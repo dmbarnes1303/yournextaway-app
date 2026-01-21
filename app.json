@@ -31,17 +31,14 @@
       "favicon": "./assets/images/final_quest_240x240.png",
       "bundler": "metro"
     },
-    "plugins": [
-      "expo-font",
-      "expo-router",
-      "expo-web-browser"
-    ],
+    "plugins": ["expo-font", "expo-router", "expo-web-browser"],
     "scheme": "natively",
     "experiments": {
       "typedRoutes": true
     },
     "extra": {
-      "router": {}
+      "router": {},
+      "EXPO_PUBLIC_API_FOOTBALL_KEY": "PUT_YOUR_KEY_HERE"
     }
   },
   "scheme": "Stadiums and Cities"
