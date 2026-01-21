@@ -1,63 +1,73 @@
 // app/(tabs)/_layout.tsx
 import React from "react";
 import { Tabs } from "expo-router";
-import { Platform } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { theme } from "@/src/constants/theme";
 
-export const unstable_settings = {
-  initialRouteName: "home",
-};
-
-function iconName(routeName: string, focused: boolean): keyof typeof Ionicons.glyphMap {
-  switch (routeName) {
-    case "home":
-      return focused ? "home" : "home-outline";
-    case "fixtures":
-      return focused ? "calendar" : "calendar-outline";
-    case "trips":
-      return focused ? "map" : "map-outline";
-    case "wallet":
-      return focused ? "wallet" : "wallet-outline";
-    case "profile":
-      return focused ? "person" : "person-outline";
-    default:
-      return focused ? "ellipse" : "ellipse-outline";
-  }
-}
-
 export default function TabsLayout() {
+  const insets = useSafeAreaInsets();
+
+  const tabBarHeight = 60 + Math.max(insets.bottom, 10);
+
   return (
     <Tabs
-      screenOptions={({ route }) => ({
+      screenOptions={{
         headerShown: false,
-        tabBarShowLabel: true,
         tabBarActiveTintColor: theme.colors.primary,
         tabBarInactiveTintColor: theme.colors.textSecondary,
-
         tabBarStyle: {
-          backgroundColor: "rgba(10, 14, 26, 0.92)",
-          borderTopColor: "rgba(255,255,255,0.08)",
-          height: Platform.OS === "ios" ? 84 : 70,
+          backgroundColor: "rgba(0,0,0,0.85)",
+          borderTopWidth: 1,
+          borderTopColor: theme.colors.border,
+          height: tabBarHeight,
+          paddingBottom: Math.max(insets.bottom, 10),
           paddingTop: 8,
-          paddingBottom: Platform.OS === "ios" ? 24 : 12,
         },
-
         tabBarLabelStyle: {
-          fontSize: 11,
+          fontSize: 12,
           fontWeight: "800",
         },
-
-        tabBarIcon: ({ focused, color, size }) => (
-          <Ionicons name={iconName(route.name, focused)} size={size ?? 22} color={color} />
-        ),
-      })}
+      }}
     >
-      <Tabs.Screen name="home" options={{ title: "Home" }} />
-      <Tabs.Screen name="fixtures" options={{ title: "Fixtures" }} />
-      <Tabs.Screen name="trips" options={{ title: "Trips" }} />
-      <Tabs.Screen name="wallet" options={{ title: "Wallet" }} />
-      <Tabs.Screen name="profile" options={{ title: "Profile" }} />
+      {/* Hard-hide any accidental routes that might appear */}
+      <Tabs.Screen name="index" options={{ href: null }} />
+
+      <Tabs.Screen
+        name="home"
+        options={{
+          title: "Home",
+          tabBarIcon: ({ color, size }) => <Ionicons name="home-outline" size={size} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="fixtures"
+        options={{
+          title: "Fixtures",
+          tabBarIcon: ({ color, size }) => <Ionicons name="calendar-outline" size={size} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="trips"
+        options={{
+          title: "Trips",
+          tabBarIcon: ({ color, size }) => <Ionicons name="airplane-outline" size={size} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="wallet"
+        options={{
+          title: "Wallet",
+          tabBarIcon: ({ color, size }) => <Ionicons name="wallet-outline" size={size} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="profile"
+        options={{
+          title: "Profile",
+          tabBarIcon: ({ color, size }) => <Ionicons name="person-outline" size={size} color={color} />,
+        }}
+      />
     </Tabs>
   );
 }
