@@ -22,7 +22,7 @@ import { theme } from "@/src/constants/theme";
 import tripsStore, { type Trip } from "@/src/state/trips";
 import { getFixtures, type FixtureListRow } from "@/src/services/apiFootball";
 
-import { LEAGUES, getRollingWindowIso, parseIsoDateOnly, type LeagueOption } from "@/src/constants/football";
+import { LEAGUES, getRollingWindowIso, parseIsoDateOnly, toIsoDate, type LeagueOption } from "@/src/constants/football";
 import { formatUkDateOnly, formatUkDateTimeMaybe } from "@/src/utils/formatters";
 
 function tripSummaryLine(t: Trip) {
@@ -50,7 +50,7 @@ export default function HomeScreen() {
 
   const [league, setLeague] = useState<LeagueOption>(LEAGUES[0]);
 
-  // Central rolling window (single source of truth)
+  // Central rolling window (single source of truth) — now defaults to TOMORROW onwards
   const { from: fromIso, to: toIso } = useMemo(() => getRollingWindowIso(), []);
 
   // Trips
@@ -66,14 +66,22 @@ export default function HomeScreen() {
     return unsub;
   }, []);
 
-  const nextTrip = useMemo(() => {
-    const withDates = trips
-      .map((t) => ({ t, d: t.startDate ? parseIsoDateOnly(t.startDate) : null }))
-      .filter((x) => !!x.d) as { t: Trip; d: Date }[];
+  const todayMidnight = useMemo(() => {
+    const iso = toIsoDate(new Date());
+    return parseIsoDateOnly(iso) ?? new Date();
+  }, []);
 
-    withDates.sort((a, b) => a.d.getTime() - b.d.getTime());
-    return withDates.length ? withDates[0].t : trips[0] ?? null;
-  }, [trips]);
+  const upcomingTrips = useMemo(() => {
+    return trips
+      .map((t) => ({ t, d: t.startDate ? parseIsoDateOnly(t.startDate) : null }))
+      .filter((x): x is { t: Trip; d: Date } => !!x.d)
+      // IMPORTANT: exclude past + today (strictly after today)
+      .filter((x) => x.d.getTime() > todayMidnight.getTime())
+      .sort((a, b) => a.d.getTime() - b.d.getTime())
+      .map((x) => x.t);
+  }, [trips, todayMidnight]);
+
+  const nextTrip = useMemo(() => upcomingTrips[0] ?? null, [upcomingTrips]);
 
   const topTrips = useMemo(() => trips.slice(0, 3), [trips]);
 
