@@ -6,20 +6,35 @@ import { theme } from "@/src/constants/theme";
 type Props = {
   fallbackHref?: string; // where to go if there's no back history
   label?: string;
+  hardHref?: string; // long-press escape hatch
 };
 
-export default function BackButton({ fallbackHref = "/(tabs)/home", label = "Back" }: Props) {
+export default function BackButton({
+  fallbackHref = "/(tabs)/home",
+  hardHref = "/(tabs)/home",
+  label = "Back",
+}: Props) {
   const router = useRouter();
 
+  const goBackSafe = () => {
+    try {
+      if (router.canGoBack()) router.back();
+      else router.replace(fallbackHref);
+    } catch {
+      router.replace(fallbackHref);
+    }
+  };
+
+  const hardExit = () => {
+    try {
+      router.replace(hardHref);
+    } catch {
+      // nothing else sensible to do
+    }
+  };
+
   return (
-    <Pressable
-      onPress={() => {
-        if (router.canGoBack()) router.back();
-        else router.replace(fallbackHref);
-      }}
-      style={styles.btn}
-      hitSlop={12}
-    >
+    <Pressable onPress={goBackSafe} onLongPress={hardExit} style={styles.btn} hitSlop={12}>
       <Text style={styles.text}>← {label}</Text>
     </Pressable>
   );
