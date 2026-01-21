@@ -19,8 +19,19 @@ import { theme } from "@/src/constants/theme";
 import tripsStore, { type Trip } from "@/src/state/trips";
 import { getFixtureById } from "@/src/services/apiFootball";
 
+function formatUkDate(iso: string | undefined): string {
+  if (!iso) return "TBC";
+  const d = new Date(`${iso}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return "TBC";
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(d);
+}
+
 function formatTripRange(t: Trip) {
-  return `${t.startDate || "TBC"} → ${t.endDate || "TBC"}`;
+  return `${formatUkDate(t.startDate)} → ${formatUkDate(t.endDate)}`;
 }
 
 function formatUkDateTimeMaybe(iso: string | undefined): string {
@@ -39,7 +50,12 @@ function formatUkDateTimeMaybe(iso: string | undefined): string {
 export default function TripDetailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ id?: string }>();
-  const id = typeof params?.id === "string" ? params.id : Array.isArray(params?.id) ? params.id[0] : undefined;
+  const id =
+    typeof params?.id === "string"
+      ? params.id
+      : Array.isArray(params?.id)
+      ? params.id[0]
+      : undefined;
 
   const [loaded, setLoaded] = useState(tripsStore.getState().loaded);
   const [trip, setTrip] = useState<Trip | null>(null);
@@ -52,17 +68,14 @@ export default function TripDetailScreen() {
     const unsub = tripsStore.subscribe((s) => {
       setLoaded(s.loaded);
       if (!id) return;
-
-      const t = s.trips.find((x) => x.id === id) ?? null;
-      setTrip(t);
+      setTrip(s.trips.find((x) => x.id === id) ?? null);
     });
 
     if (!tripsStore.getState().loaded) {
       tripsStore.loadTrips();
     } else if (id) {
       const s = tripsStore.getState();
-      const t = s.trips.find((x) => x.id === id) ?? null;
-      setTrip(t);
+      setTrip(s.trips.find((x) => x.id === id) ?? null);
     }
 
     return unsub;
@@ -85,12 +98,10 @@ export default function TripDetailScreen() {
       setFixtureRows([]);
 
       try {
-        const rows: any[] = [];
-        for (const mid of matchIds) {
-          const r = await getFixtureById(mid);
-          if (cancelled) return;
-          if (r) rows.push(r);
-        }
+        const results = await Promise.all(matchIds.map((mid) => getFixtureById(mid)));
+        if (cancelled) return;
+
+        const rows = results.filter(Boolean);
         setFixtureRows(rows);
       } catch (e: any) {
         if (cancelled) return;
@@ -106,24 +117,20 @@ export default function TripDetailScreen() {
     };
   }, [trip, matchIds]);
 
-  async function onDelete() {
+  function onDelete() {
     if (!trip) return;
 
-    Alert.alert(
-      "Delete trip?",
-      "This will remove the trip from your device.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            await tripsStore.removeTrip(trip.id);
-            router.replace("/(tabs)/trips");
-          },
+    Alert.alert("Delete trip?", "This will remove the trip from your device.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          await tripsStore.removeTrip(trip.id);
+          router.replace("/(tabs)/trips");
         },
-      ]
-    );
+      },
+    ]);
   }
 
   return (
@@ -194,7 +201,7 @@ export default function TripDetailScreen() {
                   <EmptyState title="Couldn’t load matches" message={fixtureError} />
                 ) : null}
 
-                {!loadingFixtures && !fixtureError && fixtureRows.length === 0 ? (
+                {!loadingFixtures && !fixtureError && matchIds.length > 0 && fixtureRows.length === 0 ? (
                   <EmptyState title="No match details yet" message="Matches are linked, but details are unavailable." />
                 ) : null}
 
@@ -211,11 +218,10 @@ export default function TripDetailScreen() {
                       return (
                         <Pressable
                           key={String(fixtureId ?? idx)}
-                          onPress={() =>
-                            fixtureId
-                              ? router.push({ pathname: "/match/[id]", params: { id: String(fixtureId) } })
-                              : null
-                          }
+                          onPress={() => {
+                            if (!fixtureId) return;
+                            router.push({ pathname: "/match/[id]", params: { id: String(fixtureId) } });
+                          }}
                           style={styles.row}
                         >
                           <Text style={styles.rowTitle}>
