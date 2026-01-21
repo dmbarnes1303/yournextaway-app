@@ -1,4 +1,4 @@
-// app/trip/build.tsx
+0// app/trip/build.tsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
