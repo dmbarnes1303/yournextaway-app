@@ -1,4 +1,3 @@
-// app/(tabs)/fixtures.tsx
 import React, { useEffect, useMemo, useState } from "react";
 import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -18,6 +17,12 @@ function toIsoDateInput(date: Date): string {
   const m = String(date.getMonth() + 1).padStart(2, "0");
   const d = String(date.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
+}
+
+function formatUkDate(iso: string): string {
+  const d = new Date(`${iso}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return iso;
+  return new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" }).format(d);
 }
 
 function formatUkDateTimeMaybe(iso: string | undefined): string {
@@ -40,7 +45,6 @@ function mapRow(r: FixtureListRow) {
   const kickoff = formatUkDateTimeMaybe(r?.fixture?.date);
   const venue = r?.fixture?.venue?.name ?? "";
   const line2 = venue ? `${kickoff} • ${venue}` : kickoff;
-
   return { fixtureId, home, away, line2 };
 }
 
@@ -108,7 +112,7 @@ export default function FixturesScreen() {
         <View style={styles.header}>
           <Text style={styles.title}>Fixtures</Text>
           <Text style={styles.subtitle}>
-            {selected.label} • {from} → {to}
+            {selected.label} • {formatUkDate(from)} → {formatUkDate(to)}
           </Text>
 
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.leagueRow}>
@@ -138,9 +142,7 @@ export default function FixturesScreen() {
               </View>
             ) : null}
 
-            {!loading && error ? (
-              <EmptyState title="Couldn’t load fixtures" message={error} />
-            ) : null}
+            {!loading && error ? <EmptyState title="Couldn’t load fixtures" message={error} /> : null}
 
             {!loading && !error && rows.length === 0 ? (
               <EmptyState title="No fixtures found" message="Try a different league or date window." />
