@@ -22,20 +22,7 @@ import { theme } from "@/src/constants/theme";
 import tripsStore, { type Trip } from "@/src/state/trips";
 import { getFixtures, type FixtureListRow } from "@/src/services/apiFootball";
 
-type LeagueOption = { label: string; leagueId: number; season: number };
-
-function toIsoDate(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
-
-function parseIsoDateOnly(iso: string | undefined): Date | null {
-  if (!iso) return null;
-  const d = new Date(`${iso}T00:00:00`);
-  return Number.isNaN(d.getTime()) ? null : d;
-}
+import { LEAGUES, getRollingWindowIso, parseIsoDateOnly, type LeagueOption } from "@/src/constants/football";
 
 function formatUkDate(iso: string | undefined): string {
   if (!iso) return "TBC";
@@ -80,18 +67,10 @@ function fixtureLine(r: FixtureListRow) {
 export default function HomeScreen() {
   const router = useRouter();
 
-  const leagues: LeagueOption[] = useMemo(
-    () => [
-      { label: "Premier League", leagueId: 39, season: 2025 },
-      { label: "La Liga", leagueId: 140, season: 2025 },
-      { label: "Serie A", leagueId: 135, season: 2025 },
-      { label: "Bundesliga", leagueId: 78, season: 2025 },
-      { label: "Ligue 1", leagueId: 61, season: 2025 },
-    ],
-    []
-  );
+  const [league, setLeague] = useState<LeagueOption>(LEAGUES[0]);
 
-  const [league, setLeague] = useState<LeagueOption>(leagues[0]);
+  // Central rolling window (single source of truth)
+  const { from: fromIso, to: toIso } = useMemo(() => getRollingWindowIso(), []);
 
   // Trips
   const [loadedTrips, setLoadedTrips] = useState(tripsStore.getState().loaded);
@@ -108,8 +87,9 @@ export default function HomeScreen() {
 
   const nextTrip = useMemo(() => {
     const withDates = trips
-      .map((t) => ({ t, d: parseIsoDateOnly(t.startDate) }))
+      .map((t) => ({ t, d: t.startDate ? parseIsoDateOnly(t.startDate) : null }))
       .filter((x) => !!x.d) as { t: Trip; d: Date }[];
+
     withDates.sort((a, b) => a.d.getTime() - b.d.getTime());
     return withDates.length ? withDates[0].t : trips[0] ?? null;
   }, [trips]);
@@ -120,13 +100,6 @@ export default function HomeScreen() {
   const [fxLoading, setFxLoading] = useState(false);
   const [fxError, setFxError] = useState<string | null>(null);
   const [fxRows, setFxRows] = useState<FixtureListRow[]>([]);
-
-  const fromIso = useMemo(() => toIsoDate(new Date()), []);
-  const toIso = useMemo(() => {
-    const d = new Date();
-    d.setDate(d.getDate() + 30);
-    return toIsoDate(d);
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -195,25 +168,11 @@ export default function HomeScreen() {
     return `${trips.length} trip${trips.length === 1 ? "" : "s"}`;
   }, [loadedTrips, trips.length]);
 
-  // Centralised navigation: keeps “Plan Trip” league/season aligned with what Home is showing.
   function goBuildTripWithContext(fixtureId?: string) {
     router.push({
       pathname: "/trip/build",
       params: {
         ...(fixtureId ? { fixtureId } : {}),
-        leagueId: String(league.leagueId),
-        season: String(league.season),
-        from: fromIso,
-        to: toIso,
-      },
-    } as any);
-  }
-
-  // Fixtures tab currently ignores params, but passing them is harmless and future-proofs.
-  function goFixturesTab() {
-    router.push({
-      pathname: "/(tabs)/fixtures",
-      params: {
         leagueId: String(league.leagueId),
         season: String(league.season),
         from: fromIso,
@@ -242,9 +201,7 @@ export default function HomeScreen() {
                 autoCorrect={false}
                 returnKeyType="search"
               />
-              {!showSearchResults ? (
-                <Text style={styles.heroHint}>Tip: Try “Madrid”, “Anfield”, or a team name.</Text>
-              ) : null}
+              {!showSearchResults ? <Text style={styles.heroHint}>Tip: Try “Madrid”, “Anfield”, or a team name.</Text> : null}
             </View>
 
             {showSearchResults ? (
@@ -297,7 +254,15 @@ export default function HomeScreen() {
                     </View>
                   ) : null}
 
-                  <Pressable onPress={goFixturesTab} style={styles.linkBtn}>
+                  <Pressable
+                    onPress={() =>
+                      router.push({
+                        pathname: "/(tabs)/fixtures",
+                        params: { leagueId: String(league.leagueId), season: String(league.season), from: fromIso, to: toIso },
+                      } as any)
+                    }
+                    style={styles.linkBtn}
+                  >
                     <Text style={styles.linkText}>Open Fixtures</Text>
                   </Pressable>
                 </View>
@@ -312,9 +277,7 @@ export default function HomeScreen() {
                     </View>
                   ) : null}
 
-                  {loadedTrips && tripResults.length === 0 ? (
-                    <Text style={styles.searchEmpty}>No trips found.</Text>
-                  ) : null}
+                  {loadedTrips && tripResults.length === 0 ? <Text style={styles.searchEmpty}>No trips found.</Text> : null}
 
                   {loadedTrips && tripResults.length > 0 ? (
                     <View style={styles.resultList}>
@@ -352,7 +315,7 @@ export default function HomeScreen() {
             </Pressable>
 
             <View style={styles.quickRow}>
-              <Pressable onPress={goFixturesTab} style={[styles.btn, styles.btnSecondary]}>
+              <Pressable onPress={() => router.push("/(tabs)/fixtures")} style={[styles.btn, styles.btnSecondary]}>
                 <Text style={styles.btnSecondaryText}>Fixtures</Text>
               </Pressable>
               <Pressable onPress={() => router.push("/(tabs)/trips")} style={[styles.btn, styles.btnSecondary]}>
@@ -366,7 +329,7 @@ export default function HomeScreen() {
             <SectionHeader title="Top leagues" subtitle="Pick a league for your next fixtures" />
             <GlassCard style={styles.card} intensity={22}>
               <View style={styles.leagueWrap}>
-                {leagues.map((l) => {
+                {LEAGUES.map((l) => {
                   const active = l.leagueId === league.leagueId;
                   return (
                     <Pressable
@@ -431,7 +394,15 @@ export default function HomeScreen() {
                 </View>
               ) : null}
 
-              <Pressable onPress={goFixturesTab} style={styles.linkBtn}>
+              <Pressable
+                onPress={() =>
+                  router.push({
+                    pathname: "/(tabs)/fixtures",
+                    params: { leagueId: String(league.leagueId), season: String(league.season), from: fromIso, to: toIso },
+                  } as any)
+                }
+                style={styles.linkBtn}
+              >
                 <Text style={styles.linkText}>See all fixtures</Text>
               </Pressable>
             </GlassCard>
@@ -497,7 +468,6 @@ const styles = StyleSheet.create({
   },
 
   section: { marginTop: 2 },
-
   card: { padding: theme.spacing.md },
 
   muted: { marginTop: 8, fontSize: theme.fontSize.sm, color: theme.colors.textSecondary },
