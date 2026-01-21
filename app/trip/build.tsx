@@ -14,7 +14,7 @@ import {
   Dimensions,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Stack, useLocalSearchParams, useRouter } from "expo-router";
+import { Stack, useRouter } from "expo-router";
 
 import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
@@ -68,18 +68,8 @@ function formatUkDateTimeMaybe(iso: string | undefined): string {
   }).format(d);
 }
 
-function normalizeParam(v: unknown): string | undefined {
-  if (typeof v === "string") return v;
-  if (Array.isArray(v) && typeof v[0] === "string") return v[0];
-  return undefined;
-}
-
 export default function TripBuildScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams();
-  const fixtureIdParam = normalizeParam((params as any)?.fixtureId);
-  const fixtureIdWanted = fixtureIdParam ? String(fixtureIdParam) : undefined;
-
   const listRef = useRef<ScrollView | null>(null);
 
   // Optional DateTimePicker (native). If not installed, we fall back gracefully.
@@ -134,10 +124,6 @@ export default function TripBuildScreen() {
     open: false,
   });
 
-  // Deep-link handling guards
-  const deepLinkHandledRef = useRef(false);
-  const deepLinkSearchingRef = useRef(false);
-
   // Panel animation (make it unmissable)
   const panelAnim = useRef(new Animated.Value(0)).current; // 0 closed, 1 open
   const flashAnim = useRef(new Animated.Value(0)).current; // brief “opened” flash
@@ -159,14 +145,7 @@ export default function TripBuildScreen() {
     outputRange: [0, 0.35],
   });
 
-  // Helper: find fixture in a rows array
-  function findFixtureInRows(rws: any[], wantedId?: string) {
-    if (!wantedId) return null;
-    const w = String(wantedId);
-    return rws.find((r) => String(r?.fixture?.id ?? "") === w) ?? null;
-  }
-
-  // Load fixtures for currently selected league
+  // Load fixtures
   useEffect(() => {
     let cancelled = false;
 
@@ -202,88 +181,6 @@ export default function TripBuildScreen() {
     };
   }, [selectedLeague, from, to]);
 
-  // Deep-link: if fixtureId provided, try to auto-select it.
-  // Strategy:
-  // 1) After any load completes, try to find it in current rows.
-  // 2) If not found and not yet searched, scan other leagues to locate it and switch.
-  useEffect(() => {
-    if (!fixtureIdWanted) return;
-    if (loading) return;
-
-    // If already selected, we are done.
-    if (String(selectedFixture?.fixture?.id ?? "") === String(fixtureIdWanted)) {
-      deepLinkHandledRef.current = true;
-      return;
-    }
-
-    // Try in current rows first.
-    const hit = findFixtureInRows(rows, fixtureIdWanted);
-    if (hit) {
-      setSelectedFixture(hit);
-
-      // Make it visible in the list by narrowing search to teams/venue text
-      const home = String(hit?.teams?.home?.name ?? "").trim();
-      const away = String(hit?.teams?.away?.name ?? "").trim();
-      const venue = String(hit?.fixture?.venue?.name ?? "").trim();
-      const seed = home || away || venue;
-      if (seed) setSearch(seed);
-
-      deepLinkHandledRef.current = true;
-
-      requestAnimationFrame(() => {
-        listRef.current?.scrollTo({ y: 0, animated: true });
-      });
-      return;
-    }
-
-    // If we already handled (or already scanning), do nothing.
-    if (deepLinkHandledRef.current) return;
-    if (deepLinkSearchingRef.current) return;
-
-    // Scan leagues quickly to find the fixture.
-    deepLinkSearchingRef.current = true;
-
-    (async () => {
-      try {
-        for (const l of leagues) {
-          // Skip current league (already checked)
-          if (l.leagueId === selectedLeague.leagueId) continue;
-
-          const res = await getFixtures({
-            league: l.leagueId,
-            season: l.season,
-            from,
-            to,
-          });
-
-          const rws = Array.isArray(res) ? res : [];
-          const found = findFixtureInRows(rws, fixtureIdWanted);
-
-          if (found) {
-            // Switch league; the normal load effect will pull rows for that league.
-            setSelectedLeague(l);
-
-            // After league switch loads, we’ll re-run this effect and select.
-            deepLinkSearchingRef.current = false;
-            return;
-          }
-        }
-
-        // Not found in any league
-        setError(
-          "That match isn’t available in the current 30-day window for supported leagues. Try Fixtures and adjust the date range."
-        );
-        deepLinkHandledRef.current = true;
-      } catch (e: any) {
-        setError(e?.message ?? "Could not auto-open that fixture.");
-        deepLinkHandledRef.current = true;
-      } finally {
-        deepLinkSearchingRef.current = false;
-      }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fixtureIdWanted, loading, rows, selectedLeague, leagues, from, to, selectedFixture]);
-
   // When selecting fixture: set dates + animate panel open + flash “opened”
   useEffect(() => {
     const iso = selectedFixture?.fixture?.date as string | undefined;
@@ -309,6 +206,7 @@ export default function TripBuildScreen() {
 
     setError(null);
 
+    // Open panel with a visible motion (users must notice)
     Animated.timing(panelAnim, {
       toValue: 1,
       duration: 220,
@@ -316,12 +214,14 @@ export default function TripBuildScreen() {
       useNativeDriver: true,
     }).start();
 
+    // Flash the top of the panel border briefly
     flashAnim.setValue(0);
     Animated.sequence([
       Animated.timing(flashAnim, { toValue: 1, duration: 120, useNativeDriver: true }),
       Animated.timing(flashAnim, { toValue: 0, duration: 420, useNativeDriver: true }),
     ]).start();
 
+    // Slight scroll nudge so the transition feels “new”
     requestAnimationFrame(() => {
       listRef.current?.scrollTo({ y: 0, animated: true });
     });
@@ -408,6 +308,7 @@ export default function TripBuildScreen() {
   const selVenue = selectedFixture?.fixture?.venue?.name ?? "";
   const selCity = selectedFixture?.fixture?.venue?.city ?? "";
 
+  // Reserve space so list content isn’t hidden by panel
   const bottomPad = panelOpen ? PANEL_MAX + theme.spacing.xl : theme.spacing.xxl;
 
   return (
@@ -438,10 +339,7 @@ export default function TripBuildScreen() {
                 return (
                   <Pressable
                     key={l.leagueId}
-                    onPress={() => {
-                      deepLinkHandledRef.current = true; // user is manually overriding deep-link behavior
-                      setSelectedLeague(l);
-                    }}
+                    onPress={() => setSelectedLeague(l)}
                     style={[styles.leaguePill, active && styles.leaguePillActive]}
                   >
                     <Text style={[styles.leaguePillText, active && styles.leaguePillTextActive]}>{l.label}</Text>
@@ -504,10 +402,7 @@ export default function TripBuildScreen() {
                     return (
                       <Pressable
                         key={String(fixtureId ?? idx)}
-                        onPress={() => {
-                          deepLinkHandledRef.current = true;
-                          setSelectedFixture(r);
-                        }}
+                        onPress={() => setSelectedFixture(r)}
                         style={[styles.pickRow, selected && styles.pickRowSelected]}
                       >
                         <View style={styles.pickRowTop}>
@@ -515,6 +410,7 @@ export default function TripBuildScreen() {
                           {selected ? <Text style={styles.selectedTag}>Selected</Text> : null}
                         </View>
                         <Text style={styles.rowMeta}>{line2}</Text>
+
                         {selected ? <Text style={styles.selectedHint}>Trip details opened below</Text> : null}
                       </Pressable>
                     );
@@ -531,23 +427,31 @@ export default function TripBuildScreen() {
 
             {!panelOpen ? (
               <View style={{ marginTop: 14 }}>
-                <Text style={styles.hint}>Tip: After selecting a match, use the bottom panel to set dates and save.</Text>
+                <Text style={styles.hint}>
+                  Tip: After selecting a match, use the bottom panel to set dates and save.
+                </Text>
               </View>
             ) : null}
           </GlassCard>
         </ScrollView>
 
+        {/* Backdrop (dim) + tap to close.
+           IMPORTANT: wrapper uses pointerEvents="box-none" so it cannot steal touches from the panel.
+           Backdrop pressable sits BELOW the panel (zIndex 1 vs panel zIndex 10). */}
         {panelOpen ? (
-          <Pressable
-            style={StyleSheet.absoluteFill}
-            onPress={() => setSelectedFixture(null)}
-            accessibilityRole="button"
-            accessibilityLabel="Close trip details panel"
-          >
-            <Animated.View style={[styles.backdrop, { opacity: backdropOpacity }]} />
-          </Pressable>
+          <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+            <Pressable
+              style={[StyleSheet.absoluteFill, { zIndex: 1 }]}
+              onPress={() => setSelectedFixture(null)}
+              accessibilityRole="button"
+              accessibilityLabel="Close trip details panel"
+            >
+              <Animated.View style={[styles.backdrop, { opacity: backdropOpacity }]} />
+            </Pressable>
+          </View>
         ) : null}
 
+        {/* Animated bottom panel (unmissable) */}
         <Animated.View
           pointerEvents={panelOpen ? "auto" : "none"}
           style={[
@@ -559,6 +463,7 @@ export default function TripBuildScreen() {
           ]}
         >
           <GlassCard style={styles.panel} intensity={30}>
+            {/* Flash border (brief highlight when opening) */}
             <Animated.View pointerEvents="none" style={[styles.panelFlash, { opacity: flashAnim }]} />
 
             <View style={styles.handle} />
@@ -776,6 +681,8 @@ const styles = StyleSheet.create({
     left: theme.spacing.lg,
     right: theme.spacing.lg,
     bottom: theme.spacing.lg,
+    zIndex: 10,
+    elevation: 10,
   },
 
   panel: {
