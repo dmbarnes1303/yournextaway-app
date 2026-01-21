@@ -12,38 +12,8 @@ import { theme } from "@/src/constants/theme";
 import { getFixtures, type FixtureListRow } from "@/src/services/apiFootball";
 
 import { LEAGUES, getRollingWindowIso, type LeagueOption } from "@/src/constants/football";
-
-function coerceString(v: unknown): string | null {
-  if (typeof v === "string" && v.trim()) return v.trim();
-  if (Array.isArray(v) && typeof v[0] === "string" && v[0].trim()) return v[0].trim();
-  return null;
-}
-
-function coerceNumber(v: unknown): number | null {
-  const s = coerceString(v);
-  if (!s) return null;
-  const n = Number(s);
-  return Number.isFinite(n) ? n : null;
-}
-
-function formatUkDate(iso: string): string {
-  const d = new Date(`${iso}T00:00:00`);
-  if (Number.isNaN(d.getTime())) return iso;
-  return new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" }).format(d);
-}
-
-function formatUkDateTimeMaybe(iso: string | undefined): string {
-  if (!iso) return "TBC";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "TBC";
-  return new Intl.DateTimeFormat("en-GB", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(d);
-}
+import { coerceNumber, coerceString } from "@/src/utils/params";
+import { formatUkDateOnly, formatUkDateTimeMaybe } from "@/src/utils/formatters";
 
 function mapRow(r: FixtureListRow) {
   const fixtureId = r?.fixture?.id;
@@ -144,7 +114,7 @@ export default function FixturesScreen() {
         <View style={styles.header}>
           <Text style={styles.title}>Fixtures</Text>
           <Text style={styles.subtitle}>
-            {selected.label} • {formatUkDate(from)} → {formatUkDate(to)}
+            {selected.label} • {formatUkDateOnly(from)} → {formatUkDateOnly(to)}
           </Text>
 
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.leagueRow}>
