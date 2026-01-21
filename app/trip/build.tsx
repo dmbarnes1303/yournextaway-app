@@ -12,6 +12,7 @@ import {
   Animated,
   Easing,
   Dimensions,
+  Keyboard,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Stack, useRouter, useLocalSearchParams } from "expo-router";
@@ -33,26 +34,22 @@ function toIsoDate(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
-function parseIsoDate(iso: string): Date | null {
+function parseIsoDateOnly(iso: string | undefined): Date | null {
   if (!iso) return null;
   const d = new Date(`${iso}T00:00:00`);
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
 function addDaysIso(baseIso: string, days: number): string {
-  const d = parseIsoDate(baseIso) ?? new Date();
+  const d = parseIsoDateOnly(baseIso) ?? new Date();
   d.setDate(d.getDate() + days);
   return toIsoDate(d);
 }
 
 function formatUkDate(iso: string | undefined): string {
-  const d = iso ? parseIsoDate(iso) : null;
+  const d = iso ? parseIsoDateOnly(iso) : null;
   if (!d) return "—";
-  return new Intl.DateTimeFormat("en-GB", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  }).format(d);
+  return new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" }).format(d);
 }
 
 function formatUkDateTimeMaybe(iso: string | undefined): string {
@@ -79,6 +76,11 @@ function coerceNumber(v: unknown): number | null {
   if (!s) return null;
   const n = Number(s);
   return Number.isFinite(n) ? n : null;
+}
+
+function safeId(x: unknown): string {
+  const s = String(x ?? "");
+  return s;
 }
 
 export default function TripBuildScreen() {
@@ -110,10 +112,12 @@ export default function TripBuildScreen() {
     []
   );
 
-  // Route params (these are what make “Plan Trip” context-aware)
+  // Route params (power “Plan Trip” deep links)
   const routeFixtureId = useMemo(() => coerceString(params.fixtureId), [params.fixtureId]);
   const routeLeagueId = useMemo(() => coerceNumber(params.leagueId), [params.leagueId]);
   const routeSeason = useMemo(() => coerceNumber(params.season), [params.season]);
+  const routeFrom = useMemo(() => coerceString(params.from), [params.from]);
+  const routeTo = useMemo(() => coerceString(params.to), [params.to]);
 
   const todayIso = useMemo(() => toIsoDate(new Date()), []);
   const defaultToIso = useMemo(() => {
@@ -122,13 +126,12 @@ export default function TripBuildScreen() {
     return toIsoDate(d);
   }, []);
 
-  // Allow optional from/to via params (safe to ignore if absent)
-  const from = useMemo(() => coerceString(params.from) ?? todayIso, [params.from, todayIso]);
-  const to = useMemo(() => coerceString(params.to) ?? defaultToIso, [params.to, defaultToIso]);
+  const from = useMemo(() => routeFrom ?? todayIso, [routeFrom, todayIso]);
+  const to = useMemo(() => routeTo ?? defaultToIso, [routeTo, defaultToIso]);
 
   const [selectedLeague, setSelectedLeague] = useState<LeagueOption>(leagues[0]);
 
-  // Apply league/season from route params on mount / when params change
+  // Apply league/season from route params (if provided)
   useEffect(() => {
     if (!routeLeagueId) return;
 
@@ -136,7 +139,7 @@ export default function TripBuildScreen() {
     if (!match) return;
 
     const season = routeSeason ?? match.season;
-    // Only set if something actually changes (prevents pointless reloads)
+
     setSelectedLeague((cur) => {
       if (cur.leagueId === match.leagueId && cur.season === season) return cur;
       return { ...match, season };
@@ -145,7 +148,7 @@ export default function TripBuildScreen() {
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const [rows, setRows] = useState<any[]>([]);
   const [search, setSearch] = useState("");
@@ -153,10 +156,16 @@ export default function TripBuildScreen() {
 
   const [selectedFixture, setSelectedFixture] = useState<any | null>(null);
 
-  // Store dates as ISO internally, show dd/mm/yyyy in UI.
+  // Dates + notes
   const [startIso, setStartIso] = useState(from);
   const [endIso, setEndIso] = useState(addDaysIso(from, 2));
   const [notes, setNotes] = useState("");
+
+  // Keep date defaults in sync when from param changes (rare, but correct)
+  useEffect(() => {
+    setStartIso(from);
+    setEndIso(addDaysIso(from, 2));
+  }, [from]);
 
   const [picker, setPicker] = useState<{ which: "start" | "end"; open: boolean }>({
     which: "start",
@@ -168,33 +177,35 @@ export default function TripBuildScreen() {
   const flashAnim = useRef(new Animated.Value(0)).current;
 
   const screenH = Dimensions.get("window").height;
-  const PANEL_MAX = Math.min(360, Math.round(screenH * 0.44));
+  const PANEL_MAX = Math.min(380, Math.round(screenH * 0.46));
   const panelOpen = !!selectedFixture;
 
   const panelTranslateY = panelAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [PANEL_MAX + 60, 0],
+    outputRange: [PANEL_MAX + 80, 0],
   });
   const panelOpacity = panelAnim.interpolate({
     inputRange: [0, 1],
     outputRange: [0, 1],
   });
+
+  // Backdrop is a plain View with a Pressable ABOVE it (so touches always work)
   const backdropOpacity = panelAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [0, 0.35],
+    outputRange: [0, 0.38],
   });
 
-  // Load fixtures whenever league/from/to change
+  // --- Load fixtures ---
   useEffect(() => {
     let cancelled = false;
 
     async function run() {
-      setError(null);
+      setNotice(null);
       setLoading(true);
       setRows([]);
-      setSelectedFixture(null);
       setSearch("");
       setVisibleCount(12);
+      setSelectedFixture(null);
 
       try {
         const res = await getFixtures({
@@ -205,11 +216,10 @@ export default function TripBuildScreen() {
         });
 
         if (cancelled) return;
-        const arr = Array.isArray(res) ? res : [];
-        setRows(arr);
+        setRows(Array.isArray(res) ? res : []);
       } catch (e: any) {
         if (cancelled) return;
-        setError(e?.message ?? "Failed to load fixtures.");
+        setNotice(e?.message ?? "Failed to load fixtures.");
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -221,24 +231,30 @@ export default function TripBuildScreen() {
     };
   }, [selectedLeague, from, to]);
 
-  // Auto-select fixture from route params after rows load
+  // Auto-select fixture if fixtureId is provided AND present in this fetch window.
+  // IMPORTANT: we do NOT keep re-triggering this once the user has interacted.
+  const [autoApplied, setAutoApplied] = useState(false);
+
   useEffect(() => {
+    if (autoApplied) return;
     if (!routeFixtureId) return;
     if (!rows.length) return;
 
-    const found = rows.find((r) => String(r?.fixture?.id ?? "") === String(routeFixtureId));
+    const found = rows.find((r) => safeId(r?.fixture?.id) === safeId(routeFixtureId));
     if (found) {
       setSelectedFixture(found);
+      setAutoApplied(true);
       return;
     }
 
-    // If not found, show a clear error but don't block usage
-    setError(
-      "That match isn’t available in the current 30-day window for this league. Try another league or adjust the date window."
+    // Not found in current list: show a *notice* but allow manual selection.
+    setNotice(
+      "That match isn’t in the current list. It may be outside the 30-day window or in a different league. Select it manually or switch league."
     );
-  }, [routeFixtureId, rows]);
+    setAutoApplied(true);
+  }, [autoApplied, routeFixtureId, rows]);
 
-  // Panel open/close animations + date prefill
+  // Panel open/close animations + date prefill (from fixture kickoff)
   useEffect(() => {
     const iso = selectedFixture?.fixture?.date as string | undefined;
 
@@ -252,6 +268,7 @@ export default function TripBuildScreen() {
       return;
     }
 
+    // Prefill dates based on kickoff, but do not overwrite if user already typed notes/dates in-session
     if (iso) {
       const d = new Date(iso);
       if (!Number.isNaN(d.getTime())) {
@@ -261,7 +278,7 @@ export default function TripBuildScreen() {
       }
     }
 
-    setError(null);
+    setNotice(null);
 
     Animated.timing(panelAnim, {
       toValue: 1,
@@ -276,9 +293,8 @@ export default function TripBuildScreen() {
       Animated.timing(flashAnim, { toValue: 0, duration: 420, useNativeDriver: true }),
     ]).start();
 
-    requestAnimationFrame(() => {
-      listRef.current?.scrollTo({ y: 0, animated: true });
-    });
+    // Ensure the top content stays visible behind the header + reduce “where did it come from” confusion
+    requestAnimationFrame(() => listRef.current?.scrollTo({ y: 0, animated: true }));
   }, [selectedFixture, panelAnim, flashAnim]);
 
   const filteredRows = useMemo(() => {
@@ -310,7 +326,7 @@ export default function TripBuildScreen() {
     const iso = toIsoDate(date);
     if (picker.which === "start") {
       setStartIso(iso);
-      const end = parseIsoDate(endIso);
+      const end = parseIsoDateOnly(endIso);
       if (end && end.getTime() < date.getTime()) setEndIso(addDaysIso(iso, 2));
     } else {
       setEndIso(iso);
@@ -319,22 +335,26 @@ export default function TripBuildScreen() {
     if (Platform.OS === "android") setPicker((p) => ({ ...p, open: false }));
   }
 
+  function closePanel() {
+    Keyboard.dismiss();
+    setSelectedFixture(null);
+  }
+
   async function onSave() {
     if (!selectedFixture?.fixture?.id) {
-      setError("Select a fixture first.");
+      setNotice("Select a fixture first.");
       return;
     }
-
     if (!startIso || !endIso) {
-      setError("Start/end dates are required.");
+      setNotice("Start/end dates are required.");
       return;
     }
 
-    setError(null);
+    setNotice(null);
     setSaving(true);
 
     try {
-      const fixtureId = String(selectedFixture.fixture.id);
+      const fixtureId = safeId(selectedFixture.fixture.id);
       const venueCity =
         (selectedFixture?.fixture?.venue?.city as string | undefined)?.trim() ||
         (selectedFixture?.league?.name as string | undefined)?.trim() ||
@@ -350,7 +370,7 @@ export default function TripBuildScreen() {
 
       router.replace({ pathname: "/trip/[id]", params: { id: t.id } });
     } catch (e: any) {
-      setError(e?.message ?? "Failed to save trip.");
+      setNotice(e?.message ?? "Failed to save trip.");
     } finally {
       setSaving(false);
     }
@@ -362,6 +382,7 @@ export default function TripBuildScreen() {
   const selVenue = selectedFixture?.fixture?.venue?.name ?? "";
   const selCity = selectedFixture?.fixture?.venue?.city ?? "";
 
+  // Reserve space so list isn’t hidden by panel
   const bottomPad = panelOpen ? PANEL_MAX + theme.spacing.xl : theme.spacing.xxl;
 
   return (
@@ -382,7 +403,7 @@ export default function TripBuildScreen() {
           contentContainerStyle={[styles.content, { paddingBottom: bottomPad }]}
           keyboardShouldPersistTaps="handled"
         >
-          <GlassCard style={styles.card}>
+          <GlassCard style={styles.card} intensity={26}>
             <Text style={styles.h1}>Pick a match</Text>
             <Text style={styles.muted}>Tap a fixture to open trip details. Save from the panel.</Text>
 
@@ -392,7 +413,10 @@ export default function TripBuildScreen() {
                 return (
                   <Pressable
                     key={l.leagueId}
-                    onPress={() => setSelectedLeague(l)}
+                    onPress={() => {
+                      setAutoApplied(false); // allow new routeFixtureId attempts when user changes context
+                      setSelectedLeague(l);
+                    }}
                     style={[styles.leaguePill, active && styles.leaguePillActive]}
                   >
                     <Text style={[styles.leaguePillText, active && styles.leaguePillTextActive]}>{l.label}</Text>
@@ -427,13 +451,13 @@ export default function TripBuildScreen() {
               </View>
             ) : null}
 
-            {!loading && error ? (
+            {!loading && notice ? (
               <View style={{ marginTop: 12 }}>
-                <EmptyState title="Notice" message={error} />
+                <EmptyState title="Notice" message={notice} />
               </View>
             ) : null}
 
-            {!loading && !error && filteredRows.length === 0 ? (
+            {!loading && !notice && filteredRows.length === 0 ? (
               <View style={{ marginTop: 12 }}>
                 <EmptyState title="No fixtures found" message="Try a different league, date window, or search." />
               </View>
@@ -452,16 +476,21 @@ export default function TripBuildScreen() {
                     const extra = [venue, city].filter(Boolean).join(" • ");
                     const line2 = extra ? `${kickoff} • ${extra}` : kickoff;
 
-                    const selected = String(selectedFixture?.fixture?.id ?? "") === String(fixtureId ?? "");
+                    const selected = safeId(selectedFixture?.fixture?.id) === safeId(fixtureId);
 
                     return (
                       <Pressable
-                        key={String(fixtureId ?? idx)}
-                        onPress={() => setSelectedFixture(r)}
+                        key={fixtureId ? safeId(fixtureId) : `idx-${idx}`}
+                        onPress={() => {
+                          setNotice(null);
+                          setSelectedFixture(r);
+                        }}
                         style={[styles.pickRow, selected && styles.pickRowSelected]}
                       >
                         <View style={styles.pickRowTop}>
-                          <Text style={styles.rowTitle}>{home} vs {away}</Text>
+                          <Text style={styles.rowTitle}>
+                            {home} vs {away}
+                          </Text>
                           {selected ? <Text style={styles.selectedTag}>Selected</Text> : null}
                         </View>
                         <Text style={styles.rowMeta}>{line2}</Text>
@@ -487,22 +516,17 @@ export default function TripBuildScreen() {
           </GlassCard>
         </ScrollView>
 
-        {/* Backdrop: closes panel when tapping outside.
-            IMPORTANT: backdrop is BELOW panel, so it cannot steal touches from panel buttons. */}
+        {/* Backdrop: MUST NOT steal panel touches.
+            We render it BELOW the panel (earlier) and only allow close taps on the backdrop area. */}
         {panelOpen ? (
           <Animated.View pointerEvents="auto" style={[StyleSheet.absoluteFill, { opacity: backdropOpacity }]}>
-            <Pressable
-              style={StyleSheet.absoluteFill}
-              onPress={() => setSelectedFixture(null)}
-              accessibilityRole="button"
-              accessibilityLabel="Close trip details panel"
-            >
+            <Pressable style={StyleSheet.absoluteFill} onPress={closePanel} accessibilityRole="button">
               <View style={styles.backdrop} />
             </Pressable>
           </Animated.View>
         ) : null}
 
-        {/* Panel (above backdrop) */}
+        {/* Bottom panel (above backdrop) */}
         <Animated.View
           pointerEvents={panelOpen ? "auto" : "none"}
           style={[
@@ -531,18 +555,19 @@ export default function TripBuildScreen() {
                 </Text>
               </View>
 
-              <Pressable onPress={() => setSelectedFixture(null)} style={styles.clearBtn} hitSlop={10}>
+              {/* This MUST work: it now sits above the backdrop, and nothing overlays it. */}
+              <Pressable onPress={closePanel} style={styles.clearBtn} hitSlop={12} accessibilityRole="button">
                 <Text style={styles.clearText}>Change</Text>
               </Pressable>
             </View>
 
             <View style={styles.dateRow}>
-              <Pressable onPress={() => openPicker("start")} style={styles.datePill}>
+              <Pressable onPress={() => openPicker("start")} style={styles.datePill} accessibilityRole="button">
                 <Text style={styles.dateLabel}>Start</Text>
                 <Text style={styles.dateValue}>{formatUkDate(startIso)}</Text>
               </Pressable>
 
-              <Pressable onPress={() => openPicker("end")} style={styles.datePill}>
+              <Pressable onPress={() => openPicker("end")} style={styles.datePill} accessibilityRole="button">
                 <Text style={styles.dateLabel}>End</Text>
                 <Text style={styles.dateValue}>{formatUkDate(endIso)}</Text>
               </Pressable>
@@ -586,9 +611,9 @@ export default function TripBuildScreen() {
               />
             </View>
 
-            {error ? (
+            {notice ? (
               <Text style={styles.errText} numberOfLines={3}>
-                {error}
+                {notice}
               </Text>
             ) : null}
 
@@ -600,7 +625,7 @@ export default function TripBuildScreen() {
           {DateTimePicker && picker.open ? (
             <View style={{ marginTop: 10 }}>
               <DateTimePicker
-                value={parseIsoDate(picker.which === "start" ? startIso : endIso) ?? new Date()}
+                value={parseIsoDateOnly(picker.which === "start" ? startIso : endIso) ?? new Date()}
                 mode="date"
                 display={Platform.OS === "ios" ? "inline" : "default"}
                 onChange={onPickerChange}
