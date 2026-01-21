@@ -31,14 +31,19 @@
       "favicon": "./assets/images/final_quest_240x240.png",
       "bundler": "metro"
     },
-    "plugins": ["expo-font", "expo-router", "expo-web-browser"],
+    "plugins": [
+      "expo-font",
+      "expo-router",
+      "expo-web-browser"
+    ],
     "scheme": "natively",
     "experiments": {
       "typedRoutes": true
     },
     "extra": {
       "router": {},
-      "EXPO_PUBLIC_API_FOOTBALL_KEY": "a1385c927f799e0674174b06277d2c22"
+      "EXPO_PUBLIC_API_FOOTBALL_KEY": "a1385c927f799e0674174b06277d2c22",
+      "backendUrl": "https://h5354xkb5ak2jcn98rjgh6tywsyw9qva.app.specular.dev"
     }
   },
   "scheme": "Stadiums and Cities"
