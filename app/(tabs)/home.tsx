@@ -41,11 +41,7 @@ function formatUkDate(iso: string | undefined): string {
   if (!iso) return "TBC";
   const d = new Date(`${iso}T00:00:00`);
   if (Number.isNaN(d.getTime())) return "TBC";
-  return new Intl.DateTimeFormat("en-GB", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  }).format(d);
+  return new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" }).format(d);
 }
 
 function formatUkDateTimeMaybe(iso: string | undefined): string {
@@ -106,7 +102,6 @@ export default function HomeScreen() {
       setLoadedTrips(s.loaded);
       setTrips(s.trips);
     });
-
     if (!tripsStore.getState().loaded) tripsStore.loadTrips();
     return unsub;
   }, []);
@@ -115,7 +110,6 @@ export default function HomeScreen() {
     const withDates = trips
       .map((t) => ({ t, d: parseIsoDateOnly(t.startDate) }))
       .filter((x) => !!x.d) as { t: Trip; d: Date }[];
-
     withDates.sort((a, b) => a.d.getTime() - b.d.getTime());
     return withDates.length ? withDates[0].t : trips[0] ?? null;
   }, [trips]);
@@ -149,7 +143,6 @@ export default function HomeScreen() {
           from: fromIso,
           to: toIso,
         });
-
         if (cancelled) return;
         setFxRows(Array.isArray(rows) ? rows : []);
       } catch (e: any) {
@@ -166,9 +159,10 @@ export default function HomeScreen() {
     };
   }, [league, fromIso, toIso]);
 
+  const fxPreview = useMemo(() => fxRows.slice(0, 6), [fxRows]);
+
   // Search
   const [q, setQ] = useState("");
-
   const qNorm = useMemo(() => q.trim().toLowerCase(), [q]);
 
   const matchResults = useMemo(() => {
@@ -180,9 +174,7 @@ export default function HomeScreen() {
       const city = String(r?.fixture?.venue?.city ?? "").toLowerCase();
       return home.includes(qNorm) || away.includes(qNorm) || venue.includes(qNorm) || city.includes(qNorm);
     });
-
-    // Keep it tight on Home.
-    return res.slice(0, 8);
+    return res.slice(0, 6);
   }, [fxRows, qNorm]);
 
   const tripResults = useMemo(() => {
@@ -192,55 +184,43 @@ export default function HomeScreen() {
       const notes = String(t.notes ?? "").toLowerCase();
       return city.includes(qNorm) || notes.includes(qNorm);
     });
-    return res.slice(0, 6);
+    return res.slice(0, 4);
   }, [trips, qNorm]);
 
-  const showSearch = qNorm.length > 0;
+  const showSearchResults = qNorm.length > 0;
 
   const tripsCountLabel = useMemo(() => {
     if (!loadedTrips) return "—";
     return `${trips.length} trip${trips.length === 1 ? "" : "s"}`;
   }, [loadedTrips, trips.length]);
 
-  const fxPreview = useMemo(() => fxRows.slice(0, 6), [fxRows]);
-
   return (
-    <Background imageUrl={getBackground("home")}>
+    <Background imageUrl={getBackground("home")} overlayOpacity={0.86}>
       <SafeAreaView style={styles.container} edges={["top"]}>
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={styles.content}
-          keyboardShouldPersistTaps="handled"
-        >
-          {/* Header */}
-          <View style={styles.header}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.title}>YourNextAway</Text>
-              <Text style={styles.subtitle}>Plan your next football trip</Text>
-              <Text style={styles.kpi}>
-                {league.label} • {formatUkDate(fromIso)} → {formatUkDate(toIso)} • {tripsCountLabel}
-              </Text>
+        <ScrollView style={styles.scrollView} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+          {/* HERO */}
+          <GlassCard style={styles.heroCard} intensity={26}>
+            <Text style={styles.heroKicker}>PLAN • FLY • WATCH • REPEAT</Text>
+            <Text style={styles.heroTitle}>Build European Football Trips Your Way.</Text>
+
+            <View style={styles.heroSearchWrap}>
+              <TextInput
+                value={q}
+                onChangeText={setQ}
+                placeholder="Search a country, city, club, venue…"
+                placeholderTextColor={theme.colors.textSecondary}
+                style={styles.heroSearch}
+                autoCapitalize="none"
+                autoCorrect={false}
+                returnKeyType="search"
+              />
+              {!showSearchResults ? (
+                <Text style={styles.heroHint}>Tip: Try “Madrid”, “Anfield”, or a team name.</Text>
+              ) : null}
             </View>
-          </View>
 
-          {/* Search */}
-          <GlassCard style={styles.searchCard} intensity={24}>
-            <Text style={styles.searchTitle}>Search</Text>
-            <Text style={styles.searchSub}>Find fixtures by team, venue or city. Trips by city or notes.</Text>
-
-            <TextInput
-              value={q}
-              onChangeText={setQ}
-              placeholder="Search team / venue / city…"
-              placeholderTextColor={theme.colors.textSecondary}
-              style={styles.search}
-              autoCapitalize="none"
-              autoCorrect={false}
-              returnKeyType="search"
-            />
-
-            {showSearch ? (
-              <View style={{ marginTop: 12, gap: 12 }}>
+            {showSearchResults ? (
+              <View style={styles.searchResults}>
                 <View>
                   <Text style={styles.searchSectionTitle}>Matches</Text>
                   {fxLoading ? (
@@ -250,30 +230,42 @@ export default function HomeScreen() {
                     </View>
                   ) : null}
 
-                  {!fxLoading && fxError ? (
-                    <EmptyState title="Fixtures unavailable" message={fxError} />
-                  ) : null}
+                  {!fxLoading && fxError ? <EmptyState title="Fixtures unavailable" message={fxError} /> : null}
 
                   {!fxLoading && !fxError && matchResults.length === 0 ? (
                     <Text style={styles.searchEmpty}>No matches found.</Text>
                   ) : null}
 
                   {!fxLoading && !fxError && matchResults.length > 0 ? (
-                    <View style={styles.list}>
+                    <View style={styles.resultList}>
                       {matchResults.map((r, idx) => {
                         const id = r?.fixture?.id;
                         const line = fixtureLine(r);
                         return (
-                          <Pressable
-                            key={String(id ?? idx)}
-                            onPress={() =>
-                              id ? router.push({ pathname: "/match/[id]", params: { id: String(id) } }) : null
-                            }
-                            style={styles.row}
-                          >
-                            <Text style={styles.rowTitle}>{line.title}</Text>
-                            <Text style={styles.rowMeta}>{line.meta}</Text>
-                          </Pressable>
+                          <View key={String(id ?? idx)} style={styles.resultRow}>
+                            <Pressable
+                              onPress={() =>
+                                id ? router.push({ pathname: "/match/[id]", params: { id: String(id) } }) : null
+                              }
+                              style={{ flex: 1 }}
+                            >
+                              <Text style={styles.rowTitle}>{line.title}</Text>
+                              <Text style={styles.rowMeta}>{line.meta}</Text>
+                            </Pressable>
+
+                            <Pressable
+                              onPress={() =>
+                                router.push({
+                                  pathname: "/trip/build",
+                                  // safe even if build ignores it for now
+                                  params: id ? ({ fixtureId: String(id) } as any) : undefined,
+                                } as any)
+                              }
+                              style={styles.planPill}
+                            >
+                              <Text style={styles.planPillText}>Plan trip</Text>
+                            </Pressable>
+                          </View>
                         );
                       })}
                     </View>
@@ -298,7 +290,7 @@ export default function HomeScreen() {
                   ) : null}
 
                   {loadedTrips && tripResults.length > 0 ? (
-                    <View style={styles.list}>
+                    <View style={styles.resultList}>
                       {tripResults.map((t) => (
                         <Pressable
                           key={t.id}
@@ -317,44 +309,32 @@ export default function HomeScreen() {
                   </Pressable>
                 </View>
               </View>
-            ) : (
-              <Text style={styles.searchHint}>
-                Tip: Start typing “Madrid”, “Anfield”, or a team name.
-              </Text>
-            )}
+            ) : null}
           </GlassCard>
 
-          {/* Quick actions */}
+          {/* QUICK ACTIONS */}
           <GlassCard style={styles.quickCard} intensity={24}>
             <Text style={styles.quickTitle}>Quick actions</Text>
-            <Text style={styles.quickSub}>Pick a match, save a trip, and move on.</Text>
+            <Text style={styles.quickSub}>
+              {league.label} • {formatUkDate(fromIso)} → {formatUkDate(toIso)} • {tripsCountLabel}
+            </Text>
 
-            <Pressable
-              onPress={() => router.push("/trip/build")}
-              style={[styles.btn, styles.btnPrimary]}
-            >
+            <Pressable onPress={() => router.push("/trip/build")} style={[styles.btn, styles.btnPrimary]}>
               <Text style={styles.btnPrimaryText}>Build Trip</Text>
               <Text style={styles.btnPrimaryMeta}>Select a fixture → set dates → save</Text>
             </Pressable>
 
             <View style={styles.quickRow}>
-              <Pressable
-                onPress={() => router.push("/(tabs)/fixtures")}
-                style={[styles.btn, styles.btnSecondary]}
-              >
+              <Pressable onPress={() => router.push("/(tabs)/fixtures")} style={[styles.btn, styles.btnSecondary]}>
                 <Text style={styles.btnSecondaryText}>Fixtures</Text>
               </Pressable>
-
-              <Pressable
-                onPress={() => router.push("/(tabs)/trips")}
-                style={[styles.btn, styles.btnSecondary]}
-              >
+              <Pressable onPress={() => router.push("/(tabs)/trips")} style={[styles.btn, styles.btnSecondary]}>
                 <Text style={styles.btnSecondaryText}>Trips</Text>
               </Pressable>
             </View>
           </GlassCard>
 
-          {/* League selector (no horizontal scroll) */}
+          {/* TOP LEAGUES */}
           <View style={styles.section}>
             <SectionHeader title="Top leagues" subtitle="Pick a league for your next fixtures" />
             <GlassCard style={styles.card} intensity={22}>
@@ -367,9 +347,7 @@ export default function HomeScreen() {
                       onPress={() => setLeague(l)}
                       style={[styles.leaguePill, active && styles.leaguePillActive]}
                     >
-                      <Text style={[styles.leaguePillText, active && styles.leaguePillTextActive]}>
-                        {l.label}
-                      </Text>
+                      <Text style={[styles.leaguePillText, active && styles.leaguePillTextActive]}>{l.label}</Text>
                     </Pressable>
                   );
                 })}
@@ -377,12 +355,9 @@ export default function HomeScreen() {
             </GlassCard>
           </View>
 
-          {/* Fixtures preview */}
+          {/* NEXT FIXTURES */}
           <View style={styles.section}>
-            <SectionHeader
-              title="Next fixtures"
-              subtitle={`${league.label} • ${formatUkDate(fromIso)} → ${formatUkDate(toIso)}`}
-            />
+            <SectionHeader title="Next fixtures" subtitle={`${league.label} • ${formatUkDate(fromIso)} → ${formatUkDate(toIso)}`} />
             <GlassCard style={styles.card} intensity={22}>
               {fxLoading ? (
                 <View style={styles.center}>
@@ -391,9 +366,7 @@ export default function HomeScreen() {
                 </View>
               ) : null}
 
-              {!fxLoading && fxError ? (
-                <EmptyState title="Couldn’t load fixtures" message={fxError} />
-              ) : null}
+              {!fxLoading && fxError ? <EmptyState title="Couldn’t load fixtures" message={fxError} /> : null}
 
               {!fxLoading && !fxError && fxRows.length === 0 ? (
                 <EmptyState title="No fixtures found" message="Try another league or try again later." />
@@ -404,17 +377,31 @@ export default function HomeScreen() {
                   {fxPreview.map((r, idx) => {
                     const id = r?.fixture?.id;
                     const line = fixtureLine(r);
+
                     return (
-                      <Pressable
-                        key={String(id ?? idx)}
-                        onPress={() =>
-                          id ? router.push({ pathname: "/match/[id]", params: { id: String(id) } }) : null
-                        }
-                        style={styles.row}
-                      >
-                        <Text style={styles.rowTitle}>{line.title}</Text>
-                        <Text style={styles.rowMeta}>{line.meta}</Text>
-                      </Pressable>
+                      <View key={String(id ?? idx)} style={styles.fixtureCardRow}>
+                        <Pressable
+                          onPress={() =>
+                            id ? router.push({ pathname: "/match/[id]", params: { id: String(id) } }) : null
+                          }
+                          style={{ flex: 1 }}
+                        >
+                          <Text style={styles.rowTitle}>{line.title}</Text>
+                          <Text style={styles.rowMeta}>{line.meta}</Text>
+                        </Pressable>
+
+                        <Pressable
+                          onPress={() =>
+                            router.push({
+                              pathname: "/trip/build",
+                              params: id ? ({ fixtureId: String(id) } as any) : undefined,
+                            } as any)
+                          }
+                          style={styles.planBtn}
+                        >
+                          <Text style={styles.planBtnText}>Plan Trip</Text>
+                        </Pressable>
+                      </View>
                     );
                   })}
                 </View>
@@ -426,7 +413,7 @@ export default function HomeScreen() {
             </GlassCard>
           </View>
 
-          {/* Trips preview */}
+          {/* YOUR TRIPS */}
           <View style={styles.section}>
             <SectionHeader title="Your trips" subtitle="Your saved plans" />
             <GlassCard style={styles.card} intensity={22}>
@@ -468,7 +455,7 @@ export default function HomeScreen() {
             </GlassCard>
           </View>
 
-          <View style={{ height: 8 }} />
+          <View style={{ height: 10 }} />
         </ScrollView>
       </SafeAreaView>
     </Background>
@@ -482,45 +469,24 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: theme.spacing.lg,
     paddingBottom: theme.spacing.xxl,
+    gap: theme.spacing.lg,
   },
 
-  header: {
-    paddingTop: theme.spacing.lg,
-    paddingBottom: theme.spacing.md,
-    flexDirection: "row",
-    alignItems: "flex-end",
-    gap: theme.spacing.md,
-  },
-  title: {
-    fontSize: theme.fontSize.xxl,
-    fontWeight: theme.fontWeight.bold,
-    color: theme.colors.text,
-    marginBottom: theme.spacing.xs,
-  },
-  subtitle: {
-    fontSize: theme.fontSize.md,
-    color: theme.colors.textSecondary,
-  },
-  kpi: {
-    marginTop: 10,
-    color: theme.colors.textSecondary,
-    fontSize: theme.fontSize.sm,
-    lineHeight: 18,
-  },
-
-  section: { marginTop: theme.spacing.lg },
+  section: { marginTop: 2 },
 
   card: { padding: theme.spacing.md },
+
   muted: { marginTop: 8, fontSize: theme.fontSize.sm, color: theme.colors.textSecondary },
   center: { paddingVertical: 12, alignItems: "center", gap: 10 },
 
   list: { marginTop: 10, gap: 10 },
+
   row: {
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.border,
   },
-  rowTitle: { color: theme.colors.text, fontWeight: "800", fontSize: theme.fontSize.md },
+  rowTitle: { color: theme.colors.text, fontWeight: theme.fontWeight.semibold, fontSize: theme.fontSize.md },
   rowMeta: { marginTop: 4, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm },
 
   linkBtn: {
@@ -529,52 +495,76 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    backgroundColor: "rgba(0,0,0,0.25)",
+    backgroundColor: "rgba(0,0,0,0.22)",
     alignItems: "center",
   },
-  linkText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
+  linkText: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.sm },
 
-  // Search
-  searchCard: { padding: theme.spacing.md, marginTop: theme.spacing.sm },
-  searchTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.md },
-  searchSub: {
-    marginTop: 6,
-    color: theme.colors.textSecondary,
-    fontSize: theme.fontSize.sm,
-    lineHeight: 18,
+  /* HERO */
+  heroCard: { marginTop: theme.spacing.lg },
+  heroKicker: {
+    color: theme.colors.primary,
+    fontSize: theme.fontSize.xs,
+    fontWeight: theme.fontWeight.black,
+    letterSpacing: 0.6,
   },
-  search: {
-    marginTop: 12,
+  heroTitle: {
+    marginTop: 8,
+    color: theme.colors.text,
+    fontSize: theme.fontSize.xl,
+    fontWeight: theme.fontWeight.black,
+    lineHeight: 30,
+  },
+
+  heroSearchWrap: { marginTop: 12 },
+  heroSearch: {
     borderWidth: 1,
-    borderColor: theme.colors.border,
-    backgroundColor: "rgba(0,0,0,0.25)",
-    borderRadius: 12,
+    borderColor: "rgba(0, 255, 136, 0.28)",
+    backgroundColor: "rgba(0,0,0,0.28)",
+    borderRadius: 14,
     paddingHorizontal: 12,
     paddingVertical: Platform.OS === "ios" ? 12 : 10,
     color: theme.colors.text,
     fontSize: theme.fontSize.md,
   },
-  searchHint: {
+  heroHint: {
     marginTop: 10,
     color: theme.colors.textSecondary,
     fontSize: theme.fontSize.sm,
     lineHeight: 18,
   },
+
+  searchResults: { marginTop: 14, gap: 16 },
   searchSectionTitle: {
     color: theme.colors.text,
-    fontWeight: "900",
+    fontWeight: theme.fontWeight.black,
     fontSize: theme.fontSize.sm,
     marginBottom: 6,
   },
-  searchEmpty: {
-    color: theme.colors.textSecondary,
-    fontSize: theme.fontSize.sm,
-    marginTop: 6,
-  },
+  searchEmpty: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, marginTop: 6 },
 
-  // Quick actions
-  quickCard: { padding: theme.spacing.md, marginTop: theme.spacing.lg },
-  quickTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.md },
+  resultList: { marginTop: 8, gap: 10 },
+  resultRow: {
+    flexDirection: "row",
+    gap: 10,
+    alignItems: "center",
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255,255,255,0.08)",
+  },
+  planPill: {
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(0,255,136,0.45)",
+    backgroundColor: "rgba(0,0,0,0.25)",
+  },
+  planPillText: { color: theme.colors.text, fontSize: theme.fontSize.xs, fontWeight: theme.fontWeight.black },
+
+  /* QUICK ACTIONS */
+  quickCard: {},
+  quickTitle: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.md },
   quickSub: {
     marginTop: 6,
     color: theme.colors.textSecondary,
@@ -582,70 +572,65 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
 
-  btn: {
-    borderRadius: 14,
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
+  btn: { borderRadius: 14, borderWidth: 1, alignItems: "center", justifyContent: "center" },
 
   btnPrimary: {
     marginTop: 12,
     paddingVertical: 14,
-    borderColor: theme.colors.primary,
-    backgroundColor: "rgba(0,0,0,0.40)",
+    borderColor: "rgba(0,255,136,0.55)",
+    backgroundColor: "rgba(0,0,0,0.34)",
   },
-  btnPrimaryText: {
-    color: theme.colors.text,
-    fontWeight: "900",
-    fontSize: theme.fontSize.md,
-  },
+  btnPrimaryText: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.md },
   btnPrimaryMeta: {
     marginTop: 6,
     color: theme.colors.textSecondary,
     fontSize: theme.fontSize.xs,
-    fontWeight: "700",
+    fontWeight: theme.fontWeight.semibold,
   },
 
   quickRow: { marginTop: 10, flexDirection: "row", gap: 10 },
-
   btnSecondary: {
     flex: 1,
     paddingVertical: 12,
-    borderColor: theme.colors.border,
-    backgroundColor: "rgba(0,0,0,0.25)",
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.22)",
   },
-  btnSecondaryText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
+  btnSecondaryText: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.sm },
 
-  // League selector (wrap, no horizontal scroll)
-  leagueWrap: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-  },
+  /* LEAGUES */
+  leagueWrap: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   leaguePill: {
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: theme.colors.border,
-    backgroundColor: "rgba(0,0,0,0.25)",
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.22)",
   },
-  leaguePillActive: {
-    borderColor: theme.colors.primary,
-    backgroundColor: "rgba(0,0,0,0.45)",
-  },
-  leaguePillText: {
-    color: theme.colors.textSecondary,
-    fontSize: theme.fontSize.sm,
-    fontWeight: "700",
-  },
-  leaguePillTextActive: {
-    color: theme.colors.text,
-    fontWeight: "900",
-  },
+  leaguePillActive: { borderColor: "rgba(0,255,136,0.55)", backgroundColor: "rgba(0,0,0,0.30)" },
+  leaguePillText: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, fontWeight: theme.fontWeight.semibold },
+  leaguePillTextActive: { color: theme.colors.text, fontWeight: theme.fontWeight.black },
 
-  // Next trip highlight
+  /* FIXTURES */
+  fixtureCardRow: {
+    flexDirection: "row",
+    gap: 10,
+    alignItems: "center",
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255,255,255,0.08)",
+  },
+  planBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(0,255,136,0.45)",
+    backgroundColor: "rgba(0,0,0,0.22)",
+  },
+  planBtnText: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.xs },
+
+  /* NEXT TRIP */
   nextTrip: {
     marginTop: 6,
     paddingVertical: 12,
@@ -653,24 +638,14 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     borderColor: "rgba(0, 255, 136, 0.35)",
-    backgroundColor: "rgba(0,0,0,0.25)",
+    backgroundColor: "rgba(0,0,0,0.22)",
   },
   nextTripKicker: {
     color: theme.colors.primary,
     fontSize: theme.fontSize.xs,
-    fontWeight: "900",
+    fontWeight: theme.fontWeight.black,
     letterSpacing: 0.3,
   },
-  nextTripTitle: {
-    marginTop: 6,
-    color: theme.colors.text,
-    fontSize: theme.fontSize.lg,
-    fontWeight: "900",
-  },
-  nextTripMeta: {
-    marginTop: 6,
-    color: theme.colors.textSecondary,
-    fontSize: theme.fontSize.sm,
-    lineHeight: 18,
-  },
+  nextTripTitle: { marginTop: 6, color: theme.colors.text, fontSize: theme.fontSize.lg, fontWeight: theme.fontWeight.black },
+  nextTripMeta: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18 },
 });
