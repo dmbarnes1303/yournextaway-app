@@ -2,7 +2,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 
 import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
@@ -18,6 +18,19 @@ function toIsoDateInput(date: Date): string {
   const m = String(date.getMonth() + 1).padStart(2, "0");
   const d = String(date.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
+}
+
+function coerceString(v: unknown): string | null {
+  if (typeof v === "string" && v.trim()) return v.trim();
+  if (Array.isArray(v) && typeof v[0] === "string" && v[0].trim()) return v[0].trim();
+  return null;
+}
+
+function coerceNumber(v: unknown): number | null {
+  const s = coerceString(v);
+  if (!s) return null;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
 }
 
 function formatUkDate(iso: string): string {
@@ -53,6 +66,7 @@ function mapRow(r: FixtureListRow) {
 
 export default function FixturesScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams();
 
   const leagues: LeagueOption[] = useMemo(
     () => [
@@ -65,17 +79,40 @@ export default function FixturesScreen() {
     []
   );
 
-  const [selected, setSelected] = useState<LeagueOption>(leagues[0]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [rows, setRows] = useState<FixtureListRow[]>([]);
-
-  const from = useMemo(() => toIsoDateInput(new Date()), []);
-  const to = useMemo(() => {
+  // Defaults (used if params are missing)
+  const defaultFrom = useMemo(() => toIsoDateInput(new Date()), []);
+  const defaultTo = useMemo(() => {
     const d = new Date();
     d.setDate(d.getDate() + 30);
     return toIsoDateInput(d);
   }, []);
+
+  // Params: allow Fixtures to be opened with a specific league/window.
+  const paramLeagueId = useMemo(() => coerceNumber(params.leagueId), [params.leagueId]);
+  const paramSeason = useMemo(() => coerceNumber(params.season), [params.season]);
+  const from = useMemo(() => coerceString(params.from) ?? defaultFrom, [params.from, defaultFrom]);
+  const to = useMemo(() => coerceString(params.to) ?? defaultTo, [params.to, defaultTo]);
+
+  // Selected league state (can be overridden by params)
+  const [selected, setSelected] = useState<LeagueOption>(leagues[0]);
+
+  // Apply param league/season when present
+  useEffect(() => {
+    if (!paramLeagueId) return;
+
+    const match = leagues.find((l) => l.leagueId === paramLeagueId);
+    if (!match) return;
+
+    const season = paramSeason ?? match.season;
+    setSelected((cur) => {
+      if (cur.leagueId === match.leagueId && cur.season === season) return cur;
+      return { ...match, season };
+    });
+  }, [paramLeagueId, paramSeason, leagues]);
+
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [rows, setRows] = useState<FixtureListRow[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -108,6 +145,19 @@ export default function FixturesScreen() {
       cancelled = true;
     };
   }, [selected, from, to]);
+
+  function goBuildTripWithContext(fixtureIdStr: string) {
+    router.push({
+      pathname: "/trip/build",
+      params: {
+        fixtureId: fixtureIdStr,
+        leagueId: String(selected.leagueId),
+        season: String(selected.season),
+        from,
+        to,
+      },
+    } as any);
+  }
 
   return (
     <Background imageUrl={getBackground("fixtures")}>
@@ -153,8 +203,8 @@ export default function FixturesScreen() {
               <View style={styles.list}>
                 {rows.map((r, idx) => {
                   const m = mapRow(r);
-                  const key = m.fixtureId ? String(m.fixtureId) : `idx-${idx}`;
                   const fixtureIdStr = m.fixtureId ? String(m.fixtureId) : null;
+                  const key = fixtureIdStr ?? `idx-${idx}`;
 
                   return (
                     <View key={key} style={styles.rowWrap}>
@@ -175,17 +225,7 @@ export default function FixturesScreen() {
                         disabled={!fixtureIdStr}
                         onPress={() => {
                           if (!fixtureIdStr) return;
-
-                          router.push({
-                            pathname: "/trip/build",
-                            params: {
-                              fixtureId: fixtureIdStr,
-                              leagueId: String(selected.leagueId),
-                              season: String(selected.season),
-                              from,
-                              to,
-                            },
-                          } as any);
+                          goBuildTripWithContext(fixtureIdStr);
                         }}
                         style={[styles.planBtn, !fixtureIdStr && { opacity: 0.5 }]}
                       >
