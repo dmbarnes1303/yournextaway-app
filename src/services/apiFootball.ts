@@ -1,118 +1,256 @@
-// src/services/apiFootball.ts
-import { API_FOOTBALL_BASE_URL, assertApiFootballKey } from "@/src/config/apiFootball";
+// app/match/[id].tsx
+import React, { useEffect, useMemo, useState } from "react";
+import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 
-type ApiSportsEnvelope<T> = {
-  errors?: Record<string, unknown> | unknown[] | string | null;
-  message?: unknown;
-  results?: number;
-  response?: T;
-};
+import Background from "@/src/components/Background";
+import GlassCard from "@/src/components/GlassCard";
+import EmptyState from "@/src/components/EmptyState";
+import { getBackground } from "@/src/constants/backgrounds";
+import { theme } from "@/src/constants/theme";
+import { getFixtureById, type FixtureListRow } from "@/src/services/apiFootball";
 
-function enc(q: Record<string, string | number | undefined>) {
-  const parts: string[] = [];
-  for (const [k, v] of Object.entries(q)) {
-    if (v === undefined || v === null) continue;
-    parts.push(`${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`);
-  }
-  return parts.length ? `?${parts.join("&")}` : "";
+function toIsoDate(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
 }
 
-function stringifySafe(x: unknown) {
-  try {
-    return typeof x === "string" ? x : JSON.stringify(x);
-  } catch {
-    return String(x);
-  }
+function addDaysIso(base: Date, days: number): string {
+  const d = new Date(base);
+  d.setDate(d.getDate() + days);
+  return toIsoDate(d);
 }
 
-function extractApiSportsError(json: ApiSportsEnvelope<any>): string | null {
-  const e = json?.errors;
-
-  if (!e) return null;
-
-  // common: errors = { key: "msg" }
-  if (typeof e === "object" && !Array.isArray(e)) {
-    const obj = e as Record<string, unknown>;
-    const keys = Object.keys(obj);
-    if (keys.length === 0) return null;
-    return `API-Football error: ${stringifySafe(obj)}`;
-  }
-
-  // sometimes errors is string/array
-  if (Array.isArray(e) && e.length) return `API-Football error: ${stringifySafe(e)}`;
-  if (typeof e === "string" && e.trim()) return `API-Football error: ${e.trim()}`;
-
+function coerceString(v: unknown): string | null {
+  if (typeof v === "string" && v.trim()) return v.trim();
+  if (Array.isArray(v) && typeof v[0] === "string" && v[0].trim()) return v[0].trim();
   return null;
 }
 
-async function apiGet<T>(path: string): Promise<T> {
-  const key = assertApiFootballKey();
-  const url = `${API_FOOTBALL_BASE_URL}${path}`;
+function formatUkDateTimeMaybe(iso: string | undefined): string {
+  if (!iso) return "TBC";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "TBC";
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(d);
+}
 
-  const res = await fetch(url, {
-    method: "GET",
-    headers: { "x-apisports-key": key },
-  });
+export default function MatchDetailScreen() {
+  const router = useRouter();
+  const params = useLocalSearchParams();
+  const id = useMemo(() => coerceString(params.id), [params.id]);
 
-  const text = await res.text();
+  // Keep your navigation context consistent with Home/Fixtures/Build.
+  const fromIso = useMemo(() => toIsoDate(new Date()), []);
+  const toIso = useMemo(() => addDaysIso(new Date(), 30), []);
 
-  let json: ApiSportsEnvelope<T>;
-  try {
-    json = JSON.parse(text);
-  } catch {
-    // HTML/empty/garbage responses happen; keep this message clean
-    throw new Error("API-Football returned invalid JSON");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [row, setRow] = useState<FixtureListRow | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function run() {
+      if (!id) {
+        setError("Missing match id.");
+        return;
+      }
+
+      setLoading(true);
+      setError(null);
+      setRow(null);
+
+      try {
+        const r = await getFixtureById(id);
+        if (cancelled) return;
+
+        if (!r) {
+          setError("Match not found.");
+          return;
+        }
+
+        setRow(r);
+      } catch (e: any) {
+        if (cancelled) return;
+        setError(e?.message ?? "Failed to load match details.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
+  const home = row?.teams?.home?.name ?? "Home";
+  const away = row?.teams?.away?.name ?? "Away";
+  const kickoff = formatUkDateTimeMaybe(row?.fixture?.date);
+
+  const venue = row?.fixture?.venue?.name ?? "";
+  const city = row?.fixture?.venue?.city ?? "";
+  const place = [venue, city].filter(Boolean).join(" • ");
+
+  const leagueName = row?.league?.name ?? "League";
+  const leagueId = row?.league?.id; // might be present
+  const fixtureId = row?.fixture?.id ? String(row.fixture.id) : id ?? "";
+
+  function onPlanTrip() {
+    if (!fixtureId) return;
+
+    router.push({
+      pathname: "/trip/build",
+      params: {
+        fixtureId,
+        ...(leagueId ? { leagueId: String(leagueId) } : {}),
+        // season is not guaranteed on the fixture response shape you've typed;
+        // Build Trip can still work without it (it can default to 2025 for now).
+        from: fromIso,
+        to: toIso,
+      },
+    } as any);
   }
 
-  const apiErr = extractApiSportsError(json);
-
-  if (!res.ok) {
-    // prefer API error if present
-    throw new Error(apiErr ?? `API-Football HTTP ${res.status}: ${text}`);
+  function onOpenFixtures() {
+    router.push({
+      pathname: "/(tabs)/fixtures",
+      params: {
+        ...(leagueId ? { leagueId: String(leagueId) } : {}),
+        from: fromIso,
+        to: toIso,
+      },
+    } as any);
   }
 
-  if (apiErr) throw new Error(apiErr);
+  return (
+    <Background imageUrl={getBackground("fixtures")}>
+      <Stack.Screen
+        options={{
+          headerShown: true,
+          title: "Match",
+          headerTransparent: true,
+          headerTintColor: theme.colors.text,
+        }}
+      />
 
-  // API-Sports typically returns { response: [...] }
-  return (json?.response as T) ?? ([] as any);
+      <SafeAreaView style={styles.container} edges={["bottom"]}>
+        <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
+          <GlassCard style={styles.card} intensity={26}>
+            {loading ? (
+              <View style={styles.center}>
+                <ActivityIndicator />
+                <Text style={styles.muted}>Loading match…</Text>
+              </View>
+            ) : null}
+
+            {!loading && error ? <EmptyState title="Match unavailable" message={error} /> : null}
+
+            {!loading && !error && row ? (
+              <>
+                <Text style={styles.kicker}>{leagueName}</Text>
+                <Text style={styles.title} numberOfLines={2}>
+                  {home} vs {away}
+                </Text>
+
+                <View style={styles.metaBlock}>
+                  <Text style={styles.metaLine}>
+                    <Text style={styles.metaLabel}>Kickoff: </Text>
+                    {kickoff}
+                  </Text>
+
+                  {place ? (
+                    <Text style={styles.metaLine}>
+                      <Text style={styles.metaLabel}>Venue: </Text>
+                      {place}
+                    </Text>
+                  ) : null}
+
+                  <Text style={styles.metaLine}>
+                    <Text style={styles.metaLabel}>Match ID: </Text>
+                    {fixtureId}
+                  </Text>
+                </View>
+
+                <View style={styles.ctaRow}>
+                  <Pressable onPress={onPlanTrip} style={[styles.btn, styles.btnPrimary]}>
+                    <Text style={styles.btnPrimaryText}>Plan Trip</Text>
+                    <Text style={styles.btnPrimaryMeta}>Pre-fills this match</Text>
+                  </Pressable>
+
+                  <Pressable onPress={onOpenFixtures} style={[styles.btn, styles.btnSecondary]}>
+                    <Text style={styles.btnSecondaryText}>Open Fixtures</Text>
+                  </Pressable>
+                </View>
+              </>
+            ) : null}
+          </GlassCard>
+        </ScrollView>
+      </SafeAreaView>
+    </Background>
+  );
 }
 
-/**
- * Minimal fixture shape we actually use in UI.
- * This prevents “undefined soup” from spreading.
- */
-export type FixtureListRow = {
-  fixture?: {
-    id?: number;
-    date?: string; // ISO
-    venue?: { name?: string; city?: string };
-    status?: { long?: string; short?: string };
-  };
-  league?: { id?: number; name?: string; round?: string };
-  teams?: {
-    home?: { id?: number; name?: string };
-    away?: { id?: number; name?: string };
-  };
-};
+const styles = StyleSheet.create({
+  container: { flex: 1, paddingTop: 100 },
+  scrollView: { flex: 1 },
+  content: {
+    paddingHorizontal: theme.spacing.lg,
+    paddingBottom: theme.spacing.xxl,
+  },
 
-export async function getFixtures(params: {
-  league: number;
-  season: number;
-  from: string; // YYYY-MM-DD
-  to: string; // YYYY-MM-DD
-}) {
-  const qs = enc({
-    league: params.league,
-    season: params.season,
-    from: params.from,
-    to: params.to,
-  });
+  card: { padding: theme.spacing.lg },
 
-  return apiGet<FixtureListRow[]>(`/fixtures${qs}`);
-}
+  center: { paddingVertical: theme.spacing.xl, alignItems: "center", gap: 10 },
+  muted: { color: theme.colors.textSecondary },
 
-export async function getFixtureById(fixtureId: string | number) {
-  const qs = enc({ id: fixtureId });
-  const rows = await apiGet<FixtureListRow[]>(`/fixtures${qs}`);
-  return rows?.[0] ?? null;
-}
+  kicker: {
+    color: theme.colors.primary,
+    fontSize: theme.fontSize.xs,
+    fontWeight: "900",
+    letterSpacing: 0.6,
+  },
+  title: {
+    marginTop: 8,
+    fontSize: theme.fontSize.xl,
+    fontWeight: "900",
+    color: theme.colors.text,
+    lineHeight: 30,
+  },
+
+  metaBlock: { marginTop: 12, gap: 6 },
+  metaLine: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18 },
+  metaLabel: { color: theme.colors.text, fontWeight: "900" },
+
+  ctaRow: { marginTop: 14, gap: 10 },
+
+  btn: {
+    borderRadius: 14,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  btnPrimary: {
+    paddingVertical: 14,
+    borderColor: "rgba(0,255,136,0.55)",
+    backgroundColor: "rgba(0,0,0,0.34)",
+  },
+  btnPrimaryText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.md },
+  btnPrimaryMeta: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: "700" },
+
+  btnSecondary: {
+    paddingVertical: 12,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.22)",
+  },
+  btnSecondaryText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
+});
