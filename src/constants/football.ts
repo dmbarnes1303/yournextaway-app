@@ -1,14 +1,10 @@
 // src/constants/football.ts
 
-export type LeagueOption = {
-  label: string;
-  leagueId: number;
-  season: number;
-};
+export type LeagueOption = { label: string; leagueId: number; season: number };
 
 export const DEFAULT_SEASON = 2025;
-export const DEFAULT_WINDOW_DAYS = 30;
 
+// Single source of truth for all top leagues used in app
 export const LEAGUES: LeagueOption[] = [
   { label: "Premier League", leagueId: 39, season: DEFAULT_SEASON },
   { label: "La Liga", leagueId: 140, season: DEFAULT_SEASON },
@@ -17,12 +13,8 @@ export const LEAGUES: LeagueOption[] = [
   { label: "Ligue 1", leagueId: 61, season: DEFAULT_SEASON },
 ];
 
-export function findLeagueById(leagueId: number | null | undefined): LeagueOption | null {
-  if (!leagueId) return null;
-  return LEAGUES.find((l) => l.leagueId === leagueId) ?? null;
-}
+// ---- Date helpers ----
 
-/** YYYY-MM-DD (local date) */
 export function toIsoDate(date: Date): string {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, "0");
@@ -30,6 +22,7 @@ export function toIsoDate(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
+// Parse "YYYY-MM-DD"
 export function parseIsoDateOnly(iso: string): Date | null {
   if (!iso) return null;
   const d = new Date(`${iso}T00:00:00`);
@@ -37,13 +30,22 @@ export function parseIsoDateOnly(iso: string): Date | null {
 }
 
 export function addDaysIso(baseIso: string, days: number): string {
-  const d = parseIsoDateOnly(baseIso) ?? new Date();
-  d.setDate(d.getDate() + days);
-  return toIsoDate(d);
+  const base = parseIsoDateOnly(baseIso) ?? new Date();
+  base.setDate(base.getDate() + days);
+  return toIsoDate(base);
 }
 
-export function getRollingWindowIso(days: number = DEFAULT_WINDOW_DAYS): { from: string; to: string } {
-  const from = toIsoDate(new Date());
-  const to = addDaysIso(from, Math.max(1, days));
+export type RollingWindowIso = { from: string; to: string };
+
+// Central fixture date window (rolling)
+export function getRollingWindowIso(opts?: { days?: number; start?: Date }): RollingWindowIso {
+  const days = opts?.days ?? 30;
+  const start = opts?.start ?? new Date();
+
+  const from = toIsoDate(start);
+  const end = new Date(start);
+  end.setDate(end.getDate() + days);
+  const to = toIsoDate(end);
+
   return { from, to };
 }
