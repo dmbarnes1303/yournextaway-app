@@ -195,12 +195,25 @@ export default function HomeScreen() {
     return `${trips.length} trip${trips.length === 1 ? "" : "s"}`;
   }, [loadedTrips, trips.length]);
 
+  // Centralised navigation: keeps “Plan Trip” league/season aligned with what Home is showing.
   function goBuildTripWithContext(fixtureId?: string) {
     router.push({
       pathname: "/trip/build",
       params: {
-        // optional
         ...(fixtureId ? { fixtureId } : {}),
+        leagueId: String(league.leagueId),
+        season: String(league.season),
+        from: fromIso,
+        to: toIso,
+      },
+    } as any);
+  }
+
+  // Fixtures tab currently ignores params, but passing them is harmless and future-proofs.
+  function goFixturesTab() {
+    router.push({
+      pathname: "/(tabs)/fixtures",
+      params: {
         leagueId: String(league.leagueId),
         season: String(league.season),
         from: fromIso,
@@ -212,11 +225,7 @@ export default function HomeScreen() {
   return (
     <Background imageUrl={getBackground("home")} overlayOpacity={0.86}>
       <SafeAreaView style={styles.container} edges={["top"]}>
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={styles.content}
-          keyboardShouldPersistTaps="handled"
-        >
+        <ScrollView style={styles.scrollView} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           {/* HERO */}
           <GlassCard style={styles.heroCard} intensity={26}>
             <Text style={styles.heroKicker}>PLAN • FLY • WATCH • REPEAT</Text>
@@ -288,7 +297,7 @@ export default function HomeScreen() {
                     </View>
                   ) : null}
 
-                  <Pressable onPress={() => router.push("/(tabs)/fixtures")} style={styles.linkBtn}>
+                  <Pressable onPress={goFixturesTab} style={styles.linkBtn}>
                     <Text style={styles.linkText}>Open Fixtures</Text>
                   </Pressable>
                 </View>
@@ -343,7 +352,7 @@ export default function HomeScreen() {
             </Pressable>
 
             <View style={styles.quickRow}>
-              <Pressable onPress={() => router.push("/(tabs)/fixtures")} style={[styles.btn, styles.btnSecondary]}>
+              <Pressable onPress={goFixturesTab} style={[styles.btn, styles.btnSecondary]}>
                 <Text style={styles.btnSecondaryText}>Fixtures</Text>
               </Pressable>
               <Pressable onPress={() => router.push("/(tabs)/trips")} style={[styles.btn, styles.btnSecondary]}>
@@ -375,10 +384,7 @@ export default function HomeScreen() {
 
           {/* NEXT FIXTURES */}
           <View style={styles.section}>
-            <SectionHeader
-              title="Next fixtures"
-              subtitle={`${league.label} • ${formatUkDate(fromIso)} → ${formatUkDate(toIso)}`}
-            />
+            <SectionHeader title="Next fixtures" subtitle={`${league.label} • ${formatUkDate(fromIso)} → ${formatUkDate(toIso)}`} />
             <GlassCard style={styles.card} intensity={22}>
               {fxLoading ? (
                 <View style={styles.center}>
@@ -425,7 +431,7 @@ export default function HomeScreen() {
                 </View>
               ) : null}
 
-              <Pressable onPress={() => router.push("/(tabs)/fixtures")} style={styles.linkBtn}>
+              <Pressable onPress={goFixturesTab} style={styles.linkBtn}>
                 <Text style={styles.linkText}>See all fixtures</Text>
               </Pressable>
             </GlassCard>
