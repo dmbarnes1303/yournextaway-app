@@ -11,14 +11,7 @@ import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
 import { getFixtures, type FixtureListRow } from "@/src/services/apiFootball";
 
-type LeagueOption = { label: string; leagueId: number; season: number };
-
-function toIsoDateInput(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
+import { LEAGUES, getRollingWindowIso, type LeagueOption } from "@/src/constants/football";
 
 function coerceString(v: unknown): string | null {
   if (typeof v === "string" && v.trim()) return v.trim();
@@ -68,47 +61,33 @@ export default function FixturesScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
 
-  const leagues: LeagueOption[] = useMemo(
-    () => [
-      { label: "Premier League", leagueId: 39, season: 2025 },
-      { label: "La Liga", leagueId: 140, season: 2025 },
-      { label: "Serie A", leagueId: 135, season: 2025 },
-      { label: "Bundesliga", leagueId: 78, season: 2025 },
-      { label: "Ligue 1", leagueId: 61, season: 2025 },
-    ],
-    []
-  );
+  // Central rolling window defaults (single source of truth)
+  const { from: defaultFrom, to: defaultTo } = useMemo(() => getRollingWindowIso(), []);
 
-  // Defaults (used if params are missing)
-  const defaultFrom = useMemo(() => toIsoDateInput(new Date()), []);
-  const defaultTo = useMemo(() => {
-    const d = new Date();
-    d.setDate(d.getDate() + 30);
-    return toIsoDateInput(d);
-  }, []);
-
-  // Params: allow Fixtures to be opened with a specific league/window.
+  // Params: allow Fixtures to be opened with a specific league/window
   const paramLeagueId = useMemo(() => coerceNumber(params.leagueId), [params.leagueId]);
   const paramSeason = useMemo(() => coerceNumber(params.season), [params.season]);
+
   const from = useMemo(() => coerceString(params.from) ?? defaultFrom, [params.from, defaultFrom]);
   const to = useMemo(() => coerceString(params.to) ?? defaultTo, [params.to, defaultTo]);
 
   // Selected league state (can be overridden by params)
-  const [selected, setSelected] = useState<LeagueOption>(leagues[0]);
+  const [selected, setSelected] = useState<LeagueOption>(LEAGUES[0]);
 
   // Apply param league/season when present
   useEffect(() => {
     if (!paramLeagueId) return;
 
-    const match = leagues.find((l) => l.leagueId === paramLeagueId);
+    const match = LEAGUES.find((l) => l.leagueId === paramLeagueId);
     if (!match) return;
 
     const season = paramSeason ?? match.season;
+
     setSelected((cur) => {
       if (cur.leagueId === match.leagueId && cur.season === season) return cur;
       return { ...match, season };
     });
-  }, [paramLeagueId, paramSeason, leagues]);
+  }, [paramLeagueId, paramSeason]);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -169,7 +148,7 @@ export default function FixturesScreen() {
           </Text>
 
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.leagueRow}>
-            {leagues.map((l) => {
+            {LEAGUES.map((l) => {
               const active = l.leagueId === selected.leagueId;
               return (
                 <Pressable
