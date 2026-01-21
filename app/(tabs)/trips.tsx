@@ -11,11 +11,7 @@ import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
 import tripsStore, { type Trip } from "@/src/state/trips";
 
-import { formatUkDateOnly } from "@/src/utils/formatters";
-
-function formatDateRange(t: Trip) {
-  return `${formatUkDateOnly(t.startDate)} → ${formatUkDateOnly(t.endDate)}`;
-}
+import { formatUkDateRange } from "@/src/utils/formatters";
 
 export default function TripsScreen() {
   const router = useRouter();
@@ -79,7 +75,7 @@ export default function TripsScreen() {
                     >
                       <Text style={styles.rowTitle}>{t.cityId || "Trip"}</Text>
                       <Text style={styles.rowMeta}>
-                        {formatDateRange(t)} • {matchCount} match{matchCount === 1 ? "" : "es"}
+                        {formatUkDateRange(t.startDate, t.endDate)} • {matchCount} match{matchCount === 1 ? "" : "es"}
                       </Text>
 
                       {t.notes?.trim() ? (
