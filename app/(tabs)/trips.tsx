@@ -11,16 +11,10 @@ import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
 import tripsStore, { type Trip } from "@/src/state/trips";
 
-function parseIsoDate(iso: string | undefined): Date | null {
-  if (!iso) return null;
-  // Use midnight local time to avoid timezone shifting the day
-  const d = new Date(`${iso}T00:00:00`);
-  return Number.isNaN(d.getTime()) ? null : d;
-}
-
 function formatUkDate(iso: string | undefined): string {
-  const d = parseIsoDate(iso);
-  if (!d) return "TBC";
+  if (!iso) return "TBC";
+  const d = new Date(`${iso}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return "TBC";
   return new Intl.DateTimeFormat("en-GB", {
     day: "2-digit",
     month: "2-digit",
@@ -83,29 +77,24 @@ export default function TripsScreen() {
 
             {loaded && hasTrips ? (
               <View style={styles.list}>
-                {trips.map((t) => {
-                  const matchCount = t.matchIds?.length ?? 0;
-
-                  return (
-                    <Pressable
-                      key={t.id}
-                      onPress={() => router.push({ pathname: "/trip/[id]", params: { id: t.id } })}
-                      style={styles.row}
-                    >
-                      <Text style={styles.rowTitle}>{t.cityId || "Trip"}</Text>
-
-                      <Text style={styles.rowMeta}>
-                        {formatDateRange(t)} • {matchCount} match{matchCount === 1 ? "" : "es"}
+                {trips.map((t) => (
+                  <Pressable
+                    key={t.id}
+                    onPress={() => router.push({ pathname: "/trip/[id]", params: { id: t.id } })}
+                    style={styles.row}
+                  >
+                    <Text style={styles.rowTitle}>{t.cityId || "Trip"}</Text>
+                    <Text style={styles.rowMeta}>
+                      {formatDateRange(t)} • {t.matchIds?.length ?? 0} match
+                      {(t.matchIds?.length ?? 0) === 1 ? "" : "es"}
+                    </Text>
+                    {t.notes?.trim() ? (
+                      <Text style={styles.rowNotes} numberOfLines={2}>
+                        {t.notes.trim()}
                       </Text>
-
-                      {t.notes?.trim() ? (
-                        <Text style={styles.rowNotes} numberOfLines={2}>
-                          {t.notes.trim()}
-                        </Text>
-                      ) : null}
-                    </Pressable>
-                  );
-                })}
+                    ) : null}
+                  </Pressable>
+                ))}
               </View>
             ) : null}
           </GlassCard>
