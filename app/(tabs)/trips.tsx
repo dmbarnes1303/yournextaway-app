@@ -11,19 +11,10 @@ import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
 import tripsStore, { type Trip } from "@/src/state/trips";
 
-function formatUkDate(iso: string | undefined): string {
-  if (!iso) return "TBC";
-  const d = new Date(`${iso}T00:00:00`);
-  if (Number.isNaN(d.getTime())) return "TBC";
-  return new Intl.DateTimeFormat("en-GB", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  }).format(d);
-}
+import { formatUkDateOnly } from "@/src/utils/formatters";
 
 function formatDateRange(t: Trip) {
-  return `${formatUkDate(t.startDate)} → ${formatUkDate(t.endDate)}`;
+  return `${formatUkDateOnly(t.startDate)} → ${formatUkDateOnly(t.endDate)}`;
 }
 
 export default function TripsScreen() {
@@ -77,24 +68,28 @@ export default function TripsScreen() {
 
             {loaded && hasTrips ? (
               <View style={styles.list}>
-                {trips.map((t) => (
-                  <Pressable
-                    key={t.id}
-                    onPress={() => router.push({ pathname: "/trip/[id]", params: { id: t.id } })}
-                    style={styles.row}
-                  >
-                    <Text style={styles.rowTitle}>{t.cityId || "Trip"}</Text>
-                    <Text style={styles.rowMeta}>
-                      {formatDateRange(t)} • {t.matchIds?.length ?? 0} match
-                      {(t.matchIds?.length ?? 0) === 1 ? "" : "es"}
-                    </Text>
-                    {t.notes?.trim() ? (
-                      <Text style={styles.rowNotes} numberOfLines={2}>
-                        {t.notes.trim()}
+                {trips.map((t) => {
+                  const matchCount = t.matchIds?.length ?? 0;
+
+                  return (
+                    <Pressable
+                      key={t.id}
+                      onPress={() => router.push({ pathname: "/trip/[id]", params: { id: t.id } })}
+                      style={styles.row}
+                    >
+                      <Text style={styles.rowTitle}>{t.cityId || "Trip"}</Text>
+                      <Text style={styles.rowMeta}>
+                        {formatDateRange(t)} • {matchCount} match{matchCount === 1 ? "" : "es"}
                       </Text>
-                    ) : null}
-                  </Pressable>
-                ))}
+
+                      {t.notes?.trim() ? (
+                        <Text style={styles.rowNotes} numberOfLines={2}>
+                          {t.notes.trim()}
+                        </Text>
+                      ) : null}
+                    </Pressable>
+                  );
+                })}
               </View>
             ) : null}
           </GlassCard>
