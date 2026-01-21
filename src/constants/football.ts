@@ -37,10 +37,18 @@ export function addDaysIso(baseIso: string, days: number): string {
 
 export type RollingWindowIso = { from: string; to: string };
 
+function tomorrowLocal(): Date {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() + 1);
+  return d;
+}
+
 // Central fixture date window (rolling)
+// IMPORTANT: Defaults to TOMORROW onwards (excludes past + today).
 export function getRollingWindowIso(opts?: { days?: number; start?: Date }): RollingWindowIso {
   const days = opts?.days ?? 30;
-  const start = opts?.start ?? new Date();
+  const start = opts?.start ?? tomorrowLocal();
 
   const from = toIsoDate(start);
   const end = new Date(start);
