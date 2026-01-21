@@ -21,38 +21,22 @@ import GlassCard from "@/src/components/GlassCard";
 import EmptyState from "@/src/components/EmptyState";
 import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
-import { getFixtures } from "@/src/services/apiFootball";
+import { getFixtures, type FixtureListRow } from "@/src/services/apiFootball";
 import tripsStore from "@/src/state/trips";
 
-import { LEAGUES, getRollingWindowIso, type LeagueOption } from "@/src/constants/football";
-
-function toIsoDate(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
-
-function parseIsoDate(iso: string): Date | null {
-  if (!iso) return null;
-  const d = new Date(`${iso}T00:00:00`);
-  return Number.isNaN(d.getTime()) ? null : d;
-}
-
-function addDaysIso(baseIso: string, days: number): string {
-  const d = parseIsoDate(baseIso) ?? new Date();
-  d.setDate(d.getDate() + days);
-  return toIsoDate(d);
-}
+import {
+  LEAGUES,
+  getRollingWindowIso,
+  toIsoDate,
+  parseIsoDateOnly,
+  addDaysIso,
+  type LeagueOption,
+} from "@/src/constants/football";
 
 function formatUkDate(iso: string | undefined): string {
-  const d = iso ? parseIsoDate(iso) : null;
+  const d = iso ? parseIsoDateOnly(iso) : null;
   if (!d) return "—";
-  return new Intl.DateTimeFormat("en-GB", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  }).format(d);
+  return new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" }).format(d);
 }
 
 function formatUkDateTimeMaybe(iso: string | undefined): string {
@@ -100,9 +84,7 @@ export default function TripBuildScreen() {
   }, []);
 
   // Central rolling window defaults (single source of truth)
-  const rolling = useMemo(() => getRollingWindowIso(), []);
-  const defaultFrom = rolling.from;
-  const defaultTo = rolling.to;
+  const { from: rollingFrom, to: rollingTo } = useMemo(() => getRollingWindowIso(), []);
 
   // Route params (context-aware Plan Trip)
   const routeFixtureId = useMemo(() => coerceString(params.fixtureId), [params.fixtureId]);
@@ -110,8 +92,8 @@ export default function TripBuildScreen() {
   const routeSeason = useMemo(() => coerceNumber(params.season), [params.season]);
 
   // Allow optional from/to via params (fallback to rolling window)
-  const from = useMemo(() => coerceString(params.from) ?? defaultFrom, [params.from, defaultFrom]);
-  const to = useMemo(() => coerceString(params.to) ?? defaultTo, [params.to, defaultTo]);
+  const from = useMemo(() => coerceString(params.from) ?? rollingFrom, [params.from, rollingFrom]);
+  const to = useMemo(() => coerceString(params.to) ?? rollingTo, [params.to, rollingTo]);
 
   const [selectedLeague, setSelectedLeague] = useState<LeagueOption>(LEAGUES[0]);
 
@@ -133,21 +115,20 @@ export default function TripBuildScreen() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [rows, setRows] = useState<any[]>([]);
+  const [rows, setRows] = useState<FixtureListRow[]>([]);
   const [search, setSearch] = useState("");
   const [visibleCount, setVisibleCount] = useState(12);
 
-  const [selectedFixture, setSelectedFixture] = useState<any | null>(null);
+  const [selectedFixture, setSelectedFixture] = useState<FixtureListRow | null>(null);
 
   // Store dates as ISO internally, show dd/mm/yyyy in UI.
-  const [startIso, setStartIso] = useState(from);
-  const [endIso, setEndIso] = useState(addDaysIso(from, 2));
+  // Use params-based window only on first mount; do not stomp user edits later.
+  const initialFromRef = useRef<string>(from);
+  const [startIso, setStartIso] = useState(initialFromRef.current);
+  const [endIso, setEndIso] = useState(addDaysIso(initialFromRef.current, 2));
   const [notes, setNotes] = useState("");
 
-  const [picker, setPicker] = useState<{ which: "start" | "end"; open: boolean }>({
-    which: "start",
-    open: false,
-  });
+  const [picker, setPicker] = useState<{ which: "start" | "end"; open: boolean }>({ which: "start", open: false });
 
   // Panel animation
   const panelAnim = useRef(new Animated.Value(0)).current; // 0 closed, 1 open
@@ -170,13 +151,6 @@ export default function TripBuildScreen() {
     outputRange: [0, 0.35],
   });
 
-  // If from changes (via params), keep date fields aligned (but don't stomp if user already edited)
-  useEffect(() => {
-    setStartIso(from);
-    setEndIso(addDaysIso(from, 2));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [from]);
-
   // Load fixtures whenever league/from/to change
   useEffect(() => {
     let cancelled = false;
@@ -198,8 +172,7 @@ export default function TripBuildScreen() {
         });
 
         if (cancelled) return;
-        const arr = Array.isArray(res) ? res : [];
-        setRows(arr);
+        setRows(Array.isArray(res) ? (res as FixtureListRow[]) : []);
       } catch (e: any) {
         if (cancelled) return;
         setError(e?.message ?? "Failed to load fixtures.");
@@ -225,9 +198,7 @@ export default function TripBuildScreen() {
       return;
     }
 
-    setError(
-      "That match isn’t available in the current window for this league. Try another league or adjust the date window."
-    );
+    setError("That match isn’t available in the current window for this league. Try another league or adjust the date window.");
   }, [routeFixtureId, rows]);
 
   // Panel open/close animations + date prefill
@@ -244,6 +215,7 @@ export default function TripBuildScreen() {
       return;
     }
 
+    // Prefill trip dates from selected fixture kickoff (if available)
     if (iso) {
       const d = new Date(iso);
       if (!Number.isNaN(d.getTime())) {
@@ -300,9 +272,10 @@ export default function TripBuildScreen() {
     }
 
     const iso = toIsoDate(date);
+
     if (picker.which === "start") {
       setStartIso(iso);
-      const end = parseIsoDate(endIso);
+      const end = parseIsoDateOnly(endIso);
       if (end && end.getTime() < date.getTime()) setEndIso(addDaysIso(iso, 2));
     } else {
       setEndIso(iso);
@@ -326,7 +299,9 @@ export default function TripBuildScreen() {
     setSaving(true);
 
     try {
-      const fixtureId = String(selectedFixture.fixture.id);
+      const fixtureId = String(selectedFixture.fixture?.id ?? "");
+      if (!fixtureId) throw new Error("Invalid fixture id.");
+
       const venueCity =
         (selectedFixture?.fixture?.venue?.city as string | undefined)?.trim() ||
         (selectedFixture?.league?.name as string | undefined)?.trim() ||
@@ -444,20 +419,20 @@ export default function TripBuildScreen() {
                     const extra = [venue, city].filter(Boolean).join(" • ");
                     const line2 = extra ? `${kickoff} • ${extra}` : kickoff;
 
-                    const selected = String(selectedFixture?.fixture?.id ?? "") === String(fixtureId ?? "");
+                    const isSelected = String(selectedFixture?.fixture?.id ?? "") === String(fixtureId ?? "");
 
                     return (
                       <Pressable
                         key={String(fixtureId ?? idx)}
                         onPress={() => setSelectedFixture(r)}
-                        style={[styles.pickRow, selected && styles.pickRowSelected]}
+                        style={[styles.pickRow, isSelected && styles.pickRowSelected]}
                       >
                         <View style={styles.pickRowTop}>
                           <Text style={styles.rowTitle}>{home} vs {away}</Text>
-                          {selected ? <Text style={styles.selectedTag}>Selected</Text> : null}
+                          {isSelected ? <Text style={styles.selectedTag}>Selected</Text> : null}
                         </View>
                         <Text style={styles.rowMeta}>{line2}</Text>
-                        {selected ? <Text style={styles.selectedHint}>Trip details opened below</Text> : null}
+                        {isSelected ? <Text style={styles.selectedHint}>Trip details opened below</Text> : null}
                       </Pressable>
                     );
                   })}
@@ -479,6 +454,7 @@ export default function TripBuildScreen() {
           </GlassCard>
         </ScrollView>
 
+        {/* Backdrop: closes panel when tapping outside (below panel so it won't steal panel touches). */}
         {panelOpen ? (
           <Animated.View pointerEvents="auto" style={[StyleSheet.absoluteFill, { opacity: backdropOpacity }]}>
             <Pressable
@@ -492,6 +468,7 @@ export default function TripBuildScreen() {
           </Animated.View>
         ) : null}
 
+        {/* Panel */}
         <Animated.View
           pointerEvents={panelOpen ? "auto" : "none"}
           style={[
@@ -589,7 +566,7 @@ export default function TripBuildScreen() {
           {DateTimePicker && picker.open ? (
             <View style={{ marginTop: 10 }}>
               <DateTimePicker
-                value={parseIsoDate(picker.which === "start" ? startIso : endIso) ?? new Date()}
+                value={parseIsoDateOnly(picker.which === "start" ? startIso : endIso) ?? new Date()}
                 mode="date"
                 display={Platform.OS === "ios" ? "inline" : "default"}
                 onChange={onPickerChange}
@@ -636,7 +613,7 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.primary,
     backgroundColor: "rgba(0,0,0,0.45)",
   },
-  leaguePillText: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, fontWeight: "700" },
+  leaguePillText: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, fontWeight: "700" as any },
   leaguePillTextActive: { color: theme.colors.text },
 
   searchWrap: { marginTop: 12 },
@@ -671,13 +648,13 @@ const styles = StyleSheet.create({
 
   pickRowTop: { flexDirection: "row", alignItems: "center", gap: 10 },
 
-  rowTitle: { flex: 1, color: theme.colors.text, fontWeight: "800", fontSize: theme.fontSize.md },
+  rowTitle: { flex: 1, color: theme.colors.text, fontWeight: "800" as any, fontSize: theme.fontSize.md },
   rowMeta: { marginTop: 4, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm },
 
   selectedTag: {
     color: theme.colors.primary,
     fontSize: theme.fontSize.xs,
-    fontWeight: "900",
+    fontWeight: "900" as any,
     paddingVertical: 4,
     paddingHorizontal: 8,
     borderRadius: 999,
@@ -686,7 +663,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.25)",
   },
 
-  selectedHint: { marginTop: 6, color: "rgba(0,255,136,0.85)", fontSize: theme.fontSize.xs, fontWeight: "800" },
+  selectedHint: { marginTop: 6, color: "rgba(0,255,136,0.85)", fontSize: theme.fontSize.xs, fontWeight: "800" as any },
 
   moreBtn: {
     marginTop: 12,
@@ -697,7 +674,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.25)",
     alignItems: "center",
   },
-  moreText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
+  moreText: { color: theme.colors.text, fontWeight: "900" as any, fontSize: theme.fontSize.sm },
 
   hint: { marginTop: 10, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm },
 
@@ -745,8 +722,8 @@ const styles = StyleSheet.create({
 
   panelTop: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
 
-  panelKicker: { color: theme.colors.primary, fontSize: theme.fontSize.xs, fontWeight: "900", letterSpacing: 0.4 },
-  panelTitle: { marginTop: 4, color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.lg },
+  panelKicker: { color: theme.colors.primary, fontSize: theme.fontSize.xs, fontWeight: "900" as any, letterSpacing: 0.4 },
+  panelTitle: { marginTop: 4, color: theme.colors.text, fontWeight: "900" as any, fontSize: theme.fontSize.lg },
   panelSub: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18 },
 
   clearBtn: {
@@ -757,7 +734,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(0, 255, 136, 0.55)",
     backgroundColor: "rgba(0,0,0,0.25)",
   },
-  clearText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.xs },
+  clearText: { color: theme.colors.text, fontWeight: "900" as any, fontSize: theme.fontSize.xs },
 
   dateRow: { marginTop: 12, flexDirection: "row", gap: 10 },
 
@@ -770,8 +747,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
-  dateLabel: { color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: "800" },
-  dateValue: { marginTop: 6, color: theme.colors.text, fontSize: theme.fontSize.md, fontWeight: "900" },
+  dateLabel: { color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: "800" as any },
+  dateValue: { marginTop: 6, color: theme.colors.text, fontSize: theme.fontSize.md, fontWeight: "900" as any },
 
   fallbackNote: { color: theme.colors.textSecondary, fontSize: theme.fontSize.xs },
 
@@ -787,7 +764,7 @@ const styles = StyleSheet.create({
   },
   textarea: { minHeight: 70, paddingTop: 12 },
 
-  errText: { marginTop: 10, color: theme.colors.error, fontSize: theme.fontSize.sm, fontWeight: "700" },
+  errText: { marginTop: 10, color: theme.colors.error, fontSize: theme.fontSize.sm, fontWeight: "700" as any },
 
   saveBtn: {
     marginTop: 12,
@@ -798,5 +775,5 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.40)",
     alignItems: "center",
   },
-  saveText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.md },
+  saveText: { color: theme.colors.text, fontWeight: "900" as any, fontSize: theme.fontSize.md },
 });
