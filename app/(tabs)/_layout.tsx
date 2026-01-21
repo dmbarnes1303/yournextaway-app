@@ -5,7 +5,15 @@ import { Platform } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { theme } from "@/src/constants/theme";
 
-function iconName(routeName: string, focused: boolean): keyof typeof Ionicons.glyphMap {
+// Ensure the default tab is always Home
+export const unstable_settings = {
+  initialRouteName: "home",
+};
+
+function iconName(
+  routeName: string,
+  focused: boolean
+): keyof typeof Ionicons.glyphMap {
   switch (routeName) {
     case "home":
       return focused ? "home" : "home-outline";
@@ -46,10 +54,24 @@ export default function TabsLayout() {
         },
 
         tabBarIcon: ({ focused, color, size }) => (
-          <Ionicons name={iconName(route.name, focused)} size={size ?? 22} color={color} />
+          <Ionicons
+            name={iconName(route.name, focused)}
+            size={size ?? 22}
+            color={color}
+          />
         ),
       })}
     >
+      {/**
+       * Hard-hide any accidental routes that Expo Router may discover in /app/(tabs)
+       * (e.g. index.tsx, (home)/index.tsx, etc.). This prevents random extra tabs.
+       */}
+      <Tabs.Screen name="index" options={{ href: null }} />
+      <Tabs.Screen name="(home)" options={{ href: null }} />
+
+      {/**
+       * Your five locked tabs:
+       */}
       <Tabs.Screen name="home" options={{ title: "Home" }} />
       <Tabs.Screen name="fixtures" options={{ title: "Fixtures" }} />
       <Tabs.Screen name="trips" options={{ title: "Trips" }} />
