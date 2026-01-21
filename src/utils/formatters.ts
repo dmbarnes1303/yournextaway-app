@@ -12,6 +12,10 @@ export function formatUkDateOnly(iso: string | undefined): string {
   }).format(d);
 }
 
+export function formatUkDateRange(startIso: string | undefined, endIso: string | undefined): string {
+  return `${formatUkDateOnly(startIso)} → ${formatUkDateOnly(endIso)}`;
+}
+
 export function formatUkDateTimeMaybe(iso: string | undefined): string {
   if (!iso) return "TBC";
   const d = new Date(iso);
