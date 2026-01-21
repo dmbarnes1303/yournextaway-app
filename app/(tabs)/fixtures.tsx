@@ -1,3 +1,4 @@
+// app/(tabs)/fixtures.tsx
 import React, { useEffect, useMemo, useState } from "react";
 import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -44,7 +45,9 @@ function mapRow(r: FixtureListRow) {
   const away = r?.teams?.away?.name ?? "Away";
   const kickoff = formatUkDateTimeMaybe(r?.fixture?.date);
   const venue = r?.fixture?.venue?.name ?? "";
-  const line2 = venue ? `${kickoff} • ${venue}` : kickoff;
+  const city = r?.fixture?.venue?.city ?? "";
+  const extra = [venue, city].filter(Boolean).join(" • ");
+  const line2 = extra ? `${kickoff} • ${extra}` : kickoff;
   return { fixtureId, home, away, line2 };
 }
 
@@ -124,9 +127,7 @@ export default function FixturesScreen() {
                   onPress={() => setSelected(l)}
                   style={[styles.leaguePill, active && styles.leaguePillActive]}
                 >
-                  <Text style={[styles.leaguePillText, active && styles.leaguePillTextActive]}>
-                    {l.label}
-                  </Text>
+                  <Text style={[styles.leaguePillText, active && styles.leaguePillTextActive]}>{l.label}</Text>
                 </Pressable>
               );
             })}
@@ -153,21 +154,44 @@ export default function FixturesScreen() {
                 {rows.map((r, idx) => {
                   const m = mapRow(r);
                   const key = m.fixtureId ? String(m.fixtureId) : `idx-${idx}`;
+                  const fixtureIdStr = m.fixtureId ? String(m.fixtureId) : null;
 
                   return (
-                    <Pressable
-                      key={key}
-                      onPress={() => {
-                        if (!m.fixtureId) return;
-                        router.push({ pathname: "/match/[id]", params: { id: String(m.fixtureId) } });
-                      }}
-                      style={styles.row}
-                    >
-                      <Text style={styles.rowTitle}>
-                        {m.home} vs {m.away}
-                      </Text>
-                      <Text style={styles.rowMeta}>{m.line2}</Text>
-                    </Pressable>
+                    <View key={key} style={styles.rowWrap}>
+                      <Pressable
+                        onPress={() => {
+                          if (!fixtureIdStr) return;
+                          router.push({ pathname: "/match/[id]", params: { id: fixtureIdStr } });
+                        }}
+                        style={styles.rowMain}
+                      >
+                        <Text style={styles.rowTitle}>
+                          {m.home} vs {m.away}
+                        </Text>
+                        <Text style={styles.rowMeta}>{m.line2}</Text>
+                      </Pressable>
+
+                      <Pressable
+                        disabled={!fixtureIdStr}
+                        onPress={() => {
+                          if (!fixtureIdStr) return;
+
+                          router.push({
+                            pathname: "/trip/build",
+                            params: {
+                              fixtureId: fixtureIdStr,
+                              leagueId: String(selected.leagueId),
+                              season: String(selected.season),
+                              from,
+                              to,
+                            },
+                          } as any);
+                        }}
+                        style={[styles.planBtn, !fixtureIdStr && { opacity: 0.5 }]}
+                      >
+                        <Text style={styles.planBtnText}>Plan Trip</Text>
+                      </Pressable>
+                    </View>
                   );
                 })}
               </View>
@@ -181,17 +205,20 @@ export default function FixturesScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+
   header: {
     paddingHorizontal: theme.spacing.lg,
     paddingTop: theme.spacing.lg,
     paddingBottom: theme.spacing.md,
   },
+
   title: {
     fontSize: theme.fontSize.xxl,
     fontWeight: theme.fontWeight.bold,
     color: theme.colors.text,
     marginBottom: theme.spacing.xs,
   },
+
   subtitle: {
     fontSize: theme.fontSize.sm,
     color: theme.colors.textSecondary,
@@ -199,6 +226,7 @@ const styles = StyleSheet.create({
   },
 
   leagueRow: { gap: 10, paddingRight: theme.spacing.lg },
+
   leaguePill: {
     paddingVertical: 8,
     paddingHorizontal: 12,
@@ -207,29 +235,51 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border,
     backgroundColor: "rgba(0,0,0,0.25)",
   },
+
   leaguePillActive: {
     borderColor: theme.colors.primary,
     backgroundColor: "rgba(0,0,0,0.45)",
   },
+
   leaguePillText: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, fontWeight: "700" as any },
   leaguePillTextActive: { color: theme.colors.text },
 
   scrollView: { flex: 1 },
+
   content: {
     paddingHorizontal: theme.spacing.lg,
     paddingBottom: theme.spacing.xxl,
   },
+
   card: { minHeight: 240 },
 
   center: { paddingVertical: theme.spacing.xl, alignItems: "center", gap: 10 },
   muted: { color: theme.colors.textSecondary },
 
   list: { gap: 10 },
-  row: {
+
+  rowWrap: {
+    flexDirection: "row",
+    gap: 12,
+    alignItems: "center",
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.border,
   },
+
+  rowMain: { flex: 1 },
+
   rowTitle: { color: theme.colors.text, fontWeight: "800" as any, fontSize: theme.fontSize.md },
   rowMeta: { marginTop: 4, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm },
+
+  planBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(0,255,136,0.45)",
+    backgroundColor: "rgba(0,0,0,0.22)",
+  },
+
+  planBtnText: { color: theme.colors.text, fontWeight: "900" as any, fontSize: theme.fontSize.xs },
 });
