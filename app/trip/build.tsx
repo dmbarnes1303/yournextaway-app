@@ -24,7 +24,7 @@ import { theme } from "@/src/constants/theme";
 import { getFixtures } from "@/src/services/apiFootball";
 import tripsStore from "@/src/state/trips";
 
-type LeagueOption = { label: string; leagueId: number; season: number };
+import { LEAGUES, getRollingWindowIso, type LeagueOption } from "@/src/constants/football";
 
 function toIsoDate(date: Date): string {
   const y = date.getFullYear();
@@ -99,49 +99,35 @@ export default function TripBuildScreen() {
     }
   }, []);
 
-  const leagues: LeagueOption[] = useMemo(
-    () => [
-      { label: "Premier League", leagueId: 39, season: 2025 },
-      { label: "La Liga", leagueId: 140, season: 2025 },
-      { label: "Serie A", leagueId: 135, season: 2025 },
-      { label: "Bundesliga", leagueId: 78, season: 2025 },
-      { label: "Ligue 1", leagueId: 61, season: 2025 },
-    ],
-    []
-  );
+  // Central rolling window defaults (single source of truth)
+  const rolling = useMemo(() => getRollingWindowIso(), []);
+  const defaultFrom = rolling.from;
+  const defaultTo = rolling.to;
 
-  // Route params (these are what make “Plan Trip” context-aware)
+  // Route params (context-aware Plan Trip)
   const routeFixtureId = useMemo(() => coerceString(params.fixtureId), [params.fixtureId]);
   const routeLeagueId = useMemo(() => coerceNumber(params.leagueId), [params.leagueId]);
   const routeSeason = useMemo(() => coerceNumber(params.season), [params.season]);
 
-  const todayIso = useMemo(() => toIsoDate(new Date()), []);
-  const defaultToIso = useMemo(() => {
-    const d = new Date();
-    d.setDate(d.getDate() + 30);
-    return toIsoDate(d);
-  }, []);
+  // Allow optional from/to via params (fallback to rolling window)
+  const from = useMemo(() => coerceString(params.from) ?? defaultFrom, [params.from, defaultFrom]);
+  const to = useMemo(() => coerceString(params.to) ?? defaultTo, [params.to, defaultTo]);
 
-  // Allow optional from/to via params (safe to ignore if absent)
-  const from = useMemo(() => coerceString(params.from) ?? todayIso, [params.from, todayIso]);
-  const to = useMemo(() => coerceString(params.to) ?? defaultToIso, [params.to, defaultToIso]);
+  const [selectedLeague, setSelectedLeague] = useState<LeagueOption>(LEAGUES[0]);
 
-  const [selectedLeague, setSelectedLeague] = useState<LeagueOption>(leagues[0]);
-
-  // Apply league/season from route params on mount / when params change
+  // Apply league/season from route params
   useEffect(() => {
     if (!routeLeagueId) return;
 
-    const match = leagues.find((l) => l.leagueId === routeLeagueId);
+    const match = LEAGUES.find((l) => l.leagueId === routeLeagueId);
     if (!match) return;
 
     const season = routeSeason ?? match.season;
-    // Only set if something actually changes (prevents pointless reloads)
     setSelectedLeague((cur) => {
       if (cur.leagueId === match.leagueId && cur.season === season) return cur;
       return { ...match, season };
     });
-  }, [routeLeagueId, routeSeason, leagues]);
+  }, [routeLeagueId, routeSeason]);
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -183,6 +169,13 @@ export default function TripBuildScreen() {
     inputRange: [0, 1],
     outputRange: [0, 0.35],
   });
+
+  // If from changes (via params), keep date fields aligned (but don't stomp if user already edited)
+  useEffect(() => {
+    setStartIso(from);
+    setEndIso(addDaysIso(from, 2));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [from]);
 
   // Load fixtures whenever league/from/to change
   useEffect(() => {
@@ -232,9 +225,8 @@ export default function TripBuildScreen() {
       return;
     }
 
-    // If not found, show a clear error but don't block usage
     setError(
-      "That match isn’t available in the current 30-day window for this league. Try another league or adjust the date window."
+      "That match isn’t available in the current window for this league. Try another league or adjust the date window."
     );
   }, [routeFixtureId, rows]);
 
@@ -387,7 +379,7 @@ export default function TripBuildScreen() {
             <Text style={styles.muted}>Tap a fixture to open trip details. Save from the panel.</Text>
 
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.leagueRow}>
-              {leagues.map((l) => {
+              {LEAGUES.map((l) => {
                 const active = l.leagueId === selectedLeague.leagueId;
                 return (
                   <Pressable
@@ -487,8 +479,6 @@ export default function TripBuildScreen() {
           </GlassCard>
         </ScrollView>
 
-        {/* Backdrop: closes panel when tapping outside.
-            IMPORTANT: backdrop is BELOW panel, so it cannot steal touches from panel buttons. */}
         {panelOpen ? (
           <Animated.View pointerEvents="auto" style={[StyleSheet.absoluteFill, { opacity: backdropOpacity }]}>
             <Pressable
@@ -502,7 +492,6 @@ export default function TripBuildScreen() {
           </Animated.View>
         ) : null}
 
-        {/* Panel (above backdrop) */}
         <Animated.View
           pointerEvents={panelOpen ? "auto" : "none"}
           style={[
