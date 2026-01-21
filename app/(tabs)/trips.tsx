@@ -11,10 +11,25 @@ import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
 import tripsStore, { type Trip } from "@/src/state/trips";
 
+function parseIsoDate(iso: string | undefined): Date | null {
+  if (!iso) return null;
+  // Use midnight local time to avoid timezone shifting the day
+  const d = new Date(`${iso}T00:00:00`);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function formatUkDate(iso: string | undefined): string {
+  const d = parseIsoDate(iso);
+  if (!d) return "TBC";
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(d);
+}
+
 function formatDateRange(t: Trip) {
-  const a = t.startDate || "TBC";
-  const b = t.endDate || "TBC";
-  return `${a} → ${b}`;
+  return `${formatUkDate(t.startDate)} → ${formatUkDate(t.endDate)}`;
 }
 
 export default function TripsScreen() {
@@ -29,7 +44,6 @@ export default function TripsScreen() {
       setTrips(s.trips);
     });
 
-    // load once
     if (!tripsStore.getState().loaded) {
       tripsStore.loadTrips();
     }
@@ -49,10 +63,7 @@ export default function TripsScreen() {
               <Text style={styles.subtitle}>Your planned football trips</Text>
             </View>
 
-            <Pressable
-              onPress={() => router.push("/trip/build")}
-              style={styles.cta}
-            >
+            <Pressable onPress={() => router.push("/trip/build")} style={styles.cta}>
               <Text style={styles.ctaText}>Build Trip</Text>
             </Pressable>
           </View>
@@ -64,38 +75,37 @@ export default function TripsScreen() {
 
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
           <GlassCard style={styles.card}>
-            {!loaded ? (
-              <EmptyState title="Loading trips" message="One moment…" />
-            ) : null}
+            {!loaded ? <EmptyState title="Loading trips" message="One moment…" /> : null}
 
             {loaded && !hasTrips ? (
-              <EmptyState
-                title="No trips planned"
-                message="Start planning your first away day."
-              />
+              <EmptyState title="No trips planned" message="Start planning your first away day." />
             ) : null}
 
             {loaded && hasTrips ? (
               <View style={styles.list}>
-                {trips.map((t) => (
-                  <Pressable
-                    key={t.id}
-                    onPress={() => router.push({ pathname: "/trip/[id]", params: { id: t.id } })}
-                    style={styles.row}
-                  >
-                    <Text style={styles.rowTitle}>
-                      {t.cityId || "Trip"}
-                    </Text>
-                    <Text style={styles.rowMeta}>
-                      {formatDateRange(t)} • {t.matchIds?.length ?? 0} match{(t.matchIds?.length ?? 0) === 1 ? "" : "es"}
-                    </Text>
-                    {t.notes?.trim() ? (
-                      <Text style={styles.rowNotes} numberOfLines={2}>
-                        {t.notes.trim()}
+                {trips.map((t) => {
+                  const matchCount = t.matchIds?.length ?? 0;
+
+                  return (
+                    <Pressable
+                      key={t.id}
+                      onPress={() => router.push({ pathname: "/trip/[id]", params: { id: t.id } })}
+                      style={styles.row}
+                    >
+                      <Text style={styles.rowTitle}>{t.cityId || "Trip"}</Text>
+
+                      <Text style={styles.rowMeta}>
+                        {formatDateRange(t)} • {matchCount} match{matchCount === 1 ? "" : "es"}
                       </Text>
-                    ) : null}
-                  </Pressable>
-                ))}
+
+                      {t.notes?.trim() ? (
+                        <Text style={styles.rowNotes} numberOfLines={2}>
+                          {t.notes.trim()}
+                        </Text>
+                      ) : null}
+                    </Pressable>
+                  );
+                })}
               </View>
             ) : null}
           </GlassCard>
