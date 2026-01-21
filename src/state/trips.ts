@@ -6,7 +6,7 @@ export interface Trip {
   cityId: string; // v1 label (we’ll map to slugs later)
   matchIds: string[];
   startDate: string; // YYYY-MM-DD
-  endDate: string;   // YYYY-MM-DD
+  endDate: string; // YYYY-MM-DD
   notes: string;
 }
 
@@ -30,8 +30,17 @@ function emit() {
   for (const l of listeners) l(state);
 }
 
-async function persist() {
-  await storage.setJSON(STORAGE_KEY, state.trips);
+/**
+ * Best-effort persistence:
+ * - Never throw (UI should not get bricked by storage).
+ * - If persistence fails, app still functions (state remains in memory).
+ */
+async function persistSafe(trips: Trip[]) {
+  try {
+    await storage.setJSON(STORAGE_KEY, trips);
+  } catch {
+    // swallow
+  }
 }
 
 async function loadTrips() {
@@ -42,7 +51,6 @@ async function loadTrips() {
       trips: Array.isArray(saved) ? saved : [],
     };
   } catch {
-    // Never brick the app because storage failed.
     state = { loaded: true, trips: [] };
   }
   emit();
@@ -59,25 +67,31 @@ function subscribe(listener: Listener) {
 
 async function addTrip(input: Omit<Trip, "id">) {
   const t: Trip = { id: uid(), ...input };
-  state = { ...state, trips: [t, ...state.trips] };
+  const nextTrips = [t, ...state.trips];
+
+  state = { ...state, trips: nextTrips };
   emit();
-  await persist();
+
+  await persistSafe(nextTrips);
   return t;
 }
 
 async function updateTrip(id: string, patch: Partial<Omit<Trip, "id">>) {
-  state = {
-    ...state,
-    trips: state.trips.map((t) => (t.id === id ? { ...t, ...patch } : t)),
-  };
+  const nextTrips = state.trips.map((t) => (t.id === id ? { ...t, ...patch } : t));
+
+  state = { ...state, trips: nextTrips };
   emit();
-  await persist();
+
+  await persistSafe(nextTrips);
 }
 
 async function removeTrip(id: string) {
-  state = { ...state, trips: state.trips.filter((t) => t.id !== id) };
+  const nextTrips = state.trips.filter((t) => t.id !== id);
+
+  state = { ...state, trips: nextTrips };
   emit();
-  await persist();
+
+  await persistSafe(nextTrips);
 }
 
 export default {
