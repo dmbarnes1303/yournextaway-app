@@ -22,7 +22,13 @@ import { theme } from "@/src/constants/theme";
 import tripsStore, { type Trip } from "@/src/state/trips";
 import { getFixtures, type FixtureListRow } from "@/src/services/apiFootball";
 
-import { LEAGUES, getRollingWindowIso, parseIsoDateOnly, type LeagueOption } from "@/src/constants/football";
+import { LEAGUES, getDefaultWindow, type LeagueOption } from "@/src/config/fixturesConfig";
+
+function parseIsoDateOnly(iso: string | undefined): Date | null {
+  if (!iso) return null;
+  const d = new Date(`${iso}T00:00:00`);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
 
 function formatUkDate(iso: string | undefined): string {
   if (!iso) return "TBC";
@@ -70,7 +76,7 @@ export default function HomeScreen() {
   const [league, setLeague] = useState<LeagueOption>(LEAGUES[0]);
 
   // Central rolling window (single source of truth)
-  const { from: fromIso, to: toIso } = useMemo(() => getRollingWindowIso(), []);
+  const { from: fromIso, to: toIso } = useMemo(() => getDefaultWindow(), []);
 
   // Trips
   const [loadedTrips, setLoadedTrips] = useState(tripsStore.getState().loaded);
@@ -87,7 +93,7 @@ export default function HomeScreen() {
 
   const nextTrip = useMemo(() => {
     const withDates = trips
-      .map((t) => ({ t, d: t.startDate ? parseIsoDateOnly(t.startDate) : null }))
+      .map((t) => ({ t, d: parseIsoDateOnly(t.startDate) }))
       .filter((x) => !!x.d) as { t: Trip; d: Date }[];
 
     withDates.sort((a, b) => a.d.getTime() - b.d.getTime());
@@ -138,6 +144,7 @@ export default function HomeScreen() {
   // Search
   const [q, setQ] = useState("");
   const qNorm = useMemo(() => q.trim().toLowerCase(), [q]);
+  const showSearchResults = qNorm.length > 0;
 
   const matchResults = useMemo(() => {
     if (!qNorm) return [];
@@ -160,8 +167,6 @@ export default function HomeScreen() {
     });
     return res.slice(0, 4);
   }, [trips, qNorm]);
-
-  const showSearchResults = qNorm.length > 0;
 
   const tripsCountLabel = useMemo(() => {
     if (!loadedTrips) return "—";
@@ -201,7 +206,9 @@ export default function HomeScreen() {
                 autoCorrect={false}
                 returnKeyType="search"
               />
-              {!showSearchResults ? <Text style={styles.heroHint}>Tip: Try “Madrid”, “Anfield”, or a team name.</Text> : null}
+              {!showSearchResults ? (
+                <Text style={styles.heroHint}>Tip: Try “Madrid”, “Anfield”, or a team name.</Text>
+              ) : null}
             </View>
 
             {showSearchResults ? (
@@ -258,7 +265,12 @@ export default function HomeScreen() {
                     onPress={() =>
                       router.push({
                         pathname: "/(tabs)/fixtures",
-                        params: { leagueId: String(league.leagueId), season: String(league.season), from: fromIso, to: toIso },
+                        params: {
+                          leagueId: String(league.leagueId),
+                          season: String(league.season),
+                          from: fromIso,
+                          to: toIso,
+                        },
                       } as any)
                     }
                     style={styles.linkBtn}
@@ -347,7 +359,10 @@ export default function HomeScreen() {
 
           {/* NEXT FIXTURES */}
           <View style={styles.section}>
-            <SectionHeader title="Next fixtures" subtitle={`${league.label} • ${formatUkDate(fromIso)} → ${formatUkDate(toIso)}`} />
+            <SectionHeader
+              title="Next fixtures"
+              subtitle={`${league.label} • ${formatUkDate(fromIso)} → ${formatUkDate(toIso)}`}
+            />
             <GlassCard style={styles.card} intensity={22}>
               {fxLoading ? (
                 <View style={styles.center}>
@@ -398,7 +413,12 @@ export default function HomeScreen() {
                 onPress={() =>
                   router.push({
                     pathname: "/(tabs)/fixtures",
-                    params: { leagueId: String(league.leagueId), season: String(league.season), from: fromIso, to: toIso },
+                    params: {
+                      leagueId: String(league.leagueId),
+                      season: String(league.season),
+                      from: fromIso,
+                      to: toIso,
+                    },
                   } as any)
                 }
                 style={styles.linkBtn}
