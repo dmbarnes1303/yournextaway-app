@@ -22,37 +22,12 @@ import { theme } from "@/src/constants/theme";
 import tripsStore, { type Trip } from "@/src/state/trips";
 import { getFixtures, type FixtureListRow } from "@/src/services/apiFootball";
 
-import { LEAGUES, getDefaultWindow, type LeagueOption } from "@/src/config/fixturesConfig";
-
-function parseIsoDateOnly(iso: string | undefined): Date | null {
-  if (!iso) return null;
-  const d = new Date(`${iso}T00:00:00`);
-  return Number.isNaN(d.getTime()) ? null : d;
-}
-
-function formatUkDate(iso: string | undefined): string {
-  if (!iso) return "TBC";
-  const d = new Date(`${iso}T00:00:00`);
-  if (Number.isNaN(d.getTime())) return "TBC";
-  return new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" }).format(d);
-}
-
-function formatUkDateTimeMaybe(iso: string | undefined): string {
-  if (!iso) return "TBC";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "TBC";
-  return new Intl.DateTimeFormat("en-GB", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(d);
-}
+import { LEAGUES, getRollingWindowIso, parseIsoDateOnly, type LeagueOption } from "@/src/constants/football";
+import { formatUkDateOnly, formatUkDateTimeMaybe } from "@/src/utils/formatters";
 
 function tripSummaryLine(t: Trip) {
-  const a = formatUkDate(t.startDate);
-  const b = formatUkDate(t.endDate);
+  const a = formatUkDateOnly(t.startDate);
+  const b = formatUkDateOnly(t.endDate);
   const n = t.matchIds?.length ?? 0;
   return `${a} → ${b} • ${n} match${n === 1 ? "" : "es"}`;
 }
@@ -76,7 +51,7 @@ export default function HomeScreen() {
   const [league, setLeague] = useState<LeagueOption>(LEAGUES[0]);
 
   // Central rolling window (single source of truth)
-  const { from: fromIso, to: toIso } = useMemo(() => getDefaultWindow(), []);
+  const { from: fromIso, to: toIso } = useMemo(() => getRollingWindowIso(), []);
 
   // Trips
   const [loadedTrips, setLoadedTrips] = useState(tripsStore.getState().loaded);
@@ -93,7 +68,7 @@ export default function HomeScreen() {
 
   const nextTrip = useMemo(() => {
     const withDates = trips
-      .map((t) => ({ t, d: parseIsoDateOnly(t.startDate) }))
+      .map((t) => ({ t, d: t.startDate ? parseIsoDateOnly(t.startDate) : null }))
       .filter((x) => !!x.d) as { t: Trip; d: Date }[];
 
     withDates.sort((a, b) => a.d.getTime() - b.d.getTime());
@@ -318,7 +293,7 @@ export default function HomeScreen() {
           <GlassCard style={styles.quickCard} intensity={24}>
             <Text style={styles.quickTitle}>Quick actions</Text>
             <Text style={styles.quickSub}>
-              {league.label} • {formatUkDate(fromIso)} → {formatUkDate(toIso)} • {tripsCountLabel}
+              {league.label} • {formatUkDateOnly(fromIso)} → {formatUkDateOnly(toIso)} • {tripsCountLabel}
             </Text>
 
             <Pressable onPress={() => goBuildTripWithContext()} style={[styles.btn, styles.btnPrimary]}>
@@ -361,7 +336,7 @@ export default function HomeScreen() {
           <View style={styles.section}>
             <SectionHeader
               title="Next fixtures"
-              subtitle={`${league.label} • ${formatUkDate(fromIso)} → ${formatUkDate(toIso)}`}
+              subtitle={`${league.label} • ${formatUkDateOnly(fromIso)} → ${formatUkDateOnly(toIso)}`}
             />
             <GlassCard style={styles.card} intensity={22}>
               {fxLoading ? (
