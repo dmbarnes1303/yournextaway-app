@@ -1,6 +1,6 @@
 // src/components/GlassCard.tsx
 import React from "react";
-import { View, StyleSheet, ViewStyle } from "react-native";
+import { View, StyleSheet, ViewStyle, Platform } from "react-native";
 import { BlurView } from "expo-blur";
 import { theme } from "@/src/constants/theme";
 
@@ -10,21 +10,29 @@ interface GlassCardProps {
   intensity?: number;
 }
 
+/**
+ * IMPORTANT:
+ * - Expo Go on Android can render BlurView as an opaque layer above children,
+ *   making text look "missing".
+ * - For stability, we use BlurView on iOS/web, and a tinted fallback on Android.
+ */
 export default function GlassCard({ children, style, intensity = 20 }: GlassCardProps) {
+  const useBlur = Platform.OS !== "android";
+
   return (
     <View style={[styles.container, style]}>
-      {/* CRITICAL: BlurView must never steal touches */}
-      <BlurView
-        intensity={intensity}
-        tint="dark"
-        style={StyleSheet.absoluteFillObject}
-        pointerEvents="none"
-      />
+      {useBlur ? (
+        <BlurView
+          intensity={intensity}
+          tint="dark"
+          style={StyleSheet.absoluteFillObject}
+          pointerEvents="none"
+        />
+      ) : null}
 
-      {/* Fallback tint layer helps Android + low-blur scenarios */}
+      {/* Always include tint so Android still looks "glassy" without BlurView */}
       <View pointerEvents="none" style={styles.tint} />
 
-      {/* Content is the only interactive layer */}
       <View style={styles.content}>{children}</View>
     </View>
   );
@@ -32,6 +40,7 @@ export default function GlassCard({ children, style, intensity = 20 }: GlassCard
 
 const styles = StyleSheet.create({
   container: {
+    position: "relative",
     borderRadius: theme.borderRadius.lg,
     overflow: "hidden",
     borderWidth: 1,
