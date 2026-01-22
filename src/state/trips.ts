@@ -3,7 +3,19 @@ import storage from "@/src/services/storage";
 
 export interface Trip {
   id: string;
-  cityId: string; // v1 label (we’ll map to slugs later)
+
+  /**
+   * Display label (legacy v1 naming).
+   * Keep this for UI and backwards compatibility.
+   */
+  cityId: string;
+
+  /**
+   * Stable key used for guides/lookup (e.g. "london", "madrid", "paris").
+   * Optional so older saved trips still load.
+   */
+  citySlug?: string;
+
   matchIds: string[];
   startDate: string; // YYYY-MM-DD
   endDate: string; // YYYY-MM-DD
@@ -21,6 +33,40 @@ const STORAGE_KEY = "trips_v1";
 
 function uid() {
   return `${Date.now()}_${Math.random().toString(16).slice(2)}`;
+}
+
+/**
+ * Simple, dependency-free slugify.
+ * - lowercases
+ * - removes diacritics
+ * - collapses whitespace/underscores to hyphens
+ * - strips non [a-z0-9-]
+ */
+function slugify(input: string): string {
+  const s = String(input ?? "").trim().toLowerCase();
+  if (!s) return "";
+
+  // Remove diacritics
+  const noMarks = s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+  // Replace separators with hyphen, strip invalid chars, collapse hyphens
+  return noMarks
+    .replace(/[\s_]+/g, "-")
+    .replace(/[^a-z0-9-]/g, "")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+/**
+ * If we later decide to map venue cities to canonical slugs,
+ * we can add rules here (e.g. "munich" -> "munchen" if we choose).
+ */
+function deriveCitySlug(t: Pick<Trip, "citySlug" | "cityId">): string | undefined {
+  const existing = t.citySlug ? slugify(t.citySlug) : "";
+  if (existing) return existing;
+
+  const fromLabel = t.cityId ? slugify(t.cityId) : "";
+  return fromLabel || undefined;
 }
 
 let state: TripsState = { loaded: false, trips: [] };
@@ -43,17 +89,63 @@ async function persistSafe(trips: Trip[]) {
   }
 }
 
-async function loadTrips() {
-  try {
-    const saved = await storage.getJSON<Trip[]>(STORAGE_KEY);
-    state = {
-      loaded: true,
-      trips: Array.isArray(saved) ? saved : [],
+/**
+ * Normalizes saved trips and backfills new fields.
+ * This is your "migration" layer without changing the storage key.
+ */
+function normalizeTrips(raw: any): Trip[] {
+  if (!Array.isArray(raw)) return [];
+
+  const out: Trip[] = [];
+  for (const x of raw) {
+    if (!x || typeof x !== "object") continue;
+
+    const id = typeof x.id === "string" ? x.id : uid();
+    const cityId = typeof x.cityId === "string" ? x.cityId : "Trip";
+    const matchIds = Array.isArray(x.matchIds) ? x.matchIds.map(String) : [];
+    const startDate = typeof x.startDate === "string" ? x.startDate : "";
+    const endDate = typeof x.endDate === "string" ? x.endDate : "";
+    const notes = typeof x.notes === "string" ? x.notes : "";
+
+    const base: Trip = {
+      id,
+      cityId,
+      matchIds,
+      startDate,
+      endDate,
+      notes,
     };
-  } catch {
-    state = { loaded: true, trips: [] };
+
+    const citySlug = deriveCitySlug({ cityId: base.cityId, citySlug: x.citySlug });
+
+    out.push({
+      ...base,
+      ...(citySlug ? { citySlug } : {}),
+    });
   }
+
+  return out;
+}
+
+async function loadTrips() {
+  let nextTrips: Trip[] = [];
+  try {
+    const saved = await storage.getJSON<any>(STORAGE_KEY);
+    nextTrips = normalizeTrips(saved);
+  } catch {
+    nextTrips = [];
+  }
+
+  state = { loaded: true, trips: nextTrips };
   emit();
+
+  // If we backfilled citySlug for older items, persist quietly.
+  // Best-effort; no impact on UI.
+  try {
+    await persistSafe(nextTrips);
+  } catch {
+    // swallow
+  }
 }
 
 function getState() {
@@ -66,7 +158,14 @@ function subscribe(listener: Listener) {
 }
 
 async function addTrip(input: Omit<Trip, "id">) {
-  const t: Trip = { id: uid(), ...input };
+  const citySlug = deriveCitySlug({ cityId: input.cityId, citySlug: input.citySlug });
+
+  const t: Trip = {
+    id: uid(),
+    ...input,
+    ...(citySlug ? { citySlug } : {}),
+  };
+
   const nextTrips = [t, ...state.trips];
 
   state = { ...state, trips: nextTrips };
@@ -77,7 +176,28 @@ async function addTrip(input: Omit<Trip, "id">) {
 }
 
 async function updateTrip(id: string, patch: Partial<Omit<Trip, "id">>) {
-  const nextTrips = state.trips.map((t) => (t.id === id ? { ...t, ...patch } : t));
+  const nextTrips = state.trips.map((t) => {
+    if (t.id !== id) return t;
+
+    const next = { ...t, ...patch };
+
+    // If city label changes and citySlug wasn't explicitly patched, recompute.
+    const patchTouchesCitySlug = Object.prototype.hasOwnProperty.call(patch, "citySlug");
+    const patchTouchesCityId = Object.prototype.hasOwnProperty.call(patch, "cityId");
+
+    if (!patchTouchesCitySlug && patchTouchesCityId) {
+      const derived = deriveCitySlug({ cityId: next.cityId, citySlug: next.citySlug });
+      return { ...next, ...(derived ? { citySlug: derived } : {}) };
+    }
+
+    // If citySlug was explicitly patched, normalize it.
+    if (patchTouchesCitySlug) {
+      const normalized = next.citySlug ? slugify(next.citySlug) : undefined;
+      return { ...next, ...(normalized ? { citySlug: normalized } : { citySlug: undefined }) };
+    }
+
+    return next;
+  });
 
   state = { ...state, trips: nextTrips };
   emit();
