@@ -9,63 +9,39 @@ import GlassCard from "@/src/components/GlassCard";
 import EmptyState from "@/src/components/EmptyState";
 import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
+
 import { getFixtureById, type FixtureListRow } from "@/src/services/apiFootball";
 
-function toIsoDate(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
+import { getRollingWindowIso, toIsoDate, addDaysIso } from "@/src/constants/football";
+import { coerceNumber, coerceString } from "@/src/utils/params";
+import { formatUkDateTimeMaybe } from "@/src/utils/formatters";
 
-function addDaysIso(base: Date, days: number): string {
-  const d = new Date(base);
-  d.setDate(d.getDate() + days);
-  return toIsoDate(d);
-}
-
-function coerceString(v: unknown): string | null {
-  if (typeof v === "string" && v.trim()) return v.trim();
-  if (Array.isArray(v) && typeof v[0] === "string" && v[0].trim()) return v[0].trim();
-  return null;
-}
-
-function coerceNumber(v: unknown): number | null {
-  const s = coerceString(v);
-  if (!s) return null;
-  const n = Number(s);
-  return Number.isFinite(n) ? n : null;
-}
-
-function formatUkDateTimeMaybe(iso: string | undefined): string {
-  if (!iso) return "TBC";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "TBC";
-  return new Intl.DateTimeFormat("en-GB", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(d);
+function currentFootballSeasonStartYear(now = new Date()): number {
+  // Typical European season starts around July/August.
+  // Jan 2026 => season "2025" (i.e. 2025/26)
+  const y = now.getFullYear();
+  const m = now.getMonth(); // 0=Jan
+  return m >= 6 ? y : y - 1;
 }
 
 export default function MatchDetailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
 
-  const id = useMemo(() => coerceString(params.id), [params.id]);
+  const id = useMemo(() => coerceString((params as any)?.id), [params]);
 
-  // Prefer navigation context if present (coming from Home/Fixtures),
-  // but always have a safe fallback.
+  // Prefer passed context, else fall back to a safe rolling window.
+  // (Match screen itself doesn't load a list; this is just for routing context.)
+  const rolling = useMemo(() => getRollingWindowIso(), []);
   const todayIso = useMemo(() => toIsoDate(new Date()), []);
-  const defaultToIso = useMemo(() => addDaysIso(new Date(), 30), []);
+  const fallbackFrom = useMemo(() => todayIso ?? rolling.from, [todayIso, rolling.from]);
+  const fallbackTo = useMemo(() => rolling.to ?? addDaysIso(fallbackFrom, 30), [rolling.to, fallbackFrom]);
 
-  const fromIso = useMemo(() => coerceString(params.from) ?? todayIso, [params.from, todayIso]);
-  const toIso = useMemo(() => coerceString(params.to) ?? defaultToIso, [params.to, defaultToIso]);
+  const fromIso = useMemo(() => coerceString((params as any)?.from) ?? fallbackFrom, [params, fallbackFrom]);
+  const toIso = useMemo(() => coerceString((params as any)?.to) ?? fallbackTo, [params, fallbackTo]);
 
-  const routeLeagueId = useMemo(() => coerceNumber(params.leagueId), [params.leagueId]);
-  const routeSeason = useMemo(() => coerceNumber(params.season), [params.season]);
+  const routeLeagueId = useMemo(() => coerceNumber((params as any)?.leagueId), [params]);
+  const routeSeason = useMemo(() => coerceNumber((params as any)?.season), [params]);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -108,6 +84,12 @@ export default function MatchDetailScreen() {
     };
   }, [id]);
 
+  const fixtureId = useMemo(() => {
+    const apiId = row?.fixture?.id;
+    if (apiId != null) return String(apiId);
+    return id ?? "";
+  }, [row, id]);
+
   const home = row?.teams?.home?.name ?? "Home";
   const away = row?.teams?.away?.name ?? "Away";
   const kickoff = formatUkDateTimeMaybe(row?.fixture?.date);
@@ -118,17 +100,13 @@ export default function MatchDetailScreen() {
 
   const leagueName = row?.league?.name ?? "League";
   const apiLeagueId = row?.league?.id ?? null;
+
   const effectiveLeagueId = apiLeagueId ?? routeLeagueId ?? null;
 
-  // Your app is currently hard-coded to 2025 in multiple places.
-  // Keep that behaviour as a fallback so Plan Trip never breaks.
-  const effectiveSeason = routeSeason ?? 2025;
-
-  const fixtureId = useMemo(() => {
-    const apiId = row?.fixture?.id;
-    if (apiId != null) return String(apiId);
-    return id ?? "";
-  }, [row?.fixture?.id, id]);
+  // Prefer explicit season param, else API response, else computed season-start-year
+  const apiSeason = (row as any)?.league?.season;
+  const effectiveSeason =
+    routeSeason ?? (typeof apiSeason === "number" ? apiSeason : null) ?? currentFootballSeasonStartYear();
 
   function onPlanTrip() {
     if (!fixtureId) return;
@@ -146,8 +124,6 @@ export default function MatchDetailScreen() {
   }
 
   function onOpenFixtures() {
-    // Your (tabs)/fixtures.tsx currently ignores params for preselecting league.
-    // This still passes context so you can wire it later without changing this screen.
     router.push({
       pathname: "/(tabs)/fixtures",
       params: {
@@ -202,6 +178,11 @@ export default function MatchDetailScreen() {
                       {place}
                     </Text>
                   ) : null}
+
+                  <Text style={styles.metaLine}>
+                    <Text style={styles.metaLabel}>Season: </Text>
+                    {String(effectiveSeason)}
+                  </Text>
 
                   <Text style={styles.metaLine}>
                     <Text style={styles.metaLabel}>Match ID: </Text>
