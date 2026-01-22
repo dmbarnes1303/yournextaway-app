@@ -24,9 +24,31 @@ import { theme } from "@/src/constants/theme";
 import { getFixtures } from "@/src/services/apiFootball";
 import tripsStore from "@/src/state/trips";
 
-import { LEAGUES, getRollingWindowIso, toIsoDate, parseIsoDateOnly, addDaysIso, type LeagueOption } from "@/src/constants/football";
+import {
+  LEAGUES,
+  getRollingWindowIso,
+  toIsoDate,
+  parseIsoDateOnly,
+  addDaysIso,
+  type LeagueOption,
+} from "@/src/constants/football";
 import { coerceNumber, coerceString } from "@/src/utils/params";
 import { formatUkDateOnly, formatUkDateTimeMaybe } from "@/src/utils/formatters";
+
+function tomorrowIso(): string {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() + 1);
+  return toIsoDate(d);
+}
+
+function clampIsoToTomorrow(iso: string): string {
+  const tmr = tomorrowIso();
+  const a = parseIsoDateOnly(iso);
+  const b = parseIsoDateOnly(tmr);
+  if (!a || !b) return tmr;
+  return a.getTime() < b.getTime() ? tmr : iso;
+}
 
 export default function TripBuildScreen() {
   const router = useRouter();
@@ -46,9 +68,9 @@ export default function TripBuildScreen() {
     }
   }, []);
 
-  // Central rolling window defaults (single source of truth)
+  // Central rolling window defaults (single source of truth; tomorrow onwards)
   const rolling = useMemo(() => getRollingWindowIso(), []);
-  const defaultFrom = rolling.from;
+  const defaultFrom = useMemo(() => clampIsoToTomorrow(rolling.from), [rolling.from]);
   const defaultTo = rolling.to;
 
   // Route params (context-aware Plan Trip)
@@ -56,9 +78,12 @@ export default function TripBuildScreen() {
   const routeLeagueId = useMemo(() => coerceNumber(params.leagueId), [params.leagueId]);
   const routeSeason = useMemo(() => coerceNumber(params.season), [params.season]);
 
-  // Allow optional from/to via params (fallback to rolling window)
-  const from = useMemo(() => coerceString(params.from) ?? defaultFrom, [params.from, defaultFrom]);
-  const to = useMemo(() => coerceString(params.to) ?? defaultTo, [params.to, defaultTo]);
+  // Allow optional from/to via params (but enforce tomorrow+ rule)
+  const fromParam = useMemo(() => coerceString(params.from), [params.from]);
+  const toParam = useMemo(() => coerceString(params.to), [params.to]);
+
+  const from = useMemo(() => clampIsoToTomorrow(fromParam ?? defaultFrom), [fromParam, defaultFrom]);
+  const to = useMemo(() => toParam ?? defaultTo, [toParam, defaultTo]);
 
   const [selectedLeague, setSelectedLeague] = useState<LeagueOption>(LEAGUES[0]);
 
@@ -192,7 +217,7 @@ export default function TripBuildScreen() {
     if (iso) {
       const d = new Date(iso);
       if (!Number.isNaN(d.getTime())) {
-        const start = toIsoDate(d);
+        const start = clampIsoToTomorrow(toIsoDate(d));
         setStartIso(start);
         setEndIso(addDaysIso(start, 2));
       }
@@ -244,7 +269,7 @@ export default function TripBuildScreen() {
       return;
     }
 
-    const iso = toIsoDate(date);
+    const iso = clampIsoToTomorrow(toIsoDate(date));
     if (picker.which === "start") {
       setStartIso(iso);
       const end = parseIsoDateOnly(endIso);
@@ -534,7 +559,9 @@ export default function TripBuildScreen() {
           {DateTimePicker && picker.open ? (
             <View style={{ marginTop: 10 }}>
               <DateTimePicker
-                value={parseIsoDateOnly(picker.which === "start" ? startIso : endIso) ?? new Date()}
+                value={
+                  parseIsoDateOnly(picker.which === "start" ? (startIso as any) : (endIso as any)) ?? new Date()
+                }
                 mode="date"
                 display={Platform.OS === "ios" ? "inline" : "default"}
                 onChange={onPickerChange}
