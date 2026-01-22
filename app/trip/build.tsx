@@ -13,6 +13,7 @@ import {
   Easing,
   Dimensions,
   Linking,
+  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Stack, useRouter, useLocalSearchParams } from "expo-router";
@@ -36,11 +37,24 @@ import {
 import { coerceNumber, coerceString } from "@/src/utils/params";
 import { formatUkDateOnly, formatUkDateTimeMaybe } from "@/src/utils/formatters";
 
-// City slug normalisation (source of truth for Trip.cityId)
-import { normalizeCityKey } from "@/src/utils/city";
+// Optional: If this helper exists, we will use it; otherwise we degrade gracefully (no crash)
+type CityBundle = {
+  hasGuide: boolean;
+  tripAdvisorUrl?: string;
+  items?: { title: string; description?: string }[];
+  quickTips?: string[];
+};
 
-// City guide helpers (must exist)
-import { getTopThingsToDoForTrip } from "@/src/data/cityGuides";
+function safeGetTopThingsModule(): null | ((city: string) => CityBundle | null) {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const mod = require("@/src/data/cityGuides");
+    const fn = mod?.getTopThingsToDoForTrip ?? mod?.default?.getTopThingsToDoForTrip;
+    return typeof fn === "function" ? fn : null;
+  } catch {
+    return null;
+  }
+}
 
 function tomorrowIso(): string {
   const d = new Date();
@@ -65,9 +79,10 @@ function safeCityName(input: unknown): string {
 async function safeOpenUrl(url: string) {
   try {
     const can = await Linking.canOpenURL(url);
-    if (can) await Linking.openURL(url);
+    if (!can) throw new Error("Cannot open URL");
+    await Linking.openURL(url);
   } catch {
-    // Intentionally silent: link-out should never crash Trip Build.
+    Alert.alert("Couldn’t open link", "Your device could not open that link.");
   }
 }
 
@@ -147,20 +162,22 @@ export default function TripBuildScreen() {
   const flashAnim = useRef(new Animated.Value(0)).current;
 
   const screenH = Dimensions.get("window").height;
-  const PANEL_MAX = Math.min(360, Math.round(screenH * 0.44));
+  const PANEL_MAX = Math.min(380, Math.round(screenH * 0.48));
   const panelOpen = !!selectedFixture;
 
   const panelTranslateY = panelAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [PANEL_MAX + 60, 0],
+    outputRange: [PANEL_MAX + 80, 0],
   });
   const panelOpacity = panelAnim.interpolate({
     inputRange: [0, 1],
     outputRange: [0, 1],
   });
+
+  // Strong dim when modal open (this is the “messy overlay” fix)
   const backdropOpacity = panelAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [0, 0.35],
+    outputRange: [0, 0.68],
   });
 
   // If from changes (via params), keep date fields aligned
@@ -218,7 +235,7 @@ export default function TripBuildScreen() {
       return;
     }
 
-    setError("That match isn’t available in the current window for this league. Try another league or adjust the date window.");
+    setError("That match isn’t available in the current window for this league. Try another league or adjust dates.");
   }, [routeFixtureId, rows]);
 
   // Panel open/close animations + date prefill
@@ -228,7 +245,7 @@ export default function TripBuildScreen() {
     if (!selectedFixture) {
       Animated.timing(panelAnim, {
         toValue: 0,
-        duration: 160,
+        duration: 170,
         easing: Easing.out(Easing.quad),
         useNativeDriver: true,
       }).start();
@@ -248,7 +265,7 @@ export default function TripBuildScreen() {
 
     Animated.timing(panelAnim, {
       toValue: 1,
-      duration: 220,
+      duration: 230,
       easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
     }).start();
@@ -256,7 +273,7 @@ export default function TripBuildScreen() {
     flashAnim.setValue(0);
     Animated.sequence([
       Animated.timing(flashAnim, { toValue: 1, duration: 120, useNativeDriver: true }),
-      Animated.timing(flashAnim, { toValue: 0, duration: 420, useNativeDriver: true }),
+      Animated.timing(flashAnim, { toValue: 0, duration: 450, useNativeDriver: true }),
     ]).start();
 
     requestAnimationFrame(() => {
@@ -302,31 +319,10 @@ export default function TripBuildScreen() {
     if (Platform.OS === "android") setPicker((p) => ({ ...p, open: false }));
   }
 
-  const selHome = selectedFixture?.teams?.home?.name ?? "";
-  const selAway = selectedFixture?.teams?.away?.name ?? "";
-  const selKick = formatUkDateTimeMaybe(selectedFixture?.fixture?.date);
-  const selVenue = selectedFixture?.fixture?.venue?.name ?? "";
-  const selCity = selectedFixture?.fixture?.venue?.city ?? "";
-
-  // Human label used in the UI panel (NOT what we store)
-  const destinationCityLabel = useMemo(() => {
-    if (!selectedFixture) return "";
-    return safeCityName(
-      (selectedFixture?.fixture?.venue?.city as string | undefined)?.trim() ||
-        (selectedFixture?.league?.country as string | undefined)?.trim() ||
-        (selectedFixture?.league?.name as string | undefined)?.trim()
-    );
-  }, [selectedFixture]);
-
-  // Slug used for saving + routing/lookup
-  const destinationCitySlug = useMemo(() => normalizeCityKey(destinationCityLabel), [destinationCityLabel]);
-
-  const cityBundle = useMemo(() => {
-    if (!destinationCityLabel) return null;
-    return getTopThingsToDoForTrip(destinationCityLabel);
-  }, [destinationCityLabel]);
-
-  const bottomPad = panelOpen ? PANEL_MAX + theme.spacing.xl : theme.spacing.xxl;
+  function closePanel() {
+    setSelectedFixture(null);
+    if (Platform.OS !== "web") setPicker((p) => ({ ...p, open: false }));
+  }
 
   async function onSave() {
     if (!selectedFixture?.fixture?.id) {
@@ -339,21 +335,18 @@ export default function TripBuildScreen() {
       return;
     }
 
-    // Hard requirement: we only save trips with a stable city slug.
-    if (!destinationCitySlug) {
-      setError("Couldn’t determine a valid city for this trip. Try a different fixture.");
-      return;
-    }
-
     setError(null);
     setSaving(true);
 
     try {
       const fixtureId = String(selectedFixture.fixture.id);
+      const venueCity =
+        (selectedFixture?.fixture?.venue?.city as string | undefined)?.trim() ||
+        (selectedFixture?.league?.name as string | undefined)?.trim() ||
+        "Trip";
 
       const t = await tripsStore.addTrip({
-        // IMPORTANT: Store slug, not a raw label.
-        cityId: destinationCitySlug,
+        cityId: venueCity,
         matchIds: [fixtureId],
         startDate: startIso,
         endDate: endIso,
@@ -368,6 +361,34 @@ export default function TripBuildScreen() {
     }
   }
 
+  const selHome = selectedFixture?.teams?.home?.name ?? "";
+  const selAway = selectedFixture?.teams?.away?.name ?? "";
+  const selKick = formatUkDateTimeMaybe(selectedFixture?.fixture?.date);
+  const selVenue = selectedFixture?.fixture?.venue?.name ?? "";
+  const selCity = selectedFixture?.fixture?.venue?.city ?? "";
+
+  const destinationCity = useMemo(() => {
+    if (!selectedFixture) return "";
+    return safeCityName(
+      (selectedFixture?.fixture?.venue?.city as string | undefined)?.trim() ||
+        (selectedFixture?.league?.country as string | undefined)?.trim() ||
+        (selectedFixture?.league?.name as string | undefined)?.trim()
+    );
+  }, [selectedFixture]);
+
+  const getTopThingsToDoForTrip = useMemo(() => safeGetTopThingsModule(), []);
+  const cityBundle = useMemo<CityBundle | null>(() => {
+    if (!destinationCity) return null;
+    if (!getTopThingsToDoForTrip) return null;
+    try {
+      return getTopThingsToDoForTrip(destinationCity);
+    } catch {
+      return null;
+    }
+  }, [destinationCity, getTopThingsToDoForTrip]);
+
+  const bottomPad = panelOpen ? PANEL_MAX + theme.spacing.xl : theme.spacing.xxl;
+
   return (
     <Background imageUrl={getBackground("trips")}>
       <Stack.Screen
@@ -380,11 +401,17 @@ export default function TripBuildScreen() {
       />
 
       <SafeAreaView style={styles.safe} edges={["bottom"]}>
+        {/* Main list (freeze it when modal is open) */}
         <ScrollView
           ref={(r) => (listRef.current = r)}
           style={styles.scroll}
-          contentContainerStyle={[styles.content, { paddingBottom: bottomPad }]}
+          contentContainerStyle={[
+            styles.content,
+            { paddingBottom: bottomPad },
+            panelOpen ? { opacity: 0.28 } : null, // reduce background readability slightly
+          ]}
           keyboardShouldPersistTaps="handled"
+          scrollEnabled={!panelOpen}
         >
           <GlassCard style={styles.card}>
             <Text style={styles.h1}>Pick a match</Text>
@@ -398,6 +425,7 @@ export default function TripBuildScreen() {
                     key={l.leagueId}
                     onPress={() => setSelectedLeague(l)}
                     style={[styles.leaguePill, active && styles.leaguePillActive]}
+                    disabled={panelOpen}
                   >
                     <Text style={[styles.leaguePillText, active && styles.leaguePillTextActive]}>{l.label}</Text>
                   </Pressable>
@@ -418,6 +446,7 @@ export default function TripBuildScreen() {
                 autoCapitalize="none"
                 autoCorrect={false}
                 returnKeyType="search"
+                editable={!panelOpen}
               />
               <Text style={styles.searchMeta}>
                 Showing {Math.min(visibleCount, filteredRows.length)} of {filteredRows.length}
@@ -463,6 +492,7 @@ export default function TripBuildScreen() {
                         key={String(fixtureId ?? idx)}
                         onPress={() => setSelectedFixture(r)}
                         style={[styles.pickRow, selected && styles.pickRowSelected]}
+                        disabled={panelOpen} // modal behaviour: don’t allow tapping list through
                       >
                         <View style={styles.pickRowTop}>
                           <Text style={styles.rowTitle}>
@@ -478,7 +508,7 @@ export default function TripBuildScreen() {
                 </View>
 
                 {visibleCount < filteredRows.length ? (
-                  <Pressable onPress={() => setVisibleCount((n) => n + 12)} style={styles.moreBtn}>
+                  <Pressable onPress={() => setVisibleCount((n) => n + 12)} style={styles.moreBtn} disabled={panelOpen}>
                     <Text style={styles.moreText}>Show more</Text>
                   </Pressable>
                 ) : null}
@@ -493,11 +523,15 @@ export default function TripBuildScreen() {
           </GlassCard>
         </ScrollView>
 
+        {/* Backdrop (true modal dim; intercepts touches) */}
         {panelOpen ? (
-          <Animated.View pointerEvents="auto" style={[StyleSheet.absoluteFill, { opacity: backdropOpacity }]}>
+          <Animated.View
+            pointerEvents="auto"
+            style={[StyleSheet.absoluteFill, styles.backdropWrap, { opacity: backdropOpacity }]}
+          >
             <Pressable
               style={StyleSheet.absoluteFill}
-              onPress={() => setSelectedFixture(null)}
+              onPress={closePanel}
               accessibilityRole="button"
               accessibilityLabel="Close trip details panel"
             >
@@ -506,6 +540,7 @@ export default function TripBuildScreen() {
           </Animated.View>
         ) : null}
 
+        {/* Panel */}
         <Animated.View
           pointerEvents={panelOpen ? "auto" : "none"}
           style={[
@@ -516,9 +551,8 @@ export default function TripBuildScreen() {
             },
           ]}
         >
-          <GlassCard style={styles.panel} intensity={30}>
+          <GlassCard style={styles.panel} intensity={34}>
             <Animated.View pointerEvents="none" style={[styles.panelFlash, { opacity: flashAnim }]} />
-
             <View style={styles.handle} />
 
             <View style={styles.panelTop}>
@@ -534,8 +568,8 @@ export default function TripBuildScreen() {
                 </Text>
               </View>
 
-              <Pressable onPress={() => setSelectedFixture(null)} style={styles.clearBtn} hitSlop={10}>
-                <Text style={styles.clearText}>Change</Text>
+              <Pressable onPress={closePanel} style={styles.clearBtn} hitSlop={10}>
+                <Text style={styles.clearText}>Close</Text>
               </Pressable>
             </View>
 
@@ -551,28 +585,23 @@ export default function TripBuildScreen() {
               </Pressable>
             </View>
 
-            {/* CITY GUIDE / TRIPADVISOR BLOCK */}
-            {destinationCityLabel ? (
+            {/* CITY GUIDE / TRIPADVISOR BLOCK (more opaque to avoid “double text” mess) */}
+            {destinationCity ? (
               <View style={styles.cityBlock}>
                 <View style={styles.cityBlockTop}>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.cityBlockKicker}>In {destinationCityLabel}</Text>
+                    <Text style={styles.cityBlockKicker}>In {destinationCity}</Text>
                     <Text style={styles.cityBlockTitle}>Top things to do</Text>
                     <Text style={styles.cityBlockSub}>
                       {cityBundle?.hasGuide
                         ? "Curated picks + quick tips. Link out for more."
                         : "No curated guide yet — link out for the best current picks."}
                     </Text>
-                    {destinationCitySlug ? (
-                      <Text style={styles.citySlugLine}>Saving as: {destinationCitySlug}</Text>
-                    ) : (
-                      <Text style={styles.citySlugLine}>Saving as: —</Text>
-                    )}
                   </View>
 
                   {cityBundle?.tripAdvisorUrl ? (
                     <Pressable
-                      onPress={() => safeOpenUrl(cityBundle.tripAdvisorUrl)}
+                      onPress={() => safeOpenUrl(cityBundle.tripAdvisorUrl!)}
                       style={styles.taBtn}
                       accessibilityRole="button"
                       accessibilityLabel="Open TripAdvisor things to do"
@@ -584,7 +613,7 @@ export default function TripBuildScreen() {
 
                 {cityBundle?.hasGuide && (cityBundle.items?.length ?? 0) > 0 ? (
                   <View style={styles.thingsList}>
-                    {cityBundle.items.slice(0, 10).map((it, idx) => (
+                    {cityBundle.items!.slice(0, 6).map((it, idx) => (
                       <View key={`${it.title}-${idx}`} style={styles.thingRow}>
                         <Text style={styles.thingIdx}>{idx + 1}.</Text>
                         <View style={{ flex: 1 }}>
@@ -599,7 +628,7 @@ export default function TripBuildScreen() {
                 {cityBundle?.hasGuide && (cityBundle.quickTips?.length ?? 0) > 0 ? (
                   <View style={styles.tipsBlock}>
                     <Text style={styles.tipsTitle}>Quick tips</Text>
-                    {cityBundle.quickTips.slice(0, 6).map((t, idx) => (
+                    {cityBundle.quickTips!.slice(0, 4).map((t, idx) => (
                       <Text key={`${t}-${idx}`} style={styles.tipLine}>
                         • {t}
                       </Text>
@@ -773,26 +802,35 @@ const styles = StyleSheet.create({
 
   hint: { marginTop: 10, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm },
 
+  // Backdrop modal layer
+  backdropWrap: {
+    zIndex: 50,
+    elevation: 50,
+  },
   backdrop: { flex: 1, backgroundColor: "#000" },
 
+  // Panel above backdrop
   panelWrap: {
     position: "absolute",
     left: theme.spacing.lg,
     right: theme.spacing.lg,
     bottom: theme.spacing.lg,
+    zIndex: 60,
+    elevation: 60,
   },
 
+  // More opaque panel to stop “double text” bleed-through
   panel: {
     padding: theme.spacing.md,
     borderRadius: theme.borderRadius.xl,
     borderWidth: 1,
-    borderColor: "rgba(0, 255, 136, 0.38)",
-    backgroundColor: "rgba(0,0,0,0.22)",
+    borderColor: "rgba(0, 255, 136, 0.44)",
+    backgroundColor: "rgba(0,0,0,0.56)",
     shadowColor: "#000",
-    shadowOpacity: 0.4,
+    shadowOpacity: 0.45,
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 12 },
-    elevation: 14,
+    elevation: 16,
   },
 
   panelFlash: {
@@ -837,7 +875,7 @@ const styles = StyleSheet.create({
     flex: 1,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.14)",
-    backgroundColor: "rgba(0,0,0,0.18)",
+    backgroundColor: "rgba(0,0,0,0.28)",
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
@@ -845,20 +883,19 @@ const styles = StyleSheet.create({
   dateLabel: { color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: "800" },
   dateValue: { marginTop: 6, color: theme.colors.text, fontSize: theme.fontSize.md, fontWeight: "900" },
 
-  // City block
+  // City block (more solid)
   cityBlock: {
     marginTop: 12,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    backgroundColor: "rgba(0,0,0,0.16)",
+    borderColor: "rgba(255,255,255,0.14)",
+    backgroundColor: "rgba(0,0,0,0.40)",
     padding: 12,
   },
   cityBlockTop: { flexDirection: "row", gap: 10, alignItems: "flex-start" },
   cityBlockKicker: { color: theme.colors.primary, fontSize: theme.fontSize.xs, fontWeight: "900" },
   cityBlockTitle: { marginTop: 4, color: theme.colors.text, fontSize: theme.fontSize.md, fontWeight: "900" },
   cityBlockSub: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, lineHeight: 16 },
-  citySlugLine: { marginTop: 8, color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: "800" },
 
   taBtn: {
     paddingVertical: 8,
@@ -866,7 +903,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1,
     borderColor: "rgba(0,255,136,0.40)",
-    backgroundColor: "rgba(0,0,0,0.20)",
+    backgroundColor: "rgba(0,0,0,0.22)",
   },
   taBtnText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.xs },
 
@@ -885,7 +922,7 @@ const styles = StyleSheet.create({
   input: {
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.14)",
-    backgroundColor: "rgba(0,0,0,0.18)",
+    backgroundColor: "rgba(0,0,0,0.28)",
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: Platform.OS === "ios" ? 12 : 10,
@@ -902,7 +939,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: theme.colors.primary,
-    backgroundColor: "rgba(0,0,0,0.40)",
+    backgroundColor: "rgba(0,0,0,0.48)",
     alignItems: "center",
   },
   saveText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.md },
