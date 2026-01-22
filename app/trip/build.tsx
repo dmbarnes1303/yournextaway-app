@@ -36,6 +36,9 @@ import {
 import { coerceNumber, coerceString } from "@/src/utils/params";
 import { formatUkDateOnly, formatUkDateTimeMaybe } from "@/src/utils/formatters";
 
+// City slug normalisation (source of truth for Trip.cityId)
+import { normalizeCityKey } from "@/src/utils/city";
+
 // City guide helpers (must exist)
 import { getTopThingsToDoForTrip } from "@/src/data/cityGuides";
 
@@ -215,9 +218,7 @@ export default function TripBuildScreen() {
       return;
     }
 
-    setError(
-      "That match isn’t available in the current window for this league. Try another league or adjust the date window."
-    );
+    setError("That match isn’t available in the current window for this league. Try another league or adjust the date window.");
   }, [routeFixtureId, rows]);
 
   // Panel open/close animations + date prefill
@@ -301,6 +302,32 @@ export default function TripBuildScreen() {
     if (Platform.OS === "android") setPicker((p) => ({ ...p, open: false }));
   }
 
+  const selHome = selectedFixture?.teams?.home?.name ?? "";
+  const selAway = selectedFixture?.teams?.away?.name ?? "";
+  const selKick = formatUkDateTimeMaybe(selectedFixture?.fixture?.date);
+  const selVenue = selectedFixture?.fixture?.venue?.name ?? "";
+  const selCity = selectedFixture?.fixture?.venue?.city ?? "";
+
+  // Human label used in the UI panel (NOT what we store)
+  const destinationCityLabel = useMemo(() => {
+    if (!selectedFixture) return "";
+    return safeCityName(
+      (selectedFixture?.fixture?.venue?.city as string | undefined)?.trim() ||
+        (selectedFixture?.league?.country as string | undefined)?.trim() ||
+        (selectedFixture?.league?.name as string | undefined)?.trim()
+    );
+  }, [selectedFixture]);
+
+  // Slug used for saving + routing/lookup
+  const destinationCitySlug = useMemo(() => normalizeCityKey(destinationCityLabel), [destinationCityLabel]);
+
+  const cityBundle = useMemo(() => {
+    if (!destinationCityLabel) return null;
+    return getTopThingsToDoForTrip(destinationCityLabel);
+  }, [destinationCityLabel]);
+
+  const bottomPad = panelOpen ? PANEL_MAX + theme.spacing.xl : theme.spacing.xxl;
+
   async function onSave() {
     if (!selectedFixture?.fixture?.id) {
       setError("Select a fixture first.");
@@ -312,18 +339,21 @@ export default function TripBuildScreen() {
       return;
     }
 
+    // Hard requirement: we only save trips with a stable city slug.
+    if (!destinationCitySlug) {
+      setError("Couldn’t determine a valid city for this trip. Try a different fixture.");
+      return;
+    }
+
     setError(null);
     setSaving(true);
 
     try {
       const fixtureId = String(selectedFixture.fixture.id);
-      const venueCity =
-        (selectedFixture?.fixture?.venue?.city as string | undefined)?.trim() ||
-        (selectedFixture?.league?.name as string | undefined)?.trim() ||
-        "Trip";
 
       const t = await tripsStore.addTrip({
-        cityId: venueCity,
+        // IMPORTANT: Store slug, not a raw label.
+        cityId: destinationCitySlug,
         matchIds: [fixtureId],
         startDate: startIso,
         endDate: endIso,
@@ -337,28 +367,6 @@ export default function TripBuildScreen() {
       setSaving(false);
     }
   }
-
-  const selHome = selectedFixture?.teams?.home?.name ?? "";
-  const selAway = selectedFixture?.teams?.away?.name ?? "";
-  const selKick = formatUkDateTimeMaybe(selectedFixture?.fixture?.date);
-  const selVenue = selectedFixture?.fixture?.venue?.name ?? "";
-  const selCity = selectedFixture?.fixture?.venue?.city ?? "";
-
-  const destinationCity = useMemo(() => {
-    if (!selectedFixture) return "";
-    return safeCityName(
-      (selectedFixture?.fixture?.venue?.city as string | undefined)?.trim() ||
-        (selectedFixture?.league?.country as string | undefined)?.trim() ||
-        (selectedFixture?.league?.name as string | undefined)?.trim()
-    );
-  }, [selectedFixture]);
-
-  const cityBundle = useMemo(() => {
-    if (!destinationCity) return null;
-    return getTopThingsToDoForTrip(destinationCity);
-  }, [destinationCity]);
-
-  const bottomPad = panelOpen ? PANEL_MAX + theme.spacing.xl : theme.spacing.xxl;
 
   return (
     <Background imageUrl={getBackground("trips")}>
@@ -544,17 +552,22 @@ export default function TripBuildScreen() {
             </View>
 
             {/* CITY GUIDE / TRIPADVISOR BLOCK */}
-            {destinationCity ? (
+            {destinationCityLabel ? (
               <View style={styles.cityBlock}>
                 <View style={styles.cityBlockTop}>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.cityBlockKicker}>In {destinationCity}</Text>
+                    <Text style={styles.cityBlockKicker}>In {destinationCityLabel}</Text>
                     <Text style={styles.cityBlockTitle}>Top things to do</Text>
                     <Text style={styles.cityBlockSub}>
                       {cityBundle?.hasGuide
                         ? "Curated picks + quick tips. Link out for more."
                         : "No curated guide yet — link out for the best current picks."}
                     </Text>
+                    {destinationCitySlug ? (
+                      <Text style={styles.citySlugLine}>Saving as: {destinationCitySlug}</Text>
+                    ) : (
+                      <Text style={styles.citySlugLine}>Saving as: —</Text>
+                    )}
                   </View>
 
                   {cityBundle?.tripAdvisorUrl ? (
@@ -845,6 +858,7 @@ const styles = StyleSheet.create({
   cityBlockKicker: { color: theme.colors.primary, fontSize: theme.fontSize.xs, fontWeight: "900" },
   cityBlockTitle: { marginTop: 4, color: theme.colors.text, fontSize: theme.fontSize.md, fontWeight: "900" },
   cityBlockSub: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, lineHeight: 16 },
+  citySlugLine: { marginTop: 8, color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: "800" },
 
   taBtn: {
     paddingVertical: 8,
