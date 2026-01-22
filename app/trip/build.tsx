@@ -1,3 +1,4 @@
+// app/trip/build.tsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
@@ -14,7 +15,7 @@ import {
   Linking,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import { Stack, useRouter, useLocalSearchParams } from "expo-router";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 
 import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
@@ -167,17 +168,17 @@ export default function TripBuildScreen() {
   const { height: screenH } = Dimensions.get("window");
 
   // Header-safe sizing (prevents top overlap + prevents backdrop stealing Back taps)
-  const HEADER_ESTIMATE = 56;
+  const HEADER_ESTIMATE = Platform.OS === "android" ? 72 : 56;
   const headerBlock = insets.top + HEADER_ESTIMATE;
 
-  const PANEL_MAX = Math.min(420, Math.round(screenH * 0.62));
-  const panelMaxHeight = Math.min(PANEL_MAX, Math.max(260, screenH - headerBlock - 20));
+  const PANEL_MAX = Math.min(440, Math.round(screenH * 0.64));
+  const panelMaxHeight = Math.min(PANEL_MAX, Math.max(280, screenH - headerBlock - 40));
 
   const panelOpen = !!selectedFixture;
 
   const panelTranslateY = panelAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [panelMaxHeight + 90, 0],
+    outputRange: [panelMaxHeight + 110, 0],
   });
   const panelOpacity = panelAnim.interpolate({
     inputRange: [0, 1],
@@ -253,6 +254,9 @@ export default function TripBuildScreen() {
       setSearch("");
       setVisibleCount(12);
 
+      // IMPORTANT:
+      // Do NOT clear selectedFixture here.
+      // That was the Android bug: prefill sets it, then this effect wipes it.
       try {
         const res = await getFixtures({
           league: selectedLeague.leagueId,
@@ -276,6 +280,16 @@ export default function TripBuildScreen() {
       cancelled = true;
     };
   }, [selectedLeague, from, to]);
+
+  // If we did NOT manage to prefill via getFixtureById, try to prefill from the loaded list
+  useEffect(() => {
+    if (!routeFixtureId) return;
+    if (selectedFixture) return;
+    if (!rows.length) return;
+
+    const found = rows.find((r) => String(r?.fixture?.id ?? "") === String(routeFixtureId));
+    if (found) setSelectedFixture(found);
+  }, [routeFixtureId, rows, selectedFixture]);
 
   // Panel open/close animation + prefill dates from kickoff
   useEffect(() => {
@@ -546,7 +560,7 @@ export default function TripBuildScreen() {
             ) : null}
           </GlassCard>
         </ScrollView>
-        {/* Backdrop: MUST NOT cover header zone or it steals BackButton taps on Android */}
+        {/* Backdrop: MUST NOT cover header zone or it steals BackButton taps */}
         {panelOpen ? (
           <Animated.View
             pointerEvents="auto"
@@ -558,18 +572,13 @@ export default function TripBuildScreen() {
               },
             ]}
           >
-            <Pressable
-              style={StyleSheet.absoluteFill}
-              onPress={() => setSelectedFixture(null)}
-              accessibilityRole="button"
-              accessibilityLabel="Close trip details"
-            >
+            <Pressable style={StyleSheet.absoluteFill} onPress={() => setSelectedFixture(null)}>
               <View style={styles.backdrop} />
             </Pressable>
           </Animated.View>
         ) : null}
 
-        {/* Bottom Sheet Panel */}
+        {/* Panel */}
         <Animated.View
           pointerEvents={panelOpen ? "auto" : "none"}
           style={[
@@ -582,6 +591,7 @@ export default function TripBuildScreen() {
         >
           <GlassCard style={[styles.panel, { maxHeight: panelMaxHeight }]} intensity={30}>
             <Animated.View pointerEvents="none" style={[styles.panelFlash, { opacity: flashAnim }]} />
+
             <View style={styles.handle} />
 
             <ScrollView
@@ -590,7 +600,6 @@ export default function TripBuildScreen() {
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
             >
-              {/* Panel header */}
               <View style={styles.panelTop}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.panelKicker}>Trip details</Text>
@@ -604,12 +613,11 @@ export default function TripBuildScreen() {
                   </Text>
                 </View>
 
-                <Pressable onPress={() => setSelectedFixture(null)} style={styles.clearBtn} hitSlop={12}>
+                <Pressable onPress={() => setSelectedFixture(null)} style={styles.clearBtn} hitSlop={10}>
                   <Text style={styles.clearText}>Change</Text>
                 </Pressable>
               </View>
 
-              {/* Dates */}
               <View style={styles.dateRow}>
                 <Pressable onPress={() => openPicker("start")} style={styles.datePill}>
                   <Text style={styles.dateLabel}>Start</Text>
@@ -622,7 +630,7 @@ export default function TripBuildScreen() {
                 </Pressable>
               </View>
 
-              {/* City guide bundle */}
+              {/* CITY GUIDE / TRIPADVISOR BLOCK */}
               {destinationCity ? (
                 <View style={styles.cityBlock}>
                   <View style={styles.cityBlockTop}>
@@ -637,12 +645,7 @@ export default function TripBuildScreen() {
                     </View>
 
                     {cityBundle?.tripAdvisorUrl ? (
-                      <Pressable
-                        onPress={() => safeOpenUrl(cityBundle.tripAdvisorUrl!)}
-                        style={styles.taBtn}
-                        accessibilityRole="button"
-                        accessibilityLabel="Open TripAdvisor things to do"
-                      >
+                      <Pressable onPress={() => safeOpenUrl(cityBundle.tripAdvisorUrl)} style={styles.taBtn}>
                         <Text style={styles.taBtnText}>TripAdvisor</Text>
                       </Pressable>
                     ) : null}
@@ -650,7 +653,7 @@ export default function TripBuildScreen() {
 
                   {cityBundle?.hasGuide && (cityBundle.items?.length ?? 0) > 0 ? (
                     <View style={styles.thingsList}>
-                      {cityBundle!.items.slice(0, 6).map((it, idx) => (
+                      {cityBundle.items.slice(0, 6).map((it, idx) => (
                         <View key={`${it.title}-${idx}`} style={styles.thingRow}>
                           <Text style={styles.thingIdx}>{idx + 1}.</Text>
                           <View style={{ flex: 1 }}>
@@ -659,7 +662,7 @@ export default function TripBuildScreen() {
                           </View>
                         </View>
                       ))}
-                      {(cityBundle!.items?.length ?? 0) > 6 ? (
+                      {(cityBundle.items?.length ?? 0) > 6 ? (
                         <Text style={styles.moreInline}>More in the full city guide.</Text>
                       ) : null}
                     </View>
@@ -668,7 +671,7 @@ export default function TripBuildScreen() {
                   {cityBundle?.hasGuide && (cityBundle.quickTips?.length ?? 0) > 0 ? (
                     <View style={styles.tipsBlock}>
                       <Text style={styles.tipsTitle}>Quick tips</Text>
-                      {cityBundle!.quickTips.slice(0, 5).map((t, idx) => (
+                      {cityBundle.quickTips.slice(0, 5).map((t, idx) => (
                         <Text key={`${t}-${idx}`} style={styles.tipLine}>
                           • {t}
                         </Text>
@@ -678,7 +681,6 @@ export default function TripBuildScreen() {
                 </View>
               ) : null}
 
-              {/* Fallback date edit (web / no picker) */}
               {Platform.OS === "web" || !DateTimePicker ? (
                 <View style={{ marginTop: 10, gap: 8 }}>
                   <Text style={styles.fallbackNote}>Date picker not available here. Edit ISO dates (YYYY-MM-DD).</Text>
@@ -705,7 +707,6 @@ export default function TripBuildScreen() {
                 </View>
               ) : null}
 
-              {/* Notes */}
               <View style={{ marginTop: 10 }}>
                 <TextInput
                   value={notes}
@@ -718,23 +719,20 @@ export default function TripBuildScreen() {
                 />
               </View>
 
-              {/* Inline error (keep this separate from the list error so panel can show save issues) */}
               {error ? (
                 <Text style={styles.errText} numberOfLines={3}>
                   {error}
                 </Text>
               ) : null}
 
-              {/* Save */}
               <Pressable onPress={onSave} disabled={saving} style={[styles.saveBtn, saving && { opacity: 0.7 }]}>
                 <Text style={styles.saveText}>{saving ? "Saving…" : "Save Trip"}</Text>
               </Pressable>
 
-              {/* Native date picker */}
               {DateTimePicker && picker.open ? (
                 <View style={{ marginTop: 10 }}>
                   <DateTimePicker
-                    value={parseIsoDateOnly(picker.which === "start" ? startIso : endIso) ?? new Date()}
+                    value={parseIsoDateOnly(picker.which === "start" ? (startIso as any) : (endIso as any)) ?? new Date()}
                     mode="date"
                     display={Platform.OS === "ios" ? "inline" : "default"}
                     onChange={onPickerChange}
@@ -848,7 +846,6 @@ const styles = StyleSheet.create({
 
   hint: { marginTop: 10, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm },
 
-  // Backdrop wrapper starts below headerBlock: critical for Android BackButton presses
   backdropWrap: {
     position: "absolute",
     left: 0,
@@ -930,7 +927,6 @@ const styles = StyleSheet.create({
   dateLabel: { color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: "800" },
   dateValue: { marginTop: 6, color: theme.colors.text, fontSize: theme.fontSize.md, fontWeight: "900" },
 
-  // City block
   cityBlock: {
     marginTop: 12,
     borderRadius: 12,
@@ -992,3 +988,4 @@ const styles = StyleSheet.create({
   },
   saveText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.md },
 });
+    
