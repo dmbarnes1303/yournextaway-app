@@ -1,50 +1,37 @@
 // src/data/cityGuides/types.ts
 
-export type CityArea = {
-  name: string;
-  vibe: string;
-  whyStay: string;
-  goodFor?: string[]; // e.g. ["first-timers", "nightlife", "food"]
-};
-
-export type CityThingToDo = {
+export type CityTopThing = {
   title: string;
-  tip: string; // short, actionable, not fluffy
+  tip: string; // short, practical note
 };
 
 export interface CityGuide {
-  cityId: string; // slug key, e.g. "london"
-  name: string;
+  /**
+   * IMPORTANT:
+   * In the current app, tripsStore saves `cityId` as a free-text label (often venue city).
+   * So we key guides by a normalized value (e.g. "london", "madrid").
+   */
+  cityId: string; // normalized key, e.g. "london"
+
+  name: string; // display name, e.g. "London"
   country: string;
 
-  airports?: string; // simple human string e.g. "LHR / LGW / STN..."
-  coversTeams?: string[]; // optional, but useful for football-first routing later
-  hasGuide: boolean;
+  overview: string;
 
-  vibe: string; // short “feel of the city”
-  whyGo: string; // why this city is worth the trip
-
-  bestAreasToStay: CityArea[];
-
-  // Core travel utilities
-  transportTips: string;
-  accommodationTips: string;
-
-  // Matchday-specific, but still city-first
-  matchdayTips: string[];
-  stadiumAreaTips: string;
-
-  // Content depth
-  topThingsToDo: CityThingToDo[]; // target: 10 items
-  foodAndDrink: string[]; // quick hits, not essays
-  nightlife: string;
-  budgetTips: string;
-
-  // External link (you requested this)
+  /** One TripAdvisor link for "Top things to do" */
   tripAdvisorTopThingsUrl: string;
 
-  // “Local hacks” / practical tips
-  cityTips: string[];
+  /** Exactly the kind of “top 10 things” users want at trip time */
+  topThings: CityTopThing[];
+
+  /** Practical, away-day style advice */
+  tips: string[];
+
+  /** Optional extra structured info (kept compatible with your older placeholder fields) */
+  attractions?: string[];
+  food?: string[];
+  transport?: string;
+  accommodation?: string;
 }
 
 export default CityGuide;
