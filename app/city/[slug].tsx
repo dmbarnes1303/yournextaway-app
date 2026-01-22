@@ -13,22 +13,12 @@ import { theme } from "@/src/constants/theme";
 import cityGuides from "@/src/data/cityGuides";
 import type { CityGuide } from "@/src/data/cityGuides/types";
 
+import { normalizeCityKey } from "@/src/utils/city";
+
 function coerceSlug(v: unknown): string {
   if (typeof v === "string") return v;
   if (Array.isArray(v) && typeof v[0] === "string") return v[0];
   return "";
-}
-
-function normalizeSlug(input: string) {
-  return String(input ?? "")
-    .trim()
-    .toLowerCase()
-    .replace(/[,/|].*$/, "")
-    .replace(/\(.*?\)/g, "")
-    .replace(/[^a-z0-9\s-]/g, "")
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "");
 }
 
 async function safeOpenUrl(url: string) {
@@ -43,8 +33,9 @@ async function safeOpenUrl(url: string) {
 
 export default function CityDetailScreen() {
   const params = useLocalSearchParams();
-  const raw = coerceSlug((params as any)?.slug);
-  const slug = useMemo(() => normalizeSlug(raw), [raw]);
+
+  const raw = useMemo(() => coerceSlug((params as any)?.slug), [params]);
+  const slug = useMemo(() => normalizeCityKey(raw), [raw]);
 
   const guide = useMemo<CityGuide | null>(() => {
     if (!slug) return null;
@@ -65,15 +56,20 @@ export default function CityDetailScreen() {
       <SafeAreaView style={styles.container} edges={["bottom"]}>
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
           <GlassCard style={styles.card} intensity={26}>
-            {!slug ? (
-              <EmptyState title="Missing city" message="No city slug was provided." />
+            {!raw ? <EmptyState title="Missing city" message="No city slug was provided." /> : null}
+
+            {raw && !slug ? (
+              <EmptyState title="Invalid city" message={`Couldn’t normalize slug: “${raw}”.`} />
             ) : null}
 
             {slug && !guide ? (
-              <EmptyState
-                title="Guide not found"
-                message={`No guide exists for “${slug}” yet.\nCurrent rollout: London, Madrid, Rome, Berlin, Paris.`}
-              />
+              <>
+                <EmptyState
+                  title="Guide not found"
+                  message={`No guide exists for “${slug}” yet.\nCurrent rollout: London, Madrid, Rome, Berlin, Paris.`}
+                />
+                <Text style={styles.debugLine}>Raw slug: “{raw}”</Text>
+              </>
             ) : null}
 
             {guide ? (
@@ -81,11 +77,19 @@ export default function CityDetailScreen() {
                 <View style={styles.headerRow}>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.h1}>{guide.name}</Text>
-                    <Text style={styles.muted}>{guide.country}</Text>
+                    <Text style={styles.muted}>
+                      {guide.country}
+                      {slug ? ` • ${slug}` : ""}
+                    </Text>
                   </View>
 
                   {guide.tripAdvisorTopThingsUrl ? (
-                    <Pressable onPress={() => safeOpenUrl(guide.tripAdvisorTopThingsUrl)} style={styles.ctaBtn}>
+                    <Pressable
+                      onPress={() => safeOpenUrl(guide.tripAdvisorTopThingsUrl)}
+                      style={styles.ctaBtn}
+                      accessibilityRole="button"
+                      accessibilityLabel="Open TripAdvisor top things to do"
+                    >
                       <Text style={styles.ctaText}>TripAdvisor Top 10</Text>
                     </Pressable>
                   ) : null}
@@ -119,11 +123,11 @@ export default function CityDetailScreen() {
                   </View>
                 </View>
 
-                {guide.food?.length ? (
+                {Array.isArray((guide as any).food) && (guide as any).food.length ? (
                   <View style={{ marginTop: 14 }}>
                     <Text style={styles.sectionTitle}>Food highlights</Text>
                     <View style={styles.tipList}>
-                      {guide.food.map((t, i) => (
+                      {(guide as any).food.map((t: string, i: number) => (
                         <Text key={`${t}-${i}`} style={styles.tipItem}>
                           • {t}
                         </Text>
@@ -181,6 +185,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(0,255,136,0.45)",
     backgroundColor: "rgba(0,0,0,0.25)",
+    alignSelf: "flex-start",
   },
   ctaText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.xs },
 
@@ -201,4 +206,11 @@ const styles = StyleSheet.create({
 
   tipList: { marginTop: 10, gap: 8 },
   tipItem: { color: theme.colors.text, fontSize: theme.fontSize.sm, lineHeight: 18 },
+
+  debugLine: {
+    marginTop: 10,
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSize.xs,
+    lineHeight: 16,
+  },
 });
