@@ -12,6 +12,7 @@ import {
   Animated,
   Easing,
   Dimensions,
+  Linking,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Stack, useRouter, useLocalSearchParams } from "expo-router";
@@ -35,6 +36,9 @@ import {
 import { coerceNumber, coerceString } from "@/src/utils/params";
 import { formatUkDateOnly, formatUkDateTimeMaybe } from "@/src/utils/formatters";
 
+// City guide helpers (must exist)
+import { getTopThingsToDoForTrip } from "@/src/data/cityGuides";
+
 function tomorrowIso(): string {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
@@ -48,6 +52,20 @@ function clampIsoToTomorrow(iso: string): string {
   const b = parseIsoDateOnly(tmr);
   if (!a || !b) return tmr;
   return a.getTime() < b.getTime() ? tmr : iso;
+}
+
+function safeCityName(input: unknown): string {
+  const s = String(input ?? "").trim();
+  return s || "your destination";
+}
+
+async function safeOpenUrl(url: string) {
+  try {
+    const can = await Linking.canOpenURL(url);
+    if (can) await Linking.openURL(url);
+  } catch {
+    // Intentionally silent: link-out should never crash Trip Build.
+  }
 }
 
 export default function TripBuildScreen() {
@@ -197,7 +215,9 @@ export default function TripBuildScreen() {
       return;
     }
 
-    setError("That match isn’t available in the current window for this league. Try another league or adjust the date window.");
+    setError(
+      "That match isn’t available in the current window for this league. Try another league or adjust the date window."
+    );
   }, [routeFixtureId, rows]);
 
   // Panel open/close animations + date prefill
@@ -324,6 +344,20 @@ export default function TripBuildScreen() {
   const selVenue = selectedFixture?.fixture?.venue?.name ?? "";
   const selCity = selectedFixture?.fixture?.venue?.city ?? "";
 
+  const destinationCity = useMemo(() => {
+    if (!selectedFixture) return "";
+    return safeCityName(
+      (selectedFixture?.fixture?.venue?.city as string | undefined)?.trim() ||
+        (selectedFixture?.league?.country as string | undefined)?.trim() ||
+        (selectedFixture?.league?.name as string | undefined)?.trim()
+    );
+  }, [selectedFixture]);
+
+  const cityBundle = useMemo(() => {
+    if (!destinationCity) return null;
+    return getTopThingsToDoForTrip(destinationCity);
+  }, [destinationCity]);
+
   const bottomPad = panelOpen ? PANEL_MAX + theme.spacing.xl : theme.spacing.xxl;
 
   return (
@@ -423,7 +457,9 @@ export default function TripBuildScreen() {
                         style={[styles.pickRow, selected && styles.pickRowSelected]}
                       >
                         <View style={styles.pickRowTop}>
-                          <Text style={styles.rowTitle}>{home} vs {away}</Text>
+                          <Text style={styles.rowTitle}>
+                            {home} vs {away}
+                          </Text>
                           {selected ? <Text style={styles.selectedTag}>Selected</Text> : null}
                         </View>
                         <Text style={styles.rowMeta}>{line2}</Text>
@@ -507,6 +543,59 @@ export default function TripBuildScreen() {
               </Pressable>
             </View>
 
+            {/* CITY GUIDE / TRIPADVISOR BLOCK */}
+            {destinationCity ? (
+              <View style={styles.cityBlock}>
+                <View style={styles.cityBlockTop}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.cityBlockKicker}>In {destinationCity}</Text>
+                    <Text style={styles.cityBlockTitle}>Top things to do</Text>
+                    <Text style={styles.cityBlockSub}>
+                      {cityBundle?.hasGuide
+                        ? "Curated picks + quick tips. Link out for more."
+                        : "No curated guide yet — link out for the best current picks."}
+                    </Text>
+                  </View>
+
+                  {cityBundle?.tripAdvisorUrl ? (
+                    <Pressable
+                      onPress={() => safeOpenUrl(cityBundle.tripAdvisorUrl)}
+                      style={styles.taBtn}
+                      accessibilityRole="button"
+                      accessibilityLabel="Open TripAdvisor things to do"
+                    >
+                      <Text style={styles.taBtnText}>TripAdvisor</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+
+                {cityBundle?.hasGuide && (cityBundle.items?.length ?? 0) > 0 ? (
+                  <View style={styles.thingsList}>
+                    {cityBundle.items.slice(0, 10).map((it, idx) => (
+                      <View key={`${it.title}-${idx}`} style={styles.thingRow}>
+                        <Text style={styles.thingIdx}>{idx + 1}.</Text>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.thingTitle}>{it.title}</Text>
+                          {it.description ? <Text style={styles.thingDesc}>{it.description}</Text> : null}
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                ) : null}
+
+                {cityBundle?.hasGuide && (cityBundle.quickTips?.length ?? 0) > 0 ? (
+                  <View style={styles.tipsBlock}>
+                    <Text style={styles.tipsTitle}>Quick tips</Text>
+                    {cityBundle.quickTips.slice(0, 6).map((t, idx) => (
+                      <Text key={`${t}-${idx}`} style={styles.tipLine}>
+                        • {t}
+                      </Text>
+                    ))}
+                  </View>
+                ) : null}
+              </View>
+            ) : null}
+
             {Platform.OS === "web" || !DateTimePicker ? (
               <View style={{ marginTop: 10, gap: 8 }}>
                 <Text style={styles.fallbackNote}>Date picker not available here. Edit ISO dates (YYYY-MM-DD).</Text>
@@ -559,9 +648,7 @@ export default function TripBuildScreen() {
           {DateTimePicker && picker.open ? (
             <View style={{ marginTop: 10 }}>
               <DateTimePicker
-                value={
-                  parseIsoDateOnly(picker.which === "start" ? (startIso as any) : (endIso as any)) ?? new Date()
-                }
+                value={parseIsoDateOnly(picker.which === "start" ? (startIso as any) : (endIso as any)) ?? new Date()}
                 mode="date"
                 display={Platform.OS === "ios" ? "inline" : "default"}
                 onChange={onPickerChange}
@@ -744,6 +831,40 @@ const styles = StyleSheet.create({
   },
   dateLabel: { color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: "800" },
   dateValue: { marginTop: 6, color: theme.colors.text, fontSize: theme.fontSize.md, fontWeight: "900" },
+
+  // City block
+  cityBlock: {
+    marginTop: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    backgroundColor: "rgba(0,0,0,0.16)",
+    padding: 12,
+  },
+  cityBlockTop: { flexDirection: "row", gap: 10, alignItems: "flex-start" },
+  cityBlockKicker: { color: theme.colors.primary, fontSize: theme.fontSize.xs, fontWeight: "900" },
+  cityBlockTitle: { marginTop: 4, color: theme.colors.text, fontSize: theme.fontSize.md, fontWeight: "900" },
+  cityBlockSub: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, lineHeight: 16 },
+
+  taBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "rgba(0,255,136,0.40)",
+    backgroundColor: "rgba(0,0,0,0.20)",
+  },
+  taBtnText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.xs },
+
+  thingsList: { marginTop: 10, gap: 8 },
+  thingRow: { flexDirection: "row", gap: 8 },
+  thingIdx: { width: 20, color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: "900" },
+  thingTitle: { color: theme.colors.text, fontSize: theme.fontSize.sm, fontWeight: "800" },
+  thingDesc: { marginTop: 2, color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, lineHeight: 16 },
+
+  tipsBlock: { marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.10)" },
+  tipsTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
+  tipLine: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, lineHeight: 16 },
 
   fallbackNote: { color: theme.colors.textSecondary, fontSize: theme.fontSize.xs },
 
