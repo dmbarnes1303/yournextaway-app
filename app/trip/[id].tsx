@@ -1,5 +1,4 @@
 // app/trip/[id].tsx
-
 import React, { useEffect, useMemo, useState } from "react";
 import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert, Linking } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -14,11 +13,9 @@ import { theme } from "@/src/constants/theme";
 import tripsStore, { type Trip } from "@/src/state/trips";
 import { getFixtureById } from "@/src/services/apiFootball";
 
-import cityGuides from "@/src/data/cityGuides";
-import type { CityGuide } from "@/src/data/cityGuides/types";
+import getCityGuide from "@/src/data/cityGuides/getCityGuide";
 
 import { formatUkDateOnly, formatUkDateTimeMaybe } from "@/src/utils/formatters";
-import { normalizeCityKey } from "@/src/utils/city";
 
 function formatTripRange(t: Trip) {
   return `${formatUkDateOnly(t.startDate)} → ${formatUkDateOnly(t.endDate)}`;
@@ -67,15 +64,7 @@ export default function TripDetailScreen() {
   const matchIds = useMemo(() => trip?.matchIds ?? [], [trip]);
   const matchCount = matchIds.length;
 
-  // Ensure predictable lookup typing
-  const guides = cityGuides as Record<string, CityGuide>;
-
-  // City guide lookup (Top 5 capitals for now)
-  const cityKey = useMemo(() => normalizeCityKey(trip?.cityId), [trip?.cityId]);
-  const cityGuide = useMemo<CityGuide | null>(() => {
-    if (!cityKey) return null;
-    return guides[cityKey] ?? null;
-  }, [cityKey, guides]);
+  const { slug: cityKey, guide: cityGuide } = useMemo(() => getCityGuide(trip?.cityId), [trip?.cityId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -128,12 +117,11 @@ export default function TripDetailScreen() {
   }
 
   function goCityGuide() {
-    const slug = cityKey || normalizeCityKey(trip?.cityId);
-    if (!slug) {
+    if (!cityKey) {
       Alert.alert("City unavailable", "This trip doesn’t have a valid city yet.");
       return;
     }
-    router.push({ pathname: "/city/[slug]", params: { slug } });
+    router.push({ pathname: "/city/[slug]", params: { slug: cityKey } });
   }
 
   return (
@@ -211,7 +199,7 @@ export default function TripDetailScreen() {
 
                   {cityGuide?.tripAdvisorTopThingsUrl ? (
                     <Pressable
-                      onPress={() => safeOpenUrl(cityGuide.tripAdvisorTopThingsUrl)}
+                      onPress={() => safeOpenUrl(cityGuide.tripAdvisorTopThingsUrl!)}
                       style={styles.ctaBtn}
                       accessibilityRole="button"
                       accessibilityLabel="Open TripAdvisor top things to do"
@@ -303,7 +291,9 @@ export default function TripDetailScreen() {
                   </View>
                 ) : null}
 
-                {!loadingFixtures && fixtureError ? <EmptyState title="Couldn’t load matches" message={fixtureError} /> : null}
+                {!loadingFixtures && fixtureError ? (
+                  <EmptyState title="Couldn’t load matches" message={fixtureError} />
+                ) : null}
 
                 {!loadingFixtures && !fixtureError && matchCount > 0 && fixtureRows.length === 0 ? (
                   <EmptyState title="No match details yet" message="Matches are linked, but details are unavailable." />
