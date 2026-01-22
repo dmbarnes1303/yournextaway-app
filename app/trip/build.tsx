@@ -810,7 +810,7 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.primary,
     backgroundColor: "rgba(0,0,0,0.45)",
   },
-  leaguePillText:: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, fontWeight: "700" } as any,
+  leaguePillText: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, fontWeight: "700" },
   leaguePillTextActive: { color: theme.colors.text },
 
   searchWrap: { marginTop: 12 },
