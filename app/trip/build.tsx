@@ -15,7 +15,7 @@ import {
   Linking,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import { Stack, useLocalSearchParams, useRouter } from "expo-router";
+import { Stack, useRouter, useLocalSearchParams } from "expo-router";
 
 import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
@@ -168,17 +168,17 @@ export default function TripBuildScreen() {
   const { height: screenH } = Dimensions.get("window");
 
   // Header-safe sizing (prevents top overlap + prevents backdrop stealing Back taps)
-  const HEADER_ESTIMATE = Platform.OS === "android" ? 72 : 56;
+  const HEADER_ESTIMATE = 56;
   const headerBlock = insets.top + HEADER_ESTIMATE;
 
-  const PANEL_MAX = Math.min(440, Math.round(screenH * 0.64));
-  const panelMaxHeight = Math.min(PANEL_MAX, Math.max(280, screenH - headerBlock - 40));
+  const PANEL_MAX = Math.min(420, Math.round(screenH * 0.62));
+  const panelMaxHeight = Math.min(PANEL_MAX, Math.max(260, screenH - headerBlock - 20));
 
   const panelOpen = !!selectedFixture;
 
   const panelTranslateY = panelAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [panelMaxHeight + 110, 0],
+    outputRange: [panelMaxHeight + 90, 0],
   });
   const panelOpacity = panelAnim.interpolate({
     inputRange: [0, 1],
@@ -197,8 +197,9 @@ export default function TripBuildScreen() {
   }, [from]);
 
   /**
-   * CRITICAL: Prefill selected fixture directly if fixtureId is provided.
-   * This avoids “must exist in list window” and avoids platform param quirks.
+   * CRITICAL FIX:
+   * If fixtureId is provided (Plan Trip), fetch the fixture directly.
+   * Do NOT depend on it being present in the fixtures list window.
    */
   useEffect(() => {
     let cancelled = false;
@@ -254,9 +255,6 @@ export default function TripBuildScreen() {
       setSearch("");
       setVisibleCount(12);
 
-      // IMPORTANT:
-      // Do NOT clear selectedFixture here.
-      // That was the Android bug: prefill sets it, then this effect wipes it.
       try {
         const res = await getFixtures({
           league: selectedLeague.leagueId,
@@ -280,16 +278,6 @@ export default function TripBuildScreen() {
       cancelled = true;
     };
   }, [selectedLeague, from, to]);
-
-  // If we did NOT manage to prefill via getFixtureById, try to prefill from the loaded list
-  useEffect(() => {
-    if (!routeFixtureId) return;
-    if (selectedFixture) return;
-    if (!rows.length) return;
-
-    const found = rows.find((r) => String(r?.fixture?.id ?? "") === String(routeFixtureId));
-    if (found) setSelectedFixture(found);
-  }, [routeFixtureId, rows, selectedFixture]);
 
   // Panel open/close animation + prefill dates from kickoff
   useEffect(() => {
@@ -560,6 +548,7 @@ export default function TripBuildScreen() {
             ) : null}
           </GlassCard>
         </ScrollView>
+
         {/* Backdrop: MUST NOT cover header zone or it steals BackButton taps */}
         {panelOpen ? (
           <Animated.View
@@ -988,4 +977,3 @@ const styles = StyleSheet.create({
   },
   saveText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.md },
 });
-    
