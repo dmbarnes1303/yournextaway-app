@@ -22,7 +22,7 @@ export function toIsoDate(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
-// Parse "YYYY-MM-DD"
+// Parse "YYYY-MM-DD" as a local-midnight Date
 export function parseIsoDateOnly(iso: string): Date | null {
   if (!iso) return null;
   const d = new Date(`${iso}T00:00:00`);
@@ -37,11 +37,51 @@ export function addDaysIso(baseIso: string, days: number): string {
 
 export type RollingWindowIso = { from: string; to: string };
 
-function tomorrowLocal(): Date {
+// Local "tomorrow" at 00:00:00
+export function tomorrowLocal(): Date {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
   d.setDate(d.getDate() + 1);
   return d;
+}
+
+// ISO date for local tomorrow (YYYY-MM-DD)
+export function tomorrowIso(): string {
+  return toIsoDate(tomorrowLocal());
+}
+
+/**
+ * Enforce "tomorrow onwards" (excludes past + today).
+ * If input is invalid, returns tomorrow.
+ */
+export function clampFromIsoToTomorrow(fromIso: string): string {
+  const tmr = tomorrowIso();
+  const fromDate = parseIsoDateOnly(fromIso);
+  const tmrDate = parseIsoDateOnly(tmr);
+  if (!fromDate || !tmrDate) return tmr;
+  return fromDate.getTime() < tmrDate.getTime() ? tmr : fromIso;
+}
+
+/**
+ * Normalise a window so it is always valid and never includes past/today.
+ * - clamps `from` to tomorrow
+ * - ensures `to >= from` (if not, sets `to = from + days`)
+ */
+export function normalizeWindowIso(input: { from: string; to: string }, daysIfInvalidTo = 30): RollingWindowIso {
+  const from = clampFromIsoToTomorrow(input.from);
+
+  const toDate = parseIsoDateOnly(input.to);
+  const fromDate = parseIsoDateOnly(from);
+
+  if (!toDate || !fromDate) {
+    return { from, to: addDaysIso(from, daysIfInvalidTo) };
+  }
+
+  if (toDate.getTime() < fromDate.getTime()) {
+    return { from, to: addDaysIso(from, daysIfInvalidTo) };
+  }
+
+  return { from, to: input.to };
 }
 
 // Central fixture date window (rolling)
@@ -55,5 +95,6 @@ export function getRollingWindowIso(opts?: { days?: number; start?: Date }): Rol
   end.setDate(end.getDate() + days);
   const to = toIsoDate(end);
 
-  return { from, to };
+  // Safety: if caller passes a start in the past/today, we still clamp to tomorrow.
+  return normalizeWindowIso({ from, to }, days);
 }
