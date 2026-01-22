@@ -1,4 +1,5 @@
 // app/trip/[id].tsx
+
 import React, { useEffect, useMemo, useState } from "react";
 import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert, Linking } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -17,15 +18,10 @@ import cityGuides from "@/src/data/cityGuides";
 import type { CityGuide } from "@/src/data/cityGuides/types";
 
 import { formatUkDateOnly, formatUkDateTimeMaybe } from "@/src/utils/formatters";
+import { normalizeCityKey } from "@/src/utils/city";
 
 function formatTripRange(t: Trip) {
   return `${formatUkDateOnly(t.startDate)} → ${formatUkDateOnly(t.endDate)}`;
-}
-
-function normalizeCityKey(input: string | undefined | null) {
-  return String(input ?? "")
-    .trim()
-    .toLowerCase();
 }
 
 async function safeOpenUrl(url: string) {
@@ -43,11 +39,7 @@ export default function TripDetailScreen() {
   const params = useLocalSearchParams<{ id?: string }>();
 
   const id =
-    typeof params?.id === "string"
-      ? params.id
-      : Array.isArray(params?.id)
-      ? params.id[0]
-      : undefined;
+    typeof params?.id === "string" ? params.id : Array.isArray(params?.id) ? params.id[0] : undefined;
 
   const [loaded, setLoaded] = useState(tripsStore.getState().loaded);
   const [trip, setTrip] = useState<Trip | null>(null);
@@ -74,6 +66,7 @@ export default function TripDetailScreen() {
   }, [id]);
 
   const matchIds = useMemo(() => trip?.matchIds ?? [], [trip]);
+  const matchCount = matchIds.length;
 
   // City guide lookup (Top 5 capitals for now)
   const cityKey = useMemo(() => normalizeCityKey(trip?.cityId), [trip?.cityId]);
@@ -132,7 +125,10 @@ export default function TripDetailScreen() {
     ]);
   }
 
-  const matchCount = matchIds.length;
+  function goCityGuide() {
+    const slug = cityKey || normalizeCityKey(trip?.cityId);
+    router.push({ pathname: "/city/[slug]", params: { slug } });
+  }
 
   return (
     <Background imageUrl={getBackground("trips")}>
@@ -203,13 +199,15 @@ export default function TripDetailScreen() {
                   <View style={{ flex: 1 }}>
                     <Text style={styles.h2}>City guide</Text>
                     <Text style={styles.muted}>
-                      {cityGuide ? `${cityGuide.name}, ${cityGuide.country}` : "Limited rollout (top 5 league capitals)."}
+                      {cityGuide
+                        ? `${cityGuide.name}, ${cityGuide.country}`
+                        : "Limited rollout (top 5 league capitals)."}
                     </Text>
                   </View>
 
                   {cityGuide?.tripAdvisorTopThingsUrl ? (
                     <Pressable
-                      onPress={() => safeOpenUrl(cityGuide.tripAdvisorTopThingsUrl)}
+                      onPress={() => safeOpenUrl(cityGuide.tripAdvisorTopThingsUrl!)}
                       style={styles.ctaBtn}
                       accessibilityRole="button"
                       accessibilityLabel="Open TripAdvisor top things to do"
@@ -219,14 +217,21 @@ export default function TripDetailScreen() {
                   ) : null}
                 </View>
 
+                {/* Always allow navigation (even if guide not found yet) */}
+                <Pressable onPress={goCityGuide} style={[styles.ctaBtn, { marginTop: 10 }]}>
+                  <Text style={styles.ctaText}>Open full guide</Text>
+                </Pressable>
+
                 {!cityGuide ? (
-                  <EmptyState
-                    title="No guide for this city yet"
-                    message={`Current guides: London, Madrid, Rome, Berlin, Paris.\nSaved trip city: “${trip.cityId || "—"}”`}
-                  />
+                  <View style={{ marginTop: 12 }}>
+                    <EmptyState
+                      title="No guide for this city yet"
+                      message={`Current guides: London, Madrid, Rome, Berlin, Paris.\nSaved trip city: “${trip.cityId || "—"}”\nLookup key: “${cityKey || "—"}”`}
+                    />
+                  </View>
                 ) : (
                   <>
-                    <Text style={[styles.body, { marginTop: 10 }]}>{cityGuide.overview}</Text>
+                    <Text style={[styles.body, { marginTop: 12 }]}>{cityGuide.overview}</Text>
 
                     {/* TOP 10 */}
                     <View style={{ marginTop: 14 }}>
@@ -294,7 +299,9 @@ export default function TripDetailScreen() {
                   </View>
                 ) : null}
 
-                {!loadingFixtures && fixtureError ? <EmptyState title="Couldn’t load matches" message={fixtureError} /> : null}
+                {!loadingFixtures && fixtureError ? (
+                  <EmptyState title="Couldn’t load matches" message={fixtureError} />
+                ) : null}
 
                 {!loadingFixtures && !fixtureError && matchCount > 0 && fixtureRows.length === 0 ? (
                   <EmptyState title="No match details yet" message="Matches are linked, but details are unavailable." />
@@ -388,6 +395,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(0,255,136,0.45)",
     backgroundColor: "rgba(0,0,0,0.25)",
+    alignSelf: "flex-start",
   },
   ctaText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.xs },
 
