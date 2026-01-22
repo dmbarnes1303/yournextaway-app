@@ -438,7 +438,42 @@ export default function TripBuildScreen() {
           <GlassCard style={styles.card}>
             <Text style={styles.h1}>Pick a match</Text>
             <Text style={styles.muted}>Tap a fixture to open trip details. Save from the bottom panel.</Text>
+<View
+  style={{
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,0,0,0.8)",
+    backgroundColor: "rgba(0,0,0,0.35)",
+    gap: 6,
+  }}
+>
+  <Text style={{ color: "white", fontWeight: "900" }}>
+    fixtureId param: {String(params?.fixtureId ?? "NONE")}
+  </Text>
+  <Text style={{ color: "white", fontWeight: "900" }}>
+    leagueId param: {String(params?.leagueId ?? "NONE")}
+  </Text>
+  <Text style={{ color: "white", fontWeight: "900" }}>
+    season param: {String(params?.season ?? "NONE")}
+  </Text>
+  <Text style={{ color: "white", fontWeight: "900" }}>
+    from/to param: {String(params?.from ?? "NONE")} → {String(params?.to ?? "NONE")}
+  </Text>
 
+  <View style={{ height: 1, backgroundColor: "rgba(255,255,255,0.15)", marginVertical: 6 }} />
+
+  <Text style={{ color: "white", fontWeight: "900" }}>
+    selectedFixture id: {String(selectedFixture?.fixture?.id ?? "NONE")}
+  </Text>
+  <Text style={{ color: "white", fontWeight: "900" }}>
+    panelOpen: {String(!!selectedFixture)}
+  </Text>
+  <Text style={{ color: "white", fontWeight: "900" }}>
+    error: {String(error ?? "NONE")}
+  </Text>
+</View>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.leagueRow}>
               {LEAGUES.map((l) => {
                 const active = l.leagueId === selectedLeague.leagueId;
