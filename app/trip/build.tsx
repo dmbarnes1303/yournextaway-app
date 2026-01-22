@@ -15,7 +15,7 @@ import {
   Linking,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import { Stack, useLocalSearchParams, useRouter } from "expo-router";
+import { Stack, useRouter, useLocalSearchParams } from "expo-router";
 
 import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
@@ -35,7 +35,6 @@ import {
 } from "@/src/constants/football";
 import { coerceNumber, coerceString } from "@/src/utils/params";
 import { formatUkDateOnly, formatUkDateTimeMaybe } from "@/src/utils/formatters";
-
 import { getTopThingsToDoForTrip } from "@/src/data/cityGuides";
 
 function tomorrowIso(): string {
@@ -63,14 +62,8 @@ async function safeOpenUrl(url: string) {
     const can = await Linking.canOpenURL(url);
     if (can) await Linking.openURL(url);
   } catch {
-    // Never crash Trip Build due to external link.
+    // Never crash for link-out
   }
-}
-
-function coerceId(v: unknown): string | undefined {
-  if (typeof v === "string" && v.trim()) return v.trim();
-  if (Array.isArray(v) && typeof v[0] === "string" && v[0].trim()) return v[0].trim();
-  return undefined;
 }
 
 export default function TripBuildScreen() {
@@ -98,13 +91,13 @@ export default function TripBuildScreen() {
   const defaultTo = rolling.to;
 
   // Route params (context-aware Plan Trip)
-  const routeFixtureId = useMemo(() => coerceId((params as any)?.fixtureId) ?? coerceString((params as any)?.fixtureId), [params]);
-  const routeLeagueId = useMemo(() => coerceNumber((params as any)?.leagueId), [params]);
-  const routeSeason = useMemo(() => coerceNumber((params as any)?.season), [params]);
+  const routeFixtureId = useMemo(() => coerceString(params.fixtureId), [params.fixtureId]);
+  const routeLeagueId = useMemo(() => coerceNumber(params.leagueId), [params.leagueId]);
+  const routeSeason = useMemo(() => coerceNumber(params.season), [params.season]);
 
   // Allow optional from/to via params (but enforce tomorrow+ rule)
-  const fromParam = useMemo(() => coerceString((params as any)?.from), [params]);
-  const toParam = useMemo(() => coerceString((params as any)?.to), [params]);
+  const fromParam = useMemo(() => coerceString(params.from), [params.from]);
+  const toParam = useMemo(() => coerceString(params.to), [params.to]);
 
   const from = useMemo(() => clampIsoToTomorrow(fromParam ?? defaultFrom), [fromParam, defaultFrom]);
   const to = useMemo(() => toParam ?? defaultTo, [toParam, defaultTo]);
@@ -114,12 +107,10 @@ export default function TripBuildScreen() {
   // Apply league/season from route params
   useEffect(() => {
     if (!routeLeagueId) return;
-
     const match = LEAGUES.find((l) => l.leagueId === routeLeagueId);
     if (!match) return;
 
     const season = routeSeason ?? match.season;
-
     setSelectedLeague((cur) => {
       if (cur.leagueId === match.leagueId && cur.season === season) return cur;
       return { ...match, season };
@@ -152,30 +143,24 @@ export default function TripBuildScreen() {
 
   const { height: screenH } = Dimensions.get("window");
 
-  /**
-   * Critical:
-   * - Expo Router Stack header is ~56dp.
-   * - With transparent header, content can render underneath.
-   * - On Android, absolute overlays can steal touches from headerLeft/back button.
-   */
+  // Expo Router stack header is ~56dp; with transparent header we must reserve this.
   const HEADER_ESTIMATE = 56;
   const headerBlock = insets.top + HEADER_ESTIMATE;
 
-  // Panel sizing (never invade header space)
-  const PANEL_TARGET = Math.min(440, Math.round(screenH * 0.62));
-  const panelMaxHeight = Math.min(PANEL_TARGET, Math.max(280, screenH - headerBlock - 18));
+  // Panel sizing: IMPORTANT — set a real height, not maxHeight (fixes Android collapse)
   const panelOpen = !!selectedFixture;
+
+  const desiredPanelHeight = Math.min(520, Math.round(screenH * 0.64));
+  const panelHeight = Math.min(desiredPanelHeight, Math.max(280, screenH - headerBlock - 24));
 
   const panelTranslateY = panelAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [panelMaxHeight + 90, 0],
+    outputRange: [panelHeight + 120, 0],
   });
-
   const panelOpacity = panelAnim.interpolate({
     inputRange: [0, 1],
     outputRange: [0, 1],
   });
-
   const backdropOpacity = panelAnim.interpolate({
     inputRange: [0, 1],
     outputRange: [0, 0.35],
@@ -195,8 +180,6 @@ export default function TripBuildScreen() {
     async function run() {
       setError(null);
       setLoading(true);
-
-      // Reset list UI
       setRows([]);
       setSelectedFixture(null);
       setSearch("");
@@ -254,7 +237,6 @@ export default function TripBuildScreen() {
       return;
     }
 
-    // Prefill dates from kickoff date
     if (iso) {
       const d = new Date(iso);
       if (!Number.isNaN(d.getTime())) {
@@ -279,7 +261,6 @@ export default function TripBuildScreen() {
       Animated.timing(flashAnim, { toValue: 0, duration: 420, useNativeDriver: true }),
     ]).start();
 
-    // Keep list context stable
     requestAnimationFrame(() => {
       listRef.current?.scrollTo({ y: 0, animated: true });
     });
@@ -312,7 +293,6 @@ export default function TripBuildScreen() {
     }
 
     const iso = clampIsoToTomorrow(toIsoDate(date));
-
     if (picker.which === "start") {
       setStartIso(iso);
       const end = parseIsoDateOnly(endIso);
@@ -340,7 +320,6 @@ export default function TripBuildScreen() {
 
     try {
       const fixtureId = String(selectedFixture.fixture.id);
-
       const venueCity =
         (selectedFixture?.fixture?.venue?.city as string | undefined)?.trim() ||
         (selectedFixture?.league?.name as string | undefined)?.trim() ||
@@ -362,7 +341,6 @@ export default function TripBuildScreen() {
     }
   }
 
-  // Selected fixture meta
   const selHome = selectedFixture?.teams?.home?.name ?? "";
   const selAway = selectedFixture?.teams?.away?.name ?? "";
   const selKick = formatUkDateTimeMaybe(selectedFixture?.fixture?.date);
@@ -383,7 +361,8 @@ export default function TripBuildScreen() {
     return getTopThingsToDoForTrip(destinationCity);
   }, [destinationCity]);
 
-  const bottomPad = panelOpen ? panelMaxHeight + theme.spacing.xl : theme.spacing.xxl;
+  // Ensure the list has enough space so it never sits behind the panel
+  const bottomPad = panelOpen ? panelHeight + theme.spacing.xl + Math.max(insets.bottom, 0) : theme.spacing.xxl;
 
   return (
     <Background imageUrl={getBackground("trips")}>
@@ -409,10 +388,10 @@ export default function TripBuildScreen() {
 
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.leagueRow}>
               {LEAGUES.map((l) => {
-                const active = l.leagueId === selectedLeague.leagueId && l.season === selectedLeague.season;
+                const active = l.leagueId === selectedLeague.leagueId;
                 return (
                   <Pressable
-                    key={`${l.leagueId}-${l.season}`}
+                    key={l.leagueId}
                     onPress={() => setSelectedLeague(l)}
                     style={[styles.leaguePill, active && styles.leaguePillActive]}
                   >
@@ -510,7 +489,7 @@ export default function TripBuildScreen() {
           </GlassCard>
         </ScrollView>
 
-        {/* Backdrop: MUST start below headerBlock so it cannot steal BackButton taps on Android */}
+        {/* Backdrop: starts BELOW header so it won't steal BackButton taps */}
         {panelOpen ? (
           <Animated.View
             pointerEvents="auto"
@@ -539,17 +518,18 @@ export default function TripBuildScreen() {
           style={[
             styles.panelWrap,
             {
+              bottom: theme.spacing.lg + Math.max(insets.bottom, 0), // keep it above system nav
               opacity: panelOpacity,
               transform: [{ translateY: panelTranslateY }],
             },
           ]}
         >
-          <GlassCard style={[styles.panel, { maxHeight: panelMaxHeight }]} intensity={30}>
+          <GlassCard style={[styles.panel, { height: panelHeight }]} intensity={30}>
             <Animated.View pointerEvents="none" style={[styles.panelFlash, { opacity: flashAnim }]} />
 
             <View style={styles.handle} />
 
-            {/* Panel content scrolls; prevents header overlap / "messy top" */}
+            {/* Internal scroll — panel height is fixed now, so this works reliably */}
             <ScrollView
               style={{ flex: 1 }}
               contentContainerStyle={{ paddingBottom: theme.spacing.md }}
@@ -586,7 +566,6 @@ export default function TripBuildScreen() {
                 </Pressable>
               </View>
 
-              {/* CITY GUIDE / TRIPADVISOR BLOCK */}
               {destinationCity ? (
                 <View style={styles.cityBlock}>
                   <View style={styles.cityBlockTop}>
@@ -601,12 +580,7 @@ export default function TripBuildScreen() {
                     </View>
 
                     {cityBundle?.tripAdvisorUrl ? (
-                      <Pressable
-                        onPress={() => safeOpenUrl(cityBundle.tripAdvisorUrl)}
-                        style={styles.taBtn}
-                        accessibilityRole="button"
-                        accessibilityLabel="Open TripAdvisor things to do"
-                      >
+                      <Pressable onPress={() => safeOpenUrl(cityBundle.tripAdvisorUrl)} style={styles.taBtn}>
                         <Text style={styles.taBtnText}>TripAdvisor</Text>
                       </Pressable>
                     ) : null}
@@ -623,9 +597,6 @@ export default function TripBuildScreen() {
                           </View>
                         </View>
                       ))}
-                      {(cityBundle.items?.length ?? 0) > 6 ? (
-                        <Text style={styles.moreInline}>More in the full city guide.</Text>
-                      ) : null}
                     </View>
                   ) : null}
 
@@ -689,19 +660,18 @@ export default function TripBuildScreen() {
               <Pressable onPress={onSave} disabled={saving} style={[styles.saveBtn, saving && { opacity: 0.7 }]}>
                 <Text style={styles.saveText}>{saving ? "Saving…" : "Save Trip"}</Text>
               </Pressable>
-            </ScrollView>
 
-            {/* Date picker is rendered OUTSIDE the internal scroll to avoid clipping and odd stacking */}
-            {DateTimePicker && picker.open ? (
-              <View style={{ marginTop: 10 }}>
-                <DateTimePicker
-                  value={parseIsoDateOnly(picker.which === "start" ? (startIso as any) : (endIso as any)) ?? new Date()}
-                  mode="date"
-                  display={Platform.OS === "ios" ? "inline" : "default"}
-                  onChange={onPickerChange}
-                />
-              </View>
-            ) : null}
+              {DateTimePicker && picker.open ? (
+                <View style={{ marginTop: 10 }}>
+                  <DateTimePicker
+                    value={parseIsoDateOnly(picker.which === "start" ? (startIso as any) : (endIso as any)) ?? new Date()}
+                    mode="date"
+                    display={Platform.OS === "ios" ? "inline" : "default"}
+                    onChange={onPickerChange}
+                  />
+                </View>
+              ) : null}
+            </ScrollView>
           </GlassCard>
         </Animated.View>
       </SafeAreaView>
@@ -808,7 +778,6 @@ const styles = StyleSheet.create({
 
   hint: { marginTop: 10, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm },
 
-  // Backdrop wrapper deliberately starts below header block (critical for BackButton taps)
   backdropWrap: {
     position: "absolute",
     left: 0,
@@ -823,7 +792,6 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: theme.spacing.lg,
     right: theme.spacing.lg,
-    bottom: theme.spacing.lg,
     zIndex: 20,
     elevation: 20,
   },
@@ -890,7 +858,6 @@ const styles = StyleSheet.create({
   dateLabel: { color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: "800" },
   dateValue: { marginTop: 6, color: theme.colors.text, fontSize: theme.fontSize.md, fontWeight: "900" },
 
-  // City block
   cityBlock: {
     marginTop: 12,
     borderRadius: 12,
@@ -919,7 +886,6 @@ const styles = StyleSheet.create({
   thingIdx: { width: 20, color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: "900" },
   thingTitle: { color: theme.colors.text, fontSize: theme.fontSize.sm, fontWeight: "800" },
   thingDesc: { marginTop: 2, color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, lineHeight: 16 },
-  moreInline: { marginTop: 8, color: theme.colors.textSecondary, fontSize: theme.fontSize.xs },
 
   tipsBlock: { marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.10)" },
   tipsTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
