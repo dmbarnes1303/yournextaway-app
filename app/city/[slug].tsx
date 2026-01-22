@@ -10,10 +10,7 @@ import EmptyState from "@/src/components/EmptyState";
 import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
 
-import cityGuides from "@/src/data/cityGuides";
-import type { CityGuide } from "@/src/data/cityGuides/types";
-
-import { normalizeCityKey } from "@/src/utils/city";
+import getCityGuide from "@/src/data/cityGuides/getCityGuide";
 
 function coerceSlug(v: unknown): string {
   if (typeof v === "string") return v;
@@ -35,12 +32,7 @@ export default function CityDetailScreen() {
   const params = useLocalSearchParams();
 
   const raw = useMemo(() => coerceSlug((params as any)?.slug), [params]);
-  const slug = useMemo(() => normalizeCityKey(raw), [raw]);
-
-  const guide = useMemo<CityGuide | null>(() => {
-    if (!slug) return null;
-    return (cityGuides as Record<string, CityGuide>)[slug] ?? null;
-  }, [slug]);
+  const { slug, guide } = useMemo(() => getCityGuide(raw), [raw]);
 
   return (
     <Background imageUrl={getBackground("trips")}>
@@ -85,7 +77,7 @@ export default function CityDetailScreen() {
 
                   {guide.tripAdvisorTopThingsUrl ? (
                     <Pressable
-                      onPress={() => safeOpenUrl(guide.tripAdvisorTopThingsUrl)}
+                      onPress={() => safeOpenUrl(guide.tripAdvisorTopThingsUrl!)}
                       style={styles.ctaBtn}
                       accessibilityRole="button"
                       accessibilityLabel="Open TripAdvisor top things to do"
@@ -123,11 +115,11 @@ export default function CityDetailScreen() {
                   </View>
                 </View>
 
-                {Array.isArray((guide as any).food) && (guide as any).food.length ? (
+                {Array.isArray(guide.food) && guide.food.length ? (
                   <View style={{ marginTop: 14 }}>
                     <Text style={styles.sectionTitle}>Food highlights</Text>
                     <View style={styles.tipList}>
-                      {(guide as any).food.map((t: string, i: number) => (
+                      {guide.food.map((t, i) => (
                         <Text key={`${t}-${i}`} style={styles.tipItem}>
                           • {t}
                         </Text>
