@@ -180,10 +180,12 @@ export default function TripBuildScreen() {
     inputRange: [0, 1],
     outputRange: [panelMaxHeight + 90, 0],
   });
+
   const panelOpacity = panelAnim.interpolate({
     inputRange: [0, 1],
     outputRange: [0, 1],
   });
+
   const backdropOpacity = panelAnim.interpolate({
     inputRange: [0, 1],
     outputRange: [0, 0.35],
@@ -279,7 +281,13 @@ export default function TripBuildScreen() {
     };
   }, [selectedLeague, from, to]);
 
-  // Panel open/close animation + prefill dates from kickoff
+  /**
+   * Panel open/close animation + prefill dates from kickoff
+   *
+   * IMPORTANT ANDROID/EXPO GO NOTE:
+   * - expo-blur + Animated transform with useNativeDriver:true can cause children not to render.
+   * - Therefore, we intentionally use useNativeDriver:false for the panel animation.
+   */
   useEffect(() => {
     const iso = selectedFixture?.fixture?.date as string | undefined;
 
@@ -288,7 +296,7 @@ export default function TripBuildScreen() {
         toValue: 0,
         duration: 170,
         easing: Easing.out(Easing.quad),
-        useNativeDriver: true,
+        useNativeDriver: false, // <-- critical fix
       }).start();
       return;
     }
@@ -306,7 +314,7 @@ export default function TripBuildScreen() {
       toValue: 1,
       duration: 230,
       easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
+      useNativeDriver: false, // <-- critical fix
     }).start();
 
     flashAnim.setValue(0);
@@ -417,6 +425,8 @@ export default function TripBuildScreen() {
 
   const bottomPad = panelOpen ? panelMaxHeight + theme.spacing.xl : theme.spacing.xxl;
 
+  const DEV_DEBUG = __DEV__ === true;
+
   return (
     <Background imageUrl={getBackground("trips")}>
       <Stack.Screen
@@ -438,42 +448,22 @@ export default function TripBuildScreen() {
           <GlassCard style={styles.card}>
             <Text style={styles.h1}>Pick a match</Text>
             <Text style={styles.muted}>Tap a fixture to open trip details. Save from the bottom panel.</Text>
-<View
-  style={{
-    marginTop: 12,
-    padding: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "rgba(255,0,0,0.8)",
-    backgroundColor: "rgba(0,0,0,0.35)",
-    gap: 6,
-  }}
->
-  <Text style={{ color: "white", fontWeight: "900" }}>
-    fixtureId param: {String(params?.fixtureId ?? "NONE")}
-  </Text>
-  <Text style={{ color: "white", fontWeight: "900" }}>
-    leagueId param: {String(params?.leagueId ?? "NONE")}
-  </Text>
-  <Text style={{ color: "white", fontWeight: "900" }}>
-    season param: {String(params?.season ?? "NONE")}
-  </Text>
-  <Text style={{ color: "white", fontWeight: "900" }}>
-    from/to param: {String(params?.from ?? "NONE")} → {String(params?.to ?? "NONE")}
-  </Text>
 
-  <View style={{ height: 1, backgroundColor: "rgba(255,255,255,0.15)", marginVertical: 6 }} />
+            {DEV_DEBUG ? (
+              <View style={styles.devBox}>
+                <Text style={styles.devText}>fixtureId param: {String(params?.fixtureId ?? "NONE")}</Text>
+                <Text style={styles.devText}>leagueId param: {String(params?.leagueId ?? "NONE")}</Text>
+                <Text style={styles.devText}>season param: {String(params?.season ?? "NONE")}</Text>
+                <Text style={styles.devText}>
+                  from/to param: {String(params?.from ?? "NONE")} → {String(params?.to ?? "NONE")}
+                </Text>
+                <View style={styles.devDivider} />
+                <Text style={styles.devText}>selectedFixture id: {String(selectedFixture?.fixture?.id ?? "NONE")}</Text>
+                <Text style={styles.devText}>panelOpen: {String(!!selectedFixture)}</Text>
+                <Text style={styles.devText}>error: {String(error ?? "NONE")}</Text>
+              </View>
+            ) : null}
 
-  <Text style={{ color: "white", fontWeight: "900" }}>
-    selectedFixture id: {String(selectedFixture?.fixture?.id ?? "NONE")}
-  </Text>
-  <Text style={{ color: "white", fontWeight: "900" }}>
-    panelOpen: {String(!!selectedFixture)}
-  </Text>
-  <Text style={{ color: "white", fontWeight: "900" }}>
-    error: {String(error ?? "NONE")}
-  </Text>
-</View>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.leagueRow}>
               {LEAGUES.map((l) => {
                 const active = l.leagueId === selectedLeague.leagueId;
@@ -605,6 +595,9 @@ export default function TripBuildScreen() {
         {/* Panel */}
         <Animated.View
           pointerEvents={panelOpen ? "auto" : "none"}
+          collapsable={false}
+          renderToHardwareTextureAndroid
+          needsOffscreenAlphaCompositing
           style={[
             styles.panelWrap,
             {
@@ -791,6 +784,18 @@ const styles = StyleSheet.create({
   },
   muted: { fontSize: theme.fontSize.sm, color: theme.colors.textSecondary },
 
+  devBox: {
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,0,0,0.8)",
+    backgroundColor: "rgba(0,0,0,0.35)",
+    gap: 6,
+  },
+  devText: { color: "white", fontWeight: "900" },
+  devDivider: { height: 1, backgroundColor: "rgba(255,255,255,0.15)", marginVertical: 6 },
+
   leagueRow: { gap: 10, paddingRight: theme.spacing.lg, marginTop: 12 },
 
   leaguePill: {
@@ -805,7 +810,7 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.primary,
     backgroundColor: "rgba(0,0,0,0.45)",
   },
-  leaguePillText: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, fontWeight: "700" },
+  leaguePillText:: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, fontWeight: "700" } as any,
   leaguePillTextActive: { color: theme.colors.text },
 
   searchWrap: { marginTop: 12 },
