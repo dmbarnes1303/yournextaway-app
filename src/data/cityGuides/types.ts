@@ -1,112 +1,50 @@
 // src/data/cityGuides/types.ts
 
-export type CityGuideLink = {
-  label: string;
-  url: string;
+export type CityArea = {
+  name: string;
+  vibe: string;
+  whyStay: string;
+  goodFor?: string[]; // e.g. ["first-timers", "nightlife", "food"]
 };
 
-export type CityGuideItem = {
+export type CityThingToDo = {
   title: string;
-  description?: string;
-  area?: string; // e.g. "Centro", "Old Town", "Near stadium"
-  tags?: string[]; // e.g. ["free", "family", "nightlife"]
-  link?: CityGuideLink;
-};
-
-export type CityFoodAndDrink = {
-  specialties?: string[]; // local dishes/drinks
-  areasToEat?: string[]; // neighbourhoods
-  pubsAndBars?: CityGuideItem[]; // away-day friendly pubs, etc.
-  restaurants?: CityGuideItem[];
-  quickBites?: CityGuideItem[];
-};
-
-export type CityTransport = {
-  gettingAround: string[]; // bullets
-  airport?: string[]; // bullets
-  rail?: string[]; // bullets
-  matchday?: string[]; // bullets: how to get to stadium, last train, etc.
-  taxis?: string[]; // bullets
-  safety?: string[]; // bullets (scams/areas)
-};
-
-export type CityStay = {
-  bestAreas: CityGuideItem[]; // where to stay + why
-  avoidAreas?: CityGuideItem[]; // optional, but useful
-  budgetTips?: string[];
-};
-
-export type CityMatchday = {
-  vibe?: string; // short paragraph
-  beforeMatch?: CityGuideItem[]; // where to go before kick-off
-  afterMatch?: CityGuideItem[]; // where to go after
-  stadiumTips?: string[]; // entry times, bag policy reminders, etc.
-  awayFans?: string[]; // tone and practical tips
+  tip: string; // short, actionable, not fluffy
 };
 
 export interface CityGuide {
-  /**
-   * Canonical id/slug for routing + storage. Example: "madrid", "london", "milan".
-   */
-  cityId: string;
-
-  /**
-   * Display name. Example: "Madrid".
-   */
+  cityId: string; // slug key, e.g. "london"
   name: string;
+  country: string;
 
-  /**
-   * Aliases used to match data coming from fixtures/APIs:
-   * Example: ["Madrid", "Madrid, Spain", "Comunidad de Madrid"].
-   */
-  aliases: string[];
+  airports?: string; // simple human string e.g. "LHR / LGW / STN..."
+  coversTeams?: string[]; // optional, but useful for football-first routing later
+  hasGuide: boolean;
 
-  /**
-   * Short summary suitable for cards.
-   */
-  tagline: string;
+  vibe: string; // short “feel of the city”
+  whyGo: string; // why this city is worth the trip
 
-  /**
-   * Longer overview for the guide page.
-   */
-  overview: string;
+  bestAreasToStay: CityArea[];
 
-  /**
-   * Curated "Top things to do" (your own list). This powers in-app value.
-   */
-  topThingsToDo: CityGuideItem[];
+  // Core travel utilities
+  transportTips: string;
+  accommodationTips: string;
 
-  /**
-   * Food + drink details.
-   */
-  foodAndDrink: CityFoodAndDrink;
+  // Matchday-specific, but still city-first
+  matchdayTips: string[];
+  stadiumAreaTips: string;
 
-  /**
-   * Transport guidance.
-   */
-  transport: CityTransport;
+  // Content depth
+  topThingsToDo: CityThingToDo[]; // target: 10 items
+  foodAndDrink: string[]; // quick hits, not essays
+  nightlife: string;
+  budgetTips: string;
 
-  /**
-   * Where to stay.
-   */
-  accommodation: CityStay;
+  // External link (you requested this)
+  tripAdvisorTopThingsUrl: string;
 
-  /**
-   * Matchday-specific content (what your app is about).
-   */
-  matchday: CityMatchday;
-
-  /**
-   * Useful links (TripAdvisor, official tourism board, transit maps, etc).
-   * TripAdvisor can be generated dynamically too, but storing a slot is helpful.
-   */
-  links?: CityGuideLink[];
-
-  /**
-   * Lightweight, reusable “quick tips” for surfaces like Trip Build.
-   * Keep these short; the detailed content lives in the sections above.
-   */
-  quickTips: string[];
+  // “Local hacks” / practical tips
+  cityTips: string[];
 }
 
 export default CityGuide;
