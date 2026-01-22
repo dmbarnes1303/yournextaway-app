@@ -38,8 +38,7 @@ export default function TripDetailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ id?: string }>();
 
-  const id =
-    typeof params?.id === "string" ? params.id : Array.isArray(params?.id) ? params.id[0] : undefined;
+  const id = typeof params?.id === "string" ? params.id : Array.isArray(params?.id) ? params.id[0] : undefined;
 
   const [loaded, setLoaded] = useState(tripsStore.getState().loaded);
   const [trip, setTrip] = useState<Trip | null>(null);
@@ -68,12 +67,15 @@ export default function TripDetailScreen() {
   const matchIds = useMemo(() => trip?.matchIds ?? [], [trip]);
   const matchCount = matchIds.length;
 
+  // Ensure predictable lookup typing
+  const guides = cityGuides as Record<string, CityGuide>;
+
   // City guide lookup (Top 5 capitals for now)
   const cityKey = useMemo(() => normalizeCityKey(trip?.cityId), [trip?.cityId]);
   const cityGuide = useMemo<CityGuide | null>(() => {
     if (!cityKey) return null;
-    return cityGuides[cityKey] ?? null;
-  }, [cityKey]);
+    return guides[cityKey] ?? null;
+  }, [cityKey, guides]);
 
   useEffect(() => {
     let cancelled = false;
@@ -127,6 +129,10 @@ export default function TripDetailScreen() {
 
   function goCityGuide() {
     const slug = cityKey || normalizeCityKey(trip?.cityId);
+    if (!slug) {
+      Alert.alert("City unavailable", "This trip doesn’t have a valid city yet.");
+      return;
+    }
     router.push({ pathname: "/city/[slug]", params: { slug } });
   }
 
@@ -199,15 +205,13 @@ export default function TripDetailScreen() {
                   <View style={{ flex: 1 }}>
                     <Text style={styles.h2}>City guide</Text>
                     <Text style={styles.muted}>
-                      {cityGuide
-                        ? `${cityGuide.name}, ${cityGuide.country}`
-                        : "Limited rollout (top 5 league capitals)."}
+                      {cityGuide ? `${cityGuide.name}, ${cityGuide.country}` : "Limited rollout (top 5 league capitals)."}
                     </Text>
                   </View>
 
                   {cityGuide?.tripAdvisorTopThingsUrl ? (
                     <Pressable
-                      onPress={() => safeOpenUrl(cityGuide.tripAdvisorTopThingsUrl!)}
+                      onPress={() => safeOpenUrl(cityGuide.tripAdvisorTopThingsUrl)}
                       style={styles.ctaBtn}
                       accessibilityRole="button"
                       accessibilityLabel="Open TripAdvisor top things to do"
@@ -299,9 +303,7 @@ export default function TripDetailScreen() {
                   </View>
                 ) : null}
 
-                {!loadingFixtures && fixtureError ? (
-                  <EmptyState title="Couldn’t load matches" message={fixtureError} />
-                ) : null}
+                {!loadingFixtures && fixtureError ? <EmptyState title="Couldn’t load matches" message={fixtureError} /> : null}
 
                 {!loadingFixtures && !fixtureError && matchCount > 0 && fixtureRows.length === 0 ? (
                   <EmptyState title="No match details yet" message="Matches are linked, but details are unavailable." />
