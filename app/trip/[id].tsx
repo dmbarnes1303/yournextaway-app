@@ -1,3 +1,4 @@
+// app/trip/[id].tsx
 import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
@@ -7,6 +8,7 @@ import {
   Pressable,
   ActivityIndicator,
   Alert,
+  Linking,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
@@ -19,37 +21,27 @@ import { theme } from "@/src/constants/theme";
 import tripsStore, { type Trip } from "@/src/state/trips";
 import { getFixtureById } from "@/src/services/apiFootball";
 
-function formatUkDate(iso: string | undefined): string {
-  if (!iso) return "TBC";
-  const d = new Date(`${iso}T00:00:00`);
-  if (Number.isNaN(d.getTime())) return "TBC";
-  return new Intl.DateTimeFormat("en-GB", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  }).format(d);
+import { formatUkDateOnly, formatUkDateTimeMaybe } from "@/src/utils/formatters";
+import { getCityGuide } from "@/src/data/cityGuides";
+
+function normalizeCityKey(input: string | undefined | null): string {
+  if (!input) return "";
+  return String(input).trim().toLowerCase();
 }
 
 function formatTripRange(t: Trip) {
-  return `${formatUkDate(t.startDate)} → ${formatUkDate(t.endDate)}`;
+  return `${formatUkDateOnly(t.startDate)} → ${formatUkDateOnly(t.endDate)}`;
 }
 
-function formatUkDateTimeMaybe(iso: string | undefined): string {
-  if (!iso) return "TBC";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "TBC";
-  return new Intl.DateTimeFormat("en-GB", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(d);
+function makeTripAdvisorSearchUrl(cityName: string) {
+  const q = encodeURIComponent(`${cityName} top things to do`);
+  return `https://www.tripadvisor.com/Search?q=${q}`;
 }
 
 export default function TripDetailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ id?: string }>();
+
   const id =
     typeof params?.id === "string"
       ? params.id
@@ -117,6 +109,29 @@ export default function TripDetailScreen() {
     };
   }, [trip, matchIds]);
 
+  const cityName = useMemo(() => (trip?.cityId || "").trim(), [trip?.cityId]);
+  const cityKey = useMemo(() => normalizeCityKey(cityName), [cityName]);
+
+  const guide = useMemo(() => getCityGuide(cityKey), [cityKey]);
+
+  const tripAdvisorUrl = useMemo(() => {
+    if (guide?.tripAdvisorTopThingsUrl) return guide.tripAdvisorTopThingsUrl;
+    return cityName ? makeTripAdvisorSearchUrl(cityName) : makeTripAdvisorSearchUrl("city");
+  }, [guide?.tripAdvisorTopThingsUrl, cityName]);
+
+  async function openUrl(url: string) {
+    try {
+      const can = await Linking.canOpenURL(url);
+      if (!can) {
+        Alert.alert("Can’t open link", "Your device couldn’t open this link.");
+        return;
+      }
+      await Linking.openURL(url);
+    } catch {
+      Alert.alert("Can’t open link", "Something went wrong opening that link.");
+    }
+  }
+
   function onDelete() {
     if (!trip) return;
 
@@ -160,6 +175,7 @@ export default function TripDetailScreen() {
 
           {loaded && id && trip ? (
             <>
+              {/* TRIP SUMMARY */}
               <GlassCard style={styles.card}>
                 <Text style={styles.h1}>{trip.cityId || "Trip"}</Text>
                 <Text style={styles.muted}>{formatTripRange(trip)}</Text>
@@ -184,6 +200,84 @@ export default function TripDetailScreen() {
                 <Text style={styles.smallPrint}>Trip ID: {trip.id}</Text>
               </GlassCard>
 
+              {/* CITY INTEL */}
+              <GlassCard style={styles.card}>
+                <Text style={styles.h2}>City intel</Text>
+                <Text style={styles.muted}>
+                  {guide?.hasGuide
+                    ? `${guide.name}, ${guide.country} • Top things, tips, and matchday notes`
+                    : "We don’t have a full guide for this city yet — but you can still get top things to do."}
+                </Text>
+
+                <Pressable onPress={() => openUrl(tripAdvisorUrl)} style={styles.primaryLinkBtn}>
+                  <Text style={styles.primaryLinkText}>Open TripAdvisor: Top things to do</Text>
+                </Pressable>
+
+                {guide?.hasGuide ? (
+                  <>
+                    {guide.vibe ? (
+                      <View style={{ marginTop: 12 }}>
+                        <Text style={styles.sectionTitle}>Vibe</Text>
+                        <Text style={styles.body}>{guide.vibe}</Text>
+                      </View>
+                    ) : null}
+
+                    {Array.isArray(guide.topThingsToDo) && guide.topThingsToDo.length > 0 ? (
+                      <View style={{ marginTop: 14 }}>
+                        <Text style={styles.sectionTitle}>Top things to do</Text>
+                        <View style={styles.bulletList}>
+                          {guide.topThingsToDo.slice(0, 10).map((x, idx) => (
+                            <View key={`${x.title}-${idx}`} style={styles.bulletRow}>
+                              <Text style={styles.bulletDot}>•</Text>
+                              <View style={{ flex: 1 }}>
+                                <Text style={styles.bulletTitle}>{x.title}</Text>
+                                <Text style={styles.bulletMeta}>{x.tip}</Text>
+                              </View>
+                            </View>
+                          ))}
+                        </View>
+                      </View>
+                    ) : null}
+
+                    {Array.isArray(guide.cityTips) && guide.cityTips.length > 0 ? (
+                      <View style={{ marginTop: 14 }}>
+                        <Text style={styles.sectionTitle}>City tips</Text>
+                        <View style={styles.bulletList}>
+                          {guide.cityTips.slice(0, 8).map((tip, idx) => (
+                            <View key={`ct-${idx}`} style={styles.bulletRow}>
+                              <Text style={styles.bulletDot}>•</Text>
+                              <Text style={[styles.body, { flex: 1 }]}>{tip}</Text>
+                            </View>
+                          ))}
+                        </View>
+                      </View>
+                    ) : null}
+
+                    {Array.isArray(guide.matchdayTips) && guide.matchdayTips.length > 0 ? (
+                      <View style={{ marginTop: 14 }}>
+                        <Text style={styles.sectionTitle}>Matchday tips</Text>
+                        <View style={styles.bulletList}>
+                          {guide.matchdayTips.slice(0, 6).map((tip, idx) => (
+                            <View key={`mt-${idx}`} style={styles.bulletRow}>
+                              <Text style={styles.bulletDot}>•</Text>
+                              <Text style={[styles.body, { flex: 1 }]}>{tip}</Text>
+                            </View>
+                          ))}
+                        </View>
+                      </View>
+                    ) : null}
+                  </>
+                ) : (
+                  <View style={{ marginTop: 12 }}>
+                    <EmptyState
+                      title="City guide coming soon"
+                      message="We’re building city guides with top things to do, local tips, and matchday intel. For now, use TripAdvisor above."
+                    />
+                  </View>
+                )}
+              </GlassCard>
+
+              {/* MATCHES */}
               <GlassCard style={styles.card}>
                 <Text style={styles.h2}>Matches</Text>
                 <Text style={styles.muted}>
@@ -269,6 +363,13 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
   },
 
+  sectionTitle: {
+    color: theme.colors.text,
+    fontSize: theme.fontSize.sm,
+    fontWeight: "900",
+    marginBottom: 8,
+  },
+
   label: {
     color: theme.colors.textSecondary,
     fontSize: theme.fontSize.sm,
@@ -279,6 +380,24 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSize.md,
     lineHeight: 20,
   },
+
+  bulletList: { gap: 10 },
+  bulletRow: { flexDirection: "row", gap: 10, alignItems: "flex-start" },
+  bulletDot: { color: theme.colors.textSecondary, marginTop: 2 },
+  bulletTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
+  bulletMeta: { marginTop: 4, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18 },
+
+  primaryLinkBtn: {
+    marginTop: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(0,255,136,0.45)",
+    backgroundColor: "rgba(0,0,0,0.28)",
+    alignItems: "center",
+  },
+  primaryLinkText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
 
   actions: {
     marginTop: 16,
