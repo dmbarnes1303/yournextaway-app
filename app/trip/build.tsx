@@ -1,4 +1,3 @@
-// app/trip/build.tsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
@@ -22,7 +21,8 @@ import GlassCard from "@/src/components/GlassCard";
 import EmptyState from "@/src/components/EmptyState";
 import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
-import { getFixtures } from "@/src/services/apiFootball";
+
+import { getFixtures, getFixtureById } from "@/src/services/apiFootball";
 import tripsStore from "@/src/state/trips";
 
 import {
@@ -33,9 +33,32 @@ import {
   addDaysIso,
   type LeagueOption,
 } from "@/src/constants/football";
-import { coerceNumber, coerceString } from "@/src/utils/params";
+
 import { formatUkDateOnly, formatUkDateTimeMaybe } from "@/src/utils/formatters";
 import { getTopThingsToDoForTrip } from "@/src/data/cityGuides";
+
+/**
+ * Expo Router params can be string | string[] | undefined.
+ * Keep parsing local + deterministic (Android vs web differences are real).
+ */
+function paramString(v: unknown): string | null {
+  if (typeof v === "string") {
+    const s = v.trim();
+    return s ? s : null;
+  }
+  if (Array.isArray(v) && typeof v[0] === "string") {
+    const s = v[0].trim();
+    return s ? s : null;
+  }
+  return null;
+}
+
+function paramNumber(v: unknown): number | null {
+  const s = paramString(v);
+  if (!s) return null;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
+}
 
 function tomorrowIso(): string {
   const d = new Date();
@@ -62,7 +85,7 @@ async function safeOpenUrl(url: string) {
     const can = await Linking.canOpenURL(url);
     if (can) await Linking.openURL(url);
   } catch {
-    // Never crash for link-out
+    // never crash
   }
 }
 
@@ -85,19 +108,17 @@ export default function TripBuildScreen() {
     }
   }, []);
 
-  // Central rolling window defaults (single source of truth; tomorrow onwards)
+  // Central rolling window defaults
   const rolling = useMemo(() => getRollingWindowIso(), []);
   const defaultFrom = useMemo(() => clampIsoToTomorrow(rolling.from), [rolling.from]);
   const defaultTo = rolling.to;
 
-  // Route params (context-aware Plan Trip)
-  const routeFixtureId = useMemo(() => coerceString(params.fixtureId), [params.fixtureId]);
-  const routeLeagueId = useMemo(() => coerceNumber(params.leagueId), [params.leagueId]);
-  const routeSeason = useMemo(() => coerceNumber(params.season), [params.season]);
-
-  // Allow optional from/to via params (but enforce tomorrow+ rule)
-  const fromParam = useMemo(() => coerceString(params.from), [params.from]);
-  const toParam = useMemo(() => coerceString(params.to), [params.to]);
+  // Route params
+  const routeFixtureId = useMemo(() => paramString(params.fixtureId), [params.fixtureId]);
+  const routeLeagueId = useMemo(() => paramNumber(params.leagueId), [params.leagueId]);
+  const routeSeason = useMemo(() => paramNumber(params.season), [params.season]);
+  const fromParam = useMemo(() => paramString(params.from), [params.from]);
+  const toParam = useMemo(() => paramString(params.to), [params.to]);
 
   const from = useMemo(() => clampIsoToTomorrow(fromParam ?? defaultFrom), [fromParam, defaultFrom]);
   const to = useMemo(() => toParam ?? defaultTo, [toParam, defaultTo]);
@@ -107,6 +128,7 @@ export default function TripBuildScreen() {
   // Apply league/season from route params
   useEffect(() => {
     if (!routeLeagueId) return;
+
     const match = LEAGUES.find((l) => l.leagueId === routeLeagueId);
     if (!match) return;
 
@@ -118,6 +140,7 @@ export default function TripBuildScreen() {
   }, [routeLeagueId, routeSeason]);
 
   const [loading, setLoading] = useState(false);
+  const [prefillLoading, setPrefillLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -127,7 +150,7 @@ export default function TripBuildScreen() {
 
   const [selectedFixture, setSelectedFixture] = useState<any | null>(null);
 
-  // Store dates as ISO internally, show dd/mm/yyyy in UI.
+  // Dates
   const [startIso, setStartIso] = useState(from);
   const [endIso, setEndIso] = useState(addDaysIso(from, 2));
   const [notes, setNotes] = useState("");
@@ -137,25 +160,24 @@ export default function TripBuildScreen() {
     open: false,
   });
 
-  // Panel animation
-  const panelAnim = useRef(new Animated.Value(0)).current; // 0 closed, 1 open
+  // Animation
+  const panelAnim = useRef(new Animated.Value(0)).current;
   const flashAnim = useRef(new Animated.Value(0)).current;
 
   const { height: screenH } = Dimensions.get("window");
 
-  // Expo Router stack header is ~56dp; with transparent header we must reserve this.
+  // Header-safe sizing (prevents top overlap + prevents backdrop stealing Back taps)
   const HEADER_ESTIMATE = 56;
   const headerBlock = insets.top + HEADER_ESTIMATE;
 
-  // Panel sizing: IMPORTANT — set a real height, not maxHeight (fixes Android collapse)
-  const panelOpen = !!selectedFixture;
+  const PANEL_MAX = Math.min(420, Math.round(screenH * 0.62));
+  const panelMaxHeight = Math.min(PANEL_MAX, Math.max(260, screenH - headerBlock - 20));
 
-  const desiredPanelHeight = Math.min(520, Math.round(screenH * 0.64));
-  const panelHeight = Math.min(desiredPanelHeight, Math.max(280, screenH - headerBlock - 24));
+  const panelOpen = !!selectedFixture;
 
   const panelTranslateY = panelAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [panelHeight + 120, 0],
+    outputRange: [panelMaxHeight + 90, 0],
   });
   const panelOpacity = panelAnim.interpolate({
     inputRange: [0, 1],
@@ -166,14 +188,61 @@ export default function TripBuildScreen() {
     outputRange: [0, 0.35],
   });
 
-  // If from changes (via params), keep date fields aligned
+  // Keep date fields aligned to route from
   useEffect(() => {
     setStartIso(from);
     setEndIso(addDaysIso(from, 2));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [from]);
 
-  // Load fixtures whenever league/from/to change
+  /**
+   * CRITICAL: Prefill selected fixture directly if fixtureId is provided.
+   * This avoids “must exist in list window” and avoids platform param quirks.
+   */
+  useEffect(() => {
+    let cancelled = false;
+
+    async function prefill() {
+      if (!routeFixtureId) return;
+
+      setError(null);
+      setPrefillLoading(true);
+
+      try {
+        const r = await getFixtureById(routeFixtureId);
+        if (cancelled) return;
+
+        if (!r) {
+          setError("Couldn’t load that match. Try selecting it from the list.");
+          return;
+        }
+
+        setSelectedFixture(r);
+
+        // Sync league selection when possible
+        const apiLeagueId = r?.league?.id;
+        if (typeof apiLeagueId === "number") {
+          const match = LEAGUES.find((l) => l.leagueId === apiLeagueId);
+          if (match) {
+            const season = routeSeason ?? match.season;
+            setSelectedLeague({ ...match, season });
+          }
+        }
+      } catch (e: any) {
+        if (cancelled) return;
+        setError(e?.message ?? "Couldn’t prefill that match.");
+      } finally {
+        if (!cancelled) setPrefillLoading(false);
+      }
+    }
+
+    prefill();
+    return () => {
+      cancelled = true;
+    };
+  }, [routeFixtureId, routeSeason]);
+
+  // Load fixtures list whenever league/from/to change
   useEffect(() => {
     let cancelled = false;
 
@@ -181,7 +250,6 @@ export default function TripBuildScreen() {
       setError(null);
       setLoading(true);
       setRows([]);
-      setSelectedFixture(null);
       setSearch("");
       setVisibleCount(12);
 
@@ -209,28 +277,14 @@ export default function TripBuildScreen() {
     };
   }, [selectedLeague, from, to]);
 
-  // Auto-select fixture from route params after rows load
-  useEffect(() => {
-    if (!routeFixtureId) return;
-    if (!rows.length) return;
-
-    const found = rows.find((r) => String(r?.fixture?.id ?? "") === String(routeFixtureId));
-    if (found) {
-      setSelectedFixture(found);
-      return;
-    }
-
-    setError("That match isn’t available in the current window for this league. Try another league or adjust the date window.");
-  }, [routeFixtureId, rows]);
-
-  // Panel open/close animations + date prefill
+  // Panel open/close animation + prefill dates from kickoff
   useEffect(() => {
     const iso = selectedFixture?.fixture?.date as string | undefined;
 
     if (!selectedFixture) {
       Animated.timing(panelAnim, {
         toValue: 0,
-        duration: 160,
+        duration: 170,
         easing: Easing.out(Easing.quad),
         useNativeDriver: true,
       }).start();
@@ -246,11 +300,9 @@ export default function TripBuildScreen() {
       }
     }
 
-    setError(null);
-
     Animated.timing(panelAnim, {
       toValue: 1,
-      duration: 220,
+      duration: 230,
       easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
     }).start();
@@ -293,6 +345,7 @@ export default function TripBuildScreen() {
     }
 
     const iso = clampIsoToTomorrow(toIsoDate(date));
+
     if (picker.which === "start") {
       setStartIso(iso);
       const end = parseIsoDateOnly(endIso);
@@ -309,7 +362,6 @@ export default function TripBuildScreen() {
       setError("Select a fixture first.");
       return;
     }
-
     if (!startIso || !endIso) {
       setError("Start/end dates are required.");
       return;
@@ -361,8 +413,7 @@ export default function TripBuildScreen() {
     return getTopThingsToDoForTrip(destinationCity);
   }, [destinationCity]);
 
-  // Ensure the list has enough space so it never sits behind the panel
-  const bottomPad = panelOpen ? panelHeight + theme.spacing.xl + Math.max(insets.bottom, 0) : theme.spacing.xxl;
+  const bottomPad = panelOpen ? panelMaxHeight + theme.spacing.xl : theme.spacing.xxl;
 
   return (
     <Background imageUrl={getBackground("trips")}>
@@ -419,6 +470,13 @@ export default function TripBuildScreen() {
                 Showing {Math.min(visibleCount, filteredRows.length)} of {filteredRows.length}
               </Text>
             </View>
+
+            {prefillLoading ? (
+              <View style={styles.center}>
+                <ActivityIndicator />
+                <Text style={styles.muted}>Prefilling your match…</Text>
+              </View>
+            ) : null}
 
             {loading ? (
               <View style={styles.center}>
@@ -488,8 +546,7 @@ export default function TripBuildScreen() {
             ) : null}
           </GlassCard>
         </ScrollView>
-
-        {/* Backdrop: starts BELOW header so it won't steal BackButton taps */}
+        {/* Backdrop: MUST NOT cover header zone or it steals BackButton taps on Android */}
         {panelOpen ? (
           <Animated.View
             pointerEvents="auto"
@@ -505,37 +562,35 @@ export default function TripBuildScreen() {
               style={StyleSheet.absoluteFill}
               onPress={() => setSelectedFixture(null)}
               accessibilityRole="button"
-              accessibilityLabel="Close trip details panel"
+              accessibilityLabel="Close trip details"
             >
               <View style={styles.backdrop} />
             </Pressable>
           </Animated.View>
         ) : null}
 
-        {/* Panel */}
+        {/* Bottom Sheet Panel */}
         <Animated.View
           pointerEvents={panelOpen ? "auto" : "none"}
           style={[
             styles.panelWrap,
             {
-              bottom: theme.spacing.lg + Math.max(insets.bottom, 0), // keep it above system nav
               opacity: panelOpacity,
               transform: [{ translateY: panelTranslateY }],
             },
           ]}
         >
-          <GlassCard style={[styles.panel, { height: panelHeight }]} intensity={30}>
+          <GlassCard style={[styles.panel, { maxHeight: panelMaxHeight }]} intensity={30}>
             <Animated.View pointerEvents="none" style={[styles.panelFlash, { opacity: flashAnim }]} />
-
             <View style={styles.handle} />
 
-            {/* Internal scroll — panel height is fixed now, so this works reliably */}
             <ScrollView
               style={{ flex: 1 }}
               contentContainerStyle={{ paddingBottom: theme.spacing.md }}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
             >
+              {/* Panel header */}
               <View style={styles.panelTop}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.panelKicker}>Trip details</Text>
@@ -549,11 +604,12 @@ export default function TripBuildScreen() {
                   </Text>
                 </View>
 
-                <Pressable onPress={() => setSelectedFixture(null)} style={styles.clearBtn} hitSlop={10}>
+                <Pressable onPress={() => setSelectedFixture(null)} style={styles.clearBtn} hitSlop={12}>
                   <Text style={styles.clearText}>Change</Text>
                 </Pressable>
               </View>
 
+              {/* Dates */}
               <View style={styles.dateRow}>
                 <Pressable onPress={() => openPicker("start")} style={styles.datePill}>
                   <Text style={styles.dateLabel}>Start</Text>
@@ -566,6 +622,7 @@ export default function TripBuildScreen() {
                 </Pressable>
               </View>
 
+              {/* City guide bundle */}
               {destinationCity ? (
                 <View style={styles.cityBlock}>
                   <View style={styles.cityBlockTop}>
@@ -580,7 +637,12 @@ export default function TripBuildScreen() {
                     </View>
 
                     {cityBundle?.tripAdvisorUrl ? (
-                      <Pressable onPress={() => safeOpenUrl(cityBundle.tripAdvisorUrl)} style={styles.taBtn}>
+                      <Pressable
+                        onPress={() => safeOpenUrl(cityBundle.tripAdvisorUrl!)}
+                        style={styles.taBtn}
+                        accessibilityRole="button"
+                        accessibilityLabel="Open TripAdvisor things to do"
+                      >
                         <Text style={styles.taBtnText}>TripAdvisor</Text>
                       </Pressable>
                     ) : null}
@@ -588,7 +650,7 @@ export default function TripBuildScreen() {
 
                   {cityBundle?.hasGuide && (cityBundle.items?.length ?? 0) > 0 ? (
                     <View style={styles.thingsList}>
-                      {cityBundle.items.slice(0, 6).map((it, idx) => (
+                      {cityBundle!.items.slice(0, 6).map((it, idx) => (
                         <View key={`${it.title}-${idx}`} style={styles.thingRow}>
                           <Text style={styles.thingIdx}>{idx + 1}.</Text>
                           <View style={{ flex: 1 }}>
@@ -597,13 +659,16 @@ export default function TripBuildScreen() {
                           </View>
                         </View>
                       ))}
+                      {(cityBundle!.items?.length ?? 0) > 6 ? (
+                        <Text style={styles.moreInline}>More in the full city guide.</Text>
+                      ) : null}
                     </View>
                   ) : null}
 
                   {cityBundle?.hasGuide && (cityBundle.quickTips?.length ?? 0) > 0 ? (
                     <View style={styles.tipsBlock}>
                       <Text style={styles.tipsTitle}>Quick tips</Text>
-                      {cityBundle.quickTips.slice(0, 5).map((t, idx) => (
+                      {cityBundle!.quickTips.slice(0, 5).map((t, idx) => (
                         <Text key={`${t}-${idx}`} style={styles.tipLine}>
                           • {t}
                         </Text>
@@ -613,6 +678,7 @@ export default function TripBuildScreen() {
                 </View>
               ) : null}
 
+              {/* Fallback date edit (web / no picker) */}
               {Platform.OS === "web" || !DateTimePicker ? (
                 <View style={{ marginTop: 10, gap: 8 }}>
                   <Text style={styles.fallbackNote}>Date picker not available here. Edit ISO dates (YYYY-MM-DD).</Text>
@@ -639,6 +705,7 @@ export default function TripBuildScreen() {
                 </View>
               ) : null}
 
+              {/* Notes */}
               <View style={{ marginTop: 10 }}>
                 <TextInput
                   value={notes}
@@ -651,20 +718,23 @@ export default function TripBuildScreen() {
                 />
               </View>
 
+              {/* Inline error (keep this separate from the list error so panel can show save issues) */}
               {error ? (
                 <Text style={styles.errText} numberOfLines={3}>
                   {error}
                 </Text>
               ) : null}
 
+              {/* Save */}
               <Pressable onPress={onSave} disabled={saving} style={[styles.saveBtn, saving && { opacity: 0.7 }]}>
                 <Text style={styles.saveText}>{saving ? "Saving…" : "Save Trip"}</Text>
               </Pressable>
 
+              {/* Native date picker */}
               {DateTimePicker && picker.open ? (
                 <View style={{ marginTop: 10 }}>
                   <DateTimePicker
-                    value={parseIsoDateOnly(picker.which === "start" ? (startIso as any) : (endIso as any)) ?? new Date()}
+                    value={parseIsoDateOnly(picker.which === "start" ? startIso : endIso) ?? new Date()}
                     mode="date"
                     display={Platform.OS === "ios" ? "inline" : "default"}
                     onChange={onPickerChange}
@@ -778,6 +848,7 @@ const styles = StyleSheet.create({
 
   hint: { marginTop: 10, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm },
 
+  // Backdrop wrapper starts below headerBlock: critical for Android BackButton presses
   backdropWrap: {
     position: "absolute",
     left: 0,
@@ -792,6 +863,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: theme.spacing.lg,
     right: theme.spacing.lg,
+    bottom: theme.spacing.lg,
     zIndex: 20,
     elevation: 20,
   },
@@ -858,6 +930,7 @@ const styles = StyleSheet.create({
   dateLabel: { color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: "800" },
   dateValue: { marginTop: 6, color: theme.colors.text, fontSize: theme.fontSize.md, fontWeight: "900" },
 
+  // City block
   cityBlock: {
     marginTop: 12,
     borderRadius: 12,
@@ -886,6 +959,7 @@ const styles = StyleSheet.create({
   thingIdx: { width: 20, color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: "900" },
   thingTitle: { color: theme.colors.text, fontSize: theme.fontSize.sm, fontWeight: "800" },
   thingDesc: { marginTop: 2, color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, lineHeight: 16 },
+  moreInline: { marginTop: 8, color: theme.colors.textSecondary, fontSize: theme.fontSize.xs },
 
   tipsBlock: { marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.10)" },
   tipsTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
