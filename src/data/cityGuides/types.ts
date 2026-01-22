@@ -1,26 +1,33 @@
 // src/data/cityGuides/types.ts
-export type CityTopThing = {
+
+export type CityGuideThing = {
   title: string;
   tip: string;
 };
 
 export interface CityGuide {
-  cityId: string; // slug key e.g. "london"
-  name: string;   // display name e.g. "London"
+  /** Slug key used in routes + lookup (e.g. "london") */
+  cityId: string;
+
+  /** Display fields */
+  name: string;
   country: string;
 
+  /** Short narrative */
   overview: string;
 
-  // core requirement
-  tripAdvisorTopThingsUrl?: string;
-  topThings: CityTopThing[]; // use 10 items for capitals
-  tips: string[];            // city-specific tips
+  /** “Top 10 things to do” with a useful tip for each */
+  topThings: CityGuideThing[];
 
-  // optional / legacy
-  attractions?: string[];
-  food?: string[];
+  /** Local, practical tips (short bullets) */
+  tips: string[];
+
+  /** Optional sections (expand later) */
   transport?: string;
   accommodation?: string;
+
+  /** Optional external link */
+  tripAdvisorTopThingsUrl?: string;
 }
 
 export default CityGuide;
