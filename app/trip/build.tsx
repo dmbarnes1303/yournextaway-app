@@ -15,7 +15,7 @@ import {
   Linking,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import { Stack, useRouter, useLocalSearchParams } from "expo-router";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 
 import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
@@ -36,7 +36,6 @@ import {
 import { coerceNumber, coerceString } from "@/src/utils/params";
 import { formatUkDateOnly, formatUkDateTimeMaybe } from "@/src/utils/formatters";
 
-// City guide helpers (must exist)
 import { getTopThingsToDoForTrip } from "@/src/data/cityGuides";
 
 function tomorrowIso(): string {
@@ -64,8 +63,14 @@ async function safeOpenUrl(url: string) {
     const can = await Linking.canOpenURL(url);
     if (can) await Linking.openURL(url);
   } catch {
-    // Intentionally silent: link-out should never crash Trip Build.
+    // Never crash Trip Build due to external link.
   }
+}
+
+function coerceId(v: unknown): string | undefined {
+  if (typeof v === "string" && v.trim()) return v.trim();
+  if (Array.isArray(v) && typeof v[0] === "string" && v[0].trim()) return v[0].trim();
+  return undefined;
 }
 
 export default function TripBuildScreen() {
@@ -93,13 +98,13 @@ export default function TripBuildScreen() {
   const defaultTo = rolling.to;
 
   // Route params (context-aware Plan Trip)
-  const routeFixtureId = useMemo(() => coerceString(params.fixtureId), [params.fixtureId]);
-  const routeLeagueId = useMemo(() => coerceNumber(params.leagueId), [params.leagueId]);
-  const routeSeason = useMemo(() => coerceNumber(params.season), [params.season]);
+  const routeFixtureId = useMemo(() => coerceId((params as any)?.fixtureId) ?? coerceString((params as any)?.fixtureId), [params]);
+  const routeLeagueId = useMemo(() => coerceNumber((params as any)?.leagueId), [params]);
+  const routeSeason = useMemo(() => coerceNumber((params as any)?.season), [params]);
 
   // Allow optional from/to via params (but enforce tomorrow+ rule)
-  const fromParam = useMemo(() => coerceString(params.from), [params.from]);
-  const toParam = useMemo(() => coerceString(params.to), [params.to]);
+  const fromParam = useMemo(() => coerceString((params as any)?.from), [params]);
+  const toParam = useMemo(() => coerceString((params as any)?.to), [params]);
 
   const from = useMemo(() => clampIsoToTomorrow(fromParam ?? defaultFrom), [fromParam, defaultFrom]);
   const to = useMemo(() => toParam ?? defaultTo, [toParam, defaultTo]);
@@ -114,6 +119,7 @@ export default function TripBuildScreen() {
     if (!match) return;
 
     const season = routeSeason ?? match.season;
+
     setSelectedLeague((cur) => {
       if (cur.leagueId === match.leagueId && cur.season === season) return cur;
       return { ...match, season };
@@ -146,25 +152,30 @@ export default function TripBuildScreen() {
 
   const { height: screenH } = Dimensions.get("window");
 
-  // Expo Router stack header is effectively ~56dp; with transparent header we must reserve this.
+  /**
+   * Critical:
+   * - Expo Router Stack header is ~56dp.
+   * - With transparent header, content can render underneath.
+   * - On Android, absolute overlays can steal touches from headerLeft/back button.
+   */
   const HEADER_ESTIMATE = 56;
   const headerBlock = insets.top + HEADER_ESTIMATE;
 
-  // Panel sizing
-  const PANEL_MAX = Math.min(420, Math.round(screenH * 0.62));
+  // Panel sizing (never invade header space)
+  const PANEL_TARGET = Math.min(440, Math.round(screenH * 0.62));
+  const panelMaxHeight = Math.min(PANEL_TARGET, Math.max(280, screenH - headerBlock - 18));
   const panelOpen = !!selectedFixture;
-
-  // Hard cap so the panel never encroaches into the header zone (fixes "In Madrid" under header)
-  const panelMaxHeight = Math.min(PANEL_MAX, Math.max(260, screenH - headerBlock - 20));
 
   const panelTranslateY = panelAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [panelMaxHeight + 80, 0],
+    outputRange: [panelMaxHeight + 90, 0],
   });
+
   const panelOpacity = panelAnim.interpolate({
     inputRange: [0, 1],
     outputRange: [0, 1],
   });
+
   const backdropOpacity = panelAnim.interpolate({
     inputRange: [0, 1],
     outputRange: [0, 0.35],
@@ -184,6 +195,8 @@ export default function TripBuildScreen() {
     async function run() {
       setError(null);
       setLoading(true);
+
+      // Reset list UI
       setRows([]);
       setSelectedFixture(null);
       setSearch("");
@@ -198,8 +211,7 @@ export default function TripBuildScreen() {
         });
 
         if (cancelled) return;
-        const arr = Array.isArray(res) ? res : [];
-        setRows(arr);
+        setRows(Array.isArray(res) ? res : []);
       } catch (e: any) {
         if (cancelled) return;
         setError(e?.message ?? "Failed to load fixtures.");
@@ -242,6 +254,7 @@ export default function TripBuildScreen() {
       return;
     }
 
+    // Prefill dates from kickoff date
     if (iso) {
       const d = new Date(iso);
       if (!Number.isNaN(d.getTime())) {
@@ -266,6 +279,7 @@ export default function TripBuildScreen() {
       Animated.timing(flashAnim, { toValue: 0, duration: 420, useNativeDriver: true }),
     ]).start();
 
+    // Keep list context stable
     requestAnimationFrame(() => {
       listRef.current?.scrollTo({ y: 0, animated: true });
     });
@@ -298,6 +312,7 @@ export default function TripBuildScreen() {
     }
 
     const iso = clampIsoToTomorrow(toIsoDate(date));
+
     if (picker.which === "start") {
       setStartIso(iso);
       const end = parseIsoDateOnly(endIso);
@@ -325,6 +340,7 @@ export default function TripBuildScreen() {
 
     try {
       const fixtureId = String(selectedFixture.fixture.id);
+
       const venueCity =
         (selectedFixture?.fixture?.venue?.city as string | undefined)?.trim() ||
         (selectedFixture?.league?.name as string | undefined)?.trim() ||
@@ -346,6 +362,7 @@ export default function TripBuildScreen() {
     }
   }
 
+  // Selected fixture meta
   const selHome = selectedFixture?.teams?.home?.name ?? "";
   const selAway = selectedFixture?.teams?.away?.name ?? "";
   const selKick = formatUkDateTimeMaybe(selectedFixture?.fixture?.date);
@@ -392,10 +409,10 @@ export default function TripBuildScreen() {
 
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.leagueRow}>
               {LEAGUES.map((l) => {
-                const active = l.leagueId === selectedLeague.leagueId;
+                const active = l.leagueId === selectedLeague.leagueId && l.season === selectedLeague.season;
                 return (
                   <Pressable
-                    key={l.leagueId}
+                    key={`${l.leagueId}-${l.season}`}
                     onPress={() => setSelectedLeague(l)}
                     style={[styles.leaguePill, active && styles.leaguePillActive]}
                   >
@@ -493,7 +510,7 @@ export default function TripBuildScreen() {
           </GlassCard>
         </ScrollView>
 
-        {/* Backdrop: MUST NOT cover the header zone or it will steal BackButton taps on device */}
+        {/* Backdrop: MUST start below headerBlock so it cannot steal BackButton taps on Android */}
         {panelOpen ? (
           <Animated.View
             pointerEvents="auto"
@@ -532,7 +549,7 @@ export default function TripBuildScreen() {
 
             <View style={styles.handle} />
 
-            {/* Make panel scroll internally so content doesn't push into header zone */}
+            {/* Panel content scrolls; prevents header overlap / "messy top" */}
             <ScrollView
               style={{ flex: 1 }}
               contentContainerStyle={{ paddingBottom: theme.spacing.md }}
@@ -672,18 +689,19 @@ export default function TripBuildScreen() {
               <Pressable onPress={onSave} disabled={saving} style={[styles.saveBtn, saving && { opacity: 0.7 }]}>
                 <Text style={styles.saveText}>{saving ? "Saving…" : "Save Trip"}</Text>
               </Pressable>
-
-              {DateTimePicker && picker.open ? (
-                <View style={{ marginTop: 10 }}>
-                  <DateTimePicker
-                    value={parseIsoDateOnly(picker.which === "start" ? (startIso as any) : (endIso as any)) ?? new Date()}
-                    mode="date"
-                    display={Platform.OS === "ios" ? "inline" : "default"}
-                    onChange={onPickerChange}
-                  />
-                </View>
-              ) : null}
             </ScrollView>
+
+            {/* Date picker is rendered OUTSIDE the internal scroll to avoid clipping and odd stacking */}
+            {DateTimePicker && picker.open ? (
+              <View style={{ marginTop: 10 }}>
+                <DateTimePicker
+                  value={parseIsoDateOnly(picker.which === "start" ? (startIso as any) : (endIso as any)) ?? new Date()}
+                  mode="date"
+                  display={Platform.OS === "ios" ? "inline" : "default"}
+                  onChange={onPickerChange}
+                />
+              </View>
+            ) : null}
           </GlassCard>
         </Animated.View>
       </SafeAreaView>
@@ -790,7 +808,7 @@ const styles = StyleSheet.create({
 
   hint: { marginTop: 10, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm },
 
-  // Backdrop wrapper that deliberately starts below the header block (critical for BackButton taps)
+  // Backdrop wrapper deliberately starts below header block (critical for BackButton taps)
   backdropWrap: {
     position: "absolute",
     left: 0,
