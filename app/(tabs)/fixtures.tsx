@@ -11,7 +11,7 @@ import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
 import { getFixtures, type FixtureListRow } from "@/src/services/apiFootball";
 
-import { LEAGUES, getRollingWindowIso, type LeagueOption } from "@/src/constants/football";
+import { LEAGUES, getRollingWindowIso, parseIsoDateOnly, toIsoDate, type LeagueOption } from "@/src/constants/football";
 import { coerceNumber, coerceString } from "@/src/utils/params";
 import { formatUkDateOnly, formatUkDateTimeMaybe } from "@/src/utils/formatters";
 
@@ -27,19 +27,39 @@ function mapRow(r: FixtureListRow) {
   return { fixtureId, home, away, line2 };
 }
 
+function tomorrowIso(): string {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() + 1);
+  return toIsoDate(d);
+}
+
+function clampFromToTomorrow(fromIso: string): string {
+  const tmr = tomorrowIso();
+  const fromDate = parseIsoDateOnly(fromIso);
+  const tmrDate = parseIsoDateOnly(tmr);
+  if (!fromDate || !tmrDate) return tmr;
+  return fromDate.getTime() < tmrDate.getTime() ? tmr : fromIso;
+}
+
 export default function FixturesScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
 
-  // Central rolling window defaults (single source of truth)
-  const { from: defaultFrom, to: defaultTo } = useMemo(() => getRollingWindowIso(), []);
+  // Central rolling window defaults (single source of truth; tomorrow onwards)
+  const { from: defaultFromRaw, to: defaultTo } = useMemo(() => getRollingWindowIso(), []);
+  const defaultFrom = useMemo(() => clampFromToTomorrow(defaultFromRaw), [defaultFromRaw]);
 
   // Params: allow Fixtures to be opened with a specific league/window
   const paramLeagueId = useMemo(() => coerceNumber(params.leagueId), [params.leagueId]);
   const paramSeason = useMemo(() => coerceNumber(params.season), [params.season]);
 
-  const from = useMemo(() => coerceString(params.from) ?? defaultFrom, [params.from, defaultFrom]);
-  const to = useMemo(() => coerceString(params.to) ?? defaultTo, [params.to, defaultTo]);
+  const fromParam = useMemo(() => coerceString(params.from), [params.from]);
+  const toParam = useMemo(() => coerceString(params.to), [params.to]);
+
+  // Enforce "tomorrow onwards" even if params try to pass today/past
+  const from = useMemo(() => clampFromToTomorrow(fromParam ?? defaultFrom), [fromParam, defaultFrom]);
+  const to = useMemo(() => toParam ?? defaultTo, [toParam, defaultTo]);
 
   // Selected league state (can be overridden by params)
   const [selected, setSelected] = useState<LeagueOption>(LEAGUES[0]);
