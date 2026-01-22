@@ -13,9 +13,18 @@ interface GlassCardProps {
 export default function GlassCard({ children, style, intensity = 20 }: GlassCardProps) {
   return (
     <View style={[styles.container, style]}>
-      <BlurView intensity={intensity} tint="dark" style={StyleSheet.absoluteFillObject} />
+      {/* CRITICAL: BlurView must never steal touches */}
+      <BlurView
+        intensity={intensity}
+        tint="dark"
+        style={StyleSheet.absoluteFillObject}
+        pointerEvents="none"
+      />
+
       {/* Fallback tint layer helps Android + low-blur scenarios */}
       <View pointerEvents="none" style={styles.tint} />
+
+      {/* Content is the only interactive layer */}
       <View style={styles.content}>{children}</View>
     </View>
   );
