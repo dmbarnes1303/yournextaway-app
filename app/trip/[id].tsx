@@ -1,15 +1,6 @@
 // app/trip/[id].tsx
 import React, { useEffect, useMemo, useState } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  Pressable,
-  ActivityIndicator,
-  Alert,
-  Linking,
-} from "react-native";
+import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert, Linking } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 
@@ -18,24 +9,33 @@ import GlassCard from "@/src/components/GlassCard";
 import EmptyState from "@/src/components/EmptyState";
 import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
+
 import tripsStore, { type Trip } from "@/src/state/trips";
 import { getFixtureById } from "@/src/services/apiFootball";
 
-import { formatUkDateOnly, formatUkDateTimeMaybe } from "@/src/utils/formatters";
-import { getCityGuide } from "@/src/data/cityGuides";
+import cityGuides from "@/src/data/cityGuides";
+import type { CityGuide } from "@/src/data/cityGuides/types";
 
-function normalizeCityKey(input: string | undefined | null): string {
-  if (!input) return "";
-  return String(input).trim().toLowerCase();
-}
+import { formatUkDateOnly, formatUkDateTimeMaybe } from "@/src/utils/formatters";
 
 function formatTripRange(t: Trip) {
   return `${formatUkDateOnly(t.startDate)} → ${formatUkDateOnly(t.endDate)}`;
 }
 
-function makeTripAdvisorSearchUrl(cityName: string) {
-  const q = encodeURIComponent(`${cityName} top things to do`);
-  return `https://www.tripadvisor.com/Search?q=${q}`;
+function normalizeCityKey(input: string | undefined | null) {
+  return String(input ?? "")
+    .trim()
+    .toLowerCase();
+}
+
+async function safeOpenUrl(url: string) {
+  try {
+    const can = await Linking.canOpenURL(url);
+    if (!can) throw new Error("Cannot open URL");
+    await Linking.openURL(url);
+  } catch {
+    Alert.alert("Couldn’t open link", "Your device could not open that link.");
+  }
 }
 
 export default function TripDetailScreen() {
@@ -75,6 +75,13 @@ export default function TripDetailScreen() {
 
   const matchIds = useMemo(() => trip?.matchIds ?? [], [trip]);
 
+  // City guide lookup (Top 5 capitals for now)
+  const cityKey = useMemo(() => normalizeCityKey(trip?.cityId), [trip?.cityId]);
+  const cityGuide = useMemo<CityGuide | null>(() => {
+    if (!cityKey) return null;
+    return cityGuides[cityKey] ?? null;
+  }, [cityKey]);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -109,29 +116,6 @@ export default function TripDetailScreen() {
     };
   }, [trip, matchIds]);
 
-  const cityName = useMemo(() => (trip?.cityId || "").trim(), [trip?.cityId]);
-  const cityKey = useMemo(() => normalizeCityKey(cityName), [cityName]);
-
-  const guide = useMemo(() => getCityGuide(cityKey), [cityKey]);
-
-  const tripAdvisorUrl = useMemo(() => {
-    if (guide?.tripAdvisorTopThingsUrl) return guide.tripAdvisorTopThingsUrl;
-    return cityName ? makeTripAdvisorSearchUrl(cityName) : makeTripAdvisorSearchUrl("city");
-  }, [guide?.tripAdvisorTopThingsUrl, cityName]);
-
-  async function openUrl(url: string) {
-    try {
-      const can = await Linking.canOpenURL(url);
-      if (!can) {
-        Alert.alert("Can’t open link", "Your device couldn’t open this link.");
-        return;
-      }
-      await Linking.openURL(url);
-    } catch {
-      Alert.alert("Can’t open link", "Something went wrong opening that link.");
-    }
-  }
-
   function onDelete() {
     if (!trip) return;
 
@@ -147,6 +131,8 @@ export default function TripDetailScreen() {
       },
     ]);
   }
+
+  const matchCount = matchIds.length;
 
   return (
     <Background imageUrl={getBackground("trips")}>
@@ -175,10 +161,21 @@ export default function TripDetailScreen() {
 
           {loaded && id && trip ? (
             <>
-              {/* TRIP SUMMARY */}
-              <GlassCard style={styles.card}>
+              {/* SUMMARY */}
+              <GlassCard style={styles.card} intensity={26}>
                 <Text style={styles.h1}>{trip.cityId || "Trip"}</Text>
                 <Text style={styles.muted}>{formatTripRange(trip)}</Text>
+
+                <View style={styles.summaryRow}>
+                  <View style={styles.summaryPill}>
+                    <Text style={styles.summaryLabel}>Matches</Text>
+                    <Text style={styles.summaryValue}>{matchCount}</Text>
+                  </View>
+                  <View style={styles.summaryPill}>
+                    <Text style={styles.summaryLabel}>City guide</Text>
+                    <Text style={styles.summaryValue}>{cityGuide ? "Available" : "—"}</Text>
+                  </View>
+                </View>
 
                 {trip.notes?.trim() ? (
                   <View style={{ marginTop: 12 }}>
@@ -200,88 +197,94 @@ export default function TripDetailScreen() {
                 <Text style={styles.smallPrint}>Trip ID: {trip.id}</Text>
               </GlassCard>
 
-              {/* CITY INTEL */}
-              <GlassCard style={styles.card}>
-                <Text style={styles.h2}>City intel</Text>
-                <Text style={styles.muted}>
-                  {guide?.hasGuide
-                    ? `${guide.name}, ${guide.country} • Top things, tips, and matchday notes`
-                    : "We don’t have a full guide for this city yet — but you can still get top things to do."}
-                </Text>
+              {/* CITY GUIDE */}
+              <GlassCard style={styles.card} intensity={24}>
+                <View style={styles.cardHeaderRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.h2}>City guide</Text>
+                    <Text style={styles.muted}>
+                      {cityGuide ? `${cityGuide.name}, ${cityGuide.country}` : "Limited rollout (top 5 league capitals)."}
+                    </Text>
+                  </View>
 
-                <Pressable onPress={() => openUrl(tripAdvisorUrl)} style={styles.primaryLinkBtn}>
-                  <Text style={styles.primaryLinkText}>Open TripAdvisor: Top things to do</Text>
-                </Pressable>
+                  {cityGuide?.tripAdvisorTopThingsUrl ? (
+                    <Pressable
+                      onPress={() => safeOpenUrl(cityGuide.tripAdvisorTopThingsUrl)}
+                      style={styles.ctaBtn}
+                      accessibilityRole="button"
+                      accessibilityLabel="Open TripAdvisor top things to do"
+                    >
+                      <Text style={styles.ctaText}>TripAdvisor Top 10</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
 
-                {guide?.hasGuide ? (
+                {!cityGuide ? (
+                  <EmptyState
+                    title="No guide for this city yet"
+                    message={`Current guides: London, Madrid, Rome, Berlin, Paris.\nSaved trip city: “${trip.cityId || "—"}”`}
+                  />
+                ) : (
                   <>
-                    {guide.vibe ? (
-                      <View style={{ marginTop: 12 }}>
-                        <Text style={styles.sectionTitle}>Vibe</Text>
-                        <Text style={styles.body}>{guide.vibe}</Text>
-                      </View>
-                    ) : null}
+                    <Text style={[styles.body, { marginTop: 10 }]}>{cityGuide.overview}</Text>
 
-                    {Array.isArray(guide.topThingsToDo) && guide.topThingsToDo.length > 0 ? (
-                      <View style={{ marginTop: 14 }}>
-                        <Text style={styles.sectionTitle}>Top things to do</Text>
-                        <View style={styles.bulletList}>
-                          {guide.topThingsToDo.slice(0, 10).map((x, idx) => (
-                            <View key={`${x.title}-${idx}`} style={styles.bulletRow}>
-                              <Text style={styles.bulletDot}>•</Text>
-                              <View style={{ flex: 1 }}>
-                                <Text style={styles.bulletTitle}>{x.title}</Text>
-                                <Text style={styles.bulletMeta}>{x.tip}</Text>
-                              </View>
+                    {/* TOP 10 */}
+                    <View style={{ marginTop: 14 }}>
+                      <Text style={styles.sectionTitle}>Top 10 things to do</Text>
+                      <View style={styles.bullets}>
+                        {cityGuide.topThings.slice(0, 10).map((x, i) => (
+                          <View key={`${x.title}-${i}`} style={styles.bulletRow}>
+                            <Text style={styles.bulletIndex}>{i + 1}</Text>
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.bulletTitle}>{x.title}</Text>
+                              <Text style={styles.bulletTip}>{x.tip}</Text>
                             </View>
-                          ))}
-                        </View>
+                          </View>
+                        ))}
                       </View>
-                    ) : null}
+                    </View>
 
-                    {Array.isArray(guide.cityTips) && guide.cityTips.length > 0 ? (
-                      <View style={{ marginTop: 14 }}>
-                        <Text style={styles.sectionTitle}>City tips</Text>
-                        <View style={styles.bulletList}>
-                          {guide.cityTips.slice(0, 8).map((tip, idx) => (
-                            <View key={`ct-${idx}`} style={styles.bulletRow}>
-                              <Text style={styles.bulletDot}>•</Text>
-                              <Text style={[styles.body, { flex: 1 }]}>{tip}</Text>
-                            </View>
-                          ))}
-                        </View>
+                    {/* TIPS */}
+                    <View style={{ marginTop: 14 }}>
+                      <Text style={styles.sectionTitle}>Local tips</Text>
+                      <View style={styles.tipList}>
+                        {cityGuide.tips.map((t, i) => (
+                          <Text key={`${t}-${i}`} style={styles.tipItem}>
+                            • {t}
+                          </Text>
+                        ))}
                       </View>
-                    ) : null}
+                    </View>
 
-                    {Array.isArray(guide.matchdayTips) && guide.matchdayTips.length > 0 ? (
+                    {/* OPTIONAL EXTRA INFO */}
+                    {(cityGuide.transport || cityGuide.accommodation) ? (
                       <View style={{ marginTop: 14 }}>
-                        <Text style={styles.sectionTitle}>Matchday tips</Text>
-                        <View style={styles.bulletList}>
-                          {guide.matchdayTips.slice(0, 6).map((tip, idx) => (
-                            <View key={`mt-${idx}`} style={styles.bulletRow}>
-                              <Text style={styles.bulletDot}>•</Text>
-                              <Text style={[styles.body, { flex: 1 }]}>{tip}</Text>
-                            </View>
-                          ))}
-                        </View>
+                        <Text style={styles.sectionTitle}>Practical info</Text>
+
+                        {cityGuide.transport ? (
+                          <View style={{ marginTop: 8 }}>
+                            <Text style={styles.label}>Transport</Text>
+                            <Text style={styles.body}>{cityGuide.transport}</Text>
+                          </View>
+                        ) : null}
+
+                        {cityGuide.accommodation ? (
+                          <View style={{ marginTop: 10 }}>
+                            <Text style={styles.label}>Accommodation</Text>
+                            <Text style={styles.body}>{cityGuide.accommodation}</Text>
+                          </View>
+                        ) : null}
                       </View>
                     ) : null}
                   </>
-                ) : (
-                  <View style={{ marginTop: 12 }}>
-                    <EmptyState
-                      title="City guide coming soon"
-                      message="We’re building city guides with top things to do, local tips, and matchday intel. For now, use TripAdvisor above."
-                    />
-                  </View>
                 )}
               </GlassCard>
 
               {/* MATCHES */}
-              <GlassCard style={styles.card}>
+              <GlassCard style={styles.card} intensity={24}>
                 <Text style={styles.h2}>Matches</Text>
                 <Text style={styles.muted}>
-                  {matchIds.length} match{matchIds.length === 1 ? "" : "es"} linked
+                  {matchCount} match{matchCount === 1 ? "" : "es"} linked
                 </Text>
 
                 {loadingFixtures ? (
@@ -291,11 +294,9 @@ export default function TripDetailScreen() {
                   </View>
                 ) : null}
 
-                {!loadingFixtures && fixtureError ? (
-                  <EmptyState title="Couldn’t load matches" message={fixtureError} />
-                ) : null}
+                {!loadingFixtures && fixtureError ? <EmptyState title="Couldn’t load matches" message={fixtureError} /> : null}
 
-                {!loadingFixtures && !fixtureError && matchIds.length > 0 && fixtureRows.length === 0 ? (
+                {!loadingFixtures && !fixtureError && matchCount > 0 && fixtureRows.length === 0 ? (
                   <EmptyState title="No match details yet" message="Matches are linked, but details are unavailable." />
                 ) : null}
 
@@ -307,7 +308,9 @@ export default function TripDetailScreen() {
                       const away = r?.teams?.away?.name ?? "Away";
                       const kickoff = formatUkDateTimeMaybe(r?.fixture?.date);
                       const venue = r?.fixture?.venue?.name ?? "";
-                      const line2 = venue ? `${kickoff} • ${venue}` : kickoff;
+                      const city = r?.fixture?.venue?.city ?? "";
+                      const extra = [venue, city].filter(Boolean).join(" • ");
+                      const line2 = extra ? `${kickoff} • ${extra}` : kickoff;
 
                       return (
                         <Pressable
@@ -346,64 +349,15 @@ const styles = StyleSheet.create({
   },
   card: { padding: theme.spacing.lg },
 
-  h1: {
-    fontSize: theme.fontSize.xl,
-    fontWeight: "900",
-    color: theme.colors.text,
-  },
-  h2: {
-    fontSize: theme.fontSize.lg,
-    fontWeight: "900",
-    color: theme.colors.text,
-    marginBottom: 6,
-  },
-  muted: {
-    marginTop: 6,
-    fontSize: theme.fontSize.sm,
-    color: theme.colors.textSecondary,
-  },
+  h1: { fontSize: theme.fontSize.xl, fontWeight: "900", color: theme.colors.text },
+  h2: { fontSize: theme.fontSize.lg, fontWeight: "900", color: theme.colors.text },
 
-  sectionTitle: {
-    color: theme.colors.text,
-    fontSize: theme.fontSize.sm,
-    fontWeight: "900",
-    marginBottom: 8,
-  },
+  muted: { marginTop: 6, fontSize: theme.fontSize.sm, color: theme.colors.textSecondary },
 
-  label: {
-    color: theme.colors.textSecondary,
-    fontSize: theme.fontSize.sm,
-    marginBottom: 6,
-  },
-  body: {
-    color: theme.colors.text,
-    fontSize: theme.fontSize.md,
-    lineHeight: 20,
-  },
+  label: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, marginBottom: 6 },
+  body: { color: theme.colors.text, fontSize: theme.fontSize.md, lineHeight: 20 },
 
-  bulletList: { gap: 10 },
-  bulletRow: { flexDirection: "row", gap: 10, alignItems: "flex-start" },
-  bulletDot: { color: theme.colors.textSecondary, marginTop: 2 },
-  bulletTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
-  bulletMeta: { marginTop: 4, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18 },
-
-  primaryLinkBtn: {
-    marginTop: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "rgba(0,255,136,0.45)",
-    backgroundColor: "rgba(0,0,0,0.28)",
-    alignItems: "center",
-  },
-  primaryLinkText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
-
-  actions: {
-    marginTop: 16,
-    flexDirection: "row",
-    gap: 10,
-  },
+  actions: { marginTop: 16, flexDirection: "row", gap: 10 },
   actionBtn: {
     flex: 1,
     paddingVertical: 12,
@@ -413,29 +367,58 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.30)",
     alignItems: "center",
   },
-  dangerBtn: {
-    borderColor: "rgba(255, 80, 80, 0.6)",
-  },
-  actionText: {
-    color: theme.colors.text,
-    fontWeight: "900",
-    fontSize: theme.fontSize.sm,
-  },
+  dangerBtn: { borderColor: "rgba(255, 80, 80, 0.6)" },
+  actionText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
 
-  smallPrint: {
-    marginTop: 12,
-    color: theme.colors.textSecondary,
-    fontSize: theme.fontSize.xs,
-  },
+  smallPrint: { marginTop: 12, color: theme.colors.textSecondary, fontSize: theme.fontSize.xs },
 
   center: { paddingVertical: 12, alignItems: "center", gap: 10 },
 
   list: { marginTop: 10, gap: 10 },
-  row: {
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
-  },
+  row: { paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: theme.colors.border },
   rowTitle: { color: theme.colors.text, fontWeight: "800", fontSize: theme.fontSize.md },
   rowMeta: { marginTop: 4, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm },
+
+  cardHeaderRow: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+
+  ctaBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(0,255,136,0.45)",
+    backgroundColor: "rgba(0,0,0,0.25)",
+  },
+  ctaText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.xs },
+
+  sectionTitle: { marginTop: 2, color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.md },
+
+  bullets: { marginTop: 10, gap: 10 },
+  bulletRow: { flexDirection: "row", gap: 10, alignItems: "flex-start" },
+  bulletIndex: {
+    width: 22,
+    textAlign: "center",
+    color: theme.colors.primary,
+    fontWeight: "900",
+    fontSize: theme.fontSize.sm,
+    marginTop: 1,
+  },
+  bulletTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
+  bulletTip: { marginTop: 4, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18 },
+
+  tipList: { marginTop: 10, gap: 8 },
+  tipItem: { color: theme.colors.text, fontSize: theme.fontSize.sm, lineHeight: 18 },
+
+  summaryRow: { marginTop: 12, flexDirection: "row", gap: 10 },
+  summaryPill: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    backgroundColor: "rgba(0,0,0,0.22)",
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  summaryLabel: { color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: "800" },
+  summaryValue: { marginTop: 6, color: theme.colors.text, fontSize: theme.fontSize.md, fontWeight: "900" },
 });
