@@ -1,3 +1,4 @@
+
 // src/components/BackButton.tsx
 import React, { useCallback } from "react";
 import { Pressable, Text, StyleSheet, View } from "react-native";
@@ -23,9 +24,9 @@ export default function BackButton({
     try {
       // React Navigation is the source of truth for back-stack on native.
       // Expo Router's router.canGoBack() can be flaky with replace/push flows.
-      // @ts-expect-error: typing depends on your nav container; safe at runtime.
+      // @ts-expect-error -- navigation typing depends on container; safe at runtime
       if (navigation?.canGoBack?.() === true) {
-        // @ts-expect-error
+        // @ts-expect-error -- navigation typing depends on container; safe at runtime
         navigation.goBack();
         return;
       }

@@ -1,3 +1,4 @@
+
 // src/components/GlassCard.tsx
 import React from "react";
 import { View, StyleSheet, ViewStyle, Platform } from "react-native";
@@ -15,6 +16,7 @@ interface GlassCardProps {
  * - Expo Go on Android can render BlurView as an opaque layer above children,
  *   making text look "missing".
  * - For stability, we use BlurView on iOS/web, and a tinted fallback on Android.
+ * - Explicit z-index + elevation ensures proper stacking order on Android.
  */
 export default function GlassCard({ children, style, intensity = 20 }: GlassCardProps) {
   const useBlur = Platform.OS !== "android";
@@ -25,7 +27,7 @@ export default function GlassCard({ children, style, intensity = 20 }: GlassCard
         <BlurView
           intensity={intensity}
           tint="dark"
-          style={StyleSheet.absoluteFillObject}
+          style={[StyleSheet.absoluteFillObject, styles.blur]}
           pointerEvents="none"
         />
       ) : null}
@@ -47,11 +49,19 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.10)",
     backgroundColor: "rgba(26, 31, 46, 0.55)",
   },
+  blur: {
+    zIndex: 0,
+    elevation: 0,
+  },
   tint: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(26, 31, 46, 0.45)",
+    zIndex: 1,
+    elevation: 1,
   },
   content: {
     padding: theme.spacing.md,
+    zIndex: 2,
+    elevation: 2,
   },
 });

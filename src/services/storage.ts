@@ -1,3 +1,4 @@
+
 // src/services/storage.ts
 import { Platform } from "react-native";
 
@@ -10,7 +11,7 @@ import { Platform } from "react-native";
 
 let AsyncStorage: any = null;
 try {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   AsyncStorage = require("@react-native-async-storage/async-storage").default;
 } catch {
   AsyncStorage = null;

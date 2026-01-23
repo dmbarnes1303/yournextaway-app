@@ -1,3 +1,4 @@
+
 // app/trip/build.tsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -101,7 +102,7 @@ export default function TripBuildScreen() {
   const DateTimePicker: any = useMemo(() => {
     if (Platform.OS === "web") return null;
     try {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const mod = require("@react-native-community/datetimepicker");
       return mod?.default ?? mod;
     } catch {
@@ -216,7 +217,7 @@ export default function TripBuildScreen() {
         if (cancelled) return;
 
         if (!r) {
-          setError("Couldn’t load that match. Try selecting it from the list.");
+          setError("Couldn't load that match. Try selecting it from the list.");
           return;
         }
 
@@ -233,7 +234,7 @@ export default function TripBuildScreen() {
         }
       } catch (e: any) {
         if (cancelled) return;
-        setError(e?.message ?? "Couldn’t prefill that match.");
+        setError(e?.message ?? "Couldn't prefill that match.");
       } finally {
         if (!cancelled) setPrefillLoading(false);
       }
@@ -579,8 +580,6 @@ export default function TripBuildScreen() {
         <Animated.View
           pointerEvents={panelOpen ? "auto" : "none"}
           collapsable={false}
-          renderToHardwareTextureAndroid
-          needsOffscreenAlphaCompositing
           style={[
             styles.panelWrap,
             {
