@@ -11,9 +11,14 @@ interface GlassCardProps {
 }
 
 /**
- * DEBUG SANITY CHECK:
- * - Tint is set to bright magenta to prove this file is actually being used at runtime.
- * - Once confirmed, we will revert tint and fix Build Trip panel properly.
+ * GlassCard (Android-safe)
+ *
+ * Reality:
+ * - Android + Expo Go + Blur/absolute overlays + animated parents = unreliable compositing.
+ *
+ * Policy:
+ * - iOS/web: BlurView background layer is fine.
+ * - Android: NO blur, NO absolute tint overlay. Just a single translucent background.
  */
 export default function GlassCard({ children, style, intensity = 20 }: GlassCardProps) {
   const useBlur = Platform.OS !== "android";
@@ -24,13 +29,12 @@ export default function GlassCard({ children, style, intensity = 20 }: GlassCard
         <BlurView
           intensity={intensity}
           tint="dark"
-          style={[StyleSheet.absoluteFillObject, styles.blur]}
+          style={StyleSheet.absoluteFillObject}
           pointerEvents="none"
         />
       ) : null}
 
-      <View pointerEvents="none" style={styles.tint} />
-
+      {/* IMPORTANT: On Android we do not add any absolute overlay views. */}
       <View style={styles.content}>{children}</View>
     </View>
   );
@@ -40,25 +44,12 @@ const styles = StyleSheet.create({
   container: {
     position: "relative",
     borderRadius: theme.borderRadius.lg,
-    overflow: "hidden",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(26, 31, 46, 0.55)",
-  },
-  blur: {
-    zIndex: 0,
-    elevation: 0,
-  },
-  tint: {
-    ...StyleSheet.absoluteFillObject,
-    // DEBUG: if you don't see this, you're not running this file
-    backgroundColor: "rgba(255,0,255,0.85)",
-    zIndex: 1,
-    elevation: 1,
+    backgroundColor: Platform.OS === "android" ? "rgba(26, 31, 46, 0.72)" : "rgba(26, 31, 46, 0.55)",
+    overflow: "hidden",
   },
   content: {
     padding: theme.spacing.md,
-    zIndex: 2,
-    elevation: 2,
   },
 });
