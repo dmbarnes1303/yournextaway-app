@@ -1,4 +1,3 @@
-
 // app/trip/build.tsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -163,7 +162,7 @@ export default function TripBuildScreen() {
   });
 
   // Animation
-  const panelAnim = useRef(new Animated.Value(0)).current;
+  const panelAnim = useRef(new Animated.Value(0)).current; // 0 closed, 1 open
   const flashAnim = useRef(new Animated.Value(0)).current;
 
   const { height: screenH } = Dimensions.get("window");
@@ -177,14 +176,11 @@ export default function TripBuildScreen() {
 
   const panelOpen = !!selectedFixture;
 
+  // IMPORTANT: On Android, do NOT rely on native-driver transforms + glass layers.
+  // We drive translateY via JS driver (useNativeDriver:false).
   const panelTranslateY = panelAnim.interpolate({
     inputRange: [0, 1],
     outputRange: [panelMaxHeight + 90, 0],
-  });
-
-  const panelOpacity = panelAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, 1],
   });
 
   const backdropOpacity = panelAnim.interpolate({
@@ -217,7 +213,7 @@ export default function TripBuildScreen() {
         if (cancelled) return;
 
         if (!r) {
-          setError("Couldn't load that match. Try selecting it from the list.");
+          setError("Couldn’t load that match. Try selecting it from the list.");
           return;
         }
 
@@ -234,7 +230,7 @@ export default function TripBuildScreen() {
         }
       } catch (e: any) {
         if (cancelled) return;
-        setError(e?.message ?? "Couldn't prefill that match.");
+        setError(e?.message ?? "Couldn’t prefill that match.");
       } finally {
         if (!cancelled) setPrefillLoading(false);
       }
@@ -283,11 +279,7 @@ export default function TripBuildScreen() {
 
   /**
    * Panel open/close animation + prefill dates from kickoff
-   *
-   * IMPORTANT ANDROID NOTE:
-   * - Some Android stacks can glitch when animating an overlay panel with native driver
-   *   (especially with translucent layers / blur fallbacks).
-   * - Keep this animation JS-driven for stability.
+   * useNativeDriver:false is intentional (Android + glass layers).
    */
   useEffect(() => {
     const iso = selectedFixture?.fixture?.date as string | undefined;
@@ -558,7 +550,7 @@ export default function TripBuildScreen() {
           </GlassCard>
         </ScrollView>
 
-        {/* Backdrop: MUST NOT cover header zone or it steals BackButton taps */}
+        {/* Backdrop: MUST NOT cover header zone or it steals Back taps */}
         {panelOpen ? (
           <Animated.View
             pointerEvents="auto"
@@ -583,8 +575,6 @@ export default function TripBuildScreen() {
           style={[
             styles.panelWrap,
             {
-              bottom: theme.spacing.lg + insets.bottom,
-              opacity: panelOpacity,
               transform: [{ translateY: panelTranslateY }],
             },
           ]}
@@ -860,12 +850,13 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: theme.spacing.lg,
     right: theme.spacing.lg,
-    zIndex: 20,
-    elevation: 20,
+    bottom: theme.spacing.lg,
+    zIndex: 50,
+    elevation: 50,
   },
 
   panel: {
-    padding: theme.spacing.md,
+    // GlassCard already pads content; we style surface only
     borderRadius: theme.borderRadius.xl,
     borderWidth: 1,
     borderColor: "rgba(0, 255, 136, 0.38)",
