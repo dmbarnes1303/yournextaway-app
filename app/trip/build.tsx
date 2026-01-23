@@ -90,6 +90,26 @@ async function safeOpenUrl(url: string) {
   }
 }
 
+/**
+ * Android-safe "glass" panel card.
+ * DO NOT use GlassCard here (Android compositing + animated transforms can hide children).
+ */
+function PanelCard({
+  children,
+  style,
+}: {
+  children: React.ReactNode;
+  style?: any;
+}) {
+  return (
+    <View style={[styles.panelCard, style]}>
+      {/* Tint layer (below content) */}
+      <View pointerEvents="none" style={styles.panelTint} />
+      <View style={styles.panelContent}>{children}</View>
+    </View>
+  );
+}
+
 export default function TripBuildScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
@@ -161,8 +181,8 @@ export default function TripBuildScreen() {
     open: false,
   });
 
-  // Animation
-  const panelAnim = useRef(new Animated.Value(0)).current; // 0 closed, 1 open
+  // Animation (translate-only; NO opacity animation)
+  const panelAnim = useRef(new Animated.Value(0)).current;
   const flashAnim = useRef(new Animated.Value(0)).current;
 
   const { height: screenH } = Dimensions.get("window");
@@ -176,8 +196,6 @@ export default function TripBuildScreen() {
 
   const panelOpen = !!selectedFixture;
 
-  // IMPORTANT: On Android, do NOT rely on native-driver transforms + glass layers.
-  // We drive translateY via JS driver (useNativeDriver:false).
   const panelTranslateY = panelAnim.interpolate({
     inputRange: [0, 1],
     outputRange: [panelMaxHeight + 90, 0],
@@ -279,7 +297,10 @@ export default function TripBuildScreen() {
 
   /**
    * Panel open/close animation + prefill dates from kickoff
-   * useNativeDriver:false is intentional (Android + glass layers).
+   *
+   * Android/Expo Go stability:
+   * - Keep animation JS-driven (useNativeDriver:false).
+   * - Translate only; avoid animating opacity (can flatten layers).
    */
   useEffect(() => {
     const iso = selectedFixture?.fixture?.date as string | undefined;
@@ -550,7 +571,7 @@ export default function TripBuildScreen() {
           </GlassCard>
         </ScrollView>
 
-        {/* Backdrop: MUST NOT cover header zone or it steals Back taps */}
+        {/* Backdrop: MUST NOT cover header zone or it steals BackButton taps */}
         {panelOpen ? (
           <Animated.View
             pointerEvents="auto"
@@ -568,18 +589,19 @@ export default function TripBuildScreen() {
           </Animated.View>
         ) : null}
 
-        {/* Panel */}
+        {/* Panel (Android-safe) */}
         <Animated.View
           pointerEvents={panelOpen ? "auto" : "none"}
           collapsable={false}
           style={[
             styles.panelWrap,
             {
+              bottom: theme.spacing.lg + insets.bottom,
               transform: [{ translateY: panelTranslateY }],
             },
           ]}
         >
-          <GlassCard style={[styles.panel, { maxHeight: panelMaxHeight }]} intensity={30}>
+          <PanelCard style={{ maxHeight: panelMaxHeight }}>
             <Animated.View pointerEvents="none" style={[styles.panelFlash, { opacity: flashAnim }]} />
 
             <View style={styles.handle} />
@@ -730,7 +752,7 @@ export default function TripBuildScreen() {
                 </View>
               ) : null}
             </ScrollView>
-          </GlassCard>
+          </PanelCard>
         </Animated.View>
       </SafeAreaView>
     </Background>
@@ -850,21 +872,29 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: theme.spacing.lg,
     right: theme.spacing.lg,
-    bottom: theme.spacing.lg,
-    zIndex: 50,
-    elevation: 50,
+    zIndex: 20,
+    elevation: 20,
   },
 
-  panel: {
-    // GlassCard already pads content; we style surface only
+  // ANDROID-SAFE PANEL CARD (replaces GlassCard for the overlay panel)
+  panelCard: {
+    position: "relative",
     borderRadius: theme.borderRadius.xl,
+    overflow: "hidden",
     borderWidth: 1,
     borderColor: "rgba(0, 255, 136, 0.38)",
-    backgroundColor: "rgba(0,0,0,0.22)",
+    backgroundColor: "rgba(0,0,0,0.28)",
     shadowColor: "#000",
     shadowOpacity: 0.4,
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 12 },
+  },
+  panelTint: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(26, 31, 46, 0.55)",
+  },
+  panelContent: {
+    padding: theme.spacing.md,
   },
 
   panelFlash: {
@@ -878,7 +908,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,255,136,0.95)",
   },
 
-  handle: {
+handle: {
     alignSelf: "center",
     width: 44,
     height: 4,
@@ -977,4 +1007,4 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   saveText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.md },
-});
+});  
