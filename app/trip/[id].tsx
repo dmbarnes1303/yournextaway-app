@@ -1,6 +1,15 @@
 // app/trip/[id].tsx
 import React, { useEffect, useMemo, useState } from "react";
-import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert, Linking } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  Pressable,
+  ActivityIndicator,
+  Alert,
+  Linking,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 
@@ -14,7 +23,6 @@ import tripsStore, { type Trip } from "@/src/state/trips";
 import { getFixtureById } from "@/src/services/apiFootball";
 
 import getCityGuide from "@/src/data/cityGuides/getCityGuide";
-
 import { formatUkDateOnly, formatUkDateTimeMaybe } from "@/src/utils/formatters";
 
 function formatTripRange(t: Trip) {
@@ -31,11 +39,47 @@ async function safeOpenUrl(url: string) {
   }
 }
 
+function enc(v: string) {
+  return encodeURIComponent(v);
+}
+
+/**
+ * v1 link builders (simple + reliable).
+ * Later: swap these URLs to affiliate variants in one place.
+ */
+function buildFlightsUrl(city: string, startDate?: string, endDate?: string) {
+  const q = startDate && endDate ? `Flights to ${city} ${startDate} to ${endDate}` : `Flights to ${city}`;
+  return `https://www.google.com/search?q=${enc(q)}`;
+}
+
+function buildHotelsUrl(city: string, startDate?: string, endDate?: string) {
+  // Booking supports checkin/checkout as YYYY-MM-DD.
+  // If dates are missing, still run a city search.
+  const base = `https://www.booking.com/searchresults.html?ss=${enc(city)}`;
+  if (startDate && endDate) {
+    return `${base}&checkin=${enc(startDate)}&checkout=${enc(endDate)}`;
+  }
+  return base;
+}
+
+function buildTicketsUrl(home?: string, away?: string, kickoff?: string) {
+  const vs = home && away ? `${home} vs ${away}` : "match";
+  const q = kickoff ? `${vs} tickets ${kickoff}` : `${vs} tickets`;
+  return `https://www.google.com/search?q=${enc(q)}`;
+}
+
+function buildMapsVenueUrl(venue?: string, city?: string) {
+  const q = [venue, city].filter(Boolean).join(" ");
+  if (!q) return "https://www.google.com/maps";
+  return `https://www.google.com/maps/search/?api=1&query=${enc(q)}`;
+}
+
 export default function TripDetailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ id?: string }>();
 
-  const id = typeof params?.id === "string" ? params.id : Array.isArray(params?.id) ? params.id[0] : undefined;
+  const id =
+    typeof params?.id === "string" ? params.id : Array.isArray(params?.id) ? params.id[0] : undefined;
 
   const [loaded, setLoaded] = useState(tripsStore.getState().loaded);
   const [trip, setTrip] = useState<Trip | null>(null);
@@ -64,7 +108,9 @@ export default function TripDetailScreen() {
   const matchIds = useMemo(() => trip?.matchIds ?? [], [trip]);
   const matchCount = matchIds.length;
 
-  const { slug: cityKey, guide: cityGuide } = useMemo(() => getCityGuide(trip?.cityId), [trip?.cityId]);
+  // Prefer stable citySlug if present; fall back to label.
+  const cityLookupKey = useMemo(() => trip?.citySlug || trip?.cityId, [trip?.citySlug, trip?.cityId]);
+  const { slug: cityKey, guide: cityGuide } = useMemo(() => getCityGuide(cityLookupKey), [cityLookupKey]);
 
   useEffect(() => {
     let cancelled = false;
@@ -123,6 +169,46 @@ export default function TripDetailScreen() {
     }
     router.push({ pathname: "/city/[slug]", params: { slug: cityKey } });
   }
+
+  const primaryFixture = useMemo(() => {
+    if (fixtureRows.length > 0) return fixtureRows[0];
+    return null;
+  }, [fixtureRows]);
+
+  const tripCityLabel = useMemo(() => {
+    const raw = String(trip?.cityId ?? "").trim();
+    return raw || "Trip";
+  }, [trip?.cityId]);
+
+  const primaryHome = primaryFixture?.teams?.home?.name as string | undefined;
+  const primaryAway = primaryFixture?.teams?.away?.name as string | undefined;
+  const primaryKickoff = formatUkDateTimeMaybe(primaryFixture?.fixture?.date);
+  const primaryVenue = primaryFixture?.fixture?.venue?.name as string | undefined;
+  const primaryVenueCity = primaryFixture?.fixture?.venue?.city as string | undefined;
+
+  const flightsUrl = useMemo(() => buildFlightsUrl(tripCityLabel, trip?.startDate, trip?.endDate), [
+    tripCityLabel,
+    trip?.startDate,
+    trip?.endDate,
+  ]);
+
+  const hotelsUrl = useMemo(() => buildHotelsUrl(tripCityLabel, trip?.startDate, trip?.endDate), [
+    tripCityLabel,
+    trip?.startDate,
+    trip?.endDate,
+  ]);
+
+  const ticketsUrl = useMemo(() => buildTicketsUrl(primaryHome, primaryAway, primaryKickoff), [
+    primaryHome,
+    primaryAway,
+    primaryKickoff,
+  ]);
+
+  const mapsUrl = useMemo(() => buildMapsVenueUrl(primaryVenue, primaryVenueCity || tripCityLabel), [
+    primaryVenue,
+    primaryVenueCity,
+    tripCityLabel,
+  ]);
 
   return (
     <Background imageUrl={getBackground("trips")}>
@@ -187,6 +273,55 @@ export default function TripDetailScreen() {
                 <Text style={styles.smallPrint}>Trip ID: {trip.id}</Text>
               </GlassCard>
 
+              {/* BOOK YOUR TRIP (v1 CTAs) */}
+              <GlassCard style={styles.card} intensity={24}>
+                <View style={styles.cardHeaderRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.h2}>Book your trip</Text>
+                    <Text style={styles.muted}>
+                      Fast links for flights, accommodation, tickets, and directions.
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.ctaGrid}>
+                  <Pressable onPress={() => safeOpenUrl(flightsUrl)} style={styles.bigCtaBtn}>
+                    <Text style={styles.bigCtaKicker}>Flights</Text>
+                    <Text style={styles.bigCtaTitle}>Search flights</Text>
+                    <Text style={styles.bigCtaSub}>
+                      {trip.startDate && trip.endDate ? `${formatUkDateOnly(trip.startDate)} → ${formatUkDateOnly(trip.endDate)}` : "Use your trip dates"}
+                    </Text>
+                  </Pressable>
+
+                  <Pressable onPress={() => safeOpenUrl(hotelsUrl)} style={styles.bigCtaBtn}>
+                    <Text style={styles.bigCtaKicker}>Accommodation</Text>
+                    <Text style={styles.bigCtaTitle}>Find hotels</Text>
+                    <Text style={styles.bigCtaSub}>{tripCityLabel}</Text>
+                  </Pressable>
+
+                  <Pressable onPress={() => safeOpenUrl(ticketsUrl)} style={styles.bigCtaBtn}>
+                    <Text style={styles.bigCtaKicker}>Tickets</Text>
+                    <Text style={styles.bigCtaTitle}>Find tickets</Text>
+                    <Text style={styles.bigCtaSub}>
+                      {primaryHome && primaryAway ? `${primaryHome} vs ${primaryAway}` : "Open ticket search"}
+                    </Text>
+                  </Pressable>
+
+                  <Pressable onPress={() => safeOpenUrl(mapsUrl)} style={styles.bigCtaBtn}>
+                    <Text style={styles.bigCtaKicker}>Directions</Text>
+                    <Text style={styles.bigCtaTitle}>Get to stadium</Text>
+                    <Text style={styles.bigCtaSub}>
+                      {primaryVenue ? primaryVenue : "Open maps"}
+                      {primaryVenueCity ? ` • ${primaryVenueCity}` : ""}
+                    </Text>
+                  </Pressable>
+                </View>
+
+                <Text style={styles.smallPrint}>
+                  Note: These are v1 link-outs (reliable). We can replace with affiliate / provider deep links later.
+                </Text>
+              </GlassCard>
+
               {/* CITY GUIDE */}
               <GlassCard style={styles.card} intensity={24}>
                 <View style={styles.cardHeaderRow}>
@@ -218,7 +353,7 @@ export default function TripDetailScreen() {
                   <View style={{ marginTop: 12 }}>
                     <EmptyState
                       title="No guide for this city yet"
-                      message={`Current guides: London, Madrid, Rome, Berlin, Paris.\nSaved trip city: “${trip.cityId || "—"}”\nLookup key: “${cityKey || "—"}”`}
+                      message={`Saved trip city: “${trip.cityId || "—"}”\nSaved trip slug: “${trip.citySlug || "—"}”\nLookup key: “${cityKey || "—"}”`}
                     />
                   </View>
                 ) : (
@@ -390,6 +525,35 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
   },
   ctaText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.xs },
+
+  // Book your trip
+  ctaGrid: { marginTop: 12, gap: 10 },
+  bigCtaBtn: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(0,255,136,0.28)",
+    backgroundColor: "rgba(0,0,0,0.22)",
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+  },
+  bigCtaKicker: {
+    color: theme.colors.primary,
+    fontWeight: "900",
+    fontSize: theme.fontSize.xs,
+    letterSpacing: 0.2,
+  },
+  bigCtaTitle: {
+    marginTop: 6,
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: theme.fontSize.md,
+  },
+  bigCtaSub: {
+    marginTop: 6,
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSize.sm,
+    lineHeight: 18,
+  },
 
   sectionTitle: { marginTop: 2, color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.md },
 
