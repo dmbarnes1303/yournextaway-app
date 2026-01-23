@@ -199,7 +199,6 @@ export default function TripBuildScreen() {
   }, [from]);
 
   /**
-   * CRITICAL FIX:
    * If fixtureId is provided (Plan Trip), fetch the fixture directly.
    * Do NOT depend on it being present in the fixtures list window.
    */
@@ -284,9 +283,10 @@ export default function TripBuildScreen() {
   /**
    * Panel open/close animation + prefill dates from kickoff
    *
-   * IMPORTANT ANDROID/EXPO GO NOTE:
-   * - expo-blur + Animated transform with useNativeDriver:true can cause children not to render.
-   * - Therefore, we intentionally use useNativeDriver:false for the panel animation.
+   * IMPORTANT ANDROID NOTE:
+   * - Some Android stacks can glitch when animating an overlay panel with native driver
+   *   (especially with translucent layers / blur fallbacks).
+   * - Keep this animation JS-driven for stability.
    */
   useEffect(() => {
     const iso = selectedFixture?.fixture?.date as string | undefined;
@@ -296,7 +296,7 @@ export default function TripBuildScreen() {
         toValue: 0,
         duration: 170,
         easing: Easing.out(Easing.quad),
-        useNativeDriver: false, // <-- critical fix
+        useNativeDriver: false,
       }).start();
       return;
     }
@@ -314,7 +314,7 @@ export default function TripBuildScreen() {
       toValue: 1,
       duration: 230,
       easing: Easing.out(Easing.cubic),
-      useNativeDriver: false, // <-- critical fix
+      useNativeDriver: false,
     }).start();
 
     flashAnim.setValue(0);
@@ -423,9 +423,7 @@ export default function TripBuildScreen() {
     return getTopThingsToDoForTrip(destinationCity);
   }, [destinationCity]);
 
-  const bottomPad = panelOpen ? panelMaxHeight + theme.spacing.xl : theme.spacing.xxl;
-
-  const DEV_DEBUG = __DEV__ === true;
+  const bottomPad = panelOpen ? panelMaxHeight + theme.spacing.xl + insets.bottom : theme.spacing.xxl + insets.bottom;
 
   return (
     <Background imageUrl={getBackground("trips")}>
@@ -448,21 +446,6 @@ export default function TripBuildScreen() {
           <GlassCard style={styles.card}>
             <Text style={styles.h1}>Pick a match</Text>
             <Text style={styles.muted}>Tap a fixture to open trip details. Save from the bottom panel.</Text>
-
-            {DEV_DEBUG ? (
-              <View style={styles.devBox}>
-                <Text style={styles.devText}>fixtureId param: {String(params?.fixtureId ?? "NONE")}</Text>
-                <Text style={styles.devText}>leagueId param: {String(params?.leagueId ?? "NONE")}</Text>
-                <Text style={styles.devText}>season param: {String(params?.season ?? "NONE")}</Text>
-                <Text style={styles.devText}>
-                  from/to param: {String(params?.from ?? "NONE")} → {String(params?.to ?? "NONE")}
-                </Text>
-                <View style={styles.devDivider} />
-                <Text style={styles.devText}>selectedFixture id: {String(selectedFixture?.fixture?.id ?? "NONE")}</Text>
-                <Text style={styles.devText}>panelOpen: {String(!!selectedFixture)}</Text>
-                <Text style={styles.devText}>error: {String(error ?? "NONE")}</Text>
-              </View>
-            ) : null}
 
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.leagueRow}>
               {LEAGUES.map((l) => {
@@ -601,6 +584,7 @@ export default function TripBuildScreen() {
           style={[
             styles.panelWrap,
             {
+              bottom: theme.spacing.lg + insets.bottom,
               opacity: panelOpacity,
               transform: [{ translateY: panelTranslateY }],
             },
@@ -784,18 +768,6 @@ const styles = StyleSheet.create({
   },
   muted: { fontSize: theme.fontSize.sm, color: theme.colors.textSecondary },
 
-  devBox: {
-    marginTop: 12,
-    padding: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "rgba(255,0,0,0.8)",
-    backgroundColor: "rgba(0,0,0,0.35)",
-    gap: 6,
-  },
-  devText: { color: "white", fontWeight: "900" },
-  devDivider: { height: 1, backgroundColor: "rgba(255,255,255,0.15)", marginVertical: 6 },
-
   leagueRow: { gap: 10, paddingRight: theme.spacing.lg, marginTop: 12 },
 
   leaguePill: {
@@ -889,7 +861,6 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: theme.spacing.lg,
     right: theme.spacing.lg,
-    bottom: theme.spacing.lg,
     zIndex: 20,
     elevation: 20,
   },
