@@ -38,10 +38,6 @@ import {
 import { formatUkDateOnly, formatUkDateTimeMaybe } from "@/src/utils/formatters";
 import { getTopThingsToDoForTrip } from "@/src/data/cityGuides";
 
-/**
- * Expo Router params can be string | string[] | undefined.
- * Keep parsing local + deterministic (Android vs web differences are real).
- */
 function paramString(v: unknown): string | null {
   if (typeof v === "string") {
     const s = v.trim();
@@ -90,17 +86,7 @@ async function safeOpenUrl(url: string) {
   }
 }
 
-/**
- * Basic, Android-safe "card" for modal/panel content.
- * No BlurView, no absolute overlays, no overflow tricks.
- */
-function BasicCard({
-  children,
-  style,
-}: {
-  children: React.ReactNode;
-  style?: any;
-}) {
+function BasicCard({ children, style }: { children: React.ReactNode; style?: any }) {
   return <View style={[styles.basicCard, style]}>{children}</View>;
 }
 
@@ -111,7 +97,6 @@ export default function TripBuildScreen() {
 
   const listRef = useRef<ScrollView | null>(null);
 
-  // Optional DateTimePicker (native). If not installed, we fall back gracefully.
   const DateTimePicker: any = useMemo(() => {
     if (Platform.OS === "web") return null;
     try {
@@ -123,12 +108,10 @@ export default function TripBuildScreen() {
     }
   }, []);
 
-  // Central rolling window defaults
   const rolling = useMemo(() => getRollingWindowIso(), []);
   const defaultFrom = useMemo(() => clampIsoToTomorrow(rolling.from), [rolling.from]);
   const defaultTo = rolling.to;
 
-  // Route params
   const routeFixtureId = useMemo(() => paramString(params.fixtureId), [params.fixtureId]);
   const routeLeagueId = useMemo(() => paramNumber(params.leagueId), [params.leagueId]);
   const routeSeason = useMemo(() => paramNumber(params.season), [params.season]);
@@ -140,13 +123,10 @@ export default function TripBuildScreen() {
 
   const [selectedLeague, setSelectedLeague] = useState<LeagueOption>(LEAGUES[0]);
 
-  // Apply league/season from route params
   useEffect(() => {
     if (!routeLeagueId) return;
-
     const match = LEAGUES.find((l) => l.leagueId === routeLeagueId);
     if (!match) return;
-
     const season = routeSeason ?? match.season;
     setSelectedLeague((cur) => {
       if (cur.leagueId === match.leagueId && cur.season === season) return cur;
@@ -164,10 +144,8 @@ export default function TripBuildScreen() {
   const [visibleCount, setVisibleCount] = useState(12);
 
   const [selectedFixture, setSelectedFixture] = useState<any | null>(null);
-
   const panelOpen = !!selectedFixture;
 
-  // Dates
   const [startIso, setStartIso] = useState(from);
   const [endIso, setEndIso] = useState(addDaysIso(from, 2));
   const [notes, setNotes] = useState("");
@@ -179,17 +157,12 @@ export default function TripBuildScreen() {
 
   const { height: screenH } = Dimensions.get("window");
 
-  // Keep date fields aligned to route from
   useEffect(() => {
     setStartIso(from);
     setEndIso(addDaysIso(from, 2));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [from]);
 
-  /**
-   * If fixtureId is provided (Plan Trip), fetch the fixture directly.
-   * Do NOT depend on it being present in the fixtures list window.
-   */
   useEffect(() => {
     let cancelled = false;
 
@@ -210,7 +183,6 @@ export default function TripBuildScreen() {
 
         setSelectedFixture(r);
 
-        // Prefill dates from kickoff
         const iso = r?.fixture?.date as string | undefined;
         if (iso) {
           const d = new Date(iso);
@@ -221,7 +193,6 @@ export default function TripBuildScreen() {
           }
         }
 
-        // Sync league selection when possible
         const apiLeagueId = r?.league?.id;
         if (typeof apiLeagueId === "number") {
           const match = LEAGUES.find((l) => l.leagueId === apiLeagueId);
@@ -244,7 +215,6 @@ export default function TripBuildScreen() {
     };
   }, [routeFixtureId, routeSeason]);
 
-  // Load fixtures list whenever league/from/to change
   useEffect(() => {
     let cancelled = false;
 
@@ -315,7 +285,6 @@ export default function TripBuildScreen() {
       setEndIso(iso);
     }
 
-    // Android dialog closes itself; keep state sane.
     if (Platform.OS === "android") setPicker((p) => ({ ...p, open: false }));
   }
 
@@ -347,7 +316,6 @@ export default function TripBuildScreen() {
         notes: notes.trim(),
       });
 
-      // Close panel before navigation to avoid modal weirdness on Android
       setSelectedFixture(null);
       router.replace({ pathname: "/trip/[id]", params: { id: t.id } });
     } catch (e: any) {
@@ -382,9 +350,8 @@ export default function TripBuildScreen() {
     setSelectedFixture(null);
   }
 
-  // Modal height: keep it sensible across devices
-  const SHEET_MAX_H = Math.min(560, Math.round(screenH * 0.78));
-  const SHEET_MIN_H = 320;
+  const SHEET_MAX_H = Math.min(640, Math.round(screenH * 0.82));
+  const SHEET_MIN_H = 360;
   const sheetMaxHeight = Math.max(SHEET_MIN_H, SHEET_MAX_H);
 
   return (
@@ -491,7 +458,6 @@ export default function TripBuildScreen() {
                           setError(null);
                           setSelectedFixture(r);
 
-                          // Prefill dates from kickoff immediately (helps if user saves quickly)
                           const iso = r?.fixture?.date as string | undefined;
                           if (iso) {
                             const d = new Date(iso);
@@ -501,8 +467,6 @@ export default function TripBuildScreen() {
                               setEndIso(addDaysIso(start, 2));
                             }
                           }
-
-                          requestAnimationFrame(() => listRef.current?.scrollTo({ y: 0, animated: true }));
                         }}
                         style={[styles.pickRow, selected && styles.pickRowSelected]}
                       >
@@ -526,16 +490,9 @@ export default function TripBuildScreen() {
                 ) : null}
               </>
             ) : null}
-
-            {!panelOpen ? (
-              <View style={{ marginTop: 14 }}>
-                <Text style={styles.hint}>Tip: After selecting a match, you can set dates and save the trip.</Text>
-              </View>
-            ) : null}
           </GlassCard>
         </ScrollView>
 
-        {/* ANDROID-STABLE: Modal sheet instead of animated overlay panel */}
         <Modal
           visible={panelOpen}
           transparent
@@ -544,7 +501,6 @@ export default function TripBuildScreen() {
           statusBarTranslucent
         >
           <View style={styles.modalRoot}>
-            {/* Backdrop */}
             <Pressable style={styles.modalBackdrop} onPress={closePanel} />
 
             <KeyboardAvoidingView
@@ -553,10 +509,12 @@ export default function TripBuildScreen() {
               style={styles.modalKav}
             >
               <SafeAreaView edges={["bottom"]} style={styles.modalSafe}>
-                <View style={[styles.sheet, { maxHeight: sheetMaxHeight, paddingBottom: theme.spacing.md + insets.bottom }]}>
+                <View style={[styles.sheet, { maxHeight: sheetMaxHeight }]}>
                   <View style={styles.sheetHandle} />
 
+                  {/* IMPORTANT: Fixed-height container with inner ScrollView that has flex:1 */}
                   <BasicCard style={styles.sheetCard}>
+                    {/* Non-scroll header */}
                     <View style={styles.panelTop}>
                       <View style={{ flex: 1 }}>
                         <Text style={styles.panelKicker}>Trip details</Text>
@@ -587,117 +545,125 @@ export default function TripBuildScreen() {
                       </Pressable>
                     </View>
 
-                    {/* CITY GUIDE / TRIPADVISOR BLOCK */}
-                    {destinationCity ? (
-                      <View style={styles.cityBlock}>
-                        <View style={styles.cityBlockTop}>
-                          <View style={{ flex: 1 }}>
-                            <Text style={styles.cityBlockKicker}>In {destinationCity}</Text>
-                            <Text style={styles.cityBlockTitle}>Top things to do</Text>
-                            <Text style={styles.cityBlockSub}>
-                              {cityBundle?.hasGuide
-                                ? "Curated picks + quick tips. Link out for more."
-                                : "No curated guide yet — link out for the best current picks."}
-                            </Text>
-                          </View>
+                    {/* Scrollable body */}
+                    <ScrollView
+                      style={styles.sheetScroll}
+                      contentContainerStyle={[styles.sheetScrollContent, { paddingBottom: theme.spacing.md + insets.bottom }]}
+                      showsVerticalScrollIndicator={false}
+                      keyboardShouldPersistTaps="handled"
+                      nestedScrollEnabled
+                    >
+                      {destinationCity ? (
+                        <View style={styles.cityBlock}>
+                          <View style={styles.cityBlockTop}>
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.cityBlockKicker}>In {destinationCity}</Text>
+                              <Text style={styles.cityBlockTitle}>Top things to do</Text>
+                              <Text style={styles.cityBlockSub}>
+                                {cityBundle?.hasGuide
+                                  ? "Curated picks + quick tips. Link out for more."
+                                  : "No curated guide yet — link out for the best current picks."}
+                              </Text>
+                            </View>
 
-                          {cityBundle?.tripAdvisorUrl ? (
-                            <Pressable onPress={() => safeOpenUrl(cityBundle.tripAdvisorUrl)} style={styles.taBtn}>
-                              <Text style={styles.taBtnText}>TripAdvisor</Text>
-                            </Pressable>
-                          ) : null}
-                        </View>
-
-                        {cityBundle?.hasGuide && (cityBundle.items?.length ?? 0) > 0 ? (
-                          <View style={styles.thingsList}>
-                            {cityBundle.items.slice(0, 6).map((it, idx) => (
-                              <View key={`${it.title}-${idx}`} style={styles.thingRow}>
-                                <Text style={styles.thingIdx}>{idx + 1}.</Text>
-                                <View style={{ flex: 1 }}>
-                                  <Text style={styles.thingTitle}>{it.title}</Text>
-                                  {it.description ? <Text style={styles.thingDesc}>{it.description}</Text> : null}
-                                </View>
-                              </View>
-                            ))}
-                            {(cityBundle.items?.length ?? 0) > 6 ? (
-                              <Text style={styles.moreInline}>More in the full city guide.</Text>
+                            {cityBundle?.tripAdvisorUrl ? (
+                              <Pressable onPress={() => safeOpenUrl(cityBundle.tripAdvisorUrl)} style={styles.taBtn}>
+                                <Text style={styles.taBtnText}>TripAdvisor</Text>
+                              </Pressable>
                             ) : null}
                           </View>
-                        ) : null}
 
-                        {cityBundle?.hasGuide && (cityBundle.quickTips?.length ?? 0) > 0 ? (
-                          <View style={styles.tipsBlock}>
-                            <Text style={styles.tipsTitle}>Quick tips</Text>
-                            {cityBundle.quickTips.slice(0, 5).map((t, idx) => (
-                              <Text key={`${t}-${idx}`} style={styles.tipLine}>
-                                • {t}
-                              </Text>
-                            ))}
-                          </View>
-                        ) : null}
-                      </View>
-                    ) : null}
+                          {cityBundle?.hasGuide && (cityBundle.items?.length ?? 0) > 0 ? (
+                            <View style={styles.thingsList}>
+                              {cityBundle.items.slice(0, 8).map((it, idx) => (
+                                <View key={`${it.title}-${idx}`} style={styles.thingRow}>
+                                  <Text style={styles.thingIdx}>{idx + 1}.</Text>
+                                  <View style={{ flex: 1 }}>
+                                    <Text style={styles.thingTitle}>{it.title}</Text>
+                                    {it.description ? <Text style={styles.thingDesc}>{it.description}</Text> : null}
+                                  </View>
+                                </View>
+                              ))}
+                              {(cityBundle.items?.length ?? 0) > 8 ? (
+                                <Text style={styles.moreInline}>More in the full city guide.</Text>
+                              ) : null}
+                            </View>
+                          ) : null}
 
-                    {Platform.OS === "web" || !DateTimePicker ? (
-                      <View style={{ marginTop: 10, gap: 8 }}>
-                        <Text style={styles.fallbackNote}>Date picker not available here. Edit ISO dates (YYYY-MM-DD).</Text>
-                        <View style={{ flexDirection: "row", gap: 10 }}>
-                          <TextInput
-                            value={startIso}
-                            onChangeText={setStartIso}
-                            placeholder="YYYY-MM-DD"
-                            placeholderTextColor={theme.colors.textSecondary}
-                            style={[styles.input, { flex: 1 }]}
-                            autoCapitalize="none"
-                            autoCorrect={false}
-                          />
-                          <TextInput
-                            value={endIso}
-                            onChangeText={setEndIso}
-                            placeholder="YYYY-MM-DD"
-                            placeholderTextColor={theme.colors.textSecondary}
-                            style={[styles.input, { flex: 1 }]}
-                            autoCapitalize="none"
-                            autoCorrect={false}
-                          />
+                          {cityBundle?.hasGuide && (cityBundle.quickTips?.length ?? 0) > 0 ? (
+                            <View style={styles.tipsBlock}>
+                              <Text style={styles.tipsTitle}>Quick tips</Text>
+                              {cityBundle.quickTips.slice(0, 6).map((t, idx) => (
+                                <Text key={`${t}-${idx}`} style={styles.tipLine}>
+                                  • {t}
+                                </Text>
+                              ))}
+                            </View>
+                          ) : null}
                         </View>
-                      </View>
-                    ) : null}
+                      ) : null}
 
-                    <View style={{ marginTop: 10 }}>
-                      <TextInput
-                        value={notes}
-                        onChangeText={setNotes}
-                        placeholder="Notes (hotel, trains, pubs, mates, etc.)"
-                        placeholderTextColor={theme.colors.textSecondary}
-                        style={[styles.input, styles.textarea]}
-                        multiline
-                        textAlignVertical="top"
-                      />
-                    </View>
+                      {Platform.OS === "web" || !DateTimePicker ? (
+                        <View style={{ marginTop: 10, gap: 8 }}>
+                          <Text style={styles.fallbackNote}>Date picker not available here. Edit ISO dates (YYYY-MM-DD).</Text>
+                          <View style={{ flexDirection: "row", gap: 10 }}>
+                            <TextInput
+                              value={startIso}
+                              onChangeText={setStartIso}
+                              placeholder="YYYY-MM-DD"
+                              placeholderTextColor={theme.colors.textSecondary}
+                              style={[styles.input, { flex: 1 }]}
+                              autoCapitalize="none"
+                              autoCorrect={false}
+                            />
+                            <TextInput
+                              value={endIso}
+                              onChangeText={setEndIso}
+                              placeholder="YYYY-MM-DD"
+                              placeholderTextColor={theme.colors.textSecondary}
+                              style={[styles.input, { flex: 1 }]}
+                              autoCapitalize="none"
+                              autoCorrect={false}
+                            />
+                          </View>
+                        </View>
+                      ) : null}
 
-                    {error ? (
-                      <Text style={styles.errText} numberOfLines={3}>
-                        {error}
-                      </Text>
-                    ) : null}
-
-                    <Pressable onPress={onSave} disabled={saving} style={[styles.saveBtn, saving && { opacity: 0.7 }]}>
-                      <Text style={styles.saveText}>{saving ? "Saving…" : "Save Trip"}</Text>
-                    </Pressable>
-
-                    {DateTimePicker && picker.open ? (
                       <View style={{ marginTop: 10 }}>
-                        <DateTimePicker
-                          value={
-                            parseIsoDateOnly(picker.which === "start" ? (startIso as any) : (endIso as any)) ?? new Date()
-                          }
-                          mode="date"
-                          display={Platform.OS === "ios" ? "inline" : "default"}
-                          onChange={onPickerChange}
+                        <TextInput
+                          value={notes}
+                          onChangeText={setNotes}
+                          placeholder="Notes (hotel, trains, pubs, mates, etc.)"
+                          placeholderTextColor={theme.colors.textSecondary}
+                          style={[styles.input, styles.textarea]}
+                          multiline
+                          textAlignVertical="top"
                         />
                       </View>
-                    ) : null}
+
+                      {error ? (
+                        <Text style={styles.errText} numberOfLines={3}>
+                          {error}
+                        </Text>
+                      ) : null}
+
+                      <Pressable onPress={onSave} disabled={saving} style={[styles.saveBtn, saving && { opacity: 0.7 }]}>
+                        <Text style={styles.saveText}>{saving ? "Saving…" : "Save Trip"}</Text>
+                      </Pressable>
+
+                      {DateTimePicker && picker.open ? (
+                        <View style={{ marginTop: 10 }}>
+                          <DateTimePicker
+                            value={
+                              parseIsoDateOnly(picker.which === "start" ? (startIso as any) : (endIso as any)) ?? new Date()
+                            }
+                            mode="date"
+                            display={Platform.OS === "ios" ? "inline" : "default"}
+                            onChange={onPickerChange}
+                          />
+                        </View>
+                      ) : null}
+                    </ScrollView>
                   </BasicCard>
                 </View>
               </SafeAreaView>
@@ -806,23 +772,11 @@ const styles = StyleSheet.create({
   },
   moreText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
 
-  hint: { marginTop: 10, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm },
+  modalRoot: { flex: 1, justifyContent: "flex-end" },
+  modalBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.55)" },
+  modalKav: { width: "100%" },
+  modalSafe: { width: "100%" },
 
-  // ===== Modal sheet (stable) =====
-  modalRoot: {
-    flex: 1,
-    justifyContent: "flex-end",
-  },
-  modalBackdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.55)",
-  },
-  modalKav: {
-    width: "100%",
-  },
-  modalSafe: {
-    width: "100%",
-  },
   sheet: {
     paddingHorizontal: theme.spacing.lg,
     paddingTop: theme.spacing.md,
@@ -836,7 +790,6 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.md,
   },
 
-  // BasicCard used inside sheet
   basicCard: {
     borderRadius: theme.borderRadius.xl,
     borderWidth: 1,
@@ -844,8 +797,11 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.78)",
     padding: theme.spacing.md,
   },
+
+  // This is the key: give the card a fixed inner layout so the scroll view can flex.
   sheetCard: {
-    // keep spacing consistent
+    height: "100%",
+    maxHeight: 620,
   },
 
   panelTop: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
@@ -878,8 +834,17 @@ const styles = StyleSheet.create({
   dateLabel: { color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: "800" },
   dateValue: { marginTop: 6, color: theme.colors.text, fontSize: theme.fontSize.md, fontWeight: "900" },
 
-  cityBlock: {
+  // Scroll setup
+  sheetScroll: {
     marginTop: 12,
+    flex: 1,
+    minHeight: 0, // Android: helps ScrollView compute properly inside flex containers
+  },
+  sheetScrollContent: {
+    paddingBottom: theme.spacing.lg,
+  },
+
+  cityBlock: {
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.12)",
