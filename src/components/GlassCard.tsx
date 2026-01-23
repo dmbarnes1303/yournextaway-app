@@ -1,4 +1,3 @@
-
 // src/components/GlassCard.tsx
 import React from "react";
 import { View, StyleSheet, ViewStyle, Platform } from "react-native";
@@ -13,10 +12,9 @@ interface GlassCardProps {
 
 /**
  * IMPORTANT:
- * - Expo Go on Android can render BlurView as an opaque layer above children,
- *   making text look "missing".
- * - For stability, we use BlurView on iOS/web, and a tinted fallback on Android.
- * - Explicit z-index + elevation ensures proper stacking order on Android.
+ * - Expo Go / some Android devices can composite layers weirdly with blur/tints.
+ * - We DO NOT use BlurView on Android.
+ * - We enforce stacking order with zIndex + elevation so children always stay visible.
  */
 export default function GlassCard({ children, style, intensity = 20 }: GlassCardProps) {
   const useBlur = Platform.OS !== "android";
@@ -32,9 +30,10 @@ export default function GlassCard({ children, style, intensity = 20 }: GlassCard
         />
       ) : null}
 
-      {/* Always include tint so Android still looks "glassy" without BlurView */}
+      {/* tint sits UNDER content */}
       <View pointerEvents="none" style={styles.tint} />
 
+      {/* content must be ABOVE any absolute layers */}
       <View style={styles.content}>{children}</View>
     </View>
   );
