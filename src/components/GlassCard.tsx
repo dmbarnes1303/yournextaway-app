@@ -11,10 +11,9 @@ interface GlassCardProps {
 }
 
 /**
- * IMPORTANT:
- * - Expo Go / some Android devices can composite layers weirdly with blur/tints.
- * - We DO NOT use BlurView on Android.
- * - We enforce stacking order with zIndex + elevation so children always stay visible.
+ * DEBUG SANITY CHECK:
+ * - Tint is set to bright magenta to prove this file is actually being used at runtime.
+ * - Once confirmed, we will revert tint and fix Build Trip panel properly.
  */
 export default function GlassCard({ children, style, intensity = 20 }: GlassCardProps) {
   const useBlur = Platform.OS !== "android";
@@ -30,10 +29,8 @@ export default function GlassCard({ children, style, intensity = 20 }: GlassCard
         />
       ) : null}
 
-      {/* tint sits UNDER content */}
       <View pointerEvents="none" style={styles.tint} />
 
-      {/* content must be ABOVE any absolute layers */}
       <View style={styles.content}>{children}</View>
     </View>
   );
@@ -54,7 +51,8 @@ const styles = StyleSheet.create({
   },
   tint: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(26, 31, 46, 0.45)",
+    // DEBUG: if you don't see this, you're not running this file
+    backgroundColor: "rgba(255,0,255,0.85)",
     zIndex: 1,
     elevation: 1,
   },
