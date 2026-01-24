@@ -1,285 +1,230 @@
 // src/services/searchIndex.ts
+import { LEAGUES } from "@/src/constants/football";
+import cityGuides from "@/src/data/cityGuides";
+import teamGuides from "@/src/data/teamGuides";
+import { normalizeCityKey } from "@/src/utils/city";
+import {
+  normalizeSearchText,
+  tokenizeQuery,
+  expandQueryTokens,
+} from "@/src/constants/search";
 
 /**
- * Central, offline search index builder.
+ * IMPORTANT:
+ * This is V1: in-memory, deterministic, no API calls.
  *
- * V1 objective:
- * - Make Home search “actually work” for city/team/country/venue even when the
- *   current rolling fixtures list doesn’t contain that text.
- * - Keep it fast, dependency-free, and robust.
+ * We index:
+ * - Teams (from teamGuides registry; later: expand to include API teams list)
+ * - Cities (from cityGuides registry)
+ * - Venues/Stadiums (from fixture cache, later; V1 we derive from fixtures rows if provided)
+ * - Countries + Leagues (from LEAGUES + aliases in search.ts)
  *
- * What it indexes:
- * - Teams from your LEAGUES (via fixtures API results)
- * - Cities + venues from fixtures API results
- * - Countries + league aliases (static, always available)
- *
- * What it does NOT do (yet):
- * - Fetch a full global club database (v2)
- * - Fetch city datasets (v2)
+ * Because V1 data is incomplete, we bias toward "doesn't crash" and "always returns something sensible".
  */
-
-import { getFixtures, type FixtureListRow } from "@/src/services/apiFootball";
-import { LEAGUES, type LeagueOption, getRollingWindowIso } from "@/src/constants/football";
-import { normalizeCityKey } from "@/src/utils/city";
-import { COUNTRY_LEAGUE_HINTS, LEAGUE_ALIASES, SEARCH_STOPWORDS } from "@/src/constants/search";
 
 export type SearchEntityType = "team" | "city" | "venue" | "country" | "league";
 
 export type SearchResult = {
   type: SearchEntityType;
-  key: string; // stable normalized key for dedupe
-  title: string; // display title
-  subtitle?: string; // small meta
-  // Routing payload:
-  payload:
-    | { kind: "team"; slug: string; label: string }
-    | { kind: "city"; slug: string; label: string }
-    | { kind: "venue"; slug: string; label: string; city?: string }
-    | { kind: "country"; countryKey: string; countryLabel: string; leagueId: number; season: number; leagueLabel: string }
-    | { kind: "league"; leagueId: number; season: number; label: string };
-  // Matching:
-  tokens: string[]; // normalized tokens for fast matching
+  key: string; // slug/key used in route
+  title: string; // display name
+  subtitle?: string;
+  score: number; // higher is better
+  // Optional: for fixtures routing
+  leagueId?: number;
+  season?: number;
+  country?: string;
 };
 
-export type SearchIndex = {
-  builtAt: number;
-  window: { from: string; to: string };
-  results: SearchResult[];
+type IndexEntry = {
+  type: SearchEntityType;
+  key: string;
+  title: string;
+  subtitle?: string;
+  tokens: string[]; // normalized tokens
+  leagueId?: number;
+  season?: number;
+  country?: string;
 };
 
-function stripDiacritics(input: string): string {
-  try {
-    return input.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  } catch {
-    return input;
-  }
+function uniq(arr: string[]) {
+  return Array.from(new Set(arr.filter(Boolean)));
 }
 
-function normalizeText(input: string): string {
-  const raw = String(input ?? "").trim();
-  if (!raw) return "";
-  const s = stripDiacritics(raw)
-    .toLowerCase()
-    .replace(/[,/|].*$/, "") // strip after comma/slash/pipe
-    .replace(/\(.*?\)/g, " ")
-    .replace(/[^a-z0-9\s-]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-  return s;
-}
+function scoreMatch(queryTokens: string[], entryTokens: string[]): number {
+  // Simple scoring:
+  // +3 per exact token hit
+  // +1 per partial token hit (prefix)
+  // +2 bonus if all query tokens hit at least partially
+  let score = 0;
+  let hitCount = 0;
 
-function tokenize(input: string): string[] {
-  const s = normalizeText(input);
-  if (!s) return [];
-  const parts = s.split(" ").map((x) => x.trim()).filter(Boolean);
-
-  const filtered = parts.filter((p) => !SEARCH_STOPWORDS.includes(p));
-  // also include hyphen-collapsed version for terms like "real-madrid"
-  const collapsed = filtered.join("-");
-
-  const out = new Set<string>();
-  for (const p of filtered) out.add(p);
-  if (collapsed) out.add(collapsed);
-
-  return Array.from(out);
-}
-
-function makeKey(type: SearchEntityType, slug: string) {
-  return `${type}:${slug}`;
-}
-
-function safeSlugFromName(name: string): string {
-  return normalizeText(name).replace(/\s+/g, "-");
-}
-
-function uniquePush(map: Map<string, SearchResult>, r: SearchResult) {
-  if (!r.key) return;
-  if (map.has(r.key)) return;
-  map.set(r.key, r);
-}
-
-function teamFromRow(r: FixtureListRow) {
-  const home = String(r?.teams?.home?.name ?? "").trim();
-  const away = String(r?.teams?.away?.name ?? "").trim();
-  return { home, away };
-}
-
-function venueFromRow(r: FixtureListRow) {
-  const venue = String(r?.fixture?.venue?.name ?? "").trim();
-  const city = String(r?.fixture?.venue?.city ?? "").trim();
-  return { venue, city };
-}
-
-/**
- * Build a lean index from:
- * - static country+league hints (always)
- * - static league aliases (always)
- * - fixtures from each configured league (rolling window)
- *
- * Notes:
- * - This is intentionally "best-effort". If some leagues fail, we still build an index.
- */
-export async function buildSearchIndex(opts?: { from?: string; to?: string; leagues?: LeagueOption[] }): Promise<SearchIndex> {
-  const rolling = getRollingWindowIso();
-  const from = opts?.from ?? rolling.from;
-  const to = opts?.to ?? rolling.to;
-  const leagues = opts?.leagues ?? LEAGUES;
-
-  const map = new Map<string, SearchResult>();
-
-  // 1) Static: countries -> fixtures (via league mapping)
-  for (const c of COUNTRY_LEAGUE_HINTS) {
-    const slug = c.countryKey;
-    uniquePush(map, {
-      type: "country",
-      key: makeKey("country", slug),
-      title: c.countryLabel,
-      subtitle: c.leagueLabel,
-      payload: {
-        kind: "country",
-        countryKey: c.countryKey,
-        countryLabel: c.countryLabel,
-        leagueId: c.leagueId,
-        season: c.season,
-        leagueLabel: c.leagueLabel,
-      },
-      tokens: Array.from(
-        new Set([
-          ...tokenize(c.countryLabel),
-          ...tokenize(c.countryKey),
-          ...tokenize(c.leagueLabel),
-          ...(c.aliases ?? []).flatMap((a) => tokenize(a)),
-        ])
-      ),
-    });
-  }
-
-  // 2) Static: league aliases
-  for (const l of LEAGUE_ALIASES) {
-    const slug = String(l.leagueId);
-    uniquePush(map, {
-      type: "league",
-      key: makeKey("league", slug),
-      title: l.label,
-      subtitle: "League",
-      payload: { kind: "league", leagueId: l.leagueId, season: l.season, label: l.label },
-      tokens: Array.from(new Set([...tokenize(l.label), ...l.terms.flatMap((t) => tokenize(t))])),
-    });
-  }
-
-  // 3) Dynamic: teams/cities/venues from fixtures
-  const fixturePromises = leagues.map(async (league) => {
-    try {
-      const rows = await getFixtures({ league: league.leagueId, season: league.season, from, to });
-      return Array.isArray(rows) ? rows : [];
-    } catch {
-      return [];
+  for (const qt of queryTokens) {
+    if (!qt) continue;
+    if (entryTokens.includes(qt)) {
+      score += 3;
+      hitCount += 1;
+      continue;
     }
+    const partial = entryTokens.some((et) => et.startsWith(qt) || qt.startsWith(et));
+    if (partial) {
+      score += 1;
+      hitCount += 1;
+    }
+  }
+
+  if (queryTokens.length > 0 && hitCount >= Math.max(1, Math.floor(queryTokens.length))) {
+    score += 2;
+  }
+
+  return score;
+}
+
+function toEntryTokens(parts: Array<string | undefined | null>): string[] {
+  const joined = parts.filter(Boolean).join(" ");
+  const t = tokenizeQuery(joined);
+  return uniq(t);
+}
+
+function buildBaseIndex(): IndexEntry[] {
+  const entries: IndexEntry[] = [];
+
+  // Cities: from cityGuides registry
+  Object.values(cityGuides).forEach((g: any) => {
+    const name = String(g?.name ?? g?.cityId ?? "").trim();
+    if (!name) return;
+
+    const key = normalizeCityKey(g.cityId || name);
+    const country = String(g?.country ?? "").trim();
+
+    entries.push({
+      type: "city",
+      key,
+      title: name,
+      subtitle: country ? country : undefined,
+      tokens: toEntryTokens([name, key, country]),
+      country: country || undefined,
+    });
   });
 
-  const allRows = (await Promise.all(fixturePromises)).flat();
+  // Teams: from teamGuides registry (currently empty, but safe)
+  Object.values(teamGuides as any).forEach((g: any) => {
+    const name = String(g?.name ?? g?.teamName ?? g?.teamId ?? "").trim();
+    if (!name) return;
 
-  for (const r of allRows) {
-    // Teams
-    const { home, away } = teamFromRow(r);
-    if (home) {
-      const slug = safeSlugFromName(home);
-      uniquePush(map, {
-        type: "team",
-        key: makeKey("team", slug),
-        title: home,
-        subtitle: "Team",
-        payload: { kind: "team", slug, label: home },
-        tokens: tokenize(home),
-      });
-    }
-    if (away) {
-      const slug = safeSlugFromName(away);
-      uniquePush(map, {
-        type: "team",
-        key: makeKey("team", slug),
-        title: away,
-        subtitle: "Team",
-        payload: { kind: "team", slug, label: away },
-        tokens: tokenize(away),
-      });
-    }
+    const key = String(g?.teamId ?? name)
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, "-")
+      .replace(/[^a-z0-9-]/g, "");
 
-    // Venue + City
-    const { venue, city } = venueFromRow(r);
+    entries.push({
+      type: "team",
+      key,
+      title: name,
+      subtitle: String(g?.city ?? g?.country ?? "").trim() || undefined,
+      tokens: toEntryTokens([name, key, g?.city, g?.country]),
+    });
+  });
 
-    if (city) {
-      const citySlug = normalizeCityKey(city);
-      uniquePush(map, {
-        type: "city",
-        key: makeKey("city", citySlug),
-        title: city,
-        subtitle: "City",
-        payload: { kind: "city", slug: citySlug, label: city },
-        tokens: Array.from(new Set([...tokenize(city), ...tokenize(citySlug)])),
-      });
-    }
+  // Leagues: from LEAGUES
+  LEAGUES.forEach((l) => {
+    const title = l.label;
+    const key = normalizeSearchText(title).replace(/\s+/g, "-");
+    entries.push({
+      type: "league",
+      key,
+      title,
+      subtitle: `Season ${String(l.season)}`,
+      tokens: toEntryTokens([title, key]),
+      leagueId: l.leagueId,
+      season: l.season,
+    });
+  });
 
-    if (venue) {
-      const venueSlug = safeSlugFromName(venue);
-      uniquePush(map, {
-        type: "venue",
-        key: makeKey("venue", venueSlug),
-        title: venue,
-        subtitle: city ? `Venue • ${city}` : "Venue",
-        payload: { kind: "venue", slug: venueSlug, label: venue, city: city || undefined },
-        tokens: Array.from(new Set([...tokenize(venue), ...(city ? tokenize(city) : [])])),
-      });
-    }
-  }
+  // Countries: derived from leagues and city guides (best effort)
+  const countries = uniq(
+    [
+      ...Object.values(cityGuides).map((g: any) => String(g?.country ?? "").trim()),
+      // optional: if you later add country to LEAGUES entries, it will enrich this.
+    ].filter(Boolean)
+  );
 
-  return {
-    builtAt: Date.now(),
-    window: { from, to },
-    results: Array.from(map.values()),
-  };
+  countries.forEach((c) => {
+    const key = normalizeSearchText(c).replace(/\s+/g, "-");
+    entries.push({
+      type: "country",
+      key,
+      title: c,
+      tokens: toEntryTokens([c, key]),
+      country: c,
+    });
+  });
+
+  return entries;
+}
+
+let cachedIndex: IndexEntry[] | null = null;
+
+/**
+ * Rebuild the index (call when registries change).
+ * In V1 you can call this at app boot; it is cheap.
+ */
+export function rebuildSearchIndex() {
+  cachedIndex = buildBaseIndex();
 }
 
 /**
- * Query the index.
- * Ranking:
- * - Exact token match gets priority
- * - Starts-with match second
- * - Includes match third
+ * Search across all indexed entities.
+ * Returns sorted results; caller can group them by type.
  */
-export function querySearchIndex(index: SearchIndex, query: string, opts?: { limit?: number; types?: SearchEntityType[] }) {
-  const q = normalizeText(query);
-  if (!q) return [];
+export function searchAll(query: string, limit = 20): SearchResult[] {
+  const qNorm = normalizeSearchText(query);
+  if (!qNorm) return [];
 
-  const qTokens = tokenize(q);
-  const types = opts?.types?.length ? new Set(opts.types) : null;
-  const limit = Math.max(1, opts?.limit ?? 20);
+  const baseTokens = tokenizeQuery(qNorm);
+  const queryTokens = expandQueryTokens(baseTokens);
 
-  const scored: Array<{ r: SearchResult; score: number }> = [];
+  if (!cachedIndex) rebuildSearchIndex();
 
-  for (const r of index.results) {
-    if (types && !types.has(r.type)) continue;
+  const scored: SearchResult[] = (cachedIndex ?? [])
+    .map((e) => {
+      const score = scoreMatch(queryTokens, e.tokens);
 
-    let score = 0;
+      // Type weighting (your requirement: team/city first)
+      const typeBoost =
+        e.type === "team" ? 3 : e.type === "city" ? 2 : e.type === "venue" ? 1 : 0;
 
-    // Exact token hits
-    for (const t of qTokens) {
-      if (r.tokens.includes(t)) score += 10;
-    }
+      return {
+        type: e.type,
+        key: e.key,
+        title: e.title,
+        subtitle: e.subtitle,
+        score: score + typeBoost,
+        leagueId: e.leagueId,
+        season: e.season,
+        country: e.country,
+      };
+    })
+    .filter((r) => r.score > 0)
+    .sort((a, b) => b.score - a.score);
 
-    // Starts-with / includes
-    const joined = r.tokens.join(" ");
-    if (joined.startsWith(q)) score += 6;
-    if (joined.includes(q)) score += 3;
+  return scored.slice(0, limit);
+}
 
-    // Slight boost for “team” and “city” as primary UX
-    if (r.type === "team") score += 2;
-    if (r.type === "city") score += 2;
+/**
+ * Convenience: group results for UI sections.
+ */
+export function groupSearchResults(results: SearchResult[]) {
+  const groups: Record<SearchEntityType, SearchResult[]> = {
+    team: [],
+    city: [],
+    venue: [],
+    country: [],
+    league: [],
+  };
 
-    if (score > 0) scored.push({ r, score });
-  }
+  results.forEach((r) => groups[r.type].push(r));
 
-  scored.sort((a, b) => b.score - a.score || a.r.title.localeCompare(b.r.title));
-
-  return scored.slice(0, limit).map((x) => x.r);
-  }
+  return groups;
+}
