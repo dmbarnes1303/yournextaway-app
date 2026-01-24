@@ -28,9 +28,23 @@ function mapRow(r: FixtureListRow) {
 }
 
 function norm(s: unknown) {
-  return String(s ?? "")
+  return String(s ?? "").trim().toLowerCase();
+}
+
+/**
+ * Venue/city normalization used for slug-style matching.
+ * Matches how you normalize venues in searchIndex.ts (close enough to be consistent).
+ */
+function normalizeVenueKey(input: unknown): string {
+  return String(input ?? "")
     .trim()
-    .toLowerCase();
+    .toLowerCase()
+    .replace(/\(.*?\)/g, "")
+    .replace(/[,/|].*$/, "")
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9-]/g, "")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
 }
 
 export default function FixturesScreen() {
@@ -131,6 +145,7 @@ export default function FixturesScreen() {
         season: String(selected.season),
         from,
         to,
+        ...(venueFilter ? { venue: String(venueFilter) } : {}),
       },
     } as any);
   }
@@ -144,22 +159,45 @@ export default function FixturesScreen() {
         season: String(selected.season),
         from,
         to,
+        ...(venueFilter ? { venue: String(venueFilter) } : {}),
       },
     } as any);
   }
 
   const filteredRows = useMemo(() => {
-    const vf = norm(venueFilter);
+    const vfRaw = String(venueFilter ?? "").trim();
+    const vf = norm(vfRaw);
     if (!vf) return rows;
+
+    const vfKey = normalizeVenueKey(vfRaw);
 
     return rows.filter((r) => {
       const home = norm(r?.teams?.home?.name);
       const away = norm(r?.teams?.away?.name);
-      const venue = norm(r?.fixture?.venue?.name);
-      const city = norm(r?.fixture?.venue?.city);
 
-      // "Contains" matching is deliberate: venue names vary ("Emirates Stadium" vs "Emirates").
-      return venue.includes(vf) || city.includes(vf) || home.includes(vf) || away.includes(vf);
+      const venueName = String(r?.fixture?.venue?.name ?? "").trim();
+      const venueCity = String(r?.fixture?.venue?.city ?? "").trim();
+
+      const venue = norm(venueName);
+      const city = norm(venueCity);
+
+      // Raw contains matching (handles "Emirates" vs "Emirates Stadium")
+      if (venue.includes(vf) || city.includes(vf) || home.includes(vf) || away.includes(vf)) return true;
+
+      // Slug-style matching (handles passing a slug or weird punctuation)
+      if (!vfKey) return false;
+
+      const venueKey = normalizeVenueKey(venueName);
+      const cityKey = normalizeVenueKey(venueCity);
+
+      return (
+        venueKey === vfKey ||
+        venueKey.includes(vfKey) ||
+        vfKey.includes(venueKey) ||
+        cityKey === vfKey ||
+        cityKey.includes(vfKey) ||
+        vfKey.includes(cityKey)
+      );
     });
   }, [rows, venueFilter]);
 
