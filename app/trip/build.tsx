@@ -23,7 +23,7 @@ import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
 
 import { getFixtures, getFixtureById } from "@/src/services/apiFootball";
-import tripsStore from "@/src/state/trips";
+import tripsStore, { type Trip } from "@/src/state/trips";
 
 import {
   LEAGUES,
@@ -126,18 +126,21 @@ export default function TripBuildScreen() {
   const defaultTo = rolling.to;
 
   // Route params
-  const routeFixtureId = useMemo(() => paramString(params.fixtureId), [params.fixtureId]);
-  const routeLeagueId = useMemo(() => paramNumber(params.leagueId), [params.leagueId]);
-  const routeSeason = useMemo(() => paramNumber(params.season), [params.season]);
-  const fromParam = useMemo(() => paramString(params.from), [params.from]);
-  const toParam = useMemo(() => paramString(params.to), [params.to]);
+  const routeTripId = useMemo(() => paramString((params as any)?.tripId), [params]);
+  const isEditing = !!routeTripId;
+
+  const routeFixtureId = useMemo(() => paramString((params as any)?.fixtureId), [params]);
+  const routeLeagueId = useMemo(() => paramNumber((params as any)?.leagueId), [params]);
+  const routeSeason = useMemo(() => paramNumber((params as any)?.season), [params]);
+  const fromParam = useMemo(() => paramString((params as any)?.from), [params]);
+  const toParam = useMemo(() => paramString((params as any)?.to), [params]);
 
   const from = useMemo(() => clampIsoToTomorrow(fromParam ?? defaultFrom), [fromParam, defaultFrom]);
   const to = useMemo(() => toParam ?? defaultTo, [toParam, defaultTo]);
 
   const [selectedLeague, setSelectedLeague] = useState<LeagueOption>(LEAGUES[0]);
 
-  // Apply league/season from route params
+  // Apply league/season from route params (for fixtures list browsing)
   useEffect(() => {
     if (!routeLeagueId) return;
 
@@ -162,30 +165,119 @@ export default function TripBuildScreen() {
 
   const [selectedFixture, setSelectedFixture] = useState<any | null>(null);
 
-  // Dates (default: align to route "from" as a 2-night mini-break)
+  // Edit mode state
+  const [editTrip, setEditTrip] = useState<Trip | null>(null);
+  const editTripMatchId = useMemo(() => (editTrip?.matchIds?.[0] ? String(editTrip.matchIds[0]) : null), [editTrip]);
+
+  // Dates
+  // Baseline: align to route "from" as a 2-night mini-break when no match selected
   const [startIso, setStartIso] = useState(from);
   const [endIso, setEndIso] = useState(addDaysIso(from, 2));
   const [notes, setNotes] = useState("");
+
+  // Prevent “kickoff default” from overwriting loaded edit-trip dates for the same fixture.
+  const editDatesLockRef = useRef(false);
 
   const [picker, setPicker] = useState<{ which: "start" | "end"; open: boolean }>({
     which: "start",
     open: false,
   });
 
-  // Keep date fields aligned to route from (initial "no match selected" baseline)
+  // Keep date fields aligned to route from (ONLY when not editing)
   useEffect(() => {
+    if (isEditing) return;
     setStartIso(from);
     setEndIso(addDaysIso(from, 2));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [from]);
+  }, [from, isEditing]);
 
   /**
-   * If fixtureId is provided (Plan Trip), fetch the fixture directly.
+   * EDIT MODE: load trip + prefill fields + load its fixture.
+   */
+  useEffect(() => {
+    let cancelled = false;
+
+    async function run() {
+      if (!routeTripId) return;
+
+      setError(null);
+      setPrefillLoading(true);
+
+      try {
+        // Ensure trips are loaded
+        if (!tripsStore.getState().loaded) {
+          await tripsStore.loadTrips();
+        }
+
+        if (cancelled) return;
+
+        const s = tripsStore.getState();
+        const t = s.trips.find((x) => x.id === routeTripId) ?? null;
+
+        if (!t) {
+          setEditTrip(null);
+          setError("Trip not found. It may not exist on this device.");
+          return;
+        }
+
+        setEditTrip(t);
+
+        // Prefill user-editable fields
+        setNotes(t.notes ?? "");
+        if (t.startDate) setStartIso(clampIsoToTomorrow(String(t.startDate)));
+        if (t.endDate) setEndIso(String(t.endDate));
+
+        // Lock dates for this specific fixture so the kickoff-prefill doesn’t overwrite them.
+        editDatesLockRef.current = true;
+
+        const firstMatchId = t.matchIds?.[0] ? String(t.matchIds[0]) : null;
+        if (!firstMatchId) {
+          setSelectedFixture(null);
+          return;
+        }
+
+        const r = await getFixtureById(firstMatchId);
+        if (cancelled) return;
+
+        if (!r) {
+          setError("Couldn’t load the match linked to this trip. You can still select one from the list.");
+          setSelectedFixture(null);
+          return;
+        }
+
+        setSelectedFixture(r);
+
+        // Sync league selection when possible (so list feels consistent)
+        const apiLeagueId = r?.league?.id;
+        if (typeof apiLeagueId === "number") {
+          const match = LEAGUES.find((l) => l.leagueId === apiLeagueId);
+          if (match) {
+            const season = routeSeason ?? match.season;
+            setSelectedLeague({ ...match, season });
+          }
+        }
+      } catch (e: any) {
+        if (cancelled) return;
+        setError(e?.message ?? "Couldn’t load this trip for editing.");
+      } finally {
+        if (!cancelled) setPrefillLoading(false);
+      }
+    }
+
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [routeTripId, routeSeason]);
+
+  /**
+   * CREATE MODE (Plan Trip): if fixtureId is provided, fetch fixture directly.
    */
   useEffect(() => {
     let cancelled = false;
 
     async function prefill() {
+      if (isEditing) return; // edit mode handled elsewhere
       if (!routeFixtureId) return;
 
       setError(null);
@@ -223,7 +315,7 @@ export default function TripBuildScreen() {
     return () => {
       cancelled = true;
     };
-  }, [routeFixtureId, routeSeason]);
+  }, [isEditing, routeFixtureId, routeSeason]);
 
   // Load fixtures list whenever league/from/to change
   useEffect(() => {
@@ -261,17 +353,28 @@ export default function TripBuildScreen() {
   }, [selectedLeague, from, to]);
 
   /**
-   * When a fixture is selected, prefill dates as:
+   * When a fixture is selected, prefill dates as a 2-night mini-break:
    * - arrival: 1 day before matchday
    * - departure: 1 day after matchday
-   * (2-night mini-break default)
    *
-   * Note: start is clamped to tomorrow for safety; if that clamp would make end < start,
-   * we fall back to 2 nights from start.
+   * In EDIT MODE: do not overwrite the saved dates when the selected fixture is the trip’s own fixture.
    */
   useEffect(() => {
     const iso = selectedFixture?.fixture?.date as string | undefined;
     if (!selectedFixture || !iso) return;
+
+    const fixtureId = selectedFixture?.fixture?.id != null ? String(selectedFixture.fixture.id) : null;
+
+    // If we loaded an existing trip and this is that same match, keep saved dates.
+    if (isEditing && editDatesLockRef.current && editTripMatchId && fixtureId === editTripMatchId) {
+      // Unlock after first pass so user selecting a DIFFERENT match in edit mode will re-prefill.
+      editDatesLockRef.current = false;
+
+      requestAnimationFrame(() => {
+        listRef.current?.scrollTo({ y: 0, animated: true });
+      });
+      return;
+    }
 
     const d = new Date(iso);
     if (Number.isNaN(d.getTime())) return;
@@ -295,7 +398,7 @@ export default function TripBuildScreen() {
     requestAnimationFrame(() => {
       listRef.current?.scrollTo({ y: 0, animated: true });
     });
-  }, [selectedFixture]);
+  }, [selectedFixture, isEditing, editTripMatchId]);
 
   const filteredRows = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -356,6 +459,22 @@ export default function TripBuildScreen() {
         (selectedFixture?.league?.name as string | undefined)?.trim() ||
         "Trip";
 
+      if (isEditing && routeTripId) {
+        // Update existing trip
+        await tripsStore.updateTrip(routeTripId, {
+          cityId: venueCity,
+          matchIds: [fixtureId],
+          startDate: startIso,
+          endDate: endIso,
+          notes: notes.trim(),
+        });
+
+        setSelectedFixture(null);
+        router.replace({ pathname: "/trip/[id]", params: { id: routeTripId } });
+        return;
+      }
+
+      // Create new trip
       const t = await tripsStore.addTrip({
         cityId: venueCity,
         matchIds: [fixtureId],
@@ -367,7 +486,7 @@ export default function TripBuildScreen() {
       setSelectedFixture(null);
       router.replace({ pathname: "/trip/[id]", params: { id: t.id } });
     } catch (e: any) {
-      setError(e?.message ?? "Failed to save trip.");
+      setError(e?.message ?? (isEditing ? "Failed to update trip." : "Failed to save trip."));
     } finally {
       setSaving(false);
     }
@@ -398,7 +517,7 @@ export default function TripBuildScreen() {
       <Stack.Screen
         options={{
           headerShown: true,
-          title: "Build Trip",
+          title: isEditing ? "Edit Trip" : "Build Trip",
           headerTransparent: true,
           headerTintColor: theme.colors.text,
         }}
@@ -412,8 +531,10 @@ export default function TripBuildScreen() {
           keyboardShouldPersistTaps="handled"
         >
           <GlassCard style={styles.card}>
-            <Text style={styles.h1}>Pick a match</Text>
-            <Text style={styles.muted}>Tap a fixture to open trip details. Save inside the sheet.</Text>
+            <Text style={styles.h1}>{isEditing ? "Edit trip match" : "Pick a match"}</Text>
+            <Text style={styles.muted}>
+              {isEditing ? "Select a fixture to update this trip. Save inside the sheet." : "Tap a fixture to open trip details. Save inside the sheet."}
+            </Text>
 
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.leagueRow}>
               {LEAGUES.map((l) => {
@@ -452,7 +573,7 @@ export default function TripBuildScreen() {
             {prefillLoading ? (
               <View style={styles.center}>
                 <ActivityIndicator />
-                <Text style={styles.muted}>Prefilling your match…</Text>
+                <Text style={styles.muted}>{isEditing ? "Loading your trip…" : "Prefilling your match…"}</Text>
               </View>
             ) : null}
 
@@ -493,7 +614,11 @@ export default function TripBuildScreen() {
                     return (
                       <Pressable
                         key={String(fixtureId ?? idx)}
-                        onPress={() => setSelectedFixture(r)}
+                        onPress={() => {
+                          // If user picks a different fixture in edit mode, allow kickoff default to apply.
+                          if (isEditing) editDatesLockRef.current = false;
+                          setSelectedFixture(r);
+                        }}
                         style={[styles.pickRow, selected && styles.pickRowSelected]}
                       >
                         <View style={styles.pickRowTop}>
@@ -520,7 +645,12 @@ export default function TripBuildScreen() {
         </ScrollView>
 
         {/* Native Modal sheet (Android-stable) */}
-        <Modal visible={!!selectedFixture} transparent animationType="slide" onRequestClose={() => setSelectedFixture(null)}>
+        <Modal
+          visible={!!selectedFixture}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setSelectedFixture(null)}
+        >
           <View style={styles.modalWrap}>
             <Pressable style={styles.modalBackdrop} onPress={() => setSelectedFixture(null)} />
 
@@ -530,7 +660,7 @@ export default function TripBuildScreen() {
 
                 <View style={styles.sheetHeader}>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.sheetKicker}>Trip details</Text>
+                    <Text style={styles.sheetKicker}>{isEditing ? "Edit trip details" : "Trip details"}</Text>
                     <Text style={styles.sheetTitle} numberOfLines={1}>
                       {selHome && selAway ? `${selHome} vs ${selAway}` : "Selected match"}
                     </Text>
@@ -659,7 +789,9 @@ export default function TripBuildScreen() {
                   ) : null}
 
                   <Pressable onPress={onSave} disabled={saving} style={[styles.saveBtn, saving && { opacity: 0.7 }]}>
-                    <Text style={styles.saveText}>{saving ? "Saving…" : "Save Trip"}</Text>
+                    <Text style={styles.saveText}>
+                      {saving ? "Saving…" : isEditing ? "Update Trip" : "Save Trip"}
+                    </Text>
                   </Pressable>
 
                   {DateTimePicker && picker.open ? (
