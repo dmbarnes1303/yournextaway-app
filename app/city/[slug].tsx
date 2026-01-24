@@ -1,155 +1,189 @@
 // app/city/[slug].tsx
 import React, { useMemo } from "react";
-import { View, Text, StyleSheet, ScrollView, Pressable, Alert, Linking } from "react-native";
+import { View, Text, StyleSheet, ScrollView, Pressable, Linking } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Stack, useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 
 import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
+import SectionHeader from "@/src/components/SectionHeader";
 import EmptyState from "@/src/components/EmptyState";
 import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
 
-import getCityGuide from "@/src/data/cityGuides/getCityGuide";
+import { getCityGuide } from "@/src/data/cityGuides";
+import { normalizeCityKey } from "@/src/utils/city";
 
-function coerceSlug(v: unknown): string {
-  if (typeof v === "string") return v;
-  if (Array.isArray(v) && typeof v[0] === "string") return v[0];
-  return "";
+function prettyTitleFromSlug(slug: string) {
+  const s = String(slug || "").trim();
+  if (!s) return "City";
+  return s
+    .split(/[-_]/g)
+    .map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w))
+    .join(" ");
 }
 
-async function safeOpenUrl(url: string) {
+async function openUrl(url?: string) {
+  if (!url) return;
   try {
-    const can = await Linking.canOpenURL(url);
-    if (!can) throw new Error("Cannot open URL");
+    const ok = await Linking.canOpenURL(url);
+    if (!ok) return;
     await Linking.openURL(url);
   } catch {
-    Alert.alert("Couldn’t open link", "Your device could not open that link.");
+    // swallow (no hard crash on device)
   }
 }
 
-export default function CityDetailScreen() {
+export default function CityGuideScreen() {
+  const router = useRouter();
   const params = useLocalSearchParams();
 
-  const raw = useMemo(() => coerceSlug((params as any)?.slug), [params]);
-  const { slug, guide } = useMemo(() => getCityGuide(raw), [raw]);
+  const slugRaw = useMemo(() => String(params.slug ?? "").trim(), [params.slug]);
+  const cityKey = useMemo(() => normalizeCityKey(slugRaw), [slugRaw]);
+
+  const guide = useMemo(() => (cityKey ? getCityGuide(cityKey) : null), [cityKey]);
+
+  const title = useMemo(() => {
+    if (guide?.name) return guide.name;
+    return prettyTitleFromSlug(slugRaw);
+  }, [guide?.name, slugRaw]);
+
+  const country = guide?.country ?? undefined;
 
   return (
-    <Background imageUrl={getBackground("trips")}>
-      <Stack.Screen
-        options={{
-          headerShown: true,
-          title: guide ? `${guide.name} Guide` : "City Guide",
-          headerTransparent: true,
-          headerTintColor: theme.colors.text,
-        }}
-      />
+    <Background imageUrl={getBackground("city")} overlayOpacity={0.86}>
+      <SafeAreaView style={styles.container} edges={["top"]}>
+        <View style={styles.header}>
+          <Pressable onPress={() => router.back()} style={styles.backBtn}>
+            <Text style={styles.backText}>Back</Text>
+          </Pressable>
 
-      <SafeAreaView style={styles.container} edges={["bottom"]}>
-        <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
-          <GlassCard style={styles.card} intensity={26}>
-            {!raw ? <EmptyState title="Missing city" message="No city slug was provided." /> : null}
+          <View style={{ flex: 1 }}>
+            <Text style={styles.title}>{title}</Text>
+            <Text style={styles.subtitle}>{country ? country : "City guide"}</Text>
+          </View>
+        </View>
 
-            {raw && !slug ? (
-              <EmptyState title="Invalid city" message={`Couldn’t normalize slug: “${raw}”.`} />
-            ) : null}
+        <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
+          {!guide ? (
+            <GlassCard style={styles.card} intensity={22}>
+              <EmptyState
+                title="No city guide yet"
+                message="This city doesn’t have a guide loaded yet. You can still use fixtures + trips normally."
+              />
 
-            {slug && !guide ? (
-              <>
-                <EmptyState
-                  title="Guide not found"
-                  message={`No guide exists for “${slug}” yet.\nCurrent rollout: London, Madrid, Rome, Berlin, Paris.`}
-                />
-                <Text style={styles.debugLine}>Raw slug: “{raw}”</Text>
-              </>
-            ) : null}
-
-            {guide ? (
-              <>
-                <View style={styles.headerRow}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.h1}>{guide.name}</Text>
-                    <Text style={styles.muted}>
-                      {guide.country}
-                      {slug ? ` • ${slug}` : ""}
-                    </Text>
-                  </View>
+              <Pressable
+                onPress={() =>
+                  openUrl(
+                    cityKey
+                      ? `https://www.tripadvisor.com/Search?q=${encodeURIComponent(cityKey)}`
+                      : "https://www.tripadvisor.com/"
+                  )
+                }
+                style={styles.linkBtn}
+              >
+                <Text style={styles.linkText}>Open TripAdvisor search</Text>
+              </Pressable>
+            </GlassCard>
+          ) : (
+            <>
+              {/* Overview */}
+              <View style={styles.section}>
+                <SectionHeader title="Overview" subtitle="The quick read before you plan anything." />
+                <GlassCard style={styles.card} intensity={22}>
+                  <Text style={styles.body}>{guide.overview}</Text>
 
                   {guide.tripAdvisorTopThingsUrl ? (
-                    <Pressable
-                      onPress={() => safeOpenUrl(guide.tripAdvisorTopThingsUrl!)}
-                      style={styles.ctaBtn}
-                      accessibilityRole="button"
-                      accessibilityLabel="Open TripAdvisor top things to do"
-                    >
-                      <Text style={styles.ctaText}>TripAdvisor Top 10</Text>
+                    <Pressable onPress={() => openUrl(guide.tripAdvisorTopThingsUrl)} style={styles.linkBtn}>
+                      <Text style={styles.linkText}>Open TripAdvisor: top things to do</Text>
                     </Pressable>
                   ) : null}
-                </View>
+                </GlassCard>
+              </View>
 
-                <Text style={[styles.body, { marginTop: 10 }]}>{guide.overview}</Text>
-
-                <View style={{ marginTop: 14 }}>
-                  <Text style={styles.sectionTitle}>Top 10 things to do</Text>
-                  <View style={styles.bullets}>
-                    {guide.topThings.slice(0, 10).map((x, i) => (
-                      <View key={`${x.title}-${i}`} style={styles.bulletRow}>
-                        <Text style={styles.bulletIndex}>{i + 1}</Text>
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.bulletTitle}>{x.title}</Text>
-                          <Text style={styles.bulletTip}>{x.tip}</Text>
+              {/* Top things */}
+              <View style={styles.section}>
+                <SectionHeader title="Top things to do" subtitle="Curated picks with blunt, time-saving tips." />
+                <GlassCard style={styles.card} intensity={22}>
+                  {(guide.topThings ?? []).length === 0 ? (
+                    <Text style={styles.muted}>No curated picks yet.</Text>
+                  ) : (
+                    <View style={styles.list}>
+                      {(guide.topThings ?? []).map((x, idx) => (
+                        <View key={`${x.title}-${idx}`} style={styles.item}>
+                          <Text style={styles.itemNum}>{idx + 1}.</Text>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.itemTitle}>{x.title}</Text>
+                            {x.tip ? <Text style={styles.itemTip}>{x.tip}</Text> : null}
+                          </View>
                         </View>
-                      </View>
-                    ))}
-                  </View>
-                </View>
-
-                <View style={{ marginTop: 14 }}>
-                  <Text style={styles.sectionTitle}>Local tips</Text>
-                  <View style={styles.tipList}>
-                    {guide.tips.map((t, i) => (
-                      <Text key={`${t}-${i}`} style={styles.tipItem}>
-                        • {t}
-                      </Text>
-                    ))}
-                  </View>
-                </View>
-
-                {Array.isArray(guide.food) && guide.food.length ? (
-                  <View style={{ marginTop: 14 }}>
-                    <Text style={styles.sectionTitle}>Food highlights</Text>
-                    <View style={styles.tipList}>
-                      {guide.food.map((t, i) => (
-                        <Text key={`${t}-${i}`} style={styles.tipItem}>
-                          • {t}
-                        </Text>
                       ))}
                     </View>
-                  </View>
-                ) : null}
+                  )}
+                </GlassCard>
+              </View>
 
-                {(guide.transport || guide.accommodation) ? (
-                  <View style={{ marginTop: 14 }}>
-                    <Text style={styles.sectionTitle}>Practical info</Text>
+              {/* Tips */}
+              <View style={styles.section}>
+                <SectionHeader title="Quick tips" subtitle="Small details that save you hassle." />
+                <GlassCard style={styles.card} intensity={22}>
+                  {(guide.tips ?? []).length === 0 ? (
+                    <Text style={styles.muted}>No tips yet.</Text>
+                  ) : (
+                    <View style={styles.bullets}>
+                      {(guide.tips ?? []).map((t, idx) => (
+                        <View key={`${t}-${idx}`} style={styles.bulletRow}>
+                          <Text style={styles.bulletDot}>•</Text>
+                          <Text style={styles.bulletText}>{t}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+                </GlassCard>
+              </View>
 
-                    {guide.transport ? (
-                      <View style={{ marginTop: 8 }}>
-                        <Text style={styles.label}>Transport</Text>
-                        <Text style={styles.body}>{guide.transport}</Text>
-                      </View>
-                    ) : null}
+              {/* Food */}
+              <View style={styles.section}>
+                <SectionHeader title="Food" subtitle="Easy wins and reliable defaults." />
+                <GlassCard style={styles.card} intensity={22}>
+                  {(guide.food ?? []).length === 0 ? (
+                    <Text style={styles.muted}>No food notes yet.</Text>
+                  ) : (
+                    <View style={styles.bullets}>
+                      {(guide.food ?? []).map((t, idx) => (
+                        <View key={`${t}-${idx}`} style={styles.bulletRow}>
+                          <Text style={styles.bulletDot}>•</Text>
+                          <Text style={styles.bulletText}>{t}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+                </GlassCard>
+              </View>
 
-                    {guide.accommodation ? (
-                      <View style={{ marginTop: 10 }}>
-                        <Text style={styles.label}>Accommodation</Text>
-                        <Text style={styles.body}>{guide.accommodation}</Text>
-                      </View>
-                    ) : null}
-                  </View>
-                ) : null}
-              </>
-            ) : null}
-          </GlassCard>
+              {/* Transport */}
+              <View style={styles.section}>
+                <SectionHeader title="Transport" subtitle="How to move around without wasting time." />
+                <GlassCard style={styles.card} intensity={22}>
+                  {guide.transport ? <Text style={styles.body}>{guide.transport}</Text> : <Text style={styles.muted}>—</Text>}
+                </GlassCard>
+              </View>
+
+              {/* Accommodation */}
+              <View style={styles.section}>
+                <SectionHeader title="Where to stay" subtitle="The base matters more than you think." />
+                <GlassCard style={styles.card} intensity={22}>
+                  {guide.accommodation ? (
+                    <Text style={styles.body}>{guide.accommodation}</Text>
+                  ) : (
+                    <Text style={styles.muted}>—</Text>
+                  )}
+                </GlassCard>
+              </View>
+
+              <View style={{ height: 12 }} />
+            </>
+          )}
         </ScrollView>
       </SafeAreaView>
     </Background>
@@ -157,52 +191,75 @@ export default function CityDetailScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, paddingTop: 100 },
-  scrollView: { flex: 1 },
-  content: { paddingHorizontal: theme.spacing.lg, paddingBottom: theme.spacing.xxl, gap: theme.spacing.lg },
-  card: { padding: theme.spacing.lg },
+  container: { flex: 1 },
+  scroll: { flex: 1 },
 
-  headerRow: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  header: {
+    paddingHorizontal: theme.spacing.lg,
+    paddingTop: theme.spacing.lg,
+    paddingBottom: theme.spacing.md,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
 
-  h1: { fontSize: theme.fontSize.xl, fontWeight: "900", color: theme.colors.text },
-  muted: { marginTop: 6, fontSize: theme.fontSize.sm, color: theme.colors.textSecondary },
-
-  label: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, marginBottom: 6 },
-  body: { color: theme.colors.text, fontSize: theme.fontSize.md, lineHeight: 20 },
-
-  ctaBtn: {
+  backBtn: {
     paddingVertical: 10,
     paddingHorizontal: 12,
-    borderRadius: 999,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.22)",
+  },
+  backText: { color: theme.colors.text, fontWeight: "900" as any, fontSize: theme.fontSize.sm },
+
+  title: {
+    color: theme.colors.text,
+    fontWeight: "900" as any,
+    fontSize: theme.fontSize.xl,
+    lineHeight: 30,
+  },
+  subtitle: { marginTop: 4, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm },
+
+  content: {
+    paddingHorizontal: theme.spacing.lg,
+    paddingBottom: theme.spacing.xxl,
+    gap: theme.spacing.lg,
+  },
+
+  section: { marginTop: 2 },
+  card: { padding: theme.spacing.md },
+
+  body: { color: theme.colors.text, fontSize: theme.fontSize.md, lineHeight: 20 },
+
+  muted: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm },
+
+  list: { gap: 12, marginTop: 6 },
+  item: {
+    flexDirection: "row",
+    gap: 10,
+    alignItems: "flex-start",
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255,255,255,0.08)",
+  },
+  itemNum: { color: theme.colors.primary, fontWeight: "900" as any, width: 22 },
+  itemTitle: { color: theme.colors.text, fontWeight: "900" as any, fontSize: theme.fontSize.md },
+  itemTip: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18 },
+
+  bullets: { gap: 10, marginTop: 6 },
+  bulletRow: { flexDirection: "row", gap: 10 },
+  bulletDot: { color: theme.colors.primary, fontWeight: "900" as any, marginTop: 1 },
+  bulletText: { flex: 1, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18 },
+
+  linkBtn: {
+    marginTop: 12,
+    paddingVertical: 12,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: "rgba(0,255,136,0.45)",
-    backgroundColor: "rgba(0,0,0,0.25)",
-    alignSelf: "flex-start",
+    backgroundColor: "rgba(0,0,0,0.22)",
+    alignItems: "center",
   },
-  ctaText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.xs },
-
-  sectionTitle: { marginTop: 2, color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.md },
-
-  bullets: { marginTop: 10, gap: 10 },
-  bulletRow: { flexDirection: "row", gap: 10, alignItems: "flex-start" },
-  bulletIndex: {
-    width: 22,
-    textAlign: "center",
-    color: theme.colors.primary,
-    fontWeight: "900",
-    fontSize: theme.fontSize.sm,
-    marginTop: 1,
-  },
-  bulletTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
-  bulletTip: { marginTop: 4, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18 },
-
-  tipList: { marginTop: 10, gap: 8 },
-  tipItem: { color: theme.colors.text, fontSize: theme.fontSize.sm, lineHeight: 18 },
-
-  debugLine: {
-    marginTop: 10,
-    color: theme.colors.textSecondary,
-    fontSize: theme.fontSize.xs,
-    lineHeight: 16,
-  },
+  linkText: { color: theme.colors.text, fontWeight: "900" as any, fontSize: theme.fontSize.sm },
 });
