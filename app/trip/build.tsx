@@ -174,7 +174,10 @@ export default function TripBuildScreen() {
 
   // Edit mode state
   const [editTrip, setEditTrip] = useState<Trip | null>(null);
-  const editTripMatchId = useMemo(() => (editTrip?.matchIds?.[0] ? String(editTrip.matchIds[0]) : null), [editTrip]);
+  const editTripMatchId = useMemo(
+    () => (editTrip?.matchIds?.[0] ? String(editTrip.matchIds[0]) : null),
+    [editTrip]
+  );
 
   // Dates + notes
   // Baseline: align to route "from" as a 2-night mini-break when no match selected
@@ -200,14 +203,21 @@ export default function TripBuildScreen() {
     return b.getTime() > a.getTime();
   }
 
+  /**
+   * Close behaviour:
+   * - Create mode: close sheet.
+   * - Edit mode: discard unsaved changes back to snapshot AND close sheet.
+   */
   function closeSheet() {
     if (isEditing && editSnapshotRef.current) {
       const snap = editSnapshotRef.current;
       setStartIso(snap.startIso);
       setEndIso(snap.endIso);
       setNotes(snap.notes);
-      setSelectedFixture(snap.fixture);
       setError(null);
+
+      // IMPORTANT: actually dismiss the modal
+      setSelectedFixture(null);
       return;
     }
 
@@ -225,6 +235,7 @@ export default function TripBuildScreen() {
 
   /**
    * EDIT MODE: load trip + prefill fields + load its fixture.
+   * Also captures a snapshot so Close can discard changes.
    */
   useEffect(() => {
     let cancelled = false;
@@ -248,6 +259,7 @@ export default function TripBuildScreen() {
         if (!t) {
           setEditTrip(null);
           editSnapshotRef.current = null;
+          setSelectedFixture(null);
           setError("Trip not found. It may not exist on this device.");
           return;
         }
@@ -282,8 +294,6 @@ export default function TripBuildScreen() {
         }
 
         setSelectedFixture(r);
-
-        // Snapshot for “Close = discard changes”
         editSnapshotRef.current = { fixture: r, startIso: nextStart, endIso: nextEnd, notes: nextNotes };
 
         // Sync league selection when possible
@@ -364,6 +374,7 @@ export default function TripBuildScreen() {
       setLoading(true);
       setRows([]);
       setVisibleCount(12);
+      setSearch(""); // avoids "0 results" carryover when switching leagues
 
       try {
         const res = await getFixtures({
@@ -720,9 +731,7 @@ export default function TripBuildScreen() {
 
                 {visibleCount < filteredRows.length ? (
                   <Pressable onPress={() => setVisibleCount((n) => n + 12)} style={styles.moreBtn}>
-                    <Text style={styles.moreText}>
-Show more
-                    </Text>
+                    <Text style={styles.moreText}>Show more</Text>
                   </Pressable>
                 ) : null}
               </>
@@ -731,12 +740,7 @@ Show more
         </ScrollView>
 
         {/* Native Modal sheet (Android-stable) */}
-        <Modal
-          visible={!!selectedFixture}
-          transparent
-          animationType="slide"
-          onRequestClose={closeSheet}
-        >
+        <Modal visible={!!selectedFixture} transparent animationType="slide" onRequestClose={closeSheet}>
           <View style={styles.modalWrap}>
             <Pressable style={styles.modalBackdrop} onPress={closeSheet} />
 
@@ -875,9 +879,7 @@ Show more
                   ) : null}
 
                   <Pressable onPress={onSave} disabled={saving} style={[styles.saveBtn, saving && { opacity: 0.7 }]}>
-                    <Text style={styles.saveText}>
-                      {saving ? "Saving…" : isEditing ? "Update Trip" : "Save Trip"}
-                    </Text>
+                    <Text style={styles.saveText}>{saving ? "Saving…" : isEditing ? "Update Trip" : "Save Trip"}</Text>
                   </Pressable>
 
                   {DateTimePicker && picker.open ? (
@@ -1130,4 +1132,4 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   saveText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.md },
-});                      
+});
