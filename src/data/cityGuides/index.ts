@@ -1,6 +1,6 @@
 // src/data/cityGuides/index.ts
 import type { CityGuide, CityTopThing } from "./types";
-import cityGuides from "./cityGuides";
+import cityGuidesRegistry from "./cityGuides";
 import { normalizeCityKey } from "@/src/utils/city";
 
 export type TripTopThingsBundle = {
@@ -17,7 +17,7 @@ export type TripTopThingsBundle = {
  * - getCityGuide (single lookup)
  * - getTopThingsToDoForTrip (compact “Trip Build” bundle)
  */
-export { cityGuides };
+export const cityGuides = cityGuidesRegistry;
 
 /**
  * Find a city guide by any user input (city name, venue city, etc.)
@@ -36,7 +36,6 @@ export function getTopThingsToDoForTrip(cityInput: string): TripTopThingsBundle 
   const guide = cityGuides[cityKey];
 
   if (!guide) {
-    // No guide yet — still return a functional bundle for link-out
     return {
       cityKey,
       hasGuide: false,
@@ -46,7 +45,6 @@ export function getTopThingsToDoForTrip(cityInput: string): TripTopThingsBundle 
     };
   }
 
-  // Convert to compact format for Trip Build panel
   const items = (guide.topThings ?? []).slice(0, 10).map((x: CityTopThing) => ({
     title: x.title,
     description: x.tip,
