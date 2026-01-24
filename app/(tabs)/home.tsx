@@ -65,7 +65,6 @@ function splitSearchBuckets(results: SearchResult[]) {
     else if (r.type === "league") leagues.push(r);
   }
 
-  // UX rule: Team + City first, then Venue, then Country/League
   return { teams, cities, venues, countries, leagues };
 }
 
@@ -157,7 +156,6 @@ export default function HomeScreen() {
   const [searchError, setSearchError] = useState<string | null>(null);
   const [searchIndexBuiltAt, setSearchIndexBuiltAt] = useState<number>(0);
 
-  // Keep index in memory; rebuild when window changes (or on first load)
   const indexRef = useRef<Awaited<ReturnType<typeof buildSearchIndex>> | null>(null);
 
   useEffect(() => {
@@ -191,8 +189,6 @@ export default function HomeScreen() {
     const idx = indexRef.current;
     if (!idx) return [];
     if (!qNorm) return [];
-
-    // Always query all; we control display order with bucket split
     return querySearchIndex(idx, qNorm, { limit: 30 });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [qNorm, searchIndexBuiltAt]);
@@ -229,7 +225,20 @@ export default function HomeScreen() {
     } as any);
   }
 
-  function goFixturesWithContext(params?: { leagueId?: number; season?: number }) {
+  function goMatchWithContext(fixtureId: string) {
+    router.push({
+      pathname: "/match/[id]",
+      params: {
+        id: fixtureId,
+        leagueId: String(league.leagueId),
+        season: String(league.season),
+        from: fromIso,
+        to: toIso,
+      },
+    } as any);
+  }
+
+  function goFixturesWithContext(params?: { leagueId?: number; season?: number; venue?: string }) {
     router.push({
       pathname: "/(tabs)/fixtures",
       params: {
@@ -237,6 +246,7 @@ export default function HomeScreen() {
         season: String(params?.season ?? league.season),
         from: fromIso,
         to: toIso,
+        ...(params?.venue ? { venue: params.venue } : {}),
       },
     } as any);
   }
@@ -245,19 +255,25 @@ export default function HomeScreen() {
     const p: any = r.payload;
 
     if (p?.kind === "team") {
-      router.push({ pathname: "/team/[slug]", params: { slug: p.slug } });
+      router.push({
+        pathname: "/team/[slug]",
+        params: { slug: p.slug, from: fromIso, to: toIso },
+      } as any);
       return;
     }
 
     if (p?.kind === "city") {
-      router.push({ pathname: "/city/[slug]", params: { slug: p.slug } });
+      router.push({
+        pathname: "/city/[slug]",
+        params: { slug: p.slug, from: fromIso, to: toIso },
+      } as any);
       return;
     }
 
     // Venue / Country / League route to Fixtures (v1)
     if (p?.kind === "venue") {
-      // v1: no venue guide yet; open fixtures with current league + window
-      goFixturesWithContext();
+      // You don’t have a venue page yet. Keep the user's intent by passing the venue slug.
+      goFixturesWithContext({ venue: p.slug });
       return;
     }
 
@@ -296,7 +312,6 @@ export default function HomeScreen() {
     <Background imageUrl={getBackground("home")} overlayOpacity={0.86}>
       <SafeAreaView style={styles.container} edges={["top"]}>
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-          {/* HERO */}
           <GlassCard style={styles.heroCard} intensity={26}>
             <Text style={styles.heroKicker}>PLAN • FLY • WATCH • REPEAT</Text>
             <Text style={styles.heroTitle}>Build European Football Trips Your Way.</Text>
@@ -319,7 +334,6 @@ export default function HomeScreen() {
 
             {showSearchResults ? (
               <View style={styles.searchResults}>
-                {/* PRIMARY: Teams + Cities */}
                 <View>
                   <Text style={styles.searchSectionTitle}>Teams & Cities</Text>
 
@@ -348,11 +362,14 @@ export default function HomeScreen() {
                   ) : null}
                 </View>
 
-                {/* SECONDARY: Venues + Countries + Leagues */}
                 <View>
                   <Text style={styles.searchSectionTitle}>Venues, Countries & Leagues</Text>
 
-                  {!searchLoading && !searchError && buckets.venues.length === 0 && buckets.countries.length === 0 && buckets.leagues.length === 0 ? (
+                  {!searchLoading &&
+                  !searchError &&
+                  buckets.venues.length === 0 &&
+                  buckets.countries.length === 0 &&
+                  buckets.leagues.length === 0 ? (
                     <Text style={styles.searchEmpty}>No venues/countries/leagues found.</Text>
                   ) : null}
 
@@ -374,7 +391,6 @@ export default function HomeScreen() {
                   </Pressable>
                 </View>
 
-                {/* Matches (still useful) */}
                 <View>
                   <Text style={styles.searchSectionTitle}>Matches</Text>
 
@@ -387,7 +403,9 @@ export default function HomeScreen() {
 
                   {!fxLoading && fxError ? <EmptyState title="Fixtures unavailable" message={fxError} /> : null}
 
-                  {!fxLoading && !fxError && fxRows.length === 0 ? <Text style={styles.searchEmpty}>No fixtures loaded.</Text> : null}
+                  {!fxLoading && !fxError && fxRows.length === 0 ? (
+                    <Text style={styles.searchEmpty}>No fixtures loaded.</Text>
+                  ) : null}
 
                   {!fxLoading && !fxError && fxRows.length > 0 ? (
                     <View style={styles.resultList}>
@@ -410,9 +428,7 @@ export default function HomeScreen() {
                           return (
                             <View key={fixtureId ?? `m-${idx}`} style={styles.resultRow}>
                               <Pressable
-                                onPress={() =>
-                                  fixtureId ? router.push({ pathname: "/match/[id]", params: { id: fixtureId } }) : null
-                                }
+                                onPress={() => (fixtureId ? goMatchWithContext(fixtureId) : null)}
                                 style={{ flex: 1 }}
                               >
                                 <Text style={styles.rowTitle}>{line.title}</Text>
@@ -433,7 +449,6 @@ export default function HomeScreen() {
                   ) : null}
                 </View>
 
-                {/* Trips */}
                 <View>
                   <Text style={styles.searchSectionTitle}>Trips</Text>
 
@@ -469,7 +484,6 @@ export default function HomeScreen() {
             ) : null}
           </GlassCard>
 
-          {/* QUICK ACTIONS */}
           <GlassCard style={styles.quickCard} intensity={24}>
             <Text style={styles.quickTitle}>Quick actions</Text>
             <Text style={styles.quickSub}>
@@ -491,7 +505,6 @@ export default function HomeScreen() {
             </View>
           </GlassCard>
 
-          {/* TOP LEAGUES */}
           <View style={styles.section}>
             <SectionHeader title="Top leagues" subtitle="Pick a league for your next fixtures" />
             <GlassCard style={styles.card} intensity={22}>
@@ -512,7 +525,6 @@ export default function HomeScreen() {
             </GlassCard>
           </View>
 
-          {/* NEXT FIXTURES */}
           <View style={styles.section}>
             <SectionHeader
               title="Next fixtures"
@@ -542,9 +554,7 @@ export default function HomeScreen() {
                     return (
                       <View key={fixtureId ?? `fx-${idx}`} style={styles.fixtureCardRow}>
                         <Pressable
-                          onPress={() =>
-                            fixtureId ? router.push({ pathname: "/match/[id]", params: { id: fixtureId } }) : null
-                          }
+                          onPress={() => (fixtureId ? goMatchWithContext(fixtureId) : null)}
                           style={{ flex: 1 }}
                         >
                           <Text style={styles.rowTitle}>{line.title}</Text>
@@ -566,15 +576,10 @@ export default function HomeScreen() {
 
               <Pressable
                 onPress={() =>
-                  router.push({
-                    pathname: "/(tabs)/fixtures",
-                    params: {
-                      leagueId: String(league.leagueId),
-                      season: String(league.season),
-                      from: fromIso,
-                      to: toIso,
-                    },
-                  } as any)
+                  goFixturesWithContext({
+                    leagueId: league.leagueId,
+                    season: league.season,
+                  })
                 }
                 style={styles.linkBtn}
               >
@@ -583,7 +588,6 @@ export default function HomeScreen() {
             </GlassCard>
           </View>
 
-          {/* YOUR TRIPS */}
           <View style={styles.section}>
             <SectionHeader title="Your trips" subtitle="Your saved plans" />
             <GlassCard style={styles.card} intensity={22}>
@@ -669,7 +673,6 @@ const styles = StyleSheet.create({
   },
   linkText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
 
-  /* HERO */
   heroCard: { marginTop: theme.spacing.lg },
   heroKicker: {
     color: theme.colors.primary,
@@ -732,7 +735,6 @@ const styles = StyleSheet.create({
   },
   planPillText: { color: theme.colors.text, fontSize: theme.fontSize.xs, fontWeight: "900" },
 
-  /* QUICK ACTIONS */
   quickCard: {},
   quickTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.md },
   quickSub: {
@@ -767,7 +769,6 @@ const styles = StyleSheet.create({
   },
   btnSecondaryText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
 
-  /* LEAGUES */
   leagueWrap: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   leaguePill: {
     paddingVertical: 8,
@@ -781,7 +782,6 @@ const styles = StyleSheet.create({
   leaguePillText: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, fontWeight: "700" },
   leaguePillTextActive: { color: theme.colors.text, fontWeight: "900" },
 
-  /* FIXTURES */
   fixtureCardRow: {
     flexDirection: "row",
     gap: 10,
@@ -800,7 +800,6 @@ const styles = StyleSheet.create({
   },
   planBtnText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.xs },
 
-  /* NEXT TRIP */
   nextTrip: {
     marginTop: 6,
     paddingVertical: 12,
