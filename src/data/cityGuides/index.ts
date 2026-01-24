@@ -1,6 +1,6 @@
 // src/data/cityGuides/index.ts
 import type { CityGuide, CityTopThing } from "./types";
-import cityGuidesRegistry from "./cityGuides";
+import cityGuidesRegistry from "./CityGuides";
 import { normalizeCityKey } from "@/src/utils/city";
 
 export type TripTopThingsBundle = {
