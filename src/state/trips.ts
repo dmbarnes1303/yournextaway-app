@@ -46,10 +46,8 @@ function slugify(input: string): string {
   const s = String(input ?? "").trim().toLowerCase();
   if (!s) return "";
 
-  // Remove diacritics
   const noMarks = s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
-  // Replace separators with hyphen, strip invalid chars, collapse hyphens
   return noMarks
     .replace(/[\s_]+/g, "-")
     .replace(/[^a-z0-9-]/g, "")
@@ -140,7 +138,6 @@ async function loadTrips() {
   emit();
 
   // If we backfilled citySlug for older items, persist quietly.
-  // Best-effort; no impact on UI.
   try {
     await persistSafe(nextTrips);
   } catch {
@@ -181,7 +178,6 @@ async function updateTrip(id: string, patch: Partial<Omit<Trip, "id">>) {
 
     const next = { ...t, ...patch };
 
-    // If city label changes and citySlug wasn't explicitly patched, recompute.
     const patchTouchesCitySlug = Object.prototype.hasOwnProperty.call(patch, "citySlug");
     const patchTouchesCityId = Object.prototype.hasOwnProperty.call(patch, "cityId");
 
@@ -190,7 +186,6 @@ async function updateTrip(id: string, patch: Partial<Omit<Trip, "id">>) {
       return { ...next, ...(derived ? { citySlug: derived } : {}) };
     }
 
-    // If citySlug was explicitly patched, normalize it.
     if (patchTouchesCitySlug) {
       const normalized = next.citySlug ? slugify(next.citySlug) : undefined;
       return { ...next, ...(normalized ? { citySlug: normalized } : { citySlug: undefined }) };
