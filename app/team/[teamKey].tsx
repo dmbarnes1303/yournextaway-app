@@ -1,7 +1,7 @@
 // app/team/[teamKey].tsx
-import React, { useEffect, useMemo, useState } from "react";
-import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Platform } from "react-native";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 
 import Background from "@/src/components/Background";
@@ -11,247 +11,302 @@ import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
 
 import { getFixtures, type FixtureListRow } from "@/src/services/apiFootball";
-import { LEAGUES, getRollingWindowIso, type LeagueOption } from "@/src/constants/football";
-import { coerceString } from "@/src/utils/params";
+import { DEFAULT_SEASON, LEAGUES, getRollingWindowIso, type LeagueOption } from "@/src/constants/football";
 import { formatUkDateOnly, formatUkDateTimeMaybe } from "@/src/utils/formatters";
 
-import { getTeam, leagueForTeam, normalizeTeamKey, type TeamRecord } from "@/src/data/teams";
-// If/when you have team guides populated, this will light up automatically.
 import teamGuides from "@/src/data/teamGuides";
+import { normalizeCityKey } from "@/src/utils/city";
+
+function paramString(v: unknown): string | null {
+  if (typeof v === "string") {
+    const s = v.trim();
+    return s ? s : null;
+  }
+  if (Array.isArray(v) && typeof v[0] === "string") {
+    const s = v[0].trim();
+    return s ? s : null;
+  }
+  return null;
+}
+
+function normalizeTeamKey(input: string) {
+  const s = String(input ?? "").trim().toLowerCase();
+  if (!s) return "";
+  return s
+    .replace(/&/g, "and")
+    .replace(/['’]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+function safeTeamName(teamNameParam: string | null, teamKeyParam: string | null) {
+  if (teamNameParam) return teamNameParam;
+  if (!teamKeyParam) return "Team";
+  // Title-ish fallback from slug
+  return teamKeyParam
+    .split("-")
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}
 
 function fixtureLine(r: FixtureListRow) {
+  const id = r?.fixture?.id;
+  const fixtureId = id ? String(id) : null;
+
   const home = r?.teams?.home?.name ?? "Home";
   const away = r?.teams?.away?.name ?? "Away";
   const kickoff = formatUkDateTimeMaybe(r?.fixture?.date);
+
   const venue = r?.fixture?.venue?.name ?? "";
   const city = r?.fixture?.venue?.city ?? "";
   const extra = [venue, city].filter(Boolean).join(" • ");
+
   return {
-    fixtureId: r?.fixture?.id ? String(r.fixture.id) : null,
+    fixtureId,
     title: `${home} vs ${away}`,
     meta: extra ? `${kickoff} • ${extra}` : kickoff,
     home,
     away,
-    venue,
     city,
   };
 }
 
-function matchesTeam(r: FixtureListRow, t: TeamRecord) {
-  const home = String(r?.teams?.home?.name ?? "").toLowerCase();
-  const away = String(r?.teams?.away?.name ?? "").toLowerCase();
+type SearchLeague = LeagueOption & { aliases: string[] };
 
-  const name = String(t.name ?? "").toLowerCase();
-  const aliases = (t.aliases ?? []).map((a) => String(a).toLowerCase());
+function buildSearchLeagues(): SearchLeague[] {
+  const base: SearchLeague[] = LEAGUES.map((l) => {
+    const label = l.label.toLowerCase();
+    const aliases: string[] = [label];
 
-  const hit = (s: string) => (s ? s.includes(name) || aliases.some((a) => s.includes(a)) : false);
+    if (label.includes("premier league")) aliases.push("england", "english", "uk", "united kingdom");
+    if (label.includes("la liga")) aliases.push("spain", "spanish");
+    if (label.includes("serie a")) aliases.push("italy", "italian");
+    if (label.includes("bundesliga") && !label.includes("austrian")) aliases.push("germany", "german");
+    if (label.includes("ligue 1")) aliases.push("france", "french");
 
-  return hit(home) || hit(away);
+    return { ...l, aliases };
+  });
+
+  // Austria: helps team discovery when users typed Austria in Home search.
+  const hasAustria = base.some((x) => x.leagueId === 218 || x.label.toLowerCase().includes("austrian"));
+  if (!hasAustria) {
+    base.push({
+      label: "Austrian Bundesliga",
+      leagueId: 218,
+      season: DEFAULT_SEASON ?? (LEAGUES[0]?.season ?? 2025),
+      aliases: ["austria", "austrian", "austrian bundesliga", "bundesliga austria"],
+    });
+  }
+
+  return base;
 }
 
 export default function TeamGuideScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
+  const insets = useSafeAreaInsets();
 
-  const teamKeyParam = useMemo(() => normalizeTeamKey(coerceString((params as any)?.teamKey) ?? ""), [params]);
-  const team = useMemo(() => (teamKeyParam ? getTeam(teamKeyParam) : null), [teamKeyParam]);
+  const teamKeyParam = useMemo(() => paramString((params as any)?.teamKey), [params]);
+  const teamNameParam = useMemo(() => paramString((params as any)?.teamName), [params]);
 
-  const { from, to } = useMemo(() => getRollingWindowIso(), []);
-  const [league, setLeague] = useState<LeagueOption>(LEAGUES[0]);
+  const teamKey = useMemo(() => normalizeTeamKey(teamKeyParam ?? teamNameParam ?? ""), [teamKeyParam, teamNameParam]);
+  const teamName = useMemo(() => safeTeamName(teamNameParam, teamKeyParam), [teamNameParam, teamKeyParam]);
 
-  // Try to lock league context to the team’s league if known.
-  useEffect(() => {
-    if (!team) return;
-    const inferred = leagueForTeam(team);
-    if (!inferred) return;
-    setLeague(inferred);
-  }, [team]);
+  const rolling = useMemo(() => getRollingWindowIso(), []);
+  const fromIso = rolling.from;
+  const toIso = rolling.to;
 
-  const guide = useMemo(() => {
-    if (!team) return null;
-    const key = team.teamKey;
-    return (teamGuides as any)?.[key] ?? null;
-  }, [team]);
+  const SEARCH_LEAGUES = useMemo(() => buildSearchLeagues(), []);
+
+  const [scope, setScope] = useState<"all" | "league">("all");
+  const [selectedLeague, setSelectedLeague] = useState<LeagueOption>(LEAGUES[0]);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [rows, setRows] = useState<FixtureListRow[]>([]);
 
+  const abortRef = useRef({ cancelled: false });
+
+  const guide = useMemo(() => {
+    if (!teamKey) return null;
+    return (teamGuides as any)?.[teamKey] ?? null;
+  }, [teamKey]);
+
+  // Fetch fixtures for this team
   useEffect(() => {
-    let cancelled = false;
+    abortRef.current.cancelled = false;
 
     async function run() {
-      if (!team) return;
+      if (!teamKey && !teamName) {
+        setError("Missing team details.");
+        return;
+      }
 
       setLoading(true);
       setError(null);
       setRows([]);
 
-      try {
-        const res = await getFixtures({
-          league: league.leagueId,
-          season: league.season,
-          from,
-          to,
-        });
+      const queryName = teamName.trim().toLowerCase();
+      const matchesTeam = (r: FixtureListRow) => {
+        const home = String(r?.teams?.home?.name ?? "").trim().toLowerCase();
+        const away = String(r?.teams?.away?.name ?? "").trim().toLowerCase();
 
-        if (cancelled) return;
-        const all = Array.isArray(res) ? res : [];
-        const filtered = all.filter((r) => matchesTeam(r, team));
-        setRows(filtered);
+        // Strong match first; then fallback to includes
+        if (home === queryName || away === queryName) return true;
+        return home.includes(queryName) || away.includes(queryName);
+      };
+
+      try {
+        if (scope === "league") {
+          const res = await getFixtures({
+            league: selectedLeague.leagueId,
+            season: selectedLeague.season,
+            from: fromIso,
+            to: toIso,
+          });
+
+          if (abortRef.current.cancelled) return;
+
+          const list = (Array.isArray(res) ? res : []).filter(matchesTeam);
+          setRows(list);
+          return;
+        }
+
+        // scope === "all": search across leagues but stop once we have enough
+        const collected: FixtureListRow[] = [];
+        for (const l of SEARCH_LEAGUES) {
+          if (abortRef.current.cancelled) return;
+
+          // eslint-disable-next-line no-await-in-loop
+          const res = await getFixtures({
+            league: l.leagueId,
+            season: l.season,
+            from: fromIso,
+            to: toIso,
+          });
+
+          if (abortRef.current.cancelled) return;
+
+          const list = (Array.isArray(res) ? res : []).filter(matchesTeam);
+          collected.push(...list);
+
+          // Early stop: enough items for a useful guide
+          if (collected.length >= 18) break;
+        }
+
+        setRows(collected);
       } catch (e: any) {
-        if (cancelled) return;
-        setError(e?.message ?? "Failed to load fixtures.");
+        if (abortRef.current.cancelled) return;
+        setError(e?.message ?? "Failed to load fixtures for this team.");
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!abortRef.current.cancelled) setLoading(false);
       }
     }
 
     run();
+
     return () => {
-      cancelled = true;
+      abortRef.current.cancelled = true;
     };
-  }, [team, league, from, to]);
+  }, [teamKey, teamName, scope, selectedLeague, fromIso, toIso, SEARCH_LEAGUES]);
 
-  const preview = useMemo(() => rows.slice(0, 10), [rows]);
+  const preview = useMemo(() => rows.slice(0, 12), [rows]);
 
-  function openFixtures() {
-    router.push({
-      pathname: "/(tabs)/fixtures",
-      params: {
-        leagueId: String(league.leagueId),
-        season: String(league.season),
-        from,
-        to,
-      },
-    } as any);
-  }
-
-  function planTripFromFixture(fixtureId: string) {
+  function goBuildTripWithContext(fixtureId: string) {
     router.push({
       pathname: "/trip/build",
       params: {
         fixtureId,
-        leagueId: String(league.leagueId),
-        season: String(league.season),
-        from,
-        to,
+        // Keep context sensible: if user is on single-league scope, pass it; otherwise omit.
+        ...(scope === "league"
+          ? { leagueId: String(selectedLeague.leagueId), season: String(selectedLeague.season) }
+          : {}),
+        from: fromIso,
+        to: toIso,
       },
     } as any);
   }
 
-  if (!team) {
-    return (
-      <Background imageUrl={getBackground("home")} overlayOpacity={0.86}>
-        <Stack.Screen options={{ headerShown: true, title: "Team", headerTransparent: true, headerTintColor: theme.colors.text }} />
-        <SafeAreaView style={styles.safe} edges={["bottom"]}>
-          <ScrollView contentContainerStyle={styles.content}>
-            <GlassCard style={styles.card} intensity={24}>
-              <EmptyState
-                title="Team not found"
-                message="This team isn’t in your registry yet. Add it to src/data/teams/index.ts so search and guides can route correctly."
-              />
-              <Pressable onPress={() => router.back()} style={styles.btn}>
-                <Text style={styles.btnText}>Go back</Text>
-              </Pressable>
-            </GlassCard>
-          </ScrollView>
-        </SafeAreaView>
-      </Background>
-    );
+  function openCityIfPossible(city: string) {
+    const key = normalizeCityKey(city);
+    router.push({ pathname: "/city/[cityKey]", params: { cityKey: key } } as any);
   }
 
   return (
-    <Background imageUrl={getBackground("fixtures")}>
-      <Stack.Screen options={{ headerShown: true, title: team.name, headerTransparent: true, headerTintColor: theme.colors.text }} />
+    <Background imageUrl={getBackground("home")} overlayOpacity={0.86}>
+      <Stack.Screen
+        options={{
+          headerShown: true,
+          headerTransparent: true,
+          headerTintColor: theme.colors.text,
+          title: "Team guide",
+        }}
+      />
 
       <SafeAreaView style={styles.safe} edges={["bottom"]}>
-        <ScrollView contentContainerStyle={styles.content}>
-          {/* HEADER */}
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={[styles.content, { paddingBottom: theme.spacing.xxl + insets.bottom }]}
+          keyboardShouldPersistTaps="handled"
+        >
           <GlassCard style={styles.card} intensity={26}>
             <Text style={styles.kicker}>TEAM GUIDE</Text>
-            <Text style={styles.h1}>{team.name}</Text>
-
+            <Text style={styles.title}>{teamName}</Text>
             <Text style={styles.sub}>
-              {(team.city ? `${team.city}` : "—")}
-              {team.country ? ` • ${team.country}` : ""}
+              Upcoming fixtures • {formatUkDateOnly(fromIso)} → {formatUkDateOnly(toIso)}
             </Text>
 
-            <Text style={styles.meta}>
-              Fixtures window: {formatUkDateOnly(from)} → {formatUkDateOnly(to)}
-            </Text>
+            {/* Guide content (v1 fallback if empty) */}
+            <View style={styles.guideBlock}>
+              <Text style={styles.blockTitle}>Overview</Text>
+              <Text style={styles.blockBody}>
+                {guide?.history
+                  ? guide.history
+                  : "Guide content is being added. For v1, use fixtures below to plan a trip around a match."}
+              </Text>
 
-            <View style={styles.actionsRow}>
-              <Pressable onPress={openFixtures} style={[styles.actionBtn, styles.actionBtnPrimary]}>
-                <Text style={styles.actionBtnText}>Open Fixtures</Text>
+              {guide?.stadium ? (
+                <>
+                  <Text style={[styles.blockTitle, { marginTop: 10 }]}>Stadium</Text>
+                  <Text style={styles.blockBody}>{guide.stadium}</Text>
+                </>
+              ) : null}
+
+              {guide?.gettingThere ? (
+                <>
+                  <Text style={[styles.blockTitle, { marginTop: 10 }]}>Getting there</Text>
+                  <Text style={styles.blockBody}>{guide.gettingThere}</Text>
+                </>
+              ) : null}
+            </View>
+
+            {/* Scope controls */}
+            <View style={styles.scopeRow}>
+              <Pressable
+                onPress={() => setScope("all")}
+                style={[styles.scopePill, scope === "all" && styles.scopePillActive]}
+              >
+                <Text style={[styles.scopeText, scope === "all" && styles.scopeTextActive]}>All leagues</Text>
               </Pressable>
 
-              <Pressable onPress={() => router.push("/trip/build")} style={styles.actionBtn}>
-                <Text style={styles.actionBtnText}>Build Trip</Text>
+              <Pressable
+                onPress={() => setScope("league")}
+                style={[styles.scopePill, scope === "league" && styles.scopePillActive]}
+              >
+                <Text style={[styles.scopeText, scope === "league" && styles.scopeTextActive]}>Pick league</Text>
               </Pressable>
             </View>
-          </GlassCard>
 
-          {/* GUIDE CONTENT */}
-          <GlassCard style={styles.card} intensity={22}>
-            <Text style={styles.h2}>Overview</Text>
-
-            {guide ? (
-              <>
-                {guide.history ? (
-                  <>
-                    <Text style={styles.h3}>Club snapshot</Text>
-                    <Text style={styles.body}>{guide.history}</Text>
-                  </>
-                ) : null}
-
-                {guide.stadium ? (
-                  <>
-                    <Text style={styles.h3}>Stadium</Text>
-                    <Text style={styles.body}>{guide.stadium}</Text>
-                  </>
-                ) : null}
-
-                {guide.atmosphere ? (
-                  <>
-                    <Text style={styles.h3}>Matchday vibe</Text>
-                    <Text style={styles.body}>{guide.atmosphere}</Text>
-                  </>
-                ) : null}
-
-                {guide.tickets ? (
-                  <>
-                    <Text style={styles.h3}>Tickets</Text>
-                    <Text style={styles.body}>{guide.tickets}</Text>
-                  </>
-                ) : null}
-
-                {guide.gettingThere ? (
-                  <>
-                    <Text style={styles.h3}>Getting there</Text>
-                    <Text style={styles.body}>{guide.gettingThere}</Text>
-                  </>
-                ) : null}
-              </>
-            ) : (
-              <Text style={styles.muted}>
-                Guide content isn’t available yet for this team. Once you add it to src/data/teamGuides, it will appear here automatically.
-              </Text>
-            )}
-          </GlassCard>
-
-          {/* FIXTURES PREVIEW */}
-          <GlassCard style={styles.card} intensity={22}>
-            <View style={styles.blockTop}>
-              <Text style={styles.h2}>Upcoming fixtures</Text>
-
+            {scope === "league" ? (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.leagueRow}>
                 {LEAGUES.map((l) => {
-                  const active = l.leagueId === league.leagueId;
+                  const active = l.leagueId === selectedLeague.leagueId;
                   return (
                     <Pressable
                       key={l.leagueId}
-                      onPress={() => setLeague(l)}
+                      onPress={() => setSelectedLeague(l)}
                       style={[styles.leaguePill, active && styles.leaguePillActive]}
                     >
                       <Text style={[styles.leaguePillText, active && styles.leaguePillTextActive]}>{l.label}</Text>
@@ -259,7 +314,11 @@ export default function TeamGuideScreen() {
                   );
                 })}
               </ScrollView>
-            </View>
+            ) : null}
+          </GlassCard>
+
+          <GlassCard style={styles.card} intensity={22}>
+            <Text style={styles.sectionTitle}>Fixtures</Text>
 
             {loading ? (
               <View style={styles.center}>
@@ -270,32 +329,40 @@ export default function TeamGuideScreen() {
 
             {!loading && error ? <EmptyState title="Couldn’t load fixtures" message={error} /> : null}
 
-            {!loading && !error && preview.length === 0 ? (
-              <EmptyState title="No fixtures found" message="Try another league in the selector above." />
+            {!loading && !error && rows.length === 0 ? (
+              <EmptyState title="No fixtures found" message="Try ‘All leagues’ or widen the date window later in v2." />
             ) : null}
 
             {!loading && !error && preview.length > 0 ? (
               <View style={styles.list}>
                 {preview.map((r, idx) => {
-                  const f = fixtureLine(r);
-                  const key = f.fixtureId ?? `fx-${idx}`;
+                  const line = fixtureLine(r);
+                  const key = line.fixtureId ?? `fx-${idx}`;
 
                   return (
-                    <View key={key} style={styles.rowWrap}>
+                    <View key={key} style={styles.fxRow}>
                       <Pressable
-                        onPress={() => (f.fixtureId ? router.push({ pathname: "/match/[id]", params: { id: f.fixtureId } }) : null)}
+                        onPress={() =>
+                          line.fixtureId ? router.push({ pathname: "/match/[id]", params: { id: line.fixtureId } }) : null
+                        }
                         style={{ flex: 1 }}
                       >
-                        <Text style={styles.rowTitle}>{f.title}</Text>
-                        <Text style={styles.rowMeta}>{f.meta}</Text>
+                        <Text style={styles.rowTitle}>{line.title}</Text>
+                        <Text style={styles.rowMeta}>{line.meta}</Text>
+
+                        {line.city ? (
+                          <Pressable onPress={() => openCityIfPossible(line.city)} style={styles.inlineLink}>
+                            <Text style={styles.inlineLinkText}>Open city guide: {line.city}</Text>
+                          </Pressable>
+                        ) : null}
                       </Pressable>
 
                       <Pressable
-                        disabled={!f.fixtureId}
-                        onPress={() => (f.fixtureId ? planTripFromFixture(f.fixtureId) : null)}
-                        style={[styles.pill, !f.fixtureId && { opacity: 0.5 }]}
+                        disabled={!line.fixtureId}
+                        onPress={() => (line.fixtureId ? goBuildTripWithContext(line.fixtureId) : null)}
+                        style={[styles.planBtn, !line.fixtureId && { opacity: 0.5 }]}
                       >
-                        <Text style={styles.pillText}>Plan</Text>
+                        <Text style={styles.planBtnText}>Plan</Text>
                       </Pressable>
                     </View>
                   );
@@ -303,10 +370,26 @@ export default function TeamGuideScreen() {
               </View>
             ) : null}
 
-            <Pressable onPress={openFixtures} style={styles.linkBtn}>
-              <Text style={styles.linkText}>See all fixtures</Text>
+            <Pressable
+              onPress={() =>
+                router.push({
+                  pathname: "/(tabs)/fixtures",
+                  params: {
+                    ...(scope === "league"
+                      ? { leagueId: String(selectedLeague.leagueId), season: String(selectedLeague.season) }
+                      : {}),
+                    from: fromIso,
+                    to: toIso,
+                  },
+                } as any)
+              }
+              style={styles.linkBtn}
+            >
+              <Text style={styles.linkText}>Open Fixtures</Text>
             </Pressable>
           </GlassCard>
+
+          <View style={{ height: 10 }} />
         </ScrollView>
       </SafeAreaView>
     </Background>
@@ -315,76 +398,64 @@ export default function TeamGuideScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },
+  scroll: { flex: 1 },
 
   content: {
-    paddingTop: 100,
+    paddingTop: 96,
     paddingHorizontal: theme.spacing.lg,
-    paddingBottom: theme.spacing.xxl,
     gap: theme.spacing.lg,
   },
 
   card: { padding: theme.spacing.lg },
 
-  kicker: {
-    color: theme.colors.primary,
-    fontSize: theme.fontSize.xs,
-    fontWeight: "900",
-    letterSpacing: 0.6,
-  },
+  kicker: { color: theme.colors.primary, fontSize: theme.fontSize.xs, fontWeight: "900", letterSpacing: 0.6 },
+  title: { marginTop: 8, color: theme.colors.text, fontSize: theme.fontSize.xl, fontWeight: "900", lineHeight: 30 },
+  sub: { marginTop: 8, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18 },
 
-  h1: {
-    marginTop: 8,
-    color: theme.colors.text,
-    fontSize: theme.fontSize.xl,
-    fontWeight: "900",
-    lineHeight: 30,
-  },
-
-  sub: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm },
-  meta: { marginTop: 10, color: theme.colors.textSecondary, fontSize: theme.fontSize.xs },
-
-  actionsRow: { marginTop: 12, flexDirection: "row", gap: 10 },
-
-  actionBtn: {
-    flex: 1,
-    paddingVertical: 12,
+  guideBlock: {
+    marginTop: 12,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+    padding: 12,
+  },
+  blockTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
+  blockBody: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18 },
+
+  scopeRow: { marginTop: 12, flexDirection: "row", gap: 10 },
+  scopePill: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
     backgroundColor: "rgba(0,0,0,0.22)",
-    alignItems: "center",
   },
-  actionBtnPrimary: {
-    borderColor: "rgba(0,255,136,0.55)",
-    backgroundColor: "rgba(0,0,0,0.30)",
-  },
-  actionBtnText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
+  scopePillActive: { borderColor: "rgba(0,255,136,0.55)", backgroundColor: "rgba(0,0,0,0.30)" },
+  scopeText: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, fontWeight: "800" },
+  scopeTextActive: { color: theme.colors.text },
 
-  h2: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.lg },
-  h3: { marginTop: 12, color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
-  body: { marginTop: 8, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18 },
-  muted: { marginTop: 8, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18 },
-
-  blockTop: { gap: 10 },
-
-  leagueRow: { gap: 10, paddingRight: theme.spacing.lg, marginTop: 2 },
+  leagueRow: { gap: 10, paddingRight: theme.spacing.lg, marginTop: 10 },
   leaguePill: {
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.22)",
+    borderColor: theme.colors.border,
+    backgroundColor: "rgba(0,0,0,0.25)",
   },
-  leaguePillActive: { borderColor: "rgba(0,255,136,0.55)", backgroundColor: "rgba(0,0,0,0.30)" },
+  leaguePillActive: { borderColor: theme.colors.primary, backgroundColor: "rgba(0,0,0,0.45)" },
   leaguePillText: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, fontWeight: "700" },
-  leaguePillTextActive: { color: theme.colors.text, fontWeight: "900" },
+  leaguePillTextActive: { color: theme.colors.text },
 
-  center: { paddingVertical: 14, alignItems: "center", gap: 10 },
+  sectionTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.md },
+  muted: { marginTop: 8, fontSize: theme.fontSize.sm, color: theme.colors.textSecondary },
+  center: { paddingVertical: 12, alignItems: "center", gap: 10 },
 
   list: { marginTop: 10, gap: 10 },
 
-  rowWrap: {
+  fxRow: {
     flexDirection: "row",
     gap: 10,
     alignItems: "center",
@@ -392,18 +463,22 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "rgba(255,255,255,0.08)",
   },
+
   rowTitle: { color: theme.colors.text, fontWeight: "800", fontSize: theme.fontSize.md },
   rowMeta: { marginTop: 4, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm },
 
-  pill: {
-    paddingVertical: 8,
+  inlineLink: { marginTop: 6 },
+  inlineLinkText: { color: "rgba(0,255,136,0.85)", fontWeight: "800", fontSize: theme.fontSize.xs },
+
+  planBtn: {
+    paddingVertical: 10,
     paddingHorizontal: 12,
     borderRadius: 999,
     borderWidth: 1,
     borderColor: "rgba(0,255,136,0.45)",
     backgroundColor: "rgba(0,0,0,0.22)",
   },
-  pillText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.xs },
+  planBtnText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.xs },
 
   linkBtn: {
     marginTop: 12,
@@ -415,15 +490,4 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   linkText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
-
-  btn: {
-    marginTop: 12,
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "rgba(0,255,136,0.55)",
-    backgroundColor: "rgba(0,0,0,0.30)",
-    alignItems: "center",
-  },
-  btnText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
 });
