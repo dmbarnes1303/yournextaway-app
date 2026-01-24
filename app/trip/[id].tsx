@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   Alert,
   Linking,
+  Share,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
@@ -43,35 +44,67 @@ function enc(v: string) {
   return encodeURIComponent(v);
 }
 
+function isoDateOnly(isoMaybe?: string) {
+  if (!isoMaybe) return undefined;
+  const d = new Date(isoMaybe);
+  if (Number.isNaN(d.getTime())) return undefined;
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
 /**
  * v1 link builders (simple + reliable).
  * Later: swap these URLs to affiliate variants in one place.
  */
 function buildFlightsUrl(city: string, startDate?: string, endDate?: string) {
-  const q = startDate && endDate ? `Flights to ${city} ${startDate} to ${endDate}` : `Flights to ${city}`;
+  const safeCity = city?.trim() ? city.trim() : "your destination";
+  if (startDate && endDate) {
+    const q = `Flights to ${safeCity} return ${startDate} to ${endDate}`;
+    return `https://www.google.com/search?q=${enc(q)}`;
+  }
+  const q = `Flights to ${safeCity}`;
   return `https://www.google.com/search?q=${enc(q)}`;
 }
 
 function buildHotelsUrl(city: string, startDate?: string, endDate?: string) {
-  // Booking supports checkin/checkout as YYYY-MM-DD.
-  // If dates are missing, still run a city search.
-  const base = `https://www.booking.com/searchresults.html?ss=${enc(city)}`;
-  if (startDate && endDate) {
-    return `${base}&checkin=${enc(startDate)}&checkout=${enc(endDate)}`;
-  }
+  const safeCity = city?.trim() ? city.trim() : "your destination";
+  const base = `https://www.booking.com/searchresults.html?ss=${enc(safeCity)}`;
+  if (startDate && endDate) return `${base}&checkin=${enc(startDate)}&checkout=${enc(endDate)}`;
   return base;
 }
 
-function buildTicketsUrl(home?: string, away?: string, kickoff?: string) {
+function buildTicketsUrl(home?: string, away?: string, kickoffDate?: string) {
   const vs = home && away ? `${home} vs ${away}` : "match";
-  const q = kickoff ? `${vs} tickets ${kickoff}` : `${vs} tickets`;
+  const q = kickoffDate ? `${vs} tickets ${kickoffDate}` : `${vs} tickets`;
   return `https://www.google.com/search?q=${enc(q)}`;
 }
 
-function buildMapsVenueUrl(venue?: string, city?: string) {
-  const q = [venue, city].filter(Boolean).join(" ");
+function buildMapsWebUrl(venue?: string, city?: string) {
+  const q = [venue, city].filter(Boolean).join(" ").trim();
   if (!q) return "https://www.google.com/maps";
   return `https://www.google.com/maps/search/?api=1&query=${enc(q)}`;
+}
+
+async function openMapsPreferNative(query: string) {
+  const q = query.trim();
+  if (!q) return safeOpenUrl("https://www.google.com/maps");
+
+  const geo = `geo:0,0?q=${enc(q)}`; // Android-native
+  const web = `https://www.google.com/maps/search/?api=1&query=${enc(q)}`;
+
+  try {
+    const canGeo = await Linking.canOpenURL(geo);
+    await safeOpenUrl(canGeo ? geo : web);
+  } catch {
+    await safeOpenUrl(web);
+  }
+}
+
+function subtitleOrFallback(value: string | null | undefined, fallback: string) {
+  const v = String(value ?? "").trim();
+  return v ? v : fallback;
 }
 
 export default function TripDetailScreen() {
@@ -108,8 +141,8 @@ export default function TripDetailScreen() {
   const matchIds = useMemo(() => trip?.matchIds ?? [], [trip]);
   const matchCount = matchIds.length;
 
-  // Prefer stable citySlug if present; fall back to label.
-  const cityLookupKey = useMemo(() => trip?.citySlug || trip?.cityId, [trip?.citySlug, trip?.cityId]);
+  // ARCH: prefer stable citySlug if present; fall back to label.
+  const cityLookupKey = useMemo(() => trip?.citySlug ?? trip?.cityId, [trip?.citySlug, trip?.cityId]);
   const { slug: cityKey, guide: cityGuide } = useMemo(() => getCityGuide(cityLookupKey), [cityLookupKey]);
 
   useEffect(() => {
@@ -170,10 +203,38 @@ export default function TripDetailScreen() {
     router.push({ pathname: "/city/[slug]", params: { slug: cityKey } });
   }
 
-  const primaryFixture = useMemo(() => {
-    if (fixtureRows.length > 0) return fixtureRows[0];
-    return null;
-  }, [fixtureRows]);
+  function onEditTrip() {
+    if (!trip) return;
+    router.push({ pathname: "/trip/build", params: { tripId: trip.id } });
+  }
+
+  async function onShareTrip() {
+    if (!trip) return;
+
+    const primary = fixtureRows[0];
+    const home = primary?.teams?.home?.name ?? "";
+    const away = primary?.teams?.away?.name ?? "";
+    const kick = formatUkDateTimeMaybe(primary?.fixture?.date);
+    const venue = primary?.fixture?.venue?.name ?? "";
+    const venueCity = primary?.fixture?.venue?.city ?? trip.cityId ?? "";
+
+    const lines = [
+      `YourNextAway trip`,
+      ``,
+      `City: ${trip.cityId || "Trip"}`,
+      `Dates: ${formatTripRange(trip)}`,
+      ...(home && away ? [`Match: ${home} vs ${away}`, `Kick-off: ${kick || "TBC"}`] : []),
+      ...(venue ? [`Stadium: ${venue}`, ...(venueCity ? [`Location: ${venueCity}`] : [])] : []),
+    ];
+
+    try {
+      await Share.share({ message: lines.join("\n") });
+    } catch {
+      Alert.alert("Couldn’t share", "Your device could not open the share sheet.");
+    }
+  }
+
+  const primaryFixture = useMemo(() => (fixtureRows.length > 0 ? fixtureRows[0] : null), [fixtureRows]);
 
   const tripCityLabel = useMemo(() => {
     const raw = String(trip?.cityId ?? "").trim();
@@ -182,10 +243,11 @@ export default function TripDetailScreen() {
 
   const primaryHome = primaryFixture?.teams?.home?.name as string | undefined;
   const primaryAway = primaryFixture?.teams?.away?.name as string | undefined;
-  const primaryKickoff = formatUkDateTimeMaybe(primaryFixture?.fixture?.date);
+  const primaryKickoffIso = isoDateOnly(primaryFixture?.fixture?.date as string | undefined);
   const primaryVenue = primaryFixture?.fixture?.venue?.name as string | undefined;
   const primaryVenueCity = primaryFixture?.fixture?.venue?.city as string | undefined;
 
+  // Smart-but-safe V1 URLs
   const flightsUrl = useMemo(() => buildFlightsUrl(tripCityLabel, trip?.startDate, trip?.endDate), [
     tripCityLabel,
     trip?.startDate,
@@ -198,17 +260,41 @@ export default function TripDetailScreen() {
     trip?.endDate,
   ]);
 
-  const ticketsUrl = useMemo(() => buildTicketsUrl(primaryHome, primaryAway, primaryKickoff), [
+  const ticketsUrl = useMemo(() => buildTicketsUrl(primaryHome, primaryAway, primaryKickoffIso), [
     primaryHome,
     primaryAway,
-    primaryKickoff,
+    primaryKickoffIso,
   ]);
 
-  const mapsUrl = useMemo(() => buildMapsVenueUrl(primaryVenue, primaryVenueCity || tripCityLabel), [
-    primaryVenue,
-    primaryVenueCity,
-    tripCityLabel,
-  ]);
+  const mapsWebUrl = useMemo(
+    () => buildMapsWebUrl(primaryVenue, primaryVenueCity || tripCityLabel),
+    [primaryVenue, primaryVenueCity, tripCityLabel]
+  );
+
+  // Card subtitles with fallbacks (still render even if missing)
+  const flightsSub = useMemo(() => {
+    if (trip?.startDate && trip?.endDate) return `${formatUkDateOnly(trip.startDate)} → ${formatUkDateOnly(trip.endDate)}`;
+    return "Set dates to refine search";
+  }, [trip?.startDate, trip?.endDate]);
+
+  const hotelsSub = useMemo(() => {
+    if (trip?.startDate && trip?.endDate) return `${tripCityLabel} • ${formatUkDateOnly(trip.startDate)} → ${formatUkDateOnly(trip.endDate)}`;
+    return `${tripCityLabel} • Add dates for availability`;
+  }, [tripCityLabel, trip?.startDate, trip?.endDate]);
+
+  const ticketsSub = useMemo(() => {
+    if (primaryHome && primaryAway) {
+      const when = primaryKickoffIso ? ` • ${primaryKickoffIso}` : "";
+      return `${primaryHome} vs ${primaryAway}${when}`;
+    }
+    return "Select a match to refine search";
+  }, [primaryHome, primaryAway, primaryKickoffIso]);
+
+  const directionsSub = useMemo(() => {
+    const venueLine = subtitleOrFallback(primaryVenue, "Open maps");
+    const cityLine = subtitleOrFallback(primaryVenueCity || tripCityLabel, "");
+    return [venueLine, cityLine].filter(Boolean).join(" • ");
+  }, [primaryVenue, primaryVenueCity, tripCityLabel]);
 
   return (
     <Background imageUrl={getBackground("trips")}>
@@ -260,9 +346,18 @@ export default function TripDetailScreen() {
                   </View>
                 ) : null}
 
-                <View style={styles.actions}>
+                {/* Hub actions */}
+                <View style={styles.actionsGrid}>
+                  <Pressable onPress={onEditTrip} style={styles.actionBtn}>
+                    <Text style={styles.actionText}>Edit trip</Text>
+                  </Pressable>
+
+                  <Pressable onPress={onShareTrip} style={styles.actionBtn}>
+                    <Text style={styles.actionText}>Share trip</Text>
+                  </Pressable>
+
                   <Pressable onPress={() => router.push("/trip/build")} style={styles.actionBtn}>
-                    <Text style={styles.actionText}>Build Another</Text>
+                    <Text style={styles.actionText}>Build another</Text>
                   </Pressable>
 
                   <Pressable onPress={onDelete} style={[styles.actionBtn, styles.dangerBtn]}>
@@ -278,9 +373,7 @@ export default function TripDetailScreen() {
                 <View style={styles.cardHeaderRow}>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.h2}>Book your trip</Text>
-                    <Text style={styles.muted}>
-                      Fast links for flights, accommodation, tickets, and directions.
-                    </Text>
+                    <Text style={styles.muted}>Fast links for flights, accommodation, tickets, and directions.</Text>
                   </View>
                 </View>
 
@@ -288,37 +381,37 @@ export default function TripDetailScreen() {
                   <Pressable onPress={() => safeOpenUrl(flightsUrl)} style={styles.bigCtaBtn}>
                     <Text style={styles.bigCtaKicker}>Flights</Text>
                     <Text style={styles.bigCtaTitle}>Search flights</Text>
-                    <Text style={styles.bigCtaSub}>
-                      {trip.startDate && trip.endDate ? `${formatUkDateOnly(trip.startDate)} → ${formatUkDateOnly(trip.endDate)}` : "Use your trip dates"}
-                    </Text>
+                    <Text style={styles.bigCtaSub}>{flightsSub}</Text>
                   </Pressable>
 
                   <Pressable onPress={() => safeOpenUrl(hotelsUrl)} style={styles.bigCtaBtn}>
                     <Text style={styles.bigCtaKicker}>Accommodation</Text>
                     <Text style={styles.bigCtaTitle}>Find hotels</Text>
-                    <Text style={styles.bigCtaSub}>{tripCityLabel}</Text>
+                    <Text style={styles.bigCtaSub}>{hotelsSub}</Text>
                   </Pressable>
 
                   <Pressable onPress={() => safeOpenUrl(ticketsUrl)} style={styles.bigCtaBtn}>
                     <Text style={styles.bigCtaKicker}>Tickets</Text>
                     <Text style={styles.bigCtaTitle}>Find tickets</Text>
-                    <Text style={styles.bigCtaSub}>
-                      {primaryHome && primaryAway ? `${primaryHome} vs ${primaryAway}` : "Open ticket search"}
-                    </Text>
+                    <Text style={styles.bigCtaSub}>{ticketsSub}</Text>
                   </Pressable>
 
-                  <Pressable onPress={() => safeOpenUrl(mapsUrl)} style={styles.bigCtaBtn}>
+                  <Pressable
+                    onPress={async () => {
+                      const q = [primaryVenue, primaryVenueCity || tripCityLabel].filter(Boolean).join(" ");
+                      if (!q.trim()) return safeOpenUrl(mapsWebUrl);
+                      await openMapsPreferNative(q);
+                    }}
+                    style={styles.bigCtaBtn}
+                  >
                     <Text style={styles.bigCtaKicker}>Directions</Text>
                     <Text style={styles.bigCtaTitle}>Get to stadium</Text>
-                    <Text style={styles.bigCtaSub}>
-                      {primaryVenue ? primaryVenue : "Open maps"}
-                      {primaryVenueCity ? ` • ${primaryVenueCity}` : ""}
-                    </Text>
+                    <Text style={styles.bigCtaSub}>{directionsSub}</Text>
                   </Pressable>
                 </View>
 
                 <Text style={styles.smallPrint}>
-                  Note: These are v1 link-outs (reliable). We can replace with affiliate / provider deep links later.
+                  Note: These are v1 link-outs (reliable). Swap to affiliate / provider deep links later.
                 </Text>
               </GlassCard>
 
@@ -333,18 +426,12 @@ export default function TripDetailScreen() {
                   </View>
 
                   {cityGuide?.tripAdvisorTopThingsUrl ? (
-                    <Pressable
-                      onPress={() => safeOpenUrl(cityGuide.tripAdvisorTopThingsUrl!)}
-                      style={styles.ctaBtn}
-                      accessibilityRole="button"
-                      accessibilityLabel="Open TripAdvisor top things to do"
-                    >
+                    <Pressable onPress={() => safeOpenUrl(cityGuide.tripAdvisorTopThingsUrl!)} style={styles.ctaBtn}>
                       <Text style={styles.ctaText}>TripAdvisor Top 10</Text>
                     </Pressable>
                   ) : null}
                 </View>
 
-                {/* Always allow navigation (even if guide not found yet) */}
                 <Pressable onPress={goCityGuide} style={[styles.ctaBtn, { marginTop: 10 }]}>
                   <Text style={styles.ctaText}>Open full guide</Text>
                 </Pressable>
@@ -360,7 +447,6 @@ export default function TripDetailScreen() {
                   <>
                     <Text style={[styles.body, { marginTop: 12 }]}>{cityGuide.overview}</Text>
 
-                    {/* TOP 10 */}
                     <View style={{ marginTop: 14 }}>
                       <Text style={styles.sectionTitle}>Top 10 things to do</Text>
                       <View style={styles.bullets}>
@@ -376,7 +462,6 @@ export default function TripDetailScreen() {
                       </View>
                     </View>
 
-                    {/* TIPS */}
                     <View style={{ marginTop: 14 }}>
                       <Text style={styles.sectionTitle}>Local tips</Text>
                       <View style={styles.tipList}>
@@ -388,7 +473,6 @@ export default function TripDetailScreen() {
                       </View>
                     </View>
 
-                    {/* OPTIONAL EXTRA INFO */}
                     {(cityGuide.transport || cityGuide.accommodation) ? (
                       <View style={{ marginTop: 14 }}>
                         <Text style={styles.sectionTitle}>Practical info</Text>
@@ -415,9 +499,7 @@ export default function TripDetailScreen() {
               {/* MATCHES */}
               <GlassCard style={styles.card} intensity={24}>
                 <Text style={styles.h2}>Matches</Text>
-                <Text style={styles.muted}>
-                  {matchCount} match{matchCount === 1 ? "" : "es"} linked
-                </Text>
+                <Text style={styles.muted}>{matchCount} match{matchCount === 1 ? "" : "es"} linked</Text>
 
                 {loadingFixtures ? (
                   <View style={styles.center}>
@@ -426,9 +508,7 @@ export default function TripDetailScreen() {
                   </View>
                 ) : null}
 
-                {!loadingFixtures && fixtureError ? (
-                  <EmptyState title="Couldn’t load matches" message={fixtureError} />
-                ) : null}
+                {!loadingFixtures && fixtureError ? <EmptyState title="Couldn’t load matches" message={fixtureError} /> : null}
 
                 {!loadingFixtures && !fixtureError && matchCount > 0 && fixtureRows.length === 0 ? (
                   <EmptyState title="No match details yet" message="Matches are linked, but details are unavailable." />
@@ -441,25 +521,46 @@ export default function TripDetailScreen() {
                       const home = r?.teams?.home?.name ?? "Home";
                       const away = r?.teams?.away?.name ?? "Away";
                       const kickoff = formatUkDateTimeMaybe(r?.fixture?.date);
+                      const kickoffIso = isoDateOnly(r?.fixture?.date);
                       const venue = r?.fixture?.venue?.name ?? "";
                       const city = r?.fixture?.venue?.city ?? "";
                       const extra = [venue, city].filter(Boolean).join(" • ");
                       const line2 = extra ? `${kickoff} • ${extra}` : kickoff;
 
+                      const matchTicketsUrl = buildTicketsUrl(home, away, kickoffIso);
+                      const mapQuery = [venue, city || tripCityLabel].filter(Boolean).join(" ");
+
                       return (
-                        <Pressable
-                          key={String(fixtureId ?? idx)}
-                          onPress={() => {
-                            if (!fixtureId) return;
-                            router.push({ pathname: "/match/[id]", params: { id: String(fixtureId) } });
-                          }}
-                          style={styles.row}
-                        >
-                          <Text style={styles.rowTitle}>
-                            {home} vs {away}
-                          </Text>
-                          <Text style={styles.rowMeta}>{line2}</Text>
-                        </Pressable>
+                        <View key={String(fixtureId ?? idx)} style={styles.matchCard}>
+                          <Pressable
+                            onPress={() => {
+                              if (!fixtureId) return;
+                              router.push({ pathname: "/match/[id]", params: { id: String(fixtureId) } });
+                            }}
+                            style={styles.rowTop}
+                          >
+                            <Text style={styles.rowTitle}>
+                              {home} vs {away}
+                            </Text>
+                            <Text style={styles.rowMeta}>{line2}</Text>
+                          </Pressable>
+
+                          <View style={styles.matchQuickRow}>
+                            <Pressable onPress={() => safeOpenUrl(matchTicketsUrl)} style={styles.smallPill}>
+                              <Text style={styles.smallPillText}>Tickets</Text>
+                            </Pressable>
+
+                            <Pressable
+                              onPress={async () => {
+                                if (!mapQuery.trim()) return safeOpenUrl("https://www.google.com/maps");
+                                await openMapsPreferNative(mapQuery);
+                              }}
+                              style={styles.smallPill}
+                            >
+                              <Text style={styles.smallPillText}>Directions</Text>
+                            </Pressable>
+                          </View>
+                        </View>
                       );
                     })}
                   </View>
@@ -491,9 +592,28 @@ const styles = StyleSheet.create({
   label: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, marginBottom: 6 },
   body: { color: theme.colors.text, fontSize: theme.fontSize.md, lineHeight: 20 },
 
-  actions: { marginTop: 16, flexDirection: "row", gap: 10 },
-  actionBtn: {
+  smallPrint: { marginTop: 12, color: theme.colors.textSecondary, fontSize: theme.fontSize.xs },
+
+  center: { paddingVertical: 12, alignItems: "center", gap: 10 },
+
+  // Summary pills
+  summaryRow: { marginTop: 12, flexDirection: "row", gap: 10 },
+  summaryPill: {
     flex: 1,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    backgroundColor: "rgba(0,0,0,0.22)",
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  summaryLabel: { color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: "800" },
+  summaryValue: { marginTop: 6, color: theme.colors.text, fontSize: theme.fontSize.md, fontWeight: "900" },
+
+  // Hub actions
+  actionsGrid: { marginTop: 16, flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  actionBtn: {
+    width: "48%",
     paddingVertical: 12,
     borderRadius: 12,
     borderWidth: 1,
@@ -504,15 +624,7 @@ const styles = StyleSheet.create({
   dangerBtn: { borderColor: "rgba(255, 80, 80, 0.6)" },
   actionText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
 
-  smallPrint: { marginTop: 12, color: theme.colors.textSecondary, fontSize: theme.fontSize.xs },
-
-  center: { paddingVertical: 12, alignItems: "center", gap: 10 },
-
-  list: { marginTop: 10, gap: 10 },
-  row: { paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: theme.colors.border },
-  rowTitle: { color: theme.colors.text, fontWeight: "800", fontSize: theme.fontSize.md },
-  rowMeta: { marginTop: 4, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm },
-
+  // Card header
   cardHeaderRow: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
 
   ctaBtn: {
@@ -555,6 +667,7 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
 
+  // City guide content
   sectionTitle: { marginTop: 2, color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.md },
 
   bullets: { marginTop: 10, gap: 10 },
@@ -573,16 +686,34 @@ const styles = StyleSheet.create({
   tipList: { marginTop: 10, gap: 8 },
   tipItem: { color: theme.colors.text, fontSize: theme.fontSize.sm, lineHeight: 18 },
 
-  summaryRow: { marginTop: 12, flexDirection: "row", gap: 10 },
-  summaryPill: {
-    flex: 1,
+  // Matches list
+  list: { marginTop: 12, gap: 12 },
+
+  matchCard: {
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    backgroundColor: "rgba(0,0,0,0.22)",
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.18)",
     borderRadius: 14,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
+    overflow: "hidden",
   },
-  summaryLabel: { color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: "800" },
-  summaryValue: { marginTop: 6, color: theme.colors.text, fontSize: theme.fontSize.md, fontWeight: "900" },
+  rowTop: { paddingVertical: 12, paddingHorizontal: 12 },
+  rowTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.md },
+  rowMeta: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm },
+
+  matchQuickRow: {
+    flexDirection: "row",
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingBottom: 12,
+  },
+  smallPill: {
+    flex: 1,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(0,255,136,0.35)",
+    backgroundColor: "rgba(0,0,0,0.22)",
+    paddingVertical: 10,
+    alignItems: "center",
+  },
+  smallPillText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.xs },
 });
