@@ -1,6 +1,17 @@
 // app/match/[id].tsx
 import React, { useEffect, useMemo, useState } from "react";
-import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  Pressable,
+  ActivityIndicator,
+  Alert,
+  Linking,
+  Share,
+  Platform,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 
@@ -11,17 +22,61 @@ import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
 
 import { getFixtureById, type FixtureListRow } from "@/src/services/apiFootball";
-
 import { getRollingWindowIso, toIsoDate, addDaysIso } from "@/src/constants/football";
 import { coerceNumber, coerceString } from "@/src/utils/params";
 import { formatUkDateTimeMaybe } from "@/src/utils/formatters";
 
 function currentFootballSeasonStartYear(now = new Date()): number {
-  // Typical European season starts around July/August.
-  // Jan 2026 => season "2025" (i.e. 2025/26)
   const y = now.getFullYear();
   const m = now.getMonth(); // 0=Jan
   return m >= 6 ? y : y - 1;
+}
+
+function enc(v: string) {
+  return encodeURIComponent(v);
+}
+
+async function safeOpenUrl(url: string) {
+  try {
+    const can = await Linking.canOpenURL(url);
+    if (!can) throw new Error("Cannot open URL");
+    await Linking.openURL(url);
+  } catch {
+    Alert.alert("Couldn’t open link", "Your device could not open that link.");
+  }
+}
+
+/**
+ * Neutral-traveller link builders (v1: reliable).
+ * Later: replace these with affiliate/deep links centrally.
+ */
+function buildTicketsUrl(home?: string, away?: string, kickoff?: string, league?: string) {
+  const vs = home && away ? `${home} vs ${away}` : "match";
+  const when = kickoff ? ` ${kickoff}` : "";
+  const extra = league ? ` ${league}` : "";
+  const q = `${vs}${when}${extra} tickets`;
+  return `https://www.google.com/search?q=${enc(q)}`;
+}
+
+function buildMapsVenueUrl(venue?: string, city?: string) {
+  const q = [venue, city].filter(Boolean).join(" ");
+  if (!q) return "https://www.google.com/maps";
+  return `https://www.google.com/maps/search/?api=1&query=${enc(q)}`;
+}
+
+function buildStadiumInfoUrl(venue?: string, homeTeam?: string, city?: string) {
+  const q = [venue || "stadium", homeTeam, city, "bag policy entry time seats"].filter(Boolean).join(" ");
+  return `https://www.google.com/search?q=${enc(q)}`;
+}
+
+function buildFoodDrinkUrl(venue?: string, city?: string) {
+  const q = [venue || "", city || "", "best pubs bars restaurants near"].join(" ").trim();
+  return `https://www.google.com/search?q=${enc(q)}`;
+}
+
+function buildTransportUrl(venue?: string, city?: string) {
+  const q = [venue || "stadium", city || "", "how to get there public transport"].join(" ").trim();
+  return `https://www.google.com/search?q=${enc(q)}`;
 }
 
 export default function MatchDetailScreen() {
@@ -30,8 +85,7 @@ export default function MatchDetailScreen() {
 
   const id = useMemo(() => coerceString((params as any)?.id), [params]);
 
-  // Prefer passed context, else fall back to a safe rolling window.
-  // (Match screen itself doesn't load a list; this is just for routing context.)
+  // Routing context (optional): helps you bounce back to Fixtures / Build Trip with consistent windows.
   const rolling = useMemo(() => getRollingWindowIso(), []);
   const todayIso = useMemo(() => toIsoDate(new Date()), []);
   const fallbackFrom = useMemo(() => todayIso ?? rolling.from, [todayIso, rolling.from]);
@@ -100,13 +154,17 @@ export default function MatchDetailScreen() {
 
   const leagueName = row?.league?.name ?? "League";
   const apiLeagueId = row?.league?.id ?? null;
-
   const effectiveLeagueId = apiLeagueId ?? routeLeagueId ?? null;
 
-  // Prefer explicit season param, else API response, else computed season-start-year
   const apiSeason = (row as any)?.league?.season;
   const effectiveSeason =
     routeSeason ?? (typeof apiSeason === "number" ? apiSeason : null) ?? currentFootballSeasonStartYear();
+
+  const ticketsUrl = useMemo(() => buildTicketsUrl(home, away, kickoff, leagueName), [home, away, kickoff, leagueName]);
+  const mapsUrl = useMemo(() => buildMapsVenueUrl(venue, city), [venue, city]);
+  const stadiumInfoUrl = useMemo(() => buildStadiumInfoUrl(venue, home, city), [venue, home, city]);
+  const foodDrinkUrl = useMemo(() => buildFoodDrinkUrl(venue, city), [venue, city]);
+  const transportUrl = useMemo(() => buildTransportUrl(venue, city), [venue, city]);
 
   function onPlanTrip() {
     if (!fixtureId) return;
@@ -135,6 +193,26 @@ export default function MatchDetailScreen() {
     } as any);
   }
 
+  async function onShare() {
+    const title = `${home} vs ${away}`;
+    const when = kickoff ? `Kickoff: ${kickoff}` : "Kickoff: —";
+    const where = place ? `Venue: ${place}` : "Venue: —";
+    const meta = `League: ${leagueName} • Season: ${String(effectiveSeason)}`;
+    const linkHint = `Tickets: ${ticketsUrl}\nMaps: ${mapsUrl}`;
+
+    const message = `${title}\n${when}\n${where}\n${meta}\n\n${linkHint}`;
+
+    try {
+      await Share.share(
+        Platform.OS === "ios"
+          ? { message, url: ticketsUrl }
+          : { message }
+      );
+    } catch {
+      // Don’t alert; sharing failures are common and non-critical
+    }
+  }
+
   return (
     <Background imageUrl={getBackground("fixtures")}>
       <Stack.Screen
@@ -148,6 +226,7 @@ export default function MatchDetailScreen() {
 
       <SafeAreaView style={styles.container} edges={["bottom"]}>
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
+          {/* HERO / SUMMARY */}
           <GlassCard style={styles.card} intensity={26}>
             {loading ? (
               <View style={styles.center}>
@@ -169,40 +248,110 @@ export default function MatchDetailScreen() {
                 <View style={styles.metaBlock}>
                   <Text style={styles.metaLine}>
                     <Text style={styles.metaLabel}>Kickoff: </Text>
-                    {kickoff}
+                    {kickoff || "—"}
                   </Text>
 
-                  {place ? (
-                    <Text style={styles.metaLine}>
-                      <Text style={styles.metaLabel}>Venue: </Text>
-                      {place}
-                    </Text>
-                  ) : null}
+                  <Text style={styles.metaLine}>
+                    <Text style={styles.metaLabel}>Venue: </Text>
+                    {place || "—"}
+                  </Text>
 
                   <Text style={styles.metaLine}>
                     <Text style={styles.metaLabel}>Season: </Text>
                     {String(effectiveSeason)}
                   </Text>
-
-                  <Text style={styles.metaLine}>
-                    <Text style={styles.metaLabel}>Match ID: </Text>
-                    {fixtureId}
-                  </Text>
                 </View>
 
-                <View style={styles.ctaRow}>
-                  <Pressable onPress={onPlanTrip} style={[styles.btn, styles.btnPrimary]}>
-                    <Text style={styles.btnPrimaryText}>Plan Trip</Text>
-                    <Text style={styles.btnPrimaryMeta}>Pre-fills this match</Text>
+                {/* PRIMARY CTAs */}
+                <View style={styles.ctaGrid}>
+                  <Pressable onPress={() => safeOpenUrl(ticketsUrl)} style={[styles.bigBtn, styles.bigBtnPrimary]}>
+                    <Text style={styles.bigKicker}>Tickets</Text>
+                    <Text style={styles.bigTitle}>Find tickets</Text>
+                    <Text style={styles.bigSub}>{home && away ? `${home} vs ${away}` : "Open ticket search"}</Text>
                   </Pressable>
 
-                  <Pressable onPress={onOpenFixtures} style={[styles.btn, styles.btnSecondary]}>
-                    <Text style={styles.btnSecondaryText}>Open Fixtures</Text>
+                  <Pressable onPress={() => safeOpenUrl(mapsUrl)} style={[styles.bigBtn, styles.bigBtnSecondary]}>
+                    <Text style={styles.bigKicker}>Directions</Text>
+                    <Text style={styles.bigTitle}>Open maps</Text>
+                    <Text style={styles.bigSub}>{venue ? venue : "Search stadium location"}{city ? ` • ${city}` : ""}</Text>
+                  </Pressable>
+
+                  <Pressable onPress={onPlanTrip} style={[styles.bigBtn, styles.bigBtnSecondary]}>
+                    <Text style={styles.bigKicker}>Trip</Text>
+                    <Text style={styles.bigTitle}>Plan this trip</Text>
+                    <Text style={styles.bigSub}>Pre-fills this match</Text>
+                  </Pressable>
+
+                  <Pressable onPress={onShare} style={[styles.bigBtn, styles.bigBtnSecondary]}>
+                    <Text style={styles.bigKicker}>Share</Text>
+                    <Text style={styles.bigTitle}>Share match</Text>
+                    <Text style={styles.bigSub}>Copy-friendly summary</Text>
                   </Pressable>
                 </View>
+
+                <View style={styles.smallRow}>
+                  <Pressable onPress={onOpenFixtures} style={styles.smallBtn}>
+                    <Text style={styles.smallBtnText}>Open Fixtures</Text>
+                  </Pressable>
+
+                  <Pressable onPress={() => safeOpenUrl(stadiumInfoUrl)} style={styles.smallBtn}>
+                    <Text style={styles.smallBtnText}>Stadium info</Text>
+                  </Pressable>
+                </View>
+
+                <Text style={styles.smallPrint}>Match ID: {fixtureId}</Text>
               </>
             ) : null}
           </GlassCard>
+
+          {/* MATCHDAY OPERATIONS (NEUTRAL TRAVELLER) */}
+          {!loading && !error && row ? (
+            <GlassCard style={styles.card} intensity={22}>
+              <Text style={styles.h2}>Matchday essentials</Text>
+              <Text style={styles.muted}>
+                Designed for neutral travellers: arrive smoothly, enjoy the local experience, and keep things simple.
+              </Text>
+
+              <View style={styles.opsList}>
+                <View style={styles.opsItem}>
+                  <Text style={styles.opsTitle}>Arrive early</Text>
+                  <Text style={styles.opsBody}>
+                    Aim for 60–90 minutes before kickoff if you’re collecting tickets, clearing security, or finding your seat.
+                  </Text>
+                </View>
+
+                <View style={styles.opsItem}>
+                  <Text style={styles.opsTitle}>Bag policy and entry</Text>
+                  <Text style={styles.opsBody}>
+                    Stadium policies vary. If you’re carrying a bag, double-check restrictions and permitted items before you travel.
+                  </Text>
+                  <Pressable onPress={() => safeOpenUrl(stadiumInfoUrl)} style={styles.inlineBtn}>
+                    <Text style={styles.inlineBtnText}>Search stadium entry rules</Text>
+                  </Pressable>
+                </View>
+
+                <View style={styles.opsItem}>
+                  <Text style={styles.opsTitle}>Transport plan</Text>
+                  <Text style={styles.opsBody}>
+                    Use public transport where possible; event traffic and parking can be unpredictable close to kickoff.
+                  </Text>
+                  <Pressable onPress={() => safeOpenUrl(transportUrl)} style={styles.inlineBtn}>
+                    <Text style={styles.inlineBtnText}>Search transport options</Text>
+                  </Pressable>
+                </View>
+
+                <View style={styles.opsItem}>
+                  <Text style={styles.opsTitle}>Food & drinks nearby</Text>
+                  <Text style={styles.opsBody}>
+                    The best pre-match atmosphere is usually around the stadium district—pick something walkable so you’re not rushing.
+                  </Text>
+                  <Pressable onPress={() => safeOpenUrl(foodDrinkUrl)} style={styles.inlineBtn}>
+                    <Text style={styles.inlineBtnText}>Search nearby spots</Text>
+                  </Pressable>
+                </View>
+              </View>
+            </GlassCard>
+          ) : null}
         </ScrollView>
       </SafeAreaView>
     </Background>
@@ -215,12 +364,13 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: theme.spacing.lg,
     paddingBottom: theme.spacing.xxl,
+    gap: theme.spacing.lg,
   },
 
   card: { padding: theme.spacing.lg },
 
   center: { paddingVertical: theme.spacing.xl, alignItems: "center", gap: 10 },
-  muted: { color: theme.colors.textSecondary },
+  muted: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18 },
 
   kicker: {
     color: theme.colors.primary,
@@ -240,26 +390,78 @@ const styles = StyleSheet.create({
   metaLine: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18 },
   metaLabel: { color: theme.colors.text, fontWeight: "900" },
 
-  ctaRow: { marginTop: 14, gap: 10 },
+  h2: { marginTop: 2, fontSize: theme.fontSize.lg, fontWeight: "900", color: theme.colors.text },
 
-  btn: {
+  // Big CTA grid
+  ctaGrid: { marginTop: 14, gap: 10 },
+  bigBtn: {
     borderRadius: 14,
     borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 14,
   },
-  btnPrimary: {
-    paddingVertical: 14,
+  bigBtnPrimary: {
     borderColor: "rgba(0,255,136,0.55)",
     backgroundColor: "rgba(0,0,0,0.34)",
   },
-  btnPrimaryText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.md },
-  btnPrimaryMeta: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: "700" },
-
-  btnSecondary: {
-    paddingVertical: 12,
+  bigBtnSecondary: {
     borderColor: "rgba(255,255,255,0.10)",
     backgroundColor: "rgba(0,0,0,0.22)",
   },
-  btnSecondaryText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
+  bigKicker: {
+    color: theme.colors.primary,
+    fontWeight: "900",
+    fontSize: theme.fontSize.xs,
+    letterSpacing: 0.2,
+  },
+  bigTitle: {
+    marginTop: 6,
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: theme.fontSize.md,
+  },
+  bigSub: {
+    marginTop: 6,
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSize.sm,
+    lineHeight: 18,
+  },
+
+  smallRow: { marginTop: 10, flexDirection: "row", gap: 10 },
+  smallBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: "rgba(0,0,0,0.22)",
+    alignItems: "center",
+  },
+  smallBtnText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.xs },
+
+  smallPrint: { marginTop: 12, color: theme.colors.textSecondary, fontSize: theme.fontSize.xs },
+
+  // Essentials list
+  opsList: { marginTop: 12, gap: 12 },
+  opsItem: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+    padding: 12,
+  },
+  opsTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
+  opsBody: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18 },
+
+  inlineBtn: {
+    marginTop: 10,
+    alignSelf: "flex-start",
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(0,255,136,0.35)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+  },
+  inlineBtnText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.xs },
 });
