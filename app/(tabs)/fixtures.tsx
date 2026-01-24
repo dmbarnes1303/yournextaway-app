@@ -27,6 +27,12 @@ function mapRow(r: FixtureListRow) {
   return { fixtureId, home, away, line2 };
 }
 
+function norm(s: unknown) {
+  return String(s ?? "")
+    .trim()
+    .toLowerCase();
+}
+
 export default function FixturesScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
@@ -54,6 +60,15 @@ export default function FixturesScreen() {
   // Params: allow Fixtures to be opened with a specific league/season
   const paramLeagueId = useMemo(() => coerceNumber(params.leagueId), [params.leagueId]);
   const paramSeason = useMemo(() => coerceNumber(params.season), [params.season]);
+
+  // Optional: venue filter coming from Home search (or later deep links)
+  const venueParamRaw = useMemo(() => coerceString((params as any).venue), [params]);
+  const [venueFilter, setVenueFilter] = useState<string | null>(venueParamRaw ?? null);
+
+  // Keep state in sync if params change (rare, but correct)
+  useEffect(() => {
+    setVenueFilter(venueParamRaw ?? null);
+  }, [venueParamRaw]);
 
   const [selected, setSelected] = useState<LeagueOption>(LEAGUES[0]);
 
@@ -133,14 +148,48 @@ export default function FixturesScreen() {
     } as any);
   }
 
+  const filteredRows = useMemo(() => {
+    const vf = norm(venueFilter);
+    if (!vf) return rows;
+
+    return rows.filter((r) => {
+      const home = norm(r?.teams?.home?.name);
+      const away = norm(r?.teams?.away?.name);
+      const venue = norm(r?.fixture?.venue?.name);
+      const city = norm(r?.fixture?.venue?.city);
+
+      // "Contains" matching is deliberate: venue names vary ("Emirates Stadium" vs "Emirates").
+      return venue.includes(vf) || city.includes(vf) || home.includes(vf) || away.includes(vf);
+    });
+  }, [rows, venueFilter]);
+
+  const subtitle = useMemo(() => {
+    const base = `${selected.label} • ${formatUkDateOnly(from)} → ${formatUkDateOnly(to)}`;
+    if (venueFilter) return `${base} • Filtered`;
+    return base;
+  }, [selected.label, from, to, venueFilter]);
+
   return (
     <Background imageUrl={getBackground("fixtures")}>
       <SafeAreaView style={styles.container} edges={["top"]}>
         <View style={styles.header}>
           <Text style={styles.title}>Fixtures</Text>
-          <Text style={styles.subtitle}>
-            {selected.label} • {formatUkDateOnly(from)} → {formatUkDateOnly(to)}
-          </Text>
+          <Text style={styles.subtitle}>{subtitle}</Text>
+
+          {venueFilter ? (
+            <View style={styles.filterRow}>
+              <View style={styles.filterPill}>
+                <Text style={styles.filterLabel}>Filtered by</Text>
+                <Text style={styles.filterValue} numberOfLines={1}>
+                  {venueFilter}
+                </Text>
+              </View>
+
+              <Pressable onPress={() => setVenueFilter(null)} style={styles.clearBtn}>
+                <Text style={styles.clearText}>Clear</Text>
+              </Pressable>
+            </View>
+          ) : null}
 
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.leagueRow}>
             {LEAGUES.map((l) => {
@@ -173,9 +222,16 @@ export default function FixturesScreen() {
               <EmptyState title="No fixtures found" message="Try a different league or date window." />
             ) : null}
 
-            {!loading && !error && rows.length > 0 ? (
+            {!loading && !error && rows.length > 0 && filteredRows.length === 0 ? (
+              <EmptyState
+                title="No matches for that filter"
+                message="Clear the filter or try a different search (venue/city/team)."
+              />
+            ) : null}
+
+            {!loading && !error && filteredRows.length > 0 ? (
               <View style={styles.list}>
-                {rows.map((r, idx) => {
+                {filteredRows.map((r, idx) => {
                   const m = mapRow(r);
                   const fixtureIdStr = m.fixtureId ? String(m.fixtureId) : null;
                   const key = fixtureIdStr ?? `idx-${idx}`;
@@ -238,6 +294,42 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
     marginBottom: theme.spacing.md,
   },
+
+  filterRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: theme.spacing.md,
+  },
+  filterPill: {
+    flex: 1,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(0,255,136,0.35)",
+    backgroundColor: "rgba(0,0,0,0.22)",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  filterLabel: {
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSize.xs,
+    fontWeight: "800" as any,
+  },
+  filterValue: {
+    marginTop: 2,
+    color: theme.colors.text,
+    fontSize: theme.fontSize.sm,
+    fontWeight: "900" as any,
+  },
+  clearBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+    backgroundColor: "rgba(0,0,0,0.22)",
+  },
+  clearText: { color: theme.colors.text, fontWeight: "900" as any, fontSize: theme.fontSize.sm },
 
   leagueRow: { gap: 10, paddingRight: theme.spacing.lg },
 
