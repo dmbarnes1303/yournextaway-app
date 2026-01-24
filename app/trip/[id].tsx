@@ -25,6 +25,7 @@ import { getFixtureById } from "@/src/services/apiFootball";
 
 import getCityGuide from "@/src/data/cityGuides/getCityGuide";
 import { formatUkDateOnly, formatUkDateTimeMaybe } from "@/src/utils/formatters";
+import { parseIsoDateOnly, toIsoDate } from "@/src/constants/football";
 
 function formatTripRange(t: Trip) {
   return `${formatUkDateOnly(t.startDate)} → ${formatUkDateOnly(t.endDate)}`;
@@ -107,6 +108,13 @@ function subtitleOrFallback(value: string | null | undefined, fallback: string) 
   return v ? v : fallback;
 }
 
+function isUpcomingTrip(t: Trip, todayIso: string) {
+  const end = parseIsoDateOnly(t.endDate);
+  const today = parseIsoDateOnly(todayIso);
+  if (!end || !today) return true;
+  return end.getTime() >= today.getTime();
+}
+
 export default function TripDetailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ id?: string }>();
@@ -120,6 +128,8 @@ export default function TripDetailScreen() {
   const [loadingFixtures, setLoadingFixtures] = useState(false);
   const [fixtureRows, setFixtureRows] = useState<any[]>([]);
   const [fixtureError, setFixtureError] = useState<string | null>(null);
+
+  const todayIso = useMemo(() => toIsoDate(new Date()), []);
 
   useEffect(() => {
     const unsub = tripsStore.subscribe((s) => {
@@ -247,6 +257,11 @@ export default function TripDetailScreen() {
   const primaryVenue = primaryFixture?.fixture?.venue?.name as string | undefined;
   const primaryVenueCity = primaryFixture?.fixture?.venue?.city as string | undefined;
 
+  const upcoming = useMemo(() => {
+    if (!trip) return true;
+    return isUpcomingTrip(trip, todayIso);
+  }, [trip, todayIso]);
+
   // v1 URLs
   const flightsUrl = useMemo(() => buildFlightsUrl(tripCityLabel, trip?.startDate, trip?.endDate), [
     tripCityLabel,
@@ -272,8 +287,6 @@ export default function TripDetailScreen() {
   );
 
   // Subtitles
-  // CONTINUATION OF app/trip/[id].tsx (from: flightsSub = useMemo(() => { ...)
-
   const flightsSub = useMemo(() => {
     if (trip?.startDate && trip?.endDate)
       return `${formatUkDateOnly(trip.startDate)} → ${formatUkDateOnly(trip.endDate)}`;
@@ -291,7 +304,7 @@ export default function TripDetailScreen() {
       const when = primaryKickoffIso ? ` • ${primaryKickoffIso}` : "";
       return `${primaryHome} vs ${primaryAway}${when}`;
     }
-    return "Select a match to refine search";
+    return "Match not loaded yet";
   }, [primaryHome, primaryAway, primaryKickoffIso]);
 
   const directionsSub = useMemo(() => {
@@ -314,14 +327,20 @@ export default function TripDetailScreen() {
       <SafeAreaView style={styles.container} edges={["bottom"]}>
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
           {!loaded ? (
-            <GlassCard style={styles.card}>
-              <EmptyState title="Loading trip" message="One moment…" />
+            <GlassCard style={styles.card} intensity={24}>
+              <View style={styles.center}>
+                <ActivityIndicator />
+                <Text style={styles.muted}>Loading trip…</Text>
+              </View>
             </GlassCard>
           ) : null}
 
           {loaded && (!id || !trip) ? (
-            <GlassCard style={styles.card}>
+            <GlassCard style={styles.card} intensity={24}>
               <EmptyState title="Trip not found" message="This trip doesn’t exist on this device." />
+              <Pressable onPress={() => router.replace("/(tabs)/trips")} style={[styles.ctaBtn, { marginTop: 12 }]}>
+                <Text style={styles.ctaText}>Back to Trips</Text>
+              </Pressable>
             </GlassCard>
           ) : null}
 
@@ -329,8 +348,18 @@ export default function TripDetailScreen() {
             <>
               {/* SUMMARY */}
               <GlassCard style={styles.card} intensity={26}>
-                <Text style={styles.h1}>{trip.cityId || "Trip"}</Text>
-                <Text style={styles.muted}>{formatTripRange(trip)}</Text>
+                <View style={styles.summaryHeader}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.h1} numberOfLines={1}>
+                      {trip.cityId || "Trip"}
+                    </Text>
+                    <Text style={styles.muted}>{formatTripRange(trip)}</Text>
+                  </View>
+
+                  <View style={[styles.statusPill, upcoming ? styles.statusUpcoming : styles.statusPast]}>
+                    <Text style={styles.statusText}>{upcoming ? "Upcoming" : "Past"}</Text>
+                  </View>
+                </View>
 
                 <View style={styles.summaryRow}>
                   <View style={styles.summaryPill}>
@@ -376,7 +405,7 @@ export default function TripDetailScreen() {
                 <View style={styles.cardHeaderRow}>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.h2}>Book your trip</Text>
-                    <Text style={styles.muted}>Fast links for flights, accommodation, tickets, and directions.</Text>
+                    <Text style={styles.muted}>Fast link-outs for flights, accommodation, tickets, and directions.</Text>
                   </View>
                 </View>
 
@@ -408,13 +437,13 @@ export default function TripDetailScreen() {
                     style={styles.bigCtaBtn}
                   >
                     <Text style={styles.bigCtaKicker}>Directions</Text>
-                    <Text style={styles.bigCtaTitle}>Get to stadium</Text>
+                    <Text style={styles.bigCtaTitle}>Open maps</Text>
                     <Text style={styles.bigCtaSub}>{directionsSub}</Text>
                   </Pressable>
                 </View>
 
                 <Text style={styles.smallPrint}>
-                  Note: These are v1 link-outs (reliable). Swap to affiliate / provider deep links later.
+                  Note: V1 uses reliable link-outs. Swap to affiliate/provider deep links later.
                 </Text>
               </GlassCard>
 
@@ -424,7 +453,7 @@ export default function TripDetailScreen() {
                   <View style={{ flex: 1 }}>
                     <Text style={styles.h2}>City guide</Text>
                     <Text style={styles.muted}>
-                      {cityGuide ? `${cityGuide.name}, ${cityGuide.country}` : "Limited rollout (top 5 league capitals)."}
+                      {cityGuide ? `${cityGuide.name}, ${cityGuide.country}` : "Guide coverage is expanding."}
                     </Text>
                   </View>
 
@@ -451,7 +480,7 @@ export default function TripDetailScreen() {
                     <Text style={[styles.body, { marginTop: 12 }]}>{cityGuide.overview}</Text>
 
                     <View style={{ marginTop: 14 }}>
-                      <Text style={styles.sectionTitle}>Top 10 things to do</Text>
+                      <Text style={styles.sectionTitle}>Top things to do</Text>
                       <View style={styles.bullets}>
                         {cityGuide.topThings.slice(0, 10).map((x, i) => (
                           <View key={`${x.title}-${i}`} style={styles.bulletRow}>
@@ -513,12 +542,10 @@ export default function TripDetailScreen() {
                   </View>
                 ) : null}
 
-                {!loadingFixtures && fixtureError ? (
-                  <EmptyState title="Couldn’t load matches" message={fixtureError} />
-                ) : null}
+                {!loadingFixtures && fixtureError ? <EmptyState title="Couldn’t load matches" message={fixtureError} /> : null}
 
                 {!loadingFixtures && !fixtureError && matchCount > 0 && fixtureRows.length === 0 ? (
-                  <EmptyState title="No match details yet" message="Matches are linked, but details are unavailable." />
+                  <EmptyState title="Match details unavailable" message="Matches are linked, but details could not be loaded." />
                 ) : null}
 
                 {!loadingFixtures && !fixtureError && fixtureRows.length > 0 ? (
@@ -542,7 +569,15 @@ export default function TripDetailScreen() {
                           <Pressable
                             onPress={() => {
                               if (!fixtureId) return;
-                              router.push({ pathname: "/match/[id]", params: { id: String(fixtureId) } });
+                              router.push({
+                                pathname: "/match/[id]",
+                                params: {
+                                  id: String(fixtureId),
+                                  // Helps Match screen keep a sensible “context window”
+                                  from: trip.startDate,
+                                  to: trip.endDate,
+                                },
+                              });
                             }}
                             style={styles.rowTop}
                           >
@@ -602,6 +637,19 @@ const styles = StyleSheet.create({
   smallPrint: { marginTop: 12, color: theme.colors.textSecondary, fontSize: theme.fontSize.xs },
 
   center: { paddingVertical: 12, alignItems: "center", gap: 10 },
+
+  summaryHeader: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+
+  statusPill: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    alignSelf: "flex-start",
+  },
+  statusUpcoming: { borderColor: "rgba(0,255,136,0.40)", backgroundColor: "rgba(0,0,0,0.18)" },
+  statusPast: { borderColor: "rgba(255,255,255,0.14)", backgroundColor: "rgba(0,0,0,0.16)" },
+  statusText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.xs },
 
   // Summary pills
   summaryRow: { marginTop: 12, flexDirection: "row", gap: 10 },
