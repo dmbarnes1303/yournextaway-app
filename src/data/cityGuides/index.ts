@@ -1,7 +1,7 @@
 // src/data/cityGuides/index.ts
 import type { CityGuide, CityTopThing } from "./types";
-import { normalizeCityKey } from "@/src/utils/city";
 import cityGuides from "./cityGuides";
+import { normalizeCityKey } from "@/src/utils/city";
 
 export type TripTopThingsBundle = {
   cityKey: string;
@@ -12,6 +12,22 @@ export type TripTopThingsBundle = {
 };
 
 /**
+ * Public exports:
+ * - cityGuides (full registry)
+ * - getCityGuide (single lookup)
+ * - getTopThingsToDoForTrip (compact “Trip Build” bundle)
+ */
+export { cityGuides };
+
+/**
+ * Find a city guide by any user input (city name, venue city, etc.)
+ */
+export function getCityGuide(cityInput: string): CityGuide | null {
+  const key = normalizeCityKey(cityInput);
+  return cityGuides[key] ?? null;
+}
+
+/**
  * Used in Trip Build panel.
  * Returns a lightweight bundle for "Top things to do" + a TripAdvisor link.
  */
@@ -20,6 +36,7 @@ export function getTopThingsToDoForTrip(cityInput: string): TripTopThingsBundle 
   const guide = cityGuides[cityKey];
 
   if (!guide) {
+    // No guide yet — still return a functional bundle for link-out
     return {
       cityKey,
       hasGuide: false,
@@ -29,6 +46,7 @@ export function getTopThingsToDoForTrip(cityInput: string): TripTopThingsBundle 
     };
   }
 
+  // Convert to compact format for Trip Build panel
   const items = (guide.topThings ?? []).slice(0, 10).map((x: CityTopThing) => ({
     title: x.title,
     description: x.tip,
@@ -43,5 +61,4 @@ export function getTopThingsToDoForTrip(cityInput: string): TripTopThingsBundle 
   };
 }
 
-export { cityGuides };
 export default cityGuides;
