@@ -22,7 +22,7 @@ import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
 
 import { getFixtureById, type FixtureListRow } from "@/src/services/apiFootball";
-import { getRollingWindowIso, toIsoDate, addDaysIso } from "@/src/constants/football";
+import { getRollingWindowIso, toIsoDate, addDaysIso, parseIsoDateOnly } from "@/src/constants/football";
 import { coerceNumber, coerceString } from "@/src/utils/params";
 import { formatUkDateTimeMaybe } from "@/src/utils/formatters";
 
@@ -44,6 +44,21 @@ function isoDateOnly(isoMaybe?: string) {
   const mm = String(d.getMonth() + 1).padStart(2, "0");
   const dd = String(d.getDate()).padStart(2, "0");
   return `${yyyy}-${mm}-${dd}`;
+}
+
+function tomorrowIso(): string {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() + 1);
+  return toIsoDate(d);
+}
+
+function clampFromToTomorrow(fromIso: string): string {
+  const tmr = tomorrowIso();
+  const fromDate = parseIsoDateOnly(fromIso);
+  const tmrDate = parseIsoDateOnly(tmr);
+  if (!fromDate || !tmrDate) return tmr;
+  return fromDate.getTime() < tmrDate.getTime() ? tmr : fromIso;
 }
 
 function subtitleOrFallback(value: string | null | undefined, fallback: string) {
@@ -77,7 +92,7 @@ async function openMapsPreferNative(query: string) {
 }
 
 /**
- * Neutral-traveller link builders (v1: reliable).
+ * Neutral traveller link builders (v1: reliable).
  * Later: replace these with affiliate/deep links centrally.
  */
 function buildTicketsUrl(home?: string, away?: string, kickoffDateOnly?: string, league?: string) {
@@ -115,13 +130,12 @@ export default function MatchDetailScreen() {
 
   const id = useMemo(() => coerceString((params as any)?.id), [params]);
 
-  // Routing context: helps you bounce back to Fixtures / Build Trip with consistent windows.
+  // Routing context (tomorrow onwards for consistency with Fixtures/Trip Build)
   const rolling = useMemo(() => getRollingWindowIso(), []);
-  const todayIso = useMemo(() => toIsoDate(new Date()), []);
-  const fallbackFrom = useMemo(() => todayIso ?? rolling.from, [todayIso, rolling.from]);
+  const fallbackFrom = useMemo(() => clampFromToTomorrow(rolling.from), [rolling.from]);
   const fallbackTo = useMemo(() => rolling.to ?? addDaysIso(fallbackFrom, 30), [rolling.to, fallbackFrom]);
 
-  const fromIso = useMemo(() => coerceString((params as any)?.from) ?? fallbackFrom, [params, fallbackFrom]);
+  const fromIso = useMemo(() => clampFromToTomorrow(coerceString((params as any)?.from) ?? fallbackFrom), [params, fallbackFrom]);
   const toIso = useMemo(() => coerceString((params as any)?.to) ?? fallbackTo, [params, fallbackTo]);
 
   const routeLeagueId = useMemo(() => coerceNumber((params as any)?.leagueId), [params]);
@@ -201,7 +215,6 @@ export default function MatchDetailScreen() {
   const foodDrinkUrl = useMemo(() => buildFoodDrinkUrl(venue, city), [venue, city]);
   const transportUrl = useMemo(() => buildTransportUrl(venue, city), [venue, city]);
 
-  // Subtitles with fallbacks (never blank)
   const ticketsSub = useMemo(() => {
     if (home && away) {
       const when = kickoffDateOnly ? ` • ${kickoffDateOnly}` : "";
@@ -249,7 +262,6 @@ export default function MatchDetailScreen() {
     const where = place ? `Venue: ${place}` : "Venue: —";
     const meta = `League: ${leagueName} • Season: ${String(effectiveSeason)}`;
 
-    // Keep it copy-friendly but useful
     const message = `${title}\n${when}\n${where}\n${meta}\n\nTickets: ${ticketsUrl}\nMaps: ${mapsUrl}`;
 
     try {
@@ -272,7 +284,6 @@ export default function MatchDetailScreen() {
 
       <SafeAreaView style={styles.container} edges={["bottom"]}>
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
-          {/* HERO / SUMMARY */}
           <GlassCard style={styles.card} intensity={26}>
             {loading ? (
               <View style={styles.center}>
@@ -308,7 +319,6 @@ export default function MatchDetailScreen() {
                   </Text>
                 </View>
 
-                {/* PRIMARY CTAs */}
                 <View style={styles.ctaGrid}>
                   <Pressable onPress={() => safeOpenUrl(ticketsUrl)} style={[styles.bigBtn, styles.bigBtnPrimary]}>
                     <Text style={styles.bigKicker}>Tickets</Text>
@@ -357,7 +367,6 @@ export default function MatchDetailScreen() {
             ) : null}
           </GlassCard>
 
-          {/* MATCHDAY ESSENTIALS (NEUTRAL TRAVELLER) */}
           {!loading && !error && row ? (
             <GlassCard style={styles.card} intensity={22}>
               <Text style={styles.h2}>Matchday essentials</Text>
@@ -396,7 +405,7 @@ export default function MatchDetailScreen() {
                 <View style={styles.opsItem}>
                   <Text style={styles.opsTitle}>Food & drinks nearby</Text>
                   <Text style={styles.opsBody}>
-                    The best pre-match atmosphere is often around the stadium district—pick something walkable so you’re not rushing.
+                    Pick something walkable so you’re not rushing. The best atmosphere is often around the stadium district.
                   </Text>
                   <Pressable onPress={() => safeOpenUrl(foodDrinkUrl)} style={styles.inlineBtn}>
                     <Text style={styles.inlineBtnText}>Search nearby spots</Text>
@@ -445,7 +454,6 @@ const styles = StyleSheet.create({
 
   h2: { marginTop: 2, fontSize: theme.fontSize.lg, fontWeight: "900", color: theme.colors.text },
 
-  // Big CTA grid
   ctaGrid: { marginTop: 14, gap: 10 },
   bigBtn: {
     borderRadius: 14,
@@ -494,7 +502,6 @@ const styles = StyleSheet.create({
 
   smallPrint: { marginTop: 12, color: theme.colors.textSecondary, fontSize: theme.fontSize.xs },
 
-  // Essentials list
   opsList: { marginTop: 12, gap: 12 },
   opsItem: {
     borderRadius: 14,
