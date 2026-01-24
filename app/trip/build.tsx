@@ -162,7 +162,7 @@ export default function TripBuildScreen() {
 
   const [selectedFixture, setSelectedFixture] = useState<any | null>(null);
 
-  // Dates
+  // Dates (default: align to route "from" as a 2-night mini-break)
   const [startIso, setStartIso] = useState(from);
   const [endIso, setEndIso] = useState(addDaysIso(from, 2));
   const [notes, setNotes] = useState("");
@@ -172,7 +172,7 @@ export default function TripBuildScreen() {
     open: false,
   });
 
-  // Keep date fields aligned to route from
+  // Keep date fields aligned to route from (initial "no match selected" baseline)
   useEffect(() => {
     setStartIso(from);
     setEndIso(addDaysIso(from, 2));
@@ -260,16 +260,36 @@ export default function TripBuildScreen() {
     };
   }, [selectedLeague, from, to]);
 
-  // When a fixture is selected, prefill dates from kickoff
+  /**
+   * When a fixture is selected, prefill dates as:
+   * - arrival: 1 day before matchday
+   * - departure: 1 day after matchday
+   * (2-night mini-break default)
+   *
+   * Note: start is clamped to tomorrow for safety; if that clamp would make end < start,
+   * we fall back to 2 nights from start.
+   */
   useEffect(() => {
     const iso = selectedFixture?.fixture?.date as string | undefined;
     if (!selectedFixture || !iso) return;
 
     const d = new Date(iso);
-    if (!Number.isNaN(d.getTime())) {
-      const start = clampIsoToTomorrow(toIsoDate(d));
-      setStartIso(start);
+    if (Number.isNaN(d.getTime())) return;
+
+    const matchDay = toIsoDate(d);
+
+    const start = clampIsoToTomorrow(addDaysIso(matchDay, -1));
+    const end = addDaysIso(matchDay, 1);
+
+    setStartIso(start);
+
+    const startDt = parseIsoDateOnly(start);
+    const endDt = parseIsoDateOnly(end);
+
+    if (startDt && endDt && endDt.getTime() < startDt.getTime()) {
       setEndIso(addDaysIso(start, 2));
+    } else {
+      setEndIso(end);
     }
 
     requestAnimationFrame(() => {
@@ -500,12 +520,7 @@ export default function TripBuildScreen() {
         </ScrollView>
 
         {/* Native Modal sheet (Android-stable) */}
-        <Modal
-          visible={!!selectedFixture}
-          transparent
-          animationType="slide"
-          onRequestClose={() => setSelectedFixture(null)}
-        >
+        <Modal visible={!!selectedFixture} transparent animationType="slide" onRequestClose={() => setSelectedFixture(null)}>
           <View style={styles.modalWrap}>
             <Pressable style={styles.modalBackdrop} onPress={() => setSelectedFixture(null)} />
 
@@ -751,7 +766,12 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.25)",
   },
 
-  selectedHint: { marginTop: 6, color: "rgba(0,255,136,0.85)", fontSize: theme.fontSize.xs, fontWeight: "800" },
+  selectedHint: {
+    marginTop: 6,
+    color: "rgba(0,255,136,0.85)",
+    fontSize: theme.fontSize.xs,
+    fontWeight: "800",
+  },
 
   moreBtn: {
     marginTop: 12,
