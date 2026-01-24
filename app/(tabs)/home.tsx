@@ -9,7 +9,6 @@ import {
   ActivityIndicator,
   TextInput,
   Platform,
-  Keyboard,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -23,20 +22,13 @@ import { theme } from "@/src/constants/theme";
 
 import tripsStore, { type Trip } from "@/src/state/trips";
 import { getFixtures, type FixtureListRow } from "@/src/services/apiFootball";
+
 import { LEAGUES, getRollingWindowIso, parseIsoDateOnly, toIsoDate, type LeagueOption } from "@/src/constants/football";
 import { formatUkDateOnly, formatUkDateTimeMaybe } from "@/src/utils/formatters";
 
-import {
-  buildSearchIndex,
-  searchAll,
-  type SearchResult,
-  type TeamResult,
-  type CityResult,
-  type CountryResult,
-  type LeagueResult,
-  type VenueResult,
-  type MatchResult,
-} from "@/src/services/searchIndex";
+import { buildSearchIndex, querySearchIndex, type SearchResult } from "@/src/services/searchIndex";
+import { getCityGuide } from "@/src/data/cityGuides";
+import { hasTeamGuide } from "@/src/data/teamGuides";
 
 function tripSummaryLine(t: Trip) {
   const a = formatUkDateOnly(t.startDate);
@@ -58,10 +50,23 @@ function fixtureLine(r: FixtureListRow) {
   };
 }
 
-function isAfterToday(iso: string, todayMidnight: Date): boolean {
-  const d = iso ? parseIsoDateOnly(iso) : null;
-  if (!d) return false;
-  return d.getTime() > todayMidnight.getTime();
+function splitSearchBuckets(results: SearchResult[]) {
+  const teams: SearchResult[] = [];
+  const cities: SearchResult[] = [];
+  const venues: SearchResult[] = [];
+  const countries: SearchResult[] = [];
+  const leagues: SearchResult[] = [];
+
+  for (const r of results) {
+    if (r.type === "team") teams.push(r);
+    else if (r.type === "city") cities.push(r);
+    else if (r.type === "venue") venues.push(r);
+    else if (r.type === "country") countries.push(r);
+    else if (r.type === "league") leagues.push(r);
+  }
+
+  // UX rule: Team + City first, then Venue, then Country/League
+  return { teams, cities, venues, countries, leagues };
 }
 
 export default function HomeScreen() {
@@ -69,7 +74,7 @@ export default function HomeScreen() {
 
   const [league, setLeague] = useState<LeagueOption>(LEAGUES[0]);
 
-  // Central rolling window (single source of truth) — tomorrow onwards
+  // Central rolling window (tomorrow onwards; per football.ts)
   const { from: fromIso, to: toIso } = useMemo(() => getRollingWindowIso(), []);
 
   // Trips
@@ -92,19 +97,17 @@ export default function HomeScreen() {
 
   const upcomingTrips = useMemo(() => {
     return trips
-      .filter((t) => !!t.startDate)
-      .filter((t) => isAfterToday(String(t.startDate), todayMidnight))
-      .sort((a, b) => {
-        const da = parseIsoDateOnly(String(a.startDate))?.getTime() ?? 0;
-        const db = parseIsoDateOnly(String(b.startDate))?.getTime() ?? 0;
-        return da - db;
-      });
+      .map((t) => ({ t, d: t.startDate ? parseIsoDateOnly(t.startDate) : null }))
+      .filter((x): x is { t: Trip; d: Date } => !!x.d)
+      .filter((x) => x.d.getTime() > todayMidnight.getTime())
+      .sort((a, b) => a.d.getTime() - b.d.getTime())
+      .map((x) => x.t);
   }, [trips, todayMidnight]);
 
   const nextTrip = useMemo(() => upcomingTrips[0] ?? null, [upcomingTrips]);
   const topTrips = useMemo(() => trips.slice(0, 3), [trips]);
 
-  // Fixtures (used for fixtures preview AND as the data source for search index)
+  // Fixtures (for preview + match search)
   const [fxLoading, setFxLoading] = useState(false);
   const [fxError, setFxError] = useState<string | null>(null);
   const [fxRows, setFxRows] = useState<FixtureListRow[]>([]);
@@ -143,43 +146,70 @@ export default function HomeScreen() {
 
   const fxPreview = useMemo(() => fxRows.slice(0, 6), [fxRows]);
 
-  // Search
+  // -------------------------
+  // SEARCH (powerful + offline)
+  // -------------------------
   const [q, setQ] = useState("");
   const qNorm = useMemo(() => q.trim(), [q]);
   const showSearchResults = qNorm.length > 0;
 
-  const searchIndex = useMemo(() => buildSearchIndex(fxRows), [fxRows]);
-  const searchResults = useMemo<SearchResult[]>(() => {
-    if (!qNorm) return [];
-    return searchAll(searchIndex, qNorm, {
-      maxTeams: 6,
-      maxCities: 6,
-      maxStatic: 6,
-      maxVenues: 6,
-      maxMatches: 6,
-    });
-  }, [searchIndex, qNorm]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [searchIndexBuiltAt, setSearchIndexBuiltAt] = useState<number>(0);
 
-  // Split results by kind for sectioned UI
-  const byKind = useMemo(() => {
-    const teams: TeamResult[] = [];
-    const cities: CityResult[] = [];
-    const countries: CountryResult[] = [];
-    const leagues: LeagueResult[] = [];
-    const venues: VenueResult[] = [];
-    const matches: MatchResult[] = [];
+  // Keep index in memory; rebuild when window changes (or on first load)
+  const indexRef = useRef<Awaited<ReturnType<typeof buildSearchIndex>> | null>(null);
 
-    for (const r of searchResults) {
-      if (r.kind === "team") teams.push(r);
-      else if (r.kind === "city") cities.push(r);
-      else if (r.kind === "country") countries.push(r);
-      else if (r.kind === "league") leagues.push(r);
-      else if (r.kind === "venue") venues.push(r);
-      else if (r.kind === "match") matches.push(r);
+  useEffect(() => {
+    let cancelled = false;
+
+    async function build() {
+      setSearchLoading(true);
+      setSearchError(null);
+
+      try {
+        const idx = await buildSearchIndex({ from: fromIso, to: toIso, leagues: LEAGUES });
+        if (cancelled) return;
+
+        indexRef.current = idx;
+        setSearchIndexBuiltAt(idx.builtAt);
+      } catch (e: any) {
+        if (cancelled) return;
+        setSearchError(e?.message ?? "Search index failed to build.");
+      } finally {
+        if (!cancelled) setSearchLoading(false);
+      }
     }
 
-    return { teams, cities, countries, leagues, venues, matches };
-  }, [searchResults]);
+    build();
+    return () => {
+      cancelled = true;
+    };
+  }, [fromIso, toIso]);
+
+  const rawSearchResults = useMemo(() => {
+    const idx = indexRef.current;
+    if (!idx) return [];
+    if (!qNorm) return [];
+
+    // Always query all; we control display order with bucket split
+    return querySearchIndex(idx, qNorm, { limit: 30 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [qNorm, searchIndexBuiltAt]);
+
+  const buckets = useMemo(() => splitSearchBuckets(rawSearchResults), [rawSearchResults]);
+
+  // Trips “search” stays lightweight (notes + cityId only)
+  const tripResults = useMemo(() => {
+    const query = qNorm.trim().toLowerCase();
+    if (!query) return [];
+    const res = trips.filter((t) => {
+      const city = String(t.cityId ?? "").toLowerCase();
+      const notes = String(t.notes ?? "").toLowerCase();
+      return city.includes(query) || notes.includes(query);
+    });
+    return res.slice(0, 4);
+  }, [trips, qNorm]);
 
   const tripsCountLabel = useMemo(() => {
     if (!loadedTrips) return "—";
@@ -199,53 +229,67 @@ export default function HomeScreen() {
     } as any);
   }
 
-  function openFixturesWithLeague(leagueId: number, season: number) {
+  function goFixturesWithContext(params?: { leagueId?: number; season?: number }) {
     router.push({
       pathname: "/(tabs)/fixtures",
-      params: { leagueId: String(leagueId), season: String(season), from: fromIso, to: toIso },
+      params: {
+        leagueId: String(params?.leagueId ?? league.leagueId),
+        season: String(params?.season ?? league.season),
+        from: fromIso,
+        to: toIso,
+      },
     } as any);
   }
 
   function onPressSearchResult(r: SearchResult) {
-    Keyboard.dismiss();
+    const p: any = r.payload;
 
-    if (r.kind === "team") {
-      router.push({ pathname: "/team/[slug]", params: { slug: r.teamKey } } as any);
+    if (p?.kind === "team") {
+      router.push({ pathname: "/team/[slug]", params: { slug: p.slug } });
       return;
     }
 
-    if (r.kind === "city") {
-      router.push({ pathname: "/city/[slug]", params: { slug: r.cityKey } } as any);
+    if (p?.kind === "city") {
+      router.push({ pathname: "/city/[slug]", params: { slug: p.slug } });
       return;
     }
 
-    if (r.kind === "country") {
-      if (r.leagueId && r.season) {
-        openFixturesWithLeague(r.leagueId, r.season);
-      } else {
-        router.push({ pathname: "/(tabs)/fixtures", params: { from: fromIso, to: toIso } } as any);
-      }
+    // Venue / Country / League route to Fixtures (v1)
+    if (p?.kind === "venue") {
+      // v1: no venue guide yet; open fixtures with current league + window
+      goFixturesWithContext();
       return;
     }
 
-    if (r.kind === "league") {
-      openFixturesWithLeague(r.leagueId, r.season);
+    if (p?.kind === "country") {
+      goFixturesWithContext({ leagueId: p.leagueId, season: p.season });
       return;
     }
 
-    if (r.kind === "venue") {
-      // V1: venue routes to fixtures (we don't have a venue guide yet)
-      router.push({
-        pathname: "/(tabs)/fixtures",
-        params: { leagueId: String(league.leagueId), season: String(league.season), from: fromIso, to: toIso },
-      } as any);
+    if (p?.kind === "league") {
+      goFixturesWithContext({ leagueId: p.leagueId, season: p.season });
       return;
+    }
+  }
+
+  function resultMeta(r: SearchResult): string {
+    const p: any = r.payload;
+
+    if (r.type === "team" && p?.kind === "team") {
+      const exists = hasTeamGuide(p.slug);
+      return exists ? "Team guide available" : "Team guide (link-out for now)";
     }
 
-    if (r.kind === "match") {
-      router.push({ pathname: "/match/[id]", params: { id: r.fixtureId } } as any);
-      return;
+    if (r.type === "city" && p?.kind === "city") {
+      const guide = getCityGuide(p.slug);
+      return guide ? "City guide available" : "City guide (link-out for now)";
     }
+
+    if (r.type === "venue") return r.subtitle ?? "Venue";
+    if (r.type === "country") return r.subtitle ?? "Country";
+    if (r.type === "league") return r.subtitle ?? "League";
+
+    return r.subtitle ?? "";
   }
 
   return (
@@ -254,8 +298,8 @@ export default function HomeScreen() {
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           {/* HERO */}
           <GlassCard style={styles.heroCard} intensity={26}>
-            <Text style={styles.heroKicker}>PLAN • STAY • WATCH • REPEAT</Text>
-            <Text style={styles.heroTitle}>Build match-led mini breaks.</Text>
+            <Text style={styles.heroKicker}>PLAN • FLY • WATCH • REPEAT</Text>
+            <Text style={styles.heroTitle}>Build European Football Trips Your Way.</Text>
 
             <View style={styles.heroSearchWrap}>
               <TextInput
@@ -269,139 +313,156 @@ export default function HomeScreen() {
                 returnKeyType="search"
               />
               {!showSearchResults ? (
-                <Text style={styles.heroHint}>Try “Austria”, “Madrid”, “Arsenal”, or a stadium name.</Text>
+                <Text style={styles.heroHint}>Tip: Try “Austria”, “Madrid”, “Arsenal”, or a stadium name.</Text>
               ) : null}
             </View>
 
             {showSearchResults ? (
               <View style={styles.searchResults}>
-                {/* Teams */}
+                {/* PRIMARY: Teams + Cities */}
                 <View>
-                  <Text style={styles.searchSectionTitle}>Teams</Text>
-                  {byKind.teams.length === 0 ? (
-                    <Text style={styles.searchEmpty}>No teams found.</Text>
-                  ) : (
+                  <Text style={styles.searchSectionTitle}>Teams & Cities</Text>
+
+                  {searchLoading ? (
+                    <View style={styles.center}>
+                      <ActivityIndicator />
+                      <Text style={styles.muted}>Building search…</Text>
+                    </View>
+                  ) : null}
+
+                  {!searchLoading && searchError ? <EmptyState title="Search unavailable" message={searchError} /> : null}
+
+                  {!searchLoading && !searchError && buckets.teams.length === 0 && buckets.cities.length === 0 ? (
+                    <Text style={styles.searchEmpty}>No teams or cities found.</Text>
+                  ) : null}
+
+                  {!searchLoading && !searchError && (buckets.teams.length > 0 || buckets.cities.length > 0) ? (
                     <View style={styles.resultList}>
-                      {byKind.teams.map((t) => (
-                        <Pressable key={t.key} onPress={() => onPressSearchResult(t)} style={styles.row}>
-                          <Text style={styles.rowTitle}>{t.title}</Text>
-                          <Text style={styles.rowMeta}>{t.subtitle}</Text>
+                      {[...buckets.teams.slice(0, 6), ...buckets.cities.slice(0, 6)].slice(0, 10).map((r, idx) => (
+                        <Pressable key={`${r.key}-${idx}`} onPress={() => onPressSearchResult(r)} style={styles.row}>
+                          <Text style={styles.rowTitle}>{r.title}</Text>
+                          <Text style={styles.rowMeta}>{resultMeta(r)}</Text>
                         </Pressable>
                       ))}
                     </View>
-                  )}
+                  ) : null}
                 </View>
 
-                {/* Cities */}
+                {/* SECONDARY: Venues + Countries + Leagues */}
                 <View>
-                  <Text style={styles.searchSectionTitle}>Cities</Text>
-                  {byKind.cities.length === 0 ? (
-                    <Text style={styles.searchEmpty}>No cities found.</Text>
-                  ) : (
+                  <Text style={styles.searchSectionTitle}>Venues, Countries & Leagues</Text>
+
+                  {!searchLoading && !searchError && buckets.venues.length === 0 && buckets.countries.length === 0 && buckets.leagues.length === 0 ? (
+                    <Text style={styles.searchEmpty}>No venues/countries/leagues found.</Text>
+                  ) : null}
+
+                  {!searchLoading && !searchError ? (
                     <View style={styles.resultList}>
-                      {byKind.cities.map((c) => (
-                        <Pressable key={c.key} onPress={() => onPressSearchResult(c)} style={styles.row}>
-                          <Text style={styles.rowTitle}>{c.title}</Text>
-                          <Text style={styles.rowMeta}>{c.subtitle}</Text>
-                        </Pressable>
-                      ))}
+                      {[...buckets.venues.slice(0, 5), ...buckets.countries.slice(0, 5), ...buckets.leagues.slice(0, 5)]
+                        .slice(0, 10)
+                        .map((r, idx) => (
+                          <Pressable key={`${r.key}-${idx}`} onPress={() => onPressSearchResult(r)} style={styles.row}>
+                            <Text style={styles.rowTitle}>{r.title}</Text>
+                            <Text style={styles.rowMeta}>{resultMeta(r)}</Text>
+                          </Pressable>
+                        ))}
                     </View>
-                  )}
+                  ) : null}
+
+                  <Pressable onPress={() => goFixturesWithContext()} style={styles.linkBtn}>
+                    <Text style={styles.linkText}>Open Fixtures</Text>
+                  </Pressable>
                 </View>
 
-                {/* Country / League */}
-                <View>
-                  <Text style={styles.searchSectionTitle}>Countries & leagues</Text>
-                  {byKind.countries.length === 0 && byKind.leagues.length === 0 ? (
-                    <Text style={styles.searchEmpty}>No country/league matches.</Text>
-                  ) : (
-                    <View style={styles.resultList}>
-                      {byKind.countries.map((c) => (
-                        <Pressable key={c.key} onPress={() => onPressSearchResult(c)} style={styles.row}>
-                          <Text style={styles.rowTitle}>{c.title}</Text>
-                          <Text style={styles.rowMeta}>{c.subtitle}</Text>
-                        </Pressable>
-                      ))}
-                      {byKind.leagues.map((l) => (
-                        <Pressable key={l.key} onPress={() => onPressSearchResult(l)} style={styles.row}>
-                          <Text style={styles.rowTitle}>{l.title}</Text>
-                          <Text style={styles.rowMeta}>{l.subtitle}</Text>
-                        </Pressable>
-                      ))}
-                    </View>
-                  )}
-                </View>
-
-                {/* Venues */}
-                <View>
-                  <Text style={styles.searchSectionTitle}>Venues</Text>
-                  {byKind.venues.length === 0 ? (
-                    <Text style={styles.searchEmpty}>No venues found.</Text>
-                  ) : (
-                    <View style={styles.resultList}>
-                      {byKind.venues.map((v) => (
-                        <Pressable key={v.key} onPress={() => onPressSearchResult(v)} style={styles.row}>
-                          <Text style={styles.rowTitle}>{v.title}</Text>
-                          <Text style={styles.rowMeta}>{v.subtitle}</Text>
-                        </Pressable>
-                      ))}
-                    </View>
-                  )}
-                </View>
-
-                {/* Matches */}
+                {/* Matches (still useful) */}
                 <View>
                   <Text style={styles.searchSectionTitle}>Matches</Text>
 
                   {fxLoading ? (
                     <View style={styles.center}>
                       <ActivityIndicator />
-                      <Text style={styles.muted}>Searching fixtures…</Text>
+                      <Text style={styles.muted}>Loading fixtures…</Text>
                     </View>
                   ) : null}
 
                   {!fxLoading && fxError ? <EmptyState title="Fixtures unavailable" message={fxError} /> : null}
 
-                  {!fxLoading && !fxError && byKind.matches.length === 0 ? (
-                    <Text style={styles.searchEmpty}>No matches found.</Text>
+                  {!fxLoading && !fxError && fxRows.length === 0 ? <Text style={styles.searchEmpty}>No fixtures loaded.</Text> : null}
+
+                  {!fxLoading && !fxError && fxRows.length > 0 ? (
+                    <View style={styles.resultList}>
+                      {fxRows
+                        .filter((r) => {
+                          const query = qNorm.trim().toLowerCase();
+                          if (!query) return false;
+                          const home = String(r?.teams?.home?.name ?? "").toLowerCase();
+                          const away = String(r?.teams?.away?.name ?? "").toLowerCase();
+                          const venue = String(r?.fixture?.venue?.name ?? "").toLowerCase();
+                          const city = String(r?.fixture?.venue?.city ?? "").toLowerCase();
+                          return home.includes(query) || away.includes(query) || venue.includes(query) || city.includes(query);
+                        })
+                        .slice(0, 6)
+                        .map((r, idx) => {
+                          const id = r?.fixture?.id;
+                          const fixtureId = id ? String(id) : null;
+                          const line = fixtureLine(r);
+
+                          return (
+                            <View key={fixtureId ?? `m-${idx}`} style={styles.resultRow}>
+                              <Pressable
+                                onPress={() =>
+                                  fixtureId ? router.push({ pathname: "/match/[id]", params: { id: fixtureId } }) : null
+                                }
+                                style={{ flex: 1 }}
+                              >
+                                <Text style={styles.rowTitle}>{line.title}</Text>
+                                <Text style={styles.rowMeta}>{line.meta}</Text>
+                              </Pressable>
+
+                              <Pressable
+                                disabled={!fixtureId}
+                                onPress={() => (fixtureId ? goBuildTripWithContext(fixtureId) : null)}
+                                style={[styles.planPill, !fixtureId && { opacity: 0.5 }]}
+                              >
+                                <Text style={styles.planPillText}>Plan trip</Text>
+                              </Pressable>
+                            </View>
+                          );
+                        })}
+                    </View>
+                  ) : null}
+                </View>
+
+                {/* Trips */}
+                <View>
+                  <Text style={styles.searchSectionTitle}>Trips</Text>
+
+                  {!loadedTrips ? (
+                    <View style={styles.center}>
+                      <ActivityIndicator />
+                      <Text style={styles.muted}>Searching trips…</Text>
+                    </View>
                   ) : null}
 
-                  {!fxLoading && !fxError && byKind.matches.length > 0 ? (
-                    <View style={styles.resultList}>
-                      {byKind.matches.map((m) => (
-                        <View key={m.key} style={styles.resultRow}>
-                          <Pressable onPress={() => onPressSearchResult(m)} style={{ flex: 1 }}>
-                            <Text style={styles.rowTitle}>{m.title}</Text>
-                            <Text style={styles.rowMeta}>{m.subtitle}</Text>
-                          </Pressable>
+                  {loadedTrips && tripResults.length === 0 ? <Text style={styles.searchEmpty}>No trips found.</Text> : null}
 
-                          <Pressable
-                            onPress={() => goBuildTripWithContext(m.fixtureId)}
-                            style={styles.planPill}
-                            hitSlop={6}
-                          >
-                            <Text style={styles.planPillText}>Plan</Text>
-                          </Pressable>
-                        </View>
+                  {loadedTrips && tripResults.length > 0 ? (
+                    <View style={styles.resultList}>
+                      {tripResults.map((t) => (
+                        <Pressable
+                          key={t.id}
+                          onPress={() => router.push({ pathname: "/trip/[id]", params: { id: t.id } })}
+                          style={styles.row}
+                        >
+                          <Text style={styles.rowTitle}>{t.cityId || "Trip"}</Text>
+                          <Text style={styles.rowMeta}>{tripSummaryLine(t)}</Text>
+                        </Pressable>
                       ))}
                     </View>
                   ) : null}
 
-                  <Pressable
-                    onPress={() =>
-                      router.push({
-                        pathname: "/(tabs)/fixtures",
-                        params: {
-                          leagueId: String(league.leagueId),
-                          season: String(league.season),
-                          from: fromIso,
-                          to: toIso,
-                        },
-                      } as any)
-                    }
-                    style={styles.linkBtn}
-                  >
-                    <Text style={styles.linkText}>Open Fixtures</Text>
+                  <Pressable onPress={() => router.push("/(tabs)/trips")} style={styles.linkBtn}>
+                    <Text style={styles.linkText}>Open Trips</Text>
                   </Pressable>
                 </View>
               </View>
@@ -417,7 +478,7 @@ export default function HomeScreen() {
 
             <Pressable onPress={() => goBuildTripWithContext()} style={[styles.btn, styles.btnPrimary]}>
               <Text style={styles.btnPrimaryText}>Build Trip</Text>
-              <Text style={styles.btnPrimaryMeta}>Select a match → set dates → save</Text>
+              <Text style={styles.btnPrimaryMeta}>Select a fixture → set dates → save</Text>
             </Pressable>
 
             <View style={styles.quickRow}>
@@ -495,7 +556,7 @@ export default function HomeScreen() {
                           onPress={() => (fixtureId ? goBuildTripWithContext(fixtureId) : null)}
                           style={[styles.planBtn, !fixtureId && { opacity: 0.5 }]}
                         >
-                          <Text style={styles.planBtnText}>Plan</Text>
+                          <Text style={styles.planBtnText}>Plan Trip</Text>
                         </Pressable>
                       </View>
                     );
@@ -651,7 +712,7 @@ const styles = StyleSheet.create({
   },
   searchEmpty: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, marginTop: 6 },
 
-  resultList: { marginTop: 8 },
+  resultList: { marginTop: 8, gap: 10 },
   resultRow: {
     flexDirection: "row",
     gap: 10,
