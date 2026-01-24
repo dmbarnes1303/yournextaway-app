@@ -75,26 +75,37 @@ function toEntryTokens(parts: Array<string | undefined | null>): string[] {
   return uniq(tokenizeQuery(joined));
 }
 
+/**
+ * Corrected scoring:
+ * - Exact token matches are strong.
+ * - Prefix matches only when query token length >= 3.
+ * - NO "qt.startsWith(et)" (that causes junk matches when entryTokens include short tokens like "a", "e").
+ */
 function scoreMatch(queryTokens: string[], entryTokens: string[]): number {
-  // +3 exact token hit
-  // +1 partial/prefix hit
+  // +4 exact token hit
+  // +2 prefix hit (query token length >= 3)
   // +2 bonus if most query tokens hit at least partially
   let score = 0;
   let hitCount = 0;
 
-  for (const qt of queryTokens) {
+  for (const qtRaw of queryTokens) {
+    const qt = String(qtRaw ?? "").trim();
     if (!qt) continue;
 
+    // Exact match
     if (entryTokens.includes(qt)) {
-      score += 3;
+      score += 4;
       hitCount += 1;
       continue;
     }
 
-    const partial = entryTokens.some((et) => et.startsWith(qt) || qt.startsWith(et));
-    if (partial) {
-      score += 1;
-      hitCount += 1;
+    // Prefix match (tightened)
+    if (qt.length >= 3) {
+      const prefix = entryTokens.some((et) => et.startsWith(qt));
+      if (prefix) {
+        score += 2;
+        hitCount += 1;
+      }
     }
   }
 
