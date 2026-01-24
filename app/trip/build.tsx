@@ -650,9 +650,7 @@ export default function TripBuildScreen() {
                   {DateTimePicker && picker.open ? (
                     <View style={{ marginTop: 10 }}>
                       <DateTimePicker
-                        value={
-                          parseIsoDateOnly(picker.which === "start" ? (startIso as any) : (endIso as any)) ?? new Date()
-                        }
+                        value={parseIsoDateOnly(picker.which === "start" ? startIso : endIso) ?? new Date()}
                         mode="date"
                         display={Platform.OS === "ios" ? "inline" : "default"}
                         onChange={onPickerChange}
