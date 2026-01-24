@@ -36,6 +36,21 @@ function enc(v: string) {
   return encodeURIComponent(v);
 }
 
+function isoDateOnly(isoMaybe?: string) {
+  if (!isoMaybe) return undefined;
+  const d = new Date(isoMaybe);
+  if (Number.isNaN(d.getTime())) return undefined;
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function subtitleOrFallback(value: string | null | undefined, fallback: string) {
+  const v = String(value ?? "").trim();
+  return v ? v : fallback;
+}
+
 async function safeOpenUrl(url: string) {
   try {
     const can = await Linking.canOpenURL(url);
@@ -46,20 +61,35 @@ async function safeOpenUrl(url: string) {
   }
 }
 
+async function openMapsPreferNative(query: string) {
+  const q = String(query ?? "").trim();
+  if (!q) return safeOpenUrl("https://www.google.com/maps");
+
+  const geo = `geo:0,0?q=${enc(q)}`; // Android native
+  const web = `https://www.google.com/maps/search/?api=1&query=${enc(q)}`;
+
+  try {
+    const canGeo = await Linking.canOpenURL(geo);
+    await safeOpenUrl(canGeo ? geo : web);
+  } catch {
+    await safeOpenUrl(web);
+  }
+}
+
 /**
  * Neutral-traveller link builders (v1: reliable).
  * Later: replace these with affiliate/deep links centrally.
  */
-function buildTicketsUrl(home?: string, away?: string, kickoff?: string, league?: string) {
+function buildTicketsUrl(home?: string, away?: string, kickoffDateOnly?: string, league?: string) {
   const vs = home && away ? `${home} vs ${away}` : "match";
-  const when = kickoff ? ` ${kickoff}` : "";
+  const when = kickoffDateOnly ? ` ${kickoffDateOnly}` : "";
   const extra = league ? ` ${league}` : "";
   const q = `${vs}${when}${extra} tickets`;
   return `https://www.google.com/search?q=${enc(q)}`;
 }
 
 function buildMapsVenueUrl(venue?: string, city?: string) {
-  const q = [venue, city].filter(Boolean).join(" ");
+  const q = [venue, city].filter(Boolean).join(" ").trim();
   if (!q) return "https://www.google.com/maps";
   return `https://www.google.com/maps/search/?api=1&query=${enc(q)}`;
 }
@@ -85,7 +115,7 @@ export default function MatchDetailScreen() {
 
   const id = useMemo(() => coerceString((params as any)?.id), [params]);
 
-  // Routing context (optional): helps you bounce back to Fixtures / Build Trip with consistent windows.
+  // Routing context: helps you bounce back to Fixtures / Build Trip with consistent windows.
   const rolling = useMemo(() => getRollingWindowIso(), []);
   const todayIso = useMemo(() => toIsoDate(new Date()), []);
   const fallbackFrom = useMemo(() => todayIso ?? rolling.from, [todayIso, rolling.from]);
@@ -146,7 +176,9 @@ export default function MatchDetailScreen() {
 
   const home = row?.teams?.home?.name ?? "Home";
   const away = row?.teams?.away?.name ?? "Away";
-  const kickoff = formatUkDateTimeMaybe(row?.fixture?.date);
+
+  const kickoffDisplay = formatUkDateTimeMaybe(row?.fixture?.date);
+  const kickoffDateOnly = isoDateOnly(row?.fixture?.date as string | undefined);
 
   const venue = row?.fixture?.venue?.name ?? "";
   const city = row?.fixture?.venue?.city ?? "";
@@ -160,11 +192,29 @@ export default function MatchDetailScreen() {
   const effectiveSeason =
     routeSeason ?? (typeof apiSeason === "number" ? apiSeason : null) ?? currentFootballSeasonStartYear();
 
-  const ticketsUrl = useMemo(() => buildTicketsUrl(home, away, kickoff, leagueName), [home, away, kickoff, leagueName]);
+  const ticketsUrl = useMemo(
+    () => buildTicketsUrl(home, away, kickoffDateOnly, leagueName),
+    [home, away, kickoffDateOnly, leagueName]
+  );
   const mapsUrl = useMemo(() => buildMapsVenueUrl(venue, city), [venue, city]);
   const stadiumInfoUrl = useMemo(() => buildStadiumInfoUrl(venue, home, city), [venue, home, city]);
   const foodDrinkUrl = useMemo(() => buildFoodDrinkUrl(venue, city), [venue, city]);
   const transportUrl = useMemo(() => buildTransportUrl(venue, city), [venue, city]);
+
+  // Subtitles with fallbacks (never blank)
+  const ticketsSub = useMemo(() => {
+    if (home && away) {
+      const when = kickoffDateOnly ? ` • ${kickoffDateOnly}` : "";
+      return `${home} vs ${away}${when}`;
+    }
+    return "Open ticket search";
+  }, [home, away, kickoffDateOnly]);
+
+  const directionsSub = useMemo(() => {
+    const v = subtitleOrFallback(venue, "Search stadium location");
+    const c = subtitleOrFallback(city, "");
+    return [v, c].filter(Boolean).join(" • ");
+  }, [venue, city]);
 
   function onPlanTrip() {
     if (!fixtureId) return;
@@ -195,21 +245,17 @@ export default function MatchDetailScreen() {
 
   async function onShare() {
     const title = `${home} vs ${away}`;
-    const when = kickoff ? `Kickoff: ${kickoff}` : "Kickoff: —";
+    const when = kickoffDisplay ? `Kickoff: ${kickoffDisplay}` : "Kickoff: —";
     const where = place ? `Venue: ${place}` : "Venue: —";
     const meta = `League: ${leagueName} • Season: ${String(effectiveSeason)}`;
-    const linkHint = `Tickets: ${ticketsUrl}\nMaps: ${mapsUrl}`;
 
-    const message = `${title}\n${when}\n${where}\n${meta}\n\n${linkHint}`;
+    // Keep it copy-friendly but useful
+    const message = `${title}\n${when}\n${where}\n${meta}\n\nTickets: ${ticketsUrl}\nMaps: ${mapsUrl}`;
 
     try {
-      await Share.share(
-        Platform.OS === "ios"
-          ? { message, url: ticketsUrl }
-          : { message }
-      );
+      await Share.share(Platform.OS === "ios" ? { message, url: ticketsUrl } : { message });
     } catch {
-      // Don’t alert; sharing failures are common and non-critical
+      // non-critical
     }
   }
 
@@ -248,7 +294,7 @@ export default function MatchDetailScreen() {
                 <View style={styles.metaBlock}>
                   <Text style={styles.metaLine}>
                     <Text style={styles.metaLabel}>Kickoff: </Text>
-                    {kickoff || "—"}
+                    {kickoffDisplay || "—"}
                   </Text>
 
                   <Text style={styles.metaLine}>
@@ -267,13 +313,20 @@ export default function MatchDetailScreen() {
                   <Pressable onPress={() => safeOpenUrl(ticketsUrl)} style={[styles.bigBtn, styles.bigBtnPrimary]}>
                     <Text style={styles.bigKicker}>Tickets</Text>
                     <Text style={styles.bigTitle}>Find tickets</Text>
-                    <Text style={styles.bigSub}>{home && away ? `${home} vs ${away}` : "Open ticket search"}</Text>
+                    <Text style={styles.bigSub}>{ticketsSub}</Text>
                   </Pressable>
 
-                  <Pressable onPress={() => safeOpenUrl(mapsUrl)} style={[styles.bigBtn, styles.bigBtnSecondary]}>
+                  <Pressable
+                    onPress={async () => {
+                      const q = [venue, city].filter(Boolean).join(" ").trim();
+                      if (!q) return safeOpenUrl(mapsUrl);
+                      await openMapsPreferNative(q);
+                    }}
+                    style={[styles.bigBtn, styles.bigBtnSecondary]}
+                  >
                     <Text style={styles.bigKicker}>Directions</Text>
                     <Text style={styles.bigTitle}>Open maps</Text>
-                    <Text style={styles.bigSub}>{venue ? venue : "Search stadium location"}{city ? ` • ${city}` : ""}</Text>
+                    <Text style={styles.bigSub}>{directionsSub}</Text>
                   </Pressable>
 
                   <Pressable onPress={onPlanTrip} style={[styles.bigBtn, styles.bigBtnSecondary]}>
@@ -304,12 +357,12 @@ export default function MatchDetailScreen() {
             ) : null}
           </GlassCard>
 
-          {/* MATCHDAY OPERATIONS (NEUTRAL TRAVELLER) */}
+          {/* MATCHDAY ESSENTIALS (NEUTRAL TRAVELLER) */}
           {!loading && !error && row ? (
             <GlassCard style={styles.card} intensity={22}>
               <Text style={styles.h2}>Matchday essentials</Text>
               <Text style={styles.muted}>
-                Designed for neutral travellers: arrive smoothly, enjoy the local experience, and keep things simple.
+                Built for neutral travellers: arrive smoothly, enjoy the local experience, and keep things simple.
               </Text>
 
               <View style={styles.opsList}>
@@ -323,7 +376,7 @@ export default function MatchDetailScreen() {
                 <View style={styles.opsItem}>
                   <Text style={styles.opsTitle}>Bag policy and entry</Text>
                   <Text style={styles.opsBody}>
-                    Stadium policies vary. If you’re carrying a bag, double-check restrictions and permitted items before you travel.
+                    Policies vary. If you’re carrying a bag, double-check restrictions and permitted items before you travel.
                   </Text>
                   <Pressable onPress={() => safeOpenUrl(stadiumInfoUrl)} style={styles.inlineBtn}>
                     <Text style={styles.inlineBtnText}>Search stadium entry rules</Text>
@@ -333,7 +386,7 @@ export default function MatchDetailScreen() {
                 <View style={styles.opsItem}>
                   <Text style={styles.opsTitle}>Transport plan</Text>
                   <Text style={styles.opsBody}>
-                    Use public transport where possible; event traffic and parking can be unpredictable close to kickoff.
+                    Public transport is usually easiest; event traffic and parking can be unpredictable close to kickoff.
                   </Text>
                   <Pressable onPress={() => safeOpenUrl(transportUrl)} style={styles.inlineBtn}>
                     <Text style={styles.inlineBtnText}>Search transport options</Text>
@@ -343,7 +396,7 @@ export default function MatchDetailScreen() {
                 <View style={styles.opsItem}>
                   <Text style={styles.opsTitle}>Food & drinks nearby</Text>
                   <Text style={styles.opsBody}>
-                    The best pre-match atmosphere is usually around the stadium district—pick something walkable so you’re not rushing.
+                    The best pre-match atmosphere is often around the stadium district—pick something walkable so you’re not rushing.
                   </Text>
                   <Pressable onPress={() => safeOpenUrl(foodDrinkUrl)} style={styles.inlineBtn}>
                     <Text style={styles.inlineBtnText}>Search nearby spots</Text>
