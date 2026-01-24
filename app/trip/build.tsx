@@ -9,11 +9,10 @@ import {
   TextInput,
   ActivityIndicator,
   Platform,
-  Animated,
-  Easing,
   Dimensions,
   Linking,
-  Alert,
+  Modal,
+  KeyboardAvoidingView,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Stack, useRouter, useLocalSearchParams } from "expo-router";
@@ -25,7 +24,7 @@ import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
 
 import { getFixtures, getFixtureById } from "@/src/services/apiFootball";
-import tripsStore, { type Trip } from "@/src/state/trips";
+import tripsStore from "@/src/state/trips";
 
 import {
   LEAGUES,
@@ -91,23 +90,16 @@ async function safeOpenUrl(url: string) {
   }
 }
 
-/**
- * Android-safe "glass" panel card.
- * DO NOT use GlassCard here (Android compositing + animated transforms can hide children).
- */
-function PanelCard({ children, style }: { children: React.ReactNode; style?: any }) {
-  return (
-    <View style={[styles.panelCard, style]}>
-      <View pointerEvents="none" style={styles.panelTint} />
-      <View style={styles.panelContent}>{children}</View>
-    </View>
-  );
+function isoFromDatePicker(date?: Date) {
+  if (!date) return null;
+  return clampIsoToTomorrow(toIsoDate(date));
 }
 
 export default function TripBuildScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const insets = useSafeAreaInsets();
+
   const listRef = useRef<ScrollView | null>(null);
 
   // Optional DateTimePicker (native). If not installed, we fall back gracefully.
@@ -133,10 +125,6 @@ export default function TripBuildScreen() {
   const routeSeason = useMemo(() => paramNumber(params.season), [params.season]);
   const fromParam = useMemo(() => paramString(params.from), [params.from]);
   const toParam = useMemo(() => paramString(params.to), [params.to]);
-
-  // NEW: Edit mode
-  const tripIdParam = useMemo(() => paramString(params.tripId), [params.tripId]);
-  const isEdit = !!tripIdParam;
 
   const from = useMemo(() => clampIsoToTomorrow(fromParam ?? defaultFrom), [fromParam, defaultFrom]);
   const to = useMemo(() => toParam ?? defaultTo, [toParam, defaultTo]);
@@ -167,6 +155,7 @@ export default function TripBuildScreen() {
   const [visibleCount, setVisibleCount] = useState(12);
 
   const [selectedFixture, setSelectedFixture] = useState<any | null>(null);
+  const modalOpen = !!selectedFixture;
 
   // Dates + notes
   const [startIso, setStartIso] = useState(from);
@@ -178,102 +167,22 @@ export default function TripBuildScreen() {
     open: false,
   });
 
-  // Animation (translate-only; NO opacity animation for panel)
-  const panelAnim = useRef(new Animated.Value(0)).current;
-  const flashAnim = useRef(new Animated.Value(0)).current;
-
-  const { height: screenH } = Dimensions.get("window");
-  const HEADER_ESTIMATE = 56;
-  const headerBlock = insets.top + HEADER_ESTIMATE;
-
-  const PANEL_MAX = Math.min(420, Math.round(screenH * 0.62));
-  const panelMaxHeight = Math.min(PANEL_MAX, Math.max(260, screenH - headerBlock - 20));
-
-  const panelOpen = !!selectedFixture;
-
-  const panelTranslateY = panelAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [panelMaxHeight + 90, 0],
-  });
-
-  const backdropOpacity = panelAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, 0.35],
-  });
-
-  // Keep date fields aligned to route from (only when NOT editing a trip)
+  // Keep date fields aligned to route from
   useEffect(() => {
-    if (isEdit) return;
     setStartIso(from);
     setEndIso(addDaysIso(from, 2));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [from, isEdit]);
-
-  /**
-   * EDIT MODE PREFILL:
-   * - Load trip from store
-   * - Prefill dates/notes
-   * - Prefill selected fixture (first match)
-   * - Keep screen functional even if fixture can't be loaded
-   */
-  useEffect(() => {
-    let cancelled = false;
-
-    async function prefillFromTrip() {
-      if (!tripIdParam) return;
-
-      setError(null);
-      setPrefillLoading(true);
-
-      try {
-        // Ensure store loaded
-        if (!tripsStore.getState().loaded) {
-          await tripsStore.loadTrips();
-        }
-
-        const t = tripsStore.getState().trips.find((x) => x.id === tripIdParam) ?? null;
-        if (cancelled) return;
-
-        if (!t) {
-          setError("Couldn’t load that trip. It may not exist on this device.");
-          return;
-        }
-
-        // Prefill dates + notes
-        if (t.startDate) setStartIso(clampIsoToTomorrow(t.startDate));
-        if (t.endDate) setEndIso(t.endDate);
-        setNotes(t.notes ?? "");
-
-        // Prefill match selection if possible
-        const firstMatchId = Array.isArray(t.matchIds) && t.matchIds.length > 0 ? String(t.matchIds[0]) : null;
-        if (firstMatchId) {
-          const r = await getFixtureById(firstMatchId);
-          if (!cancelled && r) setSelectedFixture(r);
-        }
-      } catch (e: any) {
-        if (cancelled) return;
-        setError(e?.message ?? "Couldn’t prefill this trip.");
-      } finally {
-        if (!cancelled) setPrefillLoading(false);
-      }
-    }
-
-    prefillFromTrip();
-    return () => {
-      cancelled = true;
-    };
-  }, [tripIdParam]);
+  }, [from]);
 
   /**
    * If fixtureId is provided (Plan Trip), fetch the fixture directly.
    * Do NOT depend on it being present in the fixtures list window.
-   * Skip if editing a trip (edit prefill already handles match selection).
    */
   useEffect(() => {
     let cancelled = false;
 
     async function prefill() {
-      if (!routeFixtureId || isEdit) return;
+      if (!routeFixtureId) return;
 
       setError(null);
       setPrefillLoading(true);
@@ -289,6 +198,7 @@ export default function TripBuildScreen() {
 
         setSelectedFixture(r);
 
+        // Sync league selection when possible
         const apiLeagueId = r?.league?.id;
         if (typeof apiLeagueId === "number") {
           const match = LEAGUES.find((l) => l.leagueId === apiLeagueId);
@@ -309,7 +219,7 @@ export default function TripBuildScreen() {
     return () => {
       cancelled = true;
     };
-  }, [routeFixtureId, routeSeason, isEdit]);
+  }, [routeFixtureId, routeSeason]);
 
   // Load fixtures list whenever league/from/to change
   useEffect(() => {
@@ -346,24 +256,12 @@ export default function TripBuildScreen() {
     };
   }, [selectedLeague, from, to]);
 
-  /**
-   * Panel open/close animation + prefill dates from kickoff
-   */
+  // When selecting a fixture, prefill dates from kickoff (best effort)
   useEffect(() => {
     const iso = selectedFixture?.fixture?.date as string | undefined;
+    if (!selectedFixture) return;
 
-    if (!selectedFixture) {
-      Animated.timing(panelAnim, {
-        toValue: 0,
-        duration: 170,
-        easing: Easing.out(Easing.quad),
-        useNativeDriver: false,
-      }).start();
-      return;
-    }
-
-    // Only auto-adjust dates from kickoff when NOT editing
-    if (!isEdit && iso) {
+    if (iso) {
       const d = new Date(iso);
       if (!Number.isNaN(d.getTime())) {
         const start = clampIsoToTomorrow(toIsoDate(d));
@@ -372,23 +270,10 @@ export default function TripBuildScreen() {
       }
     }
 
-    Animated.timing(panelAnim, {
-      toValue: 1,
-      duration: 230,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: false,
-    }).start();
-
-    flashAnim.setValue(0);
-    Animated.sequence([
-      Animated.timing(flashAnim, { toValue: 1, duration: 120, useNativeDriver: true }),
-      Animated.timing(flashAnim, { toValue: 0, duration: 420, useNativeDriver: true }),
-    ]).start();
-
     requestAnimationFrame(() => {
       listRef.current?.scrollTo({ y: 0, animated: true });
     });
-  }, [selectedFixture, panelAnim, flashAnim, isEdit]);
+  }, [selectedFixture]);
 
   const filteredRows = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -416,7 +301,11 @@ export default function TripBuildScreen() {
       return;
     }
 
-    const iso = clampIsoToTomorrow(toIsoDate(date));
+    const iso = isoFromDatePicker(date);
+    if (!iso) {
+      setPicker((p) => ({ ...p, open: false }));
+      return;
+    }
 
     if (picker.which === "start") {
       setStartIso(iso);
@@ -449,19 +338,6 @@ export default function TripBuildScreen() {
         (selectedFixture?.league?.name as string | undefined)?.trim() ||
         "Trip";
 
-      if (isEdit && tripIdParam) {
-        await tripsStore.updateTrip(tripIdParam, {
-          cityId: venueCity,
-          matchIds: [fixtureId],
-          startDate: startIso,
-          endDate: endIso,
-          notes: notes.trim(),
-        });
-
-        router.replace({ pathname: "/trip/[id]", params: { id: tripIdParam } });
-        return;
-      }
-
       const t = await tripsStore.addTrip({
         cityId: venueCity,
         matchIds: [fixtureId],
@@ -470,9 +346,11 @@ export default function TripBuildScreen() {
         notes: notes.trim(),
       });
 
+      // Close modal before routing (prevents Android visual glitches)
+      setSelectedFixture(null);
       router.replace({ pathname: "/trip/[id]", params: { id: t.id } });
     } catch (e: any) {
-      setError(e?.message ?? (isEdit ? "Failed to update trip." : "Failed to save trip."));
+      setError(e?.message ?? "Failed to save trip.");
     } finally {
       setSaving(false);
     }
@@ -498,14 +376,15 @@ export default function TripBuildScreen() {
     return getTopThingsToDoForTrip(destinationCity);
   }, [destinationCity]);
 
-  const bottomPad = panelOpen ? panelMaxHeight + theme.spacing.xl + insets.bottom : theme.spacing.xxl + insets.bottom;
+  const { height: screenH } = Dimensions.get("window");
+  const sheetMaxH = Math.min(560, Math.round(screenH * 0.78));
 
   return (
     <Background imageUrl={getBackground("trips")}>
       <Stack.Screen
         options={{
           headerShown: true,
-          title: isEdit ? "Edit Trip" : "Build Trip",
+          title: "Build Trip",
           headerTransparent: true,
           headerTintColor: theme.colors.text,
         }}
@@ -515,14 +394,12 @@ export default function TripBuildScreen() {
         <ScrollView
           ref={(r) => (listRef.current = r)}
           style={styles.scroll}
-          contentContainerStyle={[styles.content, { paddingBottom: bottomPad }]}
+          contentContainerStyle={[styles.content, { paddingBottom: theme.spacing.xxl + insets.bottom }]}
           keyboardShouldPersistTaps="handled"
         >
           <GlassCard style={styles.card}>
             <Text style={styles.h1}>Pick a match</Text>
-            <Text style={styles.muted}>
-              Tap a fixture to open trip details. {isEdit ? "Update your trip from the panel." : "Save from the bottom panel."}
-            </Text>
+            <Text style={styles.muted}>Tap a fixture to open trip details. Save inside the sheet.</Text>
 
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.leagueRow}>
               {LEAGUES.map((l) => {
@@ -561,7 +438,7 @@ export default function TripBuildScreen() {
             {prefillLoading ? (
               <View style={styles.center}>
                 <ActivityIndicator />
-                <Text style={styles.muted}>{isEdit ? "Prefilling your trip…" : "Prefilling your match…"}</Text>
+                <Text style={styles.muted}>Prefilling your match…</Text>
               </View>
             ) : null}
 
@@ -612,7 +489,7 @@ export default function TripBuildScreen() {
                           {selected ? <Text style={styles.selectedTag}>Selected</Text> : null}
                         </View>
                         <Text style={styles.rowMeta}>{line2}</Text>
-                        {selected ? <Text style={styles.selectedHint}>Trip details opened below</Text> : null}
+                        {selected ? <Text style={styles.selectedHint}>Trip details opened</Text> : null}
                       </Pressable>
                     );
                   })}
@@ -625,198 +502,174 @@ export default function TripBuildScreen() {
                 ) : null}
               </>
             ) : null}
-
-            {!panelOpen ? (
-              <View style={{ marginTop: 14 }}>
-                <Text style={styles.hint}>
-                  Tip: After selecting a match, use the bottom panel to set dates and {isEdit ? "update." : "save."}
-                </Text>
-              </View>
-            ) : null}
           </GlassCard>
         </ScrollView>
 
-        {/* Backdrop: MUST NOT cover header zone or it steals BackButton taps */}
-        {panelOpen ? (
-          <Animated.View
-            pointerEvents="auto"
-            style={[
-              styles.backdropWrap,
-              {
-                top: headerBlock,
-                opacity: backdropOpacity,
-              },
-            ]}
-          >
-            <Pressable style={StyleSheet.absoluteFill} onPress={() => setSelectedFixture(null)}>
-              <View style={styles.backdrop} />
-            </Pressable>
-          </Animated.View>
-        ) : null}
-
-        {/* Panel (Android-safe) */}
-        <Animated.View
-          pointerEvents={panelOpen ? "auto" : "none"}
-          collapsable={false}
-          style={[
-            styles.panelWrap,
-            {
-              bottom: theme.spacing.lg + insets.bottom,
-              transform: [{ translateY: panelTranslateY }],
-            },
-          ]}
+        {/* MODAL SHEET: Android-safe. No transforms. No compositing issues. */}
+        <Modal
+          visible={modalOpen}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setSelectedFixture(null)}
         >
-          <PanelCard style={{ maxHeight: panelMaxHeight }}>
-            <Animated.View pointerEvents="none" style={[styles.panelFlash, { opacity: flashAnim }]} />
-            <View style={styles.handle} />
+          <Pressable style={styles.modalBackdrop} onPress={() => setSelectedFixture(null)} />
 
-            <ScrollView
-              style={{ flex: 1 }}
-              contentContainerStyle={{ paddingBottom: theme.spacing.md }}
-              showsVerticalScrollIndicator
-              keyboardShouldPersistTaps="handled"
-            >
-              <View style={styles.panelTop}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : undefined}
+            style={styles.modalWrap}
+          >
+            <View style={[styles.sheet, { maxHeight: sheetMaxH, paddingBottom: theme.spacing.md + insets.bottom }]}>
+              <View style={styles.sheetHandle} />
+
+              <View style={styles.sheetHeader}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.panelKicker}>Trip details</Text>
-                  <Text style={styles.panelTitle} numberOfLines={1}>
+                  <Text style={styles.sheetKicker}>Trip details</Text>
+                  <Text style={styles.sheetTitle} numberOfLines={1}>
                     {selHome && selAway ? `${selHome} vs ${selAway}` : "Selected match"}
                   </Text>
-                  <Text style={styles.panelSub} numberOfLines={2}>
+                  <Text style={styles.sheetSub} numberOfLines={2}>
                     {selKick}
                     {selVenue ? ` • ${selVenue}` : ""}
                     {selCity ? ` • ${selCity}` : ""}
                   </Text>
                 </View>
 
-                <Pressable onPress={() => setSelectedFixture(null)} style={styles.clearBtn} hitSlop={10}>
-                  <Text style={styles.clearText}>Change</Text>
+                <Pressable onPress={() => setSelectedFixture(null)} style={styles.closeBtn} hitSlop={10}>
+                  <Text style={styles.closeText}>Close</Text>
                 </Pressable>
               </View>
 
-              <View style={styles.dateRow}>
-                <Pressable onPress={() => openPicker("start")} style={styles.datePill}>
-                  <Text style={styles.dateLabel}>Start</Text>
-                  <Text style={styles.dateValue}>{formatUkDateOnly(startIso)}</Text>
-                </Pressable>
+              <ScrollView
+                style={{ flex: 1 }}
+                contentContainerStyle={{ paddingBottom: theme.spacing.md }}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+              >
+                <View style={styles.dateRow}>
+                  <Pressable onPress={() => openPicker("start")} style={styles.datePill}>
+                    <Text style={styles.dateLabel}>Start</Text>
+                    <Text style={styles.dateValue}>{formatUkDateOnly(startIso)}</Text>
+                  </Pressable>
 
-                <Pressable onPress={() => openPicker("end")} style={styles.datePill}>
-                  <Text style={styles.dateLabel}>End</Text>
-                  <Text style={styles.dateValue}>{formatUkDateOnly(endIso)}</Text>
-                </Pressable>
-              </View>
+                  <Pressable onPress={() => openPicker("end")} style={styles.datePill}>
+                    <Text style={styles.dateLabel}>End</Text>
+                    <Text style={styles.dateValue}>{formatUkDateOnly(endIso)}</Text>
+                  </Pressable>
+                </View>
 
-              {destinationCity ? (
-                <View style={styles.cityBlock}>
-                  <View style={styles.cityBlockTop}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.cityBlockKicker}>In {destinationCity}</Text>
-                      <Text style={styles.cityBlockTitle}>Top things to do</Text>
-                      <Text style={styles.cityBlockSub}>
-                        {cityBundle?.hasGuide
-                          ? "Curated picks + quick tips. Link out for more."
-                          : "No curated guide yet — link out for the best current picks."}
-                      </Text>
+                {/* CITY GUIDE / TRIPADVISOR BLOCK */}
+                {destinationCity ? (
+                  <View style={styles.cityBlock}>
+                    <View style={styles.cityBlockTop}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.cityBlockKicker}>In {destinationCity}</Text>
+                        <Text style={styles.cityBlockTitle}>Top things to do</Text>
+                        <Text style={styles.cityBlockSub}>
+                          {cityBundle?.hasGuide
+                            ? "Curated picks + quick tips. Link out for more."
+                            : "No curated guide yet — link out for the best current picks."}
+                        </Text>
+                      </View>
+
+                      {cityBundle?.tripAdvisorUrl ? (
+                        <Pressable onPress={() => safeOpenUrl(cityBundle.tripAdvisorUrl)} style={styles.taBtn}>
+                          <Text style={styles.taBtnText}>TripAdvisor</Text>
+                        </Pressable>
+                      ) : null}
                     </View>
 
-                    {cityBundle?.tripAdvisorUrl ? (
-                      <Pressable onPress={() => safeOpenUrl(cityBundle.tripAdvisorUrl)} style={styles.taBtn}>
-                        <Text style={styles.taBtnText}>TripAdvisor</Text>
-                      </Pressable>
+                    {cityBundle?.hasGuide && (cityBundle.items?.length ?? 0) > 0 ? (
+                      <View style={styles.thingsList}>
+                        {cityBundle.items.slice(0, 6).map((it, idx) => (
+                          <View key={`${it.title}-${idx}`} style={styles.thingRow}>
+                            <Text style={styles.thingIdx}>{idx + 1}.</Text>
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.thingTitle}>{it.title}</Text>
+                              {it.description ? <Text style={styles.thingDesc}>{it.description}</Text> : null}
+                            </View>
+                          </View>
+                        ))}
+                        {(cityBundle.items?.length ?? 0) > 6 ? (
+                          <Text style={styles.moreInline}>More in the full city guide.</Text>
+                        ) : null}
+                      </View>
+                    ) : null}
+
+                    {cityBundle?.hasGuide && (cityBundle.quickTips?.length ?? 0) > 0 ? (
+                      <View style={styles.tipsBlock}>
+                        <Text style={styles.tipsTitle}>Quick tips</Text>
+                        {cityBundle.quickTips.slice(0, 5).map((t, idx) => (
+                          <Text key={`${t}-${idx}`} style={styles.tipLine}>
+                            • {t}
+                          </Text>
+                        ))}
+                      </View>
                     ) : null}
                   </View>
+                ) : null}
 
-                  {cityBundle?.hasGuide && (cityBundle.items?.length ?? 0) > 0 ? (
-                    <View style={styles.thingsList}>
-                      {cityBundle.items.slice(0, 6).map((it, idx) => (
-                        <View key={`${it.title}-${idx}`} style={styles.thingRow}>
-                          <Text style={styles.thingIdx}>{idx + 1}.</Text>
-                          <View style={{ flex: 1 }}>
-                            <Text style={styles.thingTitle}>{it.title}</Text>
-                            {it.description ? <Text style={styles.thingDesc}>{it.description}</Text> : null}
-                          </View>
-                        </View>
-                      ))}
-                      {(cityBundle.items?.length ?? 0) > 6 ? <Text style={styles.moreInline}>More in the full city guide.</Text> : null}
+                {Platform.OS === "web" || !DateTimePicker ? (
+                  <View style={{ marginTop: 10, gap: 8 }}>
+                    <Text style={styles.fallbackNote}>Date picker not available here. Edit ISO dates (YYYY-MM-DD).</Text>
+                    <View style={{ flexDirection: "row", gap: 10 }}>
+                      <TextInput
+                        value={startIso}
+                        onChangeText={setStartIso}
+                        placeholder="YYYY-MM-DD"
+                        placeholderTextColor={theme.colors.textSecondary}
+                        style={[styles.input, { flex: 1 }]}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                      />
+                      <TextInput
+                        value={endIso}
+                        onChangeText={setEndIso}
+                        placeholder="YYYY-MM-DD"
+                        placeholderTextColor={theme.colors.textSecondary}
+                        style={[styles.input, { flex: 1 }]}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                      />
                     </View>
-                  ) : null}
-
-                  {cityBundle?.hasGuide && (cityBundle.quickTips?.length ?? 0) > 0 ? (
-                    <View style={styles.tipsBlock}>
-                      <Text style={styles.tipsTitle}>Quick tips</Text>
-                      {cityBundle.quickTips.slice(0, 5).map((t, idx) => (
-                        <Text key={`${t}-${idx}`} style={styles.tipLine}>
-                          • {t}
-                        </Text>
-                      ))}
-                    </View>
-                  ) : null}
-                </View>
-              ) : null}
-
-              {Platform.OS === "web" || !DateTimePicker ? (
-                <View style={{ marginTop: 10, gap: 8 }}>
-                  <Text style={styles.fallbackNote}>Date picker not available here. Edit ISO dates (YYYY-MM-DD).</Text>
-                  <View style={{ flexDirection: "row", gap: 10 }}>
-                    <TextInput
-                      value={startIso}
-                      onChangeText={setStartIso}
-                      placeholder="YYYY-MM-DD"
-                      placeholderTextColor={theme.colors.textSecondary}
-                      style={[styles.input, { flex: 1 }]}
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                    />
-                    <TextInput
-                      value={endIso}
-                      onChangeText={setEndIso}
-                      placeholder="YYYY-MM-DD"
-                      placeholderTextColor={theme.colors.textSecondary}
-                      style={[styles.input, { flex: 1 }]}
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                    />
                   </View>
-                </View>
-              ) : null}
+                ) : null}
 
-              <View style={{ marginTop: 10 }}>
-                <TextInput
-                  value={notes}
-                  onChangeText={setNotes}
-                  placeholder="Notes (hotel, trains, pubs, mates, etc.)"
-                  placeholderTextColor={theme.colors.textSecondary}
-                  style={[styles.input, styles.textarea]}
-                  multiline
-                  textAlignVertical="top"
-                />
-              </View>
-
-              {error ? (
-                <Text style={styles.errText} numberOfLines={3}>
-                  {error}
-                </Text>
-              ) : null}
-
-              <Pressable onPress={onSave} disabled={saving} style={[styles.saveBtn, saving && { opacity: 0.7 }]}>
-                <Text style={styles.saveText}>
-                  {saving ? (isEdit ? "Updating…" : "Saving…") : isEdit ? "Update Trip" : "Save Trip"}
-                </Text>
-              </Pressable>
-
-              {DateTimePicker && picker.open ? (
                 <View style={{ marginTop: 10 }}>
-                  <DateTimePicker
-                    value={parseIsoDateOnly(picker.which === "start" ? (startIso as any) : (endIso as any)) ?? new Date()}
-                    mode="date"
-                    display={Platform.OS === "ios" ? "inline" : "default"}
-                    onChange={onPickerChange}
+                  <TextInput
+                    value={notes}
+                    onChangeText={setNotes}
+                    placeholder="Notes (hotel, trains, itinerary, etc.)"
+                    placeholderTextColor={theme.colors.textSecondary}
+                    style={[styles.input, styles.textarea]}
+                    multiline
+                    textAlignVertical="top"
                   />
                 </View>
-              ) : null}
-            </ScrollView>
-          </PanelCard>
-        </Animated.View>
+
+                {error ? (
+                  <Text style={styles.errText} numberOfLines={3}>
+                    {error}
+                  </Text>
+                ) : null}
+
+                <Pressable onPress={onSave} disabled={saving} style={[styles.saveBtn, saving && { opacity: 0.7 }]}>
+                  <Text style={styles.saveText}>{saving ? "Saving…" : "Save Trip"}</Text>
+                </Pressable>
+
+                {DateTimePicker && picker.open ? (
+                  <View style={{ marginTop: 10 }}>
+                    <DateTimePicker
+                      value={parseIsoDateOnly(picker.which === "start" ? (startIso as any) : (endIso as any)) ?? new Date()}
+                      mode="date"
+                      display={Platform.OS === "ios" ? "inline" : "default"}
+                      onChange={onPickerChange}
+                    />
+                  </View>
+                ) : null}
+              </ScrollView>
+            </View>
+          </KeyboardAvoidingView>
+        </Modal>
       </SafeAreaView>
     </Background>
   );
@@ -919,128 +772,105 @@ const styles = StyleSheet.create({
   },
   moreText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
 
-  hint: { marginTop: 10, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm },
-
-  backdropWrap: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 10,
-    elevation: 10,
+  // Modal sheet
+  modalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.55)",
   },
-  backdrop: { flex: 1, backgroundColor: "#000" },
-
-  panelWrap: {
-    position: "absolute",
-    left: theme.spacing.lg,
-    right: theme.spacing.lg,
-    zIndex: 20,
-    elevation: 20,
+  modalWrap: {
+    flex: 1,
+    justifyContent: "flex-end",
+    paddingHorizontal: theme.spacing.lg,
   },
-
-  // Android-safe panel card
-  panelCard: {
-    position: "relative",
+  sheet: {
     borderRadius: theme.borderRadius.xl,
-    overflow: "hidden",
     borderWidth: 1,
     borderColor: "rgba(0, 255, 136, 0.38)",
-    backgroundColor: "rgba(0,0,0,0.28)",
-    shadowColor: "#000",
-    shadowOpacity: 0.4,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 12 },
-  },
-  panelTint: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(26, 31, 46, 0.55)",
-  },
-  panelContent: {
+    backgroundColor: "rgba(0,0,0,0.72)",
+    overflow: "hidden",
     padding: theme.spacing.md,
+    marginBottom: theme.spacing.lg,
   },
-
-  panelFlash: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    top: 0,
-    height: 3,
-    borderTopLeftRadius: theme.borderRadius.xl,
-    borderTopRightRadius: theme.borderRadius.xl,
-    backgroundColor: "rgba(0,255,136,0.95)",
-  },
-
-  handle: {
+  sheetHandle: {
     alignSelf: "center",
-    width: 56,
+    width: 44,
     height: 4,
     borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.22)",
+    backgroundColor: "rgba(255,255,255,0.25)",
     marginBottom: 10,
   },
+  sheetHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    marginBottom: 10,
+  },
+  sheetKicker: {
+    color: theme.colors.primary,
+    fontWeight: "900",
+    fontSize: theme.fontSize.xs,
+    letterSpacing: 0.2,
+  },
+  sheetTitle: { marginTop: 6, color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.lg },
+  sheetSub: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18 },
 
-  panelTop: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
-  panelKicker: { color: theme.colors.primary, fontWeight: "900", fontSize: theme.fontSize.xs },
-  panelTitle: { marginTop: 6, color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.lg },
-  panelSub: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18 },
-
-  clearBtn: {
+  closeBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 14,
     borderRadius: 999,
     borderWidth: 1,
     borderColor: "rgba(0,255,136,0.35)",
-    backgroundColor: "rgba(0,0,0,0.22)",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    backgroundColor: "rgba(0,0,0,0.30)",
   },
-  clearText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.xs },
+  closeText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.xs },
 
-  dateRow: { marginTop: 12, flexDirection: "row", gap: 10 },
+  dateRow: { flexDirection: "row", gap: 10, marginTop: 6 },
   datePill: {
     flex: 1,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.12)",
-    backgroundColor: "rgba(0,0,0,0.22)",
+    backgroundColor: "rgba(0,0,0,0.28)",
     paddingVertical: 12,
     paddingHorizontal: 12,
   },
   dateLabel: { color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: "800" },
-  dateValue: { marginTop: 6, color: theme.colors.text, fontSize: theme.fontSize.md, fontWeight: "900" },
+  dateValue: { marginTop: 6, color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.md },
 
   cityBlock: {
     marginTop: 12,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.18)",
+    backgroundColor: "rgba(0,0,0,0.20)",
     padding: 12,
   },
   cityBlockTop: { flexDirection: "row", gap: 10, alignItems: "flex-start" },
-  cityBlockKicker: { color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: "800" },
+  cityBlockKicker: { color: theme.colors.primary, fontWeight: "900", fontSize: theme.fontSize.xs },
   cityBlockTitle: { marginTop: 6, color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.md },
   cityBlockSub: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18 },
 
   taBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
     borderRadius: 999,
     borderWidth: 1,
     borderColor: "rgba(0,255,136,0.35)",
-    backgroundColor: "rgba(0,0,0,0.22)",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    backgroundColor: "rgba(0,0,0,0.30)",
+    alignSelf: "flex-start",
   },
   taBtnText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.xs },
 
   thingsList: { marginTop: 12, gap: 10 },
   thingRow: { flexDirection: "row", gap: 10, alignItems: "flex-start" },
-  thingIdx: { width: 22, textAlign: "center", color: theme.colors.primary, fontWeight: "900", fontSize: theme.fontSize.sm },
+  thingIdx: { width: 20, color: theme.colors.primary, fontWeight: "900" },
   thingTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
   thingDesc: { marginTop: 4, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18 },
-  moreInline: { marginTop: 8, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm },
+  moreInline: { marginTop: 10, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm },
 
   tipsBlock: { marginTop: 12 },
-  tipsTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm, marginBottom: 6 },
-  tipLine: { color: theme.colors.text, fontSize: theme.fontSize.sm, lineHeight: 18 },
+  tipsTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
+  tipLine: { marginTop: 8, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18 },
 
   fallbackNote: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm },
 
@@ -1050,22 +880,23 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.25)",
     borderRadius: 12,
     paddingHorizontal: 12,
-    paddingVertical: 12,
+    paddingVertical: Platform.OS === "ios" ? 12 : 10,
     color: theme.colors.text,
     fontSize: theme.fontSize.md,
   },
-  textarea: { minHeight: 90 },
+  textarea: { minHeight: 96 },
 
-  errText: { marginTop: 10, color: "rgba(255,80,80,0.9)", fontSize: theme.fontSize.sm, fontWeight: "800" },
+  errText: { marginTop: 10, color: "rgba(255, 90, 90, 0.95)", fontWeight: "800" },
 
   saveBtn: {
     marginTop: 12,
+    paddingVertical: 14,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "rgba(0,255,136,0.45)",
-    backgroundColor: "rgba(0,0,0,0.28)",
-    paddingVertical: 14,
+    borderColor: "rgba(0,255,136,0.55)",
+    backgroundColor: "rgba(0,0,0,0.34)",
     alignItems: "center",
+    justifyContent: "center",
   },
   saveText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.md },
 });
