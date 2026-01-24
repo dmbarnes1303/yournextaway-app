@@ -1,5 +1,5 @@
 // app/(tabs)/home.tsx
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -22,29 +22,23 @@ import { theme } from "@/src/constants/theme";
 import tripsStore, { type Trip } from "@/src/state/trips";
 import { getFixtures, type FixtureListRow } from "@/src/services/apiFootball";
 
-import { LEAGUES, getRollingWindowIso, parseIsoDateOnly, toIsoDate, type LeagueOption } from "@/src/constants/football";
+import { LEAGUES, DEFAULT_SEASON, getRollingWindowIso, parseIsoDateOnly, toIsoDate, type LeagueOption } from "@/src/constants/football";
 import { formatUkDateOnly, formatUkDateTimeMaybe } from "@/src/utils/formatters";
 
-// City guides registry (used for real city search + routing)
-import { cityGuides as CITY_GUIDES } from "@/src/data/cityGuides";
+import { cityGuides as CITY_GUIDES_REGISTRY } from "@/src/data/cityGuides";
+import { normalizeCityKey } from "@/src/utils/city";
 
-function normalizeKey(input: string) {
-  return String(input || "")
-    .trim()
-    .toLowerCase()
-    .replace(/&/g, "and")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-+|-+$)/g, "");
-}
-
-function normalizeQuery(input: string) {
-  return String(input || "").trim().toLowerCase();
-}
-
-function includesLoose(haystack: string, needle: string) {
-  if (!needle) return false;
-  return haystack.includes(needle);
-}
+/**
+ * Search design (v1):
+ * - Results order: Teams → Cities → Countries/Leagues → Venues → Matches
+ * - Teams/Cities route to their guide screens (which will contain fixtures inside the guide).
+ * - Countries/Leagues route to Fixtures (correct).
+ * - Venues route to Fixtures (v1 best-effort; passes a venue query param for future filtering).
+ *
+ * Notes:
+ * - For "powerful" search without exploding API calls, we cache fixtures per league for the rolling window.
+ * - When the user types, we opportunistically warm a few leagues in the background and search across cached rows.
+ */
 
 function tripSummaryLine(t: Trip) {
   const a = formatUkDateOnly(t.startDate);
@@ -61,18 +55,76 @@ function fixtureLine(r: FixtureListRow) {
   const city = r?.fixture?.venue?.city ?? "";
   const extra = [venue, city].filter(Boolean).join(" • ");
   return {
+    fixtureId: r?.fixture?.id ? String(r.fixture.id) : null,
     title: `${home} vs ${away}`,
     meta: extra ? `${kickoff} • ${extra}` : kickoff,
+    home,
+    away,
+    venue,
+    city,
   };
 }
 
-type SearchResult =
-  | { type: "city"; key: string; title: string; subtitle?: string }
-  | { type: "team"; key: string; title: string; subtitle?: string }
-  | { type: "stadium"; key: string; title: string; subtitle?: string }
-  | { type: "league"; league: LeagueOption; title: string; subtitle?: string }
-  | { type: "match"; fixtureId: string; title: string; subtitle?: string }
-  | { type: "trip"; tripId: string; title: string; subtitle?: string };
+function normalizeTeamKey(input: string) {
+  const s = String(input ?? "").trim().toLowerCase();
+  if (!s) return "";
+  return s
+    .replace(/&/g, "and")
+    .replace(/['’]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+function normalizeQuery(input: string) {
+  return String(input ?? "").trim().toLowerCase();
+}
+
+function uniqBy<T>(arr: T[], keyFn: (t: T) => string) {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const x of arr) {
+    const k = keyFn(x);
+    if (!k || seen.has(k)) continue;
+    seen.add(k);
+    out.push(x);
+  }
+  return out;
+}
+
+type SearchLeague = LeagueOption & { aliases: string[] };
+
+function buildSearchLeagues(): SearchLeague[] {
+  // Keep LEAGUES as the canonical UI list, but allow search to include extra
+  // country→league mappings without forcing you to expand LEAGUES yet.
+  const base: SearchLeague[] = LEAGUES.map((l) => {
+    const label = l.label.toLowerCase();
+    const aliases: string[] = [label];
+
+    // Common country aliases for top leagues (v1).
+    if (label.includes("premier league")) aliases.push("england", "english", "uk", "united kingdom");
+    if (label.includes("la liga")) aliases.push("spain", "spanish");
+    if (label.includes("serie a")) aliases.push("italy", "italian");
+    if (label.includes("bundesliga") && !label.includes("austrian")) aliases.push("germany", "german");
+    if (label.includes("ligue 1")) aliases.push("france", "french");
+
+    return { ...l, aliases };
+  });
+
+  // Austria mapping (requested): user types “Austria” and expects Austrian Bundesliga.
+  // We add it to SEARCH only, so you don't have to commit it into LEAGUES yet.
+  const hasAustria = base.some((x) => x.leagueId === 218 || x.label.toLowerCase().includes("austrian"));
+  if (!hasAustria) {
+    base.push({
+      label: "Austrian Bundesliga",
+      leagueId: 218,
+      season: DEFAULT_SEASON ?? (LEAGUES[0]?.season ?? 2025),
+      aliases: ["austria", "austrian", "austrian bundesliga", "bundesliga austria"],
+    });
+  }
+
+  return base;
+}
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -104,7 +156,7 @@ export default function HomeScreen() {
     return trips
       .map((t) => ({ t, d: t.startDate ? parseIsoDateOnly(t.startDate) : null }))
       .filter((x): x is { t: Trip; d: Date } => !!x.d)
-      // exclude past + today
+      // exclude past + today (strictly after today)
       .filter((x) => x.d.getTime() > todayMidnight.getTime())
       .sort((a, b) => a.d.getTime() - b.d.getTime())
       .map((x) => x.t);
@@ -113,11 +165,57 @@ export default function HomeScreen() {
   const nextTrip = useMemo(() => upcomingTrips[0] ?? null, [upcomingTrips]);
   const topTrips = useMemo(() => trips.slice(0, 3), [trips]);
 
-  // Fixtures
+  const tripsCountLabel = useMemo(() => {
+    if (!loadedTrips) return "—";
+    return `${trips.length} trip${trips.length === 1 ? "" : "s"}`;
+  }, [loadedTrips, trips.length]);
+
+  function goBuildTripWithContext(fixtureId?: string, ctxLeague?: LeagueOption) {
+    const l = ctxLeague ?? league;
+    router.push({
+      pathname: "/trip/build",
+      params: {
+        ...(fixtureId ? { fixtureId } : {}),
+        leagueId: String(l.leagueId),
+        season: String(l.season),
+        from: fromIso,
+        to: toIso,
+      },
+    } as any);
+  }
+
+  // --- Fixtures cache (per league) for search ---
+  const SEARCH_LEAGUES = useMemo(() => buildSearchLeagues(), []);
+  const leagueKey = (l: { leagueId: number; season: number }) => `${l.leagueId}:${l.season}`;
+
+  const [fixturesByLeague, setFixturesByLeague] = useState<Record<string, FixtureListRow[]>>({});
+  const [fixturesLoadingByLeague, setFixturesLoadingByLeague] = useState<Record<string, boolean>>({});
+  const [fixturesErrorByLeague, setFixturesErrorByLeague] = useState<Record<string, string | null>>({});
+
   const [fxLoading, setFxLoading] = useState(false);
   const [fxError, setFxError] = useState<string | null>(null);
   const [fxRows, setFxRows] = useState<FixtureListRow[]>([]);
 
+  async function ensureLeagueFixturesLoaded(l: LeagueOption) {
+    const key = leagueKey(l);
+
+    if (fixturesByLeague[key]?.length) return;
+    if (fixturesLoadingByLeague[key]) return;
+
+    setFixturesLoadingByLeague((m) => ({ ...m, [key]: true }));
+    setFixturesErrorByLeague((m) => ({ ...m, [key]: null }));
+
+    try {
+      const rows = await getFixtures({ league: l.leagueId, season: l.season, from: fromIso, to: toIso });
+      setFixturesByLeague((m) => ({ ...m, [key]: Array.isArray(rows) ? rows : [] }));
+    } catch (e: any) {
+      setFixturesErrorByLeague((m) => ({ ...m, [key]: e?.message ?? "Failed to load fixtures." }));
+    } finally {
+      setFixturesLoadingByLeague((m) => ({ ...m, [key]: false }));
+    }
+  }
+
+  // Load current league fixtures for previews + initial cache
   useEffect(() => {
     let cancelled = false;
 
@@ -135,10 +233,21 @@ export default function HomeScreen() {
         });
 
         if (cancelled) return;
-        setFxRows(Array.isArray(rows) ? rows : []);
+
+        const list = Array.isArray(rows) ? rows : [];
+        setFxRows(list);
+
+        // Cache it for search
+        const key = leagueKey(league);
+        setFixturesByLeague((m) => ({ ...m, [key]: list }));
+        setFixturesErrorByLeague((m) => ({ ...m, [key]: null }));
       } catch (e: any) {
         if (cancelled) return;
-        setFxError(e?.message ?? "Failed to load fixtures.");
+        const msg = e?.message ?? "Failed to load fixtures.";
+        setFxError(msg);
+
+        const key = leagueKey(league);
+        setFixturesErrorByLeague((m) => ({ ...m, [key]: msg }));
       } finally {
         if (!cancelled) setFxLoading(false);
       }
@@ -152,195 +261,165 @@ export default function HomeScreen() {
 
   const fxPreview = useMemo(() => fxRows.slice(0, 6), [fxRows]);
 
-  // ---- Search: powerful + routes to City / Team / Stadium / Fixtures / Match / Trip ----
+  // --- Search ---
   const [q, setQ] = useState("");
   const qNorm = useMemo(() => normalizeQuery(q), [q]);
   const showSearchResults = qNorm.length > 0;
 
-  // country → league mapping (V1: only for leagues that exist in the app)
-  const COUNTRY_TO_LEAGUE: Record<string, LeagueOption> = useMemo(
-    () => ({
-      england: LEAGUES.find((l) => l.label.toLowerCase() === "premier league") ?? LEAGUES[0],
-      uk: LEAGUES.find((l) => l.label.toLowerCase() === "premier league") ?? LEAGUES[0],
-      spain: LEAGUES.find((l) => l.label.toLowerCase() === "la liga") ?? LEAGUES[0],
-      italy: LEAGUES.find((l) => l.label.toLowerCase() === "serie a") ?? LEAGUES[0],
-      germany: LEAGUES.find((l) => l.label.toLowerCase() === "bundesliga") ?? LEAGUES[0],
-      france: LEAGUES.find((l) => l.label.toLowerCase() === "ligue 1") ?? LEAGUES[0],
-    }),
-    []
-  );
+  // Background warmup when user searches (keeps it responsive, reduces API spam)
+  const warmupAbortRef = useRef<{ cancelled: boolean }>({ cancelled: false });
 
-  const cityResults = useMemo<SearchResult[]>(() => {
+  const [searchWarmLoading, setSearchWarmLoading] = useState(false);
+
+  useEffect(() => {
+    warmupAbortRef.current.cancelled = false;
+
+    async function warm() {
+      if (!qNorm || qNorm.length < 2) {
+        setSearchWarmLoading(false);
+        return;
+      }
+
+      // Warm the most likely candidates first:
+      // - current league
+      // - leagues whose aliases match the query
+      // - a small cap to avoid overfetching
+      const candidates = uniqBy(
+        [
+          { ...league, aliases: [] as string[] } as any,
+          ...SEARCH_LEAGUES.filter((l) => l.aliases.some((a) => a.includes(qNorm) || qNorm.includes(a))),
+          ...SEARCH_LEAGUES,
+        ],
+        (x: any) => `${x.leagueId}:${x.season}`
+      ).slice(0, 4);
+
+      setSearchWarmLoading(true);
+
+      for (const l of candidates) {
+        if (warmupAbortRef.current.cancelled) return;
+        // eslint-disable-next-line no-await-in-loop
+        await ensureLeagueFixturesLoaded(l);
+      }
+
+      if (!warmupAbortRef.current.cancelled) setSearchWarmLoading(false);
+    }
+
+    warm();
+
+    return () => {
+      warmupAbortRef.current.cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [qNorm, league.leagueId, league.season, fromIso, toIso]);
+
+  const allCachedRows = useMemo(() => {
+    const all: FixtureListRow[] = [];
+    Object.values(fixturesByLeague).forEach((rows) => {
+      if (Array.isArray(rows)) all.push(...rows);
+    });
+    return all;
+  }, [fixturesByLeague]);
+
+  const teamResults = useMemo(() => {
     if (!qNorm) return [];
 
-    // Match against:
-    // - city key (madrid)
-    // - city display name (Madrid)
-    // - country field in guide (Spain)
-    const entries = Object.values(CITY_GUIDES || {});
-    const matched = entries
-      .filter((g) => {
-        const key = normalizeKey(g.cityId);
-        const name = String(g.name ?? "").toLowerCase();
-        const country = String(g.country ?? "").toLowerCase();
-        return (
-          includesLoose(key, normalizeKey(qNorm)) ||
-          includesLoose(name, qNorm) ||
-          includesLoose(country, qNorm)
-        );
-      })
-      .slice(0, 6)
-      .map((g) => ({
-        type: "city" as const,
-        key: normalizeKey(g.cityId),
-        title: g.name ?? g.cityId,
-        subtitle: g.country ? `${g.country}` : undefined,
-      }));
+    const teams = allCachedRows
+      .flatMap((r) => [
+        String(r?.teams?.home?.name ?? "").trim(),
+        String(r?.teams?.away?.name ?? "").trim(),
+      ])
+      .filter(Boolean);
 
-    return matched;
+    const filtered = teams.filter((t) => t.toLowerCase().includes(qNorm));
+    const unique = uniqBy(filtered, (t) => normalizeTeamKey(t));
+    return unique.slice(0, 6).map((name) => ({ name, teamKey: normalizeTeamKey(name) }));
+  }, [allCachedRows, qNorm]);
+
+  const cityResults = useMemo(() => {
+    if (!qNorm) return [];
+
+    const entries = Object.entries(CITY_GUIDES_REGISTRY ?? {});
+    const hits = entries
+      .map(([key, guide]) => ({
+        cityKey: key,
+        name: guide?.name ?? key,
+        country: guide?.country ?? "",
+      }))
+      .filter((x) => {
+        const a = x.name.toLowerCase();
+        const b = x.country.toLowerCase();
+        const c = String(x.cityKey ?? "").toLowerCase();
+        return a.includes(qNorm) || b.includes(qNorm) || c.includes(qNorm);
+      });
+
+    // Prefer exact-ish starts
+    hits.sort((x, y) => {
+      const ax = x.name.toLowerCase().startsWith(qNorm) ? 0 : 1;
+      const ay = y.name.toLowerCase().startsWith(qNorm) ? 0 : 1;
+      if (ax !== ay) return ax - ay;
+      return x.name.localeCompare(y.name);
+    });
+
+    return hits.slice(0, 6);
   }, [qNorm]);
 
-  const leagueResults = useMemo<SearchResult[]>(() => {
+  const leagueCountryResults = useMemo(() => {
     if (!qNorm) return [];
 
-    // Match direct league labels ("la liga") + country shortcuts ("spain")
-    const out: SearchResult[] = [];
+    const hits = SEARCH_LEAGUES.filter((l) => {
+      const label = l.label.toLowerCase();
+      return label.includes(qNorm) || l.aliases.some((a) => a.includes(qNorm) || qNorm.includes(a));
+    });
 
-    const byLabel = LEAGUES.filter((l) => includesLoose(l.label.toLowerCase(), qNorm))
-      .slice(0, 5)
-      .map((l) => ({
-        type: "league" as const,
-        league: l,
-        title: l.label,
-        subtitle: "Open fixtures in this league",
-      }));
-    out.push(...byLabel);
+    // Keep output stable + dedupe by id/season
+    return uniqBy(hits, (x) => `${x.leagueId}:${x.season}`).slice(0, 6);
+  }, [qNorm, SEARCH_LEAGUES]);
 
-    const byCountry = COUNTRY_TO_LEAGUE[qNorm];
-    if (byCountry && !out.some((x) => x.type === "league" && x.league.leagueId === byCountry.leagueId)) {
-      out.unshift({
-        type: "league",
-        league: byCountry,
-        title: `${qNorm[0].toUpperCase()}${qNorm.slice(1)} (league)`,
-        subtitle: `Open fixtures for ${byCountry.label}`,
-      });
-    }
-
-    return out.slice(0, 6);
-  }, [qNorm, COUNTRY_TO_LEAGUE]);
-
-  const derivedTeamsAndStadiums = useMemo(() => {
-    // Derived from the loaded fixtures window (fast + no extra data dependency)
-    const teamMap = new Map<string, { name: string; count: number }>();
-    const stadiumMap = new Map<string, { name: string; city?: string; count: number }>();
-
-    for (const r of fxRows) {
-      const home = String(r?.teams?.home?.name ?? "").trim();
-      const away = String(r?.teams?.away?.name ?? "").trim();
-      const venue = String(r?.fixture?.venue?.name ?? "").trim();
-      const venueCity = String(r?.fixture?.venue?.city ?? "").trim();
-
-      if (home) teamMap.set(home, { name: home, count: (teamMap.get(home)?.count ?? 0) + 1 });
-      if (away) teamMap.set(away, { name: away, count: (teamMap.get(away)?.count ?? 0) + 1 });
-
-      if (venue) stadiumMap.set(venue, { name: venue, city: venueCity || undefined, count: (stadiumMap.get(venue)?.count ?? 0) + 1 });
-    }
-
-    const teams = Array.from(teamMap.values()).sort((a, b) => b.count - a.count);
-    const stadiums = Array.from(stadiumMap.values()).sort((a, b) => b.count - a.count);
-
-    return { teams, stadiums };
-  }, [fxRows]);
-
-  const teamResults = useMemo<SearchResult[]>(() => {
-    if (!qNorm) return [];
-    const res = derivedTeamsAndStadiums.teams
-      .filter((t) => includesLoose(t.name.toLowerCase(), qNorm))
-      .slice(0, 6)
-      .map((t) => ({
-        type: "team" as const,
-        key: normalizeKey(t.name),
-        title: t.name,
-        subtitle: "Open team guide",
-      }));
-    return res;
-  }, [qNorm, derivedTeamsAndStadiums.teams]);
-
-  const stadiumResults = useMemo<SearchResult[]>(() => {
-    if (!qNorm) return [];
-    const res = derivedTeamsAndStadiums.stadiums
-      .filter((s) => includesLoose(s.name.toLowerCase(), qNorm) || includesLoose(String(s.city ?? "").toLowerCase(), qNorm))
-      .slice(0, 6)
-      .map((s) => ({
-        type: "stadium" as const,
-        key: normalizeKey(s.name),
-        title: s.name,
-        subtitle: s.city ? `${s.city} • Open stadium guide` : "Open stadium guide",
-      }));
-    return res;
-  }, [qNorm, derivedTeamsAndStadiums.stadiums]);
-
-  const matchResults = useMemo<SearchResult[]>(() => {
+  const venueResults = useMemo(() => {
     if (!qNorm) return [];
 
-    const res = fxRows
-      .filter((r) => {
-        const home = String(r?.teams?.home?.name ?? "").toLowerCase();
-        const away = String(r?.teams?.away?.name ?? "").toLowerCase();
-        const venue = String(r?.fixture?.venue?.name ?? "").toLowerCase();
-        const city = String(r?.fixture?.venue?.city ?? "").toLowerCase();
-        return home.includes(qNorm) || away.includes(qNorm) || venue.includes(qNorm) || city.includes(qNorm);
-      })
-      .slice(0, 6)
-      .map((r, idx) => {
-        const id = r?.fixture?.id;
-        const fixtureId = id ? String(id) : `unknown-${idx}`;
-        const line = fixtureLine(r);
-        return { type: "match" as const, fixtureId, title: line.title, subtitle: line.meta };
-      });
+    const venues = allCachedRows
+      .map((r) => ({
+        venue: String(r?.fixture?.venue?.name ?? "").trim(),
+        city: String(r?.fixture?.venue?.city ?? "").trim(),
+      }))
+      .filter((x) => x.venue);
 
-    return res;
-  }, [fxRows, qNorm]);
+    const filtered = venues.filter((x) => {
+      const a = x.venue.toLowerCase();
+      const b = x.city.toLowerCase();
+      return a.includes(qNorm) || b.includes(qNorm);
+    });
 
-  const tripResults = useMemo<SearchResult[]>(() => {
+    const unique = uniqBy(filtered, (x) => `${x.venue.toLowerCase()}|${x.city.toLowerCase()}`);
+    return unique.slice(0, 6);
+  }, [allCachedRows, qNorm]);
+
+  const matchResults = useMemo(() => {
     if (!qNorm) return [];
-    const res = trips
-      .filter((t) => {
-        const city = String(t.cityId ?? "").toLowerCase();
-        const notes = String(t.notes ?? "").toLowerCase();
-        return city.includes(qNorm) || notes.includes(qNorm);
-      })
-      .slice(0, 4)
-      .map((t) => ({
-        type: "trip" as const,
-        tripId: t.id,
-        title: t.cityId || "Trip",
-        subtitle: tripSummaryLine(t),
-      }));
-    return res;
+
+    const res = allCachedRows.filter((r) => {
+      const home = String(r?.teams?.home?.name ?? "").toLowerCase();
+      const away = String(r?.teams?.away?.name ?? "").toLowerCase();
+      const venue = String(r?.fixture?.venue?.name ?? "").toLowerCase();
+      const city = String(r?.fixture?.venue?.city ?? "").toLowerCase();
+      return home.includes(qNorm) || away.includes(qNorm) || venue.includes(qNorm) || city.includes(qNorm);
+    });
+
+    return res.slice(0, 8);
+  }, [allCachedRows, qNorm]);
+
+  const tripResults = useMemo(() => {
+    if (!qNorm) return [];
+    const res = trips.filter((t) => {
+      const city = String(t.cityId ?? "").toLowerCase();
+      const notes = String(t.notes ?? "").toLowerCase();
+      return city.includes(qNorm) || notes.includes(qNorm);
+    });
+    return res.slice(0, 4);
   }, [trips, qNorm]);
 
-  const tripsCountLabel = useMemo(() => {
-    if (!loadedTrips) return "—";
-    return `${trips.length} trip${trips.length === 1 ? "" : "s"}`;
-  }, [loadedTrips, trips.length]);
-
-  function goBuildTripWithContext(fixtureId?: string) {
-    router.push({
-      pathname: "/trip/build",
-      params: {
-        ...(fixtureId ? { fixtureId } : {}),
-        leagueId: String(league.leagueId),
-        season: String(league.season),
-        from: fromIso,
-        to: toIso,
-      },
-    } as any);
-  }
-
-  function openFixturesForLeague(l: LeagueOption) {
-    // also set active league pill so the UI stays coherent
-    setLeague(l);
+  function openFixturesWithLeague(l: LeagueOption, extra?: { q?: string }) {
     router.push({
       pathname: "/(tabs)/fixtures",
       params: {
@@ -348,47 +427,20 @@ export default function HomeScreen() {
         season: String(l.season),
         from: fromIso,
         to: toIso,
+        ...(extra?.q ? { q: extra.q } : {}),
       },
     } as any);
   }
 
-  function onResultPress(r: SearchResult) {
-    if (r.type === "city") {
-      router.push({ pathname: "/city/[slug]", params: { slug: r.key } });
-      return;
-    }
-    if (r.type === "team") {
-      router.push({ pathname: "/team/[slug]", params: { slug: r.key } });
-      return;
-    }
-    if (r.type === "stadium") {
-      router.push({ pathname: "/stadium/[slug]", params: { slug: r.key } });
-      return;
-    }
-    if (r.type === "league") {
-      openFixturesForLeague(r.league);
-      return;
-    }
-    if (r.type === "match") {
-      router.push({ pathname: "/match/[id]", params: { id: r.fixtureId } });
-      return;
-    }
-    if (r.type === "trip") {
-      router.push({ pathname: "/trip/[id]", params: { id: r.tripId } });
-      return;
-    }
+  function openCityGuide(cityInput: string) {
+    const cityKey = normalizeCityKey(cityInput);
+    router.push({ pathname: "/city/[cityKey]", params: { cityKey } } as any);
   }
 
-  function renderResultRow(r: SearchResult, key: string, rightCta?: React.ReactNode) {
-    return (
-      <View key={key} style={styles.resultRow}>
-        <Pressable onPress={() => onResultPress(r)} style={{ flex: 1 }}>
-          <Text style={styles.rowTitle}>{r.title}</Text>
-          {r.subtitle ? <Text style={styles.rowMeta}>{r.subtitle}</Text> : null}
-        </Pressable>
-        {rightCta ?? null}
-      </View>
-    );
+  function openTeamGuide(teamName: string) {
+    const teamKey = normalizeTeamKey(teamName);
+    // This screen doesn't exist yet (you confirmed). We'll create it next.
+    router.push({ pathname: "/team/[teamKey]", params: { teamKey, teamName } } as any);
   }
 
   return (
@@ -412,95 +464,153 @@ export default function HomeScreen() {
                 returnKeyType="search"
               />
               {!showSearchResults ? (
-                <Text style={styles.heroHint}>Try “Madrid”, “Spain”, “La Liga”, a team name, or a stadium.</Text>
+                <Text style={styles.heroHint}>Tip: Try “Austria”, “Madrid”, “Anfield”, or a club name.</Text>
               ) : null}
             </View>
 
             {showSearchResults ? (
               <View style={styles.searchResults}>
-                {/* Quick feedback row */}
-                {fxLoading ? (
-                  <View style={styles.centerCompact}>
+                {/* Optional warmup indicator */}
+                {searchWarmLoading ? (
+                  <View style={styles.searchLoadingRow}>
                     <ActivityIndicator />
-                    <Text style={styles.muted}>Updating search data…</Text>
+                    <Text style={styles.muted}>Searching across leagues…</Text>
                   </View>
                 ) : null}
 
-                {!fxLoading && fxError ? <EmptyState title="Fixtures unavailable" message={fxError} /> : null}
-
-                {/* Cities */}
+                {/* TEAMS */}
                 <View>
-                  <Text style={styles.searchSectionTitle}>Cities</Text>
-                  {cityResults.length === 0 ? (
-                    <Text style={styles.searchEmpty}>No city guides match.</Text>
+                  <Text style={styles.searchSectionTitle}>Teams</Text>
+                  {teamResults.length === 0 ? (
+                    <Text style={styles.searchEmpty}>No teams found.</Text>
                   ) : (
                     <View style={styles.resultList}>
-                      {cityResults.map((r) => renderResultRow(r, `city-${r.key}`))}
+                      {teamResults.map((t) => (
+                        <Pressable key={t.teamKey} onPress={() => openTeamGuide(t.name)} style={styles.row}>
+                          <Text style={styles.rowTitle}>{t.name}</Text>
+                          <Text style={styles.rowMeta}>Open team guide</Text>
+                        </Pressable>
+                      ))}
                     </View>
                   )}
                 </View>
 
-                {/* Leagues / Countries */}
+                {/* CITIES */}
                 <View>
-                  <Text style={styles.searchSectionTitle}>Leagues</Text>
-                  {leagueResults.length === 0 ? (
-                    <Text style={styles.searchEmpty}>No league match.</Text>
+                  <Text style={styles.searchSectionTitle}>Cities</Text>
+                  {cityResults.length === 0 ? (
+                    <Text style={styles.searchEmpty}>No cities found.</Text>
                   ) : (
                     <View style={styles.resultList}>
-                      {leagueResults.map((r, idx) => {
-                        const key =
-                          r.type === "league" ? `league-${r.league.leagueId}-${idx}` : `league-${idx}`;
-                        return renderResultRow(r, key);
+                      {cityResults.map((c) => (
+                        <Pressable
+                          key={c.cityKey}
+                          onPress={() => openCityGuide(c.cityKey)}
+                          style={styles.row}
+                        >
+                          <Text style={styles.rowTitle}>{c.name}</Text>
+                          <Text style={styles.rowMeta}>{c.country ? c.country : "Open city guide"}</Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  )}
+                </View>
+
+                {/* COUNTRIES / LEAGUES */}
+                <View>
+                  <Text style={styles.searchSectionTitle}>Countries / leagues</Text>
+                  {leagueCountryResults.length === 0 ? (
+                    <Text style={styles.searchEmpty}>No leagues found.</Text>
+                  ) : (
+                    <View style={styles.resultList}>
+                      {leagueCountryResults.map((l) => (
+                        <Pressable
+                          key={`${l.leagueId}:${l.season}`}
+                          onPress={() => openFixturesWithLeague(l)}
+                          style={styles.row}
+                        >
+                          <Text style={styles.rowTitle}>{l.label}</Text>
+                          <Text style={styles.rowMeta}>
+                            Open fixtures • {formatUkDateOnly(fromIso)} → {formatUkDateOnly(toIso)}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  )}
+                </View>
+
+                {/* VENUES */}
+                <View>
+                  <Text style={styles.searchSectionTitle}>Venues</Text>
+                  {venueResults.length === 0 ? (
+                    <Text style={styles.searchEmpty}>No venues found.</Text>
+                  ) : (
+                    <View style={styles.resultList}>
+                      {venueResults.map((v, idx) => {
+                        const key = `${v.venue}-${v.city}-${idx}`;
+                        const label = v.city ? `${v.venue} • ${v.city}` : v.venue;
+
+                        return (
+                          <Pressable
+                            key={key}
+                            onPress={() => openFixturesWithLeague(league, { q: v.venue })}
+                            style={styles.row}
+                          >
+                            <Text style={styles.rowTitle}>{label}</Text>
+                            <Text style={styles.rowMeta}>Open fixtures (v1)</Text>
+                          </Pressable>
+                        );
                       })}
                     </View>
                   )}
                 </View>
 
-                {/* Teams */}
-                <View>
-                  <Text style={styles.searchSectionTitle}>Teams</Text>
-                  {teamResults.length === 0 ? (
-                    <Text style={styles.searchEmpty}>No team match in the loaded fixture window.</Text>
-                  ) : (
-                    <View style={styles.resultList}>
-                      {teamResults.map((r) => renderResultRow(r, `team-${r.key}`))}
-                    </View>
-                  )}
-                </View>
-
-                {/* Stadiums */}
-                <View>
-                  <Text style={styles.searchSectionTitle}>Stadiums</Text>
-                  {stadiumResults.length === 0 ? (
-                    <Text style={styles.searchEmpty}>No stadium match in the loaded fixture window.</Text>
-                  ) : (
-                    <View style={styles.resultList}>
-                      {stadiumResults.map((r) => renderResultRow(r, `stadium-${r.key}`))}
-                    </View>
-                  )}
-                </View>
-
-                {/* Matches */}
+                {/* MATCHES */}
                 <View>
                   <Text style={styles.searchSectionTitle}>Matches</Text>
-                  {!fxLoading && !fxError && matchResults.length === 0 ? (
+
+                  {fxLoading ? (
+                    <View style={styles.center}>
+                      <ActivityIndicator />
+                      <Text style={styles.muted}>Loading fixtures…</Text>
+                    </View>
+                  ) : null}
+
+                  {!fxLoading && (fxError || Object.values(fixturesErrorByLeague).some(Boolean)) ? (
+                    <EmptyState title="Fixtures unavailable" message={fxError ?? "Some leagues could not be searched right now."} />
+                  ) : null}
+
+                  {!fxLoading && matchResults.length === 0 ? (
                     <Text style={styles.searchEmpty}>No matches found.</Text>
                   ) : null}
 
-                  {!fxLoading && !fxError && matchResults.length > 0 ? (
+                  {!fxLoading && matchResults.length > 0 ? (
                     <View style={styles.resultList}>
                       {matchResults.map((r, idx) => {
-                        if (r.type !== "match") return null;
-                        const fixtureId = r.fixtureId;
-                        return renderResultRow(
-                          r,
-                          `m-${fixtureId}-${idx}`,
-                          <Pressable
-                            onPress={() => goBuildTripWithContext(fixtureId)}
-                            style={styles.planPill}
-                          >
-                            <Text style={styles.planPillText}>Plan trip</Text>
-                          </Pressable>
+                        const line = fixtureLine(r);
+                        const fixtureId = line.fixtureId;
+                        const key = fixtureId ?? `m-${idx}`;
+
+                        return (
+                          <View key={key} style={styles.resultRow}>
+                            <Pressable
+                              onPress={() =>
+                                fixtureId ? router.push({ pathname: "/match/[id]", params: { id: fixtureId } }) : null
+                              }
+                              style={{ flex: 1 }}
+                            >
+                              <Text style={styles.rowTitle}>{line.title}</Text>
+                              <Text style={styles.rowMeta}>{line.meta}</Text>
+                            </Pressable>
+
+                            <Pressable
+                              disabled={!fixtureId}
+                              onPress={() => (fixtureId ? goBuildTripWithContext(fixtureId) : null)}
+                              style={[styles.planPill, !fixtureId && { opacity: 0.5 }]}
+                            >
+                              <Text style={styles.planPillText}>Plan trip</Text>
+                            </Pressable>
+                          </View>
                         );
                       })}
                     </View>
@@ -524,12 +634,12 @@ export default function HomeScreen() {
                   </Pressable>
                 </View>
 
-                {/* Trips */}
+                {/* TRIPS (optional, keeps your v1 feature) */}
                 <View>
                   <Text style={styles.searchSectionTitle}>Trips</Text>
 
                   {!loadedTrips ? (
-                    <View style={styles.centerCompact}>
+                    <View style={styles.center}>
                       <ActivityIndicator />
                       <Text style={styles.muted}>Searching trips…</Text>
                     </View>
@@ -541,10 +651,16 @@ export default function HomeScreen() {
 
                   {loadedTrips && tripResults.length > 0 ? (
                     <View style={styles.resultList}>
-                      {tripResults.map((r, idx) => {
-                        if (r.type !== "trip") return null;
-                        return renderResultRow(r, `trip-${r.tripId}-${idx}`);
-                      })}
+                      {tripResults.map((t) => (
+                        <Pressable
+                          key={t.id}
+                          onPress={() => router.push({ pathname: "/trip/[id]", params: { id: t.id } })}
+                          style={styles.row}
+                        >
+                          <Text style={styles.rowTitle}>{t.cityId || "Trip"}</Text>
+                          <Text style={styles.rowMeta}>{tripSummaryLine(t)}</Text>
+                        </Pressable>
+                      ))}
                     </View>
                   ) : null}
 
@@ -601,10 +717,7 @@ export default function HomeScreen() {
 
           {/* NEXT FIXTURES */}
           <View style={styles.section}>
-            <SectionHeader
-              title="Next fixtures"
-              subtitle={`${league.label} • ${formatUkDateOnly(fromIso)} → ${formatUkDateOnly(toIso)}`}
-            />
+            <SectionHeader title="Next fixtures" subtitle={`${league.label} • ${formatUkDateOnly(fromIso)} → ${formatUkDateOnly(toIso)}`} />
             <GlassCard style={styles.card} intensity={22}>
               {fxLoading ? (
                 <View style={styles.center}>
@@ -622,16 +735,14 @@ export default function HomeScreen() {
               {!fxLoading && !fxError && fxPreview.length > 0 ? (
                 <View style={styles.list}>
                   {fxPreview.map((r, idx) => {
-                    const id = r?.fixture?.id;
-                    const fixtureId = id ? String(id) : null;
                     const line = fixtureLine(r);
+                    const fixtureId = line.fixtureId;
+                    const key = fixtureId ?? `fx-${idx}`;
 
                     return (
-                      <View key={fixtureId ?? `fx-${idx}`} style={styles.fixtureCardRow}>
+                      <View key={key} style={styles.fixtureCardRow}>
                         <Pressable
-                          onPress={() =>
-                            fixtureId ? router.push({ pathname: "/match/[id]", params: { id: fixtureId } }) : null
-                          }
+                          onPress={() => (fixtureId ? router.push({ pathname: "/match/[id]", params: { id: fixtureId } }) : null)}
                           style={{ flex: 1 }}
                         >
                           <Text style={styles.rowTitle}>{line.title}</Text>
@@ -732,9 +843,8 @@ const styles = StyleSheet.create({
   section: { marginTop: 2 },
   card: { padding: theme.spacing.md },
 
-  muted: { marginTop: 0, fontSize: theme.fontSize.sm, color: theme.colors.textSecondary },
+  muted: { marginTop: 8, fontSize: theme.fontSize.sm, color: theme.colors.textSecondary },
   center: { paddingVertical: 12, alignItems: "center", gap: 10 },
-  centerCompact: { paddingTop: 6, paddingBottom: 2, alignItems: "center", gap: 8 },
 
   list: { marginTop: 10, gap: 10 },
 
@@ -799,6 +909,8 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   searchEmpty: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, marginTop: 6 },
+
+  searchLoadingRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 6 },
 
   resultList: { marginTop: 8, gap: 10 },
   resultRow: {
