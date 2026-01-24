@@ -1,273 +1,276 @@
 // app/city/[slug].tsx
-import React, { useMemo } from "react";
-import { View, Text, StyleSheet, ScrollView, Pressable, Alert, Linking, Platform } from "react-native";
+import React, { useEffect, useMemo, useState } from "react";
+import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 
 import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
-import SectionHeader from "@/src/components/SectionHeader";
 import EmptyState from "@/src/components/EmptyState";
+import SectionHeader from "@/src/components/SectionHeader";
+
 import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
 
-import { getCityGuide } from "@/src/data/cityGuides";
+import { LEAGUES, getRollingWindowIso, clampFromIsoToTomorrow } from "@/src/constants/football";
+import { getFixtures, type FixtureListRow } from "@/src/services/apiFootball";
+
+import { getCityGuide, cityGuides } from "@/src/data/cityGuides";
 import { normalizeCityKey } from "@/src/utils/city";
+import { coerceString } from "@/src/utils/params";
+import { formatUkDateOnly, formatUkDateTimeMaybe } from "@/src/utils/formatters";
 
-function enc(v: string) {
-  return encodeURIComponent(v);
+function fixtureLine(r: FixtureListRow) {
+  const home = r?.teams?.home?.name ?? "Home";
+  const away = r?.teams?.away?.name ?? "Away";
+  const kickoff = formatUkDateTimeMaybe(r?.fixture?.date);
+  const venue = r?.fixture?.venue?.name ?? "";
+  const city = r?.fixture?.venue?.city ?? "";
+  const extra = [venue, city].filter(Boolean).join(" • ");
+  return {
+    fixtureId: r?.fixture?.id ? String(r.fixture.id) : null,
+    title: `${home} vs ${away}`,
+    meta: extra ? `${kickoff} • ${extra}` : kickoff,
+  };
 }
 
-async function safeOpenUrl(url: string) {
-  try {
-    const can = await Linking.canOpenURL(url);
-    if (!can) throw new Error("Cannot open URL");
-    await Linking.openURL(url);
-  } catch {
-    Alert.alert("Couldn’t open link", "Your device could not open that link.");
-  }
+function eqCity(a: string, b: string) {
+  // Normalize to avoid “Madrid, Spain” vs “Madrid” issues.
+  return normalizeCityKey(a) === normalizeCityKey(b);
 }
 
-function titleFromSlug(slug: string) {
-  const s = String(slug || "").trim();
-  if (!s) return "";
-  return s
-    .split("-")
-    .filter(Boolean)
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(" ");
-}
-
-/**
- * V1 City screen:
- * - pulls from cityGuides registry when available
- * - otherwise uses link-outs (TripAdvisor + Google) so it always “works”
- *
- * Route:
- * /city/[slug]
- * where slug is a city key (e.g. london, madrid, rome, berlin, paris)
- */
-export default function CityScreen() {
+export default function CityGuideScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
 
-  const rawSlug = useMemo(() => String(params.slug ?? "").trim(), [params.slug]);
-  const cityKey = useMemo(() => normalizeCityKey(rawSlug), [rawSlug]);
+  const slugRaw = useMemo(() => coerceString((params as any)?.slug), [params]);
+  const cityKey = useMemo(() => normalizeCityKey(slugRaw), [slugRaw]);
 
-  const guide = useMemo(() => (cityKey ? getCityGuide(cityKey) : null), [cityKey]);
+  const guide = useMemo(() => {
+    if (!cityKey) return null;
+    // Allow passing either an actual key or a human name.
+    return getCityGuide(cityKey) ?? null;
+  }, [cityKey]);
 
-  const cityName = useMemo(() => guide?.name || titleFromSlug(cityKey) || "City", [guide?.name, cityKey]);
-  const country = useMemo(() => guide?.country || "", [guide?.country]);
+  // Rolling window (tomorrow onwards)
+  const rolling = useMemo(() => getRollingWindowIso(), []);
+  const fromIso = useMemo(() => clampFromIsoToTomorrow(rolling.from), [rolling.from]);
+  const toIso = rolling.to;
 
-  const tripAdvisorUrl = useMemo(() => {
-    if (guide?.tripAdvisorTopThingsUrl) return guide.tripAdvisorTopThingsUrl;
-    // fallback: still useful even without a curated guide
-    const q = [cityName, country, "things to do TripAdvisor"].filter(Boolean).join(" ");
-    return `https://www.google.com/search?q=${enc(q)}`;
-  }, [guide?.tripAdvisorTopThingsUrl, cityName, country]);
+  const displayName = useMemo(() => {
+    if (guide?.name) return guide.name;
+    if (cityKey) return cityKey.replace(/-/g, " ").replace(/\b\w/g, (m) => m.toUpperCase());
+    return "City";
+  }, [guide?.name, cityKey]);
 
-  const mapsUrl = useMemo(() => {
-    const q = [cityName, country].filter(Boolean).join(" ").trim();
-    return `https://www.google.com/maps/search/?api=1&query=${enc(q || cityName)}`;
-  }, [cityName, country]);
+  const displayCountry = guide?.country ?? "";
 
-  const hotelsUrl = useMemo(() => {
-    const q = [cityName, country, "best areas to stay hotels"].filter(Boolean).join(" ");
-    return `https://www.google.com/search?q=${enc(q)}`;
-  }, [cityName, country]);
+  // Fixtures in this city (across configured leagues)
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [rows, setRows] = useState<FixtureListRow[]>([]);
 
-  const transportUrl = useMemo(() => {
-    const q = [cityName, country, "public transport pass airport transfer"].filter(Boolean).join(" ");
-    return `https://www.google.com/search?q=${enc(q)}`;
-  }, [cityName, country]);
+  useEffect(() => {
+    let cancelled = false;
 
-  const foodUrl = useMemo(() => {
-    const q = [cityName, country, "best restaurants bars neighbourhoods"].filter(Boolean).join(" ");
-    return `https://www.google.com/search?q=${enc(q)}`;
-  }, [cityName, country]);
+    async function run() {
+      setLoading(true);
+      setError(null);
+      setRows([]);
 
-  if (!cityKey) {
-    return (
-      <Background imageUrl={getBackground("city")} overlayOpacity={0.86}>
-        <SafeAreaView style={styles.container} edges={["top"]}>
-          <View style={styles.header}>
-            <Pressable onPress={() => router.back()} style={styles.backBtn} accessibilityRole="button">
-              <Text style={styles.backText}>Back</Text>
-            </Pressable>
-          </View>
+      try {
+        // Fetch fixtures for each configured league in parallel.
+        const all = await Promise.all(
+          LEAGUES.map((l) =>
+            getFixtures({
+              league: l.leagueId,
+              season: l.season,
+              from: fromIso,
+              to: toIso,
+            })
+              .then((r) => (Array.isArray(r) ? r : []))
+              .catch(() => [])
+          )
+        );
 
-          <View style={styles.pad}>
-            <GlassCard style={styles.card} intensity={22}>
-              <EmptyState title="Missing city" message="No city slug was provided." />
-            </GlassCard>
-          </View>
-        </SafeAreaView>
-      </Background>
-    );
+        if (cancelled) return;
+
+        const flat = all.flat();
+
+        // Filter by venue.city (best available signal in v1).
+        const filtered = flat.filter((r) => {
+          const venueCity = String(r?.fixture?.venue?.city ?? "").trim();
+          if (!venueCity) return false;
+
+          // If we have a guide, match against guide name/cityId too.
+          const a = venueCity;
+          const b = guide?.name ?? displayName;
+          return eqCity(a, b);
+        });
+
+        // Sort by kickoff datetime
+        filtered.sort((x, y) => {
+          const a = new Date(String(x?.fixture?.date ?? "")).getTime();
+          const b = new Date(String(y?.fixture?.date ?? "")).getTime();
+          return (Number.isFinite(a) ? a : 0) - (Number.isFinite(b) ? b : 0);
+        });
+
+        setRows(filtered);
+      } catch (e: any) {
+        if (cancelled) return;
+        setError(e?.message ?? "Failed to load city fixtures.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    // If cityKey is empty, do not fetch.
+    if (cityKey) run();
+    else {
+      setLoading(false);
+      setRows([]);
+      setError("Missing city.");
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [cityKey, guide?.name, displayName, fromIso, toIso]);
+
+  function goPlanTripWithContext(fixtureId: string) {
+    router.push({
+      pathname: "/trip/build",
+      params: {
+        fixtureId,
+        from: fromIso,
+        to: toIso,
+      },
+    } as any);
   }
 
-  return (
-    <Background imageUrl={getBackground("city")} overlayOpacity={0.86}>
-      <SafeAreaView style={styles.container} edges={["top"]}>
-        <View style={styles.header}>
-          <Pressable onPress={() => router.back()} style={styles.backBtn} accessibilityRole="button">
-            <Text style={styles.backText}>Back</Text>
-          </Pressable>
-        </View>
+  const hasGuide = !!guide;
 
-        <ScrollView style={styles.scroll} contentContainerStyle={styles.pad}>
+  return (
+    <Background imageUrl={getBackground("city") ?? getBackground("home")} overlayOpacity={0.86}>
+      <Stack.Screen options={{ headerShown: true, title: "City", headerTransparent: true, headerTintColor: theme.colors.text }} />
+
+      <SafeAreaView style={styles.safe} edges={["bottom"]}>
+        <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
+          {/* HERO */}
           <GlassCard style={styles.hero} intensity={26}>
             <Text style={styles.kicker}>CITY GUIDE</Text>
             <Text style={styles.title} numberOfLines={2}>
-              {cityName}
+              {displayName}
             </Text>
-            <Text style={styles.subTitle}>
-              {country ? country : "Plan a clean, low-stress weekend"}
-              {guide ? " • Curated picks" : " • Link-out mode"}
+            {displayCountry ? <Text style={styles.sub}>{displayCountry}</Text> : null}
+            <Text style={styles.meta}>
+              {formatUkDateOnly(fromIso)} → {formatUkDateOnly(toIso)}
             </Text>
 
-            <View style={styles.heroCtas}>
-              <Pressable onPress={() => safeOpenUrl(tripAdvisorUrl)} style={styles.primaryBtn} accessibilityRole="button">
-                <Text style={styles.primaryBtnText}>Top things to do</Text>
-                <Text style={styles.primaryBtnMeta}>Open TripAdvisor / current picks</Text>
-              </Pressable>
-
-              <View style={styles.twoCol}>
-                <Pressable
-                  onPress={() => safeOpenUrl(mapsUrl)}
-                  style={[styles.smallBtn, styles.smallBtnSecondary]}
-                  accessibilityRole="button"
-                >
-                  <Text style={styles.smallBtnTitle}>Map</Text>
-                  <Text style={styles.smallBtnMeta}>Neighbourhoods & landmarks</Text>
-                </Pressable>
-
-                <Pressable
-                  onPress={() => router.push("/trip/build")}
-                  style={[styles.smallBtn, styles.smallBtnSecondary]}
-                  accessibilityRole="button"
-                >
-                  <Text style={styles.smallBtnTitle}>Plan a trip</Text>
-                  <Text style={styles.smallBtnMeta}>Pick a match later</Text>
-                </Pressable>
+            {!hasGuide ? (
+              <View style={{ marginTop: 10 }}>
+                <EmptyState
+                  title="Guide not found yet"
+                  message="This city route is live, but the curated guide content hasn’t been added to the registry. Fixtures still work below."
+                />
               </View>
-
-              <Pressable
-                onPress={() => router.push("/(tabs)/fixtures")}
-                style={styles.linkBtn}
-                accessibilityRole="button"
-              >
-                <Text style={styles.linkText}>Open Fixtures</Text>
-              </Pressable>
-            </View>
+            ) : null}
           </GlassCard>
 
-          {/* CURATED GUIDE (when available) */}
-          {guide ? (
+          {/* GUIDE CONTENT */}
+          {hasGuide ? (
             <>
               <GlassCard style={styles.card} intensity={22}>
-                <SectionHeader title="Overview" subtitle="How to get the best weekend" />
-                <Text style={styles.bodyText}>{guide.overview}</Text>
+                <SectionHeader title="Overview" subtitle="How to plan a strong weekend here" />
+                <Text style={styles.body}>{guide?.overview ?? ""}</Text>
               </GlassCard>
 
               <GlassCard style={styles.card} intensity={22}>
-                <SectionHeader title="Top things to do" subtitle="High value, low fluff" />
+                <SectionHeader title="Top things to do" subtitle="Fast wins for a 1–3 day trip" />
                 <View style={styles.list}>
-                  {(guide.topThings ?? []).slice(0, 10).map((t, idx) => (
-                    <View key={`${t.title}-${idx}`} style={styles.itemRow}>
-                      <Text style={styles.idx}>{idx + 1}.</Text>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.itemTitle}>{t.title}</Text>
-                        {t.tip ? <Text style={styles.itemBody}>{t.tip}</Text> : null}
-                      </View>
+                  {(guide?.topThings ?? []).slice(0, 10).map((x, idx) => (
+                    <View key={`${x.title}-${idx}`} style={styles.item}>
+                      <Text style={styles.itemTitle}>
+                        {idx + 1}. {x.title}
+                      </Text>
+                      {x.tip ? <Text style={styles.itemBody}>{x.tip}</Text> : null}
                     </View>
                   ))}
                 </View>
-                <Pressable
-                  onPress={() => safeOpenUrl(guide.tripAdvisorTopThingsUrl)}
-                  style={styles.linkBtn}
-                  accessibilityRole="button"
-                >
-                  <Text style={styles.linkText}>Open TripAdvisor</Text>
-                </Pressable>
               </GlassCard>
 
-              <GlassCard style={styles.card} intensity={22}>
-                <SectionHeader title="Quick tips" subtitle="Small decisions that save time" />
-                <View style={{ marginTop: 8, gap: 6 }}>
-                  {(guide.tips ?? []).slice(0, 10).map((t, idx) => (
-                    <Text key={`${t}-${idx}`} style={styles.bullet}>
-                      • {t}
-                    </Text>
-                  ))}
-                </View>
-              </GlassCard>
-
-              <GlassCard style={styles.card} intensity={22}>
-                <SectionHeader title="Food" subtitle="Reliable options and areas" />
-                <View style={{ marginTop: 8, gap: 6 }}>
-                  {(guide.food ?? []).slice(0, 10).map((f, idx) => (
-                    <Text key={`${f}-${idx}`} style={styles.bullet}>
-                      • {f}
-                    </Text>
-                  ))}
-                </View>
-
-                <Pressable onPress={() => safeOpenUrl(foodUrl)} style={styles.linkBtn} accessibilityRole="button">
-                  <Text style={styles.linkText}>Search best food areas</Text>
-                </Pressable>
-              </GlassCard>
-
-              <GlassCard style={styles.card} intensity={22}>
-                <SectionHeader title="Transport" subtitle="Get around efficiently" />
-                <Text style={styles.bodyText}>{guide.transport}</Text>
-                <Pressable onPress={() => safeOpenUrl(transportUrl)} style={styles.linkBtn} accessibilityRole="button">
-                  <Text style={styles.linkText}>Search passes & airport transfer</Text>
-                </Pressable>
-              </GlassCard>
-
-              <GlassCard style={styles.card} intensity={22}>
-                <SectionHeader title="Where to stay" subtitle="Base selection matters" />
-                <Text style={styles.bodyText}>{guide.accommodation}</Text>
-                <Pressable onPress={() => safeOpenUrl(hotelsUrl)} style={styles.linkBtn} accessibilityRole="button">
-                  <Text style={styles.linkText}>Search best areas to stay</Text>
-                </Pressable>
-              </GlassCard>
+              {(guide?.tips?.length ?? 0) > 0 ? (
+                <GlassCard style={styles.card} intensity={22}>
+                  <SectionHeader title="Quick tips" subtitle="Practical, non-fluffy" />
+                  <View style={styles.bullets}>
+                    {(guide?.tips ?? []).slice(0, 12).map((t, idx) => (
+                      <Text key={`${t}-${idx}`} style={styles.bullet}>
+                        • {t}
+                      </Text>
+                    ))}
+                  </View>
+                </GlassCard>
+              ) : null}
             </>
-          ) : (
-            /* LINK-OUT MODE (no curated guide yet) */
-            <GlassCard style={styles.card} intensity={22}>
-              <SectionHeader title="This city isn’t curated yet" subtitle="Still fully usable in V1" />
-              <Text style={styles.bodyText}>
-                You can still plan a great weekend here. Use the links below to get the best current recommendations, then
-                use Fixtures to choose a match and build your trip.
-              </Text>
+          ) : null}
 
-              <View style={{ marginTop: 10, gap: 10 }}>
-                <Pressable onPress={() => safeOpenUrl(tripAdvisorUrl)} style={styles.linkRow} accessibilityRole="button">
-                  <Text style={styles.linkTitle}>Top things to do</Text>
-                  <Text style={styles.linkMeta}>TripAdvisor / current picks</Text>
-                </Pressable>
+          {/* CITY FIXTURES */}
+          <GlassCard style={styles.card} intensity={22}>
+            <SectionHeader title="Fixtures in this city" subtitle="Matches in the rolling window" />
 
-                <Pressable onPress={() => safeOpenUrl(foodUrl)} style={styles.linkRow} accessibilityRole="button">
-                  <Text style={styles.linkTitle}>Food & drink</Text>
-                  <Text style={styles.linkMeta}>Best areas and reliable lists</Text>
-                </Pressable>
-
-                <Pressable onPress={() => safeOpenUrl(transportUrl)} style={styles.linkRow} accessibilityRole="button">
-                  <Text style={styles.linkTitle}>Transport</Text>
-                  <Text style={styles.linkMeta}>Passes, airport transfer, getting around</Text>
-                </Pressable>
-
-                <Pressable onPress={() => safeOpenUrl(hotelsUrl)} style={styles.linkRow} accessibilityRole="button">
-                  <Text style={styles.linkTitle}>Where to stay</Text>
-                  <Text style={styles.linkMeta}>Neighbourhood guidance and hotel search</Text>
-                </Pressable>
+            {loading ? (
+              <View style={styles.center}>
+                <ActivityIndicator />
+                <Text style={styles.muted}>Loading fixtures…</Text>
               </View>
-            </GlassCard>
-          )}
+            ) : null}
 
-          <View style={{ height: 6 }} />
+            {!loading && error ? <EmptyState title="Couldn’t load fixtures" message={error} /> : null}
+
+            {!loading && !error && rows.length === 0 ? (
+              <EmptyState title="No fixtures found" message="Either there are no matches in this window, or the venue city does not match this city key yet." />
+            ) : null}
+
+            {!loading && !error && rows.length > 0 ? (
+              <View style={styles.fxList}>
+                {rows.slice(0, 16).map((r, idx) => {
+                  const line = fixtureLine(r);
+                  const fixtureId = line.fixtureId;
+                  const key = fixtureId ?? `fx-${idx}`;
+
+                  return (
+                    <View key={key} style={styles.fxRow}>
+                      <Pressable
+                        onPress={() => (fixtureId ? router.push({ pathname: "/match/[id]", params: { id: fixtureId, from: fromIso, to: toIso } }) : null)}
+                        style={{ flex: 1 }}
+                      >
+                        <Text style={styles.fxTitle}>{line.title}</Text>
+                        <Text style={styles.fxMeta}>{line.meta}</Text>
+                      </Pressable>
+
+                      <Pressable
+                        disabled={!fixtureId}
+                        onPress={() => (fixtureId ? goPlanTripWithContext(fixtureId) : null)}
+                        style={[styles.planBtn, !fixtureId && { opacity: 0.5 }]}
+                      >
+                        <Text style={styles.planText}>Plan</Text>
+                      </Pressable>
+                    </View>
+                  );
+                })}
+              </View>
+            ) : null}
+          </GlassCard>
+
+          {/* DEBUG / DISCOVERY (v1 helpful, non-user-facing later) */}
+          <GlassCard style={styles.card} intensity={18}>
+            <SectionHeader title="City key" subtitle="Used for routing + guide lookup" />
+            <Text style={styles.muted}>
+              slug: {String(slugRaw ?? "")}
+              {"\n"}cityKey: {String(cityKey ?? "")}
+              {"\n"}known keys: {Object.keys(cityGuides).length}
+            </Text>
+          </GlassCard>
         </ScrollView>
       </SafeAreaView>
     </Background>
@@ -275,120 +278,72 @@ export default function CityScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-
-  header: {
-    paddingTop: theme.spacing.md,
-    paddingHorizontal: theme.spacing.lg,
-    paddingBottom: theme.spacing.sm,
-  },
-
-  backBtn: {
-    alignSelf: "flex-start",
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    backgroundColor: "rgba(0,0,0,0.22)",
-  },
-  backText: { color: theme.colors.text, fontWeight: "900" as any, fontSize: theme.fontSize.sm },
-
+  safe: { flex: 1 },
   scroll: { flex: 1 },
-
-  pad: {
+  content: {
+    paddingTop: 100,
     paddingHorizontal: theme.spacing.lg,
     paddingBottom: theme.spacing.xxl,
     gap: theme.spacing.lg,
   },
 
-  hero: { padding: theme.spacing.md },
+  hero: { padding: theme.spacing.lg },
+  card: { padding: theme.spacing.lg },
 
   kicker: {
     color: theme.colors.primary,
     fontSize: theme.fontSize.xs,
-    fontWeight: "900" as any,
+    fontWeight: "900",
     letterSpacing: 0.6,
   },
   title: {
     marginTop: 8,
     color: theme.colors.text,
-    fontSize: theme.fontSize.xxl,
-    fontWeight: "900" as any,
+    fontSize: theme.fontSize.xl,
+    fontWeight: "900",
+    lineHeight: 30,
   },
-  subTitle: {
-    marginTop: 6,
-    color: theme.colors.textSecondary,
-    fontSize: theme.fontSize.sm,
-    lineHeight: 18,
-  },
+  sub: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm },
+  meta: { marginTop: 10, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm },
 
-  heroCtas: { marginTop: 14, gap: 10 },
+  body: { marginTop: 10, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18 },
 
-  primaryBtn: {
-    paddingVertical: Platform.OS === "ios" ? 14 : 12,
-    paddingHorizontal: 14,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "rgba(0,255,136,0.55)",
-    backgroundColor: "rgba(0,0,0,0.34)",
-    alignItems: "center",
-  },
-  primaryBtnText: { color: theme.colors.text, fontWeight: "900" as any, fontSize: theme.fontSize.md },
-  primaryBtnMeta: {
-    marginTop: 6,
-    color: theme.colors.textSecondary,
-    fontSize: theme.fontSize.xs,
-    fontWeight: "700" as any,
-    textAlign: "center",
-  },
-
-  twoCol: { flexDirection: "row", gap: 10 },
-
-  smallBtn: {
-    flex: 1,
-    borderRadius: 14,
-    borderWidth: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-  },
-  smallBtnSecondary: {
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.22)",
-  },
-  smallBtnTitle: { color: theme.colors.text, fontWeight: "900" as any, fontSize: theme.fontSize.sm },
-  smallBtnMeta: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, lineHeight: 16 },
-
-  linkBtn: {
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    backgroundColor: "rgba(0,0,0,0.22)",
-    alignItems: "center",
-  },
-  linkText: { color: theme.colors.text, fontWeight: "900" as any, fontSize: theme.fontSize.sm },
-
-  card: { padding: theme.spacing.md },
-
-  bodyText: { marginTop: 8, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18 },
-
-  list: { marginTop: 10, gap: 10 },
-  itemRow: { flexDirection: "row", gap: 10, alignItems: "flex-start" },
-  idx: { width: 18, color: theme.colors.primary, fontWeight: "900" as any },
-  itemTitle: { color: theme.colors.text, fontWeight: "900" as any, fontSize: theme.fontSize.sm },
-  itemBody: { marginTop: 4, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18 },
-
-  bullet: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18 },
-
-  linkRow: {
+  list: { marginTop: 10, gap: 12 },
+  item: {
     borderRadius: 14,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
     backgroundColor: "rgba(0,0,0,0.18)",
-    paddingVertical: 12,
-    paddingHorizontal: 12,
+    padding: 12,
   },
-  linkTitle: { color: theme.colors.text, fontWeight: "900" as any, fontSize: theme.fontSize.sm },
-  linkMeta: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18 },
+  itemTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
+  itemBody: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18 },
+
+  bullets: { marginTop: 10, gap: 6 },
+  bullet: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18 },
+
+  center: { paddingVertical: 14, alignItems: "center", gap: 10, marginTop: 8 },
+  muted: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18 },
+
+  fxList: { marginTop: 10, gap: 10 },
+  fxRow: {
+    flexDirection: "row",
+    gap: 10,
+    alignItems: "center",
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255,255,255,0.08)",
+  },
+  fxTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.md },
+  fxMeta: { marginTop: 4, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm },
+
+  planBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(0,255,136,0.45)",
+    backgroundColor: "rgba(0,0,0,0.22)",
+  },
+  planText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.xs },
 });
