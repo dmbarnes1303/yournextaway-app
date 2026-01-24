@@ -1,6 +1,6 @@
 // app/(tabs)/trips.tsx
 import React, { useEffect, useMemo, useState } from "react";
-import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator } from "react-native";
+import { View, Text, StyleSheet, ScrollView, Pressable } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 
@@ -10,36 +10,14 @@ import EmptyState from "@/src/components/EmptyState";
 import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
 import tripsStore, { type Trip } from "@/src/state/trips";
-import { getFixtureById } from "@/src/services/apiFootball";
 
 import { formatUkDateRange } from "@/src/utils/formatters";
-import { parseIsoDateOnly, toIsoDate } from "@/src/constants/football";
-
-type MatchSummary = {
-  fixtureId?: string;
-  home?: string;
-  away?: string;
-  kickoff?: string;
-};
-
-function isUpcomingTrip(t: Trip, todayIso: string) {
-  const end = parseIsoDateOnly(t.endDate);
-  const today = parseIsoDateOnly(todayIso);
-  if (!end || !today) return true;
-  return end.getTime() >= today.getTime();
-}
 
 export default function TripsScreen() {
   const router = useRouter();
 
   const [loaded, setLoaded] = useState(tripsStore.getState().loaded);
   const [trips, setTrips] = useState<Trip[]>(tripsStore.getState().trips);
-
-  // Match summaries for nicer list rows (best-effort; never blocks rendering)
-  const [matchByTripId, setMatchByTripId] = useState<Record<string, MatchSummary>>({});
-  const [matchLoading, setMatchLoading] = useState(false);
-
-  const todayIso = useMemo(() => toIsoDate(new Date()), []);
 
   useEffect(() => {
     const unsub = tripsStore.subscribe((s) => {
@@ -54,86 +32,7 @@ export default function TripsScreen() {
     return unsub;
   }, []);
 
-  const sortedTrips = useMemo(() => {
-    const list = [...trips];
-
-    list.sort((a, b) => {
-      const aUpcoming = isUpcomingTrip(a, todayIso);
-      const bUpcoming = isUpcomingTrip(b, todayIso);
-
-      // Upcoming first
-      if (aUpcoming !== bUpcoming) return aUpcoming ? -1 : 1;
-
-      const aStart = parseIsoDateOnly(a.startDate)?.getTime() ?? 0;
-      const bStart = parseIsoDateOnly(b.startDate)?.getTime() ?? 0;
-
-      // Upcoming: earliest first
-      if (aUpcoming && bUpcoming) return aStart - bStart;
-
-      // Past: most recent first
-      return bStart - aStart;
-    });
-
-    return list;
-  }, [trips, todayIso]);
-
-  const hasTrips = useMemo(() => sortedTrips.length > 0, [sortedTrips]);
-
-  // Best-effort fetch of first match per trip so the list feels “finished”.
-  useEffect(() => {
-    let cancelled = false;
-
-    async function run() {
-      if (!loaded) return;
-      if (!hasTrips) {
-        setMatchByTripId({});
-        return;
-      }
-
-      setMatchLoading(true);
-
-      try {
-        const next: Record<string, MatchSummary> = {};
-
-        await Promise.all(
-          sortedTrips.map(async (t) => {
-            const mid = t.matchIds?.[0];
-            if (!mid) return;
-
-            try {
-              const row: any = await getFixtureById(mid);
-              if (!row) return;
-
-              const home = row?.teams?.home?.name ?? "";
-              const away = row?.teams?.away?.name ?? "";
-              const kickoff = row?.fixture?.date ?? "";
-
-              next[t.id] = {
-                fixtureId: String(row?.fixture?.id ?? mid),
-                home,
-                away,
-                kickoff,
-              };
-            } catch {
-              // ignore
-            }
-          })
-        );
-
-        if (cancelled) return;
-
-        // Merge to avoid flicker if some rows fail
-        setMatchByTripId((cur) => ({ ...cur, ...next }));
-      } finally {
-        if (!cancelled) setMatchLoading(false);
-      }
-    }
-
-    run();
-    return () => {
-      cancelled = true;
-    };
-  }, [loaded, hasTrips, sortedTrips]);
+  const hasTrips = useMemo(() => trips.length > 0, [trips]);
 
   return (
     <Background imageUrl={getBackground("trips")}>
@@ -142,7 +41,7 @@ export default function TripsScreen() {
           <View style={styles.headerTop}>
             <View style={{ flex: 1 }}>
               <Text style={styles.title}>My Trips</Text>
-              <Text style={styles.subtitle}>Plan mini-breaks around football fixtures.</Text>
+              <Text style={styles.subtitle}>Your saved match trips</Text>
             </View>
 
             <Pressable onPress={() => router.push("/trip/build")} style={styles.cta}>
@@ -151,71 +50,51 @@ export default function TripsScreen() {
           </View>
 
           <Text style={styles.meta}>
-            {loaded ? `${sortedTrips.length} trip${sortedTrips.length === 1 ? "" : "s"}` : "Loading…"}
+            {loaded ? `${trips.length} trip${trips.length === 1 ? "" : "s"}` : "Loading…"}
           </Text>
         </View>
 
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
-          <GlassCard style={styles.card} intensity={24}>
-            {!loaded ? (
-              <View style={styles.center}>
-                <ActivityIndicator />
-                <Text style={styles.muted}>Loading trips…</Text>
-              </View>
-            ) : null}
+          <GlassCard style={styles.card}>
+            {!loaded ? <EmptyState title="Loading trips" message="One moment…" /> : null}
 
             {loaded && !hasTrips ? (
               <View style={{ gap: 12 }}>
-                <EmptyState title="No trips yet" message="Build your first trip from a match in Fixtures." />
-                <Pressable onPress={() => router.push("/trip/build")} style={styles.primaryBtn}>
-                  <Text style={styles.primaryBtnText}>Build a trip</Text>
-                </Pressable>
+                <EmptyState title="No trips planned" message="Pick a fixture and save a simple 2-night trip." />
+
+                <View style={styles.emptyActions}>
+                  <Pressable onPress={() => router.push("/(tabs)/fixtures")} style={[styles.emptyBtn, styles.emptyBtnPrimary]}>
+                    <Text style={styles.emptyBtnText}>Browse fixtures</Text>
+                  </Pressable>
+
+                  <Pressable onPress={() => router.push("/trip/build")} style={styles.emptyBtn}>
+                    <Text style={styles.emptyBtnText}>Build trip</Text>
+                  </Pressable>
+                </View>
               </View>
             ) : null}
 
             {loaded && hasTrips ? (
               <View style={styles.list}>
-                {sortedTrips.map((t) => {
+                {trips.map((t) => {
                   const matchCount = t.matchIds?.length ?? 0;
-                  const upcoming = isUpcomingTrip(t, todayIso);
-
-                  const match = matchByTripId[t.id];
-                  const hasTeams = !!(match?.home && match?.away);
 
                   return (
                     <Pressable
                       key={t.id}
                       onPress={() => router.push({ pathname: "/trip/[id]", params: { id: t.id } })}
-                      style={styles.rowCard}
+                      style={styles.row}
                     >
-                      <View style={styles.rowTop}>
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.rowTitle} numberOfLines={1}>
-                            {t.cityId || "Trip"}
-                          </Text>
-                          <Text style={styles.rowMeta} numberOfLines={1}>
-                            {formatUkDateRange(t.startDate, t.endDate)} • {matchCount} match{matchCount === 1 ? "" : "es"}
-                          </Text>
-                        </View>
+                      <Text style={styles.rowTitle}>{t.cityId || "Trip"}</Text>
+                      <Text style={styles.rowMeta}>
+                        {formatUkDateRange(t.startDate, t.endDate)} • {matchCount} match{matchCount === 1 ? "" : "es"}
+                      </Text>
 
-                        <View style={[styles.statusPill, upcoming ? styles.statusUpcoming : styles.statusPast]}>
-                          <Text style={styles.statusText}>{upcoming ? "Upcoming" : "Past"}</Text>
-                        </View>
-                      </View>
-
-                      <View style={styles.rowDivider} />
-
-                      <View style={styles.rowBottom}>
-                        <Text style={styles.matchLine} numberOfLines={1}>
-                          {hasTeams ? `${match!.home} vs ${match!.away}` : matchLoading ? "Loading match…" : "Match selected"}
+                      {t.notes?.trim() ? (
+                        <Text style={styles.rowNotes} numberOfLines={2}>
+                          {t.notes.trim()}
                         </Text>
-
-                        {t.notes?.trim() ? (
-                          <Text style={styles.rowNotes} numberOfLines={2}>
-                            {t.notes.trim()}
-                          </Text>
-                        ) : null}
-                      </View>
+                      ) : null}
                     </Pressable>
                   );
                 })}
@@ -230,7 +109,6 @@ export default function TripsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-
   header: {
     paddingHorizontal: theme.spacing.lg,
     paddingTop: theme.spacing.lg,
@@ -256,7 +134,6 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSize.sm,
     color: theme.colors.textSecondary,
   },
-
   cta: {
     paddingVertical: 10,
     paddingHorizontal: 14,
@@ -270,68 +147,49 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     fontSize: theme.fontSize.sm,
   },
-
   scrollView: { flex: 1 },
   content: {
     paddingHorizontal: theme.spacing.lg,
     paddingBottom: theme.spacing.xxl,
   },
-  card: { minHeight: 240, padding: theme.spacing.lg },
+  card: { minHeight: 240 },
 
-  center: { paddingVertical: 14, alignItems: "center", gap: 10 },
-  muted: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm },
-
-  primaryBtn: {
-    paddingVertical: 14,
-    borderRadius: 14,
+  emptyActions: { flexDirection: "row", gap: 10 },
+  emptyBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: "rgba(0,255,136,0.55)",
-    backgroundColor: "rgba(0,0,0,0.30)",
+    borderColor: theme.colors.border,
+    backgroundColor: "rgba(0,0,0,0.25)",
     alignItems: "center",
   },
-  primaryBtnText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.md },
-
-  list: { gap: 12 },
-
-  rowCard: {
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.20)",
-    padding: 12,
+  emptyBtnPrimary: {
+    borderColor: "rgba(0,255,136,0.45)",
+    backgroundColor: "rgba(0,0,0,0.32)",
   },
+  emptyBtnText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
 
-  rowTop: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
-  rowTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.md },
-  rowMeta: { marginTop: 4, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm },
-
-  statusPill: {
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 999,
-    borderWidth: 1,
-    alignSelf: "flex-start",
+  list: { gap: 10 },
+  row: {
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
   },
-  statusUpcoming: {
-    borderColor: "rgba(0,255,136,0.40)",
-    backgroundColor: "rgba(0,0,0,0.20)",
+  rowTitle: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: theme.fontSize.md,
   },
-  statusPast: {
-    borderColor: "rgba(255,255,255,0.14)",
-    backgroundColor: "rgba(0,0,0,0.18)",
-  },
-  statusText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.xs },
-
-  rowDivider: {
-    marginTop: 12,
-    height: 1,
-    backgroundColor: "rgba(255,255,255,0.08)",
-  },
-
-  rowBottom: { marginTop: 10, gap: 6 },
-  matchLine: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
-  rowNotes: {
+  rowMeta: {
+    marginTop: 4,
     color: theme.colors.textSecondary,
+    fontSize: theme.fontSize.sm,
+  },
+  rowNotes: {
+    marginTop: 6,
+    color: theme.colors.text,
+    opacity: 0.9,
     fontSize: theme.fontSize.sm,
     lineHeight: 18,
   },
