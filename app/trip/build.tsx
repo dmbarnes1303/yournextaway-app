@@ -12,6 +12,8 @@ import {
   Modal,
   Linking,
   Alert,
+  Dimensions,
+  KeyboardAvoidingView,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Stack, useRouter, useLocalSearchParams } from "expo-router";
@@ -216,7 +218,6 @@ export default function TripBuildScreen() {
       setNotes(snap.notes);
       setError(null);
 
-      // IMPORTANT: actually dismiss the modal
       setSelectedFixture(null);
       return;
     }
@@ -491,7 +492,6 @@ export default function TripBuildScreen() {
       const nextEnd = parseIsoDateOnly(iso);
 
       if (start && nextEnd && nextEnd.getTime() <= start.getTime()) {
-        // Keep it simple: bump to start + 2 nights
         setEndIso(addDaysIso(startIso, 2));
       }
     }
@@ -529,7 +529,6 @@ export default function TripBuildScreen() {
         notes: notes.trim(),
       };
 
-      // If we have a real venue city, allow slug migration; otherwise keep it generic.
       if (venueCityRaw) {
         (patch as any).citySlug = venueCityRaw;
       }
@@ -537,7 +536,6 @@ export default function TripBuildScreen() {
       if (isEditing && routeTripId) {
         await tripsStore.updateTrip(routeTripId, patch);
 
-        // Update snapshot so subsequent Close behaves sensibly after a save
         editSnapshotRef.current = { fixture: selectedFixture, startIso, endIso, notes: notes.trim() };
 
         setSelectedFixture(null);
@@ -591,6 +589,19 @@ export default function TripBuildScreen() {
     return { home, away, kick, extra };
   }, [isEditing, prefillLoading]);
 
+  const screenH = Dimensions.get("window").height;
+  const sheetMaxH = Math.max(520, Math.floor(screenH * 0.78)); // stable across devices + share builds
+
+  const sheetTitle = useMemo(() => {
+    if (selHome && selAway) return `${selHome} vs ${selAway}`;
+    return "Selected match";
+  }, [selHome, selAway]);
+
+  const sheetSub = useMemo(() => {
+    const parts = [selKick, selVenue, selCity].filter(Boolean);
+    return parts.join(" • ");
+  }, [selKick, selVenue, selCity]);
+
   return (
     <Background imageUrl={getBackground("trips")}>
       <Stack.Screen
@@ -613,8 +624,8 @@ export default function TripBuildScreen() {
             <Text style={styles.h1}>{isEditing ? "Edit trip match" : "Pick a match"}</Text>
             <Text style={styles.muted}>
               {isEditing
-                ? "Select a fixture to update this trip. Save inside the sheet."
-                : "Tap a fixture to open trip details. Save inside the sheet."}
+                ? "Select a fixture to update this trip. Save inside the panel."
+                : "Tap a fixture to open trip details. Save inside the panel."}
             </Text>
 
             {isEditing && currentMatchBlock ? (
@@ -710,7 +721,6 @@ export default function TripBuildScreen() {
                       <Pressable
                         key={String(fixtureId ?? idx)}
                         onPress={() => {
-                          // If user picks a different fixture in edit mode, allow kickoff default to apply.
                           if (isEditing) editDatesLockRef.current = false;
                           setSelectedFixture(r);
                         }}
@@ -739,161 +749,174 @@ export default function TripBuildScreen() {
           </GlassCard>
         </ScrollView>
 
-        {/* Native Modal sheet (Android-stable) */}
+        {/* Native Modal sheet (Android-stable, always-scrollable, Save button never hidden) */}
         <Modal visible={!!selectedFixture} transparent animationType="slide" onRequestClose={closeSheet}>
           <View style={styles.modalWrap}>
             <Pressable style={styles.modalBackdrop} onPress={closeSheet} />
 
             <SafeAreaView edges={["bottom"]} style={[styles.sheetWrap, { paddingBottom: insets.bottom }]}>
-              <SheetCard>
-                <View style={styles.sheetHandle} />
+              <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined}>
+                <SheetCard>
+                  <View style={styles.sheetHandle} />
 
-                <View style={styles.sheetHeader}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.sheetKicker}>{isEditing ? "Edit trip details" : "Trip details"}</Text>
-                    <Text style={styles.sheetTitle} numberOfLines={1}>
-                      {selHome && selAway ? `${selHome} vs ${selAway}` : "Selected match"}
-                    </Text>
-                    <Text style={styles.sheetSub} numberOfLines={2}>
-                      {selKick}
-                      {selVenue ? ` • ${selVenue}` : ""}
-                      {selCity ? ` • ${selCity}` : ""}
-                    </Text>
-                  </View>
+                  <View style={styles.sheetHeader}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.sheetKicker}>{isEditing ? "Edit trip details" : "Trip details"}</Text>
+                      <Text style={styles.sheetTitle} numberOfLines={1}>
+                        {sheetTitle}
+                      </Text>
+                      <Text style={styles.sheetSub} numberOfLines={2}>
+                        {sheetSub}
+                      </Text>
+                    </View>
 
-                  <Pressable onPress={closeSheet} style={styles.closeBtn} hitSlop={10}>
-                    <Text style={styles.closeText}>Close</Text>
-                  </Pressable>
-                </View>
-
-                <ScrollView
-                  style={{ maxHeight: 520 }}
-                  contentContainerStyle={{ paddingBottom: theme.spacing.md }}
-                  showsVerticalScrollIndicator={false}
-                  keyboardShouldPersistTaps="handled"
-                >
-                  <View style={styles.dateRow}>
-                    <Pressable onPress={() => openPicker("start")} style={styles.datePill}>
-                      <Text style={styles.dateLabel}>Start</Text>
-                      <Text style={styles.dateValue}>{formatUkDateOnly(startIso)}</Text>
-                    </Pressable>
-
-                    <Pressable onPress={() => openPicker("end")} style={styles.datePill}>
-                      <Text style={styles.dateLabel}>End</Text>
-                      <Text style={styles.dateValue}>{formatUkDateOnly(endIso)}</Text>
+                    <Pressable onPress={closeSheet} style={styles.closeBtn} hitSlop={10}>
+                      <Text style={styles.closeText}>Close</Text>
                     </Pressable>
                   </View>
 
-                  {destinationCity ? (
-                    <View style={styles.cityBlock}>
-                      <View style={styles.cityBlockTop}>
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.cityBlockKicker}>In {destinationCity}</Text>
-                          <Text style={styles.cityBlockTitle}>Top things to do</Text>
-                          <Text style={styles.cityBlockSub}>
-                            {cityBundle?.hasGuide
-                              ? "Curated picks + quick tips. Link out for more."
-                              : "No curated guide yet — link out for the best current picks."}
-                          </Text>
-                        </View>
+                  {/* Body */}
+                  <View style={[styles.sheetBody, { maxHeight: sheetMaxH }]}>
+                    <ScrollView
+                      style={{ flex: 1 }}
+                      contentContainerStyle={{ paddingBottom: theme.spacing.lg }}
+                      showsVerticalScrollIndicator={false}
+                      keyboardShouldPersistTaps="handled"
+                      nestedScrollEnabled
+                    >
+                      <View style={styles.dateRow}>
+                        <Pressable onPress={() => openPicker("start")} style={styles.datePill}>
+                          <Text style={styles.dateLabel}>Start</Text>
+                          <Text style={styles.dateValue}>{formatUkDateOnly(startIso)}</Text>
+                        </Pressable>
 
-                        {cityBundle?.tripAdvisorUrl ? (
-                          <Pressable onPress={() => safeOpenUrl(cityBundle.tripAdvisorUrl)} style={styles.taBtn}>
-                            <Text style={styles.taBtnText}>TripAdvisor</Text>
-                          </Pressable>
-                        ) : null}
+                        <Pressable onPress={() => openPicker("end")} style={styles.datePill}>
+                          <Text style={styles.dateLabel}>End</Text>
+                          <Text style={styles.dateValue}>{formatUkDateOnly(endIso)}</Text>
+                        </Pressable>
                       </View>
 
-                      {cityBundle?.hasGuide && (cityBundle.items?.length ?? 0) > 0 ? (
-                        <View style={styles.thingsList}>
-                          {cityBundle.items.slice(0, 6).map((it, idx) => (
-                            <View key={`${it.title}-${idx}`} style={styles.thingRow}>
-                              <Text style={styles.thingIdx}>{idx + 1}.</Text>
-                              <View style={{ flex: 1 }}>
-                                <Text style={styles.thingTitle}>{it.title}</Text>
-                                {it.description ? <Text style={styles.thingDesc}>{it.description}</Text> : null}
-                              </View>
+                      {destinationCity ? (
+                        <View style={styles.cityBlock}>
+                          <View style={styles.cityBlockTop}>
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.cityBlockKicker}>In {destinationCity}</Text>
+                              <Text style={styles.cityBlockTitle}>Top things to do</Text>
+                              <Text style={styles.cityBlockSub}>
+                                {cityBundle?.hasGuide
+                                  ? "Curated picks + quick tips. Link out for more."
+                                  : "No curated guide yet — link out for the best current picks."}
+                              </Text>
                             </View>
-                          ))}
-                          {(cityBundle.items?.length ?? 0) > 6 ? (
-                            <Text style={styles.moreInline}>More in the full city guide.</Text>
+
+                            {cityBundle?.tripAdvisorUrl ? (
+                              <Pressable onPress={() => safeOpenUrl(cityBundle.tripAdvisorUrl)} style={styles.taBtn}>
+                                <Text style={styles.taBtnText}>TripAdvisor</Text>
+                              </Pressable>
+                            ) : null}
+                          </View>
+
+                          {cityBundle?.hasGuide && (cityBundle.items?.length ?? 0) > 0 ? (
+                            <View style={styles.thingsList}>
+                              {cityBundle.items.slice(0, 6).map((it, idx) => (
+                                <View key={`${it.title}-${idx}`} style={styles.thingRow}>
+                                  <Text style={styles.thingIdx}>{idx + 1}.</Text>
+                                  <View style={{ flex: 1 }}>
+                                    <Text style={styles.thingTitle}>{it.title}</Text>
+                                    {it.description ? <Text style={styles.thingDesc}>{it.description}</Text> : null}
+                                  </View>
+                                </View>
+                              ))}
+                              {(cityBundle.items?.length ?? 0) > 6 ? (
+                                <Text style={styles.moreInline}>More in the full city guide.</Text>
+                              ) : null}
+                            </View>
+                          ) : null}
+
+                          {cityBundle?.hasGuide && (cityBundle.quickTips?.length ?? 0) > 0 ? (
+                            <View style={styles.tipsBlock}>
+                              <Text style={styles.tipsTitle}>Quick tips</Text>
+                              {cityBundle.quickTips.slice(0, 5).map((t, idx) => (
+                                <Text key={`${t}-${idx}`} style={styles.tipLine}>
+                                  • {t}
+                                </Text>
+                              ))}
+                            </View>
                           ) : null}
                         </View>
                       ) : null}
 
-                      {cityBundle?.hasGuide && (cityBundle.quickTips?.length ?? 0) > 0 ? (
-                        <View style={styles.tipsBlock}>
-                          <Text style={styles.tipsTitle}>Quick tips</Text>
-                          {cityBundle.quickTips.slice(0, 5).map((t, idx) => (
-                            <Text key={`${t}-${idx}`} style={styles.tipLine}>
-                              • {t}
-                            </Text>
-                          ))}
+                      {Platform.OS === "web" || !DateTimePicker ? (
+                        <View style={{ marginTop: 10, gap: 8 }}>
+                          <Text style={styles.fallbackNote}>
+                            Date picker not available here. Edit ISO dates (YYYY-MM-DD).
+                          </Text>
+                          <View style={{ flexDirection: "row", gap: 10 }}>
+                            <TextInput
+                              value={startIso}
+                              onChangeText={setStartIso}
+                              placeholder="YYYY-MM-DD"
+                              placeholderTextColor={theme.colors.textSecondary}
+                              style={[styles.input, { flex: 1 }]}
+                              autoCapitalize="none"
+                              autoCorrect={false}
+                            />
+                            <TextInput
+                              value={endIso}
+                              onChangeText={setEndIso}
+                              placeholder="YYYY-MM-DD"
+                              placeholderTextColor={theme.colors.textSecondary}
+                              style={[styles.input, { flex: 1 }]}
+                              autoCapitalize="none"
+                              autoCorrect={false}
+                            />
+                          </View>
                         </View>
                       ) : null}
-                    </View>
-                  ) : null}
 
-                  {Platform.OS === "web" || !DateTimePicker ? (
-                    <View style={{ marginTop: 10, gap: 8 }}>
-                      <Text style={styles.fallbackNote}>Date picker not available here. Edit ISO dates (YYYY-MM-DD).</Text>
-                      <View style={{ flexDirection: "row", gap: 10 }}>
+                      <View style={{ marginTop: 10 }}>
                         <TextInput
-                          value={startIso}
-                          onChangeText={setStartIso}
-                          placeholder="YYYY-MM-DD"
+                          value={notes}
+                          onChangeText={setNotes}
+                          placeholder="Notes (hotel, trains, plans, etc.)"
                           placeholderTextColor={theme.colors.textSecondary}
-                          style={[styles.input, { flex: 1 }]}
-                          autoCapitalize="none"
-                          autoCorrect={false}
-                        />
-                        <TextInput
-                          value={endIso}
-                          onChangeText={setEndIso}
-                          placeholder="YYYY-MM-DD"
-                          placeholderTextColor={theme.colors.textSecondary}
-                          style={[styles.input, { flex: 1 }]}
-                          autoCapitalize="none"
-                          autoCorrect={false}
+                          style={[styles.input, styles.textarea]}
+                          multiline
+                          textAlignVertical="top"
                         />
                       </View>
-                    </View>
-                  ) : null}
 
-                  <View style={{ marginTop: 10 }}>
-                    <TextInput
-                      value={notes}
-                      onChangeText={setNotes}
-                      placeholder="Notes (hotel, trains, plans, etc.)"
-                      placeholderTextColor={theme.colors.textSecondary}
-                      style={[styles.input, styles.textarea]}
-                      multiline
-                      textAlignVertical="top"
-                    />
+                      {DateTimePicker && picker.open ? (
+                        <View style={{ marginTop: 10 }}>
+                          <DateTimePicker
+                            value={parseIsoDateOnly(picker.which === "start" ? startIso : endIso) ?? new Date()}
+                            mode="date"
+                            display={Platform.OS === "ios" ? "inline" : "default"}
+                            onChange={onPickerChange}
+                          />
+                        </View>
+                      ) : null}
+
+                      <View style={{ height: 8 }} />
+                    </ScrollView>
+
+                    {/* Footer: Save is always reachable (no scrolling required) */}
+                    <View style={styles.sheetFooter}>
+                      {error ? (
+                        <Text style={styles.errText} numberOfLines={2}>
+                          {error}
+                        </Text>
+                      ) : null}
+
+                      <Pressable onPress={onSave} disabled={saving} style={[styles.saveBtn, saving && { opacity: 0.7 }]}>
+                        <Text style={styles.saveText}>
+                          {saving ? "Saving…" : isEditing ? "Update Trip" : "Save Trip"}
+                        </Text>
+                      </Pressable>
+                    </View>
                   </View>
-
-                  {error ? (
-                    <Text style={styles.errText} numberOfLines={3}>
-                      {error}
-                    </Text>
-                  ) : null}
-
-                  <Pressable onPress={onSave} disabled={saving} style={[styles.saveBtn, saving && { opacity: 0.7 }]}>
-                    <Text style={styles.saveText}>{saving ? "Saving…" : isEditing ? "Update Trip" : "Save Trip"}</Text>
-                  </Pressable>
-
-                  {DateTimePicker && picker.open ? (
-                    <View style={{ marginTop: 10 }}>
-                      <DateTimePicker
-                        value={parseIsoDateOnly(picker.which === "start" ? startIso : endIso) ?? new Date()}
-                        mode="date"
-                        display={Platform.OS === "ios" ? "inline" : "default"}
-                        onChange={onPickerChange}
-                      />
-                    </View>
-                  ) : null}
-                </ScrollView>
-              </SheetCard>
+                </SheetCard>
+              </KeyboardAvoidingView>
             </SafeAreaView>
           </View>
         </Modal>
@@ -1022,6 +1045,7 @@ const styles = StyleSheet.create({
   modalBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.55)" },
 
   sheetWrap: { paddingHorizontal: theme.spacing.lg },
+
   sheetCard: {
     borderRadius: theme.borderRadius.xl,
     overflow: "hidden",
@@ -1055,6 +1079,18 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.22)",
   },
   closeText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
+
+  sheetBody: {
+    marginTop: 10,
+  },
+
+  sheetFooter: {
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255,255,255,0.10)",
+    gap: 10,
+  },
 
   dateRow: { marginTop: 12, flexDirection: "row", gap: 10 },
 
@@ -1120,10 +1156,12 @@ const styles = StyleSheet.create({
   },
   textarea: { minHeight: 90 },
 
-  errText: { marginTop: 10, color: "rgba(255, 80, 80, 0.95)", fontWeight: "800" },
+  errText: {
+    color: "rgba(255, 80, 80, 0.95)",
+    fontWeight: "800",
+  },
 
   saveBtn: {
-    marginTop: 12,
     paddingVertical: 14,
     borderRadius: 14,
     borderWidth: 1,
@@ -1133,3 +1171,4 @@ const styles = StyleSheet.create({
   },
   saveText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.md },
 });
+  
