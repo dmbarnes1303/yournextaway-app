@@ -114,7 +114,7 @@ function normalizeTrips(raw: any): Trip[] {
       notes,
     };
 
-    const citySlug = deriveCitySlug({ cityId: base.cityId, citySlug: x.citySlug });
+    const citySlug = deriveCitySlug({ cityId: base.cityId, citySlug: (x as any).citySlug });
 
     out.push({
       ...base,
@@ -138,11 +138,7 @@ async function loadTrips() {
   emit();
 
   // If we backfilled citySlug for older items, persist quietly.
-  try {
-    await persistSafe(nextTrips);
-  } catch {
-    // swallow
-  }
+  await persistSafe(nextTrips);
 }
 
 function getState() {
@@ -165,7 +161,7 @@ async function addTrip(input: Omit<Trip, "id">) {
 
   const nextTrips = [t, ...state.trips];
 
-  state = { ...state, trips: nextTrips };
+  state = { loaded: true, trips: nextTrips };
   emit();
 
   await persistSafe(nextTrips);
@@ -194,7 +190,7 @@ async function updateTrip(id: string, patch: Partial<Omit<Trip, "id">>) {
     return next;
   });
 
-  state = { ...state, trips: nextTrips };
+  state = { loaded: true, trips: nextTrips };
   emit();
 
   await persistSafe(nextTrips);
@@ -203,7 +199,7 @@ async function updateTrip(id: string, patch: Partial<Omit<Trip, "id">>) {
 async function removeTrip(id: string) {
   const nextTrips = state.trips.filter((t) => t.id !== id);
 
-  state = { ...state, trips: nextTrips };
+  state = { loaded: true, trips: nextTrips };
   emit();
 
   await persistSafe(nextTrips);
