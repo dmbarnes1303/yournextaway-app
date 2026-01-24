@@ -141,7 +141,7 @@ export default function TripDetailScreen() {
   const matchIds = useMemo(() => trip?.matchIds ?? [], [trip]);
   const matchCount = matchIds.length;
 
-  // ARCH: prefer stable citySlug if present; fall back to label.
+  // Prefer stable citySlug if present; fall back to label.
   const cityLookupKey = useMemo(() => trip?.citySlug ?? trip?.cityId, [trip?.citySlug, trip?.cityId]);
   const { slug: cityKey, guide: cityGuide } = useMemo(() => getCityGuide(cityLookupKey), [cityLookupKey]);
 
@@ -247,7 +247,7 @@ export default function TripDetailScreen() {
   const primaryVenue = primaryFixture?.fixture?.venue?.name as string | undefined;
   const primaryVenueCity = primaryFixture?.fixture?.venue?.city as string | undefined;
 
-  // Smart-but-safe V1 URLs
+  // v1 URLs
   const flightsUrl = useMemo(() => buildFlightsUrl(tripCityLabel, trip?.startDate, trip?.endDate), [
     tripCityLabel,
     trip?.startDate,
@@ -271,14 +271,18 @@ export default function TripDetailScreen() {
     [primaryVenue, primaryVenueCity, tripCityLabel]
   );
 
-  // Card subtitles with fallbacks (still render even if missing)
+  // Subtitles
+  // CONTINUATION OF app/trip/[id].tsx (from: flightsSub = useMemo(() => { ...)
+
   const flightsSub = useMemo(() => {
-    if (trip?.startDate && trip?.endDate) return `${formatUkDateOnly(trip.startDate)} → ${formatUkDateOnly(trip.endDate)}`;
+    if (trip?.startDate && trip?.endDate)
+      return `${formatUkDateOnly(trip.startDate)} → ${formatUkDateOnly(trip.endDate)}`;
     return "Set dates to refine search";
   }, [trip?.startDate, trip?.endDate]);
 
   const hotelsSub = useMemo(() => {
-    if (trip?.startDate && trip?.endDate) return `${tripCityLabel} • ${formatUkDateOnly(trip.startDate)} → ${formatUkDateOnly(trip.endDate)}`;
+    if (trip?.startDate && trip?.endDate)
+      return `${tripCityLabel} • ${formatUkDateOnly(trip.startDate)} → ${formatUkDateOnly(trip.endDate)}`;
     return `${tripCityLabel} • Add dates for availability`;
   }, [tripCityLabel, trip?.startDate, trip?.endDate]);
 
@@ -346,7 +350,6 @@ export default function TripDetailScreen() {
                   </View>
                 ) : null}
 
-                {/* Hub actions */}
                 <View style={styles.actionsGrid}>
                   <Pressable onPress={onEditTrip} style={styles.actionBtn}>
                     <Text style={styles.actionText}>Edit trip</Text>
@@ -368,7 +371,7 @@ export default function TripDetailScreen() {
                 <Text style={styles.smallPrint}>Trip ID: {trip.id}</Text>
               </GlassCard>
 
-              {/* BOOK YOUR TRIP (v1 CTAs) */}
+              {/* BOOK YOUR TRIP */}
               <GlassCard style={styles.card} intensity={24}>
                 <View style={styles.cardHeaderRow}>
                   <View style={{ flex: 1 }}>
@@ -499,7 +502,9 @@ export default function TripDetailScreen() {
               {/* MATCHES */}
               <GlassCard style={styles.card} intensity={24}>
                 <Text style={styles.h2}>Matches</Text>
-                <Text style={styles.muted}>{matchCount} match{matchCount === 1 ? "" : "es"} linked</Text>
+                <Text style={styles.muted}>
+                  {matchCount} match{matchCount === 1 ? "" : "es"} linked
+                </Text>
 
                 {loadingFixtures ? (
                   <View style={styles.center}>
@@ -508,7 +513,9 @@ export default function TripDetailScreen() {
                   </View>
                 ) : null}
 
-                {!loadingFixtures && fixtureError ? <EmptyState title="Couldn’t load matches" message={fixtureError} /> : null}
+                {!loadingFixtures && fixtureError ? (
+                  <EmptyState title="Couldn’t load matches" message={fixtureError} />
+                ) : null}
 
                 {!loadingFixtures && !fixtureError && matchCount > 0 && fixtureRows.length === 0 ? (
                   <EmptyState title="No match details yet" message="Matches are linked, but details are unavailable." />
