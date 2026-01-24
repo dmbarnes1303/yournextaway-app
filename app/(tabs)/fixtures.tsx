@@ -24,7 +24,7 @@ function mapRow(r: FixtureListRow) {
   const city = r?.fixture?.venue?.city ?? "";
   const extra = [venue, city].filter(Boolean).join(" • ");
   const line2 = extra ? `${kickoff} • ${extra}` : kickoff;
-  return { fixtureId, home, away, line2 };
+  return { fixtureId, home, away, venue, city, line2 };
 }
 
 function tomorrowIso(): string {
@@ -42,6 +42,10 @@ function clampFromToTomorrow(fromIso: string): string {
   return fromDate.getTime() < tmrDate.getTime() ? tmr : fromIso;
 }
 
+function norm(s: string) {
+  return String(s ?? "").toLowerCase().trim();
+}
+
 export default function FixturesScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
@@ -56,6 +60,13 @@ export default function FixturesScreen() {
 
   const fromParam = useMemo(() => coerceString(params.from), [params.from]);
   const toParam = useMemo(() => coerceString(params.to), [params.to]);
+
+  // Optional filters (v1 search routing)
+  const qParam = useMemo(() => coerceString(params.q), [params.q]);
+  const teamParam = useMemo(() => coerceString(params.team), [params.team]);
+  const venueParam = useMemo(() => coerceString(params.venue), [params.venue]);
+  const cityKeyParam = useMemo(() => coerceString(params.city), [params.city]);
+  const cityNameParam = useMemo(() => coerceString(params.cityName), [params.cityName]);
 
   // Enforce "tomorrow onwards" even if params try to pass today/past
   const from = useMemo(() => clampFromToTomorrow(fromParam ?? defaultFrom), [fromParam, defaultFrom]);
@@ -115,6 +126,54 @@ export default function FixturesScreen() {
     };
   }, [selected, from, to]);
 
+  const filterLabel = useMemo(() => {
+    if (teamParam) return `Team: ${teamParam}`;
+    if (venueParam) return `Venue: ${venueParam}`;
+    if (cityNameParam) return `City: ${cityNameParam}`;
+    if (cityKeyParam) return `City: ${cityKeyParam}`;
+    if (qParam) return `Search: ${qParam}`;
+    return null;
+  }, [teamParam, venueParam, cityNameParam, cityKeyParam, qParam]);
+
+  const filteredRows = useMemo(() => {
+    if (!rows.length) return [];
+
+    const q = norm(qParam ?? "");
+    const team = norm(teamParam ?? "");
+    const venue = norm(venueParam ?? "");
+    const cityName = norm(cityNameParam ?? "");
+    const cityKey = norm(cityKeyParam ?? "");
+
+    if (!q && !team && !venue && !cityName && !cityKey) return rows;
+
+    return rows.filter((r) => {
+      const m = mapRow(r);
+      const home = norm(m.home);
+      const away = norm(m.away);
+      const v = norm(m.venue);
+      const c = norm(m.city);
+
+      // entity filters first (deterministic)
+      if (team && !(home.includes(team) || away.includes(team))) return false;
+      if (venue && !v.includes(venue)) return false;
+
+      // city can come from guide key or display name; we match against fixture city name
+      if (cityName && !c.includes(cityName)) return false;
+      if (cityKey && !c.includes(cityKey) && !norm(cityKey.replace(/-/g, " ")).includes(c)) {
+        // fallback: allow key to match city name when key is "madrid" etc.
+        const cityKeyAsWords = norm(cityKey.replace(/-/g, " "));
+        if (!c.includes(cityKey) && !c.includes(cityKeyAsWords)) return false;
+      }
+
+      // free-text q last
+      if (q) {
+        return home.includes(q) || away.includes(q) || v.includes(q) || c.includes(q);
+      }
+
+      return true;
+    });
+  }, [rows, qParam, teamParam, venueParam, cityNameParam, cityKeyParam]);
+
   function goBuildTripWithContext(fixtureIdStr: string) {
     router.push({
       pathname: "/trip/build",
@@ -136,6 +195,23 @@ export default function FixturesScreen() {
           <Text style={styles.subtitle}>
             {selected.label} • {formatUkDateOnly(from)} → {formatUkDateOnly(to)}
           </Text>
+
+          {filterLabel ? (
+            <View style={styles.filterPill}>
+              <Text style={styles.filterText}>{filterLabel}</Text>
+              <Pressable
+                onPress={() =>
+                  router.push({
+                    pathname: "/(tabs)/fixtures",
+                    params: { leagueId: String(selected.leagueId), season: String(selected.season), from, to },
+                  } as any)
+                }
+                style={styles.clearBtn}
+              >
+                <Text style={styles.clearText}>Clear</Text>
+              </Pressable>
+            </View>
+          ) : null}
 
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.leagueRow}>
             {LEAGUES.map((l) => {
@@ -164,13 +240,13 @@ export default function FixturesScreen() {
 
             {!loading && error ? <EmptyState title="Couldn’t load fixtures" message={error} /> : null}
 
-            {!loading && !error && rows.length === 0 ? (
-              <EmptyState title="No fixtures found" message="Try a different league or date window." />
+            {!loading && !error && filteredRows.length === 0 ? (
+              <EmptyState title="No fixtures found" message="Try a different league or clear filters." />
             ) : null}
 
-            {!loading && !error && rows.length > 0 ? (
+            {!loading && !error && filteredRows.length > 0 ? (
               <View style={styles.list}>
-                {rows.map((r, idx) => {
+                {filteredRows.map((r, idx) => {
                   const m = mapRow(r);
                   const fixtureIdStr = m.fixtureId ? String(m.fixtureId) : null;
                   const key = fixtureIdStr ?? `idx-${idx}`;
@@ -233,6 +309,30 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
     marginBottom: theme.spacing.md,
   },
+
+  filterPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(0,255,136,0.35)",
+    backgroundColor: "rgba(0,0,0,0.28)",
+    marginBottom: theme.spacing.md,
+  },
+  filterText: { color: theme.colors.text, fontSize: theme.fontSize.sm, fontWeight: "800" as any },
+  clearBtn: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+  },
+  clearText: { color: theme.colors.text, fontWeight: "900" as any, fontSize: theme.fontSize.xs },
 
   leagueRow: { gap: 10, paddingRight: theme.spacing.lg },
 
