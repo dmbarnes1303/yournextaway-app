@@ -11,7 +11,7 @@ import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
 import { getFixtures, type FixtureListRow } from "@/src/services/apiFootball";
 
-import { LEAGUES, getRollingWindowIso, clampFromIsoToTomorrow, type LeagueOption } from "@/src/constants/football";
+import { LEAGUES, getRollingWindowIso, normalizeWindowIso, type LeagueOption } from "@/src/constants/football";
 import { coerceNumber, coerceString } from "@/src/utils/params";
 import { formatUkDateOnly, formatUkDateTimeMaybe } from "@/src/utils/formatters";
 
@@ -31,26 +31,32 @@ export default function FixturesScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
 
-  // Central rolling window defaults (single source of truth; tomorrow onwards)
+  // Central rolling window defaults (tomorrow onwards)
   const rolling = useMemo(() => getRollingWindowIso(), []);
-  const defaultFrom = useMemo(() => clampFromIsoToTomorrow(rolling.from), [rolling.from]);
-  const defaultTo = rolling.to;
-
-  // Params: allow Fixtures to be opened with a specific league/window
-  const paramLeagueId = useMemo(() => coerceNumber(params.leagueId), [params.leagueId]);
-  const paramSeason = useMemo(() => coerceNumber(params.season), [params.season]);
-
   const fromParam = useMemo(() => coerceString(params.from), [params.from]);
   const toParam = useMemo(() => coerceString(params.to), [params.to]);
 
-  // Enforce "tomorrow onwards" even if params try to pass today/past
-  const from = useMemo(() => clampFromIsoToTomorrow(fromParam ?? defaultFrom), [fromParam, defaultFrom]);
-  const to = useMemo(() => toParam ?? defaultTo, [toParam, defaultTo]);
+  const window = useMemo(
+    () =>
+      normalizeWindowIso(
+        {
+          from: fromParam ?? rolling.from,
+          to: toParam ?? rolling.to,
+        },
+        30
+      ),
+    [fromParam, toParam, rolling.from, rolling.to]
+  );
 
-  // Selected league state (can be overridden by params)
+  const from = window.from;
+  const to = window.to;
+
+  // Params: allow Fixtures to be opened with a specific league/season
+  const paramLeagueId = useMemo(() => coerceNumber(params.leagueId), [params.leagueId]);
+  const paramSeason = useMemo(() => coerceNumber(params.season), [params.season]);
+
   const [selected, setSelected] = useState<LeagueOption>(LEAGUES[0]);
 
-  // Apply param league/season when present
   useEffect(() => {
     if (!paramLeagueId) return;
 
@@ -114,6 +120,19 @@ export default function FixturesScreen() {
     } as any);
   }
 
+  function goMatchWithContext(fixtureIdStr: string) {
+    router.push({
+      pathname: "/match/[id]",
+      params: {
+        id: fixtureIdStr,
+        leagueId: String(selected.leagueId),
+        season: String(selected.season),
+        from,
+        to,
+      },
+    } as any);
+  }
+
   return (
     <Background imageUrl={getBackground("fixtures")}>
       <SafeAreaView style={styles.container} edges={["top"]}>
@@ -166,7 +185,7 @@ export default function FixturesScreen() {
                       <Pressable
                         onPress={() => {
                           if (!fixtureIdStr) return;
-                          router.push({ pathname: "/match/[id]", params: { id: fixtureIdStr } });
+                          goMatchWithContext(fixtureIdStr);
                         }}
                         style={styles.rowMain}
                       >
