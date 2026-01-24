@@ -76,41 +76,45 @@ function toEntryTokens(parts: Array<string | undefined | null>): string[] {
 }
 
 /**
- * Corrected scoring:
- * - Exact token matches are strong.
- * - Prefix matches only when query token length >= 3.
- * - NO "qt.startsWith(et)" (that causes junk matches when entryTokens include short tokens like "a", "e").
+ * IMPORTANT:
+ * We must never return "matches" purely because of typeBoost.
+ * scoreMatch MUST return 0 when there is no meaningful overlap.
+ *
+ * Scoring rules:
+ * - +6 for exact token match
+ * - +2 for prefix match (query token is a prefix of an entry token)
+ * - Bonus for multi-token queries when most tokens hit
  */
 function scoreMatch(queryTokens: string[], entryTokens: string[]): number {
-  // +4 exact token hit
-  // +2 prefix hit (query token length >= 3)
-  // +2 bonus if most query tokens hit at least partially
-  let score = 0;
-  let hitCount = 0;
+  if (!queryTokens.length || !entryTokens.length) return 0;
 
-  for (const qtRaw of queryTokens) {
-    const qt = String(qtRaw ?? "").trim();
+  let score = 0;
+  let hit = 0;
+
+  for (const qt of queryTokens) {
     if (!qt) continue;
 
-    // Exact match
     if (entryTokens.includes(qt)) {
-      score += 4;
-      hitCount += 1;
+      score += 6;
+      hit += 1;
       continue;
     }
 
-    // Prefix match (tightened)
-    if (qt.length >= 3) {
-      const prefix = entryTokens.some((et) => et.startsWith(qt));
-      if (prefix) {
-        score += 2;
-        hitCount += 1;
-      }
+    // Prefix only (NOT qt.startsWith(et)) to avoid tiny entry tokens matching everything.
+    const prefix = entryTokens.some((et) => et.startsWith(qt));
+    if (prefix) {
+      score += 2;
+      hit += 1;
     }
   }
 
-  if (queryTokens.length > 0 && hitCount >= Math.max(1, Math.floor(queryTokens.length))) {
-    score += 2;
+  // No overlap => no match.
+  if (hit === 0) return 0;
+
+  // If query is multi-token, reward broad coverage.
+  if (queryTokens.length >= 2) {
+    const needed = Math.max(1, Math.ceil(queryTokens.length * 0.6));
+    if (hit >= needed) score += 3;
   }
 
   return score;
@@ -357,11 +361,7 @@ async function buildFixtureDerivedEntries(
 /**
  * Build an index (async because we optionally derive entities from fixtures in-window).
  */
-export async function buildSearchIndex(args: {
-  from: string;
-  to: string;
-  leagues: LeagueOption[];
-}): Promise<SearchIndex> {
+export async function buildSearchIndex(args: { from: string; to: string; leagues: LeagueOption[] }): Promise<SearchIndex> {
   const from = safeStr(args?.from);
   const to = safeStr(args?.to);
   const leagues = Array.isArray(args?.leagues) ? args.leagues : [];
@@ -393,6 +393,10 @@ export async function buildSearchIndex(args: {
 
 /**
  * Query the index and return ranked results.
+ *
+ * CRITICAL FIX:
+ * - We only apply typeBoost *after* a real match exists.
+ * - This prevents queries like "emira" returning unrelated teams just because they're "team" type.
  */
 export function querySearchIndex(index: SearchIndex, query: string, opts?: { limit?: number }): SearchResult[] {
   const limit = Math.max(1, Math.min(Number(opts?.limit ?? 20), 100));
@@ -406,7 +410,13 @@ export function querySearchIndex(index: SearchIndex, query: string, opts?: { lim
 
   const scored: SearchResult[] = (index?.entries ?? [])
     .map((e) => {
-      const score = scoreMatch(queryTokens, e.tokens) + typeBoost(e.type);
+      const baseScore = scoreMatch(queryTokens, e.tokens);
+
+      // No match => exclude (do NOT allow typeBoost to “create” relevance).
+      if (baseScore <= 0) return null;
+
+      const score = baseScore + typeBoost(e.type);
+
       return {
         type: e.type,
         key: e.key,
@@ -414,9 +424,9 @@ export function querySearchIndex(index: SearchIndex, query: string, opts?: { lim
         subtitle: e.subtitle,
         score,
         payload: e.payload,
-      };
+      } as SearchResult;
     })
-    .filter((r) => r.score > 0)
+    .filter((x): x is SearchResult => !!x)
     .sort((a, b) => b.score - a.score);
 
   return scored.slice(0, limit);
