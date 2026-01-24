@@ -101,6 +101,13 @@ function SheetCard({ children }: { children: React.ReactNode }) {
   );
 }
 
+type EditSnapshot = {
+  fixture: any | null;
+  startIso: string;
+  endIso: string;
+  notes: string;
+};
+
 export default function TripBuildScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
@@ -169,7 +176,7 @@ export default function TripBuildScreen() {
   const [editTrip, setEditTrip] = useState<Trip | null>(null);
   const editTripMatchId = useMemo(() => (editTrip?.matchIds?.[0] ? String(editTrip.matchIds[0]) : null), [editTrip]);
 
-  // Dates
+  // Dates + notes
   // Baseline: align to route "from" as a 2-night mini-break when no match selected
   const [startIso, setStartIso] = useState(from);
   const [endIso, setEndIso] = useState(addDaysIso(from, 2));
@@ -178,10 +185,35 @@ export default function TripBuildScreen() {
   // Prevent “kickoff default” from overwriting loaded edit-trip dates for the same fixture.
   const editDatesLockRef = useRef(false);
 
+  // Edit snapshot for “Close = discard changes”
+  const editSnapshotRef = useRef<EditSnapshot | null>(null);
+
   const [picker, setPicker] = useState<{ which: "start" | "end"; open: boolean }>({
     which: "start",
     open: false,
   });
+
+  function validateDateOrder(start: string, end: string): boolean {
+    const a = parseIsoDateOnly(start);
+    const b = parseIsoDateOnly(end);
+    if (!a || !b) return false;
+    return b.getTime() > a.getTime();
+  }
+
+  function closeSheet() {
+    if (isEditing && editSnapshotRef.current) {
+      const snap = editSnapshotRef.current;
+      setStartIso(snap.startIso);
+      setEndIso(snap.endIso);
+      setNotes(snap.notes);
+      setSelectedFixture(snap.fixture);
+      setError(null);
+      return;
+    }
+
+    setSelectedFixture(null);
+    setError(null);
+  }
 
   // Keep date fields aligned to route from (ONLY when not editing)
   useEffect(() => {
@@ -204,7 +236,6 @@ export default function TripBuildScreen() {
       setPrefillLoading(true);
 
       try {
-        // Ensure trips are loaded
         if (!tripsStore.getState().loaded) {
           await tripsStore.loadTrips();
         }
@@ -216,23 +247,27 @@ export default function TripBuildScreen() {
 
         if (!t) {
           setEditTrip(null);
+          editSnapshotRef.current = null;
           setError("Trip not found. It may not exist on this device.");
           return;
         }
 
         setEditTrip(t);
 
-        // Prefill user-editable fields
-        setNotes(t.notes ?? "");
-        if (t.startDate) setStartIso(clampIsoToTomorrow(String(t.startDate)));
-        if (t.endDate) setEndIso(String(t.endDate));
+        const nextNotes = t.notes ?? "";
+        const nextStart = t.startDate ? clampIsoToTomorrow(String(t.startDate)) : clampIsoToTomorrow(from);
+        const nextEnd = t.endDate ? String(t.endDate) : addDaysIso(nextStart, 2);
 
-        // Lock dates for this specific fixture so the kickoff-prefill doesn’t overwrite them.
+        setNotes(nextNotes);
+        setStartIso(nextStart);
+        setEndIso(nextEnd);
+
         editDatesLockRef.current = true;
 
         const firstMatchId = t.matchIds?.[0] ? String(t.matchIds[0]) : null;
         if (!firstMatchId) {
           setSelectedFixture(null);
+          editSnapshotRef.current = { fixture: null, startIso: nextStart, endIso: nextEnd, notes: nextNotes };
           return;
         }
 
@@ -242,12 +277,16 @@ export default function TripBuildScreen() {
         if (!r) {
           setError("Couldn’t load the match linked to this trip. You can still select one from the list.");
           setSelectedFixture(null);
+          editSnapshotRef.current = { fixture: null, startIso: nextStart, endIso: nextEnd, notes: nextNotes };
           return;
         }
 
         setSelectedFixture(r);
 
-        // Sync league selection when possible (so list feels consistent)
+        // Snapshot for “Close = discard changes”
+        editSnapshotRef.current = { fixture: r, startIso: nextStart, endIso: nextEnd, notes: nextNotes };
+
+        // Sync league selection when possible
         const apiLeagueId = r?.league?.id;
         if (typeof apiLeagueId === "number") {
           const match = LEAGUES.find((l) => l.leagueId === apiLeagueId);
@@ -268,7 +307,7 @@ export default function TripBuildScreen() {
     return () => {
       cancelled = true;
     };
-  }, [routeTripId, routeSeason]);
+  }, [routeTripId, routeSeason, from]);
 
   /**
    * CREATE MODE (Plan Trip): if fixtureId is provided, fetch fixture directly.
@@ -277,7 +316,7 @@ export default function TripBuildScreen() {
     let cancelled = false;
 
     async function prefill() {
-      if (isEditing) return; // edit mode handled elsewhere
+      if (isEditing) return;
       if (!routeFixtureId) return;
 
       setError(null);
@@ -294,7 +333,6 @@ export default function TripBuildScreen() {
 
         setSelectedFixture(r);
 
-        // Sync league selection when possible
         const apiLeagueId = r?.league?.id;
         if (typeof apiLeagueId === "number") {
           const match = LEAGUES.find((l) => l.leagueId === apiLeagueId);
@@ -325,7 +363,6 @@ export default function TripBuildScreen() {
       setError(null);
       setLoading(true);
       setRows([]);
-      setSearch("");
       setVisibleCount(12);
 
       try {
@@ -365,9 +402,8 @@ export default function TripBuildScreen() {
 
     const fixtureId = selectedFixture?.fixture?.id != null ? String(selectedFixture.fixture.id) : null;
 
-    // If we loaded an existing trip and this is that same match, keep saved dates.
+    // If we loaded an existing trip and this is that same match, keep saved dates once.
     if (isEditing && editDatesLockRef.current && editTripMatchId && fixtureId === editTripMatchId) {
-      // Unlock after first pass so user selecting a DIFFERENT match in edit mode will re-prefill.
       editDatesLockRef.current = false;
 
       requestAnimationFrame(() => {
@@ -389,7 +425,7 @@ export default function TripBuildScreen() {
     const startDt = parseIsoDateOnly(start);
     const endDt = parseIsoDateOnly(end);
 
-    if (startDt && endDt && endDt.getTime() < startDt.getTime()) {
+    if (startDt && endDt && endDt.getTime() <= startDt.getTime()) {
       setEndIso(addDaysIso(start, 2));
     } else {
       setEndIso(end);
@@ -430,10 +466,23 @@ export default function TripBuildScreen() {
 
     if (picker.which === "start") {
       setStartIso(iso);
+
       const end = parseIsoDateOnly(endIso);
-      if (end && end.getTime() < date.getTime()) setEndIso(addDaysIso(iso, 2));
+      const nextStart = parseIsoDateOnly(iso);
+
+      if (end && nextStart && end.getTime() <= nextStart.getTime()) {
+        setEndIso(addDaysIso(iso, 2));
+      }
     } else {
       setEndIso(iso);
+
+      const start = parseIsoDateOnly(startIso);
+      const nextEnd = parseIsoDateOnly(iso);
+
+      if (start && nextEnd && nextEnd.getTime() <= start.getTime()) {
+        // Keep it simple: bump to start + 2 nights
+        setEndIso(addDaysIso(startIso, 2));
+      }
     }
 
     if (Platform.OS === "android") setPicker((p) => ({ ...p, open: false }));
@@ -448,39 +497,46 @@ export default function TripBuildScreen() {
       setError("Start/end dates are required.");
       return;
     }
+    if (!validateDateOrder(startIso, endIso)) {
+      setError("End date must be after start date.");
+      return;
+    }
 
     setError(null);
     setSaving(true);
 
     try {
       const fixtureId = String(selectedFixture.fixture.id);
-      const venueCity =
-        (selectedFixture?.fixture?.venue?.city as string | undefined)?.trim() ||
-        (selectedFixture?.league?.name as string | undefined)?.trim() ||
-        "Trip";
+      const venueCityRaw = (selectedFixture?.fixture?.venue?.city as string | undefined)?.trim() || "";
+      const venueCity = venueCityRaw || "Trip";
+
+      const patch: Partial<Omit<Trip, "id">> = {
+        cityId: venueCity,
+        matchIds: [fixtureId],
+        startDate: startIso,
+        endDate: endIso,
+        notes: notes.trim(),
+      };
+
+      // If we have a real venue city, allow slug migration; otherwise keep it generic.
+      if (venueCityRaw) {
+        (patch as any).citySlug = venueCityRaw;
+      }
 
       if (isEditing && routeTripId) {
-        // Update existing trip
-        await tripsStore.updateTrip(routeTripId, {
-          cityId: venueCity,
-          matchIds: [fixtureId],
-          startDate: startIso,
-          endDate: endIso,
-          notes: notes.trim(),
-        });
+        await tripsStore.updateTrip(routeTripId, patch);
+
+        // Update snapshot so subsequent Close behaves sensibly after a save
+        editSnapshotRef.current = { fixture: selectedFixture, startIso, endIso, notes: notes.trim() };
 
         setSelectedFixture(null);
         router.replace({ pathname: "/trip/[id]", params: { id: routeTripId } });
         return;
       }
 
-      // Create new trip
       const t = await tripsStore.addTrip({
-        cityId: venueCity,
-        matchIds: [fixtureId],
-        startDate: startIso,
-        endDate: endIso,
-        notes: notes.trim(),
+        ...(patch as any),
+        ...(venueCityRaw ? { citySlug: venueCityRaw } : {}),
       });
 
       setSelectedFixture(null);
@@ -512,6 +568,18 @@ export default function TripBuildScreen() {
     return getTopThingsToDoForTrip(destinationCity);
   }, [destinationCity]);
 
+  const currentMatchBlock = useMemo(() => {
+    if (!isEditing || !editSnapshotRef.current?.fixture) return null;
+    const f = editSnapshotRef.current.fixture;
+    const home = f?.teams?.home?.name ?? "Home";
+    const away = f?.teams?.away?.name ?? "Away";
+    const kick = formatUkDateTimeMaybe(f?.fixture?.date);
+    const venue = f?.fixture?.venue?.name ?? "";
+    const city = f?.fixture?.venue?.city ?? "";
+    const extra = [venue, city].filter(Boolean).join(" • ");
+    return { home, away, kick, extra };
+  }, [isEditing, prefillLoading]);
+
   return (
     <Background imageUrl={getBackground("trips")}>
       <Stack.Screen
@@ -533,8 +601,24 @@ export default function TripBuildScreen() {
           <GlassCard style={styles.card}>
             <Text style={styles.h1}>{isEditing ? "Edit trip match" : "Pick a match"}</Text>
             <Text style={styles.muted}>
-              {isEditing ? "Select a fixture to update this trip. Save inside the sheet." : "Tap a fixture to open trip details. Save inside the sheet."}
+              {isEditing
+                ? "Select a fixture to update this trip. Save inside the sheet."
+                : "Tap a fixture to open trip details. Save inside the sheet."}
             </Text>
+
+            {isEditing && currentMatchBlock ? (
+              <View style={styles.currentBlock}>
+                <Text style={styles.currentKicker}>Current match</Text>
+                <Text style={styles.currentTitle}>
+                  {currentMatchBlock.home} vs {currentMatchBlock.away}
+                </Text>
+                <Text style={styles.currentSub}>
+                  {currentMatchBlock.kick}
+                  {currentMatchBlock.extra ? ` • ${currentMatchBlock.extra}` : ""}
+                </Text>
+                <Text style={styles.currentHint}>Pick another fixture below to change it.</Text>
+              </View>
+            ) : null}
 
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.leagueRow}>
               {LEAGUES.map((l) => {
@@ -596,7 +680,7 @@ export default function TripBuildScreen() {
               </View>
             ) : null}
 
-            {!loading && filteredRows.length > 0 ? (
+            {!loading && !error && filteredRows.length > 0 ? (
               <>
                 <View style={styles.list}>
                   {visibleRows.map((r, idx) => {
@@ -636,7 +720,9 @@ export default function TripBuildScreen() {
 
                 {visibleCount < filteredRows.length ? (
                   <Pressable onPress={() => setVisibleCount((n) => n + 12)} style={styles.moreBtn}>
-                    <Text style={styles.moreText}>Show more</Text>
+                    <Text style={styles.moreText}>
+Show more
+                    </Text>
                   </Pressable>
                 ) : null}
               </>
@@ -649,10 +735,10 @@ export default function TripBuildScreen() {
           visible={!!selectedFixture}
           transparent
           animationType="slide"
-          onRequestClose={() => setSelectedFixture(null)}
+          onRequestClose={closeSheet}
         >
           <View style={styles.modalWrap}>
-            <Pressable style={styles.modalBackdrop} onPress={() => setSelectedFixture(null)} />
+            <Pressable style={styles.modalBackdrop} onPress={closeSheet} />
 
             <SafeAreaView edges={["bottom"]} style={[styles.sheetWrap, { paddingBottom: insets.bottom }]}>
               <SheetCard>
@@ -671,7 +757,7 @@ export default function TripBuildScreen() {
                     </Text>
                   </View>
 
-                  <Pressable onPress={() => setSelectedFixture(null)} style={styles.closeBtn} hitSlop={10}>
+                  <Pressable onPress={closeSheet} style={styles.closeBtn} hitSlop={10}>
                     <Text style={styles.closeText}>Close</Text>
                   </Pressable>
                 </View>
@@ -833,6 +919,19 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   muted: { fontSize: theme.fontSize.sm, color: theme.colors.textSecondary },
+
+  currentBlock: {
+    marginTop: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+    padding: 12,
+  },
+  currentKicker: { color: theme.colors.primary, fontWeight: "900", fontSize: theme.fontSize.xs },
+  currentTitle: { marginTop: 6, color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.md },
+  currentSub: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18 },
+  currentHint: { marginTop: 8, color: theme.colors.textSecondary, fontSize: theme.fontSize.xs },
 
   leagueRow: { gap: 10, paddingRight: theme.spacing.lg, marginTop: 12 },
 
@@ -1031,4 +1130,4 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   saveText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.md },
-});
+});                      
