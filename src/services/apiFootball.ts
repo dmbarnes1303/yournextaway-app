@@ -81,19 +81,66 @@ export type FixtureListRow = {
     venue?: { name?: string; city?: string };
     status?: { long?: string; short?: string };
   };
-  league?: { id?: number; name?: string; round?: string; season?: number };
+  league?: { id?: number; name?: string; round?: string; season?: number; country?: string };
   teams?: {
     home?: { id?: number; name?: string };
     away?: { id?: number; name?: string };
   };
 };
 
+// --------------------
+// In-memory caching (V1 critical stability fix)
+// - dedupes concurrent calls
+// - TTL reduces repeated calls across screens
+// --------------------
+
+const FIXTURES_TTL_MS = 10 * 60 * 1000; // 10 minutes
+const FIXTURE_BY_ID_TTL_MS = 30 * 60 * 1000; // 30 minutes
+
+type CacheEntry<T> = {
+  ts: number;
+  value?: T;
+  inflight?: Promise<T>;
+};
+
+const fixturesCache = new Map<string, CacheEntry<FixtureListRow[]>>();
+const fixtureByIdCache = new Map<string, CacheEntry<FixtureListRow | null>>();
+
+function now() {
+  return Date.now();
+}
+
+function isFresh(ts: number, ttlMs: number) {
+  return now() - ts < ttlMs;
+}
+
+function fixturesKey(params: { league: number; season: number; from: string; to: string }) {
+  return `fixtures:${params.league}:${params.season}:${params.from}:${params.to}`;
+}
+
+function fixtureIdKey(id: string | number) {
+  return `fixture:${String(id)}`;
+}
+
 export async function getFixtures(params: {
   league: number;
   season: number;
   from: string; // YYYY-MM-DD
   to: string; // YYYY-MM-DD
-}) {
+}): Promise<FixtureListRow[]> {
+  const key = fixturesKey(params);
+  const existing = fixturesCache.get(key);
+
+  // Fresh cached value
+  if (existing?.value && isFresh(existing.ts, FIXTURES_TTL_MS)) {
+    return existing.value;
+  }
+
+  // In-flight dedupe
+  if (existing?.inflight) {
+    return existing.inflight;
+  }
+
   const qs = enc({
     league: params.league,
     season: params.season,
@@ -101,11 +148,54 @@ export async function getFixtures(params: {
     to: params.to,
   });
 
-  return apiGet<FixtureListRow[]>(`/fixtures${qs}`);
+  const inflight = apiGet<FixtureListRow[]>(`/fixtures${qs}`)
+    .then((rows) => (Array.isArray(rows) ? rows : []))
+    .then((rows) => {
+      fixturesCache.set(key, { ts: now(), value: rows });
+      return rows;
+    })
+    .catch((err) => {
+      // Do not poison cache with failures
+      fixturesCache.delete(key);
+      throw err;
+    });
+
+  fixturesCache.set(key, { ts: now(), inflight });
+  return inflight;
 }
 
-export async function getFixtureById(fixtureId: string | number) {
+export async function getFixtureById(fixtureId: string | number): Promise<FixtureListRow | null> {
+  const key = fixtureIdKey(fixtureId);
+  const existing = fixtureByIdCache.get(key);
+
+  if (existing && "value" in existing && isFresh(existing.ts, FIXTURE_BY_ID_TTL_MS)) {
+    return existing.value ?? null;
+  }
+
+  if (existing?.inflight) return existing.inflight;
+
   const qs = enc({ id: fixtureId });
-  const rows = await apiGet<FixtureListRow[]>(`/fixtures${qs}`);
-  return rows?.[0] ?? null;
+
+  const inflight = apiGet<FixtureListRow[]>(`/fixtures${qs}`)
+    .then((rows) => (Array.isArray(rows) ? rows : []))
+    .then((rows) => (rows?.[0] ?? null))
+    .then((row) => {
+      fixtureByIdCache.set(key, { ts: now(), value: row });
+      return row;
+    })
+    .catch((err) => {
+      fixtureByIdCache.delete(key);
+      throw err;
+    });
+
+  fixtureByIdCache.set(key, { ts: now(), inflight });
+  return inflight;
+}
+
+/**
+ * Optional helpers (not required, but useful if you want manual invalidation later).
+ */
+export function __clearApiFootballCache() {
+  fixturesCache.clear();
+  fixtureByIdCache.clear();
 }
