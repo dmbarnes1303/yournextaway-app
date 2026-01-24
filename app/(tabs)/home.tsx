@@ -272,8 +272,18 @@ export default function HomeScreen() {
 
     // Venue / Country / League route to Fixtures (v1)
     if (p?.kind === "venue") {
-      // You don’t have a venue page yet. Keep the user's intent by passing the venue slug.
-      goFixturesWithContext({ venue: p.slug });
+      /**
+       * Important:
+       * - Do NOT pass the slug. It’s derived and may not match API strings consistently.
+       * - Pass the display name (r.title). Fixtures does contains+slug matching anyway.
+       * - Preserve current league context.
+       */
+      const venueName = String(r.title ?? "").trim();
+      goFixturesWithContext({
+        leagueId: league.leagueId,
+        season: league.season,
+        venue: venueName || String(p.slug ?? "").trim(),
+      });
       return;
     }
 
@@ -427,10 +437,7 @@ export default function HomeScreen() {
 
                           return (
                             <View key={fixtureId ?? `m-${idx}`} style={styles.resultRow}>
-                              <Pressable
-                                onPress={() => (fixtureId ? goMatchWithContext(fixtureId) : null)}
-                                style={{ flex: 1 }}
-                              >
+                              <Pressable onPress={() => (fixtureId ? goMatchWithContext(fixtureId) : null)} style={{ flex: 1 }}>
                                 <Text style={styles.rowTitle}>{line.title}</Text>
                                 <Text style={styles.rowMeta}>{line.meta}</Text>
                               </Pressable>
@@ -526,10 +533,7 @@ export default function HomeScreen() {
           </View>
 
           <View style={styles.section}>
-            <SectionHeader
-              title="Next fixtures"
-              subtitle={`${league.label} • ${formatUkDateOnly(fromIso)} → ${formatUkDateOnly(toIso)}`}
-            />
+            <SectionHeader title="Next fixtures" subtitle={`${league.label} • ${formatUkDateOnly(fromIso)} → ${formatUkDateOnly(toIso)}`} />
             <GlassCard style={styles.card} intensity={22}>
               {fxLoading ? (
                 <View style={styles.center}>
@@ -553,10 +557,7 @@ export default function HomeScreen() {
 
                     return (
                       <View key={fixtureId ?? `fx-${idx}`} style={styles.fixtureCardRow}>
-                        <Pressable
-                          onPress={() => (fixtureId ? goMatchWithContext(fixtureId) : null)}
-                          style={{ flex: 1 }}
-                        >
+                        <Pressable onPress={() => (fixtureId ? goMatchWithContext(fixtureId) : null)} style={{ flex: 1 }}>
                           <Text style={styles.rowTitle}>{line.title}</Text>
                           <Text style={styles.rowMeta}>{line.meta}</Text>
                         </Pressable>
@@ -593,15 +594,10 @@ export default function HomeScreen() {
             <GlassCard style={styles.card} intensity={22}>
               {!loadedTrips ? <EmptyState title="Loading trips" message="One moment…" /> : null}
 
-              {loadedTrips && trips.length === 0 ? (
-                <EmptyState title="No trips yet" message="Build your first trip in under a minute." />
-              ) : null}
+              {loadedTrips && trips.length === 0 ? <EmptyState title="No trips yet" message="Build your first trip in under a minute." /> : null}
 
               {loadedTrips && nextTrip ? (
-                <Pressable
-                  onPress={() => router.push({ pathname: "/trip/[id]", params: { id: nextTrip.id } })}
-                  style={styles.nextTrip}
-                >
+                <Pressable onPress={() => router.push({ pathname: "/trip/[id]", params: { id: nextTrip.id } })} style={styles.nextTrip}>
                   <Text style={styles.nextTripKicker}>Next up</Text>
                   <Text style={styles.nextTripTitle}>{nextTrip.cityId || "Trip"}</Text>
                   <Text style={styles.nextTripMeta}>{tripSummaryLine(nextTrip)}</Text>
@@ -611,11 +607,7 @@ export default function HomeScreen() {
               {loadedTrips && trips.length > 0 ? (
                 <View style={[styles.list, { marginTop: 10 }]}>
                   {topTrips.map((t) => (
-                    <Pressable
-                      key={t.id}
-                      onPress={() => router.push({ pathname: "/trip/[id]", params: { id: t.id } })}
-                      style={styles.row}
-                    >
+                    <Pressable key={t.id} onPress={() => router.push({ pathname: "/trip/[id]", params: { id: t.id } })} style={styles.row}>
                       <Text style={styles.rowTitle}>{t.cityId || "Trip"}</Text>
                       <Text style={styles.rowMeta}>{tripSummaryLine(t)}</Text>
                     </Pressable>
