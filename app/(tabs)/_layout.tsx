@@ -32,9 +32,7 @@ export default function TabsLayout() {
       }}
     >
       {/* Hard-hide any accidental routes that might appear */}
-      <Tabs.Screen name="index" options={{ href: null }} />
-      <Tabs.Screen name="(home)" options={{ href: null }} />
-      <Tabs.Screen name="home/index" options={{ href: null }} />
+      
 
       <Tabs.Screen
         name="home"
