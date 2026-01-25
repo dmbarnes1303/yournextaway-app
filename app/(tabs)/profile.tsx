@@ -13,6 +13,7 @@ import {
   FlatList,
   KeyboardAvoidingView,
   Platform,
+  useWindowDimensions,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -58,11 +59,12 @@ function showInfo(title: string, body: string) {
 }
 
 /**
- * Cross-device picker (Android Alert truncates long button lists).
+ * Cross-device picker:
+ * - Real fixed modal height (prevents “empty list” collapse)
  * - Search
- * - Scrollable list (fixed height via flex)
- * - Selected state
- * - Optional clear action
+ * - Scrollable list
+ * - Selected highlight + tick
+ * - Optional clear button
  */
 function SelectModal({
   visible,
@@ -85,7 +87,11 @@ function SelectModal({
   allowClear?: boolean;
   clearLabel?: string;
 }) {
+  const { height: screenH, width: screenW } = useWindowDimensions();
   const [q, setQ] = useState("");
+
+  const modalWidth = Math.min(screenW - 32, 520);
+  const modalHeight = Math.min(Math.max(420, Math.floor(screenH * 0.72)), 620);
 
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
@@ -115,12 +121,22 @@ function SelectModal({
     [onClose, onSelect, selectedValue]
   );
 
+  const Empty = useMemo(() => {
+    return (
+      <View style={styles.emptyWrap}>
+        <Text style={styles.emptyTitle}>No matches</Text>
+        <Text style={styles.emptySubtitle}>Try a different search.</Text>
+      </View>
+    );
+  }, []);
+
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.modalWrap}>
         <Pressable style={styles.modalBackdrop} onPress={onClose} />
 
-        <GlassCard style={styles.modalCard} intensity={26}>
+        {/* IMPORTANT: Give the card an explicit height + width to prevent list collapse */}
+        <GlassCard style={[styles.modalCard, { width: modalWidth, height: modalHeight }]} intensity={26}>
           <View style={styles.modalHeader}>
             <View style={{ flex: 1 }}>
               <Text style={styles.modalTitle}>{title}</Text>
@@ -145,17 +161,23 @@ function SelectModal({
             />
           </View>
 
-          {/* IMPORTANT: flex:1 + nestedScrollEnabled makes this scroll reliably on Android */}
-          <FlatList
-            data={filtered}
-            keyExtractor={(item) => item.value}
-            renderItem={renderItem}
-            keyboardShouldPersistTaps="handled"
-            nestedScrollEnabled
-            style={styles.pickList}
-            contentContainerStyle={{ paddingBottom: 8 }}
-            showsVerticalScrollIndicator={false}
-          />
+          {/* List container must own remaining height */}
+          <View style={styles.listArea}>
+            <FlatList
+              data={filtered}
+              keyExtractor={(item) => item.value}
+              renderItem={renderItem}
+              keyboardShouldPersistTaps="handled"
+              nestedScrollEnabled
+              style={styles.pickList}
+              contentContainerStyle={[
+                styles.pickListContent,
+                filtered.length === 0 ? { flexGrow: 1 } : null,
+              ]}
+              ListEmptyComponent={Empty}
+              showsVerticalScrollIndicator={false}
+            />
+          </View>
 
           {allowClear ? (
             <Pressable
@@ -177,10 +199,6 @@ function SelectModal({
 
 /* --------------------------- Locale / Country ---------------------------- */
 
-/**
- * Best-effort country code (no extra libs).
- * Locale sometimes includes region (en-GB). Timezone fallback for top 5.
- */
 function getCountryCodeBestEffort(): string {
   try {
     const locale = Intl.DateTimeFormat().resolvedOptions().locale || "";
@@ -200,10 +218,7 @@ function getCountryCodeBestEffort(): string {
 }
 
 /* ------------------------------- Data Sets ------------------------------- */
-/**
- * Major airports only for now.
- * Expand whenever you add a new league/country.
- */
+
 const AIRPORTS_BY_COUNTRY: Record<string, Option[]> = {
   GB: [
     { label: "London Heathrow (LHR)", value: "London Heathrow (LHR)" },
@@ -288,19 +303,16 @@ const LANGUAGE_OPTIONS: Option[] = [
 export default function ProfileScreen() {
   const LOGO = useMemo(() => require("@/src/yna-logo.png"), []);
 
-  // Guest identity until auth exists
   const displayName = useMemo(() => "Guest Traveller", []);
   const email = useMemo(() => "Not Signed In", []);
   const planName = useMemo(() => "Full Access", []);
 
-  // Defaults (stateful for future persistence)
   const [homeAirport, setHomeAirport] = useState<string>("Not Set");
   const [currency, setCurrency] = useState<string>("GBP");
   const [language, setLanguage] = useState<string>("English");
   const [budgetTarget, setBudgetTarget] = useState<string>("Not Set");
   const [alerts, setAlerts] = useState<string>("Off");
 
-  // Unified pickers
   const [activePicker, setActivePicker] = useState<null | "airport" | "currency" | "language" | "budget">(null);
 
   const countryCode = useMemo(() => getCountryCodeBestEffort(), []);
@@ -324,6 +336,8 @@ export default function ProfileScreen() {
       { label: `${currency} 750`, value: "750" },
     ];
   }, [currency]);
+
+  const closePicker = useCallback(() => setActivePicker(null), []);
 
   const openPreferences = useCallback(() => {
     showInfo(
@@ -365,8 +379,6 @@ export default function ProfileScreen() {
     showInfo("Terms", "Terms will be available here.");
   }, []);
 
-  const closePicker = useCallback(() => setActivePicker(null), []);
-
   return (
     <Background imageUrl={getBackground("profile")} overlayOpacity={0.7}>
       <SafeAreaView style={styles.container} edges={["top"]}>
@@ -378,7 +390,6 @@ export default function ProfileScreen() {
               <Text style={styles.subtitle}>Account, Preferences, And App Info</Text>
             </View>
 
-            {/* Bigger logo; no UI border ring. Crop/zoom to reduce the “outer circle” dominance in the PNG. */}
             <View style={styles.headerLogoMask} pointerEvents="none">
               <Image source={LOGO} style={styles.headerLogoImage} resizeMode="cover" />
             </View>
@@ -482,8 +493,7 @@ export default function ProfileScreen() {
           <View style={{ height: 10 }} />
         </ScrollView>
 
-        {/* Unified selection UX (all use the same modal picker) */}
-
+        {/* Unified pickers */}
         <SelectModal
           visible={activePicker === "airport"}
           title="Home Airport"
@@ -531,7 +541,7 @@ export default function ProfileScreen() {
           clearLabel="Clear Budget"
         />
 
-        {/* Alerts toggle (kept visible while Budget modal is open) */}
+        {/* Alerts toggle overlay while budget modal is open */}
         {activePicker === "budget" ? (
           <View style={styles.alertToggleWrap} pointerEvents="box-none">
             <Pressable
@@ -567,7 +577,6 @@ const styles = StyleSheet.create({
     gap: 12,
   },
 
-  // Logo: big, no UI border. Crop/zoom to reduce the ring inside the PNG.
   headerLogoMask: {
     width: 90,
     height: 90,
@@ -714,8 +723,7 @@ const styles = StyleSheet.create({
   modalCard: {
     padding: 14,
     borderRadius: 18,
-    maxHeight: "82%",
-    width: "100%",
+    alignSelf: "center",
   },
 
   modalHeader: {
@@ -771,6 +779,11 @@ const styles = StyleSheet.create({
     padding: 0,
   },
 
+  listArea: {
+    flex: 1,
+    minHeight: 200,
+  },
+
   pickList: {
     flex: 1,
     borderRadius: 14,
@@ -778,6 +791,10 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.10)",
     backgroundColor: "rgba(0,0,0,0.14)",
     overflow: "hidden",
+  },
+
+  pickListContent: {
+    paddingBottom: 8,
   },
 
   pickRow: {
@@ -826,6 +843,28 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
     fontWeight: theme.fontWeight.black,
     fontSize: theme.fontSize.sm,
+  },
+
+  emptyWrap: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 18,
+  },
+
+  emptyTitle: {
+    color: theme.colors.text,
+    fontWeight: theme.fontWeight.black,
+    fontSize: theme.fontSize.md,
+    marginBottom: 6,
+  },
+
+  emptySubtitle: {
+    color: theme.colors.textSecondary,
+    fontWeight: theme.fontWeight.bold,
+    fontSize: theme.fontSize.sm,
+    textAlign: "center",
+    lineHeight: 18,
   },
 
   /* ------------------------- Alerts Toggle Overlay ------------------------ */
