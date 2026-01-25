@@ -1,3 +1,4 @@
+// app/_layout.tsx
 import "react-native-reanimated";
 import React, { useEffect } from "react";
 import { Stack } from "expo-router";
@@ -13,7 +14,8 @@ import BackButton from "@/src/components/BackButton";
 SplashScreen.preventAutoHideAsync();
 
 export const unstable_settings = {
-  initialRouteName: "landing",
+  // Always boot through app/index.tsx so it can redirect based on AsyncStorage
+  initialRouteName: "index",
 };
 
 export default function RootLayout() {
@@ -22,9 +24,7 @@ export default function RootLayout() {
   });
 
   useEffect(() => {
-    if (loaded) {
-      SplashScreen.hideAsync();
-    }
+    if (loaded) SplashScreen.hideAsync();
   }, [loaded]);
 
   if (!loaded) return null;
@@ -44,17 +44,19 @@ export default function RootLayout() {
             headerLeft: () => <BackButton fallbackHref="/(tabs)/home" />,
           }}
         >
-          {/* Boot redirect file */}
+          {/* Boot redirect (no header) */}
           <Stack.Screen name="index" options={{ headerShown: false }} />
 
           {/* Top funnel */}
           <Stack.Screen name="landing" options={{ headerShown: false }} />
-          <Stack.Screen name="onboarding" options={{ headerShown: true }} />
+
+          {/* Onboarding manages its own header (it already sets headerShown: false internally) */}
+          <Stack.Screen name="onboarding" options={{ headerShown: false }} />
 
           {/* Tabs */}
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
 
-          {/* Details */}
+          {/* Detail screens */}
           <Stack.Screen name="match/[id]" options={{ headerTitle: "Match" }} />
           <Stack.Screen name="city/[slug]" options={{ headerTitle: "City" }} />
           <Stack.Screen name="team/[slug]" options={{ headerTitle: "Team" }} />
@@ -70,7 +72,5 @@ export default function RootLayout() {
 }
 
 const styles = StyleSheet.create({
-  flex: {
-    flex: 1,
-  },
+  flex: { flex: 1 },
 });
