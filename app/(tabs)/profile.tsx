@@ -1,6 +1,6 @@
 // app/(tabs)/profile.tsx
-import React, { useMemo, useState, useEffect, useCallback } from "react";
-import { View, Text, StyleSheet, ScrollView, Pressable, Alert, Image, Platform } from "react-native";
+import React, { useMemo, useState, useCallback } from "react";
+import { View, Text, StyleSheet, ScrollView, Pressable, Alert, Image } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import Background from "@/src/components/Background";
@@ -34,51 +34,104 @@ function showInfo(title: string, body: string) {
   Alert.alert(title, body);
 }
 
-/**
- * Simple, permission-free default airport guesser.
- * UK-first: prefer London airports. Bias to LGW (South East) with a safe fallback to LHR.
- * Later: replace with real geolocation + nearest-airport lookup.
- */
-function guessDefaultAirport(): string {
-  try {
-    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone ?? "";
-    const isUKTz = tz.includes("London") || tz.includes("Europe/London");
-    if (!isUKTz) return "Not Set";
+type AirportOption = { label: string; value: string };
 
-    // Heuristic bias:
-    // - Android devices in UK commonly used by people travelling from LGW/LHR.
-    // - For your use case (South East), LGW is a reasonable “auto” default.
-    // Keep it deterministic and simple.
-    return "London (LGW)";
+const AIRPORTS_BY_COUNTRY: Record<string, AirportOption[]> = {
+  GB: [
+    { label: "London Heathrow (LHR)", value: "London Heathrow (LHR)" },
+    { label: "London Gatwick (LGW)", value: "London Gatwick (LGW)" },
+    { label: "London Stansted (STN)", value: "London Stansted (STN)" },
+    { label: "London Luton (LTN)", value: "London Luton (LTN)" },
+    { label: "London City (LCY)", value: "London City (LCY)" },
+    { label: "Manchester (MAN)", value: "Manchester (MAN)" },
+    { label: "Birmingham (BHX)", value: "Birmingham (BHX)" },
+    { label: "Edinburgh (EDI)", value: "Edinburgh (EDI)" },
+    { label: "Glasgow (GLA)", value: "Glasgow (GLA)" },
+    { label: "Bristol (BRS)", value: "Bristol (BRS)" },
+    { label: "Newcastle (NCL)", value: "Newcastle (NCL)" },
+    { label: "Liverpool (LPL)", value: "Liverpool (LPL)" },
+    { label: "Leeds Bradford (LBA)", value: "Leeds Bradford (LBA)" },
+  ],
+  ES: [
+    { label: "Madrid (MAD)", value: "Madrid (MAD)" },
+    { label: "Barcelona (BCN)", value: "Barcelona (BCN)" },
+    { label: "Málaga (AGP)", value: "Málaga (AGP)" },
+    { label: "Alicante (ALC)", value: "Alicante (ALC)" },
+    { label: "Valencia (VLC)", value: "Valencia (VLC)" },
+    { label: "Seville (SVQ)", value: "Seville (SVQ)" },
+    { label: "Palma de Mallorca (PMI)", value: "Palma de Mallorca (PMI)" },
+    { label: "Bilbao (BIO)", value: "Bilbao (BIO)" },
+  ],
+  IT: [
+    { label: "Rome Fiumicino (FCO)", value: "Rome Fiumicino (FCO)" },
+    { label: "Milan Malpensa (MXP)", value: "Milan Malpensa (MXP)" },
+    { label: "Milan Linate (LIN)", value: "Milan Linate (LIN)" },
+    { label: "Venice (VCE)", value: "Venice (VCE)" },
+    { label: "Naples (NAP)", value: "Naples (NAP)" },
+    { label: "Bologna (BLQ)", value: "Bologna (BLQ)" },
+    { label: "Turin (TRN)", value: "Turin (TRN)" },
+    { label: "Florence (FLR)", value: "Florence (FLR)" },
+  ],
+  DE: [
+    { label: "Frankfurt (FRA)", value: "Frankfurt (FRA)" },
+    { label: "Munich (MUC)", value: "Munich (MUC)" },
+    { label: "Berlin (BER)", value: "Berlin (BER)" },
+    { label: "Düsseldorf (DUS)", value: "Düsseldorf (DUS)" },
+    { label: "Hamburg (HAM)", value: "Hamburg (HAM)" },
+    { label: "Cologne Bonn (CGN)", value: "Cologne Bonn (CGN)" },
+    { label: "Stuttgart (STR)", value: "Stuttgart (STR)" },
+  ],
+  FR: [
+    { label: "Paris Charles de Gaulle (CDG)", value: "Paris Charles de Gaulle (CDG)" },
+    { label: "Paris Orly (ORY)", value: "Paris Orly (ORY)" },
+    { label: "Nice (NCE)", value: "Nice (NCE)" },
+    { label: "Lyon (LYS)", value: "Lyon (LYS)" },
+    { label: "Marseille (MRS)", value: "Marseille (MRS)" },
+    { label: "Toulouse (TLS)", value: "Toulouse (TLS)" },
+    { label: "Bordeaux (BOD)", value: "Bordeaux (BOD)" },
+  ],
+};
+
+function getCountryCodeBestEffort(): string {
+  // Best effort without extra libs:
+  // - Intl locale sometimes includes region (en-GB). Not guaranteed.
+  // - Timezone fallback for top 5.
+  try {
+    const locale = Intl.DateTimeFormat().resolvedOptions().locale || "";
+    const match = locale.match(/-([A-Z]{2})\b/);
+    if (match?.[1]) return match[1];
+
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+    if (tz.includes("Europe/London")) return "GB";
+    if (tz.includes("Europe/Madrid")) return "ES";
+    if (tz.includes("Europe/Rome")) return "IT";
+    if (tz.includes("Europe/Berlin")) return "DE";
+    if (tz.includes("Europe/Paris")) return "FR";
   } catch {
-    return "London (LHR)";
+    // ignore
   }
+  return "GB"; // sensible default for your current UK-first rollout
 }
 
 export default function ProfileScreen() {
   const LOGO = useMemo(() => require("@/src/yna-logo.png"), []);
 
-  // Guest identity until auth exists
   const displayName = useMemo(() => "Guest Traveller", []);
   const email = useMemo(() => "Not Signed In", []);
 
-  // Product choices
   const planName = useMemo(() => "Full Access", []);
   const languageOptions = useMemo(() => ["English", "Spanish", "Italian", "German", "French"], []);
 
-  // Defaults (stateful now; persistence later)
   const [homeAirport, setHomeAirport] = useState<string>("Not Set");
   const [currency, setCurrency] = useState<string>("GBP");
   const [language, setLanguage] = useState<string>("English");
   const [budgetTarget, setBudgetTarget] = useState<string>("Not Set");
   const [alerts, setAlerts] = useState<string>("Off");
 
-  // Auto-select airport ONCE (do not overwrite if user has set it)
-  useEffect(() => {
-    if (homeAirport !== "Not Set") return;
-    const guessed = guessDefaultAirport();
-    if (guessed !== "Not Set") setHomeAirport(guessed);
-  }, [homeAirport]);
+  const countryCode = useMemo(() => getCountryCodeBestEffort(), []);
+  const airportOptions = useMemo<AirportOption[]>(() => {
+    return AIRPORTS_BY_COUNTRY[countryCode] ?? AIRPORTS_BY_COUNTRY.GB;
+  }, [countryCode]);
 
   const budgetSummary =
     budgetTarget === "Not Set"
@@ -93,43 +146,39 @@ export default function ProfileScreen() {
   }, []);
 
   const openHomeAirport = useCallback(() => {
-    // Smarter preset list (UK-first). Keep it lean and useful.
-    const options = [
-      { label: "London (LGW)", value: "London (LGW)" },
-      { label: "London (LHR)", value: "London (LHR)" },
-      { label: "London (STN)", value: "London (STN)" },
-      { label: "London (LTN)", value: "London (LTN)" },
-      { label: "Manchester (MAN)", value: "Manchester (MAN)" },
-      { label: "Birmingham (BHX)", value: "Birmingham (BHX)" },
-      { label: "Edinburgh (EDI)", value: "Edinburgh (EDI)" },
-      { label: "Glasgow (GLA)", value: "Glasgow (GLA)" },
-    ];
+    // Alert button limits are tight; paginate into chunks.
+    const first = airportOptions.slice(0, 6);
+    const rest = airportOptions.slice(6);
 
     Alert.alert(
       "Home Airport",
-      "Choose your default departure airport for comparisons.",
+      `Select a departure airport (${countryCode}).`,
       [
         { text: "Cancel", style: "cancel" },
-        ...options.slice(0, 4).map((o) => ({ text: o.label, onPress: () => setHomeAirport(o.value) })),
-        {
-          text: "More…",
-          onPress: () =>
-            Alert.alert(
-              "More Airports",
-              "Pick one:",
-              [
-                { text: "Cancel", style: "cancel" },
-                ...options.slice(4).map((o) => ({ text: o.label, onPress: () => setHomeAirport(o.value) })),
-                { text: "Clear", style: "destructive", onPress: () => setHomeAirport("Not Set") },
-              ],
-              { cancelable: true }
-            ),
-        },
+        ...first.map((o) => ({ text: o.label, onPress: () => setHomeAirport(o.value) })),
+        ...(rest.length
+          ? [
+              {
+                text: "More…",
+                onPress: () =>
+                  Alert.alert(
+                    "More Airports",
+                    "Pick one:",
+                    [
+                      { text: "Cancel", style: "cancel" },
+                      ...rest.map((o) => ({ text: o.label, onPress: () => setHomeAirport(o.value) })),
+                      { text: "Clear", style: "destructive", onPress: () => setHomeAirport("Not Set") },
+                    ],
+                    { cancelable: true }
+                  ),
+              },
+            ]
+          : []),
         { text: "Clear", style: "destructive", onPress: () => setHomeAirport("Not Set") },
       ],
       { cancelable: true }
     );
-  }, []);
+  }, [airportOptions, countryCode]);
 
   const openCurrency = useCallback(() => {
     Alert.alert(
@@ -282,7 +331,7 @@ export default function ProfileScreen() {
           {/* Settings */}
           <GlassCard style={[styles.card, { padding: 0 }]} intensity={24}>
             <Row title="Preferences" subtitle="Date Window, League Coverage, And Planning Behaviour" onPress={openPreferences} />
-            <Row title="Home Airport" subtitle="Departure Defaults For Comparisons" rightText={homeAirport} onPress={openHomeAirport} />
+            <Row title="Home Airport" subtitle={`Departure Defaults For Comparisons (${countryCode})`} rightText={homeAirport} onPress={openHomeAirport} />
             <Row title="Currency" subtitle="Budgets And Comparisons" rightText={currency} onPress={openCurrency} />
             <Row title="Notifications" subtitle="Fixture Reminders And Trip Prompts" onPress={openNotifications} />
             <Row title="Language" subtitle="App Language" rightText={language} onPress={openLanguage} />
@@ -345,10 +394,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
 
-  headerLogo: {
-    width: 34,
-    height: 34,
-  },
+  headerLogo: { width: 34, height: 34 },
 
   title: {
     fontSize: theme.fontSize.xxl,
