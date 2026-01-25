@@ -1,4 +1,5 @@
 // app/(tabs)/profile.tsx
+
 import React, { useMemo, useState, useCallback } from "react";
 import { View, Text, StyleSheet, ScrollView, Pressable, Alert, Image } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -7,6 +8,8 @@ import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
 import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
+
+/* ----------------------------- Row Component ----------------------------- */
 
 type RowProps = {
   title: string;
@@ -21,14 +24,16 @@ function Row({ title, subtitle, rightText, onPress, last }: RowProps) {
     <Pressable onPress={onPress} style={[styles.row, last && styles.rowLast]}>
       <View style={{ flex: 1 }}>
         <Text style={styles.rowTitle}>{title}</Text>
-        {subtitle ? <Text style={styles.rowSubtitle}>{subtitle}</Text> : null}
+        {subtitle && <Text style={styles.rowSubtitle}>{subtitle}</Text>}
       </View>
 
-      {rightText ? <Text style={styles.rowRight}>{rightText}</Text> : null}
+      {rightText && <Text style={styles.rowRight}>{rightText}</Text>}
       <Text style={styles.chev}>›</Text>
     </Pressable>
   );
 }
+
+/* ----------------------------- Helpers ----------------------------- */
 
 function showInfo(title: string, body: string) {
   Alert.alert(title, body);
@@ -48,455 +53,300 @@ const AIRPORTS_BY_COUNTRY: Record<string, AirportOption[]> = {
     { label: "Edinburgh (EDI)", value: "Edinburgh (EDI)" },
     { label: "Glasgow (GLA)", value: "Glasgow (GLA)" },
     { label: "Bristol (BRS)", value: "Bristol (BRS)" },
-    { label: "Newcastle (NCL)", value: "Newcastle (NCL)" },
-    { label: "Liverpool (LPL)", value: "Liverpool (LPL)" },
-    { label: "Leeds Bradford (LBA)", value: "Leeds Bradford (LBA)" },
   ],
   ES: [
     { label: "Madrid (MAD)", value: "Madrid (MAD)" },
     { label: "Barcelona (BCN)", value: "Barcelona (BCN)" },
     { label: "Málaga (AGP)", value: "Málaga (AGP)" },
-    { label: "Alicante (ALC)", value: "Alicante (ALC)" },
     { label: "Valencia (VLC)", value: "Valencia (VLC)" },
-    { label: "Seville (SVQ)", value: "Seville (SVQ)" },
-    { label: "Palma de Mallorca (PMI)", value: "Palma de Mallorca (PMI)" },
-    { label: "Bilbao (BIO)", value: "Bilbao (BIO)" },
   ],
   IT: [
     { label: "Rome Fiumicino (FCO)", value: "Rome Fiumicino (FCO)" },
     { label: "Milan Malpensa (MXP)", value: "Milan Malpensa (MXP)" },
     { label: "Milan Linate (LIN)", value: "Milan Linate (LIN)" },
     { label: "Venice (VCE)", value: "Venice (VCE)" },
-    { label: "Naples (NAP)", value: "Naples (NAP)" },
-    { label: "Bologna (BLQ)", value: "Bologna (BLQ)" },
-    { label: "Turin (TRN)", value: "Turin (TRN)" },
-    { label: "Florence (FLR)", value: "Florence (FLR)" },
   ],
   DE: [
     { label: "Frankfurt (FRA)", value: "Frankfurt (FRA)" },
     { label: "Munich (MUC)", value: "Munich (MUC)" },
     { label: "Berlin (BER)", value: "Berlin (BER)" },
-    { label: "Düsseldorf (DUS)", value: "Düsseldorf (DUS)" },
-    { label: "Hamburg (HAM)", value: "Hamburg (HAM)" },
-    { label: "Cologne Bonn (CGN)", value: "Cologne Bonn (CGN)" },
-    { label: "Stuttgart (STR)", value: "Stuttgart (STR)" },
   ],
   FR: [
-    { label: "Paris Charles de Gaulle (CDG)", value: "Paris Charles de Gaulle (CDG)" },
+    { label: "Paris CDG (CDG)", value: "Paris CDG (CDG)" },
     { label: "Paris Orly (ORY)", value: "Paris Orly (ORY)" },
     { label: "Nice (NCE)", value: "Nice (NCE)" },
-    { label: "Lyon (LYS)", value: "Lyon (LYS)" },
-    { label: "Marseille (MRS)", value: "Marseille (MRS)" },
-    { label: "Toulouse (TLS)", value: "Toulouse (TLS)" },
-    { label: "Bordeaux (BOD)", value: "Bordeaux (BOD)" },
   ],
 };
 
 function getCountryCodeBestEffort(): string {
-  // Best effort without extra libs:
-  // - Intl locale sometimes includes region (en-GB). Not guaranteed.
-  // - Timezone fallback for top 5.
   try {
     const locale = Intl.DateTimeFormat().resolvedOptions().locale || "";
-    const match = locale.match(/-([A-Z]{2})\b/);
+    const match = locale.match(/-([A-Z]{2})/);
     if (match?.[1]) return match[1];
 
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
-    if (tz.includes("Europe/London")) return "GB";
-    if (tz.includes("Europe/Madrid")) return "ES";
-    if (tz.includes("Europe/Rome")) return "IT";
-    if (tz.includes("Europe/Berlin")) return "DE";
-    if (tz.includes("Europe/Paris")) return "FR";
-  } catch {
-    // ignore
-  }
-  return "GB"; // sensible default for your current UK-first rollout
+    if (tz.includes("London")) return "GB";
+    if (tz.includes("Madrid")) return "ES";
+    if (tz.includes("Rome")) return "IT";
+    if (tz.includes("Berlin")) return "DE";
+    if (tz.includes("Paris")) return "FR";
+  } catch {}
+
+  return "GB";
 }
+
+/* ----------------------------- Screen ----------------------------- */
 
 export default function ProfileScreen() {
   const LOGO = useMemo(() => require("@/src/yna-logo.png"), []);
 
-  const displayName = useMemo(() => "Guest Traveller", []);
-  const email = useMemo(() => "Not Signed In", []);
+  const displayName = "Guest Traveller";
+  const email = "Not Signed In";
+  const planName = "Full Access";
 
-  const planName = useMemo(() => "Full Access", []);
-  const languageOptions = useMemo(() => ["English", "Spanish", "Italian", "German", "French"], []);
+  const languageOptions = ["English", "Spanish", "Italian", "German", "French"];
 
-  const [homeAirport, setHomeAirport] = useState<string>("Not Set");
-  const [currency, setCurrency] = useState<string>("GBP");
-  const [language, setLanguage] = useState<string>("English");
-  const [budgetTarget, setBudgetTarget] = useState<string>("Not Set");
-  const [alerts, setAlerts] = useState<string>("Off");
+  const [homeAirport, setHomeAirport] = useState("Not Set");
+  const [currency, setCurrency] = useState("GBP");
+  const [language, setLanguage] = useState("English");
+  const [budgetTarget, setBudgetTarget] = useState("Not Set");
+  const [alerts, setAlerts] = useState("Off");
 
   const countryCode = useMemo(() => getCountryCodeBestEffort(), []);
-  const airportOptions = useMemo<AirportOption[]>(() => {
-    return AIRPORTS_BY_COUNTRY[countryCode] ?? AIRPORTS_BY_COUNTRY.GB;
-  }, [countryCode]);
+  const airportOptions = AIRPORTS_BY_COUNTRY[countryCode] ?? AIRPORTS_BY_COUNTRY.GB;
 
   const budgetSummary =
     budgetTarget === "Not Set"
       ? "Not Set"
-      : `${currency} ${budgetTarget}${alerts === "On" ? " • Alerts On" : " • Alerts Off"}`;
+      : `${currency} ${budgetTarget}${alerts === "On" ? " • Alerts On" : ""}`;
 
-  const openPreferences = useCallback(() => {
-    showInfo(
-      "Preferences",
-      "Set your planning defaults here: date window, league coverage, sorting, and general behaviour.\n\nNext: wire this into the core fixture + trip build flow."
-    );
-  }, []);
+  /* ---------------- Actions ---------------- */
 
   const openHomeAirport = useCallback(() => {
-    // Alert button limits are tight; paginate into chunks.
-    const first = airportOptions.slice(0, 6);
-    const rest = airportOptions.slice(6);
-
     Alert.alert(
       "Home Airport",
-      `Select a departure airport (${countryCode}).`,
+      `Airports in ${countryCode}`,
       [
         { text: "Cancel", style: "cancel" },
-        ...first.map((o) => ({ text: o.label, onPress: () => setHomeAirport(o.value) })),
-        ...(rest.length
-          ? [
-              {
-                text: "More…",
-                onPress: () =>
-                  Alert.alert(
-                    "More Airports",
-                    "Pick one:",
-                    [
-                      { text: "Cancel", style: "cancel" },
-                      ...rest.map((o) => ({ text: o.label, onPress: () => setHomeAirport(o.value) })),
-                      { text: "Clear", style: "destructive", onPress: () => setHomeAirport("Not Set") },
-                    ],
-                    { cancelable: true }
-                  ),
-              },
-            ]
-          : []),
+        ...airportOptions.map((a) => ({
+          text: a.label,
+          onPress: () => setHomeAirport(a.value),
+        })),
         { text: "Clear", style: "destructive", onPress: () => setHomeAirport("Not Set") },
-      ],
-      { cancelable: true }
+      ]
     );
   }, [airportOptions, countryCode]);
 
-  const openCurrency = useCallback(() => {
-    Alert.alert(
-      "Currency",
-      "Choose the currency used for budgets and comparisons.",
-      [
-        { text: "Cancel", style: "cancel" },
-        { text: "GBP", onPress: () => setCurrency("GBP") },
-        { text: "EUR", onPress: () => setCurrency("EUR") },
-        { text: "USD", onPress: () => setCurrency("USD") },
-      ],
-      { cancelable: true }
-    );
-  }, []);
+  const openCurrency = () => {
+    Alert.alert("Currency", "Choose currency", [
+      { text: "Cancel", style: "cancel" },
+      { text: "GBP", onPress: () => setCurrency("GBP") },
+      { text: "EUR", onPress: () => setCurrency("EUR") },
+      { text: "USD", onPress: () => setCurrency("USD") },
+    ]);
+  };
 
-  const openNotifications = useCallback(() => {
-    showInfo("Notifications", "Fixture reminders and trip prompts.\n\nKeep it quiet and useful: no spam, no noise.");
-  }, []);
+  const openLanguage = () => {
+    Alert.alert("Language", "Choose language", [
+      { text: "Cancel", style: "cancel" },
+      ...languageOptions.map((l) => ({ text: l, onPress: () => setLanguage(l) })),
+    ]);
+  };
 
-  const openLanguage = useCallback(() => {
-    Alert.alert(
-      "Language",
-      "Select your language.",
-      [{ text: "Cancel", style: "cancel" }, ...languageOptions.map((l) => ({ text: l, onPress: () => setLanguage(l) }))],
-      { cancelable: true }
-    );
-  }, [languageOptions]);
+  const openBudgetAlerts = () => {
+    Alert.alert("Budget & Alerts", "", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Toggle Alerts", onPress: () => setAlerts((p) => (p === "Off" ? "On" : "Off")) },
+      { text: "Set Budget £250", onPress: () => setBudgetTarget("250") },
+      { text: "Set Budget £500", onPress: () => setBudgetTarget("500") },
+      { text: "Clear Budget", style: "destructive", onPress: () => setBudgetTarget("Not Set") },
+    ]);
+  };
 
-  const openBudgetAlerts = useCallback(() => {
-    Alert.alert(
-      "Budget & Alerts",
-      "Set a target budget and toggle alerts.",
-      [
-        { text: "Cancel", style: "cancel" },
-        { text: alerts === "Off" ? "Turn Alerts On" : "Turn Alerts Off", onPress: () => setAlerts((p) => (p === "Off" ? "On" : "Off")) },
-        { text: `Set Budget: ${currency} 250`, onPress: () => setBudgetTarget("250") },
-        { text: `Set Budget: ${currency} 500`, onPress: () => setBudgetTarget("500") },
-        { text: "Clear Budget", style: "destructive", onPress: () => setBudgetTarget("Not Set") },
-      ],
-      { cancelable: true }
-    );
-  }, [alerts, currency]);
-
-  const managePlan = useCallback(() => {
-    showInfo(
-      "Plan",
-      "Plan: Full Access\n\nFull Access includes the full planning hub: comparisons, guides, wallet storage, and smart trip tools."
-    );
-  }, []);
-
-  const openFAQ = useCallback(() => {
-    showInfo(
-      "FAQ",
-      "How it works:\n• Start with a fixture\n• Save it as a trip\n• Build everything else in one hub (travel, stay, tickets, what to do)\n\nIf anything feels unclear, we tighten the flow."
-    );
-  }, []);
-
-  const about = useCallback(() => {
-    showInfo(
-      "About YourNextAway",
-      "YourNextAway helps you plan football-first city breaks across Europe.\n\nStart with a match, then build the trip in one place — travel, stay, tickets, and what to do."
-    );
-  }, []);
-
-  const privacy = useCallback(() => {
-    showInfo("Privacy", "Trips and notes are stored locally by default.\n\nWhen sync is enabled, you’ll be able to use YourNextAway across devices.");
-  }, []);
-
-  const terms = useCallback(() => {
-    showInfo("Terms", "Terms will be available here.");
-  }, []);
+  /* ---------------- UI ---------------- */
 
   return (
-    <Background imageUrl={getBackground("profile")} overlayOpacity={0.70}>
-      <SafeAreaView style={styles.container} edges={["top"]}>
-        <ScrollView style={styles.scrollView} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-          {/* Header with top-right logo */}
+    <Background imageUrl={getBackground("profile")} overlayOpacity={0.7}>
+      <SafeAreaView style={styles.container}>
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+          {/* Header */}
           <View style={styles.headerRow}>
             <View style={{ flex: 1 }}>
               <Text style={styles.title}>Profile</Text>
               <Text style={styles.subtitle}>Account, Preferences, And App Info</Text>
             </View>
 
-            <View style={styles.headerLogoWrap} pointerEvents="none">
-              <Image source={LOGO} style={styles.headerLogo} resizeMode="contain" />
+            <View style={styles.logoWrap}>
+              <Image source={LOGO} style={styles.logo} />
             </View>
           </View>
 
-          {/* Identity + plan */}
-          <GlassCard style={styles.card} intensity={24}>
-            <View style={styles.identityTop}>
+          {/* Identity */}
+          <GlassCard style={styles.card}>
+            <View style={styles.identityRow}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.name}>{displayName}</Text>
                 <Text style={styles.meta}>{email}</Text>
               </View>
 
-              <Pressable onPress={managePlan} style={styles.planPill}>
+              <View style={styles.planPill}>
                 <Text style={styles.planLabel}>Plan</Text>
                 <Text style={styles.planValue}>{planName}</Text>
-              </Pressable>
+              </View>
             </View>
+          </GlassCard>
 
-            <View style={styles.divider} />
-
-            <Text style={styles.sectionH}>Your Defaults</Text>
+          {/* Defaults */}
+          <GlassCard style={styles.card}>
+            <Text style={styles.section}>Your Defaults</Text>
 
             <View style={styles.defaultsRow}>
               <Pressable onPress={openHomeAirport} style={styles.defaultChip}>
-                <Text style={styles.defaultKicker}>Home Airport</Text>
-                <Text style={styles.defaultValue} numberOfLines={1}>
-                  {homeAirport}
-                </Text>
+                <Text style={styles.defaultLabel}>Home Airport</Text>
+                <Text style={styles.defaultValue}>{homeAirport}</Text>
               </Pressable>
 
               <Pressable onPress={openCurrency} style={styles.defaultChip}>
-                <Text style={styles.defaultKicker}>Currency</Text>
-                <Text style={styles.defaultValue} numberOfLines={1}>
-                  {currency}
-                </Text>
+                <Text style={styles.defaultLabel}>Currency</Text>
+                <Text style={styles.defaultValue}>{currency}</Text>
               </Pressable>
             </View>
 
             <View style={styles.defaultsRow}>
               <Pressable onPress={openLanguage} style={styles.defaultChip}>
-                <Text style={styles.defaultKicker}>Language</Text>
-                <Text style={styles.defaultValue} numberOfLines={1}>
-                  {language}
-                </Text>
+                <Text style={styles.defaultLabel}>Language</Text>
+                <Text style={styles.defaultValue}>{language}</Text>
               </Pressable>
 
               <Pressable onPress={openBudgetAlerts} style={styles.defaultChip}>
-                <Text style={styles.defaultKicker}>Budget & Alerts</Text>
-                <Text style={styles.defaultValue} numberOfLines={1}>
-                  {budgetSummary}
-                </Text>
-              </Pressable>
-            </View>
-
-            <View style={styles.quickActions}>
-              <Pressable onPress={openPreferences} style={[styles.smallBtn, styles.smallBtnPrimary]}>
-                <Text style={styles.smallBtnText}>Edit Preferences</Text>
-              </Pressable>
-
-              <Pressable onPress={managePlan} style={[styles.smallBtn, styles.smallBtnGhost]}>
-                <Text style={styles.smallBtnGhostText}>Manage Plan</Text>
+                <Text style={styles.defaultLabel}>Budget & Alerts</Text>
+                <Text style={styles.defaultValue}>{budgetSummary}</Text>
               </Pressable>
             </View>
           </GlassCard>
 
           {/* Settings */}
-          <GlassCard style={[styles.card, { padding: 0 }]} intensity={24}>
-            <Row title="Preferences" subtitle="Date Window, League Coverage, And Planning Behaviour" onPress={openPreferences} />
-            <Row title="Home Airport" subtitle={`Departure Defaults For Comparisons (${countryCode})`} rightText={homeAirport} onPress={openHomeAirport} />
-            <Row title="Currency" subtitle="Budgets And Comparisons" rightText={currency} onPress={openCurrency} />
-            <Row title="Notifications" subtitle="Fixture Reminders And Trip Prompts" onPress={openNotifications} />
+          <GlassCard style={[styles.card, { padding: 0 }]}>
+            <Row title="Home Airport" subtitle="Departure Default" rightText={homeAirport} onPress={openHomeAirport} />
+            <Row title="Currency" subtitle="Budgets & Comparisons" rightText={currency} onPress={openCurrency} />
             <Row title="Language" subtitle="App Language" rightText={language} onPress={openLanguage} />
-            <Row
-              title="Budget & Alerts"
-              subtitle="Target Budget And Drop Alerts"
-              rightText={budgetTarget === "Not Set" ? "Not Set" : budgetSummary}
-              onPress={openBudgetAlerts}
-              last
-            />
+            <Row title="Budget & Alerts" subtitle="Target Budget & Drops" rightText={budgetSummary} onPress={openBudgetAlerts} last />
           </GlassCard>
 
-          {/* Help */}
-          <GlassCard style={[styles.card, { padding: 0 }]} intensity={24}>
-            <Row title="FAQ" subtitle="How It Works And What’s Included" onPress={openFAQ} last />
-          </GlassCard>
-
-          {/* Legal / about */}
-          <GlassCard style={[styles.card, { padding: 0 }]} intensity={24}>
-            <Row title="About" subtitle="What YourNextAway Does" onPress={about} />
-            <Row title="Privacy" subtitle="What’s Stored And Where" onPress={privacy} />
-            <Row title="Terms" subtitle="Legal" onPress={terms} last />
-          </GlassCard>
-
-          <Text style={styles.footerNote}>Plan • Fly • Watch • Repeat</Text>
-          <View style={{ height: 8 }} />
+          <Text style={styles.footer}>Plan • Fly • Watch • Repeat</Text>
         </ScrollView>
       </SafeAreaView>
     </Background>
   );
 }
 
+/* ----------------------------- Styles ----------------------------- */
+
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  scrollView: { flex: 1 },
 
   content: {
-    paddingHorizontal: theme.spacing.lg,
-    paddingBottom: theme.spacing.xxl,
+    padding: theme.spacing.lg,
     gap: theme.spacing.lg,
   },
 
   headerRow: {
-    paddingTop: theme.spacing.lg,
-    paddingBottom: theme.spacing.xs,
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 12,
   },
 
-  headerLogoWrap: {
+  logoWrap: {
     width: 44,
     height: 44,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    backgroundColor: "rgba(0,0,0,0.20)",
+    borderColor: "rgba(255,255,255,0.15)",
+    backgroundColor: "rgba(0,0,0,0.25)",
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 4,
   },
 
-  headerLogo: { width: 34, height: 34 },
+  logo: { width: 32, height: 32 },
 
   title: {
-    fontSize: theme.fontSize.xxl,
-    fontWeight: theme.fontWeight.black,
     color: theme.colors.text,
-    marginBottom: theme.spacing.xs,
+    fontSize: theme.fontSize.xxl,
+    fontWeight: "900",
   },
 
   subtitle: {
-    fontSize: theme.fontSize.sm,
     color: theme.colors.textSecondary,
-    fontWeight: theme.fontWeight.bold,
+    marginTop: 4,
   },
 
-  card: { padding: theme.spacing.md },
-
-  identityTop: { flexDirection: "row", alignItems: "center", gap: 12 },
-
-  name: { color: theme.colors.text, fontSize: theme.fontSize.lg, fontWeight: theme.fontWeight.black },
-  meta: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, fontWeight: theme.fontWeight.bold },
-
-  planPill: {
-    borderRadius: 999,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderWidth: 1,
-    borderColor: "rgba(0,255,136,0.28)",
-    backgroundColor: "rgba(0,0,0,0.22)",
-    alignItems: "flex-end",
-  },
-  planLabel: { color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: theme.fontWeight.black },
-  planValue: { marginTop: 2, color: theme.colors.primary, fontSize: theme.fontSize.sm, fontWeight: theme.fontWeight.black },
-
-  divider: {
-    marginTop: 14,
-    marginBottom: 12,
-    height: 1,
-    backgroundColor: "rgba(255,255,255,0.10)",
+  card: {
+    padding: theme.spacing.md,
   },
 
-  sectionH: { color: theme.colors.text, fontSize: theme.fontSize.md, fontWeight: theme.fontWeight.black },
-
-  defaultsRow: { marginTop: 12, flexDirection: "row", gap: 10 },
-
-  defaultChip: {
-    flex: 1,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    backgroundColor: "rgba(0,0,0,0.22)",
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    minHeight: 70,
-    justifyContent: "space-between",
-  },
-
-  defaultKicker: { color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: theme.fontWeight.black, lineHeight: 14 },
-  defaultValue: { color: theme.colors.text, fontSize: theme.fontSize.sm, fontWeight: theme.fontWeight.black },
-
-  quickActions: { marginTop: 14, flexDirection: "row", gap: 10 },
-
-  smallBtn: {
-    flex: 1,
-    borderRadius: 14,
-    paddingVertical: 12,
-    alignItems: "center",
-    borderWidth: 1,
-  },
-  smallBtnPrimary: { borderColor: theme.colors.primary, backgroundColor: "rgba(0,0,0,0.40)" },
-  smallBtnText: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.sm },
-  smallBtnGhost: { borderColor: theme.colors.border, backgroundColor: "rgba(0,0,0,0.22)" },
-  smallBtnGhostText: { color: theme.colors.textSecondary, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.sm },
-
-  row: {
+  identityRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(255,255,255,0.10)",
   },
+
+  name: { color: theme.colors.text, fontSize: 18, fontWeight: "900" },
+  meta: { color: theme.colors.textSecondary, marginTop: 6 },
+
+  planPill: {
+    borderWidth: 1,
+    borderColor: "rgba(0,255,136,0.3)",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+  },
+
+  planLabel: { color: theme.colors.textSecondary, fontSize: 10 },
+  planValue: { color: theme.colors.primary, fontWeight: "900" },
+
+  section: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    marginBottom: 10,
+  },
+
+  defaultsRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 10,
+  },
+
+  defaultChip: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    borderRadius: 14,
+    padding: 12,
+  },
+
+  defaultLabel: { color: theme.colors.textSecondary, fontSize: 12 },
+  defaultValue: { color: theme.colors.text, marginTop: 6, fontWeight: "900" },
+
+  row: {
+    flexDirection: "row",
+    padding: 14,
+    alignItems: "center",
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255,255,255,0.1)",
+  },
+
   rowLast: { borderBottomWidth: 0 },
 
-  rowTitle: { color: theme.colors.text, fontSize: theme.fontSize.md, fontWeight: theme.fontWeight.black },
-  rowSubtitle: { marginTop: 4, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18, fontWeight: theme.fontWeight.bold },
+  rowTitle: { color: theme.colors.text, fontWeight: "900" },
+  rowSubtitle: { color: theme.colors.textSecondary, fontSize: 12, marginTop: 4 },
+  rowRight: { color: theme.colors.textSecondary },
+  chev: { color: theme.colors.textSecondary, fontSize: 22 },
 
-  rowRight: {
-    color: theme.colors.textSecondary,
-    fontSize: theme.fontSize.sm,
-    fontWeight: theme.fontWeight.black,
-    marginRight: 2,
-  },
-
-  chev: { color: theme.colors.textSecondary, fontSize: 26, marginTop: -2 },
-
-  footerNote: {
+  footer: {
     textAlign: "center",
-    color: "rgba(0,255,136,0.80)",
-    fontSize: theme.fontSize.xs,
-    fontWeight: theme.fontWeight.black,
+    color: theme.colors.primary,
+    fontSize: 11,
+    fontWeight: "900",
     letterSpacing: 0.6,
-    marginTop: 2,
   },
 });
