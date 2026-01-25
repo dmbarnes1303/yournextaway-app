@@ -1,6 +1,6 @@
 // app/landing.tsx
-import React, { useEffect, useState } from "react";
-import { View, Text, StyleSheet, Pressable, ActivityIndicator, Image } from "react-native";
+import React, { useEffect } from "react";
+import { View, Text, StyleSheet, Pressable, Image } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Stack, useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -18,26 +18,10 @@ const LOGO = require("@/src/yna-logo.png");
 
 export default function Landing() {
   const router = useRouter();
-  const [ready, setReady] = useState(false);
 
+  // Mark landing as "seen" the moment the user reaches it once.
   useEffect(() => {
-    let mounted = true;
-
-    (async () => {
-      try {
-        // As soon as Landing is reached once, mark it as seen.
-        // Next app launch will boot straight into Home.
-        await AsyncStorage.setItem(STORAGE_KEYS.seenLanding, "true");
-      } catch {
-        // ignore (we can still show landing)
-      } finally {
-        if (mounted) setReady(true);
-      }
-    })();
-
-    return () => {
-      mounted = false;
-    };
+    AsyncStorage.setItem(STORAGE_KEYS.seenLanding, "true");
   }, []);
 
   return (
@@ -54,31 +38,22 @@ export default function Landing() {
             </View>
 
             <GlassCard style={styles.card} intensity={24}>
-              {!ready ? (
-                <View style={styles.center}>
-                  <ActivityIndicator />
-                  <Text style={styles.muted}>Loading…</Text>
-                </View>
-              ) : (
-                <>
-                  <Text style={styles.h1}>Start planning in one flow</Text>
-                  <Text style={styles.body}>
-                    Browse fixtures first. When you’re ready, we’ll walk you through the onboarding and you can set your preferences later.
-                  </Text>
+              <Text style={styles.h1}>Start planning in one flow</Text>
+              <Text style={styles.body}>
+                Browse fixtures first. When you’re ready, we’ll walk you through onboarding and you can set preferences later.
+              </Text>
 
-                  <View style={styles.actions}>
-                    <Pressable onPress={() => router.push("/onboarding")} style={[styles.btn, styles.btnPrimary]}>
-                      <Text style={styles.btnPrimaryText}>Get started</Text>
-                    </Pressable>
+              <View style={styles.actions}>
+                <Pressable onPress={() => router.push("/onboarding")} style={[styles.btn, styles.btnPrimary]}>
+                  <Text style={styles.btnPrimaryText}>Get started</Text>
+                </Pressable>
 
-                    <Pressable onPress={() => router.replace("/(tabs)/home")} style={[styles.btn, styles.btnGhost]}>
-                      <Text style={styles.btnGhostText}>Explore first</Text>
-                    </Pressable>
-                  </View>
+                <Pressable onPress={() => router.replace("/(tabs)/home")} style={[styles.btn, styles.btnGhost]}>
+                  <Text style={styles.btnGhostText}>Explore first</Text>
+                </Pressable>
+              </View>
 
-                  <Text style={styles.micro}>Plan • Fly • Watch • Repeat</Text>
-                </>
-              )}
+              <Text style={styles.micro}>Plan • Fly • Watch • Repeat</Text>
             </GlassCard>
           </View>
         </SafeAreaView>
@@ -122,8 +97,6 @@ const styles = StyleSheet.create({
   },
 
   card: { padding: theme.spacing.lg },
-
-  center: { paddingVertical: 8, alignItems: "center", gap: 10 },
 
   h1: {
     color: theme.colors.text,
@@ -182,11 +155,5 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSize.xs,
     fontWeight: theme.fontWeight.black,
     letterSpacing: 0.6,
-  },
-
-  muted: {
-    color: theme.colors.textSecondary,
-    fontWeight: theme.fontWeight.bold,
-    fontSize: theme.fontSize.sm,
   },
 });
