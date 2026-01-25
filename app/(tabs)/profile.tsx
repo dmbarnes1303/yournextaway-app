@@ -1,6 +1,6 @@
 // app/(tabs)/profile.tsx
-import React, { useMemo, useState } from "react";
-import { View, Text, StyleSheet, ScrollView, Pressable, Alert } from "react-native";
+import React, { useMemo, useState, useEffect, useCallback } from "react";
+import { View, Text, StyleSheet, ScrollView, Pressable, Alert, Image, Platform } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import Background from "@/src/components/Background";
@@ -34,54 +34,104 @@ function showInfo(title: string, body: string) {
   Alert.alert(title, body);
 }
 
+/**
+ * Simple, permission-free default airport guesser.
+ * UK-first: prefer London airports. Bias to LGW (South East) with a safe fallback to LHR.
+ * Later: replace with real geolocation + nearest-airport lookup.
+ */
+function guessDefaultAirport(): string {
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone ?? "";
+    const isUKTz = tz.includes("London") || tz.includes("Europe/London");
+    if (!isUKTz) return "Not Set";
+
+    // Heuristic bias:
+    // - Android devices in UK commonly used by people travelling from LGW/LHR.
+    // - For your use case (South East), LGW is a reasonable “auto” default.
+    // Keep it deterministic and simple.
+    return "London (LGW)";
+  } catch {
+    return "London (LHR)";
+  }
+}
+
 export default function ProfileScreen() {
+  const LOGO = useMemo(() => require("@/src/yna-logo.png"), []);
+
   // Guest identity until auth exists
   const displayName = useMemo(() => "Guest Traveller", []);
   const email = useMemo(() => "Not Signed In", []);
 
-  // Product choices you approved
+  // Product choices
   const planName = useMemo(() => "Full Access", []);
   const languageOptions = useMemo(() => ["English", "Spanish", "Italian", "German", "French"], []);
 
-  // Defaults (stateful, so you can wire persistence later)
+  // Defaults (stateful now; persistence later)
   const [homeAirport, setHomeAirport] = useState<string>("Not Set");
   const [currency, setCurrency] = useState<string>("GBP");
   const [language, setLanguage] = useState<string>("English");
   const [budgetTarget, setBudgetTarget] = useState<string>("Not Set");
   const [alerts, setAlerts] = useState<string>("Off");
 
-  function openPreferences() {
+  // Auto-select airport ONCE (do not overwrite if user has set it)
+  useEffect(() => {
+    if (homeAirport !== "Not Set") return;
+    const guessed = guessDefaultAirport();
+    if (guessed !== "Not Set") setHomeAirport(guessed);
+  }, [homeAirport]);
+
+  const budgetSummary =
+    budgetTarget === "Not Set"
+      ? "Not Set"
+      : `${currency} ${budgetTarget}${alerts === "On" ? " • Alerts On" : " • Alerts Off"}`;
+
+  const openPreferences = useCallback(() => {
     showInfo(
       "Preferences",
       "Set your planning defaults here: date window, league coverage, sorting, and general behaviour.\n\nNext: wire this into the core fixture + trip build flow."
     );
-  }
+  }, []);
 
-  function openHomeAirport() {
+  const openHomeAirport = useCallback(() => {
+    // Smarter preset list (UK-first). Keep it lean and useful.
+    const options = [
+      { label: "London (LGW)", value: "London (LGW)" },
+      { label: "London (LHR)", value: "London (LHR)" },
+      { label: "London (STN)", value: "London (STN)" },
+      { label: "London (LTN)", value: "London (LTN)" },
+      { label: "Manchester (MAN)", value: "Manchester (MAN)" },
+      { label: "Birmingham (BHX)", value: "Birmingham (BHX)" },
+      { label: "Edinburgh (EDI)", value: "Edinburgh (EDI)" },
+      { label: "Glasgow (GLA)", value: "Glasgow (GLA)" },
+    ];
+
     Alert.alert(
       "Home Airport",
-      "Choose your default departure airport for travel comparisons.",
+      "Choose your default departure airport for comparisons.",
       [
         { text: "Cancel", style: "cancel" },
+        ...options.slice(0, 4).map((o) => ({ text: o.label, onPress: () => setHomeAirport(o.value) })),
         {
-          text: "Set To London (LHR)",
-          onPress: () => setHomeAirport("London (LHR)"),
+          text: "More…",
+          onPress: () =>
+            Alert.alert(
+              "More Airports",
+              "Pick one:",
+              [
+                { text: "Cancel", style: "cancel" },
+                ...options.slice(4).map((o) => ({ text: o.label, onPress: () => setHomeAirport(o.value) })),
+                { text: "Clear", style: "destructive", onPress: () => setHomeAirport("Not Set") },
+              ],
+              { cancelable: true }
+            ),
         },
-        {
-          text: "Set To London (LGW)",
-          onPress: () => setHomeAirport("London (LGW)"),
-        },
-        {
-          text: "Clear",
-          style: "destructive",
-          onPress: () => setHomeAirport("Not Set"),
-        },
+        { text: "Clear", style: "destructive", onPress: () => setHomeAirport("Not Set") },
       ],
       { cancelable: true }
     );
-  }
+  }, []);
 
-  function openCurrency() {
+  const openCurrency = useCallback(() => {
     Alert.alert(
       "Currency",
       "Choose the currency used for budgets and comparisons.",
@@ -93,100 +143,79 @@ export default function ProfileScreen() {
       ],
       { cancelable: true }
     );
-  }
+  }, []);
 
-  function openNotifications() {
-    showInfo(
-      "Notifications",
-      "Fixture reminders and trip prompts.\n\nWe’ll keep this quiet and useful: no spam, no noise."
-    );
-  }
+  const openNotifications = useCallback(() => {
+    showInfo("Notifications", "Fixture reminders and trip prompts.\n\nKeep it quiet and useful: no spam, no noise.");
+  }, []);
 
-  function openLanguage() {
+  const openLanguage = useCallback(() => {
     Alert.alert(
       "Language",
       "Select your language.",
-      [
-        { text: "Cancel", style: "cancel" },
-        ...languageOptions.map((l) => ({
-          text: l,
-          onPress: () => setLanguage(l),
-        })),
-      ],
+      [{ text: "Cancel", style: "cancel" }, ...languageOptions.map((l) => ({ text: l, onPress: () => setLanguage(l) }))],
       { cancelable: true }
     );
-  }
+  }, [languageOptions]);
 
-  function openBudgetAlerts() {
+  const openBudgetAlerts = useCallback(() => {
     Alert.alert(
       "Budget & Alerts",
       "Set a target budget and toggle alerts.",
       [
         { text: "Cancel", style: "cancel" },
-        {
-          text: "Toggle Alerts",
-          onPress: () => setAlerts((prev) => (prev === "Off" ? "On" : "Off")),
-        },
-        {
-          text: "Set Budget To 250",
-          onPress: () => setBudgetTarget("250"),
-        },
-        {
-          text: "Set Budget To 500",
-          onPress: () => setBudgetTarget("500"),
-        },
-        {
-          text: "Clear Budget",
-          style: "destructive",
-          onPress: () => setBudgetTarget("Not Set"),
-        },
+        { text: alerts === "Off" ? "Turn Alerts On" : "Turn Alerts Off", onPress: () => setAlerts((p) => (p === "Off" ? "On" : "Off")) },
+        { text: `Set Budget: ${currency} 250`, onPress: () => setBudgetTarget("250") },
+        { text: `Set Budget: ${currency} 500`, onPress: () => setBudgetTarget("500") },
+        { text: "Clear Budget", style: "destructive", onPress: () => setBudgetTarget("Not Set") },
       ],
       { cancelable: true }
     );
-  }
+  }, [alerts, currency]);
 
-  function managePlan() {
+  const managePlan = useCallback(() => {
     showInfo(
       "Plan",
       "Plan: Full Access\n\nFull Access includes the full planning hub: comparisons, guides, wallet storage, and smart trip tools."
     );
-  }
+  }, []);
 
-  function openFAQ() {
+  const openFAQ = useCallback(() => {
     showInfo(
       "FAQ",
-      "How it works:\n• Start with a fixture\n• Build a trip around it\n• Keep travel, stays, tickets and plans in one hub\n\nIf something feels unclear, report it and we’ll tighten the flow."
+      "How it works:\n• Start with a fixture\n• Save it as a trip\n• Build everything else in one hub (travel, stay, tickets, what to do)\n\nIf anything feels unclear, we tighten the flow."
     );
-  }
+  }, []);
 
-  function about() {
+  const about = useCallback(() => {
     showInfo(
       "About YourNextAway",
       "YourNextAway helps you plan football-first city breaks across Europe.\n\nStart with a match, then build the trip in one place — travel, stay, tickets, and what to do."
     );
-  }
+  }, []);
 
-  function privacy() {
-    showInfo(
-      "Privacy",
-      "Trips and notes are stored locally by default.\n\nWhen sync is enabled, you’ll be able to use YourNextAway across devices."
-    );
-  }
+  const privacy = useCallback(() => {
+    showInfo("Privacy", "Trips and notes are stored locally by default.\n\nWhen sync is enabled, you’ll be able to use YourNextAway across devices.");
+  }, []);
 
-  function terms() {
+  const terms = useCallback(() => {
     showInfo("Terms", "Terms will be available here.");
-  }
-
-  const budgetSummary =
-    budgetTarget === "Not Set" ? "Not Set" : `${currency} ${budgetTarget}${alerts === "On" ? " • Alerts On" : " • Alerts Off"}`;
+  }, []);
 
   return (
     <Background imageUrl={getBackground("profile")} overlayOpacity={0.70}>
       <SafeAreaView style={styles.container} edges={["top"]}>
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-          <View style={styles.header}>
-            <Text style={styles.title}>Profile</Text>
-            <Text style={styles.subtitle}>Account, Preferences, And App Info</Text>
+          {/* Header with top-right logo */}
+          <View style={styles.headerRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.title}>Profile</Text>
+              <Text style={styles.subtitle}>Account, Preferences, And App Info</Text>
+            </View>
+
+            <View style={styles.headerLogoWrap} pointerEvents="none">
+              <Image source={LOGO} style={styles.headerLogo} resizeMode="contain" />
+            </View>
           </View>
 
           {/* Identity + plan */}
@@ -197,10 +226,10 @@ export default function ProfileScreen() {
                 <Text style={styles.meta}>{email}</Text>
               </View>
 
-              <View style={styles.planPill}>
+              <Pressable onPress={managePlan} style={styles.planPill}>
                 <Text style={styles.planLabel}>Plan</Text>
                 <Text style={styles.planValue}>{planName}</Text>
-              </View>
+              </Pressable>
             </View>
 
             <View style={styles.divider} />
@@ -208,35 +237,35 @@ export default function ProfileScreen() {
             <Text style={styles.sectionH}>Your Defaults</Text>
 
             <View style={styles.defaultsRow}>
-              <View style={styles.defaultChip}>
+              <Pressable onPress={openHomeAirport} style={styles.defaultChip}>
                 <Text style={styles.defaultKicker}>Home Airport</Text>
                 <Text style={styles.defaultValue} numberOfLines={1}>
                   {homeAirport}
                 </Text>
-              </View>
+              </Pressable>
 
-              <View style={styles.defaultChip}>
+              <Pressable onPress={openCurrency} style={styles.defaultChip}>
                 <Text style={styles.defaultKicker}>Currency</Text>
                 <Text style={styles.defaultValue} numberOfLines={1}>
                   {currency}
                 </Text>
-              </View>
+              </Pressable>
             </View>
 
             <View style={styles.defaultsRow}>
-              <View style={styles.defaultChip}>
+              <Pressable onPress={openLanguage} style={styles.defaultChip}>
                 <Text style={styles.defaultKicker}>Language</Text>
                 <Text style={styles.defaultValue} numberOfLines={1}>
                   {language}
                 </Text>
-              </View>
+              </Pressable>
 
-              <View style={styles.defaultChip}>
+              <Pressable onPress={openBudgetAlerts} style={styles.defaultChip}>
                 <Text style={styles.defaultKicker}>Budget & Alerts</Text>
                 <Text style={styles.defaultValue} numberOfLines={1}>
                   {budgetSummary}
                 </Text>
-              </View>
+              </Pressable>
             </View>
 
             <View style={styles.quickActions}>
@@ -257,7 +286,13 @@ export default function ProfileScreen() {
             <Row title="Currency" subtitle="Budgets And Comparisons" rightText={currency} onPress={openCurrency} />
             <Row title="Notifications" subtitle="Fixture Reminders And Trip Prompts" onPress={openNotifications} />
             <Row title="Language" subtitle="App Language" rightText={language} onPress={openLanguage} />
-            <Row title="Budget & Alerts" subtitle="Target Budget And Drop Alerts" rightText={budgetTarget === "Not Set" ? "Not Set" : budgetSummary} onPress={openBudgetAlerts} last />
+            <Row
+              title="Budget & Alerts"
+              subtitle="Target Budget And Drop Alerts"
+              rightText={budgetTarget === "Not Set" ? "Not Set" : budgetSummary}
+              onPress={openBudgetAlerts}
+              last
+            />
           </GlassCard>
 
           {/* Help */}
@@ -290,9 +325,29 @@ const styles = StyleSheet.create({
     gap: theme.spacing.lg,
   },
 
-  header: {
+  headerRow: {
     paddingTop: theme.spacing.lg,
     paddingBottom: theme.spacing.xs,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+  },
+
+  headerLogoWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    backgroundColor: "rgba(0,0,0,0.20)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 4,
+  },
+
+  headerLogo: {
+    width: 34,
+    height: 34,
   },
 
   title: {
