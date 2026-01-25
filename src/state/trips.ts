@@ -1,212 +1,198 @@
 // src/state/trips.ts
 import storage from "@/src/services/storage";
 
-export interface Trip {
+/**
+ * Trips store (no external state libs)
+ *
+ * Goals:
+ * - Works on web + native (best-effort persistence via storage.ts)
+ * - Never hard-crashes if storage is unavailable
+ * - Simple subscribe/getState API used across Home/Trips/Trip Build
+ */
+
+export type Trip = {
   id: string;
 
-  /**
-   * Display label (legacy v1 naming).
-   * Keep this for UI and backwards compatibility.
-   */
-  cityId: string;
+  // Primary destination identity (can be a city name for now)
+  cityId?: string;
 
-  /**
-   * Stable key used for guides/lookup (e.g. "london", "madrid", "paris").
-   * Optional so older saved trips still load.
-   */
+  // Optional future-proofing
   citySlug?: string;
 
-  matchIds: string[];
-  startDate: string; // YYYY-MM-DD
-  endDate: string; // YYYY-MM-DD
-  notes: string;
-}
+  // Match/fixture ids (API-Football fixture id strings)
+  matchIds?: string[];
+
+  // ISO date-only: YYYY-MM-DD
+  startDate?: string;
+  endDate?: string;
+
+  notes?: string;
+
+  createdAt?: number;
+  updatedAt?: number;
+};
 
 type TripsState = {
   loaded: boolean;
   trips: Trip[];
 };
 
-type Listener = (state: TripsState) => void;
+type Listener = (s: TripsState) => void;
 
-const STORAGE_KEY = "trips_v1";
+const STORAGE_KEY = "yna.trips.v1";
 
-function uid() {
-  return `${Date.now()}_${Math.random().toString(16).slice(2)}`;
-}
+let state: TripsState = {
+  loaded: false,
+  trips: [],
+};
 
-/**
- * Simple, dependency-free slugify.
- * - lowercases
- * - removes diacritics
- * - collapses whitespace/underscores to hyphens
- * - strips non [a-z0-9-]
- */
-function slugify(input: string): string {
-  const s = String(input ?? "").trim().toLowerCase();
-  if (!s) return "";
-
-  const noMarks = s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-
-  return noMarks
-    .replace(/[\s_]+/g, "-")
-    .replace(/[^a-z0-9-]/g, "")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "");
-}
-
-/**
- * If we later decide to map venue cities to canonical slugs,
- * we can add rules here (e.g. "munich" -> "munchen" if we choose).
- */
-function deriveCitySlug(t: Pick<Trip, "citySlug" | "cityId">): string | undefined {
-  const existing = t.citySlug ? slugify(t.citySlug) : "";
-  if (existing) return existing;
-
-  const fromLabel = t.cityId ? slugify(t.cityId) : "";
-  return fromLabel || undefined;
-}
-
-let state: TripsState = { loaded: false, trips: [] };
 const listeners = new Set<Listener>();
 
 function emit() {
   for (const l of listeners) l(state);
 }
 
-/**
- * Best-effort persistence:
- * - Never throw (UI should not get bricked by storage).
- * - If persistence fails, app still functions (state remains in memory).
- */
-async function persistSafe(trips: Trip[]) {
-  try {
-    await storage.setJSON(STORAGE_KEY, trips);
-  } catch {
-    // swallow
-  }
+function setState(next: Partial<TripsState>) {
+  state = { ...state, ...next };
+  emit();
 }
 
-/**
- * Normalizes saved trips and backfills new fields.
- * This is your "migration" layer without changing the storage key.
- */
-function normalizeTrips(raw: any): Trip[] {
-  if (!Array.isArray(raw)) return [];
+function now() {
+  return Date.now();
+}
 
+function safeId(): string {
+  // No deps. Good enough uniqueness for local storage.
+  return `t_${now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function isIsoDateOnly(s: unknown): s is string {
+  if (typeof s !== "string") return false;
+  return /^\d{4}-\d{2}-\d{2}$/.test(s.trim());
+}
+
+function normalizeTrip(input: any): Trip | null {
+  if (!input || typeof input !== "object") return null;
+
+  const id = String(input.id ?? "").trim();
+  if (!id) return null;
+
+  const matchIdsRaw = Array.isArray(input.matchIds) ? input.matchIds : [];
+  const matchIds = matchIdsRaw
+    .map((x: any) => String(x ?? "").trim())
+    .filter(Boolean);
+
+  const t: Trip = {
+    id,
+    cityId: typeof input.cityId === "string" ? input.cityId : undefined,
+    citySlug: typeof input.citySlug === "string" ? input.citySlug : undefined,
+    matchIds: matchIds.length ? matchIds : undefined,
+    startDate: isIsoDateOnly(input.startDate) ? input.startDate : undefined,
+    endDate: isIsoDateOnly(input.endDate) ? input.endDate : undefined,
+    notes: typeof input.notes === "string" ? input.notes : undefined,
+    createdAt: typeof input.createdAt === "number" ? input.createdAt : undefined,
+    updatedAt: typeof input.updatedAt === "number" ? input.updatedAt : undefined,
+  };
+
+  return t;
+}
+
+function normalizeTripsList(input: any): Trip[] {
+  const arr = Array.isArray(input) ? input : [];
   const out: Trip[] = [];
-  for (const x of raw) {
-    if (!x || typeof x !== "object") continue;
-
-    const id = typeof x.id === "string" ? x.id : uid();
-    const cityId = typeof x.cityId === "string" ? x.cityId : "Trip";
-    const matchIds = Array.isArray(x.matchIds) ? x.matchIds.map(String) : [];
-    const startDate = typeof x.startDate === "string" ? x.startDate : "";
-    const endDate = typeof x.endDate === "string" ? x.endDate : "";
-    const notes = typeof x.notes === "string" ? x.notes : "";
-
-    const base: Trip = {
-      id,
-      cityId,
-      matchIds,
-      startDate,
-      endDate,
-      notes,
-    };
-
-    const citySlug = deriveCitySlug({ cityId: base.cityId, citySlug: (x as any).citySlug });
-
-    out.push({
-      ...base,
-      ...(citySlug ? { citySlug } : {}),
-    });
+  for (const item of arr) {
+    const t = normalizeTrip(item);
+    if (t) out.push(t);
   }
+
+  // Keep newest first (use updatedAt/createdAt fallback)
+  out.sort((a, b) => {
+    const at = a.updatedAt ?? a.createdAt ?? 0;
+    const bt = b.updatedAt ?? b.createdAt ?? 0;
+    return bt - at;
+  });
 
   return out;
 }
 
-async function loadTrips() {
-  let nextTrips: Trip[] = [];
-  try {
-    const saved = await storage.getJSON<any>(STORAGE_KEY);
-    nextTrips = normalizeTrips(saved);
-  } catch {
-    nextTrips = [];
-  }
-
-  state = { loaded: true, trips: nextTrips };
-  emit();
-
-  // If we backfilled citySlug for older items, persist quietly.
-  await persistSafe(nextTrips);
+async function persist(trips: Trip[]) {
+  // Best-effort; storage.ts already avoids throwing.
+  await storage.setJSON(STORAGE_KEY, trips);
 }
 
-function getState() {
+async function loadTrips(): Promise<void> {
+  try {
+    const saved = await storage.getJSON<any>(STORAGE_KEY);
+    const trips = normalizeTripsList(saved);
+    setState({ trips, loaded: true });
+  } catch {
+    // Never block the app if persistence fails
+    setState({ trips: [], loaded: true });
+  }
+}
+
+async function addTrip(patch: Omit<Trip, "id"> & Partial<Pick<Trip, "id">>): Promise<Trip> {
+  const id = String((patch as any)?.id ?? "").trim() || safeId();
+  const t: Trip = {
+    id,
+    cityId: patch.cityId,
+    citySlug: patch.citySlug,
+    matchIds: patch.matchIds?.map((x) => String(x)) ?? [],
+    startDate: patch.startDate,
+    endDate: patch.endDate,
+    notes: patch.notes ?? "",
+    createdAt: now(),
+    updatedAt: now(),
+  };
+
+  const next = [t, ...state.trips];
+  setState({ trips: next, loaded: true });
+  await persist(next);
+  return t;
+}
+
+async function updateTrip(id: string, patch: Partial<Omit<Trip, "id">>): Promise<void> {
+  const tid = String(id ?? "").trim();
+  if (!tid) return;
+
+  const next = state.trips.map((t) => {
+    if (t.id !== tid) return t;
+
+    const updated: Trip = {
+      ...t,
+      ...patch,
+      matchIds: patch.matchIds
+        ? patch.matchIds.map((x) => String(x)).filter(Boolean)
+        : t.matchIds,
+      updatedAt: now(),
+    };
+
+    return updated;
+  });
+
+  setState({ trips: next, loaded: true });
+  await persist(next);
+}
+
+async function removeTrip(id: string): Promise<void> {
+  const tid = String(id ?? "").trim();
+  if (!tid) return;
+
+  const next = state.trips.filter((t) => t.id !== tid);
+  setState({ trips: next, loaded: true });
+  await persist(next);
+}
+
+function getState(): TripsState {
   return state;
 }
 
-function subscribe(listener: Listener) {
+function subscribe(listener: Listener): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);
 }
 
-async function addTrip(input: Omit<Trip, "id">) {
-  const citySlug = deriveCitySlug({ cityId: input.cityId, citySlug: input.citySlug });
-
-  const t: Trip = {
-    id: uid(),
-    ...input,
-    ...(citySlug ? { citySlug } : {}),
-  };
-
-  const nextTrips = [t, ...state.trips];
-
-  state = { loaded: true, trips: nextTrips };
-  emit();
-
-  await persistSafe(nextTrips);
-  return t;
-}
-
-async function updateTrip(id: string, patch: Partial<Omit<Trip, "id">>) {
-  const nextTrips = state.trips.map((t) => {
-    if (t.id !== id) return t;
-
-    const next = { ...t, ...patch };
-
-    const patchTouchesCitySlug = Object.prototype.hasOwnProperty.call(patch, "citySlug");
-    const patchTouchesCityId = Object.prototype.hasOwnProperty.call(patch, "cityId");
-
-    if (!patchTouchesCitySlug && patchTouchesCityId) {
-      const derived = deriveCitySlug({ cityId: next.cityId, citySlug: next.citySlug });
-      return { ...next, ...(derived ? { citySlug: derived } : {}) };
-    }
-
-    if (patchTouchesCitySlug) {
-      const normalized = next.citySlug ? slugify(next.citySlug) : undefined;
-      return { ...next, ...(normalized ? { citySlug: normalized } : { citySlug: undefined }) };
-    }
-
-    return next;
-  });
-
-  state = { loaded: true, trips: nextTrips };
-  emit();
-
-  await persistSafe(nextTrips);
-}
-
-async function removeTrip(id: string) {
-  const nextTrips = state.trips.filter((t) => t.id !== id);
-
-  state = { loaded: true, trips: nextTrips };
-  emit();
-
-  await persistSafe(nextTrips);
-}
-
-export default {
-  STORAGE_KEY,
+const tripsStore = {
   getState,
   subscribe,
   loadTrips,
@@ -214,3 +200,5 @@ export default {
   updateTrip,
   removeTrip,
 };
+
+export default tripsStore;
