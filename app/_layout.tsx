@@ -13,7 +13,7 @@ import BackButton from "@/src/components/BackButton";
 SplashScreen.preventAutoHideAsync();
 
 export const unstable_settings = {
-  initialRouteName: "index",
+  initialRouteName: "landing",
 };
 
 export default function RootLayout() {
@@ -22,7 +22,9 @@ export default function RootLayout() {
   });
 
   useEffect(() => {
-    if (loaded) SplashScreen.hideAsync();
+    if (loaded) {
+      SplashScreen.hideAsync();
+    }
   }, [loaded]);
 
   if (!loaded) return null;
@@ -30,6 +32,7 @@ export default function RootLayout() {
   return (
     <>
       <StatusBar style="light" />
+
       <GestureHandlerRootView style={styles.flex}>
         <Stack
           screenOptions={{
@@ -41,17 +44,17 @@ export default function RootLayout() {
             headerLeft: () => <BackButton fallbackHref="/(tabs)/home" />,
           }}
         >
-          {/* Boot */}
+          {/* Boot redirect file */}
           <Stack.Screen name="index" options={{ headerShown: false }} />
 
-          {/* Top-of-funnel (no header so it looks intentional, not “stuck in a subpage”) */}
+          {/* Top funnel */}
           <Stack.Screen name="landing" options={{ headerShown: false }} />
-          <Stack.Screen name="onboarding" options={{ headerShown: true, headerTitle: "" }} />
+          <Stack.Screen name="onboarding" options={{ headerShown: true }} />
 
           {/* Tabs */}
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
 
-          {/* Detail screens */}
+          {/* Details */}
           <Stack.Screen name="match/[id]" options={{ headerTitle: "Match" }} />
           <Stack.Screen name="city/[slug]" options={{ headerTitle: "City" }} />
           <Stack.Screen name="team/[slug]" options={{ headerTitle: "Team" }} />
@@ -67,5 +70,7 @@ export default function RootLayout() {
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
+  flex: {
+    flex: 1,
+  },
 });
