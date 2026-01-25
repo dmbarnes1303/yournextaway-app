@@ -1,12 +1,13 @@
-// app/(tabs)/profile.tsx
 import React, { useMemo } from "react";
-import { View, Text, StyleSheet, ScrollView, Pressable, Alert } from "react-native";
+import { View, Text, StyleSheet, ScrollView, Pressable, Alert, Image } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
 import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
+
+const LOGO = require("../../src/yna-logo.png");
 
 type RowProps = {
   title: string;
@@ -27,7 +28,6 @@ function Row({ title, subtitle, onPress }: RowProps) {
 }
 
 export default function ProfileScreen() {
-  // Tonight: keep it realistic. No auth yet, so present a clean “demo identity”.
   const displayName = useMemo(() => "Guest Traveller", []);
   const email = useMemo(() => "Not signed in", []);
 
@@ -43,10 +43,7 @@ export default function ProfileScreen() {
   }
 
   function sendFeedback() {
-    Alert.alert(
-      "Feedback",
-      "Perfect — tell me what felt confusing or slow.\n\nFor now, just message me with:\n• what you searched\n• what you tapped\n• what you expected"
-    );
+    Alert.alert("Feedback", "Send me:\n• what you searched\n• what you tapped\n• what you expected\n• what actually happened");
   }
 
   return (
@@ -54,8 +51,21 @@ export default function ProfileScreen() {
       <SafeAreaView style={styles.container} edges={["top"]}>
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
           <View style={styles.header}>
-            <Text style={styles.title}>Profile</Text>
-            <Text style={styles.subtitle}>Account, preferences, and app info</Text>
+            <View style={styles.headerLeft}>
+              <View style={styles.logoBadge}>
+                <Image source={LOGO} style={styles.logo} />
+              </View>
+
+              <View style={{ flex: 1 }}>
+                <Text style={styles.title}>Profile</Text>
+                <Text style={styles.subtitle}>Account, preferences, and app info</Text>
+              </View>
+            </View>
+
+            <View style={styles.euPins}>
+              <View style={styles.pinBlue} />
+              <View style={styles.pinGold} />
+            </View>
           </View>
 
           <GlassCard style={styles.card} intensity={22}>
@@ -66,19 +76,21 @@ export default function ProfileScreen() {
 
             <Text style={styles.blurbTitle}>What you’re testing</Text>
             <Text style={styles.blurb}>
-              This is an early build. The core flow to test is: search → open fixtures/match → plan a trip → save it.
+              Core flow: search → open fixture → build trip → save.
+              {"\n"}
+              If anything feels confusing, it’s a UX bug — not you.
             </Text>
           </GlassCard>
 
           <GlassCard style={[styles.card, { padding: 0 }]} intensity={22}>
             <Row
               title="Preferences"
-              subtitle="Search behaviour, date window defaults, and UI options"
+              subtitle="Search behaviour, date windows, and UI options"
               onPress={() => comingSoon("Preferences")}
             />
             <Row
               title="Notifications"
-              subtitle="Price drops, fixture reminders, and trip prompts"
+              subtitle="Fixture reminders and trip prompts"
               onPress={() => comingSoon("Notifications")}
             />
             <Row
@@ -113,7 +125,29 @@ const styles = StyleSheet.create({
   header: {
     paddingTop: theme.spacing.lg,
     paddingBottom: theme.spacing.xs,
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    gap: 12,
   },
+
+  headerLeft: { flexDirection: "row", gap: 12, alignItems: "center", flex: 1 },
+
+  logoBadge: {
+    width: 46,
+    height: 46,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0,0,0,0.30)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+  },
+  logo: { width: 28, height: 28, resizeMode: "contain" },
+
+  euPins: { flexDirection: "row", gap: 8, alignItems: "center", marginBottom: 6 },
+  pinBlue: { width: 16, height: 6, borderRadius: 999, backgroundColor: "rgba(0, 92, 175, 0.55)" },
+  pinGold: { width: 12, height: 6, borderRadius: 999, backgroundColor: "rgba(255, 196, 46, 0.60)" },
 
   title: {
     fontSize: theme.fontSize.xxl,
