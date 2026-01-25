@@ -11,9 +11,9 @@ import { theme } from "@/src/constants/theme";
 const LOGO = require("@/src/yna-logo.png");
 
 type Step = {
-  title: string;     // Title Case
-  subtitle: string;  // Title Case
-  body: string;      // sentence case
+  title: string; // Title Case
+  subtitle: string; // Title Case
+  body: string; // sentence case
 };
 
 export default function Onboarding() {
@@ -37,7 +37,7 @@ export default function Onboarding() {
         title: "Make The City Break Better",
         subtitle: "What To Do, Where To Base Yourself",
         body:
-          "Use city and team guides to shape the weekend. Tap into top-rated ideas (including TripAdvisor inspiration), then save everything and store bookings in your wallet.",
+          "Use city and team guides to shape the trip. Tap into top-rated ideas (including TripAdvisor inspiration), then save everything and store bookings in your wallet.",
       },
     ],
     []
@@ -57,10 +57,9 @@ export default function Onboarding() {
             <Text style={styles.backText}>← Back</Text>
           </Pressable>
 
-          {/* Brand block */}
+          {/* Brand block (logo + tagline only) */}
           <View style={styles.brand}>
             <Image source={LOGO} style={styles.logo} resizeMode="contain" />
-            <Text style={styles.appLine}>YourNextAway</Text>
             <Text style={styles.tagline}>Plan • Fly • Watch • Repeat</Text>
           </View>
 
@@ -112,7 +111,7 @@ export default function Onboarding() {
             </View>
 
             <Text style={styles.micro}>
-              Travel-first planning around fixtures. Save the trip, then build the weekend properly.
+              Travel-first planning around fixtures. Save the trip, then build it properly.
             </Text>
           </GlassCard>
         </View>
@@ -146,19 +145,12 @@ const styles = StyleSheet.create({
 
   brand: {
     alignItems: "center",
-    gap: 6,
+    gap: 8,
     paddingBottom: 4,
   },
 
   // Slightly larger than before to feel “hero”
   logo: { width: 128, height: 128 },
-
-  appLine: {
-    color: theme.colors.text,
-    fontSize: theme.fontSize.md,
-    fontWeight: "900",
-    letterSpacing: 0.2,
-  },
 
   tagline: {
     color: theme.colors.primary,
