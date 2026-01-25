@@ -1,18 +1,52 @@
+// src/constants/backgrounds.ts
 
-// Remote background images for different screens
-export const BACKGROUNDS = {
-  landing: 'https://images.unsplash.com/photo-1522778119026-d647f0596c20?w=1200&q=80',
-  onboarding: 'https://images.unsplash.com/photo-1574629810360-7efbbe195018?w=1200&q=80',
-  home: 'https://images.unsplash.com/photo-1508098682722-e99c43a406b2?w=1200&q=80',
-  fixtures: 'https://images.unsplash.com/photo-1431324155629-1a6deb1dec8d?w=1200&q=80',
-  trips: 'https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=1200&q=80',
-  wallet: 'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=1200&q=80',
-  profile: 'https://images.unsplash.com/photo-1551958219-acbc608c6377?w=1200&q=80',
-  default: 'https://images.unsplash.com/photo-1522778119026-d647f0596c20?w=1200&q=80',
+export type BackgroundKey =
+  | "home"
+  | "fixtures"
+  | "build"
+  | "trips"
+  | "city"
+  | "team"
+  | "wallet"
+  | "profile"
+  | "onboarding1"
+  | "onboarding2"
+  | "onboarding3";
+
+/**
+ * Centralised remote background image map.
+ * All images are high-res Unsplash photos.
+ * Dark, cinematic, low clutter.
+ */
+const BACKGROUNDS: Record<BackgroundKey, string> = {
+  home: "https://images.unsplash.com/photo-1502602898657-3e91760cbb34",
+
+  fixtures: "https://images.unsplash.com/photo-1508098682722-e99c43a406b2",
+
+  build: "https://images.unsplash.com/photo-1529070538774-1843cb3265df",
+
+  trips: "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee",
+
+  city: "https://images.unsplash.com/photo-1494526585095-c41746248156",
+
+  team: "https://images.unsplash.com/photo-1546519638-68e109498ffc",
+
+  wallet: "https://images.unsplash.com/photo-1566073771259-6a8506099945",
+
+  profile: "https://images.unsplash.com/photo-1500534314209-a25ddb2bd429",
+
+  onboarding1: "https://images.unsplash.com/photo-1519125323398-675f0ddb6308",
+
+  onboarding2: "https://images.unsplash.com/photo-1483729558449-99ef09a8c325",
+
+  onboarding3: "https://images.unsplash.com/photo-1505765050516-f72dcac9c60b",
 };
 
-export type BackgroundKey = keyof typeof BACKGROUNDS;
-
+/**
+ * Safe accessor with fallback.
+ */
 export function getBackground(key: BackgroundKey): string {
-  return BACKGROUNDS[key] || BACKGROUNDS.default;
+  return BACKGROUNDS[key] ?? BACKGROUNDS.home;
 }
+
+export { BACKGROUNDS };
