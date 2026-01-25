@@ -1,18 +1,12 @@
+// app/onboarding.tsx
 import React, { useMemo, useState, useRef, useEffect } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  Pressable,
-  Image,
-  Animated,
-} from "react-native";
+import { View, Text, StyleSheet, Pressable, Image, Animated } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { useRouter, Stack } from "expo-router";
 
 import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
-import { getBackground } from "@/src/constants/backgrounds";
+import { getBackgroundSource } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
 
 const LOGO = require("@/src/yna-logo.png");
@@ -57,7 +51,7 @@ export default function Onboarding() {
   const [i, setI] = useState(0);
   const isLast = i === steps.length - 1;
 
-  // Animation
+  // Step animation
   const opacity = useRef(new Animated.Value(1)).current;
   const translateY = useRef(new Animated.Value(0)).current;
 
@@ -66,110 +60,97 @@ export default function Onboarding() {
     translateY.setValue(12);
 
     Animated.parallel([
-      Animated.timing(opacity, {
-        toValue: 1,
-        duration: 220,
-        useNativeDriver: true,
-      }),
-      Animated.timing(translateY, {
-        toValue: 0,
-        duration: 220,
-        useNativeDriver: true,
-      }),
+      Animated.timing(opacity, { toValue: 1, duration: 220, useNativeDriver: true }),
+      Animated.timing(translateY, { toValue: 0, duration: 220, useNativeDriver: true }),
     ]).start();
-  }, [i]);
+  }, [i, opacity, translateY]);
 
   const dotColors = [theme.colors.primary, theme.colors.accent, theme.colors.warning];
-  const bg = steps[i]?.bgKey ?? "onboarding1";
+  const bgSource = getBackgroundSource(steps[i].bgKey);
 
   return (
-    <Background imageUrl={getBackground(bg)} overlayOpacity={0.68}>
-      <SafeAreaView style={styles.safe} edges={["bottom"]}>
-        <View style={styles.screen}>
-          {/* Top Row */}
-          <View style={styles.topRow}>
-            <Pressable onPress={() => router.back()} style={styles.backPill}>
-              <Text style={styles.backText}>← Back</Text>
-            </Pressable>
+    <>
+      {/* Critical: remove native header to prevent a second Back button */}
+      <Stack.Screen options={{ headerShown: false }} />
 
-            <View style={styles.planPill}>
-              <Text style={styles.planLabel}>Plan</Text>
-              <Text style={styles.planValue}>Full Access</Text>
-            </View>
-          </View>
-
-          {/* Brand */}
-          <View style={styles.brand}>
-            <Image source={LOGO} style={styles.logo} resizeMode="contain" />
-            <Text style={styles.tagline}>Plan • Fly • Watch • Repeat</Text>
-          </View>
-
-          {/* Card */}
-          <GlassCard style={styles.card} intensity={24}>
-            <Animated.View
-              style={{
-                opacity,
-                transform: [{ translateY }],
-              }}
-            >
-              <Text style={styles.kicker}>
-                Step {i + 1} of {steps.length}
-              </Text>
-
-              <Text style={styles.h1}>{steps[i].title}</Text>
-              <Text style={styles.h2}>{steps[i].subtitle}</Text>
-              <Text style={styles.body}>{steps[i].body}</Text>
-            </Animated.View>
-
-            {/* Dots */}
-            <View style={styles.dots}>
-              {steps.map((_, idx) => {
-                const active = idx === i;
-                const color = dotColors[idx];
-                return (
-                  <View
-                    key={idx}
-                    style={[
-                      styles.dot,
-                      {
-                        backgroundColor: active ? color : "rgba(255,255,255,0.12)",
-                        borderColor: active ? color : "rgba(255,255,255,0.12)",
-                      },
-                    ]}
-                  />
-                );
-              })}
-            </View>
-
-            {/* Actions */}
-            <View style={styles.actions}>
-              <Pressable
-                onPress={() => router.replace("/(tabs)/home")}
-                style={[styles.btn, styles.btnGhost]}
-              >
-                <Text style={styles.btnGhostText}>Skip For Now</Text>
+      <Background imageSource={bgSource} overlayOpacity={0.68}>
+        <SafeAreaView style={styles.safe} edges={["bottom"]}>
+          <View style={styles.screen}>
+            {/* Top Row */}
+            <View style={styles.topRow}>
+              <Pressable onPress={() => router.back()} style={styles.backPill} hitSlop={10}>
+                <Text style={styles.backText}>← Back</Text>
               </Pressable>
 
-              <Pressable
-                onPress={() => {
-                  if (isLast) router.replace("/(tabs)/home");
-                  else setI((n) => Math.min(n + 1, steps.length - 1));
-                }}
-                style={[styles.btn, styles.btnPrimary]}
-              >
-                <Text style={styles.btnPrimaryText}>
-                  {isLast ? "Start Planning" : "Continue"}
+              <View style={styles.planPill}>
+                <Text style={styles.planLabel}>Plan</Text>
+                <Text style={styles.planValue}>Full Access</Text>
+              </View>
+            </View>
+
+            {/* Brand */}
+            <View style={styles.brand}>
+              <Image source={LOGO} style={styles.logo} resizeMode="contain" />
+              <Text style={styles.tagline}>Plan • Fly • Watch • Repeat</Text>
+            </View>
+
+            {/* Card */}
+            <GlassCard style={styles.card} intensity={24}>
+              <Animated.View style={{ opacity, transform: [{ translateY }] }}>
+                <Text style={styles.kicker}>
+                  Step {i + 1} of {steps.length}
                 </Text>
-              </Pressable>
-            </View>
 
-            <Text style={styles.micro}>
-              Football-first city breaks across Europe — planned properly in one flow.
-            </Text>
-          </GlassCard>
-        </View>
-      </SafeAreaView>
-    </Background>
+                <Text style={styles.h1}>{steps[i].title}</Text>
+                <Text style={styles.h2}>{steps[i].subtitle}</Text>
+                <Text style={styles.body}>{steps[i].body}</Text>
+              </Animated.View>
+
+              {/* Dots */}
+              <View style={styles.dots}>
+                {steps.map((_, idx) => {
+                  const active = idx === i;
+                  const color = dotColors[idx];
+                  return (
+                    <View
+                      key={idx}
+                      style={[
+                        styles.dot,
+                        {
+                          backgroundColor: active ? color : "rgba(255,255,255,0.12)",
+                          borderColor: active ? color : "rgba(255,255,255,0.12)",
+                        },
+                      ]}
+                    />
+                  );
+                })}
+              </View>
+
+              {/* Actions */}
+              <View style={styles.actions}>
+                <Pressable onPress={() => router.replace("/(tabs)/home")} style={[styles.btn, styles.btnGhost]}>
+                  <Text style={styles.btnGhostText}>Skip For Now</Text>
+                </Pressable>
+
+                <Pressable
+                  onPress={() => {
+                    if (isLast) router.replace("/(tabs)/home");
+                    else setI((n) => Math.min(n + 1, steps.length - 1));
+                  }}
+                  style={[styles.btn, styles.btnPrimary]}
+                >
+                  <Text style={styles.btnPrimaryText}>{isLast ? "Start Planning" : "Continue"}</Text>
+                </Pressable>
+              </View>
+
+              <Text style={styles.micro}>
+                Football-first city breaks across Europe — planned properly in one flow.
+              </Text>
+            </GlassCard>
+          </View>
+        </SafeAreaView>
+      </Background>
+    </>
   );
 }
 
@@ -188,6 +169,7 @@ const styles = StyleSheet.create({
   topRow: {
     flexDirection: "row",
     justifyContent: "space-between",
+    alignItems: "center",
   },
 
   backPill: {
@@ -237,9 +219,7 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSize.sm,
   },
 
-  card: {
-    padding: theme.spacing.lg,
-  },
+  card: { padding: theme.spacing.lg },
 
   kicker: {
     color: theme.colors.textSecondary,
