@@ -31,7 +31,7 @@ export default function TabsLayout() {
         },
       }}
     >
-      {/* Hard-hide any accidental routes that might appear */}
+      
       
 
       <Tabs.Screen
