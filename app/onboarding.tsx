@@ -1,6 +1,6 @@
 // app/onboarding.tsx
 import React, { useMemo, useState, useRef, useEffect, useCallback } from "react";
-import { View, Text, StyleSheet, Pressable, Image, Animated } from "react-native";
+import { View, Text, StyleSheet, Pressable, Image, Animated, Alert } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, Stack } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -19,7 +19,9 @@ type Step = {
   bgKey: "onboarding1" | "onboarding2" | "onboarding3";
 };
 
-const ONBOARDING_COMPLETE_KEY = "onboardingComplete";
+const STORAGE_KEYS = {
+  onboardingComplete: "yna:onboardingComplete",
+};
 
 export default function Onboarding() {
   const router = useRouter();
@@ -71,14 +73,15 @@ export default function Onboarding() {
   const dotColors = [theme.colors.primary, theme.colors.accent, theme.colors.warning];
   const bgSource = getBackgroundSource(steps[i].bgKey);
 
-  const completeOnboarding = useCallback(async () => {
-    // Save first; then route. If storage fails, still let the user proceed.
+  const completeOnboardingAndGoHome = useCallback(async () => {
     try {
-      await AsyncStorage.setItem(ONBOARDING_COMPLETE_KEY, "true");
-    } catch {
-      // Intentionally ignore to avoid trapping the user in onboarding.
+      await AsyncStorage.setItem(STORAGE_KEYS.onboardingComplete, "true");
+      router.replace("/(tabs)/home");
+    } catch (e) {
+      // If storage fails, still let the user proceed.
+      Alert.alert("Something went wrong", "We couldn’t save your progress, but you can continue.");
+      router.replace("/(tabs)/home");
     }
-    router.replace("/(tabs)/home");
   }, [router]);
 
   return (
@@ -141,13 +144,13 @@ export default function Onboarding() {
 
               {/* Actions */}
               <View style={styles.actions}>
-                <Pressable onPress={completeOnboarding} style={[styles.btn, styles.btnGhost]}>
+                <Pressable onPress={completeOnboardingAndGoHome} style={[styles.btn, styles.btnGhost]}>
                   <Text style={styles.btnGhostText}>Skip For Now</Text>
                 </Pressable>
 
                 <Pressable
                   onPress={() => {
-                    if (isLast) completeOnboarding();
+                    if (isLast) completeOnboardingAndGoHome();
                     else setI((n) => Math.min(n + 1, steps.length - 1));
                   }}
                   style={[styles.btn, styles.btnPrimary]}
@@ -156,9 +159,7 @@ export default function Onboarding() {
                 </Pressable>
               </View>
 
-              <Text style={styles.micro}>
-                Football-first city breaks across Europe — planned properly in one flow.
-              </Text>
+              <Text style={styles.micro}>Football-first city breaks across Europe — planned properly in one flow.</Text>
             </GlassCard>
           </View>
         </SafeAreaView>
