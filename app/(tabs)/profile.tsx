@@ -1,28 +1,13 @@
 // app/(tabs)/profile.tsx
 import React, { useCallback, useMemo, useState } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  Pressable,
-  Alert,
-  Image,
-  Modal,
-  TextInput,
-  FlatList,
-  KeyboardAvoidingView,
-  Platform,
-  useWindowDimensions,
-} from "react-native";
+import { View, Text, StyleSheet, ScrollView, Pressable, Alert, Image, useWindowDimensions } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
+import SelectModal, { type SelectOption } from "@/src/components/SelectModal";
 import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
-
-/* --------------------------------- Types --------------------------------- */
 
 type RowProps = {
   title: string;
@@ -31,10 +16,6 @@ type RowProps = {
   onPress: () => void;
   last?: boolean;
 };
-
-type Option = { label: string; value: string };
-
-/* ------------------------------- UI Pieces ------------------------------- */
 
 function Row({ title, subtitle, rightText, onPress, last }: RowProps) {
   return (
@@ -59,146 +40,8 @@ function showInfo(title: string, body: string) {
 }
 
 /**
- * Cross-device picker:
- * - Real fixed modal height (prevents “empty list” collapse)
- * - Search
- * - Scrollable list
- * - Selected highlight + tick
- * - Optional clear button
+ * Best-effort country code (no extra libs).
  */
-function SelectModal({
-  visible,
-  title,
-  subtitle,
-  options,
-  selectedValue,
-  onClose,
-  onSelect,
-  allowClear,
-  clearLabel = "Clear",
-}: {
-  visible: boolean;
-  title: string;
-  subtitle?: string;
-  options: Option[];
-  selectedValue?: string;
-  onClose: () => void;
-  onSelect: (value: string) => void;
-  allowClear?: boolean;
-  clearLabel?: string;
-}) {
-  const { height: screenH, width: screenW } = useWindowDimensions();
-  const [q, setQ] = useState("");
-
-  const modalWidth = Math.min(screenW - 32, 520);
-  const modalHeight = Math.min(Math.max(420, Math.floor(screenH * 0.72)), 620);
-
-  const filtered = useMemo(() => {
-    const s = q.trim().toLowerCase();
-    if (!s) return options;
-    return options.filter((o) => o.label.toLowerCase().includes(s) || o.value.toLowerCase().includes(s));
-  }, [options, q]);
-
-  const renderItem = useCallback(
-    ({ item }: { item: Option }) => {
-      const active = selectedValue === item.value;
-      return (
-        <Pressable
-          onPress={() => {
-            onSelect(item.value);
-            setQ("");
-            onClose();
-          }}
-          style={[styles.pickRow, active && styles.pickRowActive]}
-        >
-          <Text style={[styles.pickRowText, active && styles.pickRowTextActive]} numberOfLines={1}>
-            {item.label}
-          </Text>
-          {active ? <Text style={styles.pickTick}>✓</Text> : null}
-        </Pressable>
-      );
-    },
-    [onClose, onSelect, selectedValue]
-  );
-
-  const Empty = useMemo(() => {
-    return (
-      <View style={styles.emptyWrap}>
-        <Text style={styles.emptyTitle}>No matches</Text>
-        <Text style={styles.emptySubtitle}>Try a different search.</Text>
-      </View>
-    );
-  }, []);
-
-  return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.modalWrap}>
-        <Pressable style={styles.modalBackdrop} onPress={onClose} />
-
-        {/* IMPORTANT: Give the card an explicit height + width to prevent list collapse */}
-        <GlassCard style={[styles.modalCard, { width: modalWidth, height: modalHeight }]} intensity={26}>
-          <View style={styles.modalHeader}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.modalTitle}>{title}</Text>
-              {subtitle ? <Text style={styles.modalSubtitle}>{subtitle}</Text> : null}
-            </View>
-
-            <Pressable onPress={onClose} style={styles.modalCloseBtn}>
-              <Text style={styles.modalCloseText}>Close</Text>
-            </Pressable>
-          </View>
-
-          <View style={styles.searchWrap}>
-            <TextInput
-              value={q}
-              onChangeText={setQ}
-              placeholder="Search…"
-              placeholderTextColor="rgba(255,255,255,0.40)"
-              style={styles.searchInput}
-              autoCorrect={false}
-              autoCapitalize="none"
-              returnKeyType="done"
-            />
-          </View>
-
-          {/* List container must own remaining height */}
-          <View style={styles.listArea}>
-            <FlatList
-              data={filtered}
-              keyExtractor={(item) => item.value}
-              renderItem={renderItem}
-              keyboardShouldPersistTaps="handled"
-              nestedScrollEnabled
-              style={styles.pickList}
-              contentContainerStyle={[
-                styles.pickListContent,
-                filtered.length === 0 ? { flexGrow: 1 } : null,
-              ]}
-              ListEmptyComponent={Empty}
-              showsVerticalScrollIndicator={false}
-            />
-          </View>
-
-          {allowClear ? (
-            <Pressable
-              onPress={() => {
-                onSelect("Not Set");
-                setQ("");
-                onClose();
-              }}
-              style={styles.clearBtn}
-            >
-              <Text style={styles.clearBtnText}>{clearLabel}</Text>
-            </Pressable>
-          ) : null}
-        </GlassCard>
-      </KeyboardAvoidingView>
-    </Modal>
-  );
-}
-
-/* --------------------------- Locale / Country ---------------------------- */
-
 function getCountryCodeBestEffort(): string {
   try {
     const locale = Intl.DateTimeFormat().resolvedOptions().locale || "";
@@ -217,9 +60,7 @@ function getCountryCodeBestEffort(): string {
   return "GB";
 }
 
-/* ------------------------------- Data Sets ------------------------------- */
-
-const AIRPORTS_BY_COUNTRY: Record<string, Option[]> = {
+const AIRPORTS_BY_COUNTRY: Record<string, SelectOption[]> = {
   GB: [
     { label: "London Heathrow (LHR)", value: "London Heathrow (LHR)" },
     { label: "London Gatwick (LGW)", value: "London Gatwick (LGW)" },
@@ -284,13 +125,13 @@ const AIRPORTS_BY_COUNTRY: Record<string, Option[]> = {
   ],
 };
 
-const CURRENCY_OPTIONS: Option[] = [
+const CURRENCY_OPTIONS: SelectOption[] = [
   { label: "GBP (£)", value: "GBP" },
   { label: "EUR (€)", value: "EUR" },
   { label: "USD ($)", value: "USD" },
 ];
 
-const LANGUAGE_OPTIONS: Option[] = [
+const LANGUAGE_OPTIONS: SelectOption[] = [
   { label: "English", value: "English" },
   { label: "Spanish", value: "Spanish" },
   { label: "Italian", value: "Italian" },
@@ -298,25 +139,25 @@ const LANGUAGE_OPTIONS: Option[] = [
   { label: "French", value: "French" },
 ];
 
-/* -------------------------------- Screen -------------------------------- */
-
 export default function ProfileScreen() {
-  const LOGO = useMemo(() => require("@/src/yna-logo.png"), []);
+  const { width } = useWindowDimensions();
 
+  const LOGO = useMemo(() => require("@/src/yna-logo.png"), []);
   const displayName = useMemo(() => "Guest Traveller", []);
   const email = useMemo(() => "Not Signed In", []);
   const planName = useMemo(() => "Full Access", []);
 
-  const [homeAirport, setHomeAirport] = useState<string>("Not Set");
-  const [currency, setCurrency] = useState<string>("GBP");
-  const [language, setLanguage] = useState<string>("English");
-  const [budgetTarget, setBudgetTarget] = useState<string>("Not Set");
-  const [alerts, setAlerts] = useState<string>("Off");
+  const [homeAirport, setHomeAirport] = useState("Not Set");
+  const [currency, setCurrency] = useState("GBP");
+  const [language, setLanguage] = useState("English");
+  const [budgetTarget, setBudgetTarget] = useState("Not Set");
+  const [alerts, setAlerts] = useState<"On" | "Off">("Off");
 
   const [activePicker, setActivePicker] = useState<null | "airport" | "currency" | "language" | "budget">(null);
+  const closePicker = useCallback(() => setActivePicker(null), []);
 
   const countryCode = useMemo(() => getCountryCodeBestEffort(), []);
-  const airportOptions = useMemo<Option[]>(
+  const airportOptions = useMemo(
     () => AIRPORTS_BY_COUNTRY[countryCode] ?? AIRPORTS_BY_COUNTRY.GB,
     [countryCode]
   );
@@ -326,7 +167,7 @@ export default function ProfileScreen() {
     return `${currency} ${budgetTarget}${alerts === "On" ? " • Alerts On" : " • Alerts Off"}`;
   }, [alerts, budgetTarget, currency]);
 
-  const budgetOptions = useMemo<Option[]>(() => {
+  const budgetOptions = useMemo<SelectOption[]>(() => {
     return [
       { label: "Not Set", value: "Not Set" },
       { label: `${currency} 150`, value: "150" },
@@ -336,8 +177,6 @@ export default function ProfileScreen() {
       { label: `${currency} 750`, value: "750" },
     ];
   }, [currency]);
-
-  const closePicker = useCallback(() => setActivePicker(null), []);
 
   const openPreferences = useCallback(() => {
     showInfo(
@@ -379,23 +218,34 @@ export default function ProfileScreen() {
     showInfo("Terms", "Terms will be available here.");
   }, []);
 
+  // Responsive logo: keep your 90x90 intent, but prevent it crushing tiny screens.
+  const logoSize = useMemo(() => {
+    const max = 90;
+    const min = 64;
+    if (width < 360) return min;
+    if (width < 410) return 78;
+    return max;
+  }, [width]);
+
   return (
     <Background imageUrl={getBackground("profile")} overlayOpacity={0.7}>
       <SafeAreaView style={styles.container} edges={["top"]}>
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-          {/* Header */}
           <View style={styles.headerRow}>
             <View style={{ flex: 1 }}>
               <Text style={styles.title}>Profile</Text>
               <Text style={styles.subtitle}>Account, Preferences, And App Info</Text>
             </View>
 
-            <View style={styles.headerLogoMask} pointerEvents="none">
-              <Image source={LOGO} style={styles.headerLogoImage} resizeMode="cover" />
+            <View style={[styles.headerLogoMask, { width: logoSize, height: logoSize }]} pointerEvents="none">
+              <Image
+                source={LOGO}
+                style={[styles.headerLogoImage, { width: logoSize, height: logoSize }]}
+                resizeMode="cover"
+              />
             </View>
           </View>
 
-          {/* Identity + plan */}
           <GlassCard style={styles.card} intensity={24}>
             <View style={styles.identityTop}>
               <View style={{ flex: 1 }}>
@@ -456,7 +306,6 @@ export default function ProfileScreen() {
             </View>
           </GlassCard>
 
-          {/* Settings */}
           <GlassCard style={[styles.card, { padding: 0 }]} intensity={24}>
             <Row title="Preferences" subtitle="Date Window, League Coverage, And Planning Behaviour" onPress={openPreferences} />
             <Row
@@ -477,12 +326,10 @@ export default function ProfileScreen() {
             />
           </GlassCard>
 
-          {/* Help */}
           <GlassCard style={[styles.card, { padding: 0 }]} intensity={24}>
             <Row title="FAQ" subtitle="How It Works And What’s Included" onPress={openFAQ} last />
           </GlassCard>
 
-          {/* Legal / about */}
           <GlassCard style={[styles.card, { padding: 0 }]} intensity={24}>
             <Row title="About" subtitle="What YourNextAway Does" onPress={about} />
             <Row title="Privacy" subtitle="What’s Stored And Where" onPress={privacy} />
@@ -493,7 +340,6 @@ export default function ProfileScreen() {
           <View style={{ height: 10 }} />
         </ScrollView>
 
-        {/* Unified pickers */}
         <SelectModal
           visible={activePicker === "airport"}
           title="Home Airport"
@@ -501,9 +347,10 @@ export default function ProfileScreen() {
           options={airportOptions}
           selectedValue={homeAirport}
           onClose={closePicker}
-          onSelect={(v) => setHomeAirport(v)}
+          onSelect={setHomeAirport}
           allowClear
           clearLabel="Clear Airport"
+          clearValue="Not Set"
         />
 
         <SelectModal
@@ -513,7 +360,7 @@ export default function ProfileScreen() {
           options={CURRENCY_OPTIONS}
           selectedValue={currency}
           onClose={closePicker}
-          onSelect={(v) => setCurrency(v)}
+          onSelect={setCurrency}
         />
 
         <SelectModal
@@ -523,7 +370,7 @@ export default function ProfileScreen() {
           options={LANGUAGE_OPTIONS}
           selectedValue={language}
           onClose={closePicker}
-          onSelect={(v) => setLanguage(v)}
+          onSelect={setLanguage}
         />
 
         <SelectModal
@@ -533,15 +380,12 @@ export default function ProfileScreen() {
           options={budgetOptions}
           selectedValue={budgetTarget}
           onClose={closePicker}
-          onSelect={(v) => {
-            if (v === "Not Set") setBudgetTarget("Not Set");
-            else setBudgetTarget(v);
-          }}
+          onSelect={(v) => setBudgetTarget(v === "Not Set" ? "Not Set" : v)}
           allowClear
           clearLabel="Clear Budget"
+          clearValue="Not Set"
         />
 
-        {/* Alerts toggle overlay while budget modal is open */}
         {activePicker === "budget" ? (
           <View style={styles.alertToggleWrap} pointerEvents="box-none">
             <Pressable
@@ -556,8 +400,6 @@ export default function ProfileScreen() {
     </Background>
   );
 }
-
-/* -------------------------------- Styles -------------------------------- */
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
@@ -578,18 +420,12 @@ const styles = StyleSheet.create({
   },
 
   headerLogoMask: {
-    width: 90,
-    height: 90,
     borderRadius: 999,
     overflow: "hidden",
     backgroundColor: "transparent",
     marginTop: 2,
   },
-  headerLogoImage: {
-    width: 90,
-    height: 90,
-    transform: [{ scale: 1.22 }],
-  },
+  headerLogoImage: { transform: [{ scale: 1.22 }] },
 
   title: {
     fontSize: theme.fontSize.xxl,
@@ -665,6 +501,8 @@ const styles = StyleSheet.create({
   },
   smallBtnPrimary: { borderColor: theme.colors.primary, backgroundColor: "rgba(0,0,0,0.40)" },
   smallBtnText: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.sm },
+  // app/(tabs)/profile.tsx  (CONTINUATION — paste from here to end)
+
   smallBtnGhost: { borderColor: theme.colors.border, backgroundColor: "rgba(0,0,0,0.22)" },
   smallBtnGhostText: { color: theme.colors.textSecondary, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.sm },
 
@@ -707,167 +545,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
 
-  /* --------------------------- Modal Picker UI --------------------------- */
-
-  modalWrap: {
-    flex: 1,
-    justifyContent: "center",
-    padding: 16,
-  },
-
-  modalBackdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.55)",
-  },
-
-  modalCard: {
-    padding: 14,
-    borderRadius: 18,
-    alignSelf: "center",
-  },
-
-  modalHeader: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 10,
-    marginBottom: 10,
-  },
-
-  modalTitle: {
-    color: theme.colors.text,
-    fontSize: theme.fontSize.lg,
-    fontWeight: theme.fontWeight.black,
-  },
-
-  modalSubtitle: {
-    marginTop: 4,
-    color: theme.colors.textSecondary,
-    fontSize: theme.fontSize.sm,
-    fontWeight: theme.fontWeight.bold,
-    lineHeight: 18,
-  },
-
-  modalCloseBtn: {
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    backgroundColor: "rgba(0,0,0,0.22)",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-
-  modalCloseText: {
-    color: theme.colors.textSecondary,
-    fontWeight: theme.fontWeight.black,
-    fontSize: theme.fontSize.sm,
-  },
-
-  searchWrap: {
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    backgroundColor: "rgba(0,0,0,0.18)",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    marginBottom: 10,
-  },
-
-  searchInput: {
-    color: theme.colors.text,
-    fontWeight: theme.fontWeight.bold,
-    fontSize: theme.fontSize.md,
-    padding: 0,
-  },
-
-  listArea: {
-    flex: 1,
-    minHeight: 200,
-  },
-
-  pickList: {
-    flex: 1,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.14)",
-    overflow: "hidden",
-  },
-
-  pickListContent: {
-    paddingBottom: 8,
-  },
-
-  pickRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(255,255,255,0.08)",
-  },
-
-  pickRowActive: {
-    backgroundColor: "rgba(0,255,136,0.08)",
-  },
-
-  pickRowText: {
-    flex: 1,
-    color: theme.colors.text,
-    fontSize: theme.fontSize.md,
-    fontWeight: theme.fontWeight.black,
-  },
-
-  pickRowTextActive: {
-    color: theme.colors.text,
-  },
-
-  pickTick: {
-    marginLeft: 10,
-    color: theme.colors.primary,
-    fontSize: 16,
-    fontWeight: theme.fontWeight.black,
-  },
-
-  clearBtn: {
-    marginTop: 10,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    backgroundColor: "rgba(0,0,0,0.22)",
-    paddingVertical: 12,
-    alignItems: "center",
-  },
-
-  clearBtnText: {
-    color: theme.colors.textSecondary,
-    fontWeight: theme.fontWeight.black,
-    fontSize: theme.fontSize.sm,
-  },
-
-  emptyWrap: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 18,
-  },
-
-  emptyTitle: {
-    color: theme.colors.text,
-    fontWeight: theme.fontWeight.black,
-    fontSize: theme.fontSize.md,
-    marginBottom: 6,
-  },
-
-  emptySubtitle: {
-    color: theme.colors.textSecondary,
-    fontWeight: theme.fontWeight.bold,
-    fontSize: theme.fontSize.sm,
-    textAlign: "center",
-    lineHeight: 18,
-  },
-
-  /* ------------------------- Alerts Toggle Overlay ------------------------ */
+  /* Alerts Toggle Overlay */
 
   alertToggleWrap: {
     position: "absolute",
