@@ -1,28 +1,18 @@
 // app/landing.tsx
-import React, { useEffect } from "react";
+import React from "react";
 import { View, Text, StyleSheet, Pressable, Image } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Stack, useRouter } from "expo-router";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
 import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
 
-const STORAGE_KEYS = {
-  seenLanding: "yna:seenLanding",
-};
-
 const LOGO = require("@/src/yna-logo.png");
 
 export default function Landing() {
   const router = useRouter();
-
-  // Mark landing as "seen" the moment the user reaches it once.
-  useEffect(() => {
-    AsyncStorage.setItem(STORAGE_KEYS.seenLanding, "true");
-  }, []);
 
   return (
     <>
