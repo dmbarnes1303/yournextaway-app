@@ -1,6 +1,17 @@
 // app/(tabs)/profile.tsx
+
 import React, { useMemo, useState, useCallback } from "react";
-import { View, Text, StyleSheet, ScrollView, Pressable, Alert, Image } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  Pressable,
+  Alert,
+  Image,
+  useWindowDimensions,
+  Platform,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import Background from "@/src/components/Background";
@@ -24,7 +35,7 @@ function Row({ title, subtitle, rightText, onPress, last }: RowProps) {
         {subtitle ? <Text style={styles.rowSubtitle}>{subtitle}</Text> : null}
       </View>
 
-      {rightText ? <Text style={styles.rowRight}>{rightText}</Text> : null}
+      {rightText ? <Text style={styles.rowRight} numberOfLines={1}>{rightText}</Text> : null}
       <Text style={styles.chev}>›</Text>
     </Pressable>
   );
@@ -36,6 +47,8 @@ function showInfo(title: string, body: string) {
 
 type AirportOption = { label: string; value: string };
 
+// Curated “major airports” list for the initial rollout languages/regions.
+// Expand over time (and/or replace with a real dataset) without changing UI logic.
 const AIRPORTS_BY_COUNTRY: Record<string, AirportOption[]> = {
   GB: [
     { label: "London Heathrow (LHR)", value: "London Heathrow (LHR)" },
@@ -51,6 +64,10 @@ const AIRPORTS_BY_COUNTRY: Record<string, AirportOption[]> = {
     { label: "Newcastle (NCL)", value: "Newcastle (NCL)" },
     { label: "Liverpool (LPL)", value: "Liverpool (LPL)" },
     { label: "Leeds Bradford (LBA)", value: "Leeds Bradford (LBA)" },
+    { label: "Belfast Intl (BFS)", value: "Belfast Intl (BFS)" },
+    { label: "Belfast City (BHD)", value: "Belfast City (BHD)" },
+    { label: "East Midlands (EMA)", value: "East Midlands (EMA)" },
+    { label: "Cardiff (CWL)", value: "Cardiff (CWL)" },
   ],
   ES: [
     { label: "Madrid (MAD)", value: "Madrid (MAD)" },
@@ -61,16 +78,20 @@ const AIRPORTS_BY_COUNTRY: Record<string, AirportOption[]> = {
     { label: "Seville (SVQ)", value: "Seville (SVQ)" },
     { label: "Palma de Mallorca (PMI)", value: "Palma de Mallorca (PMI)" },
     { label: "Bilbao (BIO)", value: "Bilbao (BIO)" },
+    { label: "Tenerife South (TFS)", value: "Tenerife South (TFS)" },
+    { label: "Gran Canaria (LPA)", value: "Gran Canaria (LPA)" },
   ],
   IT: [
     { label: "Rome Fiumicino (FCO)", value: "Rome Fiumicino (FCO)" },
     { label: "Milan Malpensa (MXP)", value: "Milan Malpensa (MXP)" },
     { label: "Milan Linate (LIN)", value: "Milan Linate (LIN)" },
+    { label: "Bergamo (BGY)", value: "Bergamo (BGY)" },
     { label: "Venice (VCE)", value: "Venice (VCE)" },
     { label: "Naples (NAP)", value: "Naples (NAP)" },
     { label: "Bologna (BLQ)", value: "Bologna (BLQ)" },
     { label: "Turin (TRN)", value: "Turin (TRN)" },
     { label: "Florence (FLR)", value: "Florence (FLR)" },
+    { label: "Pisa (PSA)", value: "Pisa (PSA)" },
   ],
   DE: [
     { label: "Frankfurt (FRA)", value: "Frankfurt (FRA)" },
@@ -80,6 +101,7 @@ const AIRPORTS_BY_COUNTRY: Record<string, AirportOption[]> = {
     { label: "Hamburg (HAM)", value: "Hamburg (HAM)" },
     { label: "Cologne Bonn (CGN)", value: "Cologne Bonn (CGN)" },
     { label: "Stuttgart (STR)", value: "Stuttgart (STR)" },
+    { label: "Nuremberg (NUE)", value: "Nuremberg (NUE)" },
   ],
   FR: [
     { label: "Paris Charles de Gaulle (CDG)", value: "Paris Charles de Gaulle (CDG)" },
@@ -89,14 +111,17 @@ const AIRPORTS_BY_COUNTRY: Record<string, AirportOption[]> = {
     { label: "Marseille (MRS)", value: "Marseille (MRS)" },
     { label: "Toulouse (TLS)", value: "Toulouse (TLS)" },
     { label: "Bordeaux (BOD)", value: "Bordeaux (BOD)" },
+    { label: "Nantes (NTE)", value: "Nantes (NTE)" },
   ],
 };
 
 function getCountryCodeBestEffort(): string {
+  // No extra libraries: best-effort only.
+  // We try locale first (e.g. en-GB). If missing, we infer from timezone for top 5.
   try {
     const locale = Intl.DateTimeFormat().resolvedOptions().locale || "";
-    const match = locale.match(/-([A-Z]{2})\b/);
-    if (match?.[1]) return match[1];
+    const m = locale.match(/-([A-Z]{2})\b/);
+    if (m?.[1]) return m[1];
 
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
     if (tz.includes("Europe/London")) return "GB";
@@ -110,18 +135,33 @@ function getCountryCodeBestEffort(): string {
   return "GB";
 }
 
+// Alert button limits vary (iOS tends to be stricter). Keep lists short per page.
+function chunk<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
+
 export default function ProfileScreen() {
   const LOGO = useMemo(() => require("@/src/yna-logo.png"), []);
+  const { width } = useWindowDimensions();
+
+  // Header logo sizing that works across devices:
+  // - Large enough to feel “brand-first”
+  // - Clamped so it won’t crush the header on smaller screens
+  const logoSize = useMemo(() => {
+    const ideal = Math.round(width * 0.22); // responsive feel
+    return Math.max(56, Math.min(90, ideal)); // clamp
+  }, [width]);
 
   // Guest identity until auth exists
   const displayName = useMemo(() => "Guest Traveller", []);
   const email = useMemo(() => "Not Signed In", []);
 
-  // Product choices you approved
   const planName = useMemo(() => "Full Access", []);
   const languageOptions = useMemo(() => ["English", "Spanish", "Italian", "German", "French"], []);
 
-  // Defaults (stateful, so you can wire persistence later)
+  // Defaults (stateful for now; wire persistence later)
   const [homeAirport, setHomeAirport] = useState<string>("Not Set");
   const [currency, setCurrency] = useState<string>("GBP");
   const [language, setLanguage] = useState<string>("English");
@@ -141,43 +181,40 @@ export default function ProfileScreen() {
   const openPreferences = useCallback(() => {
     showInfo(
       "Preferences",
-      "Set your planning defaults here: date window, league coverage, sorting, and general behaviour.\n\nNext: wire this into the core fixture + trip build flow."
+      "Set your planning defaults here:\n\n• Date window\n• League coverage\n• Sorting & filters\n• Planning behaviour\n\nNext: wire these into the core fixture + trip build flow."
     );
   }, []);
 
   const openHomeAirport = useCallback(() => {
-    // Alert button limits are tight; paginate into chunks.
-    const first = airportOptions.slice(0, 6);
-    const rest = airportOptions.slice(6);
+    // Keep each page short to avoid alert action limits.
+    // iOS tends to be more strict than Android; use smaller chunk size there.
+    const pageSize = Platform.OS === "ios" ? 6 : 8;
+    const pages = chunk(airportOptions, pageSize);
 
-    Alert.alert(
-      "Home Airport",
-      `Select a departure airport (${countryCode}).`,
-      [
-        { text: "Cancel", style: "cancel" },
-        ...first.map((o) => ({ text: o.label, onPress: () => setHomeAirport(o.value) })),
-        ...(rest.length
-          ? [
-              {
-                text: "More…",
-                onPress: () =>
-                  Alert.alert(
-                    "More Airports",
-                    "Pick one:",
-                    [
-                      { text: "Cancel", style: "cancel" },
-                      ...rest.map((o) => ({ text: o.label, onPress: () => setHomeAirport(o.value) })),
-                      { text: "Clear", style: "destructive", onPress: () => setHomeAirport("Not Set") },
-                    ],
-                    { cancelable: true }
-                  ),
-              },
-            ]
-          : []),
-        { text: "Clear", style: "destructive", onPress: () => setHomeAirport("Not Set") },
-      ],
-      { cancelable: true }
-    );
+    const openPage = (pageIndex: number) => {
+      const page = pages[pageIndex] ?? [];
+      const actions = [
+        { text: "Cancel", style: "cancel" as const },
+        ...page.map((o) => ({ text: o.label, onPress: () => setHomeAirport(o.value) })),
+      ];
+
+      if (pages.length > 1 && pageIndex < pages.length - 1) {
+        actions.push({
+          text: "More…",
+          onPress: () => openPage(pageIndex + 1),
+        });
+      }
+
+      actions.push({
+        text: "Clear",
+        style: "destructive" as const,
+        onPress: () => setHomeAirport("Not Set"),
+      });
+
+      Alert.alert("Home Airport", `Select a departure airport (${countryCode}).`, actions, { cancelable: true });
+    };
+
+    openPage(0);
   }, [airportOptions, countryCode]);
 
   const openCurrency = useCallback(() => {
@@ -195,14 +232,20 @@ export default function ProfileScreen() {
   }, []);
 
   const openNotifications = useCallback(() => {
-    showInfo("Notifications", "Fixture reminders and trip prompts.\n\nWe’ll keep this quiet and useful: no spam, no noise.");
+    showInfo(
+      "Notifications",
+      "Fixture reminders and trip prompts.\n\nThis stays quiet and useful: no spam, no noise."
+    );
   }, []);
 
   const openLanguage = useCallback(() => {
     Alert.alert(
       "Language",
       "Select your language.",
-      [{ text: "Cancel", style: "cancel" }, ...languageOptions.map((l) => ({ text: l, onPress: () => setLanguage(l) }))],
+      [
+        { text: "Cancel", style: "cancel" },
+        ...languageOptions.map((l) => ({ text: l, onPress: () => setLanguage(l) })),
+      ],
       { cancelable: true }
     );
   }, [languageOptions]);
@@ -228,14 +271,14 @@ export default function ProfileScreen() {
   const managePlan = useCallback(() => {
     showInfo(
       "Plan",
-      "Plan: Full Access\n\nFull Access includes the full planning hub: comparisons, guides, wallet storage, and smart trip tools."
+      "Plan: Full Access\n\nFull Access is the full planning hub:\n• Comparisons\n• Guides\n• Wallet storage\n• Smart trip tools"
     );
   }, []);
 
   const openFAQ = useCallback(() => {
     showInfo(
       "FAQ",
-      "How it works:\n• Start with a fixture\n• Save it as a trip\n• Build everything else in one hub (travel, stay, tickets, what to do)\n\nIf something feels unclear, report it and we’ll tighten the flow."
+      "How it works:\n• Start with a fixture\n• Save it as a trip\n• Build everything else in one hub (travel, stay, tickets, what to do)\n\nIf anything feels unclear, we tighten the flow."
     );
   }, []);
 
@@ -258,18 +301,24 @@ export default function ProfileScreen() {
   }, []);
 
   return (
-    <Background imageUrl={getBackground("profile")} overlayOpacity={0.70}>
+    <Background imageUrl={getBackground("profile")} overlayOpacity={0.7}>
       <SafeAreaView style={styles.container} edges={["top"]}>
-        <ScrollView style={styles.scrollView} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-          {/* Header with top-right logo (NO outer circle) */}
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Header with top-right logo (no outer circle) */}
           <View style={styles.headerRow}>
             <View style={{ flex: 1 }}>
               <Text style={styles.title}>Profile</Text>
               <Text style={styles.subtitle}>Account, Preferences, And App Info</Text>
             </View>
 
-            {/* No border, no circle. Make logo fill the old circle area. */}
-            <View style={styles.headerLogoWrap} pointerEvents="none">
+            <View
+              style={[styles.headerLogoWrap, { width: logoSize, height: logoSize }]}
+              pointerEvents="none"
+            >
               <Image source={LOGO} style={styles.headerLogo} resizeMode="contain" />
             </View>
           </View>
@@ -337,7 +386,11 @@ export default function ProfileScreen() {
 
           {/* Settings */}
           <GlassCard style={[styles.card, { padding: 0 }]} intensity={24}>
-            <Row title="Preferences" subtitle="Date Window, League Coverage, And Planning Behaviour" onPress={openPreferences} />
+            <Row
+              title="Preferences"
+              subtitle="Date Window, League Coverage, And Planning Behaviour"
+              onPress={openPreferences}
+            />
             <Row
               title="Home Airport"
               subtitle={`Departure Defaults For Comparisons (${countryCode})`}
@@ -369,7 +422,7 @@ export default function ProfileScreen() {
           </GlassCard>
 
           <Text style={styles.footerNote}>Plan • Fly • Watch • Repeat</Text>
-          <View style={{ height: 8 }} />
+          <View style={{ height: 10 }} />
         </ScrollView>
       </SafeAreaView>
     </Background>
@@ -394,21 +447,17 @@ const styles = StyleSheet.create({
     gap: 12,
   },
 
-  // NO outer circle: no border, no background, just space for the logo.
-  // Size equals the old circle footprint, logo fills it.
+  // IMPORTANT: no circle, no border, no background.
+  // Logo is just placed in the corner, sized responsively.
   headerLogoWrap: {
-  width: 90,
-  height: 90,
-  alignItems: "center",
-  justifyContent: "center",
-  marginTop: 0,       // align better with the header text
-  marginRight: -2,    // tiny optical nudge into the corner
-},
+    alignItems: "flex-end",
+    justifyContent: "flex-start",
+  },
 
-headerLogo: {
-  width: "100%",
-  height: "100%",
-},
+  headerLogo: {
+    width: "100%",
+    height: "100%",
+  },
 
   title: {
     fontSize: theme.fontSize.xxl,
@@ -428,7 +477,12 @@ headerLogo: {
   identityTop: { flexDirection: "row", alignItems: "center", gap: 12 },
 
   name: { color: theme.colors.text, fontSize: theme.fontSize.lg, fontWeight: theme.fontWeight.black },
-  meta: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, fontWeight: theme.fontWeight.bold },
+  meta: {
+    marginTop: 6,
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSize.sm,
+    fontWeight: theme.fontWeight.bold,
+  },
 
   planPill: {
     borderRadius: 999,
@@ -512,6 +566,8 @@ headerLogo: {
     fontSize: theme.fontSize.sm,
     fontWeight: theme.fontWeight.black,
     marginRight: 2,
+    maxWidth: 140,
+    textAlign: "right",
   },
 
   chev: { color: theme.colors.textSecondary, fontSize: 26, marginTop: -2 },
