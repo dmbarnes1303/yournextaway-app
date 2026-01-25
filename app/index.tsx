@@ -1,27 +1,54 @@
-import { useEffect } from "react";
+import React, { useEffect, useState } from "react";
+import { View, ActivityIndicator } from "react-native";
 import { useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { theme } from "@/src/constants/theme";
+
+/**
+ * Root bootstrapper.
+ * Decides whether user goes to Landing or straight into app.
+ */
+
+const STORAGE_KEY = "onboardingComplete";
 
 export default function Index() {
   const router = useRouter();
+  const [checking, setChecking] = useState(true);
 
   useEffect(() => {
-    const boot = async () => {
-      try {
-        const completed = await AsyncStorage.getItem("hasCompletedOnboarding");
+    check();
+  }, []);
 
-        if (completed === "true") {
-          router.replace("/(tabs)/home");
-        } else {
-          router.replace("/landing");
-        }
-      } catch {
+  async function check() {
+    try {
+      const value = await AsyncStorage.getItem(STORAGE_KEY);
+
+      if (value === "true") {
+        router.replace("/(tabs)/home");
+      } else {
         router.replace("/landing");
       }
-    };
+    } catch (e) {
+      router.replace("/landing");
+    } finally {
+      setChecking(false);
+    }
+  }
 
-    boot();
-  }, []);
+  if (checking) {
+    return (
+      <View
+        style={{
+          flex: 1,
+          backgroundColor: theme.colors.background,
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <ActivityIndicator size="large" color={theme.colors.primary} />
+      </View>
+    );
+  }
 
   return null;
 }
