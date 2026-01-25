@@ -1,8 +1,9 @@
 // app/onboarding.tsx
-import React, { useMemo, useState, useRef, useEffect } from "react";
+import React, { useMemo, useState, useRef, useEffect, useCallback } from "react";
 import { View, Text, StyleSheet, Pressable, Image, Animated } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, Stack } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
@@ -17,6 +18,8 @@ type Step = {
   body: string;
   bgKey: "onboarding1" | "onboarding2" | "onboarding3";
 };
+
+const ONBOARDING_COMPLETE_KEY = "onboardingComplete";
 
 export default function Onboarding() {
   const router = useRouter();
@@ -67,6 +70,16 @@ export default function Onboarding() {
 
   const dotColors = [theme.colors.primary, theme.colors.accent, theme.colors.warning];
   const bgSource = getBackgroundSource(steps[i].bgKey);
+
+  const completeOnboarding = useCallback(async () => {
+    // Save first; then route. If storage fails, still let the user proceed.
+    try {
+      await AsyncStorage.setItem(ONBOARDING_COMPLETE_KEY, "true");
+    } catch {
+      // Intentionally ignore to avoid trapping the user in onboarding.
+    }
+    router.replace("/(tabs)/home");
+  }, [router]);
 
   return (
     <>
@@ -128,13 +141,13 @@ export default function Onboarding() {
 
               {/* Actions */}
               <View style={styles.actions}>
-                <Pressable onPress={() => router.replace("/(tabs)/home")} style={[styles.btn, styles.btnGhost]}>
+                <Pressable onPress={completeOnboarding} style={[styles.btn, styles.btnGhost]}>
                   <Text style={styles.btnGhostText}>Skip For Now</Text>
                 </Pressable>
 
                 <Pressable
                   onPress={() => {
-                    if (isLast) router.replace("/(tabs)/home");
+                    if (isLast) completeOnboarding();
                     else setI((n) => Math.min(n + 1, steps.length - 1));
                   }}
                   style={[styles.btn, styles.btnPrimary]}
