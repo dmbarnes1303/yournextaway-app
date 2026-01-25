@@ -1,54 +1,46 @@
+// app/index.tsx
 import React, { useEffect, useState } from "react";
-import { View, ActivityIndicator } from "react-native";
+import { View } from "react-native";
 import { useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { theme } from "@/src/constants/theme";
 
-/**
- * Root bootstrapper.
- * Decides whether user goes to Landing or straight into app.
- */
-
-const STORAGE_KEY = "onboardingComplete";
+const STORAGE_KEYS = {
+  onboardingComplete: "yna:onboardingComplete",
+};
 
 export default function Index() {
   const router = useRouter();
-  const [checking, setChecking] = useState(true);
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    check();
-  }, []);
+    let mounted = true;
 
-  async function check() {
-    try {
-      const value = await AsyncStorage.getItem(STORAGE_KEY);
+    (async () => {
+      try {
+        const done = await AsyncStorage.getItem(STORAGE_KEYS.onboardingComplete);
 
-      if (value === "true") {
-        router.replace("/(tabs)/home");
-      } else {
+        // Not completed -> show Landing
+        if (done !== "true") {
+          router.replace("/landing");
+        } else {
+          // Completed -> go straight to Home
+          router.replace("/(tabs)/home");
+        }
+      } catch {
+        // If storage fails, fail-safe to Landing (first run experience).
         router.replace("/landing");
+      } finally {
+        if (mounted) setReady(true);
       }
-    } catch (e) {
-      router.replace("/landing");
-    } finally {
-      setChecking(false);
-    }
-  }
+    })();
 
-  if (checking) {
-    return (
-      <View
-        style={{
-          flex: 1,
-          backgroundColor: theme.colors.background,
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        <ActivityIndicator size="large" color={theme.colors.primary} />
-      </View>
-    );
-  }
+    return () => {
+      mounted = false;
+    };
+  }, [router]);
 
-  return null;
+  // Render nothing while routing.
+  if (!ready) return <View />;
+
+  return <View />;
 }
