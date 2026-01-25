@@ -1,27 +1,34 @@
 // src/constants/theme.ts
 export const theme = {
   colors: {
-    background: "#0A0E1A",
-    backgroundSecondary: "#141824",
+    // Brand base: neutral near-black (no navy bias)
+    background: "#07090D",
+    backgroundSecondary: "#0C0F14",
 
     text: "#FFFFFF",
-    textSecondary: "#8B92A8",
-    textTertiary: "#5A6178",
+    // Neutral greys (not blue slates)
+    textSecondary: "#A7ADB8",
+    textTertiary: "#6E7583",
 
+    // Brand primary: neon green
     primary: "#00FF88",
     primaryDark: "#00CC6E",
     primaryLight: "#33FFA3",
 
-    accent: "#00D4FF",
-    warning: "#FFB800",
+    // Subtle EU accents (do NOT overuse)
+    // Keep blue deeper/less neon so it doesn’t dominate the palette
+    accent: "#1E4FD9", // EU-style blue (subtle use)
+    warning: "#FFB800", // EU gold
     error: "#FF3B5C",
     success: "#00FF88",
 
-    border: "#2A2F3E",
-    divider: "#1F2430",
+    // Borders/dividers: neutral charcoal
+    border: "#1B1F27",
+    divider: "#141821",
 
-    overlay: "rgba(10, 14, 26, 0.90)",
-    overlayLight: "rgba(10, 14, 26, 0.70)",
+    // Overlay: neutral black, not navy
+    overlay: "rgba(0, 0, 0, 0.82)",
+    overlayLight: "rgba(0, 0, 0, 0.62)",
   },
 
   spacing: {
