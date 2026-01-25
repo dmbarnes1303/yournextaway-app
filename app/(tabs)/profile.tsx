@@ -41,6 +41,7 @@ function Row({ title, subtitle, rightText, onPress, last }: RowProps) {
           {rightText}
         </Text>
       ) : null}
+
       <Text style={styles.chev}>›</Text>
     </Pressable>
   );
@@ -50,9 +51,6 @@ function showInfo(title: string, body: string) {
   Alert.alert(title, body);
 }
 
-/**
- * Best-effort country code (no extra libs).
- */
 function getCountryCodeBestEffort(): string {
   try {
     const locale = Intl.DateTimeFormat().resolvedOptions().locale || "";
@@ -72,6 +70,7 @@ function getCountryCodeBestEffort(): string {
 }
 
 const STORAGE_KEYS = {
+  onboardingComplete: "yna:onboardingComplete",
   setupComplete: "yna:setupComplete",
   plan: "yna:plan",
   homeAirport: "yna:profile.homeAirport",
@@ -183,7 +182,6 @@ export default function ProfileScreen() {
 
   const [loading, setLoading] = useState(true);
 
-  // Persisted user defaults
   const [plan, setPlan] = useState<PlanValue>("not_set");
   const [homeAirport, setHomeAirport] = useState("Not Set");
   const [currency, setCurrency] = useState("GBP");
@@ -217,7 +215,6 @@ export default function ProfileScreen() {
     ];
   }, [currency]);
 
-  // Responsive logo: keep your 90x90 intent, but prevent it crushing tiny screens.
   const logoSize = useMemo(() => {
     const max = 90;
     const min = 64;
@@ -261,7 +258,7 @@ export default function ProfileScreen() {
         if (storedBudget) setBudgetTarget(storedBudget);
         if (storedAlerts === "On" || storedAlerts === "Off") setAlerts(storedAlerts);
       } catch {
-        // silent fail – user can still use defaults
+        // silent fail
       } finally {
         if (mounted) setLoading(false);
       }
@@ -272,20 +269,28 @@ export default function ProfileScreen() {
     };
   }, []);
 
-  // Save changes (best-effort) whenever user updates settings
+  // Persist settings (best-effort) after initial load.
   useEffect(() => {
     if (loading) return;
 
     (async () => {
       try {
-        await Promise.all([
-          AsyncStorage.setItem(STORAGE_KEYS.plan, plan),
-          AsyncStorage.setItem(STORAGE_KEYS.homeAirport, homeAirport),
-          AsyncStorage.setItem(STORAGE_KEYS.currency, currency),
-          AsyncStorage.setItem(STORAGE_KEYS.language, language),
-          AsyncStorage.setItem(STORAGE_KEYS.budgetTarget, budgetTarget),
-          AsyncStorage.setItem(STORAGE_KEYS.alerts, alerts),
-        ]);
+        const writes: Array<Promise<void>> = [];
+
+        // Plan: only persist when chosen; otherwise remove key to avoid noise.
+        if (plan === "free" || plan === "premium") {
+          writes.push(AsyncStorage.setItem(STORAGE_KEYS.plan, plan) as any);
+        } else {
+          writes.push(AsyncStorage.removeItem(STORAGE_KEYS.plan) as any);
+        }
+
+        writes.push(AsyncStorage.setItem(STORAGE_KEYS.homeAirport, homeAirport) as any);
+        writes.push(AsyncStorage.setItem(STORAGE_KEYS.currency, currency) as any);
+        writes.push(AsyncStorage.setItem(STORAGE_KEYS.language, language) as any);
+        writes.push(AsyncStorage.setItem(STORAGE_KEYS.budgetTarget, budgetTarget) as any);
+        writes.push(AsyncStorage.setItem(STORAGE_KEYS.alerts, alerts) as any);
+
+        await Promise.all(writes);
       } catch {
         // ignore
       }
@@ -326,15 +331,12 @@ export default function ProfileScreen() {
   }, []);
 
   const canFinishSetup = useMemo(() => {
-    return homeAirport !== "Not Set" && plan !== "not_set";
+    return homeAirport !== "Not Set" && (plan === "free" || plan === "premium");
   }, [homeAirport, plan]);
 
   const finishSetup = useCallback(async () => {
     if (!canFinishSetup) {
-      Alert.alert(
-        "Finish setup",
-        "To finish setup, you must:\n\n• Set your Home Airport\n• Choose Free or Premium"
-      );
+      Alert.alert("Finish setup", "To finish setup, you must:\n\n• Set your Home Airport\n• Choose Free or Premium");
       return;
     }
 
@@ -348,57 +350,46 @@ export default function ProfileScreen() {
     }
   }, [canFinishSetup, router]);
 
-  const resetSetup = useCallback(async () => {
-    Alert.alert(
-      "Reset setup?",
-      "This will make the app show Landing again on next launch.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Reset",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await AsyncStorage.setItem(STORAGE_KEYS.setupComplete, "false");
-              setSetupComplete(false);
-              Alert.alert("Reset complete", "Setup will run again next time you open the app.");
-            } catch {
-              Alert.alert("Reset failed", "Couldn’t reset setup status.");
-            }
-          },
+  const resetSetup = useCallback(() => {
+    Alert.alert("Reset setup?", "This will make the app show Landing again on next launch.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Reset",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            // Reset both keys to avoid confusing boot logic.
+            await Promise.all([
+              AsyncStorage.removeItem(STORAGE_KEYS.setupComplete),
+              AsyncStorage.removeItem(STORAGE_KEYS.onboardingComplete),
+            ]);
+            setSetupComplete(false);
+            Alert.alert("Reset complete", "Setup will run again next time you open the app.");
+          } catch {
+            Alert.alert("Reset failed", "Couldn’t reset setup status.");
+          }
         },
-      ]
-    );
+      },
+    ]);
   }, []);
 
-  const planSummary = useMemo(() => {
-    return plan === "not_set" ? "Not Set" : planLabel(plan);
-  }, [plan]);
+  const planSummary = useMemo(() => planLabel(plan), [plan]);
 
   return (
     <Background imageUrl={getBackground("profile")} overlayOpacity={0.7}>
       <SafeAreaView style={styles.container} edges={["top"]}>
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={styles.content}
-          showsVerticalScrollIndicator={false}
-        >
+        <ScrollView style={styles.scrollView} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           <View style={styles.headerRow}>
             <View style={{ flex: 1 }}>
               <Text style={styles.title}>Profile</Text>
               <Text style={styles.subtitle}>Account, Preferences, And App Info</Text>
             </View>
 
-            <View style={[styles.headerLogoMask, { width: logoSize, height: logoSize, pointerEvents: "none" as any }]}>
-              <Image
-                source={LOGO}
-                style={[styles.headerLogoImage, { width: logoSize, height: logoSize }]}
-                resizeMode="cover"
-              />
+            <View style={[styles.headerLogoMask, { width: logoSize, height: logoSize }]} pointerEvents="none">
+              <Image source={LOGO} style={[styles.headerLogoImage, { width: logoSize, height: logoSize }]} resizeMode="cover" />
             </View>
           </View>
 
-          {/* Setup status + Finish setup */}
           <GlassCard style={styles.card} intensity={24}>
             <View style={styles.identityTop}>
               <View style={{ flex: 1 }}>
@@ -425,10 +416,7 @@ export default function ProfileScreen() {
               <Pressable
                 onPress={finishSetup}
                 disabled={!canFinishSetup}
-                style={[
-                  styles.finishBtn,
-                  canFinishSetup ? styles.finishBtnOn : styles.finishBtnOff,
-                ]}
+                style={[styles.finishBtn, canFinishSetup ? styles.finishBtnOn : styles.finishBtnOff]}
               >
                 <Text style={styles.finishBtnText}>Finish Setup</Text>
               </Pressable>
@@ -496,30 +484,15 @@ export default function ProfileScreen() {
           </GlassCard>
 
           <GlassCard style={[styles.card, { padding: 0 }]} intensity={24}>
-            <Row
-              title="Plan"
-              subtitle="Choose Free or Premium"
-              rightText={planSummary}
-              onPress={() => setActivePicker("plan")}
-            />
+            <Row title="Plan" subtitle="Choose Free or Premium" rightText={planSummary} onPress={() => setActivePicker("plan")} />
             <Row
               title="Home Airport"
               subtitle={`Departure defaults for comparisons (${countryCode})`}
               rightText={homeAirport}
               onPress={() => setActivePicker("airport")}
             />
-            <Row
-              title="Currency"
-              subtitle="Budgets and comparisons"
-              rightText={currency}
-              onPress={() => setActivePicker("currency")}
-            />
-            <Row
-              title="Language"
-              subtitle="App language"
-              rightText={language}
-              onPress={() => setActivePicker("language")}
-            />
+            <Row title="Currency" subtitle="Budgets and comparisons" rightText={currency} onPress={() => setActivePicker("currency")} />
+            <Row title="Language" subtitle="App language" rightText={language} onPress={() => setActivePicker("language")} />
             <Row
               title="Budget & Alerts"
               subtitle="Target budget and drop alerts"
@@ -543,18 +516,17 @@ export default function ProfileScreen() {
           <View style={{ height: 10 }} />
         </ScrollView>
 
-        {/* Pickers */}
         <SelectModal
           visible={activePicker === "plan"}
           title="Choose Your Plan"
           subtitle="Pick Free or Premium. This is required to finish setup."
           options={PLAN_OPTIONS}
-          selectedValue={plan === "not_set" ? "" : plan}
+          selectedValue={plan}
           onClose={closePicker}
-          onSelect={(v) => setPlan((v === "free" || v === "premium") ? v : "not_set")}
+          onSelect={(v) => setPlan(v === "free" || v === "premium" ? v : "not_set")}
           allowClear
           clearLabel="Clear Plan"
-          clearValue=""
+          clearValue="not_set"
         />
 
         <SelectModal
@@ -603,9 +575,8 @@ export default function ProfileScreen() {
           clearValue="Not Set"
         />
 
-        {/* Alerts toggle overlay shown only while budget picker is open */}
         {activePicker === "budget" ? (
-          <View style={[styles.alertToggleWrap, { pointerEvents: "box-none" as any }]}>
+          <View style={styles.alertToggleWrap} pointerEvents="box-none">
             <Pressable
               onPress={() => setAlerts((p) => (p === "Off" ? "On" : "Off"))}
               style={[styles.alertToggle, alerts === "On" && styles.alertToggleOn]}
@@ -663,12 +634,7 @@ const styles = StyleSheet.create({
   identityTop: { flexDirection: "row", alignItems: "center", gap: 12 },
 
   name: { color: theme.colors.text, fontSize: theme.fontSize.lg, fontWeight: theme.fontWeight.black },
-  meta: {
-    marginTop: 6,
-    color: theme.colors.textSecondary,
-    fontSize: theme.fontSize.sm,
-    fontWeight: theme.fontWeight.bold,
-  },
+  meta: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, fontWeight: theme.fontWeight.bold },
 
   planPill: {
     borderRadius: 999,
@@ -691,12 +657,7 @@ const styles = StyleSheet.create({
 
   sectionH: { color: theme.colors.text, fontSize: theme.fontSize.md, fontWeight: theme.fontWeight.black },
 
-  setupRow: {
-    marginTop: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
+  setupRow: { marginTop: 12, flexDirection: "row", alignItems: "center", gap: 10 },
 
   setupStatus: {
     flex: 1,
@@ -710,18 +671,8 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
 
-  setupKicker: {
-    color: theme.colors.textSecondary,
-    fontSize: theme.fontSize.xs,
-    fontWeight: theme.fontWeight.black,
-    lineHeight: 14,
-  },
-
-  setupValue: {
-    color: theme.colors.text,
-    fontSize: theme.fontSize.sm,
-    fontWeight: theme.fontWeight.black,
-  },
+  setupKicker: { color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: theme.fontWeight.black, lineHeight: 14 },
+  setupValue: { color: theme.colors.text, fontSize: theme.fontSize.sm, fontWeight: theme.fontWeight.black },
 
   finishBtn: {
     borderRadius: 14,
@@ -733,30 +684,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
 
-  finishBtnOn: {
-    borderColor: theme.colors.primary,
-    backgroundColor: "rgba(0,0,0,0.40)",
-  },
+  finishBtnOn: { borderColor: theme.colors.primary, backgroundColor: "rgba(0,0,0,0.40)" },
+  finishBtnOff: { borderColor: "rgba(255,255,255,0.12)", backgroundColor: "rgba(0,0,0,0.18)", opacity: 0.65 },
 
-  finishBtnOff: {
-    borderColor: "rgba(255,255,255,0.12)",
-    backgroundColor: "rgba(0,0,0,0.18)",
-    opacity: 0.65,
-  },
+  finishBtnText: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.sm },
 
-  finishBtnText: {
-    color: theme.colors.text,
-    fontWeight: theme.fontWeight.black,
-    fontSize: theme.fontSize.sm,
-  },
-
-  setupHint: {
-    marginTop: 10,
-    color: theme.colors.textSecondary,
-    fontSize: theme.fontSize.sm,
-    lineHeight: 18,
-    fontWeight: theme.fontWeight.bold,
-  },
+  setupHint: { marginTop: 10, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18, fontWeight: theme.fontWeight.bold },
 
   defaultsRow: { marginTop: 12, flexDirection: "row", gap: 10 },
 
@@ -772,23 +705,12 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
 
-  defaultKicker: {
-    color: theme.colors.textSecondary,
-    fontSize: theme.fontSize.xs,
-    fontWeight: theme.fontWeight.black,
-    lineHeight: 14,
-  },
+  defaultKicker: { color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: theme.fontWeight.black, lineHeight: 14 },
   defaultValue: { color: theme.colors.text, fontSize: theme.fontSize.sm, fontWeight: theme.fontWeight.black },
 
   quickActions: { marginTop: 14, flexDirection: "row", gap: 10 },
 
-  smallBtn: {
-    flex: 1,
-    borderRadius: 14,
-    paddingVertical: 12,
-    alignItems: "center",
-    borderWidth: 1,
-  },
+  smallBtn: { flex: 1, borderRadius: 14, paddingVertical: 12, alignItems: "center", borderWidth: 1 },
   smallBtnPrimary: { borderColor: theme.colors.primary, backgroundColor: "rgba(0,0,0,0.40)" },
   smallBtnText: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.sm },
   smallBtnGhost: { borderColor: theme.colors.border, backgroundColor: "rgba(0,0,0,0.22)" },
@@ -806,22 +728,9 @@ const styles = StyleSheet.create({
   rowLast: { borderBottomWidth: 0 },
 
   rowTitle: { color: theme.colors.text, fontSize: theme.fontSize.md, fontWeight: theme.fontWeight.black },
-  rowSubtitle: {
-    marginTop: 4,
-    color: theme.colors.textSecondary,
-    fontSize: theme.fontSize.sm,
-    lineHeight: 18,
-    fontWeight: theme.fontWeight.bold,
-  },
+  rowSubtitle: { marginTop: 4, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18, fontWeight: theme.fontWeight.bold },
 
-  rowRight: {
-    maxWidth: 150,
-    color: theme.colors.textSecondary,
-    fontSize: theme.fontSize.sm,
-    fontWeight: theme.fontWeight.black,
-    marginRight: 2,
-  },
-
+  rowRight: { maxWidth: 150, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, fontWeight: theme.fontWeight.black, marginRight: 2 },
   chev: { color: theme.colors.textSecondary, fontSize: 26, marginTop: -2 },
 
   footerNote: {
@@ -833,14 +742,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
 
-  /* Alerts Toggle Overlay */
-  alertToggleWrap: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 22,
-    alignItems: "center",
-  },
+  alertToggleWrap: { position: "absolute", left: 0, right: 0, bottom: 22, alignItems: "center" },
 
   alertToggle: {
     borderRadius: 999,
@@ -851,14 +753,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.35)",
   },
 
-  alertToggleOn: {
-    borderColor: "rgba(0,255,136,0.30)",
-    backgroundColor: "rgba(0,255,136,0.08)",
-  },
+  alertToggleOn: { borderColor: "rgba(0,255,136,0.30)", backgroundColor: "rgba(0,255,136,0.08)" },
 
-  alertToggleText: {
-    color: theme.colors.text,
-    fontWeight: theme.fontWeight.black,
-    fontSize: theme.fontSize.sm,
-  },
+  alertToggleText: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.sm },
 });
