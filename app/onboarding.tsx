@@ -11,9 +11,9 @@ import { theme } from "@/src/constants/theme";
 const LOGO = require("@/src/yna-logo.png");
 
 type Step = {
-  title: string;        // Title Case
-  subtitle: string;     // Title Case
-  body: string;         // sentence case
+  title: string;     // Title Case
+  subtitle: string;  // Title Case
+  body: string;      // sentence case
 };
 
 export default function Onboarding() {
@@ -23,33 +23,40 @@ export default function Onboarding() {
     () => [
       {
         title: "Start With A Fixture",
-        subtitle: "Find The Right Match Fast",
+        subtitle: "Find The Right Game For Your Dates",
         body:
-          "Browse fixtures by league and date window. Open a match and YourNextAway becomes your trip hub for that city and date.",
+          "Filter by league and date window, then open a fixture to anchor the trip. YourNextAway automatically plans around that city and matchday.",
       },
       {
         title: "Build The Trip In One Place",
-        subtitle: "Flights, Stays, Tickets, Plans",
+        subtitle: "Match Flights And Stays To Your Budget",
         body:
-          "Compare routes, shortlist areas to stay, add ticket links, and keep everything organised around the fixture so you don’t lose time across ten tabs.",
+          "Compare routes, shortlist areas to stay, and keep ticket links and notes together. Plan midweek bargains or weekend breaks without juggling ten tabs.",
       },
       {
         title: "Make The City Break Better",
         subtitle: "What To Do, Where To Base Yourself",
         body:
-          "Use city and team guides to plan the weekend properly. Save your plan, store bookings in your wallet, and generate random trip ideas when you want inspiration.",
+          "Use city and team guides to shape the weekend. Tap into top-rated ideas (including TripAdvisor inspiration), then save everything and store bookings in your wallet.",
       },
     ],
     []
   );
 
+  // Brand dots: green / blue / gold
+  const dotColors = useMemo(() => [theme.colors.primary, theme.colors.accent, theme.colors.warning], []);
   const [i, setI] = useState(0);
   const isLast = i === steps.length - 1;
 
   return (
     <Background imageUrl={getBackground("home")} overlayOpacity={0.75}>
       <SafeAreaView style={styles.safe} edges={["bottom"]}>
-        <View style={styles.wrap}>
+        <View style={styles.screen}>
+          {/* Back (pill) */}
+          <Pressable onPress={() => router.back()} style={styles.backPill}>
+            <Text style={styles.backText}>← Back</Text>
+          </Pressable>
+
           {/* Brand block */}
           <View style={styles.brand}>
             <Image source={LOGO} style={styles.logo} resizeMode="contain" />
@@ -67,17 +74,29 @@ export default function Onboarding() {
             <Text style={styles.h2}>{steps[i].subtitle}</Text>
             <Text style={styles.body}>{steps[i].body}</Text>
 
+            {/* Dots */}
             <View style={styles.dots}>
-              {steps.map((_, idx) => (
-                <View key={idx} style={[styles.dot, idx === i && styles.dotActive]} />
-              ))}
+              {steps.map((_, idx) => {
+                const base = dotColors[idx] ?? "rgba(255,255,255,0.16)";
+                const active = idx === i;
+                return (
+                  <View
+                    key={idx}
+                    style={[
+                      styles.dot,
+                      {
+                        backgroundColor: active ? base : "rgba(255,255,255,0.14)",
+                        borderColor: active ? base : "rgba(255,255,255,0.12)",
+                      },
+                    ]}
+                  />
+                );
+              })}
             </View>
 
+            {/* Actions */}
             <View style={styles.actions}>
-              <Pressable
-                onPress={() => router.replace("/(tabs)/home")}
-                style={[styles.btn, styles.btnGhost]}
-              >
+              <Pressable onPress={() => router.replace("/(tabs)/home")} style={[styles.btn, styles.btnGhost]}>
                 <Text style={styles.btnGhostText}>Skip For Now</Text>
               </Pressable>
 
@@ -88,14 +107,12 @@ export default function Onboarding() {
                 }}
                 style={[styles.btn, styles.btnPrimary]}
               >
-                <Text style={styles.btnPrimaryText}>
-                  {isLast ? "Start Planning" : "Continue"}
-                </Text>
+                <Text style={styles.btnPrimaryText}>{isLast ? "Start Planning" : "Continue"}</Text>
               </Pressable>
             </View>
 
             <Text style={styles.micro}>
-              Travel-first planning around fixtures. Choose your vibe for the weekend.
+              Travel-first planning around fixtures. Save the trip, then build the weekend properly.
             </Text>
           </GlassCard>
         </View>
@@ -107,18 +124,34 @@ export default function Onboarding() {
 const styles = StyleSheet.create({
   safe: { flex: 1 },
 
-  wrap: {
+  screen: {
     flex: 1,
-    paddingTop: 18,
+    paddingTop: 14,
     paddingHorizontal: theme.spacing.lg,
     paddingBottom: theme.spacing.xxl,
     justifyContent: "flex-end",
-    gap: 14,
+    gap: 12,
   },
 
-  brand: { alignItems: "center", gap: 8, paddingBottom: 2 },
+  backPill: {
+    alignSelf: "flex-start",
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    backgroundColor: "rgba(0,0,0,0.28)",
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+  },
+  backText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
 
-  logo: { width: 120, height: 120 },
+  brand: {
+    alignItems: "center",
+    gap: 6,
+    paddingBottom: 4,
+  },
+
+  // Slightly larger than before to feel “hero”
+  logo: { width: 128, height: 128 },
 
   appLine: {
     color: theme.colors.text,
@@ -134,7 +167,11 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSize.sm,
   },
 
-  card: { padding: theme.spacing.lg },
+  // Pull card higher: less dead space above, feels more “designed”
+  card: {
+    padding: theme.spacing.lg,
+    marginTop: 6,
+  },
 
   kicker: {
     color: theme.colors.textSecondary,
@@ -176,14 +213,7 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.14)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-  },
-
-  dotActive: {
-    backgroundColor: theme.colors.primary,
-    borderColor: theme.colors.primary,
   },
 
   actions: {
