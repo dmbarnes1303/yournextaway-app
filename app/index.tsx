@@ -5,7 +5,7 @@ import { useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const STORAGE_KEYS = {
-  onboardingComplete: "yna:onboardingComplete",
+  setupComplete: "yna:setupComplete",
 };
 
 export default function Index() {
@@ -17,17 +17,14 @@ export default function Index() {
 
     (async () => {
       try {
-        const done = await AsyncStorage.getItem(STORAGE_KEYS.onboardingComplete);
+        const done = await AsyncStorage.getItem(STORAGE_KEYS.setupComplete);
 
-        // Not completed -> show Landing
-        if (done !== "true") {
-          router.replace("/landing");
-        } else {
-          // Completed -> go straight to Home
+        if (done === "true") {
           router.replace("/(tabs)/home");
+        } else {
+          router.replace("/landing");
         }
       } catch {
-        // If storage fails, fail-safe to Landing (first run experience).
         router.replace("/landing");
       } finally {
         if (mounted) setReady(true);
@@ -39,7 +36,6 @@ export default function Index() {
     };
   }, [router]);
 
-  // Render nothing while routing.
   if (!ready) return <View />;
 
   return <View />;
