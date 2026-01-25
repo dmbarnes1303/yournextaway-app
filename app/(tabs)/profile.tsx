@@ -41,6 +41,7 @@ function Row({ title, subtitle, rightText, onPress, last }: RowProps) {
           {rightText}
         </Text>
       ) : null}
+
       <Text style={styles.chev}>›</Text>
     </Pressable>
   );
@@ -72,11 +73,10 @@ function getCountryCodeBestEffort(): string {
 }
 
 const STORAGE_KEYS = {
-  // Boot flag used by app/index.tsx
-  seenLanding: "yna:seenLanding",
-
-  // Setup-related flags + fields
+  // Option B: boot routing uses ONLY this flag (app/index.tsx)
   setupComplete: "yna:setupComplete",
+
+  // Setup fields
   plan: "yna:plan",
   homeAirport: "yna:profile.homeAirport",
   currency: "yna:profile.currency",
@@ -187,7 +187,6 @@ export default function ProfileScreen() {
 
   const [loading, setLoading] = useState(true);
 
-  // Persisted user defaults
   const [plan, setPlan] = useState<PlanValue>("not_set");
   const [homeAirport, setHomeAirport] = useState("Not Set");
   const [currency, setCurrency] = useState("GBP");
@@ -200,7 +199,10 @@ export default function ProfileScreen() {
   const closePicker = useCallback(() => setActivePicker(null), []);
 
   const countryCode = useMemo(() => getCountryCodeBestEffort(), []);
-  const airportOptions = useMemo(() => AIRPORTS_BY_COUNTRY[countryCode] ?? AIRPORTS_BY_COUNTRY.GB, [countryCode]);
+  const airportOptions = useMemo(
+    () => AIRPORTS_BY_COUNTRY[countryCode] ?? AIRPORTS_BY_COUNTRY.GB,
+    [countryCode]
+  );
 
   const budgetSummary = useMemo(() => {
     if (budgetTarget === "Not Set") return "Not Set";
@@ -218,7 +220,6 @@ export default function ProfileScreen() {
     ];
   }, [currency]);
 
-  // Responsive logo sizing
   const logoSize = useMemo(() => {
     const max = 90;
     const min = 64;
@@ -336,38 +337,43 @@ export default function ProfileScreen() {
   }, [canFinishSetup, router]);
 
   const resetSetup = useCallback(() => {
-    Alert.alert("Reset setup?", "This will make the app show Landing again on next launch.", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Reset",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            // IMPORTANT:
-            // app/index.tsx uses seenLanding to decide Landing vs Home.
-            // If you don't reset this, you will NEVER see Landing again.
-            await AsyncStorage.multiSet([
-              [STORAGE_KEYS.setupComplete, "false"],
-              [STORAGE_KEYS.seenLanding, "false"],
-              [STORAGE_KEYS.plan, "not_set"],
-              [STORAGE_KEYS.homeAirport, "Not Set"],
-              [STORAGE_KEYS.budgetTarget, "Not Set"],
-              [STORAGE_KEYS.alerts, "Off"],
-            ]);
+    Alert.alert(
+      "Reset setup?",
+      "This will make the app show Landing again on next launch.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Reset",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              // Option B: boot routing uses ONLY setupComplete.
+              await AsyncStorage.multiSet([
+                [STORAGE_KEYS.setupComplete, "false"],
+                [STORAGE_KEYS.plan, "not_set"],
+                [STORAGE_KEYS.homeAirport, "Not Set"],
+                [STORAGE_KEYS.currency, "GBP"],
+                [STORAGE_KEYS.language, "English"],
+                [STORAGE_KEYS.budgetTarget, "Not Set"],
+                [STORAGE_KEYS.alerts, "Off"],
+              ]);
 
-            setSetupComplete(false);
-            setPlan("not_set");
-            setHomeAirport("Not Set");
-            setBudgetTarget("Not Set");
-            setAlerts("Off");
+              setSetupComplete(false);
+              setPlan("not_set");
+              setHomeAirport("Not Set");
+              setCurrency("GBP");
+              setLanguage("English");
+              setBudgetTarget("Not Set");
+              setAlerts("Off");
 
-            Alert.alert("Reset complete", "Landing will show again next time you open the app.");
-          } catch {
-            Alert.alert("Reset failed", "Couldn’t reset setup status.");
-          }
+              Alert.alert("Reset complete", "Landing will show again next time you open the app.");
+            } catch {
+              Alert.alert("Reset failed", "Couldn’t reset setup status.");
+            }
+          },
         },
-      },
-    ]);
+      ]
+    );
   }, []);
 
   const planSummary = useMemo(() => {
@@ -377,7 +383,11 @@ export default function ProfileScreen() {
   return (
     <Background imageUrl={getBackground("profile")} overlayOpacity={0.7}>
       <SafeAreaView style={styles.container} edges={["top"]}>
-        <ScrollView style={styles.scrollView} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+        >
           <View style={styles.headerRow}>
             <View style={{ flex: 1 }}>
               <Text style={styles.title}>Profile</Text>
@@ -481,7 +491,15 @@ export default function ProfileScreen() {
                 <Text style={styles.smallBtnText}>Edit Preferences</Text>
               </Pressable>
 
-              <Pressable onPress={() => showInfo("Notifications", "Fixture reminders and trip prompts.\n\nKeep it quiet and useful: no spam, no noise.")} style={[styles.smallBtn, styles.smallBtnGhost]}>
+              <Pressable
+                onPress={() =>
+                  showInfo(
+                    "Notifications",
+                    "Fixture reminders and trip prompts.\n\nKeep it quiet and useful: no spam, no noise."
+                  )
+                }
+                style={[styles.smallBtn, styles.smallBtnGhost]}
+              >
                 <Text style={styles.smallBtnGhostText}>Notifications</Text>
               </Pressable>
             </View>
@@ -580,7 +598,6 @@ export default function ProfileScreen() {
           clearValue="Not Set"
         />
 
-        {/* Alerts toggle overlay shown only while budget picker is open */}
         {activePicker === "budget" ? (
           <View style={[styles.alertToggleWrap, { pointerEvents: "box-none" }]}>
             <Pressable
