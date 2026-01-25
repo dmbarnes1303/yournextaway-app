@@ -7,22 +7,42 @@ interface BackgroundProps {
   imageUrl: string;
   children: React.ReactNode;
   overlayOpacity?: number; // 0..1
+  /**
+   * Optional: lets a specific screen slightly bias the overlay.
+   * Default stays neutral-black.
+   */
+  overlayColor?: string;
 }
 
 /**
  * Touch-safe background wrapper:
- * - Background image + overlay can never steal touches.
- * - Content is rendered in a separate layer above.
+ * - Background image + overlays can never steal touches.
+ * - Neutral-black overlay avoids “blue wash” across the app.
+ * - Subtle vignette improves legibility without killing the photo.
  */
-export default function Background({ imageUrl, children, overlayOpacity = 0.85 }: BackgroundProps) {
+export default function Background({
+  imageUrl,
+  children,
+  overlayOpacity = 0.82,
+  overlayColor,
+}: BackgroundProps) {
   const clamped = Math.max(0, Math.min(1, overlayOpacity));
+
+  // Neutral charcoal-black by default (NOT navy).
+  const baseOverlay = overlayColor ?? "rgb(8, 8, 10)";
 
   return (
     <View style={styles.container}>
       {/* Non-interactive background layer */}
       <View style={StyleSheet.absoluteFill} pointerEvents="none">
         <ImageBackground source={{ uri: imageUrl }} style={styles.image} resizeMode="cover">
-          <View style={[styles.overlay, { opacity: clamped }]} />
+          {/* Base dark overlay */}
+          <View style={[styles.overlay, { opacity: clamped, backgroundColor: baseOverlay }]} />
+
+          {/* Vignette: darkens edges/top/bottom slightly so glass + text pop */}
+          <View style={styles.vignetteOuter} />
+          <View style={styles.vignetteTop} />
+          <View style={styles.vignetteBottom} />
         </ImageBackground>
       </View>
 
@@ -41,7 +61,28 @@ const styles = StyleSheet.create({
 
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgb(10, 14, 26)",
+  },
+
+  // Subtle edge vignette (neutral black). Kept low so it doesn't feel “muddy”.
+  vignetteOuter: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.10)",
+  },
+  vignetteTop: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 140,
+    backgroundColor: "rgba(0,0,0,0.22)",
+  },
+  vignetteBottom: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 180,
+    backgroundColor: "rgba(0,0,0,0.30)",
   },
 
   // Content sits above the background; box-none ensures parent doesn't block children touches
