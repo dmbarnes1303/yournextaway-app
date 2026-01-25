@@ -1,7 +1,18 @@
 // app/(tabs)/profile.tsx
-import React, { useCallback, useMemo, useState } from "react";
-import { View, Text, StyleSheet, ScrollView, Pressable, Alert, Image, useWindowDimensions } from "react-native";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  Pressable,
+  Alert,
+  Image,
+  useWindowDimensions,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useRouter } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
@@ -59,6 +70,18 @@ function getCountryCodeBestEffort(): string {
   }
   return "GB";
 }
+
+const STORAGE_KEYS = {
+  setupComplete: "yna:setupComplete",
+  plan: "yna:plan",
+  homeAirport: "yna:profile.homeAirport",
+  currency: "yna:profile.currency",
+  language: "yna:profile.language",
+  budgetTarget: "yna:profile.budgetTarget",
+  alerts: "yna:profile.alerts",
+};
+
+type PlanValue = "not_set" | "free" | "premium";
 
 const AIRPORTS_BY_COUNTRY: Record<string, SelectOption[]> = {
   GB: [
@@ -139,21 +162,37 @@ const LANGUAGE_OPTIONS: SelectOption[] = [
   { label: "French", value: "French" },
 ];
 
+const PLAN_OPTIONS: SelectOption[] = [
+  { label: "Free Plan", value: "free" },
+  { label: "Premium Plan", value: "premium" },
+];
+
+function planLabel(plan: PlanValue) {
+  if (plan === "free") return "Free";
+  if (plan === "premium") return "Premium";
+  return "Not Set";
+}
+
 export default function ProfileScreen() {
+  const router = useRouter();
   const { width } = useWindowDimensions();
 
   const LOGO = useMemo(() => require("@/src/yna-logo.png"), []);
   const displayName = useMemo(() => "Guest Traveller", []);
   const email = useMemo(() => "Not Signed In", []);
-  const planName = useMemo(() => "Full Access", []);
 
+  const [loading, setLoading] = useState(true);
+
+  // Persisted user defaults
+  const [plan, setPlan] = useState<PlanValue>("not_set");
   const [homeAirport, setHomeAirport] = useState("Not Set");
   const [currency, setCurrency] = useState("GBP");
   const [language, setLanguage] = useState("English");
   const [budgetTarget, setBudgetTarget] = useState("Not Set");
   const [alerts, setAlerts] = useState<"On" | "Off">("Off");
+  const [setupComplete, setSetupComplete] = useState(false);
 
-  const [activePicker, setActivePicker] = useState<null | "airport" | "currency" | "language" | "budget">(null);
+  const [activePicker, setActivePicker] = useState<null | "airport" | "currency" | "language" | "budget" | "plan">(null);
   const closePicker = useCallback(() => setActivePicker(null), []);
 
   const countryCode = useMemo(() => getCountryCodeBestEffort(), []);
@@ -178,6 +217,81 @@ export default function ProfileScreen() {
     ];
   }, [currency]);
 
+  // Responsive logo: keep your 90x90 intent, but prevent it crushing tiny screens.
+  const logoSize = useMemo(() => {
+    const max = 90;
+    const min = 64;
+    if (width < 360) return min;
+    if (width < 410) return 78;
+    return max;
+  }, [width]);
+
+  // Load persisted settings once
+  useEffect(() => {
+    let mounted = true;
+
+    (async () => {
+      try {
+        const [
+          storedSetup,
+          storedPlan,
+          storedAirport,
+          storedCurrency,
+          storedLanguage,
+          storedBudget,
+          storedAlerts,
+        ] = await Promise.all([
+          AsyncStorage.getItem(STORAGE_KEYS.setupComplete),
+          AsyncStorage.getItem(STORAGE_KEYS.plan),
+          AsyncStorage.getItem(STORAGE_KEYS.homeAirport),
+          AsyncStorage.getItem(STORAGE_KEYS.currency),
+          AsyncStorage.getItem(STORAGE_KEYS.language),
+          AsyncStorage.getItem(STORAGE_KEYS.budgetTarget),
+          AsyncStorage.getItem(STORAGE_KEYS.alerts),
+        ]);
+
+        if (!mounted) return;
+
+        setSetupComplete(storedSetup === "true");
+
+        if (storedPlan === "free" || storedPlan === "premium") setPlan(storedPlan);
+        if (storedAirport) setHomeAirport(storedAirport);
+        if (storedCurrency) setCurrency(storedCurrency);
+        if (storedLanguage) setLanguage(storedLanguage);
+        if (storedBudget) setBudgetTarget(storedBudget);
+        if (storedAlerts === "On" || storedAlerts === "Off") setAlerts(storedAlerts);
+      } catch {
+        // silent fail – user can still use defaults
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  // Save changes (best-effort) whenever user updates settings
+  useEffect(() => {
+    if (loading) return;
+
+    (async () => {
+      try {
+        await Promise.all([
+          AsyncStorage.setItem(STORAGE_KEYS.plan, plan),
+          AsyncStorage.setItem(STORAGE_KEYS.homeAirport, homeAirport),
+          AsyncStorage.setItem(STORAGE_KEYS.currency, currency),
+          AsyncStorage.setItem(STORAGE_KEYS.language, language),
+          AsyncStorage.setItem(STORAGE_KEYS.budgetTarget, budgetTarget),
+          AsyncStorage.setItem(STORAGE_KEYS.alerts, alerts),
+        ]);
+      } catch {
+        // ignore
+      }
+    })();
+  }, [alerts, budgetTarget, currency, homeAirport, language, loading, plan]);
+
   const openPreferences = useCallback(() => {
     showInfo(
       "Preferences",
@@ -187,13 +301,6 @@ export default function ProfileScreen() {
 
   const openNotifications = useCallback(() => {
     showInfo("Notifications", "Fixture reminders and trip prompts.\n\nKeep it quiet and useful: no spam, no noise.");
-  }, []);
-
-  const managePlan = useCallback(() => {
-    showInfo(
-      "Plan",
-      "Plan: Full Access\n\nFull Access includes the full planning hub: comparisons, guides, wallet storage, and smart trip tools."
-    );
   }, []);
 
   const openFAQ = useCallback(() => {
@@ -211,33 +318,78 @@ export default function ProfileScreen() {
   }, []);
 
   const privacy = useCallback(() => {
-    showInfo("Privacy", "Trips and notes are stored locally by default.\n\nWhen sync is enabled, you’ll be able to use YourNextAway across devices.");
+    showInfo("Privacy", "Trips and notes are stored locally by default.\n\nWhen sync is enabled, you’ll be able to use the app across devices.");
   }, []);
 
   const terms = useCallback(() => {
     showInfo("Terms", "Terms will be available here.");
   }, []);
 
-  // Responsive logo: keep your 90x90 intent, but prevent it crushing tiny screens.
-  const logoSize = useMemo(() => {
-    const max = 90;
-    const min = 64;
-    if (width < 360) return min;
-    if (width < 410) return 78;
-    return max;
-  }, [width]);
+  const canFinishSetup = useMemo(() => {
+    return homeAirport !== "Not Set" && plan !== "not_set";
+  }, [homeAirport, plan]);
+
+  const finishSetup = useCallback(async () => {
+    if (!canFinishSetup) {
+      Alert.alert(
+        "Finish setup",
+        "To finish setup, you must:\n\n• Set your Home Airport\n• Choose Free or Premium"
+      );
+      return;
+    }
+
+    try {
+      await AsyncStorage.setItem(STORAGE_KEYS.setupComplete, "true");
+      setSetupComplete(true);
+      router.replace("/(tabs)/home");
+    } catch {
+      Alert.alert("Something went wrong", "We couldn’t save setup status, but you can continue.");
+      router.replace("/(tabs)/home");
+    }
+  }, [canFinishSetup, router]);
+
+  const resetSetup = useCallback(async () => {
+    Alert.alert(
+      "Reset setup?",
+      "This will make the app show Landing again on next launch.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Reset",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await AsyncStorage.setItem(STORAGE_KEYS.setupComplete, "false");
+              setSetupComplete(false);
+              Alert.alert("Reset complete", "Setup will run again next time you open the app.");
+            } catch {
+              Alert.alert("Reset failed", "Couldn’t reset setup status.");
+            }
+          },
+        },
+      ]
+    );
+  }, []);
+
+  const planSummary = useMemo(() => {
+    return plan === "not_set" ? "Not Set" : planLabel(plan);
+  }, [plan]);
 
   return (
     <Background imageUrl={getBackground("profile")} overlayOpacity={0.7}>
       <SafeAreaView style={styles.container} edges={["top"]}>
-        <ScrollView style={styles.scrollView} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+        >
           <View style={styles.headerRow}>
             <View style={{ flex: 1 }}>
               <Text style={styles.title}>Profile</Text>
               <Text style={styles.subtitle}>Account, Preferences, And App Info</Text>
             </View>
 
-            <View style={[styles.headerLogoMask, { width: logoSize, height: logoSize, pointerEvents: "none" }]}>
+            <View style={[styles.headerLogoMask, { width: logoSize, height: logoSize, pointerEvents: "none" as any }]}>
               <Image
                 source={LOGO}
                 style={[styles.headerLogoImage, { width: logoSize, height: logoSize }]}
@@ -246,6 +398,7 @@ export default function ProfileScreen() {
             </View>
           </View>
 
+          {/* Setup status + Finish setup */}
           <GlassCard style={styles.card} intensity={24}>
             <View style={styles.identityTop}>
               <View style={{ flex: 1 }}>
@@ -253,14 +406,50 @@ export default function ProfileScreen() {
                 <Text style={styles.meta}>{email}</Text>
               </View>
 
-              <Pressable onPress={managePlan} style={styles.planPill}>
+              <Pressable onPress={() => setActivePicker("plan")} style={styles.planPill}>
                 <Text style={styles.planLabel}>Plan</Text>
-                <Text style={styles.planValue}>{planName}</Text>
+                <Text style={styles.planValue}>{planSummary}</Text>
               </Pressable>
             </View>
 
             <View style={styles.divider} />
 
+            <Text style={styles.sectionH}>Setup</Text>
+
+            <View style={styles.setupRow}>
+              <View style={styles.setupStatus}>
+                <Text style={styles.setupKicker}>Setup Status</Text>
+                <Text style={styles.setupValue}>{setupComplete ? "Complete" : "Not Complete"}</Text>
+              </View>
+
+              <Pressable
+                onPress={finishSetup}
+                disabled={!canFinishSetup}
+                style={[
+                  styles.finishBtn,
+                  canFinishSetup ? styles.finishBtnOn : styles.finishBtnOff,
+                ]}
+              >
+                <Text style={styles.finishBtnText}>Finish Setup</Text>
+              </Pressable>
+            </View>
+
+            <Text style={styles.setupHint}>
+              To finish setup: set a Home Airport + choose Free/Premium. After that, the app will boot straight into Home.
+            </Text>
+
+            <View style={styles.quickActions}>
+              <Pressable onPress={() => setActivePicker("plan")} style={[styles.smallBtn, styles.smallBtnPrimary]}>
+                <Text style={styles.smallBtnText}>Choose Plan</Text>
+              </Pressable>
+
+              <Pressable onPress={resetSetup} style={[styles.smallBtn, styles.smallBtnGhost]}>
+                <Text style={styles.smallBtnGhostText}>Reset Setup</Text>
+              </Pressable>
+            </View>
+          </GlassCard>
+
+          <GlassCard style={styles.card} intensity={24}>
             <Text style={styles.sectionH}>Your Defaults</Text>
 
             <View style={styles.defaultsRow}>
@@ -300,26 +489,40 @@ export default function ProfileScreen() {
                 <Text style={styles.smallBtnText}>Edit Preferences</Text>
               </Pressable>
 
-              <Pressable onPress={managePlan} style={[styles.smallBtn, styles.smallBtnGhost]}>
-                <Text style={styles.smallBtnGhostText}>Manage Plan</Text>
+              <Pressable onPress={openNotifications} style={[styles.smallBtn, styles.smallBtnGhost]}>
+                <Text style={styles.smallBtnGhostText}>Notifications</Text>
               </Pressable>
             </View>
           </GlassCard>
 
           <GlassCard style={[styles.card, { padding: 0 }]} intensity={24}>
-            <Row title="Preferences" subtitle="Date Window, League Coverage, And Planning Behaviour" onPress={openPreferences} />
+            <Row
+              title="Plan"
+              subtitle="Choose Free or Premium"
+              rightText={planSummary}
+              onPress={() => setActivePicker("plan")}
+            />
             <Row
               title="Home Airport"
-              subtitle={`Departure Defaults For Comparisons (${countryCode})`}
+              subtitle={`Departure defaults for comparisons (${countryCode})`}
               rightText={homeAirport}
               onPress={() => setActivePicker("airport")}
             />
-            <Row title="Currency" subtitle="Budgets And Comparisons" rightText={currency} onPress={() => setActivePicker("currency")} />
-            <Row title="Notifications" subtitle="Fixture Reminders And Trip Prompts" onPress={openNotifications} />
-            <Row title="Language" subtitle="App Language" rightText={language} onPress={() => setActivePicker("language")} />
+            <Row
+              title="Currency"
+              subtitle="Budgets and comparisons"
+              rightText={currency}
+              onPress={() => setActivePicker("currency")}
+            />
+            <Row
+              title="Language"
+              subtitle="App language"
+              rightText={language}
+              onPress={() => setActivePicker("language")}
+            />
             <Row
               title="Budget & Alerts"
-              subtitle="Target Budget And Drop Alerts"
+              subtitle="Target budget and drop alerts"
               rightText={budgetTarget === "Not Set" ? "Not Set" : budgetSummary}
               onPress={() => setActivePicker("budget")}
               last
@@ -327,18 +530,32 @@ export default function ProfileScreen() {
           </GlassCard>
 
           <GlassCard style={[styles.card, { padding: 0 }]} intensity={24}>
-            <Row title="FAQ" subtitle="How It Works And What’s Included" onPress={openFAQ} last />
+            <Row title="FAQ" subtitle="How it works and what’s included" onPress={openFAQ} last />
           </GlassCard>
 
           <GlassCard style={[styles.card, { padding: 0 }]} intensity={24}>
-            <Row title="About" subtitle="What YourNextAway Does" onPress={about} />
-            <Row title="Privacy" subtitle="What’s Stored And Where" onPress={privacy} />
+            <Row title="About" subtitle="What YourNextAway does" onPress={about} />
+            <Row title="Privacy" subtitle="What’s stored and where" onPress={privacy} />
             <Row title="Terms" subtitle="Legal" onPress={terms} last />
           </GlassCard>
 
           <Text style={styles.footerNote}>Plan • Fly • Watch • Repeat</Text>
           <View style={{ height: 10 }} />
         </ScrollView>
+
+        {/* Pickers */}
+        <SelectModal
+          visible={activePicker === "plan"}
+          title="Choose Your Plan"
+          subtitle="Pick Free or Premium. This is required to finish setup."
+          options={PLAN_OPTIONS}
+          selectedValue={plan === "not_set" ? "" : plan}
+          onClose={closePicker}
+          onSelect={(v) => setPlan((v === "free" || v === "premium") ? v : "not_set")}
+          allowClear
+          clearLabel="Clear Plan"
+          clearValue=""
+        />
 
         <SelectModal
           visible={activePicker === "airport"}
@@ -375,7 +592,7 @@ export default function ProfileScreen() {
 
         <SelectModal
           visible={activePicker === "budget"}
-          title="Budget & Alerts"
+          title="Budget"
           subtitle={`Pick a target budget. Alerts are currently: ${alerts}`}
           options={budgetOptions}
           selectedValue={budgetTarget}
@@ -386,8 +603,9 @@ export default function ProfileScreen() {
           clearValue="Not Set"
         />
 
+        {/* Alerts toggle overlay shown only while budget picker is open */}
         {activePicker === "budget" ? (
-          <View style={[styles.alertToggleWrap, { pointerEvents: "box-none" }]}>
+          <View style={[styles.alertToggleWrap, { pointerEvents: "box-none" as any }]}>
             <Pressable
               onPress={() => setAlerts((p) => (p === "Off" ? "On" : "Off"))}
               style={[styles.alertToggle, alerts === "On" && styles.alertToggleOn]}
@@ -445,7 +663,12 @@ const styles = StyleSheet.create({
   identityTop: { flexDirection: "row", alignItems: "center", gap: 12 },
 
   name: { color: theme.colors.text, fontSize: theme.fontSize.lg, fontWeight: theme.fontWeight.black },
-  meta: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, fontWeight: theme.fontWeight.bold },
+  meta: {
+    marginTop: 6,
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSize.sm,
+    fontWeight: theme.fontWeight.bold,
+  },
 
   planPill: {
     borderRadius: 999,
@@ -467,6 +690,73 @@ const styles = StyleSheet.create({
   },
 
   sectionH: { color: theme.colors.text, fontSize: theme.fontSize.md, fontWeight: theme.fontWeight.black },
+
+  setupRow: {
+    marginTop: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+
+  setupStatus: {
+    flex: 1,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    backgroundColor: "rgba(0,0,0,0.22)",
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    minHeight: 70,
+    justifyContent: "space-between",
+  },
+
+  setupKicker: {
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSize.xs,
+    fontWeight: theme.fontWeight.black,
+    lineHeight: 14,
+  },
+
+  setupValue: {
+    color: theme.colors.text,
+    fontSize: theme.fontSize.sm,
+    fontWeight: theme.fontWeight.black,
+  },
+
+  finishBtn: {
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    minHeight: 70,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  finishBtnOn: {
+    borderColor: theme.colors.primary,
+    backgroundColor: "rgba(0,0,0,0.40)",
+  },
+
+  finishBtnOff: {
+    borderColor: "rgba(255,255,255,0.12)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+    opacity: 0.65,
+  },
+
+  finishBtnText: {
+    color: theme.colors.text,
+    fontWeight: theme.fontWeight.black,
+    fontSize: theme.fontSize.sm,
+  },
+
+  setupHint: {
+    marginTop: 10,
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSize.sm,
+    lineHeight: 18,
+    fontWeight: theme.fontWeight.bold,
+  },
 
   defaultsRow: { marginTop: 12, flexDirection: "row", gap: 10 },
 
@@ -501,8 +791,6 @@ const styles = StyleSheet.create({
   },
   smallBtnPrimary: { borderColor: theme.colors.primary, backgroundColor: "rgba(0,0,0,0.40)" },
   smallBtnText: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.sm },
-  // app/(tabs)/profile.tsx  (CONTINUATION — paste from here to end)
-
   smallBtnGhost: { borderColor: theme.colors.border, backgroundColor: "rgba(0,0,0,0.22)" },
   smallBtnGhostText: { color: theme.colors.textSecondary, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.sm },
 
@@ -546,7 +834,6 @@ const styles = StyleSheet.create({
   },
 
   /* Alerts Toggle Overlay */
-
   alertToggleWrap: {
     position: "absolute",
     left: 0,
