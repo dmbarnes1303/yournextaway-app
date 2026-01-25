@@ -397,8 +397,8 @@ const styles = StyleSheet.create({
   // NO outer circle: no border, no background, just space for the logo.
   // Size equals the old circle footprint, logo fills it.
   headerLogoWrap: {
-    width: 44,
-    height: 44,
+    width: 64,
+    height: 64,
     alignItems: "center",
     justifyContent: "center",
     marginTop: 2,
