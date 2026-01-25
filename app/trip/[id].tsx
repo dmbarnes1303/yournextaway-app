@@ -1,185 +1,121 @@
 // app/trip/[id].tsx
 import React, { useEffect, useMemo, useState } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  Pressable,
-  ActivityIndicator,
-  Alert,
-  Linking,
-  Share,
-} from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert } from "react-native";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 
 import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
 import EmptyState from "@/src/components/EmptyState";
+import SectionHeader from "@/src/components/SectionHeader";
 import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
 
 import tripsStore, { type Trip } from "@/src/state/trips";
 import { getFixtureById } from "@/src/services/apiFootball";
-
-import getCityGuide from "@/src/data/cityGuides/getCityGuide";
 import { formatUkDateOnly, formatUkDateTimeMaybe } from "@/src/utils/formatters";
-import { parseIsoDateOnly, toIsoDate } from "@/src/constants/football";
-
-function formatTripRange(t: Trip) {
-  return `${formatUkDateOnly(t.startDate)} → ${formatUkDateOnly(t.endDate)}`;
-}
-
-async function safeOpenUrl(url: string) {
-  try {
-    const can = await Linking.canOpenURL(url);
-    if (!can) throw new Error("Cannot open URL");
-    await Linking.openURL(url);
-  } catch {
-    Alert.alert("Couldn’t open link", "Your device could not open that link.");
-  }
-}
-
-function enc(v: string) {
-  return encodeURIComponent(v);
-}
-
-function isoDateOnly(isoMaybe?: string) {
-  if (!isoMaybe) return undefined;
-  const d = new Date(isoMaybe);
-  if (Number.isNaN(d.getTime())) return undefined;
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
-}
+import { getTopThingsToDoForTrip } from "@/src/data/cityGuides";
 
 /**
- * v1 link builders (simple + reliable).
- * Later: swap these URLs to affiliate variants in one place.
+ * Safe param coercion (expo-router can give string | string[] | undefined).
  */
-function buildFlightsUrl(city: string, startDate?: string, endDate?: string) {
-  const safeCity = city?.trim() ? city.trim() : "your destination";
-  if (startDate && endDate) {
-    const q = `Flights to ${safeCity} return ${startDate} to ${endDate}`;
-    return `https://www.google.com/search?q=${enc(q)}`;
+function coerceId(v: unknown): string | null {
+  if (typeof v === "string") {
+    const s = v.trim();
+    return s ? s : null;
   }
-  const q = `Flights to ${safeCity}`;
-  return `https://www.google.com/search?q=${enc(q)}`;
-}
-
-function buildHotelsUrl(city: string, startDate?: string, endDate?: string) {
-  const safeCity = city?.trim() ? city.trim() : "your destination";
-  const base = `https://www.booking.com/searchresults.html?ss=${enc(safeCity)}`;
-  if (startDate && endDate) return `${base}&checkin=${enc(startDate)}&checkout=${enc(endDate)}`;
-  return base;
-}
-
-function buildTicketsUrl(home?: string, away?: string, kickoffDate?: string) {
-  const vs = home && away ? `${home} vs ${away}` : "match";
-  const q = kickoffDate ? `${vs} tickets ${kickoffDate}` : `${vs} tickets`;
-  return `https://www.google.com/search?q=${enc(q)}`;
-}
-
-function buildMapsWebUrl(venue?: string, city?: string) {
-  const q = [venue, city].filter(Boolean).join(" ").trim();
-  if (!q) return "https://www.google.com/maps";
-  return `https://www.google.com/maps/search/?api=1&query=${enc(q)}`;
-}
-
-async function openMapsPreferNative(query: string) {
-  const q = query.trim();
-  if (!q) return safeOpenUrl("https://www.google.com/maps");
-
-  const geo = `geo:0,0?q=${enc(q)}`; // Android-native
-  const web = `https://www.google.com/maps/search/?api=1&query=${enc(q)}`;
-
-  try {
-    const canGeo = await Linking.canOpenURL(geo);
-    await safeOpenUrl(canGeo ? geo : web);
-  } catch {
-    await safeOpenUrl(web);
+  if (Array.isArray(v) && typeof v[0] === "string") {
+    const s = v[0].trim();
+    return s ? s : null;
   }
+  return null;
 }
 
-function subtitleOrFallback(value: string | null | undefined, fallback: string) {
-  const v = String(value ?? "").trim();
-  return v ? v : fallback;
-}
-
-function isUpcomingTrip(t: Trip, todayIso: string) {
-  const end = parseIsoDateOnly(t.endDate);
-  const today = parseIsoDateOnly(todayIso);
-  if (!end || !today) return true;
-  return end.getTime() >= today.getTime();
+function summaryLine(t: Trip) {
+  const a = t.startDate ? formatUkDateOnly(t.startDate) : "—";
+  const b = t.endDate ? formatUkDateOnly(t.endDate) : "—";
+  const n = t.matchIds?.length ?? 0;
+  return `${a} → ${b} • ${n} match${n === 1 ? "" : "es"}`;
 }
 
 export default function TripDetailScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ id?: string }>();
+  const params = useLocalSearchParams();
+  const insets = useSafeAreaInsets();
 
-  const id =
-    typeof params?.id === "string" ? params.id : Array.isArray(params?.id) ? params.id[0] : undefined;
+  const tripId = useMemo(() => coerceId((params as any)?.id), [params]);
 
   const [loaded, setLoaded] = useState(tripsStore.getState().loaded);
   const [trip, setTrip] = useState<Trip | null>(null);
 
-  const [loadingFixtures, setLoadingFixtures] = useState(false);
-  const [fixtureRows, setFixtureRows] = useState<any[]>([]);
-  const [fixtureError, setFixtureError] = useState<string | null>(null);
+  const [fxLoading, setFxLoading] = useState(false);
+  const [fxError, setFxError] = useState<string | null>(null);
+  const [fixture, setFixture] = useState<any | null>(null);
 
-  const todayIso = useMemo(() => toIsoDate(new Date()), []);
-
+  // Subscribe to store + load trips if needed
   useEffect(() => {
-    const unsub = tripsStore.subscribe((s) => {
-      setLoaded(s.loaded);
-      if (!id) return;
-      setTrip(s.trips.find((x) => x.id === id) ?? null);
-    });
+    let mounted = true;
 
-    if (!tripsStore.getState().loaded) {
-      tripsStore.loadTrips();
-    } else if (id) {
+    const syncTrip = () => {
+      if (!tripId) {
+        setTrip(null);
+        return;
+      }
       const s = tripsStore.getState();
-      setTrip(s.trips.find((x) => x.id === id) ?? null);
-    }
+      setLoaded(s.loaded);
+      const t = s.trips.find((x) => x.id === tripId) ?? null;
+      if (mounted) setTrip(t);
+    };
 
-    return unsub;
-  }, [id]);
+    const unsub = tripsStore.subscribe(() => syncTrip());
 
-  const matchIds = useMemo(() => trip?.matchIds ?? [], [trip]);
-  const matchCount = matchIds.length;
+    // initial sync
+    syncTrip();
 
-  // Prefer stable citySlug if present; fall back to label.
-  const cityLookupKey = useMemo(() => trip?.citySlug ?? trip?.cityId, [trip?.citySlug, trip?.cityId]);
-  const { slug: cityKey, guide: cityGuide } = useMemo(() => getCityGuide(cityLookupKey), [cityLookupKey]);
+    // ensure loaded
+    (async () => {
+      if (!tripsStore.getState().loaded) {
+        try {
+          await tripsStore.loadTrips();
+        } catch {
+          // best-effort; UI will show empty state
+        } finally {
+          syncTrip();
+        }
+      }
+    })();
 
+    return () => {
+      mounted = false;
+      unsub();
+    };
+  }, [tripId]);
+
+  // Load fixture (if trip has match)
   useEffect(() => {
     let cancelled = false;
 
     async function run() {
-      if (!trip || matchIds.length === 0) {
-        setFixtureRows([]);
-        setFixtureError(null);
-        return;
-      }
+      setFxError(null);
+      setFixture(null);
 
-      setLoadingFixtures(true);
-      setFixtureError(null);
-      setFixtureRows([]);
+      const matchId = trip?.matchIds?.[0] ? String(trip.matchIds[0]) : null;
+      if (!matchId) return;
 
+      setFxLoading(true);
       try {
-        const results = await Promise.all(matchIds.map((mid) => getFixtureById(mid)));
+        const r = await getFixtureById(matchId);
         if (cancelled) return;
-
-        const rows = results.filter(Boolean);
-        setFixtureRows(rows);
+        if (!r) {
+          setFxError("Match details couldn’t be loaded right now.");
+          return;
+        }
+        setFixture(r);
       } catch (e: any) {
         if (cancelled) return;
-        setFixtureError(e?.message ?? "Failed to load fixtures for this trip.");
+        setFxError(e?.message ?? "Match details couldn’t be loaded.");
       } finally {
-        if (!cancelled) setLoadingFixtures(false);
+        if (!cancelled) setFxLoading(false);
       }
     }
 
@@ -187,146 +123,95 @@ export default function TripDetailScreen() {
     return () => {
       cancelled = true;
     };
-  }, [trip, matchIds]);
+  }, [trip?.matchIds]);
 
-  function onDelete() {
+  const cityName = useMemo(() => {
+    const fromTrip = String(trip?.cityId ?? "").trim();
+    if (fromTrip) return fromTrip;
+
+    const fromFixture = String(fixture?.fixture?.venue?.city ?? "").trim();
+    if (fromFixture) return fromFixture;
+
+    return "Trip";
+  }, [trip?.cityId, fixture]);
+
+  const matchLine = useMemo(() => {
+    if (!fixture) return null;
+    const home = fixture?.teams?.home?.name ?? "Home";
+    const away = fixture?.teams?.away?.name ?? "Away";
+    const kick = formatUkDateTimeMaybe(fixture?.fixture?.date);
+    const venue = fixture?.fixture?.venue?.name ?? "";
+    const city = fixture?.fixture?.venue?.city ?? "";
+    const extra = [venue, city].filter(Boolean).join(" • ");
+    return {
+      title: `${home} vs ${away}`,
+      meta: extra ? `${kick} • ${extra}` : kick,
+    };
+  }, [fixture]);
+
+  const cityBundle = useMemo(() => {
+    if (!cityName || cityName === "Trip") return null;
+    return getTopThingsToDoForTrip(cityName);
+  }, [cityName]);
+
+  async function onDelete() {
     if (!trip) return;
 
-    Alert.alert("Delete trip?", "This will remove the trip from your device.", [
+    Alert.alert("Delete trip?", "This will remove the trip from this device.", [
       { text: "Cancel", style: "cancel" },
       {
         text: "Delete",
         style: "destructive",
         onPress: async () => {
-          await tripsStore.removeTrip(trip.id);
-          router.replace("/(tabs)/trips");
+          try {
+            await tripsStore.removeTrip(trip.id);
+            router.replace("/(tabs)/trips");
+          } catch {
+            Alert.alert("Couldn’t delete", "Something went wrong removing this trip.");
+          }
         },
       },
     ]);
   }
 
-  function goCityGuide() {
-    if (!cityKey) {
-      Alert.alert("City unavailable", "This trip doesn’t have a valid city yet.");
-      return;
-    }
-    router.push({ pathname: "/city/[slug]", params: { slug: cityKey } });
-  }
-
-  function onEditTrip() {
+  function onEdit() {
     if (!trip) return;
-    router.push({ pathname: "/trip/build", params: { tripId: trip.id } });
+    router.push({ pathname: "/trip/build", params: { tripId: trip.id } } as any);
   }
 
-  async function onShareTrip() {
-    if (!trip) return;
-
-    const primary = fixtureRows[0];
-    const home = primary?.teams?.home?.name ?? "";
-    const away = primary?.teams?.away?.name ?? "";
-    const kick = formatUkDateTimeMaybe(primary?.fixture?.date);
-    const venue = primary?.fixture?.venue?.name ?? "";
-    const venueCity = primary?.fixture?.venue?.city ?? trip.cityId ?? "";
-
-    const lines = [
-      `YourNextAway trip`,
-      ``,
-      `City: ${trip.cityId || "Trip"}`,
-      `Dates: ${formatTripRange(trip)}`,
-      ...(home && away ? [`Match: ${home} vs ${away}`, `Kick-off: ${kick || "TBC"}`] : []),
-      ...(venue ? [`Stadium: ${venue}`, ...(venueCity ? [`Location: ${venueCity}`] : [])] : []),
-    ];
-
-    try {
-      await Share.share({ message: lines.join("\n") });
-    } catch {
-      Alert.alert("Couldn’t share", "Your device could not open the share sheet.");
-    }
+  function onOpenMatch() {
+    const id = fixture?.fixture?.id != null ? String(fixture.fixture.id) : null;
+    if (!id) return;
+    router.push({ pathname: "/match/[id]", params: { id } } as any);
   }
-
-  const primaryFixture = useMemo(() => (fixtureRows.length > 0 ? fixtureRows[0] : null), [fixtureRows]);
-
-  const tripCityLabel = useMemo(() => {
-    const raw = String(trip?.cityId ?? "").trim();
-    return raw || "Trip";
-  }, [trip?.cityId]);
-
-  const primaryHome = primaryFixture?.teams?.home?.name as string | undefined;
-  const primaryAway = primaryFixture?.teams?.away?.name as string | undefined;
-  const primaryKickoffIso = isoDateOnly(primaryFixture?.fixture?.date as string | undefined);
-  const primaryVenue = primaryFixture?.fixture?.venue?.name as string | undefined;
-  const primaryVenueCity = primaryFixture?.fixture?.venue?.city as string | undefined;
-
-  const upcoming = useMemo(() => {
-    if (!trip) return true;
-    return isUpcomingTrip(trip, todayIso);
-  }, [trip, todayIso]);
-
-  // v1 URLs
-  const flightsUrl = useMemo(() => buildFlightsUrl(tripCityLabel, trip?.startDate, trip?.endDate), [
-    tripCityLabel,
-    trip?.startDate,
-    trip?.endDate,
-  ]);
-
-  const hotelsUrl = useMemo(() => buildHotelsUrl(tripCityLabel, trip?.startDate, trip?.endDate), [
-    tripCityLabel,
-    trip?.startDate,
-    trip?.endDate,
-  ]);
-
-  const ticketsUrl = useMemo(() => buildTicketsUrl(primaryHome, primaryAway, primaryKickoffIso), [
-    primaryHome,
-    primaryAway,
-    primaryKickoffIso,
-  ]);
-
-  const mapsWebUrl = useMemo(
-    () => buildMapsWebUrl(primaryVenue, primaryVenueCity || tripCityLabel),
-    [primaryVenue, primaryVenueCity, tripCityLabel]
-  );
-
-  // Subtitles
-  const flightsSub = useMemo(() => {
-    if (trip?.startDate && trip?.endDate)
-      return `${formatUkDateOnly(trip.startDate)} → ${formatUkDateOnly(trip.endDate)}`;
-    return "Set dates to refine search";
-  }, [trip?.startDate, trip?.endDate]);
-
-  const hotelsSub = useMemo(() => {
-    if (trip?.startDate && trip?.endDate)
-      return `${tripCityLabel} • ${formatUkDateOnly(trip.startDate)} → ${formatUkDateOnly(trip.endDate)}`;
-    return `${tripCityLabel} • Add dates for availability`;
-  }, [tripCityLabel, trip?.startDate, trip?.endDate]);
-
-  const ticketsSub = useMemo(() => {
-    if (primaryHome && primaryAway) {
-      const when = primaryKickoffIso ? ` • ${primaryKickoffIso}` : "";
-      return `${primaryHome} vs ${primaryAway}${when}`;
-    }
-    return "Match not loaded yet";
-  }, [primaryHome, primaryAway, primaryKickoffIso]);
-
-  const directionsSub = useMemo(() => {
-    const venueLine = subtitleOrFallback(primaryVenue, "Open maps");
-    const cityLine = subtitleOrFallback(primaryVenueCity || tripCityLabel, "");
-    return [venueLine, cityLine].filter(Boolean).join(" • ");
-  }, [primaryVenue, primaryVenueCity, tripCityLabel]);
 
   return (
-    <Background imageUrl={getBackground("trips")}>
+    <Background imageUrl={getBackground("trips")} overlayOpacity={0.86}>
       <Stack.Screen
         options={{
           headerShown: true,
-          title: "Trip Details",
+          title: "Trip",
           headerTransparent: true,
           headerTintColor: theme.colors.text,
         }}
       />
 
-      <SafeAreaView style={styles.container} edges={["bottom"]}>
-        <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
-          {!loaded ? (
+      <SafeAreaView style={styles.safe} edges={["bottom"]}>
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={[styles.content, { paddingBottom: theme.spacing.xxl + insets.bottom }]}
+          showsVerticalScrollIndicator={false}
+        >
+          {!tripId ? (
+            <GlassCard style={styles.card} intensity={24}>
+              <EmptyState title="Missing trip id" message="This screen was opened without a valid trip id." />
+              <Pressable onPress={() => router.replace("/(tabs)/trips")} style={styles.linkBtn}>
+                <Text style={styles.linkText}>Back to Trips</Text>
+              </Pressable>
+            </GlassCard>
+          ) : null}
+
+          {tripId && !loaded ? (
             <GlassCard style={styles.card} intensity={24}>
               <View style={styles.center}>
                 <ActivityIndicator />
@@ -335,281 +220,136 @@ export default function TripDetailScreen() {
             </GlassCard>
           ) : null}
 
-          {loaded && (!id || !trip) ? (
+          {tripId && loaded && !trip ? (
             <GlassCard style={styles.card} intensity={24}>
-              <EmptyState title="Trip not found" message="This trip doesn’t exist on this device." />
-              <Pressable onPress={() => router.replace("/(tabs)/trips")} style={[styles.ctaBtn, { marginTop: 12 }]}>
-                <Text style={styles.ctaText}>Back to Trips</Text>
+              <EmptyState title="Trip not found" message="It may have been deleted or not saved on this device." />
+              <Pressable onPress={() => router.replace("/(tabs)/trips")} style={styles.linkBtn}>
+                <Text style={styles.linkText}>Back to Trips</Text>
               </Pressable>
             </GlassCard>
           ) : null}
 
-          {loaded && id && trip ? (
+          {trip ? (
             <>
-              {/* SUMMARY */}
-              <GlassCard style={styles.card} intensity={26}>
-                <View style={styles.summaryHeader}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.h1} numberOfLines={1}>
-                      {trip.cityId || "Trip"}
-                    </Text>
-                    <Text style={styles.muted}>{formatTripRange(trip)}</Text>
-                  </View>
+              <GlassCard style={styles.hero} intensity={26}>
+                <Text style={styles.kicker}>YOUR TRIP</Text>
+                <Text style={styles.cityTitle} numberOfLines={1}>
+                  {cityName}
+                </Text>
+                <Text style={styles.heroMeta}>{summaryLine(trip)}</Text>
 
-                  <View style={[styles.statusPill, upcoming ? styles.statusUpcoming : styles.statusPast]}>
-                    <Text style={styles.statusText}>{upcoming ? "Upcoming" : "Past"}</Text>
-                  </View>
-                </View>
-
-                <View style={styles.summaryRow}>
-                  <View style={styles.summaryPill}>
-                    <Text style={styles.summaryLabel}>Matches</Text>
-                    <Text style={styles.summaryValue}>{matchCount}</Text>
-                  </View>
-                  <View style={styles.summaryPill}>
-                    <Text style={styles.summaryLabel}>City guide</Text>
-                    <Text style={styles.summaryValue}>{cityGuide ? "Available" : "—"}</Text>
-                  </View>
-                </View>
-
-                {trip.notes?.trim() ? (
-                  <View style={{ marginTop: 12 }}>
-                    <Text style={styles.label}>Notes</Text>
-                    <Text style={styles.body}>{trip.notes.trim()}</Text>
+                {trip.notes ? (
+                  <View style={styles.notesBlock}>
+                    <Text style={styles.notesTitle}>Notes</Text>
+                    <Text style={styles.notesText}>{trip.notes}</Text>
                   </View>
                 ) : null}
 
-                <View style={styles.actionsGrid}>
-                  <Pressable onPress={onEditTrip} style={styles.actionBtn}>
-                    <Text style={styles.actionText}>Edit trip</Text>
+                <View style={styles.heroActions}>
+                  <Pressable onPress={onEdit} style={[styles.btn, styles.btnPrimary]}>
+                    <Text style={styles.btnPrimaryText}>Edit</Text>
                   </Pressable>
-
-                  <Pressable onPress={onShareTrip} style={styles.actionBtn}>
-                    <Text style={styles.actionText}>Share trip</Text>
-                  </Pressable>
-
-                  <Pressable onPress={() => router.push("/trip/build")} style={styles.actionBtn}>
-                    <Text style={styles.actionText}>Build another</Text>
-                  </Pressable>
-
-                  <Pressable onPress={onDelete} style={[styles.actionBtn, styles.dangerBtn]}>
-                    <Text style={styles.actionText}>Delete</Text>
+                  <Pressable onPress={onDelete} style={[styles.btn, styles.btnDanger]}>
+                    <Text style={styles.btnDangerText}>Delete</Text>
                   </Pressable>
                 </View>
-
-                <Text style={styles.smallPrint}>Trip ID: {trip.id}</Text>
               </GlassCard>
 
-              {/* BOOK YOUR TRIP */}
-              <GlassCard style={styles.card} intensity={24}>
-                <View style={styles.cardHeaderRow}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.h2}>Book your trip</Text>
-                    <Text style={styles.muted}>Fast link-outs for flights, accommodation, tickets, and directions.</Text>
-                  </View>
-                </View>
-
-                <View style={styles.ctaGrid}>
-                  <Pressable onPress={() => safeOpenUrl(flightsUrl)} style={styles.bigCtaBtn}>
-                    <Text style={styles.bigCtaKicker}>Flights</Text>
-                    <Text style={styles.bigCtaTitle}>Search flights</Text>
-                    <Text style={styles.bigCtaSub}>{flightsSub}</Text>
-                  </Pressable>
-
-                  <Pressable onPress={() => safeOpenUrl(hotelsUrl)} style={styles.bigCtaBtn}>
-                    <Text style={styles.bigCtaKicker}>Accommodation</Text>
-                    <Text style={styles.bigCtaTitle}>Find hotels</Text>
-                    <Text style={styles.bigCtaSub}>{hotelsSub}</Text>
-                  </Pressable>
-
-                  <Pressable onPress={() => safeOpenUrl(ticketsUrl)} style={styles.bigCtaBtn}>
-                    <Text style={styles.bigCtaKicker}>Tickets</Text>
-                    <Text style={styles.bigCtaTitle}>Find tickets</Text>
-                    <Text style={styles.bigCtaSub}>{ticketsSub}</Text>
-                  </Pressable>
-
-                  <Pressable
-                    onPress={async () => {
-                      const q = [primaryVenue, primaryVenueCity || tripCityLabel].filter(Boolean).join(" ");
-                      if (!q.trim()) return safeOpenUrl(mapsWebUrl);
-                      await openMapsPreferNative(q);
-                    }}
-                    style={styles.bigCtaBtn}
-                  >
-                    <Text style={styles.bigCtaKicker}>Directions</Text>
-                    <Text style={styles.bigCtaTitle}>Open maps</Text>
-                    <Text style={styles.bigCtaSub}>{directionsSub}</Text>
-                  </Pressable>
-                </View>
-
-                <Text style={styles.smallPrint}>
-                  Note: V1 uses reliable link-outs. Swap to affiliate/provider deep links later.
-                </Text>
-              </GlassCard>
-
-              {/* CITY GUIDE */}
-              <GlassCard style={styles.card} intensity={24}>
-                <View style={styles.cardHeaderRow}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.h2}>City guide</Text>
-                    <Text style={styles.muted}>
-                      {cityGuide ? `${cityGuide.name}, ${cityGuide.country}` : "Guide coverage is expanding."}
-                    </Text>
-                  </View>
-
-                  {cityGuide?.tripAdvisorTopThingsUrl ? (
-                    <Pressable onPress={() => safeOpenUrl(cityGuide.tripAdvisorTopThingsUrl!)} style={styles.ctaBtn}>
-                      <Text style={styles.ctaText}>TripAdvisor Top 10</Text>
-                    </Pressable>
+              <View style={styles.section}>
+                <SectionHeader title="Match" subtitle="The fixture linked to this trip" />
+                <GlassCard style={styles.card} intensity={24}>
+                  {fxLoading ? (
+                    <View style={styles.center}>
+                      <ActivityIndicator />
+                      <Text style={styles.muted}>Loading match…</Text>
+                    </View>
                   ) : null}
-                </View>
 
-                <Pressable onPress={goCityGuide} style={[styles.ctaBtn, { marginTop: 10 }]}>
-                  <Text style={styles.ctaText}>Open full guide</Text>
-                </Pressable>
+                  {!fxLoading && fxError ? <EmptyState title="Match unavailable" message={fxError} /> : null}
 
-                {!cityGuide ? (
-                  <View style={{ marginTop: 12 }}>
-                    <EmptyState
-                      title="No guide for this city yet"
-                      message={`Saved trip city: “${trip.cityId || "—"}”\nSaved trip slug: “${trip.citySlug || "—"}”\nLookup key: “${cityKey || "—"}”`}
-                    />
-                  </View>
-                ) : (
-                  <>
-                    <Text style={[styles.body, { marginTop: 12 }]}>{cityGuide.overview}</Text>
+                  {!fxLoading && !fxError && !fixture ? (
+                    <EmptyState title="No match linked" message="Edit this trip to choose a fixture." />
+                  ) : null}
 
-                    <View style={{ marginTop: 14 }}>
-                      <Text style={styles.sectionTitle}>Top things to do</Text>
-                      <View style={styles.bullets}>
-                        {cityGuide.topThings.slice(0, 10).map((x, i) => (
-                          <View key={`${x.title}-${i}`} style={styles.bulletRow}>
-                            <Text style={styles.bulletIndex}>{i + 1}</Text>
-                            <View style={{ flex: 1 }}>
-                              <Text style={styles.bulletTitle}>{x.title}</Text>
-                              <Text style={styles.bulletTip}>{x.tip}</Text>
+                  {matchLine ? (
+                    <>
+                      <Text style={styles.rowTitle}>{matchLine.title}</Text>
+                      <Text style={styles.rowMeta}>{matchLine.meta}</Text>
+
+                      <View style={{ height: 10 }} />
+
+                      <Pressable onPress={onOpenMatch} style={styles.linkBtn}>
+                        <Text style={styles.linkText}>Open match</Text>
+                      </Pressable>
+                    </>
+                  ) : null}
+                </GlassCard>
+              </View>
+
+              <View style={styles.section}>
+                <SectionHeader title="In the city" subtitle="Quick inspiration for your break" />
+                <GlassCard style={styles.card} intensity={24}>
+                  {!cityBundle ? (
+                    <EmptyState title="No city bundle" message="Select a fixture with a venue city to see curated picks." />
+                  ) : (
+                    <>
+                      <Text style={styles.cityBlockTitle}>Top things to do</Text>
+                      <Text style={styles.cityBlockSub}>
+                        {cityBundle.hasGuide ? "Curated picks + quick tips." : "No curated guide yet — link out for current picks."}
+                      </Text>
+
+                      {cityBundle.hasGuide && (cityBundle.items?.length ?? 0) > 0 ? (
+                        <View style={styles.thingsList}>
+                          {cityBundle.items.slice(0, 6).map((it, idx) => (
+                            <View key={`${it.title}-${idx}`} style={styles.thingRow}>
+                              <Text style={styles.thingIdx}>{idx + 1}.</Text>
+                              <View style={{ flex: 1 }}>
+                                <Text style={styles.thingTitle}>{it.title}</Text>
+                                {it.description ? <Text style={styles.thingDesc}>{it.description}</Text> : null}
+                              </View>
                             </View>
-                          </View>
-                        ))}
-                      </View>
-                    </View>
-
-                    <View style={{ marginTop: 14 }}>
-                      <Text style={styles.sectionTitle}>Local tips</Text>
-                      <View style={styles.tipList}>
-                        {cityGuide.tips.map((t, i) => (
-                          <Text key={`${t}-${i}`} style={styles.tipItem}>
-                            • {t}
-                          </Text>
-                        ))}
-                      </View>
-                    </View>
-
-                    {(cityGuide.transport || cityGuide.accommodation) ? (
-                      <View style={{ marginTop: 14 }}>
-                        <Text style={styles.sectionTitle}>Practical info</Text>
-
-                        {cityGuide.transport ? (
-                          <View style={{ marginTop: 8 }}>
-                            <Text style={styles.label}>Transport</Text>
-                            <Text style={styles.body}>{cityGuide.transport}</Text>
-                          </View>
-                        ) : null}
-
-                        {cityGuide.accommodation ? (
-                          <View style={{ marginTop: 10 }}>
-                            <Text style={styles.label}>Accommodation</Text>
-                            <Text style={styles.body}>{cityGuide.accommodation}</Text>
-                          </View>
-                        ) : null}
-                      </View>
-                    ) : null}
-                  </>
-                )}
-              </GlassCard>
-
-              {/* MATCHES */}
-              <GlassCard style={styles.card} intensity={24}>
-                <Text style={styles.h2}>Matches</Text>
-                <Text style={styles.muted}>
-                  {matchCount} match{matchCount === 1 ? "" : "es"} linked
-                </Text>
-
-                {loadingFixtures ? (
-                  <View style={styles.center}>
-                    <ActivityIndicator />
-                    <Text style={styles.muted}>Loading match details…</Text>
-                  </View>
-                ) : null}
-
-                {!loadingFixtures && fixtureError ? <EmptyState title="Couldn’t load matches" message={fixtureError} /> : null}
-
-                {!loadingFixtures && !fixtureError && matchCount > 0 && fixtureRows.length === 0 ? (
-                  <EmptyState title="Match details unavailable" message="Matches are linked, but details could not be loaded." />
-                ) : null}
-
-                {!loadingFixtures && !fixtureError && fixtureRows.length > 0 ? (
-                  <View style={styles.list}>
-                    {fixtureRows.map((r, idx) => {
-                      const fixtureId = r?.fixture?.id ?? matchIds[idx];
-                      const home = r?.teams?.home?.name ?? "Home";
-                      const away = r?.teams?.away?.name ?? "Away";
-                      const kickoff = formatUkDateTimeMaybe(r?.fixture?.date);
-                      const kickoffIso = isoDateOnly(r?.fixture?.date);
-                      const venue = r?.fixture?.venue?.name ?? "";
-                      const city = r?.fixture?.venue?.city ?? "";
-                      const extra = [venue, city].filter(Boolean).join(" • ");
-                      const line2 = extra ? `${kickoff} • ${extra}` : kickoff;
-
-                      const matchTicketsUrl = buildTicketsUrl(home, away, kickoffIso);
-                      const mapQuery = [venue, city || tripCityLabel].filter(Boolean).join(" ");
-
-                      return (
-                        <View key={String(fixtureId ?? idx)} style={styles.matchCard}>
-                          <Pressable
-                            onPress={() => {
-                              if (!fixtureId) return;
-                              router.push({
-                                pathname: "/match/[id]",
-                                params: {
-                                  id: String(fixtureId),
-                                  // Helps Match screen keep a sensible “context window”
-                                  from: trip.startDate,
-                                  to: trip.endDate,
-                                },
-                              });
-                            }}
-                            style={styles.rowTop}
-                          >
-                            <Text style={styles.rowTitle}>
-                              {home} vs {away}
-                            </Text>
-                            <Text style={styles.rowMeta}>{line2}</Text>
-                          </Pressable>
-
-                          <View style={styles.matchQuickRow}>
-                            <Pressable onPress={() => safeOpenUrl(matchTicketsUrl)} style={styles.smallPill}>
-                              <Text style={styles.smallPillText}>Tickets</Text>
-                            </Pressable>
-
-                            <Pressable
-                              onPress={async () => {
-                                if (!mapQuery.trim()) return safeOpenUrl("https://www.google.com/maps");
-                                await openMapsPreferNative(mapQuery);
-                              }}
-                              style={styles.smallPill}
-                            >
-                              <Text style={styles.smallPillText}>Directions</Text>
-                            </Pressable>
-                          </View>
+                          ))}
+                          {(cityBundle.items?.length ?? 0) > 6 ? (
+                            <Text style={styles.moreInline}>More in the full city guide.</Text>
+                          ) : null}
                         </View>
-                      );
-                    })}
-                  </View>
-                ) : null}
-              </GlassCard>
+                      ) : null}
+
+                      {cityBundle.hasGuide && (cityBundle.quickTips?.length ?? 0) > 0 ? (
+                        <View style={styles.tipsBlock}>
+                          <Text style={styles.tipsTitle}>Quick tips</Text>
+                          {cityBundle.quickTips.slice(0, 5).map((t, idx) => (
+                            <Text key={`${t}-${idx}`} style={styles.tipLine}>
+                              • {t}
+                            </Text>
+                          ))}
+                        </View>
+                      ) : null}
+
+                      {cityBundle.tripAdvisorUrl ? (
+                        <Pressable
+                          onPress={() => {
+                            // keep link opening inside city guide helpers; this is just a simple route out
+                            // if you want safeOpenUrl reused, we can factor it into a shared util.
+                            try {
+                              router.push({ pathname: "/webview", params: { url: cityBundle.tripAdvisorUrl } } as any);
+                            } catch {
+                              // If you do not have a webview route, do nothing (avoid crash)
+                            }
+                          }}
+                          style={[styles.linkBtn, { marginTop: 12 }]}
+                        >
+                          <Text style={styles.linkText}>Browse on TripAdvisor</Text>
+                        </Pressable>
+                      ) : null}
+                    </>
+                  )}
+                </GlassCard>
+              </View>
             </>
           ) : null}
+
+          <View style={{ height: 10 }} />
         </ScrollView>
       </SafeAreaView>
     </Background>
@@ -617,158 +357,95 @@ export default function TripDetailScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, paddingTop: 100 },
-  scrollView: { flex: 1 },
+  safe: { flex: 1 },
+  scroll: { flex: 1 },
+
   content: {
+    paddingTop: 100,
     paddingHorizontal: theme.spacing.lg,
-    paddingBottom: theme.spacing.xxl,
     gap: theme.spacing.lg,
   },
+
+  section: { marginTop: 2 },
+
+  hero: { padding: theme.spacing.lg },
+
+  kicker: {
+    color: theme.colors.primary,
+    fontSize: theme.fontSize.xs,
+    fontWeight: theme.fontWeight.black,
+    letterSpacing: 0.6,
+  },
+
+  cityTitle: {
+    marginTop: 8,
+    color: theme.colors.text,
+    fontSize: theme.fontSize.xl,
+    fontWeight: theme.fontWeight.black,
+    lineHeight: 30,
+  },
+
+  heroMeta: { marginTop: 8, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18 },
+
+  notesBlock: {
+    marginTop: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+    padding: 12,
+  },
+  notesTitle: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.sm },
+  notesText: { marginTop: 8, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18 },
+
+  heroActions: { marginTop: 14, flexDirection: "row", gap: 10 },
+
+  btn: {
+    flex: 1,
+    borderRadius: 14,
+    paddingVertical: 12,
+    alignItems: "center",
+    borderWidth: 1,
+    backgroundColor: "rgba(0,0,0,0.22)",
+  },
+
+  btnPrimary: { borderColor: "rgba(0,255,136,0.55)" },
+  btnPrimaryText: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.sm },
+
+  btnDanger: { borderColor: "rgba(255, 80, 80, 0.30)" },
+  btnDangerText: { color: "rgba(255, 120, 120, 0.95)", fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.sm },
+
   card: { padding: theme.spacing.lg },
 
-  h1: { fontSize: theme.fontSize.xl, fontWeight: "900", color: theme.colors.text },
-  h2: { fontSize: theme.fontSize.lg, fontWeight: "900", color: theme.colors.text },
-
-  muted: { marginTop: 6, fontSize: theme.fontSize.sm, color: theme.colors.textSecondary },
-
-  label: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, marginBottom: 6 },
-  body: { color: theme.colors.text, fontSize: theme.fontSize.md, lineHeight: 20 },
-
-  smallPrint: { marginTop: 12, color: theme.colors.textSecondary, fontSize: theme.fontSize.xs },
-
   center: { paddingVertical: 12, alignItems: "center", gap: 10 },
+  muted: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm },
 
-  summaryHeader: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  rowTitle: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.md },
+  rowMeta: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18 },
 
-  statusPill: {
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 999,
-    borderWidth: 1,
-    alignSelf: "flex-start",
-  },
-  statusUpcoming: { borderColor: "rgba(0,255,136,0.40)", backgroundColor: "rgba(0,0,0,0.18)" },
-  statusPast: { borderColor: "rgba(255,255,255,0.14)", backgroundColor: "rgba(0,0,0,0.16)" },
-  statusText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.xs },
-
-  // Summary pills
-  summaryRow: { marginTop: 12, flexDirection: "row", gap: 10 },
-  summaryPill: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    backgroundColor: "rgba(0,0,0,0.22)",
-    borderRadius: 14,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-  },
-  summaryLabel: { color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: "800" },
-  summaryValue: { marginTop: 6, color: theme.colors.text, fontSize: theme.fontSize.md, fontWeight: "900" },
-
-  // Hub actions
-  actionsGrid: { marginTop: 16, flexDirection: "row", flexWrap: "wrap", gap: 10 },
-  actionBtn: {
-    width: "48%",
+  linkBtn: {
+    marginTop: 12,
     paddingVertical: 12,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    backgroundColor: "rgba(0,0,0,0.30)",
+    backgroundColor: "rgba(0,0,0,0.22)",
     alignItems: "center",
   },
-  dangerBtn: { borderColor: "rgba(255, 80, 80, 0.6)" },
-  actionText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
+  linkText: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.sm },
 
-  // Card header
-  cardHeaderRow: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  cityBlockTitle: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.md },
+  cityBlockSub: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18 },
 
-  ctaBtn: {
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "rgba(0,255,136,0.45)",
-    backgroundColor: "rgba(0,0,0,0.25)",
-    alignSelf: "flex-start",
-  },
-  ctaText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.xs },
+  thingsList: { marginTop: 10, gap: 10 },
+  thingRow: { flexDirection: "row", gap: 10, alignItems: "flex-start" },
+  thingIdx: { width: 18, color: theme.colors.primary, fontWeight: theme.fontWeight.black },
+  thingTitle: { color: theme.colors.text, fontWeight: theme.fontWeight.black },
+  thingDesc: { marginTop: 4, color: theme.colors.textSecondary, lineHeight: 18 },
 
-  // Book your trip
-  ctaGrid: { marginTop: 12, gap: 10 },
-  bigCtaBtn: {
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "rgba(0,255,136,0.28)",
-    backgroundColor: "rgba(0,0,0,0.22)",
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-  },
-  bigCtaKicker: {
-    color: theme.colors.primary,
-    fontWeight: "900",
-    fontSize: theme.fontSize.xs,
-    letterSpacing: 0.2,
-  },
-  bigCtaTitle: {
-    marginTop: 6,
-    color: theme.colors.text,
-    fontWeight: "900",
-    fontSize: theme.fontSize.md,
-  },
-  bigCtaSub: {
-    marginTop: 6,
-    color: theme.colors.textSecondary,
-    fontSize: theme.fontSize.sm,
-    lineHeight: 18,
-  },
+  moreInline: { marginTop: 10, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm },
 
-  // City guide content
-  sectionTitle: { marginTop: 2, color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.md },
-
-  bullets: { marginTop: 10, gap: 10 },
-  bulletRow: { flexDirection: "row", gap: 10, alignItems: "flex-start" },
-  bulletIndex: {
-    width: 22,
-    textAlign: "center",
-    color: theme.colors.primary,
-    fontWeight: "900",
-    fontSize: theme.fontSize.sm,
-    marginTop: 1,
-  },
-  bulletTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
-  bulletTip: { marginTop: 4, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18 },
-
-  tipList: { marginTop: 10, gap: 8 },
-  tipItem: { color: theme.colors.text, fontSize: theme.fontSize.sm, lineHeight: 18 },
-
-  // Matches list
-  list: { marginTop: 12, gap: 12 },
-
-  matchCard: {
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.18)",
-    borderRadius: 14,
-    overflow: "hidden",
-  },
-  rowTop: { paddingVertical: 12, paddingHorizontal: 12 },
-  rowTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.md },
-  rowMeta: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm },
-
-  matchQuickRow: {
-    flexDirection: "row",
-    gap: 10,
-    paddingHorizontal: 12,
-    paddingBottom: 12,
-  },
-  smallPill: {
-    flex: 1,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "rgba(0,255,136,0.35)",
-    backgroundColor: "rgba(0,0,0,0.22)",
-    paddingVertical: 10,
-    alignItems: "center",
-  },
-  smallPillText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.xs },
+  tipsBlock: { marginTop: 12 },
+  tipsTitle: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.sm, marginBottom: 6 },
+  tipLine: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18 },
 });
