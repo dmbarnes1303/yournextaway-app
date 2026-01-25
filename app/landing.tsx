@@ -1,5 +1,5 @@
 // app/landing.tsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { View, Text, StyleSheet, Pressable, ActivityIndicator, Image } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Stack, useRouter } from "expo-router";
@@ -21,27 +21,35 @@ export default function Landing() {
   const [checking, setChecking] = useState(true);
 
   useEffect(() => {
-    let mounted = true;
+    let alive = true;
 
     (async () => {
       try {
         const done = await AsyncStorage.getItem(STORAGE_KEYS.setupComplete);
-        if (!mounted) return;
+        if (!alive) return;
 
         if (done === "true") {
           router.replace("/(tabs)/home");
           return;
         }
       } catch {
-        // ignore and show landing
+        // If storage fails, fall back to showing Landing (safe default).
       } finally {
-        if (mounted) setChecking(false);
+        if (alive) setChecking(false);
       }
     })();
 
     return () => {
-      mounted = false;
+      alive = false;
     };
+  }, [router]);
+
+  const goOnboarding = useCallback(() => {
+    router.push("/onboarding");
+  }, [router]);
+
+  const goProfileSetup = useCallback(() => {
+    router.replace("/(tabs)/profile");
   }, [router]);
 
   return (
@@ -71,18 +79,12 @@ export default function Landing() {
                   </Text>
 
                   <View style={styles.actions}>
-                    <Pressable
-                      onPress={() => router.push("/onboarding")}
-                      style={[styles.btn, styles.btnPrimary]}
-                    >
+                    <Pressable onPress={goOnboarding} style={[styles.btn, styles.btnPrimary]}>
                       <Text style={styles.btnPrimaryText}>Get started</Text>
                     </Pressable>
 
-                    <Pressable
-                      onPress={() => router.replace("/(tabs)/home")}
-                      style={[styles.btn, styles.btnGhost]}
-                    >
-                      <Text style={styles.btnGhostText}>Explore first</Text>
+                    <Pressable onPress={goProfileSetup} style={[styles.btn, styles.btnGhost]}>
+                      <Text style={styles.btnGhostText}>Set up profile</Text>
                     </Pressable>
                   </View>
 
