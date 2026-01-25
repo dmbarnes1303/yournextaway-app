@@ -5,15 +5,41 @@ import { useRouter } from "expo-router";
 
 import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
+import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
 
 const LOGO = require("@/src/yna-logo.png");
 
-export default function LandingScreen() {
+type Feature = {
+  title: string;
+  body: string;
+  accent: "green" | "blue" | "gold";
+};
+
+function FeatureCard({ title, body, accent }: Feature) {
+  const pip =
+    accent === "green"
+      ? styles.pipGreen
+      : accent === "blue"
+      ? styles.pipBlue
+      : styles.pipGold;
+
+  return (
+    <View style={styles.featureCard}>
+      <View style={[styles.pip, pip]} />
+      <View style={{ flex: 1 }}>
+        <Text style={styles.featureTitle}>{title}</Text>
+        <Text style={styles.featureBody}>{body}</Text>
+      </View>
+    </View>
+  );
+}
+
+export default function Landing() {
   const router = useRouter();
 
   return (
-    <Background imageUrl={require("@/src/eiffeltower.jpeg")} overlayOpacity={0.72}>
+    <Background imageUrl={getBackground("home")} overlayOpacity={0.75}>
       <SafeAreaView style={styles.safe} edges={["bottom"]}>
         <ScrollView
           style={styles.scroll}
@@ -23,70 +49,65 @@ export default function LandingScreen() {
 
           {/* Brand */}
           <View style={styles.brand}>
-            <Image source={LOGO} style={styles.logo} resizeMode="contain" />
+            <Image source={LOGO} style={styles.logo} />
             <Text style={styles.tagline}>Plan • Fly • Watch • Repeat</Text>
           </View>
 
           {/* Hero */}
           <GlassCard style={styles.heroCard} intensity={22}>
-
-            <Text style={styles.h1}>Turn Matches Into Trips.</Text>
+            <Text style={styles.h1}>
+              Plan Football-First City Breaks Across Europe.
+            </Text>
 
             <Text style={styles.sub}>
-              YourNextAway helps you plan short breaks around football fixtures.
-              Find a match, save it as a trip, then build everything else in one place.
+              YourNextAway helps you plan city breaks around football fixtures.
+              Find a fixture, save it as a trip, then build everything else in one place —
+              travel, stay, tickets, and what to do.
             </Text>
 
             <View style={styles.divider} />
 
-            {/* Capabilities */}
             <Text style={styles.sectionTitle}>What You Can Do</Text>
 
-            <View style={styles.feature}>
-              <View style={[styles.dot, styles.green]} />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.featureTitle}>Find Matches Fast</Text>
-                <Text style={styles.featureBody}>
-                  Browse upcoming fixtures by league and date window, then open a match to start planning.
-                </Text>
-              </View>
+            <View style={styles.features}>
+              <FeatureCard
+                title="Find Fixtures Fast"
+                body="Browse upcoming matches by league and date window, then open a fixture to start planning."
+                accent="green"
+              />
+
+              <FeatureCard
+                title="Build Trips Around Matches"
+                body="Save a fixture, set your dates, add notes, and shape a simple city-break plan."
+                accent="blue"
+              />
+
+              <FeatureCard
+                title="Explore Cities Confidently"
+                body="Get clear guidance on where to stay, what to do, and how to make the most of your time."
+                accent="gold"
+              />
             </View>
 
-            <View style={styles.feature}>
-              <View style={[styles.dot, styles.blue]} />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.featureTitle}>Build Weekend Trips</Text>
-                <Text style={styles.featureBody}>
-                  Save a match, set your dates, add notes, and shape a simple short-break plan.
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.feature}>
-              <View style={[styles.dot, styles.gold]} />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.featureTitle}>Explore Cities Confidently</Text>
-                <Text style={styles.featureBody}>
-                  Get quick ideas for what to do, where to base yourself, and how to make the most of the city.
-                </Text>
-              </View>
-            </View>
-
-            {/* Pillars */}
-            <View style={styles.pillRow}>
-              <View style={styles.pill}>
-                <Text style={styles.pillKicker}>Designed For</Text>
-                <Text style={styles.pillValue}>Fast Decisions</Text>
+            <View style={styles.valueRow}>
+              <View style={styles.valueChip}>
+                <Text style={styles.valueChipKicker}>Designed For</Text>
+                <Text style={styles.valueChipMain}>Fast Decisions</Text>
               </View>
 
-              <View style={styles.pill}>
-                <Text style={styles.pillKicker}>Optimised For</Text>
-                <Text style={styles.pillValue}>Short Breaks</Text>
+              <View style={styles.valueChip}>
+                <Text style={styles.valueChipKicker}>Optimised For</Text>
+                <Text style={styles.valueChipMain}>Short Breaks</Text>
               </View>
 
-              <View style={styles.pill}>
-                <Text style={styles.pillKicker}>Focused{"\n"}On</Text>
-                <Text style={styles.pillValue} numberOfLines={1}>
+              <View style={styles.valueChip}>
+                <Text style={styles.valueChipKicker}>Focused{"\n"}On</Text>
+                <Text
+                  style={styles.valueChipMain}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.9}
+                >
                   Reliability
                 </Text>
               </View>
@@ -94,10 +115,9 @@ export default function LandingScreen() {
 
             <View style={styles.divider} />
 
-            {/* Expanded vision (sold as present) */}
             <Text style={styles.sectionTitle}>Everything In One Hub</Text>
 
-            <View style={styles.upgradesBox}>
+            <View style={styles.upgrades}>
               <Text style={styles.bullet}>• Flight and transport comparisons</Text>
               <Text style={styles.bullet}>• Hotel and area recommendations</Text>
               <Text style={styles.bullet}>• Ticket links and reminders</Text>
@@ -106,7 +126,6 @@ export default function LandingScreen() {
               <Text style={styles.bullet}>• Random trip generator</Text>
             </View>
 
-            {/* Actions */}
             <View style={styles.actions}>
               <Pressable
                 onPress={() => router.push("/onboarding")}
@@ -126,8 +145,9 @@ export default function LandingScreen() {
             <Text style={styles.micro}>
               Built for travellers planning football-focused city breaks.
             </Text>
-
           </GlassCard>
+
+          <View style={{ height: 10 }} />
 
         </ScrollView>
       </SafeAreaView>
@@ -135,7 +155,9 @@ export default function LandingScreen() {
   );
 }
 
-/* ----------------------------- Styles ----------------------------- */
+/* ---------------------------------- */
+/* Styles */
+/* ---------------------------------- */
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },
@@ -148,16 +170,16 @@ const styles = StyleSheet.create({
     gap: 14,
   },
 
-  /* Brand */
-
   brand: {
     alignItems: "center",
     gap: 10,
+    paddingTop: 6,
   },
 
   logo: {
-    width: 150,
-    height: 150,
+    width: 132,
+    height: 132,
+    resizeMode: "contain",
   },
 
   tagline: {
@@ -167,8 +189,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
   },
 
-  /* Hero */
-
   heroCard: {
     padding: theme.spacing.lg,
   },
@@ -177,6 +197,7 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     fontSize: theme.fontSize.xxl,
     fontWeight: "900",
+    lineHeight: 36,
     marginBottom: 10,
   },
 
@@ -200,29 +221,29 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
 
-  /* Features */
+  features: { gap: 10 },
 
-  feature: {
+  featureCard: {
     flexDirection: "row",
     gap: 10,
+    alignItems: "flex-start",
     padding: 12,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: "rgba(0,255,136,0.12)",
     backgroundColor: "rgba(0,0,0,0.22)",
-    marginBottom: 10,
   },
 
-  dot: {
+  pip: {
     width: 10,
     height: 10,
     borderRadius: 999,
     marginTop: 4,
   },
 
-  green: { backgroundColor: theme.colors.primary },
-  blue: { backgroundColor: theme.colors.accent },
-  gold: { backgroundColor: theme.colors.warning },
+  pipGreen: { backgroundColor: "rgba(0,255,136,0.9)" },
+  pipBlue: { backgroundColor: "rgba(46,110,255,0.75)" },
+  pipGold: { backgroundColor: "rgba(255,196,46,0.85)" },
 
   featureTitle: {
     color: theme.colors.text,
@@ -237,15 +258,13 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
 
-  /* Pills */
-
-  pillRow: {
+  valueRow: {
     marginTop: 12,
     flexDirection: "row",
     gap: 10,
   },
 
-  pill: {
+  valueChip: {
     flex: 1,
     borderRadius: 14,
     borderWidth: 1,
@@ -257,23 +276,20 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 
-  pillKicker: {
+  valueChipKicker: {
     color: theme.colors.textSecondary,
     fontSize: theme.fontSize.xs,
     fontWeight: "900",
-    lineHeight: 16,
   },
 
-  pillValue: {
+  valueChipMain: {
     marginTop: 6,
     color: theme.colors.text,
     fontSize: theme.fontSize.sm,
     fontWeight: "900",
   },
 
-  /* Upgrades */
-
-  upgradesBox: {
+  upgrades: {
     gap: 6,
     padding: 12,
     borderRadius: 14,
@@ -287,8 +303,6 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSize.sm,
     lineHeight: 18,
   },
-
-  /* Actions */
 
   actions: {
     marginTop: theme.spacing.lg,
