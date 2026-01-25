@@ -95,7 +95,7 @@ async function safeOpenUrl(url: string) {
 function SheetCard({ children }: { children: React.ReactNode }) {
   return (
     <View style={styles.sheetCard}>
-      <View pointerEvents="none" style={styles.sheetTint} />
+      <View style={[styles.sheetTint, { pointerEvents: "none" }]} />
       <View style={styles.sheetContent}>{children}</View>
     </View>
   );
