@@ -14,7 +14,6 @@ import BackButton from "@/src/components/BackButton";
 SplashScreen.preventAutoHideAsync();
 
 export const unstable_settings = {
-  // Always boot through app/index.tsx so it can redirect based on AsyncStorage
   initialRouteName: "index",
 };
 
@@ -32,7 +31,6 @@ export default function RootLayout() {
   return (
     <>
       <StatusBar style="light" />
-
       <GestureHandlerRootView style={styles.flex}>
         <Stack
           screenOptions={{
@@ -44,25 +42,18 @@ export default function RootLayout() {
             headerLeft: () => <BackButton fallbackHref="/(tabs)/home" />,
           }}
         >
-          {/* Boot redirect (no header) */}
           <Stack.Screen name="index" options={{ headerShown: false }} />
 
-          {/* Top funnel */}
           <Stack.Screen name="landing" options={{ headerShown: false }} />
+          <Stack.Screen name="onboarding" options={{ headerShown: true, headerTitle: "" }} />
 
-          {/* Onboarding manages its own header (it already sets headerShown: false internally) */}
-          <Stack.Screen name="onboarding" options={{ headerShown: false }} />
-
-          {/* Tabs */}
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
 
-          {/* Detail screens */}
           <Stack.Screen name="match/[id]" options={{ headerTitle: "Match" }} />
           <Stack.Screen name="city/[slug]" options={{ headerTitle: "City" }} />
           <Stack.Screen name="team/[slug]" options={{ headerTitle: "Team" }} />
           <Stack.Screen name="stadium/[slug]" options={{ headerTitle: "Stadium" }} />
 
-          {/* Trips */}
           <Stack.Screen name="trip/build" options={{ headerTitle: "Build Trip" }} />
           <Stack.Screen name="trip/[id]" options={{ headerTitle: "Trip Details" }} />
         </Stack>
