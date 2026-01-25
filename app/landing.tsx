@@ -12,44 +12,33 @@ import { theme } from "@/src/constants/theme";
 
 const STORAGE_KEYS = {
   seenLanding: "yna:seenLanding",
-  setupComplete: "yna:setupComplete",
 };
 
 const LOGO = require("@/src/yna-logo.png");
 
 export default function Landing() {
   const router = useRouter();
-  const [checking, setChecking] = useState(true);
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     let mounted = true;
 
     (async () => {
       try {
-        const done = await AsyncStorage.getItem(STORAGE_KEYS.setupComplete);
-
-        if (!mounted) return;
-
-        // If they have completed setup, never show Landing again.
-        if (done === "true") {
-          router.replace("/(tabs)/home");
-          return;
-        }
-
-        // Otherwise, we're going to show Landing now.
-        // Mark it as seen so next boot goes straight to Home.
+        // As soon as Landing is reached once, mark it as seen.
+        // Next app launch will boot straight into Home.
         await AsyncStorage.setItem(STORAGE_KEYS.seenLanding, "true");
       } catch {
-        // If storage fails, just show Landing (browse-first still works).
+        // ignore (we can still show landing)
       } finally {
-        if (mounted) setChecking(false);
+        if (mounted) setReady(true);
       }
     })();
 
     return () => {
       mounted = false;
     };
-  }, [router]);
+  }, []);
 
   return (
     <>
@@ -65,7 +54,7 @@ export default function Landing() {
             </View>
 
             <GlassCard style={styles.card} intensity={24}>
-              {checking ? (
+              {!ready ? (
                 <View style={styles.center}>
                   <ActivityIndicator />
                   <Text style={styles.muted}>Loading…</Text>
@@ -74,7 +63,7 @@ export default function Landing() {
                 <>
                   <Text style={styles.h1}>Start planning in one flow</Text>
                   <Text style={styles.body}>
-                    Choose a fixture, then build the full trip — travel, stay, tickets, and what to do — without juggling tabs.
+                    Browse fixtures first. When you’re ready, we’ll walk you through the onboarding and you can set your preferences later.
                   </Text>
 
                   <View style={styles.actions}>
