@@ -58,11 +58,11 @@ function showInfo(title: string, body: string) {
 }
 
 /**
- * Cross-device select modal:
- * - Fixes Android Alert button limits
- * - Searchable
- * - Active row styling
- * - Optional Clear action
+ * Cross-device picker (Android Alert truncates long button lists).
+ * - Search
+ * - Scrollable list (fixed height via flex)
+ * - Selected state
+ * - Optional clear action
  */
 function SelectModal({
   visible,
@@ -137,7 +137,7 @@ function SelectModal({
               value={q}
               onChangeText={setQ}
               placeholder="Search…"
-              placeholderTextColor="rgba(255,255,255,0.55)" // tweak: higher contrast
+              placeholderTextColor="rgba(255,255,255,0.40)"
               style={styles.searchInput}
               autoCorrect={false}
               autoCapitalize="none"
@@ -145,11 +145,13 @@ function SelectModal({
             />
           </View>
 
+          {/* IMPORTANT: flex:1 + nestedScrollEnabled makes this scroll reliably on Android */}
           <FlatList
             data={filtered}
             keyExtractor={(item) => item.value}
             renderItem={renderItem}
             keyboardShouldPersistTaps="handled"
+            nestedScrollEnabled
             style={styles.pickList}
             contentContainerStyle={{ paddingBottom: 8 }}
             showsVerticalScrollIndicator={false}
@@ -172,6 +174,8 @@ function SelectModal({
     </Modal>
   );
 }
+
+/* --------------------------- Locale / Country ---------------------------- */
 
 /**
  * Best-effort country code (no extra libs).
@@ -196,7 +200,10 @@ function getCountryCodeBestEffort(): string {
 }
 
 /* ------------------------------- Data Sets ------------------------------- */
-
+/**
+ * Major airports only for now.
+ * Expand whenever you add a new league/country.
+ */
 const AIRPORTS_BY_COUNTRY: Record<string, Option[]> = {
   GB: [
     { label: "London Heathrow (LHR)", value: "London Heathrow (LHR)" },
@@ -293,11 +300,8 @@ export default function ProfileScreen() {
   const [budgetTarget, setBudgetTarget] = useState<string>("Not Set");
   const [alerts, setAlerts] = useState<string>("Off");
 
-  // Unified selection UX: all pickers use the same modal
-  const [airportOpen, setAirportOpen] = useState(false);
-  const [currencyOpen, setCurrencyOpen] = useState(false);
-  const [languageOpen, setLanguageOpen] = useState(false);
-  const [budgetOpen, setBudgetOpen] = useState(false);
+  // Unified pickers
+  const [activePicker, setActivePicker] = useState<null | "airport" | "currency" | "language" | "budget">(null);
 
   const countryCode = useMemo(() => getCountryCodeBestEffort(), []);
   const airportOptions = useMemo<Option[]>(
@@ -311,7 +315,6 @@ export default function ProfileScreen() {
   }, [alerts, budgetTarget, currency]);
 
   const budgetOptions = useMemo<Option[]>(() => {
-    // Simple presets for now (no freeform numeric input yet)
     return [
       { label: "Not Set", value: "Not Set" },
       { label: `${currency} 150`, value: "150" },
@@ -322,7 +325,6 @@ export default function ProfileScreen() {
     ];
   }, [currency]);
 
-  // Actions
   const openPreferences = useCallback(() => {
     showInfo(
       "Preferences",
@@ -363,18 +365,20 @@ export default function ProfileScreen() {
     showInfo("Terms", "Terms will be available here.");
   }, []);
 
+  const closePicker = useCallback(() => setActivePicker(null), []);
+
   return (
     <Background imageUrl={getBackground("profile")} overlayOpacity={0.7}>
       <SafeAreaView style={styles.container} edges={["top"]}>
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-          {/* Header with top-right logo */}
+          {/* Header */}
           <View style={styles.headerRow}>
             <View style={{ flex: 1 }}>
               <Text style={styles.title}>Profile</Text>
               <Text style={styles.subtitle}>Account, Preferences, And App Info</Text>
             </View>
 
-            {/* Logo: bigger. Outer ring is in PNG, so crop/zoom to reduce dominance. */}
+            {/* Bigger logo; no UI border ring. Crop/zoom to reduce the “outer circle” dominance in the PNG. */}
             <View style={styles.headerLogoMask} pointerEvents="none">
               <Image source={LOGO} style={styles.headerLogoImage} resizeMode="cover" />
             </View>
@@ -399,14 +403,14 @@ export default function ProfileScreen() {
             <Text style={styles.sectionH}>Your Defaults</Text>
 
             <View style={styles.defaultsRow}>
-              <Pressable onPress={() => setAirportOpen(true)} style={styles.defaultChip}>
+              <Pressable onPress={() => setActivePicker("airport")} style={styles.defaultChip}>
                 <Text style={styles.defaultKicker}>Home Airport</Text>
                 <Text style={styles.defaultValue} numberOfLines={1}>
                   {homeAirport}
                 </Text>
               </Pressable>
 
-              <Pressable onPress={() => setCurrencyOpen(true)} style={styles.defaultChip}>
+              <Pressable onPress={() => setActivePicker("currency")} style={styles.defaultChip}>
                 <Text style={styles.defaultKicker}>Currency</Text>
                 <Text style={styles.defaultValue} numberOfLines={1}>
                   {currency}
@@ -415,14 +419,14 @@ export default function ProfileScreen() {
             </View>
 
             <View style={styles.defaultsRow}>
-              <Pressable onPress={() => setLanguageOpen(true)} style={styles.defaultChip}>
+              <Pressable onPress={() => setActivePicker("language")} style={styles.defaultChip}>
                 <Text style={styles.defaultKicker}>Language</Text>
                 <Text style={styles.defaultValue} numberOfLines={1}>
                   {language}
                 </Text>
               </Pressable>
 
-              <Pressable onPress={() => setBudgetOpen(true)} style={styles.defaultChip}>
+              <Pressable onPress={() => setActivePicker("budget")} style={styles.defaultChip}>
                 <Text style={styles.defaultKicker}>Budget & Alerts</Text>
                 <Text style={styles.defaultValue} numberOfLines={1}>
                   {budgetSummary}
@@ -448,16 +452,16 @@ export default function ProfileScreen() {
               title="Home Airport"
               subtitle={`Departure Defaults For Comparisons (${countryCode})`}
               rightText={homeAirport}
-              onPress={() => setAirportOpen(true)}
+              onPress={() => setActivePicker("airport")}
             />
-            <Row title="Currency" subtitle="Budgets And Comparisons" rightText={currency} onPress={() => setCurrencyOpen(true)} />
+            <Row title="Currency" subtitle="Budgets And Comparisons" rightText={currency} onPress={() => setActivePicker("currency")} />
             <Row title="Notifications" subtitle="Fixture Reminders And Trip Prompts" onPress={openNotifications} />
-            <Row title="Language" subtitle="App Language" rightText={language} onPress={() => setLanguageOpen(true)} />
+            <Row title="Language" subtitle="App Language" rightText={language} onPress={() => setActivePicker("language")} />
             <Row
               title="Budget & Alerts"
               subtitle="Target Budget And Drop Alerts"
               rightText={budgetTarget === "Not Set" ? "Not Set" : budgetSummary}
-              onPress={() => setBudgetOpen(true)}
+              onPress={() => setActivePicker("budget")}
               last
             />
           </GlassCard>
@@ -478,49 +482,47 @@ export default function ProfileScreen() {
           <View style={{ height: 10 }} />
         </ScrollView>
 
-        {/* Airport Picker */}
+        {/* Unified selection UX (all use the same modal picker) */}
+
         <SelectModal
-          visible={airportOpen}
+          visible={activePicker === "airport"}
           title="Home Airport"
           subtitle={`Select a departure airport (${countryCode}).`}
           options={airportOptions}
           selectedValue={homeAirport}
-          onClose={() => setAirportOpen(false)}
+          onClose={closePicker}
           onSelect={(v) => setHomeAirport(v)}
           allowClear
           clearLabel="Clear Airport"
         />
 
-        {/* Currency Picker */}
         <SelectModal
-          visible={currencyOpen}
+          visible={activePicker === "currency"}
           title="Currency"
           subtitle="Choose the currency used for budgets and comparisons."
           options={CURRENCY_OPTIONS}
           selectedValue={currency}
-          onClose={() => setCurrencyOpen(false)}
+          onClose={closePicker}
           onSelect={(v) => setCurrency(v)}
         />
 
-        {/* Language Picker */}
         <SelectModal
-          visible={languageOpen}
+          visible={activePicker === "language"}
           title="Language"
           subtitle="Select your language."
           options={LANGUAGE_OPTIONS}
           selectedValue={language}
-          onClose={() => setLanguageOpen(false)}
+          onClose={closePicker}
           onSelect={(v) => setLanguage(v)}
         />
 
-        {/* Budget Picker */}
         <SelectModal
-          visible={budgetOpen}
+          visible={activePicker === "budget"}
           title="Budget & Alerts"
           subtitle={`Pick a target budget. Alerts are currently: ${alerts}`}
           options={budgetOptions}
           selectedValue={budgetTarget}
-          onClose={() => setBudgetOpen(false)}
+          onClose={closePicker}
           onSelect={(v) => {
             if (v === "Not Set") setBudgetTarget("Not Set");
             else setBudgetTarget(v);
@@ -529,8 +531,8 @@ export default function ProfileScreen() {
           clearLabel="Clear Budget"
         />
 
-        {/* Alerts toggle: pinned while budget modal is open */}
-        {budgetOpen ? (
+        {/* Alerts toggle (kept visible while Budget modal is open) */}
+        {activePicker === "budget" ? (
           <View style={styles.alertToggleWrap} pointerEvents="box-none">
             <Pressable
               onPress={() => setAlerts((p) => (p === "Off" ? "On" : "Off"))}
@@ -565,7 +567,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
 
-  // Bigger logo. The “outer ring” is inside the PNG, so we crop/zoom.
+  // Logo: big, no UI border. Crop/zoom to reduce the ring inside the PNG.
   headerLogoMask: {
     width: 90,
     height: 90,
@@ -712,7 +714,8 @@ const styles = StyleSheet.create({
   modalCard: {
     padding: 14,
     borderRadius: 18,
-    maxHeight: "70%", // tweak: less tall / less heavy
+    maxHeight: "82%",
+    width: "100%",
   },
 
   modalHeader: {
@@ -741,8 +744,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.12)",
     backgroundColor: "rgba(0,0,0,0.22)",
-    paddingHorizontal: 14, // tweak: bigger tap target
-    paddingVertical: 12, // tweak: bigger tap target
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
 
   modalCloseText: {
@@ -769,6 +772,7 @@ const styles = StyleSheet.create({
   },
 
   pickList: {
+    flex: 1,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
@@ -783,11 +787,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: "rgba(255,255,255,0.06)", // tweak: lighter separators
+    borderBottomColor: "rgba(255,255,255,0.08)",
   },
 
   pickRowActive: {
-    backgroundColor: "rgba(0,255,136,0.06)", // tweak: clearer selected row
+    backgroundColor: "rgba(0,255,136,0.08)",
   },
 
   pickRowText: {
@@ -795,7 +799,6 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     fontSize: theme.fontSize.md,
     fontWeight: theme.fontWeight.black,
-    paddingRight: 10,
   },
 
   pickRowTextActive: {
@@ -803,10 +806,10 @@ const styles = StyleSheet.create({
   },
 
   pickTick: {
+    marginLeft: 10,
     color: theme.colors.primary,
     fontSize: 16,
     fontWeight: theme.fontWeight.black,
-    marginLeft: 10,
   },
 
   clearBtn: {
@@ -825,27 +828,28 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSize.sm,
   },
 
-  /* -------------------------- Alerts Toggle Chip -------------------------- */
+  /* ------------------------- Alerts Toggle Overlay ------------------------ */
 
   alertToggleWrap: {
     position: "absolute",
     left: 0,
     right: 0,
-    bottom: 18,
+    bottom: 22,
     alignItems: "center",
   },
 
   alertToggle: {
     borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.14)",
-    backgroundColor: "rgba(0,0,0,0.40)",
-    paddingHorizontal: 16,
     paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    backgroundColor: "rgba(0,0,0,0.35)",
   },
 
   alertToggleOn: {
-    borderColor: "rgba(0,255,136,0.28)",
+    borderColor: "rgba(0,255,136,0.30)",
+    backgroundColor: "rgba(0,255,136,0.08)",
   },
 
   alertToggleText: {
