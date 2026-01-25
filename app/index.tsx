@@ -5,33 +5,40 @@ import { useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const STORAGE_KEYS = {
-  setupComplete: "yna:setupComplete",
+  seenLanding: "yna:seenLanding",
 };
 
 export default function Index() {
   const router = useRouter();
 
   useEffect(() => {
-    let alive = true;
+    let mounted = true;
 
     (async () => {
       try {
-        const done = await AsyncStorage.getItem(STORAGE_KEYS.setupComplete);
+        const seen = await AsyncStorage.getItem(STORAGE_KEYS.seenLanding);
 
-        if (!alive) return;
+        if (!mounted) return;
 
-        router.replace(done === "true" ? "/(tabs)/home" : "/landing");
+        // Browse-first:
+        // - First ever open -> Landing
+        // - Returning user -> Home
+        if (seen === "true") {
+          router.replace("/(tabs)/home");
+        } else {
+          router.replace("/landing");
+        }
       } catch {
-        if (!alive) return;
-        router.replace("/landing");
+        // If storage fails, default to Landing (safe + predictable).
+        if (mounted) router.replace("/landing");
       }
     })();
 
     return () => {
-      alive = false;
+      mounted = false;
     };
   }, [router]);
 
-  // Blank screen while deciding where to route.
+  // Empty while we redirect
   return <View />;
 }
