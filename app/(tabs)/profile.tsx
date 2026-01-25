@@ -397,13 +397,18 @@ const styles = StyleSheet.create({
   // NO outer circle: no border, no background, just space for the logo.
   // Size equals the old circle footprint, logo fills it.
   headerLogoWrap: {
-    width: 90,
-    height: 90,
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 2,
-  },
-  headerLogo: { width: 90, height: 90 },
+  width: 90,
+  height: 90,
+  alignItems: "center",
+  justifyContent: "center",
+  marginTop: 0,       // align better with the header text
+  marginRight: -2,    // tiny optical nudge into the corner
+},
+
+headerLogo: {
+  width: "100%",
+  height: "100%",
+},
 
   title: {
     fontSize: theme.fontSize.xxl,
