@@ -14,6 +14,7 @@ type Step = {
   title: string; // Title Case
   subtitle: string; // Title Case
   body: string; // sentence case
+  bgKey: "onboarding1" | "onboarding2" | "onboarding3";
 };
 
 export default function Onboarding() {
@@ -23,48 +24,59 @@ export default function Onboarding() {
     () => [
       {
         title: "Start With A Fixture",
-        subtitle: "Find The Right Game For Your Dates",
+        subtitle: "Find The Right Match For Your Dates",
         body:
-          "Filter by league and date window, then open a fixture to anchor the trip. YourNextAway automatically plans around that city and matchday.",
+          "Browse fixtures across the top leagues, lock in your date window, and open a match to anchor the trip. From that moment, YourNextAway turns the fixture into a complete city-break plan.",
+        bgKey: "onboarding1",
       },
       {
-        title: "Build The Trip In One Place",
-        subtitle: "Match Flights And Stays To Your Budget",
+        title: "Build The Trip In One Hub",
+        subtitle: "Flights, Stays, Tickets, And Notes Together",
         body:
-          "Compare routes, shortlist areas to stay, and keep ticket links and notes together. Plan midweek bargains or weekend breaks without juggling ten tabs.",
+          "Compare travel options, shortlist where to stay, and keep ticket links and trip notes organised in one place. Plan midweek bargains or weekend breaks without juggling tabs, screenshots, and group chats.",
+        bgKey: "onboarding2",
       },
       {
         title: "Make The City Break Better",
         subtitle: "What To Do, Where To Base Yourself",
         body:
-          "Use city and team guides to shape the trip. Tap into top-rated ideas (including TripAdvisor inspiration), then save everything and store bookings in your wallet.",
+          "Use city and team guidance to shape the trip beyond the match. Pull top-rated ideas (including TripAdvisor inspiration), build a simple itinerary, then store bookings and references in your wallet so everything is ready when you travel.",
+        bgKey: "onboarding3",
       },
     ],
     []
   );
 
-  // Brand dots: green / blue / gold
   const dotColors = useMemo(() => [theme.colors.primary, theme.colors.accent, theme.colors.warning], []);
   const [i, setI] = useState(0);
   const isLast = i === steps.length - 1;
 
+  const bg = steps[i]?.bgKey ?? "onboarding1";
+
   return (
-    <Background imageUrl={getBackground("home")} overlayOpacity={0.75}>
+    <Background imageUrl={getBackground(bg)} overlayOpacity={0.68}>
       <SafeAreaView style={styles.safe} edges={["bottom"]}>
         <View style={styles.screen}>
-          {/* Back (pill) */}
-          <Pressable onPress={() => router.back()} style={styles.backPill}>
-            <Text style={styles.backText}>← Back</Text>
-          </Pressable>
+          {/* Top row */}
+          <View style={styles.topRow}>
+            <Pressable onPress={() => router.back()} style={styles.backPill} hitSlop={10}>
+              <Text style={styles.backText}>← Back</Text>
+            </Pressable>
 
-          {/* Brand block (logo + tagline only) */}
+            <View style={styles.planPill}>
+              <Text style={styles.planLabel}>Plan</Text>
+              <Text style={styles.planValue}>Full Access</Text>
+            </View>
+          </View>
+
+          {/* Brand block */}
           <View style={styles.brand}>
             <Image source={LOGO} style={styles.logo} resizeMode="contain" />
             <Text style={styles.tagline}>Plan • Fly • Watch • Repeat</Text>
           </View>
 
           {/* Card */}
-          <GlassCard style={styles.card} intensity={22}>
+          <GlassCard style={styles.card} intensity={24}>
             <Text style={styles.kicker}>
               Step {i + 1} of {steps.length}
             </Text>
@@ -84,8 +96,8 @@ export default function Onboarding() {
                     style={[
                       styles.dot,
                       {
-                        backgroundColor: active ? base : "rgba(255,255,255,0.14)",
-                        borderColor: active ? base : "rgba(255,255,255,0.12)",
+                        backgroundColor: active ? base : "rgba(255,255,255,0.12)",
+                        borderColor: active ? base : "rgba(255,255,255,0.10)",
                       },
                     ]}
                   />
@@ -111,7 +123,7 @@ export default function Onboarding() {
             </View>
 
             <Text style={styles.micro}>
-              Travel-first planning around fixtures. Save the trip, then build it properly.
+              Football-first city breaks across Europe — planned properly in one flow.
             </Text>
           </GlassCard>
         </View>
@@ -132,8 +144,14 @@ const styles = StyleSheet.create({
     gap: 12,
   },
 
+  topRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+
   backPill: {
-    alignSelf: "flex-start",
     borderRadius: 999,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.12)",
@@ -143,14 +161,25 @@ const styles = StyleSheet.create({
   },
   backText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
 
+  planPill: {
+    borderRadius: 999,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: "rgba(0,255,136,0.28)",
+    backgroundColor: "rgba(0,0,0,0.22)",
+    alignItems: "flex-end",
+  },
+  planLabel: { color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: "900" },
+  planValue: { marginTop: 2, color: theme.colors.primary, fontSize: theme.fontSize.sm, fontWeight: "900" },
+
   brand: {
     alignItems: "center",
     gap: 8,
     paddingBottom: 4,
   },
 
-  // Slightly larger than before to feel “hero”
-  logo: { width: 128, height: 128 },
+  logo: { width: 132, height: 132 },
 
   tagline: {
     color: theme.colors.primary,
@@ -159,7 +188,6 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSize.sm,
   },
 
-  // Pull card higher: less dead space above, feels more “designed”
   card: {
     padding: theme.spacing.lg,
     marginTop: 6,
