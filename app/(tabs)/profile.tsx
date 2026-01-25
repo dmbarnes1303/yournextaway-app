@@ -19,6 +19,9 @@ import GlassCard from "@/src/components/GlassCard";
 import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
 
+import { getDeviceLocaleInfo } from "@/src/utils/deviceLocale";
+import { getAirportOptionsForCountry, AirportOption } from "@/src/data/airports/airportsByCountry";
+
 type RowProps = {
   title: string;
   subtitle?: string;
@@ -35,7 +38,11 @@ function Row({ title, subtitle, rightText, onPress, last }: RowProps) {
         {subtitle ? <Text style={styles.rowSubtitle}>{subtitle}</Text> : null}
       </View>
 
-      {rightText ? <Text style={styles.rowRight} numberOfLines={1}>{rightText}</Text> : null}
+      {rightText ? (
+        <Text style={styles.rowRight} numberOfLines={1}>
+          {rightText}
+        </Text>
+      ) : null}
       <Text style={styles.chev}>›</Text>
     </Pressable>
   );
@@ -45,97 +52,7 @@ function showInfo(title: string, body: string) {
   Alert.alert(title, body);
 }
 
-type AirportOption = { label: string; value: string };
-
-// Curated “major airports” list for the initial rollout languages/regions.
-// Expand over time (and/or replace with a real dataset) without changing UI logic.
-const AIRPORTS_BY_COUNTRY: Record<string, AirportOption[]> = {
-  GB: [
-    { label: "London Heathrow (LHR)", value: "London Heathrow (LHR)" },
-    { label: "London Gatwick (LGW)", value: "London Gatwick (LGW)" },
-    { label: "London Stansted (STN)", value: "London Stansted (STN)" },
-    { label: "London Luton (LTN)", value: "London Luton (LTN)" },
-    { label: "London City (LCY)", value: "London City (LCY)" },
-    { label: "Manchester (MAN)", value: "Manchester (MAN)" },
-    { label: "Birmingham (BHX)", value: "Birmingham (BHX)" },
-    { label: "Edinburgh (EDI)", value: "Edinburgh (EDI)" },
-    { label: "Glasgow (GLA)", value: "Glasgow (GLA)" },
-    { label: "Bristol (BRS)", value: "Bristol (BRS)" },
-    { label: "Newcastle (NCL)", value: "Newcastle (NCL)" },
-    { label: "Liverpool (LPL)", value: "Liverpool (LPL)" },
-    { label: "Leeds Bradford (LBA)", value: "Leeds Bradford (LBA)" },
-    { label: "Belfast Intl (BFS)", value: "Belfast Intl (BFS)" },
-    { label: "Belfast City (BHD)", value: "Belfast City (BHD)" },
-    { label: "East Midlands (EMA)", value: "East Midlands (EMA)" },
-    { label: "Cardiff (CWL)", value: "Cardiff (CWL)" },
-  ],
-  ES: [
-    { label: "Madrid (MAD)", value: "Madrid (MAD)" },
-    { label: "Barcelona (BCN)", value: "Barcelona (BCN)" },
-    { label: "Málaga (AGP)", value: "Málaga (AGP)" },
-    { label: "Alicante (ALC)", value: "Alicante (ALC)" },
-    { label: "Valencia (VLC)", value: "Valencia (VLC)" },
-    { label: "Seville (SVQ)", value: "Seville (SVQ)" },
-    { label: "Palma de Mallorca (PMI)", value: "Palma de Mallorca (PMI)" },
-    { label: "Bilbao (BIO)", value: "Bilbao (BIO)" },
-    { label: "Tenerife South (TFS)", value: "Tenerife South (TFS)" },
-    { label: "Gran Canaria (LPA)", value: "Gran Canaria (LPA)" },
-  ],
-  IT: [
-    { label: "Rome Fiumicino (FCO)", value: "Rome Fiumicino (FCO)" },
-    { label: "Milan Malpensa (MXP)", value: "Milan Malpensa (MXP)" },
-    { label: "Milan Linate (LIN)", value: "Milan Linate (LIN)" },
-    { label: "Bergamo (BGY)", value: "Bergamo (BGY)" },
-    { label: "Venice (VCE)", value: "Venice (VCE)" },
-    { label: "Naples (NAP)", value: "Naples (NAP)" },
-    { label: "Bologna (BLQ)", value: "Bologna (BLQ)" },
-    { label: "Turin (TRN)", value: "Turin (TRN)" },
-    { label: "Florence (FLR)", value: "Florence (FLR)" },
-    { label: "Pisa (PSA)", value: "Pisa (PSA)" },
-  ],
-  DE: [
-    { label: "Frankfurt (FRA)", value: "Frankfurt (FRA)" },
-    { label: "Munich (MUC)", value: "Munich (MUC)" },
-    { label: "Berlin (BER)", value: "Berlin (BER)" },
-    { label: "Düsseldorf (DUS)", value: "Düsseldorf (DUS)" },
-    { label: "Hamburg (HAM)", value: "Hamburg (HAM)" },
-    { label: "Cologne Bonn (CGN)", value: "Cologne Bonn (CGN)" },
-    { label: "Stuttgart (STR)", value: "Stuttgart (STR)" },
-    { label: "Nuremberg (NUE)", value: "Nuremberg (NUE)" },
-  ],
-  FR: [
-    { label: "Paris Charles de Gaulle (CDG)", value: "Paris Charles de Gaulle (CDG)" },
-    { label: "Paris Orly (ORY)", value: "Paris Orly (ORY)" },
-    { label: "Nice (NCE)", value: "Nice (NCE)" },
-    { label: "Lyon (LYS)", value: "Lyon (LYS)" },
-    { label: "Marseille (MRS)", value: "Marseille (MRS)" },
-    { label: "Toulouse (TLS)", value: "Toulouse (TLS)" },
-    { label: "Bordeaux (BOD)", value: "Bordeaux (BOD)" },
-    { label: "Nantes (NTE)", value: "Nantes (NTE)" },
-  ],
-};
-
-function getCountryCodeBestEffort(): string {
-  // No extra libraries: best-effort only.
-  // We try locale first (e.g. en-GB). If missing, we infer from timezone for top 5.
-  try {
-    const locale = Intl.DateTimeFormat().resolvedOptions().locale || "";
-    const m = locale.match(/-([A-Z]{2})\b/);
-    if (m?.[1]) return m[1];
-
-    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
-    if (tz.includes("Europe/London")) return "GB";
-    if (tz.includes("Europe/Madrid")) return "ES";
-    if (tz.includes("Europe/Rome")) return "IT";
-    if (tz.includes("Europe/Berlin")) return "DE";
-    if (tz.includes("Europe/Paris")) return "FR";
-  } catch {
-    // ignore
-  }
-  return "GB";
-}
-
-// Alert button limits vary (iOS tends to be stricter). Keep lists short per page.
+// Alert action limits vary (iOS is stricter). Paginate options.
 function chunk<T>(arr: T[], size: number): T[][] {
   const out: T[][] = [];
   for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
@@ -146,12 +63,10 @@ export default function ProfileScreen() {
   const LOGO = useMemo(() => require("@/src/yna-logo.png"), []);
   const { width } = useWindowDimensions();
 
-  // Header logo sizing that works across devices:
-  // - Large enough to feel “brand-first”
-  // - Clamped so it won’t crush the header on smaller screens
+  // Responsive top-right logo size (no outer circle/border/background).
   const logoSize = useMemo(() => {
-    const ideal = Math.round(width * 0.22); // responsive feel
-    return Math.max(56, Math.min(90, ideal)); // clamp
+    const ideal = Math.round(width * 0.22);
+    return Math.max(56, Math.min(90, ideal));
   }, [width]);
 
   // Guest identity until auth exists
@@ -161,17 +76,21 @@ export default function ProfileScreen() {
   const planName = useMemo(() => "Full Access", []);
   const languageOptions = useMemo(() => ["English", "Spanish", "Italian", "German", "French"], []);
 
+  // Device locale + timezone (best-effort) — centralised for future reuse.
+  const deviceInfo = useMemo(() => getDeviceLocaleInfo("GB"), []);
+  const countryCode = deviceInfo.countryCode;
+
+  const airportOptions = useMemo<AirportOption[]>(
+    () => getAirportOptionsForCountry(countryCode, "GB"),
+    [countryCode]
+  );
+
   // Defaults (stateful for now; wire persistence later)
   const [homeAirport, setHomeAirport] = useState<string>("Not Set");
   const [currency, setCurrency] = useState<string>("GBP");
   const [language, setLanguage] = useState<string>("English");
   const [budgetTarget, setBudgetTarget] = useState<string>("Not Set");
   const [alerts, setAlerts] = useState<string>("Off");
-
-  const countryCode = useMemo(() => getCountryCodeBestEffort(), []);
-  const airportOptions = useMemo<AirportOption[]>(() => {
-    return AIRPORTS_BY_COUNTRY[countryCode] ?? AIRPORTS_BY_COUNTRY.GB;
-  }, [countryCode]);
 
   const budgetSummary =
     budgetTarget === "Not Set"
@@ -186,33 +105,30 @@ export default function ProfileScreen() {
   }, []);
 
   const openHomeAirport = useCallback(() => {
-    // Keep each page short to avoid alert action limits.
-    // iOS tends to be more strict than Android; use smaller chunk size there.
     const pageSize = Platform.OS === "ios" ? 6 : 8;
     const pages = chunk(airportOptions, pageSize);
 
     const openPage = (pageIndex: number) => {
       const page = pages[pageIndex] ?? [];
-      const actions = [
-        { text: "Cancel", style: "cancel" as const },
+
+      const actions: { text: string; onPress?: () => void; style?: "default" | "cancel" | "destructive" }[] = [
+        { text: "Cancel", style: "cancel" },
         ...page.map((o) => ({ text: o.label, onPress: () => setHomeAirport(o.value) })),
       ];
 
       if (pages.length > 1 && pageIndex < pages.length - 1) {
-        actions.push({
-          text: "More…",
-          onPress: () => openPage(pageIndex + 1),
-        });
+        actions.push({ text: "More…", onPress: () => openPage(pageIndex + 1) });
       }
 
-      actions.push({
-        text: "Clear",
-        style: "destructive" as const,
-        onPress: () => setHomeAirport("Not Set"),
-      });
+      actions.push({ text: "Clear", style: "destructive", onPress: () => setHomeAirport("Not Set") });
 
       Alert.alert("Home Airport", `Select a departure airport (${countryCode}).`, actions, { cancelable: true });
     };
+
+    if (!airportOptions.length) {
+      Alert.alert("Home Airport", "No airports available for your region yet.", [{ text: "OK" }], { cancelable: true });
+      return;
+    }
 
     openPage(0);
   }, [airportOptions, countryCode]);
@@ -242,10 +158,7 @@ export default function ProfileScreen() {
     Alert.alert(
       "Language",
       "Select your language.",
-      [
-        { text: "Cancel", style: "cancel" },
-        ...languageOptions.map((l) => ({ text: l, onPress: () => setLanguage(l) })),
-      ],
+      [{ text: "Cancel", style: "cancel" }, ...languageOptions.map((l) => ({ text: l, onPress: () => setLanguage(l) }))],
       { cancelable: true }
     );
   }, [languageOptions]);
@@ -303,11 +216,7 @@ export default function ProfileScreen() {
   return (
     <Background imageUrl={getBackground("profile")} overlayOpacity={0.7}>
       <SafeAreaView style={styles.container} edges={["top"]}>
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={styles.content}
-          showsVerticalScrollIndicator={false}
-        >
+        <ScrollView style={styles.scrollView} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           {/* Header with top-right logo (no outer circle) */}
           <View style={styles.headerRow}>
             <View style={{ flex: 1 }}>
@@ -315,10 +224,7 @@ export default function ProfileScreen() {
               <Text style={styles.subtitle}>Account, Preferences, And App Info</Text>
             </View>
 
-            <View
-              style={[styles.headerLogoWrap, { width: logoSize, height: logoSize }]}
-              pointerEvents="none"
-            >
+            <View style={[styles.headerLogoWrap, { width: logoSize, height: logoSize }]} pointerEvents="none">
               <Image source={LOGO} style={styles.headerLogo} resizeMode="contain" />
             </View>
           </View>
@@ -386,11 +292,7 @@ export default function ProfileScreen() {
 
           {/* Settings */}
           <GlassCard style={[styles.card, { padding: 0 }]} intensity={24}>
-            <Row
-              title="Preferences"
-              subtitle="Date Window, League Coverage, And Planning Behaviour"
-              onPress={openPreferences}
-            />
+            <Row title="Preferences" subtitle="Date Window, League Coverage, And Planning Behaviour" onPress={openPreferences} />
             <Row
               title="Home Airport"
               subtitle={`Departure Defaults For Comparisons (${countryCode})`}
@@ -447,8 +349,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
 
-  // IMPORTANT: no circle, no border, no background.
-  // Logo is just placed in the corner, sized responsively.
+  // No outer circle. Just the logo.
   headerLogoWrap: {
     alignItems: "flex-end",
     justifyContent: "flex-start",
@@ -477,12 +378,7 @@ const styles = StyleSheet.create({
   identityTop: { flexDirection: "row", alignItems: "center", gap: 12 },
 
   name: { color: theme.colors.text, fontSize: theme.fontSize.lg, fontWeight: theme.fontWeight.black },
-  meta: {
-    marginTop: 6,
-    color: theme.colors.textSecondary,
-    fontSize: theme.fontSize.sm,
-    fontWeight: theme.fontWeight.bold,
-  },
+  meta: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, fontWeight: theme.fontWeight.bold },
 
   planPill: {
     borderRadius: 999,
@@ -519,12 +415,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
 
-  defaultKicker: {
-    color: theme.colors.textSecondary,
-    fontSize: theme.fontSize.xs,
-    fontWeight: theme.fontWeight.black,
-    lineHeight: 14,
-  },
+  defaultKicker: { color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: theme.fontWeight.black, lineHeight: 14 },
   defaultValue: { color: theme.colors.text, fontSize: theme.fontSize.sm, fontWeight: theme.fontWeight.black },
 
   quickActions: { marginTop: 14, flexDirection: "row", gap: 10 },
@@ -539,7 +430,7 @@ const styles = StyleSheet.create({
   smallBtnPrimary: { borderColor: theme.colors.primary, backgroundColor: "rgba(0,0,0,0.40)" },
   smallBtnText: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.sm },
   smallBtnGhost: { borderColor: theme.colors.border, backgroundColor: "rgba(0,0,0,0.22)" },
-  smallBtnGhostText: { color: theme.colors.textSecondary, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.sm },
+  smallBtnGhostText: { color: theme.colors.textSecondary, fontWeight: theme.fontWeight.black, fontSize: theme.fontWeight ? theme.fontSize.sm : 14 },
 
   row: {
     flexDirection: "row",
@@ -553,13 +444,7 @@ const styles = StyleSheet.create({
   rowLast: { borderBottomWidth: 0 },
 
   rowTitle: { color: theme.colors.text, fontSize: theme.fontSize.md, fontWeight: theme.fontWeight.black },
-  rowSubtitle: {
-    marginTop: 4,
-    color: theme.colors.textSecondary,
-    fontSize: theme.fontSize.sm,
-    lineHeight: 18,
-    fontWeight: theme.fontWeight.bold,
-  },
+  rowSubtitle: { marginTop: 4, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18, fontWeight: theme.fontWeight.bold },
 
   rowRight: {
     color: theme.colors.textSecondary,
