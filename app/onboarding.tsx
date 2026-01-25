@@ -1,5 +1,12 @@
-import React, { useMemo, useState } from "react";
-import { View, Text, StyleSheet, Pressable, Image } from "react-native";
+import React, { useMemo, useState, useRef, useEffect } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  Pressable,
+  Image,
+  Animated,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 
@@ -11,9 +18,9 @@ import { theme } from "@/src/constants/theme";
 const LOGO = require("@/src/yna-logo.png");
 
 type Step = {
-  title: string; // Title Case
-  subtitle: string; // Title Case
-  body: string; // sentence case
+  title: string;
+  subtitle: string;
+  body: string;
   bgKey: "onboarding1" | "onboarding2" | "onboarding3";
 };
 
@@ -47,19 +54,41 @@ export default function Onboarding() {
     []
   );
 
-  const dotColors = useMemo(() => [theme.colors.primary, theme.colors.accent, theme.colors.warning], []);
   const [i, setI] = useState(0);
   const isLast = i === steps.length - 1;
 
+  // Animation
+  const opacity = useRef(new Animated.Value(1)).current;
+  const translateY = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    opacity.setValue(0);
+    translateY.setValue(12);
+
+    Animated.parallel([
+      Animated.timing(opacity, {
+        toValue: 1,
+        duration: 220,
+        useNativeDriver: true,
+      }),
+      Animated.timing(translateY, {
+        toValue: 0,
+        duration: 220,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [i]);
+
+  const dotColors = [theme.colors.primary, theme.colors.accent, theme.colors.warning];
   const bg = steps[i]?.bgKey ?? "onboarding1";
 
   return (
     <Background imageUrl={getBackground(bg)} overlayOpacity={0.68}>
       <SafeAreaView style={styles.safe} edges={["bottom"]}>
         <View style={styles.screen}>
-          {/* Top row */}
+          {/* Top Row */}
           <View style={styles.topRow}>
-            <Pressable onPress={() => router.back()} style={styles.backPill} hitSlop={10}>
+            <Pressable onPress={() => router.back()} style={styles.backPill}>
               <Text style={styles.backText}>← Back</Text>
             </Pressable>
 
@@ -69,7 +98,7 @@ export default function Onboarding() {
             </View>
           </View>
 
-          {/* Brand block */}
+          {/* Brand */}
           <View style={styles.brand}>
             <Image source={LOGO} style={styles.logo} resizeMode="contain" />
             <Text style={styles.tagline}>Plan • Fly • Watch • Repeat</Text>
@@ -77,27 +106,34 @@ export default function Onboarding() {
 
           {/* Card */}
           <GlassCard style={styles.card} intensity={24}>
-            <Text style={styles.kicker}>
-              Step {i + 1} of {steps.length}
-            </Text>
+            <Animated.View
+              style={{
+                opacity,
+                transform: [{ translateY }],
+              }}
+            >
+              <Text style={styles.kicker}>
+                Step {i + 1} of {steps.length}
+              </Text>
 
-            <Text style={styles.h1}>{steps[i].title}</Text>
-            <Text style={styles.h2}>{steps[i].subtitle}</Text>
-            <Text style={styles.body}>{steps[i].body}</Text>
+              <Text style={styles.h1}>{steps[i].title}</Text>
+              <Text style={styles.h2}>{steps[i].subtitle}</Text>
+              <Text style={styles.body}>{steps[i].body}</Text>
+            </Animated.View>
 
             {/* Dots */}
             <View style={styles.dots}>
               {steps.map((_, idx) => {
-                const base = dotColors[idx] ?? "rgba(255,255,255,0.16)";
                 const active = idx === i;
+                const color = dotColors[idx];
                 return (
                   <View
                     key={idx}
                     style={[
                       styles.dot,
                       {
-                        backgroundColor: active ? base : "rgba(255,255,255,0.12)",
-                        borderColor: active ? base : "rgba(255,255,255,0.10)",
+                        backgroundColor: active ? color : "rgba(255,255,255,0.12)",
+                        borderColor: active ? color : "rgba(255,255,255,0.12)",
                       },
                     ]}
                   />
@@ -107,7 +143,10 @@ export default function Onboarding() {
 
             {/* Actions */}
             <View style={styles.actions}>
-              <Pressable onPress={() => router.replace("/(tabs)/home")} style={[styles.btn, styles.btnGhost]}>
+              <Pressable
+                onPress={() => router.replace("/(tabs)/home")}
+                style={[styles.btn, styles.btnGhost]}
+              >
                 <Text style={styles.btnGhostText}>Skip For Now</Text>
               </Pressable>
 
@@ -118,7 +157,9 @@ export default function Onboarding() {
                 }}
                 style={[styles.btn, styles.btnPrimary]}
               >
-                <Text style={styles.btnPrimaryText}>{isLast ? "Start Planning" : "Continue"}</Text>
+                <Text style={styles.btnPrimaryText}>
+                  {isLast ? "Start Planning" : "Continue"}
+                </Text>
               </Pressable>
             </View>
 
@@ -146,9 +187,7 @@ const styles = StyleSheet.create({
 
   topRow: {
     flexDirection: "row",
-    alignItems: "center",
     justifyContent: "space-between",
-    gap: 12,
   },
 
   backPill: {
@@ -159,7 +198,12 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 14,
   },
-  backText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
+
+  backText: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: theme.fontSize.sm,
+  },
 
   planPill: {
     borderRadius: 999,
@@ -168,16 +212,21 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(0,255,136,0.28)",
     backgroundColor: "rgba(0,0,0,0.22)",
-    alignItems: "flex-end",
   },
-  planLabel: { color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: "900" },
-  planValue: { marginTop: 2, color: theme.colors.primary, fontSize: theme.fontSize.sm, fontWeight: "900" },
 
-  brand: {
-    alignItems: "center",
-    gap: 8,
-    paddingBottom: 4,
+  planLabel: {
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSize.xs,
+    fontWeight: "900",
   },
+
+  planValue: {
+    color: theme.colors.primary,
+    fontSize: theme.fontSize.sm,
+    fontWeight: "900",
+  },
+
+  brand: { alignItems: "center", gap: 8 },
 
   logo: { width: 132, height: 132 },
 
@@ -190,12 +239,10 @@ const styles = StyleSheet.create({
 
   card: {
     padding: theme.spacing.lg,
-    marginTop: 6,
   },
 
   kicker: {
     color: theme.colors.textSecondary,
-    fontSize: theme.fontSize.sm,
     fontWeight: "900",
     marginBottom: 10,
   },
@@ -204,16 +251,14 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     fontSize: theme.fontSize.xl,
     fontWeight: "900",
-    marginBottom: 6,
-    lineHeight: 30,
   },
 
   h2: {
     color: theme.colors.text,
     fontSize: theme.fontSize.md,
     fontWeight: "900",
+    marginTop: 4,
     marginBottom: 10,
-    opacity: 0.95,
   },
 
   body: {
@@ -252,7 +297,7 @@ const styles = StyleSheet.create({
 
   btnPrimary: {
     borderColor: theme.colors.primary,
-    backgroundColor: "rgba(0,0,0,0.50)",
+    backgroundColor: "rgba(0,0,0,0.5)",
   },
 
   btnPrimaryText: {
@@ -277,7 +322,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
     color: "rgba(255,255,255,0.55)",
     fontSize: theme.fontSize.xs,
-    lineHeight: 16,
     fontWeight: "800",
   },
 });
