@@ -41,7 +41,6 @@ function Row({ title, subtitle, rightText, onPress, last }: RowProps) {
           {rightText}
         </Text>
       ) : null}
-
       <Text style={styles.chev}>›</Text>
     </Pressable>
   );
@@ -51,6 +50,9 @@ function showInfo(title: string, body: string) {
   Alert.alert(title, body);
 }
 
+/**
+ * Best-effort country code (no extra libs).
+ */
 function getCountryCodeBestEffort(): string {
   try {
     const locale = Intl.DateTimeFormat().resolvedOptions().locale || "";
@@ -70,7 +72,10 @@ function getCountryCodeBestEffort(): string {
 }
 
 const STORAGE_KEYS = {
-  onboardingComplete: "yna:onboardingComplete",
+  // Boot flag used by app/index.tsx
+  seenLanding: "yna:seenLanding",
+
+  // Setup-related flags + fields
   setupComplete: "yna:setupComplete",
   plan: "yna:plan",
   homeAirport: "yna:profile.homeAirport",
@@ -182,6 +187,7 @@ export default function ProfileScreen() {
 
   const [loading, setLoading] = useState(true);
 
+  // Persisted user defaults
   const [plan, setPlan] = useState<PlanValue>("not_set");
   const [homeAirport, setHomeAirport] = useState("Not Set");
   const [currency, setCurrency] = useState("GBP");
@@ -194,10 +200,7 @@ export default function ProfileScreen() {
   const closePicker = useCallback(() => setActivePicker(null), []);
 
   const countryCode = useMemo(() => getCountryCodeBestEffort(), []);
-  const airportOptions = useMemo(
-    () => AIRPORTS_BY_COUNTRY[countryCode] ?? AIRPORTS_BY_COUNTRY.GB,
-    [countryCode]
-  );
+  const airportOptions = useMemo(() => AIRPORTS_BY_COUNTRY[countryCode] ?? AIRPORTS_BY_COUNTRY.GB, [countryCode]);
 
   const budgetSummary = useMemo(() => {
     if (budgetTarget === "Not Set") return "Not Set";
@@ -215,6 +218,7 @@ export default function ProfileScreen() {
     ];
   }, [currency]);
 
+  // Responsive logo sizing
   const logoSize = useMemo(() => {
     const max = 90;
     const min = 64;
@@ -229,23 +233,16 @@ export default function ProfileScreen() {
 
     (async () => {
       try {
-        const [
-          storedSetup,
-          storedPlan,
-          storedAirport,
-          storedCurrency,
-          storedLanguage,
-          storedBudget,
-          storedAlerts,
-        ] = await Promise.all([
-          AsyncStorage.getItem(STORAGE_KEYS.setupComplete),
-          AsyncStorage.getItem(STORAGE_KEYS.plan),
-          AsyncStorage.getItem(STORAGE_KEYS.homeAirport),
-          AsyncStorage.getItem(STORAGE_KEYS.currency),
-          AsyncStorage.getItem(STORAGE_KEYS.language),
-          AsyncStorage.getItem(STORAGE_KEYS.budgetTarget),
-          AsyncStorage.getItem(STORAGE_KEYS.alerts),
-        ]);
+        const [storedSetup, storedPlan, storedAirport, storedCurrency, storedLanguage, storedBudget, storedAlerts] =
+          await Promise.all([
+            AsyncStorage.getItem(STORAGE_KEYS.setupComplete),
+            AsyncStorage.getItem(STORAGE_KEYS.plan),
+            AsyncStorage.getItem(STORAGE_KEYS.homeAirport),
+            AsyncStorage.getItem(STORAGE_KEYS.currency),
+            AsyncStorage.getItem(STORAGE_KEYS.language),
+            AsyncStorage.getItem(STORAGE_KEYS.budgetTarget),
+            AsyncStorage.getItem(STORAGE_KEYS.alerts),
+          ]);
 
         if (!mounted) return;
 
@@ -258,7 +255,7 @@ export default function ProfileScreen() {
         if (storedBudget) setBudgetTarget(storedBudget);
         if (storedAlerts === "On" || storedAlerts === "Off") setAlerts(storedAlerts);
       } catch {
-        // silent fail
+        // ignore
       } finally {
         if (mounted) setLoading(false);
       }
@@ -269,28 +266,20 @@ export default function ProfileScreen() {
     };
   }, []);
 
-  // Persist settings (best-effort) after initial load.
+  // Save changes best-effort whenever user updates settings
   useEffect(() => {
     if (loading) return;
 
     (async () => {
       try {
-        const writes: Array<Promise<void>> = [];
-
-        // Plan: only persist when chosen; otherwise remove key to avoid noise.
-        if (plan === "free" || plan === "premium") {
-          writes.push(AsyncStorage.setItem(STORAGE_KEYS.plan, plan) as any);
-        } else {
-          writes.push(AsyncStorage.removeItem(STORAGE_KEYS.plan) as any);
-        }
-
-        writes.push(AsyncStorage.setItem(STORAGE_KEYS.homeAirport, homeAirport) as any);
-        writes.push(AsyncStorage.setItem(STORAGE_KEYS.currency, currency) as any);
-        writes.push(AsyncStorage.setItem(STORAGE_KEYS.language, language) as any);
-        writes.push(AsyncStorage.setItem(STORAGE_KEYS.budgetTarget, budgetTarget) as any);
-        writes.push(AsyncStorage.setItem(STORAGE_KEYS.alerts, alerts) as any);
-
-        await Promise.all(writes);
+        await Promise.all([
+          AsyncStorage.setItem(STORAGE_KEYS.plan, plan),
+          AsyncStorage.setItem(STORAGE_KEYS.homeAirport, homeAirport),
+          AsyncStorage.setItem(STORAGE_KEYS.currency, currency),
+          AsyncStorage.setItem(STORAGE_KEYS.language, language),
+          AsyncStorage.setItem(STORAGE_KEYS.budgetTarget, budgetTarget),
+          AsyncStorage.setItem(STORAGE_KEYS.alerts, alerts),
+        ]);
       } catch {
         // ignore
       }
@@ -302,10 +291,6 @@ export default function ProfileScreen() {
       "Preferences",
       "Set your planning defaults here: date window, league coverage, sorting, and general behaviour.\n\nNext: wire this into the core fixture + trip build flow."
     );
-  }, []);
-
-  const openNotifications = useCallback(() => {
-    showInfo("Notifications", "Fixture reminders and trip prompts.\n\nKeep it quiet and useful: no spam, no noise.");
   }, []);
 
   const openFAQ = useCallback(() => {
@@ -331,7 +316,7 @@ export default function ProfileScreen() {
   }, []);
 
   const canFinishSetup = useMemo(() => {
-    return homeAirport !== "Not Set" && (plan === "free" || plan === "premium");
+    return homeAirport !== "Not Set" && plan !== "not_set";
   }, [homeAirport, plan]);
 
   const finishSetup = useCallback(async () => {
@@ -358,13 +343,25 @@ export default function ProfileScreen() {
         style: "destructive",
         onPress: async () => {
           try {
-            // Reset both keys to avoid confusing boot logic.
-            await Promise.all([
-              AsyncStorage.removeItem(STORAGE_KEYS.setupComplete),
-              AsyncStorage.removeItem(STORAGE_KEYS.onboardingComplete),
+            // IMPORTANT:
+            // app/index.tsx uses seenLanding to decide Landing vs Home.
+            // If you don't reset this, you will NEVER see Landing again.
+            await AsyncStorage.multiSet([
+              [STORAGE_KEYS.setupComplete, "false"],
+              [STORAGE_KEYS.seenLanding, "false"],
+              [STORAGE_KEYS.plan, "not_set"],
+              [STORAGE_KEYS.homeAirport, "Not Set"],
+              [STORAGE_KEYS.budgetTarget, "Not Set"],
+              [STORAGE_KEYS.alerts, "Off"],
             ]);
+
             setSetupComplete(false);
-            Alert.alert("Reset complete", "Setup will run again next time you open the app.");
+            setPlan("not_set");
+            setHomeAirport("Not Set");
+            setBudgetTarget("Not Set");
+            setAlerts("Off");
+
+            Alert.alert("Reset complete", "Landing will show again next time you open the app.");
           } catch {
             Alert.alert("Reset failed", "Couldn’t reset setup status.");
           }
@@ -373,7 +370,9 @@ export default function ProfileScreen() {
     ]);
   }, []);
 
-  const planSummary = useMemo(() => planLabel(plan), [plan]);
+  const planSummary = useMemo(() => {
+    return plan === "not_set" ? "Not Set" : planLabel(plan);
+  }, [plan]);
 
   return (
     <Background imageUrl={getBackground("profile")} overlayOpacity={0.7}>
@@ -385,11 +384,16 @@ export default function ProfileScreen() {
               <Text style={styles.subtitle}>Account, Preferences, And App Info</Text>
             </View>
 
-            <View style={[styles.headerLogoMask, { width: logoSize, height: logoSize }]} pointerEvents="none">
-              <Image source={LOGO} style={[styles.headerLogoImage, { width: logoSize, height: logoSize }]} resizeMode="cover" />
+            <View style={[styles.headerLogoMask, { width: logoSize, height: logoSize, pointerEvents: "none" }]}>
+              <Image
+                source={LOGO}
+                style={[styles.headerLogoImage, { width: logoSize, height: logoSize }]}
+                resizeMode="cover"
+              />
             </View>
           </View>
 
+          {/* Setup status + Finish setup */}
           <GlassCard style={styles.card} intensity={24}>
             <View style={styles.identityTop}>
               <View style={{ flex: 1 }}>
@@ -477,7 +481,7 @@ export default function ProfileScreen() {
                 <Text style={styles.smallBtnText}>Edit Preferences</Text>
               </Pressable>
 
-              <Pressable onPress={openNotifications} style={[styles.smallBtn, styles.smallBtnGhost]}>
+              <Pressable onPress={() => showInfo("Notifications", "Fixture reminders and trip prompts.\n\nKeep it quiet and useful: no spam, no noise.")} style={[styles.smallBtn, styles.smallBtnGhost]}>
                 <Text style={styles.smallBtnGhostText}>Notifications</Text>
               </Pressable>
             </View>
@@ -516,17 +520,18 @@ export default function ProfileScreen() {
           <View style={{ height: 10 }} />
         </ScrollView>
 
+        {/* Pickers */}
         <SelectModal
           visible={activePicker === "plan"}
           title="Choose Your Plan"
           subtitle="Pick Free or Premium. This is required to finish setup."
           options={PLAN_OPTIONS}
-          selectedValue={plan}
+          selectedValue={plan === "not_set" ? "" : plan}
           onClose={closePicker}
           onSelect={(v) => setPlan(v === "free" || v === "premium" ? v : "not_set")}
           allowClear
           clearLabel="Clear Plan"
-          clearValue="not_set"
+          clearValue=""
         />
 
         <SelectModal
@@ -575,8 +580,9 @@ export default function ProfileScreen() {
           clearValue="Not Set"
         />
 
+        {/* Alerts toggle overlay shown only while budget picker is open */}
         {activePicker === "budget" ? (
-          <View style={styles.alertToggleWrap} pointerEvents="box-none">
+          <View style={[styles.alertToggleWrap, { pointerEvents: "box-none" }]}>
             <Pressable
               onPress={() => setAlerts((p) => (p === "Off" ? "On" : "Off"))}
               style={[styles.alertToggle, alerts === "On" && styles.alertToggleOn]}
@@ -657,7 +663,12 @@ const styles = StyleSheet.create({
 
   sectionH: { color: theme.colors.text, fontSize: theme.fontSize.md, fontWeight: theme.fontWeight.black },
 
-  setupRow: { marginTop: 12, flexDirection: "row", alignItems: "center", gap: 10 },
+  setupRow: {
+    marginTop: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
 
   setupStatus: {
     flex: 1,
@@ -671,8 +682,18 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
 
-  setupKicker: { color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: theme.fontWeight.black, lineHeight: 14 },
-  setupValue: { color: theme.colors.text, fontSize: theme.fontSize.sm, fontWeight: theme.fontWeight.black },
+  setupKicker: {
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSize.xs,
+    fontWeight: theme.fontWeight.black,
+    lineHeight: 14,
+  },
+
+  setupValue: {
+    color: theme.colors.text,
+    fontSize: theme.fontSize.sm,
+    fontWeight: theme.fontWeight.black,
+  },
 
   finishBtn: {
     borderRadius: 14,
@@ -684,12 +705,30 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
 
-  finishBtnOn: { borderColor: theme.colors.primary, backgroundColor: "rgba(0,0,0,0.40)" },
-  finishBtnOff: { borderColor: "rgba(255,255,255,0.12)", backgroundColor: "rgba(0,0,0,0.18)", opacity: 0.65 },
+  finishBtnOn: {
+    borderColor: theme.colors.primary,
+    backgroundColor: "rgba(0,0,0,0.40)",
+  },
 
-  finishBtnText: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.sm },
+  finishBtnOff: {
+    borderColor: "rgba(255,255,255,0.12)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+    opacity: 0.65,
+  },
 
-  setupHint: { marginTop: 10, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18, fontWeight: theme.fontWeight.bold },
+  finishBtnText: {
+    color: theme.colors.text,
+    fontWeight: theme.fontWeight.black,
+    fontSize: theme.fontSize.sm,
+  },
+
+  setupHint: {
+    marginTop: 10,
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSize.sm,
+    lineHeight: 18,
+    fontWeight: theme.fontWeight.bold,
+  },
 
   defaultsRow: { marginTop: 12, flexDirection: "row", gap: 10 },
 
@@ -705,12 +744,23 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
 
-  defaultKicker: { color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: theme.fontWeight.black, lineHeight: 14 },
+  defaultKicker: {
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSize.xs,
+    fontWeight: theme.fontWeight.black,
+    lineHeight: 14,
+  },
   defaultValue: { color: theme.colors.text, fontSize: theme.fontSize.sm, fontWeight: theme.fontWeight.black },
 
   quickActions: { marginTop: 14, flexDirection: "row", gap: 10 },
 
-  smallBtn: { flex: 1, borderRadius: 14, paddingVertical: 12, alignItems: "center", borderWidth: 1 },
+  smallBtn: {
+    flex: 1,
+    borderRadius: 14,
+    paddingVertical: 12,
+    alignItems: "center",
+    borderWidth: 1,
+  },
   smallBtnPrimary: { borderColor: theme.colors.primary, backgroundColor: "rgba(0,0,0,0.40)" },
   smallBtnText: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.sm },
   smallBtnGhost: { borderColor: theme.colors.border, backgroundColor: "rgba(0,0,0,0.22)" },
@@ -728,9 +778,22 @@ const styles = StyleSheet.create({
   rowLast: { borderBottomWidth: 0 },
 
   rowTitle: { color: theme.colors.text, fontSize: theme.fontSize.md, fontWeight: theme.fontWeight.black },
-  rowSubtitle: { marginTop: 4, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18, fontWeight: theme.fontWeight.bold },
+  rowSubtitle: {
+    marginTop: 4,
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSize.sm,
+    lineHeight: 18,
+    fontWeight: theme.fontWeight.bold,
+  },
 
-  rowRight: { maxWidth: 150, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, fontWeight: theme.fontWeight.black, marginRight: 2 },
+  rowRight: {
+    maxWidth: 150,
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSize.sm,
+    fontWeight: theme.fontWeight.black,
+    marginRight: 2,
+  },
+
   chev: { color: theme.colors.textSecondary, fontSize: 26, marginTop: -2 },
 
   footerNote: {
@@ -742,7 +805,14 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
 
-  alertToggleWrap: { position: "absolute", left: 0, right: 0, bottom: 22, alignItems: "center" },
+  /* Alerts Toggle Overlay */
+  alertToggleWrap: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 22,
+    alignItems: "center",
+  },
 
   alertToggle: {
     borderRadius: 999,
@@ -753,7 +823,14 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.35)",
   },
 
-  alertToggleOn: { borderColor: "rgba(0,255,136,0.30)", backgroundColor: "rgba(0,255,136,0.08)" },
+  alertToggleOn: {
+    borderColor: "rgba(0,255,136,0.30)",
+    backgroundColor: "rgba(0,255,136,0.08)",
+  },
 
-  alertToggleText: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.sm },
+  alertToggleText: {
+    color: theme.colors.text,
+    fontWeight: theme.fontWeight.black,
+    fontSize: theme.fontSize.sm,
+  },
 });
