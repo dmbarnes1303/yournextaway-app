@@ -1,6 +1,6 @@
 // app/landing.tsx
-import React from "react";
-import { View, Text, StyleSheet, Pressable, Image } from "react-native";
+import React, { useEffect, useState } from "react";
+import { View, Text, StyleSheet, Pressable, ActivityIndicator, Image } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Stack, useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -12,22 +12,44 @@ import { theme } from "@/src/constants/theme";
 
 const STORAGE_KEYS = {
   seenLanding: "yna:seenLanding",
+  setupComplete: "yna:setupComplete",
 };
 
 const LOGO = require("@/src/yna-logo.png");
 
 export default function Landing() {
   const router = useRouter();
+  const [checking, setChecking] = useState(true);
 
-  async function proceed(path: string) {
-    try {
-      await AsyncStorage.setItem(STORAGE_KEYS.seenLanding, "true");
-    } catch {
-      // ignore – user can still proceed
-    } finally {
-      router.replace(path);
-    }
-  }
+  useEffect(() => {
+    let mounted = true;
+
+    (async () => {
+      try {
+        const done = await AsyncStorage.getItem(STORAGE_KEYS.setupComplete);
+
+        if (!mounted) return;
+
+        // If they have completed setup, never show Landing again.
+        if (done === "true") {
+          router.replace("/(tabs)/home");
+          return;
+        }
+
+        // Otherwise, we're going to show Landing now.
+        // Mark it as seen so next boot goes straight to Home.
+        await AsyncStorage.setItem(STORAGE_KEYS.seenLanding, "true");
+      } catch {
+        // If storage fails, just show Landing (browse-first still works).
+      } finally {
+        if (mounted) setChecking(false);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, [router]);
 
   return (
     <>
@@ -36,41 +58,38 @@ export default function Landing() {
       <Background imageUrl={getBackground("landing")} overlayOpacity={0.72}>
         <SafeAreaView style={styles.safe} edges={["bottom"]}>
           <View style={styles.screen}>
-            {/* Brand */}
             <View style={styles.brand}>
               <Image source={LOGO} style={styles.logo} resizeMode="contain" />
               <Text style={styles.title}>YourNextAway</Text>
-              <Text style={styles.subtitle}>
-                Football-first city breaks, planned properly.
-              </Text>
+              <Text style={styles.subtitle}>Football-first city breaks, planned properly.</Text>
             </View>
 
-            {/* Card */}
             <GlassCard style={styles.card} intensity={24}>
-              <Text style={styles.h1}>Turn matches into trips</Text>
+              {checking ? (
+                <View style={styles.center}>
+                  <ActivityIndicator />
+                  <Text style={styles.muted}>Loading…</Text>
+                </View>
+              ) : (
+                <>
+                  <Text style={styles.h1}>Start planning in one flow</Text>
+                  <Text style={styles.body}>
+                    Choose a fixture, then build the full trip — travel, stay, tickets, and what to do — without juggling tabs.
+                  </Text>
 
-              <Text style={styles.body}>
-                Start with a fixture. Build the full city break in one place —
-                travel, stay, tickets, and what to do.
-              </Text>
+                  <View style={styles.actions}>
+                    <Pressable onPress={() => router.push("/onboarding")} style={[styles.btn, styles.btnPrimary]}>
+                      <Text style={styles.btnPrimaryText}>Get started</Text>
+                    </Pressable>
 
-              <View style={styles.actions}>
-                <Pressable
-                  onPress={() => proceed("/onboarding")}
-                  style={[styles.btn, styles.btnPrimary]}
-                >
-                  <Text style={styles.btnPrimaryText}>Get started</Text>
-                </Pressable>
+                    <Pressable onPress={() => router.replace("/(tabs)/home")} style={[styles.btn, styles.btnGhost]}>
+                      <Text style={styles.btnGhostText}>Explore first</Text>
+                    </Pressable>
+                  </View>
 
-                <Pressable
-                  onPress={() => proceed("/(tabs)/home")}
-                  style={[styles.btn, styles.btnGhost]}
-                >
-                  <Text style={styles.btnGhostText}>Explore first</Text>
-                </Pressable>
-              </View>
-
-              <Text style={styles.micro}>Plan • Fly • Watch • Repeat</Text>
+                  <Text style={styles.micro}>Plan • Fly • Watch • Repeat</Text>
+                </>
+              )}
             </GlassCard>
           </View>
         </SafeAreaView>
@@ -114,6 +133,8 @@ const styles = StyleSheet.create({
   },
 
   card: { padding: theme.spacing.lg },
+
+  center: { paddingVertical: 8, alignItems: "center", gap: 10 },
 
   h1: {
     color: theme.colors.text,
@@ -172,5 +193,11 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSize.xs,
     fontWeight: theme.fontWeight.black,
     letterSpacing: 0.6,
+  },
+
+  muted: {
+    color: theme.colors.textSecondary,
+    fontWeight: theme.fontWeight.bold,
+    fontSize: theme.fontSize.sm,
   },
 });
