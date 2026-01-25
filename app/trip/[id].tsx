@@ -1,6 +1,6 @@
 // app/trip/[id].tsx
 import React, { useEffect, useMemo, useState } from "react";
-import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert } from "react-native";
+import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert, Linking } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 
@@ -16,9 +16,8 @@ import { getFixtureById } from "@/src/services/apiFootball";
 import { formatUkDateOnly, formatUkDateTimeMaybe } from "@/src/utils/formatters";
 import { getTopThingsToDoForTrip } from "@/src/data/cityGuides";
 
-/**
- * Safe param coercion (expo-router can give string | string[] | undefined).
- */
+/* -------------------------------- Helpers -------------------------------- */
+
 function coerceId(v: unknown): string | null {
   if (typeof v === "string") {
     const s = v.trim();
@@ -38,6 +37,21 @@ function summaryLine(t: Trip) {
   return `${a} → ${b} • ${n} match${n === 1 ? "" : "es"}`;
 }
 
+async function safeOpenUrl(url: string) {
+  const u = String(url ?? "").trim();
+  if (!u) return;
+
+  try {
+    const can = await Linking.canOpenURL(u);
+    if (!can) throw new Error("Cannot open URL");
+    await Linking.openURL(u);
+  } catch {
+    Alert.alert("Couldn’t open link", "Your device could not open that link.");
+  }
+}
+
+/* -------------------------------- Screen -------------------------------- */
+
 export default function TripDetailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
@@ -52,25 +66,29 @@ export default function TripDetailScreen() {
   const [fxError, setFxError] = useState<string | null>(null);
   const [fixture, setFixture] = useState<any | null>(null);
 
-  // Subscribe to store + load trips if needed
+  // Subscribe to trips store + load if needed
   useEffect(() => {
     let mounted = true;
 
-    const syncTrip = () => {
+    const sync = () => {
+      const s = tripsStore.getState();
+      if (!mounted) return;
+
+      setLoaded(s.loaded);
+
       if (!tripId) {
         setTrip(null);
         return;
       }
-      const s = tripsStore.getState();
-      setLoaded(s.loaded);
+
       const t = s.trips.find((x) => x.id === tripId) ?? null;
-      if (mounted) setTrip(t);
+      setTrip(t);
     };
 
-    const unsub = tripsStore.subscribe(() => syncTrip());
+    const unsub = tripsStore.subscribe(() => sync());
 
-    // initial sync
-    syncTrip();
+    // initial
+    sync();
 
     // ensure loaded
     (async () => {
@@ -78,9 +96,9 @@ export default function TripDetailScreen() {
         try {
           await tripsStore.loadTrips();
         } catch {
-          // best-effort; UI will show empty state
+          // best-effort; UI handles not found
         } finally {
-          syncTrip();
+          sync();
         }
       }
     })();
@@ -91,7 +109,7 @@ export default function TripDetailScreen() {
     };
   }, [tripId]);
 
-  // Load fixture (if trip has match)
+  // Load linked fixture (if any)
   useEffect(() => {
     let cancelled = false;
 
@@ -106,10 +124,12 @@ export default function TripDetailScreen() {
       try {
         const r = await getFixtureById(matchId);
         if (cancelled) return;
+
         if (!r) {
           setFxError("Match details couldn’t be loaded right now.");
           return;
         }
+
         setFixture(r);
       } catch (e: any) {
         if (cancelled) return;
@@ -146,6 +166,7 @@ export default function TripDetailScreen() {
     return {
       title: `${home} vs ${away}`,
       meta: extra ? `${kick} • ${extra}` : kick,
+      fixtureId: fixture?.fixture?.id != null ? String(fixture.fixture.id) : null,
     };
   }, [fixture]);
 
@@ -153,6 +174,17 @@ export default function TripDetailScreen() {
     if (!cityName || cityName === "Trip") return null;
     return getTopThingsToDoForTrip(cityName);
   }, [cityName]);
+
+  function onEdit() {
+    if (!trip) return;
+    router.push({ pathname: "/trip/build", params: { tripId: trip.id } } as any);
+  }
+
+  function onOpenMatch() {
+    const id = matchLine?.fixtureId;
+    if (!id) return;
+    router.push({ pathname: "/match/[id]", params: { id } } as any);
+  }
 
   async function onDelete() {
     if (!trip) return;
@@ -172,17 +204,6 @@ export default function TripDetailScreen() {
         },
       },
     ]);
-  }
-
-  function onEdit() {
-    if (!trip) return;
-    router.push({ pathname: "/trip/build", params: { tripId: trip.id } } as any);
-  }
-
-  function onOpenMatch() {
-    const id = fixture?.fixture?.id != null ? String(fixture.fixture.id) : null;
-    if (!id) return;
-    router.push({ pathname: "/match/[id]", params: { id } } as any);
   }
 
   return (
@@ -276,8 +297,6 @@ export default function TripDetailScreen() {
                       <Text style={styles.rowTitle}>{matchLine.title}</Text>
                       <Text style={styles.rowMeta}>{matchLine.meta}</Text>
 
-                      <View style={{ height: 10 }} />
-
                       <Pressable onPress={onOpenMatch} style={styles.linkBtn}>
                         <Text style={styles.linkText}>Open match</Text>
                       </Pressable>
@@ -295,7 +314,7 @@ export default function TripDetailScreen() {
                     <>
                       <Text style={styles.cityBlockTitle}>Top things to do</Text>
                       <Text style={styles.cityBlockSub}>
-                        {cityBundle.hasGuide ? "Curated picks + quick tips." : "No curated guide yet — link out for current picks."}
+                        {cityBundle.hasGuide ? "Curated picks + quick tips." : "No curated guide yet — browse current picks."}
                       </Text>
 
                       {cityBundle.hasGuide && (cityBundle.items?.length ?? 0) > 0 ? (
@@ -327,19 +346,8 @@ export default function TripDetailScreen() {
                       ) : null}
 
                       {cityBundle.tripAdvisorUrl ? (
-                        <Pressable
-                          onPress={() => {
-                            // keep link opening inside city guide helpers; this is just a simple route out
-                            // if you want safeOpenUrl reused, we can factor it into a shared util.
-                            try {
-                              router.push({ pathname: "/webview", params: { url: cityBundle.tripAdvisorUrl } } as any);
-                            } catch {
-                              // If you do not have a webview route, do nothing (avoid crash)
-                            }
-                          }}
-                          style={[styles.linkBtn, { marginTop: 12 }]}
-                        >
-                          <Text style={styles.linkText}>Browse on TripAdvisor</Text>
+                        <Pressable onPress={() => safeOpenUrl(cityBundle.tripAdvisorUrl)} style={[styles.linkBtn, { marginTop: 12 }]}>
+                          <Text style={styles.linkText}>Open TripAdvisor</Text>
                         </Pressable>
                       ) : null}
                     </>
@@ -355,6 +363,8 @@ export default function TripDetailScreen() {
     </Background>
   );
 }
+
+/* -------------------------------- Styles -------------------------------- */
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },
