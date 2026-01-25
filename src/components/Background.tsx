@@ -1,30 +1,49 @@
 // src/components/Background.tsx
 import React from "react";
-import { ImageBackground, StyleSheet, View, ImageSourcePropType } from "react-native";
+import { ImageBackground, StyleSheet, View, type ImageSourcePropType } from "react-native";
 import { theme } from "@/src/constants/theme";
 
 interface BackgroundProps {
-  imageUrl: ImageSourcePropType; // local require() or remote { uri }
+  // Preferred (supports local require() and remote uri)
+  imageSource?: ImageSourcePropType;
+
+  // Legacy (remote URL string)
+  imageUrl?: string;
+
   children: React.ReactNode;
   overlayOpacity?: number; // 0..1
 }
 
 /**
  * Touch-safe background wrapper:
- * - Background image + overlay can never steal touches.
- * - Content is rendered in a separate layer above.
+ * - Background + overlay never steal touches.
+ * - Supports local require() backgrounds and remote URLs.
  */
-export default function Background({ imageUrl, children, overlayOpacity = 0.85 }: BackgroundProps) {
+export default function Background({
+  imageSource,
+  imageUrl,
+  children,
+  overlayOpacity = 0.85,
+}: BackgroundProps) {
   const clamped = Math.max(0, Math.min(1, overlayOpacity));
+
+  const source: ImageSourcePropType | null =
+    imageSource ?? (imageUrl ? { uri: imageUrl } : null);
 
   return (
     <View style={styles.container}>
+      {/* Non-interactive background layer */}
       <View style={StyleSheet.absoluteFill} pointerEvents="none">
-        <ImageBackground source={imageUrl} style={styles.image} resizeMode="cover">
+        {source ? (
+          <ImageBackground source={source} style={styles.image} resizeMode="cover">
+            <View style={[styles.overlay, { opacity: clamped }]} />
+          </ImageBackground>
+        ) : (
           <View style={[styles.overlay, { opacity: clamped }]} />
-        </ImageBackground>
+        )}
       </View>
 
+      {/* Interactive content layer */}
       <View style={styles.content} pointerEvents="box-none">
         {children}
       </View>
