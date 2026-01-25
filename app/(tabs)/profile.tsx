@@ -237,7 +237,7 @@ export default function ProfileScreen() {
               <Text style={styles.subtitle}>Account, Preferences, And App Info</Text>
             </View>
 
-            <View style={[styles.headerLogoMask, { width: logoSize, height: logoSize }]} pointerEvents="none">
+            <View style={[styles.headerLogoMask, { width: logoSize, height: logoSize, pointerEvents: "none" }]}>
               <Image
                 source={LOGO}
                 style={[styles.headerLogoImage, { width: logoSize, height: logoSize }]}
@@ -387,7 +387,7 @@ export default function ProfileScreen() {
         />
 
         {activePicker === "budget" ? (
-          <View style={styles.alertToggleWrap} pointerEvents="box-none">
+          <View style={[styles.alertToggleWrap, { pointerEvents: "box-none" }]}>
             <Pressable
               onPress={() => setAlerts((p) => (p === "Off" ? "On" : "Off"))}
               style={[styles.alertToggle, alerts === "On" && styles.alertToggleOn]}
