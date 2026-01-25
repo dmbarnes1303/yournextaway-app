@@ -13,12 +13,13 @@ interface GlassCardProps {
 /**
  * GlassCard (Android-safe)
  *
- * Reality:
- * - Android + Expo Go + Blur/absolute overlays + animated parents = unreliable compositing.
- *
  * Policy:
  * - iOS/web: BlurView background layer is fine.
  * - Android: NO blur, NO absolute tint overlay. Just a single translucent background.
+ *
+ * Brand:
+ * - Neutral black/charcoal base (NOT navy).
+ * - Neon green is used by screens/components as accents, not as the card base color.
  */
 export default function GlassCard({ children, style, intensity = 20 }: GlassCardProps) {
   const useBlur = Platform.OS !== "android";
@@ -34,7 +35,6 @@ export default function GlassCard({ children, style, intensity = 20 }: GlassCard
         />
       ) : null}
 
-      {/* IMPORTANT: On Android we do not add any absolute overlay views. */}
       <View style={styles.content}>{children}</View>
     </View>
   );
@@ -46,7 +46,11 @@ const styles = StyleSheet.create({
     borderRadius: theme.borderRadius.lg,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: Platform.OS === "android" ? "rgba(26, 31, 46, 0.72)" : "rgba(26, 31, 46, 0.55)",
+
+    // IMPORTANT: Neutral charcoal glass, not blue.
+    // Android needs slightly stronger opacity because there is no blur.
+    backgroundColor: Platform.OS === "android" ? "rgba(0,0,0,0.52)" : "rgba(0,0,0,0.38)",
+
     overflow: "hidden",
   },
   content: {
