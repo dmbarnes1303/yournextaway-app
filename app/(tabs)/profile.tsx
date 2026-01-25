@@ -1,5 +1,5 @@
 // app/(tabs)/profile.tsx
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { View, Text, StyleSheet, ScrollView, Pressable, Alert } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -30,84 +30,132 @@ function Row({ title, subtitle, rightText, onPress, last }: RowProps) {
   );
 }
 
-function pill(label: string, value: string) {
-  return { label, value };
+function showInfo(title: string, body: string) {
+  Alert.alert(title, body);
 }
 
 export default function ProfileScreen() {
-  // No auth yet: show a clean “Guest” identity (as requested).
+  // Guest identity until auth exists
   const displayName = useMemo(() => "Guest Traveller", []);
   const email = useMemo(() => "Not Signed In", []);
 
-  // Defaults are placeholders for now (until Preferences is wired).
-  const defaults = useMemo(
-    () => ({
-      airport: "Not Set",
-      currency: "GBP",
-      language: "English",
-      budget: "Not Set",
-      alerts: "Off",
-    }),
-    []
-  );
+  // Product choices you approved
+  const planName = useMemo(() => "Full Access", []);
+  const languageOptions = useMemo(() => ["English", "Spanish", "Italian", "German", "French"], []);
 
-  const planName = useMemo(() => "Premium", []);
-
-  function showInfo(title: string, body: string) {
-    Alert.alert(title, body);
-  }
+  // Defaults (stateful, so you can wire persistence later)
+  const [homeAirport, setHomeAirport] = useState<string>("Not Set");
+  const [currency, setCurrency] = useState<string>("GBP");
+  const [language, setLanguage] = useState<string>("English");
+  const [budgetTarget, setBudgetTarget] = useState<string>("Not Set");
+  const [alerts, setAlerts] = useState<string>("Off");
 
   function openPreferences() {
     showInfo(
       "Preferences",
-      "This is where you’ll control defaults like date window, league coverage, and planning behaviour.\n\nHook-up comes next."
+      "Set your planning defaults here: date window, league coverage, sorting, and general behaviour.\n\nNext: wire this into the core fixture + trip build flow."
     );
   }
 
   function openHomeAirport() {
-    showInfo(
+    Alert.alert(
       "Home Airport",
-      "Set your default departure airport so routes and travel suggestions can be tailored to you."
+      "Choose your default departure airport for travel comparisons.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Set To London (LHR)",
+          onPress: () => setHomeAirport("London (LHR)"),
+        },
+        {
+          text: "Set To London (LGW)",
+          onPress: () => setHomeAirport("London (LGW)"),
+        },
+        {
+          text: "Clear",
+          style: "destructive",
+          onPress: () => setHomeAirport("Not Set"),
+        },
+      ],
+      { cancelable: true }
     );
   }
 
   function openCurrency() {
-    showInfo("Currency", "Choose the currency used for budgets and comparisons.");
+    Alert.alert(
+      "Currency",
+      "Choose the currency used for budgets and comparisons.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "GBP", onPress: () => setCurrency("GBP") },
+        { text: "EUR", onPress: () => setCurrency("EUR") },
+        { text: "USD", onPress: () => setCurrency("USD") },
+      ],
+      { cancelable: true }
+    );
   }
 
   function openNotifications() {
     showInfo(
       "Notifications",
-      "Fixture reminders, price alerts, and trip prompts. We’ll keep this minimal and useful — no spam."
+      "Fixture reminders and trip prompts.\n\nWe’ll keep this quiet and useful: no spam, no noise."
     );
   }
 
   function openLanguage() {
-    showInfo(
+    Alert.alert(
       "Language",
-      "Choose your language. We’ll add localisation once the core flow is fully locked."
+      "Select your language.",
+      [
+        { text: "Cancel", style: "cancel" },
+        ...languageOptions.map((l) => ({
+          text: l,
+          onPress: () => setLanguage(l),
+        })),
+      ],
+      { cancelable: true }
     );
   }
 
   function openBudgetAlerts() {
-    showInfo(
+    Alert.alert(
       "Budget & Alerts",
-      "Set a target budget and get alerts when travel or stay options drop into range."
+      "Set a target budget and toggle alerts.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Toggle Alerts",
+          onPress: () => setAlerts((prev) => (prev === "Off" ? "On" : "Off")),
+        },
+        {
+          text: "Set Budget To 250",
+          onPress: () => setBudgetTarget("250"),
+        },
+        {
+          text: "Set Budget To 500",
+          onPress: () => setBudgetTarget("500"),
+        },
+        {
+          text: "Clear Budget",
+          style: "destructive",
+          onPress: () => setBudgetTarget("Not Set"),
+        },
+      ],
+      { cancelable: true }
+    );
+  }
+
+  function managePlan() {
+    showInfo(
+      "Plan",
+      "Plan: Full Access\n\nFull Access includes the full planning hub: comparisons, guides, wallet storage, and smart trip tools."
     );
   }
 
   function openFAQ() {
     showInfo(
       "FAQ",
-      "What this app does:\n• Start with a fixture\n• Build a trip around it\n• Keep flights, stays, tickets and plans in one hub\n\nIf something feels unclear, that’s on the UX — report it and we’ll tighten it."
-    );
-  }
-
-  function managePlan() {
-    // IMPORTANT: no “coming soon” tone; treat it as part of a finished product.
-    showInfo(
-      "Plan",
-      "Plan: Premium\n\nPremium unlocks the full hub: comparisons, guides, wallet storage, and smart trip tools.\n\nBilling setup can be wired when you’re ready."
+      "How it works:\n• Start with a fixture\n• Build a trip around it\n• Keep travel, stays, tickets and plans in one hub\n\nIf something feels unclear, report it and we’ll tighten the flow."
     );
   }
 
@@ -121,13 +169,16 @@ export default function ProfileScreen() {
   function privacy() {
     showInfo(
       "Privacy",
-      "Trips and notes are stored locally by default.\n\nWhen accounts sync is added, you’ll be able to back up and use YourNextAway across devices."
+      "Trips and notes are stored locally by default.\n\nWhen sync is enabled, you’ll be able to use YourNextAway across devices."
     );
   }
 
   function terms() {
     showInfo("Terms", "Terms will be available here.");
   }
+
+  const budgetSummary =
+    budgetTarget === "Not Set" ? "Not Set" : `${currency} ${budgetTarget}${alerts === "On" ? " • Alerts On" : " • Alerts Off"}`;
 
   return (
     <Background imageUrl={getBackground("profile")} overlayOpacity={0.70}>
@@ -160,14 +211,14 @@ export default function ProfileScreen() {
               <View style={styles.defaultChip}>
                 <Text style={styles.defaultKicker}>Home Airport</Text>
                 <Text style={styles.defaultValue} numberOfLines={1}>
-                  {defaults.airport}
+                  {homeAirport}
                 </Text>
               </View>
 
               <View style={styles.defaultChip}>
                 <Text style={styles.defaultKicker}>Currency</Text>
                 <Text style={styles.defaultValue} numberOfLines={1}>
-                  {defaults.currency}
+                  {currency}
                 </Text>
               </View>
             </View>
@@ -176,14 +227,14 @@ export default function ProfileScreen() {
               <View style={styles.defaultChip}>
                 <Text style={styles.defaultKicker}>Language</Text>
                 <Text style={styles.defaultValue} numberOfLines={1}>
-                  {defaults.language}
+                  {language}
                 </Text>
               </View>
 
               <View style={styles.defaultChip}>
-                <Text style={styles.defaultKicker}>Budget Alerts</Text>
+                <Text style={styles.defaultKicker}>Budget & Alerts</Text>
                 <Text style={styles.defaultValue} numberOfLines={1}>
-                  {defaults.budget === "Not Set" ? "Not Set" : `${defaults.currency} ${defaults.budget}`} • {defaults.alerts}
+                  {budgetSummary}
                 </Text>
               </View>
             </View>
@@ -201,16 +252,12 @@ export default function ProfileScreen() {
 
           {/* Settings */}
           <GlassCard style={[styles.card, { padding: 0 }]} intensity={24}>
-            <Row
-              title="Preferences"
-              subtitle="Date Window, League Coverage, And Planning Behaviour"
-              onPress={openPreferences}
-            />
-            <Row title="Home Airport" subtitle="Departure Defaults For Comparisons" rightText={defaults.airport} onPress={openHomeAirport} />
-            <Row title="Currency" subtitle="Budgets And Comparisons" rightText={defaults.currency} onPress={openCurrency} />
-            <Row title="Notifications" subtitle="Reminders And Price Alerts" onPress={openNotifications} />
-            <Row title="Language" subtitle="Localisation And Region Settings" rightText={defaults.language} onPress={openLanguage} />
-            <Row title="Budget & Alerts" subtitle="Target Budget And Drop Alerts" onPress={openBudgetAlerts} last />
+            <Row title="Preferences" subtitle="Date Window, League Coverage, And Planning Behaviour" onPress={openPreferences} />
+            <Row title="Home Airport" subtitle="Departure Defaults For Comparisons" rightText={homeAirport} onPress={openHomeAirport} />
+            <Row title="Currency" subtitle="Budgets And Comparisons" rightText={currency} onPress={openCurrency} />
+            <Row title="Notifications" subtitle="Fixture Reminders And Trip Prompts" onPress={openNotifications} />
+            <Row title="Language" subtitle="App Language" rightText={language} onPress={openLanguage} />
+            <Row title="Budget & Alerts" subtitle="Target Budget And Drop Alerts" rightText={budgetTarget === "Not Set" ? "Not Set" : budgetSummary} onPress={openBudgetAlerts} last />
           </GlassCard>
 
           {/* Help */}
