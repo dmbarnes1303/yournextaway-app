@@ -1,6 +1,6 @@
 // app/landing.tsx
-import React from "react";
-import { View, Text, StyleSheet, Pressable, Image } from "react-native";
+import React, { useCallback, useMemo, useState } from "react";
+import { View, Text, StyleSheet, Pressable, Image, Alert } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Stack, useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -12,22 +12,52 @@ import { theme } from "@/src/constants/theme";
 
 const LOGO = require("@/src/yna-logo.png");
 
+const STORAGE_KEYS = {
+  seenLanding: "yna:seenLanding",
+};
+
 export default function Landing() {
   const router = useRouter();
+  const [resetting, setResetting] = useState(false);
 
-  const handleGetStarted = async () => {
+  const handleGetStarted = useCallback(async () => {
     try {
-      await AsyncStorage.setItem("yna:seenLanding", "true");
-    } catch {}
+      await AsyncStorage.setItem(STORAGE_KEYS.seenLanding, "true");
+    } catch {
+      // ignore
+    }
     router.push("/onboarding");
-  };
+  }, [router]);
 
-  const handleExploreFirst = async () => {
+  const handleExploreFirst = useCallback(async () => {
     try {
-      await AsyncStorage.setItem("yna:seenLanding", "true");
-    } catch {}
+      await AsyncStorage.setItem(STORAGE_KEYS.seenLanding, "true");
+    } catch {
+      // ignore
+    }
     router.replace("/(tabs)/home");
-  };
+  }, [router]);
+
+  const handleDevResetLanding = useCallback(async () => {
+    if (resetting) return;
+
+    setResetting(true);
+    try {
+      await AsyncStorage.setItem(STORAGE_KEYS.seenLanding, "false");
+
+      // Go back to boot route so app/index.tsx re-runs routing logic
+      router.replace("/");
+    } catch {
+      Alert.alert("Reset failed", "Couldn’t reset the landing flag.");
+    } finally {
+      setResetting(false);
+    }
+  }, [resetting, router]);
+
+  const devResetLabel = useMemo(() => {
+    if (!__DEV__) return "";
+    return resetting ? "Resetting…" : "Dev: Reset Landing";
+  }, [resetting]);
 
   return (
     <>
@@ -36,34 +66,40 @@ export default function Landing() {
       <Background imageUrl={getBackground("landing")} overlayOpacity={0.72}>
         <SafeAreaView style={styles.safe} edges={["bottom"]}>
           <View style={styles.screen}>
+            {/* Dev-only utility */}
+            {__DEV__ ? (
+              <View style={styles.devRow}>
+                <Pressable
+                  onPress={handleDevResetLanding}
+                  disabled={resetting}
+                  style={[styles.devBtn, resetting && styles.devBtnDisabled]}
+                  hitSlop={10}
+                >
+                  <Text style={styles.devBtnText}>{devResetLabel}</Text>
+                </Pressable>
+              </View>
+            ) : null}
+
             <View style={styles.brand}>
               <Image source={LOGO} style={styles.logo} resizeMode="contain" />
               <Text style={styles.title}>YourNextAway</Text>
-              <Text style={styles.subtitle}>
-                Football-first city breaks, planned properly.
-              </Text>
+              <Text style={styles.subtitle}>Football-first city breaks, planned properly.</Text>
             </View>
 
             <GlassCard style={styles.card} intensity={24}>
               <Text style={styles.h1}>Start planning in one flow</Text>
 
               <Text style={styles.body}>
-                Browse fixtures first. When you’re ready, we’ll walk you through
-                onboarding and you can set preferences later.
+                Browse fixtures first. When you’re ready, we’ll walk you through onboarding and you can set preferences
+                later.
               </Text>
 
               <View style={styles.actions}>
-                <Pressable
-                  onPress={handleGetStarted}
-                  style={[styles.btn, styles.btnPrimary]}
-                >
+                <Pressable onPress={handleGetStarted} style={[styles.btn, styles.btnPrimary]}>
                   <Text style={styles.btnPrimaryText}>Get started</Text>
                 </Pressable>
 
-                <Pressable
-                  onPress={handleExploreFirst}
-                  style={[styles.btn, styles.btnGhost]}
-                >
+                <Pressable onPress={handleExploreFirst} style={[styles.btn, styles.btnGhost]}>
                   <Text style={styles.btnGhostText}>Explore first</Text>
                 </Pressable>
               </View>
@@ -86,6 +122,31 @@ const styles = StyleSheet.create({
     paddingBottom: theme.spacing.xxl,
     justifyContent: "flex-end",
     gap: 14,
+  },
+
+  devRow: {
+    alignItems: "flex-end",
+    marginTop: 10,
+  },
+
+  devBtn: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.16)",
+    backgroundColor: "rgba(0,0,0,0.30)",
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+  },
+
+  devBtnDisabled: {
+    opacity: 0.6,
+  },
+
+  devBtnText: {
+    color: theme.colors.textSecondary,
+    fontWeight: theme.fontWeight.black,
+    fontSize: theme.fontSize.xs,
+    letterSpacing: 0.2,
   },
 
   brand: {
