@@ -22,6 +22,7 @@ import EmptyState from "@/src/components/EmptyState";
 import SectionHeader from "@/src/components/SectionHeader";
 import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
+import { parseIsoDateOnly, toIsoDate } from "@/src/constants/football";
 
 import tripsStore, { type Trip, type TripLinkItem, type TripItineraryItem } from "@/src/state/trips";
 import { getFixtureById } from "@/src/services/apiFootball";
@@ -49,29 +50,18 @@ function summaryLine(t: Trip) {
   return `${a} → ${b} • ${n} match${n === 1 ? "" : "es"}`;
 }
 
-function isoToday(): string {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${dd}`;
-}
-
-function parseIsoDateOnlySafe(iso?: string): Date | null {
-  const s = String(iso ?? "").trim();
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
-  const d = new Date(`${s}T00:00:00Z`);
-  return Number.isNaN(d.getTime()) ? null : d;
-}
-
+/**
+ * Trip status must use the same "date-only" semantics as the rest of the app:
+ * - local-midnight parsing for YYYY-MM-DD
+ * - today is based on local date
+ */
 function tripStatus(t: Trip): "Draft" | "Upcoming" | "Past" {
-  const start = parseIsoDateOnlySafe(t.startDate);
-  const end = parseIsoDateOnlySafe(t.endDate);
-
+  const start = t.startDate ? parseIsoDateOnly(t.startDate) : null;
+  const end = t.endDate ? parseIsoDateOnly(t.endDate) : null;
   if (!start || !end) return "Draft";
 
-  const today = parseIsoDateOnlySafe(isoToday());
+  const todayIso = toIsoDate(new Date());
+  const today = parseIsoDateOnly(todayIso);
   if (!today) return "Draft";
 
   if (end.getTime() < today.getTime()) return "Past";
@@ -820,10 +810,7 @@ export default function TripDetailScreen() {
                     </>
                   ) : (
                     <>
-                      <EmptyState
-                        title="No notes yet"
-                        message="Add quick reminders: hotel options, train times, places to eat."
-                      />
+                      <EmptyState title="No notes yet" message="Add quick reminders: hotel options, train times, places to eat." />
                       <Pressable onPress={() => openAdd("note")} style={styles.linkBtn}>
                         <Text style={styles.linkText}>Add note</Text>
                       </Pressable>
@@ -856,9 +843,7 @@ export default function TripDetailScreen() {
                               </View>
                             </View>
                           ))}
-                          {(cityBundle.items?.length ?? 0) > 6 ? (
-                            <Text style={styles.moreInline}>More in the full city guide.</Text>
-                          ) : null}
+                          {(cityBundle.items?.length ?? 0) > 6 ? <Text style={styles.moreInline}>More in the full city guide.</Text> : null}
                         </View>
                       ) : null}
 
@@ -922,11 +907,7 @@ export default function TripDetailScreen() {
                   ] as Array<{ k: AddKind; label: string }>).map((t) => {
                     const active = addKind === t.k;
                     return (
-                      <Pressable
-                        key={t.k}
-                        onPress={() => setAddKind(t.k)}
-                        style={[styles.tabPill, active && styles.tabPillActive]}
-                      >
+                      <Pressable key={t.k} onPress={() => setAddKind(t.k)} style={[styles.tabPill, active && styles.tabPillActive]}>
                         <Text style={[styles.tabText, active && styles.tabTextActive]}>{t.label}</Text>
                       </Pressable>
                     );
@@ -951,11 +932,7 @@ export default function TripDetailScreen() {
                         ] as Array<{ g: TripLinkItem["group"]; label: string }>).map((x) => {
                           const active = linkGroup === x.g;
                           return (
-                            <Pressable
-                              key={x.g}
-                              onPress={() => setLinkGroup(x.g)}
-                              style={[styles.groupPill, active && styles.groupPillActive]}
-                            >
+                            <Pressable key={x.g} onPress={() => setLinkGroup(x.g)} style={[styles.groupPill, active && styles.groupPillActive]}>
                               <Text style={[styles.groupText, active && styles.groupTextActive]}>{x.label}</Text>
                             </Pressable>
                           );
@@ -1166,7 +1143,11 @@ const styles = StyleSheet.create({
   btnSecondaryText: { color: theme.colors.textSecondary, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.sm },
 
   deleteInline: { marginTop: 10, alignSelf: "center", paddingVertical: 6, paddingHorizontal: 10 },
-  deleteInlineText: { color: "rgba(255, 120, 120, 0.95)", fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.sm },
+  deleteInlineText: {
+    color: "rgba(255, 120, 120, 0.95)",
+    fontWeight: theme.fontWeight.black,
+    fontSize: theme.fontSize.sm,
+  },
 
   card: { padding: theme.spacing.lg },
 
@@ -1186,7 +1167,13 @@ const styles = StyleSheet.create({
   },
 
   rowTitle: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.md },
-  rowMeta: { marginTop: 4, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18, fontWeight: theme.fontWeight.bold },
+  rowMeta: {
+    marginTop: 4,
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSize.sm,
+    lineHeight: 18,
+    fontWeight: theme.fontWeight.bold,
+  },
   chev: { color: theme.colors.textSecondary, fontSize: 24, marginTop: -2 },
 
   linkRow: {
