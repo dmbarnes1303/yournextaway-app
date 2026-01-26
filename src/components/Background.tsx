@@ -11,13 +11,19 @@ interface BackgroundProps {
   imageUrl?: string;
 
   children: React.ReactNode;
-  overlayOpacity?: number; // 0..1
+
+  /**
+   * Overlay darkness 0..1. Higher = darker.
+   * Default matches your current app look.
+   */
+  overlayOpacity?: number;
 }
 
 /**
  * Touch-safe background wrapper:
  * - Background + overlay never steal touches.
  * - Supports local require() backgrounds and remote URLs.
+ * - Overlay uses neutral black (no navy cast) to keep glass consistent.
  */
 export default function Background({
   imageSource,
@@ -56,7 +62,7 @@ const styles = StyleSheet.create({
   image: { flex: 1, width: "100%", height: "100%" },
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgb(10, 14, 26)",
+    backgroundColor: theme.colors.overlayBase,
   },
   content: { flex: 1 },
 });
