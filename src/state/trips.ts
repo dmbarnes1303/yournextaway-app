@@ -24,10 +24,8 @@ export type TripLinkItem = {
 export type TripItineraryItem = {
   id: string;
   title: string;
-  // Optional ISO date-only YYYY-MM-DD
-  date?: string;
-  // Optional HH:MM
-  time?: string;
+  date?: string; // ISO date-only YYYY-MM-DD
+  time?: string; // HH:MM
   notes?: string;
   createdAt?: number;
   updatedAt?: number;
@@ -49,10 +47,10 @@ export type Trip = {
   startDate?: string;
   endDate?: string;
 
-  // Freeform notes (running notes)
+  // Free text notes
   notes?: string;
 
-  // NEW: structured trip hub data
+  // New: quick-access links + itinerary
   links?: TripLinkItem[];
   itinerary?: TripItineraryItem[];
 
@@ -67,7 +65,7 @@ type TripsState = {
 
 type Listener = (s: TripsState) => void;
 
-const STORAGE_KEY = "yna.trips.v1";
+const STORAGE_KEY = "yna.trips.v2";
 
 let state: TripsState = {
   loaded: false,
@@ -90,7 +88,6 @@ function now() {
 }
 
 function safeId(): string {
-  // No deps. Good enough uniqueness for local storage.
   return `t_${now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
@@ -104,26 +101,35 @@ function isTimeHHMM(s: unknown): s is string {
   return /^\d{2}:\d{2}$/.test(s.trim());
 }
 
-function normalizeLinkGroup(g: unknown): TripLinkGroup {
-  const s = String(g ?? "").trim();
-  if (s === "stay" || s === "travel" || s === "tickets" || s === "links") return s;
+function normString(x: unknown): string {
+  return String(x ?? "").trim();
+}
+
+function normUrl(x: unknown): string {
+  const u = normString(x);
+  return u;
+}
+
+function normLinkGroup(x: unknown): TripLinkGroup {
+  const v = normString(x).toLowerCase();
+  if (v === "stay" || v === "travel" || v === "tickets" || v === "links") return v;
   return "links";
 }
 
 function normalizeLinkItem(input: any): TripLinkItem | null {
   if (!input || typeof input !== "object") return null;
 
-  const id = String(input.id ?? "").trim();
-  const url = String(input.url ?? "").trim();
-  const title = String(input.title ?? "").trim();
-
+  const id = normString(input.id);
+  const url = normUrl(input.url);
   if (!id || !url) return null;
+
+  const title = normString(input.title) || "Link";
 
   return {
     id,
+    title,
     url,
-    title: title || "Link",
-    group: normalizeLinkGroup(input.group),
+    group: normLinkGroup(input.group),
     createdAt: typeof input.createdAt === "number" ? input.createdAt : undefined,
     updatedAt: typeof input.updatedAt === "number" ? input.updatedAt : undefined,
   };
@@ -132,19 +138,20 @@ function normalizeLinkItem(input: any): TripLinkItem | null {
 function normalizeItineraryItem(input: any): TripItineraryItem | null {
   if (!input || typeof input !== "object") return null;
 
-  const id = String(input.id ?? "").trim();
-  const title = String(input.title ?? "").trim();
+  const id = normString(input.id);
+  const title = normString(input.title);
   if (!id || !title) return null;
 
   const date = isIsoDateOnly(input.date) ? input.date : undefined;
   const time = isTimeHHMM(input.time) ? input.time : undefined;
+  const notes = normString(input.notes) || undefined;
 
   return {
     id,
     title,
     date,
     time,
-    notes: typeof input.notes === "string" ? input.notes : undefined,
+    notes,
     createdAt: typeof input.createdAt === "number" ? input.createdAt : undefined,
     updatedAt: typeof input.updatedAt === "number" ? input.updatedAt : undefined,
   };
@@ -153,17 +160,21 @@ function normalizeItineraryItem(input: any): TripItineraryItem | null {
 function normalizeTrip(input: any): Trip | null {
   if (!input || typeof input !== "object") return null;
 
-  const id = String(input.id ?? "").trim();
+  const id = normString(input.id);
   if (!id) return null;
 
   const matchIdsRaw = Array.isArray(input.matchIds) ? input.matchIds : [];
-  const matchIds = matchIdsRaw.map((x: any) => String(x ?? "").trim()).filter(Boolean);
+  const matchIds = matchIdsRaw.map((x: any) => normString(x)).filter(Boolean);
 
   const linksRaw = Array.isArray(input.links) ? input.links : [];
-  const links = linksRaw.map(normalizeLinkItem).filter(Boolean) as TripLinkItem[];
+  const links = linksRaw
+    .map((x: any) => normalizeLinkItem(x))
+    .filter(Boolean) as TripLinkItem[];
 
   const itineraryRaw = Array.isArray(input.itinerary) ? input.itinerary : [];
-  const itinerary = itineraryRaw.map(normalizeItineraryItem).filter(Boolean) as TripItineraryItem[];
+  const itinerary = itineraryRaw
+    .map((x: any) => normalizeItineraryItem(x))
+    .filter(Boolean) as TripItineraryItem[];
 
   const t: Trip = {
     id,
@@ -173,8 +184,8 @@ function normalizeTrip(input: any): Trip | null {
     startDate: isIsoDateOnly(input.startDate) ? input.startDate : undefined,
     endDate: isIsoDateOnly(input.endDate) ? input.endDate : undefined,
     notes: typeof input.notes === "string" ? input.notes : undefined,
-    links: links.length ? links : [],
-    itinerary: itinerary.length ? itinerary : [],
+    links: links.length ? links : undefined,
+    itinerary: itinerary.length ? itinerary : undefined,
     createdAt: typeof input.createdAt === "number" ? input.createdAt : undefined,
     updatedAt: typeof input.updatedAt === "number" ? input.updatedAt : undefined,
   };
@@ -201,7 +212,6 @@ function normalizeTripsList(input: any): Trip[] {
 }
 
 async function persist(trips: Trip[]) {
-  // Best-effort; storage.ts already avoids throwing.
   await storage.setJSON(STORAGE_KEY, trips);
 }
 
@@ -211,24 +221,23 @@ async function loadTrips(): Promise<void> {
     const trips = normalizeTripsList(saved);
     setState({ trips, loaded: true });
   } catch {
-    // Never block the app if persistence fails
     setState({ trips: [], loaded: true });
   }
 }
 
 async function addTrip(patch: Omit<Trip, "id"> & Partial<Pick<Trip, "id">>): Promise<Trip> {
-  const id = String((patch as any)?.id ?? "").trim() || safeId();
+  const id = normString((patch as any)?.id) || safeId();
 
   const t: Trip = {
     id,
     cityId: patch.cityId,
     citySlug: patch.citySlug,
-    matchIds: patch.matchIds?.map((x) => String(x)).filter(Boolean) ?? [],
+    matchIds: patch.matchIds?.map((x) => normString(x)).filter(Boolean),
     startDate: patch.startDate,
     endDate: patch.endDate,
     notes: patch.notes ?? "",
-    links: Array.isArray(patch.links) ? patch.links : [],
-    itinerary: Array.isArray(patch.itinerary) ? patch.itinerary : [],
+    links: (patch.links ?? []).slice(),
+    itinerary: (patch.itinerary ?? []).slice(),
     createdAt: now(),
     updatedAt: now(),
   };
@@ -240,7 +249,7 @@ async function addTrip(patch: Omit<Trip, "id"> & Partial<Pick<Trip, "id">>): Pro
 }
 
 async function updateTrip(id: string, patch: Partial<Omit<Trip, "id">>): Promise<void> {
-  const tid = String(id ?? "").trim();
+  const tid = normString(id);
   if (!tid) return;
 
   const next = state.trips.map((t) => {
@@ -249,9 +258,9 @@ async function updateTrip(id: string, patch: Partial<Omit<Trip, "id">>): Promise
     const updated: Trip = {
       ...t,
       ...patch,
-      matchIds: patch.matchIds ? patch.matchIds.map((x) => String(x)).filter(Boolean) : t.matchIds,
-      links: patch.links ? patch.links : t.links,
-      itinerary: patch.itinerary ? patch.itinerary : t.itinerary,
+      matchIds: patch.matchIds ? patch.matchIds.map((x) => normString(x)).filter(Boolean) : t.matchIds,
+      links: patch.links ? patch.links.slice() : t.links,
+      itinerary: patch.itinerary ? patch.itinerary.slice() : t.itinerary,
       updatedAt: now(),
     };
 
@@ -263,7 +272,7 @@ async function updateTrip(id: string, patch: Partial<Omit<Trip, "id">>): Promise
 }
 
 async function removeTrip(id: string): Promise<void> {
-  const tid = String(id ?? "").trim();
+  const tid = normString(id);
   if (!tid) return;
 
   const next = state.trips.filter((t) => t.id !== tid);
@@ -271,23 +280,19 @@ async function removeTrip(id: string): Promise<void> {
   await persist(next);
 }
 
-/* ----------------------------- Trip Hub CRUD ----------------------------- */
-
-function touch<T extends { updatedAt?: number }>(item: T): T {
-  return { ...item, updatedAt: now() };
-}
+/* ------------------------------- Links API ------------------------------- */
 
 async function addLink(tripId: string, item: TripLinkItem): Promise<void> {
-  const tid = String(tripId ?? "").trim();
+  const tid = normString(tripId);
   if (!tid) return;
 
-  const cleaned = normalizeLinkItem(item) ?? null;
-  if (!cleaned) return;
+  const it = normalizeLinkItem(item);
+  if (!it) return;
 
   const next = state.trips.map((t) => {
     if (t.id !== tid) return t;
     const links = Array.isArray(t.links) ? t.links.slice() : [];
-    links.unshift({ ...cleaned, createdAt: cleaned.createdAt ?? now(), updatedAt: now() });
+    links.unshift({ ...it, updatedAt: now(), createdAt: it.createdAt ?? now() });
     return { ...t, links, updatedAt: now() };
   });
 
@@ -296,31 +301,33 @@ async function addLink(tripId: string, item: TripLinkItem): Promise<void> {
 }
 
 async function removeLink(tripId: string, linkId: string): Promise<void> {
-  const tid = String(tripId ?? "").trim();
-  const lid = String(linkId ?? "").trim();
+  const tid = normString(tripId);
+  const lid = normString(linkId);
   if (!tid || !lid) return;
 
   const next = state.trips.map((t) => {
     if (t.id !== tid) return t;
-    const links = (t.links ?? []).filter((l) => String(l.id) !== lid);
-    return { ...t, links, updatedAt: now() };
+    const links = (t.links ?? []).filter((l) => normString(l.id) !== lid);
+    return { ...t, links: links.length ? links : undefined, updatedAt: now() };
   });
 
   setState({ trips: next, loaded: true });
   await persist(next);
 }
 
+/* ---------------------------- Itinerary API ----------------------------- */
+
 async function addItineraryItem(tripId: string, item: TripItineraryItem): Promise<void> {
-  const tid = String(tripId ?? "").trim();
+  const tid = normString(tripId);
   if (!tid) return;
 
-  const cleaned = normalizeItineraryItem(item) ?? null;
-  if (!cleaned) return;
+  const it = normalizeItineraryItem(item);
+  if (!it) return;
 
   const next = state.trips.map((t) => {
     if (t.id !== tid) return t;
     const itinerary = Array.isArray(t.itinerary) ? t.itinerary.slice() : [];
-    itinerary.unshift({ ...cleaned, createdAt: cleaned.createdAt ?? now(), updatedAt: now() });
+    itinerary.unshift({ ...it, updatedAt: now(), createdAt: it.createdAt ?? now() });
     return { ...t, itinerary, updatedAt: now() };
   });
 
@@ -329,19 +336,21 @@ async function addItineraryItem(tripId: string, item: TripItineraryItem): Promis
 }
 
 async function removeItineraryItem(tripId: string, itemId: string): Promise<void> {
-  const tid = String(tripId ?? "").trim();
-  const iid = String(itemId ?? "").trim();
+  const tid = normString(tripId);
+  const iid = normString(itemId);
   if (!tid || !iid) return;
 
   const next = state.trips.map((t) => {
     if (t.id !== tid) return t;
-    const itinerary = (t.itinerary ?? []).filter((x) => String(x.id) !== iid);
-    return { ...t, itinerary, updatedAt: now() };
+    const itinerary = (t.itinerary ?? []).filter((x) => normString(x.id) !== iid);
+    return { ...t, itinerary: itinerary.length ? itinerary : undefined, updatedAt: now() };
   });
 
   setState({ trips: next, loaded: true });
   await persist(next);
 }
+
+/* ------------------------------ Store API ------------------------------ */
 
 function getState(): TripsState {
   return state;
@@ -360,7 +369,7 @@ const tripsStore = {
   updateTrip,
   removeTrip,
 
-  // Trip hub
+  // New APIs used by Trip Hub
   addLink,
   removeLink,
   addItineraryItem,
