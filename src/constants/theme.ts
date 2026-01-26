@@ -25,42 +25,37 @@ export const theme = {
     border: "#1B1F27",
     divider: "#141821",
 
-    // Overlay: neutral black
     overlay: "rgba(0, 0, 0, 0.82)",
     overlayLight: "rgba(0, 0, 0, 0.62)",
-
-    /**
-     * Base overlay color (used by Background + other overlays),
-     * opacity handled separately for flexibility.
-     */
-    overlayBase: "#000000",
   },
 
   /**
-   * Single source of truth for glass styling.
-   * Use these via GlassCard (strength) rather than ad-hoc RGBA everywhere.
+   * Glass system (single source of truth)
+   * - iOS/web uses BlurView + translucent base
+   * - Android uses ONLY translucent base (no blur)
    */
   glass: {
     border: "rgba(255,255,255,0.10)",
 
-    // Blur strength levels for iOS/web
+    // Blur intensities for iOS/web
     blur: {
-      subtle: 14,
-      default: 20,
-      strong: 26,
+      subtle: 16,
+      default: 24,
+      strong: 32,
     },
 
-    // Background fills (iOS/web: blur exists so lighter; Android: no blur so stronger)
+    // Base backgrounds behind blur (iOS/web)
     iosBg: {
-      subtle: "rgba(0,0,0,0.28)",
-      default: "rgba(0,0,0,0.38)",
-      strong: "rgba(0,0,0,0.46)",
+      subtle: "rgba(0,0,0,0.16)",
+      default: "rgba(0,0,0,0.24)",
+      strong: "rgba(0,0,0,0.34)",
     },
 
+    // Android backgrounds (no blur, so stronger)
     androidBg: {
-      subtle: "rgba(0,0,0,0.42)",
-      default: "rgba(0,0,0,0.52)",
-      strong: "rgba(0,0,0,0.60)",
+      subtle: "rgba(0,0,0,0.34)",
+      default: "rgba(0,0,0,0.46)",
+      strong: "rgba(0,0,0,0.58)",
     },
   },
 
