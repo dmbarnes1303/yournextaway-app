@@ -1,5 +1,5 @@
 // app/(tabs)/fixtures.tsx
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useCallback } from "react";
 import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -79,7 +79,6 @@ export default function FixturesScreen() {
   const venueParamRaw = useMemo(() => coerceString((params as any).venue), [params]);
   const [venueFilter, setVenueFilter] = useState<string | null>(venueParamRaw ?? null);
 
-  // Keep state in sync if params change (rare, but correct)
   useEffect(() => {
     setVenueFilter(venueParamRaw ?? null);
   }, [venueParamRaw]);
@@ -136,33 +135,39 @@ export default function FixturesScreen() {
     };
   }, [selected, from, to]);
 
-  function goBuildTripWithContext(fixtureIdStr: string) {
-    router.push({
-      pathname: "/trip/build",
-      params: {
-        fixtureId: fixtureIdStr,
-        leagueId: String(selected.leagueId),
-        season: String(selected.season),
-        from,
-        to,
-        ...(venueFilter ? { venue: String(venueFilter) } : {}),
-      },
-    } as any);
-  }
+  const goBuildTripWithContext = useCallback(
+    (fixtureIdStr: string) => {
+      router.push({
+        pathname: "/trip/build",
+        params: {
+          fixtureId: fixtureIdStr,
+          leagueId: String(selected.leagueId),
+          season: String(selected.season),
+          from,
+          to,
+          ...(venueFilter ? { venue: String(venueFilter) } : {}),
+        },
+      } as any);
+    },
+    [router, selected.leagueId, selected.season, from, to, venueFilter]
+  );
 
-  function goMatchWithContext(fixtureIdStr: string) {
-    router.push({
-      pathname: "/match/[id]",
-      params: {
-        id: fixtureIdStr,
-        leagueId: String(selected.leagueId),
-        season: String(selected.season),
-        from,
-        to,
-        ...(venueFilter ? { venue: String(venueFilter) } : {}),
-      },
-    } as any);
-  }
+  const goMatchWithContext = useCallback(
+    (fixtureIdStr: string) => {
+      router.push({
+        pathname: "/match/[id]",
+        params: {
+          id: fixtureIdStr,
+          leagueId: String(selected.leagueId),
+          season: String(selected.season),
+          from,
+          to,
+          ...(venueFilter ? { venue: String(venueFilter) } : {}),
+        },
+      } as any);
+    },
+    [router, selected.leagueId, selected.season, from, to, venueFilter]
+  );
 
   const filteredRows = useMemo(() => {
     const vfRaw = String(venueFilter ?? "").trim();
@@ -181,10 +186,8 @@ export default function FixturesScreen() {
       const venue = norm(venueName);
       const city = norm(venueCity);
 
-      // Raw contains matching (handles "Emirates" vs "Emirates Stadium")
       if (venue.includes(vf) || city.includes(vf) || home.includes(vf) || away.includes(vf)) return true;
 
-      // Slug-style matching (handles passing a slug or weird punctuation)
       if (!vfKey) return false;
 
       const venueKey = normalizeVenueKey(venueName);
@@ -210,20 +213,21 @@ export default function FixturesScreen() {
   return (
     <Background imageUrl={getBackground("fixtures")}>
       <SafeAreaView style={styles.container} edges={["top"]}>
+        {/* HEADER */}
         <View style={styles.header}>
           <Text style={styles.title}>Fixtures</Text>
           <Text style={styles.subtitle}>{subtitle}</Text>
 
           {venueFilter ? (
             <View style={styles.filterRow}>
-              <View style={styles.filterPill}>
+              <GlassCard strength="subtle" style={styles.filterCard}>
                 <Text style={styles.filterLabel}>Filtered by</Text>
                 <Text style={styles.filterValue} numberOfLines={1}>
                   {venueFilter}
                 </Text>
-              </View>
+              </GlassCard>
 
-              <Pressable onPress={() => setVenueFilter(null)} style={styles.clearBtn}>
+              <Pressable onPress={() => setVenueFilter(null)} style={styles.clearBtn} hitSlop={10}>
                 <Text style={styles.clearText}>Clear</Text>
               </Pressable>
             </View>
@@ -245,8 +249,9 @@ export default function FixturesScreen() {
           </ScrollView>
         </View>
 
+        {/* BODY */}
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
-          <GlassCard style={styles.card}>
+          <GlassCard strength="default" style={styles.card}>
             {loading ? (
               <View style={styles.center}>
                 <ActivityIndicator />
@@ -261,10 +266,7 @@ export default function FixturesScreen() {
             ) : null}
 
             {!loading && !error && rows.length > 0 && filteredRows.length === 0 ? (
-              <EmptyState
-                title="No matches for that filter"
-                message="Clear the filter or try a different search (venue/city/team)."
-              />
+              <EmptyState title="No matches for that filter" message="Clear the filter or try a different search (venue/city/team)." />
             ) : null}
 
             {!loading && !error && filteredRows.length > 0 ? (
@@ -275,13 +277,11 @@ export default function FixturesScreen() {
                   const key = fixtureIdStr ?? `idx-${idx}`;
 
                   return (
-                    <View key={key} style={styles.rowWrap}>
+                    <GlassCard key={key} strength="subtle" style={styles.matchCard}>
                       <Pressable
-                        onPress={() => {
-                          if (!fixtureIdStr) return;
-                          goMatchWithContext(fixtureIdStr);
-                        }}
-                        style={styles.rowMain}
+                        disabled={!fixtureIdStr}
+                        onPress={() => (fixtureIdStr ? goMatchWithContext(fixtureIdStr) : null)}
+                        style={styles.matchMain}
                       >
                         <Text style={styles.rowTitle}>
                           {m.home} vs {m.away}
@@ -289,17 +289,24 @@ export default function FixturesScreen() {
                         <Text style={styles.rowMeta}>{m.line2}</Text>
                       </Pressable>
 
-                      <Pressable
-                        disabled={!fixtureIdStr}
-                        onPress={() => {
-                          if (!fixtureIdStr) return;
-                          goBuildTripWithContext(fixtureIdStr);
-                        }}
-                        style={[styles.planBtn, !fixtureIdStr && { opacity: 0.5 }]}
-                      >
-                        <Text style={styles.planBtnText}>Plan Trip</Text>
-                      </Pressable>
-                    </View>
+                      <View style={styles.actionsRow}>
+                        <Pressable
+                          disabled={!fixtureIdStr}
+                          onPress={() => (fixtureIdStr ? goMatchWithContext(fixtureIdStr) : null)}
+                          style={[styles.smallBtn, styles.smallGhost, !fixtureIdStr && styles.disabled]}
+                        >
+                          <Text style={styles.smallGhostText}>View match</Text>
+                        </Pressable>
+
+                        <Pressable
+                          disabled={!fixtureIdStr}
+                          onPress={() => (fixtureIdStr ? goBuildTripWithContext(fixtureIdStr) : null)}
+                          style={[styles.smallBtn, styles.smallPrimary, !fixtureIdStr && styles.disabled]}
+                        >
+                          <Text style={styles.smallPrimaryText}>Plan trip</Text>
+                        </Pressable>
+                      </View>
+                    </GlassCard>
                   );
                 })}
               </View>
@@ -322,7 +329,7 @@ const styles = StyleSheet.create({
 
   title: {
     fontSize: theme.fontSize.xxl,
-    fontWeight: theme.fontWeight.bold,
+    fontWeight: theme.fontWeight.black,
     color: theme.colors.text,
     marginBottom: theme.spacing.xs,
   },
@@ -331,34 +338,20 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSize.sm,
     color: theme.colors.textSecondary,
     marginBottom: theme.spacing.md,
+    fontWeight: "700" as any,
   },
 
+  /* FILTER */
   filterRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
     marginBottom: theme.spacing.md,
   },
-  filterPill: {
-    flex: 1,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "rgba(0,255,136,0.35)",
-    backgroundColor: "rgba(0,0,0,0.22)",
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-  },
-  filterLabel: {
-    color: theme.colors.textSecondary,
-    fontSize: theme.fontSize.xs,
-    fontWeight: "800" as any,
-  },
-  filterValue: {
-    marginTop: 2,
-    color: theme.colors.text,
-    fontSize: theme.fontSize.sm,
-    fontWeight: "900" as any,
-  },
+  filterCard: { flex: 1, padding: 12 },
+  filterLabel: { color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: "800" as any },
+  filterValue: { marginTop: 2, color: theme.colors.text, fontSize: theme.fontSize.sm, fontWeight: "900" as any },
+
   clearBtn: {
     paddingVertical: 10,
     paddingHorizontal: 12,
@@ -369,6 +362,7 @@ const styles = StyleSheet.create({
   },
   clearText: { color: theme.colors.text, fontWeight: "900" as any, fontSize: theme.fontSize.sm },
 
+  /* LEAGUES */
   leagueRow: { gap: 10, paddingRight: theme.spacing.lg },
 
   leaguePill: {
@@ -379,51 +373,47 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border,
     backgroundColor: "rgba(0,0,0,0.25)",
   },
+  leaguePillActive: { borderColor: theme.colors.primary, backgroundColor: "rgba(0,0,0,0.45)" },
+  leaguePillText: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, fontWeight: "800" as any },
+  leaguePillTextActive: { color: theme.colors.text, fontWeight: "900" as any },
 
-  leaguePillActive: {
-    borderColor: theme.colors.primary,
-    backgroundColor: "rgba(0,0,0,0.45)",
-  },
-
-  leaguePillText: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, fontWeight: "700" as any },
-  leaguePillTextActive: { color: theme.colors.text },
-
+  /* BODY */
   scrollView: { flex: 1 },
-
-  content: {
-    paddingHorizontal: theme.spacing.lg,
-    paddingBottom: theme.spacing.xxl,
-  },
-
-  card: { minHeight: 240 },
+  content: { paddingHorizontal: theme.spacing.lg, paddingBottom: theme.spacing.xxl },
+  card: { minHeight: 240, padding: theme.spacing.md },
 
   center: { paddingVertical: theme.spacing.xl, alignItems: "center", gap: 10 },
-  muted: { color: theme.colors.textSecondary },
+  muted: { color: theme.colors.textSecondary, fontWeight: "700" as any },
 
   list: { gap: 10 },
 
-  rowWrap: {
-    flexDirection: "row",
-    gap: 12,
-    alignItems: "center",
+  matchCard: { padding: theme.spacing.md, gap: 10 },
+  matchMain: { paddingHorizontal: 2 },
+
+  rowTitle: { color: theme.colors.text, fontWeight: "900" as any, fontSize: theme.fontSize.md },
+  rowMeta: { marginTop: 4, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, fontWeight: "700" as any },
+
+  actionsRow: { flexDirection: "row", gap: 10 },
+
+  smallBtn: {
+    flex: 1,
+    borderRadius: 12,
     paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
+    alignItems: "center",
+    borderWidth: 1,
   },
 
-  rowMain: { flex: 1 },
+  smallPrimary: {
+    borderColor: "rgba(0,255,136,0.55)",
+    backgroundColor: "rgba(0,0,0,0.34)",
+  },
+  smallPrimaryText: { color: theme.colors.text, fontWeight: "900" as any, fontSize: theme.fontSize.sm },
 
-  rowTitle: { color: theme.colors.text, fontWeight: "800" as any, fontSize: theme.fontSize.md },
-  rowMeta: { marginTop: 4, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm },
-
-  planBtn: {
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "rgba(0,255,136,0.45)",
+  smallGhost: {
+    borderColor: theme.colors.border,
     backgroundColor: "rgba(0,0,0,0.22)",
   },
+  smallGhostText: { color: theme.colors.textSecondary, fontWeight: "900" as any, fontSize: theme.fontSize.sm },
 
-  planBtnText: { color: theme.colors.text, fontWeight: "900" as any, fontSize: theme.fontSize.xs },
+  disabled: { opacity: 0.55 },
 });
