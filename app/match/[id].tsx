@@ -22,7 +22,7 @@ import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
 
 import { getFixtureById, type FixtureListRow } from "@/src/services/apiFootball";
-import { getRollingWindowIso, toIsoDate, addDaysIso, parseIsoDateOnly } from "@/src/constants/football";
+import { getRollingWindowIso, toIsoDate, addDaysIso, clampFromIsoToTomorrow, normalizeWindowIso } from "@/src/constants/football";
 import { coerceNumber, coerceString } from "@/src/utils/params";
 import { formatUkDateTimeMaybe } from "@/src/utils/formatters";
 
@@ -36,29 +36,15 @@ function enc(v: string) {
   return encodeURIComponent(v);
 }
 
+/**
+ * Convert an ISO datetime into YYYY-MM-DD in local time.
+ * (Good enough for display/search queries; not used for match logic.)
+ */
 function isoDateOnly(isoMaybe?: string) {
   if (!isoMaybe) return undefined;
   const d = new Date(isoMaybe);
   if (Number.isNaN(d.getTime())) return undefined;
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
-}
-
-function tomorrowIso(): string {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  d.setDate(d.getDate() + 1);
   return toIsoDate(d);
-}
-
-function clampFromToTomorrow(fromIso: string): string {
-  const tmr = tomorrowIso();
-  const fromDate = parseIsoDateOnly(fromIso);
-  const tmrDate = parseIsoDateOnly(tmr);
-  if (!fromDate || !tmrDate) return tmr;
-  return fromDate.getTime() < tmrDate.getTime() ? tmr : fromIso;
 }
 
 function subtitleOrFallback(value: string | null | undefined, fallback: string) {
@@ -67,10 +53,16 @@ function subtitleOrFallback(value: string | null | undefined, fallback: string) 
 }
 
 async function safeOpenUrl(url: string) {
+  const u = String(url ?? "").trim();
+  if (!u) return;
+
+  const hasScheme = /^https?:\/\//i.test(u);
+  const candidate = hasScheme ? u : `https://${u}`;
+
   try {
-    const can = await Linking.canOpenURL(url);
+    const can = await Linking.canOpenURL(candidate);
     if (!can) throw new Error("Cannot open URL");
-    await Linking.openURL(url);
+    await Linking.openURL(candidate);
   } catch {
     Alert.alert("Couldn’t open link", "Your device could not open that link.");
   }
@@ -80,8 +72,14 @@ async function openMapsPreferNative(query: string) {
   const q = String(query ?? "").trim();
   if (!q) return safeOpenUrl("https://www.google.com/maps");
 
-  const geo = `geo:0,0?q=${enc(q)}`; // Android native
+  // Android native
+  const geo = `geo:0,0?q=${enc(q)}`;
   const web = `https://www.google.com/maps/search/?api=1&query=${enc(q)}`;
+
+  // iOS often behaves better with the web fallback unless you wire maps:// schemes explicitly.
+  if (Platform.OS === "ios") {
+    return safeOpenUrl(web);
+  }
 
   try {
     const canGeo = await Linking.canOpenURL(geo);
@@ -130,13 +128,21 @@ export default function MatchDetailScreen() {
 
   const id = useMemo(() => coerceString((params as any)?.id), [params]);
 
-  // Routing context (tomorrow onwards for consistency with Fixtures/Trip Build)
+  // Routing context: enforce "tomorrow onwards" consistency with Fixtures/Trip Build
   const rolling = useMemo(() => getRollingWindowIso(), []);
-  const fallbackFrom = useMemo(() => clampFromToTomorrow(rolling.from), [rolling.from]);
-  const fallbackTo = useMemo(() => rolling.to ?? addDaysIso(fallbackFrom, 30), [rolling.to, fallbackFrom]);
 
-  const fromIso = useMemo(() => clampFromToTomorrow(coerceString((params as any)?.from) ?? fallbackFrom), [params, fallbackFrom]);
-  const toIso = useMemo(() => coerceString((params as any)?.to) ?? fallbackTo, [params, fallbackTo]);
+  const window = useMemo(() => {
+    const routeFrom = coerceString((params as any)?.from);
+    const routeTo = coerceString((params as any)?.to);
+
+    const from = clampFromIsoToTomorrow(routeFrom ?? rolling.from);
+    const to = routeTo ?? rolling.to ?? addDaysIso(from, 30);
+
+    return normalizeWindowIso({ from, to }, 30);
+  }, [params, rolling.from, rolling.to]);
+
+  const fromIso = window.from;
+  const toIso = window.to;
 
   const routeLeagueId = useMemo(() => coerceNumber((params as any)?.leagueId), [params]);
   const routeSeason = useMemo(() => coerceNumber((params as any)?.season), [params]);
