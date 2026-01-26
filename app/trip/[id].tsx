@@ -567,13 +567,11 @@ export default function TripDetailScreen() {
                         const meta = extra ? `${kick} • ${extra}` : kick;
 
                         return (
-                          <Pressable
-                            key={`${id}-${idx}`}
-                            onPress={() => openMatch(id)}
-                            style={styles.itemRow}
-                          >
+                          <Pressable key={`${id}-${idx}`} onPress={() => openMatch(id)} style={styles.itemRow}>
                             <View style={{ flex: 1 }}>
-                              <Text style={styles.rowTitle}>{home} vs {away}</Text>
+                              <Text style={styles.rowTitle}>
+                                {home} vs {away}
+                              </Text>
                               <Text style={styles.rowMeta}>{meta || "Match details not loaded"}</Text>
                             </View>
                             <Text style={styles.chev}>›</Text>
@@ -607,8 +605,12 @@ export default function TripDetailScreen() {
                       {groupedLinks.stay.map((l) => (
                         <View key={l.id} style={styles.linkRow}>
                           <Pressable style={{ flex: 1 }} onPress={() => safeOpenUrl(l.url)}>
-                            <Text style={styles.rowTitle} numberOfLines={1}>{l.title}</Text>
-                            <Text style={styles.rowMeta} numberOfLines={1}>{shortDomain(l.url)}</Text>
+                            <Text style={styles.rowTitle} numberOfLines={1}>
+                              {l.title}
+                            </Text>
+                            <Text style={styles.rowMeta} numberOfLines={1}>
+                              {shortDomain(l.url)}
+                            </Text>
                           </Pressable>
                           <Pressable onPress={() => removeLink(l.id)} style={styles.smallDangerBtn}>
                             <Text style={styles.smallDangerText}>Remove</Text>
@@ -651,8 +653,12 @@ export default function TripDetailScreen() {
                       {groupedLinks.travel.map((l) => (
                         <View key={l.id} style={styles.linkRow}>
                           <Pressable style={{ flex: 1 }} onPress={() => safeOpenUrl(l.url)}>
-                            <Text style={styles.rowTitle} numberOfLines={1}>{l.title}</Text>
-                            <Text style={styles.rowMeta} numberOfLines={1}>{shortDomain(l.url)}</Text>
+                            <Text style={styles.rowTitle} numberOfLines={1}>
+                              {l.title}
+                            </Text>
+                            <Text style={styles.rowMeta} numberOfLines={1}>
+                              {shortDomain(l.url)}
+                            </Text>
                           </Pressable>
                           <Pressable onPress={() => removeLink(l.id)} style={styles.smallDangerBtn}>
                             <Text style={styles.smallDangerText}>Remove</Text>
@@ -698,8 +704,12 @@ export default function TripDetailScreen() {
                           {groupedLinks.tickets.map((l) => (
                             <View key={l.id} style={styles.linkRow}>
                               <Pressable style={{ flex: 1 }} onPress={() => safeOpenUrl(l.url)}>
-                                <Text style={styles.rowTitle} numberOfLines={1}>{l.title}</Text>
-                                <Text style={styles.rowMeta} numberOfLines={1}>{shortDomain(l.url)}</Text>
+                                <Text style={styles.rowTitle} numberOfLines={1}>
+                                  {l.title}
+                                </Text>
+                                <Text style={styles.rowMeta} numberOfLines={1}>
+                                  {shortDomain(l.url)}
+                                </Text>
                               </Pressable>
                               <Pressable onPress={() => removeLink(l.id)} style={styles.smallDangerBtn}>
                                 <Text style={styles.smallDangerText}>Remove</Text>
@@ -715,8 +725,13 @@ export default function TripDetailScreen() {
                           {groupedLinks.links.map((l) => (
                             <View key={l.id} style={styles.linkRow}>
                               <Pressable style={{ flex: 1 }} onPress={() => safeOpenUrl(l.url)}>
-                                <Text style={styles.rowTitle} numberOfLines={1}>{l.title}</Text>
-                                <Text style={styles.rowMeta} numberOfLines={1}>{shortDomain(l.url)}</Text>
+                                <Text style={styles.rowTitle} numberOfLines={1}>
+                                  {l.title}
+                                </Text>
+                                <Text style={styles.rowMeta} numberOfLines={1}>
+                                  {shortDomain(l.url)}
+                                </Text>
+                                </Text>
                               </Pressable>
                               <Pressable onPress={() => removeLink(l.id)} style={styles.smallDangerBtn}>
                                 <Text style={styles.smallDangerText}>Remove</Text>
@@ -771,7 +786,11 @@ export default function TripDetailScreen() {
                             <View style={{ flex: 1 }}>
                               <Text style={styles.rowTitle}>{it.title}</Text>
                               {when ? <Text style={styles.rowMeta}>{when}</Text> : null}
-                              {it.notes ? <Text style={styles.rowMeta} numberOfLines={2}>{it.notes}</Text> : null}
+                              {it.notes ? (
+                                <Text style={styles.rowMeta} numberOfLines={2}>
+                                  {it.notes}
+                                </Text>
+                              ) : null}
                             </View>
                             <Pressable onPress={() => removeItineraryItem(it.id)} style={styles.smallDangerBtn}>
                               <Text style={styles.smallDangerText}>Remove</Text>
@@ -802,7 +821,10 @@ export default function TripDetailScreen() {
                     </>
                   ) : (
                     <>
-                      <EmptyState title="No notes yet" message="Add quick reminders: hotel options, train times, places to eat." />
+                      <EmptyState
+                        title="No notes yet"
+                        message="Add quick reminders: hotel options, train times, places to eat."
+                      />
                       <Pressable onPress={() => openAdd("note")} style={styles.linkBtn}>
                         <Text style={styles.linkText}>Add note</Text>
                       </Pressable>
@@ -867,20 +889,12 @@ export default function TripDetailScreen() {
           ) : null}
         </ScrollView>
 
-{/* ADD ITEM MODAL */}
-        <Modal
-          visible={addOpen}
-          transparent
-          animationType="slide"
-          onRequestClose={closeAdd}
-        >
+        {/* ADD ITEM MODAL */}
+        <Modal visible={addOpen} transparent animationType="slide" onRequestClose={closeAdd}>
           <View style={styles.modalWrap}>
             <Pressable style={styles.modalBackdrop} onPress={closeAdd} />
 
-            <SafeAreaView
-              edges={["bottom"]}
-              style={[styles.sheetWrap, { paddingBottom: insets.bottom }]}
-            >
+            <SafeAreaView edges={["bottom"]} style={[styles.sheetWrap, { paddingBottom: insets.bottom }]}>
               <View style={styles.sheetCard}>
                 <View style={styles.sheetHandle} />
 
@@ -1337,4 +1351,4 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSize.md,
   },
   textarea: { minHeight: 90 },
-});        
+});
