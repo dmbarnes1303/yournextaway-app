@@ -24,13 +24,7 @@ import { theme } from "@/src/constants/theme";
 import tripsStore, { type Trip } from "@/src/state/trips";
 import { getFixtures, type FixtureListRow } from "@/src/services/apiFootball";
 
-import {
-  LEAGUES,
-  getRollingWindowIso,
-  parseIsoDateOnly,
-  toIsoDate,
-  type LeagueOption,
-} from "@/src/constants/football";
+import { LEAGUES, getRollingWindowIso, parseIsoDateOnly, toIsoDate, type LeagueOption } from "@/src/constants/football";
 import { formatUkDateOnly, formatUkDateTimeMaybe } from "@/src/utils/formatters";
 
 import { buildSearchIndex, querySearchIndex, type SearchResult } from "@/src/services/searchIndex";
@@ -77,7 +71,6 @@ function splitSearchBuckets(results: SearchResult[]) {
 
 export default function HomeScreen() {
   const router = useRouter();
-
   const [league, setLeague] = useState<LeagueOption>(LEAGUES[0]);
 
   // Central rolling window (tomorrow onwards; per football.ts)
@@ -224,6 +217,10 @@ export default function HomeScreen() {
     Keyboard.dismiss();
   }, []);
 
+  const dismissKeyboard = useCallback(() => {
+    Keyboard.dismiss();
+  }, []);
+
   function goBuildTripWithContext(fixtureId?: string) {
     router.push({
       pathname: "/trip/build",
@@ -347,7 +344,7 @@ export default function HomeScreen() {
           keyboardShouldPersistTaps="handled"
         >
           {/* HERO */}
-          <GlassCard style={styles.heroCard} intensity={26}>
+          <GlassCard style={styles.heroCard} strength="strong">
             <Text style={styles.heroKicker}>PLAN • FLY • WATCH • REPEAT</Text>
 
             <Text style={styles.heroTitle}>Plan a football-first city break.</Text>
@@ -366,7 +363,7 @@ export default function HomeScreen() {
                 autoCapitalize="none"
                 autoCorrect={false}
                 returnKeyType="search"
-                onSubmitEditing={() => Keyboard.dismiss()}
+                onSubmitEditing={dismissKeyboard}
               />
 
               {qNorm.length > 0 ? (
@@ -383,6 +380,7 @@ export default function HomeScreen() {
             {/* SEARCH RESULTS */}
             {showSearchResults ? (
               <View style={styles.searchResults}>
+                {/* Teams & Cities */}
                 <View>
                   <View style={styles.searchHeaderRow}>
                     <Text style={styles.searchSectionTitle}>Teams & Cities</Text>
@@ -396,9 +394,7 @@ export default function HomeScreen() {
                     </View>
                   ) : null}
 
-                  {!searchLoading && searchError ? (
-                    <EmptyState title="Search unavailable" message={searchError} />
-                  ) : null}
+                  {!searchLoading && searchError ? <EmptyState title="Search unavailable" message={searchError} /> : null}
 
                   {!searchLoading && !searchError && buckets.teams.length === 0 && buckets.cities.length === 0 ? (
                     <Text style={styles.searchEmpty}>No teams or cities found.</Text>
@@ -409,22 +405,23 @@ export default function HomeScreen() {
                       {[...buckets.teams.slice(0, 6), ...buckets.cities.slice(0, 6)]
                         .slice(0, 10)
                         .map((r, idx) => (
-                          <Pressable
-                            key={`${r.key}-${idx}`}
-                            onPress={() => onPressSearchResult(r)}
-                            style={styles.resultRow}
-                          >
-                            <View style={{ flex: 1 }}>
-                              <Text style={styles.rowTitle}>{r.title}</Text>
-                              <Text style={styles.rowMeta}>{resultMeta(r)}</Text>
-                            </View>
-                            <Text style={styles.chev}>›</Text>
+                          <Pressable key={`${r.key}-${idx}`} onPress={() => onPressSearchResult(r)} style={styles.rowPress}>
+                            <GlassCard strength="subtle" noPadding style={styles.rowCard}>
+                              <View style={styles.rowInner}>
+                                <View style={{ flex: 1 }}>
+                                  <Text style={styles.rowTitle}>{r.title}</Text>
+                                  <Text style={styles.rowMeta}>{resultMeta(r)}</Text>
+                                </View>
+                                <Text style={styles.chev}>›</Text>
+                              </View>
+                            </GlassCard>
                           </Pressable>
                         ))}
                     </View>
                   ) : null}
                 </View>
 
+                {/* Venues / Countries / Leagues */}
                 <View>
                   <View style={styles.searchHeaderRow}>
                     <Text style={styles.searchSectionTitle}>Venues, Countries & Leagues</Text>
@@ -444,16 +441,16 @@ export default function HomeScreen() {
                       {[...buckets.venues.slice(0, 5), ...buckets.countries.slice(0, 5), ...buckets.leagues.slice(0, 5)]
                         .slice(0, 10)
                         .map((r, idx) => (
-                          <Pressable
-                            key={`${r.key}-${idx}`}
-                            onPress={() => onPressSearchResult(r)}
-                            style={styles.resultRow}
-                          >
-                            <View style={{ flex: 1 }}>
-                              <Text style={styles.rowTitle}>{r.title}</Text>
-                              <Text style={styles.rowMeta}>{resultMeta(r)}</Text>
-                            </View>
-                            <Text style={styles.chev}>›</Text>
+                          <Pressable key={`${r.key}-${idx}`} onPress={() => onPressSearchResult(r)} style={styles.rowPress}>
+                            <GlassCard strength="subtle" noPadding style={styles.rowCard}>
+                              <View style={styles.rowInner}>
+                                <View style={{ flex: 1 }}>
+                                  <Text style={styles.rowTitle}>{r.title}</Text>
+                                  <Text style={styles.rowMeta}>{resultMeta(r)}</Text>
+                                </View>
+                                <Text style={styles.chev}>›</Text>
+                              </View>
+                            </GlassCard>
                           </Pressable>
                         ))}
                     </View>
@@ -464,6 +461,7 @@ export default function HomeScreen() {
                   </Pressable>
                 </View>
 
+                {/* Matches */}
                 <View>
                   <View style={styles.searchHeaderRow}>
                     <Text style={styles.searchSectionTitle}>Matches</Text>
@@ -497,11 +495,11 @@ export default function HomeScreen() {
                         const line = fixtureLine(r);
 
                         return (
-                          <View key={fixtureId ?? `m-${idx}`} style={styles.matchCard}>
+                          <GlassCard key={fixtureId ?? `m-${idx}`} strength="subtle" style={styles.matchCard}>
                             <Pressable
                               onPress={() => (fixtureId ? goMatchWithContext(fixtureId) : null)}
-                              style={styles.matchMain}
                               disabled={!fixtureId}
+                              style={{ paddingHorizontal: 2 }}
                             >
                               <Text style={styles.rowTitle}>{line.title}</Text>
                               <Text style={styles.rowMeta}>{line.meta}</Text>
@@ -524,13 +522,14 @@ export default function HomeScreen() {
                                 <Text style={styles.smallActionPrimaryText}>Plan trip</Text>
                               </Pressable>
                             </View>
-                          </View>
+                          </GlassCard>
                         );
                       })}
                     </View>
                   ) : null}
                 </View>
 
+                {/* Trips */}
                 <View>
                   <View style={styles.searchHeaderRow}>
                     <Text style={styles.searchSectionTitle}>Trips</Text>
@@ -544,9 +543,7 @@ export default function HomeScreen() {
                     </View>
                   ) : null}
 
-                  {loadedTrips && tripResults.length === 0 ? (
-                    <Text style={styles.searchEmpty}>No trips found.</Text>
-                  ) : null}
+                  {loadedTrips && tripResults.length === 0 ? <Text style={styles.searchEmpty}>No trips found.</Text> : null}
 
                   {loadedTrips && tripResults.length > 0 ? (
                     <View style={styles.resultList}>
@@ -554,13 +551,17 @@ export default function HomeScreen() {
                         <Pressable
                           key={t.id}
                           onPress={() => router.push({ pathname: "/trip/[id]", params: { id: t.id } })}
-                          style={styles.resultRow}
+                          style={styles.rowPress}
                         >
-                          <View style={{ flex: 1 }}>
-                            <Text style={styles.rowTitle}>{t.cityId || "Trip"}</Text>
-                            <Text style={styles.rowMeta}>{tripSummaryLine(t)}</Text>
-                          </View>
-                          <Text style={styles.chev}>›</Text>
+                          <GlassCard strength="subtle" noPadding style={styles.rowCard}>
+                            <View style={styles.rowInner}>
+                              <View style={{ flex: 1 }}>
+                                <Text style={styles.rowTitle}>{t.cityId || "Trip"}</Text>
+                                <Text style={styles.rowMeta}>{tripSummaryLine(t)}</Text>
+                              </View>
+                              <Text style={styles.chev}>›</Text>
+                            </View>
+                          </GlassCard>
                         </Pressable>
                       ))}
                     </View>
@@ -575,7 +576,7 @@ export default function HomeScreen() {
           </GlassCard>
 
           {/* QUICK ACTIONS */}
-          <GlassCard style={styles.quickCard} intensity={24}>
+          <GlassCard style={styles.quickCard} strength="default">
             <Text style={styles.quickTitle}>Quick actions</Text>
             <Text style={styles.quickSub}>
               {league.label} • {formatUkDateOnly(fromIso)} → {formatUkDateOnly(toIso)} • {tripsCountLabel}
@@ -600,7 +601,7 @@ export default function HomeScreen() {
           {/* TOP LEAGUES */}
           <View style={styles.section}>
             <SectionHeader title="Top leagues" subtitle="Pick a league for your next fixtures" />
-            <GlassCard style={styles.card} intensity={22}>
+            <GlassCard style={styles.card} strength="default">
               <View style={styles.leagueWrap}>
                 {LEAGUES.map((l) => {
                   const active = l.leagueId === league.leagueId;
@@ -620,11 +621,8 @@ export default function HomeScreen() {
 
           {/* NEXT FIXTURES */}
           <View style={styles.section}>
-            <SectionHeader
-              title="Next fixtures"
-              subtitle={`${league.label} • ${formatUkDateOnly(fromIso)} → ${formatUkDateOnly(toIso)}`}
-            />
-            <GlassCard style={styles.card} intensity={22}>
+            <SectionHeader title="Next fixtures" subtitle={`${league.label} • ${formatUkDateOnly(fromIso)} → ${formatUkDateOnly(toIso)}`} />
+            <GlassCard style={styles.card} strength="default">
               {fxLoading ? (
                 <View style={styles.center}>
                   <ActivityIndicator />
@@ -646,11 +644,11 @@ export default function HomeScreen() {
                     const line = fixtureLine(r);
 
                     return (
-                      <View key={fixtureId ?? `fx-${idx}`} style={styles.fixtureCard}>
+                      <GlassCard key={fixtureId ?? `fx-${idx}`} strength="subtle" style={styles.fixtureCard}>
                         <Pressable
                           onPress={() => (fixtureId ? goMatchWithContext(fixtureId) : null)}
                           disabled={!fixtureId}
-                          style={styles.fixtureMain}
+                          style={{ paddingHorizontal: 2 }}
                         >
                           <Text style={styles.rowTitle}>{line.title}</Text>
                           <Text style={styles.rowMeta}>{line.meta}</Text>
@@ -673,7 +671,7 @@ export default function HomeScreen() {
                             <Text style={styles.smallActionPrimaryText}>Plan trip</Text>
                           </Pressable>
                         </View>
-                      </View>
+                      </GlassCard>
                     );
                   })}
                 </View>
@@ -696,37 +694,34 @@ export default function HomeScreen() {
           {/* YOUR TRIPS */}
           <View style={styles.section}>
             <SectionHeader title="Your trips" subtitle="Your saved plans" />
-            <GlassCard style={styles.card} intensity={22}>
+            <GlassCard style={styles.card} strength="default">
               {!loadedTrips ? <EmptyState title="Loading trips" message="One moment…" /> : null}
 
-              {loadedTrips && trips.length === 0 ? (
-                <EmptyState title="No trips yet" message="Build your first trip in under a minute." />
-              ) : null}
+              {loadedTrips && trips.length === 0 ? <EmptyState title="No trips yet" message="Build your first trip in under a minute." /> : null}
 
               {loadedTrips && nextTrip ? (
-                <Pressable
-                  onPress={() => router.push({ pathname: "/trip/[id]", params: { id: nextTrip.id } })}
-                  style={styles.nextTrip}
-                >
-                  <Text style={styles.nextTripKicker}>Next up</Text>
-                  <Text style={styles.nextTripTitle}>{nextTrip.cityId || "Trip"}</Text>
-                  <Text style={styles.nextTripMeta}>{tripSummaryLine(nextTrip)}</Text>
+                <Pressable onPress={() => router.push({ pathname: "/trip/[id]", params: { id: nextTrip.id } })} style={styles.nextTripPress}>
+                  <GlassCard strength="subtle" style={styles.nextTripCard}>
+                    <Text style={styles.nextTripKicker}>Next up</Text>
+                    <Text style={styles.nextTripTitle}>{nextTrip.cityId || "Trip"}</Text>
+                    <Text style={styles.nextTripMeta}>{tripSummaryLine(nextTrip)}</Text>
+                  </GlassCard>
                 </Pressable>
               ) : null}
 
               {loadedTrips && trips.length > 0 ? (
                 <View style={[styles.resultList, { marginTop: 10 }]}>
                   {topTrips.map((t) => (
-                    <Pressable
-                      key={t.id}
-                      onPress={() => router.push({ pathname: "/trip/[id]", params: { id: t.id } })}
-                      style={styles.resultRow}
-                    >
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.rowTitle}>{t.cityId || "Trip"}</Text>
-                        <Text style={styles.rowMeta}>{tripSummaryLine(t)}</Text>
-                      </View>
-                      <Text style={styles.chev}>›</Text>
+                    <Pressable key={t.id} onPress={() => router.push({ pathname: "/trip/[id]", params: { id: t.id } })} style={styles.rowPress}>
+                      <GlassCard strength="subtle" noPadding style={styles.rowCard}>
+                        <View style={styles.rowInner}>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.rowTitle}>{t.cityId || "Trip"}</Text>
+                            <Text style={styles.rowMeta}>{tripSummaryLine(t)}</Text>
+                          </View>
+                          <Text style={styles.chev}>›</Text>
+                        </View>
+                      </GlassCard>
                     </Pressable>
                   ))}
                 </View>
@@ -759,7 +754,7 @@ const styles = StyleSheet.create({
   card: { padding: theme.spacing.md },
 
   muted: { marginTop: 8, fontSize: theme.fontSize.sm, color: theme.colors.textSecondary, fontWeight: "700" },
-  center: { paddingVertical: 12, alignItems: "center", gap: 10 },
+  center: { paddingVertical: 14, alignItems: "center", gap: 10 },
 
   /* HERO */
   heroCard: { marginTop: theme.spacing.lg, padding: theme.spacing.md },
@@ -787,8 +782,8 @@ const styles = StyleSheet.create({
   searchBox: {
     marginTop: 12,
     borderWidth: 1,
-    borderColor: "rgba(0, 255, 136, 0.28)",
-    backgroundColor: "rgba(0,0,0,0.28)",
+    borderColor: theme.glass.border,
+    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
     borderRadius: 14,
     paddingHorizontal: 12,
     paddingVertical: Platform.OS === "ios" ? 10 : 8,
@@ -807,8 +802,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    backgroundColor: "rgba(0,0,0,0.20)",
+    borderColor: "rgba(255,255,255,0.14)",
+    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
   },
   clearBtnText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: theme.fontSize.xs },
 
@@ -828,16 +823,15 @@ const styles = StyleSheet.create({
   searchEmpty: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, marginTop: 8, fontWeight: "700" },
 
   resultList: { marginTop: 10, gap: 10 },
-  resultRow: {
+
+  rowPress: { borderRadius: 16 },
+  rowCard: { borderRadius: 16 },
+  rowInner: {
+    paddingVertical: 12,
+    paddingHorizontal: 12,
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.18)",
   },
 
   rowTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.md },
@@ -845,15 +839,7 @@ const styles = StyleSheet.create({
   chev: { color: theme.colors.textSecondary, fontSize: 24, marginTop: -2 },
 
   matchList: { marginTop: 10, gap: 10 },
-  matchCard: {
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.18)",
-    padding: 12,
-    gap: 10,
-  },
-  matchMain: { paddingVertical: 2 },
+  matchCard: { padding: theme.spacing.md, gap: 10 },
 
   matchActions: { flexDirection: "row", gap: 10 },
   smallActionBtn: {
@@ -865,13 +851,13 @@ const styles = StyleSheet.create({
   },
   smallActionPrimary: {
     borderColor: "rgba(0,255,136,0.55)",
-    backgroundColor: "rgba(0,0,0,0.34)",
+    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.default : theme.glass.iosBg.default,
   },
   smallActionPrimaryText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
 
   smallActionGhost: {
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.18)",
+    borderColor: theme.glass.border,
+    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
   },
   smallActionGhostText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: theme.fontSize.sm },
 
@@ -884,7 +870,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    backgroundColor: "rgba(0,0,0,0.22)",
+    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
     alignItems: "center",
   },
   linkText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
@@ -906,7 +892,7 @@ const styles = StyleSheet.create({
     marginTop: 12,
     paddingVertical: 14,
     borderColor: "rgba(0,255,136,0.55)",
-    backgroundColor: "rgba(0,0,0,0.34)",
+    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.default : theme.glass.iosBg.default,
   },
   btnPrimaryText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.md },
   btnPrimaryMeta: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: "800" },
@@ -915,8 +901,8 @@ const styles = StyleSheet.create({
   btnSecondary: {
     flex: 1,
     paddingVertical: 12,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.22)",
+    borderColor: theme.glass.border,
+    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
   },
   btnSecondaryText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
 
@@ -927,35 +913,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.22)",
+    borderColor: theme.glass.border,
+    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
   },
-  leaguePillActive: { borderColor: "rgba(0,255,136,0.55)", backgroundColor: "rgba(0,0,0,0.30)" },
+  leaguePillActive: {
+    borderColor: "rgba(0,255,136,0.55)",
+    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.default : theme.glass.iosBg.default,
+  },
   leaguePillText: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, fontWeight: "800" },
   leaguePillTextActive: { color: theme.colors.text, fontWeight: "900" },
 
   /* FIXTURES */
   fixtureList: { marginTop: 10, gap: 10 },
-  fixtureCard: {
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.18)",
-    padding: 12,
-    gap: 10,
-  },
-  fixtureMain: { paddingVertical: 2 },
+  fixtureCard: { padding: theme.spacing.md, gap: 10 },
 
   /* NEXT TRIP */
-  nextTrip: {
-    marginTop: 6,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "rgba(0, 255, 136, 0.35)",
-    backgroundColor: "rgba(0,0,0,0.22)",
-  },
+  nextTripPress: { borderRadius: 16 },
+  nextTripCard: { padding: theme.spacing.md },
   nextTripKicker: {
     color: theme.colors.primary,
     fontSize: theme.fontSize.xs,
