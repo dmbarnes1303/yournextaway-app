@@ -731,7 +731,6 @@ export default function TripDetailScreen() {
                                 <Text style={styles.rowMeta} numberOfLines={1}>
                                   {shortDomain(l.url)}
                                 </Text>
-                                </Text>
                               </Pressable>
                               <Pressable onPress={() => removeLink(l.id)} style={styles.smallDangerBtn}>
                                 <Text style={styles.smallDangerText}>Remove</Text>
