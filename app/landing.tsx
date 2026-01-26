@@ -1,6 +1,6 @@
 // app/landing.tsx
-import React, { useEffect } from "react";
-import { View, Text, StyleSheet, Pressable, Image, ScrollView } from "react-native";
+import React from "react";
+import { View, Text, StyleSheet, Pressable, Image } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Stack, useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -12,82 +12,57 @@ import { theme } from "@/src/constants/theme";
 
 const LOGO = require("@/src/yna-logo.png");
 
-const STORAGE_KEYS = {
-  seenLanding: "yna:seenLanding",
-};
-
 export default function Landing() {
   const router = useRouter();
 
-  // Mark landing as "seen" the moment the user reaches it once.
-  // This is what app/index.tsx uses to decide Landing vs Home on next launch.
-  useEffect(() => {
-    AsyncStorage.setItem(STORAGE_KEYS.seenLanding, "true").catch(() => {});
-  }, []);
+  const handleGetStarted = async () => {
+    try {
+      await AsyncStorage.setItem("yna:seenLanding", "true");
+    } catch {}
+    router.push("/onboarding");
+  };
+
+  const handleExploreFirst = async () => {
+    try {
+      await AsyncStorage.setItem("yna:seenLanding", "true");
+    } catch {}
+    router.replace("/(tabs)/home");
+  };
 
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
 
       <Background imageUrl={getBackground("landing")} overlayOpacity={0.72}>
-        <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
-          <ScrollView
-            style={styles.scroll}
-            contentContainerStyle={styles.scrollContent}
-            showsVerticalScrollIndicator={false}
-            bounces={false}
-          >
+        <SafeAreaView style={styles.safe} edges={["bottom"]}>
+          <View style={styles.screen}>
             <View style={styles.brand}>
-              <Image
-                source={LOGO}
-                style={styles.logo}
-                resizeMode="contain"
-                accessible
-                accessibilityRole="image"
-                accessibilityLabel="YourNextAway logo"
-              />
-
-              <Text style={styles.title} accessibilityRole="header">
-                YourNextAway
-              </Text>
-
+              <Image source={LOGO} style={styles.logo} resizeMode="contain" />
+              <Text style={styles.title}>YourNextAway</Text>
               <Text style={styles.subtitle}>
                 Football-first city breaks, planned properly.
               </Text>
             </View>
 
             <GlassCard style={styles.card} intensity={24}>
-              <Text style={styles.h1}>Start with fixtures. Build the trip.</Text>
+              <Text style={styles.h1}>Start planning in one flow</Text>
 
               <Text style={styles.body}>
-                Browse first. When you’re ready, we’ll guide you through onboarding — preferences can wait.
+                Browse fixtures first. When you’re ready, we’ll walk you through
+                onboarding and you can set preferences later.
               </Text>
 
               <View style={styles.actions}>
                 <Pressable
-                  onPress={() => router.push("/onboarding")}
-                  accessibilityRole="button"
-                  accessibilityLabel="Get started"
-                  hitSlop={10}
-                  style={({ pressed }) => [
-                    styles.btn,
-                    styles.btnPrimary,
-                    pressed && styles.pressed,
-                  ]}
+                  onPress={handleGetStarted}
+                  style={[styles.btn, styles.btnPrimary]}
                 >
                   <Text style={styles.btnPrimaryText}>Get started</Text>
                 </Pressable>
 
                 <Pressable
-                  onPress={() => router.replace("/(tabs)/home")}
-                  accessibilityRole="button"
-                  accessibilityLabel="Explore first"
-                  hitSlop={10}
-                  style={({ pressed }) => [
-                    styles.btn,
-                    styles.btnGhost,
-                    pressed && styles.pressed,
-                  ]}
+                  onPress={handleExploreFirst}
+                  style={[styles.btn, styles.btnGhost]}
                 >
                   <Text style={styles.btnGhostText}>Explore first</Text>
                 </Pressable>
@@ -95,10 +70,7 @@ export default function Landing() {
 
               <Text style={styles.micro}>Plan • Fly • Watch • Repeat</Text>
             </GlassCard>
-
-            {/* Bottom breathing room so nothing feels pinned to the edge */}
-            <View style={styles.bottomSpacer} />
-          </ScrollView>
+          </View>
         </SafeAreaView>
       </Background>
     </>
@@ -108,26 +80,21 @@ export default function Landing() {
 const styles = StyleSheet.create({
   safe: { flex: 1 },
 
-  scroll: { flex: 1 },
-
-  scrollContent: {
-    flexGrow: 1,
+  screen: {
+    flex: 1,
     paddingHorizontal: theme.spacing.lg,
-    paddingTop: theme.spacing.xl,
     paddingBottom: theme.spacing.xxl,
     justifyContent: "flex-end",
-    gap: theme.spacing.lg,
+    gap: 14,
   },
 
   brand: {
     alignItems: "center",
-    gap: 10,
+    gap: 8,
+    paddingTop: 18,
   },
 
-  logo: {
-    width: 132,
-    height: 132,
-  },
+  logo: { width: 140, height: 140 },
 
   title: {
     color: theme.colors.text,
@@ -142,18 +109,14 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSize.md,
     textAlign: "center",
     lineHeight: 20,
-    maxWidth: 320,
   },
 
-  card: {
-    padding: theme.spacing.lg,
-  },
+  card: { padding: theme.spacing.lg },
 
   h1: {
     color: theme.colors.text,
     fontWeight: theme.fontWeight.black,
     fontSize: theme.fontSize.lg,
-    lineHeight: 24,
   },
 
   body: {
@@ -174,11 +137,8 @@ const styles = StyleSheet.create({
     flex: 1,
     borderRadius: 14,
     paddingVertical: 14,
-    paddingHorizontal: 12,
     alignItems: "center",
     borderWidth: 1,
-    minHeight: 48,
-    justifyContent: "center",
   },
 
   btnPrimary: {
@@ -203,21 +163,12 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSize.md,
   },
 
-  pressed: {
-    opacity: 0.85,
-    transform: [{ scale: 0.99 }],
-  },
-
   micro: {
-    marginTop: 14,
+    marginTop: 12,
     textAlign: "center",
-    color: "rgba(255,255,255,0.60)",
+    color: "rgba(255,255,255,0.55)",
     fontSize: theme.fontSize.xs,
     fontWeight: theme.fontWeight.black,
     letterSpacing: 0.6,
-  },
-
-  bottomSpacer: {
-    height: 6,
   },
 });
