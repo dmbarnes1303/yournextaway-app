@@ -32,8 +32,8 @@ import { getCityGuide } from "@/src/data/cityGuides";
 import { hasTeamGuide } from "@/src/data/teamGuides";
 
 function tripSummaryLine(t: Trip) {
-  const a = formatUkDateOnly(t.startDate);
-  const b = formatUkDateOnly(t.endDate);
+  const a = t.startDate ? formatUkDateOnly(t.startDate) : "—";
+  const b = t.endDate ? formatUkDateOnly(t.endDate) : "—";
   const n = t.matchIds?.length ?? 0;
   return `${a} → ${b} • ${n} match${n === 1 ? "" : "es"}`;
 }
@@ -98,7 +98,7 @@ export default function HomeScreen() {
     return trips
       .map((t) => ({ t, d: t.startDate ? parseIsoDateOnly(t.startDate) : null }))
       .filter((x): x is { t: Trip; d: Date } => !!x.d)
-      .filter((x) => x.d.getTime() > todayMidnight.getTime())
+      .filter((x) => x.d.getTime() >= todayMidnight.getTime())
       .sort((a, b) => a.d.getTime() - b.d.getTime())
       .map((x) => x.t);
   }, [trips, todayMidnight]);
@@ -338,11 +338,7 @@ export default function HomeScreen() {
   return (
     <Background imageUrl={getBackground("home")} overlayOpacity={0.86}>
       <SafeAreaView style={styles.container} edges={["top"]}>
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={styles.content}
-          keyboardShouldPersistTaps="handled"
-        >
+        <ScrollView style={styles.scrollView} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           {/* HERO */}
           <GlassCard style={styles.heroCard} strength="strong">
             <Text style={styles.heroKicker}>PLAN • FLY • WATCH • REPEAT</Text>
@@ -373,9 +369,7 @@ export default function HomeScreen() {
               ) : null}
             </View>
 
-            {qNorm.length === 0 ? (
-              <Text style={styles.heroHint}>Try “Austria”, “Madrid”, “Arsenal”, or a stadium name.</Text>
-            ) : null}
+            {qNorm.length === 0 ? <Text style={styles.heroHint}>Try “Austria”, “Madrid”, “Arsenal”, or a stadium name.</Text> : null}
 
             {/* SEARCH RESULTS */}
             {showSearchResults ? (
@@ -479,9 +473,7 @@ export default function HomeScreen() {
 
                   {!fxLoading && fxError ? <EmptyState title="Fixtures unavailable" message={fxError} /> : null}
 
-                  {!fxLoading && !fxError && fxRows.length === 0 ? (
-                    <Text style={styles.searchEmpty}>No fixtures loaded.</Text>
-                  ) : null}
+                  {!fxLoading && !fxError && fxRows.length === 0 ? <Text style={styles.searchEmpty}>No fixtures loaded.</Text> : null}
 
                   {!fxLoading && !fxError && matchHits.length === 0 ? (
                     <Text style={styles.searchEmpty}>No matches found for that query.</Text>
@@ -550,7 +542,7 @@ export default function HomeScreen() {
                       {tripResults.map((t) => (
                         <Pressable
                           key={t.id}
-                          onPress={() => router.push({ pathname: "/trip/[id]", params: { id: t.id } })}
+                          onPress={() => router.push({ pathname: "/trip/[id]", params: { id: t.id } } as any)}
                           style={styles.rowPress}
                         >
                           <GlassCard strength="subtle" noPadding style={styles.rowCard}>
@@ -588,7 +580,7 @@ export default function HomeScreen() {
             </Pressable>
 
             <View style={styles.quickRow}>
-              <Pressable onPress={() => router.push("/(tabs)/fixtures")} style={[styles.btn, styles.btnSecondary]}>
+              <Pressable onPress={() => goFixturesWithContext()} style={[styles.btn, styles.btnSecondary]}>
                 <Text style={styles.btnSecondaryText}>Fixtures</Text>
               </Pressable>
 
@@ -697,10 +689,15 @@ export default function HomeScreen() {
             <GlassCard style={styles.card} strength="default">
               {!loadedTrips ? <EmptyState title="Loading trips" message="One moment…" /> : null}
 
-              {loadedTrips && trips.length === 0 ? <EmptyState title="No trips yet" message="Build your first trip in under a minute." /> : null}
+              {loadedTrips && trips.length === 0 ? (
+                <EmptyState title="No trips yet" message="Build your first trip in under a minute." />
+              ) : null}
 
               {loadedTrips && nextTrip ? (
-                <Pressable onPress={() => router.push({ pathname: "/trip/[id]", params: { id: nextTrip.id } })} style={styles.nextTripPress}>
+                <Pressable
+                  onPress={() => router.push({ pathname: "/trip/[id]", params: { id: nextTrip.id } } as any)}
+                  style={styles.nextTripPress}
+                >
                   <GlassCard strength="subtle" style={styles.nextTripCard}>
                     <Text style={styles.nextTripKicker}>Next up</Text>
                     <Text style={styles.nextTripTitle}>{nextTrip.cityId || "Trip"}</Text>
@@ -712,7 +709,11 @@ export default function HomeScreen() {
               {loadedTrips && trips.length > 0 ? (
                 <View style={[styles.resultList, { marginTop: 10 }]}>
                   {topTrips.map((t) => (
-                    <Pressable key={t.id} onPress={() => router.push({ pathname: "/trip/[id]", params: { id: t.id } })} style={styles.rowPress}>
+                    <Pressable
+                      key={t.id}
+                      onPress={() => router.push({ pathname: "/trip/[id]", params: { id: t.id } } as any)}
+                      style={styles.rowPress}
+                    >
                       <GlassCard strength="subtle" noPadding style={styles.rowCard}>
                         <View style={styles.rowInner}>
                           <View style={{ flex: 1 }}>
@@ -937,5 +938,11 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
   nextTripTitle: { marginTop: 6, color: theme.colors.text, fontSize: theme.fontSize.lg, fontWeight: "900" },
-  nextTripMeta: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18, fontWeight: "700" },
+  nextTripMeta: {
+    marginTop: 6,
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSize.sm,
+    lineHeight: 18,
+    fontWeight: "700",
+  },
 });
