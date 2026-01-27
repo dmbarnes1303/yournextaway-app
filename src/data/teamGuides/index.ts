@@ -1,33 +1,38 @@
 // src/data/teamGuides/index.ts
 import type { TeamGuide } from "./types";
-import teamGuides from "./teamGuides";
+import { normalizeTeamKey } from "@/src/data/teams";
+
+import { premierLeagueTeamGuides } from "./premierLeague";
+import { laLigaTeamGuides } from "./laLiga";
+import { serieATeamGuides } from "./serieA";
+import { bundesligaTeamGuides } from "./bundesliga";
+import { ligue1TeamGuides } from "./ligue1";
 
 /**
  * Team Guide registry + helpers.
  *
- * V1 note:
- * - The registry can stay empty and the app still functions (we link out).
- * - As you add guides, keep the registry keys as stable “team keys” (slugs).
+ * Source of truth rules:
+ * - Team keys are defined in src/data/teams (team registry).
+ * - Guides must use the same key-normalisation as the team registry.
+ * - This index merges all league guide maps into one registry.
  *
- * Examples:
+ * Key examples:
  * - "arsenal"
  * - "real-madrid"
  * - "paris-saint-germain"
  */
 
-export { teamGuides };
-
-export function normalizeTeamKey(input: string): string {
-  return String(input ?? "")
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, "-")
-    .replace(/[^a-z0-9-]/g, "");
-}
+export const teamGuides: Record<string, TeamGuide> = {
+  ...premierLeagueTeamGuides,
+  ...laLigaTeamGuides,
+  ...serieATeamGuides,
+  ...bundesligaTeamGuides,
+  ...ligue1TeamGuides,
+};
 
 export function getTeamGuide(teamInput: string): TeamGuide | null {
   const key = normalizeTeamKey(teamInput);
-  return (teamGuides as Record<string, TeamGuide>)[key] ?? null;
+  return teamGuides[key] ?? null;
 }
 
 /**
