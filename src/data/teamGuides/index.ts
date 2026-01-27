@@ -30,6 +30,12 @@ export const teamGuides: Record<string, TeamGuide> = {
   ...ligue1TeamGuides,
 };
 
+/**
+ * Re-export so any consumer can use the SAME normalisation.
+ * (Fixes crashes where callers expect teamGuides.normalizeTeamKey)
+ */
+export { normalizeTeamKey };
+
 export function getTeamGuide(teamInput: string): TeamGuide | null {
   const key = normalizeTeamKey(teamInput);
   return teamGuides[key] ?? null;
@@ -42,4 +48,17 @@ export function hasTeamGuide(teamInput: string): boolean {
   return !!getTeamGuide(teamInput);
 }
 
-export default teamGuides;
+/**
+ * Default export MUST be compatible with both patterns:
+ * 1) Default import used as a plain registry map: guides["arsenal"]
+ * 2) Callers treating it like a module object: guides.normalizeTeamKey(...)
+ *
+ * We do that by attaching helper functions onto the registry object.
+ */
+const teamGuidesModule = Object.assign(teamGuides, {
+  normalizeTeamKey,
+  getTeamGuide,
+  hasTeamGuide,
+});
+
+export default teamGuidesModule;
