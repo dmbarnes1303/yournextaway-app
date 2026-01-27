@@ -207,7 +207,7 @@ const bundesligaTeamGuides: TeamGuide[] = [
     ],
     updatedAt: "2026-01-27"
   }),
-```0
+
 
 makeGuide({
     teamKey: "borussia-dortmund",
