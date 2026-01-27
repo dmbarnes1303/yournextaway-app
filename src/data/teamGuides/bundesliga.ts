@@ -16,7 +16,7 @@ export default bundesligaTeamGuides;
 
 {
   teamKey: "augsburg",
-  name; "FC Augsburg",
+  name: "FC Augsburg",
   city: "Augsburg",
   country: "Germany",
   stadium: "WWK Arena",
