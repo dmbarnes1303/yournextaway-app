@@ -630,6 +630,70 @@ export const premierLeagueTeamGuides: Record<string, TeamGuide> = {
 },
 
 
+  "leeds-united": {
+  teamKey: "leeds-united",
+  name: "Leeds United",
+  city: "Leeds",
+  country: "England",
+  stadium: "Elland Road",
+  sections: [
+    {
+      title: "Club Overview",
+      body:
+        "Leeds United are one of English football’s biggest “sleeping giant” institutions: a club defined by massive support, intense local identity, and a permanent sense that their natural place is higher than wherever they currently sit. Leeds are not a polite club. Everything about them is high-volume: the fanbase, the scrutiny, the emotion, and the way good seasons become city-wide events.\n\nLeeds’ identity is built around confrontation and momentum. When Leeds are flying, matches feel like a surge — relentless energy, crowd-driven intensity, and a belief that opponents can be overwhelmed. When Leeds are struggling, the atmosphere can flip into tension quickly because expectation never really leaves.\n\nFor neutral travellers, Leeds offer one of England’s rawest matchday experiences: a proper old-school ground, a crowd that treats football as identity rather than entertainment, and a club whose name still carries weight far beyond recent league finishes."
+    },
+    {
+      title: "History & Legacy",
+      body:
+        "Leeds’ historic stature is anchored in the Don Revie era — one of English football’s defining dynasties. Revie’s Leeds were feared and hated in equal measure: disciplined, physically uncompromising, tactically sharp, and relentlessly competitive. That period built Leeds’ reputation as an elite club and cemented a long-term self-image of belonging at the top.\n\nThe club’s mythology includes powerful identity themes: Yorkshire toughness, siege mentality, and a strong sense of “us against the world.”\n\nLeeds’ modern history also includes long periods of decline and instability, which only sharpened the fanbase’s sense of injustice and expectation. The key legacy point: Leeds are never treated as a small club. Even outside the top flight, they behave, travel, and get covered like a giant."
+    },
+    {
+      title: "Recent Seasons",
+      body:
+        "Leeds’ recent seasons have been shaped by sharp swings rather than slow drift.\n\nPatterns you’ll notice:\n• A high-intensity rise that re-established them as a top-flight force for a period.\n• A subsequent drop driven by structural strain: recruitment hits and misses, tactical disruption, and the Premier League’s ruthless punishment of instability.\n• A rebuild phase defined by the need to regain consistency and reassert a coherent identity.\n\nLeeds are typically at their best when the club feels unified: clear tactical plan, squad athleticism, and a crowd that believes. When confidence dips, volatility increases — which is exactly why the club’s seasons often feel dramatic rather than steady."
+    },
+    {
+      title: "Playing Style",
+      body:
+        "Leeds’ modern identity is historically associated with intensity — even when their tactical shape changes.\n\nTypical Leeds traits (across eras, with different emphasis depending on coach):\n• High energy and aggressive tempo.\n• Vertical ambition: moving the ball forward quickly when space appears.\n• A willingness to turn matches into physical and emotional contests.\n\nWhen Leeds are strong, they don’t let opponents settle. The game becomes uncomfortable: repeated duels, pressure moments, fast transitions, and crowd-driven surges.\n\nWhen Leeds are weaker, the same desire for tempo can create vulnerability — especially if the midfield becomes stretched and transitions go against them.\n\nFor neutrals: Leeds matches often feel alive. Even lower-profile fixtures can become intense because the club’s baseline emotional temperature is high."
+    },
+    {
+      title: "Stadium Profile",
+      body:
+        "Elland Road is one of England’s great traditional football stadiums.\n\nApproximate capacity: 37,000+.\n\nKey characteristics:\n• Tight, steep stands close to the pitch — you feel on top of the action.\n• Strong acoustics, especially when Leeds are pushing.\n• Old-school concourses and a proper ‘football ground’ rhythm rather than a modern entertainment complex vibe.\n\nElland Road doesn’t feel neutral. It feels like a home ground with edge — the kind of place where visiting teams can feel pressure simply from the environment."
+    },
+    {
+      title: "Atmosphere & Matchday Feel",
+      body:
+        "Elland Road is widely respected for its intensity.\n\nTypical patterns:\n• Big noise early — Leeds crowds often try to set the tone immediately.\n• Atmosphere rises sharply during pressing phases, tackles, and attacking momentum.\n• When Leeds concede or struggle, tension can appear quickly because expectation is always present.\n\nThe key: Elland Road can be genuinely intimidating when Leeds are on top. It’s not just loud — it feels emotionally directed. For neutral visitors, it’s one of the best places in England to understand how much crowd energy can shape a match."
+    },
+    {
+      title: "Rivalries",
+      body:
+        "Manchester United – the defining rivalry historically; one of English football’s most intense identity rivalries.\n\nChelsea – historically charged, rooted in past era conflict.\n\nLocal/regional tension also exists with Yorkshire neighbours depending on league alignment.\n\nManchester United is the rivalry with the deepest cultural and emotional weight."
+    },
+    {
+      title: "Legends",
+      body:
+        "Leeds’ legend culture spans historic dominance and modern identity figures.\n\nCentral names frequently referenced include:\n• Don Revie (managerial architect)\n• Billy Bremner\n• Jack Charlton\n• Norman Hunter\n\nModern-era icons are often judged against that historic standard, which is why Leeds supporters talk about identity and attitude as much as pure quality."
+    },
+    {
+      title: "Supporter Culture",
+      body:
+        "Leeds support is intense, tribal, and identity-driven.\n\nKey traits:\n• Strong Yorkshire pride and a siege-mentality edge.\n• High expectation even in rebuild phases — supporters don’t “accept smallness.”\n• Low tolerance for lack of effort; high appreciation for visible commitment.\n\nLeeds fans travel in huge numbers and treat the club as a cultural flag. Even neutrals notice the scale: Leeds often sound like the bigger club even when playing away."
+    },
+    {
+      title: "Neutral Visitor Notes",
+      body:
+        "• If you want a traditional English atmosphere with real edge, Leeds are elite.\n• Elland Road is best experienced when there’s something at stake — promotion races, big opponents, or derby-style fixtures.\n• Expect an emotionally charged environment: noise, tension, momentum swings.\n• Dress neutrally; rival colours (especially Manchester United) are best avoided if you want a quiet life."
+    }
+  ],
+  links: [{ label: "Official site", url: "https://www.leedsunited.com/" }],
+  updatedAt: "2026-01-27"
+},
+
+
+  
 "liverpool": {
   teamKey: "liverpool",
   name: "Liverpool",
