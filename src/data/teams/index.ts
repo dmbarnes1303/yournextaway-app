@@ -260,6 +260,186 @@ export const teams: Record<string, TeamRecord> = {
       "wanderers",
     ],
   },
+
+  "athletic-club": {
+    teamKey: "athletic-club",
+    name: "Athletic Club",
+    country: "Spain",
+    city: "Bilbao",
+    leagueId: 140,
+    aliases: ["athletic", "athletic bilbao", "bilbao"],
+  },
+
+  "atletico-madrid": {
+    teamKey: "atletico-madrid",
+    name: "Atlético Madrid",
+    country: "Spain",
+    city: "Madrid",
+    leagueId: 140,
+    aliases: ["atletico", "atleti", "atletico madrid"],
+  },
+
+  "barcelona": {
+    teamKey: "barcelona",
+    name: "Barcelona",
+    country: "Spain",
+    city: "Barcelona",
+    leagueId: 140,
+    aliases: ["barca", "fc barcelona"],
+  },
+
+  "celta-vigo": {
+    teamKey: "celta-vigo",
+    name: "Celta Vigo",
+    country: "Spain",
+    city: "Vigo",
+    leagueId: 140,
+    aliases: ["celta", "rc celta", "celta de vigo"],
+  },
+
+  "deportivo-alaves": {
+    teamKey: "deportivo-alaves",
+    name: "Deportivo Alavés",
+    country: "Spain",
+    city: "Vitoria-Gasteiz",
+    leagueId: 140,
+    aliases: ["alaves", "alavés", "deportivo alaves"],
+  },
+
+  "elche": {
+    teamKey: "elche",
+    name: "Elche",
+    country: "Spain",
+    city: "Elche",
+    leagueId: 140,
+    aliases: ["elche cf"],
+  },
+
+  "espanyol": {
+    teamKey: "espanyol",
+    name: "Espanyol",
+    country: "Spain",
+    city: "Barcelona",
+    leagueId: 140,
+    aliases: ["rcd espanyol", "espanyol barcelona"],
+  },
+
+  "getafe": {
+    teamKey: "getafe",
+    name: "Getafe",
+    country: "Spain",
+    city: "Getafe",
+    leagueId: 140,
+    aliases: ["getafe cf"],
+  },
+
+  "girona": {
+    teamKey: "girona",
+    name: "Girona",
+    country: "Spain",
+    city: "Girona",
+    leagueId: 140,
+    aliases: ["girona fc"],
+  },
+
+  "levante": {
+    teamKey: "levante",
+    name: "Levante",
+    country: "Spain",
+    city: "Valencia",
+    leagueId: 140,
+    aliases: ["levante ud"],
+  },
+
+  "mallorca": {
+    teamKey: "mallorca",
+    name: "Mallorca",
+    country: "Spain",
+    city: "Palma",
+    leagueId: 140,
+    aliases: ["rcd mallorca"],
+  },
+
+  "osasuna": {
+    teamKey: "osasuna",
+    name: "Osasuna",
+    country: "Spain",
+    city: "Pamplona",
+    leagueId: 140,
+    aliases: ["ca osasuna"],
+  },
+
+  "rayo-vallecano": {
+    teamKey: "rayo-vallecano",
+    name: "Rayo Vallecano",
+    country: "Spain",
+    city: "Madrid",
+    leagueId: 140,
+    aliases: ["rayo", "rayo vallecano"],
+  },
+
+  "real-betis": {
+    teamKey: "real-betis",
+    name: "Real Betis",
+    country: "Spain",
+    city: "Seville",
+    leagueId: 140,
+    aliases: ["betis", "real betis balompie"],
+  },
+
+  "real-madrid": {
+    teamKey: "real-madrid",
+    name: "Real Madrid",
+    country: "Spain",
+    city: "Madrid",
+    leagueId: 140,
+    aliases: ["madrid", "rm", "real madrid cf"],
+  },
+
+  "real-oviedo": {
+    teamKey: "real-oviedo",
+    name: "Real Oviedo",
+    country: "Spain",
+    city: "Oviedo",
+    leagueId: 140,
+    aliases: ["oviedo"],
+  },
+
+  "real-sociedad": {
+    teamKey: "real-sociedad",
+    name: "Real Sociedad",
+    country: "Spain",
+    city: "San Sebastián",
+    leagueId: 140,
+    aliases: ["sociedad", "la real"],
+  },
+
+  "sevilla": {
+    teamKey: "sevilla",
+    name: "Sevilla",
+    country: "Spain",
+    city: "Seville",
+    leagueId: 140,
+    aliases: ["sevilla fc"],
+  },
+
+  "valencia": {
+    teamKey: "valencia",
+    name: "Valencia",
+    country: "Spain",
+    city: "Valencia",
+    leagueId: 140,
+    aliases: ["valencia cf"],
+  },
+
+  "villarreal": {
+    teamKey: "villarreal",
+    name: "Villarreal",
+    country: "Spain",
+    city: "Villarreal",
+    leagueId: 140,
+    aliases: ["villarreal cf", "yellow submarine"],
+  },
 };
 
 export function getTeam(teamInput: string): TeamRecord | null {
