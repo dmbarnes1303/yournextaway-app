@@ -57,17 +57,196 @@ export function normalizeTeamKey(input: string): string {
 /**
  * Registry keyed by teamKey.
  * Populate this as you build guides.
+ *
+ * Premier League (leagueId: 39)
+ * IMPORTANT: These entries should match your team guide keys exactly.
  */
 export const teams: Record<string, TeamRecord> = {
-  // Example entries (keep or delete; safe to leave)
-  // "arsenal": {
-  //   teamKey: "arsenal",
-  //   name: "Arsenal",
-  //   country: "England",
-  //   city: "London",
-  //   leagueId: 39,
-  //   aliases: ["arsenal fc", "gunners"],
-  // },
+  // Premier League (from your current premierLeagueTeamGuides keys)
+  arsenal: {
+    teamKey: "arsenal",
+    name: "Arsenal",
+    country: "England",
+    city: "London",
+    leagueId: 39,
+    aliases: ["arsenal fc", "gunners"],
+  },
+
+  "aston-villa": {
+    teamKey: "aston-villa",
+    name: "Aston Villa",
+    country: "England",
+    city: "Birmingham",
+    leagueId: 39,
+    aliases: ["villa", "avfc", "aston villa fc"],
+  },
+
+  "afc-bournemouth": {
+    teamKey: "afc-bournemouth",
+    name: "AFC Bournemouth",
+    country: "England",
+    city: "Bournemouth",
+    leagueId: 39,
+    aliases: ["bournemouth", "bournemouth fc", "the cherries"],
+  },
+
+  brentford: {
+    teamKey: "brentford",
+    name: "Brentford",
+    country: "England",
+    city: "London",
+    leagueId: 39,
+    aliases: ["brentford fc", "the bees"],
+  },
+
+  "brighton-hove-albion": {
+    teamKey: "brighton-hove-albion",
+    name: "Brighton & Hove Albion",
+    country: "England",
+    city: "Brighton",
+    leagueId: 39,
+    aliases: [
+      "brighton",
+      "brighton and hove albion",
+      "bhafc",
+      "the seagulls",
+    ],
+  },
+
+  burnley: {
+    teamKey: "burnley",
+    name: "Burnley",
+    country: "England",
+    city: "Burnley",
+    leagueId: 39,
+    aliases: ["burnley fc", "the clarets"],
+  },
+
+  chelsea: {
+    teamKey: "chelsea",
+    name: "Chelsea",
+    country: "England",
+    city: "London",
+    leagueId: 39,
+    aliases: ["chelsea fc", "cfc", "the blues"],
+  },
+
+  "crystal-palace": {
+    teamKey: "crystal-palace",
+    name: "Crystal Palace",
+    country: "England",
+    city: "London",
+    leagueId: 39,
+    aliases: ["palace", "cpfc", "crystal palace fc", "the eagles"],
+  },
+
+  everton: {
+    teamKey: "everton",
+    name: "Everton",
+    country: "England",
+    city: "Liverpool",
+    leagueId: 39,
+    aliases: ["everton fc", "efc", "the toffees"],
+  },
+
+  fulham: {
+    teamKey: "fulham",
+    name: "Fulham",
+    country: "England",
+    city: "London",
+    leagueId: 39,
+    aliases: ["fulham fc", "ffc", "the cottagers"],
+  },
+
+  "leeds-united": {
+    teamKey: "leeds-united",
+    name: "Leeds United",
+    country: "England",
+    city: "Leeds",
+    leagueId: 39,
+    aliases: ["leeds", "leeds utd", "lufc"],
+  },
+
+  liverpool: {
+    teamKey: "liverpool",
+    name: "Liverpool",
+    country: "England",
+    city: "Liverpool",
+    leagueId: 39,
+    aliases: ["liverpool fc", "lfc", "the reds"],
+  },
+
+  "manchester-city": {
+    teamKey: "manchester-city",
+    name: "Manchester City",
+    country: "England",
+    city: "Manchester",
+    leagueId: 39,
+    aliases: ["man city", "mancity", "mcfc", "city"],
+  },
+
+  "manchester-united": {
+    teamKey: "manchester-united",
+    name: "Manchester United",
+    country: "England",
+    city: "Manchester",
+    leagueId: 39,
+    aliases: ["man united", "man utd", "mufc", "united"],
+  },
+
+  "newcastle-united": {
+    teamKey: "newcastle-united",
+    name: "Newcastle United",
+    country: "England",
+    city: "Newcastle upon Tyne",
+    leagueId: 39,
+    aliases: ["newcastle", "nufc", "the magpies"],
+  },
+
+  "nottingham-forest": {
+    teamKey: "nottingham-forest",
+    name: "Nottingham Forest",
+    country: "England",
+    city: "Nottingham",
+    leagueId: 39,
+    aliases: ["forest", "nffc", "notts forest"],
+  },
+
+  sunderland: {
+    teamKey: "sunderland",
+    name: "Sunderland",
+    country: "England",
+    city: "Sunderland",
+    leagueId: 39,
+    aliases: ["sunderland afc", "safc", "the black cats"],
+  },
+
+  "tottenham-hotspur": {
+    teamKey: "tottenham-hotspur",
+    name: "Tottenham Hotspur",
+    country: "England",
+    city: "London",
+    leagueId: 39,
+    aliases: ["tottenham", "spurs", "thfc", "tottenham hotspur"],
+  },
+
+  "west-ham-united": {
+    teamKey: "west-ham-united",
+    name: "West Ham United",
+    country: "England",
+    city: "London",
+    leagueId: 39,
+    aliases: ["west ham", "whu", "whufc", "the hammers"],
+  },
+
+  wolves: {
+    teamKey: "wolves",
+    name: "Wolverhampton Wanderers",
+    country: "England",
+    city: "Wolverhampton",
+    leagueId: 39,
+    aliases: ["wolves", "wwfc", "wolverhampton"],
+  },
 };
 
 export function getTeam(teamInput: string): TeamRecord | null {
