@@ -837,7 +837,7 @@ const bundesligaTeamGuides: TeamGuide[] = [
   ],
   updatedAt: "2026-01-27"
 },
-```0
+
 
 "vfb-stuttgart": {
   teamKey: "vfb-stuttgart",
