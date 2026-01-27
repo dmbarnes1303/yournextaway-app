@@ -80,7 +80,7 @@ const bundesligaTeamGuides: TeamGuide[] = [
   updatedAt: "2026-01-27"
 },
 
-  makeGuide({
+  {
     teamKey: "bayern-munich",
     name: "Bayern Munich",
     city: "Munich",
@@ -142,7 +142,7 @@ const bundesligaTeamGuides: TeamGuide[] = [
       { label: "Official site", url: "https://fcbayern.com/" }
     ],
     updatedAt: "2026-01-27"
-  }),
+  },
 
   {
     teamKey: "bayer-leverkusen",
@@ -206,7 +206,7 @@ const bundesligaTeamGuides: TeamGuide[] = [
       { label: "Official site", url: "https://www.bayer04.de/" }
     ],
     updatedAt: "2026-01-27"
-  }),
+  },
 
 
 {
@@ -271,7 +271,7 @@ const bundesligaTeamGuides: TeamGuide[] = [
       { label: "Official site", url: "https://www.bvb.de/" }
     ],
     updatedAt: "2026-01-27"
-  }),
+  },
 
   {
     teamKey: "eintracht-frankfurt",
@@ -335,7 +335,7 @@ const bundesligaTeamGuides: TeamGuide[] = [
       { label: "Official site", url: "https://www.eintracht.de/" }
     ],
     updatedAt: "2026-01-27"
-  }),
+  },
 
   {
     teamKey: "fc-cologne",
@@ -397,7 +397,7 @@ const bundesligaTeamGuides: TeamGuide[] = [
     ],
     links: [{ label: "Official site", url: "https://fc.de/" }],
     updatedAt: "2026-01-27"
-  }),
+  },
 
   {
     teamKey: "fc-heidenheim",
@@ -459,7 +459,7 @@ const bundesligaTeamGuides: TeamGuide[] = [
     ],
     links: [{ label: "Official site", url: "https://www.fc-heidenheim.de/" }],
     updatedAt: "2026-01-27"
-  }),
+  },
 
   {
     teamKey: "sc-freiburg",
@@ -521,7 +521,7 @@ const bundesligaTeamGuides: TeamGuide[] = [
     ],
     links: [{ label: "Official site", url: "https://www.scfreiburg.com/" }],
     updatedAt: "2026-01-27"
-  }),
+  },
 
   {
     teamKey: "hamburger-sv",
@@ -583,7 +583,7 @@ const bundesligaTeamGuides: TeamGuide[] = [
     ],
     links: [{ label: "Official site", url: "https://www.hsv.de/" }],
     updatedAt: "2026-01-27"
-  }),
+  },
 
   {
     teamKey: "tsg-hoffenheim",
@@ -645,7 +645,7 @@ const bundesligaTeamGuides: TeamGuide[] = [
     ],
     links: [{ label: "Official site", url: "https://www.tsg-hoffenheim.de/" }],
     updatedAt: "2026-01-27"
-  }),
+  },
 
   {
   teamKey: "rb-leipzig",
