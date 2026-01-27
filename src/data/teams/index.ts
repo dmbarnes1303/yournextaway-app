@@ -318,4 +318,4 @@ export function leagueForTeam(t: TeamRecord): LeagueOption | null {
 }
 
 export default teams;
-```1
+
