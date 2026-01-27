@@ -12,7 +12,7 @@ const bundesligaTeamGuides: TeamGuide[] = [
 
 ];
 
-export default bundesligaTeamGuides;
+
 
 {
   teamKey: "augsburg",
