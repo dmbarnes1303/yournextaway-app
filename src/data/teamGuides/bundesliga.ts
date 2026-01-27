@@ -144,7 +144,7 @@ const bundesligaTeamGuides: TeamGuide[] = [
     updatedAt: "2026-01-27"
   }),
 
-  makeGuide({
+  {
     teamKey: "bayer-leverkusen",
     name: "Bayer Leverkusen",
     city: "Leverkusen",
@@ -209,7 +209,7 @@ const bundesligaTeamGuides: TeamGuide[] = [
   }),
 
 
-makeGuide({
+{
     teamKey: "borussia-dortmund",
     name: "Borussia Dortmund",
     city: "Dortmund",
@@ -273,7 +273,7 @@ makeGuide({
     updatedAt: "2026-01-27"
   }),
 
-  makeGuide({
+  {
     teamKey: "eintracht-frankfurt",
     name: "Eintracht Frankfurt",
     city: "Frankfurt",
@@ -337,7 +337,7 @@ makeGuide({
     updatedAt: "2026-01-27"
   }),
 
-  makeGuide({
+  {
     teamKey: "fc-cologne",
     name: "FC Cologne",
     city: "Cologne",
@@ -399,7 +399,7 @@ makeGuide({
     updatedAt: "2026-01-27"
   }),
 
-  makeGuide({
+  {
     teamKey: "fc-heidenheim",
     name: "FC Heidenheim",
     city: "Heidenheim an der Brenz",
@@ -461,7 +461,7 @@ makeGuide({
     updatedAt: "2026-01-27"
   }),
 
-  makeGuide({
+  {
     teamKey: "sc-freiburg",
     name: "SC Freiburg",
     city: "Freiburg im Breisgau",
@@ -523,7 +523,7 @@ makeGuide({
     updatedAt: "2026-01-27"
   }),
 
-  makeGuide({
+  {
     teamKey: "hamburger-sv",
     name: "Hamburger SV",
     city: "Hamburg",
@@ -585,7 +585,7 @@ makeGuide({
     updatedAt: "2026-01-27"
   }),
 
-  makeGuide({
+  {
     teamKey: "tsg-hoffenheim",
     name: "TSG Hoffenheim",
     city: "Sinsheim",
@@ -647,7 +647,7 @@ makeGuide({
     updatedAt: "2026-01-27"
   }),
 
-  "rb-leipzig": {
+  {
   teamKey: "rb-leipzig",
   name: "RB Leipzig",
   city: "Leipzig",
@@ -711,7 +711,7 @@ makeGuide({
   updatedAt: "2026-01-27"
 },
 
-"st-pauli": {
+ {
   teamKey: "st-pauli",
   name: "FC St. Pauli",
   city: "Hamburg",
@@ -775,7 +775,7 @@ makeGuide({
   updatedAt: "2026-01-27"
 },
 
-"union-berlin": {
+ {
   teamKey: "union-berlin",
   name: "1. FC Union Berlin",
   city: "Berlin",
@@ -840,7 +840,7 @@ makeGuide({
 },
 
 
-  "vfb-stuttgart": {
+   {
   teamKey: "vfb-stuttgart",
   name: "VfB Stuttgart",
   city: "Stuttgart",
@@ -904,7 +904,7 @@ makeGuide({
   updatedAt: "2026-01-27"
 },
 
- "werder-bremen": {
+  {
   teamKey: "werder-bremen",
   name: "Werder Bremen",
   city: "Bremen",
@@ -968,7 +968,7 @@ makeGuide({
   updatedAt: "2026-01-27"
 },
 
-"wolfsburg": {
+ {
   teamKey: "wolfsburg",
   name: "VfL Wolfsburg",
   city: "Wolfsburg",
