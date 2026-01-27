@@ -9,84 +9,79 @@ import type { TeamGuide } from "./types";
  */
 
 const bundesligaTeamGuides: TeamGuide[] = [
+  makeGuide({
+    teamKey: "augsburg",
+    name: "FC Augsburg",
+    city: "Augsburg",
+    country: "Germany",
+    stadium: "WWK Arena",
+    sections: [
+      {
+        title: "Club Overview",
+        body: "FC Augsburg are an established Bundesliga club based in the Bavarian city of Augsburg, roughly one hour northwest of Munich. Since stabilising themselves in Germany’s top flight in the 2010s, Augsburg have developed a reputation as a compact, hard-working side that regularly competes above expectations. The club represents a mid-sized historic city with a relaxed atmosphere, making it a good choice for travellers wanting a calmer German football experience outside the major tourist hubs.",
+      },
+      {
+        title: "Stadium: WWK Arena",
+        body: "WWK Arena is a modern 30,000-capacity stadium located in the southern outskirts of Augsburg. Opened in 2009, it offers excellent sightlines, a steep lower tier close to the pitch, and efficient concourses. Facilities are modern, queues move quickly, and mobile ticket scanning is standard. Covered seating protects most areas from bad weather.",
+      },
+      {
+        title: "Best Areas to Sit",
+        body: "The main stand (Westtribüne) provides central views and the best overall perspective. East Stand seating offers good value and balanced angles. Behind-goal sections are cheaper and louder, while upper tiers provide a broader tactical view. For neutral visitors, central lower-tier seats in either sideline stand offer the best blend of atmosphere and comfort.",
+      },
+      {
+        title: "Getting to WWK Arena",
+        body: "From Augsburg Hauptbahnhof (main station), take Tram Line 3 towards Inninger Straße and exit at \"Stadion\" stop. The journey takes around 15 minutes, followed by a short walk. On matchdays, additional services usually operate. Driving is possible, but public transport is strongly recommended due to limited parking.",
+      },
+      {
+        title: "Matchday Timing",
+        body: "Arriving at the stadium area 60–90 minutes before kickoff is ideal. This allows time for security checks, food and drinks, and exploring the fan zone areas. Gates typically open around 90 minutes before kickoff.",
+      },
+      {
+        title: "Food & Drink Around the Stadium",
+        body: "Classic German stadium food is widely available: bratwurst, currywurst, pretzels, fries, and local beer. Prices are reasonable by Bundesliga standards. For better dining, eat in the city centre before travelling out to the stadium.",
+      },
+      {
+        title: "Pre-Match Areas in Augsburg",
+        body: "Augsburg city centre around Maximilianstraße and Rathausplatz has numerous pubs, cafés, and restaurants. Popular pre-match choices include traditional Bavarian beer halls and casual bars near Königsplatz. The city centre has a relaxed, walkable feel.",
+      },
+      {
+        title: "Neighbourhood Guide",
+        body: "Augsburg’s Old Town (Altstadt) features historic canals, colourful buildings, and small squares. The Fugger district and Rathausplatz area are good bases for visitors. Most nightlife and dining is concentrated in and around the historic core.",
+      },
+      {
+        title: "Where to Stay",
+        body: "Staying near Augsburg Hauptbahnhof or in the Altstadt offers the best access to transport, dining, and nightlife. Hotels near Königsplatz provide easy tram connections to the stadium and the wider city.",
+      },
+      {
+        title: "Things to Do (Non-Football)",
+        body: "Visit the Fuggerei (world’s oldest social housing complex), Augsburg Cathedral, and the Renaissance-style Town Hall. The city’s canal system is a UNESCO World Heritage Site. Day trips to Munich are easy by train.",
+      },
+      {
+        title: "Typical Atmosphere",
+        body: "Crowds are loyal, vocal, and family-friendly. Expect coordinated chanting, flags, and steady noise rather than constant ultras-led displays. The atmosphere is authentic and welcoming for visiting neutrals.",
+      },
+      {
+        title: "Rivalries",
+        body: "Regional tension exists with Bayern Munich, though it is not a classic derby in competitive balance. Matches against nearby Bavarian clubs carry added edge.",
+      },
+      {
+        title: "Club Identity & Colours",
+        body: "Augsburg traditionally play in red, green, and white. The club identity centres on resilience, community roots, and overachievement within Bundesliga constraints.",
+      },
+      {
+        title: "Practical Tips",
+        body: "Cashless payment is standard inside the stadium. Bring a light jacket in winter months as Augsburg can be cold. Trams after matches can be busy; waiting 15–20 minutes often makes boarding easier.",
+      },
+    ],
+    links: [
+      { label: "Official Website", url: "https://www.fcaugsburg.de" },
+      { label: "Tickets", url: "https://www.fcaugsburg.de/tickets" },
+      { label: "WWK Arena Info", url: "https://www.fcaugsburg.de/stadion" },
+    ],
+    updatedAt: "2026-01-27",
+  }),
 
-];
-
-
-
-{
-  teamKey: "augsburg",
-  name: "FC Augsburg",
-  city: "Augsburg",
-  country: "Germany",
-  stadium: "WWK Arena",
-  sections: [
-    {
-      title: "Club Overview",
-      body: "FC Augsburg are an established Bundesliga club based in the Bavarian city of Augsburg, roughly one hour northwest of Munich. Since stabilising themselves in Germany’s top flight in the 2010s, Augsburg have developed a reputation as a compact, hard-working side that regularly competes above expectations. The club represents a mid-sized historic city with a relaxed atmosphere, making it a good choice for travellers wanting a calmer German football experience outside the major tourist hubs."
-    },
-    {
-      title: "Stadium: WWK Arena",
-      body: "WWK Arena is a modern 30,000-capacity stadium located in the southern outskirts of Augsburg. Opened in 2009, it offers excellent sightlines, a steep lower tier close to the pitch, and efficient concourses. Facilities are modern, queues move quickly, and mobile ticket scanning is standard. Covered seating protects most areas from bad weather."
-    },
-    {
-      title: "Best Areas to Sit",
-      body: "The main stand (Westtribüne) provides central views and the best overall perspective. East Stand seating offers good value and balanced angles. Behind-goal sections are cheaper and louder, while upper tiers provide a broader tactical view. For neutral visitors, central lower-tier seats in either sideline stand offer the best blend of atmosphere and comfort."
-    },
-    {
-      title: "Getting to WWK Arena",
-      body: "From Augsburg Hauptbahnhof (main station), take Tram Line 3 towards Inninger Straße and exit at \"Stadion\" stop. The journey takes around 15 minutes, followed by a short walk. On matchdays, additional services usually operate. Driving is possible, but public transport is strongly recommended due to limited parking."
-    },
-    {
-      title: "Matchday Timing",
-      body: "Arriving at the stadium area 60–90 minutes before kickoff is ideal. This allows time for security checks, food and drinks, and exploring the fan zone areas. Gates typically open around 90 minutes before kickoff."
-    },
-    {
-      title: "Food & Drink Around the Stadium",
-      body: "Classic German stadium food is widely available: bratwurst, currywurst, pretzels, fries, and local beer. Prices are reasonable by Bundesliga standards. For better dining, eat in the city centre before travelling out to the stadium."
-    },
-    {
-      title: "Pre-Match Areas in Augsburg",
-      body: "Augsburg city centre around Maximilianstraße and Rathausplatz has numerous pubs, cafés, and restaurants. Popular pre-match choices include traditional Bavarian beer halls and casual bars near Königsplatz. The city centre has a relaxed, walkable feel."
-    },
-    {
-      title: "Neighbourhood Guide",
-      body: "Augsburg’s Old Town (Altstadt) features historic canals, colourful buildings, and small squares. The Fugger district and Rathausplatz area are good bases for visitors. Most nightlife and dining is concentrated in and around the historic core."
-    },
-    {
-      title: "Where to Stay",
-      body: "Staying near Augsburg Hauptbahnhof or in the Altstadt offers the best access to transport, dining, and nightlife. Hotels near Königsplatz provide easy tram connections to the stadium and the wider city."
-    },
-    {
-      title: "Things to Do (Non-Football)",
-      body: "Visit the Fuggerei (world’s oldest social housing complex), Augsburg Cathedral, and the Renaissance-style Town Hall. The city’s canal system is a UNESCO World Heritage Site. Day trips to Munich are easy by train."
-    },
-    {
-      title: "Typical Atmosphere",
-      body: "Crowds are loyal, vocal, and family-friendly. Expect coordinated chanting, flags, and steady noise rather than constant ultras-led displays. The atmosphere is authentic and welcoming for visiting neutrals."
-    },
-    {
-      title: "Rivalries",
-      body: "Regional tension exists with Bayern Munich, though it is not a classic derby in competitive balance. Matches against nearby Bavarian clubs carry added edge."
-    },
-    {
-      title: "Club Identity & Colours",
-      body: "Augsburg traditionally play in red, green, and white. The club identity centres on resilience, community roots, and overachievement within Bundesliga constraints."
-    },
-    {
-      title: "Practical Tips",
-      body: "Cashless payment is standard inside the stadium. Bring a light jacket in winter months as Augsburg can be cold. Trams after matches can be busy; waiting 15–20 minutes often makes boarding easier."
-    }
-  ],
-  links: [
-    { "label": "Official Website", "url": "https://www.fcaugsburg.de" },
-    { "label": "Tickets", "url": "https://www.fcaugsburg.de/tickets" },
-    { "label": "WWK Arena Info", "url": "https://www.fcaugsburg.de/stadion" }
-  ],
-  updatedAt: "2026-01-27"
-},
-
-makeGuide({
+  makeGuide({
     teamKey: "bayern-munich",
     name: "Bayern Munich",
     city: "Munich",
@@ -96,60 +91,57 @@ makeGuide({
       {
         title: "Club Overview",
         body:
-          "Bayern Munich are Germany’s reference institution: the club everyone measures themselves against, and the club that has normalised domestic dominance to the point where merely winning trophies isn’t a story anymore — *how* they win is.\n\nBayern’s identity is built on relentless competitiveness, elite squad depth, and a culture that treats pressure as oxygen. They operate less like a traditional ‘big club’ and more like a high-performance machine: constant standards, constant expectation, constant correction when anything slips.\n\nFor neutral travellers, Bayern are the cleanest version of the ‘elite European night’ experience in Germany: a world-famous stadium, a massive global presence, and a matchday operation that feels slick, modern, and major-event from the moment you arrive."
+          "Bayern Munich are Germany’s reference institution: the club everyone measures themselves against, and the club that has normalised domestic dominance to the point where merely winning trophies isn’t a story anymore — *how* they win is.\n\nBayern’s identity is built on relentless competitiveness, elite squad depth, and a culture that treats pressure as oxygen. They operate less like a traditional ‘big club’ and more like a high-performance machine: constant standards, constant expectation, constant correction when anything slips.\n\nFor neutral travellers, Bayern are the cleanest version of the ‘elite European night’ experience in Germany: a world-famous stadium, a massive global presence, and a matchday operation that feels slick, modern, and major-event from the moment you arrive.",
       },
       {
         title: "History & Legacy",
         body:
-          "Bayern’s rise from a strong domestic club into a global superpower is one of European football’s defining stories.\n\nThey are not just successful — they are structurally successful. Bayern built a model where elite players inside Germany often see them as the natural final step, and where the club’s governance and planning tend to outlast individual managers, cycles, or squads.\n\nTheir legacy includes repeated European Cup/Champions League triumphs and a long sequence of domestic titles that has shaped German football itself. In cultural terms, Bayern are both admired and resented: admired for standards and competence, resented because their dominance can feel inevitable.\n\nBayern’s identity is also tied to Munich: prosperous, organised, confident — and unapologetically ambitious."
+          "Bayern’s rise from a strong domestic club into a global superpower is one of European football’s defining stories.\n\nThey are not just successful — they are structurally successful. Bayern built a model where elite players inside Germany often see them as the natural final step, and where the club’s governance and planning tend to outlast individual managers, cycles, or squads.\n\nTheir legacy includes repeated European Cup/Champions League triumphs and a long sequence of domestic titles that has shaped German football itself. In cultural terms, Bayern are both admired and resented: admired for standards and competence, resented because their dominance can feel inevitable.\n\nBayern’s identity is also tied to Munich: prosperous, organised, confident — and unapologetically ambitious.",
       },
       {
         title: "Recent Seasons",
         body:
-          "Bayern’s recent seasons are still defined by expectation management rather than underdog narrative.\n\nPatterns:\n• Title races judged as ‘normal’, not exceptional.\n• Squad refresh cycles while maintaining elite baseline.\n• European performance treated as the true benchmark.\n\nEven when Bayern look imperfect, their floor remains high because of depth and institutional momentum. Supporter frustration is often triggered not by losing occasionally, but by any hint of drift: lack of intensity, lack of control, or a sense that standards are slipping.\n\nFor travellers, this means Bayern fixtures usually feel important — the club’s matches carry the weight of assumption: Bayern are here to impose themselves."
+          "Bayern’s recent seasons are still defined by expectation management rather than underdog narrative.\n\nPatterns:\n• Title races judged as ‘normal’, not exceptional.\n• Squad refresh cycles while maintaining elite baseline.\n• European performance treated as the true benchmark.\n\nEven when Bayern look imperfect, their floor remains high because of depth and institutional momentum. Supporter frustration is often triggered not by losing occasionally, but by any hint of drift: lack of intensity, lack of control, or a sense that standards are slipping.\n\nFor travellers, this means Bayern fixtures usually feel important — the club’s matches carry the weight of assumption: Bayern are here to impose themselves.",
       },
       {
         title: "Playing Style",
         body:
-          "Bayern’s football is built around territorial dominance and constant pressure.\n\nCommon traits:\n• High possession with purpose — not sterile recycling.\n• Aggressive counter-pressing after losing the ball.\n• Wide threats combined with central runners.\n• A constant desire to turn sustained pressure into repeated high-quality chances.\n\nBayern often force opponents into long defensive phases. Matches can feel like a slow tightening: the opponent survives early waves, then the space collapses as Bayern increase tempo and intensity.\n\nIn big matches, Bayern are comfortable playing at a higher tactical level: managing risk, selecting moments to accelerate, and using elite individuals to tilt the outcome."
+          "Bayern’s football is built around territorial dominance and constant pressure.\n\nCommon traits:\n• High possession with purpose — not sterile recycling.\n• Aggressive counter-pressing after losing the ball.\n• Wide threats combined with central runners.\n• A constant desire to turn sustained pressure into repeated high-quality chances.\n\nBayern often force opponents into long defensive phases. Matches can feel like a slow tightening: the opponent survives early waves, then the space collapses as Bayern increase tempo and intensity.\n\nIn big matches, Bayern are comfortable playing at a higher tactical level: managing risk, selecting moments to accelerate, and using elite individuals to tilt the outcome.",
       },
       {
         title: "Stadium Profile",
         body:
-          "Allianz Arena is one of the most recognisable stadiums in world football.\n\nApproximate capacity: 75,000+.\n\nIt’s a modern bowl with steep tiers and excellent sightlines, built for scale and spectacle. The visual identity is unmatched — even for neutrals, it feels iconic.\n\nLogistically, it’s a major-event venue: wide concourses, clear flows, and a matchday operation designed to move huge crowds efficiently."
+          "Allianz Arena is one of the most recognisable stadiums in world football.\n\nApproximate capacity: 75,000+.\n\nIt’s a modern bowl with steep tiers and excellent sightlines, built for scale and spectacle. The visual identity is unmatched — even for neutrals, it feels iconic.\n\nLogistically, it’s a major-event venue: wide concourses, clear flows, and a matchday operation designed to move huge crowds efficiently.",
       },
       {
         title: "Atmosphere & Matchday Feel",
         body:
-          "The Allianz delivers a big, polished matchday atmosphere rather than a chaotic, old-ground pressure cooker.\n\nTypical patterns:\n• Strong volume during big matches and European nights.\n• Steady support in routine league fixtures, with intensity rising as the game tightens.\n• Distinct organised singing sections that can drive momentum.\n\nBecause Bayern often dominate territory, noise tends to spike around breakthrough moments, sustained pressure phases, and big chances. When the game carries stakes — title-defining, derby edge, knockout tension — the stadium feels properly electric."
+          "The Allianz delivers a big, polished matchday atmosphere rather than a chaotic, old-ground pressure cooker.\n\nTypical patterns:\n• Strong volume during big matches and European nights.\n• Steady support in routine league fixtures, with intensity rising as the game tightens.\n• Distinct organised singing sections that can drive momentum.\n\nBecause Bayern often dominate territory, noise tends to spike around breakthrough moments, sustained pressure phases, and big chances. When the game carries stakes — title-defining, derby edge, knockout tension — the stadium feels properly electric.",
       },
       {
         title: "Rivalries",
         body:
-          "Borussia Dortmund – the defining modern sporting rivalry inside Germany.\n\n1860 Munich – historic city rivalry (less frequent at top level).\n\nBayern also attract a ‘superclub’ dynamic: many clubs treat matches against them as statement fixtures, which creates extra edge even without formal derby status."
+          "Borussia Dortmund – the defining modern sporting rivalry inside Germany.\n\n1860 Munich – historic city rivalry (less frequent at top level).\n\nBayern also attract a ‘superclub’ dynamic: many clubs treat matches against them as statement fixtures, which creates extra edge even without formal derby status.",
       },
       {
         title: "Legends",
         body:
-          "Bayern’s legend culture is stacked with era-defining names.\n\nCommonly referenced icons include:\n• Franz Beckenbauer\n• Gerd Müller\n• Oliver Kahn\n• Philipp Lahm\n• Bastian Schweinsteiger\n• Thomas Müller\n\nWhat these figures represent is not just skill, but Bayern’s core value: standards under pressure."
+          "Bayern’s legend culture is stacked with era-defining names.\n\nCommonly referenced icons include:\n• Franz Beckenbauer\n• Gerd Müller\n• Oliver Kahn\n• Philipp Lahm\n• Bastian Schweinsteiger\n• Thomas Müller\n\nWhat these figures represent is not just skill, but Bayern’s core value: standards under pressure.",
       },
       {
         title: "Supporter Culture",
         body:
-          "Bayern support blends a massive local base with one of Europe’s largest global followings.\n\nKey traits:\n• Expectation of control and dominance.\n• High appreciation for intensity and professionalism.\n• Low tolerance for complacency.\n\nIt’s not a fanbase built around romantic struggle — it’s built around entitlement to excellence. That can feel harsh, but it’s also what keeps Bayern’s internal standards so high."
+          "Bayern support blends a massive local base with one of Europe’s largest global followings.\n\nKey traits:\n• Expectation of control and dominance.\n• High appreciation for intensity and professionalism.\n• Low tolerance for complacency.\n\nIt’s not a fanbase built around romantic struggle — it’s built around entitlement to excellence. That can feel harsh, but it’s also what keeps Bayern’s internal standards so high.",
       },
       {
         title: "Neutral Visitor Notes",
         body:
-          "• If you want a ‘big European club’ experience in Germany, Bayern are the cleanest option.\n• Allianz Arena is a genuine bucket-list stadium — arrive early to take it in.\n• Atmosphere peaks for Dortmund, major European ties, and title-relevant fixtures.\n• Expect a slick, organised matchday with huge crowds and clear logistics."
-      }
+          "• If you want a ‘big European club’ experience in Germany, Bayern are the cleanest option.\n• Allianz Arena is a genuine bucket-list stadium — arrive early to take it in.\n• Atmosphere peaks for Dortmund, major European ties, and title-relevant fixtures.\n• Expect a slick, organised matchday with huge crowds and clear logistics.",
+      },
     ],
-    links: [
-      { label: "Official site", url: "https://fcbayern.com/" }
-    ],
-    updatedAt: "2026-01-27"
+    links: [{ label: "Official site", url: "https://fcbayern.com/" }],
+    updatedAt: "2026-01-27",
   }),
-
 
   makeGuide({
     teamKey: "bayer-leverkusen",
@@ -280,7 +272,6 @@ makeGuide({
     updatedAt: "2026-01-27"
   }),
 
-
   makeGuide({
     teamKey: "eintracht-frankfurt",
     name: "Eintracht Frankfurt",
@@ -345,7 +336,6 @@ makeGuide({
     updatedAt: "2026-01-27"
   }),
 
-
   makeGuide({
     teamKey: "fc-cologne",
     name: "FC Cologne",
@@ -407,7 +397,6 @@ makeGuide({
     links: [{ label: "Official site", url: "https://fc.de/" }],
     updatedAt: "2026-01-27"
   }),
-
 
   makeGuide({
     teamKey: "fc-heidenheim",
@@ -471,7 +460,6 @@ makeGuide({
     updatedAt: "2026-01-27"
   }),
 
-
   makeGuide({
     teamKey: "sc-freiburg",
     name: "SC Freiburg",
@@ -533,7 +521,6 @@ makeGuide({
     links: [{ label: "Official site", url: "https://www.scfreiburg.com/" }],
     updatedAt: "2026-01-27"
   }),
-
 
   makeGuide({
     teamKey: "hamburger-sv",
@@ -597,7 +584,6 @@ makeGuide({
     updatedAt: "2026-01-27"
   }),
 
-
   makeGuide({
     teamKey: "tsg-hoffenheim",
     name: "TSG Hoffenheim",
@@ -659,75 +645,6 @@ makeGuide({
     links: [{ label: "Official site", url: "https://www.tsg-hoffenheim.de/" }],
     updatedAt: "2026-01-27"
   }),
-
-
-  makeGuide({
-    teamKey: "mainz-05",
-    name: "1. FSV Mainz 05",
-    city: "Mainz",
-    country: "Germany",
-    stadium: "MEWA Arena",
-    sections: [
-      {
-        title: "Club Overview",
-        body:
-          "1. FSV Mainz 05 are one of German football’s most respected overachievers: a club without giant resources that has repeatedly established itself as a stable Bundesliga presence through strong identity, smart coaching appointments, and tactical clarity.\n\nMainz are not defined by glamour or star power. They are defined by collective structure, intensity, and a long-standing reputation for being uncomfortable opponents.\n\nThe club sits in a similar cultural space to Freiburg: respected, well-run, and admired for consistency rather than silverware.\n\nFor neutral travellers, Mainz offer an authentic Bundesliga experience rooted in organised support, modern facilities, and a clear footballing philosophy."
-      },
-      {
-        title: "History & Legacy",
-        body:
-          "Founded in 1905, Mainz spent the majority of their early history outside Germany’s top division.\n\nTheir modern breakthrough came in the early 2000s, achieving sustained Bundesliga promotion and stability.\n\nMainz’s legacy is tightly linked to managerial development. The club is famous for producing elite coaches rather than global superstars.\n\nThey are widely regarded as a 'coaching university' of German football."
-      },
-      {
-        title: "Coaching Lineage & Influence",
-        body:
-          "Mainz have produced some of the most influential modern managers in world football.\n\nNotable names:\n• Jürgen Klopp\n• Thomas Tuchel\n• Bo Svensson\n\nThis lineage shapes how Mainz see themselves: intense, organised, and tactically serious.\n\nEven during poor seasons, supporters expect structure and identity."
-      },
-      {
-        title: "Recent Seasons",
-        body:
-          "Mainz’s recent seasons have revolved around Bundesliga survival with periodic top-half pushes.\n\nPatterns:\n• Strong home form anchoring seasons.\n• Clear tactical identity even with squad turnover.\n• Occasional European qualification in peak cycles.\n\nMainz rarely collapse completely; they grind through difficult phases."
-      },
-      {
-        title: "Playing Style",
-        body:
-          "Mainz are traditionally high-intensity and defensively organised.\n\nCommon traits:\n• Aggressive pressing.\n• Compact defensive blocks.\n• Quick vertical transitions.\n\nThey prioritise disruption over domination.\n\nMainz matches often feel physical, confrontational, and emotionally charged."
-      },
-      {
-        title: "Stadium Profile",
-        body:
-          "MEWA Arena is a modern football-specific stadium.\n\nApproximate capacity: 34,000.\n\nSteep stands, tight sightlines, and good acoustics."
-      },
-      {
-        title: "Atmosphere & Matchday Feel",
-        body:
-          "Atmosphere is strong and organised.\n\nTypical patterns:\n• Constant drumming and chanting.\n• Loud south stand.\n• Hostile energy toward opponents.\n\nCrowd engagement is sustained rather than occasional."
-      },
-      {
-        title: "Rivalries",
-        body:
-          "Eintracht Frankfurt – Rhine-Main derby.\n\nKaiserslautern – regional rivalry.\n\nFrankfurt is the primary emotional fixture."
-      },
-      {
-        title: "Legends",
-        body:
-          "• Jürgen Klopp (player & manager)\n• Nikolče Noveski\n• André Schürrle\n\nFigures associated with identity and breakthrough eras."
-      },
-      {
-        title: "Supporter Culture",
-        body:
-          "Mainz supporters are proud of being underestimated.\n\nKey traits:\n• High tolerance for gritty football.\n• Strong identification with pressing intensity.\n• Appreciation of tactical organisation."
-      },
-      {
-        title: "Neutral Visitor Notes",
-        body:
-          "• Expect loud, constant chanting.\n• Good example of mid-sized German club culture.\n• Easy access and modern stadium."
-      }
-    ],
-    links: [{ label: "Official site", url: "https://www.mainz05.de/" }],
-    updatedAt: "2026-01-27"
-  }),
-
 
   "rb-leipzig": {
   teamKey: "rb-leipzig",
@@ -793,7 +710,6 @@ makeGuide({
   updatedAt: "2026-01-27"
 },
 
-
 "st-pauli": {
   teamKey: "st-pauli",
   name: "FC St. Pauli",
@@ -858,7 +774,6 @@ makeGuide({
   updatedAt: "2026-01-27"
 },
 
-
 "union-berlin": {
   teamKey: "union-berlin",
   name: "1. FC Union Berlin",
@@ -922,7 +837,7 @@ makeGuide({
   ],
   updatedAt: "2026-01-27"
 },
-
+```0
 
 "vfb-stuttgart": {
   teamKey: "vfb-stuttgart",
@@ -988,7 +903,6 @@ makeGuide({
   updatedAt: "2026-01-27"
 },
 
-
 "werder-bremen": {
   teamKey: "werder-bremen",
   name: "Werder Bremen",
@@ -1052,7 +966,6 @@ makeGuide({
   ],
   updatedAt: "2026-01-27"
 },
-
 
 "wolfsburg": {
   teamKey: "wolfsburg",
@@ -1119,12 +1032,7 @@ makeGuide({
 },
 
 
+
 };
 
 export default bundesligaTeamGuides;
-
-
-
-
-
-  
