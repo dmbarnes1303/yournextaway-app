@@ -600,7 +600,7 @@ export const ligue1TeamGuides: Record<string, TeamGuide> = {
 
 
   "monaco": {
-  teamKey: "monaco",
+  teamKey: "as-monaco",
   name: "AS Monaco",
   city: "Monaco",
   country: "France",
@@ -850,68 +850,6 @@ export const ligue1TeamGuides: Record<string, TeamGuide> = {
   updatedAt: "2026-01-27"
 },
 
-
-  "montpellier": {
-  teamKey: "montpellier",
-  name: "Montpellier Hérault SC",
-  city: "Montpellier",
-  country: "France",
-  stadium: "Stade de la Mosson",
-  sections: [
-    {
-      title: "Club Overview",
-      body:
-        "Montpellier occupy a rare position in modern French football: a provincial club with a genuine Ligue 1 title in the 21st century. They are neither a giant nor a perpetual struggler — instead existing as a stubbornly competitive, hard-to-kill presence in the top flight.\n\nMontpellier’s identity is built around resilience, intelligent recruitment, and collective organisation rather than star culture.\n\nFor neutral travellers, Montpellier offer a grounded, local-feeling Ligue 1 experience without corporate gloss."
-    },
-    {
-      title: "History & Legacy",
-      body:
-        "Founded in 1919, Montpellier’s defining historical moment is their remarkable 2011–12 Ligue 1 title, achieved against financially dominant opposition.\n\nThat season remains one of the great modern underdog stories in European football.\n\nBeyond that, Montpellier’s legacy is built on consistency, youth development, and producing elite attackers."
-    },
-    {
-      title: "Recent Seasons",
-      body:
-        "Recent seasons show Montpellier as a mid-table stabiliser.\n\nPatterns:\n• Clear relegation avoidance.\n• Occasional pushes toward the top half.\n• Squad turnover balanced by academy promotion.\n\nMontpellier rarely collapse but rarely mount sustained title pushes."
-    },
-    {
-      title: "Playing Style",
-      body:
-        "Montpellier lean toward compact, transition-oriented football.\n\nCommon traits:\n• Structured defensive shape.\n• Quick forward releases.\n• Physical central midfield.\n\nThey are most dangerous when space opens behind opponents."
-    },
-    {
-      title: "Stadium Profile",
-      body:
-        "Stade de la Mosson\n\nApproximate capacity: 32,000.\n\nTraditional, compact ground with close stands."
-    },
-    {
-      title: "Atmosphere & Matchday Feel",
-      body:
-        "Atmosphere is modest by Ligue 1 standards.\n\nSupport is steady rather than explosive."
-    },
-    {
-      title: "Rivalries",
-      body:
-        "Regional tensions with Nîmes and Marseille."
-    },
-    {
-      title: "Legends",
-      body:
-        "• Laurent Blanc\n• Olivier Giroud"
-    },
-    {
-      title: "Supporter Culture",
-      body:
-        "Local, loyal, community-driven support."
-    },
-    {
-      title: "Neutral Visitor Notes",
-      body:
-        "• Relaxed matchday.\n• Easy tickets.\n• Good choice for low-pressure football trip."
-    }
-  ],
-  links: [{ label: "Official site", url: "https://www.mhscfoot.com/" }],
-  updatedAt: "2026-01-27"
-},
 
 
   "metz": {
