@@ -10,15 +10,13 @@ import EmptyState from "@/src/components/EmptyState";
 
 import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
-import { LEAGUES, getRollingWindowIso } from "@/src/constants/football";
 
+import { LEAGUES, getRollingWindowIso } from "@/src/constants/football";
 import { getFixtures, type FixtureListRow } from "@/src/services/apiFootball";
 import { formatUkDateOnly, formatUkDateTimeMaybe } from "@/src/utils/formatters";
 
-import { getTeamGuide } from "@/src/data/teamGuides";
+import { getTeamGuide, normalizeTeamKey } from "@/src/data/teamGuides";
 import type { TeamGuide } from "@/src/data/teamGuides/types";
-
-import { getTeam, normalizeTeamKey } from "@/src/data/teams";
 
 function coerceString(v: unknown): string | null {
   if (typeof v === "string") {
@@ -32,11 +30,46 @@ function coerceString(v: unknown): string | null {
   return null;
 }
 
+function titleFromKey(key: string): string {
+  const s = String(key ?? "").trim();
+  if (!s) return "Team";
+  return s
+    .split("-")
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
 function fixtureKey(r: FixtureListRow, idx: number) {
   const id = r?.fixture?.id;
   return id ? String(id) : `idx-${idx}`;
 }
 
+function teamMatchesRow(row: FixtureListRow, teamNorm: string): boolean {
+  const home = String(row?.teams?.home?.name ?? "");
+  const away = String(row?.teams?.away?.name ?? "");
+  const homeNorm = normalizeTeamKey(home);
+  const awayNorm = normalizeTeamKey(away);
+
+  if (!teamNorm) return false;
+
+  if (homeNorm === teamNorm || awayNorm === teamNorm) return true;
+
+  if (
+    homeNorm.includes(teamNorm) ||
+    awayNorm.includes(teamNorm) ||
+    teamNorm.includes(homeNorm) ||
+    teamNorm.includes(awayNorm)
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Render helpers for TeamGuide, without assuming a single rigid schema.
+ */
 function isNonEmptyString(x: any): x is string {
   return typeof x === "string" && x.trim().length > 0;
 }
@@ -59,6 +92,7 @@ function renderBulletsMaybe(bullets: any) {
 
 function renderParagraphsMaybe(text: any) {
   if (!isNonEmptyString(text)) return null;
+
   const parts = text
     .split(/\n{2,}/g)
     .map((p) => p.trim())
@@ -91,6 +125,7 @@ function renderGuide(guide: TeamGuide) {
           return (
             <View key={`${idx}-${title}`} style={styles.guideSection}>
               <Text style={styles.blockTitle}>{title}</Text>
+
               {renderParagraphsMaybe(body)}
               {renderBulletsMaybe(bullets)}
 
@@ -115,14 +150,20 @@ function renderGuide(guide: TeamGuide) {
     );
   }
 
-  const legacyBlocks: Array<{ title: string; text?: string }> = [];
+  const legacyBlocks: Array<{ title: string; text?: string; bullets?: string[] }> = [];
+
   if (isNonEmptyString(g?.history)) legacyBlocks.push({ title: "Overview", text: String(g.history) });
   if (isNonEmptyString(g?.stadium)) legacyBlocks.push({ title: "Stadium", text: String(g.stadium) });
   if (isNonEmptyString(g?.tickets)) legacyBlocks.push({ title: "Tickets", text: String(g.tickets) });
   if (isNonEmptyString(g?.gettingThere)) legacyBlocks.push({ title: "Getting there", text: String(g.gettingThere) });
 
   if (legacyBlocks.length === 0) {
-    return <EmptyState title="Guide available, but not renderable yet" message="Align it to sections[] so it displays consistently." />;
+    return (
+      <EmptyState
+        title="Guide available, but not renderable yet"
+        message="This guide exists but its structure doesn’t match the current renderer. Align it to sections[] (gold standard) so it displays properly."
+      />
+    );
   }
 
   return (
@@ -131,35 +172,22 @@ function renderGuide(guide: TeamGuide) {
         <View key={`${i}-${b.title}`} style={styles.guideSection}>
           <Text style={styles.blockTitle}>{b.title}</Text>
           {renderParagraphsMaybe(b.text)}
+          {renderBulletsMaybe(b.bullets)}
         </View>
       ))}
     </View>
   );
 }
 
-function teamMatchesRow(row: FixtureListRow, teamKey: string): boolean {
-  if (!teamKey) return false;
-
-  const home = String(row?.teams?.home?.name ?? "");
-  const away = String(row?.teams?.away?.name ?? "");
-  const homeKey = normalizeTeamKey(home);
-  const awayKey = normalizeTeamKey(away);
-
-  if (homeKey === teamKey || awayKey === teamKey) return true;
-  if (homeKey.includes(teamKey) || awayKey.includes(teamKey) || teamKey.includes(homeKey) || teamKey.includes(awayKey)) return true;
-
-  return false;
-}
-
 export default function TeamScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
 
-  const rawTeamKey = useMemo(() => coerceString((params as any)?.teamKey) ?? "", [params]);
-  const teamKey = useMemo(() => normalizeTeamKey(rawTeamKey), [rawTeamKey]);
+  // ✅ Param is teamKey (because the file is [teamKey].tsx)
+  const teamKey = useMemo(() => coerceString((params as any)?.teamKey) ?? "", [params]);
 
-  const team = useMemo(() => (teamKey ? getTeam(teamKey) : null), [teamKey]);
-  const teamName = team?.name ?? (rawTeamKey ? rawTeamKey : "Team");
+  const teamName = useMemo(() => titleFromKey(teamKey), [teamKey]);
+  const teamNorm = useMemo(() => normalizeTeamKey(teamKey || teamName), [teamKey, teamName]);
 
   const rolling = useMemo(() => getRollingWindowIso(), []);
   const from = useMemo(() => coerceString((params as any)?.from) ?? rolling.from, [params, rolling.from]);
@@ -175,7 +203,7 @@ export default function TeamScreen() {
     let cancelled = false;
 
     async function run() {
-      if (!teamKey) return;
+      if (!teamNorm) return;
 
       setLoading(true);
       setError(null);
@@ -196,11 +224,12 @@ export default function TeamScreen() {
         if (cancelled) return;
 
         const merged: FixtureListRow[] = [];
+
         for (const r of results) {
           if (r.status !== "fulfilled") continue;
           const list = Array.isArray(r.value) ? (r.value as FixtureListRow[]) : [];
           for (const row of list) {
-            if (teamMatchesRow(row, teamKey)) merged.push(row);
+            if (teamMatchesRow(row, teamNorm)) merged.push(row);
           }
         }
 
@@ -226,14 +255,42 @@ export default function TeamScreen() {
     return () => {
       cancelled = true;
     };
-  }, [teamKey, from, to]);
+  }, [teamNorm, from, to]);
 
   function goBuildTrip(fixtureId: string) {
-    router.push({ pathname: "/trip/build", params: { fixtureId, from, to } } as any);
+    router.push({
+      pathname: "/trip/build",
+      params: { fixtureId, from, to },
+    } as any);
   }
 
   function goMatch(fixtureId: string) {
-    router.push({ pathname: "/match/[id]", params: { id: fixtureId, from, to } } as any);
+    router.push({
+      pathname: "/match/[id]",
+      params: { id: fixtureId, from, to },
+    } as any);
+  }
+
+  // ✅ Hard guard: if the route is hit without teamKey, show a clean error
+  if (!teamKey) {
+    return (
+      <Background imageUrl={getBackground("home")} overlayOpacity={0.88}>
+        <Stack.Screen
+          options={{
+            title: "Team",
+            headerTransparent: true,
+            headerTintColor: theme.colors.text,
+          }}
+        />
+        <SafeAreaView style={styles.safe} edges={["top"]}>
+          <ScrollView contentContainerStyle={styles.content}>
+            <GlassCard style={styles.card} intensity={22}>
+              <EmptyState title="Missing team" message="No teamKey was provided. This route must be /team/[teamKey]." />
+            </GlassCard>
+          </ScrollView>
+        </SafeAreaView>
+      </Background>
+    );
   }
 
   return (
@@ -248,15 +305,25 @@ export default function TeamScreen() {
 
       <SafeAreaView style={styles.safe} edges={["top"]}>
         <ScrollView contentContainerStyle={styles.content}>
+          {/* HEADER */}
           <GlassCard style={styles.hero} intensity={24}>
             <Text style={styles.kicker}>TEAM</Text>
             <Text style={styles.title}>{teamName}</Text>
+
             <Text style={styles.sub}>
               {formatUkDateOnly(from)} → {formatUkDateOnly(to)}
             </Text>
 
             <View style={styles.pillsRow}>
-              <Pressable onPress={() => router.push({ pathname: "/(tabs)/fixtures", params: { from, to } } as any)} style={styles.pill}>
+              <Pressable
+                onPress={() =>
+                  router.push({
+                    pathname: "/(tabs)/fixtures",
+                    params: { from, to },
+                  } as any)
+                }
+                style={styles.pill}
+              >
                 <Text style={styles.pillText}>Browse fixtures</Text>
               </Pressable>
 
@@ -266,76 +333,78 @@ export default function TeamScreen() {
             </View>
           </GlassCard>
 
-          {!teamKey ? (
-            <GlassCard style={styles.card} intensity={22}>
-              <EmptyState title="Missing team" message="No team key was provided." />
-            </GlassCard>
-          ) : null}
+          {/* GUIDE */}
+          <GlassCard style={styles.card} intensity={22}>
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.sectionTitle}>Team guide</Text>
+              <Text style={styles.sectionBadge}>{guide ? "Available" : "Coming soon"}</Text>
+            </View>
 
-          {teamKey ? (
-            <GlassCard style={styles.card} intensity={22}>
-              <View style={styles.sectionHeaderRow}>
-                <Text style={styles.sectionTitle}>Team guide</Text>
-                <Text style={styles.sectionBadge}>{guide ? "Available" : "Coming soon"}</Text>
+            {!guide ? (
+              <EmptyState
+                title="Guide coming soon"
+                message="This page is wired up so routing works. As guides are added, they will appear here automatically."
+              />
+            ) : (
+              renderGuide(guide)
+            )}
+          </GlassCard>
+
+          {/* FIXTURES */}
+          <GlassCard style={styles.card} intensity={22}>
+            <Text style={styles.sectionTitle}>Fixtures for {teamName}</Text>
+            <Text style={styles.sectionSub}>Filtered from your supported leagues list, within the rolling window.</Text>
+
+            {loading ? (
+              <View style={styles.center}>
+                <ActivityIndicator />
+                <Text style={styles.muted}>Loading fixtures…</Text>
               </View>
+            ) : null}
 
-              {!guide ? (
-                <EmptyState title="Guide coming soon" message="Once a guide exists for this club, it will show here automatically." />
-              ) : (
-                renderGuide(guide)
-              )}
-            </GlassCard>
-          ) : null}
+            {!loading && error ? <EmptyState title="Couldn’t load fixtures" message={error} /> : null}
 
-          {teamKey ? (
-            <GlassCard style={styles.card} intensity={22}>
-              <Text style={styles.sectionTitle}>Fixtures for {teamName}</Text>
-              <Text style={styles.sectionSub}>Filtered from your supported leagues, within the rolling window.</Text>
+            {!loading && !error && rows.length === 0 ? (
+              <EmptyState
+                title="No fixtures found"
+                message="Either this club isn’t in your supported leagues list, or the rolling window doesn’t include their matches."
+              />
+            ) : null}
 
-              {loading ? (
-                <View style={styles.center}>
-                  <ActivityIndicator />
-                  <Text style={styles.muted}>Loading fixtures…</Text>
-                </View>
-              ) : null}
+            {!loading && !error && rows.length > 0 ? (
+              <View style={styles.list}>
+                {rows.slice(0, 20).map((r, idx) => {
+                  const id = r?.fixture?.id ? String(r.fixture.id) : null;
+                  const home = r?.teams?.home?.name ?? "Home";
+                  const away = r?.teams?.away?.name ?? "Away";
+                  const kick = formatUkDateTimeMaybe(r?.fixture?.date);
+                  const venue = r?.fixture?.venue?.name ?? "";
+                  const city = r?.fixture?.venue?.city ?? "";
+                  const extra = [venue, city].filter(Boolean).join(" • ");
+                  const line2 = extra ? `${kick} • ${extra}` : kick;
 
-              {!loading && error ? <EmptyState title="Couldn’t load fixtures" message={error} /> : null}
+                  return (
+                    <View key={fixtureKey(r, idx)} style={styles.fixtureRow}>
+                      <Pressable onPress={() => (id ? goMatch(id) : null)} style={{ flex: 1 }} disabled={!id}>
+                        <Text style={styles.rowTitle}>
+                          {home} vs {away}
+                        </Text>
+                        <Text style={styles.rowMeta}>{line2}</Text>
+                      </Pressable>
 
-              {!loading && !error && rows.length === 0 ? (
-                <EmptyState title="No fixtures found" message="Either this club isn’t in your supported leagues list, or the window doesn’t include their matches." />
-              ) : null}
-
-              {!loading && !error && rows.length > 0 ? (
-                <View style={styles.list}>
-                  {rows.slice(0, 20).map((r, idx) => {
-                    const id = r?.fixture?.id ? String(r.fixture.id) : null;
-                    const home = r?.teams?.home?.name ?? "Home";
-                    const away = r?.teams?.away?.name ?? "Away";
-                    const kick = formatUkDateTimeMaybe(r?.fixture?.date);
-                    const venue = r?.fixture?.venue?.name ?? "";
-                    const city = r?.fixture?.venue?.city ?? "";
-                    const extra = [venue, city].filter(Boolean).join(" • ");
-                    const line2 = extra ? `${kick} • ${extra}` : kick;
-
-                    return (
-                      <View key={fixtureKey(r, idx)} style={styles.fixtureRow}>
-                        <Pressable onPress={() => (id ? goMatch(id) : null)} style={{ flex: 1 }} disabled={!id}>
-                          <Text style={styles.rowTitle}>
-                            {home} vs {away}
-                          </Text>
-                          <Text style={styles.rowMeta}>{line2}</Text>
-                        </Pressable>
-
-                        <Pressable disabled={!id} onPress={() => (id ? goBuildTrip(id) : null)} style={[styles.planBtn, !id && styles.disabled]}>
-                          <Text style={styles.planBtnText}>Plan Trip</Text>
-                        </Pressable>
-                      </View>
-                    );
-                  })}
-                </View>
-              ) : null}
-            </GlassCard>
-          ) : null}
+                      <Pressable
+                        disabled={!id}
+                        onPress={() => (id ? goBuildTrip(id) : null)}
+                        style={[styles.planBtn, !id && styles.disabled]}
+                      >
+                        <Text style={styles.planBtnText}>Plan Trip</Text>
+                      </Pressable>
+                    </View>
+                  );
+                })}
+              </View>
+            ) : null}
+          </GlassCard>
 
           <View style={{ height: 18 }} />
         </ScrollView>
@@ -374,13 +443,25 @@ const styles = StyleSheet.create({
   sectionHeaderRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "baseline", gap: 12 },
   sectionTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.md },
   sectionBadge: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: theme.fontSize.xs },
+
   sectionSub: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18, fontWeight: "800" },
 
-  guideSection: { paddingTop: 8, paddingBottom: 2, borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.08)" },
+  guideSection: {
+    paddingTop: 8,
+    paddingBottom: 2,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255,255,255,0.08)",
+  },
   blockTitle: { marginTop: 6, color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
   body: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 19, fontWeight: "700" },
 
-  guideItem: { padding: 10, borderRadius: 14, borderWidth: 1, borderColor: "rgba(255,255,255,0.10)", backgroundColor: "rgba(0,0,0,0.18)" },
+  guideItem: {
+    padding: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+  },
   itemTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
 
   bulletRow: { flexDirection: "row", gap: 8, alignItems: "flex-start" },
@@ -391,11 +472,25 @@ const styles = StyleSheet.create({
   muted: { fontSize: theme.fontSize.sm, color: theme.colors.textSecondary, fontWeight: "800" },
 
   list: { marginTop: 10, gap: 10 },
-  fixtureRow: { flexDirection: "row", gap: 12, alignItems: "center", paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.08)" },
+  fixtureRow: {
+    flexDirection: "row",
+    gap: 12,
+    alignItems: "center",
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255,255,255,0.08)",
+  },
   rowTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.md },
   rowMeta: { marginTop: 4, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, fontWeight: "700" },
 
-  planBtn: { paddingVertical: 10, paddingHorizontal: 12, borderRadius: 999, borderWidth: 1, borderColor: "rgba(0,255,136,0.45)", backgroundColor: "rgba(0,0,0,0.22)" },
+  planBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(0,255,136,0.45)",
+    backgroundColor: "rgba(0,0,0,0.22)",
+  },
   planBtnText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.xs },
 
   disabled: { opacity: 0.5 },
