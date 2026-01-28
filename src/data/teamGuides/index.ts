@@ -1,6 +1,6 @@
 // src/data/teamGuides/index.ts
 import type { TeamGuide } from "./types";
-import teamsRegistry, { normalizeTeamKey, resolveTeamKey } from "@/src/data/teams";
+import teamsRegistry, { normalizeTeamKey } from "@/src/data/teams";
 
 import { premierLeagueTeamGuides } from "./premierLeague";
 import { laLigaTeamGuides } from "./laLiga";
@@ -12,9 +12,14 @@ import { ligue1TeamGuides } from "./ligue1";
  * Team Guide registry + helpers.
  *
  * Source of truth rules:
- * - Canonical team keys are defined in src/data/teams (team registry).
- * - Guides must be retrievable using resolveTeamKey() so fixture/user variants still map.
+ * - Team keys are defined in src/data/teams (team registry).
+ * - Guides must use the same key-normalisation as the team registry.
  * - This index merges all league guide maps into one registry.
+ *
+ * Key examples:
+ * - "arsenal"
+ * - "real-madrid"
+ * - "paris-saint-germain"
  */
 
 export const teamGuides: Record<string, TeamGuide> = {
@@ -26,88 +31,136 @@ export const teamGuides: Record<string, TeamGuide> = {
 };
 
 /**
- * Re-export so consumers can use the same normalisation.
+ * Re-export so any consumer can use the SAME normalisation.
+ * (Fixes crashes where callers expect teamGuides.normalizeTeamKey)
  */
 export { normalizeTeamKey };
 
-/**
- * Canonical guide key resolver:
- * - Prefer resolveTeamKey (aliases/diacritics/prefix variants)
- * - Fallback to normalizeTeamKey so “unknown” still works as a best-effort key
- */
-function canonicalGuideKey(input: string): { key: string; resolved: boolean } | null {
-  const s = String(input ?? "").trim();
-  if (!s) return null;
-
-  const resolvedKey = resolveTeamKey(s);
-  if (resolvedKey) return { key: normalizeTeamKey(resolvedKey), resolved: true };
-
-  const fallback = normalizeTeamKey(s);
-  if (!fallback) return null;
-
-  return { key: fallback, resolved: false };
-}
-
-/**
- * Main lookup: ALWAYS go through resolveTeamKey first.
- * This fixes “guide exists but not showing” due to naming variants.
- */
 export function getTeamGuide(teamInput: string): TeamGuide | null {
-  const ck = canonicalGuideKey(teamInput);
-  if (!ck) return null;
-  return teamGuides[ck.key] ?? null;
+  const key = normalizeTeamKey(teamInput);
+  return teamGuides[key] ?? null;
 }
 
+/**
+ * Convenience helper for UI: whether a guide exists.
+ */
 export function hasTeamGuide(teamInput: string): boolean {
   return !!getTeamGuide(teamInput);
 }
 
+/* -----------------------------------------
+   DEBUG: Missing team guides (no guessing)
+   ----------------------------------------- */
+
+function isDev(): boolean {
+  // RN + Expo define __DEV__
+  // (We keep it defensive so web builds don't crash)
+  // eslint-disable-next-line no-undef
+  return typeof __DEV__ !== "undefined" ? !!__DEV__ : false;
+}
+
+export type MissingTeamGuide = {
+  teamKey: string; // canonical from registry
+  name: string;
+  leagueId?: number;
+  city?: string;
+  country?: string;
+  expectedGuideKey: string; // normalizeTeamKey(teamKey)
+};
+
 /**
- * DEBUG helper: explains why a guide isn't found.
- * Use this in the Home DEV panel to quickly spot key mismatches.
+ * Returns the canonical team registry entries that do NOT have a guide,
+ * based purely on the registry keys + normalizeTeamKey.
+ *
+ * This is the list you should work through to create guides — no guessing.
  */
-export function debugTeamGuideLookup(teamInput: string): {
-  input: string;
-  normalizedInput: string;
-  resolvedTeamKey: string | null;
-  canonicalGuideKey: string | null;
-  resolved: boolean;
-  hasGuide: boolean;
-  knownTeamInRegistry: boolean;
-  sampleGuideKeys: string[];
-} {
-  const input = String(teamInput ?? "");
-  const normalizedInput = normalizeTeamKey(input);
-  const resolvedTeamKey = resolveTeamKey(input);
+export function getMissingTeamGuides(): MissingTeamGuide[] {
+  const list = Object.values(teamsRegistry as any) as Array<{
+    teamKey?: string;
+    name?: string;
+    leagueId?: number;
+    city?: string;
+    country?: string;
+  }>;
 
-  const ck = canonicalGuideKey(input);
-  const canonicalKey = ck?.key ?? null;
+  const missing: MissingTeamGuide[] = [];
 
-  const hasGuide = canonicalKey ? !!teamGuides[canonicalKey] : false;
-  const knownTeamInRegistry = !!(resolvedTeamKey ? teamsRegistry[normalizeTeamKey(resolvedTeamKey)] : teamsRegistry[normalizedInput]);
+  for (const t of list) {
+    const teamKeyRaw = String(t?.teamKey ?? "").trim();
+    const name = String(t?.name ?? "").trim();
+    if (!teamKeyRaw || !name) continue;
 
+    const expectedGuideKey = normalizeTeamKey(teamKeyRaw);
+    if (!expectedGuideKey) continue;
+
+    const has = !!teamGuides[expectedGuideKey];
+    if (!has) {
+      missing.push({
+        teamKey: teamKeyRaw,
+        name,
+        leagueId: typeof t?.leagueId === "number" ? t.leagueId : undefined,
+        city: t?.city ? String(t.city) : undefined,
+        country: t?.country ? String(t.country) : undefined,
+        expectedGuideKey,
+      });
+    }
+  }
+
+  // Stable ordering so the list doesn't jump around
+  missing.sort((a, b) => a.expectedGuideKey.localeCompare(b.expectedGuideKey));
+  return missing;
+}
+
+export type TeamGuidesDebugSnapshot = {
+  guidesCount: number;
+  registryTeamsCount: number;
+  missingCount: number;
+  missing: MissingTeamGuide[];
+};
+
+/**
+ * Useful for a Home “DEV” card or console logging.
+ */
+export function getTeamGuidesDebugSnapshot(): TeamGuidesDebugSnapshot {
+  const missing = getMissingTeamGuides();
   return {
-    input,
-    normalizedInput,
-    resolvedTeamKey,
-    canonicalGuideKey: canonicalKey,
-    resolved: !!ck?.resolved,
-    hasGuide,
-    knownTeamInRegistry,
-    sampleGuideKeys: Object.keys(teamGuides).slice(0, 20),
+    guidesCount: Object.keys(teamGuides).length,
+    registryTeamsCount: Object.keys(teamsRegistry as any).length,
+    missingCount: missing.length,
+    missing,
   };
 }
+
+// Optional: one-time console output in dev to make it obvious immediately.
+let _loggedOnce = false;
+function maybeLogOnce() {
+  if (!isDev()) return;
+  if (_loggedOnce) return;
+  _loggedOnce = true;
+
+  const snap = getTeamGuidesDebugSnapshot();
+  // eslint-disable-next-line no-console
+  console.log(
+    `[teamGuides] guides=${snap.guidesCount} registryTeams=${snap.registryTeamsCount} missing=${snap.missingCount}`,
+    snap.missing.map((m) => `${m.expectedGuideKey} (${m.name})`)
+  );
+}
+maybeLogOnce();
 
 /**
  * Default export MUST be compatible with both patterns:
  * 1) Default import used as a plain registry map: guides["arsenal"]
  * 2) Callers treating it like a module object: guides.normalizeTeamKey(...)
+ *
+ * We do that by attaching helper functions onto the registry object.
  */
 const teamGuidesModule = Object.assign(teamGuides, {
   normalizeTeamKey,
   getTeamGuide,
   hasTeamGuide,
-  debugTeamGuideLookup,
+  // debug helpers
+  getMissingTeamGuides,
+  getTeamGuidesDebugSnapshot,
 });
 
 export default teamGuidesModule;
