@@ -3,7 +3,7 @@ import { normalizeSearchText, tokenizeQuery, expandQueryTokens } from "@/src/con
 import type { LeagueOption } from "@/src/constants/football";
 import cityGuidesRegistry from "@/src/data/cityGuides";
 import teamGuidesRegistry from "@/src/data/teamGuides";
-import teamsRegistry, { normalizeTeamKey } from "@/src/data/teams";
+import teamsRegistry, { normalizeTeamKey, resolveTeamKey } from "@/src/data/teams";
 import { normalizeCityKey } from "@/src/utils/city";
 import { getFixtures, type FixtureListRow } from "@/src/services/apiFootball";
 
@@ -74,6 +74,22 @@ function normalizeVenueKey(input: string | undefined | null): string {
 function toEntryTokens(parts: Array<string | undefined | null>): string[] {
   const joined = parts.filter(Boolean).join(" ");
   return uniq(tokenizeQuery(joined));
+}
+
+/**
+ * Canonical team slug resolver:
+ * - Prefer registry canonical key (handles aliases/diacritics/name variations)
+ * - Fallback to normalized input so unknown teams still appear
+ */
+function canonicalTeamSlug(input: string | undefined | null): string | null {
+  const s = safeStr(input);
+  if (!s) return null;
+
+  const resolved = resolveTeamKey(s);
+  if (resolved) return normalizeTeamKey(resolved);
+
+  const fallback = normalizeTeamKey(s);
+  return fallback || null;
 }
 
 /**
@@ -196,7 +212,7 @@ function buildTeamsRegistryEntries(map: Map<string, IndexEntry>) {
     const teamKey = safeStr(t?.teamKey);
     if (!name || !teamKey) return;
 
-    const slug = normalizeTeamKey(teamKey);
+    const slug = canonicalTeamSlug(teamKey);
     if (!slug) return;
 
     const subtitle = safeStr(t?.city || t?.country) || "Team";
@@ -218,7 +234,7 @@ function buildTeamGuideEntries(map: Map<string, IndexEntry>) {
     const name = safeStr(g?.name ?? g?.teamName ?? g?.teamKey ?? g?.teamId);
     if (!name) return;
 
-    const slug = normalizeTeamKey(g?.teamKey ?? g?.teamId ?? name);
+    const slug = canonicalTeamSlug(g?.teamKey ?? g?.teamId ?? name);
     if (!slug) return;
 
     upsertEntry(map, {
@@ -291,7 +307,10 @@ function patchCountryPayloads(entries: IndexEntry[], leagues: LeagueOption[]): I
   });
 }
 
-async function buildFixtureDerivedEntries(map: Map<string, IndexEntry>, args: { from: string; to: string; leagues: LeagueOption[] }) {
+async function buildFixtureDerivedEntries(
+  map: Map<string, IndexEntry>,
+  args: { from: string; to: string; leagues: LeagueOption[] }
+) {
   const { from, to, leagues } = args;
 
   const settled = await Promise.allSettled(
@@ -317,7 +336,7 @@ async function buildFixtureDerivedEntries(map: Map<string, IndexEntry>, args: { 
     const away = safeStr(r?.teams?.away?.name);
 
     if (home) {
-      const slug = normalizeTeamKey(home);
+      const slug = canonicalTeamSlug(home);
       if (slug) {
         upsertEntry(map, {
           type: "team",
@@ -331,7 +350,7 @@ async function buildFixtureDerivedEntries(map: Map<string, IndexEntry>, args: { 
     }
 
     if (away) {
-      const slug = normalizeTeamKey(away);
+      const slug = canonicalTeamSlug(away);
       if (slug) {
         upsertEntry(map, {
           type: "team",
@@ -385,7 +404,7 @@ export async function buildSearchIndex(args: { from: string; to: string; leagues
   const map = new Map<string, IndexEntry>();
 
   buildCityAndCountryEntries(map);
-  buildTeamsRegistryEntries(map); // IMPORTANT: deterministic teams exist even without fixtures/guides
+  buildTeamsRegistryEntries(map); // deterministic teams exist even without fixtures/guides
   buildTeamGuideEntries(map);
   buildLeagueEntries(map, leagues);
 
@@ -437,4 +456,4 @@ export function querySearchIndex(index: SearchIndex, query: string, opts?: { lim
     .sort((a, b) => b.score - a.score);
 
   return scored.slice(0, limit);
-}
+    }
