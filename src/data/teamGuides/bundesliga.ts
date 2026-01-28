@@ -1026,7 +1026,7 @@ export const bundesligaTeamGuides: Record<string, TeamGuide> = {
   updatedAt: "2026-01-27"
 },
 
-{
+"mainz-05": {
   teamKey: "mainz-05",
   name: "1. FSV Mainz 05",
   city: "Mainz",
