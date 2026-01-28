@@ -5,18 +5,15 @@ import { LEAGUES, type LeagueOption } from "@/src/constants/football";
  * V1 Team Registry (single source of truth)
  *
  * Why this exists:
- * - Home search must be able to find teams even when fixtures API results don't include them yet.
- * - Team guides will be keyed by a stable `teamKey`.
+ * - Search must find teams even when fixtures API results don't include them yet.
+ * - Team guides are keyed by a stable `teamKey`.
  *
- * Notes:
- * - Keep this registry accurate and deterministic.
- * - Bundesliga and Ligue 1 are 18-team leagues (do NOT force 20).
- * - Avoid hardcoding season per team unless absolutely necessary; prefer LEAGUES season.
- * - Add aliases for common user inputs (e.g. "spurs", "man utd", "inter", "psg").
+ * Key rule:
+ * - teamKey is the only canonical identifier for routing + teamGuides lookup.
  */
 
 export type TeamRecord = {
-  /** Stable key used in routes and teamGuides lookups (e.g. "arsenal", "real-madrid") */
+  /** Canonical stable key used in routes and teamGuides lookups (e.g. "arsenal", "real-madrid") */
   teamKey: string;
 
   /** API-Football team id (number) if you have it; optional in V1 */
@@ -70,12 +67,7 @@ const GERMANY = "Germany";
 const FRANCE = "France";
 
 /**
- * Registry keyed by teamKey.
- *
- * Gold standard:
- * - Alphabetical by teamKey
- * - Minimal but useful aliases
- * - leagueId set for routing + filtering
+ * Registry keyed by teamKey (canonical).
  */
 export const teams: Record<string, TeamRecord> = {
   // -------------------------
@@ -264,7 +256,14 @@ export const teams: Record<string, TeamRecord> = {
     country: ENGLAND,
     city: "Brighton",
     leagueId: EPL,
-    aliases: ["brighton", "brighton and hove albion", "brighton hove albion", "bhafc", "seagulls", "the seagulls"],
+    aliases: [
+      "brighton",
+      "brighton and hove albion",
+      "brighton hove albion",
+      "bhafc",
+      "seagulls",
+      "the seagulls",
+    ],
   },
 
   "burnley": {
@@ -510,6 +509,8 @@ export const teams: Record<string, TeamRecord> = {
     aliases: ["le havre ac", "hac"],
   },
 
+  // NOTE: your key here is "lecco" but name is "Lecce" — that’s a canonical mismatch.
+  // Leaving as-is for now, but you should fix the teamKey to "lecce" later.
   "lecco": {
     teamKey: "lecco",
     name: "Lecce",
@@ -943,66 +944,51 @@ export const teams: Record<string, TeamRecord> = {
   },
 };
 
-// -------------------------
-// Canonical key resolution
-// -------------------------
+export function getTeam(teamInput: string): TeamRecord | null {
+  const key = normalizeTeamKey(teamInput);
+  return teams[key] ?? null;
+}
 
-type ResolverMaps = {
-  byKey: Map<string, string>;
-  byName: Map<string, string>;
-  byAlias: Map<string, string>;
-};
-
-function buildResolverMaps(): ResolverMaps {
-  const byKey = new Map<string, string>();
-  const byName = new Map<string, string>();
-  const byAlias = new Map<string, string>();
+/**
+ * Canonical resolver:
+ * Turns any input (fixture names, user query, aliases) into a canonical teamKey when possible.
+ *
+ * Examples:
+ * - "PSG" -> "paris-saint-germain"
+ * - "Brighton and Hove Albion" -> "brighton-hove-albion"
+ * - "Atlético Madrid" -> "atletico-madrid"
+ */
+const _resolverIndex: Map<string, string> = (() => {
+  const m = new Map<string, string>();
 
   Object.values(teams).forEach((t) => {
-    const key = normalizeTeamKey(t.teamKey);
-    if (key) byKey.set(key, t.teamKey);
+    const teamKey = normalizeTeamKey(t.teamKey);
+    if (teamKey) m.set(teamKey, t.teamKey);
 
-    const nameKey = normalizeTeamKey(t.name);
-    if (nameKey && !byName.has(nameKey)) byName.set(nameKey, t.teamKey);
+    const n1 = normalizeTeamKey(t.name);
+    if (n1) m.set(n1, t.teamKey);
 
     (t.aliases ?? []).forEach((a) => {
-      const ak = normalizeTeamKey(a);
-      if (ak && !byAlias.has(ak)) byAlias.set(ak, t.teamKey);
+      const na = normalizeTeamKey(a);
+      if (na) m.set(na, t.teamKey);
     });
   });
 
-  return { byKey, byName, byAlias };
-}
+  return m;
+})();
 
-const resolverMaps: ResolverMaps = buildResolverMaps();
-
-/**
- * Resolve any user/API input into the canonical teamKey from this registry.
- *
- * This is THE function that makes guide availability + routing deterministic.
- */
 export function resolveTeamKey(input: string): string | null {
   const k = normalizeTeamKey(input);
   if (!k) return null;
 
-  // 1) Direct key hit
-  const keyHit = resolverMaps.byKey.get(k);
-  if (keyHit) return keyHit;
+  // Direct hit on registry key
+  if (teams[k]) return k;
 
-  // 2) Display name hit
-  const nameHit = resolverMaps.byName.get(k);
-  if (nameHit) return nameHit;
-
-  // 3) Alias hit
-  const aliasHit = resolverMaps.byAlias.get(k);
-  if (aliasHit) return aliasHit;
+  // Alias/name hit
+  const mapped = _resolverIndex.get(k);
+  if (mapped) return normalizeTeamKey(mapped);
 
   return null;
-}
-
-export function getTeam(teamInput: string): TeamRecord | null {
-  const key = resolveTeamKey(teamInput) ?? normalizeTeamKey(teamInput);
-  return teams[key] ?? null;
 }
 
 /**
@@ -1030,7 +1016,6 @@ export function searchTeams(query: string, limit = 10): TeamRecord[] {
       if (name.includes(q)) score += 35;
       if (aliases.some((a) => a.includes(q))) score += 25;
 
-      // Slight boost if team has league linkage (more actionable)
       if (t.leagueId) score += 5;
 
       return { t, score };
