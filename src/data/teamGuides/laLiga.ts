@@ -1301,3 +1301,5 @@ export const laLigaTeamGuides: Record<string, TeamGuide> = {
 
 
   };
+
+export default laLigaTeamGuides;
