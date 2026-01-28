@@ -28,37 +28,46 @@ function isRecordOfTeamGuides(x: any): x is Record<string, TeamGuide> {
 }
 
 /**
- * Helper to extract TeamGuide[] from various module export formats.
+ * Extract TeamGuide[] from a module.
+ *
  * Handles:
- * - default export: TeamGuide[]
- * - default export: Record<string, TeamGuide>
- * - named export: TeamGuide[]
- * - named export: Record<string, TeamGuide>
- * - legacy "import * as" modules containing one of the above
+ * - TeamGuide[] (direct)
+ * - default export TeamGuide[]
+ * - Record<string, TeamGuide> (direct)
+ * - default export Record<string, TeamGuide>
+ * - named export TeamGuide[]
+ * - named export Record<string, TeamGuide>
+ *
+ * IMPORTANT:
+ * Some bundlers / interop paths may give you the default export directly (no .default).
+ * This function explicitly supports that.
  */
 function extractGuides(mod: any): TeamGuide[] {
   if (!mod) return [];
 
-  // 1) Direct array
+  // 1) Module itself is a Record<string, TeamGuide>
+  if (isRecordOfTeamGuides(mod)) return Object.values(mod);
+
+  // 2) Module itself is an array
   if (Array.isArray(mod)) return mod.filter(isTeamGuide);
 
-  // 2) Default export array
-  if (Array.isArray(mod.default)) return mod.default.filter(isTeamGuide);
-
-  // 3) Default export Record<string, TeamGuide>
+  // 3) Default export is a Record<string, TeamGuide>
   if (isRecordOfTeamGuides(mod.default)) return Object.values(mod.default);
 
-  // 4) Named exports: look for an array of TeamGuide
+  // 4) Default export is an array
+  if (Array.isArray(mod.default)) return mod.default.filter(isTeamGuide);
+
+  // 5) Search named exports for a Record<string, TeamGuide>
+  for (const v of Object.values(mod)) {
+    if (isRecordOfTeamGuides(v)) return Object.values(v);
+  }
+
+  // 6) Search named exports for an array with TeamGuide items
   for (const v of Object.values(mod)) {
     if (Array.isArray(v)) {
       const arr = (v as any[]).filter(isTeamGuide);
       if (arr.length) return arr;
     }
-  }
-
-  // 5) Named exports: look for a Record<string, TeamGuide>
-  for (const v of Object.values(mod)) {
-    if (isRecordOfTeamGuides(v)) return Object.values(v);
   }
 
   return [];
@@ -80,8 +89,8 @@ const SOURCES: Record<string, TeamGuide[]> = {
  * Build the registry: Record<teamKey, TeamGuide>
  * Track duplicates for debugging
  *
- * NOTE: First-write-wins to keep behaviour deterministic.
- * If you want league files to override legacy, keep legacy last (as it is).
+ * Deterministic: first write wins.
+ * Put "legacy" last so it never overrides the league sources.
  */
 const registry: Record<string, TeamGuide> = {};
 const duplicates: Record<string, number> = {};
@@ -122,24 +131,6 @@ const missing = Object.values(teams)
 // Public API
 // -------------------------
 
-/**
- * Check if a team guide exists for the given teamKey
- */
-export function hasTeamGuide(teamKey: string): boolean {
-  return !!registry[teamKey];
-}
-
-/**
- * Get a team guide by teamKey
- * Returns null if not found
- */
-export function getTeamGuide(teamKey: string): TeamGuide | null {
-  return registry[teamKey] || null;
-}
-
-/**
- * Type definition for missing team guides
- */
 export type MissingTeamGuide = {
   expectedGuideKey: string;
   name: string;
@@ -147,16 +138,18 @@ export type MissingTeamGuide = {
   season?: number;
 };
 
-/**
- * Get list of teams that exist in the teams registry but have no guide
- */
+export function hasTeamGuide(teamKey: string): boolean {
+  return !!registry[teamKey];
+}
+
+export function getTeamGuide(teamKey: string): TeamGuide | null {
+  return registry[teamKey] || null;
+}
+
 export function getMissingTeamGuides(): MissingTeamGuide[] {
   return missing;
 }
 
-/**
- * Debug snapshot showing registry health and statistics
- */
 export function getTeamGuidesDebugSnapshot() {
   return {
     guidesCount: Object.keys(registry).length,
@@ -168,7 +161,4 @@ export function getTeamGuidesDebugSnapshot() {
   };
 }
 
-/**
- * Default export: the complete registry
- */
 export default registry;
