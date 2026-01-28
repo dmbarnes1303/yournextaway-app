@@ -264,14 +264,7 @@ export const teams: Record<string, TeamRecord> = {
     country: ENGLAND,
     city: "Brighton",
     leagueId: EPL,
-    aliases: [
-      "brighton",
-      "brighton and hove albion",
-      "brighton hove albion",
-      "bhafc",
-      "seagulls",
-      "the seagulls",
-    ],
+    aliases: ["brighton", "brighton and hove albion", "brighton hove albion", "bhafc", "seagulls", "the seagulls"],
   },
 
   "burnley": {
@@ -950,8 +943,65 @@ export const teams: Record<string, TeamRecord> = {
   },
 };
 
+// -------------------------
+// Canonical key resolution
+// -------------------------
+
+type ResolverMaps = {
+  byKey: Map<string, string>;
+  byName: Map<string, string>;
+  byAlias: Map<string, string>;
+};
+
+function buildResolverMaps(): ResolverMaps {
+  const byKey = new Map<string, string>();
+  const byName = new Map<string, string>();
+  const byAlias = new Map<string, string>();
+
+  Object.values(teams).forEach((t) => {
+    const key = normalizeTeamKey(t.teamKey);
+    if (key) byKey.set(key, t.teamKey);
+
+    const nameKey = normalizeTeamKey(t.name);
+    if (nameKey && !byName.has(nameKey)) byName.set(nameKey, t.teamKey);
+
+    (t.aliases ?? []).forEach((a) => {
+      const ak = normalizeTeamKey(a);
+      if (ak && !byAlias.has(ak)) byAlias.set(ak, t.teamKey);
+    });
+  });
+
+  return { byKey, byName, byAlias };
+}
+
+const resolverMaps: ResolverMaps = buildResolverMaps();
+
+/**
+ * Resolve any user/API input into the canonical teamKey from this registry.
+ *
+ * This is THE function that makes guide availability + routing deterministic.
+ */
+export function resolveTeamKey(input: string): string | null {
+  const k = normalizeTeamKey(input);
+  if (!k) return null;
+
+  // 1) Direct key hit
+  const keyHit = resolverMaps.byKey.get(k);
+  if (keyHit) return keyHit;
+
+  // 2) Display name hit
+  const nameHit = resolverMaps.byName.get(k);
+  if (nameHit) return nameHit;
+
+  // 3) Alias hit
+  const aliasHit = resolverMaps.byAlias.get(k);
+  if (aliasHit) return aliasHit;
+
+  return null;
+}
+
 export function getTeam(teamInput: string): TeamRecord | null {
-  const key = normalizeTeamKey(teamInput);
+  const key = resolveTeamKey(teamInput) ?? normalizeTeamKey(teamInput);
   return teams[key] ?? null;
 }
 
