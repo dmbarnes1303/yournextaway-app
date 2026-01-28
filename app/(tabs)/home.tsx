@@ -29,7 +29,12 @@ import { formatUkDateOnly, formatUkDateTimeMaybe } from "@/src/utils/formatters"
 
 import { buildSearchIndex, querySearchIndex, type SearchResult } from "@/src/services/searchIndex";
 import { getCityGuide } from "@/src/data/cityGuides";
-import { hasTeamGuide } from "@/src/data/teamGuides";
+import teamGuidesRegistry, {
+  hasTeamGuide,
+  getTeamGuidesDebugSnapshot,
+  getMissingTeamGuides,
+  type MissingTeamGuide,
+} from "@/src/data/teamGuides";
 
 function isDev() {
   // RN sets __DEV__ in dev builds
@@ -312,7 +317,7 @@ export default function HomeScreen() {
 
     if (r.type === "team" && p?.kind === "team") {
       const exists = hasTeamGuide(p.slug);
-      return exists ? "Team guide available" : "Team guide (link-out for now)";
+      return exists ? "Team guide available" : "Team guide (missing)";
     }
 
     if (r.type === "city" && p?.kind === "city") {
@@ -342,7 +347,7 @@ export default function HomeScreen() {
       .slice(0, 6);
   }, [fxRows, qNorm]);
 
-  // ---- DEV DEBUG PANEL ----
+  // ---- DEV DEBUG (Search Index) ----
   const devDebug = useMemo(() => {
     if (!isDev()) return null;
     const idx = indexRef.current as any;
@@ -369,6 +374,33 @@ export default function HomeScreen() {
       unresolvedCount: unresolved.length,
     };
   }, [fromIso, toIso, searchIndexBuiltAt]);
+
+  // ---- DEV DEBUG (Missing Team Guides) ----
+  const devMissingGuides = useMemo(() => {
+    if (!isDev()) return null;
+
+    // If you ever want to gate this behind a flag, do it here.
+    const snap = getTeamGuidesDebugSnapshot();
+    const missing = snap.missing ?? getMissingTeamGuides();
+
+    // Helpful rollups
+    const byLeague: Record<string, number> = {};
+    for (const m of missing) {
+      const key = typeof m.leagueId === "number" ? String(m.leagueId) : "unknown";
+      byLeague[key] = (byLeague[key] ?? 0) + 1;
+    }
+
+    const leaguePairs = Object.entries(byLeague).sort((a, b) => b[1] - a[1]);
+
+    return {
+      guidesCount: snap.guidesCount,
+      registryTeamsCount: snap.registryTeamsCount,
+      missingCount: snap.missingCount,
+      missingTop: missing.slice(0, 20),
+      moreCount: Math.max(0, missing.length - 20),
+      byLeagueTop: leaguePairs.slice(0, 6),
+    };
+  }, [searchIndexBuiltAt]);
 
   return (
     <Background imageUrl={getBackground("home")} overlayOpacity={0.86}>
@@ -404,7 +436,7 @@ export default function HomeScreen() {
               ) : null}
             </View>
 
-            {/* ✅ DEV DEBUG PANEL */}
+            {/* ✅ DEV DEBUG PANEL (Search Index) */}
             {devDebug ? (
               <GlassCard strength="subtle" style={styles.devCard}>
                 <View style={styles.devHeaderRow}>
@@ -456,11 +488,54 @@ export default function HomeScreen() {
                         </Text>
                       ))}
                       {devDebug.unresolvedCount > devDebug.unresolvedTop.length ? (
-                        <Text style={styles.devListMore}>…and {devDebug.unresolvedCount - devDebug.unresolvedTop.length} more</Text>
+                        <Text style={styles.devListMore}>
+                          …and {devDebug.unresolvedCount - devDebug.unresolvedTop.length} more
+                        </Text>
                       ) : null}
                     </View>
                   ) : (
                     <Text style={styles.devOk}>No unresolved fixture team names 🎯</Text>
+                  )}
+                </View>
+              </GlassCard>
+            ) : null}
+
+            {/* ✅ DEV DEBUG PANEL (Missing Team Guides) */}
+            {devMissingGuides ? (
+              <GlassCard strength="subtle" style={styles.devCard}>
+                <View style={styles.devHeaderRow}>
+                  <Text style={styles.devTitle}>DEV: Missing Team Guides</Text>
+                  <Text style={styles.devMeta}>
+                    guides {devMissingGuides.guidesCount} • registry teams {devMissingGuides.registryTeamsCount} • missing{" "}
+                    {devMissingGuides.missingCount}
+                  </Text>
+                </View>
+
+                {devMissingGuides.byLeagueTop.length > 0 ? (
+                  <View style={[styles.devGrid, { marginTop: 10 }]}>
+                    {devMissingGuides.byLeagueTop.map(([leagueId, count]) => (
+                      <View key={leagueId} style={styles.devPill}>
+                        <Text style={styles.devPillK}>league {leagueId}</Text>
+                        <Text style={styles.devPillV}>{count}</Text>
+                      </View>
+                    ))}
+                  </View>
+                ) : null}
+
+                <View style={{ marginTop: 10 }}>
+                  {devMissingGuides.missingTop.length > 0 ? (
+                    <View style={styles.devList}>
+                      {devMissingGuides.missingTop.map((m: MissingTeamGuide) => (
+                        <Text key={m.expectedGuideKey} style={styles.devListItem}>
+                          • {m.expectedGuideKey} — {m.name}
+                        </Text>
+                      ))}
+                      {devMissingGuides.moreCount > 0 ? (
+                        <Text style={styles.devListMore}>…and {devMissingGuides.moreCount} more</Text>
+                      ) : null}
+                    </View>
+                  ) : (
+                    <Text style={styles.devOk}>All registry teams have guides ✅</Text>
                   )}
                 </View>
               </GlassCard>
@@ -712,7 +787,10 @@ export default function HomeScreen() {
 
           {/* NEXT FIXTURES */}
           <View style={styles.section}>
-            <SectionHeader title="Next fixtures" subtitle={`${league.label} • ${formatUkDateOnly(fromIso)} → ${formatUkDateOnly(toIso)}`} />
+            <SectionHeader
+              title="Next fixtures"
+              subtitle={`${league.label} • ${formatUkDateOnly(fromIso)} → ${formatUkDateOnly(toIso)}`}
+            />
             <GlassCard style={styles.card} strength="default">
               {fxLoading ? (
                 <View style={styles.center}>
@@ -928,7 +1006,13 @@ const styles = StyleSheet.create({
   devPillK: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: theme.fontSize.xs },
   devPillV: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
 
-  devSmall: { marginTop: 8, color: theme.colors.textSecondary, fontWeight: "800", fontSize: theme.fontSize.xs, lineHeight: 16 },
+  devSmall: {
+    marginTop: 8,
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
+    fontSize: theme.fontSize.xs,
+    lineHeight: 16,
+  },
   devSmallStrong: { color: theme.colors.text, fontWeight: "900" },
 
   devList: { marginTop: 8, gap: 4 },
