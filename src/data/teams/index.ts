@@ -56,6 +56,7 @@ const FRANCE = "France";
 
 /**
  * Remove diacritics safely (Köln -> Koln, München -> Munchen).
+ * This is critical for matching API/fixture names to registry keys.
  */
 function stripDiacritics(input: string): string {
   try {
@@ -67,7 +68,7 @@ function stripDiacritics(input: string): string {
 
 /**
  * Normalise any user input or label into a comparable key.
- * Keep it simple and predictable for V1.
+ * Deterministic and diacritics-safe.
  */
 export function normalizeTeamKey(input: string): string {
   const s = stripDiacritics(String(input ?? ""))
@@ -76,14 +77,17 @@ export function normalizeTeamKey(input: string): string {
     .replace(/&/g, "and")
     .replace(/['’]/g, "");
 
-  return s.replace(/[^a-z0-9]+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+  return s
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
 }
 
 /**
  * Registry keyed by teamKey.
  *
  * Gold standard:
- * - Alphabetical by teamKey
+ * - Alphabetical by teamKey (ideal, not required for correctness)
  * - Minimal but useful aliases
  * - leagueId set for routing + filtering
  */
@@ -133,7 +137,14 @@ export const teams: Record<string, TeamRecord> = {
     country: ENGLAND,
     city: "Brighton",
     leagueId: EPL,
-    aliases: ["brighton", "brighton and hove albion", "brighton hove albion", "bhafc", "seagulls", "the seagulls"],
+    aliases: [
+      "brighton",
+      "brighton and hove albion",
+      "brighton hove albion",
+      "bhafc",
+      "seagulls",
+      "the seagulls",
+    ],
   },
 
   "burnley": {
@@ -466,14 +477,14 @@ export const teams: Record<string, TeamRecord> = {
     aliases: ["milan", "a.c. milan", "rossoneri"],
   },
 
-  // ✅ ADDED (unresolved list)
+  // ✅ ADDED (missing in your unresolved list)
   "atalanta": {
     teamKey: "atalanta",
     name: "Atalanta",
     country: ITALY,
     city: "Bergamo",
     leagueId: SERIE_A,
-    aliases: ["atalanta bc", "atalanta bergamasca calcio"],
+    aliases: ["atalanta bc", "atalanta bergamo", "dea"],
   },
 
   "as-roma": {
@@ -575,14 +586,14 @@ export const teams: Record<string, TeamRecord> = {
     aliases: ["ss lazio"],
   },
 
-  // ✅ FIXED (was wrongly keyed as "lecco")
+  // ✅ FIXED: Lecce key was wrong in your file ("lecco")
   "lecce": {
     teamKey: "lecce",
     name: "Lecce",
     country: ITALY,
     city: "Lecce",
     leagueId: SERIE_A,
-    aliases: ["us lecce", "u.s. lecce"],
+    aliases: ["us lecce", "u.s. lecce", "lecco"], // keep "lecco" as a safety net if any old refs exist
   },
 
   "napoli": {
@@ -666,15 +677,19 @@ export const teams: Record<string, TeamRecord> = {
     country: GERMANY,
     city: "Munich",
     leagueId: BUNDESLIGA,
+    // ✅ critical: cover API variants + diacritics
     aliases: [
       "bayern",
       "fc bayern",
       "fcb",
-      // ✅ unresolved list variants
+      "bayern munich",
+      "fc bayern munich",
       "bayern munchen",
       "bayern münchen",
       "fc bayern munchen",
       "fc bayern münchen",
+      "fc bayern muenchen",
+      "bayern muenchen",
     ],
   },
 
@@ -693,7 +708,7 @@ export const teams: Record<string, TeamRecord> = {
     country: GERMANY,
     city: "Mönchengladbach",
     leagueId: BUNDESLIGA,
-    aliases: ["gladbach", "bmg", "borussia mönchengladbach"],
+    aliases: ["gladbach", "bmg", "borussia monchengladbach", "borussia mönchengladbach"],
   },
 
   "eintracht-frankfurt": {
@@ -705,6 +720,7 @@ export const teams: Record<string, TeamRecord> = {
     aliases: ["frankfurt", "sge", "eintracht"],
   },
 
+  // ✅ critical: fixture names often come as "1. FC Köln"
   "fc-cologne": {
     teamKey: "fc-cologne",
     name: "FC Cologne",
@@ -714,15 +730,15 @@ export const teams: Record<string, TeamRecord> = {
     aliases: [
       "koln",
       "köln",
-      "1. fc koln",
+      "cologne",
       "1 fc koln",
-      // ✅ unresolved list variants
-      "1. fc köln",
       "1 fc köln",
-      "fc köln",
       "1. fc koln",
-      "1 fc koln",
+      "1. fc köln",
+      "1-fc-koln",
+      "1-fc-köln",
       "fc koln",
+      "fc köln",
     ],
   },
 
@@ -753,6 +769,7 @@ export const teams: Record<string, TeamRecord> = {
     aliases: ["hsv", "hamburg"],
   },
 
+  // ✅ critical: fixture name often "1899 Hoffenheim"
   "hoffenheim": {
     teamKey: "hoffenheim",
     name: "Hoffenheim",
@@ -763,9 +780,9 @@ export const teams: Record<string, TeamRecord> = {
       "tsg hoffenheim",
       "tsg 1899",
       "hoffenheim 1899",
-      // ✅ unresolved list variants
       "1899 hoffenheim",
       "tsg 1899 hoffenheim",
+      "tsg-1899-hoffenheim",
     ],
   },
 
@@ -775,14 +792,8 @@ export const teams: Record<string, TeamRecord> = {
     country: GERMANY,
     city: "Mainz",
     leagueId: BUNDESLIGA,
-    aliases: [
-      "mainz",
-      "fsv mainz",
-      "1. fsv mainz 05",
-      // ✅ unresolved list variants
-      "fsv mainz 05",
-      "1 fsv mainz 05",
-    ],
+    // ✅ critical: fixture names often "FSV Mainz 05"
+    aliases: ["mainz", "fsv mainz", "1. fsv mainz 05", "fsv mainz 05", "1 fsv mainz 05"],
   },
 
   "rb-leipzig": {
@@ -840,7 +851,7 @@ export const teams: Record<string, TeamRecord> = {
   },
 
   // -------------------------
-  // Ligue 1
+  // Ligue 1 (18 teams)
   // -------------------------
   "angers": {
     teamKey: "angers",
@@ -1006,52 +1017,48 @@ export const teams: Record<string, TeamRecord> = {
 };
 
 /**
- * Build a deterministic resolver map:
- * - normalize(canonical teamKey) -> canonical teamKey
- * - normalize(name) -> canonical teamKey
- * - normalize(each alias) -> canonical teamKey
+ * Deterministic resolver:
+ * - matches canonical team keys
+ * - matches aliases
+ * - diacritics-safe and punctuation-safe
  *
- * Deterministic rule:
- * - If collisions exist, the first inserted wins (based on object iteration order).
- * - We keep the registry alphabetical and stable to make this deterministic.
+ * Returns the canonical teamKey (e.g. "bayern-munich") or null.
  */
-const resolverMap: Map<string, string> = (() => {
-  const m = new Map<string, string>();
+let _aliasToTeamKey: Map<string, string> | null = null;
 
-  const add = (raw: string, teamKey: string) => {
-    const k = normalizeTeamKey(raw);
-    if (!k) return;
-    if (!m.has(k)) m.set(k, teamKey);
-  };
+function buildAliasMap(): Map<string, string> {
+  const map = new Map<string, string>();
 
   Object.values(teams).forEach((t) => {
-    add(t.teamKey, t.teamKey);
-    add(t.name, t.teamKey);
-    (t.aliases ?? []).forEach((a) => add(a, t.teamKey));
+    const canonical = normalizeTeamKey(t.teamKey);
+    if (canonical) map.set(canonical, t.teamKey);
+
+    const nameKey = normalizeTeamKey(t.name);
+    if (nameKey) map.set(nameKey, t.teamKey);
+
+    (t.aliases ?? []).forEach((a) => {
+      const k = normalizeTeamKey(a);
+      if (!k) return;
+      // first write wins (deterministic)
+      if (!map.has(k)) map.set(k, t.teamKey);
+    });
   });
 
-  return m;
-})();
+  return map;
+}
 
-/**
- * Resolve any input (fixture team name, user query, guide key) to a canonical teamKey.
- * Returns null if unknown.
- */
 export function resolveTeamKey(input: string): string | null {
   const k = normalizeTeamKey(input);
   if (!k) return null;
 
-  // direct registry hit
-  if (teams[k]) return teams[k].teamKey;
-
-  // alias/name/canonical lookup
-  return resolverMap.get(k) ?? null;
+  if (!_aliasToTeamKey) _aliasToTeamKey = buildAliasMap();
+  return _aliasToTeamKey.get(k) ?? null;
 }
 
 export function getTeam(teamInput: string): TeamRecord | null {
   const resolved = resolveTeamKey(teamInput);
-  if (!resolved) return null;
-  return teams[resolved] ?? null;
+  const key = resolved ? normalizeTeamKey(resolved) : normalizeTeamKey(teamInput);
+  return teams[key] ?? null;
 }
 
 /**
@@ -1079,14 +1086,13 @@ export function searchTeams(query: string, limit = 10): TeamRecord[] {
       if (name.includes(q)) score += 35;
       if (aliases.some((a) => a.includes(q))) score += 25;
 
-      // Slight boost if team has league linkage (more actionable)
       if (t.leagueId) score += 5;
 
       return { t, score };
     })
     .filter((x) => x.score > 0)
     .sort((a, b) => b.score - a.score)
-    .slice(0, limit)
+    .slice(0, Math.max(1, limit))
     .map((x) => x.t);
 
   return scored;
