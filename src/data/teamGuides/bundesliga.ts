@@ -267,6 +267,70 @@ export const bundesligaTeamGuides: Record<string, TeamGuide> = {
     updatedAt: "2026-01-27"
   },
 
+
+  "borussia-mgladbach": {
+  teamKey: "borussia-mgladbach",
+  name: "Borussia M'gladbach",
+  city: "Mönchengladbach",
+  country: "Germany",
+  stadium: "BORUSSIA-PARK",
+  sections: [
+    {
+      title: "Club Overview",
+      body:
+        "Borussia Mönchengladbach are one of German football’s classic names: a club with a historic reputation, a strong supporter culture, and an identity tied to playing with ambition rather than merely surviving. They sit in the category of Bundesliga clubs where expectations are meaningful — fans want a team that looks like it belongs in the upper half.\n\nFor travellers, Gladbach is a strong matchday choice: large modern stadium, engaged support, and a club whose games often carry real tempo."
+    },
+    {
+      title: "History & Legacy",
+      body:
+        "Gladbach’s legacy is built on being one of the Bundesliga’s historically significant clubs, with eras where they were a genuine national power.\n\nThat history feeds modern expectations: the club sees itself as a major German institution, not a small-market participant."
+    },
+    {
+      title: "Recent Seasons",
+      body:
+        "Recent seasons are often defined by inconsistency management — balancing ambition with the realities of squad cycles.\n\nCommon patterns:\n• Runs of strong form where Gladbach look like European contenders.\n• Transitional phases where turnover forces resets.\n• Home games as the key platform for momentum."
+    },
+    {
+      title: "Playing Style",
+      body:
+        "Gladbach typically aim to play proactive football.\n\nExpect:\n• Intent to progress quickly through midfield.\n• Willingness to attack with numbers when confidence is high.\n• Games that can become open and high-tempo, especially against similarly ambitious opponents."
+    },
+    {
+      title: "Stadium Profile",
+      body:
+        "BORUSSIA-PARK is a modern, spacious stadium with strong sightlines.\n\nIt has the scale of a major Bundesliga venue and can feel imposing when the crowd is up for it."
+    },
+    {
+      title: "Atmosphere & Matchday Feel",
+      body:
+        "Atmosphere is strongest in big fixtures and high-stakes moments.\n\nExpect steady noise with big spikes around goals, pressure waves, and late pushes — a proper German stadium feel rather than a quiet ‘event’ crowd."
+    },
+    {
+      title: "Rivalries",
+      body:
+        "Regional rivalries in western Germany add edge, especially in fixtures where geography and pride matter as much as points."
+    },
+    {
+      title: "Legends",
+      body:
+        "Gladbach’s legends are closely tied to the club’s historic peak eras and the identity of being a serious Bundesliga power.\n\nLegend culture emphasises major contribution and club status."
+    },
+    {
+      title: "Supporter Culture",
+      body:
+        "Supporters are proud and expectation-heavy. They want intensity and ambition, and they respond strongly when the team plays with courage rather than caution."
+    },
+    {
+      title: "Neutral Visitor Notes",
+      body:
+        "• Excellent Bundesliga stadium experience.\n• Best in fixtures with rivalry edge or European-chase context.\n• Expect a proper ‘big German ground’ matchday."
+    }
+  ],
+  links: [{ label: "Official site", url: "https://www.borussia.de/" }],
+  updatedAt: "2026-01-28"
+},
+
+  
   "eintracht-frankfurt": {
     teamKey: "eintracht-frankfurt",
     name: "Eintracht Frankfurt",
@@ -455,8 +519,8 @@ export const bundesligaTeamGuides: Record<string, TeamGuide> = {
     updatedAt: "2026-01-27"
   },
 
-  "sc-freiburg": {
-    teamKey: "sc-freiburg",
+  "freiburg": {
+    teamKey: "freiburg",
     name: "SC Freiburg",
     city: "Freiburg im Breisgau",
     country: "Germany",
@@ -579,9 +643,9 @@ export const bundesligaTeamGuides: Record<string, TeamGuide> = {
     updatedAt: "2026-01-27"
   },
 
-  "tsg-hoffenheim": {
-    teamKey: "tsg-hoffenheim",
-    name: "TSG Hoffenheim",
+  "hoffenheim": {
+    teamKey: "hoffenheim",
+    name: "Hoffenheim",
     city: "Sinsheim",
     country: "Germany",
     stadium: "PreZero Arena",
