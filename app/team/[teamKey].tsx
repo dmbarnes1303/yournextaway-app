@@ -1,23 +1,26 @@
 // app/team/[teamKey].tsx
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Platform } from "react-native";
-import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import React, { useEffect, useMemo, useState } from "react";
+import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 
 import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
 import EmptyState from "@/src/components/EmptyState";
+
 import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
+import { LEAGUES, getRollingWindowIso } from "@/src/constants/football";
 
 import { getFixtures, type FixtureListRow } from "@/src/services/apiFootball";
-import { DEFAULT_SEASON, LEAGUES, getRollingWindowIso, type LeagueOption } from "@/src/constants/football";
 import { formatUkDateOnly, formatUkDateTimeMaybe } from "@/src/utils/formatters";
 
-import teamGuides from "@/src/data/teamGuides";
-import { normalizeCityKey } from "@/src/utils/city";
+import { getTeamGuide } from "@/src/data/teamGuides";
+import type { TeamGuide } from "@/src/data/teamGuides/types";
 
-function paramString(v: unknown): string | null {
+import { getTeam, normalizeTeamKey } from "@/src/data/teams";
+
+function coerceString(v: unknown): string | null {
   if (typeof v === "string") {
     const s = v.trim();
     return s ? s : null;
@@ -29,367 +32,312 @@ function paramString(v: unknown): string | null {
   return null;
 }
 
-function normalizeTeamKey(input: string) {
-  const s = String(input ?? "").trim().toLowerCase();
-  if (!s) return "";
-  return s
-    .replace(/&/g, "and")
-    .replace(/['’]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "");
-}
-
-function safeTeamName(teamNameParam: string | null, teamKeyParam: string | null) {
-  if (teamNameParam) return teamNameParam;
-  if (!teamKeyParam) return "Team";
-  // Title-ish fallback from slug
-  return teamKeyParam
-    .split("-")
-    .filter(Boolean)
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(" ");
-}
-
-function fixtureLine(r: FixtureListRow) {
+function fixtureKey(r: FixtureListRow, idx: number) {
   const id = r?.fixture?.id;
-  const fixtureId = id ? String(id) : null;
-
-  const home = r?.teams?.home?.name ?? "Home";
-  const away = r?.teams?.away?.name ?? "Away";
-  const kickoff = formatUkDateTimeMaybe(r?.fixture?.date);
-
-  const venue = r?.fixture?.venue?.name ?? "";
-  const city = r?.fixture?.venue?.city ?? "";
-  const extra = [venue, city].filter(Boolean).join(" • ");
-
-  return {
-    fixtureId,
-    title: `${home} vs ${away}`,
-    meta: extra ? `${kickoff} • ${extra}` : kickoff,
-    home,
-    away,
-    city,
-  };
+  return id ? String(id) : `idx-${idx}`;
 }
 
-type SearchLeague = LeagueOption & { aliases: string[] };
+function isNonEmptyString(x: any): x is string {
+  return typeof x === "string" && x.trim().length > 0;
+}
 
-function buildSearchLeagues(): SearchLeague[] {
-  const base: SearchLeague[] = LEAGUES.map((l) => {
-    const label = l.label.toLowerCase();
-    const aliases: string[] = [label];
+function renderBulletsMaybe(bullets: any) {
+  const list = Array.isArray(bullets) ? bullets.filter(isNonEmptyString) : [];
+  if (list.length === 0) return null;
 
-    if (label.includes("premier league")) aliases.push("england", "english", "uk", "united kingdom");
-    if (label.includes("la liga")) aliases.push("spain", "spanish");
-    if (label.includes("serie a")) aliases.push("italy", "italian");
-    if (label.includes("bundesliga") && !label.includes("austrian")) aliases.push("germany", "german");
-    if (label.includes("ligue 1")) aliases.push("france", "french");
+  return (
+    <View style={{ marginTop: 8, gap: 8 }}>
+      {list.map((t: string, i: number) => (
+        <View key={`${i}-${t.slice(0, 10)}`} style={styles.bulletRow}>
+          <Text style={styles.bulletDot}>•</Text>
+          <Text style={styles.bulletText}>{t}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
 
-    return { ...l, aliases };
-  });
+function renderParagraphsMaybe(text: any) {
+  if (!isNonEmptyString(text)) return null;
+  const parts = text
+    .split(/\n{2,}/g)
+    .map((p) => p.trim())
+    .filter(Boolean);
 
-  // Austria: helps team discovery when users typed Austria in Home search.
-  const hasAustria = base.some((x) => x.leagueId === 218 || x.label.toLowerCase().includes("austrian"));
-  if (!hasAustria) {
-    base.push({
-      label: "Austrian Bundesliga",
-      leagueId: 218,
-      season: DEFAULT_SEASON ?? (LEAGUES[0]?.season ?? 2025),
-      aliases: ["austria", "austrian", "austrian bundesliga", "bundesliga austria"],
-    });
+  return (
+    <View style={{ marginTop: 8, gap: 10 }}>
+      {parts.map((p, i) => (
+        <Text key={i} style={styles.body}>
+          {p}
+        </Text>
+      ))}
+    </View>
+  );
+}
+
+function renderGuide(guide: TeamGuide) {
+  const g: any = guide;
+
+  const sections = Array.isArray(g?.sections) ? g.sections : null;
+  if (sections && sections.length > 0) {
+    return (
+      <View style={{ gap: 14, marginTop: 10 }}>
+        {sections.map((s: any, idx: number) => {
+          const title = isNonEmptyString(s?.title) ? s.title : `Section ${idx + 1}`;
+          const body = s?.body;
+          const bullets = s?.bullets;
+          const items = Array.isArray(s?.items) ? s.items : null;
+
+          return (
+            <View key={`${idx}-${title}`} style={styles.guideSection}>
+              <Text style={styles.blockTitle}>{title}</Text>
+              {renderParagraphsMaybe(body)}
+              {renderBulletsMaybe(bullets)}
+
+              {items && items.length > 0 ? (
+                <View style={{ marginTop: 10, gap: 12 }}>
+                  {items.map((it: any, j: number) => {
+                    const itTitle = isNonEmptyString(it?.title) ? it.title : null;
+                    return (
+                      <View key={`${idx}-${j}-${itTitle ?? "item"}`} style={styles.guideItem}>
+                        {itTitle ? <Text style={styles.itemTitle}>{itTitle}</Text> : null}
+                        {renderParagraphsMaybe(it?.body)}
+                        {renderBulletsMaybe(it?.bullets)}
+                      </View>
+                    );
+                  })}
+                </View>
+              ) : null}
+            </View>
+          );
+        })}
+      </View>
+    );
   }
 
-  return base;
+  const legacyBlocks: Array<{ title: string; text?: string }> = [];
+  if (isNonEmptyString(g?.history)) legacyBlocks.push({ title: "Overview", text: String(g.history) });
+  if (isNonEmptyString(g?.stadium)) legacyBlocks.push({ title: "Stadium", text: String(g.stadium) });
+  if (isNonEmptyString(g?.tickets)) legacyBlocks.push({ title: "Tickets", text: String(g.tickets) });
+  if (isNonEmptyString(g?.gettingThere)) legacyBlocks.push({ title: "Getting there", text: String(g.gettingThere) });
+
+  if (legacyBlocks.length === 0) {
+    return <EmptyState title="Guide available, but not renderable yet" message="Align it to sections[] so it displays consistently." />;
+  }
+
+  return (
+    <View style={{ gap: 14, marginTop: 10 }}>
+      {legacyBlocks.map((b, i) => (
+        <View key={`${i}-${b.title}`} style={styles.guideSection}>
+          <Text style={styles.blockTitle}>{b.title}</Text>
+          {renderParagraphsMaybe(b.text)}
+        </View>
+      ))}
+    </View>
+  );
 }
 
-export default function TeamGuideScreen() {
+function teamMatchesRow(row: FixtureListRow, teamKey: string): boolean {
+  if (!teamKey) return false;
+
+  const home = String(row?.teams?.home?.name ?? "");
+  const away = String(row?.teams?.away?.name ?? "");
+  const homeKey = normalizeTeamKey(home);
+  const awayKey = normalizeTeamKey(away);
+
+  if (homeKey === teamKey || awayKey === teamKey) return true;
+  if (homeKey.includes(teamKey) || awayKey.includes(teamKey) || teamKey.includes(homeKey) || teamKey.includes(awayKey)) return true;
+
+  return false;
+}
+
+export default function TeamScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
-  const insets = useSafeAreaInsets();
 
-  const teamKeyParam = useMemo(() => paramString((params as any)?.teamKey), [params]);
-  const teamNameParam = useMemo(() => paramString((params as any)?.teamName), [params]);
+  const rawTeamKey = useMemo(() => coerceString((params as any)?.teamKey) ?? "", [params]);
+  const teamKey = useMemo(() => normalizeTeamKey(rawTeamKey), [rawTeamKey]);
 
-  const teamKey = useMemo(() => normalizeTeamKey(teamKeyParam ?? teamNameParam ?? ""), [teamKeyParam, teamNameParam]);
-  const teamName = useMemo(() => safeTeamName(teamNameParam, teamKeyParam), [teamNameParam, teamKeyParam]);
+  const team = useMemo(() => (teamKey ? getTeam(teamKey) : null), [teamKey]);
+  const teamName = team?.name ?? (rawTeamKey ? rawTeamKey : "Team");
 
   const rolling = useMemo(() => getRollingWindowIso(), []);
-  const fromIso = rolling.from;
-  const toIso = rolling.to;
+  const from = useMemo(() => coerceString((params as any)?.from) ?? rolling.from, [params, rolling.from]);
+  const to = useMemo(() => coerceString((params as any)?.to) ?? rolling.to, [params, rolling.to]);
 
-  const SEARCH_LEAGUES = useMemo(() => buildSearchLeagues(), []);
-
-  const [scope, setScope] = useState<"all" | "league">("all");
-  const [selectedLeague, setSelectedLeague] = useState<LeagueOption>(LEAGUES[0]);
+  const guide = useMemo(() => (teamKey ? getTeamGuide(teamKey) : null), [teamKey]);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [rows, setRows] = useState<FixtureListRow[]>([]);
 
-  const abortRef = useRef({ cancelled: false });
-
-  const guide = useMemo(() => {
-    if (!teamKey) return null;
-    return (teamGuides as any)?.[teamKey] ?? null;
-  }, [teamKey]);
-
-  // Fetch fixtures for this team
   useEffect(() => {
-    abortRef.current.cancelled = false;
+    let cancelled = false;
 
     async function run() {
-      if (!teamKey && !teamName) {
-        setError("Missing team details.");
-        return;
-      }
+      if (!teamKey) return;
 
       setLoading(true);
       setError(null);
       setRows([]);
 
-      const queryName = teamName.trim().toLowerCase();
-      const matchesTeam = (r: FixtureListRow) => {
-        const home = String(r?.teams?.home?.name ?? "").trim().toLowerCase();
-        const away = String(r?.teams?.away?.name ?? "").trim().toLowerCase();
-
-        // Strong match first; then fallback to includes
-        if (home === queryName || away === queryName) return true;
-        return home.includes(queryName) || away.includes(queryName);
-      };
-
       try {
-        if (scope === "league") {
-          const res = await getFixtures({
-            league: selectedLeague.leagueId,
-            season: selectedLeague.season,
-            from: fromIso,
-            to: toIso,
-          });
+        const results = await Promise.allSettled(
+          LEAGUES.map((l) =>
+            getFixtures({
+              league: l.leagueId,
+              season: l.season,
+              from,
+              to,
+            })
+          )
+        );
 
-          if (abortRef.current.cancelled) return;
+        if (cancelled) return;
 
-          const list = (Array.isArray(res) ? res : []).filter(matchesTeam);
-          setRows(list);
-          return;
+        const merged: FixtureListRow[] = [];
+        for (const r of results) {
+          if (r.status !== "fulfilled") continue;
+          const list = Array.isArray(r.value) ? (r.value as FixtureListRow[]) : [];
+          for (const row of list) {
+            if (teamMatchesRow(row, teamKey)) merged.push(row);
+          }
         }
 
-        // scope === "all": search across leagues but stop once we have enough
-        const collected: FixtureListRow[] = [];
-        for (const l of SEARCH_LEAGUES) {
-          if (abortRef.current.cancelled) return;
+        merged.sort((a, b) => {
+          const ad = new Date(String(a?.fixture?.date ?? "")).getTime();
+          const bd = new Date(String(b?.fixture?.date ?? "")).getTime();
+          if (!Number.isFinite(ad) && !Number.isFinite(bd)) return 0;
+          if (!Number.isFinite(ad)) return 1;
+          if (!Number.isFinite(bd)) return -1;
+          return ad - bd;
+        });
 
-          // eslint-disable-next-line no-await-in-loop
-          const res = await getFixtures({
-            league: l.leagueId,
-            season: l.season,
-            from: fromIso,
-            to: toIso,
-          });
-
-          if (abortRef.current.cancelled) return;
-
-          const list = (Array.isArray(res) ? res : []).filter(matchesTeam);
-          collected.push(...list);
-
-          // Early stop: enough items for a useful guide
-          if (collected.length >= 18) break;
-        }
-
-        setRows(collected);
+        setRows(merged);
       } catch (e: any) {
-        if (abortRef.current.cancelled) return;
-        setError(e?.message ?? "Failed to load fixtures for this team.");
+        if (cancelled) return;
+        setError(e?.message ?? "Couldn’t load team fixtures.");
       } finally {
-        if (!abortRef.current.cancelled) setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     }
 
     run();
-
     return () => {
-      abortRef.current.cancelled = true;
+      cancelled = true;
     };
-  }, [teamKey, teamName, scope, selectedLeague, fromIso, toIso, SEARCH_LEAGUES]);
+  }, [teamKey, from, to]);
 
-  const preview = useMemo(() => rows.slice(0, 12), [rows]);
-
-  function goBuildTripWithContext(fixtureId: string) {
-    router.push({
-      pathname: "/trip/build",
-      params: {
-        fixtureId,
-        // Keep context sensible: if user is on single-league scope, pass it; otherwise omit.
-        ...(scope === "league"
-          ? { leagueId: String(selectedLeague.leagueId), season: String(selectedLeague.season) }
-          : {}),
-        from: fromIso,
-        to: toIso,
-      },
-    } as any);
+  function goBuildTrip(fixtureId: string) {
+    router.push({ pathname: "/trip/build", params: { fixtureId, from, to } } as any);
   }
 
-  function openCityIfPossible(city: string) {
-    const key = normalizeCityKey(city);
-    router.push({ pathname: "/city/[cityKey]", params: { cityKey: key } } as any);
+  function goMatch(fixtureId: string) {
+    router.push({ pathname: "/match/[id]", params: { id: fixtureId, from, to } } as any);
   }
 
   return (
-    <Background imageUrl={getBackground("home")} overlayOpacity={0.86}>
+    <Background imageUrl={getBackground("home")} overlayOpacity={0.88}>
       <Stack.Screen
         options={{
-          headerShown: true,
+          title: teamName,
           headerTransparent: true,
           headerTintColor: theme.colors.text,
-          title: "Team guide",
         }}
       />
 
-      <SafeAreaView style={styles.safe} edges={["bottom"]}>
-        <ScrollView
-          style={styles.scroll}
-          contentContainerStyle={[styles.content, { paddingBottom: theme.spacing.xxl + insets.bottom }]}
-          keyboardShouldPersistTaps="handled"
-        >
-          <GlassCard style={styles.card} intensity={26}>
-            <Text style={styles.kicker}>TEAM GUIDE</Text>
+      <SafeAreaView style={styles.safe} edges={["top"]}>
+        <ScrollView contentContainerStyle={styles.content}>
+          <GlassCard style={styles.hero} intensity={24}>
+            <Text style={styles.kicker}>TEAM</Text>
             <Text style={styles.title}>{teamName}</Text>
             <Text style={styles.sub}>
-              Upcoming fixtures • {formatUkDateOnly(fromIso)} → {formatUkDateOnly(toIso)}
+              {formatUkDateOnly(from)} → {formatUkDateOnly(to)}
             </Text>
 
-            {/* Guide content (v1 fallback if empty) */}
-            <View style={styles.guideBlock}>
-              <Text style={styles.blockTitle}>Overview</Text>
-              <Text style={styles.blockBody}>
-                {guide?.history
-                  ? guide.history
-                  : "Guide content is being added. For v1, use fixtures below to plan a trip around a match."}
-              </Text>
-
-              {guide?.stadium ? (
-                <>
-                  <Text style={[styles.blockTitle, { marginTop: 10 }]}>Stadium</Text>
-                  <Text style={styles.blockBody}>{guide.stadium}</Text>
-                </>
-              ) : null}
-
-              {guide?.gettingThere ? (
-                <>
-                  <Text style={[styles.blockTitle, { marginTop: 10 }]}>Getting there</Text>
-                  <Text style={styles.blockBody}>{guide.gettingThere}</Text>
-                </>
-              ) : null}
-            </View>
-
-            {/* Scope controls */}
-            <View style={styles.scopeRow}>
-              <Pressable
-                onPress={() => setScope("all")}
-                style={[styles.scopePill, scope === "all" && styles.scopePillActive]}
-              >
-                <Text style={[styles.scopeText, scope === "all" && styles.scopeTextActive]}>All leagues</Text>
+            <View style={styles.pillsRow}>
+              <Pressable onPress={() => router.push({ pathname: "/(tabs)/fixtures", params: { from, to } } as any)} style={styles.pill}>
+                <Text style={styles.pillText}>Browse fixtures</Text>
               </Pressable>
 
-              <Pressable
-                onPress={() => setScope("league")}
-                style={[styles.scopePill, scope === "league" && styles.scopePillActive]}
-              >
-                <Text style={[styles.scopeText, scope === "league" && styles.scopeTextActive]}>Pick league</Text>
+              <Pressable onPress={() => router.push("/(tabs)/home")} style={styles.pill}>
+                <Text style={styles.pillText}>Back to Home</Text>
               </Pressable>
             </View>
-
-            {scope === "league" ? (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.leagueRow}>
-                {LEAGUES.map((l) => {
-                  const active = l.leagueId === selectedLeague.leagueId;
-                  return (
-                    <Pressable
-                      key={l.leagueId}
-                      onPress={() => setSelectedLeague(l)}
-                      style={[styles.leaguePill, active && styles.leaguePillActive]}
-                    >
-                      <Text style={[styles.leaguePillText, active && styles.leaguePillTextActive]}>{l.label}</Text>
-                    </Pressable>
-                  );
-                })}
-              </ScrollView>
-            ) : null}
           </GlassCard>
 
-          <GlassCard style={styles.card} intensity={22}>
-            <Text style={styles.sectionTitle}>Fixtures</Text>
+          {!teamKey ? (
+            <GlassCard style={styles.card} intensity={22}>
+              <EmptyState title="Missing team" message="No team key was provided." />
+            </GlassCard>
+          ) : null}
 
-            {loading ? (
-              <View style={styles.center}>
-                <ActivityIndicator />
-                <Text style={styles.muted}>Loading fixtures…</Text>
+          {teamKey ? (
+            <GlassCard style={styles.card} intensity={22}>
+              <View style={styles.sectionHeaderRow}>
+                <Text style={styles.sectionTitle}>Team guide</Text>
+                <Text style={styles.sectionBadge}>{guide ? "Available" : "Coming soon"}</Text>
               </View>
-            ) : null}
 
-            {!loading && error ? <EmptyState title="Couldn’t load fixtures" message={error} /> : null}
+              {!guide ? (
+                <EmptyState title="Guide coming soon" message="Once a guide exists for this club, it will show here automatically." />
+              ) : (
+                renderGuide(guide)
+              )}
+            </GlassCard>
+          ) : null}
 
-            {!loading && !error && rows.length === 0 ? (
-              <EmptyState title="No fixtures found" message="Try ‘All leagues’ or widen the date window later in v2." />
-            ) : null}
+          {teamKey ? (
+            <GlassCard style={styles.card} intensity={22}>
+              <Text style={styles.sectionTitle}>Fixtures for {teamName}</Text>
+              <Text style={styles.sectionSub}>Filtered from your supported leagues, within the rolling window.</Text>
 
-            {!loading && !error && preview.length > 0 ? (
-              <View style={styles.list}>
-                {preview.map((r, idx) => {
-                  const line = fixtureLine(r);
-                  const key = line.fixtureId ?? `fx-${idx}`;
+              {loading ? (
+                <View style={styles.center}>
+                  <ActivityIndicator />
+                  <Text style={styles.muted}>Loading fixtures…</Text>
+                </View>
+              ) : null}
 
-                  return (
-                    <View key={key} style={styles.fxRow}>
-                      <Pressable
-                        onPress={() =>
-                          line.fixtureId ? router.push({ pathname: "/match/[id]", params: { id: line.fixtureId } }) : null
-                        }
-                        style={{ flex: 1 }}
-                      >
-                        <Text style={styles.rowTitle}>{line.title}</Text>
-                        <Text style={styles.rowMeta}>{line.meta}</Text>
+              {!loading && error ? <EmptyState title="Couldn’t load fixtures" message={error} /> : null}
 
-                        {line.city ? (
-                          <Pressable onPress={() => openCityIfPossible(line.city)} style={styles.inlineLink}>
-                            <Text style={styles.inlineLinkText}>Open city guide: {line.city}</Text>
-                          </Pressable>
-                        ) : null}
-                      </Pressable>
+              {!loading && !error && rows.length === 0 ? (
+                <EmptyState title="No fixtures found" message="Either this club isn’t in your supported leagues list, or the window doesn’t include their matches." />
+              ) : null}
 
-                      <Pressable
-                        disabled={!line.fixtureId}
-                        onPress={() => (line.fixtureId ? goBuildTripWithContext(line.fixtureId) : null)}
-                        style={[styles.planBtn, !line.fixtureId && { opacity: 0.5 }]}
-                      >
-                        <Text style={styles.planBtnText}>Plan</Text>
-                      </Pressable>
-                    </View>
-                  );
-                })}
-              </View>
-            ) : null}
+              {!loading && !error && rows.length > 0 ? (
+                <View style={styles.list}>
+                  {rows.slice(0, 20).map((r, idx) => {
+                    const id = r?.fixture?.id ? String(r.fixture.id) : null;
+                    const home = r?.teams?.home?.name ?? "Home";
+                    const away = r?.teams?.away?.name ?? "Away";
+                    const kick = formatUkDateTimeMaybe(r?.fixture?.date);
+                    const venue = r?.fixture?.venue?.name ?? "";
+                    const city = r?.fixture?.venue?.city ?? "";
+                    const extra = [venue, city].filter(Boolean).join(" • ");
+                    const line2 = extra ? `${kick} • ${extra}` : kick;
 
-            <Pressable
-              onPress={() =>
-                router.push({
-                  pathname: "/(tabs)/fixtures",
-                  params: {
-                    ...(scope === "league"
-                      ? { leagueId: String(selectedLeague.leagueId), season: String(selectedLeague.season) }
-                      : {}),
-                    from: fromIso,
-                    to: toIso,
-                  },
-                } as any)
-              }
-              style={styles.linkBtn}
-            >
-              <Text style={styles.linkText}>Open Fixtures</Text>
-            </Pressable>
-          </GlassCard>
+                    return (
+                      <View key={fixtureKey(r, idx)} style={styles.fixtureRow}>
+                        <Pressable onPress={() => (id ? goMatch(id) : null)} style={{ flex: 1 }} disabled={!id}>
+                          <Text style={styles.rowTitle}>
+                            {home} vs {away}
+                          </Text>
+                          <Text style={styles.rowMeta}>{line2}</Text>
+                        </Pressable>
 
-          <View style={{ height: 10 }} />
+                        <Pressable disabled={!id} onPress={() => (id ? goBuildTrip(id) : null)} style={[styles.planBtn, !id && styles.disabled]}>
+                          <Text style={styles.planBtnText}>Plan Trip</Text>
+                        </Pressable>
+                      </View>
+                    );
+                  })}
+                </View>
+              ) : null}
+            </GlassCard>
+          ) : null}
+
+          <View style={{ height: 18 }} />
         </ScrollView>
       </SafeAreaView>
     </Background>
@@ -398,96 +346,57 @@ export default function TeamGuideScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },
-  scroll: { flex: 1 },
-
   content: {
-    paddingTop: 96,
     paddingHorizontal: theme.spacing.lg,
+    paddingTop: theme.spacing.lg,
+    paddingBottom: theme.spacing.xxl,
     gap: theme.spacing.lg,
   },
 
-  card: { padding: theme.spacing.lg },
+  hero: { padding: theme.spacing.lg },
+  kicker: { color: theme.colors.primary, fontWeight: "900", fontSize: theme.fontSize.xs, letterSpacing: 0.6 },
+  title: { marginTop: 8, color: theme.colors.text, fontSize: theme.fontSize.xl, fontWeight: "900" },
+  sub: { marginTop: 8, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, fontWeight: "800" },
 
-  kicker: { color: theme.colors.primary, fontSize: theme.fontSize.xs, fontWeight: "900", letterSpacing: 0.6 },
-  title: { marginTop: 8, color: theme.colors.text, fontSize: theme.fontSize.xl, fontWeight: "900", lineHeight: 30 },
-  sub: { marginTop: 8, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18 },
-
-  guideBlock: {
-    marginTop: 12,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.18)",
-    padding: 12,
-  },
-  blockTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
-  blockBody: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18 },
-
-  scopeRow: { marginTop: 12, flexDirection: "row", gap: 10 },
-  scopePill: {
-    paddingVertical: 8,
+  pillsRow: { marginTop: 12, flexDirection: "row", gap: 10, flexWrap: "wrap" },
+  pill: {
+    paddingVertical: 10,
     paddingHorizontal: 12,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.14)",
+    borderColor: "rgba(255,255,255,0.12)",
     backgroundColor: "rgba(0,0,0,0.22)",
   },
-  scopePillActive: { borderColor: "rgba(0,255,136,0.55)", backgroundColor: "rgba(0,0,0,0.30)" },
-  scopeText: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, fontWeight: "800" },
-  scopeTextActive: { color: theme.colors.text },
+  pillText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.xs },
 
-  leagueRow: { gap: 10, paddingRight: theme.spacing.lg, marginTop: 10 },
-  leaguePill: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    backgroundColor: "rgba(0,0,0,0.25)",
-  },
-  leaguePillActive: { borderColor: theme.colors.primary, backgroundColor: "rgba(0,0,0,0.45)" },
-  leaguePillText: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, fontWeight: "700" },
-  leaguePillTextActive: { color: theme.colors.text },
+  card: { padding: theme.spacing.md },
 
+  sectionHeaderRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "baseline", gap: 12 },
   sectionTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.md },
-  muted: { marginTop: 8, fontSize: theme.fontSize.sm, color: theme.colors.textSecondary },
-  center: { paddingVertical: 12, alignItems: "center", gap: 10 },
+  sectionBadge: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: theme.fontSize.xs },
+  sectionSub: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18, fontWeight: "800" },
+
+  guideSection: { paddingTop: 8, paddingBottom: 2, borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.08)" },
+  blockTitle: { marginTop: 6, color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
+  body: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 19, fontWeight: "700" },
+
+  guideItem: { padding: 10, borderRadius: 14, borderWidth: 1, borderColor: "rgba(255,255,255,0.10)", backgroundColor: "rgba(0,0,0,0.18)" },
+  itemTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
+
+  bulletRow: { flexDirection: "row", gap: 8, alignItems: "flex-start" },
+  bulletDot: { color: theme.colors.textSecondary, fontWeight: "900", marginTop: 1 },
+  bulletText: { flex: 1, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 19, fontWeight: "700" },
+
+  center: { paddingVertical: 14, alignItems: "center", gap: 10, marginTop: 10 },
+  muted: { fontSize: theme.fontSize.sm, color: theme.colors.textSecondary, fontWeight: "800" },
 
   list: { marginTop: 10, gap: 10 },
+  fixtureRow: { flexDirection: "row", gap: 12, alignItems: "center", paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.08)" },
+  rowTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.md },
+  rowMeta: { marginTop: 4, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, fontWeight: "700" },
 
-  fxRow: {
-    flexDirection: "row",
-    gap: 10,
-    alignItems: "center",
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(255,255,255,0.08)",
-  },
-
-  rowTitle: { color: theme.colors.text, fontWeight: "800", fontSize: theme.fontSize.md },
-  rowMeta: { marginTop: 4, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm },
-
-  inlineLink: { marginTop: 6 },
-  inlineLinkText: { color: "rgba(0,255,136,0.85)", fontWeight: "800", fontSize: theme.fontSize.xs },
-
-  planBtn: {
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "rgba(0,255,136,0.45)",
-    backgroundColor: "rgba(0,0,0,0.22)",
-  },
+  planBtn: { paddingVertical: 10, paddingHorizontal: 12, borderRadius: 999, borderWidth: 1, borderColor: "rgba(0,255,136,0.45)", backgroundColor: "rgba(0,0,0,0.22)" },
   planBtnText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.xs },
 
-  linkBtn: {
-    marginTop: 12,
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    backgroundColor: "rgba(0,0,0,0.22)",
-    alignItems: "center",
-  },
-  linkText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
+  disabled: { opacity: 0.5 },
 });
