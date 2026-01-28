@@ -3,70 +3,36 @@
 import type { TeamGuide } from "./types";
 import { teams } from "@/src/data/teams";
 
-// Import all league guide modules
+// League guide modules
 import bundesligaGuides from "./bundesliga";
 import laLigaGuides from "./laLiga";
 import ligue1Guides from "./ligue1";
 import premierLeagueGuides from "./premierLeague";
 import serieAGuides from "./serieA";
 
-// Import legacy fallback
+// Legacy fallback (if it contains arrays/records)
 import * as legacy from "./teamGuides";
 
 /**
- * Type guards
- */
-function isTeamGuide(x: any): x is TeamGuide {
-  return !!x && typeof x === "object" && typeof x.teamKey === "string" && x.teamKey.length > 0;
-}
-
-function isRecordOfTeamGuides(x: any): x is Record<string, TeamGuide> {
-  if (!x || typeof x !== "object" || Array.isArray(x)) return false;
-  const vals = Object.values(x);
-  if (!vals.length) return false;
-  return vals.every(isTeamGuide);
-}
-
-/**
- * Extract TeamGuide[] from a module.
+ * Convert any supported export shape into TeamGuide[]
  *
- * Handles:
- * - TeamGuide[] (direct)
- * - default export TeamGuide[]
- * - Record<string, TeamGuide> (direct)
- * - default export Record<string, TeamGuide>
- * - named export TeamGuide[]
- * - named export Record<string, TeamGuide>
- *
- * IMPORTANT:
- * Some bundlers / interop paths may give you the default export directly (no .default).
- * This function explicitly supports that.
+ * Supports:
+ * - TeamGuide[] (direct or default)
+ * - Record<string, TeamGuide> (direct or default)
+ * - Module with named exports containing either of the above
  */
-function extractGuides(mod: any): TeamGuide[] {
-  if (!mod) return [];
+function toGuides(value: any): TeamGuide[] {
+  if (!value) return [];
 
-  // 1) Module itself is a Record<string, TeamGuide>
-  if (isRecordOfTeamGuides(mod)) return Object.values(mod);
+  // Array of guides
+  if (Array.isArray(value)) return value.filter(Boolean);
 
-  // 2) Module itself is an array
-  if (Array.isArray(mod)) return mod.filter(isTeamGuide);
-
-  // 3) Default export is a Record<string, TeamGuide>
-  if (isRecordOfTeamGuides(mod.default)) return Object.values(mod.default);
-
-  // 4) Default export is an array
-  if (Array.isArray(mod.default)) return mod.default.filter(isTeamGuide);
-
-  // 5) Search named exports for a Record<string, TeamGuide>
-  for (const v of Object.values(mod)) {
-    if (isRecordOfTeamGuides(v)) return Object.values(v);
-  }
-
-  // 6) Search named exports for an array with TeamGuide items
-  for (const v of Object.values(mod)) {
-    if (Array.isArray(v)) {
-      const arr = (v as any[]).filter(isTeamGuide);
-      if (arr.length) return arr;
+  // Record<string, TeamGuide>
+  if (typeof value === "object") {
+    const vals = Object.values(value);
+    // Heuristic: looks like a record of TeamGuide objects
+    if (vals.length && vals.every((v) => v && typeof v === "object" && "teamKey" in (v as any))) {
+      return (vals as TeamGuide[]).filter(Boolean);
     }
   }
 
@@ -74,7 +40,42 @@ function extractGuides(mod: any): TeamGuide[] {
 }
 
 /**
- * Build sources map from all league files
+ * Extract guides from a module:
+ * - If module.default exists, include it
+ * - Also scan named exports
+ */
+function extractGuides(mod: any): TeamGuide[] {
+  if (!mod) return [];
+
+  const out: TeamGuide[] = [];
+
+  // default export
+  if (mod.default) out.push(...toGuides(mod.default));
+
+  // module itself might be array/record (rare in ESM but safe)
+  out.push(...toGuides(mod));
+
+  // named exports (e.g. export const ligue1TeamGuides = {...})
+  for (const v of Object.values(mod)) {
+    out.push(...toGuides(v));
+  }
+
+  // De-dupe by teamKey while preserving first occurrence
+  const seen = new Set<string>();
+  const deduped: TeamGuide[] = [];
+  for (const g of out) {
+    const k = g?.teamKey;
+    if (!k) continue;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    deduped.push(g);
+  }
+
+  return deduped;
+}
+
+/**
+ * Build sources map
  */
 const SOURCES: Record<string, TeamGuide[]> = {
   bundesliga: extractGuides(bundesligaGuides),
@@ -86,16 +87,12 @@ const SOURCES: Record<string, TeamGuide[]> = {
 };
 
 /**
- * Build the registry: Record<teamKey, TeamGuide>
+ * Build registry: Record<teamKey, TeamGuide>
  * Track duplicates for debugging
- *
- * Deterministic: first write wins.
- * Put "legacy" last so it never overrides the league sources.
  */
 const registry: Record<string, TeamGuide> = {};
 const duplicates: Record<string, number> = {};
 
-// Populate registry from all sources
 for (const [sourceName, guides] of Object.entries(SOURCES)) {
   for (const guide of guides) {
     const key = guide?.teamKey;
@@ -131,13 +128,6 @@ const missing = Object.values(teams)
 // Public API
 // -------------------------
 
-export type MissingTeamGuide = {
-  expectedGuideKey: string;
-  name: string;
-  leagueId?: number;
-  season?: number;
-};
-
 export function hasTeamGuide(teamKey: string): boolean {
   return !!registry[teamKey];
 }
@@ -145,6 +135,13 @@ export function hasTeamGuide(teamKey: string): boolean {
 export function getTeamGuide(teamKey: string): TeamGuide | null {
   return registry[teamKey] || null;
 }
+
+export type MissingTeamGuide = {
+  expectedGuideKey: string;
+  name: string;
+  leagueId?: number;
+  season?: number;
+};
 
 export function getMissingTeamGuides(): MissingTeamGuide[] {
   return missing;
