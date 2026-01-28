@@ -1,7 +1,7 @@
-// src/data/teamGuides/serieA.ts
 import type { TeamGuide } from "./types";
 
 export const serieATeamGuides: Record<string, TeamGuide> = {
+  
   "ac-milan": {
     teamKey: "ac-milan",
     name: "AC Milan",
@@ -1138,3 +1138,5 @@ export const serieATeamGuides: Record<string, TeamGuide> = {
   
 
 };
+
+export default serieATeamGuides;
