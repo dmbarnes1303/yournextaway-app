@@ -74,7 +74,7 @@ export const bundesligaTeamGuides: Record<string, TeamGuide> = {
   updatedAt: "2026-01-27"
 },
 
-  {
+  "bayern-munich": {
     teamKey: "bayern-munich",
     name: "Bayern Munich",
     city: "Munich",
@@ -138,7 +138,7 @@ export const bundesligaTeamGuides: Record<string, TeamGuide> = {
     updatedAt: "2026-01-27"
   },
 
-  {
+  "bayer-leverkussn": {
     teamKey: "bayer-leverkusen",
     name: "Bayer Leverkusen",
     city: "Leverkusen",
@@ -203,7 +203,7 @@ export const bundesligaTeamGuides: Record<string, TeamGuide> = {
   },
 
 
-{
+"borussia-dortmund": {
     teamKey: "borussia-dortmund",
     name: "Borussia Dortmund",
     city: "Dortmund",
@@ -267,7 +267,7 @@ export const bundesligaTeamGuides: Record<string, TeamGuide> = {
     updatedAt: "2026-01-27"
   },
 
-  {
+  "eintracht-frankfurt": {
     teamKey: "eintracht-frankfurt",
     name: "Eintracht Frankfurt",
     city: "Frankfurt",
@@ -331,7 +331,7 @@ export const bundesligaTeamGuides: Record<string, TeamGuide> = {
     updatedAt: "2026-01-27"
   },
 
-  {
+  "fc-cologne": {
     teamKey: "fc-cologne",
     name: "FC Cologne",
     city: "Cologne",
@@ -393,7 +393,7 @@ export const bundesligaTeamGuides: Record<string, TeamGuide> = {
     updatedAt: "2026-01-27"
   },
 
-  {
+  "fc-heidenheim": {
     teamKey: "fc-heidenheim",
     name: "FC Heidenheim",
     city: "Heidenheim an der Brenz",
@@ -455,7 +455,7 @@ export const bundesligaTeamGuides: Record<string, TeamGuide> = {
     updatedAt: "2026-01-27"
   },
 
-  {
+  "sc-freiburg": {
     teamKey: "sc-freiburg",
     name: "SC Freiburg",
     city: "Freiburg im Breisgau",
@@ -517,7 +517,7 @@ export const bundesligaTeamGuides: Record<string, TeamGuide> = {
     updatedAt: "2026-01-27"
   },
 
-  {
+  "hamburger-sv": {
     teamKey: "hamburger-sv",
     name: "Hamburger SV",
     city: "Hamburg",
@@ -579,7 +579,7 @@ export const bundesligaTeamGuides: Record<string, TeamGuide> = {
     updatedAt: "2026-01-27"
   },
 
-  {
+  "tsg-hoffenheim": {
     teamKey: "tsg-hoffenheim",
     name: "TSG Hoffenheim",
     city: "Sinsheim",
@@ -641,7 +641,7 @@ export const bundesligaTeamGuides: Record<string, TeamGuide> = {
     updatedAt: "2026-01-27"
   },
 
-  {
+  "rb-leipzig": {
   teamKey: "rb-leipzig",
   name: "RB Leipzig",
   city: "Leipzig",
@@ -705,7 +705,7 @@ export const bundesligaTeamGuides: Record<string, TeamGuide> = {
   updatedAt: "2026-01-27"
 },
 
- {
+ "st-pauli": {
   teamKey: "st-pauli",
   name: "FC St. Pauli",
   city: "Hamburg",
@@ -769,7 +769,7 @@ export const bundesligaTeamGuides: Record<string, TeamGuide> = {
   updatedAt: "2026-01-27"
 },
 
- {
+ "union-berlin": {
   teamKey: "union-berlin",
   name: "1. FC Union Berlin",
   city: "Berlin",
@@ -834,7 +834,7 @@ export const bundesligaTeamGuides: Record<string, TeamGuide> = {
 },
 
 
-   {
+   "vfb-stuttgart": {
   teamKey: "vfb-stuttgart",
   name: "VfB Stuttgart",
   city: "Stuttgart",
@@ -898,7 +898,7 @@ export const bundesligaTeamGuides: Record<string, TeamGuide> = {
   updatedAt: "2026-01-27"
 },
 
-  {
+  "werder-bremen": {
   teamKey: "werder-bremen",
   name: "Werder Bremen",
   city: "Bremen",
@@ -962,7 +962,7 @@ export const bundesligaTeamGuides: Record<string, TeamGuide> = {
   updatedAt: "2026-01-27"
 },
 
- {
+ "wolfsburg": {
   teamKey: "wolfsburg",
   name: "VfL Wolfsburg",
   city: "Wolfsburg",
