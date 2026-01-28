@@ -2,7 +2,7 @@ import type { TeamGuide } from "./types";
 
 export const bundesligaTeamGuides: Record<string, TeamGuide> = {
   
-  
+  "augsburg": {
   teamKey: "augsburg",
   name: "FC Augsburg",
   city: "Augsburg",
