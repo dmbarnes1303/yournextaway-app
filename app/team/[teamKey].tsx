@@ -15,8 +15,20 @@ import { LEAGUES, getRollingWindowIso } from "@/src/constants/football";
 import { getFixtures, type FixtureListRow } from "@/src/services/apiFootball";
 import { formatUkDateOnly, formatUkDateTimeMaybe } from "@/src/utils/formatters";
 
-import { getTeamGuide, normalizeTeamKey } from "@/src/data/teamGuides";
+import teamGuidesRegistry, {
+  getTeamGuide,
+  hasTeamGuide,
+  getTeamGuidesDebugSnapshot,
+  normalizeTeamKey,
+} from "@/src/data/teamGuides";
+import { teams as teamsRegistry } from "@/src/data/teams";
 import type { TeamGuide } from "@/src/data/teamGuides/types";
+
+function isDev() {
+  // RN sets __DEV__ in dev builds
+  // eslint-disable-next-line no-undef
+  return typeof __DEV__ !== "undefined" ? !!__DEV__ : false;
+}
 
 function coerceString(v: unknown): string | null {
   if (typeof v === "string") {
@@ -161,7 +173,7 @@ function renderGuide(guide: TeamGuide) {
     return (
       <EmptyState
         title="Guide available, but not renderable yet"
-        message="This guide exists but its structure doesn’t match the current renderer. Align it to sections[] (gold standard) so it displays properly."
+        message="This guide exists but its structure doesn’t match the current renderer. Align it to sections[] so it displays properly."
       />
     );
   }
@@ -179,21 +191,93 @@ function renderGuide(guide: TeamGuide) {
   );
 }
 
+function tokenize(s: string): string[] {
+  return String(s ?? "")
+    .trim()
+    .toLowerCase()
+    .split(/[^a-z0-9]+/g)
+    .map((x) => x.trim())
+    .filter(Boolean);
+}
+
 export default function TeamScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
 
-  // ✅ Param is teamKey (because the file is [teamKey].tsx)
-  const teamKey = useMemo(() => coerceString((params as any)?.teamKey) ?? "", [params]);
+  // Param is teamKey (because the file is [teamKey].tsx)
+  const teamKeyRaw = useMemo(() => coerceString((params as any)?.teamKey) ?? "", [params]);
 
-  const teamName = useMemo(() => titleFromKey(teamKey), [teamKey]);
-  const teamNorm = useMemo(() => normalizeTeamKey(teamKey || teamName), [teamKey, teamName]);
+  // Normalise the param before looking up guides (this fixes "Bayern Munich" vs "bayern-munich" etc)
+  const teamKeyNorm = useMemo(() => normalizeTeamKey(teamKeyRaw), [teamKeyRaw]);
+
+  // Prefer the canonicalised key for title, but fall back to raw if needed
+  const teamName = useMemo(() => titleFromKey(teamKeyNorm || teamKeyRaw), [teamKeyNorm, teamKeyRaw]);
+
+  // Fixture matching key (normalised)
+  const teamNormForFixtures = useMemo(
+    () => normalizeTeamKey(teamKeyNorm || teamKeyRaw || teamName),
+    [teamKeyNorm, teamKeyRaw, teamName]
+  );
 
   const rolling = useMemo(() => getRollingWindowIso(), []);
   const from = useMemo(() => coerceString((params as any)?.from) ?? rolling.from, [params, rolling.from]);
   const to = useMemo(() => coerceString((params as any)?.to) ?? rolling.to, [params, rolling.to]);
 
-  const guide = useMemo(() => (teamKey ? getTeamGuide(teamKey) : null), [teamKey]);
+  // Deterministic guide resolution:
+  // 1) exact normalised key
+  // 2) exact raw key (in case something upstream passes canonical keys already)
+  const guide = useMemo(() => {
+    if (!teamKeyRaw) return null;
+    return getTeamGuide(teamKeyNorm) ?? getTeamGuide(teamKeyRaw) ?? null;
+  }, [teamKeyRaw, teamKeyNorm]);
+
+  // ---- DEV DEBUG (per-team guide resolution) ----
+  const devGuideDebug = useMemo(() => {
+    if (!isDev()) return null;
+
+    const teamRec = (teamsRegistry as any)?.[teamKeyNorm] ?? (teamsRegistry as any)?.[teamKeyRaw] ?? null;
+
+    const hasNorm = teamKeyNorm ? hasTeamGuide(teamKeyNorm) : false;
+    const hasRaw = teamKeyRaw ? hasTeamGuide(teamKeyRaw) : false;
+
+    const registryKeys = Object.keys(teamGuidesRegistry ?? {});
+    const qTokens = Array.from(new Set(tokenize(teamKeyRaw).concat(tokenize(teamKeyNorm))));
+    const candidates = registryKeys
+      .filter((k) => {
+        if (!k) return false;
+        if (teamKeyNorm && k === teamKeyNorm) return true;
+        if (teamKeyRaw && k === teamKeyRaw) return true;
+        // token contains match
+        if (qTokens.length === 0) return false;
+        return qTokens.some((t) => k.includes(t));
+      })
+      .slice(0, 12);
+
+    const snap = getTeamGuidesDebugSnapshot?.();
+    const missingSample = Array.isArray(snap?.missing) ? snap.missing.slice(0, 10) : [];
+
+    return {
+      raw: teamKeyRaw,
+      norm: teamKeyNorm,
+      hasRaw,
+      hasNorm,
+      guideKeyResolved: guide?.teamKey ?? null,
+      teamsRegistryHas: !!teamRec,
+      teamsRegistryName: teamRec?.name ?? null,
+      teamsRegistryLeagueId: typeof teamRec?.leagueId === "number" ? teamRec.leagueId : null,
+      keysTotal: registryKeys.length,
+      candidates,
+      snapshot: snap
+        ? {
+            guidesCount: snap.guidesCount,
+            registryTeamsCount: snap.registryTeamsCount,
+            missingCount: snap.missingCount,
+            duplicatesCount: Array.isArray(snap.duplicates) ? snap.duplicates.length : 0,
+          }
+        : null,
+      missingSample,
+    };
+  }, [teamKeyRaw, teamKeyNorm, guide]);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -203,7 +287,7 @@ export default function TeamScreen() {
     let cancelled = false;
 
     async function run() {
-      if (!teamNorm) return;
+      if (!teamNormForFixtures) return;
 
       setLoading(true);
       setError(null);
@@ -229,7 +313,7 @@ export default function TeamScreen() {
           if (r.status !== "fulfilled") continue;
           const list = Array.isArray(r.value) ? (r.value as FixtureListRow[]) : [];
           for (const row of list) {
-            if (teamMatchesRow(row, teamNorm)) merged.push(row);
+            if (teamMatchesRow(row, teamNormForFixtures)) merged.push(row);
           }
         }
 
@@ -255,7 +339,7 @@ export default function TeamScreen() {
     return () => {
       cancelled = true;
     };
-  }, [teamNorm, from, to]);
+  }, [teamNormForFixtures, from, to]);
 
   function goBuildTrip(fixtureId: string) {
     router.push({
@@ -271,8 +355,8 @@ export default function TeamScreen() {
     } as any);
   }
 
-  // ✅ Hard guard: if the route is hit without teamKey, show a clean error
-  if (!teamKey) {
+  // Hard guard: if the route is hit without teamKey, show a clean error
+  if (!teamKeyRaw) {
     return (
       <Background imageUrl={getBackground("home")} overlayOpacity={0.88}>
         <Stack.Screen
@@ -333,6 +417,82 @@ export default function TeamScreen() {
             </View>
           </GlassCard>
 
+          {/* DEV DEBUG (guide resolution) */}
+          {devGuideDebug ? (
+            <GlassCard style={styles.card} intensity={22}>
+              <Text style={styles.devTitle}>DEV: Team Guide Resolution</Text>
+
+              <View style={{ marginTop: 10, gap: 6 }}>
+                <Text style={styles.devLine}>
+                  raw: <Text style={styles.devStrong}>{devGuideDebug.raw || "—"}</Text>
+                </Text>
+                <Text style={styles.devLine}>
+                  norm: <Text style={styles.devStrong}>{devGuideDebug.norm || "—"}</Text>
+                </Text>
+                <Text style={styles.devLine}>
+                  hasGuide(raw): <Text style={styles.devStrong}>{String(devGuideDebug.hasRaw)}</Text>
+                  {"   "}hasGuide(norm): <Text style={styles.devStrong}>{String(devGuideDebug.hasNorm)}</Text>
+                </Text>
+                <Text style={styles.devLine}>
+                  resolved guideKey: <Text style={styles.devStrong}>{devGuideDebug.guideKeyResolved ?? "—"}</Text>
+                </Text>
+
+                <Text style={styles.devLine}>
+                  teams registry:{" "}
+                  <Text style={styles.devStrong}>
+                    {devGuideDebug.teamsRegistryHas ? "YES" : "NO"}
+                    {devGuideDebug.teamsRegistryName ? ` — ${devGuideDebug.teamsRegistryName}` : ""}
+                    {devGuideDebug.teamsRegistryLeagueId ? ` (league ${devGuideDebug.teamsRegistryLeagueId})` : ""}
+                  </Text>
+                </Text>
+
+                <Text style={styles.devLine}>
+                  guide keys loaded: <Text style={styles.devStrong}>{devGuideDebug.keysTotal}</Text>
+                </Text>
+
+                {devGuideDebug.snapshot ? (
+                  <Text style={styles.devLine}>
+                    snapshot:{" "}
+                    <Text style={styles.devStrong}>
+                      guides {devGuideDebug.snapshot.guidesCount} • registry teams {devGuideDebug.snapshot.registryTeamsCount} •
+                      missing {devGuideDebug.snapshot.missingCount} • duplicates {devGuideDebug.snapshot.duplicatesCount}
+                    </Text>
+                  </Text>
+                ) : null}
+
+                {Array.isArray(devGuideDebug.candidates) && devGuideDebug.candidates.length > 0 ? (
+                  <View style={{ marginTop: 8 }}>
+                    <Text style={styles.devSmallTitle}>candidate guide keys</Text>
+                    <View style={styles.devList}>
+                      {devGuideDebug.candidates.map((k: string) => (
+                        <Text key={k} style={styles.devItem}>
+                          • {k}
+                        </Text>
+                      ))}
+                    </View>
+                  </View>
+                ) : (
+                  <Text style={[styles.devLine, { marginTop: 8 }]}>
+                    candidates: <Text style={styles.devStrong}>none</Text>
+                  </Text>
+                )}
+
+                {Array.isArray(devGuideDebug.missingSample) && devGuideDebug.missingSample.length > 0 ? (
+                  <View style={{ marginTop: 10 }}>
+                    <Text style={styles.devSmallTitle}>missing sample (top 10)</Text>
+                    <View style={styles.devList}>
+                      {devGuideDebug.missingSample.map((m: any) => (
+                        <Text key={String(m?.expectedGuideKey ?? Math.random())} style={styles.devItem}>
+                          • {String(m?.expectedGuideKey ?? "—")} — {String(m?.name ?? "—")}
+                        </Text>
+                      ))}
+                    </View>
+                  </View>
+                ) : null}
+              </View>
+            </GlassCard>
+          ) : null}
+
           {/* GUIDE */}
           <GlassCard style={styles.card} intensity={22}>
             <View style={styles.sectionHeaderRow}>
@@ -343,7 +503,7 @@ export default function TeamScreen() {
             {!guide ? (
               <EmptyState
                 title="Guide coming soon"
-                message="This page is wired up so routing works. As guides are added, they will appear here automatically."
+                message="No guide exists for this teamKey (or the key doesn’t match). Check the DEV panel above for raw/norm keys and candidate guide keys."
               />
             ) : (
               renderGuide(guide)
@@ -444,7 +604,13 @@ const styles = StyleSheet.create({
   sectionTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.md },
   sectionBadge: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: theme.fontSize.xs },
 
-  sectionSub: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18, fontWeight: "800" },
+  sectionSub: {
+    marginTop: 6,
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSize.sm,
+    lineHeight: 18,
+    fontWeight: "800",
+  },
 
   guideSection: {
     paddingTop: 8,
@@ -494,4 +660,13 @@ const styles = StyleSheet.create({
   planBtnText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.xs },
 
   disabled: { opacity: 0.5 },
+
+  // DEV panel styles
+  devTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
+  devLine: { color: theme.colors.textSecondary, fontWeight: "800", fontSize: theme.fontSize.xs, lineHeight: 16 },
+  devStrong: { color: theme.colors.text, fontWeight: "900" },
+  devSmallTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.xs, marginBottom: 6 },
+  devList: { gap: 4 },
+  devItem: { color: theme.colors.textSecondary, fontWeight: "800", fontSize: theme.fontSize.xs },
 });
+```0
