@@ -2,7 +2,8 @@
 import { normalizeSearchText, tokenizeQuery, expandQueryTokens } from "@/src/constants/search";
 import type { LeagueOption } from "@/src/constants/football";
 import cityGuidesRegistry from "@/src/data/cityGuides";
-import teamGuidesRegistry, { normalizeTeamKey } from "@/src/data/teamGuides";
+import teamGuidesRegistry from "@/src/data/teamGuides";
+import teamsRegistry, { normalizeTeamKey } from "@/src/data/teams";
 import { normalizeCityKey } from "@/src/utils/city";
 import { getFixtures, type FixtureListRow } from "@/src/services/apiFootball";
 
@@ -18,7 +19,7 @@ import { getFixtures, type FixtureListRow } from "@/src/services/apiFootball";
 export type SearchEntityType = "team" | "city" | "venue" | "country" | "league";
 
 export type SearchPayload =
-  | { kind: "team"; slug: string }
+  | { kind: "team"; slug: string; teamId?: number }
   | { kind: "city"; slug: string }
   | { kind: "venue"; slug: string }
   | { kind: "country"; country: string; leagueId: number; season: number }
@@ -79,11 +80,6 @@ function toEntryTokens(parts: Array<string | undefined | null>): string[] {
  * IMPORTANT:
  * We must never return "matches" purely because of typeBoost.
  * scoreMatch MUST return 0 when there is no meaningful overlap.
- *
- * Scoring rules:
- * - +6 for exact token match
- * - +2 for prefix match (query token is a prefix of an entry token)
- * - Bonus for multi-token queries when most tokens hit
  */
 function scoreMatch(queryTokens: string[], entryTokens: string[]): number {
   if (!queryTokens.length || !entryTokens.length) return 0;
@@ -100,7 +96,6 @@ function scoreMatch(queryTokens: string[], entryTokens: string[]): number {
       continue;
     }
 
-    // Prefix only (NOT qt.startsWith(et)) to avoid tiny entry tokens matching everything.
     const prefix = entryTokens.some((et) => et.startsWith(qt));
     if (prefix) {
       score += 2;
@@ -108,10 +103,8 @@ function scoreMatch(queryTokens: string[], entryTokens: string[]): number {
     }
   }
 
-  // No overlap => no match.
   if (hit === 0) return 0;
 
-  // If query is multi-token, reward broad coverage.
   if (queryTokens.length >= 2) {
     const needed = Math.max(1, Math.ceil(queryTokens.length * 0.6));
     if (hit >= needed) score += 3;
@@ -121,7 +114,6 @@ function scoreMatch(queryTokens: string[], entryTokens: string[]): number {
 }
 
 function typeBoost(t: SearchEntityType): number {
-  // UX: team + city first, then venue, then country/league
   if (t === "team") return 3;
   if (t === "city") return 2;
   if (t === "venue") return 1;
@@ -135,18 +127,29 @@ function upsertEntry(map: Map<string, IndexEntry>, entry: IndexEntry) {
     return;
   }
 
+  // Prefer keeping richer payload (teamId etc) if present
+  const existingPayload: any = existing.payload;
+  const nextPayload: any = entry.payload;
+
+  const mergedPayload =
+    existingPayload?.kind === "team" && nextPayload?.kind === "team"
+      ? {
+          ...existingPayload,
+          ...nextPayload,
+          teamId: existingPayload.teamId ?? nextPayload.teamId,
+        }
+      : existing.payload ?? entry.payload;
+
   map.set(entry.key, {
     ...existing,
     title: existing.title || entry.title,
     subtitle: existing.subtitle || entry.subtitle,
     tokens: uniq([...(existing.tokens ?? []), ...(entry.tokens ?? [])]),
-    // Keep existing payload (it’s the stable one for routing), unless missing
-    payload: (existing.payload as any) ?? entry.payload,
+    payload: mergedPayload,
   });
 }
 
 function buildCityAndCountryEntries(map: Map<string, IndexEntry>) {
-  // Cities from guides
   Object.values(cityGuidesRegistry as any).forEach((g: any) => {
     const name = safeStr(g?.name ?? g?.cityId);
     if (!name) return;
@@ -166,7 +169,6 @@ function buildCityAndCountryEntries(map: Map<string, IndexEntry>) {
     });
   });
 
-  // Countries from guides (best-effort discovery list)
   const countries = uniq(
     Object.values(cityGuidesRegistry as any)
       .map((g: any) => safeStr(g?.country))
@@ -183,14 +185,35 @@ function buildCityAndCountryEntries(map: Map<string, IndexEntry>) {
       title: country,
       subtitle: "Country",
       tokens: toEntryTokens([country, cKey]),
-      // placeholder; patched once we know leagues
       payload: { kind: "country", country, leagueId: 0, season: 0 },
     });
   });
 }
 
-function buildTeamEntries(map: Map<string, IndexEntry>) {
-  // Teams from teamGuides (may be empty in V1)
+function buildTeamsRegistryEntries(map: Map<string, IndexEntry>) {
+  Object.values(teamsRegistry as any).forEach((t: any) => {
+    const name = safeStr(t?.name);
+    const teamKey = safeStr(t?.teamKey);
+    if (!name || !teamKey) return;
+
+    const slug = normalizeTeamKey(teamKey);
+    if (!slug) return;
+
+    const subtitle = safeStr(t?.city || t?.country) || "Team";
+    const aliases = Array.isArray(t?.aliases) ? t.aliases : [];
+
+    upsertEntry(map, {
+      type: "team",
+      key: `team:${slug}`,
+      title: name,
+      subtitle,
+      tokens: toEntryTokens([name, slug, t?.city, t?.country, ...aliases]),
+      payload: { kind: "team", slug, teamId: typeof t?.teamId === "number" ? t.teamId : undefined },
+    });
+  });
+}
+
+function buildTeamGuideEntries(map: Map<string, IndexEntry>) {
   Object.values(teamGuidesRegistry as any).forEach((g: any) => {
     const name = safeStr(g?.name ?? g?.teamName ?? g?.teamKey ?? g?.teamId);
     if (!name) return;
@@ -202,7 +225,7 @@ function buildTeamEntries(map: Map<string, IndexEntry>) {
       type: "team",
       key: `team:${slug}`,
       title: name,
-      subtitle: safeStr(g?.city ?? g?.country) || undefined,
+      subtitle: safeStr(g?.city ?? g?.country) || "Team",
       tokens: toEntryTokens([name, slug, g?.city, g?.country, g?.stadium]),
       payload: { kind: "team", slug },
     });
@@ -234,7 +257,6 @@ function patchCountryPayloads(entries: IndexEntry[], leagues: LeagueOption[]): I
   const pickLeagueForCountry = (country: string): LeagueOption | undefined => {
     const cn = normalizeSearchText(country);
 
-    // If you later add country metadata to LEAGUES, replace this with a direct mapping.
     const match =
       leagueList.find((l) => normalizeSearchText(l.label).includes(cn)) ??
       leagueList.find((l) => {
@@ -269,10 +291,7 @@ function patchCountryPayloads(entries: IndexEntry[], leagues: LeagueOption[]): I
   });
 }
 
-async function buildFixtureDerivedEntries(
-  map: Map<string, IndexEntry>,
-  args: { from: string; to: string; leagues: LeagueOption[] }
-) {
+async function buildFixtureDerivedEntries(map: Map<string, IndexEntry>, args: { from: string; to: string; leagues: LeagueOption[] }) {
   const { from, to, leagues } = args;
 
   const settled = await Promise.allSettled(
@@ -358,9 +377,6 @@ async function buildFixtureDerivedEntries(
   });
 }
 
-/**
- * Build an index (async because we optionally derive entities from fixtures in-window).
- */
 export async function buildSearchIndex(args: { from: string; to: string; leagues: LeagueOption[] }): Promise<SearchIndex> {
   const from = safeStr(args?.from);
   const to = safeStr(args?.to);
@@ -369,10 +385,10 @@ export async function buildSearchIndex(args: { from: string; to: string; leagues
   const map = new Map<string, IndexEntry>();
 
   buildCityAndCountryEntries(map);
-  buildTeamEntries(map);
+  buildTeamsRegistryEntries(map); // IMPORTANT: deterministic teams exist even without fixtures/guides
+  buildTeamGuideEntries(map);
   buildLeagueEntries(map, leagues);
 
-  // Fixture-derived enrichment (best effort; never crash)
   try {
     await buildFixtureDerivedEntries(map, { from, to, leagues });
   } catch {
@@ -391,13 +407,6 @@ export async function buildSearchIndex(args: { from: string; to: string; leagues
   };
 }
 
-/**
- * Query the index and return ranked results.
- *
- * CRITICAL FIX:
- * - We only apply typeBoost *after* a real match exists.
- * - This prevents queries like "emira" returning unrelated teams just because they're "team" type.
- */
 export function querySearchIndex(index: SearchIndex, query: string, opts?: { limit?: number }): SearchResult[] {
   const limit = Math.max(1, Math.min(Number(opts?.limit ?? 20), 100));
 
@@ -411,8 +420,6 @@ export function querySearchIndex(index: SearchIndex, query: string, opts?: { lim
   const scored: SearchResult[] = (index?.entries ?? [])
     .map((e) => {
       const baseScore = scoreMatch(queryTokens, e.tokens);
-
-      // No match => exclude (do NOT allow typeBoost to “create” relevance).
       if (baseScore <= 0) return null;
 
       const score = baseScore + typeBoost(e.type);
