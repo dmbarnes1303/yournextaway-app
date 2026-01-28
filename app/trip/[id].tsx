@@ -28,6 +28,7 @@ import tripsStore, { type Trip, type TripLinkItem, type TripItineraryItem } from
 import { getFixtureById } from "@/src/services/apiFootball";
 import { formatUkDateOnly, formatUkDateTimeMaybe } from "@/src/utils/formatters";
 import { getTopThingsToDoForTrip } from "@/src/data/cityGuides";
+import { buildAffiliateLinks, buildAffiliateLinkItems, normalizeUrlForCompare } from "@/src/services/affiliateLinks";
 
 /* -------------------------------- Helpers -------------------------------- */
 
@@ -239,6 +240,21 @@ export default function TripDetailScreen() {
     return getTopThingsToDoForTrip(cityName);
   }, [cityName]);
 
+  const bookingLinks = useMemo(() => {
+    if (!trip) return null;
+    if (!cityName || cityName === "Trip") return null;
+    return buildAffiliateLinks({
+      city: cityName,
+      startDate: trip.startDate,
+      endDate: trip.endDate,
+    });
+  }, [trip, cityName]);
+
+  const bookingItems = useMemo(() => {
+    if (!bookingLinks) return [];
+    return buildAffiliateLinkItems(bookingLinks);
+  }, [bookingLinks]);
+
   const links = useMemo(() => (trip?.links ?? []).slice(), [trip?.links]);
   const itinerary = useMemo(() => (trip?.itinerary ?? []).slice(), [trip?.itinerary]);
 
@@ -444,6 +460,36 @@ export default function TripDetailScreen() {
     router.push({ pathname: "/match/[id]", params: { id: fixtureId } } as any);
   }
 
+  async function saveBookingShortcuts() {
+    if (!trip) return;
+    if (bookingItems.length === 0) return;
+
+    const existing = new Set((trip.links ?? []).map((l) => normalizeUrlForCompare(l.url)));
+    const toAdd = bookingItems.filter((it) => !existing.has(normalizeUrlForCompare(it.url)));
+
+    if (toAdd.length === 0) {
+      Alert.alert("Already saved", "Your booking shortcuts are already in this trip.");
+      return;
+    }
+
+    try {
+      for (const it of toAdd) {
+        await tripsStore.addLink(trip.id, {
+          id: makeId("lnk"),
+          title: it.title,
+          url: it.url,
+          group: it.group,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        });
+      }
+
+      Alert.alert("Saved", `Added ${toAdd.length} shortcut${toAdd.length === 1 ? "" : "s"} to your trip links.`);
+    } catch {
+      Alert.alert("Couldn’t save", "Something went wrong saving the shortcuts.");
+    }
+  }
+
   return (
     <Background imageUrl={getBackground("trips")} overlayOpacity={0.86}>
       <Stack.Screen
@@ -520,6 +566,42 @@ export default function TripDetailScreen() {
                   <Text style={styles.deleteInlineText}>Delete trip</Text>
                 </Pressable>
               </GlassCard>
+
+              {/* BOOK THIS TRIP */}
+              {bookingLinks ? (
+                <View style={styles.section}>
+                  <SectionHeader title="Book this trip" subtitle="Fast links (affiliate-ready later)" />
+                  <GlassCard style={styles.card} strength="default">
+                    <Text style={styles.bookSub}>
+                      Shortcuts for {cityName}. You can open links now, and later we’ll attach affiliate IDs centrally.
+                    </Text>
+
+                    <View style={styles.bookGrid}>
+                      <Pressable onPress={() => safeOpenUrl(bookingLinks.hotelsUrl)} style={[styles.bookBtn, styles.bookBtnPrimary]}>
+                        <Text style={styles.bookBtnText}>Hotels</Text>
+                      </Pressable>
+                      <Pressable onPress={() => safeOpenUrl(bookingLinks.flightsUrl)} style={styles.bookBtn}>
+                        <Text style={styles.bookBtnText}>Flights</Text>
+                      </Pressable>
+                      <Pressable onPress={() => safeOpenUrl(bookingLinks.trainsUrl)} style={styles.bookBtn}>
+                        <Text style={styles.bookBtnText}>Trains</Text>
+                      </Pressable>
+                      <Pressable onPress={() => safeOpenUrl(bookingLinks.experiencesUrl)} style={styles.bookBtn}>
+                        <Text style={styles.bookBtnText}>Experiences</Text>
+                      </Pressable>
+                    </View>
+
+                    <View style={{ flexDirection: "row", gap: 10, marginTop: 12 }}>
+                      <Pressable onPress={() => safeOpenUrl(bookingLinks.mapsUrl)} style={[styles.halfBtn, styles.halfBtnGhost]}>
+                        <Text style={styles.halfBtnGhostText}>Maps</Text>
+                      </Pressable>
+                      <Pressable onPress={saveBookingShortcuts} style={[styles.halfBtn, styles.halfBtnPrimary]}>
+                        <Text style={styles.halfBtnPrimaryText}>Save shortcuts</Text>
+                      </Pressable>
+                    </View>
+                  </GlassCard>
+                </View>
+              ) : null}
 
               {/* MATCHES */}
               <View style={styles.section}>
@@ -932,7 +1014,11 @@ export default function TripDetailScreen() {
                         ] as Array<{ g: TripLinkItem["group"]; label: string }>).map((x) => {
                           const active = linkGroup === x.g;
                           return (
-                            <Pressable key={x.g} onPress={() => setLinkGroup(x.g)} style={[styles.groupPill, active && styles.groupPillActive]}>
+                            <Pressable
+                              key={x.g}
+                              onPress={() => setLinkGroup(x.g)}
+                              style={[styles.groupPill, active && styles.groupPillActive]}
+                            >
                               <Text style={[styles.groupText, active && styles.groupTextActive]}>{x.label}</Text>
                             </Pressable>
                           );
@@ -1154,6 +1240,34 @@ const styles = StyleSheet.create({
   center: { paddingVertical: 12, alignItems: "center", gap: 10 },
   muted: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm },
 
+  /* Book this trip */
+  bookSub: {
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSize.sm,
+    lineHeight: 18,
+    fontWeight: theme.fontWeight.bold,
+  },
+  bookGrid: {
+    marginTop: 12,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  bookBtn: {
+    width: "48%",
+    borderRadius: 14,
+    paddingVertical: 12,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+  },
+  bookBtnPrimary: {
+    borderColor: "rgba(0,255,136,0.55)",
+    backgroundColor: "rgba(0,0,0,0.30)",
+  },
+  bookBtnText: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.sm },
+
   itemRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -1324,7 +1438,12 @@ const styles = StyleSheet.create({
   sheetBtnPrimary: { borderColor: "rgba(0,255,136,0.55)", backgroundColor: "rgba(0,0,0,0.30)" },
   sheetBtnPrimaryText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
 
-  noteHint: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18, fontWeight: theme.fontWeight.bold },
+  noteHint: {
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSize.sm,
+    lineHeight: 18,
+    fontWeight: theme.fontWeight.bold,
+  },
 
   input: {
     borderWidth: 1,
