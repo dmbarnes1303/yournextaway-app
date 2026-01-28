@@ -548,10 +548,10 @@ export const ligue1TeamGuides: Record<string, TeamGuide> = {
         "Olympique de Marseille are France’s most emotionally intense major club: a team that operates less like a weekly entertainment product and more like a civic identity. Marseille’s size isn’t just measured in support — it’s measured in how seriously football is taken in the city. The club’s culture is expectation-heavy, volatile when things go wrong, and euphoric when momentum builds.\n\nOM sit in a unique French space: they are one of the country’s biggest names, but their modern story has often been defined by chasing stability and reasserting elite consistency. That creates a supporter base that demands relevance, not excuses.\n\nFor neutral travellers, Marseille is one of Europe’s best ‘feel it in your chest’ matchday experiences: big stadium, high emotion, and a crowd that can turn ordinary league fixtures into occasions."
     },
     {
-      title: "History & Legacy",
-      body:
-        "Marseille’s historical status is anchored in domestic success, cultural weight, and landmark European achievement.\n\nThe defining reference point remains **1993**, when Marseille won the European Cup/UEFA Champions League — a result that made OM France’s first winners of the competition. That win is permanently central to the club’s mythology and supporter identity.\n\nHowever, Marseille are **no longer** France’s only Champions League winners: **Paris Saint-Germain won the UEFA Champions League in 2024/25**. 1\n\nThis matters culturally because it changes the old French hierarchy narrative. Marseille still retain the ‘first’ status and the unique identity tied to that 1993 triumph, but they no longer hold exclusivity — which adds edge to modern domestic rivalries and raises the pressure on OM to stay elite."
-    },
+  title: "History & Legacy",
+  body:
+    "Marseille’s historical status is anchored in domestic success, cultural weight, and landmark European achievement.\n\nThe defining reference point remains **1993**, when Marseille won the European Cup/UEFA Champions League — a result that made OM the first (and for a long time the only) French men’s club to lift the trophy. That win is permanently central to the club’s mythology and supporter identity.\n\nCulturally, it matters because it gives Marseille a unique kind of prestige inside French football: not just a big club, but a club with a singular European high-water mark. It fuels the club’s self-image, sharpens modern rivalries, and keeps the expectation bar high — Marseille are judged not only on league position, but on whether they look capable of returning to the top European tier."
+},
     {
       title: "Recent Seasons",
       body:
@@ -658,69 +658,6 @@ export const ligue1TeamGuides: Record<string, TeamGuide> = {
     }
   ],
   links: [{ label: "Official site", url: "https://www.asmonaco.com/" }],
-  updatedAt: "2026-01-27"
-},
-
-
-  "montpellier": {
-  teamKey: "montpellier",
-  name: "Montpellier Hérault SC",
-  city: "Montpellier",
-  country: "France",
-  stadium: "Stade de la Mosson",
-  sections: [
-    {
-      title: "Club Overview",
-      body:
-        "Montpellier occupy a distinctive place in French football as a club whose greatest achievement came through cohesion, organisation, and tactical clarity rather than financial power. They are historically framed as proof that a well-built collective can disrupt Ligue 1’s established hierarchy.\n\nMontpellier’s identity is grounded in humility, resilience, and regional pride. They are not a glamour institution and do not pretend to be. Instead, they operate as a hard-edged, competitive club whose ambition is to remain relevant in Ligue 1 while periodically punching above their weight.\n\nFor neutral travellers, Montpellier offer an authentic provincial Ligue 1 experience: local crowd, traditional ground, and football that prioritises competitive edge over spectacle."
-    },
-    {
-      title: "History & Legacy",
-      body:
-        "Founded in 1919, Montpellier spent much of their history outside France’s elite.\n\nTheir defining moment arrived with a remarkable Ligue 1 title win, achieved against heavily favoured opposition. That triumph remains one of the great underdog stories in modern French football and permanently altered the club’s self-image.\n\nMontpellier’s legacy is therefore centred on that title-winning season and the idea that disciplined collective football can overcome resource gaps."
-    },
-    {
-      title: "Recent Seasons",
-      body:
-        "Montpellier’s recent seasons have been characterised by consolidation rather than expansion.\n\nPatterns:\n• Lower-midtable finishes.\n• Occasional flirtation with relegation battles.\n• Limited European qualification pushes.\n\nThe club’s modern objective is stability: remaining in Ligue 1 while retaining enough competitiveness to avoid prolonged survival crises."
-    },
-    {
-      title: "Playing Style",
-      body:
-        "Montpellier traditionally favour pragmatic, physically robust football.\n\nCommon traits:\n• Compact defensive block.\n• Direct vertical passing.\n• Strong emphasis on duels and second balls.\n\nThey are comfortable ceding possession and focusing on transitions rather than sustained buildup.\n\nMatches involving Montpellier often feel gritty and combative rather than fluid."
-    },
-    {
-      title: "Stadium Profile",
-      body:
-        "Stade de la Mosson is a traditional French stadium.\n\nApproximate capacity: 32,000+.\n\nThe ground feels functional rather than modern, with stands relatively close to the pitch and a straightforward matchday layout."
-    },
-    {
-      title: "Atmosphere & Matchday Feel",
-      body:
-        "Atmosphere is local and engaged.\n\nTypical patterns:\n• Loud during competitive spells.\n• Strong reaction to defensive effort.\n• Less continuous chanting than at major French ultras grounds.\n\nFeels authentic and provincial."
-    },
-    {
-      title: "Rivalries",
-      body:
-        "Nîmes – regional rivalry.\n\nOccasional tension with Marseille and other southern clubs."
-    },
-    {
-      title: "Legends",
-      body:
-        "Key figures from the title-winning era dominate legend status.\n\nNotable names include:\n• Olivier Giroud\n\nGiroud’s emergence remains a major point of pride."
-    },
-    {
-      title: "Supporter Culture",
-      body:
-        "Montpellier supporters are loyal and grounded.\n\nKey traits:\n• Appreciation for effort.\n• Pride in underdog identity.\n• Realistic expectations."
-    },
-    {
-      title: "Neutral Visitor Notes",
-      body:
-        "• Good choice for traditional Ligue 1 atmosphere.\n• Expect physical football.\n• Less tourist-driven than major clubs.\n• Authentic local feel."
-    }
-  ],
-  links: [{ label: "Official site", url: "https://www.mhscfoot.com/" }],
   updatedAt: "2026-01-27"
 },
 
