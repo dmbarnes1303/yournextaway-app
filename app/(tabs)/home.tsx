@@ -263,10 +263,11 @@ export default function HomeScreen() {
   function onPressSearchResult(r: SearchResult) {
     const p: any = r.payload;
 
+    // ✅ FIX: route to /team/[teamKey] (NOT /team/[slug] and NOT /team/[id])
     if (p?.kind === "team") {
       router.push({
-        pathname: "/team/[slug]",
-        params: { slug: p.slug, from: fromIso, to: toIso },
+        pathname: "/team/[teamKey]",
+        params: { teamKey: p.slug, from: fromIso, to: toIso },
       } as any);
       return;
     }
@@ -369,7 +370,9 @@ export default function HomeScreen() {
               ) : null}
             </View>
 
-            {qNorm.length === 0 ? <Text style={styles.heroHint}>Try “Austria”, “Madrid”, “Arsenal”, or a stadium name.</Text> : null}
+            {qNorm.length === 0 ? (
+              <Text style={styles.heroHint}>Try “Austria”, “Madrid”, “Arsenal”, or a stadium name.</Text>
+            ) : null}
 
             {/* SEARCH RESULTS */}
             {showSearchResults ? (
@@ -473,7 +476,9 @@ export default function HomeScreen() {
 
                   {!fxLoading && fxError ? <EmptyState title="Fixtures unavailable" message={fxError} /> : null}
 
-                  {!fxLoading && !fxError && fxRows.length === 0 ? <Text style={styles.searchEmpty}>No fixtures loaded.</Text> : null}
+                  {!fxLoading && !fxError && fxRows.length === 0 ? (
+                    <Text style={styles.searchEmpty}>No fixtures loaded.</Text>
+                  ) : null}
 
                   {!fxLoading && !fxError && matchHits.length === 0 ? (
                     <Text style={styles.searchEmpty}>No matches found for that query.</Text>
