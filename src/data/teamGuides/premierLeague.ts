@@ -1259,3 +1259,7 @@ export const premierLeagueTeamGuides: Record<string, TeamGuide> = {
 },
 
 };
+
+export default premierLeagueTeamGuides;
+
+
