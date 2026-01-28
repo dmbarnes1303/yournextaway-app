@@ -316,9 +316,9 @@ export const serieATeamGuides: Record<string, TeamGuide> = {
   },
 
 
-  "como": {
-    teamKey: "como",
-    name: "Como",
+  "como-1907": {
+    teamKey: "como-1907",
+    name: "Como 1907",
     city: "Como",
     country: "Italy",
     stadium: "Stadio Giuseppe Sinigaglia",
@@ -504,6 +504,67 @@ export const serieATeamGuides: Record<string, TeamGuide> = {
     updatedAt: "2026-01-27"
   },
 
+  "genoa": {
+  teamKey: "genoa",
+  name: "Genoa",
+  city: "Genoa",
+  country: "Italy",
+  stadium: "Stadio Luigi Ferraris",
+  sections: [
+    {
+      title: "Club Overview",
+      body:
+        "Genoa are one of Italy’s most traditional clubs: gritty, historic, and tightly linked to the identity of a port city that feels intense by default. Genoa matchdays are rarely neutral or polite — they’re emotional, reactive, and built around the idea that the club matters locally.\n\nFor travellers, Genoa offer a proper old-school Serie A experience: a historic stadium shared with another major club, strong crowd culture, and matches that often feel high-stakes even when the table says ‘mid-season.’"
+    },
+    {
+      title: "History & Legacy",
+      body:
+        "Genoa’s legacy is rooted in being one of the foundational names in Italian football. The club’s history carries a deep sense of tradition, and the supporter culture is built around pride in status and survival through cycles.\n\nThey’re not framed as a modern ‘project club’ — they’re a heritage club whose identity is continuity and belonging."
+    },
+    {
+      title: "Recent Seasons",
+      body:
+        "Genoa’s recent years are shaped by the hard realities of modern Italian football: fighting for stability, managing transitions, and using the Luigi Ferraris as a genuine home advantage.\n\nWhen Genoa are in good shape, they look organised and hard to beat. When they struggle, it’s usually because Serie A ruthlessly punishes defensive errors and lack of cutting edge."
+    },
+    {
+      title: "Playing Style",
+      body:
+        "Genoa often lean pragmatic and competitive.\n\nCommon traits:\n• Emphasis on defensive shape and duels.\n• Direct phases when space opens.\n• Use of wide areas and deliveries.\n\nTheir matches can feel physical and tension-heavy rather than purely technical."
+    },
+    {
+      title: "Stadium Profile",
+      body:
+        "Stadio Luigi Ferraris is one of Italy’s classic grounds — steep, enclosed, and acoustically strong.\n\nIt feels like a proper football stadium rather than a modern entertainment venue, and it’s one of the best places in Italy to feel crowd proximity to the pitch."
+    },
+    {
+      title: "Atmosphere & Matchday Feel",
+      body:
+        "Atmosphere can be excellent, especially in big fixtures or derby contexts. Expect:\n• Strong noise spikes with momentum.\n• High emotional reaction to refereeing and game state.\n• A sense that the crowd lives and dies with each phase."
+    },
+    {
+      title: "Rivalries",
+      body:
+        "Sampdoria — the city derby is the defining rivalry, one of Italy’s most iconic.\n\nEven outside derby weeks, regional and high-emotion fixtures can carry extra edge."
+    },
+    {
+      title: "Legends",
+      body:
+        "Genoa’s legends are typically long-serving, identity-linked figures — players who represented grit, loyalty, and leadership."
+    },
+    {
+      title: "Supporter Culture",
+      body:
+        "Support is intense and demanding. Fans value effort and organisation and react sharply to passive performances. Genoa is not a ‘sit quietly and watch’ crowd — it’s emotional and engaged."
+    },
+    {
+      title: "Neutral Visitor Notes",
+      body:
+        "• Excellent for a traditional Serie A stadium experience.\n• Best atmosphere in derby weeks or high-stakes fixtures.\n• Genoa as a city is very characterful — great for a food-and-heritage weekend paired with football."
+    }
+  ],
+  links: [{ label: "Official site", url: "https://www.genoacfc.it/" }],
+  updatedAt: "2026-01-28"
+},
 
   "hellas-verona": {
     teamKey: "hellas-verona",
@@ -567,7 +628,69 @@ export const serieATeamGuides: Record<string, TeamGuide> = {
     updatedAt: "2026-01-27"
   },
 
+"inter": {
+  teamKey: "inter",
+  name: "Inter",
+  city: "Milan",
+  country: "Italy",
+  stadium: "San Siro",
+  sections: [
+    {
+      title: "Club Overview",
+      body:
+        "Inter are one of Europe’s heavyweight institutions: a club built around elite expectation, big-match identity, and a long history of competing at the top end of Italian and European football. Inter’s matchdays tend to feel like ‘serious football’ — high standards, tactical detail, and the sense that results matter.\n\nFor neutral travellers, Inter is a top-tier Milan experience: a famous stadium, big-club scale, and fixtures that often carry Champions League-level intensity."
+    },
+    {
+      title: "History & Legacy",
+      body:
+        "Inter’s legacy is that of a true giant: major domestic success, deep European pedigree, and an identity shaped by competing with Italy’s other historic powers.\n\nThe club’s mythology is built around big nights, high-pressure runs, and a culture that expects trophies, not just participation."
+    },
+    {
+      title: "Recent Seasons",
+      body:
+        "Inter’s recent seasons have reinforced their status near the top of Serie A and in European competition.\n\nTypical patterns:\n• Strong tactical structure.\n• Depth and squad management across multiple competitions.\n• A focus on consistency — the hallmark of elite teams.\n\nEven transitional seasons carry a ‘must compete’ baseline."
+    },
+    {
+      title: "Playing Style",
+      body:
+        "Inter usually combine structure with efficiency.\n\nCommon traits:\n• Organised defensive shape.\n• Clear automatisms in buildup.\n• Strong use of wide channels and coordinated movement in the final third.\n\nThey often look like a team designed to win margins: spacing, timing, and set-piece value."
+    },
+    {
+      title: "Stadium Profile",
+      body:
+        "San Siro is one of world football’s iconic stadiums. It feels huge, historic, and theatrical.\n\nFor visitors it’s a bucket-list venue — steep stands, famous architecture, and the sense you’re in a place where major European football history has happened."
+    },
+    {
+      title: "Atmosphere & Matchday Feel",
+      body:
+        "Atmosphere varies by fixture but can be outstanding.\n\nExpect:\n• Big noise for derby games and European nights.\n• Strong build-up and choreography from supporter sections.\n• A stadium that amplifies momentum swings."
+    },
+    {
+      title: "Rivalries",
+      body:
+        "AC Milan — the Milan derby is one of football’s iconic rivalries.\n\nJuventus — a defining national rivalry shaped by decades of title races and status."
+    },
+    {
+      title: "Legends",
+      body:
+        "Inter’s legend culture is packed with elite names — players and coaches associated with titles and European success.\n\nThe club’s legends are typically defined by winning impact and big-game moments."
+    },
+    {
+      title: "Supporter Culture",
+      body:
+        "Inter support mixes global scale with a passionate local core. Expectations are high, patience is limited, and big matches bring out peak intensity."
+    },
+    {
+      title: "Neutral Visitor Notes",
+      body:
+        "• Ideal if you want a ‘major club’ experience.\n• Best atmosphere: derby weeks, title-race fixtures, European nights.\n• Pair with Milan’s city-break strengths: food, design, and nightlife."
+    }
+  ],
+  links: [{ label: "Official site", url: "https://www.inter.it/" }],
+  updatedAt: "2026-01-28"
+},
 
+  
   "juventus": {
     teamKey: "juventus",
     name: "Juventus",
@@ -757,69 +880,6 @@ export const serieATeamGuides: Record<string, TeamGuide> = {
   },
 
 
-  "ac-milan": {
-  teamKey: "ac-milan",
-  name: "AC Milan",
-  city: "Milan",
-  country: "Italy",
-  stadium: "San Siro (Stadio Giuseppe Meazza)",
-  sections: [
-    {
-      title: "Club Overview",
-      body:
-        "AC Milan are one of the most historically significant football institutions in world sport. They operate in a category above normal domestic giants: a club whose identity is shaped primarily by European dominance, global stature, and sustained elite expectation.\n\nMilan are not perceived internally as a club that occasionally competes for titles. They view themselves as a permanent member of football’s aristocracy. Even during downturns, the baseline belief is that Milan belong at the highest table.\n\nThe club’s modern identity balances heritage and renewal. Milan sell tradition, but they also frame themselves as a club capable of continuous regeneration. Success is measured not only in trophies, but in whether Milan look and feel like Milan: composed, technically strong, tactically intelligent, and psychologically resilient.\n\nFor neutral travellers, AC Milan represent pure European royalty — a chance to watch a club whose name alone carries continental weight, inside one of football’s most famous stadiums."
-    },
-    {
-      title: "History & Legacy",
-      body:
-        "Founded in 1899, AC Milan quickly developed into a dominant domestic force and later into one of the most successful European clubs of all time.\n\nMilan’s legacy is defined by eras of continental supremacy rather than isolated peaks. Multiple European Cup / Champions League triumphs across different decades established Milan as a cross-generational superpower.\n\nThe club’s greatest historical teams are associated with tactical innovation, defensive excellence, and world-class individuals. Milan were pioneers in shaping modern defensive organisation while simultaneously producing legendary attacking talent.\n\nUnlike many giants whose success is concentrated into one golden generation, Milan’s mythology spans several distinct dynasties. This gives the club a self-image of permanence rather than nostalgia.\n\nPeriods of decline in the late 2010s are framed internally as historical anomalies rather than natural decline."
-    },
-    {
-      title: "Recent Seasons",
-      body:
-        "Milan’s recent era is characterised by competitive restoration.\n\nPatterns:\n• Return to consistent Champions League qualification.\n• Re-establishment as Serie A title contenders.\n• Squad building focused on athleticism, tactical discipline, and development.\n\nRather than assembling short-term galáctico squads, Milan have emphasised cohesion and structure.\n\nMilan are now judged on whether they can sustain elite-level competitiveness season after season, not simply whether they qualify for Europe."
-    },
-    {
-      title: "Playing Style",
-      body:
-        "Milan operate with a modern positional structure that blends discipline with attacking freedom.\n\nCommon traits:\n• Organised buildup from defence.\n• Strong spacing between lines.\n• Vertical progression once lanes open.\n• Quick wide combinations.\n\nMilan seek to control matches through structure rather than pure possession volume.\n\nDefensively, Milan prioritise compact shape, coordinated pressing, and protection of central zones.\n\nWhen functioning well, Milan feel balanced: difficult to break down but capable of rapid attacking acceleration."
-    },
-    {
-      title: "Stadium Profile",
-      body:
-        "San Siro is one of world football’s iconic cathedrals.\n\nApproximate capacity: 75,000+.\n\nThe stadium is vast, steep, and imposing. Multiple tiers rise sharply, creating strong acoustics.\n\nDespite age, San Siro retains enormous presence. It feels monumental rather than modern."
-    },
-    {
-      title: "Atmosphere & Matchday Feel",
-      body:
-        "Atmosphere is traditional, visual, and ritualistic.\n\nTypical patterns:\n• Large choreographed displays.\n• Strong noise for big matches.\n• Crowd intensity builds with momentum.\n\nThe stadium often feels theatrical rather than chaotic — grandeur more than raw hostility."
-    },
-    {
-      title: "Rivalries",
-      body:
-        "Inter – Derby della Madonnina (city derby).\n\nJuventus – rivalry shaped by decades of title competition."
-    },
-    {
-      title: "Legends",
-      body:
-        "• Paolo Maldini\n• Franco Baresi\n• Marco van Basten\n• Andriy Shevchenko\n• Kaka\n• Alessandro Nesta"
-    },
-    {
-      title: "Supporter Culture",
-      body:
-        "Milan supporters are historically conscious and expectation-driven.\n\nKey traits:\n• Heavy emphasis on European status.\n• Appreciation for tactical intelligence.\n• Low tolerance for mediocrity."
-    },
-    {
-      title: "Neutral Visitor Notes",
-      body:
-        "• Bucket-list stadium.\n• Best atmosphere for derbies and European nights.\n• Expect large choreographies.\n• Ideal for experiencing classic continental football culture."
-    }
-  ],
-  links: [{ label: "Official site", url: "https://www.acmilan.com/" }],
-  updatedAt: "2026-01-27"
-},
-
-
   "napoli": {
   teamKey: "napoli",
   name: "Napoli",
@@ -882,69 +942,132 @@ export const serieATeamGuides: Record<string, TeamGuide> = {
   updatedAt: "2026-01-27"
 },
 
-
-  "salernitana": {
-  teamKey: "salernitana",
-  name: "Salernitana",
-  city: "Salerno",
+"parma": {
+  teamKey: "parma",
+  name: "Parma",
+  city: "Parma",
   country: "Italy",
-  stadium: "Stadio Arechi",
+  stadium: "Stadio Ennio Tardini",
   sections: [
     {
       title: "Club Overview",
       body:
-        "Salernitana are a club defined by survival mentality, regional pride, and intense emotional attachment rather than national prestige. They operate at the margins of Serie A’s economic hierarchy, yet carry themselves with the self-belief of a club that belongs at the highest level.\n\nSalernitana’s identity is rooted in defiance: repeated fights against relegation, frequent squad overhauls, and constant pressure to outperform financial reality.\n\nFor neutral travellers, Salernitana offer a raw, southern Italian football experience where passion often outweighs polish."
+        "Parma are one of Italy’s most recognisable ‘classic’ clubs: historic reputation, strong identity, and a city that pairs football perfectly with a weekend away. Parma’s modern reality is about re-establishing top-flight stability, but the name still carries weight because of what the club has represented in Italian football culture.\n\nFor neutral travellers, Parma offers a clean, traditional Serie A matchday in a compact, elegant city known for food and walkability."
     },
     {
       title: "History & Legacy",
       body:
-        "Founded in 1919, Salernitana spent most of their history in Serie B and lower divisions.\n\nTheir modern legacy is defined by achieving and sustaining Serie A status after long absences.\n\nRather than being measured by trophies, Salernitana’s historical success is framed around survival, promotion, and defying expectation."
+        "Parma’s legacy is shaped by a period where they punched well above city size and built a reputation as a serious Italian force.\n\nThat era created lasting expectations: Parma as a club that can be more than just a survival operator when the structure is right."
     },
     {
       title: "Recent Seasons",
       body:
-        "Recent seasons have largely been relegation battles.\n\nPatterns:\n• Late-season survival pushes.\n• High squad turnover.\n• Heavy reliance on home form.\n\nStaying in Serie A is treated as a major achievement."
+        "Parma’s recent seasons are about rebuilding credibility and avoiding the traps of instability.\n\nPatterns:\n• Strong emphasis on organisation and squad balance.\n• Matches that often carry ‘important points’ energy.\n• Home form as the platform for staying competitive.\n\nVisitors should expect a team that takes game management seriously."
     },
     {
       title: "Playing Style",
       body:
-        "Salernitana favour reactive, compact football.\n\nCommon traits:\n• Low-to-mid defensive block.\n• Direct counter-attacks.\n• Emphasis on physical duels.\n\nMatches are often scrappy and hard-fought."
+        "Parma generally lean pragmatic.\n\nCommon traits:\n• Structured defensive work.\n• Direct transitions when space is available.\n• Focus on staying in games and turning moments into points."
     },
     {
       title: "Stadium Profile",
       body:
-        "Stadio Arechi is a traditional coastal stadium.\n\nApproximate capacity: 31,000+.\n\nOpen design with strong sea air presence."
+        "Stadio Ennio Tardini is a traditional Italian ground close to the city.\n\nIt feels intimate and football-first, with a matchday that’s straightforward and connected — not an out-of-town ‘event arena’."
     },
     {
       title: "Atmosphere & Matchday Feel",
       body:
-        "Atmosphere is intense and emotional.\n\nTypical patterns:\n• Loud home support.\n• Strong reaction to refereeing decisions.\n• Continuous chanting.\n\nCrowd plays an active role in matches."
+        "Atmosphere is steady and engaged rather than ultra-hostile.\n\nExpect stronger noise in tight games and during late pushes, with a crowd that appreciates visible effort and organisation."
     },
     {
       title: "Rivalries",
       body:
-        "Napoli – regional southern rivalry.\n\nAvellino – historic local rivalry."
+        "Parma’s rivalry edge is mostly regional — fixtures where geography and local pride sharpen the atmosphere."
     },
     {
       title: "Legends",
       body:
-        "• Marco Di Vaio\n• Franck Ribéry (late-career impact)"
+        "Parma’s legends are closely tied to the club’s peak era and the figures who delivered major moments.\n\nThe club’s mythology leans heavily on the idea that Parma can still be ‘big’ when the project aligns."
     },
     {
       title: "Supporter Culture",
       body:
-        "Salernitana supporters are fiercely loyal.\n\nKey traits:\n• Siege mentality.\n• Strong regional pride.\n• High emotional expression."
+        "Support is proud, traditional, and expectation-aware. Fans want the team to look organised and competitive — and they respond well to visible fight, especially in home matches."
     },
     {
       title: "Neutral Visitor Notes",
       body:
-        "• Expect noisy southern Italian atmosphere.\n• Matches feel volatile.\n• Good choice for raw football culture."
+        "• Excellent ‘city break + football’ destination.\n• Traditional stadium, simple logistics.\n• Best enjoyed in meaningful fixtures where the table adds pressure."
     }
   ],
-  links: [{ label: "Official site", url: "https://www.ussalernitana1919.it/" }],
-  updatedAt: "2026-01-27"
+  links: [{ label: "Official site", url: "https://www.parmacalcio1913.com/" }],
+  updatedAt: "2026-01-28"
 },
 
+  
+"pisa": {
+  teamKey: "pisa",
+  name: "Pisa",
+  city: "Pisa",
+  country: "Italy",
+  stadium: "Arena Garibaldi – Stadio Romeo Anconetani",
+  sections: [
+    {
+      title: "Club Overview",
+      body:
+        "Pisa are a classic Italian club whose modern identity is driven by ambition, intensity, and the idea of climbing and sticking at a higher level. The city is globally famous, but the football experience is far more local and grounded — which makes Pisa a strong ‘tourism + football’ pairing.\n\nFor neutral travellers, Pisa offers a traditional stadium experience and fixtures that often feel emotionally charged because the club’s goals are tied to proving they belong."
+    },
+    {
+      title: "History & Legacy",
+      body:
+        "Pisa’s legacy is built around being a historic professional club with cycles through Italian football’s divisions.\n\nThe cultural footprint is about resilience and identity: a club with strong local attachment, where progress is treated as something earned rather than assumed."
+    },
+    {
+      title: "Recent Seasons",
+      body:
+        "Recent seasons are shaped by pressure and aspiration.\n\nPatterns:\n• High importance placed on home games.\n• Strong emotional tone in tight matches.\n• The challenge of adapting to higher-level opponents week-to-week.\n\nFor visitors, the matchday often feels like it matters — points are not taken lightly."
+    },
+    {
+      title: "Playing Style",
+      body:
+        "Pisa often lean toward competitive, direct phases.\n\nExpect:\n• Strong work rate and duels.\n• Quick transitions.\n• A willingness to make matches feel contested rather than controlled."
+    },
+    {
+      title: "Stadium Profile",
+      body:
+        "Arena Garibaldi is a proper old-school Italian ground: compact, close to the pitch, and built for noise.\n\nIt delivers the ‘traditional Italy’ football vibe much more than modern bowl stadiums."
+    },
+    {
+      title: "Atmosphere & Matchday Feel",
+      body:
+        "Atmosphere is local and reactive.\n\nExpect:\n• Strong engagement when the game is tight.\n• Big spikes around goals, pressure, and refereeing moments.\n• A crowd that feels involved rather than passive."
+    },
+    {
+      title: "Rivalries",
+      body:
+        "Rivalries are primarily regional, where geography and pride drive intensity."
+    },
+    {
+      title: "Legends",
+      body:
+        "Pisa’s legends tend to be promotion-era and identity figures — people associated with key steps upward and major emotional seasons."
+    },
+    {
+      title: "Supporter Culture",
+      body:
+        "Support is proud and demanding in the traditional Italian way: effort is non-negotiable, and passive football gets criticised. The crowd responds strongly to visible fight and momentum."
+    },
+    {
+      title: "Neutral Visitor Notes",
+      body:
+        "• Great pairing with a Tuscany trip.\n• Traditional ground, authentic atmosphere.\n• Best enjoyed in fixtures with real points pressure."
+    }
+  ],
+  links: [{ label: "Official site", url: "https://www.pisasp.org/" }],
+  updatedAt: "2026-01-28"
+},
+
+  
 
   "sassuolo": {
   teamKey: "sassuolo",
