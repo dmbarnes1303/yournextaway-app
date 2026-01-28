@@ -14,6 +14,9 @@ import { getFixtures, type FixtureListRow } from "@/src/services/apiFootball";
  * - Home uses:
  *    buildSearchIndex({ from, to, leagues })
  *    querySearchIndex(index, query, { limit })
+ *
+ * Debug:
+ * - In __DEV__, index.debug contains counts + unresolved fixture team names
  */
 
 export type SearchEntityType = "team" | "city" | "venue" | "country" | "league";
@@ -43,22 +46,24 @@ type IndexEntry = {
   payload: SearchPayload;
 };
 
+export type SearchIndexDebug = {
+  enabled: boolean;
+  counts: Record<SearchEntityType, number>;
+  totalEntries: number;
+
+  // Fixture-derived signal
+  fixtureRowsScanned: number;
+  unresolvedFixtureTeamNames: string[];
+};
+
 export type SearchIndex = {
   builtAt: number;
   from: string;
   to: string;
   leagues: LeagueOption[];
   entries: IndexEntry[];
-  /**
-   * DEV-only diagnostics to help identify why some teams
-   * are not being marked "guide available".
-   */
-  debug?: {
-    teamsRegistryCount: number;
-    teamGuidesCount: number;
-    fixtureTeamsObserved: number;
-    unresolvedFixtureTeamNames: string[];
-  };
+
+  debug?: SearchIndexDebug;
 };
 
 function uniq<T>(arr: T[]): T[] {
@@ -69,16 +74,12 @@ function safeStr(v: unknown): string {
   return String(v ?? "").trim();
 }
 
-function isDebugEnabled(): boolean {
-  return typeof __DEV__ !== "undefined" ? !!__DEV__ : false;
-}
-
 function normalizeVenueKey(input: string | undefined | null): string {
   return String(input ?? "")
     .trim()
     .toLowerCase()
-    .replace(/\(.*?\)/g, "") // remove bracketed suffixes
-    .replace(/[,/|].*$/, "") // cut after punctuation separators
+    .replace(/\(.*?\)/g, "") // remove bracketed noise
+    .replace(/[,/|].*$/, "") // cut after comma/slash/pipe
     .replace(/\s+/g, "-")
     .replace(/[^a-z0-9-]/g, "")
     .replace(/-+/g, "-")
@@ -90,72 +91,40 @@ function toEntryTokens(parts: Array<string | undefined | null>): string[] {
   return uniq(tokenizeQuery(joined));
 }
 
+function isDebugEnabled(): boolean {
+  return typeof __DEV__ !== "undefined" ? !!__DEV__ : false;
+}
+
 /**
- * Build a resolver from your teams registry:
- * - Direct key match (teamKey)
- * - Alias match (aliases[])
- *
- * This is how we make sure:
- * - "psg" resolves to "paris-saint-germain"
- * - "barca" resolves to "barcelona"
- * - diacritics / punctuation variations still land on canonical keys
+ * Try to resolve a name to a canonical registry key.
+ * If you haven't implemented resolveTeamKey in src/data/teams, this will just fallback safely.
  */
-type TeamAny = { teamKey?: string; aliases?: string[]; teamId?: number; name?: string };
-
-const _teamsList: TeamAny[] = Object.values(teamsRegistry as any) as TeamAny[];
-
-const _aliasToTeamKey: Map<string, string> = (() => {
-  const map = new Map<string, string>();
-
-  for (const t of _teamsList) {
-    const key = safeStr(t?.teamKey);
-    if (!key) continue;
-
-    // include teamKey itself
-    map.set(normalizeTeamKey(key), key);
-
-    const aliases = Array.isArray(t?.aliases) ? t.aliases : [];
-    for (const a of aliases) {
-      const n = normalizeTeamKey(a);
-      if (!n) continue;
-      // first win keeps the mapping stable
-      if (!map.has(n)) map.set(n, key);
+function tryResolveTeamKey(input: string): string | null {
+  try {
+    // Optional import at runtime: avoids hard crash if not exported
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const mod = require("@/src/data/teams");
+    const fn = mod?.resolveTeamKey;
+    if (typeof fn === "function") {
+      const out = fn(input);
+      return typeof out === "string" && out.trim() ? out.trim() : null;
     }
-
-    // include display name too (useful if you didn’t list it as an alias)
-    const name = safeStr(t?.name);
-    const nameNorm = normalizeTeamKey(name);
-    if (nameNorm && !map.has(nameNorm)) map.set(nameNorm, key);
+  } catch {
+    // ignore
   }
-
-  return map;
-})();
-
-function resolveTeamKeyLocal(input: string | undefined | null): string | null {
-  const s = safeStr(input);
-  if (!s) return null;
-
-  const n = normalizeTeamKey(s);
-  if (!n) return null;
-
-  // direct key
-  if ((teamsRegistry as any)[n]?.teamKey) return (teamsRegistry as any)[n].teamKey;
-
-  // alias map
-  const mapped = _aliasToTeamKey.get(n);
-  return mapped ?? null;
+  return null;
 }
 
 /**
  * Canonical team slug resolver:
- * - Prefer registry canonical key (handles aliases/name variations)
- * - Fallback to normalized input so unknown teams still show up in search
+ * - Prefer registry canonical key (handles aliases/diacritics/name variations)
+ * - Fallback to normalized input so unknown teams still appear
  */
 function canonicalTeamSlug(input: string | undefined | null): { slug: string | null; resolved: boolean } {
   const s = safeStr(input);
   if (!s) return { slug: null, resolved: false };
 
-  const resolvedKey = resolveTeamKeyLocal(s);
+  const resolvedKey = tryResolveTeamKey(s);
   if (resolvedKey) {
     const slug = normalizeTeamKey(resolvedKey);
     return { slug: slug || null, resolved: true };
@@ -185,7 +154,6 @@ function scoreMatch(queryTokens: string[], entryTokens: string[]): number {
       continue;
     }
 
-    // prefix match only (query token is prefix of entry token)
     const prefix = entryTokens.some((et) => et.startsWith(qt));
     if (prefix) {
       score += 2;
@@ -228,7 +196,7 @@ function upsertEntry(map: Map<string, IndexEntry>, entry: IndexEntry) {
           ...nextPayload,
           teamId: existingPayload.teamId ?? nextPayload.teamId,
         }
-      : (existing.payload as any) ?? entry.payload;
+      : existing.payload ?? entry.payload;
 
   map.set(entry.key, {
     ...existing,
@@ -240,7 +208,6 @@ function upsertEntry(map: Map<string, IndexEntry>, entry: IndexEntry) {
 }
 
 function buildCityAndCountryEntries(map: Map<string, IndexEntry>) {
-  // Cities from guides
   Object.values(cityGuidesRegistry as any).forEach((g: any) => {
     const name = safeStr(g?.name ?? g?.cityId);
     if (!name) return;
@@ -260,7 +227,6 @@ function buildCityAndCountryEntries(map: Map<string, IndexEntry>) {
     });
   });
 
-  // Countries (derived list)
   const countries = uniq(
     Object.values(cityGuidesRegistry as any)
       .map((g: any) => safeStr(g?.country))
@@ -283,7 +249,7 @@ function buildCityAndCountryEntries(map: Map<string, IndexEntry>) {
 }
 
 function buildTeamsRegistryEntries(map: Map<string, IndexEntry>) {
-  // Teams from team registry (deterministic, even without fixtures)
+  // teamsRegistry default export is a map of teamKey -> TeamRecord
   Object.values(teamsRegistry as any).forEach((t: any) => {
     const name = safeStr(t?.name);
     const teamKey = safeStr(t?.teamKey);
@@ -307,7 +273,8 @@ function buildTeamsRegistryEntries(map: Map<string, IndexEntry>) {
 }
 
 function buildTeamGuideEntries(map: Map<string, IndexEntry>) {
-  // Teams from team guides (may be partial)
+  // teamGuidesRegistry default export is an object that includes the guide maps
+  // We only need to index the guide objects
   Object.values(teamGuidesRegistry as any).forEach((g: any) => {
     const name = safeStr(g?.name ?? g?.teamName ?? g?.teamKey ?? g?.teamId);
     if (!name) return;
@@ -363,6 +330,7 @@ function patchCountryPayloads(entries: IndexEntry[], leagues: LeagueOption[]): I
         if (cn.includes("germany")) return label.includes("bundesliga");
         if (cn.includes("france")) return label.includes("ligue 1") || label.includes("ligue1");
         if (cn.includes("austria")) return label.includes("austrian") || label.includes("bundesliga");
+
         return false;
       }) ??
       fallback;
@@ -385,11 +353,14 @@ function patchCountryPayloads(entries: IndexEntry[], leagues: LeagueOption[]): I
   });
 }
 
-async function buildFixtureDerivedEntries(
-  map: Map<string, IndexEntry>,
-  args: { from: string; to: string; leagues: LeagueOption[]; unresolvedTeams?: Set<string>; observedTeamSlugs?: Set<string> }
-) {
-  const { from, to, leagues, unresolvedTeams, observedTeamSlugs } = args;
+async function buildFixtureDerivedEntries(args: {
+  map: Map<string, IndexEntry>;
+  from: string;
+  to: string;
+  leagues: LeagueOption[];
+  unresolvedFixtureTeams?: Set<string>;
+}): Promise<number> {
+  const { map, from, to, leagues, unresolvedFixtureTeams } = args;
 
   const settled = await Promise.allSettled(
     (leagues ?? []).map((l) =>
@@ -415,8 +386,7 @@ async function buildFixtureDerivedEntries(
 
     if (homeName) {
       const { slug, resolved } = canonicalTeamSlug(homeName);
-      if (slug) observedTeamSlugs?.add(slug);
-      if (!resolved) unresolvedTeams?.add(homeName);
+      if (!resolved && unresolvedFixtureTeams) unresolvedFixtureTeams.add(homeName);
 
       if (slug) {
         upsertEntry(map, {
@@ -432,8 +402,7 @@ async function buildFixtureDerivedEntries(
 
     if (awayName) {
       const { slug, resolved } = canonicalTeamSlug(awayName);
-      if (slug) observedTeamSlugs?.add(slug);
-      if (!resolved) unresolvedTeams?.add(awayName);
+      if (!resolved && unresolvedFixtureTeams) unresolvedFixtureTeams.add(awayName);
 
       if (slug) {
         upsertEntry(map, {
@@ -478,75 +447,76 @@ async function buildFixtureDerivedEntries(
       }
     }
   });
+
+  return rows.length;
 }
 
-/**
- * Build an index (async because we optionally derive entities from fixtures in-window).
- */
 export async function buildSearchIndex(args: { from: string; to: string; leagues: LeagueOption[] }): Promise<SearchIndex> {
   const from = safeStr(args?.from);
   const to = safeStr(args?.to);
   const leagues = Array.isArray(args?.leagues) ? args.leagues : [];
 
   const map = new Map<string, IndexEntry>();
-
-  // DEV diagnostics
-  const unresolvedFixtureTeamNames = new Set<string>();
-  const observedTeamSlugs = new Set<string>();
+  const debugEnabled = isDebugEnabled();
+  const unresolvedFixtureTeams = debugEnabled ? new Set<string>() : undefined;
 
   buildCityAndCountryEntries(map);
   buildTeamsRegistryEntries(map); // deterministic teams exist even without fixtures/guides
   buildTeamGuideEntries(map);
   buildLeagueEntries(map, leagues);
 
-  // Fixture-derived enrichment (best effort; never crash)
+  let fixtureRowsScanned = 0;
   try {
-    await buildFixtureDerivedEntries(map, {
+    fixtureRowsScanned = await buildFixtureDerivedEntries({
+      map,
       from,
       to,
       leagues,
-      unresolvedTeams: isDebugEnabled() ? unresolvedFixtureTeamNames : undefined,
-      observedTeamSlugs: isDebugEnabled() ? observedTeamSlugs : undefined,
+      unresolvedFixtureTeams,
     });
   } catch {
-    // ignore
+    // ignore fixture failures (offline safe)
   }
 
   let entries = Array.from(map.values());
   entries = patchCountryPayloads(entries, leagues);
 
-  const idx: SearchIndex = {
+  if (!debugEnabled) {
+    return {
+      builtAt: Date.now(),
+      from,
+      to,
+      leagues,
+      entries,
+    };
+  }
+
+  const counts: Record<SearchEntityType, number> = {
+    team: 0,
+    city: 0,
+    venue: 0,
+    country: 0,
+    league: 0,
+  };
+
+  for (const e of entries) counts[e.type] += 1;
+
+  return {
     builtAt: Date.now(),
     from,
     to,
     leagues,
     entries,
+    debug: {
+      enabled: true,
+      counts,
+      totalEntries: entries.length,
+      fixtureRowsScanned,
+      unresolvedFixtureTeamNames: unresolvedFixtureTeams ? Array.from(unresolvedFixtureTeams).sort() : [],
+    },
   };
-
-  if (isDebugEnabled()) {
-    idx.debug = {
-      teamsRegistryCount: _teamsList.length,
-      teamGuidesCount: Object.keys(teamGuidesRegistry as any).length,
-      fixtureTeamsObserved: observedTeamSlugs.size,
-      unresolvedFixtureTeamNames: Array.from(unresolvedFixtureTeamNames).sort().slice(0, 80),
-    };
-
-    // Loud + obvious in Metro logs so you can see it instantly.
-    // This is the fastest way to find which names/aliases are missing.
-    // eslint-disable-next-line no-console
-    console.log("[SearchIndex debug]", idx.debug);
-  }
-
-  return idx;
 }
 
-/**
- * Query the index and return ranked results.
- *
- * CRITICAL FIX:
- * - We only apply typeBoost *after* a real match exists.
- * - This prevents queries like "emira" returning unrelated teams just because they're "team" type.
- */
 export function querySearchIndex(index: SearchIndex, query: string, opts?: { limit?: number }): SearchResult[] {
   const limit = Math.max(1, Math.min(Number(opts?.limit ?? 20), 100));
 
@@ -560,8 +530,6 @@ export function querySearchIndex(index: SearchIndex, query: string, opts?: { lim
   const scored: SearchResult[] = (index?.entries ?? [])
     .map((e) => {
       const baseScore = scoreMatch(queryTokens, e.tokens);
-
-      // No match => exclude (do NOT allow typeBoost to “create” relevance).
       if (baseScore <= 0) return null;
 
       const score = baseScore + typeBoost(e.type);
@@ -579,4 +547,4 @@ export function querySearchIndex(index: SearchIndex, query: string, opts?: { lim
     .sort((a, b) => b.score - a.score);
 
   return scored.slice(0, limit);
-    }
+      }
