@@ -1,8 +1,7 @@
-// src/data/teamGuides/ligue1.ts
-
 import type { TeamGuide } from "./types";
 
 export const ligue1TeamGuides: Record<string, TeamGuide> = {
+  
   "angers": {
     teamKey: "angers",
     name: "Angers",
