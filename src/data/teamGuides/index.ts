@@ -1,4 +1,3 @@
-
 // src/data/teamGuides/index.ts
 
 import type { TeamGuide } from "./types";
@@ -15,26 +14,60 @@ import serieAGuides from "./serieA";
 import * as legacy from "./teamGuides";
 
 /**
+ * Type guards
+ */
+function isTeamGuide(x: any): x is TeamGuide {
+  return !!x && typeof x === "object" && typeof x.teamKey === "string" && x.teamKey.length > 0;
+}
+
+function isRecordOfTeamGuides(x: any): x is Record<string, TeamGuide> {
+  if (!x || typeof x !== "object" || Array.isArray(x)) return false;
+  const vals = Object.values(x);
+  if (!vals.length) return false;
+  return vals.every(isTeamGuide);
+}
+
+/**
  * Helper to extract TeamGuide[] from various module export formats.
  * Handles:
  * - default export: TeamGuide[]
- * - named export: { teamGuides: TeamGuide[] } or { guides: TeamGuide[] }
- * - any array value in the module
+ * - default export: Record<string, TeamGuide>
+ * - named export: TeamGuide[]
+ * - named export: Record<string, TeamGuide>
+ * - legacy "import * as" modules containing one of the above
  */
 function extractGuides(mod: any): TeamGuide[] {
   if (!mod) return [];
-  if (Array.isArray(mod)) return mod;
-  if (Array.isArray(mod.default)) return mod.default;
-  
-  // Search for any array value in the module
-  const found = Object.values(mod).find(v => Array.isArray(v));
-  return found ? (found as TeamGuide[]) : [];
+
+  // 1) Direct array
+  if (Array.isArray(mod)) return mod.filter(isTeamGuide);
+
+  // 2) Default export array
+  if (Array.isArray(mod.default)) return mod.default.filter(isTeamGuide);
+
+  // 3) Default export Record<string, TeamGuide>
+  if (isRecordOfTeamGuides(mod.default)) return Object.values(mod.default);
+
+  // 4) Named exports: look for an array of TeamGuide
+  for (const v of Object.values(mod)) {
+    if (Array.isArray(v)) {
+      const arr = (v as any[]).filter(isTeamGuide);
+      if (arr.length) return arr;
+    }
+  }
+
+  // 5) Named exports: look for a Record<string, TeamGuide>
+  for (const v of Object.values(mod)) {
+    if (isRecordOfTeamGuides(v)) return Object.values(v);
+  }
+
+  return [];
 }
 
 /**
  * Build sources map from all league files
  */
-const SOURCES = {
+const SOURCES: Record<string, TeamGuide[]> = {
   bundesliga: extractGuides(bundesligaGuides),
   laLiga: extractGuides(laLigaGuides),
   ligue1: extractGuides(ligue1Guides),
@@ -46,6 +79,9 @@ const SOURCES = {
 /**
  * Build the registry: Record<teamKey, TeamGuide>
  * Track duplicates for debugging
+ *
+ * NOTE: First-write-wins to keep behaviour deterministic.
+ * If you want league files to override legacy, keep legacy last (as it is).
  */
 const registry: Record<string, TeamGuide> = {};
 const duplicates: Record<string, number> = {};
@@ -54,21 +90,18 @@ const duplicates: Record<string, number> = {};
 for (const [sourceName, guides] of Object.entries(SOURCES)) {
   for (const guide of guides) {
     const key = guide?.teamKey;
-    
-    // Skip guides without teamKey
+
     if (!key) {
       console.log(`[teamGuides] Skipping guide without teamKey from ${sourceName}`);
       continue;
     }
-    
-    // Track duplicates
+
     if (registry[key]) {
       duplicates[key] = (duplicates[key] || 1) + 1;
       console.log(`[teamGuides] Duplicate teamKey detected: ${key} (source: ${sourceName})`);
       continue;
     }
-    
-    // Register the guide
+
     registry[key] = guide;
   }
 }
@@ -77,8 +110,8 @@ for (const [sourceName, guides] of Object.entries(SOURCES)) {
  * Identify missing team guides by comparing against teams registry
  */
 const missing = Object.values(teams)
-  .filter(t => !registry[t.teamKey])
-  .map(t => ({
+  .filter((t) => !registry[t.teamKey])
+  .map((t) => ({
     expectedGuideKey: t.teamKey,
     name: t.name,
     leagueId: t.leagueId,
@@ -131,9 +164,7 @@ export function getTeamGuidesDebugSnapshot() {
     missingCount: missing.length,
     missing,
     duplicates: Object.entries(duplicates).map(([k, v]) => ({ teamKey: k, count: v })),
-    bySource: Object.fromEntries(
-      Object.entries(SOURCES).map(([k, v]) => [k, v.length])
-    ),
+    bySource: Object.fromEntries(Object.entries(SOURCES).map(([k, v]) => [k, v.length])),
   };
 }
 
