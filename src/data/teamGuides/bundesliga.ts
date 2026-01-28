@@ -1,13 +1,7 @@
-// src/data/teamGuides/bundesliga.ts
-
 import type { TeamGuide } from "./types";
 
-/**
- * Bundesliga Team Guides
- * Season: 2025/26
- */
-
-const bundesligaTeamGuides: TeamGuide[] = [
+export const bundesligaTeamGuides: Record<string, TeamGuide> = {
+  
   {
   teamKey: "augsburg",
   name: "FC Augsburg",
@@ -1100,6 +1094,8 @@ const bundesligaTeamGuides: TeamGuide[] = [
   ],
   updatedAt: "2026-01-27"
 },
-];
+
+};
 
 export default bundesligaTeamGuides;
+
