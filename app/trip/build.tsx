@@ -876,44 +876,47 @@ export default function TripBuildScreen() {
                     </View>
                   ) : null}
 
-                  { {/* Date fallback for web/no picker */}
-                  {Platform.OS === "web" || !DateTimePicker ? (
-                    <View style={{ marginTop: 10, gap: 8 }}>
-                      <Text style={styles.fallbackNote}>Date picker not available here. Edit ISO dates (YYYY-MM-DD).</Text>
-                      <View style={{ flexDirection: "row", gap: 10 }}>
-                        <TextInput
-                          value={startIso}
-                          onChangeText={setStartIso}
-                          placeholder="YYYY-MM-DD"
-                          placeholderTextColor={theme.colors.textSecondary}
-                          style={[styles.input, { flex: 1 }]}
-                          autoCapitalize="none"
-                          autoCorrect={false}
-                        />
-                        <TextInput
-                          value={endIso}
-                          onChangeText={setEndIso}
-                          placeholder="YYYY-MM-DD"
-                          placeholderTextColor={theme.colors.textSecondary}
-                          style={[styles.input, { flex: 1 }]}
-                          autoCapitalize="none"
-                          autoCorrect={false}
-                        />
-                      </View>
-                    </View>
-                  ) : null}
+                  {/* Date fallback for web/no picker */}
+{Platform.OS === "web" || !DateTimePicker ? (
+  <View style={{ marginTop: 10, gap: 8 }}>
+    <Text style={styles.fallbackNote}>
+      Date picker not available here. Edit ISO dates (YYYY-MM-DD).
+    </Text>
 
-                  <View style={{ marginTop: 10 }}>
-                    <TextInput
-                      value={notes}
-                      onChangeText={setNotes}
-                      placeholder="Notes (hotel, trains, plans, etc.)"
-                      placeholderTextColor={theme.colors.textSecondary}
-                      style={[styles.input, styles.textarea]}
-                      multiline
-                      textAlignVertical="top"
-                    />
-                  </View>
+    <View style={{ flexDirection: "row", gap: 10 }}>
+      <TextInput
+        value={startIso}
+        onChangeText={setStartIso}
+        placeholder="YYYY-MM-DD"
+        placeholderTextColor={theme.colors.textSecondary}
+        style={[styles.input, { flex: 1 }]}
+        autoCapitalize="none"
+        autoCorrect={false}
+      />
+      <TextInput
+        value={endIso}
+        onChangeText={setEndIso}
+        placeholder="YYYY-MM-DD"
+        placeholderTextColor={theme.colors.textSecondary}
+        style={[styles.input, { flex: 1 }]}
+        autoCapitalize="none"
+        autoCorrect={false}
+      />
+    </View>
+  </View>
+) : null}
+
+<View style={{ marginTop: 10 }}>
+  <TextInput
+    value={notes}
+    onChangeText={setNotes}
+    placeholder="Notes (hotel, trains, plans, etc.)"
+    placeholderTextColor={theme.colors.textSecondary}
+    style={[styles.input, styles.textarea]}
+    multiline
+    textAlignVertical="top"
+  />
+</View>
 
                   {error ? (
                     <Text style={styles.errText} numberOfLines={3}>
