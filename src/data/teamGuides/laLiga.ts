@@ -2,8 +2,8 @@ import type { TeamGuide } from "./types";
 
 export const laLigaTeamGuides: Record<string, TeamGuide> = {
 
-"athletic-bilbao": {
-  teamKey: "athletic-bilbao",
+"athletic-club": {
+  teamKey: "athletic-club",
   name: "Athletic Club",
   city: "Bilbao",
   country: "Spain",
