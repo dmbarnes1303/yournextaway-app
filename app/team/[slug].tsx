@@ -15,8 +15,10 @@ import { LEAGUES, getRollingWindowIso } from "@/src/constants/football";
 import { getFixtures, type FixtureListRow } from "@/src/services/apiFootball";
 import { formatUkDateOnly, formatUkDateTimeMaybe } from "@/src/utils/formatters";
 
-import { getTeamGuide, normalizeTeamKey } from "@/src/data/teamGuides";
+import { getTeamGuide } from "@/src/data/teamGuides";
 import type { TeamGuide } from "@/src/data/teamGuides/types";
+
+import { getTeam, normalizeTeamKey, teams, type TeamRecord } from "@/src/data/teams";
 
 function coerceString(v: unknown): string | null {
   if (typeof v === "string") {
@@ -30,14 +32,17 @@ function coerceString(v: unknown): string | null {
   return null;
 }
 
-function titleFromSlug(slug: string): string {
-  const s = String(slug ?? "").trim();
-  if (!s) return "Team";
-  return s
-    .split("-")
-    .filter(Boolean)
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(" ");
+function coerceNumber(v: unknown): number | null {
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v === "string") {
+    const n = Number(v.trim());
+    return Number.isFinite(n) ? n : null;
+  }
+  if (Array.isArray(v) && typeof v[0] === "string") {
+    const n = Number(v[0].trim());
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
 }
 
 function fixtureKey(r: FixtureListRow, idx: number) {
@@ -45,36 +50,6 @@ function fixtureKey(r: FixtureListRow, idx: number) {
   return id ? String(id) : `idx-${idx}`;
 }
 
-function teamMatchesRow(row: FixtureListRow, teamNorm: string): boolean {
-  const home = String(row?.teams?.home?.name ?? "");
-  const away = String(row?.teams?.away?.name ?? "");
-  const homeNorm = normalizeTeamKey(home);
-  const awayNorm = normalizeTeamKey(away);
-
-  if (!teamNorm) return false;
-
-  // Exact normalized match first
-  if (homeNorm === teamNorm || awayNorm === teamNorm) return true;
-
-  // Soft fallback: handle "psg" vs "paris-saint-germain" etc
-  if (
-    homeNorm.includes(teamNorm) ||
-    awayNorm.includes(teamNorm) ||
-    teamNorm.includes(homeNorm) ||
-    teamNorm.includes(awayNorm)
-  ) {
-    return true;
-  }
-
-  return false;
-}
-
-/**
- * Render helpers for TeamGuide, without assuming a single rigid schema.
- * This supports:
- * - Gold-standard guides: guide.sections[] (common in structured guides)
- * - Legacy/simple guides: history/stadium/tickets/gettingThere fields (fallback)
- */
 function isNonEmptyString(x: any): x is string {
   return typeof x === "string" && x.trim().length > 0;
 }
@@ -97,7 +72,6 @@ function renderBulletsMaybe(bullets: any) {
 
 function renderParagraphsMaybe(text: any) {
   if (!isNonEmptyString(text)) return null;
-  // Basic paragraph splitting (keeps it readable if guides include \n\n)
   const parts = text
     .split(/\n{2,}/g)
     .map((p) => p.trim())
@@ -117,18 +91,12 @@ function renderParagraphsMaybe(text: any) {
 function renderGuide(guide: TeamGuide) {
   const g: any = guide;
 
-  // Preferred: structured sections
   const sections = Array.isArray(g?.sections) ? g.sections : null;
   if (sections && sections.length > 0) {
     return (
       <View style={{ gap: 14, marginTop: 10 }}>
         {sections.map((s: any, idx: number) => {
           const title = isNonEmptyString(s?.title) ? s.title : `Section ${idx + 1}`;
-
-          // Support common shapes:
-          // - { title, body } (string)
-          // - { title, bullets } (string[])
-          // - { title, items: [{ title, bullets/body }] }
           const body = s?.body;
           const bullets = s?.bullets;
           const items = Array.isArray(s?.items) ? s.items : null;
@@ -161,7 +129,6 @@ function renderGuide(guide: TeamGuide) {
     );
   }
 
-  // Fallback: legacy/simple fields (keeps older guides visible)
   const legacyBlocks: Array<{ title: string; text?: string; bullets?: string[] }> = [];
 
   if (isNonEmptyString(g?.history)) legacyBlocks.push({ title: "Overview", text: String(g.history) });
@@ -173,7 +140,7 @@ function renderGuide(guide: TeamGuide) {
     return (
       <EmptyState
         title="Guide available, but not renderable yet"
-        message="This guide exists but its structure doesn’t match the current renderer. We should align it to sections[] (gold standard) so it displays properly."
+        message="This guide exists but its structure doesn’t match the current renderer. Align it to sections[] so it displays consistently."
       />
     );
   }
@@ -191,21 +158,59 @@ function renderGuide(guide: TeamGuide) {
   );
 }
 
+function resolveTeam(params: Record<string, any>): { team: TeamRecord | null; teamKey: string; displayName: string } {
+  const slug = coerceString(params?.slug) ?? "";
+  const teamId = coerceNumber(params?.teamId) ?? coerceNumber(params?.id) ?? null;
+
+  // 1) Prefer explicit numeric id if provided
+  if (teamId != null) {
+    const match = Object.values(teams).find((t) => Number(t.teamId) === Number(teamId)) ?? null;
+    if (match) return { team: match, teamKey: match.teamKey, displayName: match.name };
+  }
+
+  // 2) Next try slug/teamKey/name lookup via registry helper
+  if (slug) {
+    const bySlug = getTeam(slug);
+    if (bySlug) return { team: bySlug, teamKey: bySlug.teamKey, displayName: bySlug.name };
+
+    // 3) Fallback: normalize and use as a key even if not in registry
+    const key = normalizeTeamKey(slug);
+    return { team: null, teamKey: key, displayName: slug };
+  }
+
+  return { team: null, teamKey: "", displayName: "Team" };
+}
+
+function teamMatchesRow(row: FixtureListRow, teamKey: string): boolean {
+  if (!teamKey) return false;
+
+  const home = String(row?.teams?.home?.name ?? "");
+  const away = String(row?.teams?.away?.name ?? "");
+  const homeKey = normalizeTeamKey(home);
+  const awayKey = normalizeTeamKey(away);
+
+  if (homeKey === teamKey || awayKey === teamKey) return true;
+
+  // soft fallback for slightly different normalized forms
+  if (homeKey.includes(teamKey) || awayKey.includes(teamKey) || teamKey.includes(homeKey) || teamKey.includes(awayKey)) return true;
+
+  return false;
+}
+
 export default function TeamScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
 
-  const slug = useMemo(() => coerceString((params as any)?.slug) ?? "", [params]);
-  const teamName = useMemo(() => titleFromSlug(slug), [slug]);
-  const teamNorm = useMemo(() => normalizeTeamKey(slug || teamName), [slug, teamName]);
+  const { team, teamKey, displayName } = useMemo(() => resolveTeam(params as any), [params]);
+  const teamName = useMemo(() => team?.name ?? displayName ?? "Team", [team?.name, displayName]);
 
   // Rolling window defaults (can be overridden by params)
   const rolling = useMemo(() => getRollingWindowIso(), []);
   const from = useMemo(() => coerceString((params as any)?.from) ?? rolling.from, [params, rolling.from]);
   const to = useMemo(() => coerceString((params as any)?.to) ?? rolling.to, [params, rolling.to]);
 
-  // Pull guide by slug (normalize happens in the registry helper)
-  const guide = useMemo(() => (slug ? getTeamGuide(slug) : null), [slug]);
+  // Guide should be keyed by stable teamKey if possible
+  const guide = useMemo(() => (teamKey ? getTeamGuide(teamKey) : null), [teamKey]);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -215,7 +220,7 @@ export default function TeamScreen() {
     let cancelled = false;
 
     async function run() {
-      if (!teamNorm) return;
+      if (!teamKey) return;
 
       setLoading(true);
       setError(null);
@@ -241,7 +246,7 @@ export default function TeamScreen() {
           if (r.status !== "fulfilled") continue;
           const list = Array.isArray(r.value) ? (r.value as FixtureListRow[]) : [];
           for (const row of list) {
-            if (teamMatchesRow(row, teamNorm)) merged.push(row);
+            if (teamMatchesRow(row, teamKey)) merged.push(row);
           }
         }
 
@@ -267,7 +272,7 @@ export default function TeamScreen() {
     return () => {
       cancelled = true;
     };
-  }, [teamNorm, from, to]);
+  }, [teamKey, from, to]);
 
   function goBuildTrip(fixtureId: string) {
     router.push({
@@ -283,6 +288,8 @@ export default function TeamScreen() {
     } as any);
   }
 
+  const missingTeam = !teamKey;
+
   return (
     <Background imageUrl={getBackground("home")} overlayOpacity={0.88}>
       <Stack.Screen
@@ -295,7 +302,6 @@ export default function TeamScreen() {
 
       <SafeAreaView style={styles.safe} edges={["top"]}>
         <ScrollView contentContainerStyle={styles.content}>
-          {/* HEADER */}
           <GlassCard style={styles.hero} intensity={24}>
             <Text style={styles.kicker}>TEAM</Text>
             <Text style={styles.title}>{teamName}</Text>
@@ -323,74 +329,88 @@ export default function TeamScreen() {
             </View>
           </GlassCard>
 
-          {/* GUIDE */}
-          <GlassCard style={styles.card} intensity={22}>
-            <View style={styles.sectionHeaderRow}>
-              <Text style={styles.sectionTitle}>Team guide</Text>
-              <Text style={styles.sectionBadge}>{guide ? "Available" : "Coming soon"}</Text>
-            </View>
+          {missingTeam ? (
+            <GlassCard style={styles.card} intensity={22}>
+              <EmptyState title="Missing team" message="No team slug or teamId was provided." />
+            </GlassCard>
+          ) : null}
 
-            {!guide ? (
-              <EmptyState
-                title="Guide coming soon"
-                message="This page is wired up so routing works. As guides are added, they will appear here automatically."
-              />
-            ) : (
-              renderGuide(guide)
-            )}
-          </GlassCard>
+          {/* GUIDE */}
+          {!missingTeam ? (
+            <GlassCard style={styles.card} intensity={22}>
+              <View style={styles.sectionHeaderRow}>
+                <Text style={styles.sectionTitle}>Team guide</Text>
+                <Text style={styles.sectionBadge}>{guide ? "Available" : "Coming soon"}</Text>
+              </View>
+
+              {!guide ? (
+                <EmptyState
+                  title="Guide coming soon"
+                  message="This team route is working. Once the guide exists for this club, it will show here automatically."
+                />
+              ) : (
+                renderGuide(guide)
+              )}
+            </GlassCard>
+          ) : null}
 
           {/* FIXTURES */}
-          <GlassCard style={styles.card} intensity={22}>
-            <Text style={styles.sectionTitle}>Fixtures for {teamName}</Text>
-            <Text style={styles.sectionSub}>Filtered from your supported leagues, within the rolling window.</Text>
+          {!missingTeam ? (
+            <GlassCard style={styles.card} intensity={22}>
+              <Text style={styles.sectionTitle}>Fixtures for {teamName}</Text>
+              <Text style={styles.sectionSub}>Filtered from your supported leagues, within the rolling window.</Text>
 
-            {loading ? (
-              <View style={styles.center}>
-                <ActivityIndicator />
-                <Text style={styles.muted}>Loading fixtures…</Text>
-              </View>
-            ) : null}
+              {loading ? (
+                <View style={styles.center}>
+                  <ActivityIndicator />
+                  <Text style={styles.muted}>Loading fixtures…</Text>
+                </View>
+              ) : null}
 
-            {!loading && error ? <EmptyState title="Couldn’t load fixtures" message={error} /> : null}
+              {!loading && error ? <EmptyState title="Couldn’t load fixtures" message={error} /> : null}
 
-            {!loading && !error && rows.length === 0 ? (
-              <EmptyState
-                title="No fixtures found"
-                message="Either this club isn’t in your supported leagues list, or the rolling window doesn’t include their matches."
-              />
-            ) : null}
+              {!loading && !error && rows.length === 0 ? (
+                <EmptyState
+                  title="No fixtures found"
+                  message="Either this club isn’t in your supported leagues list, or the rolling window doesn’t include their matches."
+                />
+              ) : null}
 
-            {!loading && !error && rows.length > 0 ? (
-              <View style={styles.list}>
-                {rows.slice(0, 20).map((r, idx) => {
-                  const id = r?.fixture?.id ? String(r.fixture.id) : null;
-                  const home = r?.teams?.home?.name ?? "Home";
-                  const away = r?.teams?.away?.name ?? "Away";
-                  const kick = formatUkDateTimeMaybe(r?.fixture?.date);
-                  const venue = r?.fixture?.venue?.name ?? "";
-                  const city = r?.fixture?.venue?.city ?? "";
-                  const extra = [venue, city].filter(Boolean).join(" • ");
-                  const line2 = extra ? `${kick} • ${extra}` : kick;
+              {!loading && !error && rows.length > 0 ? (
+                <View style={styles.list}>
+                  {rows.slice(0, 20).map((r, idx) => {
+                    const id = r?.fixture?.id ? String(r.fixture.id) : null;
+                    const home = r?.teams?.home?.name ?? "Home";
+                    const away = r?.teams?.away?.name ?? "Away";
+                    const kick = formatUkDateTimeMaybe(r?.fixture?.date);
+                    const venue = r?.fixture?.venue?.name ?? "";
+                    const city = r?.fixture?.venue?.city ?? "";
+                    const extra = [venue, city].filter(Boolean).join(" • ");
+                    const line2 = extra ? `${kick} • ${extra}` : kick;
 
-                  return (
-                    <View key={fixtureKey(r, idx)} style={styles.fixtureRow}>
-                      <Pressable onPress={() => (id ? goMatch(id) : null)} style={{ flex: 1 }} disabled={!id}>
-                        <Text style={styles.rowTitle}>
-                          {home} vs {away}
-                        </Text>
-                        <Text style={styles.rowMeta}>{line2}</Text>
-                      </Pressable>
+                    return (
+                      <View key={fixtureKey(r, idx)} style={styles.fixtureRow}>
+                        <Pressable onPress={() => (id ? goMatch(id) : null)} style={{ flex: 1 }} disabled={!id}>
+                          <Text style={styles.rowTitle}>
+                            {home} vs {away}
+                          </Text>
+                          <Text style={styles.rowMeta}>{line2}</Text>
+                        </Pressable>
 
-                      <Pressable disabled={!id} onPress={() => (id ? goBuildTrip(id) : null)} style={[styles.planBtn, !id && styles.disabled]}>
-                        <Text style={styles.planBtnText}>Plan Trip</Text>
-                      </Pressable>
-                    </View>
-                  );
-                })}
-              </View>
-            ) : null}
-          </GlassCard>
+                        <Pressable
+                          disabled={!id}
+                          onPress={() => (id ? goBuildTrip(id) : null)}
+                          style={[styles.planBtn, !id && styles.disabled]}
+                        >
+                          <Text style={styles.planBtnText}>Plan Trip</Text>
+                        </Pressable>
+                      </View>
+                    );
+                  })}
+                </View>
+              ) : null}
+            </GlassCard>
+          ) : null}
 
           <View style={{ height: 18 }} />
         </ScrollView>
