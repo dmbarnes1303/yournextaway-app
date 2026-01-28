@@ -31,6 +31,12 @@ import { buildSearchIndex, querySearchIndex, type SearchResult } from "@/src/ser
 import { getCityGuide } from "@/src/data/cityGuides";
 import { hasTeamGuide } from "@/src/data/teamGuides";
 
+function isDev() {
+  // RN sets __DEV__ in dev builds
+  // eslint-disable-next-line no-undef
+  return typeof __DEV__ !== "undefined" ? !!__DEV__ : false;
+}
+
 function tripSummaryLine(t: Trip) {
   const a = t.startDate ? formatUkDateOnly(t.startDate) : "—";
   const b = t.endDate ? formatUkDateOnly(t.endDate) : "—";
@@ -263,7 +269,7 @@ export default function HomeScreen() {
   function onPressSearchResult(r: SearchResult) {
     const p: any = r.payload;
 
-    // ✅ FIX: route to /team/[teamKey] (NOT /team/[slug] and NOT /team/[id])
+    // ✅ Route to /team/[teamKey]
     if (p?.kind === "team") {
       router.push({
         pathname: "/team/[teamKey]",
@@ -336,6 +342,34 @@ export default function HomeScreen() {
       .slice(0, 6);
   }, [fxRows, qNorm]);
 
+  // ---- DEV DEBUG PANEL ----
+  const devDebug = useMemo(() => {
+    if (!isDev()) return null;
+    const idx = indexRef.current as any;
+    const dbg = idx?.debug;
+    if (!dbg?.enabled) return null;
+
+    const counts = dbg.counts ?? {};
+    const unresolved: string[] = Array.isArray(dbg.unresolvedFixtureTeamNames) ? dbg.unresolvedFixtureTeamNames : [];
+
+    return {
+      builtAt: idx?.builtAt ? new Date(idx.builtAt).toLocaleTimeString() : "—",
+      from: idx?.from ?? fromIso,
+      to: idx?.to ?? toIso,
+      total: Number(dbg.totalEntries ?? 0),
+      fixtureRows: Number(dbg.fixtureRowsScanned ?? 0),
+      counts: {
+        team: Number(counts.team ?? 0),
+        city: Number(counts.city ?? 0),
+        venue: Number(counts.venue ?? 0),
+        country: Number(counts.country ?? 0),
+        league: Number(counts.league ?? 0),
+      },
+      unresolvedTop: unresolved.slice(0, 12),
+      unresolvedCount: unresolved.length,
+    };
+  }, [fromIso, toIso, searchIndexBuiltAt]);
+
   return (
     <Background imageUrl={getBackground("home")} overlayOpacity={0.86}>
       <SafeAreaView style={styles.container} edges={["top"]}>
@@ -369,6 +403,68 @@ export default function HomeScreen() {
                 </Pressable>
               ) : null}
             </View>
+
+            {/* ✅ DEV DEBUG PANEL */}
+            {devDebug ? (
+              <GlassCard strength="subtle" style={styles.devCard}>
+                <View style={styles.devHeaderRow}>
+                  <Text style={styles.devTitle}>DEV: Search Index</Text>
+                  <Text style={styles.devMeta}>
+                    built {devDebug.builtAt} • {formatUkDateOnly(devDebug.from)} → {formatUkDateOnly(devDebug.to)}
+                  </Text>
+                </View>
+
+                <View style={styles.devGrid}>
+                  <View style={styles.devPill}>
+                    <Text style={styles.devPillK}>entries</Text>
+                    <Text style={styles.devPillV}>{devDebug.total}</Text>
+                  </View>
+                  <View style={styles.devPill}>
+                    <Text style={styles.devPillK}>teams</Text>
+                    <Text style={styles.devPillV}>{devDebug.counts.team}</Text>
+                  </View>
+                  <View style={styles.devPill}>
+                    <Text style={styles.devPillK}>cities</Text>
+                    <Text style={styles.devPillV}>{devDebug.counts.city}</Text>
+                  </View>
+                  <View style={styles.devPill}>
+                    <Text style={styles.devPillK}>venues</Text>
+                    <Text style={styles.devPillV}>{devDebug.counts.venue}</Text>
+                  </View>
+                  <View style={styles.devPill}>
+                    <Text style={styles.devPillK}>countries</Text>
+                    <Text style={styles.devPillV}>{devDebug.counts.country}</Text>
+                  </View>
+                  <View style={styles.devPill}>
+                    <Text style={styles.devPillK}>leagues</Text>
+                    <Text style={styles.devPillV}>{devDebug.counts.league}</Text>
+                  </View>
+                </View>
+
+                <View style={{ marginTop: 10 }}>
+                  <Text style={styles.devSmall}>
+                    fixtures scanned: <Text style={styles.devSmallStrong}>{devDebug.fixtureRows}</Text>
+                    {"  "}• unresolved fixture team names:{" "}
+                    <Text style={styles.devSmallStrong}>{devDebug.unresolvedCount}</Text>
+                  </Text>
+
+                  {devDebug.unresolvedTop.length > 0 ? (
+                    <View style={styles.devList}>
+                      {devDebug.unresolvedTop.map((n) => (
+                        <Text key={n} style={styles.devListItem}>
+                          • {n}
+                        </Text>
+                      ))}
+                      {devDebug.unresolvedCount > devDebug.unresolvedTop.length ? (
+                        <Text style={styles.devListMore}>…and {devDebug.unresolvedCount - devDebug.unresolvedTop.length} more</Text>
+                      ) : null}
+                    </View>
+                  ) : (
+                    <Text style={styles.devOk}>No unresolved fixture team names 🎯</Text>
+                  )}
+                </View>
+              </GlassCard>
+            ) : null}
 
             {qNorm.length === 0 ? (
               <Text style={styles.heroHint}>Try “Austria”, “Madrid”, “Arsenal”, or a stadium name.</Text>
@@ -476,9 +572,7 @@ export default function HomeScreen() {
 
                   {!fxLoading && fxError ? <EmptyState title="Fixtures unavailable" message={fxError} /> : null}
 
-                  {!fxLoading && !fxError && fxRows.length === 0 ? (
-                    <Text style={styles.searchEmpty}>No fixtures loaded.</Text>
-                  ) : null}
+                  {!fxLoading && !fxError && fxRows.length === 0 ? <Text style={styles.searchEmpty}>No fixtures loaded.</Text> : null}
 
                   {!fxLoading && !fxError && matchHits.length === 0 ? (
                     <Text style={styles.searchEmpty}>No matches found for that query.</Text>
@@ -812,6 +906,36 @@ const styles = StyleSheet.create({
     backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
   },
   clearBtnText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: theme.fontSize.xs },
+
+  // DEV DEBUG
+  devCard: { marginTop: 10, padding: theme.spacing.md, borderRadius: 16 },
+  devHeaderRow: { gap: 4 },
+  devTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
+  devMeta: { color: theme.colors.textSecondary, fontWeight: "800", fontSize: theme.fontSize.xs },
+
+  devGrid: { marginTop: 10, flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  devPill: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
+    flexDirection: "row",
+    alignItems: "baseline",
+    gap: 6,
+  },
+  devPillK: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: theme.fontSize.xs },
+  devPillV: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
+
+  devSmall: { marginTop: 8, color: theme.colors.textSecondary, fontWeight: "800", fontSize: theme.fontSize.xs, lineHeight: 16 },
+  devSmallStrong: { color: theme.colors.text, fontWeight: "900" },
+
+  devList: { marginTop: 8, gap: 4 },
+  devListItem: { color: theme.colors.textSecondary, fontWeight: "800", fontSize: theme.fontSize.xs },
+  devListMore: { marginTop: 6, color: theme.colors.textSecondary, fontWeight: "900", fontSize: theme.fontSize.xs },
+
+  devOk: { marginTop: 8, color: theme.colors.textSecondary, fontWeight: "900", fontSize: theme.fontSize.xs },
 
   heroHint: {
     marginTop: 10,
