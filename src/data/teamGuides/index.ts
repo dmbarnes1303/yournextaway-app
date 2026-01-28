@@ -1,156 +1,143 @@
+
 // src/data/teamGuides/index.ts
-import { teams, normalizeTeamKey } from "@/src/data/teams";
-import type { TeamGuide } from "@/src/data/teamGuides/types";
+
+import type { TeamGuide } from "./types";
+import { teams } from "@/src/data/teams";
+
+// Import all league guide modules
+import bundesligaGuides from "./bundesliga";
+import laLigaGuides from "./laLiga";
+import ligue1Guides from "./ligue1";
+import premierLeagueGuides from "./premierLeague";
+import serieAGuides from "./serieA";
+
+// Import legacy fallback
+import * as legacy from "./teamGuides";
 
 /**
- * IMPORTANT:
- * Update these imports to match your actual files.
- * Each module should export either:
- * - default: TeamGuide[]
- * OR
- * - named export: teamGuides: TeamGuide[]
+ * Helper to extract TeamGuide[] from various module export formats.
+ * Handles:
+ * - default export: TeamGuide[]
+ * - named export: { teamGuides: TeamGuide[] } or { guides: TeamGuide[] }
+ * - any array value in the module
  */
-
-// ✅ Adjust these 5 lines to your real filenames:
-import premierLeagueGuides from "@/src/data/teamGuides/premierLeague";
-import laLigaGuides from "@/src/data/teamGuides/laLiga";
-import serieAGuides from "@/src/data/teamGuides/serieA";
-import bundesligaGuides from "@/src/data/teamGuides/bundesliga";
-import ligue1Guides from "@/src/data/teamGuides/ligue1";
-
-export type MissingTeamGuide = {
-  expectedGuideKey: string; // the teamKey we expect to exist in guides
-  name: string; // team display name
-  leagueId?: number;
-};
-
-type DebugSnapshot = {
-  guidesCount: number;
-  registryTeamsCount: number;
-  missingCount: number;
-  missing: MissingTeamGuide[];
-  duplicateGuideKeys: string[];
-  guideKeys: string[];
-};
-
-function asGuidesArray(mod: any): TeamGuide[] {
+function extractGuides(mod: any): TeamGuide[] {
   if (!mod) return [];
-  if (Array.isArray(mod)) return mod as TeamGuide[];
-  if (Array.isArray(mod?.teamGuides)) return mod.teamGuides as TeamGuide[];
-  if (Array.isArray(mod?.guides)) return mod.guides as TeamGuide[];
-  return [];
+  if (Array.isArray(mod)) return mod;
+  if (Array.isArray(mod.default)) return mod.default;
+  
+  // Search for any array value in the module
+  const found = Object.values(mod).find(v => Array.isArray(v));
+  return found ? (found as TeamGuide[]) : [];
 }
 
-const allGuides: TeamGuide[] = [
-  ...asGuidesArray(premierLeagueGuides),
-  ...asGuidesArray(laLigaGuides),
-  ...asGuidesArray(serieAGuides),
-  ...asGuidesArray(bundesligaGuides),
-  ...asGuidesArray(ligue1Guides),
-];
+/**
+ * Build sources map from all league files
+ */
+const SOURCES = {
+  bundesliga: extractGuides(bundesligaGuides),
+  laLiga: extractGuides(laLigaGuides),
+  ligue1: extractGuides(ligue1Guides),
+  premierLeague: extractGuides(premierLeagueGuides),
+  serieA: extractGuides(serieAGuides),
+  legacy: extractGuides(legacy),
+};
 
 /**
- * Build registry:
- * - normalize teamKey to avoid subtle mismatches (spacing, diacritics, punctuation)
- * - detect duplicates deterministically
+ * Build the registry: Record<teamKey, TeamGuide>
+ * Track duplicates for debugging
  */
-const guidesByKey: Record<string, TeamGuide> = {};
+const registry: Record<string, TeamGuide> = {};
 const duplicates: Record<string, number> = {};
 
-for (const g of allGuides) {
-  const rawKey = (g as any)?.teamKey ?? "";
-  const k = normalizeTeamKey(String(rawKey));
-
-  if (!k) continue;
-
-  if (guidesByKey[k]) {
-    duplicates[k] = (duplicates[k] ?? 1) + 1;
-    // Keep the first one to avoid “random overwrites”.
-    // If you want “latest wins”, swap this behaviour.
-    continue;
-  }
-
-  // Store a guide with a clean key (so downstream is consistent)
-  guidesByKey[k] = { ...(g as any), teamKey: k } as TeamGuide;
-}
-
-const duplicateGuideKeys = Object.keys(duplicates).sort();
-
-function buildMissing(): MissingTeamGuide[] {
-  const res: MissingTeamGuide[] = [];
-
-  for (const [teamKey, t] of Object.entries(teams)) {
-    const k = normalizeTeamKey(teamKey);
-    if (!guidesByKey[k]) {
-      res.push({
-        expectedGuideKey: k,
-        name: t.name ?? k,
-        leagueId: t.leagueId,
-      });
+// Populate registry from all sources
+for (const [sourceName, guides] of Object.entries(SOURCES)) {
+  for (const guide of guides) {
+    const key = guide?.teamKey;
+    
+    // Skip guides without teamKey
+    if (!key) {
+      console.log(`[teamGuides] Skipping guide without teamKey from ${sourceName}`);
+      continue;
     }
+    
+    // Track duplicates
+    if (registry[key]) {
+      duplicates[key] = (duplicates[key] || 1) + 1;
+      console.log(`[teamGuides] Duplicate teamKey detected: ${key} (source: ${sourceName})`);
+      continue;
+    }
+    
+    // Register the guide
+    registry[key] = guide;
   }
-
-  // Sort: leagueId desc grouping feels noisy; do leagueId asc then name
-  res.sort((a, b) => {
-    const la = typeof a.leagueId === "number" ? a.leagueId : 999999;
-    const lb = typeof b.leagueId === "number" ? b.leagueId : 999999;
-    if (la !== lb) return la - lb;
-    return a.name.localeCompare(b.name);
-  });
-
-  return res;
-}
-
-// --- Public API ---
-
-export function hasTeamGuide(teamKey: string): boolean {
-  const k = normalizeTeamKey(teamKey);
-  return !!guidesByKey[k];
-}
-
-export function getTeamGuide(teamKey: string): TeamGuide | null {
-  const k = normalizeTeamKey(teamKey);
-  return guidesByKey[k] ?? null;
-}
-
-export function getAllTeamGuides(): TeamGuide[] {
-  return Object.values(guidesByKey);
-}
-
-export function getMissingTeamGuides(): MissingTeamGuide[] {
-  return buildMissing();
 }
 
 /**
- * Used by your Home debug panel.
- * Includes duplicates so you can catch “guide exists but not reachable” errors fast.
+ * Identify missing team guides by comparing against teams registry
  */
-export function getTeamGuidesDebugSnapshot(): DebugSnapshot {
-  const missing = buildMissing();
-  const guideKeys = Object.keys(guidesByKey).sort();
+const missing = Object.values(teams)
+  .filter(t => !registry[t.teamKey])
+  .map(t => ({
+    expectedGuideKey: t.teamKey,
+    name: t.name,
+    leagueId: t.leagueId,
+    season: t.season,
+  }));
 
+// -------------------------
+// Public API
+// -------------------------
+
+/**
+ * Check if a team guide exists for the given teamKey
+ */
+export function hasTeamGuide(teamKey: string): boolean {
+  return !!registry[teamKey];
+}
+
+/**
+ * Get a team guide by teamKey
+ * Returns null if not found
+ */
+export function getTeamGuide(teamKey: string): TeamGuide | null {
+  return registry[teamKey] || null;
+}
+
+/**
+ * Type definition for missing team guides
+ */
+export type MissingTeamGuide = {
+  expectedGuideKey: string;
+  name: string;
+  leagueId?: number;
+  season?: number;
+};
+
+/**
+ * Get list of teams that exist in the teams registry but have no guide
+ */
+export function getMissingTeamGuides(): MissingTeamGuide[] {
+  return missing;
+}
+
+/**
+ * Debug snapshot showing registry health and statistics
+ */
+export function getTeamGuidesDebugSnapshot() {
   return {
-    guidesCount: guideKeys.length,
+    guidesCount: Object.keys(registry).length,
     registryTeamsCount: Object.keys(teams).length,
     missingCount: missing.length,
     missing,
-    duplicateGuideKeys,
-    guideKeys,
+    duplicates: Object.entries(duplicates).map(([k, v]) => ({ teamKey: k, count: v })),
+    bySource: Object.fromEntries(
+      Object.entries(SOURCES).map(([k, v]) => [k, v.length])
+    ),
   };
 }
 
 /**
- * Default export for convenience (matches your Home import)
+ * Default export: the complete registry
  */
-const teamGuidesRegistry = {
-  allGuides,
-  guidesByKey,
-  duplicateGuideKeys,
-  hasTeamGuide,
-  getTeamGuide,
-  getAllTeamGuides,
-  getMissingTeamGuides,
-  getTeamGuidesDebugSnapshot,
-};
-
-export default teamGuidesRegistry;
+export default registry;
