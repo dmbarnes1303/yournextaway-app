@@ -36,6 +36,7 @@ import {
 
 import { formatUkDateOnly, formatUkDateTimeMaybe } from "@/src/utils/formatters";
 import { getTopThingsToDoForTrip } from "@/src/data/cityGuides";
+import { buildAffiliateLinks } from "@/src/services/affiliateLinks";
 
 /**
  * Expo Router params can be string | string[] | undefined.
@@ -579,6 +580,15 @@ export default function TripBuildScreen() {
     return getTopThingsToDoForTrip(destinationCity);
   }, [destinationCity]);
 
+  const bookingLinks = useMemo(() => {
+    if (!destinationCity) return null;
+    return buildAffiliateLinks({
+      city: destinationCity,
+      startDate: startIso,
+      endDate: endIso,
+    });
+  }, [destinationCity, startIso, endIso]);
+
   const currentMatchBlock = useMemo(() => {
     if (!isEditing || !editSnapshotRef.current?.fixture) return null;
     const f = editSnapshotRef.current.fixture;
@@ -767,7 +777,7 @@ export default function TripBuildScreen() {
                 </View>
 
                 <ScrollView
-                  style={{ maxHeight: 520 }}
+                  style={{ maxHeight: 560 }}
                   contentContainerStyle={{ paddingBottom: theme.spacing.md }}
                   showsVerticalScrollIndicator={false}
                   keyboardShouldPersistTaps="handled"
@@ -783,6 +793,38 @@ export default function TripBuildScreen() {
                       <Text style={styles.dateValue}>{formatUkDateOnly(endIso)}</Text>
                     </Pressable>
                   </View>
+
+                  {/* BOOK THIS TRIP (monetisation-ready, no affiliates required yet) */}
+                  {bookingLinks ? (
+                    <View style={styles.bookBlock}>
+                      <View style={styles.bookTop}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.bookKicker}>BOOK THIS TRIP</Text>
+                          <Text style={styles.bookTitle}>Hotels, travel, things to do</Text>
+                          <Text style={styles.bookSub}>Quick search links for {destinationCity}. Affiliate IDs plug in later.</Text>
+                        </View>
+                      </View>
+
+                      <View style={styles.bookGrid}>
+                        <Pressable onPress={() => safeOpenUrl(bookingLinks.hotelsUrl)} style={[styles.bookBtn, styles.bookBtnPrimary]}>
+                          <Text style={styles.bookBtnText}>Hotels</Text>
+                        </Pressable>
+                        <Pressable onPress={() => safeOpenUrl(bookingLinks.flightsUrl)} style={styles.bookBtn}>
+                          <Text style={styles.bookBtnText}>Flights</Text>
+                        </Pressable>
+                        <Pressable onPress={() => safeOpenUrl(bookingLinks.trainsUrl)} style={styles.bookBtn}>
+                          <Text style={styles.bookBtnText}>Trains</Text>
+                        </Pressable>
+                        <Pressable onPress={() => safeOpenUrl(bookingLinks.experiencesUrl)} style={styles.bookBtn}>
+                          <Text style={styles.bookBtnText}>Experiences</Text>
+                        </Pressable>
+                      </View>
+
+                      <Pressable onPress={() => safeOpenUrl(bookingLinks.mapsUrl)} style={styles.bookInlineLink}>
+                        <Text style={styles.bookInlineLinkText}>Open Maps search</Text>
+                      </Pressable>
+                    </View>
+                  ) : null}
 
                   {destinationCity ? (
                     <View style={styles.cityBlock}>
@@ -834,6 +876,7 @@ export default function TripBuildScreen() {
                     </View>
                   ) : null}
 
+                  { {/* Date fallback for web/no picker */}
                   {Platform.OS === "web" || !DateTimePicker ? (
                     <View style={{ marginTop: 10, gap: 8 }}>
                       <Text style={styles.fallbackNote}>Date picker not available here. Edit ISO dates (YYYY-MM-DD).</Text>
@@ -1069,6 +1112,47 @@ const styles = StyleSheet.create({
   },
   dateLabel: { color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: "800" },
   dateValue: { marginTop: 6, color: theme.colors.text, fontSize: theme.fontSize.md, fontWeight: "900" },
+
+  // Book block
+  bookBlock: {
+    marginTop: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(0,255,136,0.20)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+    padding: 12,
+  },
+  bookTop: { flexDirection: "row", gap: 10, alignItems: "flex-start" },
+  bookKicker: { color: theme.colors.primary, fontWeight: "900", fontSize: theme.fontSize.xs },
+  bookTitle: { marginTop: 6, color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.md },
+  bookSub: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18 },
+
+  bookGrid: { marginTop: 10, flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  bookBtn: {
+    width: "48%",
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    backgroundColor: "rgba(0,0,0,0.22)",
+    alignItems: "center",
+  },
+  bookBtnPrimary: {
+    borderColor: "rgba(0,255,136,0.45)",
+    backgroundColor: "rgba(0,0,0,0.28)",
+  },
+  bookBtnText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
+
+  bookInlineLink: {
+    marginTop: 10,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+    alignItems: "center",
+  },
+  bookInlineLinkText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: theme.fontSize.sm },
 
   cityBlock: {
     marginTop: 12,
