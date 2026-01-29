@@ -1,7 +1,11 @@
-// src/data/cityGuides/index.ts
 import type { CityGuide, CityTopThing } from "./types";
-import cityGuidesRegistry from "./CityGuides";
 import { normalizeCityKey } from "@/src/utils/city";
+
+import premierLeagueCityGuides from "./premierLeague";
+import laLigaCityGuides from "./laLiga";
+import bundesligaCityGuides from "./bundesliga";
+import serieACityGuides from "./serieA";
+import ligue1CityGuides from "./ligue1";
 
 export type TripTopThingsBundle = {
   cityKey: string;
@@ -12,15 +16,18 @@ export type TripTopThingsBundle = {
 };
 
 /**
- * Public exports:
- * - cityGuides (full registry)
- * - getCityGuide (single lookup)
- * - getTopThingsToDoForTrip (compact “Trip Build” bundle)
+ * Unified registry
  */
-export const cityGuides = cityGuidesRegistry;
+export const cityGuides: Record<string, CityGuide> = {
+  ...premierLeagueCityGuides,
+  ...laLigaCityGuides,
+  ...bundesligaCityGuides,
+  ...serieACityGuides,
+  ...ligue1CityGuides,
+};
 
 /**
- * Find a city guide by any user input (city name, venue city, etc.)
+ * Find a city guide by any user input
  */
 export function getCityGuide(cityInput: string): CityGuide | null {
   const key = normalizeCityKey(cityInput);
@@ -28,8 +35,7 @@ export function getCityGuide(cityInput: string): CityGuide | null {
 }
 
 /**
- * Used in Trip Build panel.
- * Returns a lightweight bundle for "Top things to do" + a TripAdvisor link.
+ * Used in Trip Build panel
  */
 export function getTopThingsToDoForTrip(cityInput: string): TripTopThingsBundle {
   const cityKey = normalizeCityKey(cityInput);
@@ -39,7 +45,6 @@ export function getTopThingsToDoForTrip(cityInput: string): TripTopThingsBundle 
     return {
       cityKey,
       hasGuide: false,
-      tripAdvisorUrl: undefined,
       items: [],
       quickTips: [],
     };
