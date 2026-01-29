@@ -608,7 +608,7 @@ brighton: {
       teamKey: "brighton"
     }
   ]
-}
+},
 
 nottingham: {
   cityId: "nottingham",
@@ -691,7 +691,9 @@ nottingham: {
       teamKey: "nottingham-forest"
     }
   ]
-}
+},
+
+  
 burnley: {
   cityId: "burnley",
   name: "Burnley",
@@ -773,7 +775,7 @@ burnley: {
       teamKey: "burnley"
     }
   ]
-}
+},
 
 wolverhampton: {
   cityId: "wolverhampton",
@@ -860,7 +862,9 @@ wolverhampton: {
      - Fixtures integration:
        Pull upcoming Wolves home fixtures (next 2 months) and surface here
   --------------------------------------------------------------------- */
-},sunderland: {
+},
+  
+  sunderland: {
   cityId: "sunderland",
   name: "Sunderland",
   country: "England",
