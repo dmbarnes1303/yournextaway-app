@@ -1108,6 +1108,8 @@ bournemouth: {
   --------------------------------------------------------------------- */
 },
 
+};
+
 
 
 export default premierLeagueCityGuides;
