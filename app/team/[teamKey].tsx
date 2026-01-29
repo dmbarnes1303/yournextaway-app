@@ -1,13 +1,12 @@
 // app/team/[teamKey].tsx
 import React, { useEffect, useMemo, useState } from "react";
-import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Linking } from "react-native";
+import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 
 import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
 import EmptyState from "@/src/components/EmptyState";
-import PlanTripBlock from "@/src/components/PlanTripBlock";
 
 import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
@@ -16,16 +15,10 @@ import { LEAGUES, getRollingWindowIso } from "@/src/constants/football";
 import { getFixtures, type FixtureListRow } from "@/src/services/apiFootball";
 import { formatUkDateOnly, formatUkDateTimeMaybe } from "@/src/utils/formatters";
 
-import teamGuidesRegistry, {
-  getTeamGuide,
-  hasTeamGuide,
-  getTeamGuidesDebugSnapshot,
-  normalizeTeamKey,
-} from "@/src/data/teamGuides";
+import teamGuidesRegistry, { getTeamGuide, hasTeamGuide, getTeamGuidesDebugSnapshot, normalizeTeamKey } from "@/src/data/teamGuides";
 import { teams as teamsRegistry } from "@/src/data/teams";
 import type { TeamGuide } from "@/src/data/teamGuides/types";
-
-import { getCityKeyForTeam, getCityNameForTeam, getTeamsInSameCityAsTeam } from "@/src/helpers/cityTeamHelpers";
+import { usePro } from "@/src/context/ProContext";
 
 function isDev() {
   // eslint-disable-next-line no-undef
@@ -66,14 +59,10 @@ function teamMatchesRow(row: FixtureListRow, teamNorm: string): boolean {
   const awayNorm = normalizeTeamKey(away);
 
   if (!teamNorm) return false;
+
   if (homeNorm === teamNorm || awayNorm === teamNorm) return true;
 
-  if (
-    homeNorm.includes(teamNorm) ||
-    awayNorm.includes(teamNorm) ||
-    teamNorm.includes(homeNorm) ||
-    teamNorm.includes(awayNorm)
-  ) {
+  if (homeNorm.includes(teamNorm) || awayNorm.includes(teamNorm) || teamNorm.includes(homeNorm) || teamNorm.includes(awayNorm)) {
     return true;
   }
 
@@ -82,22 +71,6 @@ function teamMatchesRow(row: FixtureListRow, teamNorm: string): boolean {
 
 function isNonEmptyString(x: any): x is string {
   return typeof x === "string" && x.trim().length > 0;
-}
-
-function renderBulletsMaybe(bullets: any) {
-  const list = Array.isArray(bullets) ? bullets.filter(isNonEmptyString) : [];
-  if (list.length === 0) return null;
-
-  return (
-    <View style={{ marginTop: 8, gap: 8 }}>
-      {list.map((t: string, i: number) => (
-        <View key={`${i}-${t.slice(0, 10)}`} style={styles.bulletRow}>
-          <Text style={styles.bulletDot}>•</Text>
-          <Text style={styles.bulletText}>{t}</Text>
-        </View>
-      ))}
-    </View>
-  );
 }
 
 function renderParagraphsMaybe(text: any) {
@@ -119,71 +92,23 @@ function renderParagraphsMaybe(text: any) {
   );
 }
 
-function renderGuide(guide: TeamGuide) {
-  const g: any = guide;
-
-  const sections = Array.isArray(g?.sections) ? g.sections : null;
-  if (sections && sections.length > 0) {
-    return (
-      <View style={{ gap: 14, marginTop: 10 }}>
-        {sections.map((s: any, idx: number) => {
-          const title = isNonEmptyString(s?.title) ? s.title : `Section ${idx + 1}`;
-          const body = s?.body;
-          const bullets = s?.bullets;
-          const items = Array.isArray(s?.items) ? s.items : null;
-
-          return (
-            <View key={`${idx}-${title}`} style={styles.guideSection}>
-              <Text style={styles.blockTitle}>{title}</Text>
-              {renderParagraphsMaybe(body)}
-              {renderBulletsMaybe(bullets)}
-
-              {items && items.length > 0 ? (
-                <View style={{ marginTop: 10, gap: 12 }}>
-                  {items.map((it: any, j: number) => {
-                    const itTitle = isNonEmptyString(it?.title) ? it.title : null;
-                    return (
-                      <View key={`${idx}-${j}-${itTitle ?? "item"}`} style={styles.guideItem}>
-                        {itTitle ? <Text style={styles.itemTitle}>{itTitle}</Text> : null}
-                        {renderParagraphsMaybe(it?.body)}
-                        {renderBulletsMaybe(it?.bullets)}
-                      </View>
-                    );
-                  })}
-                </View>
-              ) : null}
-            </View>
-          );
-        })}
-      </View>
-    );
-  }
-
-  const legacyBlocks: Array<{ title: string; text?: string; bullets?: string[] }> = [];
-
-  if (isNonEmptyString(g?.history)) legacyBlocks.push({ title: "Overview", text: String(g.history) });
-  if (isNonEmptyString(g?.stadium)) legacyBlocks.push({ title: "Stadium", text: String(g.stadium) });
-  if (isNonEmptyString(g?.tickets)) legacyBlocks.push({ title: "Tickets", text: String(g.tickets) });
-  if (isNonEmptyString(g?.gettingThere)) legacyBlocks.push({ title: "Getting there", text: String(g.gettingThere) });
-
-  if (legacyBlocks.length === 0) {
-    return (
-      <EmptyState
-        title="Guide available, but not renderable yet"
-        message="This guide exists but its structure doesn’t match the current renderer. Align it to sections[] so it displays properly."
-      />
-    );
-  }
+function renderGuideSections(sections: any[], limit?: number) {
+  const list = Array.isArray(sections) ? sections : [];
+  const sliced = typeof limit === "number" ? list.slice(0, limit) : list;
 
   return (
     <View style={{ gap: 14, marginTop: 10 }}>
-      {legacyBlocks.map((b, i) => (
-        <View key={`${i}-${b.title}`} style={styles.guideSection}>
-          <Text style={styles.blockTitle}>{b.title}</Text>
-          {renderParagraphsMaybe(b.text)}
-          {renderBulletsMaybe(b.bullets)}
-        </View>
-      ))}
+      {sliced.map((s: any, idx: number) => {
+        const title = isNonEmptyString(s?.title) ? s.title : `Section ${idx + 1}`;
+        const body = s?.body;
+
+        return (
+          <View key={`${idx}-${title}`} style={styles.guideSection}>
+            <Text style={styles.blockTitle}>{title}</Text>
+            {renderParagraphsMaybe(body)}
+          </View>
+        );
+      })}
     </View>
   );
 }
@@ -197,41 +122,16 @@ function tokenize(s: string): string[] {
     .filter(Boolean);
 }
 
-function bookingSearchUrl(city: string, country?: string) {
-  const q = [city, country].filter(Boolean).join(", ");
-  return `https://www.booking.com/searchresults.html?ss=${encodeURIComponent(q)}`;
-}
-
-function skyscannerSearchUrl(city: string) {
-  // Generic “flights to” search by query; user can refine origin in-app.
-  return `https://www.skyscanner.net/transport/flights-to/${encodeURIComponent(city.toLowerCase())}/`;
-}
-
-function tripAdvisorSearchUrl(city: string) {
-  return `https://www.tripadvisor.com/Search?q=${encodeURIComponent(city)}`;
-}
-
-async function openUrl(url: string) {
-  try {
-    const ok = await Linking.canOpenURL(url);
-    if (ok) await Linking.openURL(url);
-  } catch {
-    // silent; UI is non-critical
-  }
-}
-
 export default function TeamScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
+  const pro = usePro();
 
   const teamKeyRaw = useMemo(() => coerceString((params as any)?.teamKey) ?? "", [params]);
   const teamKeyNorm = useMemo(() => normalizeTeamKey(teamKeyRaw), [teamKeyRaw]);
-  const teamName = useMemo(() => titleFromKey(teamKeyNorm || teamKeyRaw), [teamKeyNorm, teamKeyRaw]);
 
-  const teamNormForFixtures = useMemo(
-    () => normalizeTeamKey(teamKeyNorm || teamKeyRaw || teamName),
-    [teamKeyNorm, teamKeyRaw, teamName]
-  );
+  const teamName = useMemo(() => titleFromKey(teamKeyNorm || teamKeyRaw), [teamKeyNorm, teamKeyRaw]);
+  const teamNormForFixtures = useMemo(() => normalizeTeamKey(teamKeyNorm || teamKeyRaw || teamName), [teamKeyNorm, teamKeyRaw, teamName]);
 
   const rolling = useMemo(() => getRollingWindowIso(), []);
   const from = useMemo(() => coerceString((params as any)?.from) ?? rolling.from, [params, rolling.from]);
@@ -242,23 +142,12 @@ export default function TeamScreen() {
     return getTeamGuide(teamKeyNorm) ?? getTeamGuide(teamKeyRaw) ?? null;
   }, [teamKeyRaw, teamKeyNorm]);
 
-  const teamRec = useMemo(() => {
-    if (!teamKeyNorm && !teamKeyRaw) return null;
-    return (teamsRegistry as any)?.[teamKeyNorm] ?? (teamsRegistry as any)?.[teamKeyRaw] ?? null;
-  }, [teamKeyNorm, teamKeyRaw]);
-
-  const cityName = useMemo(() => getCityNameForTeam(teamKeyNorm || teamKeyRaw) ?? teamRec?.city ?? null, [teamKeyNorm, teamKeyRaw, teamRec]);
-  const cityKey = useMemo(() => getCityKeyForTeam(teamKeyNorm || teamKeyRaw) ?? null, [teamKeyNorm, teamKeyRaw]);
-  const country = useMemo(() => (teamRec?.country ? String(teamRec.country) : guide?.country ? String(guide.country) : ""), [teamRec, guide]);
-
-  const otherClubsSameCity = useMemo(() => {
-    if (!teamKeyNorm && !teamKeyRaw) return [];
-    return getTeamsInSameCityAsTeam(teamKeyNorm || teamKeyRaw);
-  }, [teamKeyNorm, teamKeyRaw]);
+  const [showLockCard, setShowLockCard] = useState(false);
 
   const devGuideDebug = useMemo(() => {
     if (!isDev()) return null;
 
+    const teamRec = (teamsRegistry as any)?.[teamKeyNorm] ?? (teamsRegistry as any)?.[teamKeyRaw] ?? null;
     const hasNorm = teamKeyNorm ? hasTeamGuide(teamKeyNorm) : false;
     const hasRaw = teamKeyRaw ? hasTeamGuide(teamKeyRaw) : false;
 
@@ -298,7 +187,7 @@ export default function TeamScreen() {
         : null,
       missingSample,
     };
-  }, [teamKeyRaw, teamKeyNorm, guide, teamRec]);
+  }, [teamKeyRaw, teamKeyNorm, guide]);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -329,7 +218,6 @@ export default function TeamScreen() {
         if (cancelled) return;
 
         const merged: FixtureListRow[] = [];
-
         for (const r of results) {
           if (r.status !== "fulfilled") continue;
           const list = Array.isArray(r.value) ? (r.value as FixtureListRow[]) : [];
@@ -362,22 +250,20 @@ export default function TeamScreen() {
     };
   }, [teamNormForFixtures, from, to]);
 
+  function goPaywallInline() {
+    setShowLockCard(true);
+  }
+
+  function goPaywall() {
+    router.push("/paywall");
+  }
+
   function goBuildTrip(fixtureId: string) {
     router.push({ pathname: "/trip/build", params: { fixtureId, from, to } } as any);
   }
 
   function goMatch(fixtureId: string) {
     router.push({ pathname: "/match/[id]", params: { id: fixtureId, from, to } } as any);
-  }
-
-  function openCityGuide() {
-    if (!cityKey) return;
-    router.push({ pathname: "/city/[cityKey]", params: { cityKey } } as any);
-  }
-
-  function openFixturesInCity() {
-    if (!cityKey) return;
-    router.push({ pathname: "/(tabs)/fixtures", params: { cityKey, from, to } } as any);
   }
 
   if (!teamKeyRaw) {
@@ -395,6 +281,9 @@ export default function TeamScreen() {
     );
   }
 
+  const sections = Array.isArray((guide as any)?.sections) ? ((guide as any).sections as any[]) : [];
+  const FREE_SECTION_COUNT = 2;
+
   return (
     <Background imageUrl={getBackground("home")} overlayOpacity={0.88}>
       <Stack.Screen options={{ title: teamName, headerTransparent: true, headerTintColor: theme.colors.text }} />
@@ -403,7 +292,7 @@ export default function TeamScreen() {
         <ScrollView contentContainerStyle={styles.content}>
           {/* HEADER */}
           <GlassCard style={styles.hero} intensity={24}>
-            <Text style={styles.kicker}>TEAM GUIDE</Text>
+            <Text style={styles.kicker}>TEAM</Text>
             <Text style={styles.title}>{teamName}</Text>
 
             <Text style={styles.sub}>
@@ -418,97 +307,16 @@ export default function TeamScreen() {
                 <Text style={styles.pillText}>Browse fixtures</Text>
               </Pressable>
 
-              {cityKey ? (
-                <Pressable onPress={openCityGuide} style={styles.pill}>
-                  <Text style={styles.pillText}>{cityName ? `City: ${cityName}` : "Open city guide"}</Text>
-                </Pressable>
-              ) : null}
-
-              {cityKey ? (
-                <Pressable onPress={openFixturesInCity} style={styles.pill}>
-                  <Text style={styles.pillText}>Matches in this city</Text>
-                </Pressable>
-              ) : null}
+              <Pressable onPress={() => router.push("/(tabs)/home")} style={styles.pill}>
+                <Text style={styles.pillText}>Back to Home</Text>
+              </Pressable>
             </View>
           </GlassCard>
-
-          {/* MONETIZATION */}
-          {cityName ? (
-            <>
-              <PlanTripBlock
-                title={`Plan a weekend in ${cityName}`}
-                cityName={cityName}
-                country={country}
-                onBuildTrip={() =>
-                  router.push({
-                    pathname: "/trip/build",
-                    params: { cityKey: cityKey ?? undefined, from, to },
-                  } as any)
-                }
-              />
-
-              <GlassCard style={styles.card} intensity={22}>
-                <Text style={styles.sectionTitle}>Book your basics</Text>
-                <Text style={styles.sectionSub}>Fast links to hotels, flights and things to do.</Text>
-
-                <View style={styles.actionRow}>
-                  <Pressable
-                    onPress={() => openUrl(bookingSearchUrl(cityName, country || undefined))}
-                    style={[styles.actionBtn, styles.actionBtnPrimary]}
-                  >
-                    <Text style={styles.actionBtnText}>Hotels</Text>
-                  </Pressable>
-
-                  <Pressable onPress={() => openUrl(tripAdvisorSearchUrl(cityName))} style={styles.actionBtn}>
-                    <Text style={styles.actionBtnText}>Things to do</Text>
-                  </Pressable>
-                </View>
-
-                <View style={[styles.actionRow, { marginTop: 10 }]}>
-                  <Pressable onPress={() => openUrl(skyscannerSearchUrl(cityName))} style={styles.actionBtn}>
-                    <Text style={styles.actionBtnText}>Flights</Text>
-                  </Pressable>
-
-                  <Pressable
-                    onPress={() => openUrl(`https://www.google.com/maps/search/${encodeURIComponent(`${cityName} train station`)}`)}
-                    style={styles.actionBtn}
-                  >
-                    <Text style={styles.actionBtnText}>Trains</Text>
-                  </Pressable>
-                </View>
-              </GlassCard>
-            </>
-          ) : null}
-
-          {/* OTHER CLUBS IN SAME CITY */}
-          {otherClubsSameCity.length > 0 ? (
-            <GlassCard style={styles.card} intensity={22}>
-              <Text style={styles.sectionTitle}>Also in {cityName}</Text>
-              <Text style={styles.sectionSub}>Other clubs with guides in the same city.</Text>
-
-              <View style={{ marginTop: 10, gap: 10 }}>
-                {otherClubsSameCity.map((t) => (
-                  <Pressable
-                    key={t.teamKey}
-                    onPress={() => router.push({ pathname: "/team/[teamKey]", params: { teamKey: t.teamKey } } as any)}
-                    style={styles.relatedRow}
-                  >
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.relatedTitle}>{t.name}</Text>
-                      <Text style={styles.relatedMeta}>{[t.city, t.country].filter(Boolean).join(" • ")}</Text>
-                    </View>
-                    <Text style={styles.chev}>›</Text>
-                  </Pressable>
-                ))}
-              </View>
-            </GlassCard>
-          ) : null}
 
           {/* DEV DEBUG */}
           {devGuideDebug ? (
             <GlassCard style={styles.card} intensity={22}>
               <Text style={styles.devTitle}>DEV: Team Guide Resolution</Text>
-
               <View style={{ marginTop: 10, gap: 6 }}>
                 <Text style={styles.devLine}>
                   raw: <Text style={styles.devStrong}>{devGuideDebug.raw || "—"}</Text>
@@ -523,41 +331,15 @@ export default function TeamScreen() {
                 <Text style={styles.devLine}>
                   resolved guideKey: <Text style={styles.devStrong}>{devGuideDebug.guideKeyResolved ?? "—"}</Text>
                 </Text>
-
-                <Text style={styles.devLine}>
-                  teams registry:{" "}
-                  <Text style={styles.devStrong}>
-                    {devGuideDebug.teamsRegistryHas ? "YES" : "NO"}
-                    {devGuideDebug.teamsRegistryName ? ` — ${devGuideDebug.teamsRegistryName}` : ""}
-                    {devGuideDebug.teamsRegistryLeagueId ? ` (league ${devGuideDebug.teamsRegistryLeagueId})` : ""}
-                  </Text>
-                </Text>
-
-                <Text style={styles.devLine}>
-                  guide keys loaded: <Text style={styles.devStrong}>{devGuideDebug.keysTotal}</Text>
-                </Text>
-
-                {Array.isArray(devGuideDebug.candidates) && devGuideDebug.candidates.length > 0 ? (
-                  <View style={{ marginTop: 8 }}>
-                    <Text style={styles.devSmallTitle}>candidate guide keys</Text>
-                    <View style={styles.devList}>
-                      {devGuideDebug.candidates.map((k: string) => (
-                        <Text key={k} style={styles.devItem}>
-                          • {k}
-                        </Text>
-                      ))}
-                    </View>
-                  </View>
-                ) : null}
               </View>
             </GlassCard>
           ) : null}
 
-          {/* GUIDE */}
+          {/* GUIDE (PRO-GATED) */}
           <GlassCard style={styles.card} intensity={22}>
             <View style={styles.sectionHeaderRow}>
               <Text style={styles.sectionTitle}>Team guide</Text>
-              <Text style={styles.sectionBadge}>{guide ? "Available" : "Coming soon"}</Text>
+              <Text style={styles.sectionBadge}>{pro.isPro ? "Pro" : "Preview"}</Text>
             </View>
 
             {!guide ? (
@@ -565,8 +347,34 @@ export default function TeamScreen() {
                 title="Guide coming soon"
                 message="No guide exists for this teamKey (or the key doesn’t match)."
               />
+            ) : pro.isPro ? (
+              renderGuideSections(sections)
             ) : (
-              renderGuide(guide)
+              <>
+                {renderGuideSections(sections, FREE_SECTION_COUNT)}
+
+                {sections.length > FREE_SECTION_COUNT ? (
+                  <Pressable onPress={goPaywallInline} style={styles.inlineCta}>
+                    <Text style={styles.inlineCtaText}>Show full guide</Text>
+                  </Pressable>
+                ) : null}
+
+                {showLockCard ? (
+                  <View style={styles.lockCard}>
+                    <Text style={styles.lockTitle}>Unlock YourNextAway Pro</Text>
+                    <Text style={styles.lockBody}>Full team guide detail is Pro-only. Unlock to see every section.</Text>
+
+                    <View style={{ flexDirection: "row", gap: 10, marginTop: 12 }}>
+                      <Pressable onPress={goPaywall} style={[styles.unlockBtn, styles.unlockBtnPrimary]}>
+                        <Text style={styles.unlockBtnText}>Unlock Pro</Text>
+                      </Pressable>
+                      <Pressable onPress={pro.refresh} style={styles.unlockBtn}>
+                        <Text style={styles.unlockBtnText}>Refresh</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                ) : null}
+              </>
             )}
           </GlassCard>
 
@@ -612,11 +420,7 @@ export default function TeamScreen() {
                         <Text style={styles.rowMeta}>{line2}</Text>
                       </Pressable>
 
-                      <Pressable
-                        disabled={!id}
-                        onPress={() => (id ? goBuildTrip(id) : null)}
-                        style={[styles.planBtn, !id && styles.disabled]}
-                      >
+                      <Pressable disabled={!id} onPress={() => (id ? goBuildTrip(id) : null)} style={[styles.planBtn, !id && styles.disabled]}>
                         <Text style={styles.planBtnText}>Plan Trip</Text>
                       </Pressable>
                     </View>
@@ -664,17 +468,35 @@ const styles = StyleSheet.create({
   sectionTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.md },
   sectionBadge: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: theme.fontSize.xs },
 
-  sectionSub: {
-    marginTop: 6,
-    color: theme.colors.textSecondary,
-    fontSize: theme.fontSize.sm,
-    lineHeight: 18,
-    fontWeight: "800",
-  },
+  sectionSub: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18, fontWeight: "800" },
 
-  // monetization buttons
-  actionRow: { flexDirection: "row", gap: 10, marginTop: 12 },
-  actionBtn: {
+  guideSection: { paddingTop: 8, paddingBottom: 2, borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.08)" },
+  blockTitle: { marginTop: 6, color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
+  body: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 19, fontWeight: "700" },
+
+  inlineCta: {
+    marginTop: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(0,255,136,0.40)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+    alignItems: "center",
+  },
+  inlineCtaText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
+
+  lockCard: {
+    marginTop: 14,
+    padding: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.20)",
+  },
+  lockTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.md },
+  lockBody: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18, fontWeight: "700" },
+
+  unlockBtn: {
     flex: 1,
     paddingVertical: 12,
     borderRadius: 14,
@@ -683,62 +505,14 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.22)",
     alignItems: "center",
   },
-  actionBtnPrimary: {
-    borderColor: "rgba(0,255,136,0.55)",
-    backgroundColor: "rgba(0,0,0,0.30)",
-  },
-  actionBtnText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
-
-  // related clubs
-  relatedRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.18)",
-  },
-  relatedTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.md },
-  relatedMeta: { marginTop: 4, color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: "700" },
-  chev: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: 22, marginLeft: 6 },
-
-  guideSection: {
-    paddingTop: 8,
-    paddingBottom: 2,
-    borderTopWidth: 1,
-    borderTopColor: "rgba(255,255,255,0.08)",
-  },
-  blockTitle: { marginTop: 6, color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
-  body: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 19, fontWeight: "700" },
-
-  guideItem: {
-    padding: 10,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.18)",
-  },
-  itemTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
-
-  bulletRow: { flexDirection: "row", gap: 8, alignItems: "flex-start" },
-  bulletDot: { color: theme.colors.textSecondary, fontWeight: "900", marginTop: 1 },
-  bulletText: { flex: 1, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 19, fontWeight: "700" },
+  unlockBtnPrimary: { borderColor: "rgba(0,255,136,0.55)", backgroundColor: "rgba(0,0,0,0.30)" },
+  unlockBtnText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
 
   center: { paddingVertical: 14, alignItems: "center", gap: 10, marginTop: 10 },
   muted: { fontSize: theme.fontSize.sm, color: theme.colors.textSecondary, fontWeight: "800" },
 
   list: { marginTop: 10, gap: 10 },
-  fixtureRow: {
-    flexDirection: "row",
-    gap: 12,
-    alignItems: "center",
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(255,255,255,0.08)",
-  },
+  fixtureRow: { flexDirection: "row", gap: 12, alignItems: "center", paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.08)" },
   rowTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.md },
   rowMeta: { marginTop: 4, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, fontWeight: "700" },
 
@@ -751,13 +525,10 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.22)",
   },
   planBtnText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.xs },
+
   disabled: { opacity: 0.5 },
 
-  // DEV panel styles
   devTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
   devLine: { color: theme.colors.textSecondary, fontWeight: "800", fontSize: theme.fontSize.xs, lineHeight: 16 },
   devStrong: { color: theme.colors.text, fontWeight: "900" },
-  devSmallTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.xs, marginBottom: 6 },
-  devList: { gap: 4 },
-  devItem: { color: theme.colors.textSecondary, fontWeight: "800", fontSize: theme.fontSize.xs },
 });
