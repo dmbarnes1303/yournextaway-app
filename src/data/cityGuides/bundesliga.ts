@@ -204,7 +204,7 @@ sinsheim: {
     "Regional trains connect Sinsheim to Heidelberg, Mannheim, Stuttgart. Stadium reachable by shuttle or walk from station.",
   accommodation:
     "Small hotels and guesthouses near station or stadium. Heidelberg offers wider choice if basing there.",
-  }
+  },
 
   leipzig: {
   cityId: "leipzig",
