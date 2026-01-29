@@ -54,19 +54,17 @@ export default function RootLayout() {
             <Stack.Screen name="landing" options={{ headerShown: false }} />
             <Stack.Screen name="onboarding" options={{ headerShown: true, headerTitle: "" }} />
 
-            {/* Tabs */}
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-
             {/* Paywall */}
             <Stack.Screen name="paywall" options={{ headerTitle: "YourNextAway Pro" }} />
 
+            {/* Tabs */}
+            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+
             {/* Details */}
             <Stack.Screen name="match/[id]" options={{ headerTitle: "Match" }} />
-
-            {/* IMPORTANT: These must match your real filenames */}
+            <Stack.Screen name="city/[slug]" options={{ headerTitle: "City" }} />
             <Stack.Screen name="city/[cityKey]" options={{ headerTitle: "City" }} />
             <Stack.Screen name="team/[teamKey]" options={{ headerTitle: "Team" }} />
-
             <Stack.Screen name="stadium/[slug]" options={{ headerTitle: "Stadium" }} />
 
             {/* Trips */}
