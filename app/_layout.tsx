@@ -10,6 +10,7 @@ import { StyleSheet } from "react-native";
 
 import { theme } from "@/src/constants/theme";
 import BackButton from "@/src/components/BackButton";
+import { ProProvider } from "@/src/context/ProContext";
 
 // Keep the splash up until fonts are ready.
 SplashScreen.preventAutoHideAsync().catch(() => {
@@ -35,36 +36,44 @@ export default function RootLayout() {
       <StatusBar style="light" />
 
       <GestureHandlerRootView style={styles.flex}>
-        <Stack
-          screenOptions={{
-            headerShown: true,
-            headerTransparent: true,
-            headerTitle: "",
-            headerTintColor: theme.colors.text,
-            headerStyle: { backgroundColor: "transparent" },
-            headerLeft: () => <BackButton fallbackHref="/(tabs)/home" />,
-          }}
-        >
-          {/* Boot redirect file (decides Landing vs Home) */}
-          <Stack.Screen name="index" options={{ headerShown: false }} />
+        <ProProvider>
+          <Stack
+            screenOptions={{
+              headerShown: true,
+              headerTransparent: true,
+              headerTitle: "",
+              headerTintColor: theme.colors.text,
+              headerStyle: { backgroundColor: "transparent" },
+              headerLeft: () => <BackButton fallbackHref="/(tabs)/home" />,
+            }}
+          >
+            {/* Boot redirect file (decides Landing vs Home) */}
+            <Stack.Screen name="index" options={{ headerShown: false }} />
 
-          {/* Top funnel */}
-          <Stack.Screen name="landing" options={{ headerShown: false }} />
-          <Stack.Screen name="onboarding" options={{ headerShown: true, headerTitle: "" }} />
+            {/* Top funnel */}
+            <Stack.Screen name="landing" options={{ headerShown: false }} />
+            <Stack.Screen name="onboarding" options={{ headerShown: true, headerTitle: "" }} />
 
-          {/* Tabs */}
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            {/* Tabs */}
+            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
 
-          {/* Details */}
-          <Stack.Screen name="match/[id]" options={{ headerTitle: "Match" }} />
-          <Stack.Screen name="city/[slug]" options={{ headerTitle: "City" }} />
-          <Stack.Screen name="team/[slug]" options={{ headerTitle: "Team" }} />
-          <Stack.Screen name="stadium/[slug]" options={{ headerTitle: "Stadium" }} />
+            {/* Paywall */}
+            <Stack.Screen name="paywall" options={{ headerTitle: "YourNextAway Pro" }} />
 
-          {/* Trips */}
-          <Stack.Screen name="trip/build" options={{ headerTitle: "Build Trip" }} />
-          <Stack.Screen name="trip/[id]" options={{ headerTitle: "Trip Details" }} />
-        </Stack>
+            {/* Details */}
+            <Stack.Screen name="match/[id]" options={{ headerTitle: "Match" }} />
+
+            {/* IMPORTANT: These must match your real filenames */}
+            <Stack.Screen name="city/[cityKey]" options={{ headerTitle: "City" }} />
+            <Stack.Screen name="team/[teamKey]" options={{ headerTitle: "Team" }} />
+
+            <Stack.Screen name="stadium/[slug]" options={{ headerTitle: "Stadium" }} />
+
+            {/* Trips */}
+            <Stack.Screen name="trip/build" options={{ headerTitle: "Build Trip" }} />
+            <Stack.Screen name="trip/[id]" options={{ headerTitle: "Trip Details" }} />
+          </Stack>
+        </ProProvider>
       </GestureHandlerRootView>
     </>
   );
