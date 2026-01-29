@@ -1155,7 +1155,7 @@ heidenheim: {
   accommodation:
     "Book early for match weekends — supply is smaller. Stay central if you want easy walking and simple logistics, or slightly outside town if you want quieter, more ‘countryside break’ energy. If you’re pairing with Stuttgart/Ulm, consider whether you want to sleep in Heidenheim for matchday convenience or use a bigger city base for broader trip variety.",
 },
-`
+
 
 
   
