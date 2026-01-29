@@ -1,190 +1,233 @@
 // app/paywall.tsx
 import React, { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Stack, useRouter } from "expo-router";
+import Purchases, { type PurchasesPackage } from "react-native-purchases";
 
 import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
 import EmptyState from "@/src/components/EmptyState";
 import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
-
 import { usePro } from "@/src/context/ProContext";
-import {
-  getDefaultOfferingSafe,
-  pickPackage,
-  purchasePackageSafe,
-  restorePurchasesSafe,
-} from "@/src/services/subscriptions";
+
+function priceLabel(pkg: PurchasesPackage): string {
+  const p: any = pkg?.product;
+  const price = p?.priceString ?? "";
+  const title = p?.title ?? "";
+  const isAnnual = /year|annual/i.test(String(title)) || /P1Y/i.test(String(p?.subscriptionPeriod ?? ""));
+  const isMonthly = /month/i.test(String(title)) || /P1M/i.test(String(p?.subscriptionPeriod ?? ""));
+  const cadence = isAnnual ? " / year" : isMonthly ? " / month" : "";
+  return `${price}${cadence}`.trim();
+}
+
+function packageName(pkg: PurchasesPackage): string {
+  const id = String((pkg as any)?.identifier ?? "");
+  const title = String((pkg as any)?.product?.title ?? "");
+  if (/annual|year/i.test(title) || /annual|year/i.test(id)) return "Annual";
+  if (/month/i.test(title) || /monthly|month/i.test(id)) return "Monthly";
+  return "Pro";
+}
 
 export default function PaywallScreen() {
   const router = useRouter();
-  const { isPro, purchasesEnabled, refresh } = usePro();
+  const pro = usePro();
 
   const [loading, setLoading] = useState(true);
-  const [purchasing, setPurchasing] = useState<"monthly" | "annual" | null>(null);
-  const [offering, setOffering] = useState<any>(null);
+  const [purchasing, setPurchasing] = useState(false);
+  const [packages, setPackages] = useState<PurchasesPackage[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  const copy = useMemo(
+    () => ({
+      headline: "Plan a European trip around a fixture in minutes",
+      bullets: [
+        "Full City Guides (complete detail, no fluff)",
+        "Full Team Guides (stadium, logistics, tickets, timing)",
+        "Fast trip building around a specific match",
+        "Priority access to alerts + randomiser features as they ship",
+      ],
+    }),
+    []
+  );
 
   useEffect(() => {
     let mounted = true;
-    (async () => {
+
+    async function run() {
       setLoading(true);
-      const off = await getDefaultOfferingSafe();
-      if (mounted) setOffering(off);
-      setLoading(false);
-    })();
+      setError(null);
+
+      try {
+        const offerings = await Purchases.getOfferings();
+        const current = offerings?.current;
+
+        const pkgs: PurchasesPackage[] = [];
+        const ap = (current as any)?.availablePackages;
+        if (Array.isArray(ap)) pkgs.push(...ap);
+
+        // De-dupe by identifier
+        const seen = new Set<string>();
+        const deduped = pkgs.filter((p) => {
+          const k = String((p as any)?.identifier ?? (p as any)?.product?.identifier ?? Math.random());
+          if (seen.has(k)) return false;
+          seen.add(k);
+          return true;
+        });
+
+        if (!mounted) return;
+        setPackages(deduped);
+      } catch (e: any) {
+        if (!mounted) return;
+        setError(e?.message ?? "Couldn’t load purchase options.");
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    }
+
+    run();
     return () => {
       mounted = false;
     };
   }, []);
 
-  const monthly = useMemo(() => pickPackage(offering, "monthly"), [offering]);
-  const annual = useMemo(() => pickPackage(offering, "annual"), [offering]);
+  async function buy(pkg: PurchasesPackage) {
+    try {
+      setPurchasing(true);
+      await Purchases.purchasePackage(pkg);
+      await pro.refresh();
 
-  async function buy(kind: "monthly" | "annual") {
-    const pkg = kind === "monthly" ? monthly : annual;
-    if (!pkg) return;
+      // If they’re Pro now, bounce them back.
+      if (pro.isPro) {
+        router.back();
+        return;
+      }
 
-    setPurchasing(kind);
-    const info = await purchasePackageSafe(pkg);
-    await refresh();
-    setPurchasing(null);
-
-    if (info) {
-      // If pro unlocked, bounce back
-      router.back();
+      Alert.alert("Purchase complete", "Thanks! If Pro doesn’t unlock immediately, tap Refresh.");
+    } catch (e: any) {
+      const msg = String(e?.message ?? "");
+      // User cancelled
+      if (/cancel/i.test(msg)) return;
+      Alert.alert("Purchase failed", msg || "Couldn’t complete purchase.");
+    } finally {
+      setPurchasing(false);
     }
   }
 
   async function restore() {
-    setPurchasing("annual");
-    await restorePurchasesSafe();
-    await refresh();
-    setPurchasing(null);
+    try {
+      setPurchasing(true);
+      await Purchases.restorePurchases();
+      await pro.refresh();
+
+      if (pro.isPro) {
+        Alert.alert("Restored", "Your Pro access is active.");
+        router.back();
+        return;
+      }
+
+      Alert.alert("No active subscription", "We didn’t find an active Pro subscription for this Apple/Google account.");
+    } catch (e: any) {
+      Alert.alert("Restore failed", String(e?.message ?? "Couldn’t restore purchases."));
+    } finally {
+      setPurchasing(false);
+    }
   }
 
   return (
     <Background imageUrl={getBackground("home")} overlayOpacity={0.88}>
-      <Stack.Screen
-        options={{
-          title: "YourNextAway Pro",
-          headerTransparent: true,
-          headerTintColor: theme.colors.text,
-        }}
-      />
-
+      <Stack.Screen options={{ headerShown: true, title: "YourNextAway Pro", headerTransparent: true, headerTintColor: theme.colors.text }} />
       <SafeAreaView style={styles.safe} edges={["bottom"]}>
         <ScrollView contentContainerStyle={styles.content}>
           <GlassCard style={styles.card} intensity={26}>
             <Text style={styles.kicker}>YOURNEXTAWAY PRO</Text>
-            <Text style={styles.h1}>Plan a European trip around a fixture in minutes</Text>
-
-            <Text style={styles.sub}>
-              Unlock full city & team guides, offline access, and Match Trip Alerts.
-            </Text>
+            <Text style={styles.h1}>{copy.headline}</Text>
 
             <View style={styles.bullets}>
-              {[
-                "Match Trip Alerts (push notifications)",
-                "Fixture change alerts",
-                "Unlimited saved trips",
-                "Full city guides + full team guides",
-                "Offline city + team guides",
-              ].map((x) => (
-                <View key={x} style={styles.bulletRow}>
-                  <Text style={styles.bulletDot}>•</Text>
-                  <Text style={styles.bulletText}>{x}</Text>
-                </View>
+              {copy.bullets.map((b, i) => (
+                <Text key={`${i}-${b.slice(0, 12)}`} style={styles.bullet}>
+                  • {b}
+                </Text>
               ))}
             </View>
-          </GlassCard>
 
-          {!purchasesEnabled ? (
-            <GlassCard style={styles.card} intensity={22}>
-              <EmptyState
-                title="Purchases not enabled yet"
-                message="Add EXPO_PUBLIC_REVENUECAT_IOS_KEY and EXPO_PUBLIC_REVENUECAT_ANDROID_KEY, then create the Pro entitlement + products in RevenueCat."
-              />
-            </GlassCard>
-          ) : null}
+            <View style={styles.statusRow}>
+              <Text style={styles.statusText}>
+                Status:{" "}
+                <Text style={styles.statusStrong}>
+                  {pro.isReady ? (pro.isPro ? "Pro active" : "Free") : "Checking…"}
+                </Text>
+              </Text>
+
+              <Pressable onPress={pro.refresh} style={styles.smallBtn} disabled={!pro.isReady || purchasing}>
+                <Text style={styles.smallBtnText}>Refresh</Text>
+              </Pressable>
+            </View>
+          </GlassCard>
 
           {loading ? (
             <GlassCard style={styles.card} intensity={22}>
               <View style={styles.center}>
                 <ActivityIndicator />
-                <Text style={styles.muted}>Loading plans…</Text>
+                <Text style={styles.muted}>Loading purchase options…</Text>
               </View>
             </GlassCard>
           ) : null}
 
-          {!loading && purchasesEnabled && !monthly && !annual ? (
+          {!loading && error ? (
             <GlassCard style={styles.card} intensity={22}>
-              <EmptyState
-                title="Plans not found"
-                message='Create an offering named "default" with Monthly + Annual packages, mapped to products yna_pro_monthly / yna_pro_annual.'
-              />
+              <EmptyState title="Couldn’t load options" message={error} />
+              <Pressable onPress={restore} style={[styles.actionBtn, { marginTop: 12 }]} disabled={purchasing}>
+                <Text style={styles.actionBtnText}>Restore purchases</Text>
+              </Pressable>
             </GlassCard>
           ) : null}
 
-          {!loading && purchasesEnabled && (monthly || annual) ? (
+          {!loading && !error ? (
             <GlassCard style={styles.card} intensity={22}>
               <Text style={styles.h2}>Choose a plan</Text>
+              <Text style={styles.muted}>Monthly or annual — cancel anytime in App Store / Google Play.</Text>
 
-              <View style={styles.planGrid}>
-                {monthly ? (
-                  <Pressable
-                    onPress={() => buy("monthly")}
-                    disabled={!!purchasing}
-                    style={[styles.plan, styles.planPrimary, purchasing && { opacity: 0.7 }]}
-                  >
-                    <Text style={styles.planTitle}>Monthly</Text>
-                    <Text style={styles.planPrice}>{monthly.product.priceString}</Text>
-                    <Text style={styles.planMeta}>Cancel anytime</Text>
+              {packages.length === 0 ? (
+                <EmptyState
+                  title="No packages found"
+                  message="Create products + an offering in RevenueCat, then try again."
+                />
+              ) : (
+                <View style={styles.pkgList}>
+                  {packages.map((pkg) => (
+                    <Pressable
+                      key={String((pkg as any)?.identifier ?? pkg?.product?.identifier ?? Math.random())}
+                      onPress={() => buy(pkg)}
+                      style={[styles.pkgRow, purchasing && { opacity: 0.6 }]}
+                      disabled={purchasing}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.pkgTitle}>{packageName(pkg)}</Text>
+                        <Text style={styles.pkgSub}>{String((pkg as any)?.product?.description ?? "YourNextAway Pro")}</Text>
+                      </View>
+                      <Text style={styles.pkgPrice}>{priceLabel(pkg)}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              )}
 
-                    <View style={styles.planBtn}>
-                      {purchasing === "monthly" ? <ActivityIndicator /> : <Text style={styles.planBtnText}>Start Pro</Text>}
-                    </View>
-                  </Pressable>
-                ) : null}
+              <View style={styles.rowBtns}>
+                <Pressable onPress={restore} style={styles.actionBtn} disabled={purchasing}>
+                  <Text style={styles.actionBtnText}>Restore purchases</Text>
+                </Pressable>
 
-                {annual ? (
-                  <Pressable
-                    onPress={() => buy("annual")}
-                    disabled={!!purchasing}
-                    style={[styles.plan, purchasing && { opacity: 0.7 }]}
-                  >
-                    <Text style={styles.planTitle}>Annual</Text>
-                    <Text style={styles.planPrice}>{annual.product.priceString}</Text>
-                    <Text style={styles.planMeta}>Best value</Text>
-
-                    <View style={styles.planBtnAlt}>
-                      {purchasing === "annual" ? <ActivityIndicator /> : <Text style={styles.planBtnText}>Go Annual</Text>}
-                    </View>
-                  </Pressable>
-                ) : null}
+                <Pressable onPress={() => router.back()} style={[styles.actionBtn, styles.actionBtnSecondary]} disabled={purchasing}>
+                  <Text style={styles.actionBtnText}>Not now</Text>
+                </Pressable>
               </View>
 
-              <Pressable onPress={restore} disabled={!!purchasing} style={styles.restoreBtn}>
-                <Text style={styles.restoreText}>Restore purchases</Text>
-              </Pressable>
-
-              {isPro ? (
-                <Text style={styles.proNote}>You already have Pro. You can close this screen.</Text>
-              ) : null}
+              <Text style={styles.legal}>
+                By subscribing you agree to the store subscription terms. You can manage or cancel in your device subscription settings.
+              </Text>
             </GlassCard>
           ) : null}
-
-          <GlassCard style={styles.card} intensity={22}>
-            <Text style={styles.smallTitle}>Next</Text>
-            <Text style={styles.muted}>
-              After Pro is wired: we add alert frequency settings (Instant/Daily/Weekly) in Profile, then implement the alert engine.
-            </Text>
-
-            <Pressable onPress={() => router.back()} style={styles.backBtn}>
-              <Text style={styles.backText}>Back</Text>
-            </Pressable>
-          </GlassCard>
         </ScrollView>
       </SafeAreaView>
     </Background>
@@ -194,91 +237,70 @@ export default function PaywallScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1 },
   content: {
-    paddingTop: 90,
+    paddingTop: 100,
     paddingHorizontal: theme.spacing.lg,
     paddingBottom: theme.spacing.xxl,
     gap: theme.spacing.lg,
   },
   card: { padding: theme.spacing.lg },
 
-  kicker: {
-    color: theme.colors.primary,
-    fontSize: theme.fontSize.xs,
-    fontWeight: "900",
-    letterSpacing: 0.6,
+  kicker: { color: theme.colors.primary, fontSize: theme.fontSize.xs, fontWeight: "900", letterSpacing: 0.6 },
+  h1: { marginTop: 8, color: theme.colors.text, fontSize: theme.fontSize.xl, fontWeight: "900", lineHeight: 30 },
+
+  h2: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.lg, marginBottom: 6 },
+
+  bullets: { marginTop: 12, gap: 6 },
+  bullet: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18, fontWeight: "700" },
+
+  muted: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18 },
+
+  center: { paddingVertical: 14, alignItems: "center", gap: 10 },
+
+  statusRow: { marginTop: 12, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
+  statusText: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, fontWeight: "800" },
+  statusStrong: { color: theme.colors.text, fontWeight: "900" },
+
+  smallBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    backgroundColor: "rgba(0,0,0,0.22)",
   },
-  h1: { marginTop: 10, color: theme.colors.text, fontSize: theme.fontSize.xl, fontWeight: "900", lineHeight: 30 },
-  sub: { marginTop: 10, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18 },
+  smallBtnText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.xs },
 
-  bullets: { marginTop: 12, gap: 8 },
-  bulletRow: { flexDirection: "row", gap: 10, alignItems: "flex-start" },
-  bulletDot: { color: theme.colors.primary, fontWeight: "900", marginTop: 1 },
-  bulletText: { flex: 1, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18, fontWeight: "700" },
-
-  h2: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.lg, marginBottom: 10 },
-  smallTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
-
-  planGrid: { flexDirection: "row", gap: 12, marginTop: 6 },
-  plan: {
-    flex: 1,
-    borderRadius: 16,
+  pkgList: { marginTop: 10, gap: 10 },
+  pkgRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
     backgroundColor: "rgba(0,0,0,0.18)",
-    padding: 14,
   },
-  planPrimary: {
-    borderColor: "rgba(0,255,136,0.55)",
-    backgroundColor: "rgba(0,0,0,0.26)",
-  },
-  planTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.md },
-  planPrice: { marginTop: 6, color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.lg },
-  planMeta: { marginTop: 4, color: theme.colors.textSecondary, fontWeight: "700", fontSize: theme.fontSize.xs },
+  pkgTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.md },
+  pkgSub: { marginTop: 4, color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: "700" },
+  pkgPrice: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
 
-  planBtn: {
-    marginTop: 12,
-    paddingVertical: 10,
-    borderRadius: 12,
+  rowBtns: { marginTop: 12, flexDirection: "row", gap: 10 },
+  actionBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: "rgba(0,255,136,0.55)",
+    backgroundColor: "rgba(0,0,0,0.30)",
+    alignItems: "center",
+  },
+  actionBtnSecondary: {
+    borderColor: "rgba(255,255,255,0.12)",
     backgroundColor: "rgba(0,0,0,0.22)",
-    alignItems: "center",
   },
-  planBtnAlt: {
-    marginTop: 12,
-    paddingVertical: 10,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.14)",
-    backgroundColor: "rgba(0,0,0,0.22)",
-    alignItems: "center",
-  },
-  planBtnText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
+  actionBtnText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
 
-  restoreBtn: {
-    marginTop: 14,
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    backgroundColor: "rgba(0,0,0,0.18)",
-    alignItems: "center",
-  },
-  restoreText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
-
-  proNote: { marginTop: 10, color: theme.colors.primary, fontWeight: "900", fontSize: theme.fontSize.sm },
-
-  center: { paddingVertical: 12, alignItems: "center", gap: 10 },
-  muted: { marginTop: 8, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18, fontWeight: "700" },
-
-  backBtn: {
-    marginTop: 12,
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    backgroundColor: "rgba(0,0,0,0.22)",
-    alignItems: "center",
-  },
-  backText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
+  legal: { marginTop: 12, color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, lineHeight: 16 },
 });
