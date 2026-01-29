@@ -20,6 +20,7 @@ import { formatUkDateOnly, formatUkDateTimeMaybe } from "@/src/utils/formatters"
 import { getCityGuide } from "@/src/data/cityGuides";
 import { normalizeCityKey } from "@/src/utils/city";
 import { getTeamsForCity } from "@/src/helpers/cityTeamHelpers";
+import { usePro } from "@/src/context/ProContext";
 
 function fixtureLine(r: FixtureListRow) {
   const home = r?.teams?.home?.name ?? "Home";
@@ -32,8 +33,6 @@ function fixtureLine(r: FixtureListRow) {
     fixtureId: r?.fixture?.id ? String(r.fixture.id) : null,
     title: `${home} vs ${away}`,
     meta: extra ? `${kickoff} • ${extra}` : kickoff,
-    venue,
-    city,
   };
 }
 
@@ -45,7 +44,6 @@ function matchesCity(r: FixtureListRow, cityKey: string, cityName?: string) {
   const name = String(cityName ?? "").toLowerCase();
 
   const hits = (needle: string) => (needle ? vCity.includes(needle) || vName.includes(needle) : false);
-
   return hits(name) || hits(key);
 }
 
@@ -60,12 +58,12 @@ function titleFromKey(key: string) {
 export default function CityGuideScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
+  const pro = usePro();
 
   const cityKeyParamRaw = useMemo(() => coerceString((params as any)?.cityKey) ?? "", [params]);
   const cityKey = useMemo(() => normalizeCityKey(cityKeyParamRaw), [cityKeyParamRaw]);
 
   const guide = useMemo(() => (cityKey ? getCityGuide(cityKey) : null), [cityKey]);
-
   const displayName = guide?.name ?? (cityKey ? titleFromKey(cityKey) : "City");
   const country = guide?.country ?? "";
 
@@ -73,6 +71,8 @@ export default function CityGuideScreen() {
   const [league, setLeague] = useState<LeagueOption>(LEAGUES[0]);
 
   const teamsInCity = useMemo(() => (cityKey ? getTeamsForCity(cityKey) : []), [cityKey]);
+
+  const [showLockCard, setShowLockCard] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -98,7 +98,6 @@ export default function CityGuideScreen() {
 
         if (cancelled) return;
         const all = Array.isArray(res) ? res : [];
-
         const filtered = all.filter((r) => matchesCity(r, cityKey, guide?.name ?? displayName));
         setRows(filtered);
       } catch (e: any) {
@@ -115,7 +114,7 @@ export default function CityGuideScreen() {
     };
   }, [cityKey, league, from, to, guide?.name, displayName]);
 
-  const preview = useMemo(() => rows.slice(0, 12), [rows]);
+  const previewFixtures = useMemo(() => rows.slice(0, 12), [rows]);
 
   function openFixturesFilteredToCity() {
     router.push({
@@ -157,6 +156,14 @@ export default function CityGuideScreen() {
     } as any);
   }
 
+  function openPaywallInline() {
+    setShowLockCard(true);
+  }
+
+  function goPaywall() {
+    router.push("/paywall");
+  }
+
   if (!cityKey) {
     return (
       <Background imageUrl={getBackground("home")} overlayOpacity={0.86}>
@@ -174,6 +181,10 @@ export default function CityGuideScreen() {
       </Background>
     );
   }
+
+  // City guide preview rules (Free)
+  const freeTopThings = guide?.topThings?.slice(0, 3) ?? [];
+  const freeTips = guide?.tips?.slice(0, 3) ?? [];
 
   return (
     <Background imageUrl={getBackground("fixtures")}>
@@ -203,11 +214,11 @@ export default function CityGuideScreen() {
             </View>
           </GlassCard>
 
-          {/* CLUB LINKS */}
+          {/* CLUB LINKS (free to browse, team page will gate the guide) */}
           {teamsInCity.length > 0 ? (
             <GlassCard style={styles.card} intensity={22}>
               <Text style={styles.h2}>Clubs in {displayName}</Text>
-              <Text style={styles.muted}>Tap a club to open the team guide.</Text>
+              <Text style={styles.muted}>Tap a club to open the team page.</Text>
 
               <View style={styles.teamList}>
                 {teamsInCity.map((t) => (
@@ -218,9 +229,7 @@ export default function CityGuideScreen() {
                   >
                     <View style={{ flex: 1 }}>
                       <Text style={styles.teamName}>{t.name}</Text>
-                      <Text style={styles.teamMeta}>
-                        {[t.stadium, t.country].filter(Boolean).join(" • ") || "Team guide"}
-                      </Text>
+                      <Text style={styles.teamMeta}>{[t.stadium, t.country].filter(Boolean).join(" • ") || "Team"}</Text>
                     </View>
                     <Text style={styles.teamChevron}>›</Text>
                   </Pressable>
@@ -229,27 +238,33 @@ export default function CityGuideScreen() {
             </GlassCard>
           ) : null}
 
-          {/* MONETIZATION */}
-          <PlanTripBlock
-            title={`Plan a weekend in ${displayName}`}
-            cityName={displayName}
-            country={country}
-            onBuildTrip={openTripBuildFromCity}
-          />
+          {/* MONETIZATION BLOCK (copy updated) */}
+          <PlanTripBlock title="Plan a European trip around a fixture in minutes" cityName={displayName} country={country} onBuildTrip={openTripBuildFromCity} />
 
-          {/* GUIDE CONTENT */}
+          {/* GUIDE CONTENT (PRO-GATED) */}
           <GlassCard style={styles.card} intensity={22}>
-            <Text style={styles.h2}>Overview</Text>
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.h2}>City guide</Text>
+              <Text style={styles.badge}>{pro.isPro ? "Pro" : "Preview"}</Text>
+            </View>
 
-            {guide ? (
+            {!guide ? (
+              <Text style={styles.muted}>
+                No curated guide yet for this city. Add it in src/data/cityGuides and it will appear here automatically.
+              </Text>
+            ) : (
               <>
+                {/* Overview stays visible (it sells the upgrade better than a blank wall) */}
+                <Text style={styles.h3}>Overview</Text>
                 {guide.overview ? <Text style={styles.body}>{guide.overview}</Text> : <Text style={styles.muted}>—</Text>}
 
+                {/* Top things */}
                 {(guide.topThings?.length ?? 0) > 0 ? (
                   <>
                     <Text style={styles.h3}>Top things to do</Text>
+
                     <View style={styles.bullets}>
-                      {guide.topThings.slice(0, 10).map((x, idx) => (
+                      {(pro.isPro ? guide.topThings.slice(0, 10) : freeTopThings).map((x, idx) => (
                         <View key={`${x.title}-${idx}`} style={styles.bulletRow}>
                           <Text style={styles.bulletIdx}>{idx + 1}.</Text>
                           <View style={{ flex: 1 }}>
@@ -259,47 +274,75 @@ export default function CityGuideScreen() {
                         </View>
                       ))}
                     </View>
+
+                    {!pro.isPro && (guide.topThings?.length ?? 0) > freeTopThings.length ? (
+                      <Pressable onPress={openPaywallInline} style={styles.inlineCta}>
+                        <Text style={styles.inlineCtaText}>Show full guide</Text>
+                      </Pressable>
+                    ) : null}
                   </>
                 ) : null}
 
+                {/* Tips */}
                 {(guide.tips?.length ?? 0) > 0 ? (
                   <>
                     <Text style={styles.h3}>Quick tips</Text>
                     <View style={styles.tipBlock}>
-                      {guide.tips.slice(0, 10).map((t, idx) => (
+                      {(pro.isPro ? guide.tips.slice(0, 10) : freeTips).map((t, idx) => (
                         <Text key={`${t}-${idx}`} style={styles.tipLine}>
                           • {t}
                         </Text>
                       ))}
                     </View>
+
+                    {!pro.isPro && (guide.tips?.length ?? 0) > freeTips.length ? (
+                      <Pressable onPress={openPaywallInline} style={styles.inlineCta}>
+                        <Text style={styles.inlineCtaText}>Unlock the complete guide</Text>
+                      </Pressable>
+                    ) : null}
                   </>
                 ) : null}
 
-                {(guide.food?.length ?? 0) > 0 ? (
+                {/* Pro-only blocks */}
+                {pro.isPro ? (
                   <>
-                    <Text style={styles.h3}>Food & drink</Text>
-                    <Text style={styles.body}>{guide.food.join(" • ")}</Text>
-                  </>
-                ) : null}
+                    {(guide.food?.length ?? 0) > 0 ? (
+                      <>
+                        <Text style={styles.h3}>Food & drink</Text>
+                        <Text style={styles.body}>{guide.food.join(" • ")}</Text>
+                      </>
+                    ) : null}
 
-                {guide.transport ? (
-                  <>
-                    <Text style={styles.h3}>Transport</Text>
-                    <Text style={styles.body}>{guide.transport}</Text>
-                  </>
-                ) : null}
+                    {guide.transport ? (
+                      <>
+                        <Text style={styles.h3}>Transport</Text>
+                        <Text style={styles.body}>{guide.transport}</Text>
+                      </>
+                    ) : null}
 
-                {guide.accommodation ? (
-                  <>
-                    <Text style={styles.h3}>Where to stay</Text>
-                    <Text style={styles.body}>{guide.accommodation}</Text>
+                    {guide.accommodation ? (
+                      <>
+                        <Text style={styles.h3}>Where to stay</Text>
+                        <Text style={styles.body}>{guide.accommodation}</Text>
+                      </>
+                    ) : null}
                   </>
+                ) : showLockCard ? (
+                  <View style={styles.lockCard}>
+                    <Text style={styles.lockTitle}>Unlock YourNextAway Pro</Text>
+                    <Text style={styles.lockBody}>Full city guide detail (food areas, transport specifics, where to stay) is Pro-only.</Text>
+
+                    <View style={{ flexDirection: "row", gap: 10, marginTop: 12 }}>
+                      <Pressable onPress={goPaywall} style={[styles.actionBtn, styles.actionBtnPrimary]}>
+                        <Text style={styles.actionBtnText}>Unlock Pro</Text>
+                      </Pressable>
+                      <Pressable onPress={pro.refresh} style={styles.actionBtn}>
+                        <Text style={styles.actionBtnText}>Refresh</Text>
+                      </Pressable>
+                    </View>
+                  </View>
                 ) : null}
               </>
-            ) : (
-              <Text style={styles.muted}>
-                No curated guide yet for this city. Add it in src/data/cityGuides/cityGuides.ts and it will appear here automatically.
-              </Text>
             )}
           </GlassCard>
 
@@ -333,16 +376,16 @@ export default function CityGuideScreen() {
 
             {!loading && error ? <EmptyState title="Couldn’t load fixtures" message={error} /> : null}
 
-            {!loading && !error && preview.length === 0 ? (
+            {!loading && !error && previewFixtures.length === 0 ? (
               <EmptyState
                 title="No matches found"
                 message="Either there are no fixtures in this window, or the API venue city doesn’t match this city name yet."
               />
             ) : null}
 
-            {!loading && !error && preview.length > 0 ? (
+            {!loading && !error && previewFixtures.length > 0 ? (
               <View style={styles.list}>
-                {preview.map((r, idx) => {
+                {previewFixtures.map((r, idx) => {
                   const f = fixtureLine(r);
                   const key = f.fixtureId ?? `fx-${idx}`;
 
@@ -391,20 +434,9 @@ const styles = StyleSheet.create({
 
   card: { padding: theme.spacing.lg },
 
-  kicker: {
-    color: theme.colors.primary,
-    fontSize: theme.fontSize.xs,
-    fontWeight: "900",
-    letterSpacing: 0.6,
-  },
+  kicker: { color: theme.colors.primary, fontSize: theme.fontSize.xs, fontWeight: "900", letterSpacing: 0.6 },
 
-  h1: {
-    marginTop: 8,
-    color: theme.colors.text,
-    fontSize: theme.fontSize.xl,
-    fontWeight: "900",
-    lineHeight: 30,
-  },
+  h1: { marginTop: 8, color: theme.colors.text, fontSize: theme.fontSize.xl, fontWeight: "900", lineHeight: 30 },
 
   sub: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18 },
 
@@ -419,17 +451,17 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.22)",
     alignItems: "center",
   },
-  actionBtnPrimary: {
-    borderColor: "rgba(0,255,136,0.55)",
-    backgroundColor: "rgba(0,0,0,0.30)",
-  },
+  actionBtnPrimary: { borderColor: "rgba(0,255,136,0.55)", backgroundColor: "rgba(0,0,0,0.30)" },
   actionBtnText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
 
   h2: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.lg },
   h3: { marginTop: 14, color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
 
-  body: { marginTop: 8, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18 },
   muted: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18 },
+  body: { marginTop: 8, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18 },
+
+  sectionHeaderRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "baseline", gap: 12 },
+  badge: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: theme.fontSize.xs },
 
   // teams
   teamList: { marginTop: 10, gap: 10 },
@@ -457,6 +489,28 @@ const styles = StyleSheet.create({
   tipBlock: { marginTop: 8, gap: 6 },
   tipLine: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18 },
 
+  inlineCta: {
+    marginTop: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(0,255,136,0.40)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+    alignItems: "center",
+  },
+  inlineCtaText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
+
+  lockCard: {
+    marginTop: 14,
+    padding: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.20)",
+  },
+  lockTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.md },
+  lockBody: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18, fontWeight: "700" },
+
   blockTop: { gap: 10 },
 
   leagueRow: { gap: 10, paddingRight: theme.spacing.lg, marginTop: 2 },
@@ -475,7 +529,6 @@ const styles = StyleSheet.create({
   center: { paddingVertical: 14, alignItems: "center", gap: 10 },
 
   list: { marginTop: 10, gap: 10 },
-
   rowWrap: {
     flexDirection: "row",
     gap: 10,
