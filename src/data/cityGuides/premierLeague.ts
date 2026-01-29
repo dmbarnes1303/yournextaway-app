@@ -443,79 +443,6 @@ leeds: {
       "Best areas: City Centre, Arena Quarter, or near Leeds Station. Prioritise walkable access to nightlife and rail station rather than suburban hotels.",
   },
 
-leeds: {
-    cityId: "leeds",
-    name: "Leeds",
-    country: "England",
-    tripAdvisorTopThingsUrl: "https://www.tripadvisor.com/Attractions-g186411-Activities-Leeds_West_Yorkshire_England.html",
-    overview:
-      "Leeds is a fast-growing northern city with a strong football identity, busy nightlife, compact centre, and easy access to countryside. It’s big enough to feel energetic but small enough to navigate easily on a weekend break. For football travellers, Leeds offers a traditional English matchday atmosphere combined with a lively city centre before and after games.",
-
-    topThings: [
-      {
-        title: "Leeds United matchday (Elland Road)",
-        tip: "Arrive early and soak up the pubs around Elland Road or in the city centre before heading out. Atmosphere builds well ahead of kick-off.",
-      },
-      {
-        title: "Royal Armouries Museum",
-        tip: "Free entry and genuinely good. Allow 60–90 minutes rather than rushing.",
-      },
-      {
-        title: "Leeds City Museum",
-        tip: "Good short stop if you want culture without committing half a day.",
-      },
-      {
-        title: "Trinity Leeds & Victoria Quarter",
-        tip: "Best central area for shopping, food, and coffee in one walkable zone.",
-      },
-      {
-        title: "Leeds Waterfront / Calls Landing",
-        tip: "Nice riverside walk with bars and restaurants — good early evening spot.",
-      },
-      {
-        title: "Roundhay Park",
-        tip: "Huge park with lakes and views. Taxi or bus out if you’ve got spare time.",
-      },
-      {
-        title: "Kirkstall Abbey",
-        tip: "Impressive ruins and open green space. Combine with a nearby pub stop.",
-      },
-      {
-        title: "Northern Monk Brewery",
-        tip: "Popular local brewery taproom — busy on weekends, but worth it.",
-      },
-      {
-        title: "Corn Exchange",
-        tip: "Architectural highlight with indie shops and cafés.",
-      },
-      {
-        title: "Arcade Club (Kirkstall)",
-        tip: "Massive retro arcade venue if you want something different.",
-      },
-    ],
-
-    tips: [
-      "Leeds city centre is very walkable — you won’t need transport for most activities.",
-      "Matchdays increase hotel demand noticeably — book early.",
-      "Nightlife clusters around Call Lane and Merrion Street.",
-      "Elland Road isn’t central — plan transport in advance.",
-      "Leeds–Manchester trains are frequent if you’re combining cities.",
-    ],
-
-    food: [
-      "Trinity Kitchen (street food)",
-      "Bundobust (Indian street food)",
-      "The Man Behind the Curtain (fine dining)",
-      "Ox Club (steak)",
-      "Kirkgate Market food hall",
-    ],
-
-    transport:
-      "Leeds is a major rail hub with direct connections to London, Manchester, Sheffield, and Newcastle. Buses run frequently across the city. Taxis and ride-hailing are widely available late into the night.",
-
-    accommodation:
-      "Best areas: City Centre, Arena Quarter, or near Leeds Station. Prioritise walkable access to nightlife and rail station rather than suburban hotels.",
-  },
 
 nottingham: {
   cityId: "nottingham",
@@ -598,7 +525,7 @@ nottingham: {
       teamKey: "nottingham-forest"
     }
   ]
-}
+},
 
 brighton: {
   cityId: "brighton",
