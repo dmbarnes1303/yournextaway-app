@@ -1,53 +1,85 @@
 // src/constants/cityTeams.ts
-/**
- * Canonical city <-> teams mapping
- *
- * IMPORTANT:
- * - We do NOT hand-write this list. It is derived from src/data/teams (your V1 team registry).
- * - City keys are normalized via normalizeCityKey() to match routes: /city/[cityKey]
- * - Team keys are the canonical teamKey used by: /team/[teamKey] and teamGuides registry.
- *
- * If a team has no city in the registry, it will not appear here.
- */
-
 import { teams, type TeamRecord } from "@/src/data/teams";
 import { normalizeCityKey } from "@/src/utils/city";
 
+/**
+ * Canonical city <-> teams mapping.
+ *
+ * We generate this from the Team Registry so you don't maintain the same truth twice.
+ * This becomes the single source of truth for cross-linking city guides <-> team guides.
+ *
+ * Keys: normalized city keys used by city routes (e.g. "munich", "manchester").
+ * Values: normalized team keys used by /team/[teamKey] and teamGuides registry.
+ */
+
 export type CityTeamsMap = Record<string, string[]>;
+
+/**
+ * City key overrides for known "non-obvious" cases.
+ * (Example: team.city may be "Newcastle upon Tyne" but your city guide key might be "newcastle".)
+ *
+ * Left side = normalizeCityKey(team.city)
+ * Right side = city guide key you want to use
+ */
+const CITY_KEY_OVERRIDES: Record<string, string> = {
+  // Common variants / simplifications
+  "newcastle-upon-tyne": "newcastle",
+  "monchengladbach": "monchengladbach",
+  "vitoria-gasteiz": "vitoria-gasteiz",
+  "san-sebastian": "san-sebastian",
+
+  // You can add more as you notice mismatches between team.city and city guide keys.
+};
+
+function applyCityOverride(cityKey: string): string {
+  const k = String(cityKey ?? "").trim();
+  if (!k) return "";
+  return CITY_KEY_OVERRIDES[k] ?? k;
+}
 
 function uniqSorted(list: string[]): string[] {
   return Array.from(new Set(list.filter(Boolean))).sort((a, b) => a.localeCompare(b));
 }
 
-function buildCityTeamsMapFromRegistry(registry: Record<string, TeamRecord>): CityTeamsMap {
-  const map: CityTeamsMap = {};
+function buildCityTeamsMapFromRegistry(): CityTeamsMap {
+  const out: Record<string, string[]> = {};
 
-  Object.values(registry).forEach((t) => {
-    const city = String(t?.city ?? "").trim();
-    if (!city) return;
+  Object.values(teams).forEach((t: TeamRecord) => {
+    const rawCity = String(t.city ?? "").trim();
+    if (!rawCity) return;
 
-    const cityKey = normalizeCityKey(city);
+    const base = normalizeCityKey(rawCity);
+    if (!base) return;
+
+    const cityKey = applyCityOverride(base);
     if (!cityKey) return;
 
-    const teamKey = String(t?.teamKey ?? "").trim();
+    const teamKey = String(t.teamKey ?? "").trim();
     if (!teamKey) return;
 
-    if (!map[cityKey]) map[cityKey] = [];
-    map[cityKey].push(teamKey);
+    if (!out[cityKey]) out[cityKey] = [];
+    out[cityKey].push(teamKey);
   });
 
-  // de-dupe + sort for determinism
-  Object.keys(map).forEach((k) => {
-    map[k] = uniqSorted(map[k]);
+  // Final clean + deterministic sort
+  Object.keys(out).forEach((k) => {
+    out[k] = uniqSorted(out[k]);
   });
 
-  return map;
+  return out;
 }
 
 /**
- * This is the canonical derived mapping.
- * It updates automatically as you edit src/data/teams.
+ * Generated mapping (single source of truth).
  */
-export const CITY_TEAMS: CityTeamsMap = buildCityTeamsMapFromRegistry(teams);
+export const CITY_TEAMS: CityTeamsMap = buildCityTeamsMapFromRegistry();
+
+/**
+ * Convenience: teams for cityKey (normalized).
+ */
+export function getTeamKeysForCity(cityInput: string): string[] {
+  const key = applyCityOverride(normalizeCityKey(cityInput));
+  return CITY_TEAMS[key] ?? [];
+}
 
 export default CITY_TEAMS;
