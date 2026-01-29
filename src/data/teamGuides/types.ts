@@ -29,7 +29,15 @@ export type TeamGuide = {
   /** Display name */
   name: string;
 
-  /** Optional metadata */
+  /**
+   * Stable city key used in /city/[cityKey] and city guides registry.
+   * Example: "london", "munich"
+   *
+   * Strongly preferred for cross-linking.
+   */
+  cityKey?: string;
+
+  /** Optional metadata (display-focused) */
   city?: string;
   country?: string;
   stadium?: string;
