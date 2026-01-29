@@ -7,6 +7,8 @@ import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
 import EmptyState from "@/src/components/EmptyState";
+import PlanTripBlock from "@/src/components/PlanTripBlock";
+
 import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
 
@@ -17,6 +19,7 @@ import { formatUkDateOnly, formatUkDateTimeMaybe } from "@/src/utils/formatters"
 
 import { getCityGuide } from "@/src/data/cityGuides";
 import { normalizeCityKey } from "@/src/utils/city";
+import { getTeamsForCity } from "@/src/helpers/cityTeamHelpers";
 
 function fixtureLine(r: FixtureListRow) {
   const home = r?.teams?.home?.name ?? "Home";
@@ -41,13 +44,17 @@ function matchesCity(r: FixtureListRow, cityKey: string, cityName?: string) {
   const key = String(cityKey ?? "").toLowerCase();
   const name = String(cityName ?? "").toLowerCase();
 
-  // Practical v1 approach:
-  // - primary: venue.city contains city name/key
-  // - secondary: venue.name contains city name (some APIs put the city in venue name)
-  const hits = (needle: string) =>
-    needle ? vCity.includes(needle) || vName.includes(needle) : false;
+  const hits = (needle: string) => (needle ? vCity.includes(needle) || vName.includes(needle) : false);
 
   return hits(name) || hits(key);
+}
+
+function titleFromKey(key: string) {
+  return String(key ?? "")
+    .split("-")
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
 }
 
 export default function CityGuideScreen() {
@@ -59,11 +66,13 @@ export default function CityGuideScreen() {
 
   const guide = useMemo(() => (cityKey ? getCityGuide(cityKey) : null), [cityKey]);
 
-  const displayName = guide?.name ?? (cityKey ? cityKey.replace(/-/g, " ") : "City");
+  const displayName = guide?.name ?? (cityKey ? titleFromKey(cityKey) : "City");
   const country = guide?.country ?? "";
 
   const { from, to } = useMemo(() => getRollingWindowIso(), []);
   const [league, setLeague] = useState<LeagueOption>(LEAGUES[0]);
+
+  const teamsInCity = useMemo(() => (cityKey ? getTeamsForCity(cityKey) : []), [cityKey]);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -108,10 +117,11 @@ export default function CityGuideScreen() {
 
   const preview = useMemo(() => rows.slice(0, 12), [rows]);
 
-  function openFixtures() {
+  function openFixturesFilteredToCity() {
     router.push({
       pathname: "/(tabs)/fixtures",
       params: {
+        cityKey: String(cityKey),
         leagueId: String(league.leagueId),
         season: String(league.season),
         from,
@@ -120,10 +130,11 @@ export default function CityGuideScreen() {
     } as any);
   }
 
-  function openTripBuild() {
+  function openTripBuildFromCity() {
     router.push({
       pathname: "/trip/build",
       params: {
+        cityKey: String(cityKey),
         leagueId: String(league.leagueId),
         season: String(league.season),
         from,
@@ -137,6 +148,7 @@ export default function CityGuideScreen() {
       pathname: "/trip/build",
       params: {
         fixtureId,
+        cityKey: String(cityKey),
         leagueId: String(league.leagueId),
         season: String(league.season),
         from,
@@ -181,15 +193,49 @@ export default function CityGuideScreen() {
             </Text>
 
             <View style={styles.actionsRow}>
-              <Pressable onPress={openFixtures} style={[styles.actionBtn, styles.actionBtnPrimary]}>
-                <Text style={styles.actionBtnText}>Open Fixtures</Text>
+              <Pressable onPress={openFixturesFilteredToCity} style={[styles.actionBtn, styles.actionBtnPrimary]}>
+                <Text style={styles.actionBtnText}>Upcoming matches</Text>
               </Pressable>
 
-              <Pressable onPress={openTripBuild} style={styles.actionBtn}>
-                <Text style={styles.actionBtnText}>Build Trip</Text>
+              <Pressable onPress={openTripBuildFromCity} style={styles.actionBtn}>
+                <Text style={styles.actionBtnText}>Build trip</Text>
               </Pressable>
             </View>
           </GlassCard>
+
+          {/* CLUB LINKS */}
+          {teamsInCity.length > 0 ? (
+            <GlassCard style={styles.card} intensity={22}>
+              <Text style={styles.h2}>Clubs in {displayName}</Text>
+              <Text style={styles.muted}>Tap a club to open the team guide.</Text>
+
+              <View style={styles.teamList}>
+                {teamsInCity.map((t) => (
+                  <Pressable
+                    key={t.teamKey}
+                    onPress={() => router.push({ pathname: "/team/[teamKey]", params: { teamKey: t.teamKey } } as any)}
+                    style={styles.teamRow}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.teamName}>{t.name}</Text>
+                      <Text style={styles.teamMeta}>
+                        {[t.stadium, t.country].filter(Boolean).join(" • ") || "Team guide"}
+                      </Text>
+                    </View>
+                    <Text style={styles.teamChevron}>›</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </GlassCard>
+          ) : null}
+
+          {/* MONETIZATION */}
+          <PlanTripBlock
+            title={`Plan a weekend in ${displayName}`}
+            cityName={displayName}
+            country={country}
+            onBuildTrip={openTripBuildFromCity}
+          />
 
           {/* GUIDE CONTENT */}
           <GlassCard style={styles.card} intensity={22}>
@@ -323,8 +369,8 @@ export default function CityGuideScreen() {
               </View>
             ) : null}
 
-            <Pressable onPress={openFixtures} style={styles.linkBtn}>
-              <Text style={styles.linkText}>See all fixtures</Text>
+            <Pressable onPress={openFixturesFilteredToCity} style={styles.linkBtn}>
+              <Text style={styles.linkText}>See all matches in {displayName}</Text>
             </Pressable>
           </GlassCard>
         </ScrollView>
@@ -383,7 +429,24 @@ const styles = StyleSheet.create({
   h3: { marginTop: 14, color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
 
   body: { marginTop: 8, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18 },
-  muted: { marginTop: 8, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18 },
+  muted: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18 },
+
+  // teams
+  teamList: { marginTop: 10, gap: 10 },
+  teamRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+  },
+  teamName: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.md },
+  teamMeta: { marginTop: 4, color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: "700" },
+  teamChevron: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: 22, marginLeft: 6 },
 
   bullets: { marginTop: 10, gap: 10 },
   bulletRow: { flexDirection: "row", gap: 10, alignItems: "flex-start" },
