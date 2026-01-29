@@ -495,7 +495,7 @@ vigo: {
   showUpcomingFixtures: true,
 },
 
-san-sebastian: {
+sanSebastian: {
   cityId: "san-sebastian",
   name: "San Sebastián",
   country: "Spain",
