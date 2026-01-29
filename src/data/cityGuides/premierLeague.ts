@@ -1,6 +1,6 @@
 import type { CityGuide } from "./types";
 
-export const premierLeagueCityGuides: Record<string, CityGuide> = {};
+export const premierLeagueCityGuides: Record<string, CityGuide> = {
 
 london: {
   cityId: "london",
