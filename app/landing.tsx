@@ -37,7 +37,7 @@ export default function Landing() {
     router.push("/onboarding");
   }, [markSeen, router]);
 
-  const title = useMemo(() => "Plan YourNextAway.", []);
+  const title = useMemo(() => "Plan Your Next Away.", []);
   const subtitle = useMemo(
     () => "Matches, Cities, And Trips — One Seamless Plan.\nSet Preferences Anytime.",
     []
