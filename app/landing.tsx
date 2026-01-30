@@ -1,12 +1,12 @@
 // app/landing.tsx
-import React, { useCallback } from "react";
+import React, { useCallback, useMemo } from "react";
 import { View, Text, StyleSheet, Pressable, Image } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Stack, useRouter } from "expo-router";
 
 import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
-import { getBackgroundSource } from "@/src/constants/backgrounds";
+import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
 import storage from "@/src/services/storage";
 
@@ -37,26 +37,27 @@ export default function Landing() {
     router.replace("/(tabs)/home");
   }, [markSeen, router]);
 
+  const tagline = useMemo(() => "Football-First City Breaks Across Europe", []);
+
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
 
-      <Background imageSource={getBackgroundSource("landing")} overlayOpacity={0.60}>
+      <Background imageUrl={getBackground("landing")} overlayOpacity={0.68}>
         <SafeAreaView style={styles.safe} edges={["bottom"]}>
           <View style={styles.screen}>
-            {/* Brand */}
+            {/* Brand block */}
             <View style={styles.brand}>
               <Image source={LOGO} style={styles.logo} resizeMode="contain" />
-              {/* No repeated "YourNextAway" text — logo already says it */}
-              <Text style={styles.subtitle}>Football-First City Breaks, Planned Properly.</Text>
+              <Text style={styles.tagline}>{tagline}</Text>
             </View>
 
-            {/* CTA Card */}
-            <GlassCard style={styles.card} intensity={24}>
-              <Text style={styles.h1}>Start With Fixtures</Text>
+            {/* CTA card */}
+            <GlassCard style={[styles.card, styles.cardLite]} intensity={16}>
+              <Text style={styles.h1}>Plan Your Next Away</Text>
 
               <Text style={styles.body}>
-                Browse fixtures or pick a city first — either way, YourNextAway builds the whole trip in one place.
+                Pick a match or pick a city — we’ll help you build the full trip in one place.
               </Text>
 
               <View style={styles.actions}>
@@ -69,7 +70,7 @@ export default function Landing() {
                 </Pressable>
               </View>
 
-              <Text style={styles.micro}>PLAN • FLY • WATCH • REPEAT</Text>
+              <Text style={styles.motto}>PLAN • FLY • WATCH • REPEAT</Text>
             </GlassCard>
           </View>
         </SafeAreaView>
@@ -85,39 +86,49 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: theme.spacing.lg,
     paddingBottom: theme.spacing.xxl,
-    justifyContent: "flex-end",
-    gap: 12,
+    justifyContent: "space-between",
   },
 
   brand: {
     alignItems: "center",
-    gap: 8,
-    paddingTop: 22,
+    paddingTop: 18,
   },
 
-  logo: { width: 150, height: 150 },
+  // Slightly higher + more “top hero” feel without leaving a dead gap
+  logo: {
+    width: 150,
+    height: 150,
+    marginTop: 6,
+  },
 
-  subtitle: {
-    color: theme.colors.textSecondary,
+  tagline: {
+    marginTop: 14,
+    color: "rgba(255,255,255,0.78)",
     fontWeight: theme.fontWeight.black,
-    fontSize: theme.fontSize.md,
+    fontSize: theme.fontSize.sm,
     textAlign: "center",
-    lineHeight: 20,
     letterSpacing: 0.2,
   },
 
   card: { padding: theme.spacing.lg },
 
+  // More transparent so the background actually shows
+  cardLite: {
+    backgroundColor: "rgba(0,0,0,0.14)",
+    borderColor: "rgba(255,255,255,0.12)",
+    borderWidth: 1,
+  },
+
   h1: {
     color: theme.colors.text,
     fontWeight: theme.fontWeight.black,
-    fontSize: theme.fontSize.lg,
+    fontSize: theme.fontSize.xl,
     letterSpacing: 0.2,
   },
 
   body: {
     marginTop: 10,
-    color: theme.colors.textSecondary,
+    color: "rgba(255,255,255,0.70)",
     fontWeight: theme.fontWeight.bold,
     fontSize: theme.fontSize.md,
     lineHeight: 22,
@@ -139,34 +150,32 @@ const styles = StyleSheet.create({
 
   btnPrimary: {
     borderColor: theme.colors.primary,
-    backgroundColor: "rgba(0,0,0,0.50)",
+    backgroundColor: "rgba(0,0,0,0.22)",
   },
 
   btnPrimaryText: {
     color: theme.colors.text,
     fontWeight: theme.fontWeight.black,
     fontSize: theme.fontSize.md,
-    letterSpacing: 0.2,
   },
 
   btnGhost: {
-    borderColor: theme.colors.border,
-    backgroundColor: "rgba(0,0,0,0.28)",
+    borderColor: "rgba(255,255,255,0.14)",
+    backgroundColor: "rgba(0,0,0,0.12)",
   },
 
   btnGhostText: {
-    color: theme.colors.textSecondary,
+    color: "rgba(255,255,255,0.78)",
     fontWeight: theme.fontWeight.black,
     fontSize: theme.fontSize.md,
-    letterSpacing: 0.2,
   },
 
-  micro: {
-    marginTop: 12,
+  motto: {
+    marginTop: 14,
     textAlign: "center",
-    color: "rgba(0,255,136,0.90)", // brand green
+    color: theme.colors.primary,
     fontSize: theme.fontSize.xs,
     fontWeight: theme.fontWeight.black,
-    letterSpacing: 0.9,
+    letterSpacing: 0.8,
   },
 });
