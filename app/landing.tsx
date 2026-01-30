@@ -44,14 +44,19 @@ export default function Landing() {
       <Background imageSource={getBackgroundSource("landing")} overlayOpacity={0.58}>
         <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
           <View style={styles.screen}>
-            {/* Top-aligned brand block */}
+            {/* Push brand block down into top third */}
+            <View style={styles.brandSpacerTop} />
+
             <View style={styles.brand}>
               <Image source={LOGO} style={styles.logo} resizeMode="contain" />
               <Text style={styles.tagline}>Football-First City Breaks Across Europe</Text>
             </View>
 
-            {/* Bottom-anchored CTA card */}
-            <View style={styles.bottomWrap}>
+            {/* Keep a little breathing room before the CTA section */}
+            <View style={styles.brandSpacerBottom} />
+
+            {/* Bottom-anchored CTA card with consistent bottom margin */}
+            <View style={styles.cardWrap}>
               <GlassCard style={styles.card} intensity={10}>
                 <Text style={styles.h1}>Plan Your Next Away</Text>
 
@@ -85,13 +90,23 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     paddingHorizontal: theme.spacing.lg,
-    paddingTop: 18,
-    paddingBottom: theme.spacing.xl,
+  },
+
+  /**
+   * These two spacers control the overall composition:
+   * - brandSpacerTop pushes the logo down into the top third
+   * - brandSpacerBottom controls the gap between brand and CTA
+   *
+   * If you want the logo LOWER: increase brandSpacerTop (e.g. 1.25)
+   * If you want the logo HIGHER: decrease brandSpacerTop (e.g. 0.95)
+   */
+  brandSpacerTop: {
+    flex: 1.15,
+    minHeight: 18,
   },
 
   brand: {
     alignItems: "center",
-    paddingTop: 6,
   },
 
   logo: {
@@ -109,16 +124,21 @@ const styles = StyleSheet.create({
     letterSpacing: 0.25,
   },
 
-  bottomWrap: {
+  brandSpacerBottom: {
     flex: 1,
+    minHeight: 12,
+  },
+
+  cardWrap: {
     justifyContent: "flex-end",
+    paddingBottom: theme.spacing.xl, // consistent bottom offset (premium spacing)
   },
 
   card: {
-    padding: theme.spacing.md,
+    padding: theme.spacing.lg,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.11)", // slightly more transparent than before
+    backgroundColor: "rgba(0,0,0,0.11)", // transparent enough to reveal the hero
   },
 
   h1: {
