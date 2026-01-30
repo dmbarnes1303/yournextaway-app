@@ -41,7 +41,7 @@ export default function Landing() {
     <>
       <Stack.Screen options={{ headerShown: false }} />
 
-      <Background imageSource={getBackgroundSource("landing")} overlayOpacity={0.72}>
+      <Background imageSource={getBackgroundSource("landing")} overlayOpacity={0.60}>
         <SafeAreaView style={styles.safe} edges={["bottom"]}>
           <View style={styles.screen}>
             {/* Brand */}
