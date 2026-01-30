@@ -1,29 +1,35 @@
 // src/components/Background.tsx
+
 import React from "react";
-import { ImageBackground, StyleSheet, View, type ImageSourcePropType } from "react-native";
+import {
+  ImageBackground,
+  StyleSheet,
+  View,
+  type ImageSourcePropType,
+} from "react-native";
 import { theme } from "@/src/constants/theme";
 
 interface BackgroundProps {
-  // Preferred (supports local require() and remote uri)
   imageSource?: ImageSourcePropType;
-
-  // Legacy (remote URL string)
   imageUrl?: string;
 
   children: React.ReactNode;
 
   /**
-   * Overlay darkness 0..1. Higher = darker.
-   * Default matches your current app look.
+   * 0..1
+   * Higher = darker.
    */
   overlayOpacity?: number;
 }
 
 /**
- * Touch-safe background wrapper:
- * - Background + overlay never steal touches.
- * - Supports local require() backgrounds and remote URLs.
- * - Overlay uses neutral black (no navy cast) to keep glass consistent.
+ * Background
+ *
+ * - Image (optional)
+ * - Neutral black overlay
+ * - Content above
+ *
+ * Background layer never steals touches.
  */
 export default function Background({
   imageSource,
@@ -37,11 +43,15 @@ export default function Background({
     imageSource ?? (imageUrl ? { uri: imageUrl } : null);
 
   return (
-    <View style={styles.container}>
-      {/* Non-interactive background layer */}
+    <View style={styles.root}>
+      {/* Background layer */}
       <View style={StyleSheet.absoluteFill} pointerEvents="none">
         {source ? (
-          <ImageBackground source={source} style={styles.image} resizeMode="cover">
+          <ImageBackground
+            source={source}
+            style={styles.image}
+            resizeMode="cover"
+          >
             <View style={[styles.overlay, { opacity: clamped }]} />
           </ImageBackground>
         ) : (
@@ -49,7 +59,7 @@ export default function Background({
         )}
       </View>
 
-      {/* Interactive content layer */}
+      {/* Foreground */}
       <View style={styles.content} pointerEvents="box-none">
         {children}
       </View>
@@ -58,11 +68,23 @@ export default function Background({
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.colors.background },
-  image: { flex: 1, width: "100%", height: "100%" },
+  root: {
+    flex: 1,
+    backgroundColor: theme.colors.bgBase,
+  },
+
+  image: {
+    flex: 1,
+    width: "100%",
+    height: "100%",
+  },
+
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: theme.colors.overlayBase,
+    backgroundColor: "#000",
   },
-  content: { flex: 1 },
+
+  content: {
+    flex: 1,
+  },
 });
