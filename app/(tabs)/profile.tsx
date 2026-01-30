@@ -13,13 +13,13 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
 import SelectModal, { type SelectOption } from "@/src/components/SelectModal";
 import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
+import storage from "@/src/services/storage";
 
 type RowProps = {
   title: string;
@@ -238,7 +238,7 @@ export default function ProfileScreen() {
     ];
   }, [currency]);
 
-  // Load persisted settings once
+  // Load persisted settings once (best-effort)
   useEffect(() => {
     let mounted = true;
 
@@ -246,13 +246,13 @@ export default function ProfileScreen() {
       try {
         const [storedSetup, storedPlan, storedAirport, storedCurrency, storedLanguage, storedBudget, storedAlerts] =
           await Promise.all([
-            AsyncStorage.getItem(STORAGE_KEYS.setupComplete),
-            AsyncStorage.getItem(STORAGE_KEYS.plan),
-            AsyncStorage.getItem(STORAGE_KEYS.homeAirport),
-            AsyncStorage.getItem(STORAGE_KEYS.currency),
-            AsyncStorage.getItem(STORAGE_KEYS.language),
-            AsyncStorage.getItem(STORAGE_KEYS.budgetTarget),
-            AsyncStorage.getItem(STORAGE_KEYS.alerts),
+            storage.getString(STORAGE_KEYS.setupComplete),
+            storage.getString(STORAGE_KEYS.plan),
+            storage.getString(STORAGE_KEYS.homeAirport),
+            storage.getString(STORAGE_KEYS.currency),
+            storage.getString(STORAGE_KEYS.language),
+            storage.getString(STORAGE_KEYS.budgetTarget),
+            storage.getString(STORAGE_KEYS.alerts),
           ]);
 
         if (!mounted) return;
@@ -284,12 +284,12 @@ export default function ProfileScreen() {
     (async () => {
       try {
         await Promise.all([
-          AsyncStorage.setItem(STORAGE_KEYS.plan, plan),
-          AsyncStorage.setItem(STORAGE_KEYS.homeAirport, homeAirport),
-          AsyncStorage.setItem(STORAGE_KEYS.currency, currency),
-          AsyncStorage.setItem(STORAGE_KEYS.language, language),
-          AsyncStorage.setItem(STORAGE_KEYS.budgetTarget, budgetTarget),
-          AsyncStorage.setItem(STORAGE_KEYS.alerts, alerts),
+          storage.setString(STORAGE_KEYS.plan, plan),
+          storage.setString(STORAGE_KEYS.homeAirport, homeAirport),
+          storage.setString(STORAGE_KEYS.currency, currency),
+          storage.setString(STORAGE_KEYS.language, language),
+          storage.setString(STORAGE_KEYS.budgetTarget, budgetTarget),
+          storage.setString(STORAGE_KEYS.alerts, alerts),
         ]);
       } catch {
         // ignore
@@ -304,7 +304,7 @@ export default function ProfileScreen() {
     }
 
     try {
-      await AsyncStorage.setItem(STORAGE_KEYS.setupComplete, "true");
+      await storage.setString(STORAGE_KEYS.setupComplete, "true");
       setSetupComplete(true);
       router.replace("/(tabs)/home");
     } catch {
@@ -321,14 +321,14 @@ export default function ProfileScreen() {
         style: "destructive",
         onPress: async () => {
           try {
-            await AsyncStorage.multiSet([
-              [STORAGE_KEYS.setupComplete, "false"],
-              [STORAGE_KEYS.plan, "not_set"],
-              [STORAGE_KEYS.homeAirport, "Not Set"],
-              [STORAGE_KEYS.currency, "GBP"],
-              [STORAGE_KEYS.language, "English"],
-              [STORAGE_KEYS.budgetTarget, "Not Set"],
-              [STORAGE_KEYS.alerts, "Off"],
+            await Promise.all([
+              storage.setString(STORAGE_KEYS.setupComplete, "false"),
+              storage.setString(STORAGE_KEYS.plan, "not_set"),
+              storage.setString(STORAGE_KEYS.homeAirport, "Not Set"),
+              storage.setString(STORAGE_KEYS.currency, "GBP"),
+              storage.setString(STORAGE_KEYS.language, "English"),
+              storage.setString(STORAGE_KEYS.budgetTarget, "Not Set"),
+              storage.setString(STORAGE_KEYS.alerts, "Off"),
             ]);
 
             setSetupComplete(false);
@@ -385,7 +385,11 @@ export default function ProfileScreen() {
             </View>
 
             <View style={[styles.logoMask, { width: logoSize, height: logoSize }]} pointerEvents="none">
-              <Image source={LOGO} style={{ width: logoSize, height: logoSize, transform: [{ scale: 1.18 }] }} resizeMode="cover" />
+              <Image
+                source={LOGO}
+                style={{ width: logoSize, height: logoSize, transform: [{ scale: 1.18 }] }}
+                resizeMode="cover"
+              />
             </View>
           </View>
 
@@ -464,10 +468,7 @@ export default function ProfileScreen() {
               last
               rightSlot={
                 <View style={styles.switchWrap}>
-                  <Switch
-                    value={alerts === "On"}
-                    onValueChange={(v) => setAlerts(v ? "On" : "Off")}
-                  />
+                  <Switch value={alerts === "On"} onValueChange={(v) => setAlerts(v ? "On" : "Off")} />
                 </View>
               }
             />
@@ -540,7 +541,7 @@ export default function ProfileScreen() {
         <SelectModal
           visible={activePicker === "budget"}
           title="Budget"
-          subtitle={alerts === "On" ? "Alerts are on" : "Alerts are off"}
+          subtitle={budgetSummary}
           options={budgetOptions}
           selectedValue={budgetTarget}
           onClose={closePicker}
