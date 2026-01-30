@@ -94,7 +94,7 @@ const styles = StyleSheet.create({
   // Adjust this to move logo up/down.
   // Higher number = brand sits lower.
   brandSpacerTop: {
-    flex: 1.6,
+    flex: 1,
     minHeight: 44,
   },
 
