@@ -121,7 +121,7 @@ const styles = StyleSheet.create({
   },
 
   brandSpacerBottom: {
-    flex: 0.45,
+    flex: 1,
     minHeight: 4,
   },
 
