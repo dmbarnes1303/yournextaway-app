@@ -98,13 +98,14 @@ const styles = StyleSheet.create({
   logo: { width: 128, height: 128 },
 
   tagline: {
-    marginTop: 12,
-    color: "rgba(255,255,255,0.80)",
-    fontWeight: theme.fontWeight.black,
-    fontSize: theme.fontSize.sm,
-    textAlign: "center",
-    letterSpacing: 0.2,
-  },
+  marginTop: 8,
+  maxWidth: 320,
+  color: "rgba(255,255,255,0.80)",
+  fontWeight: theme.fontWeight.black,
+  fontSize: theme.fontSize.sm,
+  textAlign: "center",
+  letterSpacing: 0.2,
+},
 
   // This is the “gap controller”
   // Increase/decrease this ONE number to tune the layout.
