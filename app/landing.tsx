@@ -1,6 +1,6 @@
 // app/landing.tsx
-import React, { useCallback, useMemo, useState } from "react";
-import { View, Text, StyleSheet, Pressable, Image, Alert } from "react-native";
+import React, { useCallback, useMemo } from "react";
+import { View, Text, StyleSheet, Pressable, Image } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Stack, useRouter } from "expo-router";
 
@@ -18,7 +18,6 @@ const STORAGE_KEYS = {
 
 export default function Landing() {
   const router = useRouter();
-  const [resetting, setResetting] = useState(false);
 
   const markSeen = useCallback(async () => {
     try {
@@ -35,73 +34,40 @@ export default function Landing() {
 
   const handleSetPreferences = useCallback(async () => {
     await markSeen();
-    router.push("/(tabs)/profile");
+    router.push("/onboarding");
   }, [markSeen, router]);
 
-  const handleDevResetLanding = useCallback(async () => {
-    if (resetting) return;
-
-    setResetting(true);
-    try {
-      await storage.setString(STORAGE_KEYS.seenLanding, "false");
-      router.replace("/");
-    } catch {
-      Alert.alert("Reset failed", "Couldn’t reset the landing flag.");
-    } finally {
-      setResetting(false);
-    }
-  }, [resetting, router]);
-
-  const devResetLabel = useMemo(() => {
-    if (!__DEV__) return "";
-    return resetting ? "Resetting…" : "Dev: Reset Landing";
-  }, [resetting]);
+  const title = useMemo(() => "Start With A Match. Build The Trip.", []);
+  const subtitle = useMemo(
+    () => "Matches, Cities, And Trips — One Seamless Plan.\nSet Preferences Anytime.",
+    []
+  );
 
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
 
-      <Background imageUrl={getBackground("landing")} overlayOpacity={0.74}>
-        <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
+      <Background imageUrl={getBackground("landing")} overlayOpacity={0.72}>
+        <SafeAreaView style={styles.safe} edges={["bottom"]}>
           <View style={styles.screen}>
-            {/* Dev-only utility */}
-            {__DEV__ ? (
-              <View style={styles.devRow}>
-                <Pressable
-                  onPress={handleDevResetLanding}
-                  disabled={resetting}
-                  style={[styles.devBtn, resetting && styles.devBtnDisabled]}
-                  hitSlop={10}
-                >
-                  <Text style={styles.devBtnText}>{devResetLabel}</Text>
-                </Pressable>
-              </View>
-            ) : null}
-
-            {/* Brand (higher) */}
+            {/* Brand */}
             <View style={styles.brand}>
               <Image source={LOGO} style={styles.logo} resizeMode="contain" />
-              <Text style={styles.subtitle}>Football-first city breaks, planned properly.</Text>
+              <Text style={styles.tagline}>Football-First City Breaks, Planned Properly.</Text>
             </View>
 
-            {/* Spacer keeps the card anchored low while logo sits higher */}
-            <View style={{ flex: 1 }} />
-
-            <GlassCard style={styles.card} intensity={26}>
-              <Text style={styles.h1}>Start with fixtures</Text>
-
-              <Text style={styles.body}>
-                Matches, cities, and trips — one seamless plan.{"\n"}
-                Set preferences anytime.
-              </Text>
+            {/* Card */}
+            <GlassCard style={styles.card} intensity={24}>
+              <Text style={styles.h1}>{title}</Text>
+              <Text style={styles.body}>{subtitle}</Text>
 
               <View style={styles.actions}>
-                <Pressable onPress={handleBrowseFixtures} style={[styles.btnPrimary]}>
-                  <Text style={styles.btnPrimaryText}>Browse fixtures</Text>
+                <Pressable onPress={handleBrowseFixtures} style={[styles.btn, styles.btnPrimary]}>
+                  <Text style={styles.btnPrimaryText}>Browse Fixtures</Text>
                 </Pressable>
 
-                <Pressable onPress={handleSetPreferences} hitSlop={8} style={styles.btnTextWrap}>
-                  <Text style={styles.btnText}>Set preferences</Text>
+                <Pressable onPress={handleSetPreferences} style={[styles.btn, styles.btnGhost]}>
+                  <Text style={styles.btnGhostText}>Set Preferences</Text>
                 </Pressable>
               </View>
 
@@ -120,59 +86,35 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     paddingHorizontal: theme.spacing.lg,
-    paddingBottom: theme.spacing.xxl,
-  },
-
-  devRow: {
-    alignItems: "flex-end",
-    marginTop: 10,
-  },
-
-  devBtn: {
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.16)",
-    backgroundColor: "rgba(0,0,0,0.30)",
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-  },
-
-  devBtnDisabled: { opacity: 0.6 },
-
-  devBtnText: {
-    color: theme.colors.textSecondary,
-    fontWeight: theme.fontWeight.black,
-    fontSize: theme.fontSize.xs,
-    letterSpacing: 0.2,
+    paddingTop: 18,
+    paddingBottom: 18,
+    justifyContent: "space-between",
   },
 
   brand: {
     alignItems: "center",
-    paddingTop: 18,
+    paddingTop: 6,
     gap: 10,
   },
 
   logo: { width: 150, height: 150 },
 
-  subtitle: {
+  tagline: {
     color: theme.colors.textSecondary,
-    fontWeight: theme.fontWeight.bold,
+    fontWeight: theme.fontWeight.black,
     fontSize: theme.fontSize.md,
     textAlign: "center",
     lineHeight: 20,
-    opacity: 0.92,
+    opacity: 0.95,
   },
 
-  card: {
-    padding: theme.spacing.lg,
-    marginTop: 16,
-  },
+  card: { padding: theme.spacing.lg },
 
   h1: {
     color: theme.colors.text,
     fontWeight: theme.fontWeight.black,
     fontSize: theme.fontSize.lg,
-    letterSpacing: 0.2,
+    lineHeight: 26,
   },
 
   body: {
@@ -188,42 +130,42 @@ const styles = StyleSheet.create({
     gap: 10,
   },
 
-  btnPrimary: {
+  btn: {
     borderRadius: 14,
     paddingVertical: 14,
     alignItems: "center",
     borderWidth: 1,
+  },
+
+  btnPrimary: {
     borderColor: theme.colors.primary,
-    backgroundColor: "rgba(0,0,0,0.55)",
+    backgroundColor: "rgba(0,0,0,0.50)",
   },
 
   btnPrimaryText: {
     color: theme.colors.text,
     fontWeight: theme.fontWeight.black,
     fontSize: theme.fontSize.md,
-    letterSpacing: 0.2,
   },
 
-  btnTextWrap: {
-    alignItems: "center",
-    paddingVertical: 10,
+  btnGhost: {
+    borderColor: theme.colors.border,
+    backgroundColor: "rgba(0,0,0,0.22)",
   },
 
-  btnText: {
+  btnGhostText: {
     color: theme.colors.textSecondary,
     fontWeight: theme.fontWeight.black,
     fontSize: theme.fontSize.md,
-    letterSpacing: 0.2,
-    opacity: 0.9,
   },
 
   micro: {
-    marginTop: 12,
+    marginTop: 14,
     textAlign: "center",
     color: theme.colors.primary,
     fontSize: theme.fontSize.xs,
     fontWeight: theme.fontWeight.black,
-    letterSpacing: 0.9,
-    opacity: 0.95,
+    letterSpacing: 0.8,
+    opacity: 0.9,
   },
 });
