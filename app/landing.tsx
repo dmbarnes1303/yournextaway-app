@@ -3,12 +3,12 @@ import React, { useCallback, useMemo, useState } from "react";
 import { View, Text, StyleSheet, Pressable, Image, Alert } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Stack, useRouter } from "expo-router";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
 import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
+import storage from "@/src/services/storage";
 
 const LOGO = require("@/src/yna-logo.png");
 
@@ -20,30 +20,31 @@ export default function Landing() {
   const router = useRouter();
   const [resetting, setResetting] = useState(false);
 
-  const handleGetStarted = useCallback(async () => {
+  const markSeen = useCallback(async () => {
+    // Best-effort; storage never hard-throws, but keep try/catch anyway.
     try {
-      await AsyncStorage.setItem(STORAGE_KEYS.seenLanding, "true");
+      await storage.setString(STORAGE_KEYS.seenLanding, "true");
     } catch {
       // ignore
     }
+  }, []);
+
+  const handleGetStarted = useCallback(async () => {
+    await markSeen();
     router.push("/onboarding");
-  }, [router]);
+  }, [markSeen, router]);
 
   const handleExploreFirst = useCallback(async () => {
-    try {
-      await AsyncStorage.setItem(STORAGE_KEYS.seenLanding, "true");
-    } catch {
-      // ignore
-    }
+    await markSeen();
     router.replace("/(tabs)/home");
-  }, [router]);
+  }, [markSeen, router]);
 
   const handleDevResetLanding = useCallback(async () => {
     if (resetting) return;
 
     setResetting(true);
     try {
-      await AsyncStorage.setItem(STORAGE_KEYS.seenLanding, "false");
+      await storage.setString(STORAGE_KEYS.seenLanding, "false");
 
       // Go back to boot route so app/index.tsx re-runs routing logic
       router.replace("/");
