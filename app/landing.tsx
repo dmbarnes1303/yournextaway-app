@@ -17,7 +17,7 @@ const STORAGE_KEYS = {
 };
 
 export default function Landing() {
-  const routerrouter = useRouter();
+  const router = useRouter();
 
   const markSeen = useCallback(async () => {
     try {
@@ -29,8 +29,6 @@ export default function Landing() {
 
   const handleGetStarted = useCallback(async () => {
     await markSeen();
-    R
-    const router = useRouter();
     router.push("/onboarding");
   }, [markSeen, router]);
 
@@ -46,21 +44,19 @@ export default function Landing() {
       <Background imageSource={getBackgroundSource("landing")} overlayOpacity={0.58}>
         <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
           <View style={styles.screen}>
-            {/* Top spacer pushes brand into top third */}
+            {/* Push brand into top third (premium) */}
             <View style={styles.brandSpacerTop} />
 
-            {/* Brand */}
             <View style={styles.brand}>
               <Image source={LOGO} style={styles.logo} resizeMode="contain" />
               <Text style={styles.tagline}>Football-First City Breaks Across Europe</Text>
             </View>
 
-            {/* Middle spacer keeps card positioning stable */}
             <View style={styles.brandSpacerBottom} />
 
-            {/* CTA */}
+            {/* CTA Card */}
             <View style={styles.cardWrap}>
-              <GlassCard style={styles.card} intensity={8}>
+              <GlassCard style={styles.card} intensity={6}>
                 <Text style={styles.h1}>Plan Your Next Away</Text>
 
                 <Text style={styles.body}>
@@ -95,10 +91,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.lg,
   },
 
-  // ↓ push logo down slightly more than before (premium)
+  // Adjust this to move logo up/down.
+  // Higher number = brand sits lower.
   brandSpacerTop: {
-    flex: 1.35,
-    minHeight: 24,
+    flex: 1.45,
+    minHeight: 28,
   },
 
   brand: {
@@ -110,7 +107,6 @@ const styles = StyleSheet.create({
     height: 130,
   },
 
-  // Improve legibility without adding a "box"
   tagline: {
     marginTop: 10,
     maxWidth: 330,
@@ -129,18 +125,18 @@ const styles = StyleSheet.create({
     minHeight: 12,
   },
 
-  // bring CTA card up slightly from bottom for balance
+  // Brings the card up slightly (not glued to bottom)
   cardWrap: {
     justifyContent: "flex-end",
     paddingBottom: theme.spacing.lg,
   },
 
-  // More transparent + less visible border (stop drawing a rectangle)
+  // More transparent card + faint border so background shows through
   card: {
     padding: theme.spacing.lg,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
-    backgroundColor: "rgba(0,0,0,0.085)",
+    borderColor: "rgba(255,255,255,0.05)",
+    backgroundColor: "rgba(0,0,0,0.07)",
   },
 
   h1: {
@@ -175,7 +171,7 @@ const styles = StyleSheet.create({
 
   btnPrimary: {
     borderColor: theme.colors.primary,
-    backgroundColor: "rgba(0,0,0,0.14)",
+    backgroundColor: "rgba(0,0,0,0.12)",
   },
 
   btnPrimaryText: {
@@ -186,7 +182,7 @@ const styles = StyleSheet.create({
 
   btnGhost: {
     borderColor: "rgba(255,255,255,0.08)",
-    backgroundColor: "rgba(0,0,0,0.05)",
+    backgroundColor: "rgba(0,0,0,0.04)",
   },
 
   btnGhostText: {
