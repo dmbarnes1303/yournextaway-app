@@ -10,6 +10,7 @@ import storage from "@/src/services/storage";
  * - Simple subscribe/getState API used across Home/Trips/Trip Build/Trip Hub
  * - Guard against concurrent loads / race conditions
  * - Normalize persisted shape (avoid empty strings/arrays unless meaningful)
+ * - CRITICAL: never overwrite storage before hydration completes
  */
 
 export type TripLinkGroup = "stay" | "travel" | "tickets" | "links";
@@ -36,23 +37,17 @@ export type TripItineraryItem = {
 export type Trip = {
   id: string;
 
-  // Primary destination identity (can be a city name for now)
   cityId?: string;
-
-  // Optional future-proofing
   citySlug?: string;
 
-  // Match/fixture ids (API-Football fixture id strings)
   matchIds?: string[];
 
   // ISO date-only: YYYY-MM-DD
   startDate?: string;
   endDate?: string;
 
-  // Free text notes
   notes?: string;
 
-  // Quick-access links + itinerary
   links?: TripLinkItem[];
   itinerary?: TripItineraryItem[];
 
@@ -110,7 +105,7 @@ function isTimeHHMM(s: unknown): s is string {
 }
 
 function normUrl(x: unknown): string {
-  // Keep permissive; UI and safeOpenUrl handle scheme.
+  // Keep permissive; UI/safeOpenUrl can handle missing scheme.
   return normString(x);
 }
 
@@ -118,43 +113,6 @@ function normLinkGroup(x: unknown): TripLinkGroup {
   const v = normString(x).toLowerCase();
   if (v === "stay" || v === "travel" || v === "tickets" || v === "links") return v;
   return "links";
-}
-
-function compactTrip(t: Trip): Trip {
-  // Remove empty fields to keep persistence clean.
-  const out: Trip = { ...t };
-
-  if (!normString(out.cityId)) delete out.cityId;
-  if (!normString(out.citySlug)) delete out.citySlug;
-
-  if (!isIsoDateOnly(out.startDate)) delete out.startDate;
-  if (!isIsoDateOnly(out.endDate)) delete out.endDate;
-
-  if (!normString(out.notes)) delete out.notes;
-
-  if (Array.isArray(out.matchIds)) {
-    const ids = out.matchIds.map((x) => normString(x)).filter(Boolean);
-    if (ids.length) out.matchIds = ids;
-    else delete out.matchIds;
-  }
-
-  if (Array.isArray(out.links)) {
-    const links = out.links
-      .map((x) => normalizeLinkItem(x))
-      .filter(Boolean) as TripLinkItem[];
-    if (links.length) out.links = links;
-    else delete out.links;
-  }
-
-  if (Array.isArray(out.itinerary)) {
-    const it = out.itinerary
-      .map((x) => normalizeItineraryItem(x))
-      .filter(Boolean) as TripItineraryItem[];
-    if (it.length) out.itinerary = it;
-    else delete out.itinerary;
-  }
-
-  return out;
 }
 
 function normalizeLinkItem(input: any): TripLinkItem | null {
@@ -198,6 +156,38 @@ function normalizeItineraryItem(input: any): TripItineraryItem | null {
   };
 }
 
+function compactTrip(t: Trip): Trip {
+  const out: Trip = { ...t };
+
+  if (!normString(out.cityId)) delete out.cityId;
+  if (!normString(out.citySlug)) delete out.citySlug;
+
+  if (!isIsoDateOnly(out.startDate)) delete out.startDate;
+  if (!isIsoDateOnly(out.endDate)) delete out.endDate;
+
+  if (!normString(out.notes)) delete out.notes;
+
+  if (Array.isArray(out.matchIds)) {
+    const ids = out.matchIds.map((x) => normString(x)).filter(Boolean);
+    if (ids.length) out.matchIds = ids;
+    else delete out.matchIds;
+  }
+
+  if (Array.isArray(out.links)) {
+    const links = out.links.map((x) => normalizeLinkItem(x)).filter(Boolean) as TripLinkItem[];
+    if (links.length) out.links = links;
+    else delete out.links;
+  }
+
+  if (Array.isArray(out.itinerary)) {
+    const it = out.itinerary.map((x) => normalizeItineraryItem(x)).filter(Boolean) as TripItineraryItem[];
+    if (it.length) out.itinerary = it;
+    else delete out.itinerary;
+  }
+
+  return out;
+}
+
 function normalizeTrip(input: any): Trip | null {
   if (!input || typeof input !== "object") return null;
 
@@ -239,7 +229,7 @@ function normalizeTripsList(input: any): Trip[] {
     if (t) out.push(t);
   }
 
-  // Keep newest first (use updatedAt/createdAt fallback)
+  // Newest first
   out.sort((a, b) => {
     const at = a.updatedAt ?? a.createdAt ?? 0;
     const bt = b.updatedAt ?? b.createdAt ?? 0;
@@ -249,21 +239,31 @@ function normalizeTripsList(input: any): Trip[] {
   return out;
 }
 
-async function persist(trips: Trip[]): Promise<void> {
-  // Best-effort, never throw out of store methods.
-  try {
-    const compacted = trips.map(compactTrip);
-    await storage.setJSON(STORAGE_KEY_V2, compacted);
-  } catch {
-    // ignore
-  }
-}
+/**
+ * IMPORTANT: Only persist after hydration.
+ * If you persist before loadTrips resolves, you can overwrite real stored trips with an empty in-memory array.
+ */
+let hydrated = false;
 
 /** Guards concurrent loads */
 let loadPromise: Promise<void> | null = null;
 
+/** Best-effort persist. Never throws. */
+async function persist(trips: Trip[]): Promise<void> {
+  if (!hydrated) return;
+  try {
+    const compacted = trips.map(compactTrip);
+    await storage.setJSON(STORAGE_KEY_V2, compacted);
+  } catch {
+    // ignore (best-effort)
+  }
+}
+
 async function loadTrips(): Promise<void> {
-  if (state.loaded) return;
+  if (state.loaded) {
+    hydrated = true;
+    return;
+  }
 
   if (loadPromise) return loadPromise;
 
@@ -279,14 +279,17 @@ async function loadTrips(): Promise<void> {
         const legacyTrips = normalizeTripsList(savedV1);
         if (legacyTrips.length) {
           trips = legacyTrips;
-          // Migrate forward
+          // Mark hydrated BEFORE migrate persist so we don't block the write.
+          hydrated = true;
           await persist(trips);
         }
       }
 
       setState({ trips, loaded: true });
+      hydrated = true;
     } catch {
       setState({ trips: [], loaded: true });
+      hydrated = true;
     } finally {
       loadPromise = null;
     }
@@ -295,7 +298,18 @@ async function loadTrips(): Promise<void> {
   return loadPromise;
 }
 
+/**
+ * Ensure hydration before any mutating op.
+ * This prevents the classic race: addTrip() runs before loadTrips() and overwrites storage.
+ */
+async function ensureLoaded(): Promise<void> {
+  if (state.loaded && hydrated) return;
+  await loadTrips();
+}
+
 async function addTrip(patch: Omit<Trip, "id"> & Partial<Pick<Trip, "id">>): Promise<Trip> {
+  await ensureLoaded();
+
   const id = normString((patch as any)?.id) || safeId();
 
   const t: Trip = compactTrip({
@@ -319,6 +333,8 @@ async function addTrip(patch: Omit<Trip, "id"> & Partial<Pick<Trip, "id">>): Pro
 }
 
 async function updateTrip(id: string, patch: Partial<Omit<Trip, "id">>): Promise<void> {
+  await ensureLoaded();
+
   const tid = normString(id);
   if (!tid) return;
 
@@ -343,6 +359,8 @@ async function updateTrip(id: string, patch: Partial<Omit<Trip, "id">>): Promise
 }
 
 async function removeTrip(id: string): Promise<void> {
+  await ensureLoaded();
+
   const tid = normString(id);
   if (!tid) return;
 
@@ -354,6 +372,8 @@ async function removeTrip(id: string): Promise<void> {
 /* ------------------------------- Links API ------------------------------- */
 
 async function addLink(tripId: string, item: TripLinkItem): Promise<void> {
+  await ensureLoaded();
+
   const tid = normString(tripId);
   if (!tid) return;
 
@@ -374,6 +394,8 @@ async function addLink(tripId: string, item: TripLinkItem): Promise<void> {
 }
 
 async function removeLink(tripId: string, linkId: string): Promise<void> {
+  await ensureLoaded();
+
   const tid = normString(tripId);
   const lid = normString(linkId);
   if (!tid || !lid) return;
@@ -392,6 +414,8 @@ async function removeLink(tripId: string, linkId: string): Promise<void> {
 /* ---------------------------- Itinerary API ----------------------------- */
 
 async function addItineraryItem(tripId: string, item: TripItineraryItem): Promise<void> {
+  await ensureLoaded();
+
   const tid = normString(tripId);
   if (!tid) return;
 
@@ -412,6 +436,8 @@ async function addItineraryItem(tripId: string, item: TripItineraryItem): Promis
 }
 
 async function removeItineraryItem(tripId: string, itemId: string): Promise<void> {
+  await ensureLoaded();
+
   const tid = normString(tripId);
   const iid = normString(itemId);
   if (!tid || !iid) return;
