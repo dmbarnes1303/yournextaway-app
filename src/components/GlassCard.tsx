@@ -1,4 +1,5 @@
 // src/components/GlassCard.tsx
+
 import React from "react";
 import { View, StyleSheet, ViewStyle, Platform } from "react-native";
 import { BlurView } from "expo-blur";
@@ -11,30 +12,30 @@ interface GlassCardProps {
   style?: ViewStyle;
 
   /**
-   * Backwards compatible:
-   * - If provided, used as BlurView intensity on iOS/web.
-   * Prefer strength for consistency.
+   * Backwards compatibility.
+   * Prefer using strength instead.
    */
   intensity?: number;
 
   /**
-   * Canonical approach: consistent glass levels across the app.
+   * Canonical strength levels.
    */
   strength?: GlassStrength;
 
   /**
-   * Optional: remove default inner padding (some screens may want full-bleed content).
+   * Remove inner padding if required.
    */
   noPadding?: boolean;
 }
 
 /**
- * GlassCard (Android-safe, consistent recipe)
+ * GlassCard
  *
- * Rules:
- * - Android: no blur (performance + reliability). Use stronger translucent base + border.
- * - iOS/web: BlurView + translucent base + border.
- * - Use strength to standardise the look across screens. Avoid ad-hoc intensities.
+ * Philosophy:
+ * - Feels like frosted architectural panels.
+ * - Android = NO blur (performance + consistency).
+ * - iOS/Web = Blur + tinted surface.
+ * - One radius, one border, one shadow recipe.
  */
 export default function GlassCard({
   children,
@@ -47,7 +48,7 @@ export default function GlassCard({
   const blurIntensity = intensity ?? theme.glass.blur[strength];
 
   return (
-    <View style={[styles.container, stylesByStrength[strength], style]}>
+    <View style={[styles.shell, stylesByStrength[strength], style]}>
       {useBlur ? (
         <BlurView
           intensity={blurIntensity}
@@ -57,7 +58,7 @@ export default function GlassCard({
         />
       ) : null}
 
-      <View style={[styles.content, noPadding && styles.contentNoPadding]}>
+      <View style={[styles.content, noPadding && styles.noPadding]}>
         {children}
       </View>
     </View>
@@ -65,19 +66,28 @@ export default function GlassCard({
 }
 
 const styles = StyleSheet.create({
-  container: {
+  shell: {
     position: "relative",
     borderRadius: theme.borderRadius.lg,
     borderWidth: 1,
     borderColor: theme.glass.border,
     overflow: "hidden",
+
+    // Soft elevation
+    shadowColor: "#000",
+    shadowOpacity: 0.35,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 6 },
+
+    // Android fallback
+    elevation: 4,
   },
 
   content: {
     padding: theme.spacing.md,
   },
 
-  contentNoPadding: {
+  noPadding: {
     padding: 0,
   },
 });
@@ -89,12 +99,14 @@ const stylesByStrength = StyleSheet.create<Record<GlassStrength, ViewStyle>>({
         ? theme.glass.androidBg.subtle
         : theme.glass.iosBg.subtle,
   },
+
   default: {
     backgroundColor:
       Platform.OS === "android"
         ? theme.glass.androidBg.default
         : theme.glass.iosBg.default,
   },
+
   strong: {
     backgroundColor:
       Platform.OS === "android"
