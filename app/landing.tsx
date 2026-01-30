@@ -94,8 +94,8 @@ const styles = StyleSheet.create({
   // Adjust this to move logo up/down.
   // Higher number = brand sits lower.
   brandSpacerTop: {
-    flex: 2.2,
-    minHeight: 40,
+    flex: 2.4,
+    minHeight: 44,
   },
 
   brand: {
@@ -121,8 +121,8 @@ const styles = StyleSheet.create({
   },
 
   brandSpacerBottom: {
-    flex: 0.6,
-    minHeight: 6,
+    flex: 0.45,
+    minHeight: 4,
   },
 
   // Brings the card up slightly (not glued to bottom)
@@ -171,7 +171,7 @@ const styles = StyleSheet.create({
 
   btnPrimary: {
     borderColor: theme.colors.primary,
-    backgroundColor: "rgba(0,0,0,0.12)",
+    backgroundColor: "rgba(0,0,0,0.24)",
   },
 
   btnPrimaryText: {
