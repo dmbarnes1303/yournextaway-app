@@ -5,7 +5,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Stack, useRouter } from "expo-router";
 
 import Background from "@/src/components/Background";
-import GlassCard from "@/src/components/GlassCard";
 import { getBackgroundSource } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
 import storage from "@/src/services/storage";
@@ -15,6 +14,14 @@ const LOGO = require("@/src/yna-logo.png");
 const STORAGE_KEYS = {
   seenLanding: "yna:seenLanding",
 };
+
+/**
+ * TUNING KNOBS (edit these two numbers only)
+ * - BRAND_TOP: higher = logo sits lower (moves DOWN)
+ * - CARD_RAISE: higher = card moves up more (exposes stadium)
+ */
+const BRAND_TOP = 22;
+const CARD_RAISE = 18;
 
 export default function Landing() {
   const router = useRouter();
@@ -44,19 +51,15 @@ export default function Landing() {
       <Background imageSource={getBackgroundSource("landing")} overlayOpacity={0.58}>
         <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
           <View style={styles.screen}>
-            {/* Push brand into top third (premium) */}
-            <View style={styles.brandSpacerTop} />
-
-            <View style={styles.brand}>
+            {/* Brand (top-third, controllable) */}
+            <View style={[styles.brand, { marginTop: BRAND_TOP }]}>
               <Image source={LOGO} style={styles.logo} resizeMode="contain" />
               <Text style={styles.tagline}>Football-First City Breaks Across Europe</Text>
             </View>
 
-            <View style={styles.brandSpacerBottom} />
-
-            {/* CTA Card */}
-            <View style={styles.cardWrap}>
-              <GlassCard style={styles.card} intensity={6}>
+            {/* CTA (raised, more transparent, NO blur) */}
+            <View style={[styles.cardWrap, { transform: [{ translateY: -CARD_RAISE }] }]}>
+              <View style={styles.card}>
                 <Text style={styles.h1}>Plan Your Next Away</Text>
 
                 <Text style={styles.body}>
@@ -74,7 +77,7 @@ export default function Landing() {
                 </View>
 
                 <Text style={styles.motto}>PLAN • FLY • WATCH • REPEAT</Text>
-              </GlassCard>
+              </View>
             </View>
           </View>
         </SafeAreaView>
@@ -89,13 +92,9 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     paddingHorizontal: theme.spacing.lg,
-  },
-
-  // Adjust this to move logo up/down.
-  // Higher number = brand sits lower.
-  brandSpacerTop: {
-    flex: 0.42,
-    minHeight: 44,
+    paddingTop: theme.spacing.md,
+    paddingBottom: theme.spacing.lg,
+    justifyContent: "space-between", // decouples brand + card positioning
   },
 
   brand: {
@@ -120,23 +119,17 @@ const styles = StyleSheet.create({
     textShadowRadius: 10,
   },
 
-  brandSpacerBottom: {
-    flex: 0.35,
-    minHeight: 4,
-  },
-
-  // Brings the card up slightly (not glued to bottom)
   cardWrap: {
-    justifyContent: "flex-end",
     paddingBottom: theme.spacing.lg,
   },
 
-  // More transparent card + faint border so background shows through
+  // transparent + premium, NO blur
   card: {
-    padding: theme.spacing.lg,
+    padding: theme.spacing.md,
+    borderRadius: 22,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.05)",
-    backgroundColor: "rgba(0,0,0,0.07)",
+    borderColor: "rgba(255,255,255,0.045)",
+    backgroundColor: "rgba(0,0,0,0.055)",
   },
 
   h1: {
@@ -148,7 +141,7 @@ const styles = StyleSheet.create({
   },
 
   body: {
-    marginTop: 10,
+    marginTop: 8,
     color: "rgba(255,255,255,0.74)",
     fontWeight: theme.fontWeight.bold,
     fontSize: theme.fontSize.md,
@@ -156,7 +149,7 @@ const styles = StyleSheet.create({
   },
 
   actions: {
-    marginTop: theme.spacing.lg,
+    marginTop: theme.spacing.md,
     flexDirection: "row",
     gap: 12,
   },
@@ -171,7 +164,7 @@ const styles = StyleSheet.create({
 
   btnPrimary: {
     borderColor: theme.colors.primary,
-    backgroundColor: "rgba(0,0,0,0.24)",
+    backgroundColor: "rgba(0,0,0,0.22)",
   },
 
   btnPrimaryText: {
@@ -181,18 +174,18 @@ const styles = StyleSheet.create({
   },
 
   btnGhost: {
-    borderColor: "rgba(255,255,255,0.08)",
-    backgroundColor: "rgba(0,0,0,0.04)",
+    borderColor: "rgba(255,255,255,0.05)",
+    backgroundColor: "rgba(255,255,255,0.02)",
   },
 
   btnGhostText: {
-    color: "rgba(255,255,255,0.70)",
+    color: "rgba(255,255,255,0.55)",
     fontWeight: theme.fontWeight.black,
     fontSize: theme.fontSize.md,
   },
 
   motto: {
-    marginTop: 14,
+    marginTop: 10,
     textAlign: "center",
     color: theme.colors.primary,
     fontSize: theme.fontSize.xs,
