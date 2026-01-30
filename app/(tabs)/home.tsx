@@ -1,4 +1,5 @@
 // app/(tabs)/home.tsx
+
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import {
   View,
@@ -16,7 +17,6 @@ import { useRouter } from "expo-router";
 
 import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
-import SectionHeader from "@/src/components/SectionHeader";
 import EmptyState from "@/src/components/EmptyState";
 import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
@@ -28,19 +28,8 @@ import { LEAGUES, getRollingWindowIso, parseIsoDateOnly, toIsoDate, type LeagueO
 import { formatUkDateOnly, formatUkDateTimeMaybe } from "@/src/utils/formatters";
 
 import { buildSearchIndex, querySearchIndex, type SearchResult } from "@/src/services/searchIndex";
+import { hasTeamGuide } from "@/src/data/teamGuides";
 import { getCityGuide } from "@/src/data/cityGuides";
-import teamGuidesRegistry, {
-  hasTeamGuide,
-  getTeamGuidesDebugSnapshot,
-  getMissingTeamGuides,
-  type MissingTeamGuide,
-} from "@/src/data/teamGuides";
-
-function isDev() {
-  // RN sets __DEV__ in dev builds
-  // eslint-disable-next-line no-undef
-  return typeof __DEV__ !== "undefined" ? !!__DEV__ : false;
-}
 
 function tripSummaryLine(t: Trip) {
   const a = t.startDate ? formatUkDateOnly(t.startDate) : "—";
@@ -82,6 +71,8 @@ function splitSearchBuckets(results: SearchResult[]) {
 
 export default function HomeScreen() {
   const router = useRouter();
+
+  // Context league (kept for fixture preview + deep links)
   const [league, setLeague] = useState<LeagueOption>(LEAGUES[0]);
 
   // Central rolling window (tomorrow onwards; per football.ts)
@@ -115,9 +106,8 @@ export default function HomeScreen() {
   }, [trips, todayMidnight]);
 
   const nextTrip = useMemo(() => upcomingTrips[0] ?? null, [upcomingTrips]);
-  const topTrips = useMemo(() => trips.slice(0, 3), [trips]);
 
-  // Fixtures (for preview + match search)
+  // Fixtures preview
   const [fxLoading, setFxLoading] = useState(false);
   const [fxError, setFxError] = useState<string | null>(null);
   const [fxRows, setFxRows] = useState<FixtureListRow[]>([]);
@@ -154,10 +144,10 @@ export default function HomeScreen() {
     };
   }, [league, fromIso, toIso]);
 
-  const fxPreview = useMemo(() => fxRows.slice(0, 6), [fxRows]);
+  const fxPreview = useMemo(() => fxRows.slice(0, 4), [fxRows]);
 
   // -------------------------
-  // SEARCH (powerful + offline)
+  // SEARCH (offline index)
   // -------------------------
   const [q, setQ] = useState("");
   const qNorm = useMemo(() => q.trim(), [q]);
@@ -200,28 +190,11 @@ export default function HomeScreen() {
     const idx = indexRef.current;
     if (!idx) return [];
     if (!qNorm) return [];
-    return querySearchIndex(idx, qNorm, { limit: 30 });
+    return querySearchIndex(idx, qNorm, { limit: 24 });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [qNorm, searchIndexBuiltAt]);
 
   const buckets = useMemo(() => splitSearchBuckets(rawSearchResults), [rawSearchResults]);
-
-  // Trips “search” stays lightweight (notes + cityId only)
-  const tripResults = useMemo(() => {
-    const query = qNorm.trim().toLowerCase();
-    if (!query) return [];
-    const res = trips.filter((t) => {
-      const city = String(t.cityId ?? "").toLowerCase();
-      const notes = String(t.notes ?? "").toLowerCase();
-      return city.includes(query) || notes.includes(query);
-    });
-    return res.slice(0, 4);
-  }, [trips, qNorm]);
-
-  const tripsCountLabel = useMemo(() => {
-    if (!loadedTrips) return "—";
-    return `${trips.length} trip${trips.length === 1 ? "" : "s"}`;
-  }, [loadedTrips, trips.length]);
 
   const clearSearch = useCallback(() => {
     setQ("");
@@ -232,97 +205,109 @@ export default function HomeScreen() {
     Keyboard.dismiss();
   }, []);
 
-  function goBuildTripWithContext(fixtureId?: string) {
-    router.push({
-      pathname: "/trip/build",
-      params: {
-        ...(fixtureId ? { fixtureId } : {}),
-        leagueId: String(league.leagueId),
-        season: String(league.season),
-        from: fromIso,
-        to: toIso,
-      },
-    } as any);
-  }
-
-  function goMatchWithContext(fixtureId: string) {
-    router.push({
-      pathname: "/match/[id]",
-      params: {
-        id: fixtureId,
-        leagueId: String(league.leagueId),
-        season: String(league.season),
-        from: fromIso,
-        to: toIso,
-      },
-    } as any);
-  }
-
-  function goFixturesWithContext(params?: { leagueId?: number; season?: number; venue?: string }) {
-    router.push({
-      pathname: "/(tabs)/fixtures",
-      params: {
-        leagueId: String(params?.leagueId ?? league.leagueId),
-        season: String(params?.season ?? league.season),
-        from: fromIso,
-        to: toIso,
-        ...(params?.venue ? { venue: params.venue } : {}),
-      },
-    } as any);
-  }
-
-  function onPressSearchResult(r: SearchResult) {
-    const p: any = r.payload;
-
-    // ✅ Route to /team/[teamKey]
-    if (p?.kind === "team") {
+  // -------------------------
+  // Navigation helpers
+  // -------------------------
+  const goBuildTripWithContext = useCallback(
+    (fixtureId?: string) => {
       router.push({
-        pathname: "/team/[teamKey]",
-        params: { teamKey: p.slug, from: fromIso, to: toIso },
+        pathname: "/trip/build",
+        params: {
+          ...(fixtureId ? { fixtureId } : {}),
+          leagueId: String(league.leagueId),
+          season: String(league.season),
+          from: fromIso,
+          to: toIso,
+        },
       } as any);
-      return;
-    }
+    },
+    [router, league.leagueId, league.season, fromIso, toIso]
+  );
 
-    if (p?.kind === "city") {
+  const goMatchWithContext = useCallback(
+    (fixtureId: string) => {
       router.push({
-        pathname: "/city/[slug]",
-        params: { slug: p.slug, from: fromIso, to: toIso },
+        pathname: "/match/[id]",
+        params: {
+          id: fixtureId,
+          leagueId: String(league.leagueId),
+          season: String(league.season),
+          from: fromIso,
+          to: toIso,
+        },
       } as any);
-      return;
-    }
+    },
+    [router, league.leagueId, league.season, fromIso, toIso]
+  );
 
-    if (p?.kind === "venue") {
-      const venueName = String(r.title ?? "").trim();
-      goFixturesWithContext({
-        leagueId: league.leagueId,
-        season: league.season,
-        venue: venueName || String(p.slug ?? "").trim(),
-      });
-      return;
-    }
+  const goFixturesWithContext = useCallback(
+    (params?: { leagueId?: number; season?: number; venue?: string }) => {
+      router.push({
+        pathname: "/(tabs)/fixtures",
+        params: {
+          leagueId: String(params?.leagueId ?? league.leagueId),
+          season: String(params?.season ?? league.season),
+          from: fromIso,
+          to: toIso,
+          ...(params?.venue ? { venue: params.venue } : {}),
+        },
+      } as any);
+    },
+    [router, league.leagueId, league.season, fromIso, toIso]
+  );
 
-    if (p?.kind === "country") {
-      goFixturesWithContext({ leagueId: p.leagueId, season: p.season });
-      return;
-    }
+  const onPressSearchResult = useCallback(
+    (r: SearchResult) => {
+      const p: any = r.payload;
 
-    if (p?.kind === "league") {
-      goFixturesWithContext({ leagueId: p.leagueId, season: p.season });
-      return;
-    }
-  }
+      if (p?.kind === "team") {
+        router.push({
+          pathname: "/team/[teamKey]",
+          params: { teamKey: p.slug, from: fromIso, to: toIso },
+        } as any);
+        return;
+      }
 
-  function resultMeta(r: SearchResult): string {
+      if (p?.kind === "city") {
+        router.push({
+          pathname: "/city/[slug]",
+          params: { slug: p.slug, from: fromIso, to: toIso },
+        } as any);
+        return;
+      }
+
+      if (p?.kind === "venue") {
+        const venueName = String(r.title ?? "").trim();
+        goFixturesWithContext({
+          leagueId: league.leagueId,
+          season: league.season,
+          venue: venueName || String(p.slug ?? "").trim(),
+        });
+        return;
+      }
+
+      if (p?.kind === "country") {
+        goFixturesWithContext({ leagueId: p.leagueId, season: p.season });
+        return;
+      }
+
+      if (p?.kind === "league") {
+        goFixturesWithContext({ leagueId: p.leagueId, season: p.season });
+        return;
+      }
+    },
+    [router, fromIso, toIso, goFixturesWithContext, league.leagueId, league.season]
+  );
+
+  const resultMeta = useCallback((r: SearchResult): string => {
     const p: any = r.payload;
 
     if (r.type === "team" && p?.kind === "team") {
-      const exists = hasTeamGuide(p.slug);
-      return exists ? "Team guide available" : "Team guide (missing)";
+      return hasTeamGuide(p.slug) ? "Team guide available" : "Team guide coming soon";
     }
 
     if (r.type === "city" && p?.kind === "city") {
-      const guide = getCityGuide(p.slug);
-      return guide ? "City guide available" : "City guide (link-out for now)";
+      return getCityGuide(p.slug) ? "City guide available" : "City guide coming soon";
     }
 
     if (r.type === "venue") return r.subtitle ?? "Venue";
@@ -330,98 +315,46 @@ export default function HomeScreen() {
     if (r.type === "league") return r.subtitle ?? "League";
 
     return r.subtitle ?? "";
-  }
+  }, []);
 
-  const matchHits = useMemo(() => {
-    const query = qNorm.trim().toLowerCase();
-    if (!query) return [];
+  // Safe “Popular cities” chips (do not assume slugs exist)
+  const popularCityChips = useMemo(
+    () => ["Madrid", "Barcelona", "Milan", "Lisbon", "Amsterdam", "Berlin"],
+    []
+  );
 
-    return fxRows
-      .filter((r) => {
-        const home = String(r?.teams?.home?.name ?? "").toLowerCase();
-        const away = String(r?.teams?.away?.name ?? "").toLowerCase();
-        const venue = String(r?.fixture?.venue?.name ?? "").toLowerCase();
-        const city = String(r?.fixture?.venue?.city ?? "").toLowerCase();
-        return home.includes(query) || away.includes(query) || venue.includes(query) || city.includes(query);
-      })
-      .slice(0, 6);
-  }, [fxRows, qNorm]);
-
-  // ---- DEV DEBUG (Search Index) ----
-  const devDebug = useMemo(() => {
-    if (!isDev()) return null;
-    const idx = indexRef.current as any;
-    const dbg = idx?.debug;
-    if (!dbg?.enabled) return null;
-
-    const counts = dbg.counts ?? {};
-    const unresolved: string[] = Array.isArray(dbg.unresolvedFixtureTeamNames) ? dbg.unresolvedFixtureTeamNames : [];
-
-    return {
-      builtAt: idx?.builtAt ? new Date(idx.builtAt).toLocaleTimeString() : "—",
-      from: idx?.from ?? fromIso,
-      to: idx?.to ?? toIso,
-      total: Number(dbg.totalEntries ?? 0),
-      fixtureRows: Number(dbg.fixtureRowsScanned ?? 0),
-      counts: {
-        team: Number(counts.team ?? 0),
-        city: Number(counts.city ?? 0),
-        venue: Number(counts.venue ?? 0),
-        country: Number(counts.country ?? 0),
-        league: Number(counts.league ?? 0),
-      },
-      unresolvedTop: unresolved.slice(0, 12),
-      unresolvedCount: unresolved.length,
-    };
-  }, [fromIso, toIso, searchIndexBuiltAt]);
-
-  // ---- DEV DEBUG (Missing Team Guides) ----
-  const devMissingGuides = useMemo(() => {
-    if (!isDev()) return null;
-
-    // If you ever want to gate this behind a flag, do it here.
-    const snap = getTeamGuidesDebugSnapshot();
-    const missing = snap.missing ?? getMissingTeamGuides();
-
-    // Helpful rollups
-    const byLeague: Record<string, number> = {};
-    for (const m of missing) {
-      const key = typeof m.leagueId === "number" ? String(m.leagueId) : "unknown";
-      byLeague[key] = (byLeague[key] ?? 0) + 1;
-    }
-
-    const leaguePairs = Object.entries(byLeague).sort((a, b) => b[1] - a[1]);
-
-    return {
-      guidesCount: snap.guidesCount,
-      registryTeamsCount: snap.registryTeamsCount,
-      missingCount: snap.missingCount,
-      missingTop: missing.slice(0, 20),
-      moreCount: Math.max(0, missing.length - 20),
-      byLeagueTop: leaguePairs.slice(0, 6),
-    };
-  }, [searchIndexBuiltAt]);
+  // Inspiration (simple, editorial)
+  const inspiration = useMemo(
+    () => [
+      { title: "Weekend trips that just work", sub: "Low-stress planning across Europe" },
+      { title: "Pick a match, build the break", sub: "Dates, stay, transport — in one hub" },
+      { title: "Shortlist cities fast", sub: "Search by team, city, stadium, or country" },
+    ],
+    []
+  );
 
   return (
     <Background imageUrl={getBackground("home")} overlayOpacity={0.86}>
       <SafeAreaView style={styles.container} edges={["top"]}>
-        <ScrollView style={styles.scrollView} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
           {/* HERO */}
           <GlassCard style={styles.heroCard} strength="strong">
-            <Text style={styles.heroKicker}>PLAN • FLY • WATCH • REPEAT</Text>
-
-            <Text style={styles.heroTitle}>Plan a football-first city break.</Text>
-
+            <Text style={styles.heroTitle}>Plan your next European football trip</Text>
             <Text style={styles.heroSub}>
-              Search clubs, cities, venues, countries, or leagues — then jump straight into fixtures or build a trip.
+              Search countries, cities, teams, or venues — then jump into fixtures or build a trip.
             </Text>
 
             <View style={styles.searchBox}>
               <TextInput
                 value={q}
                 onChangeText={setQ}
-                placeholder="Search a country, city, club, venue…"
-                placeholderTextColor={theme.colors.textSecondary}
+                placeholder="Search country, city, team, or venue"
+                placeholderTextColor={theme.colors.textTertiary}
                 style={styles.searchInput}
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -436,361 +369,135 @@ export default function HomeScreen() {
               ) : null}
             </View>
 
-            {/* ✅ DEV DEBUG PANEL (Search Index) */}
-            {devDebug ? (
-              <GlassCard strength="subtle" style={styles.devCard}>
-                <View style={styles.devHeaderRow}>
-                  <Text style={styles.devTitle}>DEV: Search Index</Text>
-                  <Text style={styles.devMeta}>
-                    built {devDebug.builtAt} • {formatUkDateOnly(devDebug.from)} → {formatUkDateOnly(devDebug.to)}
-                  </Text>
-                </View>
-
-                <View style={styles.devGrid}>
-                  <View style={styles.devPill}>
-                    <Text style={styles.devPillK}>entries</Text>
-                    <Text style={styles.devPillV}>{devDebug.total}</Text>
-                  </View>
-                  <View style={styles.devPill}>
-                    <Text style={styles.devPillK}>teams</Text>
-                    <Text style={styles.devPillV}>{devDebug.counts.team}</Text>
-                  </View>
-                  <View style={styles.devPill}>
-                    <Text style={styles.devPillK}>cities</Text>
-                    <Text style={styles.devPillV}>{devDebug.counts.city}</Text>
-                  </View>
-                  <View style={styles.devPill}>
-                    <Text style={styles.devPillK}>venues</Text>
-                    <Text style={styles.devPillV}>{devDebug.counts.venue}</Text>
-                  </View>
-                  <View style={styles.devPill}>
-                    <Text style={styles.devPillK}>countries</Text>
-                    <Text style={styles.devPillV}>{devDebug.counts.country}</Text>
-                  </View>
-                  <View style={styles.devPill}>
-                    <Text style={styles.devPillK}>leagues</Text>
-                    <Text style={styles.devPillV}>{devDebug.counts.league}</Text>
-                  </View>
-                </View>
-
-                <View style={{ marginTop: 10 }}>
-                  <Text style={styles.devSmall}>
-                    fixtures scanned: <Text style={styles.devSmallStrong}>{devDebug.fixtureRows}</Text>
-                    {"  "}• unresolved fixture team names:{" "}
-                    <Text style={styles.devSmallStrong}>{devDebug.unresolvedCount}</Text>
-                  </Text>
-
-                  {devDebug.unresolvedTop.length > 0 ? (
-                    <View style={styles.devList}>
-                      {devDebug.unresolvedTop.map((n) => (
-                        <Text key={n} style={styles.devListItem}>
-                          • {n}
-                        </Text>
-                      ))}
-                      {devDebug.unresolvedCount > devDebug.unresolvedTop.length ? (
-                        <Text style={styles.devListMore}>
-                          …and {devDebug.unresolvedCount - devDebug.unresolvedTop.length} more
-                        </Text>
-                      ) : null}
-                    </View>
-                  ) : (
-                    <Text style={styles.devOk}>No unresolved fixture team names 🎯</Text>
-                  )}
-                </View>
-              </GlassCard>
-            ) : null}
-
-            {/* ✅ DEV DEBUG PANEL (Missing Team Guides) */}
-            {devMissingGuides ? (
-              <GlassCard strength="subtle" style={styles.devCard}>
-                <View style={styles.devHeaderRow}>
-                  <Text style={styles.devTitle}>DEV: Missing Team Guides</Text>
-                  <Text style={styles.devMeta}>
-                    guides {devMissingGuides.guidesCount} • registry teams {devMissingGuides.registryTeamsCount} • missing{" "}
-                    {devMissingGuides.missingCount}
-                  </Text>
-                </View>
-
-                {devMissingGuides.byLeagueTop.length > 0 ? (
-                  <View style={[styles.devGrid, { marginTop: 10 }]}>
-                    {devMissingGuides.byLeagueTop.map(([leagueId, count]) => (
-                      <View key={leagueId} style={styles.devPill}>
-                        <Text style={styles.devPillK}>league {leagueId}</Text>
-                        <Text style={styles.devPillV}>{count}</Text>
-                      </View>
-                    ))}
-                  </View>
-                ) : null}
-
-                <View style={{ marginTop: 10 }}>
-                  {devMissingGuides.missingTop.length > 0 ? (
-                    <View style={styles.devList}>
-                      {devMissingGuides.missingTop.map((m: MissingTeamGuide) => (
-                        <Text key={m.expectedGuideKey} style={styles.devListItem}>
-                          • {m.expectedGuideKey} — {m.name}
-                        </Text>
-                      ))}
-                      {devMissingGuides.moreCount > 0 ? (
-                        <Text style={styles.devListMore}>…and {devMissingGuides.moreCount} more</Text>
-                      ) : null}
-                    </View>
-                  ) : (
-                    <Text style={styles.devOk}>All registry teams have guides ✅</Text>
-                  )}
-                </View>
-              </GlassCard>
-            ) : null}
-
-            {qNorm.length === 0 ? (
-              <Text style={styles.heroHint}>Try “Austria”, “Madrid”, “Arsenal”, or a stadium name.</Text>
+            {/* Popular city chips (quick-fill search) */}
+            {!showSearchResults ? (
+              <View style={styles.chipsRow}>
+                {popularCityChips.slice(0, 6).map((name) => (
+                  <Pressable key={name} onPress={() => setQ(name)} style={styles.chip}>
+                    <Text style={styles.chipText}>{name}</Text>
+                  </Pressable>
+                ))}
+              </View>
             ) : null}
 
             {/* SEARCH RESULTS */}
             {showSearchResults ? (
               <View style={styles.searchResults}>
-                {/* Teams & Cities */}
-                <View>
-                  <View style={styles.searchHeaderRow}>
-                    <Text style={styles.searchSectionTitle}>Teams & Cities</Text>
-                    <Text style={styles.searchSectionMeta}>Tap to open</Text>
+                {searchLoading ? (
+                  <View style={styles.center}>
+                    <ActivityIndicator />
+                    <Text style={styles.muted}>Preparing search…</Text>
                   </View>
+                ) : null}
 
-                  {searchLoading ? (
-                    <View style={styles.center}>
-                      <ActivityIndicator />
-                      <Text style={styles.muted}>Building search…</Text>
-                    </View>
-                  ) : null}
+                {!searchLoading && searchError ? (
+                  <EmptyState title="Search unavailable" message={searchError} />
+                ) : null}
 
-                  {!searchLoading && searchError ? <EmptyState title="Search unavailable" message={searchError} /> : null}
+                {!searchLoading && !searchError ? (
+                  <>
+                    {/* Teams & Cities */}
+                    <View style={styles.group}>
+                      <View style={styles.groupHeader}>
+                        <Text style={styles.groupTitle}>Teams & Cities</Text>
+                        <Text style={styles.groupMeta}>Tap to open</Text>
+                      </View>
 
-                  {!searchLoading && !searchError && buckets.teams.length === 0 && buckets.cities.length === 0 ? (
-                    <Text style={styles.searchEmpty}>No teams or cities found.</Text>
-                  ) : null}
-
-                  {!searchLoading && !searchError && (buckets.teams.length > 0 || buckets.cities.length > 0) ? (
-                    <View style={styles.resultList}>
-                      {[...buckets.teams.slice(0, 6), ...buckets.cities.slice(0, 6)]
-                        .slice(0, 10)
-                        .map((r, idx) => (
-                          <Pressable key={`${r.key}-${idx}`} onPress={() => onPressSearchResult(r)} style={styles.rowPress}>
-                            <GlassCard strength="subtle" noPadding style={styles.rowCard}>
-                              <View style={styles.rowInner}>
-                                <View style={{ flex: 1 }}>
-                                  <Text style={styles.rowTitle}>{r.title}</Text>
-                                  <Text style={styles.rowMeta}>{resultMeta(r)}</Text>
-                                </View>
-                                <Text style={styles.chev}>›</Text>
-                              </View>
-                            </GlassCard>
-                          </Pressable>
-                        ))}
-                    </View>
-                  ) : null}
-                </View>
-
-                {/* Venues / Countries / Leagues */}
-                <View>
-                  <View style={styles.searchHeaderRow}>
-                    <Text style={styles.searchSectionTitle}>Venues, Countries & Leagues</Text>
-                    <Text style={styles.searchSectionMeta}>Routes to Fixtures</Text>
-                  </View>
-
-                  {!searchLoading &&
-                  !searchError &&
-                  buckets.venues.length === 0 &&
-                  buckets.countries.length === 0 &&
-                  buckets.leagues.length === 0 ? (
-                    <Text style={styles.searchEmpty}>No venues/countries/leagues found.</Text>
-                  ) : null}
-
-                  {!searchLoading && !searchError ? (
-                    <View style={styles.resultList}>
-                      {[...buckets.venues.slice(0, 5), ...buckets.countries.slice(0, 5), ...buckets.leagues.slice(0, 5)]
-                        .slice(0, 10)
-                        .map((r, idx) => (
-                          <Pressable key={`${r.key}-${idx}`} onPress={() => onPressSearchResult(r)} style={styles.rowPress}>
-                            <GlassCard strength="subtle" noPadding style={styles.rowCard}>
-                              <View style={styles.rowInner}>
-                                <View style={{ flex: 1 }}>
-                                  <Text style={styles.rowTitle}>{r.title}</Text>
-                                  <Text style={styles.rowMeta}>{resultMeta(r)}</Text>
-                                </View>
-                                <Text style={styles.chev}>›</Text>
-                              </View>
-                            </GlassCard>
-                          </Pressable>
-                        ))}
-                    </View>
-                  ) : null}
-
-                  <Pressable onPress={() => goFixturesWithContext()} style={styles.linkBtn}>
-                    <Text style={styles.linkText}>Open Fixtures</Text>
-                  </Pressable>
-                </View>
-
-                {/* Matches */}
-                <View>
-                  <View style={styles.searchHeaderRow}>
-                    <Text style={styles.searchSectionTitle}>Matches</Text>
-                    <Text style={styles.searchSectionMeta}>
-                      {league.label} • {formatUkDateOnly(fromIso)} → {formatUkDateOnly(toIso)}
-                    </Text>
-                  </View>
-
-                  {fxLoading ? (
-                    <View style={styles.center}>
-                      <ActivityIndicator />
-                      <Text style={styles.muted}>Loading fixtures…</Text>
-                    </View>
-                  ) : null}
-
-                  {!fxLoading && fxError ? <EmptyState title="Fixtures unavailable" message={fxError} /> : null}
-
-                  {!fxLoading && !fxError && fxRows.length === 0 ? <Text style={styles.searchEmpty}>No fixtures loaded.</Text> : null}
-
-                  {!fxLoading && !fxError && matchHits.length === 0 ? (
-                    <Text style={styles.searchEmpty}>No matches found for that query.</Text>
-                  ) : null}
-
-                  {!fxLoading && !fxError && matchHits.length > 0 ? (
-                    <View style={styles.matchList}>
-                      {matchHits.map((r, idx) => {
-                        const id = r?.fixture?.id;
-                        const fixtureId = id ? String(id) : null;
-                        const line = fixtureLine(r);
-
-                        return (
-                          <GlassCard key={fixtureId ?? `m-${idx}`} strength="subtle" style={styles.matchCard}>
-                            <Pressable
-                              onPress={() => (fixtureId ? goMatchWithContext(fixtureId) : null)}
-                              disabled={!fixtureId}
-                              style={{ paddingHorizontal: 2 }}
-                            >
-                              <Text style={styles.rowTitle}>{line.title}</Text>
-                              <Text style={styles.rowMeta}>{line.meta}</Text>
-                            </Pressable>
-
-                            <View style={styles.matchActions}>
+                      {buckets.teams.length === 0 && buckets.cities.length === 0 ? (
+                        <Text style={styles.groupEmpty}>No teams or cities found.</Text>
+                      ) : (
+                        <View style={styles.resultList}>
+                          {[...buckets.teams.slice(0, 6), ...buckets.cities.slice(0, 6)]
+                            .slice(0, 10)
+                            .map((r, idx) => (
                               <Pressable
-                                onPress={() => (fixtureId ? goMatchWithContext(fixtureId) : null)}
-                                disabled={!fixtureId}
-                                style={[styles.smallActionBtn, styles.smallActionGhost, !fixtureId && styles.disabled]}
+                                key={`${r.key}-${idx}`}
+                                onPress={() => onPressSearchResult(r)}
+                                style={styles.rowPress}
                               >
-                                <Text style={styles.smallActionGhostText}>View match</Text>
+                                <GlassCard strength="subtle" noPadding style={styles.rowCard}>
+                                  <View style={styles.rowInner}>
+                                    <View style={{ flex: 1 }}>
+                                      <Text style={styles.rowTitle}>{r.title}</Text>
+                                      <Text style={styles.rowMeta}>{resultMeta(r)}</Text>
+                                    </View>
+                                    <Text style={styles.chev}>›</Text>
+                                  </View>
+                                </GlassCard>
                               </Pressable>
+                            ))}
+                        </View>
+                      )}
+                    </View>
 
+                    {/* Venues / Countries / Leagues */}
+                    <View style={styles.group}>
+                      <View style={styles.groupHeader}>
+                        <Text style={styles.groupTitle}>Venues, Countries & Leagues</Text>
+                        <Text style={styles.groupMeta}>Routes to Fixtures</Text>
+                      </View>
+
+                      {buckets.venues.length === 0 && buckets.countries.length === 0 && buckets.leagues.length === 0 ? (
+                        <Text style={styles.groupEmpty}>No venues/countries/leagues found.</Text>
+                      ) : (
+                        <View style={styles.resultList}>
+                          {[...buckets.venues.slice(0, 5), ...buckets.countries.slice(0, 5), ...buckets.leagues.slice(0, 5)]
+                            .slice(0, 10)
+                            .map((r, idx) => (
                               <Pressable
-                                onPress={() => (fixtureId ? goBuildTripWithContext(fixtureId) : null)}
-                                disabled={!fixtureId}
-                                style={[styles.smallActionBtn, styles.smallActionPrimary, !fixtureId && styles.disabled]}
+                                key={`${r.key}-${idx}`}
+                                onPress={() => onPressSearchResult(r)}
+                                style={styles.rowPress}
                               >
-                                <Text style={styles.smallActionPrimaryText}>Plan trip</Text>
+                                <GlassCard strength="subtle" noPadding style={styles.rowCard}>
+                                  <View style={styles.rowInner}>
+                                    <View style={{ flex: 1 }}>
+                                      <Text style={styles.rowTitle}>{r.title}</Text>
+                                      <Text style={styles.rowMeta}>{resultMeta(r)}</Text>
+                                    </View>
+                                    <Text style={styles.chev}>›</Text>
+                                  </View>
+                                </GlassCard>
                               </Pressable>
-                            </View>
-                          </GlassCard>
-                        );
-                      })}
+                            ))}
+                        </View>
+                      )}
+
+                      <Pressable onPress={() => goFixturesWithContext()} style={styles.linkBtn}>
+                        <Text style={styles.linkText}>Open Fixtures</Text>
+                      </Pressable>
                     </View>
-                  ) : null}
-                </View>
-
-                {/* Trips */}
-                <View>
-                  <View style={styles.searchHeaderRow}>
-                    <Text style={styles.searchSectionTitle}>Trips</Text>
-                    <Text style={styles.searchSectionMeta}>Your saved plans</Text>
-                  </View>
-
-                  {!loadedTrips ? (
-                    <View style={styles.center}>
-                      <ActivityIndicator />
-                      <Text style={styles.muted}>Searching trips…</Text>
-                    </View>
-                  ) : null}
-
-                  {loadedTrips && tripResults.length === 0 ? <Text style={styles.searchEmpty}>No trips found.</Text> : null}
-
-                  {loadedTrips && tripResults.length > 0 ? (
-                    <View style={styles.resultList}>
-                      {tripResults.map((t) => (
-                        <Pressable
-                          key={t.id}
-                          onPress={() => router.push({ pathname: "/trip/[id]", params: { id: t.id } } as any)}
-                          style={styles.rowPress}
-                        >
-                          <GlassCard strength="subtle" noPadding style={styles.rowCard}>
-                            <View style={styles.rowInner}>
-                              <View style={{ flex: 1 }}>
-                                <Text style={styles.rowTitle}>{t.cityId || "Trip"}</Text>
-                                <Text style={styles.rowMeta}>{tripSummaryLine(t)}</Text>
-                              </View>
-                              <Text style={styles.chev}>›</Text>
-                            </View>
-                          </GlassCard>
-                        </Pressable>
-                      ))}
-                    </View>
-                  ) : null}
-
-                  <Pressable onPress={() => router.push("/(tabs)/trips")} style={styles.linkBtn}>
-                    <Text style={styles.linkText}>Open Trips</Text>
-                  </Pressable>
-                </View>
+                  </>
+                ) : null}
               </View>
             ) : null}
           </GlassCard>
 
-          {/* QUICK ACTIONS */}
-          <GlassCard style={styles.quickCard} strength="default">
-            <Text style={styles.quickTitle}>Quick actions</Text>
-            <Text style={styles.quickSub}>
-              {league.label} • {formatUkDateOnly(fromIso)} → {formatUkDateOnly(toIso)} • {tripsCountLabel}
-            </Text>
-
-            <Pressable onPress={() => goBuildTripWithContext()} style={[styles.btn, styles.btnPrimary]}>
-              <Text style={styles.btnPrimaryText}>Build Trip</Text>
-              <Text style={styles.btnPrimaryMeta}>Pick a fixture, set dates, save</Text>
-            </Pressable>
-
-            <View style={styles.quickRow}>
-              <Pressable onPress={() => goFixturesWithContext()} style={[styles.btn, styles.btnSecondary]}>
-                <Text style={styles.btnSecondaryText}>Fixtures</Text>
-              </Pressable>
-
-              <Pressable onPress={() => router.push("/(tabs)/trips")} style={[styles.btn, styles.btnSecondary]}>
-                <Text style={styles.btnSecondaryText}>Trips</Text>
-              </Pressable>
+          {/* UPCOMING MATCHES */}
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Upcoming matches</Text>
+              <Text style={styles.sectionMeta}>
+                {league.label} • {formatUkDateOnly(fromIso)} → {formatUkDateOnly(toIso)}
+              </Text>
             </View>
-          </GlassCard>
 
-          {/* TOP LEAGUES */}
-          <View style={styles.section}>
-            <SectionHeader title="Top leagues" subtitle="Pick a league for your next fixtures" />
-            <GlassCard style={styles.card} strength="default">
-              <View style={styles.leagueWrap}>
-                {LEAGUES.map((l) => {
-                  const active = l.leagueId === league.leagueId;
-                  return (
-                    <Pressable
-                      key={l.leagueId}
-                      onPress={() => setLeague(l)}
-                      style={[styles.leaguePill, active && styles.leaguePillActive]}
-                    >
-                      <Text style={[styles.leaguePillText, active && styles.leaguePillTextActive]}>{l.label}</Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </GlassCard>
-          </View>
+            {/* League selector (quiet) */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.leagueRow}>
+              {LEAGUES.map((l) => {
+                const active = l.leagueId === league.leagueId;
+                return (
+                  <Pressable
+                    key={l.leagueId}
+                    onPress={() => setLeague(l)}
+                    style={[styles.leaguePill, active && styles.leaguePillActive]}
+                  >
+                    <Text style={[styles.leaguePillText, active && styles.leaguePillTextActive]}>{l.label}</Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
 
-          {/* NEXT FIXTURES */}
-          <View style={styles.section}>
-            <SectionHeader
-              title="Next fixtures"
-              subtitle={`${league.label} • ${formatUkDateOnly(fromIso)} → ${formatUkDateOnly(toIso)}`}
-            />
             <GlassCard style={styles.card} strength="default">
               {fxLoading ? (
                 <View style={styles.center}>
@@ -799,75 +506,84 @@ export default function HomeScreen() {
                 </View>
               ) : null}
 
-              {!fxLoading && fxError ? <EmptyState title="Couldn’t load fixtures" message={fxError} /> : null}
+              {!fxLoading && fxError ? <EmptyState title="Fixtures unavailable" message={fxError} /> : null}
 
-              {!fxLoading && !fxError && fxRows.length === 0 ? (
+              {!fxLoading && !fxError && fxPreview.length === 0 ? (
                 <EmptyState title="No fixtures found" message="Try another league or try again later." />
               ) : null}
 
               {!fxLoading && !fxError && fxPreview.length > 0 ? (
-                <View style={styles.fixtureList}>
+                <View style={styles.matchList}>
                   {fxPreview.map((r, idx) => {
                     const id = r?.fixture?.id;
                     const fixtureId = id ? String(id) : null;
                     const line = fixtureLine(r);
 
                     return (
-                      <GlassCard key={fixtureId ?? `fx-${idx}`} strength="subtle" style={styles.fixtureCard}>
-                        <Pressable
-                          onPress={() => (fixtureId ? goMatchWithContext(fixtureId) : null)}
-                          disabled={!fixtureId}
-                          style={{ paddingHorizontal: 2 }}
-                        >
-                          <Text style={styles.rowTitle}>{line.title}</Text>
-                          <Text style={styles.rowMeta}>{line.meta}</Text>
-                        </Pressable>
-
-                        <View style={styles.matchActions}>
-                          <Pressable
-                            onPress={() => (fixtureId ? goMatchWithContext(fixtureId) : null)}
-                            disabled={!fixtureId}
-                            style={[styles.smallActionBtn, styles.smallActionGhost, !fixtureId && styles.disabled]}
-                          >
-                            <Text style={styles.smallActionGhostText}>View match</Text>
-                          </Pressable>
-
-                          <Pressable
-                            onPress={() => (fixtureId ? goBuildTripWithContext(fixtureId) : null)}
-                            disabled={!fixtureId}
-                            style={[styles.smallActionBtn, styles.smallActionPrimary, !fixtureId && styles.disabled]}
-                          >
-                            <Text style={styles.smallActionPrimaryText}>Plan trip</Text>
-                          </Pressable>
-                        </View>
-                      </GlassCard>
+                      <Pressable
+                        key={fixtureId ?? `fx-${idx}`}
+                        onPress={() => (fixtureId ? goMatchWithContext(fixtureId) : null)}
+                        disabled={!fixtureId}
+                        style={styles.matchRowPress}
+                      >
+                        <GlassCard strength="subtle" noPadding style={styles.matchRowCard}>
+                          <View style={styles.matchRowInner}>
+                            <View style={styles.thumb} />
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.matchTitle}>{line.title}</Text>
+                              <Text style={styles.matchMeta}>{line.meta}</Text>
+                            </View>
+                            <Text style={styles.chev}>›</Text>
+                          </View>
+                        </GlassCard>
+                      </Pressable>
                     );
                   })}
                 </View>
               ) : null}
 
-              <Pressable
-                onPress={() =>
-                  goFixturesWithContext({
-                    leagueId: league.leagueId,
-                    season: league.season,
-                  })
-                }
-                style={styles.linkBtn}
-              >
-                <Text style={styles.linkText}>See all fixtures</Text>
-              </Pressable>
+              <View style={styles.ctaRow}>
+                <Pressable onPress={() => goFixturesWithContext()} style={[styles.btn, styles.btnGhost]}>
+                  <Text style={styles.btnGhostText}>Fixtures</Text>
+                </Pressable>
+
+                <Pressable onPress={() => goBuildTripWithContext()} style={[styles.btn, styles.btnPrimary]}>
+                  <Text style={styles.btnPrimaryText}>Build trip</Text>
+                </Pressable>
+              </View>
             </GlassCard>
           </View>
 
-          {/* YOUR TRIPS */}
+          {/* NEXT TRIP (minimal presence) */}
           <View style={styles.section}>
-            <SectionHeader title="Your trips" subtitle="Your saved plans" />
-            <GlassCard style={styles.card} strength="default">
-              {!loadedTrips ? <EmptyState title="Loading trips" message="One moment…" /> : null}
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Trips</Text>
+              <Text style={styles.sectionMeta}>Your next plan</Text>
+            </View>
 
-              {loadedTrips && trips.length === 0 ? (
-                <EmptyState title="No trips yet" message="Build your first trip in under a minute." />
+            <GlassCard style={styles.card} strength="default">
+              {!loadedTrips ? (
+                <View style={styles.center}>
+                  <ActivityIndicator />
+                  <Text style={styles.muted}>Loading trips…</Text>
+                </View>
+              ) : null}
+
+              {loadedTrips && !nextTrip ? (
+                <>
+                  <Text style={styles.emptyTitle}>No trips yet</Text>
+                  <Text style={styles.emptyMeta}>Start with a fixture, then build the break in one hub.</Text>
+
+                  <View style={styles.ctaRow}>
+                    <Pressable onPress={() => goFixturesWithContext()} style={[styles.btn, styles.btnGhost]}>
+                      <Text style={styles.btnGhostText}>Browse fixtures</Text>
+                    </Pressable>
+
+                    <Pressable onPress={() => goBuildTripWithContext()} style={[styles.btn, styles.btnPrimary]}>
+                      <Text style={styles.btnPrimaryText}>Build trip</Text>
+                    </Pressable>
+                  </View>
+                </>
               ) : null}
 
               {loadedTrips && nextTrip ? (
@@ -875,40 +591,48 @@ export default function HomeScreen() {
                   onPress={() => router.push({ pathname: "/trip/[id]", params: { id: nextTrip.id } } as any)}
                   style={styles.nextTripPress}
                 >
-                  <GlassCard strength="subtle" style={styles.nextTripCard}>
-                    <Text style={styles.nextTripKicker}>Next up</Text>
-                    <Text style={styles.nextTripTitle}>{nextTrip.cityId || "Trip"}</Text>
-                    <Text style={styles.nextTripMeta}>{tripSummaryLine(nextTrip)}</Text>
+                  <GlassCard strength="subtle" noPadding style={styles.nextTripCard}>
+                    <View style={styles.nextTripInner}>
+                      <Text style={styles.nextTripKicker}>Next up</Text>
+                      <Text style={styles.nextTripTitle}>{nextTrip.cityId || "Trip"}</Text>
+                      <Text style={styles.nextTripMeta}>{tripSummaryLine(nextTrip)}</Text>
+                    </View>
                   </GlassCard>
                 </Pressable>
-              ) : null}
-
-              {loadedTrips && trips.length > 0 ? (
-                <View style={[styles.resultList, { marginTop: 10 }]}>
-                  {topTrips.map((t) => (
-                    <Pressable
-                      key={t.id}
-                      onPress={() => router.push({ pathname: "/trip/[id]", params: { id: t.id } } as any)}
-                      style={styles.rowPress}
-                    >
-                      <GlassCard strength="subtle" noPadding style={styles.rowCard}>
-                        <View style={styles.rowInner}>
-                          <View style={{ flex: 1 }}>
-                            <Text style={styles.rowTitle}>{t.cityId || "Trip"}</Text>
-                            <Text style={styles.rowMeta}>{tripSummaryLine(t)}</Text>
-                          </View>
-                          <Text style={styles.chev}>›</Text>
-                        </View>
-                      </GlassCard>
-                    </Pressable>
-                  ))}
-                </View>
               ) : null}
 
               <Pressable onPress={() => router.push("/(tabs)/trips")} style={styles.linkBtn}>
                 <Text style={styles.linkText}>Open Trips</Text>
               </Pressable>
             </GlassCard>
+          </View>
+
+          {/* INSPIRATION */}
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Inspiration</Text>
+              <Text style={styles.sectionMeta}>Editorial shortcuts</Text>
+            </View>
+
+            <View style={styles.inspoList}>
+              {inspiration.map((x) => (
+                <Pressable
+                  key={x.title}
+                  onPress={() => {
+                    // Keep it simple: inspiration nudges users into action
+                    goFixturesWithContext();
+                  }}
+                  style={styles.inspoPress}
+                >
+                  <GlassCard strength="default" noPadding style={styles.inspoCard}>
+                    <View style={styles.inspoInner}>
+                      <Text style={styles.inspoTitle}>{x.title}</Text>
+                      <Text style={styles.inspoSub}>{x.sub}</Text>
+                    </View>
+                  </GlassCard>
+                </Pressable>
+              ))}
+            </View>
           </View>
 
           <View style={{ height: 10 }} />
@@ -928,41 +652,28 @@ const styles = StyleSheet.create({
     gap: theme.spacing.lg,
   },
 
-  section: { marginTop: 2 },
-  card: { padding: theme.spacing.md },
-
-  muted: { marginTop: 8, fontSize: theme.fontSize.sm, color: theme.colors.textSecondary, fontWeight: "700" },
-  center: { paddingVertical: 14, alignItems: "center", gap: 10 },
-
-  /* HERO */
-  heroCard: { marginTop: theme.spacing.lg, padding: theme.spacing.md },
-  heroKicker: {
-    color: theme.colors.primary,
-    fontSize: theme.fontSize.xs,
-    fontWeight: "900",
-    letterSpacing: 0.6,
-  },
+  // HERO
+  heroCard: { marginTop: theme.spacing.lg },
   heroTitle: {
-    marginTop: 8,
     color: theme.colors.text,
-    fontSize: theme.fontSize.xl,
-    fontWeight: "900",
-    lineHeight: 30,
+    fontSize: 22,
+    fontWeight: theme.fontWeight.medium,
+    lineHeight: 28,
   },
   heroSub: {
     marginTop: 8,
     color: theme.colors.textSecondary,
-    fontSize: theme.fontSize.sm,
-    lineHeight: 19,
-    fontWeight: "700",
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: theme.fontWeight.regular,
   },
 
   searchBox: {
-    marginTop: 12,
+    marginTop: 14,
     borderWidth: 1,
     borderColor: theme.glass.border,
     backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
-    borderRadius: 14,
+    borderRadius: 16,
     paddingHorizontal: 12,
     paddingVertical: Platform.OS === "ios" ? 10 : 8,
     flexDirection: "row",
@@ -972,7 +683,7 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     color: theme.colors.text,
-    fontSize: theme.fontSize.md,
+    fontSize: 15,
     paddingVertical: Platform.OS === "ios" ? 6 : 4,
   },
   clearBtn: {
@@ -980,63 +691,42 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.14)",
+    borderColor: theme.colors.border,
     backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
   },
-  clearBtnText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: theme.fontSize.xs },
+  clearBtnText: { color: theme.colors.textSecondary, fontWeight: theme.fontWeight.semibold, fontSize: 13 },
 
-  // DEV DEBUG
-  devCard: { marginTop: 10, padding: theme.spacing.md, borderRadius: 16 },
-  devHeaderRow: { gap: 4 },
-  devTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
-  devMeta: { color: theme.colors.textSecondary, fontWeight: "800", fontSize: theme.fontSize.xs },
-
-  devGrid: { marginTop: 10, flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  devPill: {
-    paddingVertical: 6,
-    paddingHorizontal: 10,
+  chipsRow: { marginTop: 12, flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  chip: {
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
+    borderColor: theme.colors.border,
     backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
-    flexDirection: "row",
-    alignItems: "baseline",
-    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
   },
-  devPillK: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: theme.fontSize.xs },
-  devPillV: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
+  chipText: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.medium },
 
-  devSmall: {
-    marginTop: 8,
-    color: theme.colors.textSecondary,
-    fontWeight: "800",
-    fontSize: theme.fontSize.xs,
-    lineHeight: 16,
-  },
-  devSmallStrong: { color: theme.colors.text, fontWeight: "900" },
+  // Sections
+  section: { marginTop: 2 },
+  sectionHeader: { gap: 4 },
+  sectionTitle: { color: theme.colors.text, fontSize: 18, fontWeight: theme.fontWeight.medium },
+  sectionMeta: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.regular },
 
-  devList: { marginTop: 8, gap: 4 },
-  devListItem: { color: theme.colors.textSecondary, fontWeight: "800", fontSize: theme.fontSize.xs },
-  devListMore: { marginTop: 6, color: theme.colors.textSecondary, fontWeight: "900", fontSize: theme.fontSize.xs },
+  card: { padding: theme.spacing.md },
 
-  devOk: { marginTop: 8, color: theme.colors.textSecondary, fontWeight: "900", fontSize: theme.fontSize.xs },
+  center: { paddingVertical: 14, alignItems: "center", gap: 10 },
+  muted: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.medium },
 
-  heroHint: {
-    marginTop: 10,
-    color: theme.colors.textSecondary,
-    fontSize: theme.fontSize.sm,
-    lineHeight: 18,
-    fontWeight: "700",
-  },
-
-  /* SEARCH RESULTS */
+  // Search results
   searchResults: { marginTop: 14, gap: 16 },
-  searchHeaderRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "baseline", gap: 10 },
-  searchSectionTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
-  searchSectionMeta: { color: theme.colors.textSecondary, fontWeight: "800", fontSize: theme.fontSize.xs },
-  searchEmpty: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, marginTop: 8, fontWeight: "700" },
+  group: { gap: 10 },
+  groupHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "baseline", gap: 10 },
+  groupTitle: { color: theme.colors.text, fontSize: 15, fontWeight: theme.fontWeight.medium },
+  groupMeta: { color: theme.colors.textTertiary, fontSize: 12, fontWeight: theme.fontWeight.regular },
+  groupEmpty: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.regular },
 
-  resultList: { marginTop: 10, gap: 10 },
+  resultList: { gap: 10 },
 
   rowPress: { borderRadius: 16 },
   rowCard: { borderRadius: 16 },
@@ -1047,115 +737,98 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
   },
+  rowTitle: { color: theme.colors.text, fontWeight: theme.fontWeight.medium, fontSize: 15 },
+  rowMeta: { marginTop: 4, color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.regular },
+  chev: { color: theme.colors.textTertiary, fontSize: 24, marginTop: -2 },
 
-  rowTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.md },
-  rowMeta: { marginTop: 4, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, fontWeight: "700" },
-  chev: { color: theme.colors.textSecondary, fontSize: 24, marginTop: -2 },
-
-  matchList: { marginTop: 10, gap: 10 },
-  matchCard: { padding: theme.spacing.md, gap: 10 },
-
-  matchActions: { flexDirection: "row", gap: 10 },
-  smallActionBtn: {
-    flex: 1,
-    borderRadius: 12,
-    paddingVertical: 12,
-    alignItems: "center",
-    borderWidth: 1,
-  },
-  smallActionPrimary: {
-    borderColor: "rgba(0,255,136,0.55)",
-    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.default : theme.glass.iosBg.default,
-  },
-  smallActionPrimaryText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
-
-  smallActionGhost: {
-    borderColor: theme.glass.border,
-    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
-  },
-  smallActionGhostText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: theme.fontSize.sm },
-
-  disabled: { opacity: 0.55 },
-
-  /* LINK BUTTON */
-  linkBtn: {
-    marginTop: 12,
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
-    alignItems: "center",
-  },
-  linkText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
-
-  /* QUICK ACTIONS */
-  quickCard: { padding: theme.spacing.md },
-  quickTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.md },
-  quickSub: {
-    marginTop: 6,
-    color: theme.colors.textSecondary,
-    fontSize: theme.fontSize.sm,
-    lineHeight: 18,
-    fontWeight: "700",
-  },
-
-  btn: { borderRadius: 14, borderWidth: 1, alignItems: "center", justifyContent: "center" },
-
-  btnPrimary: {
-    marginTop: 12,
-    paddingVertical: 14,
-    borderColor: "rgba(0,255,136,0.55)",
-    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.default : theme.glass.iosBg.default,
-  },
-  btnPrimaryText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.md },
-  btnPrimaryMeta: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: "800" },
-
-  quickRow: { marginTop: 10, flexDirection: "row", gap: 10 },
-  btnSecondary: {
-    flex: 1,
-    paddingVertical: 12,
-    borderColor: theme.glass.border,
-    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
-  },
-  btnSecondaryText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
-
-  /* LEAGUES */
-  leagueWrap: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  // League selector (quiet)
+  leagueRow: { gap: 10, paddingRight: theme.spacing.lg, marginTop: 10 },
   leaguePill: {
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: theme.glass.border,
+    borderColor: theme.colors.border,
     backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
   },
   leaguePillActive: {
-    borderColor: "rgba(0,255,136,0.55)",
+    borderColor: "rgba(79,224,138,0.35)",
     backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.default : theme.glass.iosBg.default,
   },
-  leaguePillText: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, fontWeight: "800" },
-  leaguePillTextActive: { color: theme.colors.text, fontWeight: "900" },
+  leaguePillText: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.medium },
+  leaguePillTextActive: { color: theme.colors.text, fontWeight: theme.fontWeight.medium },
 
-  /* FIXTURES */
-  fixtureList: { marginTop: 10, gap: 10 },
-  fixtureCard: { padding: theme.spacing.md, gap: 10 },
+  // Match list (uses a lightweight “universal match row”)
+  matchList: { marginTop: 10, gap: 10 },
+  matchRowPress: { borderRadius: 16 },
+  matchRowCard: { borderRadius: 16 },
+  matchRowInner: {
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  thumb: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+  },
+  matchTitle: { color: theme.colors.text, fontSize: 15, fontWeight: theme.fontWeight.medium },
+  matchMeta: { marginTop: 4, color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.regular },
 
-  /* NEXT TRIP */
-  nextTripPress: { borderRadius: 16 },
-  nextTripCard: { padding: theme.spacing.md },
-  nextTripKicker: {
-    color: theme.colors.primary,
-    fontSize: theme.fontSize.xs,
-    fontWeight: "900",
-    letterSpacing: 0.3,
+  // CTA row
+  ctaRow: { flexDirection: "row", gap: 10, marginTop: 12 },
+  btn: {
+    flex: 1,
+    borderRadius: 16,
+    paddingVertical: 12,
+    alignItems: "center",
+    borderWidth: 1,
   },
-  nextTripTitle: { marginTop: 6, color: theme.colors.text, fontSize: theme.fontSize.lg, fontWeight: "900" },
-  nextTripMeta: {
-    marginTop: 6,
-    color: theme.colors.textSecondary,
-    fontSize: theme.fontSize.sm,
-    lineHeight: 18,
-    fontWeight: "700",
+  btnPrimary: {
+    borderColor: "rgba(79,224,138,0.35)",
+    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.default : theme.glass.iosBg.default,
   },
+  btnPrimaryText: { color: theme.colors.text, fontSize: 15, fontWeight: theme.fontWeight.medium },
+
+  btnGhost: {
+    borderColor: theme.colors.border,
+    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
+  },
+  btnGhostText: { color: theme.colors.textSecondary, fontSize: 15, fontWeight: theme.fontWeight.medium },
+
+  // Link button (single, understated)
+  linkBtn: {
+    marginTop: 12,
+    paddingVertical: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
+    alignItems: "center",
+  },
+  linkText: { color: theme.colors.textSecondary, fontSize: 14, fontWeight: theme.fontWeight.medium },
+
+  // Trips (minimal)
+  emptyTitle: { color: theme.colors.text, fontSize: 15, fontWeight: theme.fontWeight.medium },
+  emptyMeta: { marginTop: 6, color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.regular, lineHeight: 18 },
+
+  nextTripPress: { borderRadius: 16, marginTop: 2 },
+  nextTripCard: { borderRadius: 16 },
+  nextTripInner: { paddingVertical: 14, paddingHorizontal: 14 },
+  nextTripKicker: { color: theme.colors.textTertiary, fontSize: 12, fontWeight: theme.fontWeight.medium },
+  nextTripTitle: { marginTop: 6, color: theme.colors.text, fontSize: 18, fontWeight: theme.fontWeight.medium },
+  nextTripMeta: { marginTop: 6, color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.regular, lineHeight: 18 },
+
+  // Inspiration
+  inspoList: { gap: 10 },
+  inspoPress: { borderRadius: 16 },
+  inspoCard: { borderRadius: 16 },
+  inspoInner: { paddingVertical: 14, paddingHorizontal: 14 },
+  inspoTitle: { color: theme.colors.text, fontSize: 15, fontWeight: theme.fontWeight.medium },
+  inspoSub: { marginTop: 6, color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.regular, lineHeight: 18 },
 });
