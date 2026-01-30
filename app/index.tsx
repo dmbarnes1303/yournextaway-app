@@ -1,4 +1,3 @@
-// app/index.tsx
 import React, { useEffect } from "react";
 import { View } from "react-native";
 import { useRouter } from "expo-router";
@@ -11,20 +10,13 @@ export default function Index() {
     let cancelled = false;
 
     (async () => {
-      try {
-        const seenLanding = await storage.getString("yna:seenLanding");
+      const seenLanding = await storage.getString("yna:seenLanding");
+      if (cancelled) return;
 
-        if (cancelled) return;
-
-        if (seenLanding === "true") {
-          router.replace("/(tabs)/home");
-        } else {
-          router.replace("/landing");
-        }
-      } catch {
-        if (!cancelled) router.replace("/landing");
-      }
-    })();
+      router.replace(seenLanding === "true" ? "/(tabs)/home" : "/landing");
+    })().catch(() => {
+      if (!cancelled) router.replace("/landing");
+    });
 
     return () => {
       cancelled = true;
