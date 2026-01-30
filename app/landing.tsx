@@ -17,7 +17,7 @@ const STORAGE_KEYS = {
 };
 
 export default function Landing() {
-  const router = useRouter();
+  const routerrouter = useRouter();
 
   const markSeen = useCallback(async () => {
     try {
@@ -29,6 +29,8 @@ export default function Landing() {
 
   const handleGetStarted = useCallback(async () => {
     await markSeen();
+    R
+    const router = useRouter();
     router.push("/onboarding");
   }, [markSeen, router]);
 
@@ -44,20 +46,21 @@ export default function Landing() {
       <Background imageSource={getBackgroundSource("landing")} overlayOpacity={0.58}>
         <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
           <View style={styles.screen}>
-            {/* Push brand block down into top third */}
+            {/* Top spacer pushes brand into top third */}
             <View style={styles.brandSpacerTop} />
 
+            {/* Brand */}
             <View style={styles.brand}>
               <Image source={LOGO} style={styles.logo} resizeMode="contain" />
               <Text style={styles.tagline}>Football-First City Breaks Across Europe</Text>
             </View>
 
-            {/* Keep a little breathing room before the CTA section */}
+            {/* Middle spacer keeps card positioning stable */}
             <View style={styles.brandSpacerBottom} />
 
-            {/* Bottom-anchored CTA card with consistent bottom margin */}
+            {/* CTA */}
             <View style={styles.cardWrap}>
-              <GlassCard style={styles.card} intensity={10}>
+              <GlassCard style={styles.card} intensity={8}>
                 <Text style={styles.h1}>Plan Your Next Away</Text>
 
                 <Text style={styles.body}>
@@ -92,17 +95,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.lg,
   },
 
-  /**
-   * These two spacers control the overall composition:
-   * - brandSpacerTop pushes the logo down into the top third
-   * - brandSpacerBottom controls the gap between brand and CTA
-   *
-   * If you want the logo LOWER: increase brandSpacerTop (e.g. 1.25)
-   * If you want the logo HIGHER: decrease brandSpacerTop (e.g. 0.95)
-   */
+  // ↓ push logo down slightly more than before (premium)
   brandSpacerTop: {
-    flex: 1.15,
-    minHeight: 18,
+    flex: 1.35,
+    minHeight: 24,
   },
 
   brand: {
@@ -114,14 +110,18 @@ const styles = StyleSheet.create({
     height: 130,
   },
 
+  // Improve legibility without adding a "box"
   tagline: {
     marginTop: 10,
-    maxWidth: 320,
-    color: "rgba(255,255,255,0.82)",
+    maxWidth: 330,
+    color: "rgba(255,255,255,0.86)",
     fontWeight: theme.fontWeight.black,
     fontSize: theme.fontSize.sm,
     textAlign: "center",
     letterSpacing: 0.25,
+    textShadowColor: "rgba(0,0,0,0.55)",
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 10,
   },
 
   brandSpacerBottom: {
@@ -129,16 +129,18 @@ const styles = StyleSheet.create({
     minHeight: 12,
   },
 
+  // bring CTA card up slightly from bottom for balance
   cardWrap: {
     justifyContent: "flex-end",
-    paddingBottom: theme.spacing.xl, // consistent bottom offset (premium spacing)
+    paddingBottom: theme.spacing.lg,
   },
 
+  // More transparent + less visible border (stop drawing a rectangle)
   card: {
     padding: theme.spacing.lg,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.11)", // transparent enough to reveal the hero
+    borderColor: "rgba(255,255,255,0.06)",
+    backgroundColor: "rgba(0,0,0,0.085)",
   },
 
   h1: {
@@ -151,7 +153,7 @@ const styles = StyleSheet.create({
 
   body: {
     marginTop: 10,
-    color: "rgba(255,255,255,0.72)",
+    color: "rgba(255,255,255,0.74)",
     fontWeight: theme.fontWeight.bold,
     fontSize: theme.fontSize.md,
     lineHeight: 22,
@@ -173,7 +175,7 @@ const styles = StyleSheet.create({
 
   btnPrimary: {
     borderColor: theme.colors.primary,
-    backgroundColor: "rgba(0,0,0,0.16)",
+    backgroundColor: "rgba(0,0,0,0.14)",
   },
 
   btnPrimaryText: {
@@ -183,12 +185,12 @@ const styles = StyleSheet.create({
   },
 
   btnGhost: {
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.07)",
+    borderColor: "rgba(255,255,255,0.08)",
+    backgroundColor: "rgba(0,0,0,0.05)",
   },
 
   btnGhostText: {
-    color: "rgba(255,255,255,0.72)",
+    color: "rgba(255,255,255,0.70)",
     fontWeight: theme.fontWeight.black,
     fontSize: theme.fontSize.md,
   },
