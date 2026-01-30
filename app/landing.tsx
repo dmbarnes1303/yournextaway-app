@@ -1,12 +1,12 @@
 // app/landing.tsx
-import React, { useCallback, useMemo } from "react";
+import React, { useCallback } from "react";
 import { View, Text, StyleSheet, Pressable, Image } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Stack, useRouter } from "expo-router";
 
 import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
-import { getBackground } from "@/src/constants/backgrounds";
+import { getBackgroundSource } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
 import storage from "@/src/services/storage";
 
@@ -37,23 +37,24 @@ export default function Landing() {
     router.replace("/(tabs)/home");
   }, [markSeen, router]);
 
-  const tagline = useMemo(() => "Football-First City Breaks Across Europe", []);
-
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
 
-      <Background imageUrl={getBackground("landing")} overlayOpacity={0.68}>
-        <SafeAreaView style={styles.safe} edges={["bottom"]}>
+      <Background imageSource={getBackgroundSource("landing")} overlayOpacity={0.62}>
+        <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
           <View style={styles.screen}>
-            {/* Brand block */}
+            {/* Brand (top-aligned, premium) */}
             <View style={styles.brand}>
               <Image source={LOGO} style={styles.logo} resizeMode="contain" />
-              <Text style={styles.tagline}>{tagline}</Text>
+              <Text style={styles.tagline}>Football-First City Breaks Across Europe</Text>
             </View>
 
-            {/* CTA card */}
-            <GlassCard style={[styles.card, styles.cardLite]} intensity={16}>
+            {/* Controlled spacer to kill the “dead zone” */}
+            <View style={styles.midSpacer} />
+
+            {/* CTA Card */}
+            <GlassCard style={styles.card} intensity={18}>
               <Text style={styles.h1}>Plan Your Next Away</Text>
 
               <Text style={styles.body}>
@@ -86,37 +87,37 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: theme.spacing.lg,
     paddingBottom: theme.spacing.xxl,
-    justifyContent: "space-between",
+    paddingTop: 18,
   },
 
   brand: {
     alignItems: "center",
-    paddingTop: 18,
   },
 
-  // Slightly higher + more “top hero” feel without leaving a dead gap
-  logo: {
-    width: 150,
-    height: 150,
-    marginTop: 6,
-  },
+  // Slightly smaller so it doesn’t bully the page, and reduces perceived gaps
+  logo: { width: 128, height: 128 },
 
   tagline: {
-    marginTop: 14,
-    color: "rgba(255,255,255,0.78)",
+    marginTop: 12,
+    color: "rgba(255,255,255,0.80)",
     fontWeight: theme.fontWeight.black,
     fontSize: theme.fontSize.sm,
     textAlign: "center",
     letterSpacing: 0.2,
   },
 
-  card: { padding: theme.spacing.lg },
+  // This is the “gap controller”
+  // Increase/decrease this ONE number to tune the layout.
+  midSpacer: {
+    flex: 1,
+    minHeight: 18,
+  },
 
-  // More transparent so the background actually shows
-  cardLite: {
-    backgroundColor: "rgba(0,0,0,0.14)",
-    borderColor: "rgba(255,255,255,0.12)",
+  card: {
+    padding: theme.spacing.lg,
     borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.18)", // lets background show through without killing readability
   },
 
   h1: {
@@ -128,7 +129,7 @@ const styles = StyleSheet.create({
 
   body: {
     marginTop: 10,
-    color: "rgba(255,255,255,0.70)",
+    color: "rgba(255,255,255,0.72)",
     fontWeight: theme.fontWeight.bold,
     fontSize: theme.fontSize.md,
     lineHeight: 22,
@@ -165,7 +166,7 @@ const styles = StyleSheet.create({
   },
 
   btnGhostText: {
-    color: "rgba(255,255,255,0.78)",
+    color: "rgba(255,255,255,0.80)",
     fontWeight: theme.fontWeight.black,
     fontSize: theme.fontSize.md,
   },
