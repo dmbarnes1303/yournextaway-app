@@ -23,7 +23,7 @@ export type BackgroundKey =
  * If you later host the landing image, replace landing with a URL and delete the require.
  */
 const BACKGROUND_SOURCES: Record<BackgroundKey, ImageSourcePropType> = {
-  landing: require("@/src/landing-hero.png"),
+  landing: require("@/src/assets/backgrounds/landing-hero.png"),
 
   home: { uri: "https://images.unsplash.com/photo-1502602898657-3e91760cbb34?auto=format&fit=crop&w=1600&q=80" },
   fixtures: { uri: "https://images.unsplash.com/photo-1508098682722-e99c43a406b2?auto=format&fit=crop&w=1600&q=80" },
