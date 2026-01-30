@@ -41,7 +41,7 @@ export default function Landing() {
     <>
       <Stack.Screen options={{ headerShown: false }} />
 
-      <Background imageSource={getBackgroundSource("landing")} overlayOpacity={0.62}>
+      <Background imageSource={getBackgroundSource("landing")} overlayOpacity={0.58}>
         <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
           <View style={styles.screen}>
             {/* Brand (top-aligned, premium) */}
@@ -111,7 +111,7 @@ const styles = StyleSheet.create({
   // Increase/decrease this ONE number to tune the layout.
   midSpacer: {
     flex: 1,
-    minHeight: 18,
+    minHeight: 10,
   },
 
   card: {
@@ -122,11 +122,12 @@ const styles = StyleSheet.create({
   },
 
   h1: {
-    color: theme.colors.text,
-    fontWeight: theme.fontWeight.black,
-    fontSize: theme.fontSize.xl,
-    letterSpacing: 0.2,
-  },
+  color: theme.colors.text,
+  fontWeight: theme.fontWeight.black,
+  fontSize: theme.fontSize.lg,
+  lineHeight: 30,
+  letterSpacing: 0.2,
+},
 
   body: {
     marginTop: 10,
@@ -152,7 +153,7 @@ const styles = StyleSheet.create({
 
   btnPrimary: {
     borderColor: theme.colors.primary,
-    backgroundColor: "rgba(0,0,0,0.22)",
+    backgroundColor: "rgba(0,0,0,0.18)",
   },
 
   btnPrimaryText: {
@@ -162,12 +163,12 @@ const styles = StyleSheet.create({
   },
 
   btnGhost: {
-    borderColor: "rgba(255,255,255,0.14)",
-    backgroundColor: "rgba(0,0,0,0.12)",
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.08)",
   },
 
   btnGhostText: {
-    color: "rgba(255,255,255,0.80)",
+    color: "rgba(255,255,255,0.72)",
     fontWeight: theme.fontWeight.black,
     fontSize: theme.fontSize.md,
   },
