@@ -9,6 +9,7 @@ import {
   Alert,
   Image,
   useWindowDimensions,
+  Switch,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -23,26 +24,37 @@ import { theme } from "@/src/constants/theme";
 type RowProps = {
   title: string;
   subtitle?: string;
-  rightText?: string;
-  onPress: () => void;
+  value?: string;
+  onPress?: () => void;
+  rightSlot?: React.ReactNode;
   last?: boolean;
 };
 
-function Row({ title, subtitle, rightText, onPress, last }: RowProps) {
-  return (
-    <Pressable onPress={onPress} style={[styles.row, last && styles.rowLast]}>
+function Row({ title, subtitle, value, onPress, rightSlot, last }: RowProps) {
+  const content = (
+    <View style={[styles.row, last && styles.rowLast]}>
       <View style={{ flex: 1 }}>
         <Text style={styles.rowTitle}>{title}</Text>
         {subtitle ? <Text style={styles.rowSubtitle}>{subtitle}</Text> : null}
       </View>
 
-      {rightText ? (
-        <Text style={styles.rowRight} numberOfLines={1}>
-          {rightText}
+      {rightSlot ? rightSlot : null}
+
+      {!rightSlot && value ? (
+        <Text style={styles.rowValue} numberOfLines={1}>
+          {value}
         </Text>
       ) : null}
 
-      <Text style={styles.chev}>›</Text>
+      {onPress ? <Text style={styles.chev}>›</Text> : null}
+    </View>
+  );
+
+  if (!onPress) return content;
+
+  return (
+    <Pressable onPress={onPress} style={({ pressed }) => [{ opacity: pressed ? 0.85 : 1 }]}>
+      {content}
     </Pressable>
   );
 }
@@ -73,10 +85,7 @@ function getCountryCodeBestEffort(): string {
 }
 
 const STORAGE_KEYS = {
-  // Option B: boot routing uses ONLY this flag (app/index.tsx)
   setupComplete: "yna:setupComplete",
-
-  // Setup fields
   plan: "yna:plan",
   homeAirport: "yna:profile.homeAirport",
   currency: "yna:profile.currency",
@@ -86,6 +95,7 @@ const STORAGE_KEYS = {
 };
 
 type PlanValue = "not_set" | "free" | "premium";
+type AlertsValue = "On" | "Off";
 
 const AIRPORTS_BY_COUNTRY: Record<string, SelectOption[]> = {
   GB: [
@@ -174,7 +184,7 @@ const PLAN_OPTIONS: SelectOption[] = [
 function planLabel(plan: PlanValue) {
   if (plan === "free") return "Free";
   if (plan === "premium") return "Premium";
-  return "Not Set";
+  return "Not set";
 }
 
 export default function ProfileScreen() {
@@ -192,26 +202,34 @@ export default function ProfileScreen() {
   const [currency, setCurrency] = useState("GBP");
   const [language, setLanguage] = useState("English");
   const [budgetTarget, setBudgetTarget] = useState("Not Set");
-  const [alerts, setAlerts] = useState<"On" | "Off">("Off");
+  const [alerts, setAlerts] = useState<AlertsValue>("Off");
   const [setupComplete, setSetupComplete] = useState(false);
 
   const [activePicker, setActivePicker] = useState<null | "airport" | "currency" | "language" | "budget" | "plan">(null);
   const closePicker = useCallback(() => setActivePicker(null), []);
 
   const countryCode = useMemo(() => getCountryCodeBestEffort(), []);
-  const airportOptions = useMemo(
-    () => AIRPORTS_BY_COUNTRY[countryCode] ?? AIRPORTS_BY_COUNTRY.GB,
-    [countryCode]
-  );
+  const airportOptions = useMemo(() => AIRPORTS_BY_COUNTRY[countryCode] ?? AIRPORTS_BY_COUNTRY.GB, [countryCode]);
+
+  const logoSize = useMemo(() => {
+    const max = 86;
+    const min = 62;
+    if (width < 360) return min;
+    if (width < 410) return 76;
+    return max;
+  }, [width]);
+
+  // Derived
+  const canFinishSetup = useMemo(() => homeAirport !== "Not Set" && plan !== "not_set", [homeAirport, plan]);
 
   const budgetSummary = useMemo(() => {
-    if (budgetTarget === "Not Set") return "Not Set";
-    return `${currency} ${budgetTarget}${alerts === "On" ? " • Alerts On" : " • Alerts Off"}`;
+    const b = budgetTarget === "Not Set" ? "Not set" : `${currency} ${budgetTarget}`;
+    return alerts === "On" ? `${b} • Alerts on` : `${b} • Alerts off`;
   }, [alerts, budgetTarget, currency]);
 
   const budgetOptions = useMemo<SelectOption[]>(() => {
     return [
-      { label: "Not Set", value: "Not Set" },
+      { label: "Not set", value: "Not Set" },
       { label: `${currency} 150`, value: "150" },
       { label: `${currency} 250`, value: "250" },
       { label: `${currency} 350`, value: "350" },
@@ -219,14 +237,6 @@ export default function ProfileScreen() {
       { label: `${currency} 750`, value: "750" },
     ];
   }, [currency]);
-
-  const logoSize = useMemo(() => {
-    const max = 90;
-    const min = 64;
-    if (width < 360) return min;
-    if (width < 410) return 78;
-    return max;
-  }, [width]);
 
   // Load persisted settings once
   useEffect(() => {
@@ -287,13 +297,58 @@ export default function ProfileScreen() {
     })();
   }, [alerts, budgetTarget, currency, homeAirport, language, loading, plan]);
 
-  const openPreferences = useCallback(() => {
-    showInfo(
-      "Preferences",
-      "Set your planning defaults here: date window, league coverage, sorting, and general behaviour.\n\nNext: wire this into the core fixture + trip build flow."
-    );
+  const finishSetup = useCallback(async () => {
+    if (!canFinishSetup) {
+      Alert.alert("Finish setup", "To finish setup, you must:\n\n• Set your Home Airport\n• Choose Free or Premium");
+      return;
+    }
+
+    try {
+      await AsyncStorage.setItem(STORAGE_KEYS.setupComplete, "true");
+      setSetupComplete(true);
+      router.replace("/(tabs)/home");
+    } catch {
+      Alert.alert("Something went wrong", "We couldn’t save setup status, but you can continue.");
+      router.replace("/(tabs)/home");
+    }
+  }, [canFinishSetup, router]);
+
+  const resetSetup = useCallback(() => {
+    Alert.alert("Reset setup?", "This will make the app show Landing again on next launch.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Reset",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await AsyncStorage.multiSet([
+              [STORAGE_KEYS.setupComplete, "false"],
+              [STORAGE_KEYS.plan, "not_set"],
+              [STORAGE_KEYS.homeAirport, "Not Set"],
+              [STORAGE_KEYS.currency, "GBP"],
+              [STORAGE_KEYS.language, "English"],
+              [STORAGE_KEYS.budgetTarget, "Not Set"],
+              [STORAGE_KEYS.alerts, "Off"],
+            ]);
+
+            setSetupComplete(false);
+            setPlan("not_set");
+            setHomeAirport("Not Set");
+            setCurrency("GBP");
+            setLanguage("English");
+            setBudgetTarget("Not Set");
+            setAlerts("Off");
+
+            Alert.alert("Reset complete", "Landing will show again next time you open the app.");
+          } catch {
+            Alert.alert("Reset failed", "Couldn’t reset setup status.");
+          }
+        },
+      },
+    ]);
   }, []);
 
+  // Info / legal
   const openFAQ = useCallback(() => {
     showInfo(
       "FAQ",
@@ -316,95 +371,26 @@ export default function ProfileScreen() {
     showInfo("Terms", "Terms will be available here.");
   }, []);
 
-  const canFinishSetup = useMemo(() => {
-    return homeAirport !== "Not Set" && plan !== "not_set";
-  }, [homeAirport, plan]);
-
-  const finishSetup = useCallback(async () => {
-    if (!canFinishSetup) {
-      Alert.alert("Finish setup", "To finish setup, you must:\n\n• Set your Home Airport\n• Choose Free or Premium");
-      return;
-    }
-
-    try {
-      await AsyncStorage.setItem(STORAGE_KEYS.setupComplete, "true");
-      setSetupComplete(true);
-      router.replace("/(tabs)/home");
-    } catch {
-      Alert.alert("Something went wrong", "We couldn’t save setup status, but you can continue.");
-      router.replace("/(tabs)/home");
-    }
-  }, [canFinishSetup, router]);
-
-  const resetSetup = useCallback(() => {
-    Alert.alert(
-      "Reset setup?",
-      "This will make the app show Landing again on next launch.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Reset",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              // Option B: boot routing uses ONLY setupComplete.
-              await AsyncStorage.multiSet([
-                [STORAGE_KEYS.setupComplete, "false"],
-                [STORAGE_KEYS.plan, "not_set"],
-                [STORAGE_KEYS.homeAirport, "Not Set"],
-                [STORAGE_KEYS.currency, "GBP"],
-                [STORAGE_KEYS.language, "English"],
-                [STORAGE_KEYS.budgetTarget, "Not Set"],
-                [STORAGE_KEYS.alerts, "Off"],
-              ]);
-
-              setSetupComplete(false);
-              setPlan("not_set");
-              setHomeAirport("Not Set");
-              setCurrency("GBP");
-              setLanguage("English");
-              setBudgetTarget("Not Set");
-              setAlerts("Off");
-
-              Alert.alert("Reset complete", "Landing will show again next time you open the app.");
-            } catch {
-              Alert.alert("Reset failed", "Couldn’t reset setup status.");
-            }
-          },
-        },
-      ]
-    );
-  }, []);
-
-  const planSummary = useMemo(() => {
-    return plan === "not_set" ? "Not Set" : planLabel(plan);
-  }, [plan]);
+  const planSummary = useMemo(() => planLabel(plan), [plan]);
 
   return (
-    <Background imageUrl={getBackground("profile")} overlayOpacity={0.7}>
+    <Background imageUrl={getBackground("profile")} overlayOpacity={0.78}>
       <SafeAreaView style={styles.container} edges={["top"]}>
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={styles.content}
-          showsVerticalScrollIndicator={false}
-        >
+        <ScrollView style={styles.scrollView} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+          {/* HEADER */}
           <View style={styles.headerRow}>
             <View style={{ flex: 1 }}>
               <Text style={styles.title}>Profile</Text>
-              <Text style={styles.subtitle}>Account, Preferences, And App Info</Text>
+              <Text style={styles.subtitle}>Your defaults and app info</Text>
             </View>
 
-            <View style={[styles.headerLogoMask, { width: logoSize, height: logoSize, pointerEvents: "none" }]}>
-              <Image
-                source={LOGO}
-                style={[styles.headerLogoImage, { width: logoSize, height: logoSize }]}
-                resizeMode="cover"
-              />
+            <View style={[styles.logoMask, { width: logoSize, height: logoSize }]} pointerEvents="none">
+              <Image source={LOGO} style={{ width: logoSize, height: logoSize, transform: [{ scale: 1.18 }] }} resizeMode="cover" />
             </View>
           </View>
 
-          {/* Setup status + Finish setup */}
-          <GlassCard style={styles.card} intensity={24}>
+          {/* IDENTITY */}
+          <GlassCard style={styles.card} strength="default">
             <View style={styles.identityTop}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.name}>{displayName}</Text>
@@ -412,163 +398,129 @@ export default function ProfileScreen() {
               </View>
 
               <Pressable onPress={() => setActivePicker("plan")} style={styles.planPill}>
-                <Text style={styles.planLabel}>Plan</Text>
-                <Text style={styles.planValue}>{planSummary}</Text>
+                <Text style={styles.planPillLabel}>Plan</Text>
+                <Text style={styles.planPillValue}>{planSummary}</Text>
               </Pressable>
             </View>
 
             <View style={styles.divider} />
 
-            <Text style={styles.sectionH}>Setup</Text>
-
-            <View style={styles.setupRow}>
-              <View style={styles.setupStatus}>
-                <Text style={styles.setupKicker}>Setup Status</Text>
-                <Text style={styles.setupValue}>{setupComplete ? "Complete" : "Not Complete"}</Text>
+            <View style={styles.setupBlock}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.sectionH}>Setup</Text>
+                <Text style={styles.sectionHint}>
+                  Set a home airport and plan. Then the app boots straight into Home.
+                </Text>
               </View>
 
+              <View style={styles.setupStatusPill}>
+                <Text style={styles.setupStatusKicker}>Status</Text>
+                <Text style={styles.setupStatusValue}>{setupComplete ? "Complete" : "Incomplete"}</Text>
+              </View>
+            </View>
+
+            <View style={styles.primaryActions}>
               <Pressable
                 onPress={finishSetup}
                 disabled={!canFinishSetup}
-                style={[styles.finishBtn, canFinishSetup ? styles.finishBtnOn : styles.finishBtnOff]}
+                style={[styles.btn, styles.btnPrimary, !canFinishSetup && styles.btnDisabled]}
               >
-                <Text style={styles.finishBtnText}>Finish Setup</Text>
-              </Pressable>
-            </View>
-
-            <Text style={styles.setupHint}>
-              To finish setup: set a Home Airport + choose Free/Premium. After that, the app will boot straight into Home.
-            </Text>
-
-            <View style={styles.quickActions}>
-              <Pressable onPress={() => setActivePicker("plan")} style={[styles.smallBtn, styles.smallBtnPrimary]}>
-                <Text style={styles.smallBtnText}>Choose Plan</Text>
+                <Text style={styles.btnPrimaryText}>Finish setup</Text>
+                <Text style={styles.btnMeta}>{canFinishSetup ? "Save & continue" : "Choose plan + airport"}</Text>
               </Pressable>
 
-              <Pressable onPress={resetSetup} style={[styles.smallBtn, styles.smallBtnGhost]}>
-                <Text style={styles.smallBtnGhostText}>Reset Setup</Text>
+              <Pressable onPress={resetSetup} style={[styles.btn, styles.btnGhost]}>
+                <Text style={styles.btnGhostText}>Reset</Text>
+                <Text style={styles.btnMeta}>Show Landing next launch</Text>
               </Pressable>
             </View>
           </GlassCard>
 
-          <GlassCard style={styles.card} intensity={24}>
-            <Text style={styles.sectionH}>Your Defaults</Text>
-
-            <View style={styles.defaultsRow}>
-              <Pressable onPress={() => setActivePicker("airport")} style={styles.defaultChip}>
-                <Text style={styles.defaultKicker}>Home Airport</Text>
-                <Text style={styles.defaultValue} numberOfLines={1}>
-                  {homeAirport}
-                </Text>
-              </Pressable>
-
-              <Pressable onPress={() => setActivePicker("currency")} style={styles.defaultChip}>
-                <Text style={styles.defaultKicker}>Currency</Text>
-                <Text style={styles.defaultValue} numberOfLines={1}>
-                  {currency}
-                </Text>
-              </Pressable>
+          {/* DEFAULTS */}
+          <GlassCard style={[styles.card, { padding: 0 }]} strength="subtle" noPadding>
+            <View style={styles.listHeader}>
+              <Text style={styles.sectionH}>Your defaults</Text>
+              <Text style={styles.listSub}>{`Region: ${countryCode}`}</Text>
             </View>
 
-            <View style={styles.defaultsRow}>
-              <Pressable onPress={() => setActivePicker("language")} style={styles.defaultChip}>
-                <Text style={styles.defaultKicker}>Language</Text>
-                <Text style={styles.defaultValue} numberOfLines={1}>
-                  {language}
-                </Text>
-              </Pressable>
-
-              <Pressable onPress={() => setActivePicker("budget")} style={styles.defaultChip}>
-                <Text style={styles.defaultKicker}>Budget & Alerts</Text>
-                <Text style={styles.defaultValue} numberOfLines={1}>
-                  {budgetSummary}
-                </Text>
-              </Pressable>
-            </View>
-
-            <View style={styles.quickActions}>
-              <Pressable onPress={openPreferences} style={[styles.smallBtn, styles.smallBtnPrimary]}>
-                <Text style={styles.smallBtnText}>Edit Preferences</Text>
-              </Pressable>
-
-              <Pressable
-                onPress={() =>
-                  showInfo(
-                    "Notifications",
-                    "Fixture reminders and trip prompts.\n\nKeep it quiet and useful: no spam, no noise."
-                  )
-                }
-                style={[styles.smallBtn, styles.smallBtnGhost]}
-              >
-                <Text style={styles.smallBtnGhostText}>Notifications</Text>
-              </Pressable>
-            </View>
-          </GlassCard>
-
-          <GlassCard style={[styles.card, { padding: 0 }]} intensity={24}>
-            <Row title="Plan" subtitle="Choose Free or Premium" rightText={planSummary} onPress={() => setActivePicker("plan")} />
             <Row
-              title="Home Airport"
-              subtitle={`Departure defaults for comparisons (${countryCode})`}
-              rightText={homeAirport}
+              title="Home airport"
+              subtitle="Departure defaults for comparisons"
+              value={homeAirport === "Not Set" ? "Not set" : homeAirport}
               onPress={() => setActivePicker("airport")}
             />
-            <Row title="Currency" subtitle="Budgets and comparisons" rightText={currency} onPress={() => setActivePicker("currency")} />
-            <Row title="Language" subtitle="App language" rightText={language} onPress={() => setActivePicker("language")} />
+            <Row title="Plan" subtitle="Free or Premium" value={planSummary} onPress={() => setActivePicker("plan")} />
+            <Row title="Currency" subtitle="Budgets and comparisons" value={currency} onPress={() => setActivePicker("currency")} />
+            <Row title="Language" subtitle="App language" value={language} onPress={() => setActivePicker("language")} />
             <Row
-              title="Budget & Alerts"
-              subtitle="Target budget and drop alerts"
-              rightText={budgetTarget === "Not Set" ? "Not Set" : budgetSummary}
+              title="Budget"
+              subtitle={budgetTarget === "Not Set" ? "Optional" : "Target budget for quick planning"}
+              value={budgetTarget === "Not Set" ? "Not set" : `${currency} ${budgetTarget}`}
               onPress={() => setActivePicker("budget")}
+            />
+            <Row
+              title="Alerts"
+              subtitle="Budget drop alerts (quiet, useful)"
               last
+              rightSlot={
+                <View style={styles.switchWrap}>
+                  <Switch
+                    value={alerts === "On"}
+                    onValueChange={(v) => setAlerts(v ? "On" : "Off")}
+                  />
+                </View>
+              }
             />
           </GlassCard>
 
-          <GlassCard style={[styles.card, { padding: 0 }]} intensity={24}>
-            <Row title="FAQ" subtitle="How it works and what’s included" onPress={openFAQ} last />
-          </GlassCard>
+          {/* INFO */}
+          <GlassCard style={[styles.card, { padding: 0 }]} strength="subtle" noPadding>
+            <View style={styles.listHeader}>
+              <Text style={styles.sectionH}>Help & info</Text>
+              <Text style={styles.listSub}>No noise. Just the essentials.</Text>
+            </View>
 
-          <GlassCard style={[styles.card, { padding: 0 }]} intensity={24}>
+            <Row title="FAQ" subtitle="How the flow works" onPress={openFAQ} />
             <Row title="About" subtitle="What YourNextAway does" onPress={about} />
             <Row title="Privacy" subtitle="What’s stored and where" onPress={privacy} />
             <Row title="Terms" subtitle="Legal" onPress={terms} last />
           </GlassCard>
 
-          <Text style={styles.footerNote}>Plan • Fly • Watch • Repeat</Text>
+          <Text style={styles.footerNote}>PLAN • FLY • WATCH • REPEAT</Text>
           <View style={{ height: 10 }} />
         </ScrollView>
 
-        {/* Pickers */}
+        {/* PICKERS */}
         <SelectModal
           visible={activePicker === "plan"}
-          title="Choose Your Plan"
-          subtitle="Pick Free or Premium. This is required to finish setup."
+          title="Choose your plan"
+          subtitle="Pick Free or Premium. Required to finish setup."
           options={PLAN_OPTIONS}
           selectedValue={plan === "not_set" ? "" : plan}
           onClose={closePicker}
           onSelect={(v) => setPlan(v === "free" || v === "premium" ? v : "not_set")}
           allowClear
-          clearLabel="Clear Plan"
+          clearLabel="Clear plan"
           clearValue=""
         />
 
         <SelectModal
           visible={activePicker === "airport"}
-          title="Home Airport"
+          title="Home airport"
           subtitle={`Select a departure airport (${countryCode}).`}
           options={airportOptions}
           selectedValue={homeAirport}
           onClose={closePicker}
           onSelect={setHomeAirport}
           allowClear
-          clearLabel="Clear Airport"
+          clearLabel="Clear airport"
           clearValue="Not Set"
         />
 
         <SelectModal
           visible={activePicker === "currency"}
           title="Currency"
-          subtitle="Choose the currency used for budgets and comparisons."
+          subtitle="Used for budgets and comparisons."
           options={CURRENCY_OPTIONS}
           selectedValue={currency}
           onClose={closePicker}
@@ -588,26 +540,15 @@ export default function ProfileScreen() {
         <SelectModal
           visible={activePicker === "budget"}
           title="Budget"
-          subtitle={`Pick a target budget. Alerts are currently: ${alerts}`}
+          subtitle={alerts === "On" ? "Alerts are on" : "Alerts are off"}
           options={budgetOptions}
           selectedValue={budgetTarget}
           onClose={closePicker}
           onSelect={(v) => setBudgetTarget(v === "Not Set" ? "Not Set" : v)}
           allowClear
-          clearLabel="Clear Budget"
+          clearLabel="Clear budget"
           clearValue="Not Set"
         />
-
-        {activePicker === "budget" ? (
-          <View style={[styles.alertToggleWrap, { pointerEvents: "box-none" }]}>
-            <Pressable
-              onPress={() => setAlerts((p) => (p === "Off" ? "On" : "Off"))}
-              style={[styles.alertToggle, alerts === "On" && styles.alertToggleOn]}
-            >
-              <Text style={styles.alertToggleText}>{alerts === "On" ? "Alerts: On" : "Alerts: Off"}</Text>
-            </Pressable>
-          </View>
-        ) : null}
       </SafeAreaView>
     </Background>
   );
@@ -631,13 +572,12 @@ const styles = StyleSheet.create({
     gap: 12,
   },
 
-  headerLogoMask: {
+  logoMask: {
     borderRadius: 999,
     overflow: "hidden",
     backgroundColor: "transparent",
     marginTop: 2,
   },
-  headerLogoImage: { transform: [{ scale: 1.22 }] },
 
   title: {
     fontSize: theme.fontSize.xxl,
@@ -652,7 +592,7 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeight.bold,
   },
 
-  card: { padding: theme.spacing.md },
+  card: { padding: theme.spacing.lg },
 
   identityTop: { flexDirection: "row", alignItems: "center", gap: 12 },
 
@@ -665,11 +605,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderWidth: 1,
     borderColor: "rgba(0,255,136,0.28)",
-    backgroundColor: "rgba(0,0,0,0.22)",
+    backgroundColor: "rgba(0,0,0,0.20)",
     alignItems: "flex-end",
   },
-  planLabel: { color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: theme.fontWeight.black },
-  planValue: { marginTop: 2, color: theme.colors.primary, fontSize: theme.fontSize.sm, fontWeight: theme.fontWeight.black },
+  planPillLabel: { color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: theme.fontWeight.black },
+  planPillValue: { marginTop: 2, color: theme.colors.primary, fontSize: theme.fontSize.sm, fontWeight: theme.fontWeight.black },
 
   divider: {
     marginTop: 14,
@@ -680,119 +620,76 @@ const styles = StyleSheet.create({
 
   sectionH: { color: theme.colors.text, fontSize: theme.fontSize.md, fontWeight: theme.fontWeight.black },
 
-  setupRow: {
-    marginTop: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-
-  setupStatus: {
-    flex: 1,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    backgroundColor: "rgba(0,0,0,0.22)",
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    minHeight: 70,
-    justifyContent: "space-between",
-  },
-
-  setupKicker: {
-    color: theme.colors.textSecondary,
-    fontSize: theme.fontSize.xs,
-    fontWeight: theme.fontWeight.black,
-    lineHeight: 14,
-  },
-
-  setupValue: {
-    color: theme.colors.text,
-    fontSize: theme.fontSize.sm,
-    fontWeight: theme.fontWeight.black,
-  },
-
-  finishBtn: {
-    borderRadius: 14,
-    paddingVertical: 14,
-    paddingHorizontal: 14,
-    borderWidth: 1,
-    minHeight: 70,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-
-  finishBtnOn: {
-    borderColor: theme.colors.primary,
-    backgroundColor: "rgba(0,0,0,0.40)",
-  },
-
-  finishBtnOff: {
-    borderColor: "rgba(255,255,255,0.12)",
-    backgroundColor: "rgba(0,0,0,0.18)",
-    opacity: 0.65,
-  },
-
-  finishBtnText: {
-    color: theme.colors.text,
-    fontWeight: theme.fontWeight.black,
-    fontSize: theme.fontSize.sm,
-  },
-
-  setupHint: {
-    marginTop: 10,
+  sectionHint: {
+    marginTop: 6,
     color: theme.colors.textSecondary,
     fontSize: theme.fontSize.sm,
     lineHeight: 18,
-    fontWeight: theme.fontWeight.bold,
+    fontWeight: "700",
   },
 
-  defaultsRow: { marginTop: 12, flexDirection: "row", gap: 10 },
+  setupBlock: { flexDirection: "row", alignItems: "center", gap: 10 },
 
-  defaultChip: {
-    flex: 1,
+  setupStatusPill: {
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    backgroundColor: "rgba(0,0,0,0.22)",
-    paddingVertical: 12,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+    paddingVertical: 10,
     paddingHorizontal: 12,
-    minHeight: 70,
-    justifyContent: "space-between",
+    minWidth: 110,
+    alignItems: "flex-end",
   },
+  setupStatusKicker: { color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: theme.fontWeight.black },
+  setupStatusValue: { marginTop: 3, color: theme.colors.text, fontSize: theme.fontSize.sm, fontWeight: theme.fontWeight.black },
 
-  defaultKicker: {
-    color: theme.colors.textSecondary,
-    fontSize: theme.fontSize.xs,
-    fontWeight: theme.fontWeight.black,
-    lineHeight: 14,
-  },
-  defaultValue: { color: theme.colors.text, fontSize: theme.fontSize.sm, fontWeight: theme.fontWeight.black },
+  primaryActions: { marginTop: 14, flexDirection: "row", gap: 10 },
 
-  quickActions: { marginTop: 14, flexDirection: "row", gap: 10 },
-
-  smallBtn: {
+  btn: {
     flex: 1,
     borderRadius: 14,
     paddingVertical: 12,
-    alignItems: "center",
+    paddingHorizontal: 10,
     borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 2,
   },
-  smallBtnPrimary: { borderColor: theme.colors.primary, backgroundColor: "rgba(0,0,0,0.40)" },
-  smallBtnText: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.sm },
-  smallBtnGhost: { borderColor: theme.colors.border, backgroundColor: "rgba(0,0,0,0.22)" },
-  smallBtnGhostText: { color: theme.colors.textSecondary, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.sm },
+
+  btnPrimary: {
+    borderColor: "rgba(0,255,136,0.50)",
+    backgroundColor: "rgba(0,0,0,0.30)",
+  },
+  btnPrimaryText: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.sm },
+
+  btnGhost: {
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+  },
+  btnGhostText: { color: theme.colors.textSecondary, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.sm },
+
+  btnDisabled: { opacity: 0.6 },
+
+  btnMeta: { color: theme.colors.textTertiary, fontSize: theme.fontSize.xs, fontWeight: "800" },
+
+  listHeader: {
+    paddingHorizontal: theme.spacing.lg,
+    paddingTop: theme.spacing.lg,
+    paddingBottom: 10,
+  },
+
+  listSub: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, fontWeight: "700" },
 
   row: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    paddingHorizontal: theme.spacing.md,
+    paddingHorizontal: theme.spacing.lg,
     paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(255,255,255,0.10)",
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255,255,255,0.10)",
   },
-  rowLast: { borderBottomWidth: 0 },
+  rowLast: {},
 
   rowTitle: { color: theme.colors.text, fontSize: theme.fontSize.md, fontWeight: theme.fontWeight.black },
   rowSubtitle: {
@@ -803,13 +700,15 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeight.bold,
   },
 
-  rowRight: {
-    maxWidth: 150,
+  rowValue: {
+    maxWidth: 170,
     color: theme.colors.textSecondary,
     fontSize: theme.fontSize.sm,
     fontWeight: theme.fontWeight.black,
     marginRight: 2,
   },
+
+  switchWrap: { marginRight: 2 },
 
   chev: { color: theme.colors.textSecondary, fontSize: 26, marginTop: -2 },
 
@@ -820,34 +719,5 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeight.black,
     letterSpacing: 0.6,
     marginTop: 2,
-  },
-
-  /* Alerts Toggle Overlay */
-  alertToggleWrap: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 22,
-    alignItems: "center",
-  },
-
-  alertToggle: {
-    borderRadius: 999,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    backgroundColor: "rgba(0,0,0,0.35)",
-  },
-
-  alertToggleOn: {
-    borderColor: "rgba(0,255,136,0.30)",
-    backgroundColor: "rgba(0,255,136,0.08)",
-  },
-
-  alertToggleText: {
-    color: theme.colors.text,
-    fontWeight: theme.fontWeight.black,
-    fontSize: theme.fontSize.sm,
   },
 });
