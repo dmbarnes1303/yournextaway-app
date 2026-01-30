@@ -115,10 +115,10 @@ const styles = StyleSheet.create({
   },
 
   card: {
-    padding: theme.spacing.lg,
+    padding: theme.spacing.md,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.18)", // lets background show through without killing readability
+    backgroundColor: "rgba(0,0,0,0.14)", // lets background show through without killing readability
   },
 
   h1: {
