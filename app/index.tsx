@@ -2,15 +2,19 @@
 import React, { useEffect } from "react";
 import { View } from "react-native";
 import { useRouter } from "expo-router";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import storage from "@/src/services/storage";
 
 export default function Index() {
   const router = useRouter();
 
   useEffect(() => {
+    let cancelled = false;
+
     (async () => {
       try {
-        const seenLanding = await AsyncStorage.getItem("yna:seenLanding");
+        const seenLanding = await storage.getString("yna:seenLanding");
+
+        if (cancelled) return;
 
         if (seenLanding === "true") {
           router.replace("/(tabs)/home");
@@ -18,9 +22,13 @@ export default function Index() {
           router.replace("/landing");
         }
       } catch {
-        router.replace("/landing");
+        if (!cancelled) router.replace("/landing");
       }
     })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [router]);
 
   return <View />;
