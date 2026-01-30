@@ -15,11 +15,16 @@ export type BackgroundKey =
   | "onboarding2"
   | "onboarding3";
 
+/**
+ * Backgrounds policy:
+ * - Landing: local bundled image (reliable even with private repo)
+ * - Everything else: remote URLs (your existing policy)
+ */
 const LOCAL_BACKGROUNDS: Partial<Record<BackgroundKey, ImageSourcePropType>> = {
   landing: require("@/src/assets/backgrounds/landing-hero.png"),
 };
 
-const REMOTE_BACKGROUNDS: Record<Exclude<BackgroundKey, "landing">, string> = {
+const BACKGROUND_URLS: Record<Exclude<BackgroundKey, "landing">, string> = {
   home: "https://images.unsplash.com/photo-1502602898657-3e91760cbb34?auto=format&fit=crop&w=1600&q=80",
   fixtures: "https://images.unsplash.com/photo-1508098682722-e99c43a406b2?auto=format&fit=crop&w=1600&q=80",
   build: "https://images.unsplash.com/photo-1529070538774-1843cb3265df?auto=format&fit=crop&w=1600&q=80",
@@ -33,9 +38,19 @@ const REMOTE_BACKGROUNDS: Record<Exclude<BackgroundKey, "landing">, string> = {
   onboarding3: "https://images.unsplash.com/photo-1505765050516-f72dcac9c60b?auto=format&fit=crop&w=1600&q=80",
 };
 
+/** URL accessor (for any legacy callers still using imageUrl=...) */
+export function getBackground(key: BackgroundKey): string {
+  if (key === "landing") return BACKGROUND_URLS.home;
+  return BACKGROUND_URLS[key];
+}
+
+/** Preferred accessor */
 export function getBackgroundSource(key: BackgroundKey): ImageSourcePropType {
   const local = LOCAL_BACKGROUNDS[key];
   if (local) return local;
-  const url = (REMOTE_BACKGROUNDS as any)[key] as string | undefined;
-  return { uri: url ?? REMOTE_BACKGROUNDS.home };
+
+  const url = BACKGROUND_URLS[key as Exclude<BackgroundKey, "landing">] ?? BACKGROUND_URLS.home;
+  return { uri: url };
 }
+
+export { BACKGROUND_URLS, LOCAL_BACKGROUNDS };
