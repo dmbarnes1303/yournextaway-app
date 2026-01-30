@@ -2,100 +2,185 @@
 import { Platform } from "react-native";
 
 /**
- * Subscriptions service (SAFE STUB)
+ * Web-safe subscriptions wrapper.
  *
- * Why this exists:
- * - Your app is currently crashing because `react-native-purchases` is not resolvable (especially on web).
- * - This stub keeps the app running until you intentionally wire RevenueCat/IAP properly.
+ * Key rule:
+ * - NEVER top-level import native-only modules (react-native-purchases).
+ * - Use dynamic import inside functions, only on iOS/Android.
  *
- * Rules:
- * - Never hard-import native-only modules at top-level in a project that bundles for web.
- * - Keep surface area stable so the rest of the app doesn’t need refactors later.
+ * This keeps Expo Web running without crash loops.
  */
+
+export type PurchasesProduct = {
+  identifier: string;
+  title: string;
+  priceString: string;
+  currencyCode?: string;
+};
 
 export type PurchasesPackage = {
   identifier: string;
-  product: {
-    identifier: string;
-    title?: string;
-    description?: string;
-    priceString?: string;
-    price?: number;
-    currencyCode?: string;
-  };
+  product: PurchasesProduct;
 };
 
-export type PurchasesOffering = {
-  identifier: string;
-  availablePackages: PurchasesPackage[];
-};
+export type OfferingsResult =
+  | { ok: true; packages: PurchasesPackage[] }
+  | { ok: false; message: string };
 
-export type PurchasesOfferings = {
-  current?: PurchasesOffering | null;
-  all?: Record<string, PurchasesOffering>;
-};
+export type PurchaseResult =
+  | { ok: true }
+  | { ok: false; cancelled?: boolean; message: string };
 
-export type PurchaseResult = {
-  ok: boolean;
-  cancelled?: boolean;
-  message?: string;
-};
+export type RestoreResult =
+  | { ok: true }
+  | { ok: false; message: string };
 
-export type CustomerInfo = {
-  activeEntitlements: string[];
-};
-
-/**
- * App-wide capability switch:
- * - Web: always false (RevenueCat is native-first; you can add Stripe later if you want web paywalls)
- * - Native: still false until you wire the real SDK + keys
- */
 export function subscriptionsSupported(): boolean {
-  return Platform.OS !== "web" && Platform.OS !== "windows" && Platform.OS !== "macos";
-}
-
-export async function configurePurchases(_opts: {
-  apiKey: string;
-  appUserId?: string;
-}): Promise<void> {
-  // Stub: no-op
-  return;
-}
-
-export async function setDebugLogsEnabled(_enabled: boolean): Promise<void> {
-  // Stub: no-op
-  return;
-}
-
-export async function getOfferings(): Promise<PurchasesOfferings> {
-  // Stub: empty offerings
-  return { current: null, all: {} };
-}
-
-export async function purchasePackage(_pkg: PurchasesPackage): Promise<PurchaseResult> {
-  // Stub: always fail gracefully (no crash)
-  return {
-    ok: false,
-    message: subscriptionsSupported()
-      ? "Subscriptions not configured yet."
-      : "Subscriptions are not supported on this platform.",
-  };
-}
-
-export async function restorePurchases(): Promise<CustomerInfo> {
-  // Stub: no entitlements
-  return { activeEntitlements: [] };
-}
-
-export async function getCustomerInfo(): Promise<CustomerInfo> {
-  // Stub: no entitlements
-  return { activeEntitlements: [] };
+  // RevenueCat is native-only in this setup.
+  return Platform.OS !== "web";
 }
 
 /**
- * Simple helper your UI can use for paywalls / gating.
+ * RevenueCat CustomerInfo is an opaque object here (we keep it untyped to stay web-safe).
+ * This helper must exist because ProContext calls it.
  */
-export async function hasPremiumEntitlement(_entitlementId = "premium"): Promise<boolean> {
-  // Stub: always false until you wire the real system.
+export function isProFromCustomerInfo(customerInfo: any): boolean {
+  if (!customerInfo) return false;
+
+  // Common RevenueCat shape:
+  // customerInfo.entitlements.active is a map of entitlementId -> entitlementInfo
+  const entitlements = customerInfo?.entitlements;
+  const active = entitlements?.active;
+
+  if (active && typeof active === "object") {
+    const keys = Object.keys(active);
+    if (keys.length > 0) return true;
+  }
+
+  // Some setups store activeSubscriptions array
+  const activeSubs = customerInfo?.activeSubscriptions;
+  if (Array.isArray(activeSubs) && activeSubs.length > 0) return true;
+
   return false;
+}
+
+/**
+ * Lazy-load Purchases only on native.
+ */
+async function loadPurchases() {
+  if (!subscriptionsSupported()) return null;
+
+  try {
+    const mod: any = await import("react-native-purchases");
+    return mod?.default ?? mod;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Offerings: return packages (best-effort).
+ * For now, if Purchases isn't configured, you still get a useful error not a crash.
+ */
+export async function getOfferings(): Promise<OfferingsResult> {
+  if (!subscriptionsSupported()) {
+    return { ok: false, message: "Subscriptions not supported on this platform." };
+  }
+
+  const Purchases = await loadPurchases();
+  if (!Purchases) {
+    return { ok: false, message: "Purchases SDK not available. (react-native-purchases missing)" };
+  }
+
+  try {
+    const offerings = await Purchases.getOfferings();
+    const current = offerings?.current;
+
+    const pkgs: PurchasesPackage[] = Array.isArray(current?.availablePackages)
+      ? current.availablePackages.map((p: any) => ({
+          identifier: String(p?.identifier ?? p?.packageType ?? "package"),
+          product: {
+            identifier: String(p?.product?.identifier ?? ""),
+            title: String(p?.product?.title ?? "Premium"),
+            priceString: String(p?.product?.priceString ?? ""),
+            currencyCode: String(p?.product?.currencyCode ?? ""),
+          },
+        }))
+      : [];
+
+    return { ok: true, packages: pkgs };
+  } catch (e: any) {
+    return { ok: false, message: e?.message ?? "Failed to fetch offerings." };
+  }
+}
+
+/**
+ * Purchase a package. Web-safe.
+ */
+export async function purchasePackage(pkg: PurchasesPackage): Promise<PurchaseResult> {
+  if (!subscriptionsSupported()) {
+    return { ok: false, message: "Purchases aren’t available on this platform." };
+  }
+
+  const Purchases = await loadPurchases();
+  if (!Purchases) {
+    return { ok: false, message: "Purchases SDK not available. (react-native-purchases missing)" };
+  }
+
+  try {
+    // RevenueCat expects its own package object; our minimal type won't match.
+    // If you want to wire real purchases, call purchasePackageFromOfferings() using the raw package.
+    // For now, return a clear message instead of crashing.
+    return { ok: false, message: "Purchases not wired yet. Hook this to real RevenueCat packages." };
+  } catch (e: any) {
+    const msg = e?.message ?? "Purchase failed.";
+    const cancelled =
+      msg.toLowerCase().includes("cancel") ||
+      msg.toLowerCase().includes("user cancelled") ||
+      e?.userCancelled === true;
+
+    return { ok: false, cancelled, message: msg };
+  }
+}
+
+/**
+ * Restore purchases. Web-safe.
+ */
+export async function restorePurchases(): Promise<RestoreResult> {
+  if (!subscriptionsSupported()) {
+    return { ok: false, message: "Restore isn’t available on this platform." };
+  }
+
+  const Purchases = await loadPurchases();
+  if (!Purchases) {
+    return { ok: false, message: "Purchases SDK not available. (react-native-purchases missing)" };
+  }
+
+  try {
+    await Purchases.restorePurchases();
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, message: e?.message ?? "Restore failed." };
+  }
+}
+
+/**
+ * Optional: fetch customer info for ProContext (native only).
+ */
+export async function getCustomerInfo(): Promise<{ ok: true; customerInfo: any } | { ok: false; message: string }> {
+  if (!subscriptionsSupported()) {
+    return { ok: false, message: "Customer info not supported on this platform." };
+  }
+
+  const Purchases = await loadPurchases();
+  if (!Purchases) {
+    return { ok: false, message: "Purchases SDK not available. (react-native-purchases missing)" };
+  }
+
+  try {
+    const info = await Purchases.getCustomerInfo();
+    return { ok: true, customerInfo: info };
+  } catch (e: any) {
+    return { ok: false, message: e?.message ?? "Failed to load customer info." };
+  }
 }
