@@ -9,13 +9,7 @@ import GlassCard from "@/src/components/GlassCard";
 import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
 
-import {
-  getOfferings,
-  purchasePackage,
-  restorePurchases,
-  subscriptionsSupported,
-  type PurchasesPackage,
-} from "@/src/services/subscriptions";
+import { purchasePackage, restorePurchases, subscriptionsSupported, type PurchasesPackage } from "@/src/services/subscriptions";
 
 type PlanCardProps = {
   title: string;
@@ -58,7 +52,6 @@ export default function PaywallScreen() {
   const [restoring, setRestoring] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Placeholder packages for now (keeps UI stable before RevenueCat wiring)
   const packages = useMemo<PurchasesPackage[]>(() => {
     return [
       {
@@ -83,13 +76,9 @@ export default function PaywallScreen() {
   }, []);
 
   const [selectedId, setSelectedId] = useState(packages[1]?.identifier ?? packages[0]?.identifier ?? "");
-
   const selectedPkg = useMemo(() => packages.find((p) => p.identifier === selectedId) ?? null, [packages, selectedId]);
 
-  const close = useCallback(() => {
-    // You can choose replace/back. Back is safest.
-    router.back();
-  }, [router]);
+  const close = useCallback(() => router.back(), [router]);
 
   const onContinue = useCallback(async () => {
     setError(null);
@@ -101,20 +90,17 @@ export default function PaywallScreen() {
 
     setLoading(true);
     try {
-      // If subscriptions not supported (web), fail gracefully instead of crashing.
       if (!subscriptionsSupported()) {
-        setError("Purchases aren’t available on this platform. Use iOS/Android to subscribe.");
+        setError("Purchases aren’t available on web. Use iOS/Android to subscribe.");
         return;
       }
 
-      // This currently uses the safe stub; later it’ll call real RevenueCat.
       const res = await purchasePackage(selectedPkg);
       if (!res.ok) {
         setError(res.cancelled ? "Purchase cancelled." : res.message ?? "Purchase failed.");
         return;
       }
 
-      // Success: exit paywall
       router.back();
     } catch (e: any) {
       setError(e?.message ?? "Purchase failed.");
@@ -128,10 +114,16 @@ export default function PaywallScreen() {
     setRestoring(true);
     try {
       if (!subscriptionsSupported()) {
-        setError("Restore isn’t available on this platform.");
+        setError("Restore isn’t available on web.");
         return;
       }
-      await restorePurchases();
+
+      const res = await restorePurchases();
+      if (!res.ok) {
+        setError(res.message ?? "Restore failed.");
+        return;
+      }
+
       router.back();
     } catch (e: any) {
       setError(e?.message ?? "Restore failed.");
@@ -150,10 +142,10 @@ export default function PaywallScreen() {
             <Text style={styles.closeText}>Close</Text>
           </Pressable>
 
-          <Text style={styles.kicker}>YOURNEXTAWAY • PREMIUM</Text>
+          <Text style={styles.kicker}>PREMIUM</Text>
           <Text style={styles.title}>Upgrade your planning.</Text>
           <Text style={styles.sub}>
-            Keep it calm, modern, and fast — premium adds the tools that make trip-building effortless.
+            Premium adds the tools that make trip-building faster and cleaner. No spam. No noise.
           </Text>
         </View>
 
@@ -161,7 +153,7 @@ export default function PaywallScreen() {
           <PlanCard
             title="Premium Monthly"
             price="£4.99 / month"
-            bullets={["Faster trip build flow", "Premium fixtures filters", "Saved preferences + defaults"]}
+            bullets={["Faster planning flow", "Better filtering", "Saved defaults"]}
             active={selectedId === "premium_monthly"}
             onPress={() => setSelectedId("premium_monthly")}
           />
@@ -169,7 +161,7 @@ export default function PaywallScreen() {
           <PlanCard
             title="Premium Yearly"
             price="£39.99 / year"
-            bullets={["Best value", "Everything in monthly", "Priority feature drops"]}
+            bullets={["Best value", "Everything in monthly", "Priority updates"]}
             active={selectedId === "premium_yearly"}
             onPress={() => setSelectedId("premium_yearly")}
           />
@@ -190,19 +182,13 @@ export default function PaywallScreen() {
               {restoring ? <ActivityIndicator /> : <Text style={styles.smallBtnText}>Restore</Text>}
             </Pressable>
 
-            <Pressable
-              onPress={() => {
-                // optional: later route to terms/privacy
-                setError("Terms/Privacy screen not wired yet.");
-              }}
-              style={styles.smallBtn}
-            >
+            <Pressable onPress={() => setError("Terms/Privacy screen not wired yet.")} style={styles.smallBtn}>
               <Text style={styles.smallBtnText}>Terms</Text>
             </Pressable>
           </View>
 
           <Text style={styles.note}>
-            Subscriptions are wired later via RevenueCat (native). For now, this screen is UI-complete and won’t crash web.
+            This screen is web-safe. RevenueCat wiring happens later (native only) via src/services/subscriptions.ts.
           </Text>
         </View>
       </SafeAreaView>
@@ -259,13 +245,8 @@ const styles = StyleSheet.create({
     gap: 12,
   },
 
-  planCard: {
-    borderRadius: 18,
-    padding: theme.spacing.md,
-  },
-  planCardActive: {
-    borderColor: "rgba(0,255,136,0.55)",
-  },
+  planCard: { borderRadius: 18, padding: theme.spacing.md },
+  planCardActive: { borderColor: "rgba(0,255,136,0.55)" },
 
   planTop: { flexDirection: "row", alignItems: "center", gap: 12 },
   planTitle: { color: theme.colors.text, fontWeight: "900" as any, fontSize: theme.fontSize.md },
