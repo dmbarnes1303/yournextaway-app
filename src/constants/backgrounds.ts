@@ -2,6 +2,7 @@
 import type { ImageSourcePropType } from "react-native";
 
 export type BackgroundKey =
+  | "landing"
   | "home"
   | "fixtures"
   | "build"
@@ -14,11 +15,11 @@ export type BackgroundKey =
   | "onboarding2"
   | "onboarding3";
 
-/**
- * Remote-only backgrounds (single policy).
- * Use direct Unsplash URLs with sizing params for predictable performance.
- */
-const BACKGROUND_URLS: Record<BackgroundKey, string> = {
+const LOCAL_BACKGROUNDS: Partial<Record<BackgroundKey, ImageSourcePropType>> = {
+  landing: require("@/src/assets/backgrounds/landing-hero.png"),
+};
+
+const REMOTE_BACKGROUNDS: Record<Exclude<BackgroundKey, "landing">, string> = {
   home: "https://images.unsplash.com/photo-1502602898657-3e91760cbb34?auto=format&fit=crop&w=1600&q=80",
   fixtures: "https://images.unsplash.com/photo-1508098682722-e99c43a406b2?auto=format&fit=crop&w=1600&q=80",
   build: "https://images.unsplash.com/photo-1529070538774-1843cb3265df?auto=format&fit=crop&w=1600&q=80",
@@ -32,20 +33,9 @@ const BACKGROUND_URLS: Record<BackgroundKey, string> = {
   onboarding3: "https://images.unsplash.com/photo-1505765050516-f72dcac9c60b?auto=format&fit=crop&w=1600&q=80",
 };
 
-/**
- * Backwards-compatible accessor: returns URL string.
- * Use where you still pass imageUrl="https://..."
- */
-export function getBackground(key: BackgroundKey): string {
-  return BACKGROUND_URLS[key] ?? BACKGROUND_URLS.home;
-}
-
-/**
- * Preferred accessor: returns ImageSourcePropType for Background imageSource.
- * Remote-only per project policy.
- */
 export function getBackgroundSource(key: BackgroundKey): ImageSourcePropType {
-  return { uri: getBackground(key) };
+  const local = LOCAL_BACKGROUNDS[key];
+  if (local) return local;
+  const url = (REMOTE_BACKGROUNDS as any)[key] as string | undefined;
+  return { uri: url ?? REMOTE_BACKGROUNDS.home };
 }
-
-export { BACKGROUND_URLS };
