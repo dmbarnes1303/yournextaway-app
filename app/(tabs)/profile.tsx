@@ -63,9 +63,6 @@ function showInfo(title: string, body: string) {
   Alert.alert(title, body);
 }
 
-/**
- * Best-effort country code (no extra libs).
- */
 function getCountryCodeBestEffort(): string {
   try {
     const locale = Intl.DateTimeFormat().resolvedOptions().locale || "";
@@ -85,8 +82,12 @@ function getCountryCodeBestEffort(): string {
 }
 
 const STORAGE_KEYS = {
+  seenLanding: "yna:seenLanding",
   setupComplete: "yna:setupComplete",
+
+  // Optional plan (not a gate)
   plan: "yna:plan",
+
   homeAirport: "yna:profile.homeAirport",
   currency: "yna:profile.currency",
   language: "yna:profile.language",
@@ -197,9 +198,12 @@ export default function ProfileScreen() {
 
   const [loading, setLoading] = useState(true);
 
+  const countryCode = useMemo(() => getCountryCodeBestEffort(), []);
+  const airportOptions = useMemo(() => AIRPORTS_BY_COUNTRY[countryCode] ?? AIRPORTS_BY_COUNTRY.GB, [countryCode]);
+
   const [plan, setPlan] = useState<PlanValue>("not_set");
   const [homeAirport, setHomeAirport] = useState("Not Set");
-  const [currency, setCurrency] = useState("GBP");
+  const [currency, setCurrency] = useState(countryCode === "GB" ? "GBP" : "EUR");
   const [language, setLanguage] = useState("English");
   const [budgetTarget, setBudgetTarget] = useState("Not Set");
   const [alerts, setAlerts] = useState<AlertsValue>("Off");
@@ -208,9 +212,6 @@ export default function ProfileScreen() {
   const [activePicker, setActivePicker] = useState<null | "airport" | "currency" | "language" | "budget" | "plan">(null);
   const closePicker = useCallback(() => setActivePicker(null), []);
 
-  const countryCode = useMemo(() => getCountryCodeBestEffort(), []);
-  const airportOptions = useMemo(() => AIRPORTS_BY_COUNTRY[countryCode] ?? AIRPORTS_BY_COUNTRY.GB, [countryCode]);
-
   const logoSize = useMemo(() => {
     const max = 86;
     const min = 62;
@@ -218,9 +219,6 @@ export default function ProfileScreen() {
     if (width < 410) return 76;
     return max;
   }, [width]);
-
-  // Derived
-  const canFinishSetup = useMemo(() => homeAirport !== "Not Set" && plan !== "not_set", [homeAirport, plan]);
 
   const budgetSummary = useMemo(() => {
     const b = budgetTarget === "Not Set" ? "Not set" : `${currency} ${budgetTarget}`;
@@ -238,7 +236,7 @@ export default function ProfileScreen() {
     ];
   }, [currency]);
 
-  // Load persisted settings once (best-effort)
+  // Load persisted settings once
   useEffect(() => {
     let mounted = true;
 
@@ -277,7 +275,7 @@ export default function ProfileScreen() {
     };
   }, []);
 
-  // Save changes best-effort whenever user updates settings
+  // Persist changes
   useEffect(() => {
     if (loading) return;
 
@@ -298,23 +296,22 @@ export default function ProfileScreen() {
   }, [alerts, budgetTarget, currency, homeAirport, language, loading, plan]);
 
   const finishSetup = useCallback(async () => {
-    if (!canFinishSetup) {
-      Alert.alert("Finish setup", "To finish setup, you must:\n\n• Set your Home Airport\n• Choose Free or Premium");
-      return;
-    }
+  try {
+    await storage.setString(STORAGE_KEYS.setupComplete, "true");
+    setSetupComplete(true);
+    router.replace("/(tabs)/home");
+  } catch {
+    // Even if persistence fails, keep UX moving.
+    setSetupComplete(true);
+    router.replace("/(tabs)/home");
+  }
+}, [router]);
 
-    try {
-      await storage.setString(STORAGE_KEYS.setupComplete, "true");
-      setSetupComplete(true);
-      router.replace("/(tabs)/home");
-    } catch {
-      Alert.alert("Something went wrong", "We couldn’t save setup status, but you can continue.");
-      router.replace("/(tabs)/home");
-    }
-  }, [canFinishSetup, router]);
-
-  const resetSetup = useCallback(() => {
-    Alert.alert("Reset setup?", "This will make the app show Landing again on next launch.", [
+const resetSetup = useCallback(() => {
+  Alert.alert(
+    "Reset setup?",
+    "This will make the app show Landing again on next launch.",
+    [
       { text: "Cancel", style: "cancel" },
       {
         text: "Reset",
@@ -322,10 +319,11 @@ export default function ProfileScreen() {
         onPress: async () => {
           try {
             await Promise.all([
+              storage.setString(STORAGE_KEYS.seenLanding, "false"),
               storage.setString(STORAGE_KEYS.setupComplete, "false"),
               storage.setString(STORAGE_KEYS.plan, "not_set"),
               storage.setString(STORAGE_KEYS.homeAirport, "Not Set"),
-              storage.setString(STORAGE_KEYS.currency, "GBP"),
+              storage.setString(STORAGE_KEYS.currency, countryCode === "GB" ? "GBP" : "EUR"),
               storage.setString(STORAGE_KEYS.language, "English"),
               storage.setString(STORAGE_KEYS.budgetTarget, "Not Set"),
               storage.setString(STORAGE_KEYS.alerts, "Off"),
@@ -334,7 +332,7 @@ export default function ProfileScreen() {
             setSetupComplete(false);
             setPlan("not_set");
             setHomeAirport("Not Set");
-            setCurrency("GBP");
+            setCurrency(countryCode === "GB" ? "GBP" : "EUR");
             setLanguage("English");
             setBudgetTarget("Not Set");
             setAlerts("Off");
@@ -345,214 +343,216 @@ export default function ProfileScreen() {
           }
         },
       },
-    ]);
-  }, []);
+    ]
+  );
+}, [countryCode]);
 
-  // Info / legal
-  const openFAQ = useCallback(() => {
-    showInfo(
-      "FAQ",
-      "How it works:\n• Start with a fixture\n• Save it as a trip\n• Build everything else in one hub (travel, stay, tickets, what to do)\n\nIf anything feels unclear, we tighten the flow."
-    );
-  }, []);
+// Info / legal
+const openFAQ = useCallback(() => {
+  showInfo(
+    "FAQ",
+    "How it works:\n• Start with a fixture\n• Save it as a trip\n• Build everything else in one hub (travel, stay, tickets, what to do)\n\nIf anything feels unclear, we tighten the flow."
+  );
+}, []);
 
-  const about = useCallback(() => {
-    showInfo(
-      "About YourNextAway",
-      "YourNextAway helps you plan football-first city breaks across Europe.\n\nStart with a match, then build the trip in one place — travel, stay, tickets, and what to do."
-    );
-  }, []);
+const about = useCallback(() => {
+  showInfo(
+    "About YourNextAway",
+    "YourNextAway helps you plan football-first city breaks across Europe.\n\nStart with a match, then build the trip in one place — travel, stay, tickets, and what to do."
+  );
+}, []);
 
-  const privacy = useCallback(() => {
-    showInfo("Privacy", "Trips and notes are stored locally by default.\n\nWhen sync is enabled, you’ll be able to use the app across devices.");
-  }, []);
+const privacy = useCallback(() => {
+  showInfo(
+    "Privacy",
+    "Trips and notes are stored locally by default.\n\nWhen sync is enabled, you’ll be able to use the app across devices."
+  );
+}, []);
 
-  const terms = useCallback(() => {
-    showInfo("Terms", "Terms will be available here.");
-  }, []);
+const terms = useCallback(() => {
+  showInfo("Terms", "Terms will be available here.");
+}, []);
 
-  const planSummary = useMemo(() => planLabel(plan), [plan]);
+const planSummary = useMemo(() => planLabel(plan), [plan]);
 
-  return (
-    <Background imageUrl={getBackground("profile")} overlayOpacity={0.78}>
-      <SafeAreaView style={styles.container} edges={["top"]}>
-        <ScrollView style={styles.scrollView} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-          {/* HEADER */}
-          <View style={styles.headerRow}>
+return (
+  <Background imageUrl={getBackground("profile")} overlayOpacity={0.78}>
+    <SafeAreaView style={styles.container} edges={["top"]}>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* HEADER */}
+        <View style={styles.headerRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.title}>Profile</Text>
+            <Text style={styles.subtitle}>Your defaults and app info</Text>
+          </View>
+
+          <View style={[styles.logoMask, { width: logoSize, height: logoSize }]} pointerEvents="none">
+            <Image
+              source={LOGO}
+              style={{ width: logoSize, height: logoSize, transform: [{ scale: 1.18 }] }}
+              resizeMode="cover"
+            />
+          </View>
+        </View>
+
+        {/* IDENTITY */}
+        <GlassCard style={styles.card} strength="default">
+          <View style={styles.identityTop}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.title}>Profile</Text>
-              <Text style={styles.subtitle}>Your defaults and app info</Text>
+              <Text style={styles.name}>{displayName}</Text>
+              <Text style={styles.meta}>{email}</Text>
             </View>
 
-            <View style={[styles.logoMask, { width: logoSize, height: logoSize }]} pointerEvents="none">
-              <Image
-                source={LOGO}
-                style={{ width: logoSize, height: logoSize, transform: [{ scale: 1.18 }] }}
-                resizeMode="cover"
-              />
+            <Pressable onPress={() => setActivePicker("plan")} style={styles.planPill}>
+              <Text style={styles.planPillLabel}>Plan</Text>
+              <Text style={styles.planPillValue}>{planSummary}</Text>
+            </Pressable>
+          </View>
+
+          <View style={styles.divider} />
+
+          <View style={styles.setupBlock}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.sectionH}>Setup</Text>
+              <Text style={styles.sectionHint}>Set your defaults. You can change them anytime.</Text>
+            </View>
+
+            <View style={styles.setupStatusPill}>
+              <Text style={styles.setupStatusKicker}>Status</Text>
+              <Text style={styles.setupStatusValue}>{setupComplete ? "Complete" : "Incomplete"}</Text>
             </View>
           </View>
 
-          {/* IDENTITY */}
-          <GlassCard style={styles.card} strength="default">
-            <View style={styles.identityTop}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.name}>{displayName}</Text>
-                <Text style={styles.meta}>{email}</Text>
+          <View style={styles.primaryActions}>
+            <Pressable onPress={finishSetup} style={[styles.btn, styles.btnPrimary]}>
+              <Text style={styles.btnPrimaryText}>Finish setup</Text>
+              <Text style={styles.btnMeta}>Save & continue</Text>
+            </Pressable>
+
+            <Pressable onPress={resetSetup} style={[styles.btn, styles.btnGhost]}>
+              <Text style={styles.btnGhostText}>Reset</Text>
+              <Text style={styles.btnMeta}>Show Landing next launch</Text>
+            </Pressable>
+          </View>
+        </GlassCard>
+
+        {/* DEFAULTS */}
+        <GlassCard style={[styles.card, { padding: 0 }]} strength="subtle" noPadding>
+          <View style={styles.listHeader}>
+            <Text style={styles.sectionH}>Your defaults</Text>
+            <Text style={styles.listSub}>{`Region: ${countryCode}`}</Text>
+          </View>
+
+          <Row
+            title="Home airport"
+            subtitle="Departure defaults for comparisons"
+            value={homeAirport === "Not Set" ? "Not set" : homeAirport}
+            onPress={() => setActivePicker("airport")}
+          />
+          <Row title="Plan" subtitle="Free or Premium" value={planSummary} onPress={() => setActivePicker("plan")} />
+          <Row title="Currency" subtitle="Budgets and comparisons" value={currency} onPress={() => setActivePicker("currency")} />
+          <Row title="Language" subtitle="App language" value={language} onPress={() => setActivePicker("language")} />
+          <Row
+            title="Budget"
+            subtitle={budgetTarget === "Not Set" ? "Optional" : "Target budget for quick planning"}
+            value={budgetTarget === "Not Set" ? "Not set" : `${currency} ${budgetTarget}`}
+            onPress={() => setActivePicker("budget")}
+          />
+          <Row
+            title="Alerts"
+            subtitle="Budget drop alerts (quiet, useful)"
+            last
+            rightSlot={
+              <View style={styles.switchWrap}>
+                <Switch value={alerts === "On"} onValueChange={(v) => setAlerts(v ? "On" : "Off")} />
               </View>
+            }
+          />
+        </GlassCard>
 
-              <Pressable onPress={() => setActivePicker("plan")} style={styles.planPill}>
-                <Text style={styles.planPillLabel}>Plan</Text>
-                <Text style={styles.planPillValue}>{planSummary}</Text>
-              </Pressable>
-            </View>
+        {/* INFO */}
+        <GlassCard style={[styles.card, { padding: 0 }]} strength="subtle" noPadding>
+          <View style={styles.listHeader}>
+            <Text style={styles.sectionH}>Help & info</Text>
+            <Text style={styles.listSub}>No noise. Just the essentials.</Text>
+          </View>
 
-            <View style={styles.divider} />
+          <Row title="FAQ" subtitle="How the flow works" onPress={openFAQ} />
+          <Row title="About" subtitle="What YourNextAway does" onPress={about} />
+          <Row title="Privacy" subtitle="What’s stored and where" onPress={privacy} />
+          <Row title="Terms" subtitle="Legal" onPress={terms} last />
+        </GlassCard>
 
-            <View style={styles.setupBlock}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.sectionH}>Setup</Text>
-                <Text style={styles.sectionHint}>
-                  Set a home airport and plan. Then the app boots straight into Home.
-                </Text>
-              </View>
+        <Text style={styles.footerNote}>PLAN • FLY • WATCH • REPEAT</Text>
+        <View style={{ height: 10 }} />
+      </ScrollView>
 
-              <View style={styles.setupStatusPill}>
-                <Text style={styles.setupStatusKicker}>Status</Text>
-                <Text style={styles.setupStatusValue}>{setupComplete ? "Complete" : "Incomplete"}</Text>
-              </View>
-            </View>
+      {/* PICKERS */}
+      <SelectModal
+        visible={activePicker === "plan"}
+        title="Choose your plan"
+        subtitle="Pick Free or Premium."
+        options={PLAN_OPTIONS}
+        selectedValue={plan === "not_set" ? "" : plan}
+        onClose={closePicker}
+        onSelect={(v) => setPlan(v === "free" || v === "premium" ? v : "not_set")}
+        allowClear
+        clearLabel="Clear plan"
+        clearValue=""
+      />
 
-            <View style={styles.primaryActions}>
-              <Pressable
-                onPress={finishSetup}
-                disabled={!canFinishSetup}
-                style={[styles.btn, styles.btnPrimary, !canFinishSetup && styles.btnDisabled]}
-              >
-                <Text style={styles.btnPrimaryText}>Finish setup</Text>
-                <Text style={styles.btnMeta}>{canFinishSetup ? "Save & continue" : "Choose plan + airport"}</Text>
-              </Pressable>
+      <SelectModal
+        visible={activePicker === "airport"}
+        title="Home airport"
+        subtitle={`Select a departure airport (${countryCode}).`}
+        options={airportOptions}
+        selectedValue={homeAirport}
+        onClose={closePicker}
+        onSelect={setHomeAirport}
+        allowClear
+        clearLabel="Clear airport"
+        clearValue="Not Set"
+      />
 
-              <Pressable onPress={resetSetup} style={[styles.btn, styles.btnGhost]}>
-                <Text style={styles.btnGhostText}>Reset</Text>
-                <Text style={styles.btnMeta}>Show Landing next launch</Text>
-              </Pressable>
-            </View>
-          </GlassCard>
+      <SelectModal
+        visible={activePicker === "currency"}
+        title="Currency"
+        subtitle="Used for budgets and comparisons."
+        options={CURRENCY_OPTIONS}
+        selectedValue={currency}
+        onClose={closePicker}
+        onSelect={setCurrency}
+      />
 
-          {/* DEFAULTS */}
-          <GlassCard style={[styles.card, { padding: 0 }]} strength="subtle" noPadding>
-            <View style={styles.listHeader}>
-              <Text style={styles.sectionH}>Your defaults</Text>
-              <Text style={styles.listSub}>{`Region: ${countryCode}`}</Text>
-            </View>
+      <SelectModal
+        visible={activePicker === "language"}
+        title="Language"
+        subtitle="Select your language."
+        options={LANGUAGE_OPTIONS}
+        selectedValue={language}
+        onClose={closePicker}
+        onSelect={setLanguage}
+      />
 
-            <Row
-              title="Home airport"
-              subtitle="Departure defaults for comparisons"
-              value={homeAirport === "Not Set" ? "Not set" : homeAirport}
-              onPress={() => setActivePicker("airport")}
-            />
-            <Row title="Plan" subtitle="Free or Premium" value={planSummary} onPress={() => setActivePicker("plan")} />
-            <Row title="Currency" subtitle="Budgets and comparisons" value={currency} onPress={() => setActivePicker("currency")} />
-            <Row title="Language" subtitle="App language" value={language} onPress={() => setActivePicker("language")} />
-            <Row
-              title="Budget"
-              subtitle={budgetTarget === "Not Set" ? "Optional" : "Target budget for quick planning"}
-              value={budgetTarget === "Not Set" ? "Not set" : `${currency} ${budgetTarget}`}
-              onPress={() => setActivePicker("budget")}
-            />
-            <Row
-              title="Alerts"
-              subtitle="Budget drop alerts (quiet, useful)"
-              last
-              rightSlot={
-                <View style={styles.switchWrap}>
-                  <Switch value={alerts === "On"} onValueChange={(v) => setAlerts(v ? "On" : "Off")} />
-                </View>
-              }
-            />
-          </GlassCard>
-
-          {/* INFO */}
-          <GlassCard style={[styles.card, { padding: 0 }]} strength="subtle" noPadding>
-            <View style={styles.listHeader}>
-              <Text style={styles.sectionH}>Help & info</Text>
-              <Text style={styles.listSub}>No noise. Just the essentials.</Text>
-            </View>
-
-            <Row title="FAQ" subtitle="How the flow works" onPress={openFAQ} />
-            <Row title="About" subtitle="What YourNextAway does" onPress={about} />
-            <Row title="Privacy" subtitle="What’s stored and where" onPress={privacy} />
-            <Row title="Terms" subtitle="Legal" onPress={terms} last />
-          </GlassCard>
-
-          <Text style={styles.footerNote}>PLAN • FLY • WATCH • REPEAT</Text>
-          <View style={{ height: 10 }} />
-        </ScrollView>
-
-        {/* PICKERS */}
-        <SelectModal
-          visible={activePicker === "plan"}
-          title="Choose your plan"
-          subtitle="Pick Free or Premium. Required to finish setup."
-          options={PLAN_OPTIONS}
-          selectedValue={plan === "not_set" ? "" : plan}
-          onClose={closePicker}
-          onSelect={(v) => setPlan(v === "free" || v === "premium" ? v : "not_set")}
-          allowClear
-          clearLabel="Clear plan"
-          clearValue=""
-        />
-
-        <SelectModal
-          visible={activePicker === "airport"}
-          title="Home airport"
-          subtitle={`Select a departure airport (${countryCode}).`}
-          options={airportOptions}
-          selectedValue={homeAirport}
-          onClose={closePicker}
-          onSelect={setHomeAirport}
-          allowClear
-          clearLabel="Clear airport"
-          clearValue="Not Set"
-        />
-
-        <SelectModal
-          visible={activePicker === "currency"}
-          title="Currency"
-          subtitle="Used for budgets and comparisons."
-          options={CURRENCY_OPTIONS}
-          selectedValue={currency}
-          onClose={closePicker}
-          onSelect={setCurrency}
-        />
-
-        <SelectModal
-          visible={activePicker === "language"}
-          title="Language"
-          subtitle="Select your language."
-          options={LANGUAGE_OPTIONS}
-          selectedValue={language}
-          onClose={closePicker}
-          onSelect={setLanguage}
-        />
-
-        <SelectModal
-          visible={activePicker === "budget"}
-          title="Budget"
-          subtitle={budgetSummary}
-          options={budgetOptions}
-          selectedValue={budgetTarget}
-          onClose={closePicker}
-          onSelect={(v) => setBudgetTarget(v === "Not Set" ? "Not Set" : v)}
-          allowClear
-          clearLabel="Clear budget"
-          clearValue="Not Set"
-        />
-      </SafeAreaView>
-    </Background>
-  );
+      <SelectModal
+        visible={activePicker === "budget"}
+        title="Budget"
+        subtitle={budgetSummary}
+        options={budgetOptions}
+        selectedValue={budgetTarget}
+        onClose={closePicker}
+        onSelect={(v) => setBudgetTarget(v === "Not Set" ? "Not Set" : v)}
+        allowClear
+        clearLabel="Clear budget"
+        clearValue="Not Set"
+      />
+    </SafeAreaView>
+  </Background>
+);
 }
 
 const styles = StyleSheet.create({
