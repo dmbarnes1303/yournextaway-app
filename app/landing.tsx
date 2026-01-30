@@ -44,35 +44,34 @@ export default function Landing() {
       <Background imageSource={getBackgroundSource("landing")} overlayOpacity={0.58}>
         <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
           <View style={styles.screen}>
-            {/* Brand (top-aligned, premium) */}
+            {/* Top-aligned brand block */}
             <View style={styles.brand}>
               <Image source={LOGO} style={styles.logo} resizeMode="contain" />
               <Text style={styles.tagline}>Football-First City Breaks Across Europe</Text>
             </View>
 
-            {/* Controlled spacer to kill the “dead zone” */}
-            <View style={styles.midSpacer} />
+            {/* Bottom-anchored CTA card */}
+            <View style={styles.bottomWrap}>
+              <GlassCard style={styles.card} intensity={10}>
+                <Text style={styles.h1}>Plan Your Next Away</Text>
 
-            {/* CTA Card */}
-            <GlassCard style={styles.card} intensity={18}>
-              <Text style={styles.h1}>Plan Your Next Away</Text>
+                <Text style={styles.body}>
+                  Pick a match or pick a city — we’ll help you build the full trip in one place.
+                </Text>
 
-              <Text style={styles.body}>
-                Pick a match or pick a city — we’ll help you build the full trip in one place.
-              </Text>
+                <View style={styles.actions}>
+                  <Pressable onPress={handleGetStarted} style={[styles.btn, styles.btnPrimary]}>
+                    <Text style={styles.btnPrimaryText}>Get Started</Text>
+                  </Pressable>
 
-              <View style={styles.actions}>
-                <Pressable onPress={handleGetStarted} style={[styles.btn, styles.btnPrimary]}>
-                  <Text style={styles.btnPrimaryText}>Get Started</Text>
-                </Pressable>
+                  <Pressable onPress={handleExploreFirst} style={[styles.btn, styles.btnGhost]}>
+                    <Text style={styles.btnGhostText}>Explore First</Text>
+                  </Pressable>
+                </View>
 
-                <Pressable onPress={handleExploreFirst} style={[styles.btn, styles.btnGhost]}>
-                  <Text style={styles.btnGhostText}>Explore First</Text>
-                </Pressable>
-              </View>
-
-              <Text style={styles.motto}>PLAN • FLY • WATCH • REPEAT</Text>
-            </GlassCard>
+                <Text style={styles.motto}>PLAN • FLY • WATCH • REPEAT</Text>
+              </GlassCard>
+            </View>
           </View>
         </SafeAreaView>
       </Background>
@@ -86,48 +85,49 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     paddingHorizontal: theme.spacing.lg,
-    paddingBottom: theme.spacing.xxl,
     paddingTop: 18,
+    paddingBottom: theme.spacing.xl,
   },
 
   brand: {
     alignItems: "center",
+    paddingTop: 6,
   },
 
-  // Slightly smaller so it doesn’t bully the page, and reduces perceived gaps
-  logo: { width: 128, height: 128 },
+  logo: {
+    width: 130,
+    height: 130,
+  },
 
   tagline: {
-  marginTop: 8,
-  maxWidth: 320,
-  color: "rgba(255,255,255,0.80)",
-  fontWeight: theme.fontWeight.black,
-  fontSize: theme.fontSize.sm,
-  textAlign: "center",
-  letterSpacing: 0.2,
-},
+    marginTop: 10,
+    maxWidth: 320,
+    color: "rgba(255,255,255,0.82)",
+    fontWeight: theme.fontWeight.black,
+    fontSize: theme.fontSize.sm,
+    textAlign: "center",
+    letterSpacing: 0.25,
+  },
 
-  // This is the “gap controller”
-  // Increase/decrease this ONE number to tune the layout.
-  midSpacer: {
+  bottomWrap: {
     flex: 1,
-    minHeight: 10,
+    justifyContent: "flex-end",
   },
 
   card: {
     padding: theme.spacing.md,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.14)", // lets background show through without killing readability
+    backgroundColor: "rgba(0,0,0,0.11)", // slightly more transparent than before
   },
 
   h1: {
-  color: theme.colors.text,
-  fontWeight: theme.fontWeight.black,
-  fontSize: theme.fontSize.lg,
-  lineHeight: 30,
-  letterSpacing: 0.2,
-},
+    color: theme.colors.text,
+    fontWeight: theme.fontWeight.black,
+    fontSize: theme.fontSize.lg,
+    lineHeight: 30,
+    letterSpacing: 0.2,
+  },
 
   body: {
     marginTop: 10,
@@ -153,7 +153,7 @@ const styles = StyleSheet.create({
 
   btnPrimary: {
     borderColor: theme.colors.primary,
-    backgroundColor: "rgba(0,0,0,0.18)",
+    backgroundColor: "rgba(0,0,0,0.16)",
   },
 
   btnPrimaryText: {
@@ -164,7 +164,7 @@ const styles = StyleSheet.create({
 
   btnGhost: {
     borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.08)",
+    backgroundColor: "rgba(0,0,0,0.07)",
   },
 
   btnGhostText: {
