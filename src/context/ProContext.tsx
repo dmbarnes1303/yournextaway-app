@@ -1,81 +1,75 @@
 // src/context/ProContext.tsx
-import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
-import type { CustomerInfo } from "react-native-purchases";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
 import {
-  addCustomerInfoListener,
-  configureRevenueCat,
-  getCustomerInfoSafe,
+  getCustomerInfo,
   isProFromCustomerInfo,
-  purchasesEnabled,
+  subscriptionsSupported,
 } from "@/src/services/subscriptions";
 
-type ProState = {
-  isReady: boolean;
+type ProContextValue = {
   isPro: boolean;
-  purchasesEnabled: boolean;
-  customerInfo: CustomerInfo | null;
+  supported: boolean;
+  loading: boolean;
+  lastError: string | null;
   refresh: () => Promise<void>;
 };
 
-const Ctx = createContext<ProState | null>(null);
+const ProContext = createContext<ProContextValue | null>(null);
 
 export function ProProvider({ children }: { children: React.ReactNode }) {
-  const [isReady, setIsReady] = useState(false);
-  const [customerInfo, setCustomerInfo] = useState<CustomerInfo | null>(null);
+  const supported = useMemo(() => subscriptionsSupported(), []);
+  const [isPro, setIsPro] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [lastError, setLastError] = useState<string | null>(null);
 
-  const isPro = useMemo(() => isProFromCustomerInfo(customerInfo), [customerInfo]);
-  const enabled = useMemo(() => purchasesEnabled(), []);
+  const refresh = useCallback(async () => {
+    setLastError(null);
 
-  async function refresh() {
-    const info = await getCustomerInfoSafe();
-    if (info) setCustomerInfo(info);
-  }
+    // Web: always safe false, no calls.
+    if (!supported) {
+      setIsPro(false);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    const res = await getCustomerInfo();
+
+    if (!res.ok) {
+      setLastError(res.message);
+      setIsPro(false);
+      setLoading(false);
+      return;
+    }
+
+    setIsPro(isProFromCustomerInfo(res.customerInfo));
+    setLoading(false);
+  }, [supported]);
 
   useEffect(() => {
-    let unsub: (() => void) | null = null;
-    let mounted = true;
+    // Initial load
+    refresh();
+  }, [refresh]);
 
-    (async () => {
-      try {
-        // Anonymous user by default; you can later pass a logged-in user id.
-        await configureRevenueCat(null);
+  const value = useMemo<ProContextValue>(
+    () => ({
+      isPro,
+      supported,
+      loading,
+      lastError,
+      refresh,
+    }),
+    [isPro, supported, loading, lastError, refresh]
+  );
 
-        if (!mounted) return;
-
-        const info = await getCustomerInfoSafe();
-        if (info) setCustomerInfo(info);
-
-        unsub = addCustomerInfoListener((next) => {
-          setCustomerInfo(next);
-        });
-      } finally {
-        if (mounted) setIsReady(true);
-      }
-    })();
-
-    return () => {
-      mounted = false;
-      if (unsub) unsub();
-    };
-  }, []);
-
-  const value: ProState = {
-    isReady,
-    isPro,
-    purchasesEnabled: enabled,
-    customerInfo,
-    refresh,
-  };
-
-  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+  return <ProContext.Provider value={value}>{children}</ProContext.Provider>;
 }
 
-export function usePro(): ProState {
-  const v = useContext(Ctx);
-  if (!v) {
-    // Hard fail early so you wrap layout correctly.
-    throw new Error("usePro() must be used inside <ProProvider>.");
+export function usePro() {
+  const ctx = useContext(ProContext);
+  if (!ctx) {
+    throw new Error("usePro must be used within a ProProvider");
   }
-  return v;
+  return ctx;
 }
