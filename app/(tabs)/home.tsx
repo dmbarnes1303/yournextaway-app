@@ -334,7 +334,7 @@ export default function HomeScreen() {
   );
 
   return (
-    <Background imageUrl={getBackground("home")} overlayOpacity={0.86}>
+    <Background imageUrl={getBackground("home")} overlayOpacity={0.65}>
       <SafeAreaView style={styles.container} edges={["top"]}>
         <ScrollView
           style={styles.scrollView}
