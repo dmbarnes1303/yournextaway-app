@@ -12,7 +12,7 @@ import { theme } from "@/src/constants/theme";
 import BackButton from "@/src/components/BackButton";
 import { ProProvider } from "@/src/context/ProContext";
 
-// IMPORTANT: error logger lives in /utils (NOT /src/utils)
+// Logger is in /utils, not /src/utils
 import "@/utils/errorLogger";
 
 // Keep the splash up until fonts are ready.
@@ -55,7 +55,8 @@ export default function RootLayout() {
 
             {/* Top funnel */}
             <Stack.Screen name="landing" options={{ headerShown: false }} />
-            <Stack.Screen name="onboarding" options={{ headerShown: true, headerTitle: "" }} />
+            {/* IMPORTANT: onboarding has its own UI, so hide the header */}
+            <Stack.Screen name="onboarding" options={{ headerShown: false }} />
 
             {/* Paywall */}
             <Stack.Screen name="paywall" options={{ headerTitle: "YourNextAway Pro" }} />
