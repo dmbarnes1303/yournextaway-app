@@ -20,7 +20,7 @@ const STORAGE_KEYS = {
  * - BRAND_DROP: + moves logo/subtitle DOWN (stable across devices)
  * - CARD_RAISE: + moves card UP (exposes stadium)
  */
-const BRAND_DROP = 18;
+const BRAND_DROP = 26;
 const CARD_RAISE = 36;
 
 export default function Landing() {
