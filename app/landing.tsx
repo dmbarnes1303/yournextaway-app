@@ -20,7 +20,7 @@ const STORAGE_KEYS = {
  * - BRAND_TOP: higher = logo sits lower (moves DOWN)
  * - CARD_RAISE: higher = card moves up more (exposes stadium)
  */
-const BRAND_TOP = 45;
+const BRAND_TOP = 75;
 const CARD_RAISE = 18;
 
 export default function Landing() {
