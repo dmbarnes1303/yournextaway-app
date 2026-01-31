@@ -14,13 +14,14 @@ import BackButton from "@/src/components/BackButton";
 import { ProProvider } from "@/src/context/ProContext";
 import { setupErrorLogging } from "@/src/utils/errorLogger";
 
+declare const __DEV__: boolean;
+
 // Keep the splash up until fonts are ready.
 SplashScreen.preventAutoHideAsync().catch(() => {
   // ignore
 });
 
-// ✅ Dev-only logging init (runs once per bundle load)
-declare const __DEV__: boolean;
+// ✅ Dev-only logging init (safe)
 if (__DEV__) {
   try {
     setupErrorLogging();
@@ -59,34 +60,26 @@ export default function RootLayout() {
               headerLeft: () => <BackButton fallbackHref="/(tabs)/home" />,
             }}
           >
-            {/* Boot redirect file (decides Landing vs Home) */}
             <Stack.Screen name="index" options={{ headerShown: false }} />
 
-            {/* Top funnel */}
             <Stack.Screen name="landing" options={{ headerShown: false }} />
             <Stack.Screen name="onboarding" options={{ headerShown: true, headerTitle: "" }} />
 
-            {/* Paywall */}
             <Stack.Screen name="paywall" options={{ headerTitle: "YourNextAway Pro" }} />
 
-            {/* Tabs */}
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
 
-            {/* Details */}
             <Stack.Screen name="match/[id]" options={{ headerTitle: "Match" }} />
 
-            {/*
-              ⚠️ Potential routing conflict:
-              You have BOTH city/[slug] and city/[cityKey]. Expo Router will treat these as the same route pattern.
-              If both files exist in app/city/, one of them must go or be renamed.
-            */}
+            {/* ✅ Canonical city route */}
             <Stack.Screen name="city/[slug]" options={{ headerTitle: "City" }} />
-            <Stack.Screen name="city/[cityKey]" options={{ headerTitle: "City" }} />
+
+            {/* ✅ Secondary key route (no conflict now) */}
+            <Stack.Screen name="city/key/[cityKey]" options={{ headerTitle: "City" }} />
 
             <Stack.Screen name="team/[teamKey]" options={{ headerTitle: "Team" }} />
             <Stack.Screen name="stadium/[slug]" options={{ headerTitle: "Stadium" }} />
 
-            {/* Trips */}
             <Stack.Screen name="trip/build" options={{ headerTitle: "Build Trip" }} />
             <Stack.Screen name="trip/[id]" options={{ headerTitle: "Trip Details" }} />
           </Stack>
