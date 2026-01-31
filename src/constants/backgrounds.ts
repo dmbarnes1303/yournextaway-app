@@ -17,15 +17,12 @@ export type BackgroundKey =
   | "onboarding4";
 
 /**
- * Local assets:
- * - landing (custom hero)
- * - onboarding1..4 (your generated onboarding backgrounds)
- *
- * Remote assets:
- * - app tabs/backgrounds can remain remote for now
+ * landing = local (private)
+ * onboarding = local
+ * everything else = remote
  */
+
 const BACKGROUND_SOURCES: Record<BackgroundKey, ImageSourcePropType> = {
-  // Local
   landing: require("@/src/assets/backgrounds/landing-hero.png"),
 
   onboarding1: require("@/src/assets/backgrounds/onboarding-1.png"),
@@ -33,7 +30,6 @@ const BACKGROUND_SOURCES: Record<BackgroundKey, ImageSourcePropType> = {
   onboarding3: require("@/src/assets/backgrounds/onboarding-3.png"),
   onboarding4: require("@/src/assets/backgrounds/onboarding-4.png"),
 
-  // Remote (can replace later)
   home: {
     uri: "https://images.unsplash.com/photo-1502602898657-3e91760cbb34?auto=format&fit=crop&w=1600&q=80",
   },
@@ -61,12 +57,11 @@ const BACKGROUND_SOURCES: Record<BackgroundKey, ImageSourcePropType> = {
 };
 
 export function getBackgroundSource(key: BackgroundKey): ImageSourcePropType {
-  return BACKGROUND_SOURCES[key] ?? BACKGROUND_SOURCES.home;
+  return BACKGROUND_SOURCES[key];
 }
 
-// Back-compat: returns URL only when it's a uri source
 export function getBackground(key: BackgroundKey): string {
-  const src = getBackgroundSource(key) as any;
+  const src = BACKGROUND_SOURCES[key] as any;
   return typeof src?.uri === "string" ? src.uri : "";
 }
 
