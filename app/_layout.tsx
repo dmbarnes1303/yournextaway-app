@@ -1,5 +1,6 @@
 // app/_layout.tsx
 import "react-native-reanimated";
+
 import React, { useEffect } from "react";
 import { Stack } from "expo-router";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -11,11 +12,22 @@ import { StyleSheet } from "react-native";
 import { theme } from "@/src/constants/theme";
 import BackButton from "@/src/components/BackButton";
 import { ProProvider } from "@/src/context/ProContext";
+import { setupErrorLogging } from "@/src/utils/errorLogger";
 
 // Keep the splash up until fonts are ready.
 SplashScreen.preventAutoHideAsync().catch(() => {
   // ignore
 });
+
+// ✅ Dev-only logging init (runs once per bundle load)
+declare const __DEV__: boolean;
+if (__DEV__) {
+  try {
+    setupErrorLogging();
+  } catch {
+    // never crash because of logging
+  }
+}
 
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
@@ -62,8 +74,15 @@ export default function RootLayout() {
 
             {/* Details */}
             <Stack.Screen name="match/[id]" options={{ headerTitle: "Match" }} />
+
+            {/*
+              ⚠️ Potential routing conflict:
+              You have BOTH city/[slug] and city/[cityKey]. Expo Router will treat these as the same route pattern.
+              If both files exist in app/city/, one of them must go or be renamed.
+            */}
             <Stack.Screen name="city/[slug]" options={{ headerTitle: "City" }} />
             <Stack.Screen name="city/[cityKey]" options={{ headerTitle: "City" }} />
+
             <Stack.Screen name="team/[teamKey]" options={{ headerTitle: "Team" }} />
             <Stack.Screen name="stadium/[slug]" options={{ headerTitle: "Stadium" }} />
 
