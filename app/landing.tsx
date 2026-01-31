@@ -16,12 +16,12 @@ const STORAGE_KEYS = {
 };
 
 /**
- * TUNING KNOBS (edit these two numbers only)
- * - BRAND_TOP: higher = logo sits lower (moves DOWN)
- * - CARD_RAISE: higher = card moves up more (exposes stadium)
+ * TUNING KNOBS (edit these only)
+ * - BRAND_DROP: + moves logo/subtitle DOWN (stable across devices)
+ * - CARD_RAISE: + moves card UP (exposes stadium)
  */
-const BRAND_TOP = 160;
-const CARD_RAISE = 18;
+const BRAND_DROP = 18;
+const CARD_RAISE = 22;
 
 export default function Landing() {
   const router = useRouter();
@@ -48,16 +48,25 @@ export default function Landing() {
     <>
       <Stack.Screen options={{ headerShown: false }} />
 
-      <Background imageSource={getBackgroundSource("landing")} overlayOpacity={0.58}>
+      <Background
+        imageSource={getBackgroundSource("landing")}
+        overlayOpacity={0.58}
+      >
         <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
           <View style={styles.screen}>
-            {/* Brand (top-third, controllable) */}
-            <View style={[styles.brand, { marginTop: BRAND_TOP }]}>
+            {/* Top spacing so brand sits in top-third across devices */}
+            <View style={styles.topSpacer} />
+
+            {/* Brand block (nudged by BRAND_DROP) */}
+            <View style={[styles.brand, { transform: [{ translateY: BRAND_DROP }] }]}>
               <Image source={LOGO} style={styles.logo} resizeMode="contain" />
               <Text style={styles.tagline}>Football-First City Breaks Across Europe</Text>
             </View>
 
-            {/* CTA (raised, more transparent, NO blur) */}
+            {/* Middle spacer keeps brand + card balanced without hard-coded magic numbers */}
+            <View style={styles.midSpacer} />
+
+            {/* CTA (raised to expose stadium) */}
             <View style={[styles.cardWrap, { transform: [{ translateY: -CARD_RAISE }] }]}>
               <View style={styles.card}>
                 <Text style={styles.h1}>Plan Your Next Away</Text>
@@ -67,11 +76,17 @@ export default function Landing() {
                 </Text>
 
                 <View style={styles.actions}>
-                  <Pressable onPress={handleGetStarted} style={[styles.btn, styles.btnPrimary]}>
+                  <Pressable
+                    onPress={handleGetStarted}
+                    style={[styles.btn, styles.btnPrimary]}
+                  >
                     <Text style={styles.btnPrimaryText}>Get Started</Text>
                   </Pressable>
 
-                  <Pressable onPress={handleExploreFirst} style={[styles.btn, styles.btnGhost]}>
+                  <Pressable
+                    onPress={handleExploreFirst}
+                    style={[styles.btn, styles.btnGhost]}
+                  >
                     <Text style={styles.btnGhostText}>Explore First</Text>
                   </Pressable>
                 </View>
@@ -94,7 +109,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.lg,
     paddingTop: theme.spacing.md,
     paddingBottom: theme.spacing.lg,
-    justifyContent: "space-between", // decouples brand + card positioning
+  },
+
+  // Keeps brand out of the extreme top on tall devices, without hard px hacks
+  topSpacer: {
+    flex: 0.22,
+    minHeight: 36,
   },
 
   brand: {
@@ -109,14 +129,20 @@ const styles = StyleSheet.create({
   tagline: {
     marginTop: 10,
     maxWidth: 330,
-    color: "rgba(255,255,255,0.86)",
+    color: "rgba(255,255,255,0.90)",
     fontWeight: theme.fontWeight.black,
     fontSize: theme.fontSize.sm,
     textAlign: "center",
     letterSpacing: 0.25,
-    textShadowColor: "rgba(0,0,0,0.55)",
+    textShadowColor: "rgba(0,0,0,0.65)",
     textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 10,
+    textShadowRadius: 12,
+  },
+
+  // Flexible breathing room so the card doesn't float too low/high on different screens
+  midSpacer: {
+    flex: 1,
+    minHeight: 10,
   },
 
   cardWrap: {
@@ -129,7 +155,7 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.045)",
-    backgroundColor: "rgba(0,0,0,0.055)",
+    backgroundColor: "rgba(0,0,0,0.050)", // slightly more transparent than your current
   },
 
   h1: {
