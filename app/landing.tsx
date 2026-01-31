@@ -90,7 +90,7 @@ const styles = StyleSheet.create({
   safe: { flex: 1 },
 
   screen: {
-    flex: 1,
+    flex: 1.5,
     paddingHorizontal: theme.spacing.lg,
     paddingTop: theme.spacing.md,
     paddingBottom: theme.spacing.lg,
