@@ -17,22 +17,21 @@ export type BackgroundKey =
   | "onboarding4";
 
 /**
- * landing = local (private)
- * onboarding = local
- * everything else = remote
+ * Local assets:
+ * - Use local for any custom/generated backgrounds you control.
+ * - Keep remote for generic placeholders until you replace them.
  */
-
 const BACKGROUND_SOURCES: Record<BackgroundKey, ImageSourcePropType> = {
+  // Local (custom)
   landing: require("@/src/assets/backgrounds/landing-hero.png"),
+  home: require("@/src/assets/backgrounds/home.png"),
 
   onboarding1: require("@/src/assets/backgrounds/onboarding-1.png"),
   onboarding2: require("@/src/assets/backgrounds/onboarding-2.png"),
   onboarding3: require("@/src/assets/backgrounds/onboarding-3.png"),
   onboarding4: require("@/src/assets/backgrounds/onboarding-4.png"),
 
-  home: {
-    uri: "https://images.unsplash.com/photo-1502602898657-3e91760cbb34?auto=format&fit=crop&w=1600&q=80",
-  },
+  // Remote (placeholders for now)
   fixtures: {
     uri: "https://images.unsplash.com/photo-1508098682722-e99c43a406b2?auto=format&fit=crop&w=1600&q=80",
   },
@@ -57,11 +56,12 @@ const BACKGROUND_SOURCES: Record<BackgroundKey, ImageSourcePropType> = {
 };
 
 export function getBackgroundSource(key: BackgroundKey): ImageSourcePropType {
-  return BACKGROUND_SOURCES[key];
+  return BACKGROUND_SOURCES[key] ?? BACKGROUND_SOURCES.home;
 }
 
+// Back-compat: returns URL only when it's a uri source
 export function getBackground(key: BackgroundKey): string {
-  const src = BACKGROUND_SOURCES[key] as any;
+  const src = getBackgroundSource(key) as any;
   return typeof src?.uri === "string" ? src.uri : "";
 }
 
