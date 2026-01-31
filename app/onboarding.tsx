@@ -2,7 +2,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { View, Text, StyleSheet, Pressable, Image, Animated, Alert, Platform } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Stack, useRouter } from "expo-router";
+import { router } from "expo-router";
 
 import Background from "@/src/components/Background";
 import SelectModal, { type SelectOption } from "@/src/components/SelectModal";
@@ -12,13 +12,11 @@ import storage from "@/src/services/storage";
 
 const LOGO = require("@/src/yna-logo.png");
 
-type BgKey = Extract<BackgroundKey, "onboarding1" | "onboarding2" | "onboarding3" | "onboarding4">;
-
 type ExplainStep = {
   title: string;
   subtitle: string;
   body: string;
-  bgKey: BgKey;
+  bgKey: Extract<BackgroundKey, "onboarding1" | "onboarding2" | "onboarding3">;
 };
 
 const STEPS: ExplainStep[] = [
@@ -70,6 +68,7 @@ const CURRENCY_OPTIONS: SelectOption[] = [
   { label: "USD ($)", value: "USD" },
 ];
 
+// keep it deterministic + reliable (no Intl quirks)
 function getCountryCodeBestEffort(): string {
   return "GB";
 }
@@ -90,11 +89,10 @@ const AIRPORTS_BY_COUNTRY: Record<string, SelectOption[]> = {
 };
 
 export default function Onboarding() {
-  const router = useRouter();
-
   const [stepIndex, setStepIndex] = useState(0); // 0..2 explain, 3 prefs
   const isPrefsStep = stepIndex === 3;
 
+  // Pref state
   const countryCode = useMemo(() => getCountryCodeBestEffort(), []);
   const airportOptions = useMemo(
     () => AIRPORTS_BY_COUNTRY[countryCode] ?? AIRPORTS_BY_COUNTRY.GB,
@@ -125,6 +123,7 @@ export default function Onboarding() {
     return alerts === "On" ? `${b} • Alerts on` : `${b} • Alerts off`;
   }, [alerts, budgetTarget, currency]);
 
+  // Explain animation only
   const opacity = useRef(new Animated.Value(1)).current;
   const translateY = useRef(new Animated.Value(0)).current;
 
@@ -140,6 +139,7 @@ export default function Onboarding() {
     ]).start();
   }, [stepIndex, isPrefsStep, opacity, translateY]);
 
+  // Hydrate stored prefs once
   useEffect(() => {
     let cancelled = false;
 
@@ -157,19 +157,21 @@ export default function Onboarding() {
       if (sCurrency) setCurrency(sCurrency);
       if (sBudget) setBudgetTarget(sBudget);
       if (sAlerts === "On" || sAlerts === "Off") setAlerts(sAlerts);
-    })().catch(() => {});
+    })().catch(() => {
+      // ignore
+    });
 
     return () => {
       cancelled = true;
     };
   }, []);
 
-  const bgKey: BgKey = isPrefsStep ? "onboarding4" : STEPS[stepIndex].bgKey;
+  const bgKey: BackgroundKey = isPrefsStep ? "onboarding4" : STEPS[stepIndex].bgKey;
   const bgSource = getBackgroundSource(bgKey);
 
   const goHome = useCallback(() => {
     router.replace("/(tabs)/home");
-  }, [router]);
+  }, []);
 
   const next = useCallback(() => {
     setStepIndex((n) => Math.min(n + 1, 3));
@@ -205,218 +207,218 @@ export default function Onboarding() {
   const stepLabel = isPrefsStep ? "Step 4 of 4" : `Step ${stepIndex + 1} of 4`;
 
   return (
-    <>
-      <Stack.Screen options={{ headerShown: false }} />
-
-      <Background imageSource={bgSource} overlayOpacity={0.68}>
-        <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
-          <View style={styles.screen}>
-            <View style={styles.topRow}>
-              {stepIndex > 0 ? (
-                <Pressable onPress={back} style={styles.pill} hitSlop={10}>
-                  <Text style={styles.pillText}>Back</Text>
-                </Pressable>
-              ) : (
-                <View style={{ width: 72 }} />
-              )}
-
-              <Pressable
-                onPress={() => {
-                  Alert.alert("Skip onboarding?", "You can set preferences later in Profile.", [
-                    { text: "Cancel", style: "cancel" },
-                    { text: "Skip", style: "default", onPress: goHome },
-                  ]);
-                }}
-                style={styles.pill}
-                hitSlop={10}
-              >
-                <Text style={styles.pillText}>Skip</Text>
+    <Background imageSource={bgSource} overlayOpacity={0.68}>
+      <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
+        <View style={styles.screen}>
+          {/* Top row */}
+          <View style={styles.topRow}>
+            {stepIndex > 0 ? (
+              <Pressable onPress={back} style={styles.pill} hitSlop={10}>
+                <Text style={styles.pillText}>Back</Text>
               </Pressable>
-            </View>
+            ) : (
+              <View style={{ width: 72 }} />
+            )}
 
-            <View style={[styles.brand, { marginTop: BRAND_TOP }]}>
-              <Image source={LOGO} style={styles.logo} resizeMode="contain" />
-              <Text style={styles.tagline}>Plan • Fly • Watch • Repeat</Text>
-            </View>
-
-            <View style={[styles.cardWrap, { transform: [{ translateY: -CARD_RAISE }] }]}>
-              <View style={styles.card}>
-                {!isPrefsStep ? (
-                  <Animated.View style={{ opacity, transform: [{ translateY }] }}>
-                    <Text style={styles.kicker}>{stepLabel}</Text>
-
-                    <Text style={styles.h1}>{STEPS[stepIndex].title}</Text>
-                    <Text style={styles.h2}>{STEPS[stepIndex].subtitle}</Text>
-                    <Text style={styles.body}>{STEPS[stepIndex].body}</Text>
-
-                    <View style={styles.dots}>
-                      {Array.from({ length: 4 }).map((_, idx) => {
-                        const active = idx === stepIndex;
-                        const color = dotColors[idx] ?? theme.colors.primary;
-                        return (
-                          <View
-                            key={`dot-${idx}`}
-                            style={[
-                              styles.dot,
-                              {
-                                backgroundColor: active ? color : "rgba(255,255,255,0.12)",
-                                borderColor: active ? color : "rgba(255,255,255,0.12)",
-                              },
-                            ]}
-                          />
-                        );
-                      })}
-                    </View>
-
-                    <View style={styles.actions}>
-                      <Pressable onPress={goHome} style={[styles.btn, styles.btnGhost]}>
-                        <Text style={styles.btnGhostText}>Skip For Now</Text>
-                      </Pressable>
-
-                      <Pressable onPress={next} style={[styles.btn, styles.btnPrimary]}>
-                        <Text style={styles.btnPrimaryText}>Continue</Text>
-                      </Pressable>
-                    </View>
-
-                    <Text style={styles.micro}>Football-first city breaks. Planned properly.</Text>
-                  </Animated.View>
-                ) : (
-                  <View>
-                    <Text style={styles.kicker}>{stepLabel}</Text>
-                    <Text style={styles.h1}>Set your defaults</Text>
-                    <Text style={styles.h2}>So fixtures and budgets feel personal</Text>
-                    <Text style={styles.body}>
-                      Optional. You can change any of this later in Profile. We use it to pre-fill comparisons and quick
-                      picks.
-                    </Text>
-
-                    <View style={styles.prefList}>
-                      <Pressable onPress={() => setActivePicker("airport")} style={[styles.prefRow, styles.prefRowFirst]}>
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.prefTitle}>Home airport</Text>
-                          <Text style={styles.prefSub}>Departure defaults</Text>
-                        </View>
-                        <Text style={styles.prefValue} numberOfLines={1}>
-                          {homeAirport === "Not Set" ? "Not set" : homeAirport}
-                        </Text>
-                        <Text style={styles.chev}>›</Text>
-                      </Pressable>
-
-                      <Pressable onPress={() => setActivePicker("currency")} style={styles.prefRow}>
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.prefTitle}>Currency</Text>
-                          <Text style={styles.prefSub}>Budgets and comparisons</Text>
-                        </View>
-                        <Text style={styles.prefValue}>{currency}</Text>
-                        <Text style={styles.chev}>›</Text>
-                      </Pressable>
-
-                      <Pressable onPress={() => setActivePicker("budget")} style={styles.prefRow}>
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.prefTitle}>Budget</Text>
-                          <Text style={styles.prefSub}>Optional target</Text>
-                        </View>
-                        <Text style={styles.prefValue} numberOfLines={1}>
-                          {budgetTarget === "Not Set" ? "Not set" : `${currency} ${budgetTarget}`}
-                        </Text>
-                        <Text style={styles.chev}>›</Text>
-                      </Pressable>
-
-                      <Pressable
-                        onPress={() => setAlerts((v) => (v === "On" ? "Off" : "On"))}
-                        style={[styles.prefRow, styles.prefRowLast]}
-                      >
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.prefTitle}>Alerts</Text>
-                          <Text style={styles.prefSub}>Quiet, useful drops</Text>
-                        </View>
-                        <View style={styles.alertPill}>
-                          <Text style={styles.alertPillText}>{alerts}</Text>
-                        </View>
-                      </Pressable>
-                    </View>
-
-                    <View style={styles.dots}>
-                      {Array.from({ length: 4 }).map((_, idx) => {
-                        const active = idx === 3;
-                        const color = dotColors[idx] ?? theme.colors.primary;
-                        return (
-                          <View
-                            key={`dot-${idx}`}
-                            style={[
-                              styles.dot,
-                              {
-                                backgroundColor: active ? color : "rgba(255,255,255,0.12)",
-                                borderColor: active ? color : "rgba(255,255,255,0.12)",
-                                opacity: active ? 1 : 0.6,
-                              },
-                            ]}
-                          />
-                        );
-                      })}
-                    </View>
-
-                    <View style={styles.actions}>
-                      <Pressable onPress={goHome} style={[styles.btn, styles.btnGhost]}>
-                        <Text style={styles.btnGhostText}>Skip For Now</Text>
-                      </Pressable>
-
-                      <Pressable onPress={complete} style={[styles.btn, styles.btnPrimary]}>
-                        <Text style={styles.btnPrimaryText}>Browse Fixtures</Text>
-                      </Pressable>
-                    </View>
-
-                    <Text style={styles.micro}>You’re set. Fixtures next.</Text>
-                  </View>
-                )}
-              </View>
-            </View>
-
-            {activePicker === "airport" ? (
-              <SelectModal
-                visible
-                title="Home airport"
-                subtitle={`Select a departure airport (${countryCode}).`}
-                options={airportOptions}
-                selectedValue={homeAirport}
-                onClose={closePicker}
-                onSelect={setHomeAirport}
-                allowClear
-                clearLabel="Clear airport"
-                clearValue="Not Set"
-              />
-            ) : null}
-
-            {activePicker === "currency" ? (
-              <SelectModal
-                visible
-                title="Currency"
-                subtitle="Used for budgets and comparisons."
-                options={CURRENCY_OPTIONS}
-                selectedValue={currency}
-                onClose={closePicker}
-                onSelect={setCurrency}
-              />
-            ) : null}
-
-            {activePicker === "budget" ? (
-              <SelectModal
-                visible
-                title="Budget"
-                subtitle={budgetSummary}
-                options={budgetOptions}
-                selectedValue={budgetTarget}
-                onClose={closePicker}
-                onSelect={(v) => setBudgetTarget(v === "Not Set" ? "Not Set" : v)}
-                allowClear
-                clearLabel="Clear budget"
-                clearValue="Not Set"
-              />
-            ) : null}
+            <Pressable
+              onPress={() => {
+                Alert.alert("Skip onboarding?", "You can set preferences later in Profile.", [
+                  { text: "Cancel", style: "cancel" },
+                  { text: "Skip", style: "default", onPress: goHome },
+                ]);
+              }}
+              style={styles.pill}
+              hitSlop={10}
+            >
+              <Text style={styles.pillText}>Skip</Text>
+            </Pressable>
           </View>
-        </SafeAreaView>
-      </Background>
-    </>
+
+          {/* Brand */}
+          <View style={[styles.brand, { marginTop: BRAND_TOP }]}>
+            <Image source={LOGO} style={styles.logo} resizeMode="contain" />
+            <Text style={styles.tagline}>Plan • Fly • Watch • Repeat</Text>
+          </View>
+
+          {/* Card */}
+          <View style={[styles.cardWrap, { transform: [{ translateY: -CARD_RAISE }] }]}>
+            <View style={styles.card}>
+              {!isPrefsStep ? (
+                <Animated.View style={{ opacity, transform: [{ translateY }] }}>
+                  <Text style={styles.kicker}>{stepLabel}</Text>
+
+                  <Text style={styles.h1}>{STEPS[stepIndex].title}</Text>
+                  <Text style={styles.h2}>{STEPS[stepIndex].subtitle}</Text>
+                  <Text style={styles.body}>{STEPS[stepIndex].body}</Text>
+
+                  <View style={styles.dots}>
+                    {Array.from({ length: 4 }).map((_, idx) => {
+                      const active = idx === stepIndex;
+                      const color = dotColors[idx] ?? theme.colors.primary;
+                      return (
+                        <View
+                          key={`dot-${idx}`}
+                          style={[
+                            styles.dot,
+                            {
+                              backgroundColor: active ? color : "rgba(255,255,255,0.12)",
+                              borderColor: active ? color : "rgba(255,255,255,0.12)",
+                            },
+                          ]}
+                        />
+                      );
+                    })}
+                  </View>
+
+                  <View style={styles.actions}>
+                    <Pressable onPress={goHome} style={[styles.btn, styles.btnGhost]}>
+                      <Text style={styles.btnGhostText}>Skip For Now</Text>
+                    </Pressable>
+
+                    <Pressable onPress={next} style={[styles.btn, styles.btnPrimary]}>
+                      <Text style={styles.btnPrimaryText}>Continue</Text>
+                    </Pressable>
+                  </View>
+
+                  <Text style={styles.micro}>Football-first city breaks. Planned properly.</Text>
+                </Animated.View>
+              ) : (
+                <View>
+                  <Text style={styles.kicker}>{stepLabel}</Text>
+                  <Text style={styles.h1}>Set your defaults</Text>
+                  <Text style={styles.h2}>So fixtures and budgets feel personal</Text>
+                  <Text style={styles.body}>
+                    Optional. You can change any of this later in Profile. We use it to pre-fill comparisons and quick
+                    picks.
+                  </Text>
+
+                  <View style={styles.prefList}>
+                    <Pressable onPress={() => setActivePicker("airport")} style={[styles.prefRow, styles.prefRowFirst]}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.prefTitle}>Home airport</Text>
+                        <Text style={styles.prefSub}>Departure defaults</Text>
+                      </View>
+                      <Text style={styles.prefValue} numberOfLines={1}>
+                        {homeAirport === "Not Set" ? "Not set" : homeAirport}
+                      </Text>
+                      <Text style={styles.chev}>›</Text>
+                    </Pressable>
+
+                    <Pressable onPress={() => setActivePicker("currency")} style={styles.prefRow}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.prefTitle}>Currency</Text>
+                        <Text style={styles.prefSub}>Budgets and comparisons</Text>
+                      </View>
+                      <Text style={styles.prefValue}>{currency}</Text>
+                      <Text style={styles.chev}>›</Text>
+                    </Pressable>
+
+                    <Pressable onPress={() => setActivePicker("budget")} style={styles.prefRow}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.prefTitle}>Budget</Text>
+                        <Text style={styles.prefSub}>Optional target</Text>
+                      </View>
+                      <Text style={styles.prefValue} numberOfLines={1}>
+                        {budgetTarget === "Not Set" ? "Not set" : `${currency} ${budgetTarget}`}
+                      </Text>
+                      <Text style={styles.chev}>›</Text>
+                    </Pressable>
+
+                    <Pressable
+                      onPress={() => setAlerts((v) => (v === "On" ? "Off" : "On"))}
+                      style={[styles.prefRow, styles.prefRowLast]}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.prefTitle}>Alerts</Text>
+                        <Text style={styles.prefSub}>Quiet, useful drops</Text>
+                      </View>
+                      <View style={styles.alertPill}>
+                        <Text style={styles.alertPillText}>{alerts}</Text>
+                      </View>
+                    </Pressable>
+                  </View>
+
+                  <View style={styles.dots}>
+                    {Array.from({ length: 4 }).map((_, idx) => {
+                      const active = idx === 3;
+                      const color = dotColors[idx] ?? theme.colors.primary;
+                      return (
+                        <View
+                          key={`dot-${idx}`}
+                          style={[
+                            styles.dot,
+                            {
+                              backgroundColor: active ? color : "rgba(255,255,255,0.12)",
+                              borderColor: active ? color : "rgba(255,255,255,0.12)",
+                              opacity: active ? 1 : 0.6,
+                            },
+                          ]}
+                        />
+                      );
+                    })}
+                  </View>
+
+                  <View style={styles.actions}>
+                    <Pressable onPress={goHome} style={[styles.btn, styles.btnGhost]}>
+                      <Text style={styles.btnGhostText}>Skip For Now</Text>
+                    </Pressable>
+
+                    <Pressable onPress={complete} style={[styles.btn, styles.btnPrimary]}>
+                      <Text style={styles.btnPrimaryText}>Browse Fixtures</Text>
+                    </Pressable>
+                  </View>
+
+                  <Text style={styles.micro}>You’re set. Fixtures next.</Text>
+                </View>
+              )}
+            </View>
+          </View>
+
+          {/* Mount modals only when needed */}
+          {activePicker === "airport" ? (
+            <SelectModal
+              visible
+              title="Home airport"
+              subtitle={`Select a departure airport (${countryCode}).`}
+              options={airportOptions}
+              selectedValue={homeAirport}
+              onClose={closePicker}
+              onSelect={setHomeAirport}
+              allowClear
+              clearLabel="Clear airport"
+              clearValue="Not Set"
+            />
+          ) : null}
+
+          {activePicker === "currency" ? (
+            <SelectModal
+              visible
+              title="Currency"
+              subtitle="Used for budgets and comparisons."
+              options={CURRENCY_OPTIONS}
+              selectedValue={currency}
+              onClose={closePicker}
+              onSelect={setCurrency}
+            />
+          ) : null}
+
+          {activePicker === "budget" ? (
+            <SelectModal
+              visible
+              title="Budget"
+              subtitle={budgetSummary}
+              options={budgetOptions}
+              selectedValue={budgetTarget}
+              onClose={closePicker}
+              onSelect={(v) => setBudgetTarget(v === "Not Set" ? "Not Set" : v)}
+              allowClear
+              clearLabel="Clear budget"
+              clearValue="Not Set"
+            />
+          ) : null}
+        </View>
+      </SafeAreaView>
+    </Background>
   );
 }
 
@@ -469,6 +471,7 @@ const styles = StyleSheet.create({
     paddingBottom: theme.spacing.lg,
   },
 
+  // transparent + premium, NO blur
   card: {
     padding: theme.spacing.lg,
     borderRadius: 22,
