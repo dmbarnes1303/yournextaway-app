@@ -21,11 +21,13 @@ import storage from "@/src/services/storage";
 
 const LOGO = require("@/src/yna-logo.png");
 
+type BgKey = "onboarding1" | "onboarding2" | "onboarding3" | "onboarding4";
+
 type ExplainStep = {
   title: string;
   subtitle: string;
   body: string;
-  bgKey: "onboarding1" | "onboarding2" | "onboarding3";
+  bgKey: BgKey;
 };
 
 const STEPS: ExplainStep[] = [
@@ -71,16 +73,14 @@ type AlertsValue = "On" | "Off";
 const BRAND_TOP = 18;
 const CARD_RAISE = 14;
 
-// Options
 const CURRENCY_OPTIONS: SelectOption[] = [
   { label: "GBP (£)", value: "GBP" },
   { label: "EUR (€)", value: "EUR" },
   { label: "USD ($)", value: "USD" },
 ];
 
-// Keep this simple (Intl can be flaky depending on Hermes/runtime)
+// keep it deterministic + reliable (no Intl quirks)
 function getCountryCodeBestEffort(): string {
-  // Default to GB for now; you can expand later
   return "GB";
 }
 
@@ -103,9 +103,9 @@ export default function Onboarding() {
   const router = useRouter();
 
   const [stepIndex, setStepIndex] = useState(0); // 0..2 explain, 3 prefs
-  const isPrefsStep = stepIndex >= 3;
+  const isPrefsStep = stepIndex === 3;
 
-  // Preferences
+  // Pref state
   const countryCode = useMemo(() => getCountryCodeBestEffort(), []);
   const airportOptions = useMemo(
     () => AIRPORTS_BY_COUNTRY[countryCode] ?? AIRPORTS_BY_COUNTRY.GB,
@@ -136,7 +136,7 @@ export default function Onboarding() {
     return alerts === "On" ? `${b} • Alerts on` : `${b} • Alerts off`;
   }, [alerts, budgetTarget, currency]);
 
-  // Animate the explain content only
+  // Explain animation only
   const opacity = useRef(new Animated.Value(1)).current;
   const translateY = useRef(new Animated.Value(0)).current;
 
@@ -179,9 +179,9 @@ export default function Onboarding() {
     };
   }, []);
 
-  const bgSource = isPrefsStep
-    ? getBackgroundSource("onboarding3")
-    : getBackgroundSource(STEPS[Math.min(stepIndex, 2)].bgKey);
+  // ✅ Step 4 uses onboarding4
+  const bgKey: BgKey = isPrefsStep ? "onboarding4" : STEPS[stepIndex].bgKey;
+  const bgSource = getBackgroundSource(bgKey);
 
   const goHome = useCallback(() => {
     router.replace("/(tabs)/home");
@@ -218,7 +218,7 @@ export default function Onboarding() {
     theme.colors.primary,
   ];
 
-  const stepLabel = !isPrefsStep ? `Step ${stepIndex + 1} of 4` : "Step 4 of 4";
+  const stepLabel = isPrefsStep ? "Step 4 of 4" : `Step ${stepIndex + 1} of 4`;
 
   return (
     <>
@@ -391,7 +391,7 @@ export default function Onboarding() {
               </View>
             </View>
 
-            {/* Only mount the modals when needed (reduces weird runtime issues) */}
+            {/* Mount modals only when needed */}
             {activePicker === "airport" ? (
               <SelectModal
                 visible
@@ -474,10 +474,7 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSize.sm,
   },
 
-  brand: {
-    alignItems: "center",
-    gap: 6,
-  },
+  brand: { alignItems: "center", gap: 6 },
 
   logo: { width: 110, height: 110 },
 
@@ -492,7 +489,7 @@ const styles = StyleSheet.create({
     paddingBottom: theme.spacing.lg,
   },
 
-  // Match Landing: transparent + premium, NO blur
+  // transparent + premium, NO blur
   card: {
     padding: theme.spacing.lg,
     borderRadius: 22,
@@ -608,10 +605,7 @@ const styles = StyleSheet.create({
     borderTopColor: "rgba(255,255,255,0.10)",
   },
 
-  prefRowFirst: {
-    borderTopWidth: 0,
-  },
-
+  prefRowFirst: { borderTopWidth: 0 },
   prefRowLast: {},
 
   prefTitle: {
