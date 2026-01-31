@@ -17,21 +17,17 @@ export type BackgroundKey =
   | "onboarding4";
 
 /**
- * Local assets:
- * - Use local for any custom/generated backgrounds you control.
- * - Keep remote for generic placeholders until you replace them.
+ * Mix allowed:
+ * - landing + onboarding + home use local assets (stable, fast, no network)
+ * - everything else can remain remote for now
  */
 const BACKGROUND_SOURCES: Record<BackgroundKey, ImageSourcePropType> = {
-  // Local (custom)
   landing: require("@/src/assets/backgrounds/landing-hero.png"),
+
+  // ✅ You added /src/assets/backgrounds/home.png
   home: require("@/src/assets/backgrounds/home.png"),
 
-  onboarding1: require("@/src/assets/backgrounds/onboarding-1.png"),
-  onboarding2: require("@/src/assets/backgrounds/onboarding-2.png"),
-  onboarding3: require("@/src/assets/backgrounds/onboarding-3.png"),
-  onboarding4: require("@/src/assets/backgrounds/onboarding-4.png"),
-
-  // Remote (placeholders for now)
+  // Remote (can change later)
   fixtures: {
     uri: "https://images.unsplash.com/photo-1508098682722-e99c43a406b2?auto=format&fit=crop&w=1600&q=80",
   },
@@ -53,6 +49,12 @@ const BACKGROUND_SOURCES: Record<BackgroundKey, ImageSourcePropType> = {
   profile: {
     uri: "https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?auto=format&fit=crop&w=1600&q=80",
   },
+
+  // ✅ You added onboarding-1..4.png
+  onboarding1: require("@/src/assets/backgrounds/onboarding-1.png"),
+  onboarding2: require("@/src/assets/backgrounds/onboarding-2.png"),
+  onboarding3: require("@/src/assets/backgrounds/onboarding-3.png"),
+  onboarding4: require("@/src/assets/backgrounds/onboarding-4.png"),
 };
 
 export function getBackgroundSource(key: BackgroundKey): ImageSourcePropType {
