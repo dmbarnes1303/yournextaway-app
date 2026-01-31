@@ -1,24 +1,24 @@
 // src/constants/backgrounds.ts
+
 import type { ImageSourcePropType } from "react-native";
 
 export type BackgroundKey =
-  | "landingHero"
   | "home"
-  | "onboarding1"
-  | "onboarding2"
-  | "onboarding3"
-  | "onboarding4";
+  | "landing-hero"
+  | "onboarding-1"
+  | "onboarding-2"
+  | "onboarding-3"
+  | "onboarding-4";
 
 const BACKGROUNDS: Record<BackgroundKey, ImageSourcePropType> = {
-  landingHero: require("@/src/assets/backgrounds/landing-hero.png"),
   home: require("@/src/assets/backgrounds/home.png"),
-
-  onboarding1: require("@/src/assets/backgrounds/onboarding-1.png"),
-  onboarding2: require("@/src/assets/backgrounds/onboarding-2.png"),
-  onboarding3: require("@/src/assets/backgrounds/onboarding-3.png"),
-  onboarding4: require("@/src/assets/backgrounds/onboarding-4.png"),
+  "landing-hero": require("@/src/assets/backgrounds/landing-hero.png"),
+  "onboarding-1": require("@/src/assets/backgrounds/onboarding-1.png"),
+  "onboarding-2": require("@/src/assets/backgrounds/onboarding-2.png"),
+  "onboarding-3": require("@/src/assets/backgrounds/onboarding-3.png"),
+  "onboarding-4": require("@/src/assets/backgrounds/onboarding-4.png"),
 };
 
-export function getBackgroundSource(key: BackgroundKey): ImageSourcePropType {
+export function getBackground(key: BackgroundKey): ImageSourcePropType {
   return BACKGROUNDS[key];
 }
