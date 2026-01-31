@@ -24,10 +24,20 @@ import { theme } from "@/src/constants/theme";
 import tripsStore, { type Trip } from "@/src/state/trips";
 import { getFixtures, type FixtureListRow } from "@/src/services/apiFootball";
 
-import { LEAGUES, getRollingWindowIso, parseIsoDateOnly, toIsoDate, type LeagueOption } from "@/src/constants/football";
+import {
+  LEAGUES,
+  getRollingWindowIso,
+  parseIsoDateOnly,
+  toIsoDate,
+  type LeagueOption,
+} from "@/src/constants/football";
 import { formatUkDateOnly, formatUkDateTimeMaybe } from "@/src/utils/formatters";
 
-import { buildSearchIndex, querySearchIndex, type SearchResult } from "@/src/services/searchIndex";
+import {
+  buildSearchIndex,
+  querySearchIndex,
+  type SearchResult,
+} from "@/src/services/searchIndex";
 import { hasTeamGuide } from "@/src/data/teamGuides";
 import { getCityGuide } from "@/src/data/cityGuides";
 
@@ -334,7 +344,7 @@ export default function HomeScreen() {
   );
 
   return (
-    <Background imageUrl={getBackground("home")} overlayOpacity={0.74}>
+    <Background imageSource={getBackground("home")} overlayOpacity={0.74}>
       <SafeAreaView style={styles.container} edges={["top"]}>
         <ScrollView
           style={styles.scrollView}
@@ -554,7 +564,7 @@ export default function HomeScreen() {
             </GlassCard>
           </View>
 
-          {/* NEXT TRIP (minimal presence) */}
+          {/* NEXT TRIP */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Trips</Text>
@@ -618,10 +628,7 @@ export default function HomeScreen() {
               {inspiration.map((x) => (
                 <Pressable
                   key={x.title}
-                  onPress={() => {
-                    // Keep it simple: inspiration nudges users into action
-                    goFixturesWithContext();
-                  }}
+                  onPress={() => goFixturesWithContext()}
                   style={styles.inspoPress}
                 >
                   <GlassCard strength="default" noPadding style={styles.inspoCard}>
@@ -672,7 +679,10 @@ const styles = StyleSheet.create({
     marginTop: 14,
     borderWidth: 1,
     borderColor: theme.glass.border,
-    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
+    backgroundColor:
+      Platform.OS === "android"
+        ? theme.glass.androidBg.subtle
+        : theme.glass.iosBg.subtle,
     borderRadius: 16,
     paddingHorizontal: 12,
     paddingVertical: Platform.OS === "ios" ? 10 : 8,
@@ -692,39 +702,82 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
+    backgroundColor:
+      Platform.OS === "android"
+        ? theme.glass.androidBg.subtle
+        : theme.glass.iosBg.subtle,
   },
-  clearBtnText: { color: theme.colors.textSecondary, fontWeight: theme.fontWeight.semibold, fontSize: 13 },
+  clearBtnText: {
+    color: theme.colors.textSecondary,
+    fontWeight: theme.fontWeight.semibold,
+    fontSize: 13,
+  },
 
   chipsRow: { marginTop: 12, flexDirection: "row", flexWrap: "wrap", gap: 10 },
   chip: {
     borderRadius: 999,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
+    backgroundColor:
+      Platform.OS === "android"
+        ? theme.glass.androidBg.subtle
+        : theme.glass.iosBg.subtle,
     paddingVertical: 8,
     paddingHorizontal: 12,
   },
-  chipText: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.medium },
+  chipText: {
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.medium,
+  },
 
   // Sections
   section: { marginTop: 2 },
   sectionHeader: { gap: 4 },
-  sectionTitle: { color: theme.colors.text, fontSize: 18, fontWeight: theme.fontWeight.medium },
-  sectionMeta: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.regular },
+  sectionTitle: {
+    color: theme.colors.text,
+    fontSize: 18,
+    fontWeight: theme.fontWeight.medium,
+  },
+  sectionMeta: {
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.regular,
+  },
 
   card: { padding: theme.spacing.md },
 
   center: { paddingVertical: 14, alignItems: "center", gap: 10 },
-  muted: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.medium },
+  muted: {
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.medium,
+  },
 
   // Search results
   searchResults: { marginTop: 14, gap: 16 },
   group: { gap: 10 },
-  groupHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "baseline", gap: 10 },
-  groupTitle: { color: theme.colors.text, fontSize: 15, fontWeight: theme.fontWeight.medium },
-  groupMeta: { color: theme.colors.textTertiary, fontSize: 12, fontWeight: theme.fontWeight.regular },
-  groupEmpty: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.regular },
+  groupHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "baseline",
+    gap: 10,
+  },
+  groupTitle: {
+    color: theme.colors.text,
+    fontSize: 15,
+    fontWeight: theme.fontWeight.medium,
+  },
+  groupMeta: {
+    color: theme.colors.textTertiary,
+    fontSize: 12,
+    fontWeight: theme.fontWeight.regular,
+  },
+  groupEmpty: {
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.regular,
+  },
 
   resultList: { gap: 10 },
 
@@ -738,10 +791,15 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   rowTitle: { color: theme.colors.text, fontWeight: theme.fontWeight.medium, fontSize: 15 },
-  rowMeta: { marginTop: 4, color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.regular },
+  rowMeta: {
+    marginTop: 4,
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.regular,
+  },
   chev: { color: theme.colors.textTertiary, fontSize: 24, marginTop: -2 },
 
-  // League selector (quiet)
+  // League selector
   leagueRow: { gap: 10, paddingRight: theme.spacing.lg, marginTop: 10 },
   leaguePill: {
     paddingVertical: 8,
@@ -749,16 +807,22 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
+    backgroundColor:
+      Platform.OS === "android"
+        ? theme.glass.androidBg.subtle
+        : theme.glass.iosBg.subtle,
   },
   leaguePillActive: {
     borderColor: "rgba(79,224,138,0.35)",
-    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.default : theme.glass.iosBg.default,
+    backgroundColor:
+      Platform.OS === "android"
+        ? theme.glass.androidBg.default
+        : theme.glass.iosBg.default,
   },
   leaguePillText: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.medium },
   leaguePillTextActive: { color: theme.colors.text, fontWeight: theme.fontWeight.medium },
 
-  // Match list (uses a lightweight “universal match row”)
+  // Match list
   matchList: { marginTop: 10, gap: 10 },
   matchRowPress: { borderRadius: 16 },
   matchRowCard: { borderRadius: 16 },
@@ -778,7 +842,12 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.06)",
   },
   matchTitle: { color: theme.colors.text, fontSize: 15, fontWeight: theme.fontWeight.medium },
-  matchMeta: { marginTop: 4, color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.regular },
+  matchMeta: {
+    marginTop: 4,
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.regular,
+  },
 
   // CTA row
   ctaRow: { flexDirection: "row", gap: 10, marginTop: 12 },
@@ -791,38 +860,59 @@ const styles = StyleSheet.create({
   },
   btnPrimary: {
     borderColor: "rgba(79,224,138,0.35)",
-    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.default : theme.glass.iosBg.default,
+    backgroundColor:
+      Platform.OS === "android"
+        ? theme.glass.androidBg.default
+        : theme.glass.iosBg.default,
   },
   btnPrimaryText: { color: theme.colors.text, fontSize: 15, fontWeight: theme.fontWeight.medium },
 
   btnGhost: {
     borderColor: theme.colors.border,
-    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
+    backgroundColor:
+      Platform.OS === "android"
+        ? theme.glass.androidBg.subtle
+        : theme.glass.iosBg.subtle,
   },
   btnGhostText: { color: theme.colors.textSecondary, fontSize: 15, fontWeight: theme.fontWeight.medium },
 
-  // Link button (single, understated)
+  // Link button
   linkBtn: {
     marginTop: 12,
     paddingVertical: 12,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
+    backgroundColor:
+      Platform.OS === "android"
+        ? theme.glass.androidBg.subtle
+        : theme.glass.iosBg.subtle,
     alignItems: "center",
   },
   linkText: { color: theme.colors.textSecondary, fontSize: 14, fontWeight: theme.fontWeight.medium },
 
-  // Trips (minimal)
+  // Trips
   emptyTitle: { color: theme.colors.text, fontSize: 15, fontWeight: theme.fontWeight.medium },
-  emptyMeta: { marginTop: 6, color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.regular, lineHeight: 18 },
+  emptyMeta: {
+    marginTop: 6,
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.regular,
+    lineHeight: 18,
+  },
 
   nextTripPress: { borderRadius: 16, marginTop: 2 },
   nextTripCard: { borderRadius: 16 },
   nextTripInner: { paddingVertical: 14, paddingHorizontal: 14 },
   nextTripKicker: { color: theme.colors.textTertiary, fontSize: 12, fontWeight: theme.fontWeight.medium },
   nextTripTitle: { marginTop: 6, color: theme.colors.text, fontSize: 18, fontWeight: theme.fontWeight.medium },
-  nextTripMeta: { marginTop: 6, color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.regular, lineHeight: 18 },
+  nextTripMeta: {
+    marginTop: 6,
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.regular,
+    lineHeight: 18,
+  },
 
   // Inspiration
   inspoList: { gap: 10 },
@@ -830,5 +920,11 @@ const styles = StyleSheet.create({
   inspoCard: { borderRadius: 16 },
   inspoInner: { paddingVertical: 14, paddingHorizontal: 14 },
   inspoTitle: { color: theme.colors.text, fontSize: 15, fontWeight: theme.fontWeight.medium },
-  inspoSub: { marginTop: 6, color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.regular, lineHeight: 18 },
+  inspoSub: {
+    marginTop: 6,
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.regular,
+    lineHeight: 18,
+  },
 });
