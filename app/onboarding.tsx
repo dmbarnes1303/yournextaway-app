@@ -1,11 +1,19 @@
 // app/onboarding.tsx
-import React, { useMemo, useState, useRef, useEffect, useCallback } from "react";
-import { View, Text, StyleSheet, Pressable, Image, Animated, Alert } from "react-native";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  Pressable,
+  Image,
+  Animated,
+  Alert,
+  Platform,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Stack, useRouter } from "expo-router";
 
 import Background from "@/src/components/Background";
-import GlassCard from "@/src/components/GlassCard";
 import SelectModal, { type SelectOption } from "@/src/components/SelectModal";
 import { getBackgroundSource } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
@@ -20,6 +28,30 @@ type ExplainStep = {
   bgKey: "onboarding1" | "onboarding2" | "onboarding3";
 };
 
+const STEPS: ExplainStep[] = [
+  {
+    title: "Start With A Fixture",
+    subtitle: "Find The Right Match For Your Dates",
+    body:
+      "Browse fixtures across the top leagues, lock in your date window, and open a match to anchor the trip. From that moment, YourNextAway turns the fixture into a complete city-break plan.",
+    bgKey: "onboarding1",
+  },
+  {
+    title: "Build The Trip In One Hub",
+    subtitle: "Flights, Stays, Tickets, And Notes Together",
+    body:
+      "Compare travel options, shortlist where to stay, and keep ticket links and trip notes organised in one place. Plan midweek bargains or weekend breaks without juggling tabs, screenshots, and group chats.",
+    bgKey: "onboarding2",
+  },
+  {
+    title: "Make The City Break Better",
+    subtitle: "What To Do, Where To Base Yourself",
+    body:
+      "Use city and team guidance to shape the trip beyond the match. Build a simple itinerary, then store bookings and references so everything is ready when you travel.",
+    bgKey: "onboarding3",
+  },
+];
+
 const STORAGE_KEYS = {
   seenLanding: "yna:seenLanding",
   setupComplete: "yna:setupComplete",
@@ -31,27 +63,24 @@ const STORAGE_KEYS = {
 
 type AlertsValue = "On" | "Off";
 
+/**
+ * TUNING KNOBS
+ * - BRAND_TOP: higher = brand sits lower (moves DOWN)
+ * - CARD_RAISE: higher = card moves up more (exposes background)
+ */
+const BRAND_TOP = 18;
+const CARD_RAISE = 14;
+
+// Options
 const CURRENCY_OPTIONS: SelectOption[] = [
   { label: "GBP (£)", value: "GBP" },
   { label: "EUR (€)", value: "EUR" },
   { label: "USD ($)", value: "USD" },
 ];
 
+// Keep this simple (Intl can be flaky depending on Hermes/runtime)
 function getCountryCodeBestEffort(): string {
-  try {
-    const locale = Intl.DateTimeFormat().resolvedOptions().locale || "";
-    const match = locale.match(/-([A-Z]{2})\b/);
-    if (match?.[1]) return match[1];
-
-    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
-    if (tz.includes("Europe/London")) return "GB";
-    if (tz.includes("Europe/Madrid")) return "ES";
-    if (tz.includes("Europe/Rome")) return "IT";
-    if (tz.includes("Europe/Berlin")) return "DE";
-    if (tz.includes("Europe/Paris")) return "FR";
-  } catch {
-    // ignore
-  }
+  // Default to GB for now; you can expand later
   return "GB";
 }
 
@@ -67,95 +96,21 @@ const AIRPORTS_BY_COUNTRY: Record<string, SelectOption[]> = {
     { label: "Edinburgh (EDI)", value: "Edinburgh (EDI)" },
     { label: "Glasgow (GLA)", value: "Glasgow (GLA)" },
     { label: "Bristol (BRS)", value: "Bristol (BRS)" },
-    { label: "Newcastle (NCL)", value: "Newcastle (NCL)" },
-    { label: "Liverpool (LPL)", value: "Liverpool (LPL)" },
-    { label: "Leeds Bradford (LBA)", value: "Leeds Bradford (LBA)" },
-    { label: "East Midlands (EMA)", value: "East Midlands (EMA)" },
-    { label: "Belfast Intl (BFS)", value: "Belfast Intl (BFS)" },
-    { label: "Belfast City (BHD)", value: "Belfast City (BHD)" },
-    { label: "Cardiff (CWL)", value: "Cardiff (CWL)" },
-    { label: "Southampton (SOU)", value: "Southampton (SOU)" },
-    { label: "Aberdeen (ABZ)", value: "Aberdeen (ABZ)" },
-  ],
-  ES: [
-    { label: "Madrid (MAD)", value: "Madrid (MAD)" },
-    { label: "Barcelona (BCN)", value: "Barcelona (BCN)" },
-    { label: "Málaga (AGP)", value: "Málaga (AGP)" },
-    { label: "Alicante (ALC)", value: "Alicante (ALC)" },
-    { label: "Valencia (VLC)", value: "Valencia (VLC)" },
-    { label: "Seville (SVQ)", value: "Seville (SVQ)" },
-    { label: "Palma de Mallorca (PMI)", value: "Palma de Mallorca (PMI)" },
-    { label: "Bilbao (BIO)", value: "Bilbao (BIO)" },
-    { label: "Tenerife South (TFS)", value: "Tenerife South (TFS)" },
-    { label: "Gran Canaria (LPA)", value: "Gran Canaria (LPA)" },
-  ],
-  IT: [
-    { label: "Rome Fiumicino (FCO)", value: "Rome Fiumicino (FCO)" },
-    { label: "Milan Malpensa (MXP)", value: "Milan Malpensa (MXP)" },
-    { label: "Milan Linate (LIN)", value: "Milan Linate (LIN)" },
-    { label: "Venice (VCE)", value: "Venice (VCE)" },
-    { label: "Naples (NAP)", value: "Naples (NAP)" },
-    { label: "Bologna (BLQ)", value: "Bologna (BLQ)" },
-    { label: "Turin (TRN)", value: "Turin (TRN)" },
-    { label: "Florence (FLR)", value: "Florence (FLR)" },
-    { label: "Pisa (PSA)", value: "Pisa (PSA)" },
-  ],
-  DE: [
-    { label: "Frankfurt (FRA)", value: "Frankfurt (FRA)" },
-    { label: "Munich (MUC)", value: "Munich (MUC)" },
-    { label: "Berlin (BER)", value: "Berlin (BER)" },
-    { label: "Düsseldorf (DUS)", value: "Düsseldorf (DUS)" },
-    { label: "Hamburg (HAM)", value: "Hamburg (HAM)" },
-    { label: "Cologne Bonn (CGN)", value: "Cologne Bonn (CGN)" },
-    { label: "Stuttgart (STR)", value: "Stuttgart (STR)" },
-  ],
-  FR: [
-    { label: "Paris Charles de Gaulle (CDG)", value: "Paris Charles de Gaulle (CDG)" },
-    { label: "Paris Orly (ORY)", value: "Paris Orly (ORY)" },
-    { label: "Nice (NCE)", value: "Nice (NCE)" },
-    { label: "Lyon (LYS)", value: "Lyon (LYS)" },
-    { label: "Marseille (MRS)", value: "Marseille (MRS)" },
-    { label: "Toulouse (TLS)", value: "Toulouse (TLS)" },
-    { label: "Bordeaux (BOD)", value: "Bordeaux (BOD)" },
   ],
 };
 
 export default function Onboarding() {
   const router = useRouter();
 
-  const steps: ExplainStep[] = useMemo(
-    () => [
-      {
-        title: "Start With A Fixture",
-        subtitle: "Find The Right Match For Your Dates",
-        body:
-          "Browse fixtures across the top leagues, lock in your date window, and open a match to anchor the trip. From that moment, YourNextAway turns the fixture into a complete city-break plan.",
-        bgKey: "onboarding1",
-      },
-      {
-        title: "Build The Trip In One Hub",
-        subtitle: "Flights, Stays, Tickets, And Notes Together",
-        body:
-          "Compare travel options, shortlist where to stay, and keep ticket links and trip notes organised in one place. Plan midweek bargains or weekend breaks without juggling tabs, screenshots, and group chats.",
-        bgKey: "onboarding2",
-      },
-      {
-        title: "Make The City Break Better",
-        subtitle: "What To Do, Where To Base Yourself",
-        body:
-          "Use city and team guidance to shape the trip beyond the match. Build a simple itinerary, then store bookings and references so everything is ready when you travel.",
-        bgKey: "onboarding3",
-      },
-    ],
-    []
-  );
-
   const [stepIndex, setStepIndex] = useState(0); // 0..2 explain, 3 prefs
-  const isPrefsStep = stepIndex === 3;
+  const isPrefsStep = stepIndex >= 3;
 
-  // Preferences state (defaults are best-effort, then hydrate from storage)
+  // Preferences
   const countryCode = useMemo(() => getCountryCodeBestEffort(), []);
-  const airportOptions = useMemo(() => AIRPORTS_BY_COUNTRY[countryCode] ?? AIRPORTS_BY_COUNTRY.GB, [countryCode]);
+  const airportOptions = useMemo(
+    () => AIRPORTS_BY_COUNTRY[countryCode] ?? AIRPORTS_BY_COUNTRY.GB,
+    [countryCode]
+  );
 
   const [homeAirport, setHomeAirport] = useState<string>("Not Set");
   const [currency, setCurrency] = useState<string>(countryCode === "GB" ? "GBP" : "EUR");
@@ -181,7 +136,7 @@ export default function Onboarding() {
     return alerts === "On" ? `${b} • Alerts on` : `${b} • Alerts off`;
   }, [alerts, budgetTarget, currency]);
 
-  // Animation for explain card only
+  // Animate the explain content only
   const opacity = useRef(new Animated.Value(1)).current;
   const translateY = useRef(new Animated.Value(0)).current;
 
@@ -189,7 +144,7 @@ export default function Onboarding() {
     if (isPrefsStep) return;
 
     opacity.setValue(0);
-    translateY.setValue(12);
+    translateY.setValue(10);
 
     Animated.parallel([
       Animated.timing(opacity, { toValue: 1, duration: 220, useNativeDriver: true }),
@@ -197,7 +152,7 @@ export default function Onboarding() {
     ]).start();
   }, [stepIndex, isPrefsStep, opacity, translateY]);
 
-  // Hydrate existing preferences once (so onboarding is idempotent if shown again)
+  // Hydrate stored prefs once
   useEffect(() => {
     let cancelled = false;
 
@@ -224,7 +179,9 @@ export default function Onboarding() {
     };
   }, []);
 
-  const bgSource = isPrefsStep ? getBackgroundSource("onboarding3") : getBackgroundSource(steps[stepIndex].bgKey);
+  const bgSource = isPrefsStep
+    ? getBackgroundSource("onboarding3")
+    : getBackgroundSource(STEPS[Math.min(stepIndex, 2)].bgKey);
 
   const goHome = useCallback(() => {
     router.replace("/(tabs)/home");
@@ -240,9 +197,7 @@ export default function Onboarding() {
 
   const complete = useCallback(async () => {
     try {
-      // Always mark landing seen when finishing onboarding (prevents loopiness)
       await storage.setString(STORAGE_KEYS.seenLanding, "true");
-
       await Promise.all([
         storage.setString(STORAGE_KEYS.homeAirport, homeAirport),
         storage.setString(STORAGE_KEYS.currency, currency),
@@ -253,25 +208,30 @@ export default function Onboarding() {
     } catch {
       // still allow continue
     }
-
-    // No more gating. Go to fixtures/home.
     goHome();
   }, [alerts, budgetTarget, currency, goHome, homeAirport]);
 
-  const dotColors = [theme.colors.primary, theme.colors.accent, theme.colors.warning, theme.colors.primary];
+  const dotColors = [
+    theme.colors.primary,
+    theme.colors.accent ?? theme.colors.primary,
+    theme.colors.warning ?? theme.colors.primary,
+    theme.colors.primary,
+  ];
+
+  const stepLabel = !isPrefsStep ? `Step ${stepIndex + 1} of 4` : "Step 4 of 4";
 
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
 
       <Background imageSource={bgSource} overlayOpacity={0.68}>
-        <SafeAreaView style={styles.safe} edges={["bottom"]}>
+        <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
           <View style={styles.screen}>
-            {/* Top Row */}
+            {/* Top row */}
             <View style={styles.topRow}>
               {stepIndex > 0 ? (
-                <Pressable onPress={back} style={styles.backPill} hitSlop={10}>
-                  <Text style={styles.backText}>Back</Text>
+                <Pressable onPress={back} style={styles.pill} hitSlop={10}>
+                  <Text style={styles.pillText}>Back</Text>
                 </Pressable>
               ) : (
                 <View style={{ width: 72 }} />
@@ -284,194 +244,195 @@ export default function Onboarding() {
                     { text: "Skip", style: "default", onPress: goHome },
                   ]);
                 }}
-                style={styles.skipPill}
+                style={styles.pill}
                 hitSlop={10}
               >
-                <Text style={styles.skipText}>Skip</Text>
+                <Text style={styles.pillText}>Skip</Text>
               </Pressable>
             </View>
 
             {/* Brand */}
-            <View style={styles.brand}>
+            <View style={[styles.brand, { marginTop: BRAND_TOP }]}>
               <Image source={LOGO} style={styles.logo} resizeMode="contain" />
               <Text style={styles.tagline}>Plan • Fly • Watch • Repeat</Text>
             </View>
 
             {/* Card */}
-            <GlassCard style={styles.card} intensity={24}>
-              {!isPrefsStep ? (
-                <Animated.View style={{ opacity, transform: [{ translateY }] }}>
-                  <Text style={styles.kicker}>
-                    Step {stepIndex + 1} of 4
-                  </Text>
+            <View style={[styles.cardWrap, { transform: [{ translateY: -CARD_RAISE }] }]}>
+              <View style={styles.card}>
+                {!isPrefsStep ? (
+                  <Animated.View style={{ opacity, transform: [{ translateY }] }}>
+                    <Text style={styles.kicker}>{stepLabel}</Text>
 
-                  <Text style={styles.h1}>{steps[stepIndex].title}</Text>
-                  <Text style={styles.h2}>{steps[stepIndex].subtitle}</Text>
-                  <Text style={styles.body}>{steps[stepIndex].body}</Text>
+                    <Text style={styles.h1}>{STEPS[stepIndex].title}</Text>
+                    <Text style={styles.h2}>{STEPS[stepIndex].subtitle}</Text>
+                    <Text style={styles.body}>{STEPS[stepIndex].body}</Text>
 
-                  <View style={styles.dots}>
-                    {Array.from({ length: 4 }).map((_, idx) => {
-                      const active = idx === stepIndex;
-                      const color = dotColors[idx];
-                      return (
-                        <View
-                          key={idx}
-                          style={[
-                            styles.dot,
-                            {
-                              backgroundColor: active ? color : "rgba(255,255,255,0.12)",
-                              borderColor: active ? color : "rgba(255,255,255,0.12)",
-                            },
-                          ]}
-                        />
-                      );
-                    })}
-                  </View>
+                    <View style={styles.dots}>
+                      {Array.from({ length: 4 }).map((_, idx) => {
+                        const active = idx === stepIndex;
+                        const color = dotColors[idx] ?? theme.colors.primary;
+                        return (
+                          <View
+                            key={idx}
+                            style={[
+                              styles.dot,
+                              {
+                                backgroundColor: active ? color : "rgba(255,255,255,0.12)",
+                                borderColor: active ? color : "rgba(255,255,255,0.12)",
+                              },
+                            ]}
+                          />
+                        );
+                      })}
+                    </View>
 
-                  <View style={styles.actions}>
-                    <Pressable onPress={goHome} style={[styles.btn, styles.btnGhost]}>
-                      <Text style={styles.btnGhostText}>Skip For Now</Text>
-                    </Pressable>
+                    <View style={styles.actions}>
+                      <Pressable onPress={goHome} style={[styles.btn, styles.btnGhost]}>
+                        <Text style={styles.btnGhostText}>Skip For Now</Text>
+                      </Pressable>
 
-                    <Pressable onPress={next} style={[styles.btn, styles.btnPrimary]}>
-                      <Text style={styles.btnPrimaryText}>Continue</Text>
-                    </Pressable>
-                  </View>
+                      <Pressable onPress={next} style={[styles.btn, styles.btnPrimary]}>
+                        <Text style={styles.btnPrimaryText}>Continue</Text>
+                      </Pressable>
+                    </View>
 
-                  <Text style={styles.micro}>Football-first city breaks. Planned properly.</Text>
-                </Animated.View>
-              ) : (
-                <View>
-                  <Text style={styles.kicker}>Step 4 of 4</Text>
-                  <Text style={styles.h1}>Set your defaults</Text>
-                  <Text style={styles.h2}>So fixtures and budgets feel personal</Text>
-                  <Text style={styles.body}>
-                    Optional. You can change any of this later in Profile. We use it to pre-fill comparisons and quick picks.
-                  </Text>
-
-                  <View style={styles.prefList}>
-                    <Pressable onPress={() => setActivePicker("airport")} style={styles.prefRow}>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.prefTitle}>Home airport</Text>
-                        <Text style={styles.prefSub}>Departure defaults</Text>
-                      </View>
-                      <Text style={styles.prefValue} numberOfLines={1}>
-                        {homeAirport === "Not Set" ? "Not set" : homeAirport}
-                      </Text>
-                      <Text style={styles.chev}>›</Text>
-                    </Pressable>
-
-                    <Pressable onPress={() => setActivePicker("currency")} style={styles.prefRow}>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.prefTitle}>Currency</Text>
-                        <Text style={styles.prefSub}>Budgets and comparisons</Text>
-                      </View>
-                      <Text style={styles.prefValue}>{currency}</Text>
-                      <Text style={styles.chev}>›</Text>
-                    </Pressable>
-
-                    <Pressable onPress={() => setActivePicker("budget")} style={styles.prefRow}>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.prefTitle}>Budget</Text>
-                        <Text style={styles.prefSub}>Optional target</Text>
-                      </View>
-                      <Text style={styles.prefValue} numberOfLines={1}>
-                        {budgetTarget === "Not Set" ? "Not set" : `${currency} ${budgetTarget}`}
-                      </Text>
-                      <Text style={styles.chev}>›</Text>
-                    </Pressable>
-
-                    <Pressable
-                      onPress={() => setAlerts((v) => (v === "On" ? "Off" : "On"))}
-                      style={[styles.prefRow, styles.prefRowLast]}
-                    >
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.prefTitle}>Alerts</Text>
-                        <Text style={styles.prefSub}>Quiet, useful drops</Text>
-                      </View>
-                      <View style={styles.alertPill}>
-                        <Text style={styles.alertPillText}>{alerts === "On" ? "On" : "Off"}</Text>
-                      </View>
-                    </Pressable>
-                  </View>
-
-                  {homeAirport === "Not Set" ? (
-                    <Text style={styles.hint}>
-                      Tip: set a home airport for better “quick compare” results — you can do it later too.
+                    <Text style={styles.micro}>Football-first city breaks. Planned properly.</Text>
+                  </Animated.View>
+                ) : (
+                  <View>
+                    <Text style={styles.kicker}>{stepLabel}</Text>
+                    <Text style={styles.h1}>Set your defaults</Text>
+                    <Text style={styles.h2}>So fixtures and budgets feel personal</Text>
+                    <Text style={styles.body}>
+                      Optional. You can change any of this later in Profile. We use it to pre-fill comparisons and quick
+                      picks.
                     </Text>
-                  ) : null}
 
-                  <View style={styles.dots}>
-                    {Array.from({ length: 4 }).map((_, idx) => {
-                      const active = idx === 3;
-                      const color = dotColors[idx];
-                      return (
-                        <View
-                          key={idx}
-                          style={[
-                            styles.dot,
-                            {
-                              backgroundColor: idx === 3 ? color : "rgba(255,255,255,0.12)",
-                              borderColor: idx === 3 ? color : "rgba(255,255,255,0.12)",
-                              opacity: idx === 3 ? 1 : 0.6,
-                            },
-                          ]}
-                        />
-                      );
-                    })}
+                    <View style={styles.prefList}>
+                      <Pressable onPress={() => setActivePicker("airport")} style={[styles.prefRow, styles.prefRowFirst]}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.prefTitle}>Home airport</Text>
+                          <Text style={styles.prefSub}>Departure defaults</Text>
+                        </View>
+                        <Text style={styles.prefValue} numberOfLines={1}>
+                          {homeAirport === "Not Set" ? "Not set" : homeAirport}
+                        </Text>
+                        <Text style={styles.chev}>›</Text>
+                      </Pressable>
+
+                      <Pressable onPress={() => setActivePicker("currency")} style={styles.prefRow}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.prefTitle}>Currency</Text>
+                          <Text style={styles.prefSub}>Budgets and comparisons</Text>
+                        </View>
+                        <Text style={styles.prefValue}>{currency}</Text>
+                        <Text style={styles.chev}>›</Text>
+                      </Pressable>
+
+                      <Pressable onPress={() => setActivePicker("budget")} style={styles.prefRow}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.prefTitle}>Budget</Text>
+                          <Text style={styles.prefSub}>Optional target</Text>
+                        </View>
+                        <Text style={styles.prefValue} numberOfLines={1}>
+                          {budgetTarget === "Not Set" ? "Not set" : `${currency} ${budgetTarget}`}
+                        </Text>
+                        <Text style={styles.chev}>›</Text>
+                      </Pressable>
+
+                      <Pressable
+                        onPress={() => setAlerts((v) => (v === "On" ? "Off" : "On"))}
+                        style={[styles.prefRow, styles.prefRowLast]}
+                      >
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.prefTitle}>Alerts</Text>
+                          <Text style={styles.prefSub}>Quiet, useful drops</Text>
+                        </View>
+                        <View style={styles.alertPill}>
+                          <Text style={styles.alertPillText}>{alerts}</Text>
+                        </View>
+                      </Pressable>
+                    </View>
+
+                    <View style={styles.dots}>
+                      {Array.from({ length: 4 }).map((_, idx) => {
+                        const active = idx === 3;
+                        const color = dotColors[idx] ?? theme.colors.primary;
+                        return (
+                          <View
+                            key={idx}
+                            style={[
+                              styles.dot,
+                              {
+                                backgroundColor: active ? color : "rgba(255,255,255,0.12)",
+                                borderColor: active ? color : "rgba(255,255,255,0.12)",
+                                opacity: active ? 1 : 0.6,
+                              },
+                            ]}
+                          />
+                        );
+                      })}
+                    </View>
+
+                    <View style={styles.actions}>
+                      <Pressable onPress={goHome} style={[styles.btn, styles.btnGhost]}>
+                        <Text style={styles.btnGhostText}>Skip For Now</Text>
+                      </Pressable>
+
+                      <Pressable onPress={complete} style={[styles.btn, styles.btnPrimary]}>
+                        <Text style={styles.btnPrimaryText}>Browse Fixtures</Text>
+                      </Pressable>
+                    </View>
+
+                    <Text style={styles.micro}>You’re set. Fixtures next.</Text>
                   </View>
+                )}
+              </View>
+            </View>
 
-                  <View style={styles.actions}>
-                    <Pressable onPress={goHome} style={[styles.btn, styles.btnGhost]}>
-                      <Text style={styles.btnGhostText}>Skip For Now</Text>
-                    </Pressable>
+            {/* Only mount the modals when needed (reduces weird runtime issues) */}
+            {activePicker === "airport" ? (
+              <SelectModal
+                visible
+                title="Home airport"
+                subtitle={`Select a departure airport (${countryCode}).`}
+                options={airportOptions}
+                selectedValue={homeAirport}
+                onClose={closePicker}
+                onSelect={setHomeAirport}
+                allowClear
+                clearLabel="Clear airport"
+                clearValue="Not Set"
+              />
+            ) : null}
 
-                    <Pressable onPress={complete} style={[styles.btn, styles.btnPrimary]}>
-                      <Text style={styles.btnPrimaryText}>Browse Fixtures</Text>
-                    </Pressable>
-                  </View>
+            {activePicker === "currency" ? (
+              <SelectModal
+                visible
+                title="Currency"
+                subtitle="Used for budgets and comparisons."
+                options={CURRENCY_OPTIONS}
+                selectedValue={currency}
+                onClose={closePicker}
+                onSelect={setCurrency}
+              />
+            ) : null}
 
-                  <Text style={styles.micro}>You’re set. Fixtures next.</Text>
-                </View>
-              )}
-            </GlassCard>
-
-            {/* Pickers */}
-            <SelectModal
-              visible={activePicker === "airport"}
-              title="Home airport"
-              subtitle={`Select a departure airport (${countryCode}).`}
-              options={airportOptions}
-              selectedValue={homeAirport}
-              onClose={closePicker}
-              onSelect={setHomeAirport}
-              allowClear
-              clearLabel="Clear airport"
-              clearValue="Not Set"
-            />
-
-            <SelectModal
-              visible={activePicker === "currency"}
-              title="Currency"
-              subtitle="Used for budgets and comparisons."
-              options={CURRENCY_OPTIONS}
-              selectedValue={currency}
-              onClose={closePicker}
-              onSelect={setCurrency}
-            />
-
-            <SelectModal
-              visible={activePicker === "budget"}
-              title="Budget"
-              subtitle={budgetSummary}
-              options={budgetOptions}
-              selectedValue={budgetTarget}
-              onClose={closePicker}
-              onSelect={(v) => setBudgetTarget(v === "Not Set" ? "Not Set" : v)}
-              allowClear
-              clearLabel="Clear budget"
-              clearValue="Not Set"
-            />
+            {activePicker === "budget" ? (
+              <SelectModal
+                visible
+                title="Budget"
+                subtitle={budgetSummary}
+                options={budgetOptions}
+                selectedValue={budgetTarget}
+                onClose={closePicker}
+                onSelect={(v) => setBudgetTarget(v === "Not Set" ? "Not Set" : v)}
+                allowClear
+                clearLabel="Clear budget"
+                clearValue="Not Set"
+              />
+            ) : null}
           </View>
         </SafeAreaView>
       </Background>
@@ -484,11 +445,10 @@ const styles = StyleSheet.create({
 
   screen: {
     flex: 1,
-    paddingTop: 14,
     paddingHorizontal: theme.spacing.lg,
-    paddingBottom: theme.spacing.xxl,
-    justifyContent: "flex-end",
-    gap: 12,
+    paddingTop: 12,
+    paddingBottom: theme.spacing.lg,
+    justifyContent: "space-between",
   },
 
   topRow: {
@@ -497,7 +457,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
 
-  backPill: {
+  pill: {
     borderRadius: 999,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.12)",
@@ -508,28 +468,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
 
-  backText: {
+  pillText: {
     color: theme.colors.textSecondary,
     fontWeight: "900",
     fontSize: theme.fontSize.sm,
   },
 
-  skipPill: {
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    backgroundColor: "rgba(0,0,0,0.22)",
-    paddingVertical: 10,
-    paddingHorizontal: 14,
+  brand: {
+    alignItems: "center",
+    gap: 6,
   },
-
-  skipText: {
-    color: theme.colors.textSecondary,
-    fontWeight: "900",
-    fontSize: theme.fontSize.sm,
-  },
-
-  brand: { alignItems: "center", gap: 6 },
 
   logo: { width: 110, height: 110 },
 
@@ -540,7 +488,18 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSize.sm,
   },
 
-  card: { padding: theme.spacing.lg },
+  cardWrap: {
+    paddingBottom: theme.spacing.lg,
+  },
+
+  // Match Landing: transparent + premium, NO blur
+  card: {
+    padding: theme.spacing.lg,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.045)",
+    backgroundColor: "rgba(0,0,0,0.055)",
+  },
 
   kicker: {
     color: theme.colors.textSecondary,
@@ -553,7 +512,7 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     fontSize: theme.fontSize.xxl,
     fontWeight: "900",
-    lineHeight: 34,
+    lineHeight: Platform.select({ ios: 34, android: 34, default: 34 }),
   },
 
   h2: {
@@ -570,15 +529,6 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSize.md,
     lineHeight: 22,
     fontWeight: "700",
-  },
-
-  hint: {
-    marginTop: 12,
-    textAlign: "center",
-    color: "rgba(255,255,255,0.62)",
-    fontSize: theme.fontSize.xs,
-    fontWeight: "800",
-    lineHeight: 16,
   },
 
   dots: {
@@ -658,9 +608,11 @@ const styles = StyleSheet.create({
     borderTopColor: "rgba(255,255,255,0.10)",
   },
 
-  prefRowLast: {
-    borderBottomWidth: 0,
+  prefRowFirst: {
+    borderTopWidth: 0,
   },
+
+  prefRowLast: {},
 
   prefTitle: {
     color: theme.colors.text,
