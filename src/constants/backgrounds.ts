@@ -17,12 +17,15 @@ export type BackgroundKey =
   | "onboarding4";
 
 /**
- * Mix allowed:
- * - landing + onboarding screens use local assets (you control the look + no network dependency)
- * - the rest can stay remote (you can later swap to hosted assets if you want)
+ * Local assets:
+ * - landing (custom hero)
+ * - onboarding1..4 (your generated onboarding backgrounds)
+ *
+ * Remote assets:
+ * - app tabs/backgrounds can remain remote for now
  */
 const BACKGROUND_SOURCES: Record<BackgroundKey, ImageSourcePropType> = {
-  // Local (generated)
+  // Local
   landing: require("@/src/assets/backgrounds/landing-hero.png"),
 
   onboarding1: require("@/src/assets/backgrounds/onboarding-1.png"),
@@ -30,7 +33,7 @@ const BACKGROUND_SOURCES: Record<BackgroundKey, ImageSourcePropType> = {
   onboarding3: require("@/src/assets/backgrounds/onboarding-3.png"),
   onboarding4: require("@/src/assets/backgrounds/onboarding-4.png"),
 
-  // Remote (placeholders / can be replaced later)
+  // Remote (can replace later)
   home: {
     uri: "https://images.unsplash.com/photo-1502602898657-3e91760cbb34?auto=format&fit=crop&w=1600&q=80",
   },
