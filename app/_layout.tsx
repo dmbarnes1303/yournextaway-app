@@ -1,6 +1,5 @@
 // app/_layout.tsx
 import "react-native-reanimated";
-
 import React, { useEffect } from "react";
 import { Stack } from "expo-router";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -12,23 +11,14 @@ import { StyleSheet } from "react-native";
 import { theme } from "@/src/constants/theme";
 import BackButton from "@/src/components/BackButton";
 import { ProProvider } from "@/src/context/ProContext";
-import { setupErrorLogging } from "@/src/utils/errorLogger";
 
-declare const __DEV__: boolean;
+// IMPORTANT: error logger lives in /utils (NOT /src/utils)
+import "@/utils/errorLogger";
 
 // Keep the splash up until fonts are ready.
 SplashScreen.preventAutoHideAsync().catch(() => {
   // ignore
 });
-
-// ✅ Dev-only logging init (safe)
-if (__DEV__) {
-  try {
-    setupErrorLogging();
-  } catch {
-    // never crash because of logging
-  }
-}
 
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
@@ -60,26 +50,27 @@ export default function RootLayout() {
               headerLeft: () => <BackButton fallbackHref="/(tabs)/home" />,
             }}
           >
+            {/* Boot redirect file (decides Landing vs Home) */}
             <Stack.Screen name="index" options={{ headerShown: false }} />
 
+            {/* Top funnel */}
             <Stack.Screen name="landing" options={{ headerShown: false }} />
             <Stack.Screen name="onboarding" options={{ headerShown: true, headerTitle: "" }} />
 
+            {/* Paywall */}
             <Stack.Screen name="paywall" options={{ headerTitle: "YourNextAway Pro" }} />
 
+            {/* Tabs */}
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
 
+            {/* Details */}
             <Stack.Screen name="match/[id]" options={{ headerTitle: "Match" }} />
-
-            {/* ✅ Canonical city route */}
             <Stack.Screen name="city/[slug]" options={{ headerTitle: "City" }} />
-
-            {/* ✅ Secondary key route (no conflict now) */}
-            <Stack.Screen name="city/key/[cityKey]" options={{ headerTitle: "City" }} />
-
+            <Stack.Screen name="city/[cityKey]" options={{ headerTitle: "City" }} />
             <Stack.Screen name="team/[teamKey]" options={{ headerTitle: "Team" }} />
             <Stack.Screen name="stadium/[slug]" options={{ headerTitle: "Stadium" }} />
 
+            {/* Trips */}
             <Stack.Screen name="trip/build" options={{ headerTitle: "Build Trip" }} />
             <Stack.Screen name="trip/[id]" options={{ headerTitle: "Trip Details" }} />
           </Stack>
