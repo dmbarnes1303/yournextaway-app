@@ -1,33 +1,27 @@
 // app/onboarding.tsx
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  Pressable,
-  Image,
-  Animated,
-  Alert,
-  Platform,
-} from "react-native";
+import { View, Text, StyleSheet, Pressable, Image, Animated, Alert, Platform } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Stack, useRouter } from "expo-router";
 
 import Background from "@/src/components/Background";
 import SelectModal, { type SelectOption } from "@/src/components/SelectModal";
-import { getBackgroundSource } from "@/src/constants/backgrounds";
+import { getBackgroundSource, type BackgroundKey } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
 import storage from "@/src/services/storage";
 
 const LOGO = require("@/src/yna-logo.png");
 
-type BgKey = "onboarding1" | "onboarding2" | "onboarding3" | "onboarding4";
+type AlertsValue = "On" | "Off";
+
+// Only allow onboarding keys (tied to BackgroundKey so it can't drift)
+type OnboardingBgKey = Extract<BackgroundKey, "onboarding1" | "onboarding2" | "onboarding3" | "onboarding4">;
 
 type ExplainStep = {
   title: string;
   subtitle: string;
   body: string;
-  bgKey: BgKey;
+  bgKey: Extract<OnboardingBgKey, "onboarding1" | "onboarding2" | "onboarding3">;
 };
 
 const STEPS: ExplainStep[] = [
@@ -63,8 +57,6 @@ const STORAGE_KEYS = {
   alerts: "yna:profile.alerts",
 };
 
-type AlertsValue = "On" | "Off";
-
 /**
  * TUNING KNOBS
  * - BRAND_TOP: higher = brand sits lower (moves DOWN)
@@ -79,7 +71,7 @@ const CURRENCY_OPTIONS: SelectOption[] = [
   { label: "USD ($)", value: "USD" },
 ];
 
-// keep it deterministic + reliable (no Intl quirks)
+// Keep deterministic + reliable (no Intl quirks)
 function getCountryCodeBestEffort(): string {
   return "GB";
 }
@@ -107,10 +99,7 @@ export default function Onboarding() {
 
   // Pref state
   const countryCode = useMemo(() => getCountryCodeBestEffort(), []);
-  const airportOptions = useMemo(
-    () => AIRPORTS_BY_COUNTRY[countryCode] ?? AIRPORTS_BY_COUNTRY.GB,
-    [countryCode]
-  );
+  const airportOptions = useMemo(() => AIRPORTS_BY_COUNTRY[countryCode] ?? AIRPORTS_BY_COUNTRY.GB, [countryCode]);
 
   const [homeAirport, setHomeAirport] = useState<string>("Not Set");
   const [currency, setCurrency] = useState<string>(countryCode === "GB" ? "GBP" : "EUR");
@@ -179,8 +168,8 @@ export default function Onboarding() {
     };
   }, []);
 
-  // ✅ Step 4 uses onboarding4
-  const bgKey: BgKey = isPrefsStep ? "onboarding4" : STEPS[stepIndex].bgKey;
+  // Background selection: step 4 must use onboarding4
+  const bgKey: OnboardingBgKey = isPrefsStep ? "onboarding4" : STEPS[stepIndex].bgKey;
   const bgSource = getBackgroundSource(bgKey);
 
   const goHome = useCallback(() => {
@@ -305,8 +294,7 @@ export default function Onboarding() {
                     <Text style={styles.h1}>Set your defaults</Text>
                     <Text style={styles.h2}>So fixtures and budgets feel personal</Text>
                     <Text style={styles.body}>
-                      Optional. You can change any of this later in Profile. We use it to pre-fill comparisons and quick
-                      picks.
+                      Optional. You can change any of this later in Profile. We use it to pre-fill comparisons and quick picks.
                     </Text>
 
                     <View style={styles.prefList}>
