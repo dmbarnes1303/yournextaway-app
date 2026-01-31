@@ -10,7 +10,10 @@ import {
 import { theme } from "@/src/constants/theme";
 
 interface BackgroundProps {
+  /** For local assets: require("...") etc */
   imageSource?: ImageSourcePropType;
+
+  /** For remote images: https://... */
   imageUrl?: string;
 
   children: React.ReactNode;
@@ -25,9 +28,9 @@ interface BackgroundProps {
 /**
  * Background
  *
- * - Image (optional)
- * - Neutral black overlay
- * - Content above
+ * - Optional image
+ * - Black overlay for readability
+ * - Foreground content above
  *
  * Background layer never steals touches.
  */
@@ -47,11 +50,7 @@ export default function Background({
       {/* Background layer */}
       <View style={StyleSheet.absoluteFill} pointerEvents="none">
         {source ? (
-          <ImageBackground
-            source={source}
-            style={styles.image}
-            resizeMode="cover"
-          >
+          <ImageBackground source={source} style={styles.image} resizeMode="cover">
             <View style={[styles.overlay, { opacity: clamped }]} />
           </ImageBackground>
         ) : (
@@ -72,18 +71,15 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: theme.colors.bgBase,
   },
-
   image: {
     flex: 1,
     width: "100%",
     height: "100%",
   },
-
   overlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "#000",
   },
-
   content: {
     flex: 1,
   },
