@@ -1,13 +1,20 @@
-export type LeagueOption = { label: string; leagueId: number; season: number };
+// src/constants/football.ts
+
+export type LeagueOption = {
+  label: string;
+  leagueId: number;
+  season: number;
+  countryCode: string; // ISO-2 for emoji flag
+};
 
 export const DEFAULT_SEASON = 2025;
 
 export const LEAGUES: LeagueOption[] = [
-  { label: "Premier League", leagueId: 39, season: DEFAULT_SEASON },
-  { label: "La Liga", leagueId: 140, season: DEFAULT_SEASON },
-  { label: "Serie A", leagueId: 135, season: DEFAULT_SEASON },
-  { label: "Bundesliga", leagueId: 78, season: DEFAULT_SEASON },
-  { label: "Ligue 1", leagueId: 61, season: DEFAULT_SEASON },
+  { label: "Premier League", leagueId: 39, season: DEFAULT_SEASON, countryCode: "GB" },
+  { label: "La Liga", leagueId: 140, season: DEFAULT_SEASON, countryCode: "ES" },
+  { label: "Serie A", leagueId: 135, season: DEFAULT_SEASON, countryCode: "IT" },
+  { label: "Bundesliga", leagueId: 78, season: DEFAULT_SEASON, countryCode: "DE" },
+  { label: "Ligue 1", leagueId: 61, season: DEFAULT_SEASON, countryCode: "FR" },
 ];
 
 // --------------------
@@ -57,7 +64,7 @@ export function clampFromIsoToTomorrow(fromIso: string): string {
 
 export function normalizeWindowIso(
   input: { from: string; to: string },
-  daysIfInvalidTo = 90
+  daysIfInvalidTo = 30
 ): RollingWindowIso {
   const from = clampFromIsoToTomorrow(input.from);
 
@@ -76,8 +83,7 @@ export function normalizeWindowIso(
 }
 
 /**
- * Central fixture date window (rolling).
- * DEFAULT: 90 days from tomorrow.
+ * Defaults to 90 days (as you wanted).
  */
 export function getRollingWindowIso(opts?: { days?: number; start?: Date }): RollingWindowIso {
   const days = opts?.days ?? 90;
@@ -85,6 +91,5 @@ export function getRollingWindowIso(opts?: { days?: number; start?: Date }): Rol
 
   const from = toIsoDate(start);
   const to = addDaysIso(from, days);
-
   return normalizeWindowIso({ from, to }, days);
 }
