@@ -33,13 +33,13 @@ import {
 } from "@/src/constants/football";
 import { formatUkDateOnly, formatUkDateTimeMaybe } from "@/src/utils/formatters";
 
-import {
-  buildSearchIndex,
-  querySearchIndex,
-  type SearchResult,
-} from "@/src/services/searchIndex";
+import { buildSearchIndex, querySearchIndex, type SearchResult } from "@/src/services/searchIndex";
 import { hasTeamGuide } from "@/src/data/teamGuides";
 import { getCityGuide } from "@/src/data/cityGuides";
+
+// You said you'll create this file.
+// Must export: getFlagEmoji(countryCode: string): string
+import { getFlagEmoji } from "@/src/utils/flags";
 
 function tripSummaryLine(t: Trip) {
   const a = t.startDate ? formatUkDateOnly(t.startDate) : "—";
@@ -78,6 +78,18 @@ function splitSearchBuckets(results: SearchResult[]) {
 
   return { teams, cities, venues, countries, leagues };
 }
+
+type PopularCityChip = { name: string; countryCode: string };
+
+// Hard-mapped popular chips (fast + reliable until you wire real city data)
+const POPULAR_CITIES: PopularCityChip[] = [
+  { name: "Madrid", countryCode: "ES" },
+  { name: "Barcelona", countryCode: "ES" },
+  { name: "Milan", countryCode: "IT" },
+  { name: "Lisbon", countryCode: "PT" },
+  { name: "Amsterdam", countryCode: "NL" },
+  { name: "Berlin", countryCode: "DE" },
+];
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -211,9 +223,7 @@ export default function HomeScreen() {
     Keyboard.dismiss();
   }, []);
 
-  const dismissKeyboard = useCallback(() => {
-    Keyboard.dismiss();
-  }, []);
+  const dismissKeyboard = useCallback(() => Keyboard.dismiss(), []);
 
   // -------------------------
   // Navigation helpers
@@ -327,12 +337,6 @@ export default function HomeScreen() {
     return r.subtitle ?? "";
   }, []);
 
-  // Safe “Popular cities” chips (do not assume slugs exist)
-  const popularCityChips = useMemo(
-    () => ["Madrid", "Barcelona", "Milan", "Lisbon", "Amsterdam", "Berlin"],
-    []
-  );
-
   // Inspiration (simple, editorial)
   const inspiration = useMemo(
     () => [
@@ -343,6 +347,11 @@ export default function HomeScreen() {
     []
   );
 
+  const heroHint = useMemo(() => {
+    // tiny “EU” vibe without shouting about it
+    return `Rolling window: ${formatUkDateOnly(fromIso)} → ${formatUkDateOnly(toIso)}`;
+  }, [fromIso, toIso]);
+
   return (
     <Background imageSource={getBackground("home")} overlayOpacity={0.74}>
       <SafeAreaView style={styles.container} edges={["top"]}>
@@ -352,14 +361,28 @@ export default function HomeScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* HERO */}
+          {/* HERO (THIS IS THE SECTION YOU CARE ABOUT) */}
           <GlassCard style={styles.heroCard} strength="strong">
+            {/* Accent rails */}
+            <View pointerEvents="none" style={styles.heroAccentRailGreen} />
+            <View pointerEvents="none" style={styles.heroAccentRailBlue} />
+            <View pointerEvents="none" style={styles.heroGoldDust} />
+
+            <View style={styles.heroKickerRow}>
+              <View style={styles.kDot} />
+              <Text style={styles.heroKicker}>YOURNEXTAWAY</Text>
+              <Text style={styles.heroKickerSep}>•</Text>
+              <Text style={styles.heroKickerMeta}>{heroHint}</Text>
+            </View>
+
             <Text style={styles.heroTitle}>Plan your next European football trip</Text>
             <Text style={styles.heroSub}>
               Search countries, cities, teams, or venues — then jump into fixtures or build a trip.
             </Text>
 
-            <View style={styles.searchBox}>
+            {/* Search (premium command bar) */}
+            <View style={styles.searchShell}>
+              <View style={styles.searchIconStub} />
               <TextInput
                 value={q}
                 onChangeText={setQ}
@@ -376,17 +399,27 @@ export default function HomeScreen() {
                 <Pressable onPress={clearSearch} style={styles.clearBtn} hitSlop={10}>
                   <Text style={styles.clearBtnText}>Clear</Text>
                 </Pressable>
-              ) : null}
+              ) : (
+                <View style={styles.searchTagPill} pointerEvents="none">
+                  <Text style={styles.searchTagText}>EU</Text>
+                </View>
+              )}
             </View>
 
             {/* Popular city chips (quick-fill search) */}
             {!showSearchResults ? (
               <View style={styles.chipsRow}>
-                {popularCityChips.slice(0, 6).map((name) => (
-                  <Pressable key={name} onPress={() => setQ(name)} style={styles.chip}>
-                    <Text style={styles.chipText}>{name}</Text>
-                  </Pressable>
-                ))}
+                {POPULAR_CITIES.slice(0, 6).map((c) => {
+                  const flag = getFlagEmoji(c.countryCode);
+                  return (
+                    <Pressable key={c.name} onPress={() => setQ(c.name)} style={styles.chip}>
+                      <Text style={styles.chipText}>
+                        <Text style={styles.chipFlag}>{flag} </Text>
+                        {c.name}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
               </View>
             ) : null}
 
@@ -400,9 +433,7 @@ export default function HomeScreen() {
                   </View>
                 ) : null}
 
-                {!searchLoading && searchError ? (
-                  <EmptyState title="Search unavailable" message={searchError} />
-                ) : null}
+                {!searchLoading && searchError ? <EmptyState title="Search unavailable" message={searchError} /> : null}
 
                 {!searchLoading && !searchError ? (
                   <>
@@ -427,6 +458,7 @@ export default function HomeScreen() {
                               >
                                 <GlassCard strength="subtle" noPadding style={styles.rowCard}>
                                   <View style={styles.rowInner}>
+                                    <View style={styles.rowAccent} />
                                     <View style={{ flex: 1 }}>
                                       <Text style={styles.rowTitle}>{r.title}</Text>
                                       <Text style={styles.rowMeta}>{resultMeta(r)}</Text>
@@ -461,6 +493,7 @@ export default function HomeScreen() {
                               >
                                 <GlassCard strength="subtle" noPadding style={styles.rowCard}>
                                   <View style={styles.rowInner}>
+                                    <View style={[styles.rowAccent, styles.rowAccentBlue]} />
                                     <View style={{ flex: 1 }}>
                                       <Text style={styles.rowTitle}>{r.title}</Text>
                                       <Text style={styles.rowMeta}>{resultMeta(r)}</Text>
@@ -483,6 +516,7 @@ export default function HomeScreen() {
             ) : null}
           </GlassCard>
 
+          {/* Everything below is untouched in intent (kept from your original). */}
           {/* UPCOMING MATCHES */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
@@ -492,7 +526,6 @@ export default function HomeScreen() {
               </Text>
             </View>
 
-            {/* League selector (quiet) */}
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.leagueRow}>
               {LEAGUES.map((l) => {
                 const active = l.leagueId === league.leagueId;
@@ -626,11 +659,7 @@ export default function HomeScreen() {
 
             <View style={styles.inspoList}>
               {inspiration.map((x) => (
-                <Pressable
-                  key={x.title}
-                  onPress={() => goFixturesWithContext()}
-                  style={styles.inspoPress}
-                >
+                <Pressable key={x.title} onPress={() => goFixturesWithContext()} style={styles.inspoPress}>
                   <GlassCard strength="default" noPadding style={styles.inspoCard}>
                     <View style={styles.inspoInner}>
                       <Text style={styles.inspoTitle}>{x.title}</Text>
@@ -661,98 +690,145 @@ const styles = StyleSheet.create({
 
   // HERO
   heroCard: { marginTop: theme.spacing.lg },
+
+  heroAccentRailGreen: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 3,
+    backgroundColor: "rgba(79,224,138,0.65)",
+  },
+  heroAccentRailBlue: {
+    position: "absolute",
+    left: 3,
+    top: 0,
+    bottom: 0,
+    width: 2,
+    backgroundColor: "rgba(47,107,255,0.28)",
+  },
+  heroGoldDust: {
+    position: "absolute",
+    right: -60,
+    top: -60,
+    width: 160,
+    height: 160,
+    borderRadius: 160,
+    backgroundColor: "rgba(214,181,106,0.10)",
+  },
+
+  heroKickerRow: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 8 },
+  kDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 8,
+    backgroundColor: theme.colors.primary,
+  },
+  heroKicker: {
+    color: theme.colors.textSecondary,
+    fontSize: 12,
+    fontWeight: "900",
+    letterSpacing: 0.9,
+  },
+  heroKickerSep: {
+    color: "rgba(214,181,106,0.65)",
+    fontSize: 12,
+    fontWeight: "900",
+  },
+  heroKickerMeta: {
+    color: theme.colors.textTertiary,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+
   heroTitle: {
+    marginTop: 10,
     color: theme.colors.text,
-    fontSize: 22,
-    fontWeight: theme.fontWeight.medium,
-    lineHeight: 28,
+    fontSize: 24,
+    fontWeight: "900",
+    lineHeight: 30,
   },
   heroSub: {
-    marginTop: 8,
+    marginTop: 10,
     color: theme.colors.textSecondary,
     fontSize: 15,
     lineHeight: 20,
-    fontWeight: theme.fontWeight.regular,
+    fontWeight: "700",
   },
 
-  searchBox: {
+  // Search shell
+  searchShell: {
     marginTop: 14,
     borderWidth: 1,
-    borderColor: theme.glass.border,
-    backgroundColor:
-      Platform.OS === "android"
-        ? theme.glass.androidBg.subtle
-        : theme.glass.iosBg.subtle,
-    borderRadius: 16,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.default : theme.glass.iosBg.default,
+    borderRadius: 18,
     paddingHorizontal: 12,
-    paddingVertical: Platform.OS === "ios" ? 10 : 8,
+    paddingVertical: Platform.OS === "ios" ? 12 : 10,
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
+  },
+  searchIconStub: {
+    width: 10,
+    height: 10,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: "rgba(47,107,255,0.55)",
+    opacity: 0.9,
   },
   searchInput: {
     flex: 1,
     color: theme.colors.text,
     fontSize: 15,
     paddingVertical: Platform.OS === "ios" ? 6 : 4,
+    fontWeight: "700",
   },
+  searchTagPill: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(214,181,106,0.22)",
+    backgroundColor: "rgba(214,181,106,0.08)",
+  },
+  searchTagText: {
+    color: "rgba(214,181,106,0.85)",
+    fontWeight: "900",
+    fontSize: 12,
+    letterSpacing: 0.6,
+  },
+
   clearBtn: {
     paddingVertical: 6,
     paddingHorizontal: 10,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: theme.colors.border,
-    backgroundColor:
-      Platform.OS === "android"
-        ? theme.glass.androidBg.subtle
-        : theme.glass.iosBg.subtle,
+    borderColor: "rgba(79,224,138,0.28)",
+    backgroundColor: "rgba(0,0,0,0.18)",
   },
   clearBtnText: {
-    color: theme.colors.textSecondary,
-    fontWeight: theme.fontWeight.semibold,
+    color: theme.colors.text,
+    fontWeight: "900",
     fontSize: 13,
   },
 
   chipsRow: { marginTop: 12, flexDirection: "row", flexWrap: "wrap", gap: 10 },
+
   chip: {
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: theme.colors.border,
-    backgroundColor:
-      Platform.OS === "android"
-        ? theme.glass.androidBg.subtle
-        : theme.glass.iosBg.subtle,
-    paddingVertical: 8,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
+    paddingVertical: 9,
     paddingHorizontal: 12,
   },
   chipText: {
     color: theme.colors.textSecondary,
     fontSize: 13,
-    fontWeight: theme.fontWeight.medium,
+    fontWeight: "900",
   },
-
-  // Sections
-  section: { marginTop: 2 },
-  sectionHeader: { gap: 4 },
-  sectionTitle: {
-    color: theme.colors.text,
-    fontSize: 18,
-    fontWeight: theme.fontWeight.medium,
-  },
-  sectionMeta: {
-    color: theme.colors.textSecondary,
-    fontSize: 13,
-    fontWeight: theme.fontWeight.regular,
-  },
-
-  card: { padding: theme.spacing.md },
-
-  center: { paddingVertical: 14, alignItems: "center", gap: 10 },
-  muted: {
-    color: theme.colors.textSecondary,
-    fontSize: 13,
-    fontWeight: theme.fontWeight.medium,
-  },
+  chipFlag: { color: theme.colors.text, fontWeight: "900" },
 
   // Search results
   searchResults: { marginTop: 14, gap: 16 },
@@ -766,17 +842,17 @@ const styles = StyleSheet.create({
   groupTitle: {
     color: theme.colors.text,
     fontSize: 15,
-    fontWeight: theme.fontWeight.medium,
+    fontWeight: "900",
   },
   groupMeta: {
     color: theme.colors.textTertiary,
     fontSize: 12,
-    fontWeight: theme.fontWeight.regular,
+    fontWeight: "800",
   },
   groupEmpty: {
     color: theme.colors.textSecondary,
     fontSize: 13,
-    fontWeight: theme.fontWeight.regular,
+    fontWeight: "700",
   },
 
   resultList: { gap: 10 },
@@ -790,14 +866,34 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
   },
-  rowTitle: { color: theme.colors.text, fontWeight: theme.fontWeight.medium, fontSize: 15 },
+  rowAccent: {
+    width: 3,
+    height: 34,
+    borderRadius: 3,
+    backgroundColor: "rgba(79,224,138,0.55)",
+  },
+  rowAccentBlue: {
+    backgroundColor: "rgba(47,107,255,0.40)",
+  },
+  rowTitle: { color: theme.colors.text, fontWeight: "900", fontSize: 15 },
   rowMeta: {
     marginTop: 4,
     color: theme.colors.textSecondary,
     fontSize: 13,
-    fontWeight: theme.fontWeight.regular,
+    fontWeight: "700",
   },
   chev: { color: theme.colors.textTertiary, fontSize: 24, marginTop: -2 },
+
+  // Sections
+  section: { marginTop: 2 },
+  sectionHeader: { gap: 4 },
+  sectionTitle: { color: theme.colors.text, fontSize: 18, fontWeight: "900" },
+  sectionMeta: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: "700" },
+
+  card: { padding: theme.spacing.md },
+
+  center: { paddingVertical: 14, alignItems: "center", gap: 10 },
+  muted: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: "800" },
 
   // League selector
   leagueRow: { gap: 10, paddingRight: theme.spacing.lg, marginTop: 10 },
@@ -807,20 +903,14 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    backgroundColor:
-      Platform.OS === "android"
-        ? theme.glass.androidBg.subtle
-        : theme.glass.iosBg.subtle,
+    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
   },
   leaguePillActive: {
     borderColor: "rgba(79,224,138,0.35)",
-    backgroundColor:
-      Platform.OS === "android"
-        ? theme.glass.androidBg.default
-        : theme.glass.iosBg.default,
+    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.default : theme.glass.iosBg.default,
   },
-  leaguePillText: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.medium },
-  leaguePillTextActive: { color: theme.colors.text, fontWeight: theme.fontWeight.medium },
+  leaguePillText: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: "800" },
+  leaguePillTextActive: { color: theme.colors.text, fontWeight: "900" },
 
   // Match list
   matchList: { marginTop: 10, gap: 10 },
@@ -841,13 +931,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.06)",
   },
-  matchTitle: { color: theme.colors.text, fontSize: 15, fontWeight: theme.fontWeight.medium },
-  matchMeta: {
-    marginTop: 4,
-    color: theme.colors.textSecondary,
-    fontSize: 13,
-    fontWeight: theme.fontWeight.regular,
-  },
+  matchTitle: { color: theme.colors.text, fontSize: 15, fontWeight: "900" },
+  matchMeta: { marginTop: 4, color: theme.colors.textSecondary, fontSize: 13, fontWeight: "700" },
 
   // CTA row
   ctaRow: { flexDirection: "row", gap: 10, marginTop: 12 },
@@ -860,21 +945,15 @@ const styles = StyleSheet.create({
   },
   btnPrimary: {
     borderColor: "rgba(79,224,138,0.35)",
-    backgroundColor:
-      Platform.OS === "android"
-        ? theme.glass.androidBg.default
-        : theme.glass.iosBg.default,
+    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.default : theme.glass.iosBg.default,
   },
-  btnPrimaryText: { color: theme.colors.text, fontSize: 15, fontWeight: theme.fontWeight.medium },
+  btnPrimaryText: { color: theme.colors.text, fontSize: 15, fontWeight: "900" },
 
   btnGhost: {
     borderColor: theme.colors.border,
-    backgroundColor:
-      Platform.OS === "android"
-        ? theme.glass.androidBg.subtle
-        : theme.glass.iosBg.subtle,
+    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
   },
-  btnGhostText: { color: theme.colors.textSecondary, fontSize: 15, fontWeight: theme.fontWeight.medium },
+  btnGhostText: { color: theme.colors.textSecondary, fontSize: 15, fontWeight: "900" },
 
   // Link button
   linkBtn: {
@@ -882,49 +961,28 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: theme.colors.border,
-    backgroundColor:
-      Platform.OS === "android"
-        ? theme.glass.androidBg.subtle
-        : theme.glass.iosBg.subtle,
+    borderColor: "rgba(47,107,255,0.22)",
+    backgroundColor: "rgba(0,0,0,0.18)",
     alignItems: "center",
   },
-  linkText: { color: theme.colors.textSecondary, fontSize: 14, fontWeight: theme.fontWeight.medium },
+  linkText: { color: theme.colors.text, fontSize: 14, fontWeight: "900" },
 
   // Trips
-  emptyTitle: { color: theme.colors.text, fontSize: 15, fontWeight: theme.fontWeight.medium },
-  emptyMeta: {
-    marginTop: 6,
-    color: theme.colors.textSecondary,
-    fontSize: 13,
-    fontWeight: theme.fontWeight.regular,
-    lineHeight: 18,
-  },
+  emptyTitle: { color: theme.colors.text, fontSize: 15, fontWeight: "900" },
+  emptyMeta: { marginTop: 6, color: theme.colors.textSecondary, fontSize: 13, fontWeight: "700", lineHeight: 18 },
 
   nextTripPress: { borderRadius: 16, marginTop: 2 },
   nextTripCard: { borderRadius: 16 },
   nextTripInner: { paddingVertical: 14, paddingHorizontal: 14 },
-  nextTripKicker: { color: theme.colors.textTertiary, fontSize: 12, fontWeight: theme.fontWeight.medium },
-  nextTripTitle: { marginTop: 6, color: theme.colors.text, fontSize: 18, fontWeight: theme.fontWeight.medium },
-  nextTripMeta: {
-    marginTop: 6,
-    color: theme.colors.textSecondary,
-    fontSize: 13,
-    fontWeight: theme.fontWeight.regular,
-    lineHeight: 18,
-  },
+  nextTripKicker: { color: theme.colors.textTertiary, fontSize: 12, fontWeight: "900" },
+  nextTripTitle: { marginTop: 6, color: theme.colors.text, fontSize: 18, fontWeight: "900" },
+  nextTripMeta: { marginTop: 6, color: theme.colors.textSecondary, fontSize: 13, fontWeight: "700", lineHeight: 18 },
 
   // Inspiration
   inspoList: { gap: 10 },
   inspoPress: { borderRadius: 16 },
   inspoCard: { borderRadius: 16 },
   inspoInner: { paddingVertical: 14, paddingHorizontal: 14 },
-  inspoTitle: { color: theme.colors.text, fontSize: 15, fontWeight: theme.fontWeight.medium },
-  inspoSub: {
-    marginTop: 6,
-    color: theme.colors.textSecondary,
-    fontSize: 13,
-    fontWeight: theme.fontWeight.regular,
-    lineHeight: 18,
-  },
+  inspoTitle: { color: theme.colors.text, fontSize: 15, fontWeight: "900" },
+  inspoSub: { marginTop: 6, color: theme.colors.textSecondary, fontSize: 13, fontWeight: "700", lineHeight: 18 },
 });
