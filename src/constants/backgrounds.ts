@@ -1,10 +1,10 @@
 // src/constants/backgrounds.ts
-
 import type { ImageSourcePropType } from "react-native";
 
 export type BackgroundKey =
   | "home"
   | "fixtures"
+  | "trips"
   | "landing"
   | "landing-hero"
   | "onboarding-1"
@@ -15,6 +15,7 @@ export type BackgroundKey =
 const BACKGROUNDS: Record<BackgroundKey, ImageSourcePropType> = {
   home: require("@/src/assets/backgrounds/home.png"),
   fixtures: require("@/src/assets/backgrounds/fixtures.png"),
+  trips: require("@/src/assets/backgrounds/trips.png"),
 
   // Support both keys so older screens don't explode
   landing: require("@/src/assets/backgrounds/landing-hero.png"),
@@ -27,20 +28,17 @@ const BACKGROUNDS: Record<BackgroundKey, ImageSourcePropType> = {
 };
 
 /**
- * New name (what we used on Home / Fixtures)
+ * Preferred accessor used by screens.
  */
 export function getBackground(key: BackgroundKey): ImageSourcePropType {
   return BACKGROUNDS[key];
 }
 
 /**
- * Backwards-compatible name (what some older screens may use)
+ * Backwards-compatible name (legacy screens).
  */
 export function getBackgroundSource(key: BackgroundKey): ImageSourcePropType {
   return BACKGROUNDS[key];
 }
 
-/**
- * Default export for any legacy imports.
- */
 export default BACKGROUNDS;
