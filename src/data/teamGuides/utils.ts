@@ -4,17 +4,19 @@ export function normalizeTeamKey(input: unknown): string {
   return String(input ?? "")
     .trim()
     .toLowerCase()
-    .replace(/\(.*?\)/g, "")      // drop bracketed suffixes
+    .replace(/\(.*?\)/g, "")     // remove bracketed bits
     .replace(/&/g, "and")
     .replace(/['’]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")  // spaces/punct -> hyphen
+    .replace(/[,/|].*$/, "")     // strip suffix after comma/slash/pipe
+    .replace(/\s+/g, " ")
+    .replace(/[^a-z0-9]+/g, "-") // non-alnum -> hyphen
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "");
 }
 
 export function titleFromKey(key: unknown): string {
   const s = String(key ?? "").trim();
-  if (!s) return "";
+  if (!s) return "Team";
   return s
     .split("-")
     .filter(Boolean)
