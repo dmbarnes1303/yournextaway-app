@@ -1,5 +1,3 @@
-// app/(tabs)/home.tsx
-
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import {
   View,
@@ -33,11 +31,7 @@ import {
 } from "@/src/constants/football";
 import { formatUkDateOnly, formatUkDateTimeMaybe } from "@/src/utils/formatters";
 
-import {
-  buildSearchIndex,
-  querySearchIndex,
-  type SearchResult,
-} from "@/src/services/searchIndex";
+import { buildSearchIndex, querySearchIndex, type SearchResult } from "@/src/services/searchIndex";
 import { hasTeamGuide } from "@/src/data/teamGuides";
 import { getCityGuide } from "@/src/data/cityGuides";
 import { getFlagEmoji } from "@/src/utils/flags";
@@ -87,6 +81,7 @@ export default function HomeScreen() {
 
   const [league, setLeague] = useState<LeagueOption>(LEAGUES[0]);
 
+  // now defaults to 90 days (football.ts)
   const { from: fromIso, to: toIso } = useMemo(() => getRollingWindowIso(), []);
 
   // Trips
@@ -357,18 +352,13 @@ export default function HomeScreen() {
           {/* HERO */}
           <GlassCard style={styles.heroCard} strength="strong" noPadding>
             <View style={styles.heroShell}>
-              {/* Only keep the intentional brand edge */}
-              <View pointerEvents="none" style={styles.heroEdgeLeft} />
+              {/* Premium glow edge (not a flat bar) */}
+              <View pointerEvents="none" style={styles.heroEdgeGlow} />
+              <View pointerEvents="none" style={styles.heroEdgeCore} />
 
-              {/* Kill top-left background orbs */}
-              <View pointerEvents="none" style={styles.heroTopLeftShade} />
-              <View pointerEvents="none" style={styles.heroTopLeftMask} />
-              <View pointerEvents="none" style={styles.heroTopLeftMask2} />
-
-              {/* Kill top-right background orb */}
-              <View pointerEvents="none" style={styles.heroCornerShade} />
-              <View pointerEvents="none" style={styles.heroOrbMask} />
-              <View pointerEvents="none" style={styles.heroOrbMask2} />
+              {/* Clean vignette to hide background corner artifacts without looking hacked */}
+              <View pointerEvents="none" style={styles.heroVignetteTop} />
+              <View pointerEvents="none" style={styles.heroVignetteCorners} />
 
               <Text style={styles.heroTitle}>Plan your next European football trip</Text>
 
@@ -522,7 +512,9 @@ export default function HomeScreen() {
                     onPress={() => setLeague(l)}
                     style={[styles.leaguePill, active && styles.leaguePillActive]}
                   >
-                    <Text style={[styles.leaguePillText, active && styles.leaguePillTextActive]}>{l.label}</Text>
+                    <Text style={[styles.leaguePillText, active && styles.leaguePillTextActive]}>
+                      {l.label}
+                    </Text>
                   </Pressable>
                 );
               })}
@@ -633,7 +625,7 @@ export default function HomeScreen() {
 
               <Pressable onPress={() => router.push("/(tabs)/trips")} style={styles.linkBtn}>
                 <Text style={styles.linkText}>Open Trips</Text>
-                </Pressable>
+              </Pressable>
             </GlassCard>
           </View>
 
@@ -679,71 +671,41 @@ const styles = StyleSheet.create({
   heroCard: { marginTop: theme.spacing.lg, borderRadius: theme.borderRadius.xl },
   heroShell: { padding: theme.spacing.lg, borderRadius: theme.borderRadius.xl, overflow: "hidden" },
 
-  heroEdgeLeft: {
+  // Green glow edge
+  heroEdgeGlow: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 16,
+    backgroundColor: "rgba(79,224,138,0.14)",
+  },
+  heroEdgeCore: {
     position: "absolute",
     left: 0,
     top: 0,
     bottom: 0,
     width: 3,
-    backgroundColor: "rgba(79,224,138,0.65)",
+    backgroundColor: "rgba(79,224,138,0.70)",
   },
 
-  // Top-left orb suppression (background artifact)
-  heroTopLeftShade: {
+  // Vignette to hide background artifacts cleanly
+  heroVignetteTop: {
     position: "absolute",
     left: 0,
-    top: 0,
-    width: 200,
-    height: 140,
-    backgroundColor: "rgba(15,17,19,0.52)",
-    borderBottomRightRadius: 34,
-  },
-  heroTopLeftMask: {
-    position: "absolute",
-    left: -70,
-    top: -70,
-    width: 190,
-    height: 190,
-    borderRadius: 999,
-    backgroundColor: "rgba(15,17,19,0.72)",
-  },
-  heroTopLeftMask2: {
-    position: "absolute",
-    left: -160,
-    top: -160,
-    width: 330,
-    height: 330,
-    borderRadius: 999,
-    backgroundColor: "rgba(15,17,19,0.44)",
-  },
-
-  // Top-right orb suppression (background artifact)
-  heroCornerShade: {
-    position: "absolute",
     right: 0,
     top: 0,
-    width: 210,
-    height: 210,
-    backgroundColor: "rgba(15,17,19,0.55)",
-    borderBottomLeftRadius: 42,
+    height: 120,
+    backgroundColor: "rgba(0,0,0,0.18)",
   },
-  heroOrbMask: {
+  heroVignetteCorners: {
     position: "absolute",
-    right: -50,
-    top: -50,
-    width: 220,
+    left: -40,
+    right: -40,
+    top: -40,
     height: 220,
-    borderRadius: 999,
-    backgroundColor: "rgba(15,17,19,0.78)",
-  },
-  heroOrbMask2: {
-    position: "absolute",
-    right: -130,
-    top: -130,
-    width: 360,
-    height: 360,
-    borderRadius: 999,
-    backgroundColor: "rgba(15,17,19,0.48)",
+    borderRadius: 260,
+    backgroundColor: "rgba(0,0,0,0.16)",
   },
 
   heroTitle: {
@@ -787,7 +749,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     borderWidth: 1,
     borderColor: "rgba(79,224,138,0.24)",
-    backgroundColor: "rgba(0,0,0,0.18)",
+    backgroundColor: "rgba(0,0,0,0.16)",
   },
   clearBtnText: {
     color: "rgba(242,244,246,0.72)",
@@ -806,7 +768,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   chipText: {
-    color: "rgba(242,244,246,0.78)",
+    color: "rgba(242,244,246,0.80)",
     fontSize: 13,
     fontWeight: theme.fontWeight.black,
   },
@@ -918,14 +880,26 @@ const styles = StyleSheet.create({
 
   // Trips
   emptyTitle: { color: theme.colors.text, fontSize: 15, fontWeight: theme.fontWeight.black },
-  emptyMeta: { marginTop: 6, color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold, lineHeight: 18 },
+  emptyMeta: {
+    marginTop: 6,
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.bold,
+    lineHeight: 18,
+  },
 
   nextTripPress: { borderRadius: 16, marginTop: 2 },
   nextTripCard: { borderRadius: 16 },
   nextTripInner: { paddingVertical: 14, paddingHorizontal: 14 },
   nextTripKicker: { color: theme.colors.textTertiary, fontSize: 12, fontWeight: theme.fontWeight.black },
   nextTripTitle: { marginTop: 6, color: theme.colors.text, fontSize: 18, fontWeight: theme.fontWeight.black },
-  nextTripMeta: { marginTop: 6, color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold, lineHeight: 18 },
+  nextTripMeta: {
+    marginTop: 6,
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.bold,
+    lineHeight: 18,
+  },
 
   // Inspiration
   inspoList: { gap: 10 },
@@ -933,5 +907,11 @@ const styles = StyleSheet.create({
   inspoCard: { borderRadius: 16 },
   inspoInner: { paddingVertical: 14, paddingHorizontal: 14 },
   inspoTitle: { color: theme.colors.text, fontSize: 15, fontWeight: theme.fontWeight.black },
-  inspoSub: { marginTop: 6, color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold, lineHeight: 18 },
+  inspoSub: {
+    marginTop: 6,
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.bold,
+    lineHeight: 18,
+  },
 });
