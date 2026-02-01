@@ -30,6 +30,8 @@ import {
   getRollingWindowIso,
   parseIsoDateOnly,
   toIsoDate,
+  addDaysIso,
+  tomorrowLocal,
   type LeagueOption,
 } from "@/src/constants/football";
 import { formatUkDateOnly, formatUkDateTimeMaybe } from "@/src/utils/formatters";
@@ -115,6 +117,28 @@ function CrestSquare({ row }: { row: FixtureListRow }) {
 
 type CityChip = { name: string; countryCode: string };
 
+function nextWeekendWindowIso(): { from: string; to: string } {
+  // Use "tomorrow onwards" baseline so we don't propose past weekends.
+  const start = tomorrowLocal();
+  const day = start.getDay(); // 0 Sun .. 6 Sat
+
+  // Find next Saturday from start
+  const daysUntilSat = (6 - day + 7) % 7;
+  const sat = new Date(start);
+  sat.setHours(0, 0, 0, 0);
+  sat.setDate(sat.getDate() + daysUntilSat);
+
+  const from = toIsoDate(sat);
+  const to = addDaysIso(from, 1); // Sunday (date-only)
+  return { from, to };
+}
+
+function nextNDaysWindowIso(days: number): { from: string; to: string } {
+  const from = toIsoDate(tomorrowLocal());
+  const to = addDaysIso(from, days);
+  return { from, to };
+}
+
 export default function HomeScreen() {
   const router = useRouter();
 
@@ -123,7 +147,7 @@ export default function HomeScreen() {
   // defaults to 90 days (centralised)
   const { from: fromIso, to: toIso } = useMemo(() => getRollingWindowIso(), []);
 
-  // Trips (for a minimal “Continue” strip only)
+  // Trips
   const [loadedTrips, setLoadedTrips] = useState(tripsStore.getState().loaded);
   const [trips, setTrips] = useState<Trip[]>(tripsStore.getState().trips);
 
@@ -264,6 +288,21 @@ export default function HomeScreen() {
     [router, league.leagueId, league.season, fromIso, toIso]
   );
 
+  const goBuildTripGlobal = useCallback(
+    (window?: { from: string; to: string }) => {
+      const w = window ?? { from: fromIso, to: toIso };
+      router.push({
+        pathname: "/trip/build",
+        params: {
+          global: "1",
+          from: w.from,
+          to: w.to,
+        },
+      } as any);
+    },
+    [router, fromIso, toIso]
+  );
+
   const goMatchWithContext = useCallback(
     (fixtureId: string) => {
       router.push({
@@ -369,16 +408,17 @@ export default function HomeScreen() {
     []
   );
 
-  const inspiration = useMemo(
-    () => [
-      { title: "Weekend trips that just work", sub: "Low-stress planning across Europe" },
-      { title: "Pick a match, build the break", sub: "Dates, stay, transport — in one hub" },
-      { title: "Shortlist cities fast", sub: "Search by team, city, stadium, or country" },
-    ],
-    []
-  );
-
-  const showContinueStrip = loadedTrips && !!nextTrip;
+  const quickShortcuts = useMemo(() => {
+    const weekend = nextWeekendWindowIso();
+    return [
+      { key: "weekend", label: "This weekend", sub: "Sat–Sun", window: weekend },
+      { key: "7", label: "Next 7 days", sub: "Quick break", window: nextNDaysWindowIso(7) },
+      { key: "14", label: "Next 14 days", sub: "More options", window: nextNDaysWindowIso(14) },
+      { key: "30", label: "Next 30 days", sub: "Plan ahead", window: nextNDaysWindowIso(30) },
+      { key: "90", label: "Next 90 days", sub: "Full window", window: getRollingWindowIso({ days: 90 }) },
+      { key: "all", label: "Just browse", sub: "All leagues", window: getRollingWindowIso({ days: 30 }) },
+    ];
+  }, []);
 
   return (
     <Background imageSource={getBackground("home")} overlayOpacity={0.74}>
@@ -533,34 +573,6 @@ export default function HomeScreen() {
             </View>
           </GlassCard>
 
-          {/* CONTINUE STRIP (only if a trip exists) */}
-          {showContinueStrip && nextTrip ? (
-            <GlassCard style={styles.continueCard} strength="default" noPadding>
-              <View style={styles.continueInner}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.continueKicker}>Continue</Text>
-                  <Text style={styles.continueTitle} numberOfLines={1}>
-                    {nextTrip.cityId || "Next trip"}
-                  </Text>
-                  <Text style={styles.continueMeta}>{tripSummaryLine(nextTrip)}</Text>
-                </View>
-
-                <View style={styles.continueBtns}>
-                  <Pressable
-                    onPress={() => router.push({ pathname: "/trip/[id]", params: { id: nextTrip.id } } as any)}
-                    style={[styles.miniBtn, styles.miniBtnPrimary]}
-                  >
-                    <Text style={styles.miniBtnPrimaryText}>Open</Text>
-                  </Pressable>
-
-                  <Pressable onPress={() => router.push("/(tabs)/trips")} style={[styles.miniBtn, styles.miniBtnGhost]}>
-                    <Text style={styles.miniBtnGhostText}>All trips</Text>
-                  </Pressable>
-                </View>
-              </View>
-            </GlassCard>
-          ) : null}
-
           {/* UPCOMING MATCHES */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
@@ -642,26 +654,100 @@ export default function HomeScreen() {
             </GlassCard>
           </View>
 
-          {/* INSPIRATION */}
+          {/* TRIPS */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Inspiration</Text>
-              <Text style={styles.sectionMeta}>Editorial shortcuts</Text>
+              <Text style={styles.sectionTitle}>Trips</Text>
+              <Text style={styles.sectionMeta}>Your next plan</Text>
             </View>
 
-            <View style={styles.inspoList}>
-              {inspiration.map((x) => (
-                <Pressable key={x.title} onPress={() => goFixturesWithContext()} style={styles.inspoPress}>
-                  <GlassCard strength="default" noPadding style={styles.inspoCard}>
-                    <View style={styles.inspoInner}>
-                      <Text style={styles.inspoTitle}>{x.title}</Text>
-                      <Text style={styles.inspoSub}>{x.sub}</Text>
+            <GlassCard style={styles.card} strength="default">
+              {!loadedTrips ? (
+                <View style={styles.center}>
+                  <ActivityIndicator />
+                  <Text style={styles.muted}>Loading trips…</Text>
+                </View>
+              ) : null}
+
+              {loadedTrips && !nextTrip ? (
+                <>
+                  <Text style={styles.emptyTitle}>No trips yet</Text>
+                  <Text style={styles.emptyMeta}>Start with a fixture, then build the break in one hub.</Text>
+
+                  <View style={styles.ctaRow}>
+                    <Pressable onPress={() => goFixturesWithContext()} style={[styles.btn, styles.btnGhost]}>
+                      <Text style={styles.btnGhostText}>Browse fixtures</Text>
+                    </Pressable>
+
+                    <Pressable onPress={() => goBuildTripWithContext()} style={[styles.btn, styles.btnPrimary]}>
+                      <Text style={styles.btnPrimaryText}>Build trip</Text>
+                    </Pressable>
+                  </View>
+                </>
+              ) : null}
+
+              {loadedTrips && nextTrip ? (
+                <Pressable
+                  onPress={() => router.push({ pathname: "/trip/[id]", params: { id: nextTrip.id } } as any)}
+                  style={styles.nextTripPress}
+                >
+                  <GlassCard strength="subtle" noPadding style={styles.nextTripCard}>
+                    <View style={styles.nextTripInner}>
+                      <Text style={styles.nextTripKicker}>Next up</Text>
+                      <Text style={styles.nextTripTitle}>{nextTrip.cityId || "Trip"}</Text>
+                      <Text style={styles.nextTripMeta}>{tripSummaryLine(nextTrip)}</Text>
                     </View>
                   </GlassCard>
                 </Pressable>
-              ))}
-            </View>
+              ) : null}
+
+              <Pressable onPress={() => router.push("/(tabs)/trips")} style={styles.linkBtn}>
+                <Text style={styles.linkText}>Open Trips</Text>
+              </Pressable>
+            </GlassCard>
           </View>
+
+          {/* QUICK SHORTCUTS (HIDE DURING SEARCH) */}
+          {!showSearchResults ? (
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>Quick shortcuts</Text>
+                <Text style={styles.sectionMeta}>All leagues • jump straight into Build Trip</Text>
+              </View>
+
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.shortcutRow}
+              >
+                {quickShortcuts.map((x) => (
+                  <Pressable
+                    key={x.key}
+                    onPress={() => goBuildTripGlobal(x.window)}
+                    style={styles.shortcutPill}
+                  >
+                    <Text style={styles.shortcutTitle}>{x.label}</Text>
+                    <Text style={styles.shortcutSub}>{x.sub}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+
+              <GlassCard style={styles.card} strength="subtle">
+                <View style={styles.shortcutHintRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.shortcutHintTitle}>Want everything?</Text>
+                    <Text style={styles.shortcutHintSub}>
+                      Open Build Trip in global mode and then narrow down by league or search.
+                    </Text>
+                  </View>
+
+                  <Pressable onPress={() => goBuildTripGlobal()} style={styles.pillBtn}>
+                    <Text style={styles.pillBtnText}>Open</Text>
+                  </Pressable>
+                </View>
+              </GlassCard>
+            </View>
+          ) : null}
 
           <View style={{ height: 10 }} />
         </ScrollView>
@@ -725,7 +811,13 @@ const styles = StyleSheet.create({
   },
 
   heroTitle: { color: theme.colors.text, fontSize: 26, fontWeight: theme.fontWeight.black, lineHeight: 32 },
-  heroSub: { marginTop: 10, color: theme.colors.textSecondary, fontSize: 15, lineHeight: 20, fontWeight: theme.fontWeight.bold },
+  heroSub: {
+    marginTop: 10,
+    color: theme.colors.textSecondary,
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: theme.fontWeight.bold,
+  },
 
   searchBox: {
     marginTop: 14,
@@ -749,7 +841,13 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.06)",
     opacity: 0.55,
   },
-  searchInput: { flex: 1, color: theme.colors.text, fontSize: 15, paddingVertical: Platform.OS === "ios" ? 6 : 4, fontWeight: theme.fontWeight.bold },
+  searchInput: {
+    flex: 1,
+    color: theme.colors.text,
+    fontSize: 15,
+    paddingVertical: Platform.OS === "ios" ? 6 : 4,
+    fontWeight: theme.fontWeight.bold,
+  },
 
   clearBtn: {
     paddingVertical: 6,
@@ -802,32 +900,6 @@ const styles = StyleSheet.create({
   rowTitle: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: 15 },
   rowMeta: { marginTop: 4, color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold },
   chev: { color: theme.colors.textTertiary, fontSize: 24, marginTop: -2 },
-
-  // Continue strip
-  continueCard: { borderRadius: theme.borderRadius.xl },
-  continueInner: {
-    padding: theme.spacing.md,
-    borderRadius: theme.borderRadius.xl,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  continueKicker: { color: theme.colors.textTertiary, fontSize: 12, fontWeight: theme.fontWeight.black },
-  continueTitle: { marginTop: 4, color: theme.colors.text, fontSize: 16, fontWeight: theme.fontWeight.black },
-  continueMeta: { marginTop: 6, color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold },
-
-  continueBtns: { gap: 10 },
-  miniBtn: { borderRadius: 999, paddingVertical: 10, paddingHorizontal: 14, borderWidth: 1, alignItems: "center" },
-  miniBtnPrimary: {
-    borderColor: "rgba(79,224,138,0.45)",
-    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.default : theme.glass.iosBg.default,
-  },
-  miniBtnPrimaryText: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: 13 },
-  miniBtnGhost: {
-    borderColor: "rgba(255,255,255,0.12)",
-    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
-  },
-  miniBtnGhostText: { color: theme.colors.textSecondary, fontWeight: theme.fontWeight.black, fontSize: 13 },
 
   // League selector w/ flags
   leagueRow: { gap: 10, paddingRight: theme.spacing.lg, marginTop: 10 },
@@ -906,11 +978,42 @@ const styles = StyleSheet.create({
   },
   linkText: { color: theme.colors.textSecondary, fontSize: 14, fontWeight: theme.fontWeight.black },
 
-  // Inspiration
-  inspoList: { gap: 10 },
-  inspoPress: { borderRadius: 16 },
-  inspoCard: { borderRadius: 16 },
-  inspoInner: { paddingVertical: 14, paddingHorizontal: 14 },
-  inspoTitle: { color: theme.colors.text, fontSize: 15, fontWeight: theme.fontWeight.black },
-  inspoSub: { marginTop: 6, color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold, lineHeight: 18 },
+  // Trips
+  emptyTitle: { color: theme.colors.text, fontSize: 15, fontWeight: theme.fontWeight.black },
+  emptyMeta: { marginTop: 6, color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold, lineHeight: 18 },
+
+  nextTripPress: { borderRadius: 16, marginTop: 2 },
+  nextTripCard: { borderRadius: 16 },
+  nextTripInner: { paddingVertical: 14, paddingHorizontal: 14 },
+  nextTripKicker: { color: theme.colors.textTertiary, fontSize: 12, fontWeight: theme.fontWeight.black },
+  nextTripTitle: { marginTop: 6, color: theme.colors.text, fontSize: 18, fontWeight: theme.fontWeight.black },
+  nextTripMeta: { marginTop: 6, color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold, lineHeight: 18 },
+
+  // Quick shortcuts
+  shortcutRow: { gap: 10, paddingRight: theme.spacing.lg, marginTop: 10 },
+  shortcutPill: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: Platform.OS === "android" ? "rgba(22,25,29,0.45)" : "rgba(22,25,29,0.40)",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    minWidth: 138,
+  },
+  shortcutTitle: { color: theme.colors.text, fontSize: 13, fontWeight: theme.fontWeight.black },
+  shortcutSub: { marginTop: 4, color: theme.colors.textSecondary, fontSize: 12, fontWeight: theme.fontWeight.bold },
+
+  shortcutHintRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  shortcutHintTitle: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: 14 },
+  shortcutHintSub: { marginTop: 6, color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold, lineHeight: 18 },
+
+  pillBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(79,224,138,0.35)",
+    backgroundColor: "rgba(0,0,0,0.22)",
+  },
+  pillBtnText: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: 13 },
 });
