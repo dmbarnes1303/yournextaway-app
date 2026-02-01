@@ -4,11 +4,17 @@ export type LeagueOption = {
   label: string;
   leagueId: number;
   season: number;
-  countryCode: string; // ISO-2 for emoji flag
+  countryCode: string; // ISO2 for flag images
 };
 
+/**
+ * Keep this aligned with your API-Football season.
+ */
 export const DEFAULT_SEASON = 2025;
 
+/**
+ * Single source of truth for all top leagues used in the app.
+ */
 export const LEAGUES: LeagueOption[] = [
   { label: "Premier League", leagueId: 39, season: DEFAULT_SEASON, countryCode: "GB" },
   { label: "La Liga", leagueId: 140, season: DEFAULT_SEASON, countryCode: "ES" },
@@ -28,6 +34,9 @@ export function toIsoDate(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
+/**
+ * Parse "YYYY-MM-DD" as a local-midnight Date (safe for date-only comparisons).
+ */
 export function parseIsoDateOnly(iso: string): Date | null {
   if (!iso) return null;
   const d = new Date(`${iso}T00:00:00`);
@@ -43,6 +52,9 @@ export function addDaysIso(baseIso: string, days: number): string {
 
 export type RollingWindowIso = { from: string; to: string };
 
+/**
+ * Local "tomorrow" at 00:00:00.
+ */
 export function tomorrowLocal(): Date {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
@@ -54,6 +66,10 @@ export function tomorrowIso(): string {
   return toIsoDate(tomorrowLocal());
 }
 
+/**
+ * Enforce "tomorrow onwards" (excludes past + today).
+ * If input is invalid, returns tomorrow.
+ */
 export function clampFromIsoToTomorrow(fromIso: string): string {
   const tmr = tomorrowIso();
   const fromDate = parseIsoDateOnly(fromIso);
@@ -62,9 +78,14 @@ export function clampFromIsoToTomorrow(fromIso: string): string {
   return fromDate.getTime() < tmrDate.getTime() ? tmr : fromIso;
 }
 
+/**
+ * Normalise a window so it is always valid and never includes past/today:
+ * - clamps `from` to tomorrow
+ * - ensures `to >= from` (if not, sets `to = from + days`)
+ */
 export function normalizeWindowIso(
   input: { from: string; to: string },
-  daysIfInvalidTo = 30
+  daysIfInvalidTo = 90
 ): RollingWindowIso {
   const from = clampFromIsoToTomorrow(input.from);
 
@@ -83,7 +104,9 @@ export function normalizeWindowIso(
 }
 
 /**
- * Defaults to 90 days (as you wanted).
+ * Central fixture date window (rolling).
+ * IMPORTANT: Defaults to TOMORROW onwards (excludes past + today).
+ * Default is now 90 days.
  */
 export function getRollingWindowIso(opts?: { days?: number; start?: Date }): RollingWindowIso {
   const days = opts?.days ?? 90;
@@ -91,5 +114,6 @@ export function getRollingWindowIso(opts?: { days?: number; start?: Date }): Rol
 
   const from = toIsoDate(start);
   const to = addDaysIso(from, days);
+
   return normalizeWindowIso({ from, to }, days);
 }
