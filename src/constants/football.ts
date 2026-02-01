@@ -80,7 +80,10 @@ export function clampFromIsoToTomorrow(fromIso: string): string {
  * - clamps `from` to tomorrow
  * - ensures `to >= from` (if not, sets `to = from + days`)
  */
-export function normalizeWindowIso(input: { from: string; to: string }, daysIfInvalidTo = 30): RollingWindowIso {
+export function normalizeWindowIso(
+  input: { from: string; to: string },
+  daysIfInvalidTo = 90
+): RollingWindowIso {
   const from = clampFromIsoToTomorrow(input.from);
 
   const toDate = parseIsoDateOnly(input.to);
@@ -100,9 +103,13 @@ export function normalizeWindowIso(input: { from: string; to: string }, daysIfIn
 /**
  * Central fixture date window (rolling).
  * IMPORTANT: Defaults to TOMORROW onwards (excludes past + today).
+ *
+ * Default: 90 days.
+ * - Still overrideable via opts.days
+ * - Still clamped to tomorrow if caller gives past/today
  */
 export function getRollingWindowIso(opts?: { days?: number; start?: Date }): RollingWindowIso {
-  const days = opts?.days ?? 30;
+  const days = opts?.days ?? 90;
   const start = opts?.start ?? tomorrowLocal();
 
   const from = toIsoDate(start);
