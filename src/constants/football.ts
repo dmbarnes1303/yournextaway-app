@@ -4,7 +4,12 @@ export type LeagueOption = {
   label: string;
   leagueId: number;
   season: number;
-  countryCode: string; // ISO2 for flag images
+  /**
+   * Flag code for UI.
+   * - ISO-3166-1 alpha-2 for sovereign countries (e.g. "ES", "DE")
+   * - Special regional codes supported by our flag helpers (e.g. "ENG")
+   */
+  countryCode: string;
 };
 
 /**
@@ -16,7 +21,8 @@ export const DEFAULT_SEASON = 2025;
  * Single source of truth for all top leagues used in the app.
  */
 export const LEAGUES: LeagueOption[] = [
-  { label: "Premier League", leagueId: 39, season: DEFAULT_SEASON, countryCode: "GB" },
+  // Premier League is ENGLAND (not "GB")
+  { label: "Premier League", leagueId: 39, season: DEFAULT_SEASON, countryCode: "ENG" },
   { label: "La Liga", leagueId: 140, season: DEFAULT_SEASON, countryCode: "ES" },
   { label: "Serie A", leagueId: 135, season: DEFAULT_SEASON, countryCode: "IT" },
   { label: "Bundesliga", leagueId: 78, season: DEFAULT_SEASON, countryCode: "DE" },
@@ -106,7 +112,7 @@ export function normalizeWindowIso(
 /**
  * Central fixture date window (rolling).
  * IMPORTANT: Defaults to TOMORROW onwards (excludes past + today).
- * Default is now 90 days.
+ * Default is 90 days.
  */
 export function getRollingWindowIso(opts?: { days?: number; start?: Date }): RollingWindowIso {
   const days = opts?.days ?? 90;
