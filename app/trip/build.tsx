@@ -1,5 +1,3 @@
-// app/trip/build.tsx
-
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
@@ -116,22 +114,7 @@ type EditSnapshot = {
   notes: string;
 };
 
-const ALL_LEAGUES: LeagueOption = {
-  label: "All leagues",
-  leagueId: 0,
-  season: LEAGUES[0]?.season ?? 2025,
-  countryCode: "EU",
-};
-
-function sortFixturesByKickoffAsc(rows: any[]): any[] {
-  return [...rows].sort((a, b) => {
-    const ad = new Date(String(a?.fixture?.date ?? ""));
-    const bd = new Date(String(b?.fixture?.date ?? ""));
-    const at = Number.isNaN(ad.getTime()) ? 0 : ad.getTime();
-    const bt = Number.isNaN(bd.getTime()) ? 0 : bd.getTime();
-    return at - bt;
-  });
-}
+type BuildLeague = LeagueOption & { key?: string };
 
 export default function TripBuildScreen() {
   const router = useRouter();
@@ -167,15 +150,35 @@ export default function TripBuildScreen() {
   const fromParam = useMemo(() => paramString((params as any)?.from), [params]);
   const toParam = useMemo(() => paramString((params as any)?.to), [params]);
 
-  const globalMode = useMemo(() => paramBool((params as any)?.global), [params]);
+  // Global browsing mode (Home shortcuts use this)
+  const routeGlobal = useMemo(() => paramBool((params as any)?.global), [params]);
 
   const from = useMemo(() => clampIsoToTomorrow(fromParam ?? defaultFrom), [fromParam, defaultFrom]);
   const to = useMemo(() => toParam ?? defaultTo, [toParam, defaultTo]);
 
-  const [selectedLeague, setSelectedLeague] = useState<LeagueOption>(() => (globalMode ? ALL_LEAGUES : LEAGUES[0]));
+  const ALL_LEAGUES: BuildLeague = useMemo(
+    () => ({
+      label: "All leagues",
+      leagueId: 0,
+      season: routeSeason ?? (LEAGUES[0]?.season ?? 2025),
+      countryCode: "EU",
+      key: "all",
+    }),
+    [routeSeason]
+  );
+
+  const leagueOptions: BuildLeague[] = useMemo(() => [ALL_LEAGUES, ...LEAGUES], [ALL_LEAGUES]);
+
+  const [selectedLeague, setSelectedLeague] = useState<BuildLeague>(routeGlobal ? ALL_LEAGUES : leagueOptions[1] ?? ALL_LEAGUES);
 
   // Apply league/season from route params (for fixtures list browsing)
   useEffect(() => {
+    // If Home passed global=1, force All leagues unless a specific leagueId is explicitly provided
+    if (routeGlobal && !routeLeagueId) {
+      setSelectedLeague(ALL_LEAGUES);
+      return;
+    }
+
     if (!routeLeagueId) return;
 
     const match = LEAGUES.find((l) => l.leagueId === routeLeagueId);
@@ -186,7 +189,7 @@ export default function TripBuildScreen() {
       if (cur.leagueId === match.leagueId && cur.season === season) return cur;
       return { ...match, season };
     });
-  }, [routeLeagueId, routeSeason]);
+  }, [routeGlobal, routeLeagueId, routeSeason, ALL_LEAGUES]);
 
   const [loading, setLoading] = useState(false);
   const [prefillLoading, setPrefillLoading] = useState(false);
@@ -391,6 +394,54 @@ export default function TripBuildScreen() {
     };
   }, [isEditing, routeFixtureId, routeSeason]);
 
+  function isAllLeaguesSelected(l: BuildLeague) {
+    return l.leagueId === 0;
+  }
+
+  async function loadFixturesForLeague(l: LeagueOption, fromIso: string, toIso: string) {
+    const res = await getFixtures({
+      league: l.leagueId,
+      season: l.season,
+      from: fromIso,
+      to: toIso,
+    });
+    return Array.isArray(res) ? res : [];
+  }
+
+  async function loadFixturesGlobal(fromIso: string, toIso: string) {
+    const results = await Promise.all(
+      LEAGUES.map(async (l) => {
+        try {
+          return await loadFixturesForLeague(l, fromIso, toIso);
+        } catch {
+          return [];
+        }
+      })
+    );
+
+    const flat = results.flat();
+
+    // De-dupe by fixture id
+    const seen = new Set<string>();
+    const deduped: any[] = [];
+    for (const r of flat) {
+      const id = r?.fixture?.id != null ? String(r.fixture.id) : "";
+      if (!id) continue;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      deduped.push(r);
+    }
+
+    // Sort by kickoff asc
+    deduped.sort((a, b) => {
+      const ad = a?.fixture?.date ? new Date(a.fixture.date).getTime() : 0;
+      const bd = b?.fixture?.date ? new Date(b.fixture.date).getTime() : 0;
+      return ad - bd;
+    });
+
+    return deduped;
+  }
+
   // Load fixtures list whenever league/from/to change
   useEffect(() => {
     let cancelled = false;
@@ -400,38 +451,15 @@ export default function TripBuildScreen() {
       setLoading(true);
       setRows([]);
       setVisibleCount(12);
-      setSearch("");
+      setSearch(""); // avoids "0 results" carryover when switching leagues
 
       try {
-        // Global: pull from all leagues only when "All leagues" is selected.
-        if (globalMode && selectedLeague.leagueId === ALL_LEAGUES.leagueId) {
-          const res = await Promise.all(
-            LEAGUES.map(async (l) => {
-              try {
-                const r = await getFixtures({ league: l.leagueId, season: l.season, from, to });
-                return Array.isArray(r) ? r : [];
-              } catch {
-                return [];
-              }
-            })
-          );
-
-          if (cancelled) return;
-
-          const merged = sortFixturesByKickoffAsc(res.flat());
-          setRows(merged);
-          return;
-        }
-
-        const res = await getFixtures({
-          league: selectedLeague.leagueId,
-          season: selectedLeague.season,
-          from,
-          to,
-        });
+        const res = isAllLeaguesSelected(selectedLeague)
+          ? await loadFixturesGlobal(from, to)
+          : await loadFixturesForLeague(selectedLeague, from, to);
 
         if (cancelled) return;
-        setRows(Array.isArray(res) ? sortFixturesByKickoffAsc(res) : []);
+        setRows(Array.isArray(res) ? res : []);
       } catch (e: any) {
         if (cancelled) return;
         setError(e?.message ?? "Failed to load fixtures.");
@@ -444,7 +472,7 @@ export default function TripBuildScreen() {
     return () => {
       cancelled = true;
     };
-  }, [selectedLeague, from, to, globalMode]);
+  }, [selectedLeague, from, to]);
 
   /**
    * When a fixture is selected, prefill dates as a 2-night mini-break:
@@ -459,6 +487,7 @@ export default function TripBuildScreen() {
 
     const fixtureId = selectedFixture?.fixture?.id != null ? String(selectedFixture.fixture.id) : null;
 
+    // If we loaded an existing trip and this is that same match, keep saved dates once.
     if (isEditing && editDatesLockRef.current && editTripMatchId && fixtureId === editTripMatchId) {
       editDatesLockRef.current = false;
 
@@ -574,9 +603,7 @@ export default function TripBuildScreen() {
         notes: notes.trim(),
       };
 
-      if (venueCityRaw) {
-        (patch as any).citySlug = venueCityRaw;
-      }
+      if (venueCityRaw) (patch as any).citySlug = venueCityRaw;
 
       if (isEditing && routeTripId) {
         await tripsStore.updateTrip(routeTripId, patch);
@@ -643,11 +670,6 @@ export default function TripBuildScreen() {
     return { home, away, kick, extra };
   }, [isEditing, prefillLoading]);
 
-  const leaguePills = useMemo(() => {
-    if (!globalMode) return LEAGUES;
-    return [ALL_LEAGUES, ...LEAGUES];
-  }, [globalMode]);
-
   return (
     <Background imageUrl={getBackground("trips")}>
       <Stack.Screen
@@ -667,7 +689,7 @@ export default function TripBuildScreen() {
           keyboardShouldPersistTaps="handled"
         >
           <GlassCard style={styles.card}>
-            <Text style={styles.h1}>{isEditing ? "Edit trip match" : globalMode ? "Pick a match (all leagues)" : "Pick a match"}</Text>
+            <Text style={styles.h1}>{isEditing ? "Edit trip match" : "Pick a match"}</Text>
             <Text style={styles.muted}>
               {isEditing
                 ? "Select a fixture to update this trip. Save inside the sheet."
@@ -689,12 +711,12 @@ export default function TripBuildScreen() {
             ) : null}
 
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.leagueRow}>
-              {leaguePills.map((l) => {
+              {leagueOptions.map((l) => {
                 const active = l.leagueId === selectedLeague.leagueId;
                 return (
                   <Pressable
-                    key={`${l.leagueId}-${l.label}`}
-                    onPress={() => setSelectedLeague(l.leagueId === 0 ? ALL_LEAGUES : l)}
+                    key={l.key ?? String(l.leagueId)}
+                    onPress={() => setSelectedLeague(l)}
                     style={[styles.leaguePill, active && styles.leaguePillActive]}
                   >
                     <Text style={[styles.leaguePillText, active && styles.leaguePillTextActive]}>{l.label}</Text>
@@ -710,7 +732,7 @@ export default function TripBuildScreen() {
                   setSearch(t);
                   setVisibleCount(12);
                 }}
-                placeholder="Search team / venue / city / league…"
+                placeholder="Search team / league / venue / city…"
                 placeholderTextColor={theme.colors.textSecondary}
                 style={styles.search}
                 autoCapitalize="none"
@@ -744,7 +766,7 @@ export default function TripBuildScreen() {
 
             {!loading && !error && filteredRows.length === 0 ? (
               <View style={{ marginTop: 12 }}>
-                <EmptyState title="No fixtures found" message="Try a different league, date window, or search." />
+                <EmptyState title="No fixtures found" message="Try a different league window, or search." />
               </View>
             ) : null}
 
@@ -758,9 +780,9 @@ export default function TripBuildScreen() {
                     const kickoff = formatUkDateTimeMaybe(r?.fixture?.date);
                     const venue = r?.fixture?.venue?.name ?? "";
                     const city = r?.fixture?.venue?.city ?? "";
-                    const leagueName = r?.league?.name ? String(r.league.name) : "";
-                    const extra = [kickoff, venue, city].filter(Boolean).join(" • ");
-                    const line2 = leagueName ? `${leagueName} • ${extra}` : extra;
+                    const leagueName = String(r?.league?.name ?? "").trim();
+                    const extra = [leagueName, venue, city].filter(Boolean).join(" • ");
+                    const line2 = extra ? `${kickoff} • ${extra}` : kickoff;
 
                     const selected = String(selectedFixture?.fixture?.id ?? "") === String(fixtureId ?? "");
 
@@ -841,6 +863,7 @@ export default function TripBuildScreen() {
                     </Pressable>
                   </View>
 
+                  {/* BOOK THIS TRIP */}
                   {bookingLinks ? (
                     <View style={styles.bookBlock}>
                       <View style={styles.bookTop}>
@@ -903,9 +926,7 @@ export default function TripBuildScreen() {
                               </View>
                             </View>
                           ))}
-                          {(cityBundle.items?.length ?? 0) > 6 ? (
-                            <Text style={styles.moreInline}>More in the full city guide.</Text>
-                          ) : null}
+                          {(cityBundle.items?.length ?? 0) > 6 ? <Text style={styles.moreInline}>More in the full city guide.</Text> : null}
                         </View>
                       ) : null}
 
@@ -922,6 +943,7 @@ export default function TripBuildScreen() {
                     </View>
                   ) : null}
 
+                  {/* Date fallback for web/no picker */}
                   {Platform.OS === "web" || !DateTimePicker ? (
                     <View style={{ marginTop: 10, gap: 8 }}>
                       <Text style={styles.fallbackNote}>Date picker not available here. Edit ISO dates (YYYY-MM-DD).</Text>
