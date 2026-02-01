@@ -87,7 +87,6 @@ export default function HomeScreen() {
 
   const [league, setLeague] = useState<LeagueOption>(LEAGUES[0]);
 
-  // Central rolling window (your football.ts defaults now drive this)
   const { from: fromIso, to: toIso } = useMemo(() => getRollingWindowIso(), []);
 
   // Trips
@@ -358,24 +357,18 @@ export default function HomeScreen() {
           {/* HERO */}
           <GlassCard style={styles.heroCard} strength="strong" noPadding>
             <View style={styles.heroShell}>
-              {/* Brand edges */}
+              {/* Only keep the intentional brand edge */}
               <View pointerEvents="none" style={styles.heroEdgeLeft} />
-              <View pointerEvents="none" style={styles.heroEdgeTop} />
-              <View pointerEvents="none" style={styles.heroGoldDot} />
 
-              {/* Strong orb kill zone (top-right) */}
+              {/* Kill top-left background orbs */}
+              <View pointerEvents="none" style={styles.heroTopLeftShade} />
+              <View pointerEvents="none" style={styles.heroTopLeftMask} />
+              <View pointerEvents="none" style={styles.heroTopLeftMask2} />
+
+              {/* Kill top-right background orb */}
               <View pointerEvents="none" style={styles.heroCornerShade} />
               <View pointerEvents="none" style={styles.heroOrbMask} />
               <View pointerEvents="none" style={styles.heroOrbMask2} />
-
-              <View style={styles.heroMetaRow}>
-                <View style={styles.brandDot} />
-                <Text style={styles.heroBrand}>YOURNEXTAWAY</Text>
-                <Text style={styles.heroSep}>•</Text>
-                <Text style={styles.heroMetaText}>
-                  Rolling window: {formatUkDateOnly(fromIso)} → {formatUkDateOnly(toIso)}
-                </Text>
-              </View>
 
               <Text style={styles.heroTitle}>Plan your next European football trip</Text>
 
@@ -384,11 +377,10 @@ export default function HomeScreen() {
               </Text>
 
               <View style={styles.searchBox}>
-                <View style={styles.searchIcon} />
                 <TextInput
                   value={q}
                   onChangeText={setQ}
-                  placeholder="Search country, city, team, or venue"
+                  placeholder="Search country, city or team"
                   placeholderTextColor={theme.colors.textTertiary}
                   style={styles.searchInput}
                   autoCapitalize="none"
@@ -401,11 +393,7 @@ export default function HomeScreen() {
                   <Pressable onPress={clearSearch} style={styles.clearBtn} hitSlop={10}>
                     <Text style={styles.clearBtnText}>Clear</Text>
                   </Pressable>
-                ) : (
-                  <View style={styles.euPill} pointerEvents="none">
-                    <Text style={styles.euPillText}>EU</Text>
-                  </View>
-                )}
+                ) : null}
               </View>
 
               {!showSearchResults ? (
@@ -645,7 +633,7 @@ export default function HomeScreen() {
 
               <Pressable onPress={() => router.push("/(tabs)/trips")} style={styles.linkBtn}>
                 <Text style={styles.linkText}>Open Trips</Text>
-              </Pressable>
+                </Pressable>
             </GlassCard>
           </View>
 
@@ -699,29 +687,37 @@ const styles = StyleSheet.create({
     width: 3,
     backgroundColor: "rgba(79,224,138,0.65)",
   },
-  heroEdgeTop: {
+
+  // Top-left orb suppression (background artifact)
+  heroTopLeftShade: {
     position: "absolute",
     left: 0,
-    right: 0,
     top: 0,
-    height: 2,
-    backgroundColor: "rgba(47,107,255,0.35)",
+    width: 200,
+    height: 140,
+    backgroundColor: "rgba(15,17,19,0.52)",
+    borderBottomRightRadius: 34,
   },
-  heroGoldDot: {
+  heroTopLeftMask: {
     position: "absolute",
-    left: 12,
-    top: 12,
-    width: 6,
-    height: 6,
+    left: -70,
+    top: -70,
+    width: 190,
+    height: 190,
     borderRadius: 999,
-    backgroundColor: "rgba(214,181,106,0.78)",
+    backgroundColor: "rgba(15,17,19,0.72)",
+  },
+  heroTopLeftMask2: {
+    position: "absolute",
+    left: -160,
+    top: -160,
+    width: 330,
+    height: 330,
+    borderRadius: 999,
+    backgroundColor: "rgba(15,17,19,0.44)",
   },
 
-  /**
-   * STRONGER top-right kill zone:
-   * - Corner shade: a soft rectangle that guarantees the bright orb is suppressed
-   * - Two big circular masks: keep it feeling “natural”, not like a hard block
-   */
+  // Top-right orb suppression (background artifact)
   heroCornerShade: {
     position: "absolute",
     right: 0,
@@ -750,28 +746,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(15,17,19,0.48)",
   },
 
-  heroMetaRow: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 8 },
-  brandDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 999,
-    backgroundColor: "rgba(79,224,138,0.85)",
-  },
-  heroBrand: {
-    color: "rgba(242,244,246,0.78)",
-    fontSize: 12,
-    fontWeight: theme.fontWeight.black,
-    letterSpacing: 1.2,
-  },
-  heroSep: { color: "rgba(214,181,106,0.70)", fontSize: 12, fontWeight: theme.fontWeight.black },
-  heroMetaText: {
-    color: "rgba(242,244,246,0.52)",
-    fontSize: 12,
-    fontWeight: theme.fontWeight.bold,
-  },
-
   heroTitle: {
-    marginTop: 10,
     color: theme.colors.text,
     fontSize: 24,
     fontWeight: theme.fontWeight.black,
@@ -798,15 +773,6 @@ const styles = StyleSheet.create({
     gap: 10,
   },
 
-  searchIcon: {
-    width: 10,
-    height: 10,
-    borderRadius: 999,
-    borderWidth: 2,
-    borderColor: "rgba(47,107,255,0.40)",
-    opacity: 0.9,
-  },
-
   searchInput: {
     flex: 1,
     color: theme.colors.text,
@@ -828,21 +794,6 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeight.black,
     fontSize: 12,
     letterSpacing: 0.3,
-  },
-
-  euPill: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "rgba(214,181,106,0.30)",
-    backgroundColor: "rgba(0,0,0,0.16)",
-  },
-  euPillText: {
-    color: "rgba(214,181,106,0.90)",
-    fontWeight: theme.fontWeight.black,
-    fontSize: 12,
-    letterSpacing: 0.6,
   },
 
   chipsRow: { marginTop: 14, flexDirection: "row", flexWrap: "wrap", gap: 10 },
