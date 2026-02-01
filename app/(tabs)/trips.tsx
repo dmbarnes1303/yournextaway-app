@@ -87,8 +87,14 @@ export default function TripsScreen() {
     return { upcoming: up, past: pa };
   }, [sorted]);
 
-  const openTrip = useCallback((t: Trip) => router.push({ pathname: "/trip/[id]", params: { id: t.id } } as any), [router]);
-  const editTrip = useCallback((t: Trip) => router.push({ pathname: "/trip/build", params: { tripId: t.id } } as any), [router]);
+  const openTrip = useCallback(
+    (t: Trip) => router.push({ pathname: "/trip/[id]", params: { id: t.id } } as any),
+    [router]
+  );
+  const editTrip = useCallback(
+    (t: Trip) => router.push({ pathname: "/trip/build", params: { tripId: t.id } } as any),
+    [router]
+  );
 
   const deleteTrip = useCallback((t: Trip) => {
     Alert.alert("Delete trip?", "This will remove the trip from this device.", [
@@ -108,7 +114,7 @@ export default function TripsScreen() {
   }, [past.length, trips.length, upcoming.length]);
 
   return (
-    <Background imageUrl={getBackground("trips")} overlayOpacity={0.86}>
+    <Background imageSource={getBackground("trips")} overlayOpacity={0.86}>
       <SafeAreaView style={styles.container} edges={["top"]}>
         <ScrollView style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           <View style={styles.header}>
@@ -116,7 +122,7 @@ export default function TripsScreen() {
             <Text style={styles.subtitle}>Saved plans, upcoming breaks, and drafts.</Text>
           </View>
 
-          {/* STATS (compact, not a whole extra card) */}
+          {/* STATS */}
           <View style={styles.statsRow}>
             <View style={styles.statPill}>
               <Text style={styles.statKicker}>Upcoming</Text>
@@ -142,7 +148,7 @@ export default function TripsScreen() {
             </GlassCard>
           ) : null}
 
-          {/* EMPTY (single, clean CTA hierarchy) */}
+          {/* EMPTY */}
           {showEmpty ? (
             <GlassCard style={styles.card} strength="default">
               <EmptyState title="No trips yet" message="Start with a fixture, then build the break in one hub." />
@@ -278,7 +284,12 @@ const styles = StyleSheet.create({
   },
 
   header: { paddingTop: theme.spacing.lg, paddingBottom: theme.spacing.xs },
-  title: { fontSize: theme.fontSize.xxl, fontWeight: theme.fontWeight.black, color: theme.colors.text, marginBottom: theme.spacing.xs },
+  title: {
+    fontSize: theme.fontSize.xxl,
+    fontWeight: theme.fontWeight.black,
+    color: theme.colors.text,
+    marginBottom: theme.spacing.xs,
+  },
   subtitle: { fontSize: theme.fontSize.sm, color: theme.colors.textSecondary, fontWeight: theme.fontWeight.bold },
 
   statsRow: { flexDirection: "row", gap: 10 },
