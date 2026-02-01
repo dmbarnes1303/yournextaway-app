@@ -1,5 +1,13 @@
 // src/constants/theme.ts
 
+/**
+ * YourNextAway Theme (V1 - Luxury Hospitality x Tech, Dark-Only)
+ *
+ * Tweaks in this revision:
+ * - Glass surfaces slightly MORE transparent globally
+ * - Keeps readability by maintaining near-black tint
+ */
+
 export const theme = {
   colors: {
     bgBase: "#0F1113",
@@ -20,6 +28,7 @@ export const theme = {
     borderSubtle: "rgba(255,255,255,0.06)",
     dividerSubtle: "rgba(255,255,255,0.06)",
 
+    // Backwards compatible aliases
     background: "#0F1113",
     backgroundSecondary: "#16191D",
 
@@ -32,6 +41,7 @@ export const theme = {
     primaryLight: "rgba(79,224,138,0.95)",
 
     accent: "#2F6BFF",
+
     success: "#4FE08A",
 
     border: "rgba(255,255,255,0.06)",
@@ -41,8 +51,14 @@ export const theme = {
     overlayLight: "rgba(0,0,0,0.62)",
   },
 
+  /**
+   * Glass system (single source of truth)
+   *
+   * Change: slightly lower alpha values so background shows through more,
+   * without losing the “luxury dark panel” feel.
+   */
   glass: {
-    border: "rgba(255,255,255,0.08)",
+    border: "rgba(255,255,255,0.07)",
 
     blur: {
       subtle: 14,
@@ -50,18 +66,18 @@ export const theme = {
       strong: 28,
     },
 
-    // ↓ More transparent than before (lets background breathe)
+    // iOS/web: blur + translucent surface tint (MORE transparent)
     iosBg: {
-      subtle: "rgba(22,25,29,0.42)",
-      default: "rgba(22,25,29,0.56)",
-      strong: "rgba(30,34,39,0.60)",
+      subtle: "rgba(22,25,29,0.48)",
+      default: "rgba(22,25,29,0.62)",
+      strong: "rgba(30,34,39,0.68)",
     },
 
-    // Android: still stronger than iOS (no blur), but less opaque than before
+    // Android: no blur, so still stronger than iOS (but slightly more transparent)
     androidBg: {
-      subtle: "rgba(22,25,29,0.56)",
-      default: "rgba(22,25,29,0.72)",
-      strong: "rgba(30,34,39,0.78)",
+      subtle: "rgba(22,25,29,0.62)",
+      default: "rgba(22,25,29,0.78)",
+      strong: "rgba(30,34,39,0.84)",
     },
   },
 
