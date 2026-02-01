@@ -114,7 +114,7 @@ export default function TripsScreen() {
   }, [past.length, trips.length, upcoming.length]);
 
   return (
-    <Background imageSource={getBackground("trips")} overlayOpacity={0.86}>
+    <Background imageSource={getBackground("trips")} overlayOpacity={0.50}>
       <SafeAreaView style={styles.container} edges={["top"]}>
         <ScrollView style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           <View style={styles.header}>
