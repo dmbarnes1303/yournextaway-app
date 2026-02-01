@@ -37,8 +37,6 @@ import { buildSearchIndex, querySearchIndex, type SearchResult } from "@/src/ser
 import { hasTeamGuide } from "@/src/data/teamGuides";
 import { getCityGuide } from "@/src/data/cityGuides";
 
-// You said you'll create this file.
-// Must export: getFlagEmoji(countryCode: string): string
 import { getFlagEmoji } from "@/src/utils/flags";
 
 function tripSummaryLine(t: Trip) {
@@ -81,7 +79,6 @@ function splitSearchBuckets(results: SearchResult[]) {
 
 type PopularCityChip = { name: string; countryCode: string };
 
-// Hard-mapped popular chips (fast + reliable until you wire real city data)
 const POPULAR_CITIES: PopularCityChip[] = [
   { name: "Madrid", countryCode: "ES" },
   { name: "Barcelona", countryCode: "ES" },
@@ -93,14 +90,9 @@ const POPULAR_CITIES: PopularCityChip[] = [
 
 export default function HomeScreen() {
   const router = useRouter();
-
-  // Context league (kept for fixture preview + deep links)
   const [league, setLeague] = useState<LeagueOption>(LEAGUES[0]);
-
-  // Central rolling window (tomorrow onwards; per football.ts)
   const { from: fromIso, to: toIso } = useMemo(() => getRollingWindowIso(), []);
 
-  // Trips
   const [loadedTrips, setLoadedTrips] = useState(tripsStore.getState().loaded);
   const [trips, setTrips] = useState<Trip[]>(tripsStore.getState().trips);
 
@@ -129,7 +121,6 @@ export default function HomeScreen() {
 
   const nextTrip = useMemo(() => upcomingTrips[0] ?? null, [upcomingTrips]);
 
-  // Fixtures preview
   const [fxLoading, setFxLoading] = useState(false);
   const [fxError, setFxError] = useState<string | null>(null);
   const [fxRows, setFxRows] = useState<FixtureListRow[]>([]);
@@ -168,9 +159,6 @@ export default function HomeScreen() {
 
   const fxPreview = useMemo(() => fxRows.slice(0, 4), [fxRows]);
 
-  // -------------------------
-  // SEARCH (offline index)
-  // -------------------------
   const [q, setQ] = useState("");
   const qNorm = useMemo(() => q.trim(), [q]);
   const showSearchResults = qNorm.length > 0;
@@ -225,9 +213,6 @@ export default function HomeScreen() {
 
   const dismissKeyboard = useCallback(() => Keyboard.dismiss(), []);
 
-  // -------------------------
-  // Navigation helpers
-  // -------------------------
   const goBuildTripWithContext = useCallback(
     (fixtureId?: string) => {
       router.push({
@@ -281,18 +266,12 @@ export default function HomeScreen() {
       const p: any = r.payload;
 
       if (p?.kind === "team") {
-        router.push({
-          pathname: "/team/[teamKey]",
-          params: { teamKey: p.slug, from: fromIso, to: toIso },
-        } as any);
+        router.push({ pathname: "/team/[teamKey]", params: { teamKey: p.slug, from: fromIso, to: toIso } } as any);
         return;
       }
 
       if (p?.kind === "city") {
-        router.push({
-          pathname: "/city/[slug]",
-          params: { slug: p.slug, from: fromIso, to: toIso },
-        } as any);
+        router.push({ pathname: "/city/[slug]", params: { slug: p.slug, from: fromIso, to: toIso } } as any);
         return;
       }
 
@@ -319,25 +298,27 @@ export default function HomeScreen() {
     [router, fromIso, toIso, goFixturesWithContext, league.leagueId, league.season]
   );
 
-  const resultMeta = useCallback((r: SearchResult): string => {
-    const p: any = r.payload;
+  const resultMeta = useCallback(
+    (r: SearchResult): string => {
+      const p: any = r.payload;
 
-    if (r.type === "team" && p?.kind === "team") {
-      return hasTeamGuide(p.slug) ? "Team guide available" : "Team guide coming soon";
-    }
+      if (r.type === "team" && p?.kind === "team") {
+        return hasTeamGuide(p.slug) ? "Team guide available" : "Team guide coming soon";
+      }
 
-    if (r.type === "city" && p?.kind === "city") {
-      return getCityGuide(p.slug) ? "City guide available" : "City guide coming soon";
-    }
+      if (r.type === "city" && p?.kind === "city") {
+        return getCityGuide(p.slug) ? "City guide available" : "City guide coming soon";
+      }
 
-    if (r.type === "venue") return r.subtitle ?? "Venue";
-    if (r.type === "country") return r.subtitle ?? "Country";
-    if (r.type === "league") return r.subtitle ?? "League";
+      if (r.type === "venue") return r.subtitle ?? "Venue";
+      if (r.type === "country") return r.subtitle ?? "Country";
+      if (r.type === "league") return r.subtitle ?? "League";
 
-    return r.subtitle ?? "";
-  }, []);
+      return r.subtitle ?? "";
+    },
+    []
+  );
 
-  // Inspiration (simple, editorial)
   const inspiration = useMemo(
     () => [
       { title: "Weekend trips that just work", sub: "Low-stress planning across Europe" },
@@ -347,10 +328,7 @@ export default function HomeScreen() {
     []
   );
 
-  const heroHint = useMemo(() => {
-    // tiny “EU” vibe without shouting about it
-    return `Rolling window: ${formatUkDateOnly(fromIso)} → ${formatUkDateOnly(toIso)}`;
-  }, [fromIso, toIso]);
+  const heroHint = useMemo(() => `Rolling window: ${formatUkDateOnly(fromIso)} → ${formatUkDateOnly(toIso)}`, [fromIso, toIso]);
 
   return (
     <Background imageSource={getBackground("home")} overlayOpacity={0.74}>
@@ -361,12 +339,9 @@ export default function HomeScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* HERO (THIS IS THE SECTION YOU CARE ABOUT) */}
           <GlassCard style={styles.heroCard} strength="strong">
-            {/* Accent rails */}
             <View pointerEvents="none" style={styles.heroAccentRailGreen} />
             <View pointerEvents="none" style={styles.heroAccentRailBlue} />
-            <View pointerEvents="none" style={styles.heroGoldDust} />
 
             <View style={styles.heroKickerRow}>
               <View style={styles.kDot} />
@@ -380,7 +355,6 @@ export default function HomeScreen() {
               Search countries, cities, teams, or venues — then jump into fixtures or build a trip.
             </Text>
 
-            {/* Search (premium command bar) */}
             <View style={styles.searchShell}>
               <View style={styles.searchIconStub} />
               <TextInput
@@ -406,24 +380,19 @@ export default function HomeScreen() {
               )}
             </View>
 
-            {/* Popular city chips (quick-fill search) */}
             {!showSearchResults ? (
               <View style={styles.chipsRow}>
-                {POPULAR_CITIES.slice(0, 6).map((c) => {
-                  const flag = getFlagEmoji(c.countryCode);
-                  return (
-                    <Pressable key={c.name} onPress={() => setQ(c.name)} style={styles.chip}>
-                      <Text style={styles.chipText}>
-                        <Text style={styles.chipFlag}>{flag} </Text>
-                        {c.name}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
+                {POPULAR_CITIES.slice(0, 6).map((c) => (
+                  <Pressable key={c.name} onPress={() => setQ(c.name)} style={styles.chip}>
+                    <Text style={styles.chipText}>
+                      <Text style={styles.chipFlag}>{getFlagEmoji(c.countryCode)} </Text>
+                      {c.name}
+                    </Text>
+                  </Pressable>
+                ))}
               </View>
             ) : null}
 
-            {/* SEARCH RESULTS */}
             {showSearchResults ? (
               <View style={styles.searchResults}>
                 {searchLoading ? (
@@ -437,7 +406,6 @@ export default function HomeScreen() {
 
                 {!searchLoading && !searchError ? (
                   <>
-                    {/* Teams & Cities */}
                     <View style={styles.group}>
                       <View style={styles.groupHeader}>
                         <Text style={styles.groupTitle}>Teams & Cities</Text>
@@ -451,11 +419,7 @@ export default function HomeScreen() {
                           {[...buckets.teams.slice(0, 6), ...buckets.cities.slice(0, 6)]
                             .slice(0, 10)
                             .map((r, idx) => (
-                              <Pressable
-                                key={`${r.key}-${idx}`}
-                                onPress={() => onPressSearchResult(r)}
-                                style={styles.rowPress}
-                              >
+                              <Pressable key={`${r.key}-${idx}`} onPress={() => onPressSearchResult(r)} style={styles.rowPress}>
                                 <GlassCard strength="subtle" noPadding style={styles.rowCard}>
                                   <View style={styles.rowInner}>
                                     <View style={styles.rowAccent} />
@@ -472,7 +436,6 @@ export default function HomeScreen() {
                       )}
                     </View>
 
-                    {/* Venues / Countries / Leagues */}
                     <View style={styles.group}>
                       <View style={styles.groupHeader}>
                         <Text style={styles.groupTitle}>Venues, Countries & Leagues</Text>
@@ -486,11 +449,7 @@ export default function HomeScreen() {
                           {[...buckets.venues.slice(0, 5), ...buckets.countries.slice(0, 5), ...buckets.leagues.slice(0, 5)]
                             .slice(0, 10)
                             .map((r, idx) => (
-                              <Pressable
-                                key={`${r.key}-${idx}`}
-                                onPress={() => onPressSearchResult(r)}
-                                style={styles.rowPress}
-                              >
+                              <Pressable key={`${r.key}-${idx}`} onPress={() => onPressSearchResult(r)} style={styles.rowPress}>
                                 <GlassCard strength="subtle" noPadding style={styles.rowCard}>
                                   <View style={styles.rowInner}>
                                     <View style={[styles.rowAccent, styles.rowAccentBlue]} />
@@ -516,8 +475,7 @@ export default function HomeScreen() {
             ) : null}
           </GlassCard>
 
-          {/* Everything below is untouched in intent (kept from your original). */}
-          {/* UPCOMING MATCHES */}
+          {/* Everything below unchanged */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Upcoming matches</Text>
@@ -530,11 +488,7 @@ export default function HomeScreen() {
               {LEAGUES.map((l) => {
                 const active = l.leagueId === league.leagueId;
                 return (
-                  <Pressable
-                    key={l.leagueId}
-                    onPress={() => setLeague(l)}
-                    style={[styles.leaguePill, active && styles.leaguePillActive]}
-                  >
+                  <Pressable key={l.leagueId} onPress={() => setLeague(l)} style={[styles.leaguePill, active && styles.leaguePillActive]}>
                     <Text style={[styles.leaguePillText, active && styles.leaguePillTextActive]}>{l.label}</Text>
                   </Pressable>
                 );
@@ -597,7 +551,6 @@ export default function HomeScreen() {
             </GlassCard>
           </View>
 
-          {/* NEXT TRIP */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Trips</Text>
@@ -630,10 +583,7 @@ export default function HomeScreen() {
               ) : null}
 
               {loadedTrips && nextTrip ? (
-                <Pressable
-                  onPress={() => router.push({ pathname: "/trip/[id]", params: { id: nextTrip.id } } as any)}
-                  style={styles.nextTripPress}
-                >
+                <Pressable onPress={() => router.push({ pathname: "/trip/[id]", params: { id: nextTrip.id } } as any)} style={styles.nextTripPress}>
                   <GlassCard strength="subtle" noPadding style={styles.nextTripCard}>
                     <View style={styles.nextTripInner}>
                       <Text style={styles.nextTripKicker}>Next up</Text>
@@ -650,7 +600,6 @@ export default function HomeScreen() {
             </GlassCard>
           </View>
 
-          {/* INSPIRATION */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Inspiration</Text>
@@ -688,7 +637,6 @@ const styles = StyleSheet.create({
     gap: theme.spacing.lg,
   },
 
-  // HERO
   heroCard: { marginTop: theme.spacing.lg },
 
   heroAccentRailGreen: {
@@ -707,56 +655,16 @@ const styles = StyleSheet.create({
     width: 2,
     backgroundColor: "rgba(47,107,255,0.28)",
   },
-  heroGoldDust: {
-    position: "absolute",
-    right: -60,
-    top: -60,
-    width: 160,
-    height: 160,
-    borderRadius: 160,
-    backgroundColor: "rgba(214,181,106,0.10)",
-  },
 
   heroKickerRow: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 8 },
-  kDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 8,
-    backgroundColor: theme.colors.primary,
-  },
-  heroKicker: {
-    color: theme.colors.textSecondary,
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 0.9,
-  },
-  heroKickerSep: {
-    color: "rgba(214,181,106,0.65)",
-    fontSize: 12,
-    fontWeight: "900",
-  },
-  heroKickerMeta: {
-    color: theme.colors.textTertiary,
-    fontSize: 12,
-    fontWeight: "800",
-  },
+  kDot: { width: 8, height: 8, borderRadius: 8, backgroundColor: theme.colors.primary },
+  heroKicker: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: "900", letterSpacing: 0.9 },
+  heroKickerSep: { color: "rgba(214,181,106,0.65)", fontSize: 12, fontWeight: "900" },
+  heroKickerMeta: { color: theme.colors.textTertiary, fontSize: 12, fontWeight: "800" },
 
-  heroTitle: {
-    marginTop: 10,
-    color: theme.colors.text,
-    fontSize: 24,
-    fontWeight: "900",
-    lineHeight: 30,
-  },
-  heroSub: {
-    marginTop: 10,
-    color: theme.colors.textSecondary,
-    fontSize: 15,
-    lineHeight: 20,
-    fontWeight: "700",
-  },
+  heroTitle: { marginTop: 10, color: theme.colors.text, fontSize: 24, fontWeight: "900", lineHeight: 30 },
+  heroSub: { marginTop: 10, color: theme.colors.textSecondary, fontSize: 15, lineHeight: 20, fontWeight: "700" },
 
-  // Search shell
   searchShell: {
     marginTop: 14,
     borderWidth: 1,
@@ -769,21 +677,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
   },
-  searchIconStub: {
-    width: 10,
-    height: 10,
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: "rgba(47,107,255,0.55)",
-    opacity: 0.9,
-  },
-  searchInput: {
-    flex: 1,
-    color: theme.colors.text,
-    fontSize: 15,
-    paddingVertical: Platform.OS === "ios" ? 6 : 4,
-    fontWeight: "700",
-  },
+  searchIconStub: { width: 10, height: 10, borderRadius: 10, borderWidth: 2, borderColor: "rgba(47,107,255,0.55)", opacity: 0.9 },
+  searchInput: { flex: 1, color: theme.colors.text, fontSize: 15, paddingVertical: Platform.OS === "ios" ? 6 : 4, fontWeight: "700" },
+
   searchTagPill: {
     paddingVertical: 6,
     paddingHorizontal: 10,
@@ -792,12 +688,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(214,181,106,0.22)",
     backgroundColor: "rgba(214,181,106,0.08)",
   },
-  searchTagText: {
-    color: "rgba(214,181,106,0.85)",
-    fontWeight: "900",
-    fontSize: 12,
-    letterSpacing: 0.6,
-  },
+  searchTagText: { color: "rgba(214,181,106,0.85)", fontWeight: "900", fontSize: 12, letterSpacing: 0.6 },
 
   clearBtn: {
     paddingVertical: 6,
@@ -807,14 +698,9 @@ const styles = StyleSheet.create({
     borderColor: "rgba(79,224,138,0.28)",
     backgroundColor: "rgba(0,0,0,0.18)",
   },
-  clearBtnText: {
-    color: theme.colors.text,
-    fontWeight: "900",
-    fontSize: 13,
-  },
+  clearBtnText: { color: theme.colors.text, fontWeight: "900", fontSize: 13 },
 
   chipsRow: { marginTop: 12, flexDirection: "row", flexWrap: "wrap", gap: 10 },
-
   chip: {
     borderRadius: 999,
     borderWidth: 1,
@@ -823,68 +709,26 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
     paddingHorizontal: 12,
   },
-  chipText: {
-    color: theme.colors.textSecondary,
-    fontSize: 13,
-    fontWeight: "900",
-  },
+  chipText: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: "900" },
   chipFlag: { color: theme.colors.text, fontWeight: "900" },
 
-  // Search results
   searchResults: { marginTop: 14, gap: 16 },
   group: { gap: 10 },
-  groupHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "baseline",
-    gap: 10,
-  },
-  groupTitle: {
-    color: theme.colors.text,
-    fontSize: 15,
-    fontWeight: "900",
-  },
-  groupMeta: {
-    color: theme.colors.textTertiary,
-    fontSize: 12,
-    fontWeight: "800",
-  },
-  groupEmpty: {
-    color: theme.colors.textSecondary,
-    fontSize: 13,
-    fontWeight: "700",
-  },
-
+  groupHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "baseline", gap: 10 },
+  groupTitle: { color: theme.colors.text, fontSize: 15, fontWeight: "900" },
+  groupMeta: { color: theme.colors.textTertiary, fontSize: 12, fontWeight: "800" },
+  groupEmpty: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: "700" },
   resultList: { gap: 10 },
 
   rowPress: { borderRadius: 16 },
   rowCard: { borderRadius: 16 },
-  rowInner: {
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  rowAccent: {
-    width: 3,
-    height: 34,
-    borderRadius: 3,
-    backgroundColor: "rgba(79,224,138,0.55)",
-  },
-  rowAccentBlue: {
-    backgroundColor: "rgba(47,107,255,0.40)",
-  },
+  rowInner: { paddingVertical: 12, paddingHorizontal: 12, flexDirection: "row", alignItems: "center", gap: 12 },
+  rowAccent: { width: 3, height: 34, borderRadius: 3, backgroundColor: "rgba(79,224,138,0.55)" },
+  rowAccentBlue: { backgroundColor: "rgba(47,107,255,0.40)" },
   rowTitle: { color: theme.colors.text, fontWeight: "900", fontSize: 15 },
-  rowMeta: {
-    marginTop: 4,
-    color: theme.colors.textSecondary,
-    fontSize: 13,
-    fontWeight: "700",
-  },
+  rowMeta: { marginTop: 4, color: theme.colors.textSecondary, fontSize: 13, fontWeight: "700" },
   chev: { color: theme.colors.textTertiary, fontSize: 24, marginTop: -2 },
 
-  // Sections
   section: { marginTop: 2 },
   sectionHeader: { gap: 4 },
   sectionTitle: { color: theme.colors.text, fontSize: 18, fontWeight: "900" },
@@ -895,7 +739,6 @@ const styles = StyleSheet.create({
   center: { paddingVertical: 14, alignItems: "center", gap: 10 },
   muted: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: "800" },
 
-  // League selector
   leagueRow: { gap: 10, paddingRight: theme.spacing.lg, marginTop: 10 },
   leaguePill: {
     paddingVertical: 8,
@@ -912,37 +755,16 @@ const styles = StyleSheet.create({
   leaguePillText: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: "800" },
   leaguePillTextActive: { color: theme.colors.text, fontWeight: "900" },
 
-  // Match list
   matchList: { marginTop: 10, gap: 10 },
   matchRowPress: { borderRadius: 16 },
   matchRowCard: { borderRadius: 16 },
-  matchRowInner: {
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  thumb: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: "rgba(255,255,255,0.06)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
-  },
+  matchRowInner: { paddingVertical: 12, paddingHorizontal: 12, flexDirection: "row", alignItems: "center", gap: 12 },
+  thumb: { width: 44, height: 44, borderRadius: 12, backgroundColor: "rgba(255,255,255,0.06)", borderWidth: 1, borderColor: "rgba(255,255,255,0.06)" },
   matchTitle: { color: theme.colors.text, fontSize: 15, fontWeight: "900" },
   matchMeta: { marginTop: 4, color: theme.colors.textSecondary, fontSize: 13, fontWeight: "700" },
 
-  // CTA row
   ctaRow: { flexDirection: "row", gap: 10, marginTop: 12 },
-  btn: {
-    flex: 1,
-    borderRadius: 16,
-    paddingVertical: 12,
-    alignItems: "center",
-    borderWidth: 1,
-  },
+  btn: { flex: 1, borderRadius: 16, paddingVertical: 12, alignItems: "center", borderWidth: 1 },
   btnPrimary: {
     borderColor: "rgba(79,224,138,0.35)",
     backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.default : theme.glass.iosBg.default,
@@ -955,7 +777,6 @@ const styles = StyleSheet.create({
   },
   btnGhostText: { color: theme.colors.textSecondary, fontSize: 15, fontWeight: "900" },
 
-  // Link button
   linkBtn: {
     marginTop: 12,
     paddingVertical: 12,
@@ -967,7 +788,6 @@ const styles = StyleSheet.create({
   },
   linkText: { color: theme.colors.text, fontSize: 14, fontWeight: "900" },
 
-  // Trips
   emptyTitle: { color: theme.colors.text, fontSize: 15, fontWeight: "900" },
   emptyMeta: { marginTop: 6, color: theme.colors.textSecondary, fontSize: 13, fontWeight: "700", lineHeight: 18 },
 
@@ -978,7 +798,6 @@ const styles = StyleSheet.create({
   nextTripTitle: { marginTop: 6, color: theme.colors.text, fontSize: 18, fontWeight: "900" },
   nextTripMeta: { marginTop: 6, color: theme.colors.textSecondary, fontSize: 13, fontWeight: "700", lineHeight: 18 },
 
-  // Inspiration
   inspoList: { gap: 10 },
   inspoPress: { borderRadius: 16 },
   inspoCard: { borderRadius: 16 },
