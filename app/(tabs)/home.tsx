@@ -85,10 +85,9 @@ type CityChip = { name: string; countryCode: string };
 export default function HomeScreen() {
   const router = useRouter();
 
-  // Context league (kept for fixture preview + deep links)
   const [league, setLeague] = useState<LeagueOption>(LEAGUES[0]);
 
-  // Central rolling window (default now 90 days, from football.ts)
+  // Central rolling window (your football.ts defaults now drive this)
   const { from: fromIso, to: toIso } = useMemo(() => getRollingWindowIso(), []);
 
   // Trips
@@ -159,9 +158,7 @@ export default function HomeScreen() {
 
   const fxPreview = useMemo(() => fxRows.slice(0, 4), [fxRows]);
 
-  // -------------------------
   // SEARCH (offline index)
-  // -------------------------
   const [q, setQ] = useState("");
   const qNorm = useMemo(() => q.trim(), [q]);
   const showSearchResults = qNorm.length > 0;
@@ -218,9 +215,7 @@ export default function HomeScreen() {
     Keyboard.dismiss();
   }, []);
 
-  // -------------------------
   // Navigation helpers
-  // -------------------------
   const goBuildTripWithContext = useCallback(
     (fixtureId?: string) => {
       router.push({
@@ -330,7 +325,6 @@ export default function HomeScreen() {
     return r.subtitle ?? "";
   }, []);
 
-  // Popular city chips now include explicit country codes for flags
   const popularCityChips = useMemo<CityChip[]>(
     () => [
       { name: "Madrid", countryCode: "ES" },
@@ -364,16 +358,16 @@ export default function HomeScreen() {
           {/* HERO */}
           <GlassCard style={styles.heroCard} strength="strong" noPadding>
             <View style={styles.heroShell}>
-              {/* Brand edge accents */}
+              {/* Brand edges */}
               <View pointerEvents="none" style={styles.heroEdgeLeft} />
               <View pointerEvents="none" style={styles.heroEdgeTop} />
               <View pointerEvents="none" style={styles.heroGoldDot} />
 
-              {/* Orb killer mask (keeps transparency but removes ugly bokeh circle) */}
+              {/* Strong orb kill zone (top-right) */}
+              <View pointerEvents="none" style={styles.heroCornerShade} />
               <View pointerEvents="none" style={styles.heroOrbMask} />
               <View pointerEvents="none" style={styles.heroOrbMask2} />
 
-              {/* Header meta */}
               <View style={styles.heroMetaRow}>
                 <View style={styles.brandDot} />
                 <Text style={styles.heroBrand}>YOURNEXTAWAY</Text>
@@ -414,7 +408,6 @@ export default function HomeScreen() {
                 )}
               </View>
 
-              {/* Popular city chips (quick-fill search) */}
               {!showSearchResults ? (
                 <View style={styles.chipsRow}>
                   {popularCityChips.map((c) => {
@@ -430,7 +423,6 @@ export default function HomeScreen() {
                 </View>
               ) : null}
 
-              {/* SEARCH RESULTS */}
               {showSearchResults ? (
                 <View style={styles.searchResults}>
                   {searchLoading ? (
@@ -446,7 +438,6 @@ export default function HomeScreen() {
 
                   {!searchLoading && !searchError ? (
                     <>
-                      {/* Teams & Cities */}
                       <View style={styles.group}>
                         <View style={styles.groupHeader}>
                           <Text style={styles.groupTitle}>Teams & Cities</Text>
@@ -480,7 +471,6 @@ export default function HomeScreen() {
                         )}
                       </View>
 
-                      {/* Venues / Countries / Leagues */}
                       <View style={styles.group}>
                         <View style={styles.groupHeader}>
                           <Text style={styles.groupTitle}>Venues, Countries & Leagues</Text>
@@ -701,7 +691,6 @@ const styles = StyleSheet.create({
   heroCard: { marginTop: theme.spacing.lg, borderRadius: theme.borderRadius.xl },
   heroShell: { padding: theme.spacing.lg, borderRadius: theme.borderRadius.xl, overflow: "hidden" },
 
-  // Brand edges
   heroEdgeLeft: {
     position: "absolute",
     left: 0,
@@ -729,28 +718,36 @@ const styles = StyleSheet.create({
   },
 
   /**
-   * Orb killer:
-   * These two layers subtly darken the top-right quadrant
-   * so any bright bokeh circle in home.png doesn’t scream through.
-   * Keeps the rest transparent.
+   * STRONGER top-right kill zone:
+   * - Corner shade: a soft rectangle that guarantees the bright orb is suppressed
+   * - Two big circular masks: keep it feeling “natural”, not like a hard block
    */
+  heroCornerShade: {
+    position: "absolute",
+    right: 0,
+    top: 0,
+    width: 210,
+    height: 210,
+    backgroundColor: "rgba(15,17,19,0.55)",
+    borderBottomLeftRadius: 42,
+  },
   heroOrbMask: {
     position: "absolute",
-    right: -30,
-    top: -30,
-    width: 160,
-    height: 160,
+    right: -50,
+    top: -50,
+    width: 220,
+    height: 220,
     borderRadius: 999,
-    backgroundColor: "rgba(15,17,19,0.68)",
+    backgroundColor: "rgba(15,17,19,0.78)",
   },
   heroOrbMask2: {
     position: "absolute",
-    right: -90,
-    top: -90,
-    width: 260,
-    height: 260,
+    right: -130,
+    top: -130,
+    width: 360,
+    height: 360,
     borderRadius: 999,
-    backgroundColor: "rgba(15,17,19,0.38)",
+    backgroundColor: "rgba(15,17,19,0.48)",
   },
 
   heroMetaRow: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 8 },
@@ -866,16 +863,8 @@ const styles = StyleSheet.create({
   // Sections
   section: { marginTop: 2 },
   sectionHeader: { gap: 4 },
-  sectionTitle: {
-    color: theme.colors.text,
-    fontSize: 18,
-    fontWeight: theme.fontWeight.black,
-  },
-  sectionMeta: {
-    color: theme.colors.textSecondary,
-    fontSize: 13,
-    fontWeight: theme.fontWeight.bold,
-  },
+  sectionTitle: { color: theme.colors.text, fontSize: 18, fontWeight: theme.fontWeight.black },
+  sectionMeta: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold },
 
   card: { padding: theme.spacing.md },
 
@@ -891,21 +880,9 @@ const styles = StyleSheet.create({
     alignItems: "baseline",
     gap: 10,
   },
-  groupTitle: {
-    color: theme.colors.text,
-    fontSize: 15,
-    fontWeight: theme.fontWeight.black,
-  },
-  groupMeta: {
-    color: theme.colors.textTertiary,
-    fontSize: 12,
-    fontWeight: theme.fontWeight.bold,
-  },
-  groupEmpty: {
-    color: theme.colors.textSecondary,
-    fontSize: 13,
-    fontWeight: theme.fontWeight.bold,
-  },
+  groupTitle: { color: theme.colors.text, fontSize: 15, fontWeight: theme.fontWeight.black },
+  groupMeta: { color: theme.colors.textTertiary, fontSize: 12, fontWeight: theme.fontWeight.bold },
+  groupEmpty: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold },
 
   resultList: { gap: 10 },
 
@@ -919,12 +896,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   rowTitle: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: 15 },
-  rowMeta: {
-    marginTop: 4,
-    color: theme.colors.textSecondary,
-    fontSize: 13,
-    fontWeight: theme.fontWeight.bold,
-  },
+  rowMeta: { marginTop: 4, color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold },
   chev: { color: theme.colors.textTertiary, fontSize: 24, marginTop: -2 },
 
   // League selector
@@ -964,22 +936,11 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.06)",
   },
   matchTitle: { color: theme.colors.text, fontSize: 15, fontWeight: theme.fontWeight.black },
-  matchMeta: {
-    marginTop: 4,
-    color: theme.colors.textSecondary,
-    fontSize: 13,
-    fontWeight: theme.fontWeight.bold,
-  },
+  matchMeta: { marginTop: 4, color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold },
 
   // CTA row
   ctaRow: { flexDirection: "row", gap: 10, marginTop: 12 },
-  btn: {
-    flex: 1,
-    borderRadius: 16,
-    paddingVertical: 12,
-    alignItems: "center",
-    borderWidth: 1,
-  },
+  btn: { flex: 1, borderRadius: 16, paddingVertical: 12, alignItems: "center", borderWidth: 1 },
   btnPrimary: {
     borderColor: "rgba(79,224,138,0.35)",
     backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.default : theme.glass.iosBg.default,
@@ -1006,26 +967,14 @@ const styles = StyleSheet.create({
 
   // Trips
   emptyTitle: { color: theme.colors.text, fontSize: 15, fontWeight: theme.fontWeight.black },
-  emptyMeta: {
-    marginTop: 6,
-    color: theme.colors.textSecondary,
-    fontSize: 13,
-    fontWeight: theme.fontWeight.bold,
-    lineHeight: 18,
-  },
+  emptyMeta: { marginTop: 6, color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold, lineHeight: 18 },
 
   nextTripPress: { borderRadius: 16, marginTop: 2 },
   nextTripCard: { borderRadius: 16 },
   nextTripInner: { paddingVertical: 14, paddingHorizontal: 14 },
   nextTripKicker: { color: theme.colors.textTertiary, fontSize: 12, fontWeight: theme.fontWeight.black },
   nextTripTitle: { marginTop: 6, color: theme.colors.text, fontSize: 18, fontWeight: theme.fontWeight.black },
-  nextTripMeta: {
-    marginTop: 6,
-    color: theme.colors.textSecondary,
-    fontSize: 13,
-    fontWeight: theme.fontWeight.bold,
-    lineHeight: 18,
-  },
+  nextTripMeta: { marginTop: 6, color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold, lineHeight: 18 },
 
   // Inspiration
   inspoList: { gap: 10 },
@@ -1033,11 +982,5 @@ const styles = StyleSheet.create({
   inspoCard: { borderRadius: 16 },
   inspoInner: { paddingVertical: 14, paddingHorizontal: 14 },
   inspoTitle: { color: theme.colors.text, fontSize: 15, fontWeight: theme.fontWeight.black },
-  inspoSub: {
-    marginTop: 6,
-    color: theme.colors.textSecondary,
-    fontSize: 13,
-    fontWeight: theme.fontWeight.bold,
-    lineHeight: 18,
-  },
+  inspoSub: { marginTop: 6, color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold, lineHeight: 18 },
 });
