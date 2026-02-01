@@ -3,6 +3,9 @@
 import type { TeamGuide } from "./types";
 import { teams } from "@/src/data/teams";
 
+// Helpers
+import { normalizeTeamKey, titleFromKey } from "./utils";
+
 // League guide modules
 import bundesligaGuides from "./bundesliga";
 import laLigaGuides from "./laLiga";
@@ -24,13 +27,10 @@ import * as legacy from "./teamGuides";
 function toGuides(value: any): TeamGuide[] {
   if (!value) return [];
 
-  // Array of guides
   if (Array.isArray(value)) return value.filter(Boolean);
 
-  // Record<string, TeamGuide>
   if (typeof value === "object") {
     const vals = Object.values(value);
-    // Heuristic: looks like a record of TeamGuide objects
     if (vals.length && vals.every((v) => v && typeof v === "object" && "teamKey" in (v as any))) {
       return (vals as TeamGuide[]).filter(Boolean);
     }
@@ -49,13 +49,9 @@ function extractGuides(mod: any): TeamGuide[] {
 
   const out: TeamGuide[] = [];
 
-  // default export
   if (mod.default) out.push(...toGuides(mod.default));
-
-  // module itself might be array/record (rare in ESM but safe)
   out.push(...toGuides(mod));
 
-  // named exports (e.g. export const ligue1TeamGuides = {...})
   for (const v of Object.values(mod)) {
     out.push(...toGuides(v));
   }
@@ -158,4 +154,8 @@ export function getTeamGuidesDebugSnapshot() {
   };
 }
 
+// ✅ export the helpers you’re trying to import in screens
+export { normalizeTeamKey, titleFromKey };
+
+// default export stays the registry
 export default registry;
