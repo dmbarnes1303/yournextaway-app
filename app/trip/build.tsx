@@ -1,4 +1,5 @@
 // app/trip/build.tsx
+
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
@@ -60,6 +61,12 @@ function paramNumber(v: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+function paramBool(v: unknown): boolean {
+  const s = paramString(v);
+  if (!s) return false;
+  return s === "1" || s.toLowerCase() === "true" || s.toLowerCase() === "yes";
+}
+
 function tomorrowIso(): string {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
@@ -109,6 +116,23 @@ type EditSnapshot = {
   notes: string;
 };
 
+const ALL_LEAGUES: LeagueOption = {
+  label: "All leagues",
+  leagueId: 0,
+  season: LEAGUES[0]?.season ?? 2025,
+  countryCode: "EU",
+};
+
+function sortFixturesByKickoffAsc(rows: any[]): any[] {
+  return [...rows].sort((a, b) => {
+    const ad = new Date(String(a?.fixture?.date ?? ""));
+    const bd = new Date(String(b?.fixture?.date ?? ""));
+    const at = Number.isNaN(ad.getTime()) ? 0 : ad.getTime();
+    const bt = Number.isNaN(bd.getTime()) ? 0 : bd.getTime();
+    return at - bt;
+  });
+}
+
 export default function TripBuildScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
@@ -143,10 +167,12 @@ export default function TripBuildScreen() {
   const fromParam = useMemo(() => paramString((params as any)?.from), [params]);
   const toParam = useMemo(() => paramString((params as any)?.to), [params]);
 
+  const globalMode = useMemo(() => paramBool((params as any)?.global), [params]);
+
   const from = useMemo(() => clampIsoToTomorrow(fromParam ?? defaultFrom), [fromParam, defaultFrom]);
   const to = useMemo(() => toParam ?? defaultTo, [toParam, defaultTo]);
 
-  const [selectedLeague, setSelectedLeague] = useState<LeagueOption>(LEAGUES[0]);
+  const [selectedLeague, setSelectedLeague] = useState<LeagueOption>(() => (globalMode ? ALL_LEAGUES : LEAGUES[0]));
 
   // Apply league/season from route params (for fixtures list browsing)
   useEffect(() => {
@@ -217,7 +243,6 @@ export default function TripBuildScreen() {
       setNotes(snap.notes);
       setError(null);
 
-      // IMPORTANT: actually dismiss the modal
       setSelectedFixture(null);
       return;
     }
@@ -375,9 +400,29 @@ export default function TripBuildScreen() {
       setLoading(true);
       setRows([]);
       setVisibleCount(12);
-      setSearch(""); // avoids "0 results" carryover when switching leagues
+      setSearch("");
 
       try {
+        // Global: pull from all leagues only when "All leagues" is selected.
+        if (globalMode && selectedLeague.leagueId === ALL_LEAGUES.leagueId) {
+          const res = await Promise.all(
+            LEAGUES.map(async (l) => {
+              try {
+                const r = await getFixtures({ league: l.leagueId, season: l.season, from, to });
+                return Array.isArray(r) ? r : [];
+              } catch {
+                return [];
+              }
+            })
+          );
+
+          if (cancelled) return;
+
+          const merged = sortFixturesByKickoffAsc(res.flat());
+          setRows(merged);
+          return;
+        }
+
         const res = await getFixtures({
           league: selectedLeague.leagueId,
           season: selectedLeague.season,
@@ -386,7 +431,7 @@ export default function TripBuildScreen() {
         });
 
         if (cancelled) return;
-        setRows(Array.isArray(res) ? res : []);
+        setRows(Array.isArray(res) ? sortFixturesByKickoffAsc(res) : []);
       } catch (e: any) {
         if (cancelled) return;
         setError(e?.message ?? "Failed to load fixtures.");
@@ -399,7 +444,7 @@ export default function TripBuildScreen() {
     return () => {
       cancelled = true;
     };
-  }, [selectedLeague, from, to]);
+  }, [selectedLeague, from, to, globalMode]);
 
   /**
    * When a fixture is selected, prefill dates as a 2-night mini-break:
@@ -414,7 +459,6 @@ export default function TripBuildScreen() {
 
     const fixtureId = selectedFixture?.fixture?.id != null ? String(selectedFixture.fixture.id) : null;
 
-    // If we loaded an existing trip and this is that same match, keep saved dates once.
     if (isEditing && editDatesLockRef.current && editTripMatchId && fixtureId === editTripMatchId) {
       editDatesLockRef.current = false;
 
@@ -457,7 +501,8 @@ export default function TripBuildScreen() {
       const away = String(r?.teams?.away?.name ?? "").toLowerCase();
       const venue = String(r?.fixture?.venue?.name ?? "").toLowerCase();
       const city = String(r?.fixture?.venue?.city ?? "").toLowerCase();
-      return home.includes(q) || away.includes(q) || venue.includes(q) || city.includes(q);
+      const league = String(r?.league?.name ?? "").toLowerCase();
+      return home.includes(q) || away.includes(q) || venue.includes(q) || city.includes(q) || league.includes(q);
     });
   }, [rows, search]);
 
@@ -492,7 +537,6 @@ export default function TripBuildScreen() {
       const nextEnd = parseIsoDateOnly(iso);
 
       if (start && nextEnd && nextEnd.getTime() <= start.getTime()) {
-        // Keep it simple: bump to start + 2 nights
         setEndIso(addDaysIso(startIso, 2));
       }
     }
@@ -530,7 +574,6 @@ export default function TripBuildScreen() {
         notes: notes.trim(),
       };
 
-      // If we have a real venue city, allow slug migration; otherwise keep it generic.
       if (venueCityRaw) {
         (patch as any).citySlug = venueCityRaw;
       }
@@ -538,7 +581,6 @@ export default function TripBuildScreen() {
       if (isEditing && routeTripId) {
         await tripsStore.updateTrip(routeTripId, patch);
 
-        // Update snapshot so subsequent Close behaves sensibly after a save
         editSnapshotRef.current = { fixture: selectedFixture, startIso, endIso, notes: notes.trim() };
 
         setSelectedFixture(null);
@@ -601,6 +643,11 @@ export default function TripBuildScreen() {
     return { home, away, kick, extra };
   }, [isEditing, prefillLoading]);
 
+  const leaguePills = useMemo(() => {
+    if (!globalMode) return LEAGUES;
+    return [ALL_LEAGUES, ...LEAGUES];
+  }, [globalMode]);
+
   return (
     <Background imageUrl={getBackground("trips")}>
       <Stack.Screen
@@ -620,7 +667,7 @@ export default function TripBuildScreen() {
           keyboardShouldPersistTaps="handled"
         >
           <GlassCard style={styles.card}>
-            <Text style={styles.h1}>{isEditing ? "Edit trip match" : "Pick a match"}</Text>
+            <Text style={styles.h1}>{isEditing ? "Edit trip match" : globalMode ? "Pick a match (all leagues)" : "Pick a match"}</Text>
             <Text style={styles.muted}>
               {isEditing
                 ? "Select a fixture to update this trip. Save inside the sheet."
@@ -642,12 +689,12 @@ export default function TripBuildScreen() {
             ) : null}
 
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.leagueRow}>
-              {LEAGUES.map((l) => {
+              {leaguePills.map((l) => {
                 const active = l.leagueId === selectedLeague.leagueId;
                 return (
                   <Pressable
-                    key={l.leagueId}
-                    onPress={() => setSelectedLeague(l)}
+                    key={`${l.leagueId}-${l.label}`}
+                    onPress={() => setSelectedLeague(l.leagueId === 0 ? ALL_LEAGUES : l)}
                     style={[styles.leaguePill, active && styles.leaguePillActive]}
                   >
                     <Text style={[styles.leaguePillText, active && styles.leaguePillTextActive]}>{l.label}</Text>
@@ -663,7 +710,7 @@ export default function TripBuildScreen() {
                   setSearch(t);
                   setVisibleCount(12);
                 }}
-                placeholder="Search team / venue / city…"
+                placeholder="Search team / venue / city / league…"
                 placeholderTextColor={theme.colors.textSecondary}
                 style={styles.search}
                 autoCapitalize="none"
@@ -711,8 +758,9 @@ export default function TripBuildScreen() {
                     const kickoff = formatUkDateTimeMaybe(r?.fixture?.date);
                     const venue = r?.fixture?.venue?.name ?? "";
                     const city = r?.fixture?.venue?.city ?? "";
-                    const extra = [venue, city].filter(Boolean).join(" • ");
-                    const line2 = extra ? `${kickoff} • ${extra}` : kickoff;
+                    const leagueName = r?.league?.name ? String(r.league.name) : "";
+                    const extra = [kickoff, venue, city].filter(Boolean).join(" • ");
+                    const line2 = leagueName ? `${leagueName} • ${extra}` : extra;
 
                     const selected = String(selectedFixture?.fixture?.id ?? "") === String(fixtureId ?? "");
 
@@ -720,7 +768,6 @@ export default function TripBuildScreen() {
                       <Pressable
                         key={String(fixtureId ?? idx)}
                         onPress={() => {
-                          // If user picks a different fixture in edit mode, allow kickoff default to apply.
                           if (isEditing) editDatesLockRef.current = false;
                           setSelectedFixture(r);
                         }}
@@ -794,7 +841,6 @@ export default function TripBuildScreen() {
                     </Pressable>
                   </View>
 
-                  {/* BOOK THIS TRIP (monetisation-ready, no affiliates required yet) */}
                   {bookingLinks ? (
                     <View style={styles.bookBlock}>
                       <View style={styles.bookTop}>
@@ -876,47 +922,44 @@ export default function TripBuildScreen() {
                     </View>
                   ) : null}
 
-                  {/* Date fallback for web/no picker */}
-{Platform.OS === "web" || !DateTimePicker ? (
-  <View style={{ marginTop: 10, gap: 8 }}>
-    <Text style={styles.fallbackNote}>
-      Date picker not available here. Edit ISO dates (YYYY-MM-DD).
-    </Text>
+                  {Platform.OS === "web" || !DateTimePicker ? (
+                    <View style={{ marginTop: 10, gap: 8 }}>
+                      <Text style={styles.fallbackNote}>Date picker not available here. Edit ISO dates (YYYY-MM-DD).</Text>
 
-    <View style={{ flexDirection: "row", gap: 10 }}>
-      <TextInput
-        value={startIso}
-        onChangeText={setStartIso}
-        placeholder="YYYY-MM-DD"
-        placeholderTextColor={theme.colors.textSecondary}
-        style={[styles.input, { flex: 1 }]}
-        autoCapitalize="none"
-        autoCorrect={false}
-      />
-      <TextInput
-        value={endIso}
-        onChangeText={setEndIso}
-        placeholder="YYYY-MM-DD"
-        placeholderTextColor={theme.colors.textSecondary}
-        style={[styles.input, { flex: 1 }]}
-        autoCapitalize="none"
-        autoCorrect={false}
-      />
-    </View>
-  </View>
-) : null}
+                      <View style={{ flexDirection: "row", gap: 10 }}>
+                        <TextInput
+                          value={startIso}
+                          onChangeText={setStartIso}
+                          placeholder="YYYY-MM-DD"
+                          placeholderTextColor={theme.colors.textSecondary}
+                          style={[styles.input, { flex: 1 }]}
+                          autoCapitalize="none"
+                          autoCorrect={false}
+                        />
+                        <TextInput
+                          value={endIso}
+                          onChangeText={setEndIso}
+                          placeholder="YYYY-MM-DD"
+                          placeholderTextColor={theme.colors.textSecondary}
+                          style={[styles.input, { flex: 1 }]}
+                          autoCapitalize="none"
+                          autoCorrect={false}
+                        />
+                      </View>
+                    </View>
+                  ) : null}
 
-<View style={{ marginTop: 10 }}>
-  <TextInput
-    value={notes}
-    onChangeText={setNotes}
-    placeholder="Notes (hotel, trains, plans, etc.)"
-    placeholderTextColor={theme.colors.textSecondary}
-    style={[styles.input, styles.textarea]}
-    multiline
-    textAlignVertical="top"
-  />
-</View>
+                  <View style={{ marginTop: 10 }}>
+                    <TextInput
+                      value={notes}
+                      onChangeText={setNotes}
+                      placeholder="Notes (hotel, trains, plans, etc.)"
+                      placeholderTextColor={theme.colors.textSecondary}
+                      style={[styles.input, styles.textarea]}
+                      multiline
+                      textAlignVertical="top"
+                    />
+                  </View>
 
                   {error ? (
                     <Text style={styles.errText} numberOfLines={3}>
