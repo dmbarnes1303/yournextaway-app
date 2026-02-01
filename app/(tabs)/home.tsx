@@ -1,3 +1,5 @@
+// app/(tabs)/home.tsx
+
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import {
   View,
@@ -31,7 +33,11 @@ import {
 } from "@/src/constants/football";
 import { formatUkDateOnly, formatUkDateTimeMaybe } from "@/src/utils/formatters";
 
-import { buildSearchIndex, querySearchIndex, type SearchResult } from "@/src/services/searchIndex";
+import {
+  buildSearchIndex,
+  querySearchIndex,
+  type SearchResult,
+} from "@/src/services/searchIndex";
 import { hasTeamGuide } from "@/src/data/teamGuides";
 import { getCityGuide } from "@/src/data/cityGuides";
 import { getFlagEmoji } from "@/src/utils/flags";
@@ -81,7 +87,7 @@ export default function HomeScreen() {
 
   const [league, setLeague] = useState<LeagueOption>(LEAGUES[0]);
 
-  // defaults to 90 days now
+  // defaults to 90 days now (centralised)
   const { from: fromIso, to: toIso } = useMemo(() => getRollingWindowIso(), []);
 
   // Trips
@@ -351,11 +357,11 @@ export default function HomeScreen() {
           {/* HERO */}
           <GlassCard style={styles.heroCard} strength="strong" noPadding>
             <View style={styles.heroShell}>
-              {/* Ambient glow edge (less "strip", more "brand atmosphere") */}
+              {/* Ambient glow edge */}
               <View pointerEvents="none" style={styles.edgeGlowWide} />
               <View pointerEvents="none" style={styles.edgeGlowCore} />
 
-              {/* Stronger top-right suppression without ugly circles/masks */}
+              {/* Vignettes to suppress background circles */}
               <View pointerEvents="none" style={styles.vignetteTop} />
               <View pointerEvents="none" style={styles.vignetteTR} />
 
@@ -366,7 +372,6 @@ export default function HomeScreen() {
               </Text>
 
               <View style={styles.searchBox}>
-                {/* subtle inner sheen */}
                 <View pointerEvents="none" style={styles.searchSheen} />
 
                 <TextInput
@@ -463,7 +468,11 @@ export default function HomeScreen() {
                           <Text style={styles.groupEmpty}>No venues/countries/leagues found.</Text>
                         ) : (
                           <View style={styles.resultList}>
-                            {[...buckets.venues.slice(0, 5), ...buckets.countries.slice(0, 5), ...buckets.leagues.slice(0, 5)]
+                            {[
+                              ...buckets.venues.slice(0, 5),
+                              ...buckets.countries.slice(0, 5),
+                              ...buckets.leagues.slice(0, 5),
+                            ]
                               .slice(0, 10)
                               .map((r, idx) => (
                                 <Pressable
@@ -496,7 +505,7 @@ export default function HomeScreen() {
             </View>
           </GlassCard>
 
-          {/* UPCOMING MATCHES */}
+          {/* UPCOMING MATCHES (rewritten visuals only) */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Upcoming matches</Text>
@@ -505,75 +514,93 @@ export default function HomeScreen() {
               </Text>
             </View>
 
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.leagueRow}>
-              {LEAGUES.map((l) => {
-                const active = l.leagueId === league.leagueId;
-                return (
-                  <Pressable
-                    key={l.leagueId}
-                    onPress={() => setLeague(l)}
-                    style={[styles.leaguePill, active && styles.leaguePillActive]}
+            <GlassCard style={styles.upcomingCard} strength="default" noPadding>
+              <View style={styles.upcomingShell}>
+                {/* League selector becomes part of the card (feels intentional) */}
+                <View style={styles.leagueBar}>
+                  <View pointerEvents="none" style={styles.leagueBarSheen} />
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.leagueRow}
                   >
-                    <Text style={[styles.leaguePillText, active && styles.leaguePillTextActive]}>
-                      {l.label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
-
-            <GlassCard style={styles.card} strength="default">
-              {fxLoading ? (
-                <View style={styles.center}>
-                  <ActivityIndicator />
-                  <Text style={styles.muted}>Loading fixtures…</Text>
+                    {LEAGUES.map((l) => {
+                      const active = l.leagueId === league.leagueId;
+                      return (
+                        <Pressable
+                          key={l.leagueId}
+                          onPress={() => setLeague(l)}
+                          style={[styles.leaguePill, active && styles.leaguePillActive]}
+                        >
+                          <Text style={[styles.leaguePillText, active && styles.leaguePillTextActive]}>
+                            {l.label}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </ScrollView>
                 </View>
-              ) : null}
 
-              {!fxLoading && fxError ? <EmptyState title="Fixtures unavailable" message={fxError} /> : null}
+                {/* Fixtures list */}
+                <View style={styles.upcomingBody}>
+                  {fxLoading ? (
+                    <View style={styles.center}>
+                      <ActivityIndicator />
+                      <Text style={styles.muted}>Loading fixtures…</Text>
+                    </View>
+                  ) : null}
 
-              {!fxLoading && !fxError && fxPreview.length === 0 ? (
-                <EmptyState title="No fixtures found" message="Try another league or try again later." />
-              ) : null}
+                  {!fxLoading && fxError ? <EmptyState title="Fixtures unavailable" message={fxError} /> : null}
 
-              {!fxLoading && !fxError && fxPreview.length > 0 ? (
-                <View style={styles.matchList}>
-                  {fxPreview.map((r, idx) => {
-                    const id = r?.fixture?.id;
-                    const fixtureId = id ? String(id) : null;
-                    const line = fixtureLine(r);
+                  {!fxLoading && !fxError && fxPreview.length === 0 ? (
+                    <EmptyState title="No fixtures found" message="Try another league or try again later." />
+                  ) : null}
 
-                    return (
-                      <Pressable
-                        key={fixtureId ?? `fx-${idx}`}
-                        onPress={() => (fixtureId ? goMatchWithContext(fixtureId) : null)}
-                        disabled={!fixtureId}
-                        style={styles.matchRowPress}
-                      >
-                        <GlassCard strength="subtle" noPadding style={styles.matchRowCard}>
-                          <View style={styles.matchRowInner}>
-                            <View style={styles.thumb} />
-                            <View style={{ flex: 1 }}>
-                              <Text style={styles.matchTitle}>{line.title}</Text>
-                              <Text style={styles.matchMeta}>{line.meta}</Text>
-                            </View>
-                            <Text style={styles.chev}>›</Text>
-                          </View>
-                        </GlassCard>
-                      </Pressable>
-                    );
-                  })}
+                  {!fxLoading && !fxError && fxPreview.length > 0 ? (
+                    <View style={styles.matchList}>
+                      {fxPreview.map((r, idx) => {
+                        const id = r?.fixture?.id;
+                        const fixtureId = id ? String(id) : null;
+                        const line = fixtureLine(r);
+
+                        return (
+                          <Pressable
+                            key={fixtureId ?? `fx-${idx}`}
+                            onPress={() => (fixtureId ? goMatchWithContext(fixtureId) : null)}
+                            disabled={!fixtureId}
+                            style={styles.matchRowPress}
+                          >
+                            <GlassCard strength="subtle" noPadding style={styles.matchRowCard}>
+                              <View style={styles.matchRowInner}>
+                                <View style={styles.thumb}>
+                                  <View pointerEvents="none" style={styles.thumbRing} />
+                                </View>
+
+                                <View style={{ flex: 1 }}>
+                                  <Text style={styles.matchTitle}>{line.title}</Text>
+                                  <Text style={styles.matchMeta}>{line.meta}</Text>
+                                </View>
+
+                                <Text style={styles.chev}>›</Text>
+                              </View>
+                            </GlassCard>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  ) : null}
+
+                  {/* CTA row */}
+                  <View style={styles.ctaRow}>
+                    <Pressable onPress={() => goFixturesWithContext()} style={[styles.btn, styles.btnGhost]}>
+                      <Text style={styles.btnGhostText}>Fixtures</Text>
+                    </Pressable>
+
+                    <Pressable onPress={() => goBuildTripWithContext()} style={[styles.btn, styles.btnPrimary]}>
+                      <Text style={styles.btnPrimaryText}>Build trip</Text>
+                    </Pressable>
+                  </View>
                 </View>
-              ) : null}
-
-              <View style={styles.ctaRow}>
-                <Pressable onPress={() => goFixturesWithContext()} style={[styles.btn, styles.btnGhost]}>
-                  <Text style={styles.btnGhostText}>Fixtures</Text>
-                </Pressable>
-
-                <Pressable onPress={() => goBuildTripWithContext()} style={[styles.btn, styles.btnPrimary]}>
-                  <Text style={styles.btnPrimaryText}>Build trip</Text>
-                </Pressable>
               </View>
             </GlassCard>
           </View>
@@ -669,17 +696,16 @@ const styles = StyleSheet.create({
     gap: theme.spacing.lg,
   },
 
-  // HERO — reduce height + tighten layout
+  // HERO
   heroCard: { marginTop: theme.spacing.lg, borderRadius: theme.borderRadius.xl },
   heroShell: {
     paddingHorizontal: theme.spacing.lg,
     paddingTop: theme.spacing.lg,
-    paddingBottom: 18, // less tall than before
+    paddingBottom: 18,
     borderRadius: theme.borderRadius.xl,
     overflow: "hidden",
   },
 
-  // Ambient green edge glow
   edgeGlowWide: {
     position: "absolute",
     left: 0,
@@ -697,7 +723,6 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(79,224,138,0.65)",
   },
 
-  // Vignettes to suppress background circles (TR is the offender)
   vignetteTop: {
     position: "absolute",
     left: 0,
@@ -730,7 +755,6 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeight.bold,
   },
 
-  // Search looks more “alive”
   searchBox: {
     marginTop: 14,
     borderWidth: 1,
@@ -776,7 +800,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
 
-  // Chips — lighter weight + less “buttony”
   chipsRow: { marginTop: 12, flexDirection: "row", flexWrap: "wrap", gap: 10 },
   chip: {
     borderRadius: 999,
@@ -831,25 +854,53 @@ const styles = StyleSheet.create({
   rowMeta: { marginTop: 4, color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold },
   chev: { color: theme.colors.textTertiary, fontSize: 24, marginTop: -2 },
 
-  // League selector
-  leagueRow: { gap: 10, paddingRight: theme.spacing.lg, marginTop: 10 },
+  // UPCOMING MATCHES (new styling)
+  upcomingCard: { borderRadius: theme.borderRadius.xl },
+  upcomingShell: { borderRadius: theme.borderRadius.xl, overflow: "hidden" },
+
+  leagueBar: {
+    position: "relative",
+    paddingTop: 12,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255,255,255,0.06)",
+    backgroundColor: Platform.OS === "android" ? "rgba(0,0,0,0.10)" : "rgba(0,0,0,0.06)",
+    overflow: "hidden",
+  },
+  leagueBarSheen: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: 0,
+    height: 18,
+    backgroundColor: "rgba(255,255,255,0.05)",
+    opacity: 0.7,
+  },
+
+  leagueRow: { gap: 10, paddingHorizontal: theme.spacing.md, paddingRight: theme.spacing.lg },
+
   leaguePill: {
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 999,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
+    backgroundColor: Platform.OS === "android" ? "rgba(22,25,29,0.52)" : "rgba(22,25,29,0.44)",
   },
   leaguePillActive: {
-    borderColor: "rgba(79,224,138,0.35)",
-    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.default : theme.glass.iosBg.default,
+    borderColor: "rgba(79,224,138,0.38)",
+    backgroundColor: Platform.OS === "android" ? "rgba(22,25,29,0.66)" : "rgba(22,25,29,0.56)",
   },
   leaguePillText: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.black },
   leaguePillTextActive: { color: theme.colors.text, fontWeight: theme.fontWeight.black },
 
+  upcomingBody: {
+    padding: theme.spacing.md,
+    paddingTop: 14,
+  },
+
   // Match list
-  matchList: { marginTop: 10, gap: 10 },
+  matchList: { marginTop: 2, gap: 10 },
   matchRowPress: { borderRadius: 16 },
   matchRowCard: { borderRadius: 16 },
   matchRowInner: {
@@ -859,20 +910,30 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
   },
+
   thumb: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: "rgba(255,255,255,0.06)",
+    width: 46,
+    height: 46,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.05)",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.06)",
+    overflow: "hidden",
   },
+  thumbRing: {
+    ...StyleSheet.absoluteFillObject,
+    borderWidth: 1,
+    borderColor: "rgba(79,224,138,0.12)",
+    borderRadius: 14,
+  },
+
   matchTitle: { color: theme.colors.text, fontSize: 15, fontWeight: theme.fontWeight.black },
   matchMeta: { marginTop: 4, color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold },
 
   // CTA row
   ctaRow: { flexDirection: "row", gap: 10, marginTop: 12 },
   btn: { flex: 1, borderRadius: 16, paddingVertical: 12, alignItems: "center", borderWidth: 1 },
+
   btnPrimary: {
     borderColor: "rgba(79,224,138,0.35)",
     backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.default : theme.glass.iosBg.default,
