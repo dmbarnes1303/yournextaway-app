@@ -85,21 +85,60 @@ function initials(name: string) {
   return `${parts[0][0] ?? ""}${parts[1][0] ?? ""}`.toUpperCase();
 }
 
+function FlagBadge({ code, size }: { code: string; size: "league" | "city" }) {
+  const txt = String(code ?? "").trim().toUpperCase();
+  return (
+    <View style={size === "league" ? styles.flagFallback : styles.cityFlagFallback}>
+      <Text style={size === "league" ? styles.flagFallbackText : styles.cityFlagFallbackText}>
+        {txt || "—"}
+      </Text>
+    </View>
+  );
+}
+
 function LeagueFlag({ code }: { code: string }) {
-  const url = getFlagImageUrl(code);
-  if (!url) return null;
-  return <Image source={{ uri: url }} style={styles.flag} />;
+  const url = getFlagImageUrl(code, { size: 40 });
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    setFailed(false);
+  }, [code]);
+
+  if (!url || failed) return <FlagBadge code={code} size="league" />;
+
+  return (
+    <Image
+      source={{ uri: url }}
+      style={styles.flag}
+      resizeMode="cover"
+      onError={() => setFailed(true)}
+    />
+  );
 }
 
 function CityFlag({ code }: { code: string }) {
-  const url = getFlagImageUrl(code);
-  if (!url) return null;
-  return <Image source={{ uri: url }} style={styles.cityFlag} />;
+  const url = getFlagImageUrl(code, { size: 40 });
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    setFailed(false);
+  }, [code]);
+
+  if (!url || failed) return <FlagBadge code={code} size="city" />;
+
+  return (
+    <Image
+      source={{ uri: url }}
+      style={styles.cityFlag}
+      resizeMode="cover"
+      onError={() => setFailed(true)}
+    />
+  );
 }
 
 function CrestSquare({ row }: { row: FixtureListRow }) {
   const homeName = row?.teams?.home?.name ?? "";
-  const logo = row?.teams?.home?.logo;
+  const logo = (row as any)?.teams?.home?.logo;
 
   return (
     <View style={styles.crestWrap}>
@@ -120,7 +159,6 @@ export default function HomeScreen() {
 
   const [league, setLeague] = useState<LeagueOption>(LEAGUES[0]);
 
-  // defaults to 90 days (centralised)
   const { from: fromIso, to: toIso } = useMemo(() => getRollingWindowIso(), []);
 
   // Trips
@@ -535,11 +573,9 @@ export default function HomeScreen() {
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Upcoming matches</Text>
-              {/* You asked to remove the date window. Keep it clean. */}
               <Text style={styles.sectionMeta}>{league.label}</Text>
             </View>
 
-            {/* League tabs w/ flag image after label */}
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.leagueRow}>
               {LEAGUES.map((l) => {
                 const active = l.leagueId === league.leagueId;
@@ -586,7 +622,6 @@ export default function HomeScreen() {
                       >
                         <GlassCard strength="subtle" noPadding style={styles.matchRowCard}>
                           <View style={styles.matchRowInner}>
-                            {/* This is the square you asked about: home crest */}
                             <CrestSquare row={r} />
 
                             <View style={{ flex: 1 }}>
@@ -803,6 +838,23 @@ const styles = StyleSheet.create({
 
   cityFlag: { width: 16, height: 12, borderRadius: 3, opacity: 0.92 },
 
+  cityFlagFallback: {
+    width: 16,
+    height: 12,
+    borderRadius: 3,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cityFlagFallbackText: {
+    color: "rgba(242,244,246,0.72)",
+    fontSize: 7,
+    fontWeight: theme.fontWeight.black,
+    letterSpacing: 0.2,
+  },
+
   section: { marginTop: 2 },
   sectionHeader: { gap: 4 },
   sectionTitle: { color: theme.colors.text, fontSize: 18, fontWeight: theme.fontWeight.black },
@@ -850,6 +902,23 @@ const styles = StyleSheet.create({
   leaguePillTextActive: { color: theme.colors.text, fontWeight: theme.fontWeight.black },
 
   flag: { width: 18, height: 13, borderRadius: 3, opacity: 0.9 },
+
+  flagFallback: {
+    height: 13,
+    paddingHorizontal: 6,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  flagFallbackText: {
+    color: "rgba(242,244,246,0.72)",
+    fontSize: 10,
+    fontWeight: theme.fontWeight.black,
+    letterSpacing: 0.4,
+  },
 
   // Match list
   matchList: { marginTop: 10, gap: 10 },
