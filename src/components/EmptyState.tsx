@@ -1,7 +1,8 @@
+// src/components/EmptyState.tsx
 
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { theme } from '@/src/constants/theme';
+import React from "react";
+import { View, Text, StyleSheet } from "react-native";
+import { theme } from "@/src/constants/theme";
 
 interface EmptyStateProps {
   title: string;
@@ -19,21 +20,23 @@ export default function EmptyState({ title, message }: EmptyStateProps) {
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: theme.spacing.xl,
+    width: "100%",
+    paddingVertical: 10,
+    paddingHorizontal: theme.spacing.lg,
+    alignItems: "center",
   },
   title: {
-    fontSize: theme.fontSize.lg,
-    fontWeight: theme.fontWeight.bold,
     color: theme.colors.text,
-    marginBottom: theme.spacing.sm,
-    textAlign: 'center',
+    fontSize: theme.fontSize.md,
+    fontWeight: "900",
+    textAlign: "center",
   },
   message: {
-    fontSize: theme.fontSize.md,
+    marginTop: 8,
     color: theme.colors.textSecondary,
-    textAlign: 'center',
+    fontSize: theme.fontSize.sm,
+    fontWeight: "700",
+    textAlign: "center",
+    lineHeight: 18,
   },
 });
