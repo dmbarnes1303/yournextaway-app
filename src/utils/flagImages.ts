@@ -3,16 +3,21 @@
 /**
  * Flag images by code.
  *
- * Default behaviour:
- * - ISO-3166 alpha-2 => FlagCDN (fast + predictable)
+ * Supported inputs:
+ * - ISO-3166-1 alpha-2: "ES", "DE", "IT", etc.
+ * - Special UK home nations:
+ *   - "ENG" => England (St George’s Cross)
+ *   - "SCT" => Scotland
+ *   - "WLS" => Wales
+ *   - "NIR" => Northern Ireland
  *
- * Special cases:
- * - England / Scotland / Wales / Northern Ireland are NOT sovereign ISO-3166 countries.
- *   Use explicit images (reliable PNGs).
+ * Implementation:
+ * - Uses FlagCDN PNGs (predictable, fast, consistent with the rest of your flags).
+ * - For UK home nations we map to FlagCDN subdivision-style codes (gb-eng, gb-sct, gb-wls, gb-nir).
  *
  * Notes:
- * - We use PNG URLs (RN Image does not handle SVG by default).
- * - Keep these URLs stable; if you want 100% control, host your own copies.
+ * - RN <Image> handles PNG well; avoids SVG entirely.
+ * - If you want 100% control, host your own copies later.
  */
 
 const FLAGCDN_SIZES = new Set([20, 40, 80, 160]);
@@ -29,38 +34,28 @@ function sizeToken(size?: number): string {
 }
 
 /**
- * PNG URLs for UK home nations.
- * Using Wikimedia "thumb" PNGs to avoid SVG.
+ * Map our special codes to FlagCDN subdivision flag codes.
+ * These are PNGs just like regular country flags.
  */
-const UK_HOME_NATIONS_PNG: Record<string, string> = {
-  // England (St George’s Cross)
-  ENG: "https://upload.wikimedia.org/wikipedia/en/thumb/b/be/Flag_of_England.svg/80px-Flag_of_England.svg.png",
-
-  // Scotland (Saltire)
-  SCT: "https://upload.wikimedia.org/wikipedia/commons/thumb/1/10/Flag_of_Scotland.svg/80px-Flag_of_Scotland.svg.png",
-
-  // Wales (Red Dragon)
-  WLS: "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dc/Flag_of_Wales.svg/80px-Flag_of_Wales.svg.png",
-
-  // Northern Ireland (Ulster Banner)
-  NIR: "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5c/Ulster_Banner.svg/80px-Ulster_Banner.svg.png",
+const SPECIAL_TO_FLAGCDN_CODE: Record<string, string> = {
+  ENG: "gb-eng",
+  SCT: "gb-sct",
+  WLS: "gb-wls",
+  NIR: "gb-nir",
 };
 
-/**
- * Returns a URL to a flag image.
- *
- * - ISO2 ("GB", "ES", "IT", ...) => FlagCDN
- * - ENG/SCT/WLS/NIR => fixed PNG URLs
- */
 export function getFlagImageUrl(code: string, opts?: { size?: number }): string | null {
   const cc = normalizeCode(code);
+  const token = sizeToken(opts?.size);
 
-  // Home nations (and any future custom codes)
-  if (UK_HOME_NATIONS_PNG[cc]) return UK_HOME_NATIONS_PNG[cc];
+  // Special UK home nations
+  const special = SPECIAL_TO_FLAGCDN_CODE[cc];
+  if (special) {
+    return `https://flagcdn.com/${token}/${special}.png`;
+  }
 
   // ISO2 via FlagCDN
   if (/^[A-Z]{2}$/.test(cc)) {
-    const token = sizeToken(opts?.size);
     return `https://flagcdn.com/${token}/${cc.toLowerCase()}.png`;
   }
 
