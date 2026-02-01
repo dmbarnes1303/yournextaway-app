@@ -1,5 +1,3 @@
-// src/components/GlassCard.tsx
-
 import React from "react";
 import { View, StyleSheet, ViewStyle, Platform } from "react-native";
 import { BlurView } from "expo-blur";
@@ -30,12 +28,9 @@ interface GlassCardProps {
 
 /**
  * GlassCard
- *
- * Philosophy:
- * - Feels like frosted architectural panels.
- * - Android = NO blur (performance + consistency).
- * - iOS/Web = Blur + tinted surface.
- * - One radius, one border, one shadow recipe.
+ * - iOS/Web: blur + tinted glass
+ * - Android: no blur, stronger tint
+ * - Adds a subtle top highlight so it reads like glass, not grey plastic
  */
 export default function GlassCard({
   children,
@@ -58,9 +53,10 @@ export default function GlassCard({
         />
       ) : null}
 
-      <View style={[styles.content, noPadding && styles.noPadding]}>
-        {children}
-      </View>
+      {/* Glass highlight / sheen */}
+      <View pointerEvents="none" style={styles.highlightTop} />
+
+      <View style={[styles.content, noPadding && styles.noPadding]}>{children}</View>
     </View>
   );
 }
@@ -75,12 +71,23 @@ const styles = StyleSheet.create({
 
     // Soft elevation
     shadowColor: "#000",
-    shadowOpacity: 0.35,
-    shadowRadius: 20,
+    shadowOpacity: 0.32,
+    shadowRadius: 18,
     shadowOffset: { width: 0, height: 6 },
 
     // Android fallback
     elevation: 4,
+  },
+
+  highlightTop: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: 0,
+    height: 64,
+    // looks like a subtle reflection band
+    backgroundColor: "rgba(255,255,255,0.05)",
+    opacity: 0.65,
   },
 
   content: {
@@ -95,22 +102,14 @@ const styles = StyleSheet.create({
 const stylesByStrength = StyleSheet.create<Record<GlassStrength, ViewStyle>>({
   subtle: {
     backgroundColor:
-      Platform.OS === "android"
-        ? theme.glass.androidBg.subtle
-        : theme.glass.iosBg.subtle,
+      Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
   },
-
   default: {
     backgroundColor:
-      Platform.OS === "android"
-        ? theme.glass.androidBg.default
-        : theme.glass.iosBg.default,
+      Platform.OS === "android" ? theme.glass.androidBg.default : theme.glass.iosBg.default,
   },
-
   strong: {
     backgroundColor:
-      Platform.OS === "android"
-        ? theme.glass.androidBg.strong
-        : theme.glass.iosBg.strong,
+      Platform.OS === "android" ? theme.glass.androidBg.strong : theme.glass.iosBg.strong,
   },
 });
