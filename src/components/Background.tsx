@@ -9,30 +9,24 @@ import {
 } from "react-native";
 import { theme } from "@/src/constants/theme";
 
-interface BackgroundProps {
-  /** For local assets: require("...") etc */
+type BackgroundProps = {
+  /** Preferred: local assets (require("...")) */
   imageSource?: ImageSourcePropType;
 
-  /** For remote images: https://... */
+  /** Optional: remote URL */
   imageUrl?: string;
 
   children: React.ReactNode;
 
-  /**
-   * 0..1
-   * Higher = darker.
-   */
+  /** 0..1 (higher = darker) */
   overlayOpacity?: number;
-}
+};
 
 /**
  * Background
- *
- * - Optional image
+ * - Optional image (local or remote)
  * - Black overlay for readability
  * - Foreground content above
- *
- * Background layer never steals touches.
  */
 export default function Background({
   imageSource,
@@ -42,12 +36,18 @@ export default function Background({
 }: BackgroundProps) {
   const clamped = Math.max(0, Math.min(1, overlayOpacity));
 
+  // Harden against accidental misuse:
+  // Some screens passed require(...) into imageUrl, which becomes a number at runtime.
+  const urlIsString = typeof imageUrl === "string" && imageUrl.trim().length > 0;
+
   const source: ImageSourcePropType | null =
-    imageSource ?? (imageUrl ? { uri: imageUrl } : null);
+    imageSource ??
+    // If someone incorrectly passes require(...) into imageUrl, treat it as imageSource.
+    ((typeof imageUrl === "number" ? (imageUrl as unknown as ImageSourcePropType) : null) ??
+      (urlIsString ? ({ uri: imageUrl.trim() } as const) : null));
 
   return (
     <View style={styles.root}>
-      {/* Background layer */}
       <View style={StyleSheet.absoluteFill} pointerEvents="none">
         {source ? (
           <ImageBackground source={source} style={styles.image} resizeMode="cover">
@@ -58,7 +58,6 @@ export default function Background({
         )}
       </View>
 
-      {/* Foreground */}
       <View style={styles.content} pointerEvents="box-none">
         {children}
       </View>
