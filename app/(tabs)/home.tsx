@@ -11,6 +11,7 @@ import {
   TextInput,
   Platform,
   Keyboard,
+  Image,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -33,14 +34,10 @@ import {
 } from "@/src/constants/football";
 import { formatUkDateOnly, formatUkDateTimeMaybe } from "@/src/utils/formatters";
 
-import {
-  buildSearchIndex,
-  querySearchIndex,
-  type SearchResult,
-} from "@/src/services/searchIndex";
+import { buildSearchIndex, querySearchIndex, type SearchResult } from "@/src/services/searchIndex";
 import { hasTeamGuide } from "@/src/data/teamGuides";
 import { getCityGuide } from "@/src/data/cityGuides";
-import { getFlagEmoji } from "@/src/utils/flags";
+import { getFlagImageUrl } from "@/src/utils/flagImages";
 
 function tripSummaryLine(t: Trip) {
   const a = t.startDate ? formatUkDateOnly(t.startDate) : "—";
@@ -80,6 +77,42 @@ function splitSearchBuckets(results: SearchResult[]) {
   return { teams, cities, venues, countries, leagues };
 }
 
+function initials(name: string) {
+  const clean = String(name ?? "").trim();
+  if (!clean) return "—";
+  const parts = clean.split(/\s+/g).filter(Boolean);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0][0] ?? ""}${parts[1][0] ?? ""}`.toUpperCase();
+}
+
+function LeagueFlag({ code }: { code: string }) {
+  const url = getFlagImageUrl(code);
+  if (!url) return null;
+  return <Image source={{ uri: url }} style={styles.flag} />;
+}
+
+function CityFlag({ code }: { code: string }) {
+  const url = getFlagImageUrl(code);
+  if (!url) return null;
+  return <Image source={{ uri: url }} style={styles.cityFlag} />;
+}
+
+function CrestSquare({ row }: { row: FixtureListRow }) {
+  const homeName = row?.teams?.home?.name ?? "";
+  const logo = row?.teams?.home?.logo;
+
+  return (
+    <View style={styles.crestWrap}>
+      {logo ? (
+        <Image source={{ uri: logo }} style={styles.crestImg} resizeMode="contain" />
+      ) : (
+        <Text style={styles.crestFallback}>{initials(homeName)}</Text>
+      )}
+      <View pointerEvents="none" style={styles.crestRing} />
+    </View>
+  );
+}
+
 type CityChip = { name: string; countryCode: string };
 
 export default function HomeScreen() {
@@ -87,7 +120,7 @@ export default function HomeScreen() {
 
   const [league, setLeague] = useState<LeagueOption>(LEAGUES[0]);
 
-  // defaults to 90 days now (centralised)
+  // defaults to 90 days (centralised)
   const { from: fromIso, to: toIso } = useMemo(() => getRollingWindowIso(), []);
 
   // Trips
@@ -357,11 +390,8 @@ export default function HomeScreen() {
           {/* HERO */}
           <GlassCard style={styles.heroCard} strength="strong" noPadding>
             <View style={styles.heroShell}>
-              {/* Ambient glow edge */}
               <View pointerEvents="none" style={styles.edgeGlowWide} />
               <View pointerEvents="none" style={styles.edgeGlowCore} />
-
-              {/* Vignettes to suppress background circles */}
               <View pointerEvents="none" style={styles.vignetteTop} />
               <View pointerEvents="none" style={styles.vignetteTR} />
 
@@ -395,16 +425,12 @@ export default function HomeScreen() {
 
               {!showSearchResults ? (
                 <View style={styles.chipsRow}>
-                  {popularCityChips.map((c) => {
-                    const flag = getFlagEmoji(c.countryCode);
-                    return (
-                      <Pressable key={c.name} onPress={() => setQ(c.name)} style={styles.chip}>
-                        <Text style={styles.chipText}>
-                          {flag} {c.name}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
+                  {popularCityChips.map((c) => (
+                    <Pressable key={c.name} onPress={() => setQ(c.name)} style={styles.chip}>
+                      <CityFlag code={c.countryCode} />
+                      <Text style={styles.chipText}>{c.name}</Text>
+                    </Pressable>
+                  ))}
                 </View>
               ) : null}
 
@@ -505,107 +531,91 @@ export default function HomeScreen() {
             </View>
           </GlassCard>
 
-          {/* UPCOMING MATCHES (rewritten visuals only) */}
+          {/* UPCOMING MATCHES */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Upcoming matches</Text>
-              <Text style={styles.sectionMeta}>
-                {league.label} • {formatUkDateOnly(fromIso)} → {formatUkDateOnly(toIso)}
-              </Text>
+              {/* You asked to remove the date window. Keep it clean. */}
+              <Text style={styles.sectionMeta}>{league.label}</Text>
             </View>
 
-            <GlassCard style={styles.upcomingCard} strength="default" noPadding>
-              <View style={styles.upcomingShell}>
-                {/* League selector becomes part of the card (feels intentional) */}
-                <View style={styles.leagueBar}>
-                  <View pointerEvents="none" style={styles.leagueBarSheen} />
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.leagueRow}
+            {/* League tabs w/ flag image after label */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.leagueRow}>
+              {LEAGUES.map((l) => {
+                const active = l.leagueId === league.leagueId;
+                return (
+                  <Pressable
+                    key={l.leagueId}
+                    onPress={() => setLeague(l)}
+                    style={[styles.leaguePill, active && styles.leaguePillActive]}
                   >
-                    {LEAGUES.map((l) => {
-                      const active = l.leagueId === league.leagueId;
-                      return (
-                        <Pressable
-                          key={l.leagueId}
-                          onPress={() => setLeague(l)}
-                          style={[styles.leaguePill, active && styles.leaguePillActive]}
-                        >
-                          <Text style={[styles.leaguePillText, active && styles.leaguePillTextActive]}>
-                            {l.label}
-                          </Text>
-                        </Pressable>
-                      );
-                    })}
-                  </ScrollView>
+                    <Text style={[styles.leaguePillText, active && styles.leaguePillTextActive]}>{l.label}</Text>
+                    <LeagueFlag code={l.countryCode} />
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+
+            <GlassCard style={styles.card} strength="default">
+              {fxLoading ? (
+                <View style={styles.center}>
+                  <ActivityIndicator />
+                  <Text style={styles.muted}>Loading fixtures…</Text>
                 </View>
+              ) : null}
 
-                {/* Fixtures list */}
-                <View style={styles.upcomingBody}>
-                  {fxLoading ? (
-                    <View style={styles.center}>
-                      <ActivityIndicator />
-                      <Text style={styles.muted}>Loading fixtures…</Text>
-                    </View>
-                  ) : null}
+              {!fxLoading && fxError ? <EmptyState title="Fixtures unavailable" message={fxError} /> : null}
 
-                  {!fxLoading && fxError ? <EmptyState title="Fixtures unavailable" message={fxError} /> : null}
+              {!fxLoading && !fxError && fxPreview.length === 0 ? (
+                <EmptyState title="No fixtures found" message="Try another league or try again later." />
+              ) : null}
 
-                  {!fxLoading && !fxError && fxPreview.length === 0 ? (
-                    <EmptyState title="No fixtures found" message="Try another league or try again later." />
-                  ) : null}
+              {!fxLoading && !fxError && fxPreview.length > 0 ? (
+                <View style={styles.matchList}>
+                  {fxPreview.map((r, idx) => {
+                    const id = r?.fixture?.id;
+                    const fixtureId = id ? String(id) : null;
+                    const line = fixtureLine(r);
 
-                  {!fxLoading && !fxError && fxPreview.length > 0 ? (
-                    <View style={styles.matchList}>
-                      {fxPreview.map((r, idx) => {
-                        const id = r?.fixture?.id;
-                        const fixtureId = id ? String(id) : null;
-                        const line = fixtureLine(r);
+                    return (
+                      <Pressable
+                        key={fixtureId ?? `fx-${idx}`}
+                        onPress={() => (fixtureId ? goMatchWithContext(fixtureId) : null)}
+                        disabled={!fixtureId}
+                        style={styles.matchRowPress}
+                      >
+                        <GlassCard strength="subtle" noPadding style={styles.matchRowCard}>
+                          <View style={styles.matchRowInner}>
+                            {/* This is the square you asked about: home crest */}
+                            <CrestSquare row={r} />
 
-                        return (
-                          <Pressable
-                            key={fixtureId ?? `fx-${idx}`}
-                            onPress={() => (fixtureId ? goMatchWithContext(fixtureId) : null)}
-                            disabled={!fixtureId}
-                            style={styles.matchRowPress}
-                          >
-                            <GlassCard strength="subtle" noPadding style={styles.matchRowCard}>
-                              <View style={styles.matchRowInner}>
-                                <View style={styles.thumb}>
-                                  <View pointerEvents="none" style={styles.thumbRing} />
-                                </View>
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.matchTitle}>{line.title}</Text>
+                              <Text style={styles.matchMeta}>{line.meta}</Text>
+                            </View>
 
-                                <View style={{ flex: 1 }}>
-                                  <Text style={styles.matchTitle}>{line.title}</Text>
-                                  <Text style={styles.matchMeta}>{line.meta}</Text>
-                                </View>
-
-                                <Text style={styles.chev}>›</Text>
-                              </View>
-                            </GlassCard>
-                          </Pressable>
-                        );
-                      })}
-                    </View>
-                  ) : null}
-
-                  {/* CTA row */}
-                  <View style={styles.ctaRow}>
-                    <Pressable onPress={() => goFixturesWithContext()} style={[styles.btn, styles.btnGhost]}>
-                      <Text style={styles.btnGhostText}>Fixtures</Text>
-                    </Pressable>
-
-                    <Pressable onPress={() => goBuildTripWithContext()} style={[styles.btn, styles.btnPrimary]}>
-                      <Text style={styles.btnPrimaryText}>Build trip</Text>
-                    </Pressable>
-                  </View>
+                            <Text style={styles.chev}>›</Text>
+                          </View>
+                        </GlassCard>
+                      </Pressable>
+                    );
+                  })}
                 </View>
+              ) : null}
+
+              <View style={styles.ctaRow}>
+                <Pressable onPress={() => goFixturesWithContext()} style={[styles.btn, styles.btnGhost]}>
+                  <Text style={styles.btnGhostText}>Fixtures</Text>
+                </Pressable>
+
+                <Pressable onPress={() => goBuildTripWithContext()} style={[styles.btn, styles.btnPrimary]}>
+                  <Text style={styles.btnPrimaryText}>Build trip</Text>
+                </Pressable>
               </View>
             </GlassCard>
           </View>
 
-          {/* NEXT TRIP */}
+          {/* TRIPS */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Trips</Text>
@@ -696,7 +706,6 @@ const styles = StyleSheet.create({
     gap: theme.spacing.lg,
   },
 
-  // HERO
   heroCard: { marginTop: theme.spacing.lg, borderRadius: theme.borderRadius.xl },
   heroShell: {
     paddingHorizontal: theme.spacing.lg,
@@ -741,19 +750,8 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.28)",
   },
 
-  heroTitle: {
-    color: theme.colors.text,
-    fontSize: 26,
-    fontWeight: theme.fontWeight.black,
-    lineHeight: 32,
-  },
-  heroSub: {
-    marginTop: 10,
-    color: theme.colors.textSecondary,
-    fontSize: 15,
-    lineHeight: 20,
-    fontWeight: theme.fontWeight.bold,
-  },
+  heroTitle: { color: theme.colors.text, fontSize: 26, fontWeight: theme.fontWeight.black, lineHeight: 32 },
+  heroSub: { marginTop: 10, color: theme.colors.textSecondary, fontSize: 15, lineHeight: 20, fontWeight: theme.fontWeight.bold },
 
   searchBox: {
     marginTop: 14,
@@ -777,13 +775,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.06)",
     opacity: 0.55,
   },
-  searchInput: {
-    flex: 1,
-    color: theme.colors.text,
-    fontSize: 15,
-    paddingVertical: Platform.OS === "ios" ? 6 : 4,
-    fontWeight: theme.fontWeight.bold,
-  },
+  searchInput: { flex: 1, color: theme.colors.text, fontSize: 15, paddingVertical: Platform.OS === "ios" ? 6 : 4, fontWeight: theme.fontWeight.bold },
 
   clearBtn: {
     paddingVertical: 6,
@@ -793,12 +785,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(79,224,138,0.22)",
     backgroundColor: "rgba(0,0,0,0.14)",
   },
-  clearBtnText: {
-    color: "rgba(242,244,246,0.72)",
-    fontWeight: theme.fontWeight.black,
-    fontSize: 12,
-    letterSpacing: 0.3,
-  },
+  clearBtnText: { color: "rgba(242,244,246,0.72)", fontWeight: theme.fontWeight.black, fontSize: 12, letterSpacing: 0.3 },
 
   chipsRow: { marginTop: 12, flexDirection: "row", flexWrap: "wrap", gap: 10 },
   chip: {
@@ -808,14 +795,14 @@ const styles = StyleSheet.create({
     backgroundColor: Platform.OS === "android" ? "rgba(22,25,29,0.52)" : "rgba(22,25,29,0.46)",
     paddingVertical: 7,
     paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
-  chipText: {
-    color: "rgba(242,244,246,0.78)",
-    fontSize: 13,
-    fontWeight: theme.fontWeight.semibold,
-  },
+  chipText: { color: "rgba(242,244,246,0.78)", fontSize: 13, fontWeight: theme.fontWeight.semibold },
 
-  // Sections
+  cityFlag: { width: 16, height: 12, borderRadius: 3, opacity: 0.92 },
+
   section: { marginTop: 2 },
   sectionHeader: { gap: 4 },
   sectionTitle: { color: theme.colors.text, fontSize: 18, fontWeight: theme.fontWeight.black },
@@ -829,103 +816,66 @@ const styles = StyleSheet.create({
   // Search results
   searchResults: { marginTop: 14, gap: 16 },
   group: { gap: 10 },
-  groupHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "baseline",
-    gap: 10,
-  },
+  groupHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "baseline", gap: 10 },
   groupTitle: { color: theme.colors.text, fontSize: 15, fontWeight: theme.fontWeight.black },
   groupMeta: { color: theme.colors.textTertiary, fontSize: 12, fontWeight: theme.fontWeight.bold },
   groupEmpty: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold },
-
   resultList: { gap: 10 },
 
   rowPress: { borderRadius: 16 },
   rowCard: { borderRadius: 16 },
-  rowInner: {
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
+  rowInner: { paddingVertical: 12, paddingHorizontal: 12, flexDirection: "row", alignItems: "center", gap: 12 },
   rowTitle: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: 15 },
   rowMeta: { marginTop: 4, color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold },
   chev: { color: theme.colors.textTertiary, fontSize: 24, marginTop: -2 },
 
-  // UPCOMING MATCHES (new styling)
-  upcomingCard: { borderRadius: theme.borderRadius.xl },
-  upcomingShell: { borderRadius: theme.borderRadius.xl, overflow: "hidden" },
-
-  leagueBar: {
-    position: "relative",
-    paddingTop: 12,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(255,255,255,0.06)",
-    backgroundColor: Platform.OS === "android" ? "rgba(0,0,0,0.10)" : "rgba(0,0,0,0.06)",
-    overflow: "hidden",
-  },
-  leagueBarSheen: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    top: 0,
-    height: 18,
-    backgroundColor: "rgba(255,255,255,0.05)",
-    opacity: 0.7,
-  },
-
-  leagueRow: { gap: 10, paddingHorizontal: theme.spacing.md, paddingRight: theme.spacing.lg },
-
+  // League selector w/ flags
+  leagueRow: { gap: 10, paddingRight: theme.spacing.lg, marginTop: 10 },
   leaguePill: {
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 999,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: Platform.OS === "android" ? "rgba(22,25,29,0.52)" : "rgba(22,25,29,0.44)",
+    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   leaguePillActive: {
-    borderColor: "rgba(79,224,138,0.38)",
-    backgroundColor: Platform.OS === "android" ? "rgba(22,25,29,0.66)" : "rgba(22,25,29,0.56)",
+    borderColor: "rgba(79,224,138,0.35)",
+    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.default : theme.glass.iosBg.default,
   },
   leaguePillText: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.black },
   leaguePillTextActive: { color: theme.colors.text, fontWeight: theme.fontWeight.black },
 
-  upcomingBody: {
-    padding: theme.spacing.md,
-    paddingTop: 14,
-  },
+  flag: { width: 18, height: 13, borderRadius: 3, opacity: 0.9 },
 
   // Match list
-  matchList: { marginTop: 2, gap: 10 },
+  matchList: { marginTop: 10, gap: 10 },
   matchRowPress: { borderRadius: 16 },
   matchRowCard: { borderRadius: 16 },
-  matchRowInner: {
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
+  matchRowInner: { paddingVertical: 12, paddingHorizontal: 12, flexDirection: "row", alignItems: "center", gap: 12 },
 
-  thumb: {
+  crestWrap: {
     width: 46,
     height: 46,
     borderRadius: 14,
     backgroundColor: "rgba(255,255,255,0.05)",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.06)",
+    alignItems: "center",
+    justifyContent: "center",
     overflow: "hidden",
   },
-  thumbRing: {
+  crestRing: {
     ...StyleSheet.absoluteFillObject,
     borderWidth: 1,
     borderColor: "rgba(79,224,138,0.12)",
     borderRadius: 14,
   },
+  crestImg: { width: 30, height: 30, opacity: 0.95 },
+  crestFallback: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: theme.fontWeight.black, letterSpacing: 0.4 },
 
   matchTitle: { color: theme.colors.text, fontSize: 15, fontWeight: theme.fontWeight.black },
   matchMeta: { marginTop: 4, color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold },
@@ -933,13 +883,11 @@ const styles = StyleSheet.create({
   // CTA row
   ctaRow: { flexDirection: "row", gap: 10, marginTop: 12 },
   btn: { flex: 1, borderRadius: 16, paddingVertical: 12, alignItems: "center", borderWidth: 1 },
-
   btnPrimary: {
     borderColor: "rgba(79,224,138,0.35)",
     backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.default : theme.glass.iosBg.default,
   },
   btnPrimaryText: { color: theme.colors.text, fontSize: 15, fontWeight: theme.fontWeight.black },
-
   btnGhost: {
     borderColor: "rgba(255,255,255,0.10)",
     backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
@@ -960,26 +908,14 @@ const styles = StyleSheet.create({
 
   // Trips
   emptyTitle: { color: theme.colors.text, fontSize: 15, fontWeight: theme.fontWeight.black },
-  emptyMeta: {
-    marginTop: 6,
-    color: theme.colors.textSecondary,
-    fontSize: 13,
-    fontWeight: theme.fontWeight.bold,
-    lineHeight: 18,
-  },
+  emptyMeta: { marginTop: 6, color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold, lineHeight: 18 },
 
   nextTripPress: { borderRadius: 16, marginTop: 2 },
   nextTripCard: { borderRadius: 16 },
   nextTripInner: { paddingVertical: 14, paddingHorizontal: 14 },
   nextTripKicker: { color: theme.colors.textTertiary, fontSize: 12, fontWeight: theme.fontWeight.black },
   nextTripTitle: { marginTop: 6, color: theme.colors.text, fontSize: 18, fontWeight: theme.fontWeight.black },
-  nextTripMeta: {
-    marginTop: 6,
-    color: theme.colors.textSecondary,
-    fontSize: 13,
-    fontWeight: theme.fontWeight.bold,
-    lineHeight: 18,
-  },
+  nextTripMeta: { marginTop: 6, color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold, lineHeight: 18 },
 
   // Inspiration
   inspoList: { gap: 10 },
@@ -987,11 +923,5 @@ const styles = StyleSheet.create({
   inspoCard: { borderRadius: 16 },
   inspoInner: { paddingVertical: 14, paddingHorizontal: 14 },
   inspoTitle: { color: theme.colors.text, fontSize: 15, fontWeight: theme.fontWeight.black },
-  inspoSub: {
-    marginTop: 6,
-    color: theme.colors.textSecondary,
-    fontSize: 13,
-    fontWeight: theme.fontWeight.bold,
-    lineHeight: 18,
-  },
+  inspoSub: { marginTop: 6, color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold, lineHeight: 18 },
 });
