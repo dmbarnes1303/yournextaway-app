@@ -73,6 +73,7 @@ async function apiGet<T>(path: string): Promise<T> {
 
 /**
  * Minimal fixture shape we actually use in UI.
+ * NOTE: includes team logos so we can render crests.
  */
 export type FixtureListRow = {
   fixture?: {
@@ -81,10 +82,16 @@ export type FixtureListRow = {
     venue?: { name?: string; city?: string };
     status?: { long?: string; short?: string };
   };
-  league?: { id?: number; name?: string; round?: string; season?: number; country?: string };
+  league?: {
+    id?: number;
+    name?: string;
+    round?: string;
+    season?: number;
+    country?: string;
+  };
   teams?: {
-    home?: { id?: number; name?: string };
-    away?: { id?: number; name?: string };
+    home?: { id?: number; name?: string; logo?: string };
+    away?: { id?: number; name?: string; logo?: string };
   };
 };
 
@@ -131,12 +138,10 @@ export async function getFixtures(params: {
   const key = fixturesKey(params);
   const existing = fixturesCache.get(key);
 
-  // Fresh cached value
   if (existing?.value && isFresh(existing.ts, FIXTURES_TTL_MS)) {
     return existing.value;
   }
 
-  // In-flight dedupe
   if (existing?.inflight) {
     return existing.inflight;
   }
@@ -155,7 +160,6 @@ export async function getFixtures(params: {
       return rows;
     })
     .catch((err) => {
-      // Do not poison cache with failures
       fixturesCache.delete(key);
       throw err;
     });
@@ -192,10 +196,7 @@ export async function getFixtureById(fixtureId: string | number): Promise<Fixtur
   return inflight;
 }
 
-/**
- * Optional helpers (not required, but useful if you want manual invalidation later).
- */
 export function __clearApiFootballCache() {
   fixturesCache.clear();
   fixtureByIdCache.clear();
-}
+    }
