@@ -33,10 +33,13 @@ import {
 } from "@/src/constants/football";
 import { formatUkDateOnly, formatUkDateTimeMaybe } from "@/src/utils/formatters";
 
-import { buildSearchIndex, querySearchIndex, type SearchResult } from "@/src/services/searchIndex";
+import {
+  buildSearchIndex,
+  querySearchIndex,
+  type SearchResult,
+} from "@/src/services/searchIndex";
 import { hasTeamGuide } from "@/src/data/teamGuides";
 import { getCityGuide } from "@/src/data/cityGuides";
-
 import { getFlagEmoji } from "@/src/utils/flags";
 
 function tripSummaryLine(t: Trip) {
@@ -77,22 +80,18 @@ function splitSearchBuckets(results: SearchResult[]) {
   return { teams, cities, venues, countries, leagues };
 }
 
-type PopularCityChip = { name: string; countryCode: string };
-
-const POPULAR_CITIES: PopularCityChip[] = [
-  { name: "Madrid", countryCode: "ES" },
-  { name: "Barcelona", countryCode: "ES" },
-  { name: "Milan", countryCode: "IT" },
-  { name: "Lisbon", countryCode: "PT" },
-  { name: "Amsterdam", countryCode: "NL" },
-  { name: "Berlin", countryCode: "DE" },
-];
+type CityChip = { name: string; countryCode: string };
 
 export default function HomeScreen() {
   const router = useRouter();
+
+  // Context league (kept for fixture preview + deep links)
   const [league, setLeague] = useState<LeagueOption>(LEAGUES[0]);
+
+  // Central rolling window (default now 90 days, from football.ts)
   const { from: fromIso, to: toIso } = useMemo(() => getRollingWindowIso(), []);
 
+  // Trips
   const [loadedTrips, setLoadedTrips] = useState(tripsStore.getState().loaded);
   const [trips, setTrips] = useState<Trip[]>(tripsStore.getState().trips);
 
@@ -121,6 +120,7 @@ export default function HomeScreen() {
 
   const nextTrip = useMemo(() => upcomingTrips[0] ?? null, [upcomingTrips]);
 
+  // Fixtures preview
   const [fxLoading, setFxLoading] = useState(false);
   const [fxError, setFxError] = useState<string | null>(null);
   const [fxRows, setFxRows] = useState<FixtureListRow[]>([]);
@@ -159,6 +159,9 @@ export default function HomeScreen() {
 
   const fxPreview = useMemo(() => fxRows.slice(0, 4), [fxRows]);
 
+  // -------------------------
+  // SEARCH (offline index)
+  // -------------------------
   const [q, setQ] = useState("");
   const qNorm = useMemo(() => q.trim(), [q]);
   const showSearchResults = qNorm.length > 0;
@@ -211,8 +214,13 @@ export default function HomeScreen() {
     Keyboard.dismiss();
   }, []);
 
-  const dismissKeyboard = useCallback(() => Keyboard.dismiss(), []);
+  const dismissKeyboard = useCallback(() => {
+    Keyboard.dismiss();
+  }, []);
 
+  // -------------------------
+  // Navigation helpers
+  // -------------------------
   const goBuildTripWithContext = useCallback(
     (fixtureId?: string) => {
       router.push({
@@ -266,12 +274,18 @@ export default function HomeScreen() {
       const p: any = r.payload;
 
       if (p?.kind === "team") {
-        router.push({ pathname: "/team/[teamKey]", params: { teamKey: p.slug, from: fromIso, to: toIso } } as any);
+        router.push({
+          pathname: "/team/[teamKey]",
+          params: { teamKey: p.slug, from: fromIso, to: toIso },
+        } as any);
         return;
       }
 
       if (p?.kind === "city") {
-        router.push({ pathname: "/city/[slug]", params: { slug: p.slug, from: fromIso, to: toIso } } as any);
+        router.push({
+          pathname: "/city/[slug]",
+          params: { slug: p.slug, from: fromIso, to: toIso },
+        } as any);
         return;
       }
 
@@ -298,24 +312,34 @@ export default function HomeScreen() {
     [router, fromIso, toIso, goFixturesWithContext, league.leagueId, league.season]
   );
 
-  const resultMeta = useCallback(
-    (r: SearchResult): string => {
-      const p: any = r.payload;
+  const resultMeta = useCallback((r: SearchResult): string => {
+    const p: any = r.payload;
 
-      if (r.type === "team" && p?.kind === "team") {
-        return hasTeamGuide(p.slug) ? "Team guide available" : "Team guide coming soon";
-      }
+    if (r.type === "team" && p?.kind === "team") {
+      return hasTeamGuide(p.slug) ? "Team guide available" : "Team guide coming soon";
+    }
 
-      if (r.type === "city" && p?.kind === "city") {
-        return getCityGuide(p.slug) ? "City guide available" : "City guide coming soon";
-      }
+    if (r.type === "city" && p?.kind === "city") {
+      return getCityGuide(p.slug) ? "City guide available" : "City guide coming soon";
+    }
 
-      if (r.type === "venue") return r.subtitle ?? "Venue";
-      if (r.type === "country") return r.subtitle ?? "Country";
-      if (r.type === "league") return r.subtitle ?? "League";
+    if (r.type === "venue") return r.subtitle ?? "Venue";
+    if (r.type === "country") return r.subtitle ?? "Country";
+    if (r.type === "league") return r.subtitle ?? "League";
 
-      return r.subtitle ?? "";
-    },
+    return r.subtitle ?? "";
+  }, []);
+
+  // Popular city chips now include explicit country codes for flags
+  const popularCityChips = useMemo<CityChip[]>(
+    () => [
+      { name: "Madrid", countryCode: "ES" },
+      { name: "Barcelona", countryCode: "ES" },
+      { name: "Milan", countryCode: "IT" },
+      { name: "Lisbon", countryCode: "PT" },
+      { name: "Amsterdam", countryCode: "NL" },
+      { name: "Berlin", countryCode: "DE" },
+    ],
     []
   );
 
@@ -328,8 +352,6 @@ export default function HomeScreen() {
     []
   );
 
-  const heroHint = useMemo(() => `Rolling window: ${formatUkDateOnly(fromIso)} → ${formatUkDateOnly(toIso)}`, [fromIso, toIso]);
-
   return (
     <Background imageSource={getBackground("home")} overlayOpacity={0.74}>
       <SafeAreaView style={styles.container} edges={["top"]}>
@@ -339,143 +361,172 @@ export default function HomeScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <GlassCard style={styles.heroCard} strength="strong">
-            <View pointerEvents="none" style={styles.heroAccentRailGreen} />
-            <View pointerEvents="none" style={styles.heroAccentRailBlue} />
+          {/* HERO */}
+          <GlassCard style={styles.heroCard} strength="strong" noPadding>
+            <View style={styles.heroShell}>
+              {/* Brand edge accents */}
+              <View pointerEvents="none" style={styles.heroEdgeLeft} />
+              <View pointerEvents="none" style={styles.heroEdgeTop} />
+              <View pointerEvents="none" style={styles.heroGoldDot} />
 
-            <View style={styles.heroKickerRow}>
-              <View style={styles.kDot} />
-              <Text style={styles.heroKicker}>YOURNEXTAWAY</Text>
-              <Text style={styles.heroKickerSep}>•</Text>
-              <Text style={styles.heroKickerMeta}>{heroHint}</Text>
-            </View>
+              {/* Orb killer mask (keeps transparency but removes ugly bokeh circle) */}
+              <View pointerEvents="none" style={styles.heroOrbMask} />
+              <View pointerEvents="none" style={styles.heroOrbMask2} />
 
-            <Text style={styles.heroTitle}>Plan your next European football trip</Text>
-            <Text style={styles.heroSub}>
-              Search countries, cities, teams, or venues — then jump into fixtures or build a trip.
-            </Text>
+              {/* Header meta */}
+              <View style={styles.heroMetaRow}>
+                <View style={styles.brandDot} />
+                <Text style={styles.heroBrand}>YOURNEXTAWAY</Text>
+                <Text style={styles.heroSep}>•</Text>
+                <Text style={styles.heroMetaText}>
+                  Rolling window: {formatUkDateOnly(fromIso)} → {formatUkDateOnly(toIso)}
+                </Text>
+              </View>
 
-            <View style={styles.searchShell}>
-              <View style={styles.searchIconStub} />
-              <TextInput
-                value={q}
-                onChangeText={setQ}
-                placeholder="Search country, city, team, or venue"
-                placeholderTextColor={theme.colors.textTertiary}
-                style={styles.searchInput}
-                autoCapitalize="none"
-                autoCorrect={false}
-                returnKeyType="search"
-                onSubmitEditing={dismissKeyboard}
-              />
+              <Text style={styles.heroTitle}>Plan your next European football trip</Text>
 
-              {qNorm.length > 0 ? (
-                <Pressable onPress={clearSearch} style={styles.clearBtn} hitSlop={10}>
-                  <Text style={styles.clearBtnText}>Clear</Text>
-                </Pressable>
-              ) : (
-                <View style={styles.searchTagPill} pointerEvents="none">
-                  <Text style={styles.searchTagText}>EU</Text>
-                </View>
-              )}
-            </View>
+              <Text style={styles.heroSub}>
+                Search countries, cities, teams, or venues — then jump into fixtures or build a trip.
+              </Text>
 
-            {!showSearchResults ? (
-              <View style={styles.chipsRow}>
-                {POPULAR_CITIES.slice(0, 6).map((c) => (
-                  <Pressable key={c.name} onPress={() => setQ(c.name)} style={styles.chip}>
-                    <Text style={styles.chipText}>
-                      <Text style={styles.chipFlag}>{getFlagEmoji(c.countryCode)} </Text>
-                      {c.name}
-                    </Text>
+              <View style={styles.searchBox}>
+                <View style={styles.searchIcon} />
+                <TextInput
+                  value={q}
+                  onChangeText={setQ}
+                  placeholder="Search country, city, team, or venue"
+                  placeholderTextColor={theme.colors.textTertiary}
+                  style={styles.searchInput}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  returnKeyType="search"
+                  onSubmitEditing={dismissKeyboard}
+                />
+
+                {qNorm.length > 0 ? (
+                  <Pressable onPress={clearSearch} style={styles.clearBtn} hitSlop={10}>
+                    <Text style={styles.clearBtnText}>Clear</Text>
                   </Pressable>
-                ))}
-              </View>
-            ) : null}
-
-            {showSearchResults ? (
-              <View style={styles.searchResults}>
-                {searchLoading ? (
-                  <View style={styles.center}>
-                    <ActivityIndicator />
-                    <Text style={styles.muted}>Preparing search…</Text>
+                ) : (
+                  <View style={styles.euPill} pointerEvents="none">
+                    <Text style={styles.euPillText}>EU</Text>
                   </View>
-                ) : null}
-
-                {!searchLoading && searchError ? <EmptyState title="Search unavailable" message={searchError} /> : null}
-
-                {!searchLoading && !searchError ? (
-                  <>
-                    <View style={styles.group}>
-                      <View style={styles.groupHeader}>
-                        <Text style={styles.groupTitle}>Teams & Cities</Text>
-                        <Text style={styles.groupMeta}>Tap to open</Text>
-                      </View>
-
-                      {buckets.teams.length === 0 && buckets.cities.length === 0 ? (
-                        <Text style={styles.groupEmpty}>No teams or cities found.</Text>
-                      ) : (
-                        <View style={styles.resultList}>
-                          {[...buckets.teams.slice(0, 6), ...buckets.cities.slice(0, 6)]
-                            .slice(0, 10)
-                            .map((r, idx) => (
-                              <Pressable key={`${r.key}-${idx}`} onPress={() => onPressSearchResult(r)} style={styles.rowPress}>
-                                <GlassCard strength="subtle" noPadding style={styles.rowCard}>
-                                  <View style={styles.rowInner}>
-                                    <View style={styles.rowAccent} />
-                                    <View style={{ flex: 1 }}>
-                                      <Text style={styles.rowTitle}>{r.title}</Text>
-                                      <Text style={styles.rowMeta}>{resultMeta(r)}</Text>
-                                    </View>
-                                    <Text style={styles.chev}>›</Text>
-                                  </View>
-                                </GlassCard>
-                              </Pressable>
-                            ))}
-                        </View>
-                      )}
-                    </View>
-
-                    <View style={styles.group}>
-                      <View style={styles.groupHeader}>
-                        <Text style={styles.groupTitle}>Venues, Countries & Leagues</Text>
-                        <Text style={styles.groupMeta}>Routes to Fixtures</Text>
-                      </View>
-
-                      {buckets.venues.length === 0 && buckets.countries.length === 0 && buckets.leagues.length === 0 ? (
-                        <Text style={styles.groupEmpty}>No venues/countries/leagues found.</Text>
-                      ) : (
-                        <View style={styles.resultList}>
-                          {[...buckets.venues.slice(0, 5), ...buckets.countries.slice(0, 5), ...buckets.leagues.slice(0, 5)]
-                            .slice(0, 10)
-                            .map((r, idx) => (
-                              <Pressable key={`${r.key}-${idx}`} onPress={() => onPressSearchResult(r)} style={styles.rowPress}>
-                                <GlassCard strength="subtle" noPadding style={styles.rowCard}>
-                                  <View style={styles.rowInner}>
-                                    <View style={[styles.rowAccent, styles.rowAccentBlue]} />
-                                    <View style={{ flex: 1 }}>
-                                      <Text style={styles.rowTitle}>{r.title}</Text>
-                                      <Text style={styles.rowMeta}>{resultMeta(r)}</Text>
-                                    </View>
-                                    <Text style={styles.chev}>›</Text>
-                                  </View>
-                                </GlassCard>
-                              </Pressable>
-                            ))}
-                        </View>
-                      )}
-
-                      <Pressable onPress={() => goFixturesWithContext()} style={styles.linkBtn}>
-                        <Text style={styles.linkText}>Open Fixtures</Text>
-                      </Pressable>
-                    </View>
-                  </>
-                ) : null}
+                )}
               </View>
-            ) : null}
+
+              {/* Popular city chips (quick-fill search) */}
+              {!showSearchResults ? (
+                <View style={styles.chipsRow}>
+                  {popularCityChips.map((c) => {
+                    const flag = getFlagEmoji(c.countryCode);
+                    return (
+                      <Pressable key={c.name} onPress={() => setQ(c.name)} style={styles.chip}>
+                        <Text style={styles.chipText}>
+                          {flag} {c.name}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              ) : null}
+
+              {/* SEARCH RESULTS */}
+              {showSearchResults ? (
+                <View style={styles.searchResults}>
+                  {searchLoading ? (
+                    <View style={styles.center}>
+                      <ActivityIndicator />
+                      <Text style={styles.muted}>Preparing search…</Text>
+                    </View>
+                  ) : null}
+
+                  {!searchLoading && searchError ? (
+                    <EmptyState title="Search unavailable" message={searchError} />
+                  ) : null}
+
+                  {!searchLoading && !searchError ? (
+                    <>
+                      {/* Teams & Cities */}
+                      <View style={styles.group}>
+                        <View style={styles.groupHeader}>
+                          <Text style={styles.groupTitle}>Teams & Cities</Text>
+                          <Text style={styles.groupMeta}>Tap to open</Text>
+                        </View>
+
+                        {buckets.teams.length === 0 && buckets.cities.length === 0 ? (
+                          <Text style={styles.groupEmpty}>No teams or cities found.</Text>
+                        ) : (
+                          <View style={styles.resultList}>
+                            {[...buckets.teams.slice(0, 6), ...buckets.cities.slice(0, 6)]
+                              .slice(0, 10)
+                              .map((r, idx) => (
+                                <Pressable
+                                  key={`${r.key}-${idx}`}
+                                  onPress={() => onPressSearchResult(r)}
+                                  style={styles.rowPress}
+                                >
+                                  <GlassCard strength="subtle" noPadding style={styles.rowCard}>
+                                    <View style={styles.rowInner}>
+                                      <View style={{ flex: 1 }}>
+                                        <Text style={styles.rowTitle}>{r.title}</Text>
+                                        <Text style={styles.rowMeta}>{resultMeta(r)}</Text>
+                                      </View>
+                                      <Text style={styles.chev}>›</Text>
+                                    </View>
+                                  </GlassCard>
+                                </Pressable>
+                              ))}
+                          </View>
+                        )}
+                      </View>
+
+                      {/* Venues / Countries / Leagues */}
+                      <View style={styles.group}>
+                        <View style={styles.groupHeader}>
+                          <Text style={styles.groupTitle}>Venues, Countries & Leagues</Text>
+                          <Text style={styles.groupMeta}>Routes to Fixtures</Text>
+                        </View>
+
+                        {buckets.venues.length === 0 &&
+                        buckets.countries.length === 0 &&
+                        buckets.leagues.length === 0 ? (
+                          <Text style={styles.groupEmpty}>No venues/countries/leagues found.</Text>
+                        ) : (
+                          <View style={styles.resultList}>
+                            {[...buckets.venues.slice(0, 5), ...buckets.countries.slice(0, 5), ...buckets.leagues.slice(0, 5)]
+                              .slice(0, 10)
+                              .map((r, idx) => (
+                                <Pressable
+                                  key={`${r.key}-${idx}`}
+                                  onPress={() => onPressSearchResult(r)}
+                                  style={styles.rowPress}
+                                >
+                                  <GlassCard strength="subtle" noPadding style={styles.rowCard}>
+                                    <View style={styles.rowInner}>
+                                      <View style={{ flex: 1 }}>
+                                        <Text style={styles.rowTitle}>{r.title}</Text>
+                                        <Text style={styles.rowMeta}>{resultMeta(r)}</Text>
+                                      </View>
+                                      <Text style={styles.chev}>›</Text>
+                                    </View>
+                                  </GlassCard>
+                                </Pressable>
+                              ))}
+                          </View>
+                        )}
+
+                        <Pressable onPress={() => goFixturesWithContext()} style={styles.linkBtn}>
+                          <Text style={styles.linkText}>Open Fixtures</Text>
+                        </Pressable>
+                      </View>
+                    </>
+                  ) : null}
+                </View>
+              ) : null}
+            </View>
           </GlassCard>
 
-          {/* Everything below unchanged */}
+          {/* UPCOMING MATCHES */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Upcoming matches</Text>
@@ -488,7 +539,11 @@ export default function HomeScreen() {
               {LEAGUES.map((l) => {
                 const active = l.leagueId === league.leagueId;
                 return (
-                  <Pressable key={l.leagueId} onPress={() => setLeague(l)} style={[styles.leaguePill, active && styles.leaguePillActive]}>
+                  <Pressable
+                    key={l.leagueId}
+                    onPress={() => setLeague(l)}
+                    style={[styles.leaguePill, active && styles.leaguePillActive]}
+                  >
                     <Text style={[styles.leaguePillText, active && styles.leaguePillTextActive]}>{l.label}</Text>
                   </Pressable>
                 );
@@ -551,6 +606,7 @@ export default function HomeScreen() {
             </GlassCard>
           </View>
 
+          {/* NEXT TRIP */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Trips</Text>
@@ -583,7 +639,10 @@ export default function HomeScreen() {
               ) : null}
 
               {loadedTrips && nextTrip ? (
-                <Pressable onPress={() => router.push({ pathname: "/trip/[id]", params: { id: nextTrip.id } } as any)} style={styles.nextTripPress}>
+                <Pressable
+                  onPress={() => router.push({ pathname: "/trip/[id]", params: { id: nextTrip.id } } as any)}
+                  style={styles.nextTripPress}
+                >
                   <GlassCard strength="subtle" noPadding style={styles.nextTripCard}>
                     <View style={styles.nextTripInner}>
                       <Text style={styles.nextTripKicker}>Next up</Text>
@@ -600,6 +659,7 @@ export default function HomeScreen() {
             </GlassCard>
           </View>
 
+          {/* INSPIRATION */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Inspiration</Text>
@@ -637,9 +697,12 @@ const styles = StyleSheet.create({
     gap: theme.spacing.lg,
   },
 
-  heroCard: { marginTop: theme.spacing.lg },
+  // HERO
+  heroCard: { marginTop: theme.spacing.lg, borderRadius: theme.borderRadius.xl },
+  heroShell: { padding: theme.spacing.lg, borderRadius: theme.borderRadius.xl, overflow: "hidden" },
 
-  heroAccentRailGreen: {
+  // Brand edges
+  heroEdgeLeft: {
     position: "absolute",
     left: 0,
     top: 0,
@@ -647,161 +710,334 @@ const styles = StyleSheet.create({
     width: 3,
     backgroundColor: "rgba(79,224,138,0.65)",
   },
-  heroAccentRailBlue: {
+  heroEdgeTop: {
     position: "absolute",
-    left: 3,
+    left: 0,
+    right: 0,
     top: 0,
-    bottom: 0,
-    width: 2,
-    backgroundColor: "rgba(47,107,255,0.28)",
+    height: 2,
+    backgroundColor: "rgba(47,107,255,0.35)",
+  },
+  heroGoldDot: {
+    position: "absolute",
+    left: 12,
+    top: 12,
+    width: 6,
+    height: 6,
+    borderRadius: 999,
+    backgroundColor: "rgba(214,181,106,0.78)",
   },
 
-  heroKickerRow: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 8 },
-  kDot: { width: 8, height: 8, borderRadius: 8, backgroundColor: theme.colors.primary },
-  heroKicker: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: "900", letterSpacing: 0.9 },
-  heroKickerSep: { color: "rgba(214,181,106,0.65)", fontSize: 12, fontWeight: "900" },
-  heroKickerMeta: { color: theme.colors.textTertiary, fontSize: 12, fontWeight: "800" },
+  /**
+   * Orb killer:
+   * These two layers subtly darken the top-right quadrant
+   * so any bright bokeh circle in home.png doesn’t scream through.
+   * Keeps the rest transparent.
+   */
+  heroOrbMask: {
+    position: "absolute",
+    right: -30,
+    top: -30,
+    width: 160,
+    height: 160,
+    borderRadius: 999,
+    backgroundColor: "rgba(15,17,19,0.68)",
+  },
+  heroOrbMask2: {
+    position: "absolute",
+    right: -90,
+    top: -90,
+    width: 260,
+    height: 260,
+    borderRadius: 999,
+    backgroundColor: "rgba(15,17,19,0.38)",
+  },
 
-  heroTitle: { marginTop: 10, color: theme.colors.text, fontSize: 24, fontWeight: "900", lineHeight: 30 },
-  heroSub: { marginTop: 10, color: theme.colors.textSecondary, fontSize: 15, lineHeight: 20, fontWeight: "700" },
+  heroMetaRow: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 8 },
+  brandDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 999,
+    backgroundColor: "rgba(79,224,138,0.85)",
+  },
+  heroBrand: {
+    color: "rgba(242,244,246,0.78)",
+    fontSize: 12,
+    fontWeight: theme.fontWeight.black,
+    letterSpacing: 1.2,
+  },
+  heroSep: { color: "rgba(214,181,106,0.70)", fontSize: 12, fontWeight: theme.fontWeight.black },
+  heroMetaText: {
+    color: "rgba(242,244,246,0.52)",
+    fontSize: 12,
+    fontWeight: theme.fontWeight.bold,
+  },
 
-  searchShell: {
-    marginTop: 14,
+  heroTitle: {
+    marginTop: 10,
+    color: theme.colors.text,
+    fontSize: 24,
+    fontWeight: theme.fontWeight.black,
+    lineHeight: 30,
+  },
+  heroSub: {
+    marginTop: 10,
+    color: theme.colors.textSecondary,
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: theme.fontWeight.bold,
+  },
+
+  searchBox: {
+    marginTop: 16,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.default : theme.glass.iosBg.default,
-    borderRadius: 18,
+    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
+    borderRadius: 16,
     paddingHorizontal: 12,
-    paddingVertical: Platform.OS === "ios" ? 12 : 10,
+    paddingVertical: Platform.OS === "ios" ? 10 : 8,
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
   },
-  searchIconStub: { width: 10, height: 10, borderRadius: 10, borderWidth: 2, borderColor: "rgba(47,107,255,0.55)", opacity: 0.9 },
-  searchInput: { flex: 1, color: theme.colors.text, fontSize: 15, paddingVertical: Platform.OS === "ios" ? 6 : 4, fontWeight: "700" },
 
-  searchTagPill: {
-    paddingVertical: 6,
-    paddingHorizontal: 10,
+  searchIcon: {
+    width: 10,
+    height: 10,
     borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "rgba(214,181,106,0.22)",
-    backgroundColor: "rgba(214,181,106,0.08)",
+    borderWidth: 2,
+    borderColor: "rgba(47,107,255,0.40)",
+    opacity: 0.9,
   },
-  searchTagText: { color: "rgba(214,181,106,0.85)", fontWeight: "900", fontSize: 12, letterSpacing: 0.6 },
+
+  searchInput: {
+    flex: 1,
+    color: theme.colors.text,
+    fontSize: 15,
+    paddingVertical: Platform.OS === "ios" ? 6 : 4,
+    fontWeight: theme.fontWeight.bold,
+  },
 
   clearBtn: {
     paddingVertical: 6,
     paddingHorizontal: 10,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "rgba(79,224,138,0.28)",
+    borderColor: "rgba(79,224,138,0.24)",
     backgroundColor: "rgba(0,0,0,0.18)",
   },
-  clearBtnText: { color: theme.colors.text, fontWeight: "900", fontSize: 13 },
+  clearBtnText: {
+    color: "rgba(242,244,246,0.72)",
+    fontWeight: theme.fontWeight.black,
+    fontSize: 12,
+    letterSpacing: 0.3,
+  },
 
-  chipsRow: { marginTop: 12, flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  euPill: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(214,181,106,0.30)",
+    backgroundColor: "rgba(0,0,0,0.16)",
+  },
+  euPillText: {
+    color: "rgba(214,181,106,0.90)",
+    fontWeight: theme.fontWeight.black,
+    fontSize: 12,
+    letterSpacing: 0.6,
+  },
+
+  chipsRow: { marginTop: 14, flexDirection: "row", flexWrap: "wrap", gap: 10 },
   chip: {
     borderRadius: 999,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
     backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
-    paddingVertical: 9,
+    paddingVertical: 8,
     paddingHorizontal: 12,
   },
-  chipText: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: "900" },
-  chipFlag: { color: theme.colors.text, fontWeight: "900" },
+  chipText: {
+    color: "rgba(242,244,246,0.78)",
+    fontSize: 13,
+    fontWeight: theme.fontWeight.black,
+  },
 
-  searchResults: { marginTop: 14, gap: 16 },
-  group: { gap: 10 },
-  groupHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "baseline", gap: 10 },
-  groupTitle: { color: theme.colors.text, fontSize: 15, fontWeight: "900" },
-  groupMeta: { color: theme.colors.textTertiary, fontSize: 12, fontWeight: "800" },
-  groupEmpty: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: "700" },
-  resultList: { gap: 10 },
-
-  rowPress: { borderRadius: 16 },
-  rowCard: { borderRadius: 16 },
-  rowInner: { paddingVertical: 12, paddingHorizontal: 12, flexDirection: "row", alignItems: "center", gap: 12 },
-  rowAccent: { width: 3, height: 34, borderRadius: 3, backgroundColor: "rgba(79,224,138,0.55)" },
-  rowAccentBlue: { backgroundColor: "rgba(47,107,255,0.40)" },
-  rowTitle: { color: theme.colors.text, fontWeight: "900", fontSize: 15 },
-  rowMeta: { marginTop: 4, color: theme.colors.textSecondary, fontSize: 13, fontWeight: "700" },
-  chev: { color: theme.colors.textTertiary, fontSize: 24, marginTop: -2 },
-
+  // Sections
   section: { marginTop: 2 },
   sectionHeader: { gap: 4 },
-  sectionTitle: { color: theme.colors.text, fontSize: 18, fontWeight: "900" },
-  sectionMeta: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: "700" },
+  sectionTitle: {
+    color: theme.colors.text,
+    fontSize: 18,
+    fontWeight: theme.fontWeight.black,
+  },
+  sectionMeta: {
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.bold,
+  },
 
   card: { padding: theme.spacing.md },
 
   center: { paddingVertical: 14, alignItems: "center", gap: 10 },
-  muted: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: "800" },
+  muted: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold },
 
+  // Search results
+  searchResults: { marginTop: 14, gap: 16 },
+  group: { gap: 10 },
+  groupHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "baseline",
+    gap: 10,
+  },
+  groupTitle: {
+    color: theme.colors.text,
+    fontSize: 15,
+    fontWeight: theme.fontWeight.black,
+  },
+  groupMeta: {
+    color: theme.colors.textTertiary,
+    fontSize: 12,
+    fontWeight: theme.fontWeight.bold,
+  },
+  groupEmpty: {
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.bold,
+  },
+
+  resultList: { gap: 10 },
+
+  rowPress: { borderRadius: 16 },
+  rowCard: { borderRadius: 16 },
+  rowInner: {
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  rowTitle: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: 15 },
+  rowMeta: {
+    marginTop: 4,
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.bold,
+  },
+  chev: { color: theme.colors.textTertiary, fontSize: 24, marginTop: -2 },
+
+  // League selector
   leagueRow: { gap: 10, paddingRight: theme.spacing.lg, marginTop: 10 },
   leaguePill: {
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: "rgba(255,255,255,0.10)",
     backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
   },
   leaguePillActive: {
     borderColor: "rgba(79,224,138,0.35)",
     backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.default : theme.glass.iosBg.default,
   },
-  leaguePillText: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: "800" },
-  leaguePillTextActive: { color: theme.colors.text, fontWeight: "900" },
+  leaguePillText: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.black },
+  leaguePillTextActive: { color: theme.colors.text, fontWeight: theme.fontWeight.black },
 
+  // Match list
   matchList: { marginTop: 10, gap: 10 },
   matchRowPress: { borderRadius: 16 },
   matchRowCard: { borderRadius: 16 },
-  matchRowInner: { paddingVertical: 12, paddingHorizontal: 12, flexDirection: "row", alignItems: "center", gap: 12 },
-  thumb: { width: 44, height: 44, borderRadius: 12, backgroundColor: "rgba(255,255,255,0.06)", borderWidth: 1, borderColor: "rgba(255,255,255,0.06)" },
-  matchTitle: { color: theme.colors.text, fontSize: 15, fontWeight: "900" },
-  matchMeta: { marginTop: 4, color: theme.colors.textSecondary, fontSize: 13, fontWeight: "700" },
+  matchRowInner: {
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  thumb: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+  },
+  matchTitle: { color: theme.colors.text, fontSize: 15, fontWeight: theme.fontWeight.black },
+  matchMeta: {
+    marginTop: 4,
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.bold,
+  },
 
+  // CTA row
   ctaRow: { flexDirection: "row", gap: 10, marginTop: 12 },
-  btn: { flex: 1, borderRadius: 16, paddingVertical: 12, alignItems: "center", borderWidth: 1 },
+  btn: {
+    flex: 1,
+    borderRadius: 16,
+    paddingVertical: 12,
+    alignItems: "center",
+    borderWidth: 1,
+  },
   btnPrimary: {
     borderColor: "rgba(79,224,138,0.35)",
     backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.default : theme.glass.iosBg.default,
   },
-  btnPrimaryText: { color: theme.colors.text, fontSize: 15, fontWeight: "900" },
+  btnPrimaryText: { color: theme.colors.text, fontSize: 15, fontWeight: theme.fontWeight.black },
 
   btnGhost: {
-    borderColor: theme.colors.border,
+    borderColor: "rgba(255,255,255,0.10)",
     backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
   },
-  btnGhostText: { color: theme.colors.textSecondary, fontSize: 15, fontWeight: "900" },
+  btnGhostText: { color: theme.colors.textSecondary, fontSize: 15, fontWeight: theme.fontWeight.black },
 
+  // Link button
   linkBtn: {
     marginTop: 12,
     paddingVertical: 12,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: "rgba(47,107,255,0.22)",
-    backgroundColor: "rgba(0,0,0,0.18)",
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
     alignItems: "center",
   },
-  linkText: { color: theme.colors.text, fontSize: 14, fontWeight: "900" },
+  linkText: { color: theme.colors.textSecondary, fontSize: 14, fontWeight: theme.fontWeight.black },
 
-  emptyTitle: { color: theme.colors.text, fontSize: 15, fontWeight: "900" },
-  emptyMeta: { marginTop: 6, color: theme.colors.textSecondary, fontSize: 13, fontWeight: "700", lineHeight: 18 },
+  // Trips
+  emptyTitle: { color: theme.colors.text, fontSize: 15, fontWeight: theme.fontWeight.black },
+  emptyMeta: {
+    marginTop: 6,
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.bold,
+    lineHeight: 18,
+  },
 
   nextTripPress: { borderRadius: 16, marginTop: 2 },
   nextTripCard: { borderRadius: 16 },
   nextTripInner: { paddingVertical: 14, paddingHorizontal: 14 },
-  nextTripKicker: { color: theme.colors.textTertiary, fontSize: 12, fontWeight: "900" },
-  nextTripTitle: { marginTop: 6, color: theme.colors.text, fontSize: 18, fontWeight: "900" },
-  nextTripMeta: { marginTop: 6, color: theme.colors.textSecondary, fontSize: 13, fontWeight: "700", lineHeight: 18 },
+  nextTripKicker: { color: theme.colors.textTertiary, fontSize: 12, fontWeight: theme.fontWeight.black },
+  nextTripTitle: { marginTop: 6, color: theme.colors.text, fontSize: 18, fontWeight: theme.fontWeight.black },
+  nextTripMeta: {
+    marginTop: 6,
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.bold,
+    lineHeight: 18,
+  },
 
+  // Inspiration
   inspoList: { gap: 10 },
   inspoPress: { borderRadius: 16 },
   inspoCard: { borderRadius: 16 },
   inspoInner: { paddingVertical: 14, paddingHorizontal: 14 },
-  inspoTitle: { color: theme.colors.text, fontSize: 15, fontWeight: "900" },
-  inspoSub: { marginTop: 6, color: theme.colors.textSecondary, fontSize: 13, fontWeight: "700", lineHeight: 18 },
+  inspoTitle: { color: theme.colors.text, fontSize: 15, fontWeight: theme.fontWeight.black },
+  inspoSub: {
+    marginTop: 6,
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.bold,
+    lineHeight: 18,
+  },
 });
