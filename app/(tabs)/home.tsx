@@ -123,11 +123,9 @@ function tomorrowLocal(): Date {
 }
 
 function nextWeekendWindowIso(): ShortcutWindow {
-  // Next Sat-Sun window (upcoming weekend, not past)
   const d = tomorrowLocal();
-  // JS: 0 Sun ... 6 Sat
-  const day = d.getDay();
-  const daysUntilSat = (6 - day + 7) % 7; // 0 if already Sat, but we're starting from tomorrow
+  const day = d.getDay(); // 0 Sun ... 6 Sat
+  const daysUntilSat = (6 - day + 7) % 7;
   const sat = new Date(d);
   sat.setDate(sat.getDate() + daysUntilSat);
   sat.setHours(0, 0, 0, 0);
@@ -148,6 +146,9 @@ function windowFromTomorrow(days: number): ShortcutWindow {
 
 export default function HomeScreen() {
   const router = useRouter();
+
+  const scrollRef = useRef<ScrollView | null>(null);
+  const searchInputRef = useRef<TextInput | null>(null);
 
   const [league, setLeague] = useState<LeagueOption>(LEAGUES[0]);
 
@@ -279,6 +280,8 @@ export default function HomeScreen() {
     Keyboard.dismiss();
   }, []);
 
+  // -------- Routing helpers --------
+
   const goBuildTripWithContext = useCallback(
     (fixtureId?: string) => {
       router.push({
@@ -295,15 +298,15 @@ export default function HomeScreen() {
     [router, league.leagueId, league.season, fromIso, toIso]
   );
 
-  const goBuildTripGlobal = useCallback(
-    (window?: ShortcutWindow) => {
-      const w = window ?? getRollingWindowIso({ days: 60 });
+  // Global mode = ALWAYS /trip/build with global=1 and a window
+  const goBuildTripGlobalWindow = useCallback(
+    (window: ShortcutWindow) => {
       router.push({
         pathname: "/trip/build",
         params: {
           global: "1",
-          from: w.from,
-          to: w.to,
+          from: window.from,
+          to: window.to,
         },
       } as any);
     },
@@ -341,6 +344,15 @@ export default function HomeScreen() {
     },
     [router, league.leagueId, league.season, fromIso, toIso]
   );
+
+  const focusSearch = useCallback(() => {
+    // Kill any existing search results then focus
+    setQ("");
+    requestAnimationFrame(() => {
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
+      requestAnimationFrame(() => searchInputRef.current?.focus());
+    });
+  }, []);
 
   const onPressSearchResult = useCallback(
     (r: SearchResult) => {
@@ -415,30 +427,58 @@ export default function HomeScreen() {
     []
   );
 
+  // -------- Bottom section windows (source of truth) --------
+  const winWeekend = useMemo(() => nextWeekendWindowIso(), []);
+  const win7 = useMemo(() => windowFromTomorrow(7), []);
+  const win14 = useMemo(() => windowFromTomorrow(14), []);
+  const win30 = useMemo(() => windowFromTomorrow(30), []);
+  const winAny = useMemo(() => getRollingWindowIso({ days: 60 }), []);
+
   const quickShortcuts = useMemo(
     () => [
-      { key: "wknd", label: "This weekend", sub: "Sat–Sun", window: nextWeekendWindowIso() },
-      { key: "d7", label: "Next 7 days", sub: "Quick break", window: windowFromTomorrow(7) },
-      { key: "d14", label: "Next 14 days", sub: "Pick a match", window: windowFromTomorrow(14) },
-      { key: "d30", label: "Next 30 days", sub: "More options", window: windowFromTomorrow(30) },
-      { key: "any", label: "Any time", sub: "Browse broadly", window: getRollingWindowIso({ days: 60 }) },
+      { key: "wknd", label: "This weekend", sub: "Sat–Sun", window: winWeekend },
+      { key: "d7", label: "Next 7 days", sub: "Quick break", window: win7 },
+      { key: "d14", label: "Next 14 days", sub: "Pick a match", window: win14 },
+      { key: "d30", label: "Next 30 days", sub: "More options", window: win30 },
+      { key: "any", label: "Any time", sub: "Browse broadly", window: winAny },
     ],
-    []
+    [winWeekend, win7, win14, win30, winAny]
   );
 
   const inspiration = useMemo(
     () => [
-      { title: "Weekend trips that just work", sub: "Low-stress planning across Europe" },
-      { title: "Pick a match, build the break", sub: "Dates, stay, transport — in one hub" },
-      { title: "Shortlist cities fast", sub: "Search by team, city, stadium, or country" },
+      { key: "weekend", title: "Weekend trips that just work", sub: "Low-stress planning across Europe" },
+      { key: "pick", title: "Pick a match, build the break", sub: "Dates, stay, transport — in one hub" },
+      { key: "shortlist", title: "Shortlist cities fast", sub: "Search by team, city, stadium, or country" },
     ],
     []
+  );
+
+  const onPressInspiration = useCallback(
+    (key: string) => {
+      if (key === "weekend") {
+        goBuildTripGlobalWindow(winWeekend);
+        return;
+      }
+      if (key === "pick") {
+        // honest: this card is about browsing matches first
+        goFixturesWithContext();
+        return;
+      }
+      if (key === "shortlist") {
+        // fastest: take them to the actual search bar
+        focusSearch();
+        return;
+      }
+    },
+    [goBuildTripGlobalWindow, winWeekend, goFixturesWithContext, focusSearch]
   );
 
   return (
     <Background imageSource={getBackground("home")} overlayOpacity={0.74}>
       <SafeAreaView style={styles.container} edges={["top"]}>
         <ScrollView
+          ref={(r) => (scrollRef.current = r)}
           style={styles.scrollView}
           contentContainerStyle={styles.content}
           keyboardShouldPersistTaps="handled"
@@ -462,6 +502,7 @@ export default function HomeScreen() {
                 <View pointerEvents="none" style={styles.searchSheen} />
 
                 <TextInput
+                  ref={(r) => (searchInputRef.current = r)}
                   value={q}
                   onChangeText={setQ}
                   placeholder="Search country, city or team"
@@ -595,7 +636,6 @@ export default function HomeScreen() {
               <Text style={styles.sectionMeta}>{league.label}</Text>
             </View>
 
-            {/* League tabs w/ flag image after label */}
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.leagueRow}>
               {LEAGUES.map((l) => {
                 const active = l.leagueId === league.leagueId;
@@ -643,12 +683,10 @@ export default function HomeScreen() {
                         <GlassCard strength="subtle" noPadding style={styles.matchRowCard}>
                           <View style={styles.matchRowInner}>
                             <CrestSquare row={r} />
-
                             <View style={{ flex: 1 }}>
                               <Text style={styles.matchTitle}>{line.title}</Text>
                               <Text style={styles.matchMeta}>{line.meta}</Text>
                             </View>
-
                             <Text style={styles.chev}>›</Text>
                           </View>
                         </GlassCard>
@@ -741,7 +779,11 @@ export default function HomeScreen() {
                   decelerationRate="fast"
                 >
                   {quickShortcuts.map((x) => (
-                    <Pressable key={x.key} onPress={() => goBuildTripGlobal(x.window)} style={styles.shortcutCard}>
+                    <Pressable
+                      key={x.key}
+                      onPress={() => goBuildTripGlobalWindow(x.window)}
+                      style={styles.shortcutCard}
+                    >
                       <Text style={styles.shortcutTitle}>{x.label}</Text>
                       <Text style={styles.shortcutSub}>{x.sub}</Text>
                     </Pressable>
@@ -762,7 +804,7 @@ export default function HomeScreen() {
 
             <View style={styles.inspoList}>
               {inspiration.map((x) => (
-                <Pressable key={x.title} onPress={() => goFixturesWithContext()} style={styles.inspoPress}>
+                <Pressable key={x.key} onPress={() => onPressInspiration(x.key)} style={styles.inspoPress}>
                   <GlassCard strength="default" noPadding style={styles.inspoCard}>
                     <View style={styles.inspoInner}>
                       <Text style={styles.inspoTitle}>{x.title}</Text>
@@ -882,7 +924,12 @@ const styles = StyleSheet.create({
     borderColor: "rgba(79,224,138,0.22)",
     backgroundColor: "rgba(0,0,0,0.14)",
   },
-  clearBtnText: { color: "rgba(242,244,246,0.72)", fontWeight: theme.fontWeight.black, fontSize: 12, letterSpacing: 0.3 },
+  clearBtnText: {
+    color: "rgba(242,244,246,0.72)",
+    fontWeight: theme.fontWeight.black,
+    fontSize: 12,
+    letterSpacing: 0.3,
+  },
 
   chipsRow: { marginTop: 12, flexDirection: "row", flexWrap: "wrap", gap: 10 },
   chip: {
