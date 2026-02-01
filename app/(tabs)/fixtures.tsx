@@ -22,7 +22,12 @@ import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
 import { getFixtures, type FixtureListRow } from "@/src/services/apiFootball";
 
-import { LEAGUES, getRollingWindowIso, normalizeWindowIso, type LeagueOption } from "@/src/constants/football";
+import {
+  LEAGUES,
+  getRollingWindowIso,
+  normalizeWindowIso,
+  type LeagueOption,
+} from "@/src/constants/football";
 import { coerceNumber, coerceString } from "@/src/utils/params";
 import { formatUkDateOnly, formatUkDateTimeMaybe } from "@/src/utils/formatters";
 
@@ -71,7 +76,11 @@ function pickDateStrip(fromIso: string, days = 7) {
   const out: { iso: string; labelTop: string; labelBottom: string }[] = [];
   for (let i = 0; i < days; i++) {
     const d = addDays(base, i);
-    out.push({ iso: isoDay(d), labelTop: weekdayShort(d), labelBottom: dayMonth(d) });
+    out.push({
+      iso: isoDay(d),
+      labelTop: weekdayShort(d),
+      labelBottom: dayMonth(d),
+    });
   }
   return out;
 }
@@ -101,15 +110,21 @@ function rowMeta(r: FixtureListRow) {
 function resolveLeagueSelection(
   paramsLeagueId: unknown,
   paramsSeason: unknown
-): { mode: LeagueMode; selected?: LeagueOption; selectedMany?: LeagueOption[] } {
+): {
+  mode: LeagueMode;
+  selected?: LeagueOption;
+  selectedMany?: LeagueOption[];
+} {
   const leagueIdStr = String(paramsLeagueId ?? "").trim().toLowerCase();
   const leagueIdNum = coerceNumber(paramsLeagueId);
   const seasonNum = coerceNumber(paramsSeason);
 
+  // Explicit multi: leagueId=all
   if (leagueIdStr === "all") {
     return { mode: "multi", selectedMany: LEAGUES };
   }
 
+  // Single by default; if leagueId is missing, use first league
   if (!leagueIdNum) {
     return { mode: "single", selected: LEAGUES[0] };
   }
@@ -125,6 +140,7 @@ export default function FixturesScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
 
+  // Window defaults (tomorrow onwards; still supports from/to params)
   const rolling = useMemo(() => getRollingWindowIso(), []);
   const fromParam = useMemo(() => coerceString(params.from), [params.from]);
   const toParam = useMemo(() => coerceString(params.to), [params.to]);
@@ -144,22 +160,32 @@ export default function FixturesScreen() {
   const from = window.from;
   const to = window.to;
 
-  const venueParamRaw = useMemo(() => coerceString((params as any).venue), [params]);
+  // Filters
+  const venueParamRaw = useMemo(
+    () => coerceString((params as any).venue),
+    [params]
+  );
   const [query, setQuery] = useState<string>(venueParamRaw ?? "");
   const qNorm = useMemo(() => query.trim(), [query]);
 
   useEffect(() => {
+    // If a deep link sets venue, reflect it in search bar
     setQuery(venueParamRaw ?? "");
   }, [venueParamRaw]);
 
+  // League selection: single vs multi
   const selection = useMemo(
     () => resolveLeagueSelection(params.leagueId, params.season),
     [params.leagueId, params.season]
   );
 
   const [mode, setMode] = useState<LeagueMode>(selection.mode);
-  const [selectedSingle, setSelectedSingle] = useState<LeagueOption>(selection.selected ?? LEAGUES[0]);
-  const [selectedMany, setSelectedMany] = useState<LeagueOption[]>(selection.selectedMany ?? LEAGUES);
+  const [selectedSingle, setSelectedSingle] = useState<LeagueOption>(
+    selection.selected ?? LEAGUES[0]
+  );
+  const [selectedMany, setSelectedMany] = useState<LeagueOption[]>(
+    selection.selectedMany ?? LEAGUES
+  );
 
   useEffect(() => {
     setMode(selection.mode);
@@ -167,20 +193,24 @@ export default function FixturesScreen() {
     if (selection.selectedMany) setSelectedMany(selection.selectedMany);
   }, [selection.mode, selection.selected, selection.selectedMany]);
 
+  // Date strip (7 days) anchored to "from"
   const dateStrip = useMemo(() => pickDateStrip(from, 7), [from]);
-
   const [activeDay, setActiveDay] = useState<string>(dateStrip[0]?.iso ?? from);
 
   useEffect(() => {
-    const first = dateStrip[0]?.iso ?? from;
-    setActiveDay(first);
-  }, [from, dateStrip]);
+    setActiveDay(dateStrip[0]?.iso ?? from);
+  }, [from]);
 
+  // Fetch fixtures:
+  // - single => one call
+  // - multi  => parallel calls, then merge
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [rowsSingle, setRowsSingle] = useState<FixtureListRow[]>([]);
-  const [rowsMulti, setRowsMulti] = useState<Record<number, FixtureListRow[]>>({});
+  const [rowsMulti, setRowsMulti] = useState<Record<number, FixtureListRow[]>>(
+    {}
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -253,6 +283,7 @@ export default function FixturesScreen() {
     Keyboard.dismiss();
   }, []);
 
+  // Filter rows by query (team/city/venue). Also supports slug-like matching.
   const passesQuery = useCallback(
     (r: FixtureListRow) => {
       const q = qNorm.trim().toLowerCase();
@@ -267,7 +298,13 @@ export default function FixturesScreen() {
       const venue = norm(venueName);
       const city = norm(venueCity);
 
-      if (home.includes(q) || away.includes(q) || venue.includes(q) || city.includes(q)) return true;
+      if (
+        home.includes(q) ||
+        away.includes(q) ||
+        venue.includes(q) ||
+        city.includes(q)
+      )
+        return true;
 
       const qKey = normalizeVenueKey(q);
       if (!qKey) return false;
@@ -287,6 +324,7 @@ export default function FixturesScreen() {
     [qNorm]
   );
 
+  // Filter to active day (7-day strip)
   const isActiveDay = useCallback(
     (r: FixtureListRow) => {
       const d = fixtureIsoDateOnly(r);
@@ -304,7 +342,9 @@ export default function FixturesScreen() {
     const out: Record<number, FixtureListRow[]> = {};
     for (const l of selectedMany) {
       const rows = rowsMulti[l.leagueId] ?? [];
-      out[l.leagueId] = rows.filter((r) => passesQuery(r)).filter((r) => isActiveDay(r));
+      out[l.leagueId] = rows
+        .filter((r) => passesQuery(r))
+        .filter((r) => isActiveDay(r));
     }
     return out;
   }, [rowsMulti, selectedMany, passesQuery, isActiveDay]);
@@ -317,8 +357,14 @@ export default function FixturesScreen() {
 
   const goMatchWithContext = useCallback(
     (fixtureIdStr: string, leagueIdForRow?: number, seasonForRow?: number) => {
-      const lid = mode === "single" ? selectedSingle.leagueId : leagueIdForRow ?? selectedSingle.leagueId;
-      const sea = mode === "single" ? selectedSingle.season : seasonForRow ?? selectedSingle.season;
+      const lid =
+        mode === "single"
+          ? selectedSingle.leagueId
+          : leagueIdForRow ?? selectedSingle.leagueId;
+      const sea =
+        mode === "single"
+          ? selectedSingle.season
+          : seasonForRow ?? selectedSingle.season;
 
       router.push({
         pathname: "/match/[id]",
@@ -337,8 +383,14 @@ export default function FixturesScreen() {
 
   const goBuildTripWithContext = useCallback(
     (fixtureIdStr: string, leagueIdForRow?: number, seasonForRow?: number) => {
-      const lid = mode === "single" ? selectedSingle.leagueId : leagueIdForRow ?? selectedSingle.leagueId;
-      const sea = mode === "single" ? selectedSingle.season : seasonForRow ?? selectedSingle.season;
+      const lid =
+        mode === "single"
+          ? selectedSingle.leagueId
+          : leagueIdForRow ?? selectedSingle.leagueId;
+      const sea =
+        mode === "single"
+          ? selectedSingle.season
+          : seasonForRow ?? selectedSingle.season;
 
       router.push({
         pathname: "/trip/build",
@@ -355,6 +407,8 @@ export default function FixturesScreen() {
     [router, mode, selectedSingle.leagueId, selectedSingle.season, from, to, qNorm]
   );
 
+  const showClear = qNorm.length > 0;
+
   const emptyMessage = useMemo(() => {
     if (!qNorm) return "Try a different day or switch leagues.";
     return "Try a different search term (team, city, or venue) or clear the filter.";
@@ -365,8 +419,12 @@ export default function FixturesScreen() {
   }, []);
 
   return (
-    <Background imageUrl={getBackground("fixtures")} overlayOpacity={0.86}>
+    <Background
+      imageSource={getBackground("fixtures")}
+      overlayOpacity={0.86}
+    >
       <SafeAreaView style={styles.container} edges={["top"]}>
+        {/* HEADER */}
         <View style={styles.header}>
           <View style={styles.titleRow}>
             <View style={{ flex: 1 }}>
@@ -375,10 +433,13 @@ export default function FixturesScreen() {
             </View>
 
             <Pressable onPress={toggleMode} style={styles.modePill} hitSlop={10}>
-              <Text style={styles.modePillText}>{mode === "single" ? "One league" : "Top leagues"}</Text>
+              <Text style={styles.modePillText}>
+                {mode === "single" ? "One league" : "Top leagues"}
+              </Text>
             </Pressable>
           </View>
 
+          {/* Search */}
           <View style={styles.searchBox}>
             <TextInput
               value={query}
@@ -392,14 +453,19 @@ export default function FixturesScreen() {
               onSubmitEditing={dismissKeyboard}
             />
 
-            {qNorm.length > 0 ? (
+            {showClear ? (
               <Pressable onPress={clearQuery} style={styles.clearBtn} hitSlop={10}>
                 <Text style={styles.clearBtnText}>Clear</Text>
               </Pressable>
             ) : null}
           </View>
 
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dateRow}>
+          {/* Date strip */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.dateRow}
+          >
             {dateStrip.map((d) => {
               const active = d.iso === activeDay;
               return (
@@ -408,15 +474,24 @@ export default function FixturesScreen() {
                   onPress={() => setActiveDay(d.iso)}
                   style={[styles.datePill, active && styles.datePillActive]}
                 >
-                  <Text style={[styles.dateTop, active && styles.dateTopActive]}>{d.labelTop}</Text>
-                  <Text style={[styles.dateBottom, active && styles.dateBottomActive]}>{d.labelBottom}</Text>
+                  <Text style={[styles.dateTop, active && styles.dateTopActive]}>
+                    {d.labelTop}
+                  </Text>
+                  <Text style={[styles.dateBottom, active && styles.dateBottomActive]}>
+                    {d.labelBottom}
+                  </Text>
                 </Pressable>
               );
             })}
           </ScrollView>
 
+          {/* League pills (single mode only) */}
           {mode === "single" ? (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.leagueRow}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.leagueRow}
+            >
               {LEAGUES.map((l) => {
                 const active = l.leagueId === selectedSingle.leagueId;
                 return (
@@ -425,7 +500,14 @@ export default function FixturesScreen() {
                     onPress={() => setSelectedSingle(l)}
                     style={[styles.leaguePill, active && styles.leaguePillActive]}
                   >
-                    <Text style={[styles.leaguePillText, active && styles.leaguePillTextActive]}>{l.label}</Text>
+                    <Text
+                      style={[
+                        styles.leaguePillText,
+                        active && styles.leaguePillTextActive,
+                      ]}
+                    >
+                      {l.label}
+                    </Text>
                   </Pressable>
                 );
               })}
@@ -433,7 +515,12 @@ export default function FixturesScreen() {
           ) : null}
         </View>
 
-        <ScrollView style={styles.scrollView} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        {/* BODY */}
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+        >
           <GlassCard strength="default" style={styles.card}>
             {loading ? (
               <View style={styles.center}>
@@ -442,127 +529,157 @@ export default function FixturesScreen() {
               </View>
             ) : null}
 
-            {!loading && error ? <EmptyState title="Couldn’t load fixtures" message={error} /> : null}
+            {!loading && error ? (
+              <EmptyState title="Couldn’t load fixtures" message={error} />
+            ) : null}
 
             {!loading && !error ? (
               mode === "single" ? (
-                filteredSingle.length === 0 ? (
-                  <EmptyState title="No matches found" message={emptyMessage} />
-                ) : (
-                  <View style={styles.list}>
-                    {filteredSingle.map((r, idx) => {
-                      const id = r?.fixture?.id;
-                      const fixtureIdStr = id ? String(id) : null;
-                      const key = fixtureIdStr ?? `idx-${idx}`;
+                <>
+                  {filteredSingle.length === 0 ? (
+                    <EmptyState title="No matches found" message={emptyMessage} />
+                  ) : (
+                    <View style={styles.list}>
+                      {filteredSingle.map((r, idx) => {
+                        const id = r?.fixture?.id;
+                        const fixtureIdStr = id ? String(id) : null;
+                        const key = fixtureIdStr ?? `idx-${idx}`;
 
-                      return (
-                        <GlassCard key={key} strength="subtle" noPadding style={styles.rowCard}>
-                          <Pressable
-                            disabled={!fixtureIdStr}
-                            onPress={() => (fixtureIdStr ? goMatchWithContext(fixtureIdStr) : null)}
-                            style={styles.rowMain}
-                          >
-                            <View style={styles.rowInner}>
-                              <View style={styles.thumb} />
-                              <View style={{ flex: 1 }}>
-                                <Text style={styles.rowTitle}>{rowTitle(r)}</Text>
-                                <Text style={styles.rowMeta}>{rowMeta(r)}</Text>
-                              </View>
-                              <Text style={styles.chev}>›</Text>
-                            </View>
-                          </Pressable>
-
-                          <View style={styles.actionsRow}>
+                        return (
+                          <GlassCard key={key} strength="subtle" noPadding style={styles.rowCard}>
                             <Pressable
                               disabled={!fixtureIdStr}
                               onPress={() => (fixtureIdStr ? goMatchWithContext(fixtureIdStr) : null)}
-                              style={[styles.smallBtn, styles.smallGhost, !fixtureIdStr && styles.disabled]}
+                              style={styles.rowMain}
                             >
-                              <Text style={styles.smallGhostText}>View match</Text>
-                            </Pressable>
-
-                            <Pressable
-                              disabled={!fixtureIdStr}
-                              onPress={() => (fixtureIdStr ? goBuildTripWithContext(fixtureIdStr) : null)}
-                              style={[styles.smallBtn, styles.smallPrimary, !fixtureIdStr && styles.disabled]}
-                            >
-                              <Text style={styles.smallPrimaryText}>Plan trip</Text>
-                            </Pressable>
-                          </View>
-                        </GlassCard>
-                      );
-                    })}
-                  </View>
-                )
-              ) : selectedMany.every((l) => (filteredMulti[l.leagueId]?.length ?? 0) === 0) ? (
-                <EmptyState title="No matches found" message={emptyMessage} />
-              ) : (
-                <View style={styles.multiWrap}>
-                  {selectedMany.map((l) => {
-                    const leagueRows = filteredMulti[l.leagueId] ?? [];
-                    if (leagueRows.length === 0) return null;
-
-                    return (
-                      <View key={l.leagueId} style={styles.leagueGroup}>
-                        <View style={styles.groupHeader}>
-                          <Text style={styles.groupTitle}>{l.label}</Text>
-                          <Text style={styles.groupMeta}>{formatUkDateOnly(activeDay)}</Text>
-                        </View>
-
-                        <View style={styles.list}>
-                          {leagueRows.map((r, idx) => {
-                            const id = r?.fixture?.id;
-                            const fixtureIdStr = id ? String(id) : null;
-                            const key = fixtureIdStr ?? `l-${l.leagueId}-${idx}`;
-
-                            return (
-                              <GlassCard key={key} strength="subtle" noPadding style={styles.rowCard}>
-                                <Pressable
-                                  disabled={!fixtureIdStr}
-                                  onPress={() =>
-                                    fixtureIdStr ? goMatchWithContext(fixtureIdStr, l.leagueId, l.season) : null
-                                  }
-                                  style={styles.rowMain}
-                                >
-                                  <View style={styles.rowInner}>
-                                    <View style={styles.thumb} />
-                                    <View style={{ flex: 1 }}>
-                                      <Text style={styles.rowTitle}>{rowTitle(r)}</Text>
-                                      <Text style={styles.rowMeta}>{rowMeta(r)}</Text>
-                                    </View>
-                                    <Text style={styles.chev}>›</Text>
-                                  </View>
-                                </Pressable>
-
-                                <View style={styles.actionsRow}>
-                                  <Pressable
-                                    disabled={!fixtureIdStr}
-                                    onPress={() =>
-                                      fixtureIdStr ? goMatchWithContext(fixtureIdStr, l.leagueId, l.season) : null
-                                    }
-                                    style={[styles.smallBtn, styles.smallGhost, !fixtureIdStr && styles.disabled]}
-                                  >
-                                    <Text style={styles.smallGhostText}>View match</Text>
-                                  </Pressable>
-
-                                  <Pressable
-                                    disabled={!fixtureIdStr}
-                                    onPress={() =>
-                                      fixtureIdStr ? goBuildTripWithContext(fixtureIdStr, l.leagueId, l.season) : null
-                                    }
-                                    style={[styles.smallBtn, styles.smallPrimary, !fixtureIdStr && styles.disabled]}
-                                  >
-                                    <Text style={styles.smallPrimaryText}>Plan trip</Text>
-                                  </Pressable>
+                              <View style={styles.rowInner}>
+                                <View style={styles.thumb} />
+                                <View style={{ flex: 1 }}>
+                                  <Text style={styles.rowTitle}>{rowTitle(r)}</Text>
+                                  <Text style={styles.rowMeta}>{rowMeta(r)}</Text>
                                 </View>
-                              </GlassCard>
-                            );
-                          })}
-                        </View>
-                      </View>
-                    );
-                  })}
-                </View>
+                                <Text style={styles.chev}>›</Text>
+                              </View>
+                            </Pressable>
+
+                            <View style={styles.actionsRow}>
+                              <Pressable
+                                disabled={!fixtureIdStr}
+                                onPress={() => (fixtureIdStr ? goMatchWithContext(fixtureIdStr) : null)}
+                                style={[
+                                  styles.smallBtn,
+                                  styles.smallGhost,
+                                  !fixtureIdStr && styles.disabled,
+                                ]}
+                              >
+                                <Text style={styles.smallGhostText}>View match</Text>
+                              </Pressable>
+
+                              <Pressable
+                                disabled={!fixtureIdStr}
+                                onPress={() => (fixtureIdStr ? goBuildTripWithContext(fixtureIdStr) : null)}
+                                style={[
+                                  styles.smallBtn,
+                                  styles.smallPrimary,
+                                  !fixtureIdStr && styles.disabled,
+                                ]}
+                              >
+                                <Text style={styles.smallPrimaryText}>Plan trip</Text>
+                              </Pressable>
+                            </View>
+                          </GlassCard>
+                        );
+                      })}
+                    </View>
+                  )}
+                </>
+              ) : (
+                <>
+                  {selectedMany.every((l) => (filteredMulti[l.leagueId]?.length ?? 0) === 0) ? (
+                    <EmptyState title="No matches found" message={emptyMessage} />
+                  ) : (
+                    <View style={styles.multiWrap}>
+                      {selectedMany.map((l) => {
+                        const leagueRows = filteredMulti[l.leagueId] ?? [];
+                        if (leagueRows.length === 0) return null;
+
+                        return (
+                          <View key={l.leagueId} style={styles.leagueGroup}>
+                            <View style={styles.groupHeader}>
+                              <Text style={styles.groupTitle}>{l.label}</Text>
+                              <Text style={styles.groupMeta}>{formatUkDateOnly(activeDay)}</Text>
+                            </View>
+
+                            <View style={styles.list}>
+                              {leagueRows.map((r, idx) => {
+                                const id = r?.fixture?.id;
+                                const fixtureIdStr = id ? String(id) : null;
+                                const key = fixtureIdStr ?? `l-${l.leagueId}-${idx}`;
+
+                                return (
+                                  <GlassCard key={key} strength="subtle" noPadding style={styles.rowCard}>
+                                    <Pressable
+                                      disabled={!fixtureIdStr}
+                                      onPress={() =>
+                                        fixtureIdStr
+                                          ? goMatchWithContext(fixtureIdStr, l.leagueId, l.season)
+                                          : null
+                                      }
+                                      style={styles.rowMain}
+                                    >
+                                      <View style={styles.rowInner}>
+                                        <View style={styles.thumb} />
+                                        <View style={{ flex: 1 }}>
+                                          <Text style={styles.rowTitle}>{rowTitle(r)}</Text>
+                                          <Text style={styles.rowMeta}>{rowMeta(r)}</Text>
+                                        </View>
+                                        <Text style={styles.chev}>›</Text>
+                                      </View>
+                                    </Pressable>
+
+                                    <View style={styles.actionsRow}>
+                                      <Pressable
+                                        disabled={!fixtureIdStr}
+                                        onPress={() =>
+                                          fixtureIdStr
+                                            ? goMatchWithContext(fixtureIdStr, l.leagueId, l.season)
+                                            : null
+                                        }
+                                        style={[
+                                          styles.smallBtn,
+                                          styles.smallGhost,
+                                          !fixtureIdStr && styles.disabled,
+                                        ]}
+                                      >
+                                        <Text style={styles.smallGhostText}>View match</Text>
+                                      </Pressable>
+
+                                      <Pressable
+                                        disabled={!fixtureIdStr}
+                                        onPress={() =>
+                                          fixtureIdStr
+                                            ? goBuildTripWithContext(fixtureIdStr, l.leagueId, l.season)
+                                            : null
+                                        }
+                                        style={[
+                                          styles.smallBtn,
+                                          styles.smallPrimary,
+                                          !fixtureIdStr && styles.disabled,
+                                        ]}
+                                      >
+                                        <Text style={styles.smallPrimaryText}>Plan trip</Text>
+                                      </Pressable>
+                                    </View>
+                                  </GlassCard>
+                                );
+                              })}
+                            </View>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  )}
+                </>
               )
             ) : null}
           </GlassCard>
@@ -605,14 +722,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
+    backgroundColor:
+      Platform.OS === "android"
+        ? theme.glass.androidBg.subtle
+        : theme.glass.iosBg.subtle,
   },
-  modePillText: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.medium },
+  modePillText: {
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.medium,
+  },
 
+  // Search
   searchBox: {
     borderWidth: 1,
     borderColor: theme.glass.border,
-    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
+    backgroundColor:
+      Platform.OS === "android"
+        ? theme.glass.androidBg.subtle
+        : theme.glass.iosBg.subtle,
     borderRadius: 16,
     paddingHorizontal: 12,
     paddingVertical: Platform.OS === "ios" ? 10 : 8,
@@ -632,16 +760,27 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
+    backgroundColor:
+      Platform.OS === "android"
+        ? theme.glass.androidBg.subtle
+        : theme.glass.iosBg.subtle,
   },
-  clearBtnText: { color: theme.colors.textSecondary, fontWeight: theme.fontWeight.semibold, fontSize: 13 },
+  clearBtnText: {
+    color: theme.colors.textSecondary,
+    fontWeight: theme.fontWeight.semibold,
+    fontSize: 13,
+  },
 
+  // Date strip
   dateRow: { gap: 10, paddingRight: theme.spacing.lg },
   datePill: {
     borderRadius: 16,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
+    backgroundColor:
+      Platform.OS === "android"
+        ? theme.glass.androidBg.subtle
+        : theme.glass.iosBg.subtle,
     paddingVertical: 10,
     paddingHorizontal: 12,
     minWidth: 74,
@@ -649,13 +788,26 @@ const styles = StyleSheet.create({
   },
   datePillActive: {
     borderColor: "rgba(79,224,138,0.28)",
-    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.default : theme.glass.iosBg.default,
+    backgroundColor:
+      Platform.OS === "android"
+        ? theme.glass.androidBg.default
+        : theme.glass.iosBg.default,
   },
-  dateTop: { color: theme.colors.textTertiary, fontSize: 12, fontWeight: theme.fontWeight.medium },
+  dateTop: {
+    color: theme.colors.textTertiary,
+    fontSize: 12,
+    fontWeight: theme.fontWeight.medium,
+  },
   dateTopActive: { color: theme.colors.textSecondary },
-  dateBottom: { marginTop: 2, color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.medium },
+  dateBottom: {
+    marginTop: 2,
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.medium,
+  },
   dateBottomActive: { color: theme.colors.text },
 
+  // League pills (single only)
   leagueRow: { gap: 10, paddingRight: theme.spacing.lg },
   leaguePill: {
     paddingVertical: 8,
@@ -663,15 +815,26 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
+    backgroundColor:
+      Platform.OS === "android"
+        ? theme.glass.androidBg.subtle
+        : theme.glass.iosBg.subtle,
   },
   leaguePillActive: {
     borderColor: "rgba(79,224,138,0.28)",
-    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.default : theme.glass.iosBg.default,
+    backgroundColor:
+      Platform.OS === "android"
+        ? theme.glass.androidBg.default
+        : theme.glass.iosBg.default,
   },
-  leaguePillText: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.medium },
+  leaguePillText: {
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.medium,
+  },
   leaguePillTextActive: { color: theme.colors.text, fontWeight: theme.fontWeight.medium },
 
+  // Body
   scrollView: { flex: 1 },
   content: { paddingHorizontal: theme.spacing.lg, paddingBottom: theme.spacing.xxl },
   card: { minHeight: 260, padding: theme.spacing.md },
@@ -679,6 +842,7 @@ const styles = StyleSheet.create({
   center: { paddingVertical: 14, alignItems: "center", gap: 10 },
   muted: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.medium },
 
+  // Lists
   list: { gap: 10 },
   rowCard: { borderRadius: 16 },
   rowMain: { borderRadius: 16 },
@@ -713,18 +877,25 @@ const styles = StyleSheet.create({
 
   smallPrimary: {
     borderColor: "rgba(79,224,138,0.28)",
-    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.default : theme.glass.iosBg.default,
+    backgroundColor:
+      Platform.OS === "android"
+        ? theme.glass.androidBg.default
+        : theme.glass.iosBg.default,
   },
   smallPrimaryText: { color: theme.colors.text, fontWeight: theme.fontWeight.medium, fontSize: 14 },
 
   smallGhost: {
     borderColor: theme.colors.border,
-    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
+    backgroundColor:
+      Platform.OS === "android"
+        ? theme.glass.androidBg.subtle
+        : theme.glass.iosBg.subtle,
   },
   smallGhostText: { color: theme.colors.textSecondary, fontWeight: theme.fontWeight.medium, fontSize: 14 },
 
   disabled: { opacity: 0.55 },
 
+  // Multi grouping
   multiWrap: { gap: 18 },
   leagueGroup: { gap: 10 },
   groupHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "baseline" },
