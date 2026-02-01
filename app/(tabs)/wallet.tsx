@@ -1,4 +1,5 @@
 // app/(tabs)/wallet.tsx
+
 import React, { useMemo } from "react";
 import { View, Text, StyleSheet, ScrollView, Pressable, Alert } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -27,7 +28,7 @@ export default function WalletScreen() {
   }
 
   return (
-    <Background imageUrl={getBackground("wallet")} overlayOpacity={0.86}>
+    <Background imageSource={getBackground("wallet")} overlayOpacity={0.86}>
       <SafeAreaView style={styles.container} edges={["top"]}>
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           <View style={styles.header}>
@@ -35,7 +36,6 @@ export default function WalletScreen() {
             <Text style={styles.subtitle}>{subtitle}</Text>
           </View>
 
-          {/* Compact stats row (matches your screenshots structure) */}
           <View style={styles.statsRow}>
             <View style={styles.statPill}>
               <Text style={styles.statKicker}>Items</Text>
@@ -57,7 +57,6 @@ export default function WalletScreen() {
               When you’re travelling, you don’t want to dig through emails. Wallet will store confirmations and passes so you can leave the house with confidence.
             </Text>
 
-            {/* Make "How it works" feel like the “real” action. Demo is secondary. */}
             <View style={styles.btnRow}>
               <Pressable onPress={showHowItWorks} style={[styles.btn, styles.btnPrimary]}>
                 <Text style={styles.btnPrimaryText}>How it works</Text>
@@ -105,7 +104,6 @@ export default function WalletScreen() {
             </View>
           </GlassCard>
 
-          {/* Tightened empty card (less dead space) */}
           <GlassCard style={styles.card} strength="subtle">
             <EmptyState title="Nothing saved yet" message="When ticket and booking storage is enabled, your items will show up here." />
             <Text style={styles.smallNote}>Tip: build a trip first — Wallet will eventually pull items directly from your Trip hub.</Text>
