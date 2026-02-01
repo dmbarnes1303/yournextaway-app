@@ -81,7 +81,7 @@ export default function HomeScreen() {
 
   const [league, setLeague] = useState<LeagueOption>(LEAGUES[0]);
 
-  // now defaults to 90 days (football.ts)
+  // defaults to 90 days now
   const { from: fromIso, to: toIso } = useMemo(() => getRollingWindowIso(), []);
 
   // Trips
@@ -152,7 +152,7 @@ export default function HomeScreen() {
 
   const fxPreview = useMemo(() => fxRows.slice(0, 4), [fxRows]);
 
-  // SEARCH (offline index)
+  // SEARCH
   const [q, setQ] = useState("");
   const qNorm = useMemo(() => q.trim(), [q]);
   const showSearchResults = qNorm.length > 0;
@@ -209,7 +209,6 @@ export default function HomeScreen() {
     Keyboard.dismiss();
   }, []);
 
-  // Navigation helpers
   const goBuildTripWithContext = useCallback(
     (fixtureId?: string) => {
       router.push({
@@ -352,13 +351,13 @@ export default function HomeScreen() {
           {/* HERO */}
           <GlassCard style={styles.heroCard} strength="strong" noPadding>
             <View style={styles.heroShell}>
-              {/* Premium glow edge (not a flat bar) */}
-              <View pointerEvents="none" style={styles.heroEdgeGlow} />
-              <View pointerEvents="none" style={styles.heroEdgeCore} />
+              {/* Ambient glow edge (less "strip", more "brand atmosphere") */}
+              <View pointerEvents="none" style={styles.edgeGlowWide} />
+              <View pointerEvents="none" style={styles.edgeGlowCore} />
 
-              {/* Clean vignette to hide background corner artifacts without looking hacked */}
-              <View pointerEvents="none" style={styles.heroVignetteTop} />
-              <View pointerEvents="none" style={styles.heroVignetteCorners} />
+              {/* Stronger top-right suppression without ugly circles/masks */}
+              <View pointerEvents="none" style={styles.vignetteTop} />
+              <View pointerEvents="none" style={styles.vignetteTR} />
 
               <Text style={styles.heroTitle}>Plan your next European football trip</Text>
 
@@ -367,6 +366,9 @@ export default function HomeScreen() {
               </Text>
 
               <View style={styles.searchBox}>
+                {/* subtle inner sheen */}
+                <View pointerEvents="none" style={styles.searchSheen} />
+
                 <TextInput
                   value={q}
                   onChangeText={setQ}
@@ -667,52 +669,58 @@ const styles = StyleSheet.create({
     gap: theme.spacing.lg,
   },
 
-  // HERO
+  // HERO — reduce height + tighten layout
   heroCard: { marginTop: theme.spacing.lg, borderRadius: theme.borderRadius.xl },
-  heroShell: { padding: theme.spacing.lg, borderRadius: theme.borderRadius.xl, overflow: "hidden" },
+  heroShell: {
+    paddingHorizontal: theme.spacing.lg,
+    paddingTop: theme.spacing.lg,
+    paddingBottom: 18, // less tall than before
+    borderRadius: theme.borderRadius.xl,
+    overflow: "hidden",
+  },
 
-  // Green glow edge
-  heroEdgeGlow: {
+  // Ambient green edge glow
+  edgeGlowWide: {
     position: "absolute",
     left: 0,
     top: 0,
     bottom: 0,
-    width: 16,
-    backgroundColor: "rgba(79,224,138,0.14)",
+    width: 18,
+    backgroundColor: "rgba(79,224,138,0.12)",
   },
-  heroEdgeCore: {
+  edgeGlowCore: {
     position: "absolute",
     left: 0,
     top: 0,
     bottom: 0,
-    width: 3,
-    backgroundColor: "rgba(79,224,138,0.70)",
+    width: 2,
+    backgroundColor: "rgba(79,224,138,0.65)",
   },
 
-  // Vignette to hide background artifacts cleanly
-  heroVignetteTop: {
+  // Vignettes to suppress background circles (TR is the offender)
+  vignetteTop: {
     position: "absolute",
     left: 0,
     right: 0,
     top: 0,
     height: 120,
-    backgroundColor: "rgba(0,0,0,0.18)",
+    backgroundColor: "rgba(0,0,0,0.22)",
   },
-  heroVignetteCorners: {
+  vignetteTR: {
     position: "absolute",
-    left: -40,
-    right: -40,
-    top: -40,
+    right: -30,
+    top: -30,
+    width: 220,
     height: 220,
-    borderRadius: 260,
-    backgroundColor: "rgba(0,0,0,0.16)",
+    borderRadius: 240,
+    backgroundColor: "rgba(0,0,0,0.28)",
   },
 
   heroTitle: {
     color: theme.colors.text,
-    fontSize: 24,
+    fontSize: 26,
     fontWeight: theme.fontWeight.black,
-    lineHeight: 30,
+    lineHeight: 32,
   },
   heroSub: {
     marginTop: 10,
@@ -722,10 +730,11 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeight.bold,
   },
 
+  // Search looks more “alive”
   searchBox: {
-    marginTop: 16,
+    marginTop: 14,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
+    borderColor: "rgba(79,224,138,0.16)",
     backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
     borderRadius: 16,
     paddingHorizontal: 12,
@@ -733,8 +742,17 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
+    overflow: "hidden",
   },
-
+  searchSheen: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: 0,
+    height: 18,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    opacity: 0.55,
+  },
   searchInput: {
     flex: 1,
     color: theme.colors.text,
@@ -748,8 +766,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "rgba(79,224,138,0.24)",
-    backgroundColor: "rgba(0,0,0,0.16)",
+    borderColor: "rgba(79,224,138,0.22)",
+    backgroundColor: "rgba(0,0,0,0.14)",
   },
   clearBtnText: {
     color: "rgba(242,244,246,0.72)",
@@ -758,19 +776,20 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
 
-  chipsRow: { marginTop: 14, flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  // Chips — lighter weight + less “buttony”
+  chipsRow: { marginTop: 12, flexDirection: "row", flexWrap: "wrap", gap: 10 },
   chip: {
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
-    paddingVertical: 8,
+    borderColor: "rgba(255,255,255,0.08)",
+    backgroundColor: Platform.OS === "android" ? "rgba(22,25,29,0.52)" : "rgba(22,25,29,0.46)",
+    paddingVertical: 7,
     paddingHorizontal: 12,
   },
   chipText: {
-    color: "rgba(242,244,246,0.80)",
+    color: "rgba(242,244,246,0.78)",
     fontSize: 13,
-    fontWeight: theme.fontWeight.black,
+    fontWeight: theme.fontWeight.semibold,
   },
 
   // Sections
