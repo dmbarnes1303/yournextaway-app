@@ -85,60 +85,21 @@ function initials(name: string) {
   return `${parts[0][0] ?? ""}${parts[1][0] ?? ""}`.toUpperCase();
 }
 
-function FlagBadge({ code, size }: { code: string; size: "league" | "city" }) {
-  const txt = String(code ?? "").trim().toUpperCase();
-  return (
-    <View style={size === "league" ? styles.flagFallback : styles.cityFlagFallback}>
-      <Text style={size === "league" ? styles.flagFallbackText : styles.cityFlagFallbackText}>
-        {txt || "—"}
-      </Text>
-    </View>
-  );
-}
-
 function LeagueFlag({ code }: { code: string }) {
-  const url = getFlagImageUrl(code, { size: 40 });
-  const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    setFailed(false);
-  }, [code]);
-
-  if (!url || failed) return <FlagBadge code={code} size="league" />;
-
-  return (
-    <Image
-      source={{ uri: url }}
-      style={styles.flag}
-      resizeMode="cover"
-      onError={() => setFailed(true)}
-    />
-  );
+  const url = getFlagImageUrl(code);
+  if (!url) return null;
+  return <Image source={{ uri: url }} style={styles.flag} />;
 }
 
 function CityFlag({ code }: { code: string }) {
-  const url = getFlagImageUrl(code, { size: 40 });
-  const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    setFailed(false);
-  }, [code]);
-
-  if (!url || failed) return <FlagBadge code={code} size="city" />;
-
-  return (
-    <Image
-      source={{ uri: url }}
-      style={styles.cityFlag}
-      resizeMode="cover"
-      onError={() => setFailed(true)}
-    />
-  );
+  const url = getFlagImageUrl(code);
+  if (!url) return null;
+  return <Image source={{ uri: url }} style={styles.cityFlag} />;
 }
 
 function CrestSquare({ row }: { row: FixtureListRow }) {
   const homeName = row?.teams?.home?.name ?? "";
-  const logo = (row as any)?.teams?.home?.logo;
+  const logo = row?.teams?.home?.logo;
 
   return (
     <View style={styles.crestWrap}>
@@ -159,9 +120,10 @@ export default function HomeScreen() {
 
   const [league, setLeague] = useState<LeagueOption>(LEAGUES[0]);
 
+  // defaults to 90 days (centralised)
   const { from: fromIso, to: toIso } = useMemo(() => getRollingWindowIso(), []);
 
-  // Trips
+  // Trips (for a minimal “Continue” strip only)
   const [loadedTrips, setLoadedTrips] = useState(tripsStore.getState().loaded);
   const [trips, setTrips] = useState<Trip[]>(tripsStore.getState().trips);
 
@@ -416,6 +378,8 @@ export default function HomeScreen() {
     []
   );
 
+  const showContinueStrip = loadedTrips && !!nextTrip;
+
   return (
     <Background imageSource={getBackground("home")} overlayOpacity={0.74}>
       <SafeAreaView style={styles.container} edges={["top"]}>
@@ -569,6 +533,34 @@ export default function HomeScreen() {
             </View>
           </GlassCard>
 
+          {/* CONTINUE STRIP (only if a trip exists) */}
+          {showContinueStrip && nextTrip ? (
+            <GlassCard style={styles.continueCard} strength="default" noPadding>
+              <View style={styles.continueInner}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.continueKicker}>Continue</Text>
+                  <Text style={styles.continueTitle} numberOfLines={1}>
+                    {nextTrip.cityId || "Next trip"}
+                  </Text>
+                  <Text style={styles.continueMeta}>{tripSummaryLine(nextTrip)}</Text>
+                </View>
+
+                <View style={styles.continueBtns}>
+                  <Pressable
+                    onPress={() => router.push({ pathname: "/trip/[id]", params: { id: nextTrip.id } } as any)}
+                    style={[styles.miniBtn, styles.miniBtnPrimary]}
+                  >
+                    <Text style={styles.miniBtnPrimaryText}>Open</Text>
+                  </Pressable>
+
+                  <Pressable onPress={() => router.push("/(tabs)/trips")} style={[styles.miniBtn, styles.miniBtnGhost]}>
+                    <Text style={styles.miniBtnGhostText}>All trips</Text>
+                  </Pressable>
+                </View>
+              </View>
+            </GlassCard>
+          ) : null}
+
           {/* UPCOMING MATCHES */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
@@ -647,59 +639,6 @@ export default function HomeScreen() {
                   <Text style={styles.btnPrimaryText}>Build trip</Text>
                 </Pressable>
               </View>
-            </GlassCard>
-          </View>
-
-          {/* TRIPS */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Trips</Text>
-              <Text style={styles.sectionMeta}>Your next plan</Text>
-            </View>
-
-            <GlassCard style={styles.card} strength="default">
-              {!loadedTrips ? (
-                <View style={styles.center}>
-                  <ActivityIndicator />
-                  <Text style={styles.muted}>Loading trips…</Text>
-                </View>
-              ) : null}
-
-              {loadedTrips && !nextTrip ? (
-                <>
-                  <Text style={styles.emptyTitle}>No trips yet</Text>
-                  <Text style={styles.emptyMeta}>Start with a fixture, then build the break in one hub.</Text>
-
-                  <View style={styles.ctaRow}>
-                    <Pressable onPress={() => goFixturesWithContext()} style={[styles.btn, styles.btnGhost]}>
-                      <Text style={styles.btnGhostText}>Browse fixtures</Text>
-                    </Pressable>
-
-                    <Pressable onPress={() => goBuildTripWithContext()} style={[styles.btn, styles.btnPrimary]}>
-                      <Text style={styles.btnPrimaryText}>Build trip</Text>
-                    </Pressable>
-                  </View>
-                </>
-              ) : null}
-
-              {loadedTrips && nextTrip ? (
-                <Pressable
-                  onPress={() => router.push({ pathname: "/trip/[id]", params: { id: nextTrip.id } } as any)}
-                  style={styles.nextTripPress}
-                >
-                  <GlassCard strength="subtle" noPadding style={styles.nextTripCard}>
-                    <View style={styles.nextTripInner}>
-                      <Text style={styles.nextTripKicker}>Next up</Text>
-                      <Text style={styles.nextTripTitle}>{nextTrip.cityId || "Trip"}</Text>
-                      <Text style={styles.nextTripMeta}>{tripSummaryLine(nextTrip)}</Text>
-                    </View>
-                  </GlassCard>
-                </Pressable>
-              ) : null}
-
-              <Pressable onPress={() => router.push("/(tabs)/trips")} style={styles.linkBtn}>
-                <Text style={styles.linkText}>Open Trips</Text>
-              </Pressable>
             </GlassCard>
           </View>
 
@@ -838,23 +777,6 @@ const styles = StyleSheet.create({
 
   cityFlag: { width: 16, height: 12, borderRadius: 3, opacity: 0.92 },
 
-  cityFlagFallback: {
-    width: 16,
-    height: 12,
-    borderRadius: 3,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.14)",
-    backgroundColor: "rgba(0,0,0,0.18)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  cityFlagFallbackText: {
-    color: "rgba(242,244,246,0.72)",
-    fontSize: 7,
-    fontWeight: theme.fontWeight.black,
-    letterSpacing: 0.2,
-  },
-
   section: { marginTop: 2 },
   sectionHeader: { gap: 4 },
   sectionTitle: { color: theme.colors.text, fontSize: 18, fontWeight: theme.fontWeight.black },
@@ -881,6 +803,32 @@ const styles = StyleSheet.create({
   rowMeta: { marginTop: 4, color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold },
   chev: { color: theme.colors.textTertiary, fontSize: 24, marginTop: -2 },
 
+  // Continue strip
+  continueCard: { borderRadius: theme.borderRadius.xl },
+  continueInner: {
+    padding: theme.spacing.md,
+    borderRadius: theme.borderRadius.xl,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  continueKicker: { color: theme.colors.textTertiary, fontSize: 12, fontWeight: theme.fontWeight.black },
+  continueTitle: { marginTop: 4, color: theme.colors.text, fontSize: 16, fontWeight: theme.fontWeight.black },
+  continueMeta: { marginTop: 6, color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold },
+
+  continueBtns: { gap: 10 },
+  miniBtn: { borderRadius: 999, paddingVertical: 10, paddingHorizontal: 14, borderWidth: 1, alignItems: "center" },
+  miniBtnPrimary: {
+    borderColor: "rgba(79,224,138,0.45)",
+    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.default : theme.glass.iosBg.default,
+  },
+  miniBtnPrimaryText: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: 13 },
+  miniBtnGhost: {
+    borderColor: "rgba(255,255,255,0.12)",
+    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
+  },
+  miniBtnGhostText: { color: theme.colors.textSecondary, fontWeight: theme.fontWeight.black, fontSize: 13 },
+
   // League selector w/ flags
   leagueRow: { gap: 10, paddingRight: theme.spacing.lg, marginTop: 10 },
   leaguePill: {
@@ -902,23 +850,6 @@ const styles = StyleSheet.create({
   leaguePillTextActive: { color: theme.colors.text, fontWeight: theme.fontWeight.black },
 
   flag: { width: 18, height: 13, borderRadius: 3, opacity: 0.9 },
-
-  flagFallback: {
-    height: 13,
-    paddingHorizontal: 6,
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.14)",
-    backgroundColor: "rgba(0,0,0,0.18)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  flagFallbackText: {
-    color: "rgba(242,244,246,0.72)",
-    fontSize: 10,
-    fontWeight: theme.fontWeight.black,
-    letterSpacing: 0.4,
-  },
 
   // Match list
   matchList: { marginTop: 10, gap: 10 },
@@ -974,17 +905,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   linkText: { color: theme.colors.textSecondary, fontSize: 14, fontWeight: theme.fontWeight.black },
-
-  // Trips
-  emptyTitle: { color: theme.colors.text, fontSize: 15, fontWeight: theme.fontWeight.black },
-  emptyMeta: { marginTop: 6, color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold, lineHeight: 18 },
-
-  nextTripPress: { borderRadius: 16, marginTop: 2 },
-  nextTripCard: { borderRadius: 16 },
-  nextTripInner: { paddingVertical: 14, paddingHorizontal: 14 },
-  nextTripKicker: { color: theme.colors.textTertiary, fontSize: 12, fontWeight: theme.fontWeight.black },
-  nextTripTitle: { marginTop: 6, color: theme.colors.text, fontSize: 18, fontWeight: theme.fontWeight.black },
-  nextTripMeta: { marginTop: 6, color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold, lineHeight: 18 },
 
   // Inspiration
   inspoList: { gap: 10 },
