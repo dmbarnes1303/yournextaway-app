@@ -517,38 +517,35 @@ export default function HomeScreen() {
     [discoverFrom, discoverTripLength, discoverVibes, discoverWindowKey]
   );
 
-  const pickFixtureFromLeagues = useCallback(
-    async (w: ShortcutWindow, filter: (r: FixtureListRow) => boolean) => {
-      const tried = new Set<number>();
+  const pickFixtureFromLeagues = useCallback(async (w: ShortcutWindow, filter: (r: FixtureListRow) => boolean) => {
+    const tried = new Set<number>();
 
-      for (let attempt = 0; attempt < 5; attempt++) {
-        const remaining = LEAGUES.filter((l) => !tried.has(l.leagueId));
-        const next = pickRandom(remaining.length ? remaining : LEAGUES);
-        if (!next) break;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const remaining = LEAGUES.filter((l) => !tried.has(l.leagueId));
+      const next = pickRandom(remaining.length ? remaining : LEAGUES);
+      if (!next) break;
 
-        tried.add(next.leagueId);
+      tried.add(next.leagueId);
 
-        const res = await getFixtures({
-          league: next.leagueId,
-          season: next.season,
-          from: w.from,
-          to: w.to,
-        });
+      const res = await getFixtures({
+        league: next.leagueId,
+        season: next.season,
+        from: w.from,
+        to: w.to,
+      });
 
-        const list = Array.isArray(res) ? (res as FixtureListRow[]) : [];
-        const valid = list.filter((r) => r?.fixture?.id != null).filter(filter);
+      const list = Array.isArray(res) ? (res as FixtureListRow[]) : [];
+      const valid = list.filter((r) => r?.fixture?.id != null).filter(filter);
 
-        if (valid.length > 0) {
-          const chosen = pickRandom(valid);
-          const fixtureId = chosen?.fixture?.id != null ? String(chosen.fixture.id) : null;
-          if (fixtureId) return { league: next, fixtureId };
-        }
+      if (valid.length > 0) {
+        const chosen = pickRandom(valid);
+        const fixtureId = chosen?.fixture?.id != null ? String(chosen.fixture.id) : null;
+        if (fixtureId) return { league: next, fixtureId };
       }
+    }
 
-      return null;
-    },
-    []
-  );
+    return null;
+  }, []);
 
   const goDiscover = useCallback(
     async (mode: "surprise" | "hidden") => {
@@ -666,9 +663,7 @@ export default function HomeScreen() {
                     </View>
                   ) : null}
 
-                  {!searchLoading && searchError ? (
-                    <EmptyState title="Search unavailable" message={searchError} />
-                  ) : null}
+                  {!searchLoading && searchError ? <EmptyState title="Search unavailable" message={searchError} /> : null}
 
                   {!searchLoading && !searchError ? (
                     <>
@@ -689,6 +684,7 @@ export default function HomeScreen() {
                                   key={`${r.key}-${idx}`}
                                   onPress={() => onPressSearchResult(r)}
                                   style={styles.rowPress}
+                                  android_ripple={{ color: "rgba(79,224,138,0.10)" }}
                                 >
                                   <GlassCard strength="subtle" noPadding style={styles.rowCard}>
                                     <View style={styles.rowInner}>
@@ -711,9 +707,7 @@ export default function HomeScreen() {
                           <Text style={styles.groupMeta}>Routes to Fixtures</Text>
                         </View>
 
-                        {buckets.venues.length === 0 &&
-                        buckets.countries.length === 0 &&
-                        buckets.leagues.length === 0 ? (
+                        {buckets.venues.length === 0 && buckets.countries.length === 0 && buckets.leagues.length === 0 ? (
                           <Text style={styles.groupEmpty}>No venues/countries/leagues found.</Text>
                         ) : (
                           <View style={styles.resultList}>
@@ -728,6 +722,7 @@ export default function HomeScreen() {
                                   key={`${r.key}-${idx}`}
                                   onPress={() => onPressSearchResult(r)}
                                   style={styles.rowPress}
+                                  android_ripple={{ color: "rgba(79,224,138,0.10)" }}
                                 >
                                   <GlassCard strength="subtle" noPadding style={styles.rowCard}>
                                     <View style={styles.rowInner}>
@@ -743,7 +738,12 @@ export default function HomeScreen() {
                           </View>
                         )}
 
-                        <Pressable onPress={() => goFixturesWithContext()} style={styles.linkBtn}>
+                        <Pressable
+                          onPress={() => goFixturesWithContext()}
+                          style={({ pressed }) => [styles.linkBtn, pressed && { opacity: 0.94, transform: [{ scale: 0.995 }] }]}
+                          android_ripple={{ color: "rgba(79,224,138,0.10)" }}
+                        >
+                          <View pointerEvents="none" style={styles.linkBtnSheen} />
                           <Text style={styles.linkText}>Open Fixtures</Text>
                         </Pressable>
                       </View>
@@ -768,7 +768,8 @@ export default function HomeScreen() {
                   <Pressable
                     key={l.leagueId}
                     onPress={() => setLeague(l)}
-                    style={[styles.leaguePill, active && styles.leaguePillActive]}
+                    style={({ pressed }) => [styles.leaguePill, active && styles.leaguePillActive, pressed && { opacity: 0.94 }]}
+                    android_ripple={{ color: "rgba(79,224,138,0.10)" }}
                   >
                     <Text style={[styles.leaguePillText, active && styles.leaguePillTextActive]}>{l.label}</Text>
                     <LeagueFlag code={l.countryCode} />
@@ -803,7 +804,8 @@ export default function HomeScreen() {
                         key={fixtureId ?? `fx-${idx}`}
                         onPress={() => (fixtureId ? goMatchWithContext(fixtureId) : null)}
                         disabled={!fixtureId}
-                        style={styles.matchRowPress}
+                        style={({ pressed }) => [styles.matchRowPress, pressed && { opacity: 0.94 }]}
+                        android_ripple={{ color: "rgba(79,224,138,0.10)" }}
                       >
                         <GlassCard strength="subtle" noPadding style={styles.matchRowCard}>
                           <View style={styles.matchRowInner}>
@@ -822,11 +824,19 @@ export default function HomeScreen() {
               ) : null}
 
               <View style={styles.ctaRow}>
-                <Pressable onPress={() => goFixturesWithContext()} style={[styles.btn, styles.btnGhost]}>
+                <Pressable
+                  onPress={() => goFixturesWithContext()}
+                  style={({ pressed }) => [styles.btn, styles.btnGhost, pressed && { opacity: 0.94 }]}
+                  android_ripple={{ color: "rgba(79,224,138,0.10)" }}
+                >
                   <Text style={styles.btnGhostText}>Fixtures</Text>
                 </Pressable>
 
-                <Pressable onPress={() => goBuildTripWithContext()} style={[styles.btn, styles.btnPrimary]}>
+                <Pressable
+                  onPress={() => goBuildTripWithContext()}
+                  style={({ pressed }) => [styles.btn, styles.btnPrimary, pressed && { opacity: 0.94 }]}
+                  android_ripple={{ color: "rgba(79,224,138,0.12)" }}
+                >
                   <Text style={styles.btnPrimaryText}>Build trip</Text>
                 </Pressable>
               </View>
@@ -854,12 +864,21 @@ export default function HomeScreen() {
                   <Text style={styles.emptyMeta}>Start with a match — then build the break in one hub.</Text>
 
                   <View style={styles.ctaRow}>
-                    <Pressable onPress={() => goBuildTripWithContext()} style={[styles.btn, styles.btnPrimary]}>
+                    <Pressable
+                      onPress={() => goBuildTripWithContext()}
+                      style={({ pressed }) => [styles.btn, styles.btnPrimary, pressed && { opacity: 0.94 }]}
+                      android_ripple={{ color: "rgba(79,224,138,0.12)" }}
+                    >
                       <Text style={styles.btnPrimaryText}>Build trip</Text>
                     </Pressable>
                   </View>
 
-                  <Pressable onPress={() => router.push("/(tabs)/trips")} style={styles.linkBtn}>
+                  <Pressable
+                    onPress={() => router.push("/(tabs)/trips")}
+                    style={({ pressed }) => [styles.linkBtn, pressed && { opacity: 0.94, transform: [{ scale: 0.995 }] }]}
+                    android_ripple={{ color: "rgba(79,224,138,0.10)" }}
+                  >
+                    <View pointerEvents="none" style={styles.linkBtnSheen} />
                     <Text style={styles.linkText}>Open Trips</Text>
                   </Pressable>
                 </>
@@ -869,7 +888,8 @@ export default function HomeScreen() {
                 <>
                   <Pressable
                     onPress={() => router.push({ pathname: "/trip/[id]", params: { id: nextTrip.id } } as any)}
-                    style={styles.nextTripPress}
+                    style={({ pressed }) => [styles.nextTripPress, pressed && { opacity: 0.94 }]}
+                    android_ripple={{ color: "rgba(79,224,138,0.10)" }}
                   >
                     <GlassCard strength="subtle" noPadding style={styles.nextTripCard}>
                       <View style={styles.nextTripInner}>
@@ -880,7 +900,12 @@ export default function HomeScreen() {
                     </GlassCard>
                   </Pressable>
 
-                  <Pressable onPress={() => router.push("/(tabs)/trips")} style={styles.linkBtn}>
+                  <Pressable
+                    onPress={() => router.push("/(tabs)/trips")}
+                    style={({ pressed }) => [styles.linkBtn, pressed && { opacity: 0.94, transform: [{ scale: 0.995 }] }]}
+                    android_ripple={{ color: "rgba(79,224,138,0.10)" }}
+                  >
+                    <View pointerEvents="none" style={styles.linkBtnSheen} />
                     <Text style={styles.linkText}>Open Trips</Text>
                   </Pressable>
                 </>
@@ -904,7 +929,12 @@ export default function HomeScreen() {
                   decelerationRate="fast"
                 >
                   {quickShortcuts.map((x) => (
-                    <Pressable key={x.key} onPress={() => goBuildTripGlobal(x.window)} style={styles.shortcutCard}>
+                    <Pressable
+                      key={x.key}
+                      onPress={() => goBuildTripGlobal(x.window)}
+                      style={({ pressed }) => [styles.shortcutCard, pressed && { opacity: 0.94, transform: [{ scale: 0.99 }] }]}
+                      android_ripple={{ color: "rgba(79,224,138,0.10)" }}
+                    >
                       <Text style={styles.shortcutTitle}>{x.label}</Text>
                       <Text style={styles.shortcutSub}>{x.sub}</Text>
                     </Pressable>
@@ -925,17 +955,34 @@ export default function HomeScreen() {
               </View>
 
               <View style={styles.discoverGrid}>
-                <Pressable onPress={() => goDiscover("surprise")} disabled={surpriseLoading} style={styles.discoverPress}>
+                {/* SURPRISE (PRIMARY) */}
+                <Pressable
+                  onPress={() => goDiscover("surprise")}
+                  disabled={surpriseLoading}
+                  android_ripple={{ color: "rgba(79,224,138,0.12)" }}
+                  style={({ pressed }) => [
+                    styles.discoverPress,
+                    (pressed || surpriseLoading) && { opacity: 0.94, transform: [{ scale: 0.99 }] },
+                  ]}
+                >
                   <GlassCard
                     strength="default"
                     noPadding
-                    style={[styles.discoverCard, surpriseLoading && { opacity: 0.88 }]}
+                    style={[styles.discoverCard, styles.discoverCardPrimary, surpriseLoading && { opacity: 0.88 }]}
                   >
+                    <View pointerEvents="none" style={styles.discoverGlowEdge} />
+                    <View pointerEvents="none" style={styles.discoverSheenTop} />
+
+                    <View style={styles.discoverBadge}>
+                      <Text style={styles.discoverBadgeText}>🎲</Text>
+                    </View>
+
                     <View style={styles.discoverInner}>
                       <Text style={styles.discoverTitle}>Surprise me</Text>
                       <Text style={styles.discoverSub}>
                         {labelForWindowKey(discoverWindowKey)} • {labelForTripLength(discoverTripLength)}
                       </Text>
+
                       <View style={styles.discoverFooter}>
                         <Text style={styles.discoverHint}>
                           {discoverVibes.length ? discoverVibes.map(labelForVibe).join(" • ") : "Any vibe"}
@@ -946,15 +993,32 @@ export default function HomeScreen() {
                   </GlassCard>
                 </Pressable>
 
-                <Pressable onPress={() => goDiscover("hidden")} disabled={surpriseLoading} style={styles.discoverPress}>
+                {/* HIDDEN (SECONDARY) */}
+                <Pressable
+                  onPress={() => goDiscover("hidden")}
+                  disabled={surpriseLoading}
+                  android_ripple={{ color: "rgba(79,224,138,0.10)" }}
+                  style={({ pressed }) => [
+                    styles.discoverPress,
+                    (pressed || surpriseLoading) && { opacity: 0.94, transform: [{ scale: 0.99 }] },
+                  ]}
+                >
                   <GlassCard
                     strength="default"
                     noPadding
-                    style={[styles.discoverCard, surpriseLoading && { opacity: 0.88 }]}
+                    style={[styles.discoverCard, styles.discoverCardSecondary, surpriseLoading && { opacity: 0.88 }]}
                   >
+                    <View pointerEvents="none" style={styles.discoverGlowEdgeSoft} />
+                    <View pointerEvents="none" style={styles.discoverSheenTop} />
+
+                    <View style={styles.discoverBadge}>
+                      <Text style={styles.discoverBadgeText}>💎</Text>
+                    </View>
+
                     <View style={styles.discoverInner}>
                       <Text style={styles.discoverTitle}>Hidden gems</Text>
                       <Text style={styles.discoverSub}>Avoid obvious cities • Find something different</Text>
+
                       <View style={styles.discoverFooter}>
                         <Text style={styles.discoverHint}>Curated by simple heuristics (no price claims)</Text>
                         {surpriseLoading ? <ActivityIndicator /> : <Text style={styles.chev}>›</Text>}
@@ -964,7 +1028,12 @@ export default function HomeScreen() {
                 </Pressable>
               </View>
 
-              <Pressable onPress={openDiscover} style={styles.linkBtn}>
+              <Pressable
+                onPress={openDiscover}
+                style={({ pressed }) => [styles.linkBtn, pressed && { opacity: 0.94, transform: [{ scale: 0.995 }] }]}
+                android_ripple={{ color: "rgba(79,224,138,0.10)" }}
+              >
+                <View pointerEvents="none" style={styles.linkBtnSheen} />
                 <Text style={styles.linkText}>Refine Discover preferences</Text>
               </Pressable>
             </View>
@@ -981,7 +1050,12 @@ export default function HomeScreen() {
               <View style={styles.modalInner}>
                 <View style={styles.modalHeader}>
                   <Text style={styles.modalTitle}>Discover preferences</Text>
-                  <Pressable onPress={closeDiscover} hitSlop={10} style={styles.modalClose}>
+                  <Pressable
+                    onPress={closeDiscover}
+                    hitSlop={10}
+                    style={({ pressed }) => [styles.modalClose, pressed && { opacity: 0.92 }]}
+                    android_ripple={{ color: "rgba(79,224,138,0.10)" }}
+                  >
                     <Text style={styles.modalCloseText}>Done</Text>
                   </Pressable>
                 </View>
@@ -1008,9 +1082,12 @@ export default function HomeScreen() {
                       <Pressable
                         key={k}
                         onPress={() => setDiscoverWindowKey(k)}
-                        style={[styles.modalChip, active && styles.modalChipActive]}
+                        style={({ pressed }) => [styles.modalChip, active && styles.modalChipActive, pressed && { opacity: 0.94 }]}
+                        android_ripple={{ color: "rgba(79,224,138,0.10)" }}
                       >
-                        <Text style={[styles.modalChipText, active && styles.modalChipTextActive]}>{labelForWindowKey(k)}</Text>
+                        <Text style={[styles.modalChipText, active && styles.modalChipTextActive]}>
+                          {labelForWindowKey(k)}
+                        </Text>
                       </Pressable>
                     );
                   })}
@@ -1024,7 +1101,8 @@ export default function HomeScreen() {
                       <Pressable
                         key={k}
                         onPress={() => setDiscoverTripLength(k)}
-                        style={[styles.modalChip, active && styles.modalChipActive]}
+                        style={({ pressed }) => [styles.modalChip, active && styles.modalChipActive, pressed && { opacity: 0.94 }]}
+                        android_ripple={{ color: "rgba(79,224,138,0.10)" }}
                       >
                         <Text style={[styles.modalChipText, active && styles.modalChipTextActive]}>{labelForTripLength(k)}</Text>
                       </Pressable>
@@ -1040,7 +1118,8 @@ export default function HomeScreen() {
                       <Pressable
                         key={v}
                         onPress={() => toggleVibe(v)}
-                        style={[styles.modalChip, active && styles.modalChipActive]}
+                        style={({ pressed }) => [styles.modalChip, active && styles.modalChipActive, pressed && { opacity: 0.94 }]}
+                        android_ripple={{ color: "rgba(79,224,138,0.10)" }}
                       >
                         <Text style={[styles.modalChipText, active && styles.modalChipTextActive]}>{labelForVibe(v)}</Text>
                       </Pressable>
@@ -1056,7 +1135,8 @@ export default function HomeScreen() {
                       setDiscoverVibes(["easy"]);
                       setDiscoverFrom("");
                     }}
-                    style={[styles.btn, styles.btnGhost]}
+                    style={({ pressed }) => [styles.btn, styles.btnGhost, pressed && { opacity: 0.94 }]}
+                    android_ripple={{ color: "rgba(79,224,138,0.10)" }}
                   >
                     <Text style={styles.btnGhostText}>Reset</Text>
                   </Pressable>
@@ -1066,15 +1146,14 @@ export default function HomeScreen() {
                       closeDiscover();
                       goDiscover("surprise");
                     }}
-                    style={[styles.btn, styles.btnPrimary]}
+                    style={({ pressed }) => [styles.btn, styles.btnPrimary, pressed && { opacity: 0.94 }]}
+                    android_ripple={{ color: "rgba(79,224,138,0.12)" }}
                   >
                     <Text style={styles.btnPrimaryText}>Surprise me</Text>
                   </Pressable>
                 </View>
 
-                <Text style={styles.modalFootnote}>
-                  Note: Pricing appears later when booking partners are connected.
-                </Text>
+                <Text style={styles.modalFootnote}>Note: Pricing appears later when booking partners are connected.</Text>
               </View>
             </GlassCard>
           </View>
@@ -1246,6 +1325,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+    overflow: "hidden",
   },
   leaguePillActive: {
     borderColor: "rgba(79,224,138,0.35)",
@@ -1258,7 +1338,7 @@ const styles = StyleSheet.create({
 
   // Match list
   matchList: { marginTop: 10, gap: 10 },
-  matchRowPress: { borderRadius: 16 },
+  matchRowPress: { borderRadius: 16, overflow: "hidden" },
   matchRowCard: { borderRadius: 16 },
   matchRowInner: { paddingVertical: 12, paddingHorizontal: 12, flexDirection: "row", alignItems: "center", gap: 12 },
 
@@ -1287,7 +1367,7 @@ const styles = StyleSheet.create({
 
   // CTA row
   ctaRow: { flexDirection: "row", gap: 10, marginTop: 12 },
-  btn: { flex: 1, borderRadius: 16, paddingVertical: 12, alignItems: "center", borderWidth: 1 },
+  btn: { flex: 1, borderRadius: 16, paddingVertical: 12, alignItems: "center", borderWidth: 1, overflow: "hidden" },
   btnPrimary: {
     borderColor: "rgba(79,224,138,0.35)",
     backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.default : theme.glass.iosBg.default,
@@ -1308,6 +1388,16 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.10)",
     backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
     alignItems: "center",
+    overflow: "hidden",
+  },
+  linkBtnSheen: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: 0,
+    height: 20,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    opacity: 0.6,
   },
   linkText: { color: theme.colors.textSecondary, fontSize: 14, fontWeight: theme.fontWeight.black },
 
@@ -1321,7 +1411,7 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
 
-  nextTripPress: { borderRadius: 16, marginTop: 2 },
+  nextTripPress: { borderRadius: 16, marginTop: 2, overflow: "hidden" },
   nextTripCard: { borderRadius: 16 },
   nextTripInner: { paddingVertical: 14, paddingHorizontal: 14 },
   nextTripKicker: { color: theme.colors.textTertiary, fontSize: 12, fontWeight: theme.fontWeight.black },
@@ -1346,6 +1436,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 14,
     minWidth: 160,
+    overflow: "hidden",
   },
 
   shortcutTitle: { color: theme.colors.text, fontSize: 14, fontWeight: theme.fontWeight.black },
@@ -1371,13 +1462,68 @@ const styles = StyleSheet.create({
 
   // Discover
   discoverGrid: { flexDirection: "row", gap: 10, marginTop: 10 },
-  discoverPress: { flex: 1, borderRadius: 16 },
-  discoverCard: { borderRadius: 16 },
+  discoverPress: { flex: 1, borderRadius: 16, overflow: "hidden" },
+
+  discoverCard: { borderRadius: 16, overflow: "hidden" },
+  discoverCardPrimary: {
+    borderWidth: 1,
+    borderColor: "rgba(79,224,138,0.28)",
+    backgroundColor: Platform.OS === "android" ? "rgba(22,25,29,0.62)" : "rgba(22,25,29,0.54)",
+  },
+  discoverCardSecondary: {
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: Platform.OS === "android" ? "rgba(22,25,29,0.52)" : "rgba(22,25,29,0.46)",
+  },
+
+  discoverGlowEdge: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 3,
+    backgroundColor: "rgba(79,224,138,0.75)",
+    opacity: 0.7,
+  },
+  discoverGlowEdgeSoft: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 2,
+    backgroundColor: "rgba(79,224,138,0.35)",
+    opacity: 0.55,
+  },
+  discoverSheenTop: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: 0,
+    height: 22,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    opacity: 0.65,
+  },
+
+  discoverBadge: {
+    position: "absolute",
+    right: 12,
+    top: 12,
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.20)",
+  },
+  discoverBadgeText: { fontSize: 16, opacity: 0.95 },
+
   discoverInner: { paddingVertical: 14, paddingHorizontal: 14, gap: 8 },
-  discoverTitle: { color: theme.colors.text, fontSize: 15, fontWeight: theme.fontWeight.black },
-  discoverSub: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold, lineHeight: 18 },
+  discoverTitle: { color: theme.colors.text, fontSize: 16, fontWeight: theme.fontWeight.black },
+  discoverSub: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.semibold, lineHeight: 18, opacity: 0.92 },
   discoverFooter: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10, marginTop: 2 },
-  discoverHint: { flex: 1, color: theme.colors.textTertiary, fontSize: 12, fontWeight: theme.fontWeight.bold },
+  discoverHint: { flex: 1, color: theme.colors.textTertiary, fontSize: 12, fontWeight: theme.fontWeight.bold, opacity: 0.78 },
 
   // Modal (bottom sheet-ish)
   modalBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.55)" },
@@ -1393,6 +1539,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
     backgroundColor: "rgba(0,0,0,0.18)",
+    overflow: "hidden",
   },
   modalCloseText: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: theme.fontWeight.black },
 
@@ -1415,6 +1562,7 @@ const styles = StyleSheet.create({
     backgroundColor: Platform.OS === "android" ? "rgba(22,25,29,0.55)" : "rgba(22,25,29,0.48)",
     paddingVertical: 7,
     paddingHorizontal: 10,
+    overflow: "hidden",
   },
   modalChipActive: {
     borderColor: "rgba(79,224,138,0.35)",
