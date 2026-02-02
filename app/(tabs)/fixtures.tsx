@@ -1,6 +1,6 @@
 // app/(tabs)/fixtures.tsx
 
-import React, { useEffect, useMemo, useState, useCallback } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -25,7 +25,7 @@ import { getFixtures, type FixtureListRow } from "@/src/services/apiFootball";
 
 import { LEAGUES, getRollingWindowIso, normalizeWindowIso, type LeagueOption } from "@/src/constants/football";
 import { coerceNumber, coerceString } from "@/src/utils/params";
-import { formatUkDateOnly, formatUkDateTimeMaybe } from "@/src/utils/formatters";
+import { formatUkDateOnly } from "@/src/utils/formatters";
 import { getFlagImageUrl } from "@/src/utils/flagImages";
 
 import useFollowStore from "@/src/state/followStore";
@@ -36,6 +36,33 @@ function norm(s: unknown) {
   return String(s ?? "").trim().toLowerCase();
 }
 
+function isoDay(d: Date) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const da = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${da}`;
+}
+
+function addDays(date: Date, days: number) {
+  const d = new Date(date);
+  d.setDate(d.getDate() + days);
+  return d;
+}
+
+function addDaysIso(iso: string, days: number) {
+  const d = new Date(`${iso}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return iso;
+  return isoDay(addDays(d, days));
+}
+
+function weekdayShort(d: Date) {
+  return d.toLocaleDateString("en-GB", { weekday: "short" });
+}
+
+function dayMonth(d: Date) {
+  return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+}
+
 function fixtureIsoDateOnly(r: FixtureListRow): string | null {
   const raw = r?.fixture?.date;
   if (!raw) return null;
@@ -44,24 +71,61 @@ function fixtureIsoDateOnly(r: FixtureListRow): string | null {
   return m?.[1] ?? null;
 }
 
+function getNextWeekendIso(today = new Date()) {
+  // Upcoming Saturday by default (Livescore-ish). If it's Sat already, use Sat.
+  const d = new Date(today);
+  d.setHours(0, 0, 0, 0);
+  const day = d.getDay(); // 0 Sun ... 6 Sat
+  const daysToSat = (6 - day + 7) % 7;
+  const sat = addDays(d, daysToSat);
+  return isoDay(sat);
+}
+
+/**
+ * Placeholder kickoff detection (heuristic):
+ * Some leagues/API feeds use 17:00 / 12:00 / 00:00 as "unknown, TBC".
+ * We must surface this as TBC, not as a real kickoff time.
+ */
+function isTbcKickoff(kickoffIso: string | null) {
+  if (!kickoffIso) return true;
+  const dt = new Date(kickoffIso);
+  if (Number.isNaN(dt.getTime())) return true;
+
+  const hh = dt.getHours();
+  const mm = dt.getMinutes();
+
+  // Known placeholder patterns (heuristic)
+  if (mm === 0 && (hh === 0 || hh === 12 || hh === 17)) return true;
+
+  return false;
+}
+
+function kickoffTimeLocalOrNull(kickoffIso: string | null) {
+  if (!kickoffIso) return null;
+  const dt = new Date(kickoffIso);
+  if (Number.isNaN(dt.getTime())) return null;
+  const hh = String(dt.getHours()).padStart(2, "0");
+  const mm = String(dt.getMinutes()).padStart(2, "0");
+  return `${hh}:${mm}`;
+}
+
 function rowTitle(r: FixtureListRow) {
   const home = r?.teams?.home?.name ?? "Home";
   const away = r?.teams?.away?.name ?? "Away";
   return `${home} vs ${away}`;
 }
 
-/**
- * Kickoff label: keep it simple + honest.
- * - If we have a datetime: show it
- * - Else: "TBC"
- *
- * NOTE: Later you'll improve TBC detection (e.g. league quirks, placeholder times).
- */
-function kickoffLabel(r: FixtureListRow) {
-  const raw = r?.fixture?.date;
-  if (!raw) return "TBC";
-  const pretty = formatUkDateTimeMaybe(raw);
-  return pretty || "TBC";
+function rowLine2(r: FixtureListRow) {
+  const dateOnly = fixtureIsoDateOnly(r);
+  const kickoffIso = r?.fixture?.date ? String(r.fixture.date) : null;
+
+  const d = dateOnly ? formatUkDateOnly(dateOnly) : "—";
+  if (!kickoffIso) return `${d} • TBC`;
+
+  if (isTbcKickoff(kickoffIso)) return `${d} • TBC`;
+
+  const t = kickoffTimeLocalOrNull(kickoffIso) ?? "—";
+  return `${d} • ${t}`;
 }
 
 function resolveLeagueSelection(
@@ -121,41 +185,6 @@ function CrestSquare({ r }: { r: FixtureListRow }) {
   );
 }
 
-function isoDay(d: Date) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const da = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${da}`;
-}
-
-function addDays(date: Date, days: number) {
-  const d = new Date(date);
-  d.setDate(d.getDate() + days);
-  return d;
-}
-
-function weekdayShort(d: Date) {
-  return d.toLocaleDateString("en-GB", { weekday: "short" });
-}
-
-function dayMonth(d: Date) {
-  return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
-}
-
-function pickDateStrip(fromIso: string, days = 10) {
-  const base = new Date(`${fromIso}T00:00:00Z`);
-  const out: { iso: string; labelTop: string; labelBottom: string }[] = [];
-  for (let i = 0; i < days; i++) {
-    const d = addDays(base, i);
-    out.push({
-      iso: isoDay(d),
-      labelTop: weekdayShort(d),
-      labelBottom: dayMonth(d),
-    });
-  }
-  return out;
-}
-
 type FollowPillProps = {
   fixtureId: string;
   leagueId: number;
@@ -210,6 +239,7 @@ export default function FixturesScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
 
+  // Keep your rolling window for route context (match/trip screens), but fetch per-day for speed.
   const rolling = useMemo(() => getRollingWindowIso(), []);
   const fromParam = useMemo(() => coerceString(params.from), [params.from]);
   const toParam = useMemo(() => coerceString(params.to), [params.to]);
@@ -221,13 +251,10 @@ export default function FixturesScreen() {
           from: fromParam ?? rolling.from,
           to: toParam ?? rolling.to,
         },
-        90
+        365 // allow long date strip; we still fetch per-day
       ),
     [fromParam, toParam, rolling.from, rolling.to]
   );
-
-  const from = window.from;
-  const to = window.to;
 
   const selection = useMemo(() => resolveLeagueSelection(params.leagueId, params.season), [params.leagueId, params.season]);
 
@@ -241,13 +268,37 @@ export default function FixturesScreen() {
     if (selection.selectedMany) setSelectedMany(selection.selectedMany);
   }, [selection.mode, selection.selected, selection.selectedMany]);
 
-  // Horizontal date strip (livescore-style)
-  const dateStrip = useMemo(() => pickDateStrip(from, 10), [from]);
-  const [activeDay, setActiveDay] = useState<string>(dateStrip[0]?.iso ?? from);
+  // Livescore-style horizontal date strip: generate a long runway (up to "window.to")
+  const dateStrip = useMemo(() => {
+    const fromIso = window.from;
+    const toIso = window.to;
+
+    const start = new Date(`${fromIso}T00:00:00`);
+    const end = new Date(`${toIso}T00:00:00`);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return [];
+
+    const maxDays = 365; // safety cap (strip still "to end of season" once you pass season end in params)
+    const days = Math.max(1, Math.min(maxDays, Math.round((end.getTime() - start.getTime()) / 86400000) + 1));
+
+    const out: { iso: string; labelTop: string; labelBottom: string }[] = [];
+    for (let i = 0; i < days; i++) {
+      const d = addDays(start, i);
+      out.push({
+        iso: isoDay(d),
+        labelTop: weekdayShort(d),
+        labelBottom: dayMonth(d),
+      });
+    }
+    return out;
+  }, [window.from, window.to]);
+
+  // Default active day: upcoming weekend (unless a param provides a specific day)
+  const dayParam = useMemo(() => coerceString((params as any).day), [params]);
+  const [activeDay, setActiveDay] = useState<string>(() => dayParam ?? getNextWeekendIso());
 
   useEffect(() => {
-    setActiveDay(dateStrip[0]?.iso ?? from);
-  }, [from, dateStrip]);
+    if (dayParam) setActiveDay(dayParam);
+  }, [dayParam]);
 
   // Search (light filter)
   const venueParamRaw = useMemo(() => coerceString((params as any).venue), [params]);
@@ -264,6 +315,9 @@ export default function FixturesScreen() {
     Keyboard.dismiss();
   }, []);
 
+  // Follow store (we also push latest snapshots into the store after fetching)
+  const upsertLatestSnapshot = useFollowStore((s) => s.upsertLatestSnapshot);
+
   // Data
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -275,9 +329,12 @@ export default function FixturesScreen() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
-    // Collapse expansion when you change date/league/mode/search window
     setExpandedId(null);
-  }, [activeDay, mode, selectedSingle.leagueId, selectedSingle.season, from, to, qNorm]);
+  }, [activeDay, mode, selectedSingle.leagueId, selectedSingle.season, qNorm]);
+
+  // Fetch ONLY the active day (fast + avoids gigantic scroll lists)
+  const fetchFrom = activeDay;
+  const fetchTo = activeDay;
 
   useEffect(() => {
     let cancelled = false;
@@ -291,12 +348,37 @@ export default function FixturesScreen() {
         const res = await getFixtures({
           league: selectedSingle.leagueId,
           season: selectedSingle.season,
-          from,
-          to,
+          from: fetchFrom,
+          to: fetchTo,
         });
 
         if (cancelled) return;
-        setRowsSingle(Array.isArray(res) ? res : []);
+
+        const rows = Array.isArray(res) ? res : [];
+        setRowsSingle(rows);
+
+        // Push latest snapshots to follow store (so we can detect kickoff confirmations/changes later)
+        rows.forEach((r) => {
+          const id = r?.fixture?.id;
+          if (!id) return;
+
+          const fixtureId = String(id);
+          const homeTeamId = r?.teams?.home?.id ?? 0;
+          const awayTeamId = r?.teams?.away?.id ?? 0;
+
+          if (!homeTeamId || !awayTeamId) return;
+
+          upsertLatestSnapshot({
+            fixtureId,
+            leagueId: selectedSingle.leagueId,
+            season: selectedSingle.season,
+            homeTeamId,
+            awayTeamId,
+            kickoffIso: r?.fixture?.date ? String(r.fixture.date) : null,
+            venue: r?.fixture?.venue?.name ? String(r.fixture.venue.name) : null,
+            city: r?.fixture?.venue?.city ? String(r.fixture.venue.city) : null,
+          });
+        });
       } catch (e: any) {
         if (cancelled) return;
         setError(e?.message ?? "Failed to load fixtures.");
@@ -316,17 +398,42 @@ export default function FixturesScreen() {
             const res = await getFixtures({
               league: l.leagueId,
               season: l.season,
-              from,
-              to,
+              from: fetchFrom,
+              to: fetchTo,
             });
-            return [l.leagueId, Array.isArray(res) ? res : []] as const;
+            return [l.leagueId, Array.isArray(res) ? res : [], l.season] as const;
           })
         );
 
         if (cancelled) return;
 
         const map: Record<number, FixtureListRow[]> = {};
-        for (const [leagueId, rows] of results) map[leagueId] = rows;
+        for (const [leagueId, rows, season] of results) {
+          map[leagueId] = rows;
+
+          rows.forEach((r) => {
+            const id = r?.fixture?.id;
+            if (!id) return;
+
+            const fixtureId = String(id);
+            const homeTeamId = r?.teams?.home?.id ?? 0;
+            const awayTeamId = r?.teams?.away?.id ?? 0;
+
+            if (!homeTeamId || !awayTeamId) return;
+
+            upsertLatestSnapshot({
+              fixtureId,
+              leagueId,
+              season,
+              homeTeamId,
+              awayTeamId,
+              kickoffIso: r?.fixture?.date ? String(r.fixture.date) : null,
+              venue: r?.fixture?.venue?.name ? String(r.fixture.venue.name) : null,
+              city: r?.fixture?.venue?.city ? String(r.fixture.venue.city) : null,
+            });
+          });
+        }
+
         setRowsMulti(map);
       } catch (e: any) {
         if (cancelled) return;
@@ -342,7 +449,15 @@ export default function FixturesScreen() {
     return () => {
       cancelled = true;
     };
-  }, [mode, selectedSingle, selectedMany, from, to]);
+  }, [
+    mode,
+    selectedSingle.leagueId,
+    selectedSingle.season,
+    selectedMany,
+    fetchFrom,
+    fetchTo,
+    upsertLatestSnapshot,
+  ]);
 
   const passesQuery = useCallback(
     (r: FixtureListRow) => {
@@ -351,7 +466,6 @@ export default function FixturesScreen() {
 
       const home = norm(r?.teams?.home?.name);
       const away = norm(r?.teams?.away?.name);
-
       const venueName = norm(r?.fixture?.venue?.name);
       const venueCity = norm(r?.fixture?.venue?.city);
 
@@ -360,25 +474,16 @@ export default function FixturesScreen() {
     [qNorm]
   );
 
-  const isActiveDay = useCallback(
-    (r: FixtureListRow) => {
-      const d = fixtureIsoDateOnly(r);
-      if (!d) return false;
-      return d === activeDay;
-    },
-    [activeDay]
-  );
-
-  const filteredSingle = useMemo(() => rowsSingle.filter((r) => passesQuery(r)).filter((r) => isActiveDay(r)), [rowsSingle, passesQuery, isActiveDay]);
+  const filteredSingle = useMemo(() => rowsSingle.filter((r) => passesQuery(r)), [rowsSingle, passesQuery]);
 
   const filteredMulti = useMemo(() => {
     const out: Record<number, FixtureListRow[]> = {};
     for (const l of selectedMany) {
       const rows = rowsMulti[l.leagueId] ?? [];
-      out[l.leagueId] = rows.filter((r) => passesQuery(r)).filter((r) => isActiveDay(r));
+      out[l.leagueId] = rows.filter((r) => passesQuery(r));
     }
     return out;
-  }, [rowsMulti, selectedMany, passesQuery, isActiveDay]);
+  }, [rowsMulti, selectedMany, passesQuery]);
 
   const subtitle = useMemo(() => {
     if (mode === "single") return selectedSingle.label;
@@ -386,6 +491,10 @@ export default function FixturesScreen() {
   }, [mode, selectedSingle.label]);
 
   const toggleMode = useCallback(() => setMode((m) => (m === "single" ? "multi" : "single")), []);
+
+  // Keep route context consistent for downstream pages
+  const routeFrom = window.from;
+  const routeTo = window.to;
 
   const goMatchWithContext = useCallback(
     (fixtureIdStr: string, leagueIdForRow?: number, seasonForRow?: number) => {
@@ -398,13 +507,14 @@ export default function FixturesScreen() {
           id: fixtureIdStr,
           leagueId: String(lid),
           season: String(sea),
-          from,
-          to,
+          from: routeFrom,
+          to: routeTo,
+          day: activeDay,
           ...(qNorm ? { venue: qNorm } : {}),
         },
       } as any);
     },
-    [router, mode, selectedSingle.leagueId, selectedSingle.season, from, to, qNorm]
+    [router, mode, selectedSingle.leagueId, selectedSingle.season, routeFrom, routeTo, activeDay, qNorm]
   );
 
   const goBuildTripWithContext = useCallback(
@@ -418,17 +528,18 @@ export default function FixturesScreen() {
           fixtureId: fixtureIdStr,
           leagueId: String(lid),
           season: String(sea),
-          from,
-          to,
+          from: routeFrom,
+          to: routeTo,
+          day: activeDay,
           ...(qNorm ? { venue: qNorm } : {}),
         },
       } as any);
     },
-    [router, mode, selectedSingle.leagueId, selectedSingle.season, from, to, qNorm]
+    [router, mode, selectedSingle.leagueId, selectedSingle.season, routeFrom, routeTo, activeDay, qNorm]
   );
 
   const emptyMessage = useMemo(() => {
-    if (!qNorm) return "Try a different day or switch leagues.";
+    if (!qNorm) return "Try another date or switch leagues.";
     return "Try a different search term (team, city, or venue) or clear the filter.";
   }, [qNorm]);
 
@@ -439,10 +550,10 @@ export default function FixturesScreen() {
       const expanded = fixtureIdStr && expandedId === fixtureIdStr;
 
       const title = rowTitle(r);
-      const kickoff = kickoffLabel(r);
+      const line2 = rowLine2(r);
 
       return (
-        <View key={fixtureIdStr || `${title}-${kickoff}`} style={styles.rowWrap}>
+        <View key={fixtureIdStr || `${title}-${line2}`} style={styles.rowWrap}>
           <GlassCard strength="subtle" noPadding style={styles.rowCard}>
             <Pressable
               disabled={!fixtureIdStr}
@@ -461,7 +572,7 @@ export default function FixturesScreen() {
                     {title}
                   </Text>
                   <Text style={styles.rowMeta} numberOfLines={1}>
-                    {kickoff}
+                    {line2}
                   </Text>
                 </View>
 
@@ -504,9 +615,22 @@ export default function FixturesScreen() {
     return selectedMany.every((l) => (filteredMulti[l.leagueId]?.length ?? 0) === 0);
   }, [selectedMany, filteredMulti]);
 
+  // Nice-to-have: if activeDay isn’t in the strip (e.g. params), keep it sane
+  useEffect(() => {
+    if (!activeDay) return;
+    if (dateStrip.length === 0) return;
+
+    const first = dateStrip[0]?.iso;
+    const last = dateStrip[dateStrip.length - 1]?.iso;
+    if (!first || !last) return;
+
+    if (activeDay < first) setActiveDay(first);
+    if (activeDay > last) setActiveDay(last);
+  }, [activeDay, dateStrip]);
+
   return (
     <Background imageSource={getBackground("fixtures")} overlayOpacity={0.86}>
-      <SafeAreaView style={styles.container} edges={["top"]}>
+      <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
         {/* HEADER */}
         <View style={styles.header}>
           <View style={styles.titleRow}>
@@ -515,7 +639,12 @@ export default function FixturesScreen() {
               <Text style={styles.subtitle}>{subtitle}</Text>
             </View>
 
-            <Pressable onPress={toggleMode} style={styles.modePill} hitSlop={10} android_ripple={{ color: "rgba(79,224,138,0.10)" }}>
+            <Pressable
+              onPress={toggleMode}
+              style={styles.modePill}
+              hitSlop={10}
+              android_ripple={{ color: "rgba(79,224,138,0.10)" }}
+            >
               <Text style={styles.modePillText}>{mode === "single" ? "One league" : "Top leagues"}</Text>
             </Pressable>
           </View>
@@ -535,14 +664,23 @@ export default function FixturesScreen() {
             />
 
             {qNorm.length > 0 ? (
-              <Pressable onPress={clearQuery} style={styles.clearBtn} hitSlop={10} android_ripple={{ color: "rgba(79,224,138,0.10)" }}>
+              <Pressable
+                onPress={clearQuery}
+                style={styles.clearBtn}
+                hitSlop={10}
+                android_ripple={{ color: "rgba(79,224,138,0.10)" }}
+              >
                 <Text style={styles.clearBtnText}>Clear</Text>
               </Pressable>
             ) : null}
           </View>
 
           {/* Date strip */}
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dateRow}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.dateRow}
+          >
             {dateStrip.map((d) => {
               const active = d.iso === activeDay;
               return (
@@ -632,7 +770,7 @@ export default function FixturesScreen() {
             ) : null}
           </GlassCard>
 
-          <View style={{ height: 10 }} />
+          <View style={{ height: 18 }} />
         </ScrollView>
       </SafeAreaView>
     </Background>
@@ -737,7 +875,7 @@ const styles = StyleSheet.create({
   // Body
   scrollView: { flex: 1 },
   content: { paddingHorizontal: theme.spacing.lg, paddingBottom: theme.spacing.xxl },
-  card: { minHeight: 260, padding: theme.spacing.md },
+  card: { minHeight: 220, padding: theme.spacing.md },
 
   center: { paddingVertical: 14, alignItems: "center", gap: 10 },
   muted: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.medium },
@@ -801,7 +939,7 @@ const styles = StyleSheet.create({
   followPillText: { color: "rgba(242,244,246,0.70)", fontSize: 12, fontWeight: theme.fontWeight.black, letterSpacing: 0.2 },
   followPillTextActive: { color: "rgba(79,224,138,0.95)" },
 
-  // Expanded area (kept minimal on purpose)
+  // Expanded area
   expandArea: {
     flexDirection: "row",
     gap: 10,
