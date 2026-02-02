@@ -1,6 +1,6 @@
 // app/(tabs)/fixtures.tsx
 
-import React, { useEffect, useMemo, useState, useCallback } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -34,34 +34,28 @@ import { formatUkDateOnly, formatUkDateTimeMaybe } from "@/src/utils/formatters"
 import { getFlagImageUrl } from "@/src/utils/flagImages";
 
 type LeagueMode = "single" | "multi";
+type WindowKey = "d7" | "d14" | "d30" | "d90";
 
 function norm(s: unknown) {
   return String(s ?? "").trim().toLowerCase();
 }
 
-function normalizeVenueKey(input: unknown): string {
-  return String(input ?? "")
-    .trim()
-    .toLowerCase()
-    .replace(/\(.*?\)/g, "")
-    .replace(/[,/|].*$/, "")
-    .replace(/\s+/g, "-")
-    .replace(/[^a-z0-9-]/g, "")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "");
-}
-
-function isoDay(d: Date) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const da = String(d.getDate()).padStart(2, "0");
+function isoDayUTC(d: Date) {
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const da = String(d.getUTCDate()).padStart(2, "0");
   return `${y}-${m}-${da}`;
 }
 
-function addDays(date: Date, days: number) {
+function addDaysUTC(date: Date, days: number) {
   const d = new Date(date);
-  d.setDate(d.getDate() + days);
+  d.setUTCDate(d.getUTCDate() + days);
   return d;
+}
+
+function parseIsoDayUTC(iso: string) {
+  // stable: treat input as UTC midnight
+  return new Date(`${iso}T00:00:00.000Z`);
 }
 
 function weekdayShort(d: Date) {
@@ -72,13 +66,13 @@ function dayMonth(d: Date) {
   return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
 }
 
-function pickDateStrip(fromIso: string, days = 7) {
-  const base = new Date(`${fromIso}T00:00:00Z`);
+function pickDateStrip(fromIso: string, countDays: number) {
+  const base = parseIsoDayUTC(fromIso);
   const out: { iso: string; labelTop: string; labelBottom: string }[] = [];
-  for (let i = 0; i < days; i++) {
-    const d = addDays(base, i);
+  for (let i = 0; i < countDays; i++) {
+    const d = addDaysUTC(base, i);
     out.push({
-      iso: isoDay(d),
+      iso: isoDayUTC(d),
       labelTop: weekdayShort(d),
       labelBottom: dayMonth(d),
     });
@@ -116,33 +110,6 @@ function initials(name: string) {
   return `${parts[0][0] ?? ""}${parts[1][0] ?? ""}`.toUpperCase();
 }
 
-function resolveLeagueSelection(
-  paramsLeagueId: unknown,
-  paramsSeason: unknown
-): {
-  mode: LeagueMode;
-  selected?: LeagueOption;
-  selectedMany?: LeagueOption[];
-} {
-  const leagueIdStr = String(paramsLeagueId ?? "").trim().toLowerCase();
-  const leagueIdNum = coerceNumber(paramsLeagueId);
-  const seasonNum = coerceNumber(paramsSeason);
-
-  if (leagueIdStr === "all") {
-    return { mode: "multi", selectedMany: LEAGUES };
-  }
-
-  if (!leagueIdNum) {
-    return { mode: "single", selected: LEAGUES[0] };
-  }
-
-  const match = LEAGUES.find((l) => l.leagueId === leagueIdNum);
-  if (!match) return { mode: "single", selected: LEAGUES[0] };
-
-  const season = seasonNum ?? match.season;
-  return { mode: "single", selected: { ...match, season } };
-}
-
 function LeagueFlag({ code }: { code: string }) {
   const url = getFlagImageUrl(code);
   if (!url) return null;
@@ -160,68 +127,183 @@ function CrestSquare({ r }: { r: FixtureListRow }) {
       ) : (
         <Text style={styles.crestFallback}>{initials(homeName)}</Text>
       )}
+      <View pointerEvents="none" style={styles.crestRing} />
     </View>
   );
+}
+
+function resolveInitialSelection(params: {
+  leagueId?: unknown;
+  season?: unknown;
+  mode?: unknown;
+}): { mode: LeagueMode; single: LeagueOption; many: LeagueOption[] } {
+  const modeStr = String(params.mode ?? "").trim().toLowerCase();
+  const leagueIdStr = String(params.leagueId ?? "").trim().toLowerCase();
+  const leagueIdNum = coerceNumber(params.leagueId);
+  const seasonNum = coerceNumber(params.season);
+
+  // explicit multi
+  if (modeStr === "multi" || leagueIdStr === "all") {
+    return { mode: "multi", single: LEAGUES[0], many: LEAGUES };
+  }
+
+  // default single
+  if (!leagueIdNum) {
+    return { mode: "single", single: LEAGUES[0], many: LEAGUES };
+  }
+
+  const match = LEAGUES.find((l) => l.leagueId === leagueIdNum) ?? LEAGUES[0];
+  const season = seasonNum ?? match.season;
+
+  return { mode: "single", single: { ...match, season }, many: LEAGUES };
+}
+
+function windowLabel(k: WindowKey) {
+  if (k === "d7") return "7 days";
+  if (k === "d14") return "14 days";
+  if (k === "d30") return "30 days";
+  return "90 days";
+}
+
+function windowDays(k: WindowKey) {
+  if (k === "d7") return 7;
+  if (k === "d14") return 14;
+  if (k === "d30") return 30;
+  return 90;
+}
+
+function computeWindowFromKey(key: WindowKey, override?: { from?: string | null; to?: string | null }) {
+  // If caller passed from/to explicitly, keep them (normalized).
+  const rawFrom = override?.from ?? null;
+  const rawTo = override?.to ?? null;
+  if (rawFrom && rawTo) {
+    return normalizeWindowIso({ from: rawFrom, to: rawTo }, 90);
+  }
+
+  // else compute rolling window for the selected key
+  const days = windowDays(key);
+  return getRollingWindowIso({ days });
+}
+
+function passesQueryFactory(qNorm: string) {
+  const q = qNorm.trim().toLowerCase();
+  if (!q) return () => true;
+
+  // keep it simple + fast: direct substring against team + venue + city
+  return (r: FixtureListRow) => {
+    const home = norm(r?.teams?.home?.name);
+    const away = norm(r?.teams?.away?.name);
+    const venue = norm(r?.fixture?.venue?.name);
+    const city = norm(r?.fixture?.venue?.city);
+    return home.includes(q) || away.includes(q) || venue.includes(q) || city.includes(q);
+  };
 }
 
 export default function FixturesScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
 
-  const rolling = useMemo(() => getRollingWindowIso(), []);
+  // ---- Params (accept both q and venue as "prefill search") ----
   const fromParam = useMemo(() => coerceString(params.from), [params.from]);
   const toParam = useMemo(() => coerceString(params.to), [params.to]);
 
-  const window = useMemo(
+  const qParam = useMemo(() => coerceString((params as any).q), [params]);
+  const venueParam = useMemo(() => coerceString((params as any).venue), [params]);
+
+  const focusDateParam = useMemo(() => coerceString((params as any).focusDate), [params]);
+  const modeParam = useMemo(() => coerceString((params as any).mode), [params]);
+  const initialWindowKeyParam = useMemo(() => {
+    const w = String((params as any).window ?? "").trim().toLowerCase();
+    if (w === "7" || w === "d7") return "d7";
+    if (w === "14" || w === "d14") return "d14";
+    if (w === "30" || w === "d30") return "d30";
+    if (w === "90" || w === "d90") return "d90";
+    return null;
+  }, [params]);
+
+  const initialSelection = useMemo(
     () =>
-      normalizeWindowIso(
-        {
-          from: fromParam ?? rolling.from,
-          to: toParam ?? rolling.to,
-        },
-        90
-      ),
-    [fromParam, toParam, rolling.from, rolling.to]
+      resolveInitialSelection({
+        leagueId: params.leagueId,
+        season: params.season,
+        mode: modeParam,
+      }),
+    [params.leagueId, params.season, modeParam]
   );
 
+  // ---- Mode + Leagues ----
+  const [mode, setMode] = useState<LeagueMode>(initialSelection.mode);
+  const [selectedSingle, setSelectedSingle] = useState<LeagueOption>(initialSelection.single);
+  const [selectedMany] = useState<LeagueOption[]>(initialSelection.many); // currently fixed to LEAGUES
+
+  useEffect(() => {
+    // update if deep link changes
+    setMode(initialSelection.mode);
+    setSelectedSingle(initialSelection.single);
+    // selectedMany stays LEAGUES for now (multi selection modal can come later)
+  }, [initialSelection.mode, initialSelection.single]);
+
+  // ---- Window controls ----
+  const [windowKey, setWindowKey] = useState<WindowKey>(initialWindowKeyParam ?? "d14");
+
+  const computedWindow = useMemo(() => {
+    // if explicit from/to provided, respect them
+    if (fromParam && toParam) {
+      return computeWindowFromKey("d90", { from: fromParam, to: toParam }); // key irrelevant when explicit
+    }
+    return computeWindowFromKey(windowKey);
+  }, [fromParam, toParam, windowKey]);
+
+  const window = useMemo(() => normalizeWindowIso(computedWindow, 90), [computedWindow]);
   const from = window.from;
   const to = window.to;
 
-  const venueParamRaw = useMemo(() => coerceString((params as any).venue), [params]);
-  const [query, setQuery] = useState<string>(venueParamRaw ?? "");
-  const qNorm = useMemo(() => query.trim(), [query]);
+  // ---- Date strip (drives filtering only; do NOT refetch per-day) ----
+  const stripDays = useMemo(() => {
+    // Show up to 7 chips always. In short windows, use window length; otherwise 7-day strip.
+    const days = windowDays(windowKey);
+    return Math.max(7, Math.min(7, days)); // currently always 7, intentionally stable UI
+  }, [windowKey]);
 
-  useEffect(() => {
-    setQuery(venueParamRaw ?? "");
-  }, [venueParamRaw]);
+  const dateStrip = useMemo(() => pickDateStrip(from, stripDays), [from, stripDays]);
 
-  const selection = useMemo(
-    () => resolveLeagueSelection(params.leagueId, params.season),
-    [params.leagueId, params.season]
-  );
-
-  const [mode, setMode] = useState<LeagueMode>(selection.mode);
-  const [selectedSingle, setSelectedSingle] = useState<LeagueOption>(selection.selected ?? LEAGUES[0]);
-  const [selectedMany, setSelectedMany] = useState<LeagueOption[]>(selection.selectedMany ?? LEAGUES);
-
-  useEffect(() => {
-    setMode(selection.mode);
-    if (selection.selected) setSelectedSingle(selection.selected);
-    if (selection.selectedMany) setSelectedMany(selection.selectedMany);
-  }, [selection.mode, selection.selected, selection.selectedMany]);
-
-  const dateStrip = useMemo(() => pickDateStrip(from, 7), [from]);
   const [activeDay, setActiveDay] = useState<string>(dateStrip[0]?.iso ?? from);
 
   useEffect(() => {
+    // If focusDate provided and within range, prefer it; else default to strip[0]
+    const focus = (focusDateParam ?? "").trim();
+    const stripSet = new Set(dateStrip.map((d) => d.iso));
+    if (focus && stripSet.has(focus)) {
+      setActiveDay(focus);
+      return;
+    }
     setActiveDay(dateStrip[0]?.iso ?? from);
-  }, [from]);
+  }, [from, dateStrip, focusDateParam]);
 
+  // ---- Search ----
+  const prefill = useMemo(() => (venueParam ?? qParam ?? "").trim(), [venueParam, qParam]);
+  const [query, setQuery] = useState<string>(prefill);
+  const qNorm = useMemo(() => query.trim(), [query]);
+
+  useEffect(() => {
+    // only overwrite query if the incoming prefill changed (prevents clobber while typing)
+    setQuery(prefill);
+  }, [prefill]);
+
+  const dismissKeyboard = useCallback(() => Keyboard.dismiss(), []);
+  const clearQuery = useCallback(() => {
+    setQuery("");
+    Keyboard.dismiss();
+  }, []);
+
+  // ---- Fetch state ----
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [rowsSingle, setRowsSingle] = useState<FixtureListRow[]>([]);
   const [rowsMulti, setRowsMulti] = useState<Record<number, FixtureListRow[]>>({});
+
+  const fetchKeyRef = useRef<string>("");
 
   useEffect(() => {
     let cancelled = false;
@@ -229,7 +311,6 @@ export default function FixturesScreen() {
     async function runSingle() {
       setError(null);
       setLoading(true);
-      setRowsSingle([]);
 
       try {
         const res = await getFixtures({
@@ -241,9 +322,12 @@ export default function FixturesScreen() {
 
         if (cancelled) return;
         setRowsSingle(Array.isArray(res) ? res : []);
+        setRowsMulti({});
       } catch (e: any) {
         if (cancelled) return;
         setError(e?.message ?? "Failed to load fixtures.");
+        setRowsSingle([]);
+        setRowsMulti({});
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -252,7 +336,6 @@ export default function FixturesScreen() {
     async function runMulti() {
       setError(null);
       setLoading(true);
-      setRowsMulti({});
 
       try {
         const results = await Promise.all(
@@ -271,14 +354,27 @@ export default function FixturesScreen() {
 
         const map: Record<number, FixtureListRow[]> = {};
         for (const [leagueId, rows] of results) map[leagueId] = rows;
+
         setRowsMulti(map);
+        setRowsSingle([]);
       } catch (e: any) {
         if (cancelled) return;
         setError(e?.message ?? "Failed to load fixtures.");
+        setRowsSingle([]);
+        setRowsMulti({});
       } finally {
         if (!cancelled) setLoading(false);
       }
     }
+
+    const key =
+      mode === "single"
+        ? `single:${selectedSingle.leagueId}:${selectedSingle.season}:${from}:${to}`
+        : `multi:${selectedMany.map((l) => `${l.leagueId}-${l.season}`).join(",")}:${from}:${to}`;
+
+    // Avoid double-fetch if React re-renders quickly
+    if (fetchKeyRef.current === key) return;
+    fetchKeyRef.current = key;
 
     if (mode === "single") runSingle();
     else runMulti();
@@ -286,76 +382,160 @@ export default function FixturesScreen() {
     return () => {
       cancelled = true;
     };
-  }, [mode, selectedSingle, selectedMany, from, to]);
+  }, [mode, selectedSingle.leagueId, selectedSingle.season, selectedMany, from, to]);
 
-  const dismissKeyboard = useCallback(() => Keyboard.dismiss(), []);
-  const clearQuery = useCallback(() => {
-    setQuery("");
-    Keyboard.dismiss();
-  }, []);
-
-  const passesQuery = useCallback(
-    (r: FixtureListRow) => {
-      const q = qNorm.trim().toLowerCase();
-      if (!q) return true;
-
-      const home = norm(r?.teams?.home?.name);
-      const away = norm(r?.teams?.away?.name);
-
-      const venueName = String(r?.fixture?.venue?.name ?? "").trim();
-      const venueCity = String(r?.fixture?.venue?.city ?? "").trim();
-
-      const venue = norm(venueName);
-      const city = norm(venueCity);
-
-      if (home.includes(q) || away.includes(q) || venue.includes(q) || city.includes(q)) return true;
-
-      const qKey = normalizeVenueKey(q);
-      if (!qKey) return false;
-
-      const venueKey = normalizeVenueKey(venueName);
-      const cityKey = normalizeVenueKey(venueCity);
-
-      return (
-        venueKey === qKey ||
-        venueKey.includes(qKey) ||
-        qKey.includes(venueKey) ||
-        cityKey === qKey ||
-        cityKey.includes(qKey) ||
-        qKey.includes(cityKey)
-      );
-    },
-    [qNorm]
-  );
+  // ---- Filtering ----
+  const passesQuery = useMemo(() => passesQueryFactory(qNorm), [qNorm]);
 
   const isActiveDay = useCallback(
     (r: FixtureListRow) => {
       const d = fixtureIsoDateOnly(r);
-      if (!d) return false;
-      return d === activeDay;
+      return !!d && d === activeDay;
     },
     [activeDay]
   );
 
-  const filteredSingle = useMemo(() => {
-    return rowsSingle.filter((r) => passesQuery(r)).filter((r) => isActiveDay(r));
-  }, [rowsSingle, passesQuery, isActiveDay]);
+  const dayRowsSingleUnfiltered = useMemo(() => rowsSingle.filter((r) => isActiveDay(r)), [rowsSingle, isActiveDay]);
+  const dayRowsSingleFiltered = useMemo(
+    () => rowsSingle.filter((r) => isActiveDay(r)).filter((r) => passesQuery(r)),
+    [rowsSingle, isActiveDay, passesQuery]
+  );
 
-  const filteredMulti = useMemo(() => {
+  const dayRowsMultiUnfiltered = useMemo(() => {
     const out: Record<number, FixtureListRow[]> = {};
     for (const l of selectedMany) {
       const rows = rowsMulti[l.leagueId] ?? [];
-      out[l.leagueId] = rows.filter((r) => passesQuery(r)).filter((r) => isActiveDay(r));
+      out[l.leagueId] = rows.filter((r) => isActiveDay(r));
     }
     return out;
-  }, [rowsMulti, selectedMany, passesQuery, isActiveDay]);
+  }, [rowsMulti, selectedMany, isActiveDay]);
 
+  const dayRowsMultiFiltered = useMemo(() => {
+    const out: Record<number, FixtureListRow[]> = {};
+    for (const l of selectedMany) {
+      const rows = rowsMulti[l.leagueId] ?? [];
+      out[l.leagueId] = rows.filter((r) => isActiveDay(r)).filter((r) => passesQuery(r));
+    }
+    return out;
+  }, [rowsMulti, selectedMany, isActiveDay, passesQuery]);
+
+  // ---- Empty-state intelligence ----
+  const nextStripDayWithMatches = useMemo(() => {
+    // Find the next date chip in the strip that has ANY fixtures (ignores query)
+    const strip = dateStrip.map((d) => d.iso);
+    const idx = Math.max(0, strip.indexOf(activeDay));
+
+    const hasAnyOnDay = (iso: string) => {
+      if (mode === "single") {
+        return rowsSingle.some((r) => fixtureIsoDateOnly(r) === iso);
+      }
+      // multi
+      for (const l of selectedMany) {
+        const rows = rowsMulti[l.leagueId] ?? [];
+        if (rows.some((r) => fixtureIsoDateOnly(r) === iso)) return true;
+      }
+      return false;
+    };
+
+    for (let i = idx + 1; i < strip.length; i++) {
+      if (hasAnyOnDay(strip[i])) return strip[i];
+    }
+    for (let i = 0; i < idx; i++) {
+      if (hasAnyOnDay(strip[i])) return strip[i];
+    }
+    return null;
+  }, [dateStrip, activeDay, mode, rowsSingle, rowsMulti, selectedMany]);
+
+  const emptyState = useMemo(() => {
+    const hasQuery = !!qNorm;
+    const dayLabel = formatUkDateOnly(activeDay);
+
+    // Search filtered everything out, but there ARE fixtures that day.
+    if (mode === "single") {
+      if (hasQuery && dayRowsSingleFiltered.length === 0 && dayRowsSingleUnfiltered.length > 0) {
+        return {
+          title: "No matches match your search",
+          message: `There are fixtures on ${dayLabel}, but none match “${qNorm}”. Try a different search term or clear the filter.`,
+          kind: "search" as const,
+        };
+      }
+      // No fixtures at all on that day (ignoring query)
+      if (dayRowsSingleUnfiltered.length === 0) {
+        const next = nextStripDayWithMatches ? formatUkDateOnly(nextStripDayWithMatches) : null;
+        return {
+          title: "No matches on this day",
+          message: next
+            ? `No fixtures on ${dayLabel}. Try ${next}, switch league, or expand the window.`
+            : `No fixtures on ${dayLabel}. Try another day, switch league, or expand the window.`,
+          kind: "day" as const,
+        };
+      }
+      // Otherwise: filtered empty and unfiltered empty handled, so generic
+      if (dayRowsSingleFiltered.length === 0) {
+        return {
+          title: "No matches found",
+          message: hasQuery
+            ? `Try a different search term or clear the filter.`
+            : `Try a different day or switch leagues.`,
+          kind: "generic" as const,
+        };
+      }
+      return null;
+    }
+
+    // multi mode
+    const anyUnfiltered = selectedMany.some((l) => (dayRowsMultiUnfiltered[l.leagueId]?.length ?? 0) > 0);
+    const anyFiltered = selectedMany.some((l) => (dayRowsMultiFiltered[l.leagueId]?.length ?? 0) > 0);
+
+    if (hasQuery && !anyFiltered && anyUnfiltered) {
+      return {
+        title: "No matches match your search",
+        message: `There are fixtures on ${dayLabel}, but none match “${qNorm}”. Try a different search term or clear the filter.`,
+        kind: "search" as const,
+      };
+    }
+
+    if (!anyUnfiltered) {
+      const next = nextStripDayWithMatches ? formatUkDateOnly(nextStripDayWithMatches) : null;
+      return {
+        title: "No matches on this day",
+        message: next
+          ? `No fixtures on ${dayLabel}. Try ${next} or expand the window.`
+          : `No fixtures on ${dayLabel}. Try another day or expand the window.`,
+        kind: "day" as const,
+      };
+    }
+
+    if (!anyFiltered) {
+      return {
+        title: "No matches found",
+        message: hasQuery
+          ? `Try a different search term or clear the filter.`
+          : `Try a different day or switch mode.`,
+        kind: "generic" as const,
+      };
+    }
+
+    return null;
+  }, [
+    mode,
+    qNorm,
+    activeDay,
+    dayRowsSingleFiltered.length,
+    dayRowsSingleUnfiltered.length,
+    selectedMany,
+    dayRowsMultiUnfiltered,
+    dayRowsMultiFiltered,
+    nextStripDayWithMatches,
+  ]);
+
+  // ---- Header subtitle ----
   const subtitle = useMemo(() => {
-    // You said “get rid of the date window” — so keep it clean.
     if (mode === "single") return selectedSingle.label;
     return "Top leagues";
   }, [mode, selectedSingle.label]);
 
+  // ---- Navigation ----
   const goMatchWithContext = useCallback(
     (fixtureIdStr: string, leagueIdForRow?: number, seasonForRow?: number) => {
       const lid = mode === "single" ? selectedSingle.leagueId : leagueIdForRow ?? selectedSingle.leagueId;
@@ -369,11 +549,13 @@ export default function FixturesScreen() {
           season: String(sea),
           from,
           to,
-          ...(qNorm ? { venue: qNorm } : {}),
+          ...(qNorm ? { q: qNorm } : {}),
+          focusDate: activeDay,
+          mode,
         },
       } as any);
     },
-    [router, mode, selectedSingle.leagueId, selectedSingle.season, from, to, qNorm]
+    [router, mode, selectedSingle.leagueId, selectedSingle.season, from, to, qNorm, activeDay]
   );
 
   const goBuildTripWithContext = useCallback(
@@ -389,21 +571,33 @@ export default function FixturesScreen() {
           season: String(sea),
           from,
           to,
-          ...(qNorm ? { venue: qNorm } : {}),
+          ...(qNorm ? { q: qNorm } : {}),
+          focusDate: activeDay,
+          source: "fixtures",
+          mode,
         },
       } as any);
     },
-    [router, mode, selectedSingle.leagueId, selectedSingle.season, from, to, qNorm]
+    [router, mode, selectedSingle.leagueId, selectedSingle.season, from, to, qNorm, activeDay]
   );
 
-  const emptyMessage = useMemo(() => {
-    if (!qNorm) return "Try a different day or switch leagues.";
-    return "Try a different search term (team, city, or venue) or clear the filter.";
-  }, [qNorm]);
-
+  // ---- Mode / window actions ----
   const toggleMode = useCallback(() => {
     setMode((m) => (m === "single" ? "multi" : "single"));
   }, []);
+
+  const onPickWindow = useCallback((k: WindowKey) => {
+    // If the user came in with explicit from/to, switching windows should take control back (reset to rolling)
+    setWindowKey(k);
+  }, []);
+
+  const showWindowPicker = useMemo(() => !(fromParam && toParam), [fromParam, toParam]);
+
+  // ---- Derived: multi-mode emptiness ----
+  const multiHasAny = useMemo(() => {
+    if (mode !== "multi") return false;
+    return selectedMany.some((l) => (dayRowsMultiFiltered[l.leagueId]?.length ?? 0) > 0);
+  }, [mode, selectedMany, dayRowsMultiFiltered]);
 
   return (
     <Background imageSource={getBackground("fixtures")} overlayOpacity={0.86}>
@@ -416,13 +610,14 @@ export default function FixturesScreen() {
               <Text style={styles.subtitle}>{subtitle}</Text>
             </View>
 
-            <Pressable onPress={toggleMode} style={styles.modePill} hitSlop={10}>
+            <Pressable onPress={toggleMode} style={styles.modePill} hitSlop={10} android_ripple={{ color: "rgba(79,224,138,0.10)" }}>
               <Text style={styles.modePillText}>{mode === "single" ? "One league" : "Top leagues"}</Text>
             </Pressable>
           </View>
 
           {/* Search */}
           <View style={styles.searchBox}>
+            <View pointerEvents="none" style={styles.searchSheen} />
             <TextInput
               value={query}
               onChangeText={setQuery}
@@ -436,11 +631,34 @@ export default function FixturesScreen() {
             />
 
             {qNorm.length > 0 ? (
-              <Pressable onPress={clearQuery} style={styles.clearBtn} hitSlop={10}>
+              <Pressable onPress={clearQuery} style={styles.clearBtn} hitSlop={10} android_ripple={{ color: "rgba(79,224,138,0.10)" }}>
                 <Text style={styles.clearBtnText}>Clear</Text>
               </Pressable>
             ) : null}
           </View>
+
+          {/* Window pills (only when not deep-linked with explicit from/to) */}
+          {showWindowPicker ? (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.windowRow}>
+              {(["d7", "d14", "d30", "d90"] as WindowKey[]).map((k) => {
+                const active = windowKey === k;
+                return (
+                  <Pressable
+                    key={k}
+                    onPress={() => onPickWindow(k)}
+                    style={[styles.windowPill, active && styles.windowPillActive]}
+                    android_ripple={{ color: "rgba(79,224,138,0.10)" }}
+                  >
+                    <Text style={[styles.windowPillText, active && styles.windowPillTextActive]}>{windowLabel(k)}</Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          ) : (
+            <Text style={styles.windowLockedNote}>
+              Window: {formatUkDateOnly(from)} → {formatUkDateOnly(to)}
+            </Text>
+          )}
 
           {/* Date strip */}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dateRow}>
@@ -451,6 +669,7 @@ export default function FixturesScreen() {
                   key={d.iso}
                   onPress={() => setActiveDay(d.iso)}
                   style={[styles.datePill, active && styles.datePillActive]}
+                  android_ripple={{ color: "rgba(79,224,138,0.10)" }}
                 >
                   <Text style={[styles.dateTop, active && styles.dateTopActive]}>{d.labelTop}</Text>
                   <Text style={[styles.dateBottom, active && styles.dateBottomActive]}>{d.labelBottom}</Text>
@@ -469,6 +688,7 @@ export default function FixturesScreen() {
                     key={l.leagueId}
                     onPress={() => setSelectedSingle(l)}
                     style={[styles.leaguePill, active && styles.leaguePillActive]}
+                    android_ripple={{ color: "rgba(79,224,138,0.10)" }}
                   >
                     <Text style={[styles.leaguePillText, active && styles.leaguePillTextActive]}>{l.label}</Text>
                     <LeagueFlag code={l.countryCode} />
@@ -493,11 +713,42 @@ export default function FixturesScreen() {
 
             {!loading && !error ? (
               mode === "single" ? (
-                filteredSingle.length === 0 ? (
-                  <EmptyState title="No matches found" message={emptyMessage} />
+                dayRowsSingleFiltered.length === 0 ? (
+                  <View style={{ gap: 12 }}>
+                    <EmptyState title={emptyState?.title ?? "No matches found"} message={emptyState?.message ?? "Try another day or switch leagues."} />
+                    <View style={styles.emptyActionsRow}>
+                      {nextStripDayWithMatches ? (
+                        <Pressable
+                          onPress={() => setActiveDay(nextStripDayWithMatches)}
+                          style={[styles.smallBtn, styles.smallGhost]}
+                          android_ripple={{ color: "rgba(79,224,138,0.10)" }}
+                        >
+                          <Text style={styles.smallGhostText}>Try {formatUkDateOnly(nextStripDayWithMatches)}</Text>
+                        </Pressable>
+                      ) : null}
+
+                      {qNorm ? (
+                        <Pressable
+                          onPress={clearQuery}
+                          style={[styles.smallBtn, styles.smallPrimary]}
+                          android_ripple={{ color: "rgba(79,224,138,0.12)" }}
+                        >
+                          <Text style={styles.smallPrimaryText}>Clear search</Text>
+                        </Pressable>
+                      ) : (
+                        <Pressable
+                          onPress={() => setWindowKey((k) => (k === "d30" ? "d90" : "d30"))}
+                          style={[styles.smallBtn, styles.smallPrimary]}
+                          android_ripple={{ color: "rgba(79,224,138,0.12)" }}
+                        >
+                          <Text style={styles.smallPrimaryText}>{windowKey === "d30" ? "Expand to 90 days" : "Expand to 30 days"}</Text>
+                        </Pressable>
+                      )}
+                    </View>
+                  </View>
                 ) : (
                   <View style={styles.list}>
-                    {filteredSingle.map((r, idx) => {
+                    {dayRowsSingleFiltered.map((r, idx) => {
                       const id = r?.fixture?.id;
                       const fixtureIdStr = id ? String(id) : null;
                       const key = fixtureIdStr ?? `idx-${idx}`;
@@ -508,6 +759,7 @@ export default function FixturesScreen() {
                             disabled={!fixtureIdStr}
                             onPress={() => (fixtureIdStr ? goMatchWithContext(fixtureIdStr) : null)}
                             style={styles.rowMain}
+                            android_ripple={{ color: "rgba(79,224,138,0.10)" }}
                           >
                             <View style={styles.rowInner}>
                               <CrestSquare r={r} />
@@ -524,6 +776,7 @@ export default function FixturesScreen() {
                               disabled={!fixtureIdStr}
                               onPress={() => (fixtureIdStr ? goMatchWithContext(fixtureIdStr) : null)}
                               style={[styles.smallBtn, styles.smallGhost, !fixtureIdStr && styles.disabled]}
+                              android_ripple={{ color: "rgba(79,224,138,0.10)" }}
                             >
                               <Text style={styles.smallGhostText}>View match</Text>
                             </Pressable>
@@ -532,6 +785,7 @@ export default function FixturesScreen() {
                               disabled={!fixtureIdStr}
                               onPress={() => (fixtureIdStr ? goBuildTripWithContext(fixtureIdStr) : null)}
                               style={[styles.smallBtn, styles.smallPrimary, !fixtureIdStr && styles.disabled]}
+                              android_ripple={{ color: "rgba(79,224,138,0.12)" }}
                             >
                               <Text style={styles.smallPrimaryText}>Plan trip</Text>
                             </Pressable>
@@ -541,12 +795,43 @@ export default function FixturesScreen() {
                     })}
                   </View>
                 )
-              ) : selectedMany.every((l) => (filteredMulti[l.leagueId]?.length ?? 0) === 0) ? (
-                <EmptyState title="No matches found" message={emptyMessage} />
+              ) : !multiHasAny ? (
+                <View style={{ gap: 12 }}>
+                  <EmptyState title={emptyState?.title ?? "No matches found"} message={emptyState?.message ?? "Try another day or expand the window."} />
+                  <View style={styles.emptyActionsRow}>
+                    {nextStripDayWithMatches ? (
+                      <Pressable
+                        onPress={() => setActiveDay(nextStripDayWithMatches)}
+                        style={[styles.smallBtn, styles.smallGhost]}
+                        android_ripple={{ color: "rgba(79,224,138,0.10)" }}
+                      >
+                        <Text style={styles.smallGhostText}>Try {formatUkDateOnly(nextStripDayWithMatches)}</Text>
+                      </Pressable>
+                    ) : null}
+
+                    {qNorm ? (
+                      <Pressable
+                        onPress={clearQuery}
+                        style={[styles.smallBtn, styles.smallPrimary]}
+                        android_ripple={{ color: "rgba(79,224,138,0.12)" }}
+                      >
+                        <Text style={styles.smallPrimaryText}>Clear search</Text>
+                      </Pressable>
+                    ) : (
+                      <Pressable
+                        onPress={() => setWindowKey((k) => (k === "d30" ? "d90" : "d30"))}
+                        style={[styles.smallBtn, styles.smallPrimary]}
+                        android_ripple={{ color: "rgba(79,224,138,0.12)" }}
+                      >
+                        <Text style={styles.smallPrimaryText}>{windowKey === "d30" ? "Expand to 90 days" : "Expand to 30 days"}</Text>
+                      </Pressable>
+                    )}
+                  </View>
+                </View>
               ) : (
                 <View style={styles.multiWrap}>
                   {selectedMany.map((l) => {
-                    const leagueRows = filteredMulti[l.leagueId] ?? [];
+                    const leagueRows = dayRowsMultiFiltered[l.leagueId] ?? [];
                     if (leagueRows.length === 0) return null;
 
                     return (
@@ -569,10 +854,9 @@ export default function FixturesScreen() {
                               <GlassCard key={key} strength="subtle" noPadding style={styles.rowCard}>
                                 <Pressable
                                   disabled={!fixtureIdStr}
-                                  onPress={() =>
-                                    fixtureIdStr ? goMatchWithContext(fixtureIdStr, l.leagueId, l.season) : null
-                                  }
+                                  onPress={() => (fixtureIdStr ? goMatchWithContext(fixtureIdStr, l.leagueId, l.season) : null)}
                                   style={styles.rowMain}
+                                  android_ripple={{ color: "rgba(79,224,138,0.10)" }}
                                 >
                                   <View style={styles.rowInner}>
                                     <CrestSquare r={r} />
@@ -587,20 +871,18 @@ export default function FixturesScreen() {
                                 <View style={styles.actionsRow}>
                                   <Pressable
                                     disabled={!fixtureIdStr}
-                                    onPress={() =>
-                                      fixtureIdStr ? goMatchWithContext(fixtureIdStr, l.leagueId, l.season) : null
-                                    }
+                                    onPress={() => (fixtureIdStr ? goMatchWithContext(fixtureIdStr, l.leagueId, l.season) : null)}
                                     style={[styles.smallBtn, styles.smallGhost, !fixtureIdStr && styles.disabled]}
+                                    android_ripple={{ color: "rgba(79,224,138,0.10)" }}
                                   >
                                     <Text style={styles.smallGhostText}>View match</Text>
                                   </Pressable>
 
                                   <Pressable
                                     disabled={!fixtureIdStr}
-                                    onPress={() =>
-                                      fixtureIdStr ? goBuildTripWithContext(fixtureIdStr, l.leagueId, l.season) : null
-                                    }
+                                    onPress={() => (fixtureIdStr ? goBuildTripWithContext(fixtureIdStr, l.leagueId, l.season) : null)}
                                     style={[styles.smallBtn, styles.smallPrimary, !fixtureIdStr && styles.disabled]}
+                                    android_ripple={{ color: "rgba(79,224,138,0.12)" }}
                                   >
                                     <Text style={styles.smallPrimaryText}>Plan trip</Text>
                                   </Pressable>
@@ -639,14 +921,14 @@ const styles = StyleSheet.create({
   title: {
     color: theme.colors.text,
     fontSize: 22,
-    fontWeight: theme.fontWeight.medium,
+    fontWeight: theme.fontWeight.black,
   },
 
   subtitle: {
     marginTop: 4,
     color: theme.colors.textSecondary,
     fontSize: 13,
-    fontWeight: theme.fontWeight.regular,
+    fontWeight: theme.fontWeight.bold,
   },
 
   modePill: {
@@ -656,11 +938,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.colors.border,
     backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
+    overflow: "hidden",
   },
   modePillText: {
     color: theme.colors.textSecondary,
     fontSize: 13,
-    fontWeight: theme.fontWeight.medium,
+    fontWeight: theme.fontWeight.black,
   },
 
   // Search
@@ -674,25 +957,63 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
+    overflow: "hidden",
+  },
+  searchSheen: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: 0,
+    height: 18,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    opacity: 0.55,
   },
   searchInput: {
     flex: 1,
     color: theme.colors.text,
     fontSize: 15,
     paddingVertical: Platform.OS === "ios" ? 6 : 4,
+    fontWeight: theme.fontWeight.bold,
   },
   clearBtn: {
     paddingVertical: 6,
     paddingHorizontal: 10,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: theme.colors.border,
-    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
+    borderColor: "rgba(79,224,138,0.22)",
+    backgroundColor: "rgba(0,0,0,0.14)",
+    overflow: "hidden",
   },
   clearBtnText: {
-    color: theme.colors.textSecondary,
-    fontWeight: theme.fontWeight.semibold,
-    fontSize: 13,
+    color: "rgba(242,244,246,0.72)",
+    fontWeight: theme.fontWeight.black,
+    fontSize: 12,
+    letterSpacing: 0.3,
+  },
+
+  // Window pills
+  windowRow: { gap: 10, paddingRight: theme.spacing.lg },
+  windowPill: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+    overflow: "hidden",
+  },
+  windowPillActive: {
+    borderColor: "rgba(79,224,138,0.35)",
+    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.default : theme.glass.iosBg.default,
+  },
+  windowPillText: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: theme.fontWeight.black },
+  windowPillTextActive: { color: theme.colors.text, fontWeight: theme.fontWeight.black },
+
+  windowLockedNote: {
+    color: theme.colors.textTertiary,
+    fontSize: 12,
+    fontWeight: theme.fontWeight.bold,
+    marginTop: -2,
   },
 
   // Date strip
@@ -700,20 +1021,21 @@ const styles = StyleSheet.create({
   datePill: {
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: "rgba(255,255,255,0.10)",
     backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
     paddingVertical: 10,
     paddingHorizontal: 12,
     minWidth: 74,
     alignItems: "center",
+    overflow: "hidden",
   },
   datePillActive: {
     borderColor: "rgba(79,224,138,0.28)",
     backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.default : theme.glass.iosBg.default,
   },
-  dateTop: { color: theme.colors.textTertiary, fontSize: 12, fontWeight: theme.fontWeight.medium },
+  dateTop: { color: theme.colors.textTertiary, fontSize: 12, fontWeight: theme.fontWeight.black },
   dateTopActive: { color: theme.colors.textSecondary },
-  dateBottom: { marginTop: 2, color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.medium },
+  dateBottom: { marginTop: 2, color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.black },
   dateBottomActive: { color: theme.colors.text },
 
   // League pills (single only)
@@ -723,25 +1045,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: "rgba(255,255,255,0.10)",
     backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+    overflow: "hidden",
   },
   leaguePillActive: {
     borderColor: "rgba(79,224,138,0.28)",
     backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.default : theme.glass.iosBg.default,
   },
-  leaguePillText: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.medium },
-  leaguePillTextActive: { color: theme.colors.text, fontWeight: theme.fontWeight.medium },
+  leaguePillText: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.black },
+  leaguePillTextActive: { color: theme.colors.text, fontWeight: theme.fontWeight.black },
 
-  flag: {
-    width: 18,
-    height: 13,
-    borderRadius: 3,
-    opacity: 0.9,
-  },
+  flag: { width: 18, height: 13, borderRadius: 3, opacity: 0.9 },
 
   // Body
   scrollView: { flex: 1 },
@@ -749,7 +1067,7 @@ const styles = StyleSheet.create({
   card: { minHeight: 260, padding: theme.spacing.md },
 
   center: { paddingVertical: 14, alignItems: "center", gap: 10 },
-  muted: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.medium },
+  muted: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold },
 
   // Lists
   list: { gap: 10 },
@@ -764,47 +1082,46 @@ const styles = StyleSheet.create({
   },
 
   crestWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: "rgba(255,255,255,0.06)",
+    width: 46,
+    height: 46,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.05)",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.06)",
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
   },
-  crestImg: {
-    width: 30,
-    height: 30,
-    opacity: 0.95,
+  crestRing: {
+    ...StyleSheet.absoluteFillObject,
+    borderWidth: 1,
+    borderColor: "rgba(79,224,138,0.12)",
+    borderRadius: 14,
   },
-  crestFallback: {
-    color: theme.colors.textSecondary,
-    fontSize: 12,
-    fontWeight: theme.fontWeight.medium,
-    letterSpacing: 0.4,
-  },
+  crestImg: { width: 30, height: 30, opacity: 0.95 },
+  crestFallback: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: theme.fontWeight.black, letterSpacing: 0.4 },
 
-  rowTitle: { color: theme.colors.text, fontSize: 15, fontWeight: theme.fontWeight.medium },
-  rowMeta: { marginTop: 4, color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.regular },
+  rowTitle: { color: theme.colors.text, fontSize: 15, fontWeight: theme.fontWeight.black },
+  rowMeta: { marginTop: 4, color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold },
   chev: { color: theme.colors.textTertiary, fontSize: 24, marginTop: -2 },
 
   actionsRow: { flexDirection: "row", gap: 10, paddingHorizontal: 12, paddingBottom: 12 },
 
-  smallBtn: { flex: 1, borderRadius: 16, paddingVertical: 12, alignItems: "center", borderWidth: 1 },
+  emptyActionsRow: { flexDirection: "row", gap: 10 },
+
+  smallBtn: { flex: 1, borderRadius: 16, paddingVertical: 12, alignItems: "center", borderWidth: 1, overflow: "hidden" },
 
   smallPrimary: {
     borderColor: "rgba(79,224,138,0.28)",
     backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.default : theme.glass.iosBg.default,
   },
-  smallPrimaryText: { color: theme.colors.text, fontWeight: theme.fontWeight.medium, fontSize: 14 },
+  smallPrimaryText: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: 14 },
 
   smallGhost: {
-    borderColor: theme.colors.border,
+    borderColor: "rgba(255,255,255,0.10)",
     backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
   },
-  smallGhostText: { color: theme.colors.textSecondary, fontWeight: theme.fontWeight.medium, fontSize: 14 },
+  smallGhostText: { color: theme.colors.textSecondary, fontWeight: theme.fontWeight.black, fontSize: 14 },
 
   disabled: { opacity: 0.55 },
 
@@ -813,6 +1130,6 @@ const styles = StyleSheet.create({
   leagueGroup: { gap: 10 },
   groupHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "baseline" },
   groupTitleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  groupTitle: { color: theme.colors.text, fontSize: 15, fontWeight: theme.fontWeight.medium },
-  groupMeta: { color: theme.colors.textTertiary, fontSize: 12, fontWeight: theme.fontWeight.regular },
+  groupTitle: { color: theme.colors.text, fontSize: 15, fontWeight: theme.fontWeight.black },
+  groupMeta: { color: theme.colors.textTertiary, fontSize: 12, fontWeight: theme.fontWeight.bold },
 });
