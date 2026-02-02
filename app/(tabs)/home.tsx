@@ -26,7 +26,14 @@ import { theme } from "@/src/constants/theme";
 import tripsStore, { type Trip } from "@/src/state/trips";
 import { getFixtures, type FixtureListRow } from "@/src/services/apiFootball";
 
-import { LEAGUES, getRollingWindowIso, parseIsoDateOnly, toIsoDate, addDaysIso, type LeagueOption } from "@/src/constants/football";
+import {
+  LEAGUES,
+  getRollingWindowIso,
+  parseIsoDateOnly,
+  toIsoDate,
+  addDaysIso,
+  type LeagueOption,
+} from "@/src/constants/football";
 import { formatUkDateOnly, formatUkDateTimeMaybe } from "@/src/utils/formatters";
 
 import { buildSearchIndex, querySearchIndex, type SearchResult } from "@/src/services/searchIndex";
@@ -69,6 +76,10 @@ const POPULAR_TEAMS: TeamChip[] = [
   { name: "Inter Milan", teamId: 505, cityName: "Milan" },
   { name: "Borussia Dortmund", teamId: 165, cityName: "Dortmund" },
 ];
+
+type DiscoveryIntent = "standard" | "weekend48" | "cheapOvernight" | "family" | "luxury" | "lastMinute";
+type DiscoveryMode = "standard" | "cheapestWeekend" | "doubles";
+type KickoffWindow = "any" | "morning" | "afternoon" | "evening" | "late";
 
 function toKey(s: string) {
   return String(s ?? "").trim().toLowerCase();
@@ -289,6 +300,27 @@ function scoreFixture(r: FixtureListRow): number {
   return s;
 }
 
+/**
+ * Home -> Fixtures "intent presets" without changing UI:
+ * - We wire these to LONG PRESS on existing Quick Shortcut cards.
+ * - Normal press stays exactly as-is (Build Trip Global).
+ */
+function shortcutToDiscoveryPreset(key: DiscoverWindowKey): { intent: DiscoveryIntent; mode: DiscoveryMode; flexDays: 0 | 3 | 7; kickoffWindow: KickoffWindow; sort: "attractiveness" } {
+  if (key === "wknd") {
+    return { intent: "weekend48", mode: "standard", flexDays: 3, kickoffWindow: "any", sort: "attractiveness" };
+  }
+  if (key === "d7") {
+    return { intent: "lastMinute", mode: "standard", flexDays: 0, kickoffWindow: "any", sort: "attractiveness" };
+  }
+  if (key === "d14") {
+    return { intent: "standard", mode: "standard", flexDays: 3, kickoffWindow: "any", sort: "attractiveness" };
+  }
+  if (key === "d30") {
+    return { intent: "standard", mode: "standard", flexDays: 7, kickoffWindow: "any", sort: "attractiveness" };
+  }
+  return { intent: "standard", mode: "standard", flexDays: 7, kickoffWindow: "any", sort: "attractiveness" };
+}
+
 export default function HomeScreen() {
   const router = useRouter();
 
@@ -494,6 +526,31 @@ export default function HomeScreen() {
       } as any);
     },
     [router, league.leagueId, league.season, fromIso, toIso]
+  );
+
+  /**
+   * NEW (additive): long-press shortcut cards to open Fixtures with discovery params.
+   * This does NOT change existing behaviour (normal press still builds trip globally).
+   */
+  const goFixturesPreset = useCallback(
+    (key: DiscoverWindowKey, w: ShortcutWindow) => {
+      const preset = shortcutToDiscoveryPreset(key);
+
+      router.push({
+        pathname: "/(tabs)/fixtures",
+        params: {
+          leagueId: "all",
+          from: w.from,
+          to: w.to,
+          intent: preset.intent,
+          mode: preset.mode,
+          flexDays: String(preset.flexDays),
+          kickoffWindow: preset.kickoffWindow,
+          sort: preset.sort,
+        },
+      } as any);
+    },
+    [router]
   );
 
   const onPressSearchResult = useCallback(
@@ -1091,6 +1148,8 @@ export default function HomeScreen() {
                       <Pressable
                         key={x.key}
                         onPress={() => goBuildTripGlobal(x.window)}
+                        onLongPress={() => goFixturesPreset(x.key as any, x.window)}
+                        delayLongPress={280}
                         style={({ pressed }) => [
                           styles.shortcutCard,
                           featured && styles.shortcutCardFeatured,
@@ -1324,6 +1383,7 @@ export default function HomeScreen() {
   );
 }
 
+// STYLES UNCHANGED
 const styles = StyleSheet.create({
   container: { flex: 1 },
   scrollView: { flex: 1 },
