@@ -7,15 +7,11 @@
     "icon": "./assets/images/natively-dark.png",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
-
-    "scheme": ["stadiumsandcities"],
-
     "splash": {
       "image": "./assets/images/natively-dark.png",
       "resizeMode": "contain",
       "backgroundColor": "#000000"
     },
-
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.anonymous.natively",
@@ -23,32 +19,28 @@
         "ITSAppUsesNonExemptEncryption": false
       }
     },
-
     "android": {
-      "package": "com.anonymous.natively",
-      "edgeToEdgeEnabled": true,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/natively-dark.png",
         "backgroundColor": "#000000"
-      }
+      },
+      "edgeToEdgeEnabled": true,
+      "package": "com.anonymous.natively"
     },
-
     "web": {
       "favicon": "./assets/images/final_quest_240x240.png",
       "bundler": "metro"
     },
-
     "plugins": [
       "expo-font",
       "expo-router",
       "expo-web-browser",
       "@react-native-community/datetimepicker"
     ],
-
+    "scheme": "stadiumscities",
     "experiments": {
       "typedRoutes": true
     },
-
     "extra": {
       "router": {},
       "EXPO_PUBLIC_API_FOOTBALL_KEY": "a1385c927f799e0674174b06277d2c22",
