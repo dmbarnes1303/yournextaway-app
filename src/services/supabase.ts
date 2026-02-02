@@ -1,4 +1,7 @@
 // src/services/supabase.ts
+
+console.log("SUPABASE URL", process.env.EXPO_PUBLIC_SUPABASE_URL);
+
 import { createClient } from "@supabase/supabase-js";
 
 function mustEnv(name: string) {
