@@ -29,7 +29,9 @@ import { coerceNumber, coerceString } from "@/src/utils/params";
 import { formatUkDateTimeMaybe } from "@/src/utils/formatters";
 
 import authStore from "@/src/state/auth";
-import { isWatched, watchFixture, unwatchFixture } from "@/src/services/watchlist";
+import useFollowStore from "@/src/state/followStore";
+
+import { computeLikelyPlaceholderTbcIds, isKickoffTbc } from "@/src/utils/kickoffTbc";
 
 function currentFootballSeasonStartYear(now = new Date()): number {
   const y = now.getFullYear();
@@ -115,30 +117,16 @@ function buildTransportUrl(venue?: string, city?: string) {
   return `https://www.google.com/search?q=${enc(q)}`;
 }
 
-function isKickoffTbc(row: FixtureListRow | null): boolean {
-  if (!row) return true;
-
-  const status = String(row?.fixture?.status?.short ?? "").toUpperCase();
-  if (status.includes("TBD") || status.includes("TBC")) return true;
-
-  const iso = String(row?.fixture?.date ?? "").trim();
-  if (!iso) return true;
-
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return true;
-
-  const h = d.getHours();
-  const m = d.getMinutes();
-  if (h === 0 && m === 0) return true;
-
-  return false;
+function clampNum(n: unknown, fallback = 0) {
+  const v = Number(n);
+  return Number.isFinite(v) ? v : fallback;
 }
 
 export default function MatchDetailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
 
-  // boot auth
+  // boot auth (only used for "alerts later" messaging for now)
   const booted = authStore((s) => s.booted);
   const user = authStore((s) => s.user);
   const initAuth = authStore((s) => s.init);
@@ -174,9 +162,10 @@ export default function MatchDetailScreen() {
   const [error, setError] = useState<string | null>(null);
   const [row, setRow] = useState<FixtureListRow | null>(null);
 
-  // watch state
-  const [watched, setWatched] = useState(false);
-  const [watchBusy, setWatchBusy] = useState(false);
+  // Follow (local) state
+  const isFollowing = useFollowStore((s) => s.isFollowing);
+  const toggleFollow = useFollowStore((s) => s.toggle);
+  const upsertLatestSnapshot = useFollowStore((s) => s.upsertLatestSnapshot);
 
   // sign-in UI
   const [email, setEmail] = useState("");
@@ -224,60 +213,67 @@ export default function MatchDetailScreen() {
     return id ?? "";
   }, [row, id]);
 
-  useEffect(() => {
-    let cancelled = false;
+  // For single row, placeholder dominance can’t be inferred from a list.
+  // But we *can* still feed the util a 1-row list so it uses explicit status + strict heuristics consistently.
+  const placeholderTbcIds = useMemo(() => {
+    if (!row) return new Set<string>();
+    return computeLikelyPlaceholderTbcIds([row]);
+  }, [row]);
 
-    async function syncWatched() {
-      if (!user || !fixtureId) {
-        setWatched(false);
-        return;
-      }
-      try {
-        const ok = await isWatched(fixtureId);
-        if (!cancelled) setWatched(ok);
-      } catch {
-        if (!cancelled) setWatched(false);
-      }
-    }
+  const home = String(row?.teams?.home?.name ?? "Home").trim() || "Home";
+  const away = String(row?.teams?.away?.name ?? "Away").trim() || "Away";
 
-    syncWatched();
-    return () => {
-      cancelled = true;
-    };
-  }, [user, fixtureId]);
-
-  const home = row?.teams?.home?.name ?? "Home";
-  const away = row?.teams?.away?.name ?? "Away";
-
-  const kickoffDisplay = formatUkDateTimeMaybe(row?.fixture?.date);
   const kickoffDateOnly = isoDateOnly(row?.fixture?.date as string | undefined);
 
-  const venue = row?.fixture?.venue?.name ?? "";
-  const city = row?.fixture?.venue?.city ?? "";
+  const venue = String(row?.fixture?.venue?.name ?? "").trim();
+  const city = String(row?.fixture?.venue?.city ?? "").trim();
   const place = [venue, city].filter(Boolean).join(" • ");
 
-  const leagueName = row?.league?.name ?? "League";
-  const apiLeagueId = row?.league?.id ?? null;
+  const leagueName = String(row?.league?.name ?? "League").trim() || "League";
+  const apiLeagueId = typeof row?.league?.id === "number" ? row!.league!.id : null;
   const effectiveLeagueId = apiLeagueId ?? routeLeagueId ?? null;
 
   const apiSeason = (row as any)?.league?.season;
   const effectiveSeason =
     routeSeason ?? (typeof apiSeason === "number" ? apiSeason : null) ?? currentFootballSeasonStartYear();
 
-  const tbc = useMemo(() => isKickoffTbc(row), [row]);
+  const tbc = useMemo(() => isKickoffTbc(row, placeholderTbcIds), [row, placeholderTbcIds]);
 
-  const ticketsUrl = useMemo(() => buildTicketsUrl(home, away, kickoffDateOnly, leagueName), [home, away, kickoffDateOnly, leagueName]);
+  const kickoffDisplay = useMemo(() => {
+    if (!row) return null;
+    if (tbc) return null;
+    return formatUkDateTimeMaybe(row?.fixture?.date) || null;
+  }, [row, tbc]);
+
+  // Keep followed snapshot fresh when we load the match
+  useEffect(() => {
+    if (!row || !fixtureId) return;
+
+    const kickoffIso = !tbc && row?.fixture?.date ? String(row.fixture.date) : null;
+
+    upsertLatestSnapshot(fixtureId, {
+      leagueId: effectiveLeagueId ?? undefined,
+      season: typeof effectiveSeason === "number" ? effectiveSeason : undefined,
+      homeTeamId: row?.teams?.home?.id ?? undefined,
+      awayTeamId: row?.teams?.away?.id ?? undefined,
+      kickoffIso,
+      venue: venue || null,
+      city: city || null,
+    });
+  }, [row, fixtureId, tbc, upsertLatestSnapshot, effectiveLeagueId, effectiveSeason, venue, city]);
+
+  const ticketsUrl = useMemo(
+    () => buildTicketsUrl(home, away, kickoffDateOnly, leagueName),
+    [home, away, kickoffDateOnly, leagueName]
+  );
   const mapsUrl = useMemo(() => buildMapsVenueUrl(venue, city), [venue, city]);
   const stadiumInfoUrl = useMemo(() => buildStadiumInfoUrl(venue, home, city), [venue, home, city]);
   const foodDrinkUrl = useMemo(() => buildFoodDrinkUrl(venue, city), [venue, city]);
   const transportUrl = useMemo(() => buildTransportUrl(venue, city), [venue, city]);
 
   const ticketsSub = useMemo(() => {
-    if (home && away) {
-      const when = kickoffDateOnly ? ` • ${kickoffDateOnly}` : "";
-      return `${home} vs ${away}${when}`;
-    }
-    return "Open ticket search";
+    const when = kickoffDateOnly ? ` • ${kickoffDateOnly}` : "";
+    return `${home} vs ${away}${when}`;
   }, [home, away, kickoffDateOnly]);
 
   const directionsSub = useMemo(() => {
@@ -328,43 +324,33 @@ export default function MatchDetailScreen() {
     }
   }, [home, away, tbc, kickoffDisplay, place, leagueName, effectiveSeason, ticketsUrl, mapsUrl]);
 
-  const onToggleWatch = useCallback(async () => {
-    if (!fixtureId) return;
+  const following = useMemo(() => (fixtureId ? isFollowing(fixtureId) : false), [fixtureId, isFollowing]);
 
-    if (!user) {
-      Alert.alert("Sign in required", "Sign in to watch fixtures and get kickoff-change alerts.");
-      return;
+  const onToggleFollow = useCallback(() => {
+    if (!row || !fixtureId) return;
+
+    const kickoffIso = !tbc && row?.fixture?.date ? String(row.fixture.date) : null;
+
+    toggleFollow({
+      fixtureId,
+      leagueId: clampNum(effectiveLeagueId),
+      season: clampNum(effectiveSeason),
+      homeTeamId: clampNum(row?.teams?.home?.id),
+      awayTeamId: clampNum(row?.teams?.away?.id),
+      kickoffIso,
+      venue: venue || null,
+      city: city || null,
+    });
+
+    if (!following) {
+      Alert.alert(
+        "Following",
+        tbc
+          ? "We’ll keep an eye on this fixture. Kickoff is TBC — you’ll see it update when confirmed."
+          : "Fixture saved. You’ll see it update if kickoff changes."
+      );
     }
-
-    if (watchBusy) return;
-
-    try {
-      setWatchBusy(true);
-
-      if (watched) {
-        await unwatchFixture(fixtureId);
-        setWatched(false);
-        return;
-      }
-
-      const kickoffIso = row?.fixture?.date ? String(row.fixture.date) : null;
-
-      await watchFixture({
-        fixtureId,
-        leagueId: effectiveLeagueId ?? undefined,
-        season: typeof effectiveSeason === "number" ? effectiveSeason : undefined,
-        lastKnownKickoffIso: kickoffIso,
-        lastKnownIsTbc: tbc,
-      });
-
-      setWatched(true);
-      Alert.alert("Watching", "We’ll notify you later when kickoff changes (email + push coming next).");
-    } catch (e: any) {
-      Alert.alert("Watch failed", e?.message ?? "Could not update watch status.");
-    } finally {
-      setWatchBusy(false);
-    }
-  }, [fixtureId, user, watchBusy, watched, row, effectiveLeagueId, effectiveSeason, tbc]);
+  }, [row, fixtureId, toggleFollow, effectiveLeagueId, effectiveSeason, venue, city, tbc, following]);
 
   const onSendMagicLink = useCallback(async () => {
     const e = String(email ?? "").trim();
@@ -412,12 +398,11 @@ export default function MatchDetailScreen() {
                   <Text style={styles.kicker}>{leagueName}</Text>
 
                   <Pressable
-                    onPress={onToggleWatch}
-                    disabled={watchBusy}
-                    style={[styles.watchPill, watched && styles.watchPillActive, watchBusy && { opacity: 0.7 }]}
+                    onPress={onToggleFollow}
+                    style={[styles.followPill, following && styles.followPillActive]}
                   >
-                    <Text style={[styles.watchPillText, watched && styles.watchPillTextActive]}>
-                      {watched ? "Watching" : "Watch kickoff"}
+                    <Text style={[styles.followPillText, following && styles.followPillTextActive]}>
+                      {following ? "Following" : "Follow"}
                     </Text>
                   </Pressable>
                 </View>
@@ -429,7 +414,12 @@ export default function MatchDetailScreen() {
                 <View style={styles.metaBlock}>
                   <Text style={styles.metaLine}>
                     <Text style={styles.metaLabel}>Kickoff: </Text>
-                    {tbc ? "TBC (league confirms later)" : kickoffDisplay || "—"}
+                    {tbc ? (
+                      <>
+                        <Text style={styles.tbcText}>TBC</Text>
+                        <Text style={styles.metaHint}> (league confirms later)</Text>
+                      </>
+                    ) : kickoffDisplay || "—"}
                   </Text>
 
                   <Text style={styles.metaLine}>
@@ -447,7 +437,7 @@ export default function MatchDetailScreen() {
                   <View style={styles.signInBox}>
                     <Text style={styles.signInTitle}>Sign in for alerts</Text>
                     <Text style={styles.signInBody}>
-                      Watching a fixture only works when you’re signed in. Magic link = no passwords.
+                      Following works offline. Signing in enables email/push alerts later.
                     </Text>
 
                     <View style={styles.inputRow}>
@@ -533,12 +523,16 @@ export default function MatchDetailScreen() {
               <View style={styles.opsList}>
                 <View style={styles.opsItem}>
                   <Text style={styles.opsTitle}>Arrive early</Text>
-                  <Text style={styles.opsBody}>Aim for 60–90 minutes before kickoff if you’re collecting tickets or navigating security.</Text>
+                  <Text style={styles.opsBody}>
+                    Aim for 60–90 minutes before kickoff if you’re collecting tickets or navigating security.
+                  </Text>
                 </View>
 
                 <View style={styles.opsItem}>
                   <Text style={styles.opsTitle}>Bag policy and entry</Text>
-                  <Text style={styles.opsBody}>Policies vary. If you’re carrying a bag, double-check restrictions before you travel.</Text>
+                  <Text style={styles.opsBody}>
+                    Policies vary. If you’re carrying a bag, double-check restrictions before you travel.
+                  </Text>
                   <Pressable onPress={() => safeOpenUrl(stadiumInfoUrl)} style={styles.inlineBtn}>
                     <Text style={styles.inlineBtnText}>Search stadium entry rules</Text>
                   </Pressable>
@@ -546,7 +540,9 @@ export default function MatchDetailScreen() {
 
                 <View style={styles.opsItem}>
                   <Text style={styles.opsTitle}>Transport plan</Text>
-                  <Text style={styles.opsBody}>Public transport is usually easiest; event traffic and parking are unpredictable near kickoff.</Text>
+                  <Text style={styles.opsBody}>
+                    Public transport is usually easiest; event traffic and parking are unpredictable near kickoff.
+                  </Text>
                   <Pressable onPress={() => safeOpenUrl(transportUrl)} style={styles.inlineBtn}>
                     <Text style={styles.inlineBtnText}>Search transport options</Text>
                   </Pressable>
@@ -554,7 +550,9 @@ export default function MatchDetailScreen() {
 
                 <View style={styles.opsItem}>
                   <Text style={styles.opsTitle}>Food & drinks nearby</Text>
-                  <Text style={styles.opsBody}>Pick something walkable so you’re not rushing. Atmosphere is often best around the stadium district.</Text>
+                  <Text style={styles.opsBody}>
+                    Pick something walkable so you’re not rushing. Atmosphere is often best around the stadium district.
+                  </Text>
                   <Pressable onPress={() => safeOpenUrl(foodDrinkUrl)} style={styles.inlineBtn}>
                     <Text style={styles.inlineBtnText}>Search nearby spots</Text>
                   </Pressable>
@@ -583,24 +581,26 @@ const styles = StyleSheet.create({
   kicker: { color: theme.colors.primary, fontSize: theme.fontSize.xs, fontWeight: "900", letterSpacing: 0.6 },
   title: { marginTop: 8, fontSize: theme.fontSize.xl, fontWeight: "900", color: theme.colors.text, lineHeight: 30 },
 
-  watchPill: {
+  followPill: {
     paddingVertical: 7,
-    paddingHorizontal: 10,
+    paddingHorizontal: 12,
     borderRadius: 999,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.12)",
     backgroundColor: "rgba(0,0,0,0.16)",
   },
-  watchPillActive: {
+  followPillActive: {
     borderColor: "rgba(79,224,138,0.35)",
     backgroundColor: "rgba(79,224,138,0.10)",
   },
-  watchPillText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: 12 },
-  watchPillTextActive: { color: "rgba(79,224,138,0.92)" },
+  followPillText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: 12 },
+  followPillTextActive: { color: "rgba(79,224,138,0.92)" },
 
   metaBlock: { marginTop: 12, gap: 6 },
   metaLine: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18, fontWeight: "700" },
   metaLabel: { color: theme.colors.text, fontWeight: "900" },
+  metaHint: { color: theme.colors.textSecondary, fontWeight: "700" },
+  tbcText: { color: "rgba(242,244,246,0.92)", fontWeight: "900" },
 
   h2: { marginTop: 2, fontSize: theme.fontSize.lg, fontWeight: "900", color: theme.colors.text },
 
