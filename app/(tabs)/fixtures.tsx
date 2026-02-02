@@ -188,7 +188,7 @@ function FollowPill({ fixtureId, leagueId, season, row, placeholderIds }: Follow
           season,
           homeTeamId,
           awayTeamId,
-          kickoffIso, // <-- null when TBC
+          kickoffIso, // null when TBC/placeholder
           venue,
           city,
         });
@@ -307,8 +307,10 @@ export default function FixturesScreen() {
         const rows = Array.isArray(res) ? res : [];
         setRowsSingle(rows);
 
-        // Compute placeholder IDs for this batch and refresh snapshots for followed items.
+        // Full-batch placeholder ids (Option B)
         const placeholderIds = computeLikelyPlaceholderTbcIds(rows);
+
+        // Refresh snapshots for followed items.
         for (const r of rows) {
           const id = r?.fixture?.id != null ? String(r.fixture.id) : "";
           if (!id) continue;
@@ -356,9 +358,10 @@ export default function FixturesScreen() {
         for (const [leagueId, rows] of results) map[leagueId] = rows;
         setRowsMulti(map);
 
-        // Refresh snapshots for followed items across all leagues.
+        // Refresh snapshots for followed items across all leagues (full-batch placeholder ids).
         for (const [leagueId, rows, season] of results) {
           const placeholderIds = computeLikelyPlaceholderTbcIds(rows);
+
           for (const r of rows) {
             const id = r?.fixture?.id != null ? String(r.fixture.id) : "";
             if (!id) continue;
@@ -389,7 +392,16 @@ export default function FixturesScreen() {
     return () => {
       cancelled = true;
     };
-  }, [mode, selectedSingle.leagueId, selectedSingle.season, selectedMany, from, to, isFollowing, upsertLatestSnapshot]);
+  }, [
+    mode,
+    selectedSingle.leagueId,
+    selectedSingle.season,
+    selectedMany,
+    from,
+    to,
+    isFollowing,
+    upsertLatestSnapshot,
+  ]);
 
   const passesQuery = useCallback(
     (r: FixtureListRow) => {
@@ -429,17 +441,20 @@ export default function FixturesScreen() {
     return out;
   }, [rowsMulti, selectedMany, passesQuery, isActiveDay]);
 
-  // Placeholder detection for what we are *rendering* (so labels + follow payload match).
-  const placeholderIdsSingle = useMemo(() => computeLikelyPlaceholderTbcIds(filteredSingle), [filteredSingle]);
+  /**
+   * OPTION B IMPLEMENTATION:
+   * Placeholder IDs are computed from the FULL fetched batches, not the filtered/visible list.
+   */
+  const placeholderIdsSingle = useMemo(() => computeLikelyPlaceholderTbcIds(rowsSingle), [rowsSingle]);
 
   const placeholderIdsByLeague = useMemo(() => {
     const map = new Map<number, Set<string>>();
     for (const l of selectedMany) {
-      const rows = filteredMulti[l.leagueId] ?? [];
-      map.set(l.leagueId, computeLikelyPlaceholderTbcIds(rows));
+      const full = rowsMulti[l.leagueId] ?? [];
+      map.set(l.leagueId, computeLikelyPlaceholderTbcIds(full));
     }
     return map;
-  }, [filteredMulti, selectedMany]);
+  }, [rowsMulti, selectedMany]);
 
   const subtitle = useMemo(() => {
     if (mode === "single") return selectedSingle.label;
@@ -701,7 +716,7 @@ export default function FixturesScreen() {
                       renderFixtureRow(r, {
                         leagueId: selectedSingle.leagueId,
                         season: selectedSingle.season,
-                        placeholderIds: placeholderIdsSingle,
+                        placeholderIds: placeholderIdsSingle, // <- full batch
                       })
                     )}
                   </View>
@@ -714,7 +729,7 @@ export default function FixturesScreen() {
                     const leagueRows = filteredMulti[l.leagueId] ?? [];
                     if (leagueRows.length === 0) return null;
 
-                    const pid = placeholderIdsByLeague.get(l.leagueId);
+                    const pid = placeholderIdsByLeague.get(l.leagueId); // <- full batch per league
 
                     return (
                       <View key={l.leagueId} style={styles.leagueGroup}>
