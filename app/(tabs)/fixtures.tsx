@@ -14,6 +14,7 @@ import {
   FlatList,
   ListRenderItemInfo,
   Alert,
+  ScrollView,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -27,7 +28,7 @@ import { getFixtures, type FixtureListRow } from "@/src/services/apiFootball";
 
 import { LEAGUES, type LeagueOption } from "@/src/constants/football";
 import { coerceNumber, coerceString } from "@/src/utils/params";
-import { formatUkDateOnly, formatUkDateTimeMaybe } from "@/src/utils/formatters";
+import { formatUkDateOnly } from "@/src/utils/formatters";
 import { getFlagImageUrl } from "@/src/utils/flagImages";
 
 type Mode = "browse" | "plan";
@@ -46,7 +47,6 @@ function isoDate(d: Date) {
 }
 
 function parseIsoToLocalMidnight(iso: string) {
-  // Safe local date (avoid timezone surprises from "Z" parsing)
   const [y, m, d] = iso.split("-").map((x) => Number(x));
   const dt = new Date();
   dt.setFullYear(y, (m ?? 1) - 1, d ?? 1);
@@ -72,13 +72,11 @@ function nextSaturdayIso(from?: Date) {
   base.setHours(0, 0, 0, 0);
   const day = base.getDay(); // 0 Sun ... 6 Sat
   const daysUntilSat = (6 - day + 7) % 7;
-  const sat = addDays(base, daysUntilSat === 0 ? 7 : daysUntilSat); // "upcoming" weekend (not today if already Sat)
+  const sat = addDays(base, daysUntilSat === 0 ? 7 : daysUntilSat);
   return isoDate(sat);
 }
 
 function seasonEndIso(season: number) {
-  // Good-enough for European leagues: season "2025" => ends 2026-06-30
-  // If you later want per-league end dates, do it in src/constants/football.
   return `${season + 1}-06-30`;
 }
 
@@ -103,12 +101,51 @@ function norm(s: unknown) {
   return String(s ?? "").trim().toLowerCase();
 }
 
-function rowTime(r: FixtureListRow) {
-  // Keep it super scannable: time only (or "--:--")
+function kickoffStatusShort(r: FixtureListRow) {
+  return String(r?.fixture?.status?.short ?? "").trim().toUpperCase();
+}
+
+function kickoffStatusLong(r: FixtureListRow) {
+  return String(r?.fixture?.status?.long ?? "").trim().toLowerCase();
+}
+
+function parseKickoffDate(r: FixtureListRow): Date | null {
   const raw = r?.fixture?.date;
-  if (!raw) return "--:--";
+  if (!raw) return null;
   const dt = new Date(String(raw));
-  if (Number.isNaN(dt.getTime())) return "--:--";
+  if (Number.isNaN(dt.getTime())) return null;
+  return dt;
+}
+
+/**
+ * Kickoff is considered "TBC" if:
+ * - API status says TBD/TBC
+ * - or status.long implies time not defined
+ * - or kickoff time resolves to 00:00 (common placeholder)
+ *
+ * Conservative by design: better to label TBC than mislead users.
+ */
+function isKickoffTBC(r: FixtureListRow): boolean {
+  const s = kickoffStatusShort(r);
+  if (s === "TBD" || s === "TBC") return true;
+
+  const long = kickoffStatusLong(r);
+  if (long.includes("to be defined") || long.includes("time to be defined") || long.includes("tbd")) return true;
+
+  const dt = parseKickoffDate(r);
+  if (!dt) return true; // no date -> treat as not confirmed for UI
+  const hh = dt.getHours();
+  const mm = dt.getMinutes();
+  if (hh === 0 && mm === 0) return true;
+
+  return false;
+}
+
+function rowTimeLabel(r: FixtureListRow) {
+  if (isKickoffTBC(r)) return "TBC";
+
+  const dt = parseKickoffDate(r);
+  if (!dt) return "--:--";
   const hh = String(dt.getHours()).padStart(2, "0");
   const mm = String(dt.getMinutes()).padStart(2, "0");
   return `${hh}:${mm}`;
@@ -157,12 +194,11 @@ function resolveInitialLeagues(paramsLeagueId: unknown, paramsSeason: unknown) {
   const seasonNum = coerceNumber(paramsSeason);
 
   if (leagueIdStr === "all") {
-    // cap to 10 (your rule)
-    return { selected: LEAGUES.slice(0, 10), season: seasonNum ?? LEAGUES[0]?.season ?? new Date().getFullYear() };
+    return { selected: LEAGUES.slice(0, 10), season: seasonNum ?? (LEAGUES[0]?.season ?? new Date().getFullYear()) };
   }
 
   if (!leagueIdNum) {
-    const s = seasonNum ?? LEAGUES[0]?.season ?? new Date().getFullYear();
+    const s = seasonNum ?? (LEAGUES[0]?.season ?? new Date().getFullYear());
     return { selected: [LEAGUES[0]], season: s };
   }
 
@@ -175,47 +211,40 @@ export default function FixturesScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
 
-  // ---------
-  // SESSION STATE ONLY
-  // ---------
+  // Prefill search from params (session-only)
   const venueParamRaw = useMemo(() => coerceString((params as any).venue), [params]);
   const [query, setQuery] = useState<string>(venueParamRaw ?? "");
   const qNorm = useMemo(() => query.trim(), [query]);
 
   useEffect(() => {
-    // If routed in with a venue filter, prefill.
     setQuery(venueParamRaw ?? "");
   }, [venueParamRaw]);
 
   const initial = useMemo(() => resolveInitialLeagues(params.leagueId, params.season), [params.leagueId, params.season]);
   const [selectedLeagues, setSelectedLeagues] = useState<LeagueOption[]>(initial.selected);
 
-  // Mode: browse vs plan
-  const [mode, setMode] = useState<Mode>("plan"); // You chose Trip Build default behaviour
+  // Mode
+  const [mode, setMode] = useState<Mode>("plan");
 
   const season = useMemo(() => {
-    // Derive season from selection (fall back to initial)
-    const s = selectedLeagues?.[0]?.season ?? initial.season ?? new Date().getFullYear();
-    return s;
+    return selectedLeagues?.[0]?.season ?? initial.season ?? new Date().getFullYear();
   }, [selectedLeagues, initial.season]);
 
-  // Date range shown in strip: today -> season end
+  // Date strip range: today -> end of season
   const todayIso = useMemo(() => isoDate(new Date()), []);
   const endIso = useMemo(() => seasonEndIso(season), [season]);
-
   const dates = useMemo(() => buildDateChips(todayIso, endIso), [todayIso, endIso]);
 
-  // Default active = upcoming weekend (next Saturday)
+  // Default active: upcoming weekend
   const [activeDay, setActiveDay] = useState<string>(() => nextSaturdayIso(new Date()));
 
-  // Ensure activeDay exists in range (if season changes)
   useEffect(() => {
     const exists = dates.some((d) => d.iso === activeDay);
     if (!exists) setActiveDay(nextSaturdayIso(new Date()));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dates.length]);
 
-  // Scroll to active day on mount (and when season shifts)
+  // Scroll date strip to active
   const dateListRef = useRef<FlatList<DateChip>>(null);
   useEffect(() => {
     const idx = dates.findIndex((d) => d.iso === activeDay);
@@ -231,7 +260,6 @@ export default function FixturesScreen() {
   const openFilters = useCallback(() => setFiltersOpen(true), []);
   const closeFilters = useCallback(() => setFiltersOpen(false), []);
 
-  // Draft selection in modal
   const [draftLeagues, setDraftLeagues] = useState<LeagueOption[]>(selectedLeagues);
   useEffect(() => setDraftLeagues(selectedLeagues), [selectedLeagues, filtersOpen]);
 
@@ -239,7 +267,7 @@ export default function FixturesScreen() {
     setDraftLeagues((prev) => {
       const has = prev.some((x) => x.leagueId === l.leagueId);
       if (has) return prev.filter((x) => x.leagueId !== l.leagueId);
-      if (prev.length >= 10) return prev; // hard cap
+      if (prev.length >= 10) return prev;
       return [...prev, l];
     });
   }, []);
@@ -263,13 +291,9 @@ export default function FixturesScreen() {
     Keyboard.dismiss();
   }, []);
 
-  // ---------
-  // DATA LOAD (single day only; this is the LiveScore pattern)
-  // ---------
+  // Data (single day only)
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // Rows grouped by leagueId
   const [rowsByLeague, setRowsByLeague] = useState<Record<number, FixtureListRow[]>>({});
 
   useEffect(() => {
@@ -281,7 +305,7 @@ export default function FixturesScreen() {
       setRowsByLeague({});
 
       try {
-        const leagues = selectedLeagues.slice(0, 10); // enforce cap
+        const leagues = selectedLeagues.slice(0, 10);
         const results = await Promise.all(
           leagues.map(async (l) => {
             const res = await getFixtures({
@@ -313,9 +337,7 @@ export default function FixturesScreen() {
     };
   }, [selectedLeagues, activeDay]);
 
-  // ---------
-  // SEARCH FILTER (local only; no extra API calls)
-  // ---------
+  // Search filter
   const passesQuery = useCallback(
     (r: FixtureListRow) => {
       const q = qNorm.toLowerCase();
@@ -337,12 +359,13 @@ export default function FixturesScreen() {
       .map((l) => {
         const raw = rowsByLeague[l.leagueId] ?? [];
         const filtered = raw.filter(passesQuery).filter((r) => r?.fixture?.id != null);
-        // sort by kickoff
+
         filtered.sort((a, b) => {
           const ta = a?.fixture?.date ? new Date(String(a.fixture.date)).getTime() : 0;
           const tb = b?.fixture?.date ? new Date(String(b.fixture.date)).getTime() : 0;
           return ta - tb;
         });
+
         return { league: l, rows: filtered };
       })
       .filter((g) => g.rows.length > 0);
@@ -371,17 +394,11 @@ export default function FixturesScreen() {
       };
 
       if (mode === "plan") {
-        router.push({
-          pathname: "/trip/build",
-          params: { ...baseParams, fixtureId },
-        } as any);
+        router.push({ pathname: "/trip/build", params: { ...baseParams, fixtureId } } as any);
         return;
       }
 
-      router.push({
-        pathname: "/match/[id]",
-        params: { ...baseParams, id: fixtureId },
-      } as any);
+      router.push({ pathname: "/match/[id]", params: { ...baseParams, id: fixtureId } } as any);
     },
     [router, mode, activeDay, qNorm]
   );
@@ -413,7 +430,6 @@ export default function FixturesScreen() {
   );
 
   const getDateItemLayout = useCallback((_: any, index: number) => {
-    // Approx width for smooth scrollToIndex (keep stable)
     const ITEM_W = 78;
     const GAP = 10;
     const len = ITEM_W + GAP;
@@ -473,7 +489,7 @@ export default function FixturesScreen() {
             ) : null}
           </View>
 
-          {/* DATE STRIP: today -> end of season */}
+          {/* DATE STRIP */}
           <FlatList
             ref={dateListRef}
             horizontal
@@ -489,8 +505,13 @@ export default function FixturesScreen() {
           />
         </View>
 
-        {/* BODY */}
-        <View style={styles.body}>
+        {/* BODY (SCROLLABLE) */}
+        <ScrollView
+          style={styles.bodyScroll}
+          contentContainerStyle={styles.bodyContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
           <GlassCard strength="default" style={styles.card}>
             {loading ? (
               <View style={styles.center}>
@@ -519,6 +540,7 @@ export default function FixturesScreen() {
                       {g.rows.map((r, idx) => {
                         const id = r?.fixture?.id;
                         const key = id ? String(id) : `idx-${idx}`;
+                        const tbc = isKickoffTBC(r);
 
                         return (
                           <Pressable
@@ -529,7 +551,14 @@ export default function FixturesScreen() {
                           >
                             <GlassCard strength="subtle" noPadding style={styles.rowCard}>
                               <View style={styles.rowInner}>
-                                <Text style={styles.kickoff}>{rowTime(r)}</Text>
+                                <View style={styles.kickoffCol}>
+                                  <Text style={[styles.kickoff, tbc && styles.kickoffTbc]}>{rowTimeLabel(r)}</Text>
+                                  {tbc ? (
+                                    <View style={styles.tbcPill}>
+                                      <Text style={styles.tbcText}>TBC</Text>
+                                    </View>
+                                  ) : null}
+                                </View>
 
                                 <View style={styles.crestCol}>
                                   <CrestSquare r={r} />
@@ -542,6 +571,11 @@ export default function FixturesScreen() {
                                   <Text style={styles.away} numberOfLines={1}>
                                     {rowAway(r)}
                                   </Text>
+                                  {tbc ? (
+                                    <Text style={styles.tbcHint} numberOfLines={1}>
+                                      Kickoff time not confirmed yet
+                                    </Text>
+                                  ) : null}
                                 </View>
 
                                 <Text style={styles.chev}>›</Text>
@@ -556,7 +590,9 @@ export default function FixturesScreen() {
               </View>
             ) : null}
           </GlassCard>
-        </View>
+
+          <View style={{ height: 14 }} />
+        </ScrollView>
 
         {/* FILTERS MODAL */}
         <Modal visible={filtersOpen} animationType="fade" transparent onRequestClose={closeFilters}>
@@ -630,7 +666,7 @@ export default function FixturesScreen() {
                 </View>
 
                 <Text style={styles.modalFootnote}>
-                  Tip: Browse mode opens the match screen. Plan mode jumps straight into building a trip hub.
+                  Browse opens match details. Plan jumps straight into building a trip hub.
                 </Text>
               </View>
             </GlassCard>
@@ -730,8 +766,10 @@ const styles = StyleSheet.create({
   dateBottom: { marginTop: 2, color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.black },
   dateBottomActive: { color: theme.colors.text },
 
-  // Body
-  body: { flex: 1, paddingHorizontal: theme.spacing.lg, paddingBottom: theme.spacing.xxl },
+  // Body scroll
+  bodyScroll: { flex: 1, paddingHorizontal: theme.spacing.lg },
+  bodyContent: { paddingBottom: theme.spacing.xxl },
+
   card: { minHeight: 260, padding: theme.spacing.md },
 
   center: { paddingVertical: 14, alignItems: "center", gap: 10 },
@@ -748,7 +786,7 @@ const styles = StyleSheet.create({
 
   flag: { width: 18, height: 13, borderRadius: 3, opacity: 0.9 },
 
-  // Rows (minimal, scannable)
+  // Rows
   list: { gap: 10 },
   rowPress: { borderRadius: 16, overflow: "hidden" },
   rowCard: { borderRadius: 16 },
@@ -761,7 +799,19 @@ const styles = StyleSheet.create({
     gap: 12,
   },
 
-  kickoff: { width: 52, color: theme.colors.textSecondary, fontSize: 14, fontWeight: theme.fontWeight.black },
+  kickoffCol: { width: 64, alignItems: "flex-start", gap: 6 },
+  kickoff: { color: theme.colors.textSecondary, fontSize: 14, fontWeight: theme.fontWeight.black },
+  kickoffTbc: { color: "rgba(242,244,246,0.70)" },
+
+  tbcPill: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    backgroundColor: "rgba(0,0,0,0.16)",
+  },
+  tbcText: { color: "rgba(242,244,246,0.72)", fontSize: 11, fontWeight: theme.fontWeight.black, letterSpacing: 0.3 },
 
   crestCol: { width: 46, alignItems: "center", justifyContent: "center" },
 
@@ -789,17 +839,14 @@ const styles = StyleSheet.create({
   home: { color: theme.colors.text, fontSize: 15, fontWeight: theme.fontWeight.black },
   away: { color: theme.colors.textSecondary, fontSize: 14, fontWeight: theme.fontWeight.bold },
 
+  tbcHint: { marginTop: 2, color: theme.colors.textTertiary, fontSize: 12, fontWeight: theme.fontWeight.bold, opacity: 0.85 },
+
   chev: { color: theme.colors.textTertiary, fontSize: 24, marginTop: -2 },
 
   // Modal
   modalBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.55)" },
   modalWrap: { flex: 1, justifyContent: "flex-end" },
-  modalSheet: {
-    borderRadius: 22,
-    marginHorizontal: theme.spacing.lg,
-    marginBottom: theme.spacing.lg,
-    overflow: "hidden",
-  },
+  modalSheet: { borderRadius: 22, marginHorizontal: theme.spacing.lg, marginBottom: theme.spacing.lg, overflow: "hidden" },
   modalInner: { padding: 14, gap: 12 },
 
   modalHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
@@ -845,15 +892,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  checkboxInner: {
-    width: 10,
-    height: 10,
-    borderRadius: 4,
-    backgroundColor: "rgba(255,255,255,0.10)",
-  },
-  checkboxInnerOn: {
-    backgroundColor: "rgba(79,224,138,0.85)",
-  },
+  checkboxInner: { width: 10, height: 10, borderRadius: 4, backgroundColor: "rgba(255,255,255,0.10)" },
+  checkboxInnerOn: { backgroundColor: "rgba(79,224,138,0.85)" },
 
   modalActions: { flexDirection: "row", gap: 10, marginTop: 4 },
   btn: { flex: 1, borderRadius: 16, paddingVertical: 12, alignItems: "center", borderWidth: 1, overflow: "hidden" },
