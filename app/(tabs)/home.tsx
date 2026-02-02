@@ -1,3 +1,4 @@
+// app/(tabs)/home.tsx
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import {
   View,
@@ -10,6 +11,8 @@ import {
   Platform,
   Keyboard,
   Image,
+  Alert,
+  Modal,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -144,11 +147,51 @@ function windowFromTomorrow(days: number): ShortcutWindow {
   return { from, to };
 }
 
+function pickRandom<T>(arr: T[]): T | null {
+  if (!Array.isArray(arr) || arr.length === 0) return null;
+  const i = Math.floor(Math.random() * arr.length);
+  return arr[i] ?? null;
+}
+
+type DiscoverWindowKey = "wknd" | "d7" | "d14" | "d30" | "any";
+type DiscoverTripLength = "day" | "1" | "2" | "3" | "any";
+type DiscoverVibe = "big" | "hidden" | "easy" | "nightlife" | "culture" | "warm";
+
+function windowKeyToWindow(key: DiscoverWindowKey): ShortcutWindow {
+  if (key === "wknd") return nextWeekendWindowIso();
+  if (key === "d7") return windowFromTomorrow(7);
+  if (key === "d14") return windowFromTomorrow(14);
+  if (key === "d30") return windowFromTomorrow(30);
+  return getRollingWindowIso({ days: 60 });
+}
+
+function labelForWindowKey(key: DiscoverWindowKey) {
+  if (key === "wknd") return "This weekend";
+  if (key === "d7") return "Next 7 days";
+  if (key === "d14") return "Next 14 days";
+  if (key === "d30") return "Next 30 days";
+  return "Any time";
+}
+
+function labelForTripLength(v: DiscoverTripLength) {
+  if (v === "day") return "Day trip";
+  if (v === "1") return "1 night";
+  if (v === "2") return "2 nights";
+  if (v === "3") return "3 nights";
+  return "Any";
+}
+
+function labelForVibe(v: DiscoverVibe) {
+  if (v === "big") return "Big match";
+  if (v === "hidden") return "Hidden gem";
+  if (v === "easy") return "Easy travel";
+  if (v === "nightlife") return "Nightlife";
+  if (v === "culture") return "Culture";
+  return "Warm-ish";
+}
+
 export default function HomeScreen() {
   const router = useRouter();
-
-  const scrollRef = useRef<ScrollView | null>(null);
-  const searchInputRef = useRef<TextInput | null>(null);
 
   const [league, setLeague] = useState<LeagueOption>(LEAGUES[0]);
 
@@ -280,8 +323,6 @@ export default function HomeScreen() {
     Keyboard.dismiss();
   }, []);
 
-  // -------- Routing helpers --------
-
   const goBuildTripWithContext = useCallback(
     (fixtureId?: string) => {
       router.push({
@@ -298,15 +339,15 @@ export default function HomeScreen() {
     [router, league.leagueId, league.season, fromIso, toIso]
   );
 
-  // Global mode = ALWAYS /trip/build with global=1 and a window
-  const goBuildTripGlobalWindow = useCallback(
-    (window: ShortcutWindow) => {
+  const goBuildTripGlobal = useCallback(
+    (window?: ShortcutWindow) => {
+      const w = window ?? getRollingWindowIso({ days: 60 });
       router.push({
         pathname: "/trip/build",
         params: {
           global: "1",
-          from: window.from,
-          to: window.to,
+          from: w.from,
+          to: w.to,
         },
       } as any);
     },
@@ -344,15 +385,6 @@ export default function HomeScreen() {
     },
     [router, league.leagueId, league.season, fromIso, toIso]
   );
-
-  const focusSearch = useCallback(() => {
-    // Kill any existing search results then focus
-    setQ("");
-    requestAnimationFrame(() => {
-      scrollRef.current?.scrollTo({ y: 0, animated: true });
-      requestAnimationFrame(() => searchInputRef.current?.focus());
-    });
-  }, []);
 
   const onPressSearchResult = useCallback(
     (r: SearchResult) => {
@@ -427,58 +459,152 @@ export default function HomeScreen() {
     []
   );
 
-  // -------- Bottom section windows (source of truth) --------
-  const winWeekend = useMemo(() => nextWeekendWindowIso(), []);
-  const win7 = useMemo(() => windowFromTomorrow(7), []);
-  const win14 = useMemo(() => windowFromTomorrow(14), []);
-  const win30 = useMemo(() => windowFromTomorrow(30), []);
-  const winAny = useMemo(() => getRollingWindowIso({ days: 60 }), []);
+  const popularCityNames = useMemo(() => new Set(popularCityChips.map((c) => c.name.toLowerCase())), [popularCityChips]);
 
   const quickShortcuts = useMemo(
     () => [
-      { key: "wknd", label: "This weekend", sub: "Sat–Sun", window: winWeekend },
-      { key: "d7", label: "Next 7 days", sub: "Quick break", window: win7 },
-      { key: "d14", label: "Next 14 days", sub: "Pick a match", window: win14 },
-      { key: "d30", label: "Next 30 days", sub: "More options", window: win30 },
-      { key: "any", label: "Any time", sub: "Browse broadly", window: winAny },
-    ],
-    [winWeekend, win7, win14, win30, winAny]
-  );
-
-  const inspiration = useMemo(
-    () => [
-      { key: "weekend", title: "Weekend trips that just work", sub: "Low-stress planning across Europe" },
-      { key: "pick", title: "Pick a match, build the break", sub: "Dates, stay, transport — in one hub" },
-      { key: "shortlist", title: "Shortlist cities fast", sub: "Search by team, city, stadium, or country" },
+      { key: "wknd", label: "This weekend", sub: "Sat–Sun", window: nextWeekendWindowIso() },
+      { key: "d7", label: "Next 7 days", sub: "Quick break", window: windowFromTomorrow(7) },
+      { key: "d14", label: "Next 14 days", sub: "Pick a match", window: windowFromTomorrow(14) },
+      { key: "d30", label: "Next 30 days", sub: "More options", window: windowFromTomorrow(30) },
+      { key: "any", label: "Any time", sub: "Browse broadly", window: getRollingWindowIso({ days: 60 }) },
     ],
     []
   );
 
-  const onPressInspiration = useCallback(
-    (key: string) => {
-      if (key === "weekend") {
-        goBuildTripGlobalWindow(winWeekend);
-        return;
+  // ---------------------------
+  // DISCOVER: Surprise + Hidden
+  // ---------------------------
+  const [discoverOpen, setDiscoverOpen] = useState(false);
+  const [discoverWindowKey, setDiscoverWindowKey] = useState<DiscoverWindowKey>("wknd");
+  const [discoverTripLength, setDiscoverTripLength] = useState<DiscoverTripLength>("2");
+  const [discoverVibes, setDiscoverVibes] = useState<DiscoverVibe[]>(["easy"]);
+  const [discoverFrom, setDiscoverFrom] = useState<string>("");
+
+  const [surpriseLoading, setSurpriseLoading] = useState(false);
+
+  const toggleVibe = useCallback((v: DiscoverVibe) => {
+    setDiscoverVibes((prev) => {
+      const has = prev.includes(v);
+      const next = has ? prev.filter((x) => x !== v) : [...prev, v];
+      // Keep it sane: 3 max
+      if (next.length > 3) return next.slice(next.length - 3);
+      return next;
+    });
+  }, []);
+
+  const buildDiscoverParams = useCallback(
+    (opts: { window: ShortcutWindow; league: LeagueOption; fixtureId: string; mode: "surprise" | "hidden" }) => {
+      const fromText = discoverFrom.trim();
+      const vibes = discoverVibes.length ? discoverVibes.join(",") : "any";
+
+      return {
+        global: "1",
+        fixtureId: opts.fixtureId,
+        leagueId: String(opts.league.leagueId),
+        season: String(opts.league.season),
+        from: opts.window.from,
+        to: opts.window.to,
+
+        // Optional “preferences” — harmless if trip/build ignores them for now
+        prefMode: opts.mode,
+        prefFrom: fromText ? fromText : undefined,
+        prefWindow: discoverWindowKey,
+        prefLength: discoverTripLength,
+        prefVibes: vibes,
+      } as any;
+    },
+    [discoverFrom, discoverTripLength, discoverVibes, discoverWindowKey]
+  );
+
+  const pickFixtureFromLeagues = useCallback(
+    async (w: ShortcutWindow, filter: (r: FixtureListRow) => boolean) => {
+      const tried = new Set<number>();
+
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const remaining = LEAGUES.filter((l) => !tried.has(l.leagueId));
+        const next = pickRandom(remaining.length ? remaining : LEAGUES);
+        if (!next) break;
+
+        tried.add(next.leagueId);
+
+        const res = await getFixtures({
+          league: next.leagueId,
+          season: next.season,
+          from: w.from,
+          to: w.to,
+        });
+
+        const list = Array.isArray(res) ? (res as FixtureListRow[]) : [];
+        const valid = list.filter((r) => r?.fixture?.id != null).filter(filter);
+
+        if (valid.length > 0) {
+          const chosen = pickRandom(valid);
+          const fixtureId = chosen?.fixture?.id != null ? String(chosen.fixture.id) : null;
+          if (fixtureId) return { league: next, fixtureId };
+        }
       }
-      if (key === "pick") {
-        // honest: this card is about browsing matches first
-        goFixturesWithContext();
-        return;
-      }
-      if (key === "shortlist") {
-        // fastest: take them to the actual search bar
-        focusSearch();
-        return;
+
+      return null;
+    },
+    []
+  );
+
+  const goDiscover = useCallback(
+    async (mode: "surprise" | "hidden") => {
+      if (surpriseLoading) return;
+      setSurpriseLoading(true);
+
+      try {
+        const w = windowKeyToWindow(discoverWindowKey);
+
+        const filter = (r: FixtureListRow) => {
+          const city = String(r?.fixture?.venue?.city ?? "").trim().toLowerCase();
+          const venue = String(r?.fixture?.venue?.name ?? "").trim();
+          const hasVenue = Boolean(venue);
+          if (!hasVenue) return false;
+
+          if (mode === "hidden") {
+            // "Hidden" heuristic: avoid the obvious popular cities
+            if (!city) return false;
+            if (popularCityNames.has(city)) return false;
+          }
+
+          return true;
+        };
+
+        const picked = await pickFixtureFromLeagues(w, filter);
+
+        if (!picked) {
+          Alert.alert("No matches found", "Try another window or try again in a moment.");
+          return;
+        }
+
+        router.push({
+          pathname: "/trip/build",
+          params: buildDiscoverParams({
+            window: w,
+            league: picked.league,
+            fixtureId: picked.fixtureId,
+            mode,
+          }),
+        } as any);
+      } catch (e: any) {
+        Alert.alert(mode === "hidden" ? "Hidden Gem failed" : "Surprise Me failed", e?.message ?? "Try again.");
+      } finally {
+        setSurpriseLoading(false);
       }
     },
-    [goBuildTripGlobalWindow, winWeekend, goFixturesWithContext, focusSearch]
+    [buildDiscoverParams, discoverWindowKey, pickFixtureFromLeagues, popularCityNames, router, surpriseLoading]
   );
+
+  const openDiscover = useCallback(() => setDiscoverOpen(true), []);
+  const closeDiscover = useCallback(() => setDiscoverOpen(false), []);
 
   return (
     <Background imageSource={getBackground("home")} overlayOpacity={0.74}>
       <SafeAreaView style={styles.container} edges={["top"]}>
         <ScrollView
-          ref={(r) => (scrollRef.current = r)}
           style={styles.scrollView}
           contentContainerStyle={styles.content}
           keyboardShouldPersistTaps="handled"
@@ -502,7 +628,6 @@ export default function HomeScreen() {
                 <View pointerEvents="none" style={styles.searchSheen} />
 
                 <TextInput
-                  ref={(r) => (searchInputRef.current = r)}
                   value={q}
                   onChangeText={setQ}
                   placeholder="Search country, city or team"
@@ -779,11 +904,7 @@ export default function HomeScreen() {
                   decelerationRate="fast"
                 >
                   {quickShortcuts.map((x) => (
-                    <Pressable
-                      key={x.key}
-                      onPress={() => goBuildTripGlobalWindow(x.window)}
-                      style={styles.shortcutCard}
-                    >
+                    <Pressable key={x.key} onPress={() => goBuildTripGlobal(x.window)} style={styles.shortcutCard}>
                       <Text style={styles.shortcutTitle}>{x.label}</Text>
                       <Text style={styles.shortcutSub}>{x.sub}</Text>
                     </Pressable>
@@ -795,29 +916,169 @@ export default function HomeScreen() {
             </View>
           ) : null}
 
-          {/* INSPIRATION */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Inspiration</Text>
-              <Text style={styles.sectionMeta}>Editorial shortcuts</Text>
-            </View>
+          {/* DISCOVER (REPLACES “INSPIRATION”) */}
+          {!showSearchResults ? (
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>Discover</Text>
+                <Text style={styles.sectionMeta}>Randomise or find hidden gems</Text>
+              </View>
 
-            <View style={styles.inspoList}>
-              {inspiration.map((x) => (
-                <Pressable key={x.key} onPress={() => onPressInspiration(x.key)} style={styles.inspoPress}>
-                  <GlassCard strength="default" noPadding style={styles.inspoCard}>
-                    <View style={styles.inspoInner}>
-                      <Text style={styles.inspoTitle}>{x.title}</Text>
-                      <Text style={styles.inspoSub}>{x.sub}</Text>
+              <View style={styles.discoverGrid}>
+                <Pressable onPress={() => goDiscover("surprise")} disabled={surpriseLoading} style={styles.discoverPress}>
+                  <GlassCard
+                    strength="default"
+                    noPadding
+                    style={[styles.discoverCard, surpriseLoading && { opacity: 0.88 }]}
+                  >
+                    <View style={styles.discoverInner}>
+                      <Text style={styles.discoverTitle}>Surprise me</Text>
+                      <Text style={styles.discoverSub}>
+                        {labelForWindowKey(discoverWindowKey)} • {labelForTripLength(discoverTripLength)}
+                      </Text>
+                      <View style={styles.discoverFooter}>
+                        <Text style={styles.discoverHint}>
+                          {discoverVibes.length ? discoverVibes.map(labelForVibe).join(" • ") : "Any vibe"}
+                        </Text>
+                        {surpriseLoading ? <ActivityIndicator /> : <Text style={styles.chev}>›</Text>}
+                      </View>
                     </View>
                   </GlassCard>
                 </Pressable>
-              ))}
+
+                <Pressable onPress={() => goDiscover("hidden")} disabled={surpriseLoading} style={styles.discoverPress}>
+                  <GlassCard
+                    strength="default"
+                    noPadding
+                    style={[styles.discoverCard, surpriseLoading && { opacity: 0.88 }]}
+                  >
+                    <View style={styles.discoverInner}>
+                      <Text style={styles.discoverTitle}>Hidden gems</Text>
+                      <Text style={styles.discoverSub}>Avoid obvious cities • Find something different</Text>
+                      <View style={styles.discoverFooter}>
+                        <Text style={styles.discoverHint}>Curated by simple heuristics (no price claims)</Text>
+                        {surpriseLoading ? <ActivityIndicator /> : <Text style={styles.chev}>›</Text>}
+                      </View>
+                    </View>
+                  </GlassCard>
+                </Pressable>
+              </View>
+
+              <Pressable onPress={openDiscover} style={styles.linkBtn}>
+                <Text style={styles.linkText}>Refine Discover preferences</Text>
+              </Pressable>
             </View>
-          </View>
+          ) : null}
 
           <View style={{ height: 10 }} />
         </ScrollView>
+
+        {/* DISCOVER PREFERENCES MODAL */}
+        <Modal visible={discoverOpen} animationType="fade" transparent onRequestClose={closeDiscover}>
+          <Pressable style={styles.modalBackdrop} onPress={closeDiscover} />
+          <View style={styles.modalSheetWrap} pointerEvents="box-none">
+            <GlassCard strength="strong" style={styles.modalSheet} noPadding>
+              <View style={styles.modalInner}>
+                <View style={styles.modalHeader}>
+                  <Text style={styles.modalTitle}>Discover preferences</Text>
+                  <Pressable onPress={closeDiscover} hitSlop={10} style={styles.modalClose}>
+                    <Text style={styles.modalCloseText}>Done</Text>
+                  </Pressable>
+                </View>
+
+                <Text style={styles.modalKicker}>Flying from (optional)</Text>
+                <View style={styles.modalInputWrap}>
+                  <TextInput
+                    value={discoverFrom}
+                    onChangeText={setDiscoverFrom}
+                    placeholder="e.g. London, LGW, MAN"
+                    placeholderTextColor={theme.colors.textTertiary}
+                    style={styles.modalInput}
+                    autoCapitalize="words"
+                    autoCorrect={false}
+                    returnKeyType="done"
+                  />
+                </View>
+
+                <Text style={styles.modalKicker}>Date window</Text>
+                <View style={styles.modalChipsRow}>
+                  {(["wknd", "d7", "d14", "d30", "any"] as DiscoverWindowKey[]).map((k) => {
+                    const active = discoverWindowKey === k;
+                    return (
+                      <Pressable
+                        key={k}
+                        onPress={() => setDiscoverWindowKey(k)}
+                        style={[styles.modalChip, active && styles.modalChipActive]}
+                      >
+                        <Text style={[styles.modalChipText, active && styles.modalChipTextActive]}>{labelForWindowKey(k)}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+
+                <Text style={styles.modalKicker}>Trip length</Text>
+                <View style={styles.modalChipsRow}>
+                  {(["day", "1", "2", "3", "any"] as DiscoverTripLength[]).map((k) => {
+                    const active = discoverTripLength === k;
+                    return (
+                      <Pressable
+                        key={k}
+                        onPress={() => setDiscoverTripLength(k)}
+                        style={[styles.modalChip, active && styles.modalChipActive]}
+                      >
+                        <Text style={[styles.modalChipText, active && styles.modalChipTextActive]}>{labelForTripLength(k)}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+
+                <Text style={styles.modalKicker}>Vibe (pick up to 3)</Text>
+                <View style={styles.modalChipsRow}>
+                  {(["easy", "big", "hidden", "nightlife", "culture", "warm"] as DiscoverVibe[]).map((v) => {
+                    const active = discoverVibes.includes(v);
+                    return (
+                      <Pressable
+                        key={v}
+                        onPress={() => toggleVibe(v)}
+                        style={[styles.modalChip, active && styles.modalChipActive]}
+                      >
+                        <Text style={[styles.modalChipText, active && styles.modalChipTextActive]}>{labelForVibe(v)}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+
+                <View style={styles.modalActions}>
+                  <Pressable
+                    onPress={() => {
+                      setDiscoverWindowKey("wknd");
+                      setDiscoverTripLength("2");
+                      setDiscoverVibes(["easy"]);
+                      setDiscoverFrom("");
+                    }}
+                    style={[styles.btn, styles.btnGhost]}
+                  >
+                    <Text style={styles.btnGhostText}>Reset</Text>
+                  </Pressable>
+
+                  <Pressable
+                    onPress={() => {
+                      closeDiscover();
+                      goDiscover("surprise");
+                    }}
+                    style={[styles.btn, styles.btnPrimary]}
+                  >
+                    <Text style={styles.btnPrimaryText}>Surprise me</Text>
+                  </Pressable>
+                </View>
+
+                <Text style={styles.modalFootnote}>
+                  Note: Pricing appears later when booking partners are connected.
+                </Text>
+              </View>
+            </GlassCard>
+          </View>
+        </Modal>
       </SafeAreaView>
     </Background>
   );
@@ -1052,14 +1313,26 @@ const styles = StyleSheet.create({
 
   // Trips
   emptyTitle: { color: theme.colors.text, fontSize: 15, fontWeight: theme.fontWeight.black },
-  emptyMeta: { marginTop: 6, color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold, lineHeight: 18 },
+  emptyMeta: {
+    marginTop: 6,
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.bold,
+    lineHeight: 18,
+  },
 
   nextTripPress: { borderRadius: 16, marginTop: 2 },
   nextTripCard: { borderRadius: 16 },
   nextTripInner: { paddingVertical: 14, paddingHorizontal: 14 },
   nextTripKicker: { color: theme.colors.textTertiary, fontSize: 12, fontWeight: theme.fontWeight.black },
   nextTripTitle: { marginTop: 6, color: theme.colors.text, fontSize: 18, fontWeight: theme.fontWeight.black },
-  nextTripMeta: { marginTop: 6, color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold, lineHeight: 18 },
+  nextTripMeta: {
+    marginTop: 6,
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.bold,
+    lineHeight: 18,
+  },
 
   // Quick shortcuts
   shortcutWrap: { position: "relative" },
@@ -1096,11 +1369,60 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 18,
   },
 
-  // Inspiration
-  inspoList: { gap: 10 },
-  inspoPress: { borderRadius: 16 },
-  inspoCard: { borderRadius: 16 },
-  inspoInner: { paddingVertical: 14, paddingHorizontal: 14 },
-  inspoTitle: { color: theme.colors.text, fontSize: 15, fontWeight: theme.fontWeight.black },
-  inspoSub: { marginTop: 6, color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold, lineHeight: 18 },
+  // Discover
+  discoverGrid: { flexDirection: "row", gap: 10, marginTop: 10 },
+  discoverPress: { flex: 1, borderRadius: 16 },
+  discoverCard: { borderRadius: 16 },
+  discoverInner: { paddingVertical: 14, paddingHorizontal: 14, gap: 8 },
+  discoverTitle: { color: theme.colors.text, fontSize: 15, fontWeight: theme.fontWeight.black },
+  discoverSub: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold, lineHeight: 18 },
+  discoverFooter: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10, marginTop: 2 },
+  discoverHint: { flex: 1, color: theme.colors.textTertiary, fontSize: 12, fontWeight: theme.fontWeight.bold },
+
+  // Modal (bottom sheet-ish)
+  modalBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.55)" },
+  modalSheetWrap: { flex: 1, justifyContent: "flex-end" },
+  modalSheet: { borderRadius: 22, marginHorizontal: theme.spacing.lg, marginBottom: theme.spacing.lg, overflow: "hidden" },
+  modalInner: { padding: 14, gap: 12 },
+  modalHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
+  modalTitle: { color: theme.colors.text, fontSize: 16, fontWeight: theme.fontWeight.black },
+  modalClose: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+  },
+  modalCloseText: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: theme.fontWeight.black },
+
+  modalKicker: { color: theme.colors.textTertiary, fontSize: 12, fontWeight: theme.fontWeight.black },
+  modalInputWrap: {
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: Platform.OS === "ios" ? 10 : 8,
+  },
+  modalInput: { color: theme.colors.text, fontSize: 14, fontWeight: theme.fontWeight.bold },
+
+  modalChipsRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  modalChip: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: Platform.OS === "android" ? "rgba(22,25,29,0.55)" : "rgba(22,25,29,0.48)",
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+  },
+  modalChipActive: {
+    borderColor: "rgba(79,224,138,0.35)",
+    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.default : theme.glass.iosBg.default,
+  },
+  modalChipText: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: theme.fontWeight.black },
+  modalChipTextActive: { color: theme.colors.text, fontWeight: theme.fontWeight.black },
+
+  modalActions: { flexDirection: "row", gap: 10, marginTop: 4 },
+  modalFootnote: { color: theme.colors.textTertiary, fontSize: 12, fontWeight: theme.fontWeight.bold, lineHeight: 16 },
 });
