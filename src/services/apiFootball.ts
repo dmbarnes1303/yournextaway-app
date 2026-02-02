@@ -199,4 +199,4 @@ export async function getFixtureById(fixtureId: string | number): Promise<Fixtur
 export function __clearApiFootballCache() {
   fixturesCache.clear();
   fixtureByIdCache.clear();
-    }
+}
