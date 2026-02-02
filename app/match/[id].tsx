@@ -24,12 +24,18 @@ import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
 
 import { getFixtureById, type FixtureListRow } from "@/src/services/apiFootball";
-import { getRollingWindowIso, toIsoDate, addDaysIso, clampFromIsoToTomorrow, normalizeWindowIso } from "@/src/constants/football";
+import {
+  getRollingWindowIso,
+  toIsoDate,
+  addDaysIso,
+  clampFromIsoToTomorrow,
+  normalizeWindowIso,
+} from "@/src/constants/football";
 import { coerceNumber, coerceString } from "@/src/utils/params";
 import { formatUkDateTimeMaybe } from "@/src/utils/formatters";
 
 import authStore from "@/src/state/auth";
-import { isWatched, watchFixture, unwatchFixture } from "@/src/services/watchlist";
+import useFollowStore from "@/src/state/followStore";
 import { isKickoffTbc, kickoffIsoOrNull } from "@/src/utils/kickoffTbc";
 
 function currentFootballSeasonStartYear(now = new Date()): number {
@@ -120,7 +126,7 @@ export default function MatchDetailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
 
-  // boot auth
+  // auth (optional for future sync + email/push)
   const booted = authStore((s) => s.booted);
   const user = authStore((s) => s.user);
   const initAuth = authStore((s) => s.init);
@@ -156,9 +162,10 @@ export default function MatchDetailScreen() {
   const [error, setError] = useState<string | null>(null);
   const [row, setRow] = useState<FixtureListRow | null>(null);
 
-  // watch state
-  const [watched, setWatched] = useState(false);
-  const [watchBusy, setWatchBusy] = useState(false);
+  // follow store
+  const storeIsFollowing = useFollowStore((s) => s.isFollowing);
+  const toggleFollow = useFollowStore((s) => s.toggle);
+  const upsertLatestSnapshot = useFollowStore((s) => s.upsertLatestSnapshot);
 
   // sign-in UI
   const [email, setEmail] = useState("");
@@ -186,6 +193,20 @@ export default function MatchDetailScreen() {
         }
 
         setRow(r);
+
+        // Keep snapshot fresh if already followed (and harmless if not)
+        const fid = r?.fixture?.id != null ? String(r.fixture.id) : "";
+        if (fid && storeIsFollowing(fid)) {
+          upsertLatestSnapshot(fid, {
+            kickoffIso: kickoffIsoOrNull(r),
+            venue: r?.fixture?.venue?.name ? String(r.fixture.venue.name) : null,
+            city: r?.fixture?.venue?.city ? String(r.fixture.venue.city) : null,
+            homeTeamId: r?.teams?.home?.id ?? undefined,
+            awayTeamId: r?.teams?.away?.id ?? undefined,
+            leagueId: r?.league?.id ?? undefined,
+            season: (r as any)?.league?.season ?? routeSeason ?? undefined,
+          });
+        }
       } catch (e: any) {
         if (cancelled) return;
         setError(e?.message ?? "Failed to load match details.");
@@ -198,7 +219,7 @@ export default function MatchDetailScreen() {
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, routeSeason, storeIsFollowing, upsertLatestSnapshot]);
 
   const fixtureId = useMemo(() => {
     const apiId = row?.fixture?.id;
@@ -206,27 +227,7 @@ export default function MatchDetailScreen() {
     return id ?? "";
   }, [row, id]);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function syncWatched() {
-      if (!user || !fixtureId) {
-        setWatched(false);
-        return;
-      }
-      try {
-        const ok = await isWatched(fixtureId);
-        if (!cancelled) setWatched(ok);
-      } catch {
-        if (!cancelled) setWatched(false);
-      }
-    }
-
-    syncWatched();
-    return () => {
-      cancelled = true;
-    };
-  }, [user, fixtureId]);
+  const followed = useMemo(() => (fixtureId ? storeIsFollowing(fixtureId) : false), [fixtureId, storeIsFollowing]);
 
   const home = row?.teams?.home?.name ?? "Home";
   const away = row?.teams?.away?.name ?? "Away";
@@ -248,7 +249,10 @@ export default function MatchDetailScreen() {
 
   const tbc = useMemo(() => (row ? isKickoffTbc(row) : true), [row]);
 
-  const ticketsUrl = useMemo(() => buildTicketsUrl(home, away, kickoffDateOnly, leagueName), [home, away, kickoffDateOnly, leagueName]);
+  const ticketsUrl = useMemo(
+    () => buildTicketsUrl(home, away, kickoffDateOnly, leagueName),
+    [home, away, kickoffDateOnly, leagueName]
+  );
   const mapsUrl = useMemo(() => buildMapsVenueUrl(venue, city), [venue, city]);
   const stadiumInfoUrl = useMemo(() => buildStadiumInfoUrl(venue, home, city), [venue, home, city]);
   const foodDrinkUrl = useMemo(() => buildFoodDrinkUrl(venue, city), [venue, city]);
@@ -310,43 +314,48 @@ export default function MatchDetailScreen() {
     }
   }, [home, away, tbc, kickoffDisplay, place, leagueName, effectiveSeason, ticketsUrl, mapsUrl]);
 
-  const onToggleWatch = useCallback(async () => {
-    if (!fixtureId) return;
+  const onToggleFollow = useCallback(() => {
+    if (!row || !fixtureId) return;
 
-    if (!user) {
-      Alert.alert("Sign in required", "Sign in to watch fixtures and get kickoff-change alerts.");
+    const homeTeamId = row?.teams?.home?.id ?? 0;
+    const awayTeamId = row?.teams?.away?.id ?? 0;
+
+    const lid = effectiveLeagueId ?? 0;
+    const sea = typeof effectiveSeason === "number" ? effectiveSeason : 0;
+
+    if (!lid || !sea || !homeTeamId || !awayTeamId) {
+      Alert.alert("Can’t follow yet", "This fixture is missing required data. Try again later.");
       return;
     }
 
-    if (watchBusy) return;
+    toggleFollow({
+      fixtureId,
+      leagueId: lid,
+      season: sea,
+      homeTeamId,
+      awayTeamId,
+      kickoffIso: kickoffIsoOrNull(row), // null when TBC/explicit unknown
+      venue: row?.fixture?.venue?.name ? String(row.fixture.venue.name) : null,
+      city: row?.fixture?.venue?.city ? String(row.fixture.venue.city) : null,
+    });
 
-    try {
-      setWatchBusy(true);
-
-      if (watched) {
-        await unwatchFixture(fixtureId);
-        setWatched(false);
-        return;
-      }
-
-      const lastKnownKickoffIso = row ? kickoffIsoOrNull(row) : null;
-
-      await watchFixture({
-        fixtureId,
-        leagueId: effectiveLeagueId ?? undefined,
-        season: typeof effectiveSeason === "number" ? effectiveSeason : undefined,
-        lastKnownKickoffIso,
-        lastKnownIsTbc: tbc,
-      });
-
-      setWatched(true);
-      Alert.alert("Watching", "We’ll notify you later when kickoff changes (email + push coming next).");
-    } catch (e: any) {
-      Alert.alert("Watch failed", e?.message ?? "Could not update watch status.");
-    } finally {
-      setWatchBusy(false);
+    // Messaging that doesn’t lie
+    if (!user) {
+      Alert.alert(
+        followed ? "Unfollowed" : "Following",
+        followed
+          ? "Removed from your followed list on this device."
+          : "Following on this device. Sign in later to sync across devices and enable email/push alerts."
+      );
+    } else {
+      Alert.alert(
+        followed ? "Unfollowed" : "Following",
+        followed
+          ? "Removed from your followed list."
+          : "We’ll alert you when kickoff is confirmed/changes (sync + notifications can be added next)."
+      );
     }
-  }, [fixtureId, user, watchBusy, watched, row, effectiveLeagueId, effectiveSeason, tbc]);
+  }, [row, fixtureId, toggleFollow, effectiveLeagueId, effectiveSeason, user, followed]);
 
   const onSendMagicLink = useCallback(async () => {
     const e = String(email ?? "").trim();
@@ -393,13 +402,9 @@ export default function MatchDetailScreen() {
                 <View style={styles.topRow}>
                   <Text style={styles.kicker}>{leagueName}</Text>
 
-                  <Pressable
-                    onPress={onToggleWatch}
-                    disabled={watchBusy}
-                    style={[styles.watchPill, watched && styles.watchPillActive, watchBusy && { opacity: 0.7 }]}
-                  >
-                    <Text style={[styles.watchPillText, watched && styles.watchPillTextActive]}>
-                      {watched ? "Watching" : "Watch kickoff"}
+                  <Pressable onPress={onToggleFollow} style={[styles.watchPill, followed && styles.watchPillActive]}>
+                    <Text style={[styles.watchPillText, followed && styles.watchPillTextActive]}>
+                      {followed ? "Following" : "Follow"}
                     </Text>
                   </Pressable>
                 </View>
@@ -427,9 +432,9 @@ export default function MatchDetailScreen() {
 
                 {!user ? (
                   <View style={styles.signInBox}>
-                    <Text style={styles.signInTitle}>Sign in for alerts</Text>
+                    <Text style={styles.signInTitle}>Sign in (optional)</Text>
                     <Text style={styles.signInBody}>
-                      Watching a fixture only works when you’re signed in. Magic link = no passwords.
+                      Following works on this device already. Sign in later to sync across devices and enable email/push alerts.
                     </Text>
 
                     <View style={styles.inputRow}>
@@ -515,7 +520,9 @@ export default function MatchDetailScreen() {
               <View style={styles.opsList}>
                 <View style={styles.opsItem}>
                   <Text style={styles.opsTitle}>Arrive early</Text>
-                  <Text style={styles.opsBody}>Aim for 60–90 minutes before kickoff if you’re collecting tickets or navigating security.</Text>
+                  <Text style={styles.opsBody}>
+                    Aim for 60–90 minutes before kickoff if you’re collecting tickets or navigating security.
+                  </Text>
                 </View>
 
                 <View style={styles.opsItem}>
@@ -528,7 +535,9 @@ export default function MatchDetailScreen() {
 
                 <View style={styles.opsItem}>
                   <Text style={styles.opsTitle}>Transport plan</Text>
-                  <Text style={styles.opsBody}>Public transport is usually easiest; event traffic and parking are unpredictable near kickoff.</Text>
+                  <Text style={styles.opsBody}>
+                    Public transport is usually easiest; event traffic and parking are unpredictable near kickoff.
+                  </Text>
                   <Pressable onPress={() => safeOpenUrl(transportUrl)} style={styles.inlineBtn}>
                     <Text style={styles.inlineBtnText}>Search transport options</Text>
                   </Pressable>
@@ -536,7 +545,9 @@ export default function MatchDetailScreen() {
 
                 <View style={styles.opsItem}>
                   <Text style={styles.opsTitle}>Food & drinks nearby</Text>
-                  <Text style={styles.opsBody}>Pick something walkable so you’re not rushing. Atmosphere is often best around the stadium district.</Text>
+                  <Text style={styles.opsBody}>
+                    Pick something walkable so you’re not rushing. Atmosphere is often best around the stadium district.
+                  </Text>
                   <Pressable onPress={() => safeOpenUrl(foodDrinkUrl)} style={styles.inlineBtn}>
                     <Text style={styles.inlineBtnText}>Search nearby spots</Text>
                   </Pressable>
@@ -550,7 +561,6 @@ export default function MatchDetailScreen() {
   );
 }
 
-// styles unchanged from your file
 const styles = StyleSheet.create({
   container: { flex: 1, paddingTop: 100 },
   scrollView: { flex: 1 },
@@ -568,7 +578,7 @@ const styles = StyleSheet.create({
 
   watchPill: {
     paddingVertical: 7,
-    paddingHorizontal: 10,
+    paddingHorizontal: 12,
     borderRadius: 999,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.12)",
@@ -654,10 +664,25 @@ const styles = StyleSheet.create({
   smallPrint: { marginTop: 12, color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: "700" },
 
   opsList: { marginTop: 12, gap: 12 },
-  opsItem: { borderRadius: 14, borderWidth: 1, borderColor: "rgba(255,255,255,0.10)", backgroundColor: "rgba(0,0,0,0.18)", padding: 12 },
+  opsItem: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+    padding: 12,
+  },
   opsTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
   opsBody: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18, fontWeight: "700" },
 
-  inlineBtn: { marginTop: 10, alignSelf: "flex-start", paddingVertical: 8, paddingHorizontal: 10, borderRadius: 999, borderWidth: 1, borderColor: "rgba(0,255,136,0.35)", backgroundColor: "rgba(0,0,0,0.18)" },
+  inlineBtn: {
+    marginTop: 10,
+    alignSelf: "flex-start",
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(0,255,136,0.35)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+  },
   inlineBtnText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.xs },
 });
