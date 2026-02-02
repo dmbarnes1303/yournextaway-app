@@ -9,10 +9,10 @@ import GlassCard from "@/src/components/GlassCard";
 import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
 
-import { getRollingWindowIso } from "@/src/constants/football";
+import { getRollingWindowIso, normalizeWindowIso } from "@/src/constants/football";
 import { normalizeCityKey } from "@/src/utils/city";
 
-function coerceString(v: unknown): string | null {
+function paramString(v: unknown): string | null {
   if (typeof v === "string") {
     const s = v.trim();
     return s ? s : null;
@@ -28,30 +28,27 @@ export default function CitySlugRedirect() {
   const router = useRouter();
   const params = useLocalSearchParams();
 
-  const slugRaw = useMemo(() => coerceString((params as any)?.slug) ?? "", [params]);
-  const cityKey = useMemo(() => normalizeCityKey(slugRaw), [slugRaw]);
+  const slugRaw = useMemo(() => paramString((params as any)?.slug) ?? "", [params]);
+  const cityKey = useMemo(() => (slugRaw ? normalizeCityKey(slugRaw) : ""), [slugRaw]);
 
-  // preserve optional rolling window overrides if present
   const rolling = useMemo(() => getRollingWindowIso(), []);
-  const from = useMemo(() => coerceString((params as any)?.from) ?? rolling.from, [params, rolling.from]);
-  const to = useMemo(() => coerceString((params as any)?.to) ?? rolling.to, [params, rolling.to]);
+  const fromParam = useMemo(() => paramString((params as any)?.from), [params]);
+  const toParam = useMemo(() => paramString((params as any)?.to), [params]);
+
+  const window = useMemo(() => {
+    const w = { from: fromParam ?? rolling.from, to: toParam ?? rolling.to };
+    return normalizeWindowIso(w);
+  }, [fromParam, toParam, rolling.from, rolling.to]);
 
   useEffect(() => {
-    // If slug is missing/invalid, don’t attempt to redirect endlessly.
     if (!cityKey) return;
 
-    // Replace (not push) so back button doesn't bounce between routes.
     router.replace({
       pathname: "/city/[cityKey]",
-      params: {
-        cityKey,
-        from,
-        to,
-      },
+      params: { cityKey, from: window.from, to: window.to },
     } as any);
-  }, [router, cityKey, from, to]);
+  }, [router, cityKey, window.from, window.to]);
 
-  // Minimal UI while redirecting (prevents a blank flash)
   return (
     <Background imageUrl={getBackground("home")} overlayOpacity={0.88}>
       <Stack.Screen options={{ title: "City", headerTransparent: true, headerTintColor: theme.colors.text }} />
@@ -65,12 +62,10 @@ export default function CitySlugRedirect() {
                 <Text style={styles.sub}>This link is missing a valid city slug.</Text>
               </>
             ) : (
-              <>
-                <View style={styles.row}>
-                  <ActivityIndicator />
-                  <Text style={styles.sub}>Opening city guide…</Text>
-                </View>
-              </>
+              <View style={styles.row}>
+                <ActivityIndicator />
+                <Text style={styles.sub}>Opening city guide…</Text>
+              </View>
             )}
           </GlassCard>
         </View>
