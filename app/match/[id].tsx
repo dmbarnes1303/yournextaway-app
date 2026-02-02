@@ -1,5 +1,5 @@
 // app/match/[id].tsx
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -22,9 +22,14 @@ import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
 
 import { getFixtureById, type FixtureListRow } from "@/src/services/apiFootball";
-import { getRollingWindowIso, toIsoDate, addDaysIso, clampFromIsoToTomorrow, normalizeWindowIso } from "@/src/constants/football";
+import {
+  getRollingWindowIso,
+  toIsoDate,
+  addDaysIso,
+  clampFromIsoToTomorrow,
+  normalizeWindowIso,
+} from "@/src/constants/football";
 import { coerceNumber, coerceString } from "@/src/utils/params";
-import { formatUkDateTimeMaybe } from "@/src/utils/formatters";
 
 function currentFootballSeasonStartYear(now = new Date()): number {
   const y = now.getFullYear();
@@ -72,11 +77,9 @@ async function openMapsPreferNative(query: string) {
   const q = String(query ?? "").trim();
   if (!q) return safeOpenUrl("https://www.google.com/maps");
 
-  // Android native
   const geo = `geo:0,0?q=${enc(q)}`;
   const web = `https://www.google.com/maps/search/?api=1&query=${enc(q)}`;
 
-  // iOS often behaves better with the web fallback unless you wire maps:// schemes explicitly.
   if (Platform.OS === "ios") {
     return safeOpenUrl(web);
   }
@@ -108,7 +111,9 @@ function buildMapsVenueUrl(venue?: string, city?: string) {
 }
 
 function buildStadiumInfoUrl(venue?: string, homeTeam?: string, city?: string) {
-  const q = [venue || "stadium", homeTeam, city, "bag policy entry time seats"].filter(Boolean).join(" ");
+  const q = [venue || "stadium", homeTeam, city, "bag policy entry time seats"]
+    .filter(Boolean)
+    .join(" ");
   return `https://www.google.com/search?q=${enc(q)}`;
 }
 
@@ -122,13 +127,68 @@ function buildTransportUrl(venue?: string, city?: string) {
   return `https://www.google.com/search?q=${enc(q)}`;
 }
 
+function statusShort(row?: FixtureListRow | null) {
+  return String(row?.fixture?.status?.short ?? "").trim().toUpperCase();
+}
+function statusLong(row?: FixtureListRow | null) {
+  return String(row?.fixture?.status?.long ?? "").trim().toLowerCase();
+}
+function parseKickoffDate(row?: FixtureListRow | null): Date | null {
+  const raw = row?.fixture?.date;
+  if (!raw) return null;
+  const dt = new Date(String(raw));
+  if (Number.isNaN(dt.getTime())) return null;
+  return dt;
+}
+
+/**
+ * Conservative TBC detection:
+ * - status says TBD/TBC
+ * - status.long implies "to be defined"
+ * - time is 00:00 placeholder
+ * - missing/invalid date -> treat as not confirmed (display TBC)
+ */
+function isKickoffTBC(row?: FixtureListRow | null): boolean {
+  const s = statusShort(row);
+  if (s === "TBD" || s === "TBC") return true;
+
+  const long = statusLong(row);
+  if (long.includes("to be defined") || long.includes("time to be defined") || long.includes("tbd")) return true;
+
+  const dt = parseKickoffDate(row);
+  if (!dt) return true;
+
+  if (dt.getHours() === 0 && dt.getMinutes() === 0) return true;
+
+  return false;
+}
+
+function kickoffLabel(row?: FixtureListRow | null): string {
+  if (!row) return "—";
+  if (isKickoffTBC(row)) return "TBC";
+
+  const dt = parseKickoffDate(row);
+  if (!dt) return "—";
+
+  // Local UK-style readable datetime
+  // Avoid importing formatUkDateTimeMaybe because it will happily format placeholder values too.
+  return dt.toLocaleString("en-GB", {
+    weekday: "short",
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 export default function MatchDetailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
 
   const id = useMemo(() => coerceString((params as any)?.id), [params]);
 
-  // Routing context: enforce "tomorrow onwards" consistency with Fixtures/Trip Build
+  // Routing context
   const rolling = useMemo(() => getRollingWindowIso(), []);
 
   const window = useMemo(() => {
@@ -150,6 +210,9 @@ export default function MatchDetailScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [row, setRow] = useState<FixtureListRow | null>(null);
+
+  // Session-only watch state
+  const [watchKickoff, setWatchKickoff] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -197,8 +260,9 @@ export default function MatchDetailScreen() {
   const home = row?.teams?.home?.name ?? "Home";
   const away = row?.teams?.away?.name ?? "Away";
 
-  const kickoffDisplay = formatUkDateTimeMaybe(row?.fixture?.date);
-  const kickoffDateOnly = isoDateOnly(row?.fixture?.date as string | undefined);
+  const kickoffIsTBC = useMemo(() => isKickoffTBC(row), [row]);
+  const kickoffDisplay = useMemo(() => kickoffLabel(row), [row]);
+  const kickoffDateOnly = useMemo(() => isoDateOnly(row?.fixture?.date as string | undefined), [row]);
 
   const venue = row?.fixture?.venue?.name ?? "";
   const city = row?.fixture?.venue?.city ?? "";
@@ -235,7 +299,7 @@ export default function MatchDetailScreen() {
     return [v, c].filter(Boolean).join(" • ");
   }, [venue, city]);
 
-  function onPlanTrip() {
+  const onPlanTrip = useCallback(() => {
     if (!fixtureId) return;
 
     router.push({
@@ -248,9 +312,9 @@ export default function MatchDetailScreen() {
         to: toIso,
       },
     } as any);
-  }
+  }, [router, fixtureId, effectiveLeagueId, effectiveSeason, fromIso, toIso]);
 
-  function onOpenFixtures() {
+  const onOpenFixtures = useCallback(() => {
     router.push({
       pathname: "/(tabs)/fixtures",
       params: {
@@ -260,11 +324,11 @@ export default function MatchDetailScreen() {
         to: toIso,
       },
     } as any);
-  }
+  }, [router, effectiveLeagueId, effectiveSeason, fromIso, toIso]);
 
-  async function onShare() {
+  const onShare = useCallback(async () => {
     const title = `${home} vs ${away}`;
-    const when = kickoffDisplay ? `Kickoff: ${kickoffDisplay}` : "Kickoff: —";
+    const when = kickoffIsTBC ? `Kickoff: TBC` : `Kickoff: ${kickoffDisplay}`;
     const where = place ? `Venue: ${place}` : "Venue: —";
     const meta = `League: ${leagueName} • Season: ${String(effectiveSeason)}`;
 
@@ -275,10 +339,22 @@ export default function MatchDetailScreen() {
     } catch {
       // non-critical
     }
-  }
+  }, [home, away, kickoffIsTBC, kickoffDisplay, place, leagueName, effectiveSeason, ticketsUrl, mapsUrl]);
+
+  const onToggleWatchKickoff = useCallback(() => {
+    setWatchKickoff((v) => !v);
+
+    // Be honest: session-only today.
+    if (!watchKickoff) {
+      Alert.alert(
+        "Watching kickoff (session)",
+        "You’ll see this marked as watched for this session. In the next step we’ll wire real alerts (push + email) when kickoff details are confirmed."
+      );
+    }
+  }, [watchKickoff]);
 
   return (
-    <Background imageUrl={getBackground("fixtures")}>
+    <Background imageSource={getBackground("fixtures")} overlayOpacity={0.86}>
       <Stack.Screen
         options={{
           headerShown: true,
@@ -308,10 +384,27 @@ export default function MatchDetailScreen() {
                   {home} vs {away}
                 </Text>
 
+                {/* TBC banner */}
+                {kickoffIsTBC ? (
+                  <View style={styles.tbcBanner}>
+                    <Text style={styles.tbcBannerTitle}>Kickoff time TBC</Text>
+                    <Text style={styles.tbcBannerBody}>
+                      Some leagues publish placeholder times until TV scheduling is confirmed. We’ll surface the real time as
+                      soon as it’s available.
+                    </Text>
+
+                    <Pressable onPress={onToggleWatchKickoff} style={[styles.watchBtn, watchKickoff && styles.watchBtnOn]}>
+                      <Text style={[styles.watchBtnText, watchKickoff && styles.watchBtnTextOn]}>
+                        {watchKickoff ? "Watching kickoff" : "Watch kickoff"}
+                      </Text>
+                    </Pressable>
+                  </View>
+                ) : null}
+
                 <View style={styles.metaBlock}>
                   <Text style={styles.metaLine}>
                     <Text style={styles.metaLabel}>Kickoff: </Text>
-                    {kickoffDisplay || "—"}
+                    <Text style={kickoffIsTBC ? styles.metaValueTbc : undefined}>{kickoffDisplay || "—"}</Text>
                   </Text>
 
                   <Text style={styles.metaLine}>
@@ -324,6 +417,18 @@ export default function MatchDetailScreen() {
                     {String(effectiveSeason)}
                   </Text>
                 </View>
+
+                {/* If kickoff is confirmed, you can still offer "watch changes" */}
+                {!kickoffIsTBC ? (
+                  <View style={styles.watchRow}>
+                    <Pressable onPress={onToggleWatchKickoff} style={[styles.watchMini, watchKickoff && styles.watchMiniOn]}>
+                      <Text style={[styles.watchMiniText, watchKickoff && styles.watchMiniTextOn]}>
+                        {watchKickoff ? "Watching changes (session)" : "Watch for changes"}
+                      </Text>
+                    </Pressable>
+                    <Text style={styles.watchHint}>Alerts will be wired next (push + email).</Text>
+                  </View>
+                ) : null}
 
                 <View style={styles.ctaGrid}>
                   <Pressable onPress={() => safeOpenUrl(ticketsUrl)} style={[styles.bigBtn, styles.bigBtnPrimary]}>
@@ -454,9 +559,56 @@ const styles = StyleSheet.create({
     lineHeight: 30,
   },
 
+  // TBC banner
+  tbcBanner: {
+    marginTop: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+    padding: 12,
+    gap: 8,
+  },
+  tbcBannerTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.md },
+  tbcBannerBody: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18 },
+
+  watchBtn: {
+    marginTop: 2,
+    alignSelf: "flex-start",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+  },
+  watchBtnOn: {
+    borderColor: "rgba(0,255,136,0.45)",
+    backgroundColor: "rgba(0,0,0,0.22)",
+  },
+  watchBtnText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.xs },
+  watchBtnTextOn: { color: theme.colors.primary },
+
   metaBlock: { marginTop: 12, gap: 6 },
   metaLine: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18 },
   metaLabel: { color: theme.colors.text, fontWeight: "900" },
+  metaValueTbc: { color: "rgba(242,244,246,0.70)", fontWeight: "900" },
+
+  // confirmed watch row
+  watchRow: { marginTop: 12, gap: 6 },
+  watchMini: {
+    alignSelf: "flex-start",
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    backgroundColor: "rgba(0,0,0,0.16)",
+  },
+  watchMiniOn: { borderColor: "rgba(0,255,136,0.40)" },
+  watchMiniText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.xs },
+  watchMiniTextOn: { color: theme.colors.primary },
+  watchHint: { color: theme.colors.textTertiary, fontSize: theme.fontSize.xs, lineHeight: 16 },
 
   h2: { marginTop: 2, fontSize: theme.fontSize.lg, fontWeight: "900", color: theme.colors.text },
 
