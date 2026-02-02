@@ -922,23 +922,64 @@ export default function HomeScreen() {
               </View>
 
               <View style={styles.shortcutWrap}>
+                {/* depth rail behind the row */}
+                <View pointerEvents="none" style={styles.shortcutRail} />
+                <View pointerEvents="none" style={styles.shortcutRailSheen} />
+
                 <ScrollView
                   horizontal
                   showsHorizontalScrollIndicator={false}
                   contentContainerStyle={styles.shortcutRow}
                   decelerationRate="fast"
                 >
-                  {quickShortcuts.map((x) => (
-                    <Pressable
-                      key={x.key}
-                      onPress={() => goBuildTripGlobal(x.window)}
-                      style={({ pressed }) => [styles.shortcutCard, pressed && { opacity: 0.94, transform: [{ scale: 0.99 }] }]}
-                      android_ripple={{ color: "rgba(79,224,138,0.10)" }}
-                    >
-                      <Text style={styles.shortcutTitle}>{x.label}</Text>
-                      <Text style={styles.shortcutSub}>{x.sub}</Text>
-                    </Pressable>
-                  ))}
+                  {quickShortcuts.map((x) => {
+                    const featured = x.key === "wknd";
+                    const icon =
+                      x.key === "wknd"
+                        ? "📅"
+                        : x.key === "d7"
+                        ? "⚡"
+                        : x.key === "d14"
+                        ? "🎟️"
+                        : x.key === "d30"
+                        ? "🗺️"
+                        : "🧭";
+
+                    return (
+                      <Pressable
+                        key={x.key}
+                        onPress={() => goBuildTripGlobal(x.window)}
+                        style={({ pressed }) => [
+                          styles.shortcutCard,
+                          featured && styles.shortcutCardFeatured,
+                          pressed && { opacity: 0.94, transform: [{ scale: 0.99 }] },
+                        ]}
+                        android_ripple={{ color: "rgba(79,224,138,0.10)" }}
+                      >
+                        {featured ? <View pointerEvents="none" style={styles.shortcutGlowEdge} /> : null}
+                        <View pointerEvents="none" style={styles.shortcutSheenTop} />
+
+                        <View style={styles.shortcutTopRow}>
+                          <Text style={styles.shortcutTitle}>{x.label}</Text>
+
+                          <View style={[styles.shortcutBadge, featured && styles.shortcutBadgeFeatured]}>
+                            <Text style={styles.shortcutBadgeText}>{icon}</Text>
+                          </View>
+                        </View>
+
+                        <Text style={styles.shortcutSub}>{x.sub}</Text>
+
+                        {featured ? <Text style={styles.shortcutMicro}>Best for match + 1–2 nights</Text> : null}
+
+                        <View style={styles.shortcutFooter}>
+                          <View style={styles.shortcutPill}>
+                            <Text style={styles.shortcutPillText}>{x.sub}</Text>
+                          </View>
+                          <Text style={styles.chev}>›</Text>
+                        </View>
+                      </Pressable>
+                    );
+                  })}
                 </ScrollView>
 
                 <View pointerEvents="none" style={styles.shortcutFade} />
@@ -1085,9 +1126,7 @@ export default function HomeScreen() {
                         style={({ pressed }) => [styles.modalChip, active && styles.modalChipActive, pressed && { opacity: 0.94 }]}
                         android_ripple={{ color: "rgba(79,224,138,0.10)" }}
                       >
-                        <Text style={[styles.modalChipText, active && styles.modalChipTextActive]}>
-                          {labelForWindowKey(k)}
-                        </Text>
+                        <Text style={[styles.modalChipText, active && styles.modalChipTextActive]}>{labelForWindowKey(k)}</Text>
                       </Pressable>
                     );
                   })}
@@ -1263,6 +1302,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(79,224,138,0.22)",
     backgroundColor: "rgba(0,0,0,0.14)",
+    overflow: "hidden",
   },
   clearBtnText: {
     color: "rgba(242,244,246,0.72)",
@@ -1306,7 +1346,7 @@ const styles = StyleSheet.create({
   groupEmpty: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold },
   resultList: { gap: 10 },
 
-  rowPress: { borderRadius: 16 },
+  rowPress: { borderRadius: 16, overflow: "hidden" },
   rowCard: { borderRadius: 16 },
   rowInner: { paddingVertical: 12, paddingHorizontal: 12, flexDirection: "row", alignItems: "center", gap: 12 },
   rowTitle: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: 15 },
@@ -1425,8 +1465,32 @@ const styles = StyleSheet.create({
   },
 
   // Quick shortcuts
-  shortcutWrap: { position: "relative" },
-  shortcutRow: { gap: 10, paddingRight: theme.spacing.lg, marginTop: 10 },
+  shortcutWrap: { position: "relative", marginTop: 2 },
+  shortcutRow: { gap: 10, paddingRight: theme.spacing.lg, marginTop: 10, paddingVertical: 6 },
+
+  // depth rail behind the horizontal list
+  shortcutRail: {
+    position: "absolute",
+    left: -theme.spacing.lg,
+    right: -theme.spacing.lg,
+    top: 8,
+    height: 128,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+    backgroundColor: Platform.OS === "android" ? "rgba(10,12,14,0.26)" : "rgba(10,12,14,0.22)",
+  },
+  shortcutRailSheen: {
+    position: "absolute",
+    left: -theme.spacing.lg,
+    right: -theme.spacing.lg,
+    top: 8,
+    height: 26,
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    backgroundColor: "rgba(255,255,255,0.05)",
+    opacity: 0.6,
+  },
 
   shortcutCard: {
     borderRadius: 18,
@@ -1435,23 +1499,90 @@ const styles = StyleSheet.create({
     backgroundColor: Platform.OS === "android" ? "rgba(22,25,29,0.55)" : "rgba(22,25,29,0.48)",
     paddingVertical: 14,
     paddingHorizontal: 14,
-    minWidth: 160,
+    minWidth: 178,
     overflow: "hidden",
   },
 
-  shortcutTitle: { color: theme.colors.text, fontSize: 14, fontWeight: theme.fontWeight.black },
+  shortcutCardFeatured: {
+    borderColor: "rgba(79,224,138,0.28)",
+    backgroundColor: Platform.OS === "android" ? "rgba(22,25,29,0.62)" : "rgba(22,25,29,0.54)",
+    minWidth: 210,
+  },
+
+  shortcutGlowEdge: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 3,
+    backgroundColor: "rgba(79,224,138,0.75)",
+    opacity: 0.7,
+  },
+
+  shortcutSheenTop: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: 0,
+    height: 20,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    opacity: 0.65,
+  },
+
+  shortcutTopRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
+
+  shortcutTitle: { color: theme.colors.text, fontSize: 15, fontWeight: theme.fontWeight.black },
+
   shortcutSub: {
     marginTop: 6,
-    color: theme.colors.textSecondary,
+    color: "rgba(242,244,246,0.78)",
     fontSize: 12,
     fontWeight: theme.fontWeight.bold,
     lineHeight: 16,
   },
 
+  shortcutMicro: {
+    marginTop: 8,
+    color: "rgba(79,224,138,0.70)",
+    fontSize: 12,
+    fontWeight: theme.fontWeight.black,
+  },
+
+  shortcutBadge: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.20)",
+  },
+
+  shortcutBadgeFeatured: {
+    borderColor: "rgba(79,224,138,0.22)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+  },
+
+  shortcutBadgeText: { fontSize: 16, opacity: 0.95 },
+
+  shortcutFooter: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10, marginTop: 10 },
+
+  shortcutPill: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.14)",
+  },
+
+  shortcutPillText: { color: "rgba(242,244,246,0.72)", fontSize: 12, fontWeight: theme.fontWeight.black },
+
   shortcutFade: {
     position: "absolute",
     right: 0,
-    top: 10,
+    top: 16,
     bottom: 0,
     width: 34,
     backgroundColor: "rgba(0,0,0,0.55)",
@@ -1521,7 +1652,13 @@ const styles = StyleSheet.create({
 
   discoverInner: { paddingVertical: 14, paddingHorizontal: 14, gap: 8 },
   discoverTitle: { color: theme.colors.text, fontSize: 16, fontWeight: theme.fontWeight.black },
-  discoverSub: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.semibold, lineHeight: 18, opacity: 0.92 },
+  discoverSub: {
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.semibold,
+    lineHeight: 18,
+    opacity: 0.92,
+  },
   discoverFooter: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10, marginTop: 2 },
   discoverHint: { flex: 1, color: theme.colors.textTertiary, fontSize: 12, fontWeight: theme.fontWeight.bold, opacity: 0.78 },
 
