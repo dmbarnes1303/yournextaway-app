@@ -1,5 +1,5 @@
 // app/(tabs)/home.tsx
-import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -26,14 +26,7 @@ import { theme } from "@/src/constants/theme";
 import tripsStore, { type Trip } from "@/src/state/trips";
 import { getFixtures, type FixtureListRow } from "@/src/services/apiFootball";
 
-import {
-  LEAGUES,
-  getRollingWindowIso,
-  parseIsoDateOnly,
-  toIsoDate,
-  addDaysIso,
-  type LeagueOption,
-} from "@/src/constants/football";
+import { LEAGUES, getRollingWindowIso, parseIsoDateOnly, toIsoDate, addDaysIso, type LeagueOption } from "@/src/constants/football";
 import { formatUkDateOnly, formatUkDateTimeMaybe } from "@/src/utils/formatters";
 
 import { buildSearchIndex, querySearchIndex, type SearchResult } from "@/src/services/searchIndex";
@@ -47,15 +40,19 @@ import { getFlagImageUrl } from "@/src/utils/flagImages";
  *   1) Popular cities (flag + city)
  *   2) Popular teams (club crest + team name)
  *
- * IMPORTANT: team crests must be stable (not dependent on fixtures window).
- * API-Football (API-Sports) team logos follow this CDN pattern:
- * https://media.api-sports.io/football/teams/{id}.png
+ * IMPORTANT:
+ * - No repeated team/city (e.g., Madrid + Real Madrid). If a team-city overlaps a popular city,
+ *   we remove the CITY chip (keep the TEAM chip).
+ * - Team crests must be stable (not dependent on fixtures window).
+ *   API-Football (API-Sports) team logos follow this CDN pattern:
+ *   https://media.api-sports.io/football/teams/{id}.png
  */
 const API_SPORTS_TEAM_LOGO = (teamId: number) => `https://media.api-sports.io/football/teams/${teamId}.png`;
 
 type CityChip = { name: string; countryCode: string };
 type TeamChip = { name: string; teamId: number; cityName: string };
 
+// Your chosen 5 cities
 const POPULAR_CITIES: CityChip[] = [
   { name: "Paris", countryCode: "FR" },
   { name: "Rome", countryCode: "IT" },
@@ -64,6 +61,7 @@ const POPULAR_CITIES: CityChip[] = [
   { name: "Lisbon", countryCode: "PT" },
 ];
 
+// Your chosen 5 teams (API-Football IDs)
 const POPULAR_TEAMS: TeamChip[] = [
   { name: "Real Madrid", teamId: 541, cityName: "Madrid" },
   { name: "Arsenal", teamId: 42, cityName: "London" },
@@ -71,6 +69,23 @@ const POPULAR_TEAMS: TeamChip[] = [
   { name: "Inter Milan", teamId: 505, cityName: "Milan" },
   { name: "Borussia Dortmund", teamId: 165, cityName: "Dortmund" },
 ];
+
+function toKey(s: string) {
+  return String(s ?? "").trim().toLowerCase();
+}
+
+function dedupeBy<T>(arr: T[], keyFn: (t: T) => string): T[] {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const item of arr) {
+    const k = keyFn(item);
+    if (!k) continue;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(item);
+  }
+  return out;
+}
 
 function tripSummaryLine(t: Trip) {
   const a = t.startDate ? formatUkDateOnly(t.startDate) : "—";
@@ -164,6 +179,7 @@ function nextWeekendWindowIso(): ShortcutWindow {
   const d = tomorrowLocal();
   const day = d.getDay(); // 0 Sun ... 6 Sat
   const daysUntilSat = (6 - day + 7) % 7;
+
   const sat = new Date(d);
   sat.setDate(sat.getDate() + daysUntilSat);
   sat.setHours(0, 0, 0, 0);
@@ -229,11 +245,9 @@ function labelForVibe(v: DiscoverVibe) {
  * Upcoming match scoring (simple, deterministic, V1-safe):
  * - Big uplift if fixture includes one of POPULAR_TEAMS (by team id if present; fallback by name match)
  * - Weekend uplift
- * - Evening uplift (local parsing via Date; best-effort)
- * - Venue present uplift (helps planning)
- * - Round contains "Final/Semi/Quarter/Derby" uplift if available
- *
- * This is NOT pretending to be "best match" objectively — it's just a sane ranking.
+ * - Evening uplift
+ * - Venue present uplift
+ * - Round contains "Final/Semi/Quarter/Derby" uplift
  */
 function scoreFixture(r: FixtureListRow): number {
   let s = 0;
@@ -244,8 +258,10 @@ function scoreFixture(r: FixtureListRow): number {
   const awayName = String(r?.teams?.away?.name ?? "").toLowerCase();
 
   const popularIds = new Set(POPULAR_TEAMS.map((t) => t.teamId));
-  const isPopularHome = typeof homeId === "number" ? popularIds.has(homeId) : POPULAR_TEAMS.some((t) => homeName.includes(t.name.toLowerCase()));
-  const isPopularAway = typeof awayId === "number" ? popularIds.has(awayId) : POPULAR_TEAMS.some((t) => awayName.includes(t.name.toLowerCase()));
+  const isPopularHome =
+    typeof homeId === "number" ? popularIds.has(homeId) : POPULAR_TEAMS.some((t) => homeName.includes(t.name.toLowerCase()));
+  const isPopularAway =
+    typeof awayId === "number" ? popularIds.has(awayId) : POPULAR_TEAMS.some((t) => awayName.includes(t.name.toLowerCase()));
 
   if (isPopularHome) s += 80;
   if (isPopularAway) s += 80;
@@ -267,7 +283,7 @@ function scoreFixture(r: FixtureListRow): number {
     const day = dt.getDay(); // 0 Sun ... 6 Sat
     if (day === 5 || day === 6 || day === 0) s += 14; // Fri/Sat/Sun
     const hr = dt.getHours();
-    if (hr >= 17 && hr <= 21) s += 10; // evening-ish
+    if (hr >= 17 && hr <= 21) s += 10;
   }
 
   return s;
@@ -541,13 +557,18 @@ export default function HomeScreen() {
     return r.subtitle ?? "";
   }, []);
 
-  // No city/team duplicates:
-  // - If any popular team city appears in popular cities, remove it (prevents Madrid + Real Madrid, etc).
-  const teamCitiesLower = useMemo(() => new Set(POPULAR_TEAMS.map((t) => t.cityName.toLowerCase())), []);
-  const filteredPopularCities = useMemo(
-    () => POPULAR_CITIES.filter((c) => !teamCitiesLower.has(c.name.toLowerCase())),
-    [teamCitiesLower]
-  );
+  // ---------------------------
+  // POPULAR CHIPS (NO DUPES)
+  // ---------------------------
+
+  const dedupedPopularTeams = useMemo(() => dedupeBy(POPULAR_TEAMS, (t) => String(t.teamId)), []);
+  const teamCitiesLower = useMemo(() => new Set(dedupedPopularTeams.map((t) => toKey(t.cityName))), [dedupedPopularTeams]);
+
+  // If a city overlaps a team-city, remove the city chip (prevents "Madrid" + "Real Madrid" etc).
+  const filteredPopularCities = useMemo(() => {
+    const dedupedCities = dedupeBy(POPULAR_CITIES, (c) => toKey(c.name));
+    return dedupedCities.filter((c) => !teamCitiesLower.has(toKey(c.name)));
+  }, [teamCitiesLower]);
 
   const quickShortcuts = useMemo(
     () => [
@@ -580,10 +601,12 @@ export default function HomeScreen() {
     });
   }, []);
 
-  const popularCityNames = useMemo(
-    () => new Set([...POPULAR_CITIES.map((c) => c.name.toLowerCase()), ...POPULAR_TEAMS.map((t) => t.cityName.toLowerCase())]),
-    []
-  );
+  const popularCityNames = useMemo(() => {
+    const citySet = new Set<string>();
+    for (const c of POPULAR_CITIES) citySet.add(toKey(c.name));
+    for (const t of POPULAR_TEAMS) citySet.add(toKey(t.cityName));
+    return citySet;
+  }, []);
 
   const buildDiscoverParams = useCallback(
     (opts: { window: ShortcutWindow; league: LeagueOption; fixtureId: string; mode: "surprise" | "hidden" }) => {
@@ -647,7 +670,7 @@ export default function HomeScreen() {
         const w = windowKeyToWindow(discoverWindowKey);
 
         const filter = (r: FixtureListRow) => {
-          const city = String(r?.fixture?.venue?.city ?? "").trim().toLowerCase();
+          const city = toKey(String(r?.fixture?.venue?.city ?? ""));
           const venue = String(r?.fixture?.venue?.name ?? "").trim();
           const hasVenue = Boolean(venue);
           if (!hasVenue) return false;
@@ -691,12 +714,7 @@ export default function HomeScreen() {
   return (
     <Background imageSource={getBackground("home")} overlayOpacity={0.74}>
       <SafeAreaView style={styles.container} edges={["top"]}>
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={styles.content}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
+        <ScrollView style={styles.scrollView} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           {/* HERO */}
           <GlassCard style={styles.heroCard} strength="strong" noPadding>
             <View style={styles.heroShell}>
@@ -707,9 +725,7 @@ export default function HomeScreen() {
 
               <Text style={styles.heroTitle}>Plan your next European football trip</Text>
 
-              <Text style={styles.heroSub}>
-                Search countries, cities, teams, or venues — then jump into fixtures or build a trip.
-              </Text>
+              <Text style={styles.heroSub}>Search countries, cities, teams, or venues — then jump into fixtures or build a trip.</Text>
 
               <View style={styles.searchBox}>
                 <View pointerEvents="none" style={styles.searchSheen} />
@@ -741,12 +757,7 @@ export default function HomeScreen() {
                     <Text style={styles.popularMeta}>Tap to search</Text>
                   </View>
 
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.popularRow}
-                    decelerationRate="fast"
-                  >
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.popularRow} decelerationRate="fast">
                     {filteredPopularCities.map((c) => (
                       <Pressable
                         key={`city-${c.name}`}
@@ -765,13 +776,8 @@ export default function HomeScreen() {
                     <Text style={styles.popularMeta}>Crests • Tap to search</Text>
                   </View>
 
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.popularRow}
-                    decelerationRate="fast"
-                  >
-                    {POPULAR_TEAMS.map((t) => (
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.popularRow} decelerationRate="fast">
+                    {dedupedPopularTeams.map((t) => (
                       <Pressable
                         key={`team-${t.teamId}`}
                         onPress={() => setQ(t.name)}
@@ -848,11 +854,7 @@ export default function HomeScreen() {
                           <Text style={styles.groupEmpty}>No venues/countries/leagues found.</Text>
                         ) : (
                           <View style={styles.resultList}>
-                            {[
-                              ...buckets.venues.slice(0, 5),
-                              ...buckets.countries.slice(0, 5),
-                              ...buckets.leagues.slice(0, 5),
-                            ]
+                            {[...buckets.venues.slice(0, 5), ...buckets.countries.slice(0, 5), ...buckets.leagues.slice(0, 5)]
                               .slice(0, 10)
                               .map((r, idx) => (
                                 <Pressable
@@ -1071,12 +1073,7 @@ export default function HomeScreen() {
                 <View pointerEvents="none" style={styles.shortcutRail} />
                 <View pointerEvents="none" style={styles.shortcutRailSheen} />
 
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.shortcutRow}
-                  decelerationRate="fast"
-                >
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.shortcutRow} decelerationRate="fast">
                   {quickShortcuts.map((x) => {
                     const featured = x.key === "wknd";
                     const icon =
@@ -1143,16 +1140,9 @@ export default function HomeScreen() {
                   onPress={() => goDiscover("surprise")}
                   disabled={surpriseLoading}
                   android_ripple={{ color: "rgba(79,224,138,0.12)" }}
-                  style={({ pressed }) => [
-                    styles.discoverPress,
-                    (pressed || surpriseLoading) && { opacity: 0.94, transform: [{ scale: 0.99 }] },
-                  ]}
+                  style={({ pressed }) => [styles.discoverPress, (pressed || surpriseLoading) && { opacity: 0.94, transform: [{ scale: 0.99 }] }]}
                 >
-                  <GlassCard
-                    strength="default"
-                    noPadding
-                    style={[styles.discoverCard, styles.discoverCardPrimary, surpriseLoading && { opacity: 0.88 }]}
-                  >
+                  <GlassCard strength="default" noPadding style={[styles.discoverCard, styles.discoverCardPrimary, surpriseLoading && { opacity: 0.88 }]}>
                     <View pointerEvents="none" style={styles.discoverGlowEdge} />
                     <View pointerEvents="none" style={styles.discoverSheenTop} />
 
@@ -1167,9 +1157,7 @@ export default function HomeScreen() {
                       </Text>
 
                       <View style={styles.discoverFooter}>
-                        <Text style={styles.discoverHint}>
-                          {discoverVibes.length ? discoverVibes.map(labelForVibe).join(" • ") : "Any vibe"}
-                        </Text>
+                        <Text style={styles.discoverHint}>{discoverVibes.length ? discoverVibes.map(labelForVibe).join(" • ") : "Any vibe"}</Text>
                         {surpriseLoading ? <ActivityIndicator /> : <Text style={styles.chev}>›</Text>}
                       </View>
                     </View>
@@ -1180,16 +1168,9 @@ export default function HomeScreen() {
                   onPress={() => goDiscover("hidden")}
                   disabled={surpriseLoading}
                   android_ripple={{ color: "rgba(79,224,138,0.10)" }}
-                  style={({ pressed }) => [
-                    styles.discoverPress,
-                    (pressed || surpriseLoading) && { opacity: 0.94, transform: [{ scale: 0.99 }] },
-                  ]}
+                  style={({ pressed }) => [styles.discoverPress, (pressed || surpriseLoading) && { opacity: 0.94, transform: [{ scale: 0.99 }] }]}
                 >
-                  <GlassCard
-                    strength="default"
-                    noPadding
-                    style={[styles.discoverCard, styles.discoverCardSecondary, surpriseLoading && { opacity: 0.88 }]}
-                  >
+                  <GlassCard strength="default" noPadding style={[styles.discoverCard, styles.discoverCardSecondary, surpriseLoading && { opacity: 0.88 }]}>
                     <View pointerEvents="none" style={styles.discoverGlowEdgeSoft} />
                     <View pointerEvents="none" style={styles.discoverSheenTop} />
 
