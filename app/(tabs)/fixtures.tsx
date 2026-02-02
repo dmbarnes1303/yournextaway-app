@@ -68,13 +68,8 @@ function resolveLeagueSelection(
   const leagueIdNum = coerceNumber(paramsLeagueId);
   const seasonNum = coerceNumber(paramsSeason);
 
-  if (leagueIdStr === "all") {
-    return { mode: "multi", selectedMany: LEAGUES };
-  }
-
-  if (!leagueIdNum) {
-    return { mode: "single", selected: LEAGUES[0] };
-  }
+  if (leagueIdStr === "all") return { mode: "multi", selectedMany: LEAGUES };
+  if (!leagueIdNum) return { mode: "single", selected: LEAGUES[0] };
 
   const match = LEAGUES.find((l) => l.leagueId === leagueIdNum);
   if (!match) return { mode: "single", selected: LEAGUES[0] };
@@ -142,8 +137,6 @@ function dayMonth(d: Date) {
 }
 
 function pickDateStrip(fromIso: string, days = 10) {
-  // Keep the same behaviour as your version: base day starts at `from` and shows N consecutive days.
-  // Using Z is fine because we only display labels and compare ISO date-only strings.
   const base = new Date(`${fromIso}T00:00:00Z`);
   const out: { iso: string; labelTop: string; labelBottom: string }[] = [];
   for (let i = 0; i < days; i++) {
@@ -278,9 +271,6 @@ export default function FixturesScreen() {
 
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  const isFollowing = useFollowStore((s) => s.isFollowing);
-  const upsertLatestSnapshot = useFollowStore((s) => s.upsertLatestSnapshot);
-
   useEffect(() => {
     setExpandedId(null);
   }, [activeDay, mode, selectedSingle.leagueId, selectedSingle.season, from, to, qNorm]);
@@ -302,27 +292,7 @@ export default function FixturesScreen() {
         });
 
         if (cancelled) return;
-
-        const rows = Array.isArray(res) ? res : [];
-        setRowsSingle(rows);
-
-        // Keep followed snapshots fresh when we refetch fixtures
-        for (const r of rows) {
-          const id = r?.fixture?.id;
-          if (!id) continue;
-          const fixtureId = String(id);
-          if (!isFollowing(fixtureId)) continue;
-
-          upsertLatestSnapshot(fixtureId, {
-            leagueId: selectedSingle.leagueId,
-            season: selectedSingle.season,
-            kickoffIso: r?.fixture?.date ? String(r.fixture.date) : null,
-            venue: r?.fixture?.venue?.name ? String(r.fixture.venue.name) : null,
-            city: r?.fixture?.venue?.city ? String(r.fixture.venue.city) : null,
-            homeTeamId: r?.teams?.home?.id ?? undefined,
-            awayTeamId: r?.teams?.away?.id ?? undefined,
-          });
-        }
+        setRowsSingle(Array.isArray(res) ? res : []);
       } catch (e: any) {
         if (cancelled) return;
         setError(e?.message ?? "Failed to load fixtures.");
@@ -345,35 +315,15 @@ export default function FixturesScreen() {
               from,
               to,
             });
-            return [l.leagueId, l.season, Array.isArray(res) ? res : []] as const;
+            return [l.leagueId, Array.isArray(res) ? res : []] as const;
           })
         );
 
         if (cancelled) return;
 
         const map: Record<number, FixtureListRow[]> = {};
-        for (const [leagueId, _season, rows] of results) map[leagueId] = rows;
+        for (const [leagueId, rows] of results) map[leagueId] = rows;
         setRowsMulti(map);
-
-        // Snapshot refresh for followed matches (multi)
-        for (const [leagueId, season, rows] of results) {
-          for (const r of rows) {
-            const id = r?.fixture?.id;
-            if (!id) continue;
-            const fixtureId = String(id);
-            if (!isFollowing(fixtureId)) continue;
-
-            upsertLatestSnapshot(fixtureId, {
-              leagueId,
-              season,
-              kickoffIso: r?.fixture?.date ? String(r.fixture.date) : null,
-              venue: r?.fixture?.venue?.name ? String(r.fixture.venue.name) : null,
-              city: r?.fixture?.venue?.city ? String(r.fixture.venue.city) : null,
-              homeTeamId: r?.teams?.home?.id ?? undefined,
-              awayTeamId: r?.teams?.away?.id ?? undefined,
-            });
-          }
-        }
       } catch (e: any) {
         if (cancelled) return;
         setError(e?.message ?? "Failed to load fixtures.");
@@ -388,16 +338,7 @@ export default function FixturesScreen() {
     return () => {
       cancelled = true;
     };
-  }, [
-    mode,
-    selectedSingle.leagueId,
-    selectedSingle.season,
-    selectedMany,
-    from,
-    to,
-    isFollowing,
-    upsertLatestSnapshot,
-  ]);
+  }, [mode, selectedSingle.leagueId, selectedSingle.season, selectedMany, from, to]);
 
   const passesQuery = useCallback(
     (r: FixtureListRow) => {
@@ -493,14 +434,18 @@ export default function FixturesScreen() {
     (r: FixtureListRow, ctx: { leagueId: number; season: number }) => {
       const id = r?.fixture?.id;
       const fixtureIdStr = id ? String(id) : "";
+
       const expanded = fixtureIdStr && expandedId === fixtureIdStr;
 
-      const homeName = String(r?.teams?.home?.name ?? "Home");
-      const awayName = String(r?.teams?.away?.name ?? "Away");
+      // HARD GUARANTEE: always show both names
+      const homeName = String(r?.teams?.home?.name ?? "").trim() || "Home";
+      const awayName = String(r?.teams?.away?.name ?? "").trim() || "Away";
+
       const homeLogo = r?.teams?.home?.logo ? String(r.teams.home.logo) : null;
       const awayLogo = r?.teams?.away?.logo ? String(r.teams.away.logo) : null;
 
       const kickoff = kickoffLabel(r);
+
       const venue = r?.fixture?.venue?.name ? String(r.fixture.venue.name) : "";
       const city = r?.fixture?.venue?.city ? String(r.fixture.venue.city) : "";
       const location = venue && city ? `${venue} • ${city}` : venue || city || "";
@@ -518,7 +463,6 @@ export default function FixturesScreen() {
               style={({ pressed }) => [styles.rowMain, pressed && fixtureIdStr ? { opacity: 0.94 } : null]}
             >
               <View style={styles.rowInner}>
-                {/* Symmetrical: Home crest | Center text | Away crest */}
                 <TeamCrest name={homeName} logo={homeLogo} side="home" />
 
                 <View style={styles.centerBlock}>
@@ -546,6 +490,11 @@ export default function FixturesScreen() {
                       <FollowPill fixtureId={fixtureIdStr} leagueId={ctx.leagueId} season={ctx.season} row={r} />
                     </View>
                   ) : null}
+
+                  {/* Subtle affordance without breaking symmetry */}
+                  <Text style={styles.tapHint} numberOfLines={1}>
+                    Tap for actions
+                  </Text>
                 </View>
 
                 <TeamCrest name={awayName} logo={awayLogo} side="away" />
@@ -585,7 +534,6 @@ export default function FixturesScreen() {
   return (
     <Background imageSource={getBackground("fixtures")} overlayOpacity={0.86}>
       <SafeAreaView style={styles.container} edges={["top"]}>
-        {/* HEADER */}
         <View style={styles.header}>
           <View style={styles.titleRow}>
             <View style={{ flex: 1 }}>
@@ -599,13 +547,10 @@ export default function FixturesScreen() {
               hitSlop={10}
               android_ripple={{ color: "rgba(79,224,138,0.10)" }}
             >
-              <Text style={styles.modePillText}>
-                {mode === "single" ? "One league" : "Top leagues"}
-              </Text>
+              <Text style={styles.modePillText}>{mode === "single" ? "One league" : "Top leagues"}</Text>
             </Pressable>
           </View>
 
-          {/* Search */}
           <View style={styles.searchBox}>
             <TextInput
               value={query}
@@ -631,7 +576,6 @@ export default function FixturesScreen() {
             ) : null}
           </View>
 
-          {/* Date strip */}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dateRow}>
             {dateStrip.map((d) => {
               const active = d.iso === activeDay;
@@ -649,7 +593,6 @@ export default function FixturesScreen() {
             })}
           </ScrollView>
 
-          {/* League pills (single mode only) */}
           {mode === "single" ? (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.leagueRow}>
               {LEAGUES.map((l) => {
@@ -670,7 +613,6 @@ export default function FixturesScreen() {
           ) : null}
         </View>
 
-        {/* BODY */}
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           <GlassCard strength="default" style={styles.card}>
             {loading ? (
@@ -873,7 +815,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    minHeight: 74,
+    minHeight: 86,
   },
 
   teamLineTop: {
@@ -922,6 +864,15 @@ const styles = StyleSheet.create({
     marginTop: 4,
     alignItems: "center",
     justifyContent: "center",
+  },
+
+  tapHint: {
+    marginTop: 2,
+    color: theme.colors.textTertiary,
+    fontSize: 11,
+    fontWeight: theme.fontWeight.regular,
+    opacity: 0.75,
+    textAlign: "center",
   },
 
   followPill: {
