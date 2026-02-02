@@ -23,23 +23,27 @@ import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
 import { getFixtures, type FixtureListRow } from "@/src/services/apiFootball";
 
-import { LEAGUES, getRollingWindowIso, normalizeWindowIso, type LeagueOption } from "@/src/constants/football";
+import {
+  LEAGUES,
+  getRollingWindowIso,
+  normalizeWindowIso,
+  type LeagueOption,
+} from "@/src/constants/football";
 import { coerceNumber, coerceString } from "@/src/utils/params";
 import { formatUkDateOnly, formatUkDateTimeMaybe } from "@/src/utils/formatters";
 import { getFlagImageUrl } from "@/src/utils/flagImages";
 
 import useFollowStore from "@/src/state/followStore";
-import { computeLikelyPlaceholderTbcIds, kickoffIsoOrNull } from "@/src/utils/kickoffTbc";
+import {
+  computeLikelyPlaceholderTbcIds,
+  kickoffIsoOrNull,
+  isKickoffTbc,
+} from "@/src/utils/kickoffTbc";
 
 type LeagueMode = "single" | "multi";
 
 function norm(s: unknown) {
   return String(s ?? "").trim().toLowerCase();
-}
-
-function fixtureIdStrOf(r: FixtureListRow): string {
-  const id = r?.fixture?.id;
-  return id != null ? String(id) : "";
 }
 
 function fixtureIsoDateOnly(r: FixtureListRow): string | null {
@@ -86,12 +90,24 @@ function initials(name: string) {
   return `${parts[0][0] ?? ""}${parts[1][0] ?? ""}`.toUpperCase();
 }
 
-function TeamCrest({ name, logo, side }: { name: string; logo?: string | null; side: "home" | "away" }) {
+function TeamCrest({
+  name,
+  logo,
+  side,
+}: {
+  name: string;
+  logo?: string | null;
+  side: "home" | "away";
+}) {
   const ring = side === "home" ? styles.crestRingHome : styles.crestRingAway;
 
   return (
     <View style={styles.crestWrap}>
-      {logo ? <Image source={{ uri: logo }} style={styles.crestImg} resizeMode="contain" /> : <Text style={styles.crestFallback}>{initials(name)}</Text>}
+      {logo ? (
+        <Image source={{ uri: logo }} style={styles.crestImg} resizeMode="contain" />
+      ) : (
+        <Text style={styles.crestFallback}>{initials(name)}</Text>
+      )}
       <View pointerEvents="none" style={[styles.crestRing, ring]} />
     </View>
   );
@@ -132,13 +148,6 @@ function pickDateStrip(fromIso: string, days = 10) {
   return out;
 }
 
-function kickoffLabel(r: FixtureListRow, placeholderIds?: Set<string>) {
-  const iso = kickoffIsoOrNull(r, placeholderIds);
-  if (!iso) return "TBC";
-  const pretty = formatUkDateTimeMaybe(iso);
-  return pretty || "TBC";
-}
-
 type FollowPillProps = {
   fixtureId: string;
   leagueId: number;
@@ -154,7 +163,9 @@ function FollowPill({ fixtureId, leagueId, season, row, placeholderIds }: Follow
   const homeTeamId = row?.teams?.home?.id ?? 0;
   const awayTeamId = row?.teams?.away?.id ?? 0;
 
+  // IMPORTANT: store null if kickoff is TBC (explicit OR placeholder)
   const kickoffIso = kickoffIsoOrNull(row, placeholderIds);
+
   const venue = row?.fixture?.venue?.name ? String(row.fixture.venue.name) : null;
   const city = row?.fixture?.venue?.city ? String(row.fixture.venue.city) : null;
 
@@ -170,7 +181,7 @@ function FollowPill({ fixtureId, leagueId, season, row, placeholderIds }: Follow
           season,
           homeTeamId,
           awayTeamId,
-          kickoffIso, // null when TBC
+          kickoffIso,
           venue,
           city,
         });
@@ -183,7 +194,9 @@ function FollowPill({ fixtureId, leagueId, season, row, placeholderIds }: Follow
       ]}
       hitSlop={10}
     >
-      <Text style={[styles.followPillText, isFollowing && styles.followPillTextActive]}>{isFollowing ? "Following" : "Follow"}</Text>
+      <Text style={[styles.followPillText, isFollowing && styles.followPillTextActive]}>
+        {isFollowing ? "Following" : "Follow"}
+      </Text>
     </Pressable>
   );
 }
@@ -211,11 +224,18 @@ export default function FixturesScreen() {
   const from = window.from;
   const to = window.to;
 
-  const selection = useMemo(() => resolveLeagueSelection(params.leagueId, params.season), [params.leagueId, params.season]);
+  const selection = useMemo(
+    () => resolveLeagueSelection(params.leagueId, params.season),
+    [params.leagueId, params.season]
+  );
 
   const [mode, setMode] = useState<LeagueMode>(selection.mode);
-  const [selectedSingle, setSelectedSingle] = useState<LeagueOption>(selection.selected ?? LEAGUES[0]);
-  const [selectedMany, setSelectedMany] = useState<LeagueOption[]>(selection.selectedMany ?? LEAGUES);
+  const [selectedSingle, setSelectedSingle] = useState<LeagueOption>(
+    selection.selected ?? LEAGUES[0]
+  );
+  const [selectedMany, setSelectedMany] = useState<LeagueOption[]>(
+    selection.selectedMany ?? LEAGUES
+  );
 
   useEffect(() => {
     setMode(selection.mode);
@@ -250,41 +270,27 @@ export default function FixturesScreen() {
   const [rowsSingle, setRowsSingle] = useState<FixtureListRow[]>([]);
   const [rowsMulti, setRowsMulti] = useState<Record<number, FixtureListRow[]>>({});
 
-  // TBC placeholder detection per fetch result-set
-  const [placeholderIdsSingle, setPlaceholderIdsSingle] = useState<Set<string>>(new Set());
-  const [placeholderIdsMulti, setPlaceholderIdsMulti] = useState<Record<number, Set<string>>>({});
+  // TBC placeholder sets (computed per dataset)
+  const [placeholderSingle, setPlaceholderSingle] = useState<Set<string>>(new Set());
+  const [placeholderMulti, setPlaceholderMulti] = useState<Record<number, Set<string>>>({});
 
   const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  const isFollowing = useFollowStore((s) => s.isFollowing);
+  const upsertLatestSnapshot = useFollowStore((s) => s.upsertLatestSnapshot);
 
   useEffect(() => {
     setExpandedId(null);
   }, [activeDay, mode, selectedSingle.leagueId, selectedSingle.season, from, to, qNorm]);
 
-  const upsertLatestSnapshot = useFollowStore((s) => s.upsertLatestSnapshot);
-  const followedIdsSet = useFollowStore(
-    useCallback((s) => new Set(s.followed.map((f) => f.fixtureId)), [])
-  );
-
   useEffect(() => {
     let cancelled = false;
-
-    function snapshotFromRow(r: FixtureListRow, placeholderIds?: Set<string>) {
-      return {
-        kickoffIso: kickoffIsoOrNull(r, placeholderIds), // null when TBC
-        venue: r?.fixture?.venue?.name ? String(r.fixture.venue.name) : null,
-        city: r?.fixture?.venue?.city ? String(r.fixture.venue.city) : null,
-        homeTeamId: r?.teams?.home?.id != null ? Number(r.teams.home.id) : undefined,
-        awayTeamId: r?.teams?.away?.id != null ? Number(r.teams.away.id) : undefined,
-        leagueId: r?.league?.id != null ? Number(r.league.id) : undefined,
-        season: (r as any)?.league?.season != null ? Number((r as any).league.season) : undefined,
-      };
-    }
 
     async function runSingle() {
       setError(null);
       setLoading(true);
       setRowsSingle([]);
-      setPlaceholderIdsSingle(new Set());
+      setPlaceholderSingle(new Set());
 
       try {
         const res = await getFixtures({
@@ -299,15 +305,27 @@ export default function FixturesScreen() {
         const rows = Array.isArray(res) ? res : [];
         setRowsSingle(rows);
 
-        const placeholders = computeLikelyPlaceholderTbcIds(rows);
-        setPlaceholderIdsSingle(placeholders);
+        // Compute placeholder TBC ids for this dataset (league+window)
+        const ph = computeLikelyPlaceholderTbcIds(rows);
+        setPlaceholderSingle(ph);
 
-        // Keep followed matches fresh (only for those already followed)
+        // Snapshot refresh for followed matches
         for (const r of rows) {
-          const fid = fixtureIdStrOf(r);
-          if (!fid) continue;
-          if (!followedIdsSet.has(fid)) continue;
-          upsertLatestSnapshot(fid, snapshotFromRow(r, placeholders));
+          const id = r?.fixture?.id;
+          if (!id) continue;
+
+          const fixtureId = String(id);
+          if (!isFollowing(fixtureId)) continue;
+
+          upsertLatestSnapshot(fixtureId, {
+            leagueId: selectedSingle.leagueId,
+            season: selectedSingle.season,
+            kickoffIso: kickoffIsoOrNull(r, ph),
+            venue: r?.fixture?.venue?.name ? String(r.fixture.venue.name) : null,
+            city: r?.fixture?.venue?.city ? String(r.fixture.venue.city) : null,
+            homeTeamId: r?.teams?.home?.id ?? undefined,
+            awayTeamId: r?.teams?.away?.id ?? undefined,
+          });
         }
       } catch (e: any) {
         if (cancelled) return;
@@ -321,7 +339,7 @@ export default function FixturesScreen() {
       setError(null);
       setLoading(true);
       setRowsMulti({});
-      setPlaceholderIdsMulti({});
+      setPlaceholderMulti({});
 
       try {
         const results = await Promise.all(
@@ -332,31 +350,45 @@ export default function FixturesScreen() {
               from,
               to,
             });
-            return [l.leagueId, Array.isArray(res) ? res : []] as const;
+            return [l.leagueId, l.season, Array.isArray(res) ? res : []] as const;
           })
         );
 
         if (cancelled) return;
 
         const map: Record<number, FixtureListRow[]> = {};
-        const pmap: Record<number, Set<string>> = {};
+        const phMap: Record<number, Set<string>> = {};
 
-        for (const [leagueId, rows] of results) {
+        for (const [leagueId, _season, rows] of results) {
           map[leagueId] = rows;
-          pmap[leagueId] = computeLikelyPlaceholderTbcIds(rows);
-
-          // snapshot refresh for followed fixtures
-          const placeholders = pmap[leagueId];
-          for (const r of rows) {
-            const fid = fixtureIdStrOf(r);
-            if (!fid) continue;
-            if (!followedIdsSet.has(fid)) continue;
-            upsertLatestSnapshot(fid, snapshotFromRow(r, placeholders));
-          }
+          phMap[leagueId] = computeLikelyPlaceholderTbcIds(rows);
         }
 
         setRowsMulti(map);
-        setPlaceholderIdsMulti(pmap);
+        setPlaceholderMulti(phMap);
+
+        // Snapshot refresh for followed matches (multi)
+        for (const [leagueId, season, rows] of results) {
+          const ph = phMap[leagueId] ?? new Set<string>();
+
+          for (const r of rows) {
+            const id = r?.fixture?.id;
+            if (!id) continue;
+
+            const fixtureId = String(id);
+            if (!isFollowing(fixtureId)) continue;
+
+            upsertLatestSnapshot(fixtureId, {
+              leagueId,
+              season,
+              kickoffIso: kickoffIsoOrNull(r, ph),
+              venue: r?.fixture?.venue?.name ? String(r.fixture.venue.name) : null,
+              city: r?.fixture?.venue?.city ? String(r.fixture.venue.city) : null,
+              homeTeamId: r?.teams?.home?.id ?? undefined,
+              awayTeamId: r?.teams?.away?.id ?? undefined,
+            });
+          }
+        }
       } catch (e: any) {
         if (cancelled) return;
         setError(e?.message ?? "Failed to load fixtures.");
@@ -371,7 +403,16 @@ export default function FixturesScreen() {
     return () => {
       cancelled = true;
     };
-  }, [mode, selectedSingle.leagueId, selectedSingle.season, selectedMany, from, to, upsertLatestSnapshot, followedIdsSet]);
+  }, [
+    mode,
+    selectedSingle.leagueId,
+    selectedSingle.season,
+    selectedMany,
+    from,
+    to,
+    isFollowing,
+    upsertLatestSnapshot,
+  ]);
 
   const passesQuery = useCallback(
     (r: FixtureListRow) => {
@@ -397,7 +438,10 @@ export default function FixturesScreen() {
     [activeDay]
   );
 
-  const filteredSingle = useMemo(() => rowsSingle.filter((r) => passesQuery(r)).filter((r) => isActiveDay(r)), [rowsSingle, passesQuery, isActiveDay]);
+  const filteredSingle = useMemo(
+    () => rowsSingle.filter((r) => passesQuery(r)).filter((r) => isActiveDay(r)),
+    [rowsSingle, passesQuery, isActiveDay]
+  );
 
   const filteredMulti = useMemo(() => {
     const out: Record<number, FixtureListRow[]> = {};
@@ -417,8 +461,10 @@ export default function FixturesScreen() {
 
   const goMatchWithContext = useCallback(
     (fixtureIdStr: string, leagueIdForRow?: number, seasonForRow?: number) => {
-      const lid = mode === "single" ? selectedSingle.leagueId : leagueIdForRow ?? selectedSingle.leagueId;
-      const sea = mode === "single" ? selectedSingle.season : seasonForRow ?? selectedSingle.season;
+      const lid =
+        mode === "single" ? selectedSingle.leagueId : leagueIdForRow ?? selectedSingle.leagueId;
+      const sea =
+        mode === "single" ? selectedSingle.season : seasonForRow ?? selectedSingle.season;
 
       router.push({
         pathname: "/match/[id]",
@@ -437,8 +483,10 @@ export default function FixturesScreen() {
 
   const goBuildTripWithContext = useCallback(
     (fixtureIdStr: string, leagueIdForRow?: number, seasonForRow?: number) => {
-      const lid = mode === "single" ? selectedSingle.leagueId : leagueIdForRow ?? selectedSingle.leagueId;
-      const sea = mode === "single" ? selectedSingle.season : seasonForRow ?? selectedSingle.season;
+      const lid =
+        mode === "single" ? selectedSingle.leagueId : leagueIdForRow ?? selectedSingle.leagueId;
+      const sea =
+        mode === "single" ? selectedSingle.season : seasonForRow ?? selectedSingle.season;
 
       router.push({
         pathname: "/trip/build",
@@ -460,16 +508,20 @@ export default function FixturesScreen() {
     return "Try a different search term (team, city, or venue) or clear the filter.";
   }, [qNorm]);
 
-  const renderFixtureRow = useCallback(
-    (
-      r: FixtureListRow,
-      ctx: { leagueId: number; season: number; placeholderIds?: Set<string> }
-    ) => {
-      const fixtureIdStr = fixtureIdStrOf(r);
+  function kickoffLabel(r: FixtureListRow, ph?: Set<string>) {
+    // TBC logic comes from a single source of truth
+    if (isKickoffTbc(r, ph)) return "TBC";
+    const iso = r?.fixture?.date ? String(r.fixture.date) : "";
+    const pretty = formatUkDateTimeMaybe(iso);
+    return pretty || "TBC";
+  }
 
+  const renderFixtureRow = useCallback(
+    (r: FixtureListRow, ctx: { leagueId: number; season: number; placeholderIds?: Set<string> }) => {
+      const id = r?.fixture?.id;
+      const fixtureIdStr = id ? String(id) : "";
       const expanded = fixtureIdStr && expandedId === fixtureIdStr;
 
-      // HARD GUARANTEE: always show both names
       const homeName = String(r?.teams?.home?.name ?? "").trim() || "Home";
       const awayName = String(r?.teams?.away?.name ?? "").trim() || "Away";
 
@@ -492,9 +544,13 @@ export default function FixturesScreen() {
                 setExpandedId((prev) => (prev === fixtureIdStr ? null : fixtureIdStr));
               }}
               android_ripple={{ color: "rgba(79,224,138,0.10)" }}
-              style={({ pressed }) => [styles.rowMain, pressed && fixtureIdStr ? { opacity: 0.94 } : null]}
+              style={({ pressed }) => [
+                styles.rowMain,
+                pressed && fixtureIdStr ? { opacity: 0.94 } : null,
+              ]}
             >
               <View style={styles.rowInner}>
+                {/* Symmetrical: Home crest | Center text | Away crest */}
                 <TeamCrest name={homeName} logo={homeLogo} side="home" />
 
                 <View style={styles.centerBlock}>
@@ -542,7 +598,11 @@ export default function FixturesScreen() {
               <View style={styles.expandArea}>
                 <Pressable
                   onPress={() => goMatchWithContext(fixtureIdStr, ctx.leagueId, ctx.season)}
-                  style={({ pressed }) => [styles.expandBtn, styles.expandBtnGhost, pressed && { opacity: 0.92 }]}
+                  style={({ pressed }) => [
+                    styles.expandBtn,
+                    styles.expandBtnGhost,
+                    pressed && { opacity: 0.92 },
+                  ]}
                   android_ripple={{ color: "rgba(79,224,138,0.10)" }}
                 >
                   <Text style={styles.expandBtnGhostText}>Match</Text>
@@ -550,7 +610,11 @@ export default function FixturesScreen() {
 
                 <Pressable
                   onPress={() => goBuildTripWithContext(fixtureIdStr, ctx.leagueId, ctx.season)}
-                  style={({ pressed }) => [styles.expandBtn, styles.expandBtnPrimary, pressed && { opacity: 0.92 }]}
+                  style={({ pressed }) => [
+                    styles.expandBtn,
+                    styles.expandBtnPrimary,
+                    pressed && { opacity: 0.92 },
+                  ]}
                   android_ripple={{ color: "rgba(79,224,138,0.12)" }}
                 >
                   <Text style={styles.expandBtnPrimaryText}>Build trip</Text>
@@ -564,7 +628,9 @@ export default function FixturesScreen() {
     [expandedId, goBuildTripWithContext, goMatchWithContext]
   );
 
-  const nothingInMulti = useMemo(() => selectedMany.every((l) => (filteredMulti[l.leagueId]?.length ?? 0) === 0), [selectedMany, filteredMulti]);
+  const nothingInMulti = useMemo(() => {
+    return selectedMany.every((l) => (filteredMulti[l.leagueId]?.length ?? 0) === 0);
+  }, [selectedMany, filteredMulti]);
 
   return (
     <Background imageSource={getBackground("fixtures")} overlayOpacity={0.86}>
@@ -576,8 +642,15 @@ export default function FixturesScreen() {
               <Text style={styles.subtitle}>{subtitle}</Text>
             </View>
 
-            <Pressable onPress={toggleMode} style={styles.modePill} hitSlop={10} android_ripple={{ color: "rgba(79,224,138,0.10)" }}>
-              <Text style={styles.modePillText}>{mode === "single" ? "One league" : "Top leagues"}</Text>
+            <Pressable
+              onPress={toggleMode}
+              style={styles.modePill}
+              hitSlop={10}
+              android_ripple={{ color: "rgba(79,224,138,0.10)" }}
+            >
+              <Text style={styles.modePillText}>
+                {mode === "single" ? "One league" : "Top leagues"}
+              </Text>
             </Pressable>
           </View>
 
@@ -591,11 +664,16 @@ export default function FixturesScreen() {
               autoCapitalize="none"
               autoCorrect={false}
               returnKeyType="search"
-              onSubmitEditing={() => dismissKeyboard()}
+              onSubmitEditing={() => Keyboard.dismiss()}
             />
 
             {qNorm.length > 0 ? (
-              <Pressable onPress={clearQuery} style={styles.clearBtn} hitSlop={10} android_ripple={{ color: "rgba(79,224,138,0.10)" }}>
+              <Pressable
+                onPress={clearQuery}
+                style={styles.clearBtn}
+                hitSlop={10}
+                android_ripple={{ color: "rgba(79,224,138,0.10)" }}
+              >
                 <Text style={styles.clearBtnText}>Clear</Text>
               </Pressable>
             ) : null}
@@ -608,7 +686,11 @@ export default function FixturesScreen() {
                 <Pressable
                   key={d.iso}
                   onPress={() => setActiveDay(d.iso)}
-                  style={({ pressed }) => [styles.datePill, active && styles.datePillActive, pressed && { opacity: 0.94 }]}
+                  style={({ pressed }) => [
+                    styles.datePill,
+                    active && styles.datePillActive,
+                    pressed && { opacity: 0.94 },
+                  ]}
                   android_ripple={{ color: "rgba(79,224,138,0.10)" }}
                 >
                   <Text style={[styles.dateTop, active && styles.dateTopActive]}>{d.labelTop}</Text>
@@ -626,7 +708,11 @@ export default function FixturesScreen() {
                   <Pressable
                     key={l.leagueId}
                     onPress={() => setSelectedSingle(l)}
-                    style={({ pressed }) => [styles.leaguePill, active && styles.leaguePillActive, pressed && { opacity: 0.94 }]}
+                    style={({ pressed }) => [
+                      styles.leaguePill,
+                      active && styles.leaguePillActive,
+                      pressed && { opacity: 0.94 },
+                    ]}
                     android_ripple={{ color: "rgba(79,224,138,0.10)" }}
                   >
                     <Text style={[styles.leaguePillText, active && styles.leaguePillTextActive]}>{l.label}</Text>
@@ -659,7 +745,7 @@ export default function FixturesScreen() {
                       renderFixtureRow(r, {
                         leagueId: selectedSingle.leagueId,
                         season: selectedSingle.season,
-                        placeholderIds: placeholderIdsSingle,
+                        placeholderIds: placeholderSingle,
                       })
                     )}
                   </View>
@@ -671,8 +757,6 @@ export default function FixturesScreen() {
                   {selectedMany.map((l) => {
                     const leagueRows = filteredMulti[l.leagueId] ?? [];
                     if (leagueRows.length === 0) return null;
-
-                    const placeholders = placeholderIdsMulti[l.leagueId] ?? new Set<string>();
 
                     return (
                       <View key={l.leagueId} style={styles.leagueGroup}>
@@ -686,7 +770,11 @@ export default function FixturesScreen() {
 
                         <View style={styles.list}>
                           {leagueRows.map((r) =>
-                            renderFixtureRow(r, { leagueId: l.leagueId, season: l.season, placeholderIds: placeholders })
+                            renderFixtureRow(r, {
+                              leagueId: l.leagueId,
+                              season: l.season,
+                              placeholderIds: placeholderMulti[l.leagueId],
+                            })
                           )}
                         </View>
                       </View>
