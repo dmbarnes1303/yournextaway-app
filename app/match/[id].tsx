@@ -30,7 +30,7 @@ import { formatUkDateTimeMaybe } from "@/src/utils/formatters";
 
 import authStore from "@/src/state/auth";
 import { isWatched, watchFixture, unwatchFixture } from "@/src/services/watchlist";
-import { isKickoffTbc } from "@/src/utils/kickoffTbc";
+import { isKickoffTbc, kickoffIsoOrNull } from "@/src/utils/kickoffTbc";
 
 function currentFootballSeasonStartYear(now = new Date()): number {
   const y = now.getFullYear();
@@ -120,6 +120,7 @@ export default function MatchDetailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
 
+  // boot auth
   const booted = authStore((s) => s.booted);
   const user = authStore((s) => s.user);
   const initAuth = authStore((s) => s.init);
@@ -132,6 +133,7 @@ export default function MatchDetailScreen() {
 
   const id = useMemo(() => coerceString((params as any)?.id), [params]);
 
+  // Routing context
   const rolling = useMemo(() => getRollingWindowIso(), []);
 
   const window = useMemo(() => {
@@ -154,9 +156,11 @@ export default function MatchDetailScreen() {
   const [error, setError] = useState<string | null>(null);
   const [row, setRow] = useState<FixtureListRow | null>(null);
 
+  // watch state
   const [watched, setWatched] = useState(false);
   const [watchBusy, setWatchBusy] = useState(false);
 
+  // sign-in UI
   const [email, setEmail] = useState("");
 
   useEffect(() => {
@@ -242,13 +246,9 @@ export default function MatchDetailScreen() {
   const effectiveSeason =
     routeSeason ?? (typeof apiSeason === "number" ? apiSeason : null) ?? currentFootballSeasonStartYear();
 
-  // Single-source of truth (explicit TBC). Placeholder dominance is handled in Fixtures list.
   const tbc = useMemo(() => (row ? isKickoffTbc(row) : true), [row]);
 
-  const ticketsUrl = useMemo(
-    () => buildTicketsUrl(home, away, kickoffDateOnly, leagueName),
-    [home, away, kickoffDateOnly, leagueName]
-  );
+  const ticketsUrl = useMemo(() => buildTicketsUrl(home, away, kickoffDateOnly, leagueName), [home, away, kickoffDateOnly, leagueName]);
   const mapsUrl = useMemo(() => buildMapsVenueUrl(venue, city), [venue, city]);
   const stadiumInfoUrl = useMemo(() => buildStadiumInfoUrl(venue, home, city), [venue, home, city]);
   const foodDrinkUrl = useMemo(() => buildFoodDrinkUrl(venue, city), [venue, city]);
@@ -329,13 +329,13 @@ export default function MatchDetailScreen() {
         return;
       }
 
-      const kickoffIso = row?.fixture?.date ? String(row.fixture.date) : null;
+      const lastKnownKickoffIso = row ? kickoffIsoOrNull(row) : null;
 
       await watchFixture({
         fixtureId,
         leagueId: effectiveLeagueId ?? undefined,
         season: typeof effectiveSeason === "number" ? effectiveSeason : undefined,
-        lastKnownKickoffIso: kickoffIso,
+        lastKnownKickoffIso,
         lastKnownIsTbc: tbc,
       });
 
@@ -515,16 +515,12 @@ export default function MatchDetailScreen() {
               <View style={styles.opsList}>
                 <View style={styles.opsItem}>
                   <Text style={styles.opsTitle}>Arrive early</Text>
-                  <Text style={styles.opsBody}>
-                    Aim for 60–90 minutes before kickoff if you’re collecting tickets or navigating security.
-                  </Text>
+                  <Text style={styles.opsBody}>Aim for 60–90 minutes before kickoff if you’re collecting tickets or navigating security.</Text>
                 </View>
 
                 <View style={styles.opsItem}>
                   <Text style={styles.opsTitle}>Bag policy and entry</Text>
-                  <Text style={styles.opsBody}>
-                    Policies vary. If you’re carrying a bag, double-check restrictions before you travel.
-                  </Text>
+                  <Text style={styles.opsBody}>Policies vary. If you’re carrying a bag, double-check restrictions before you travel.</Text>
                   <Pressable onPress={() => safeOpenUrl(stadiumInfoUrl)} style={styles.inlineBtn}>
                     <Text style={styles.inlineBtnText}>Search stadium entry rules</Text>
                   </Pressable>
@@ -532,9 +528,7 @@ export default function MatchDetailScreen() {
 
                 <View style={styles.opsItem}>
                   <Text style={styles.opsTitle}>Transport plan</Text>
-                  <Text style={styles.opsBody}>
-                    Public transport is usually easiest; event traffic and parking are unpredictable near kickoff.
-                  </Text>
+                  <Text style={styles.opsBody}>Public transport is usually easiest; event traffic and parking are unpredictable near kickoff.</Text>
                   <Pressable onPress={() => safeOpenUrl(transportUrl)} style={styles.inlineBtn}>
                     <Text style={styles.inlineBtnText}>Search transport options</Text>
                   </Pressable>
@@ -542,9 +536,7 @@ export default function MatchDetailScreen() {
 
                 <View style={styles.opsItem}>
                   <Text style={styles.opsTitle}>Food & drinks nearby</Text>
-                  <Text style={styles.opsBody}>
-                    Pick something walkable so you’re not rushing. Atmosphere is often best around the stadium district.
-                  </Text>
+                  <Text style={styles.opsBody}>Pick something walkable so you’re not rushing. Atmosphere is often best around the stadium district.</Text>
                   <Pressable onPress={() => safeOpenUrl(foodDrinkUrl)} style={styles.inlineBtn}>
                     <Text style={styles.inlineBtnText}>Search nearby spots</Text>
                   </Pressable>
@@ -558,6 +550,7 @@ export default function MatchDetailScreen() {
   );
 }
 
+// styles unchanged from your file
 const styles = StyleSheet.create({
   container: { flex: 1, paddingTop: 100 },
   scrollView: { flex: 1 },
