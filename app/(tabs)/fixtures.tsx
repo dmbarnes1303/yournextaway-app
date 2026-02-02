@@ -33,6 +33,8 @@ import { coerceNumber, coerceString } from "@/src/utils/params";
 import { formatUkDateOnly, formatUkDateTimeMaybe } from "@/src/utils/formatters";
 import { getFlagImageUrl } from "@/src/utils/flagImages";
 
+import { computeLikelyPlaceholderTbcIds, isKickoffTbc, kickoffIsoOrNull } from "@/src/utils/kickoffTbc";
+
 import useFollowStore from "@/src/state/followStore";
 
 type LeagueMode = "single" | "multi";
@@ -47,13 +49,6 @@ function fixtureIsoDateOnly(r: FixtureListRow): string | null {
   const s = String(raw);
   const m = s.match(/^(\d{4}-\d{2}-\d{2})/);
   return m?.[1] ?? null;
-}
-
-function kickoffLabel(r: FixtureListRow) {
-  const raw = r?.fixture?.date;
-  if (!raw) return "TBC";
-  const pretty = formatUkDateTimeMaybe(raw);
-  return pretty || "TBC";
 }
 
 function resolveLeagueSelection(
@@ -155,16 +150,17 @@ type FollowPillProps = {
   leagueId: number;
   season: number;
   row: FixtureListRow;
+  kickoffIsoOverride?: string | null; // IMPORTANT: null means TBC/unconfirmed
 };
 
-function FollowPill({ fixtureId, leagueId, season, row }: FollowPillProps) {
+function FollowPill({ fixtureId, leagueId, season, row, kickoffIsoOverride }: FollowPillProps) {
   const isFollowing = useFollowStore((s) => s.isFollowing(fixtureId));
   const toggle = useFollowStore((s) => s.toggle);
 
   const homeTeamId = row?.teams?.home?.id ?? 0;
   const awayTeamId = row?.teams?.away?.id ?? 0;
 
-  const kickoffIso = row?.fixture?.date ? String(row.fixture.date) : null;
+  const kickoffIso = kickoffIsoOverride !== undefined ? kickoffIsoOverride : (row?.fixture?.date ? String(row.fixture.date) : null);
   const venue = row?.fixture?.venue?.name ? String(row.fixture.venue.name) : null;
   const city = row?.fixture?.venue?.city ? String(row.fixture.venue.city) : null;
 
@@ -229,12 +225,8 @@ export default function FixturesScreen() {
   );
 
   const [mode, setMode] = useState<LeagueMode>(selection.mode);
-  const [selectedSingle, setSelectedSingle] = useState<LeagueOption>(
-    selection.selected ?? LEAGUES[0]
-  );
-  const [selectedMany, setSelectedMany] = useState<LeagueOption[]>(
-    selection.selectedMany ?? LEAGUES
-  );
+  const [selectedSingle, setSelectedSingle] = useState<LeagueOption>(selection.selected ?? LEAGUES[0]);
+  const [selectedMany, setSelectedMany] = useState<LeagueOption[]>(selection.selectedMany ?? LEAGUES);
 
   useEffect(() => {
     setMode(selection.mode);
@@ -269,6 +261,10 @@ export default function FixturesScreen() {
   const [rowsSingle, setRowsSingle] = useState<FixtureListRow[]>([]);
   const [rowsMulti, setRowsMulti] = useState<Record<number, FixtureListRow[]>>({});
 
+  // TBC placeholder sets (computed from fetched rows)
+  const [tbcPlaceholdersSingle, setTbcPlaceholdersSingle] = useState<Set<string>>(new Set());
+  const [tbcPlaceholdersMulti, setTbcPlaceholdersMulti] = useState<Record<number, Set<string>>>({});
+
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -282,6 +278,7 @@ export default function FixturesScreen() {
       setError(null);
       setLoading(true);
       setRowsSingle([]);
+      setTbcPlaceholdersSingle(new Set());
 
       try {
         const res = await getFixtures({
@@ -292,7 +289,12 @@ export default function FixturesScreen() {
         });
 
         if (cancelled) return;
-        setRowsSingle(Array.isArray(res) ? res : []);
+
+        const rows = Array.isArray(res) ? res : [];
+        setRowsSingle(rows);
+
+        // compute placeholder TBC ids across the fetched set (league scope)
+        setTbcPlaceholdersSingle(computeLikelyPlaceholderTbcIds(rows));
       } catch (e: any) {
         if (cancelled) return;
         setError(e?.message ?? "Failed to load fixtures.");
@@ -305,6 +307,7 @@ export default function FixturesScreen() {
       setError(null);
       setLoading(true);
       setRowsMulti({});
+      setTbcPlaceholdersMulti({});
 
       try {
         const results = await Promise.all(
@@ -322,8 +325,15 @@ export default function FixturesScreen() {
         if (cancelled) return;
 
         const map: Record<number, FixtureListRow[]> = {};
-        for (const [leagueId, rows] of results) map[leagueId] = rows;
+        const tbcMap: Record<number, Set<string>> = {};
+
+        for (const [leagueId, rows] of results) {
+          map[leagueId] = rows;
+          tbcMap[leagueId] = computeLikelyPlaceholderTbcIds(rows);
+        }
+
         setRowsMulti(map);
+        setTbcPlaceholdersMulti(tbcMap);
       } catch (e: any) {
         if (cancelled) return;
         setError(e?.message ?? "Failed to load fixtures.");
@@ -444,11 +454,18 @@ export default function FixturesScreen() {
       const homeLogo = r?.teams?.home?.logo ? String(r.teams.home.logo) : null;
       const awayLogo = r?.teams?.away?.logo ? String(r.teams.away.logo) : null;
 
-      const kickoff = kickoffLabel(r);
+      const placeholderSet =
+        mode === "single" ? tbcPlaceholdersSingle : (tbcPlaceholdersMulti[ctx.leagueId] ?? new Set<string>());
+
+      const tbc = isKickoffTbc(r, placeholderSet);
+
+      const kickoff = tbc ? "TBC" : (formatUkDateTimeMaybe(r?.fixture?.date ? String(r.fixture.date) : undefined) || "TBC");
 
       const venue = r?.fixture?.venue?.name ? String(r.fixture.venue.name) : "";
       const city = r?.fixture?.venue?.city ? String(r.fixture.venue.city) : "";
       const location = venue && city ? `${venue} • ${city}` : venue || city || "";
+
+      const kickoffIsoToStore = kickoffIsoOrNull(r, placeholderSet); // IMPORTANT: null if unconfirmed
 
       return (
         <View key={fixtureIdStr || `${homeName}-${awayName}-${kickoff}`} style={styles.rowWrap}>
@@ -480,18 +497,25 @@ export default function FixturesScreen() {
                     {awayName}
                   </Text>
 
-                  <Text style={styles.metaLine} numberOfLines={1}>
-                    {kickoff}
-                    {location ? ` • ${location}` : ""}
-                  </Text>
+                  <View style={styles.metaRow} numberOfLines={1 as any}>
+                    {tbc ? <Text style={styles.tbcBadge}>TBC</Text> : null}
+                    <Text style={styles.metaLine} numberOfLines={1}>
+                      {tbc ? (location ? location : "Kickoff time not confirmed") : `${kickoff}${location ? ` • ${location}` : ""}`}
+                    </Text>
+                  </View>
 
                   {fixtureIdStr ? (
                     <View style={styles.followRow}>
-                      <FollowPill fixtureId={fixtureIdStr} leagueId={ctx.leagueId} season={ctx.season} row={r} />
+                      <FollowPill
+                        fixtureId={fixtureIdStr}
+                        leagueId={ctx.leagueId}
+                        season={ctx.season}
+                        row={r}
+                        kickoffIsoOverride={kickoffIsoToStore}
+                      />
                     </View>
                   ) : null}
 
-                  {/* Subtle affordance without breaking symmetry */}
                   <Text style={styles.tapHint} numberOfLines={1}>
                     Tap for actions
                   </Text>
@@ -524,7 +548,14 @@ export default function FixturesScreen() {
         </View>
       );
     },
-    [expandedId, goBuildTripWithContext, goMatchWithContext]
+    [
+      expandedId,
+      goBuildTripWithContext,
+      goMatchWithContext,
+      mode,
+      tbcPlaceholdersSingle,
+      tbcPlaceholdersMulti,
+    ]
   );
 
   const nothingInMulti = useMemo(() => {
@@ -815,7 +846,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    minHeight: 86,
+    minHeight: 92,
   },
 
   teamLineTop: {
@@ -852,12 +883,34 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.10)",
   },
 
-  metaLine: {
+  // Meta row with optional TBC badge
+  metaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
     marginTop: 2,
+    paddingHorizontal: 2,
+  },
+  tbcBadge: {
+    color: "rgba(242,244,246,0.88)",
+    fontSize: 10,
+    fontWeight: theme.fontWeight.black,
+    letterSpacing: 0.7,
+    textTransform: "uppercase",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+    backgroundColor: Platform.OS === "android" ? "rgba(22,25,29,0.60)" : "rgba(22,25,29,0.52)",
+    overflow: "hidden",
+  },
+  metaLine: {
     color: theme.colors.textSecondary,
     fontSize: 12,
     fontWeight: theme.fontWeight.regular,
     textAlign: "center",
+    flex: 1,
   },
 
   followRow: {
