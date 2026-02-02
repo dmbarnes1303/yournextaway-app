@@ -12,7 +12,7 @@ import { theme } from "@/src/constants/theme";
 
 import { getRollingWindowIso, normalizeWindowIso } from "@/src/constants/football";
 import { normalizeCityKey } from "@/src/utils/city";
-import cityGuidesRegistry from "@/src/data/cityGuides";
+import { getCityGuide } from "@/src/data/cityGuides";
 
 function paramString(v: unknown): string | null {
   if (typeof v === "string") {
@@ -30,31 +30,6 @@ function safeStr(v: unknown): string {
   return String(v ?? "").trim();
 }
 
-function pickGuide(cityKey: string): any | null {
-  try {
-    const reg: any = cityGuidesRegistry as any;
-    if (!reg) return null;
-
-    // Common patterns:
-    // - registry[cityKey]
-    // - registry is an object of guides (values)
-    const direct = reg[cityKey];
-    if (direct) return direct;
-
-    const values = Object.values(reg);
-    if (!Array.isArray(values)) return null;
-
-    const hit =
-      values.find((g: any) => safeStr(g?.cityId) && normalizeCityKey(g.cityId) === cityKey) ||
-      values.find((g: any) => safeStr(g?.name) && normalizeCityKey(g.name) === cityKey) ||
-      values.find((g: any) => safeStr(g?.slug) && normalizeCityKey(g.slug) === cityKey);
-
-    return hit ?? null;
-  } catch {
-    return null;
-  }
-}
-
 export default function CityScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
@@ -62,6 +37,7 @@ export default function CityScreen() {
   const cityKeyRaw = useMemo(() => paramString((params as any)?.cityKey) ?? "", [params]);
   const cityKey = useMemo(() => (cityKeyRaw ? normalizeCityKey(cityKeyRaw) : ""), [cityKeyRaw]);
 
+  // Preserve optional window overrides
   const rolling = useMemo(() => getRollingWindowIso(), []);
   const fromParam = useMemo(() => paramString((params as any)?.from), [params]);
   const toParam = useMemo(() => paramString((params as any)?.to), [params]);
@@ -71,42 +47,40 @@ export default function CityScreen() {
     return normalizeWindowIso(w);
   }, [fromParam, toParam, rolling.from, rolling.to]);
 
-  const guide = useMemo(() => (cityKey ? pickGuide(cityKey) : null), [cityKey]);
+  const guide = useMemo(() => (cityKey ? getCityGuide(cityKey) : null), [cityKey]);
 
   const title = useMemo(() => {
-    const name = safeStr(guide?.name || guide?.cityId || cityKeyRaw || cityKey);
-    return name || "City";
+    // CityGuide likely has name; if not, fall back hard
+    const n = safeStr((guide as any)?.name) || safeStr(cityKeyRaw) || safeStr(cityKey);
+    return n || "City";
   }, [guide, cityKeyRaw, cityKey]);
 
-  const country = useMemo(() => safeStr(guide?.country), [guide]);
+  const country = useMemo(() => safeStr((guide as any)?.country), [guide]);
 
-  const quickTips: string[] = useMemo(() => {
-    const arr = guide?.quickTips;
-    if (!Array.isArray(arr)) return [];
-    return arr.map((x: any) => safeStr(x)).filter(Boolean).slice(0, 10);
+  const intro = useMemo(() => {
+    // You may or may not have an intro/summary field; keep it safe.
+    return safeStr((guide as any)?.intro || (guide as any)?.summary || (guide as any)?.description);
   }, [guide]);
 
-  const items = useMemo(() => {
-    const arr = guide?.items;
+  const topThings = useMemo(() => {
+    const arr = (guide as any)?.topThings;
     if (!Array.isArray(arr)) return [];
     return arr
-      .map((it: any) => ({
-        title: safeStr(it?.title),
-        description: safeStr(it?.description),
+      .map((x: any) => ({
+        title: safeStr(x?.title),
+        tip: safeStr(x?.tip),
       }))
       .filter((x: any) => x.title)
       .slice(0, 10);
   }, [guide]);
 
-  const intro = useMemo(() => {
-    // tolerate different guide shapes
-    const s =
-      safeStr(guide?.intro) ||
-      safeStr(guide?.summary) ||
-      safeStr(guide?.description) ||
-      "";
-    return s;
+  const tips = useMemo(() => {
+    const arr = (guide as any)?.tips;
+    if (!Array.isArray(arr)) return [];
+    return arr.map((t: any) => safeStr(t)).filter(Boolean).slice(0, 10);
   }, [guide]);
+
+  const tripAdvisorUrl = useMemo(() => safeStr((guide as any)?.tripAdvisorTopThingsUrl), [guide]);
 
   function goTripBuild() {
     router.push({
@@ -119,6 +93,13 @@ export default function CityScreen() {
     } as any);
   }
 
+  function goFixtures() {
+    router.push({
+      pathname: "/(tabs)/fixtures",
+      params: { from: window.from, to: window.to },
+    } as any);
+  }
+
   function goHome() {
     router.replace("/(tabs)/home");
   }
@@ -128,16 +109,11 @@ export default function CityScreen() {
       <Stack.Screen options={{ headerShown: true, title, headerTransparent: true, headerTintColor: theme.colors.text }} />
 
       <SafeAreaView style={styles.safe} edges={["bottom"]}>
-        <ScrollView
-          style={styles.scroll}
-          contentContainerStyle={styles.content}
-          showsVerticalScrollIndicator={false}
-        >
+        <ScrollView style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           <GlassCard style={styles.hero} intensity={22}>
             <Text style={styles.kicker}>CITY GUIDE</Text>
             <Text style={styles.h1}>{title}</Text>
             {country ? <Text style={styles.sub}>{country}</Text> : null}
-
             {intro ? <Text style={styles.p}>{intro}</Text> : null}
 
             <View style={styles.ctaRow}>
@@ -145,15 +121,7 @@ export default function CityScreen() {
                 <Text style={styles.primaryBtnText}>Plan a trip</Text>
               </Pressable>
 
-              <Pressable
-                onPress={() =>
-                  router.push({
-                    pathname: "/(tabs)/fixtures",
-                    params: { from: window.from, to: window.to },
-                  } as any)
-                }
-                style={styles.secondaryBtn}
-              >
+              <Pressable onPress={goFixtures} style={styles.secondaryBtn}>
                 <Text style={styles.secondaryBtnText}>Browse fixtures</Text>
               </Pressable>
             </View>
@@ -174,7 +142,7 @@ export default function CityScreen() {
             <GlassCard style={styles.card} intensity={20}>
               <EmptyState
                 title="No guide yet"
-                message={`We don’t have a full guide for “${safeStr(cityKeyRaw || cityKey)}” yet. You can still browse matches and plan a trip.`}
+                message={`We don’t have a guide for “${safeStr(cityKeyRaw || cityKey)}” yet. You can still browse matches and plan a trip.`}
               />
               <View style={{ height: 12 }} />
               <Pressable onPress={goTripBuild} style={styles.primaryBtn}>
@@ -183,27 +151,43 @@ export default function CityScreen() {
             </GlassCard>
           ) : (
             <>
-              {items.length > 0 ? (
+              {topThings.length > 0 ? (
                 <GlassCard style={styles.card} intensity={20}>
-                  <Text style={styles.sectionTitle}>Top things to do</Text>
+                  <View style={styles.sectionHead}>
+                    <Text style={styles.sectionTitle}>Top things to do</Text>
+                    {tripAdvisorUrl ? (
+                      <Pressable
+                        onPress={() => {
+                          // Don’t hard-crash if Linking fails: TripBuild already has safeOpenUrl,
+                          // but we keep City screen minimal. Worst case: nothing happens.
+                          // eslint-disable-next-line @typescript-eslint/no-floating-promises
+                          import("react-native").then(({ Linking }) => Linking.openURL(tripAdvisorUrl));
+                        }}
+                        style={styles.pillBtn}
+                      >
+                        <Text style={styles.pillBtnText}>TripAdvisor</Text>
+                      </Pressable>
+                    ) : null}
+                  </View>
+
                   <View style={{ height: 10 }} />
-                  {items.map((it, idx) => (
+                  {topThings.map((it, idx) => (
                     <View key={`${it.title}-${idx}`} style={styles.itemRow}>
                       <Text style={styles.itemIdx}>{idx + 1}.</Text>
                       <View style={{ flex: 1 }}>
                         <Text style={styles.itemTitle}>{it.title}</Text>
-                        {it.description ? <Text style={styles.itemDesc}>{it.description}</Text> : null}
+                        {it.tip ? <Text style={styles.itemDesc}>{it.tip}</Text> : null}
                       </View>
                     </View>
                   ))}
                 </GlassCard>
               ) : null}
 
-              {quickTips.length > 0 ? (
+              {tips.length > 0 ? (
                 <GlassCard style={styles.card} intensity={20}>
                   <Text style={styles.sectionTitle}>Quick tips</Text>
                   <View style={{ height: 10 }} />
-                  {quickTips.map((t, idx) => (
+                  {tips.map((t, idx) => (
                     <Text key={`${t}-${idx}`} style={styles.tipLine}>
                       • {t}
                     </Text>
@@ -211,9 +195,9 @@ export default function CityScreen() {
                 </GlassCard>
               ) : null}
 
-              {items.length === 0 && quickTips.length === 0 ? (
+              {topThings.length === 0 && tips.length === 0 ? (
                 <GlassCard style={styles.card} intensity={20}>
-                  <EmptyState title="Guide is thin" message="This city guide exists but doesn’t have content yet." />
+                  <EmptyState title="Guide is empty" message="This city exists but doesn’t have content yet." />
                   <View style={{ height: 12 }} />
                   <Pressable onPress={goTripBuild} style={styles.primaryBtn}>
                     <Text style={styles.primaryBtnText}>Plan a trip</Text>
@@ -299,11 +283,18 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
 
-  sectionTitle: {
-    color: theme.colors.text,
-    fontWeight: "900",
-    fontSize: theme.fontSize.md,
+  sectionHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
+  sectionTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.md },
+
+  pillBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(0,255,136,0.45)",
+    backgroundColor: "rgba(0,0,0,0.25)",
   },
+  pillBtnText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.xs },
 
   itemRow: { flexDirection: "row", gap: 10, alignItems: "flex-start", marginTop: 10 },
   itemIdx: { width: 18, color: theme.colors.primary, fontWeight: "900" },
