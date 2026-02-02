@@ -11,6 +11,8 @@ import {
   Linking,
   Share,
   Platform,
+  TextInput,
+  Keyboard,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
@@ -22,14 +24,12 @@ import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
 
 import { getFixtureById, type FixtureListRow } from "@/src/services/apiFootball";
-import {
-  getRollingWindowIso,
-  toIsoDate,
-  addDaysIso,
-  clampFromIsoToTomorrow,
-  normalizeWindowIso,
-} from "@/src/constants/football";
+import { getRollingWindowIso, toIsoDate, addDaysIso, clampFromIsoToTomorrow, normalizeWindowIso } from "@/src/constants/football";
 import { coerceNumber, coerceString } from "@/src/utils/params";
+import { formatUkDateTimeMaybe } from "@/src/utils/formatters";
+
+import authStore from "@/src/state/auth";
+import { isWatched, watchFixture, unwatchFixture } from "@/src/services/watchlist";
 
 function currentFootballSeasonStartYear(now = new Date()): number {
   const y = now.getFullYear();
@@ -41,10 +41,6 @@ function enc(v: string) {
   return encodeURIComponent(v);
 }
 
-/**
- * Convert an ISO datetime into YYYY-MM-DD in local time.
- * (Good enough for display/search queries; not used for match logic.)
- */
 function isoDateOnly(isoMaybe?: string) {
   if (!isoMaybe) return undefined;
   const d = new Date(isoMaybe);
@@ -80,9 +76,7 @@ async function openMapsPreferNative(query: string) {
   const geo = `geo:0,0?q=${enc(q)}`;
   const web = `https://www.google.com/maps/search/?api=1&query=${enc(q)}`;
 
-  if (Platform.OS === "ios") {
-    return safeOpenUrl(web);
-  }
+  if (Platform.OS === "ios") return safeOpenUrl(web);
 
   try {
     const canGeo = await Linking.canOpenURL(geo);
@@ -92,10 +86,6 @@ async function openMapsPreferNative(query: string) {
   }
 }
 
-/**
- * Neutral traveller link builders (v1: reliable).
- * Later: replace these with affiliate/deep links centrally.
- */
 function buildTicketsUrl(home?: string, away?: string, kickoffDateOnly?: string, league?: string) {
   const vs = home && away ? `${home} vs ${away}` : "match";
   const when = kickoffDateOnly ? ` ${kickoffDateOnly}` : "";
@@ -111,9 +101,7 @@ function buildMapsVenueUrl(venue?: string, city?: string) {
 }
 
 function buildStadiumInfoUrl(venue?: string, homeTeam?: string, city?: string) {
-  const q = [venue || "stadium", homeTeam, city, "bag policy entry time seats"]
-    .filter(Boolean)
-    .join(" ");
+  const q = [venue || "stadium", homeTeam, city, "bag policy entry time seats"].filter(Boolean).join(" ");
   return `https://www.google.com/search?q=${enc(q)}`;
 }
 
@@ -127,64 +115,39 @@ function buildTransportUrl(venue?: string, city?: string) {
   return `https://www.google.com/search?q=${enc(q)}`;
 }
 
-function statusShort(row?: FixtureListRow | null) {
-  return String(row?.fixture?.status?.short ?? "").trim().toUpperCase();
-}
-function statusLong(row?: FixtureListRow | null) {
-  return String(row?.fixture?.status?.long ?? "").trim().toLowerCase();
-}
-function parseKickoffDate(row?: FixtureListRow | null): Date | null {
-  const raw = row?.fixture?.date;
-  if (!raw) return null;
-  const dt = new Date(String(raw));
-  if (Number.isNaN(dt.getTime())) return null;
-  return dt;
-}
+function isKickoffTbc(row: FixtureListRow | null): boolean {
+  if (!row) return true;
 
-/**
- * Conservative TBC detection:
- * - status says TBD/TBC
- * - status.long implies "to be defined"
- * - time is 00:00 placeholder
- * - missing/invalid date -> treat as not confirmed (display TBC)
- */
-function isKickoffTBC(row?: FixtureListRow | null): boolean {
-  const s = statusShort(row);
-  if (s === "TBD" || s === "TBC") return true;
+  const status = String(row?.fixture?.status?.short ?? "").toUpperCase();
+  if (status.includes("TBD") || status.includes("TBC")) return true;
 
-  const long = statusLong(row);
-  if (long.includes("to be defined") || long.includes("time to be defined") || long.includes("tbd")) return true;
+  const iso = String(row?.fixture?.date ?? "").trim();
+  if (!iso) return true;
 
-  const dt = parseKickoffDate(row);
-  if (!dt) return true;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return true;
 
-  if (dt.getHours() === 0 && dt.getMinutes() === 0) return true;
+  const h = d.getHours();
+  const m = d.getMinutes();
+  if (h === 0 && m === 0) return true;
 
   return false;
-}
-
-function kickoffLabel(row?: FixtureListRow | null): string {
-  if (!row) return "—";
-  if (isKickoffTBC(row)) return "TBC";
-
-  const dt = parseKickoffDate(row);
-  if (!dt) return "—";
-
-  // Local UK-style readable datetime
-  // Avoid importing formatUkDateTimeMaybe because it will happily format placeholder values too.
-  return dt.toLocaleString("en-GB", {
-    weekday: "short",
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
 }
 
 export default function MatchDetailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
+
+  // boot auth
+  const booted = authStore((s) => s.booted);
+  const user = authStore((s) => s.user);
+  const initAuth = authStore((s) => s.init);
+  const signInWithMagicLink = authStore((s) => s.signInWithMagicLink);
+  const signOut = authStore((s) => s.signOut);
+
+  useEffect(() => {
+    if (!booted) initAuth().catch(() => null);
+  }, [booted, initAuth]);
 
   const id = useMemo(() => coerceString((params as any)?.id), [params]);
 
@@ -211,8 +174,12 @@ export default function MatchDetailScreen() {
   const [error, setError] = useState<string | null>(null);
   const [row, setRow] = useState<FixtureListRow | null>(null);
 
-  // Session-only watch state
-  const [watchKickoff, setWatchKickoff] = useState(false);
+  // watch state
+  const [watched, setWatched] = useState(false);
+  const [watchBusy, setWatchBusy] = useState(false);
+
+  // sign-in UI
+  const [email, setEmail] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -257,12 +224,33 @@ export default function MatchDetailScreen() {
     return id ?? "";
   }, [row, id]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function syncWatched() {
+      if (!user || !fixtureId) {
+        setWatched(false);
+        return;
+      }
+      try {
+        const ok = await isWatched(fixtureId);
+        if (!cancelled) setWatched(ok);
+      } catch {
+        if (!cancelled) setWatched(false);
+      }
+    }
+
+    syncWatched();
+    return () => {
+      cancelled = true;
+    };
+  }, [user, fixtureId]);
+
   const home = row?.teams?.home?.name ?? "Home";
   const away = row?.teams?.away?.name ?? "Away";
 
-  const kickoffIsTBC = useMemo(() => isKickoffTBC(row), [row]);
-  const kickoffDisplay = useMemo(() => kickoffLabel(row), [row]);
-  const kickoffDateOnly = useMemo(() => isoDateOnly(row?.fixture?.date as string | undefined), [row]);
+  const kickoffDisplay = formatUkDateTimeMaybe(row?.fixture?.date);
+  const kickoffDateOnly = isoDateOnly(row?.fixture?.date as string | undefined);
 
   const venue = row?.fixture?.venue?.name ?? "";
   const city = row?.fixture?.venue?.city ?? "";
@@ -276,10 +264,9 @@ export default function MatchDetailScreen() {
   const effectiveSeason =
     routeSeason ?? (typeof apiSeason === "number" ? apiSeason : null) ?? currentFootballSeasonStartYear();
 
-  const ticketsUrl = useMemo(
-    () => buildTicketsUrl(home, away, kickoffDateOnly, leagueName),
-    [home, away, kickoffDateOnly, leagueName]
-  );
+  const tbc = useMemo(() => isKickoffTbc(row), [row]);
+
+  const ticketsUrl = useMemo(() => buildTicketsUrl(home, away, kickoffDateOnly, leagueName), [home, away, kickoffDateOnly, leagueName]);
   const mapsUrl = useMemo(() => buildMapsVenueUrl(venue, city), [venue, city]);
   const stadiumInfoUrl = useMemo(() => buildStadiumInfoUrl(venue, home, city), [venue, home, city]);
   const foodDrinkUrl = useMemo(() => buildFoodDrinkUrl(venue, city), [venue, city]);
@@ -328,7 +315,7 @@ export default function MatchDetailScreen() {
 
   const onShare = useCallback(async () => {
     const title = `${home} vs ${away}`;
-    const when = kickoffIsTBC ? `Kickoff: TBC` : `Kickoff: ${kickoffDisplay}`;
+    const when = tbc ? "Kickoff: TBC" : kickoffDisplay ? `Kickoff: ${kickoffDisplay}` : "Kickoff: —";
     const where = place ? `Venue: ${place}` : "Venue: —";
     const meta = `League: ${leagueName} • Season: ${String(effectiveSeason)}`;
 
@@ -339,22 +326,65 @@ export default function MatchDetailScreen() {
     } catch {
       // non-critical
     }
-  }, [home, away, kickoffIsTBC, kickoffDisplay, place, leagueName, effectiveSeason, ticketsUrl, mapsUrl]);
+  }, [home, away, tbc, kickoffDisplay, place, leagueName, effectiveSeason, ticketsUrl, mapsUrl]);
 
-  const onToggleWatchKickoff = useCallback(() => {
-    setWatchKickoff((v) => !v);
+  const onToggleWatch = useCallback(async () => {
+    if (!fixtureId) return;
 
-    // Be honest: session-only today.
-    if (!watchKickoff) {
-      Alert.alert(
-        "Watching kickoff (session)",
-        "You’ll see this marked as watched for this session. In the next step we’ll wire real alerts (push + email) when kickoff details are confirmed."
-      );
+    if (!user) {
+      Alert.alert("Sign in required", "Sign in to watch fixtures and get kickoff-change alerts.");
+      return;
     }
-  }, [watchKickoff]);
+
+    if (watchBusy) return;
+
+    try {
+      setWatchBusy(true);
+
+      if (watched) {
+        await unwatchFixture(fixtureId);
+        setWatched(false);
+        return;
+      }
+
+      const kickoffIso = row?.fixture?.date ? String(row.fixture.date) : null;
+
+      await watchFixture({
+        fixtureId,
+        leagueId: effectiveLeagueId ?? undefined,
+        season: typeof effectiveSeason === "number" ? effectiveSeason : undefined,
+        lastKnownKickoffIso: kickoffIso,
+        lastKnownIsTbc: tbc,
+      });
+
+      setWatched(true);
+      Alert.alert("Watching", "We’ll notify you later when kickoff changes (email + push coming next).");
+    } catch (e: any) {
+      Alert.alert("Watch failed", e?.message ?? "Could not update watch status.");
+    } finally {
+      setWatchBusy(false);
+    }
+  }, [fixtureId, user, watchBusy, watched, row, effectiveLeagueId, effectiveSeason, tbc]);
+
+  const onSendMagicLink = useCallback(async () => {
+    const e = String(email ?? "").trim();
+    if (!e) {
+      Alert.alert("Email required", "Enter an email to sign in.");
+      return;
+    }
+
+    try {
+      Keyboard.dismiss();
+      await signInWithMagicLink(e);
+      Alert.alert("Check your email", "Tap the link to finish signing in.");
+      setEmail("");
+    } catch (err: any) {
+      Alert.alert("Sign in failed", err?.message ?? "Could not send magic link.");
+    }
+  }, [email, signInWithMagicLink]);
 
   return (
-    <Background imageSource={getBackground("fixtures")} overlayOpacity={0.86}>
+    <Background imageUrl={getBackground("fixtures")}>
       <Stack.Screen
         options={{
           headerShown: true,
@@ -378,33 +408,28 @@ export default function MatchDetailScreen() {
 
             {!loading && !error && row ? (
               <>
-                <Text style={styles.kicker}>{leagueName}</Text>
+                <View style={styles.topRow}>
+                  <Text style={styles.kicker}>{leagueName}</Text>
+
+                  <Pressable
+                    onPress={onToggleWatch}
+                    disabled={watchBusy}
+                    style={[styles.watchPill, watched && styles.watchPillActive, watchBusy && { opacity: 0.7 }]}
+                  >
+                    <Text style={[styles.watchPillText, watched && styles.watchPillTextActive]}>
+                      {watched ? "Watching" : "Watch kickoff"}
+                    </Text>
+                  </Pressable>
+                </View>
 
                 <Text style={styles.title} numberOfLines={2}>
                   {home} vs {away}
                 </Text>
 
-                {/* TBC banner */}
-                {kickoffIsTBC ? (
-                  <View style={styles.tbcBanner}>
-                    <Text style={styles.tbcBannerTitle}>Kickoff time TBC</Text>
-                    <Text style={styles.tbcBannerBody}>
-                      Some leagues publish placeholder times until TV scheduling is confirmed. We’ll surface the real time as
-                      soon as it’s available.
-                    </Text>
-
-                    <Pressable onPress={onToggleWatchKickoff} style={[styles.watchBtn, watchKickoff && styles.watchBtnOn]}>
-                      <Text style={[styles.watchBtnText, watchKickoff && styles.watchBtnTextOn]}>
-                        {watchKickoff ? "Watching kickoff" : "Watch kickoff"}
-                      </Text>
-                    </Pressable>
-                  </View>
-                ) : null}
-
                 <View style={styles.metaBlock}>
                   <Text style={styles.metaLine}>
                     <Text style={styles.metaLabel}>Kickoff: </Text>
-                    <Text style={kickoffIsTBC ? styles.metaValueTbc : undefined}>{kickoffDisplay || "—"}</Text>
+                    {tbc ? "TBC (league confirms later)" : kickoffDisplay || "—"}
                   </Text>
 
                   <Text style={styles.metaLine}>
@@ -418,17 +443,39 @@ export default function MatchDetailScreen() {
                   </Text>
                 </View>
 
-                {/* If kickoff is confirmed, you can still offer "watch changes" */}
-                {!kickoffIsTBC ? (
-                  <View style={styles.watchRow}>
-                    <Pressable onPress={onToggleWatchKickoff} style={[styles.watchMini, watchKickoff && styles.watchMiniOn]}>
-                      <Text style={[styles.watchMiniText, watchKickoff && styles.watchMiniTextOn]}>
-                        {watchKickoff ? "Watching changes (session)" : "Watch for changes"}
-                      </Text>
-                    </Pressable>
-                    <Text style={styles.watchHint}>Alerts will be wired next (push + email).</Text>
+                {!user ? (
+                  <View style={styles.signInBox}>
+                    <Text style={styles.signInTitle}>Sign in for alerts</Text>
+                    <Text style={styles.signInBody}>
+                      Watching a fixture only works when you’re signed in. Magic link = no passwords.
+                    </Text>
+
+                    <View style={styles.inputRow}>
+                      <TextInput
+                        value={email}
+                        onChangeText={setEmail}
+                        placeholder="you@email.com"
+                        placeholderTextColor={theme.colors.textTertiary}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        keyboardType="email-address"
+                        style={styles.input}
+                        returnKeyType="done"
+                        onSubmitEditing={onSendMagicLink}
+                      />
+                      <Pressable onPress={onSendMagicLink} style={styles.inputBtn}>
+                        <Text style={styles.inputBtnText}>Send</Text>
+                      </Pressable>
+                    </View>
                   </View>
-                ) : null}
+                ) : (
+                  <View style={styles.accountRow}>
+                    <Text style={styles.accountText}>{user.email ?? "Signed in"}</Text>
+                    <Pressable onPress={async () => signOut()} style={styles.signOutBtn}>
+                      <Text style={styles.signOutText}>Sign out</Text>
+                    </Pressable>
+                  </View>
+                )}
 
                 <View style={styles.ctaGrid}>
                   <Pressable onPress={() => safeOpenUrl(ticketsUrl)} style={[styles.bigBtn, styles.bigBtnPrimary]}>
@@ -481,23 +528,17 @@ export default function MatchDetailScreen() {
           {!loading && !error && row ? (
             <GlassCard style={styles.card} intensity={22}>
               <Text style={styles.h2}>Matchday essentials</Text>
-              <Text style={styles.muted}>
-                Built for neutral travellers: arrive smoothly, enjoy the local experience, and keep things simple.
-              </Text>
+              <Text style={styles.muted}>Neutral traveller view: arrive smoothly, enjoy the city, keep it simple.</Text>
 
               <View style={styles.opsList}>
                 <View style={styles.opsItem}>
                   <Text style={styles.opsTitle}>Arrive early</Text>
-                  <Text style={styles.opsBody}>
-                    Aim for 60–90 minutes before kickoff if you’re collecting tickets, clearing security, or finding your seat.
-                  </Text>
+                  <Text style={styles.opsBody}>Aim for 60–90 minutes before kickoff if you’re collecting tickets or navigating security.</Text>
                 </View>
 
                 <View style={styles.opsItem}>
                   <Text style={styles.opsTitle}>Bag policy and entry</Text>
-                  <Text style={styles.opsBody}>
-                    Policies vary. If you’re carrying a bag, double-check restrictions and permitted items before you travel.
-                  </Text>
+                  <Text style={styles.opsBody}>Policies vary. If you’re carrying a bag, double-check restrictions before you travel.</Text>
                   <Pressable onPress={() => safeOpenUrl(stadiumInfoUrl)} style={styles.inlineBtn}>
                     <Text style={styles.inlineBtnText}>Search stadium entry rules</Text>
                   </Pressable>
@@ -505,9 +546,7 @@ export default function MatchDetailScreen() {
 
                 <View style={styles.opsItem}>
                   <Text style={styles.opsTitle}>Transport plan</Text>
-                  <Text style={styles.opsBody}>
-                    Public transport is usually easiest; event traffic and parking can be unpredictable close to kickoff.
-                  </Text>
+                  <Text style={styles.opsBody}>Public transport is usually easiest; event traffic and parking are unpredictable near kickoff.</Text>
                   <Pressable onPress={() => safeOpenUrl(transportUrl)} style={styles.inlineBtn}>
                     <Text style={styles.inlineBtnText}>Search transport options</Text>
                   </Pressable>
@@ -515,9 +554,7 @@ export default function MatchDetailScreen() {
 
                 <View style={styles.opsItem}>
                   <Text style={styles.opsTitle}>Food & drinks nearby</Text>
-                  <Text style={styles.opsBody}>
-                    Pick something walkable so you’re not rushing. The best atmosphere is often around the stadium district.
-                  </Text>
+                  <Text style={styles.opsBody}>Pick something walkable so you’re not rushing. Atmosphere is often best around the stadium district.</Text>
                   <Pressable onPress={() => safeOpenUrl(foodDrinkUrl)} style={styles.inlineBtn}>
                     <Text style={styles.inlineBtnText}>Search nearby spots</Text>
                   </Pressable>
@@ -534,117 +571,90 @@ export default function MatchDetailScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, paddingTop: 100 },
   scrollView: { flex: 1 },
-  content: {
-    paddingHorizontal: theme.spacing.lg,
-    paddingBottom: theme.spacing.xxl,
-    gap: theme.spacing.lg,
-  },
+  content: { paddingHorizontal: theme.spacing.lg, paddingBottom: theme.spacing.xxl, gap: theme.spacing.lg },
 
   card: { padding: theme.spacing.lg },
 
   center: { paddingVertical: theme.spacing.xl, alignItems: "center", gap: 10 },
-  muted: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18 },
+  muted: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18, fontWeight: "700" },
 
-  kicker: {
-    color: theme.colors.primary,
-    fontSize: theme.fontSize.xs,
-    fontWeight: "900",
-    letterSpacing: 0.6,
-  },
-  title: {
-    marginTop: 8,
-    fontSize: theme.fontSize.xl,
-    fontWeight: "900",
-    color: theme.colors.text,
-    lineHeight: 30,
-  },
+  topRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 10 },
 
-  // TBC banner
-  tbcBanner: {
-    marginTop: 12,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    backgroundColor: "rgba(0,0,0,0.18)",
-    padding: 12,
-    gap: 8,
-  },
-  tbcBannerTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.md },
-  tbcBannerBody: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18 },
+  kicker: { color: theme.colors.primary, fontSize: theme.fontSize.xs, fontWeight: "900", letterSpacing: 0.6 },
+  title: { marginTop: 8, fontSize: theme.fontSize.xl, fontWeight: "900", color: theme.colors.text, lineHeight: 30 },
 
-  watchBtn: {
-    marginTop: 2,
-    alignSelf: "flex-start",
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.14)",
-    backgroundColor: "rgba(0,0,0,0.18)",
-  },
-  watchBtnOn: {
-    borderColor: "rgba(0,255,136,0.45)",
-    backgroundColor: "rgba(0,0,0,0.22)",
-  },
-  watchBtnText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.xs },
-  watchBtnTextOn: { color: theme.colors.primary },
-
-  metaBlock: { marginTop: 12, gap: 6 },
-  metaLine: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18 },
-  metaLabel: { color: theme.colors.text, fontWeight: "900" },
-  metaValueTbc: { color: "rgba(242,244,246,0.70)", fontWeight: "900" },
-
-  // confirmed watch row
-  watchRow: { marginTop: 12, gap: 6 },
-  watchMini: {
-    alignSelf: "flex-start",
-    paddingVertical: 8,
+  watchPill: {
+    paddingVertical: 7,
     paddingHorizontal: 10,
     borderRadius: 999,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.12)",
     backgroundColor: "rgba(0,0,0,0.16)",
   },
-  watchMiniOn: { borderColor: "rgba(0,255,136,0.40)" },
-  watchMiniText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.xs },
-  watchMiniTextOn: { color: theme.colors.primary },
-  watchHint: { color: theme.colors.textTertiary, fontSize: theme.fontSize.xs, lineHeight: 16 },
+  watchPillActive: {
+    borderColor: "rgba(79,224,138,0.35)",
+    backgroundColor: "rgba(79,224,138,0.10)",
+  },
+  watchPillText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: 12 },
+  watchPillTextActive: { color: "rgba(79,224,138,0.92)" },
+
+  metaBlock: { marginTop: 12, gap: 6 },
+  metaLine: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18, fontWeight: "700" },
+  metaLabel: { color: theme.colors.text, fontWeight: "900" },
 
   h2: { marginTop: 2, fontSize: theme.fontSize.lg, fontWeight: "900", color: theme.colors.text },
 
-  ctaGrid: { marginTop: 14, gap: 10 },
-  bigBtn: {
+  signInBox: {
+    marginTop: 14,
     borderRadius: 14,
     borderWidth: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-  },
-  bigBtnPrimary: {
-    borderColor: "rgba(0,255,136,0.55)",
-    backgroundColor: "rgba(0,0,0,0.34)",
-  },
-  bigBtnSecondary: {
     borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.22)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+    padding: 12,
   },
-  bigKicker: {
-    color: theme.colors.primary,
-    fontWeight: "900",
-    fontSize: theme.fontSize.xs,
-    letterSpacing: 0.2,
-  },
-  bigTitle: {
-    marginTop: 6,
+  signInTitle: { color: theme.colors.text, fontWeight: "900", fontSize: 13 },
+  signInBody: { marginTop: 6, color: theme.colors.textSecondary, fontWeight: "700", fontSize: 12, lineHeight: 16 },
+  inputRow: { marginTop: 10, flexDirection: "row", gap: 10, alignItems: "center" },
+  input: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    borderRadius: 12,
+    paddingVertical: Platform.OS === "ios" ? 10 : 8,
+    paddingHorizontal: 12,
     color: theme.colors.text,
-    fontWeight: "900",
-    fontSize: theme.fontSize.md,
+    backgroundColor: "rgba(0,0,0,0.16)",
+    fontWeight: "800",
   },
-  bigSub: {
-    marginTop: 6,
-    color: theme.colors.textSecondary,
-    fontSize: theme.fontSize.sm,
-    lineHeight: 18,
+  inputBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(79,224,138,0.35)",
+    backgroundColor: "rgba(79,224,138,0.10)",
   },
+  inputBtnText: { color: theme.colors.text, fontWeight: "900", fontSize: 12 },
+
+  accountRow: { marginTop: 14, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
+  accountText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: 12 },
+  signOutBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.16)",
+  },
+  signOutText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: 12 },
+
+  ctaGrid: { marginTop: 14, gap: 10 },
+  bigBtn: { borderRadius: 14, borderWidth: 1, paddingVertical: 12, paddingHorizontal: 14 },
+  bigBtnPrimary: { borderColor: "rgba(0,255,136,0.55)", backgroundColor: "rgba(0,0,0,0.34)" },
+  bigBtnSecondary: { borderColor: "rgba(255,255,255,0.10)", backgroundColor: "rgba(0,0,0,0.22)" },
+  bigKicker: { color: theme.colors.primary, fontWeight: "900", fontSize: theme.fontSize.xs, letterSpacing: 0.2 },
+  bigTitle: { marginTop: 6, color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.md },
+  bigSub: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18, fontWeight: "700" },
 
   smallRow: { marginTop: 10, flexDirection: "row", gap: 10 },
   smallBtn: {
@@ -658,28 +668,13 @@ const styles = StyleSheet.create({
   },
   smallBtnText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.xs },
 
-  smallPrint: { marginTop: 12, color: theme.colors.textSecondary, fontSize: theme.fontSize.xs },
+  smallPrint: { marginTop: 12, color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: "700" },
 
   opsList: { marginTop: 12, gap: 12 },
-  opsItem: {
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.18)",
-    padding: 12,
-  },
+  opsItem: { borderRadius: 14, borderWidth: 1, borderColor: "rgba(255,255,255,0.10)", backgroundColor: "rgba(0,0,0,0.18)", padding: 12 },
   opsTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
-  opsBody: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18 },
+  opsBody: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18, fontWeight: "700" },
 
-  inlineBtn: {
-    marginTop: 10,
-    alignSelf: "flex-start",
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "rgba(0,255,136,0.35)",
-    backgroundColor: "rgba(0,0,0,0.18)",
-  },
+  inlineBtn: { marginTop: 10, alignSelf: "flex-start", paddingVertical: 8, paddingHorizontal: 10, borderRadius: 999, borderWidth: 1, borderColor: "rgba(0,255,136,0.35)", backgroundColor: "rgba(0,0,0,0.18)" },
   inlineBtnText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.xs },
 });
