@@ -24,20 +24,13 @@ import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
 
 import { getFixtureById, type FixtureListRow } from "@/src/services/apiFootball";
-import {
-  getRollingWindowIso,
-  toIsoDate,
-  addDaysIso,
-  clampFromIsoToTomorrow,
-  normalizeWindowIso,
-} from "@/src/constants/football";
+import { getRollingWindowIso, toIsoDate, addDaysIso, clampFromIsoToTomorrow, normalizeWindowIso } from "@/src/constants/football";
 import { coerceNumber, coerceString } from "@/src/utils/params";
 import { formatUkDateTimeMaybe } from "@/src/utils/formatters";
 
 import authStore from "@/src/state/auth";
 import { isWatched, watchFixture, unwatchFixture } from "@/src/services/watchlist";
-
-import { isKickoffTbc, kickoffIsoOrNull } from "@/src/utils/kickoffTbc";
+import { isKickoffTbc } from "@/src/utils/kickoffTbc";
 
 function currentFootballSeasonStartYear(now = new Date()): number {
   const y = now.getFullYear();
@@ -49,7 +42,7 @@ function enc(v: string) {
   return encodeURIComponent(v);
 }
 
-function isoDateOnlyFromIso(isoMaybe?: string) {
+function isoDateOnly(isoMaybe?: string) {
   if (!isoMaybe) return undefined;
   const d = new Date(isoMaybe);
   if (Number.isNaN(d.getTime())) return undefined;
@@ -127,7 +120,6 @@ export default function MatchDetailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
 
-  // auth
   const booted = authStore((s) => s.booted);
   const user = authStore((s) => s.user);
   const initAuth = authStore((s) => s.init);
@@ -140,7 +132,6 @@ export default function MatchDetailScreen() {
 
   const id = useMemo(() => coerceString((params as any)?.id), [params]);
 
-  // Routing context
   const rolling = useMemo(() => getRollingWindowIso(), []);
 
   const window = useMemo(() => {
@@ -163,11 +154,9 @@ export default function MatchDetailScreen() {
   const [error, setError] = useState<string | null>(null);
   const [row, setRow] = useState<FixtureListRow | null>(null);
 
-  // watch state
   const [watched, setWatched] = useState(false);
   const [watchBusy, setWatchBusy] = useState(false);
 
-  // sign-in UI
   const [email, setEmail] = useState("");
 
   useEffect(() => {
@@ -235,35 +224,26 @@ export default function MatchDetailScreen() {
     };
   }, [user, fixtureId]);
 
-  // HARD GUARANTEE: always show both team names
-  const home = useMemo(() => {
-    const s = String(row?.teams?.home?.name ?? "").trim();
-    return s || "Home";
-  }, [row]);
+  const home = row?.teams?.home?.name ?? "Home";
+  const away = row?.teams?.away?.name ?? "Away";
 
-  const away = useMemo(() => {
-    const s = String(row?.teams?.away?.name ?? "").trim();
-    return s || "Away";
-  }, [row]);
+  const kickoffDisplay = formatUkDateTimeMaybe(row?.fixture?.date);
+  const kickoffDateOnly = isoDateOnly(row?.fixture?.date as string | undefined);
 
-  // Option A: explicit-only TBC (no placeholder inference)
-  const tbc = useMemo(() => (row ? isKickoffTbc(row) : true), [row]);
-  const kickoffIso = useMemo(() => (row ? kickoffIsoOrNull(row) : null), [row]);
+  const venue = row?.fixture?.venue?.name ?? "";
+  const city = row?.fixture?.venue?.city ?? "";
+  const place = [venue, city].filter(Boolean).join(" • ");
 
-  const kickoffDisplay = useMemo(() => (kickoffIso ? formatUkDateTimeMaybe(kickoffIso) : "TBC"), [kickoffIso]);
-  const kickoffDateOnly = useMemo(() => isoDateOnlyFromIso(kickoffIso ?? undefined), [kickoffIso]);
-
-  const venue = useMemo(() => String(row?.fixture?.venue?.name ?? "").trim(), [row]);
-  const city = useMemo(() => String(row?.fixture?.venue?.city ?? "").trim(), [row]);
-  const place = useMemo(() => [venue, city].filter(Boolean).join(" • "), [venue, city]);
-
-  const leagueName = useMemo(() => String(row?.league?.name ?? "League").trim() || "League", [row]);
+  const leagueName = row?.league?.name ?? "League";
   const apiLeagueId = row?.league?.id ?? null;
   const effectiveLeagueId = apiLeagueId ?? routeLeagueId ?? null;
 
   const apiSeason = (row as any)?.league?.season;
   const effectiveSeason =
     routeSeason ?? (typeof apiSeason === "number" ? apiSeason : null) ?? currentFootballSeasonStartYear();
+
+  // Single-source of truth (explicit TBC). Placeholder dominance is handled in Fixtures list.
+  const tbc = useMemo(() => (row ? isKickoffTbc(row) : true), [row]);
 
   const ticketsUrl = useMemo(
     () => buildTicketsUrl(home, away, kickoffDateOnly, leagueName),
@@ -275,8 +255,11 @@ export default function MatchDetailScreen() {
   const transportUrl = useMemo(() => buildTransportUrl(venue, city), [venue, city]);
 
   const ticketsSub = useMemo(() => {
-    const when = kickoffDateOnly ? ` • ${kickoffDateOnly}` : "";
-    return `${home} vs ${away}${when}`;
+    if (home && away) {
+      const when = kickoffDateOnly ? ` • ${kickoffDateOnly}` : "";
+      return `${home} vs ${away}${when}`;
+    }
+    return "Open ticket search";
   }, [home, away, kickoffDateOnly]);
 
   const directionsSub = useMemo(() => {
@@ -346,6 +329,8 @@ export default function MatchDetailScreen() {
         return;
       }
 
+      const kickoffIso = row?.fixture?.date ? String(row.fixture.date) : null;
+
       await watchFixture({
         fixtureId,
         leagueId: effectiveLeagueId ?? undefined,
@@ -361,7 +346,7 @@ export default function MatchDetailScreen() {
     } finally {
       setWatchBusy(false);
     }
-  }, [fixtureId, user, watchBusy, watched, effectiveLeagueId, effectiveSeason, kickoffIso, tbc]);
+  }, [fixtureId, user, watchBusy, watched, row, effectiveLeagueId, effectiveSeason, tbc]);
 
   const onSendMagicLink = useCallback(async () => {
     const e = String(email ?? "").trim();
@@ -443,7 +428,9 @@ export default function MatchDetailScreen() {
                 {!user ? (
                   <View style={styles.signInBox}>
                     <Text style={styles.signInTitle}>Sign in for alerts</Text>
-                    <Text style={styles.signInBody}>Watching a fixture only works when you’re signed in. Magic link = no passwords.</Text>
+                    <Text style={styles.signInBody}>
+                      Watching a fixture only works when you’re signed in. Magic link = no passwords.
+                    </Text>
 
                     <View style={styles.inputRow}>
                       <TextInput
@@ -528,12 +515,16 @@ export default function MatchDetailScreen() {
               <View style={styles.opsList}>
                 <View style={styles.opsItem}>
                   <Text style={styles.opsTitle}>Arrive early</Text>
-                  <Text style={styles.opsBody}>Aim for 60–90 minutes before kickoff if you’re collecting tickets or navigating security.</Text>
+                  <Text style={styles.opsBody}>
+                    Aim for 60–90 minutes before kickoff if you’re collecting tickets or navigating security.
+                  </Text>
                 </View>
 
                 <View style={styles.opsItem}>
                   <Text style={styles.opsTitle}>Bag policy and entry</Text>
-                  <Text style={styles.opsBody}>Policies vary. If you’re carrying a bag, double-check restrictions before you travel.</Text>
+                  <Text style={styles.opsBody}>
+                    Policies vary. If you’re carrying a bag, double-check restrictions before you travel.
+                  </Text>
                   <Pressable onPress={() => safeOpenUrl(stadiumInfoUrl)} style={styles.inlineBtn}>
                     <Text style={styles.inlineBtnText}>Search stadium entry rules</Text>
                   </Pressable>
@@ -541,7 +532,9 @@ export default function MatchDetailScreen() {
 
                 <View style={styles.opsItem}>
                   <Text style={styles.opsTitle}>Transport plan</Text>
-                  <Text style={styles.opsBody}>Public transport is usually easiest; event traffic and parking are unpredictable near kickoff.</Text>
+                  <Text style={styles.opsBody}>
+                    Public transport is usually easiest; event traffic and parking are unpredictable near kickoff.
+                  </Text>
                   <Pressable onPress={() => safeOpenUrl(transportUrl)} style={styles.inlineBtn}>
                     <Text style={styles.inlineBtnText}>Search transport options</Text>
                   </Pressable>
@@ -549,7 +542,9 @@ export default function MatchDetailScreen() {
 
                 <View style={styles.opsItem}>
                   <Text style={styles.opsTitle}>Food & drinks nearby</Text>
-                  <Text style={styles.opsBody}>Pick something walkable so you’re not rushing. Atmosphere is often best around the stadium district.</Text>
+                  <Text style={styles.opsBody}>
+                    Pick something walkable so you’re not rushing. Atmosphere is often best around the stadium district.
+                  </Text>
                   <Pressable onPress={() => safeOpenUrl(foodDrinkUrl)} style={styles.inlineBtn}>
                     <Text style={styles.inlineBtnText}>Search nearby spots</Text>
                   </Pressable>
@@ -670,15 +665,6 @@ const styles = StyleSheet.create({
   opsTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
   opsBody: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18, fontWeight: "700" },
 
-  inlineBtn: {
-    marginTop: 10,
-    alignSelf: "flex-start",
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "rgba(0,255,136,0.35)",
-    backgroundColor: "rgba(0,0,0,0.18)",
-  },
+  inlineBtn: { marginTop: 10, alignSelf: "flex-start", paddingVertical: 8, paddingHorizontal: 10, borderRadius: 999, borderWidth: 1, borderColor: "rgba(0,255,136,0.35)", backgroundColor: "rgba(0,0,0,0.18)" },
   inlineBtnText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.xs },
 });
