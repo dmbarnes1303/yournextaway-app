@@ -1,5 +1,5 @@
 // app/trip/build.tsx
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -22,7 +22,7 @@ import EmptyState from "@/src/components/EmptyState";
 import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
 
-import { getFixtures, getFixtureById } from "@/src/services/apiFootball";
+import { getFixtures, getFixtureById, type FixtureListRow } from "@/src/services/apiFootball";
 import tripsStore, { type Trip } from "@/src/state/trips";
 
 import {
@@ -39,6 +39,8 @@ import {
 import { formatUkDateOnly, formatUkDateTimeMaybe } from "@/src/utils/formatters";
 import { getTopThingsToDoForTrip } from "@/src/data/cityGuides";
 import { buildAffiliateLinks } from "@/src/services/affiliateLinks";
+
+import { computeLikelyPlaceholderTbcIds, isKickoffTbc } from "@/src/utils/kickoffTbc";
 
 /**
  * Expo Router params can be string | string[] | undefined.
@@ -96,13 +98,25 @@ function SheetCard({ children }: { children: React.ReactNode }) {
 }
 
 type EditSnapshot = {
-  fixture: any | null;
+  fixture: FixtureListRow | null;
   startIso: string;
   endIso: string;
   notes: string;
 };
 
 type BuildLeague = LeagueOption & { key?: string };
+
+function fixtureIdStr(r: any): string {
+  const id = r?.fixture?.id;
+  return id != null ? String(id) : "";
+}
+
+function kickoffTimeSortValue(r: any, isTbc: boolean): number {
+  if (isTbc) return Number.POSITIVE_INFINITY; // push to bottom
+  const raw = r?.fixture?.date ? String(r.fixture.date) : "";
+  const t = raw ? new Date(raw).getTime() : Number.POSITIVE_INFINITY;
+  return Number.isFinite(t) ? t : Number.POSITIVE_INFINITY;
+}
 
 export default function TripBuildScreen() {
   const router = useRouter();
@@ -189,11 +203,14 @@ export default function TripBuildScreen() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [rows, setRows] = useState<any[]>([]);
+  const [rows, setRows] = useState<FixtureListRow[]>([]);
   const [search, setSearch] = useState("");
   const [visibleCount, setVisibleCount] = useState(12);
 
-  const [selectedFixture, setSelectedFixture] = useState<any | null>(null);
+  const [selectedFixture, setSelectedFixture] = useState<FixtureListRow | null>(null);
+
+  // TBC placeholder detection for current loaded result set
+  const [placeholderTbcIds, setPlaceholderTbcIds] = useState<Set<string>>(new Set());
 
   // Edit mode state
   const [editTrip, setEditTrip] = useState<Trip | null>(null);
@@ -218,6 +235,8 @@ export default function TripBuildScreen() {
     which: "start",
     open: false,
   });
+
+  const isAllLeaguesSelected = useCallback((l: BuildLeague) => l.leagueId === 0, []);
 
   function validateDateOrder(start: string, end: string): boolean {
     const a = parseIsoDateOnly(start);
@@ -387,10 +406,6 @@ export default function TripBuildScreen() {
     };
   }, [isEditing, routeFixtureId, routeSeason]);
 
-  function isAllLeaguesSelected(l: BuildLeague) {
-    return l.leagueId === 0;
-  }
-
   async function loadFixturesForLeague(l: LeagueOption, fromIso: string, toIso: string) {
     const res = await getFixtures({
       league: l.leagueId,
@@ -416,21 +431,14 @@ export default function TripBuildScreen() {
 
     // De-dupe by fixture id
     const seen = new Set<string>();
-    const deduped: any[] = [];
+    const deduped: FixtureListRow[] = [];
     for (const r of flat) {
-      const id = r?.fixture?.id != null ? String(r.fixture.id) : "";
+      const id = fixtureIdStr(r);
       if (!id) continue;
       if (seen.has(id)) continue;
       seen.add(id);
       deduped.push(r);
     }
-
-    // Sort by kickoff asc
-    deduped.sort((a, b) => {
-      const ad = a?.fixture?.date ? new Date(a.fixture.date).getTime() : 0;
-      const bd = b?.fixture?.date ? new Date(b.fixture.date).getTime() : 0;
-      return ad - bd;
-    });
 
     return deduped;
   }
@@ -443,6 +451,7 @@ export default function TripBuildScreen() {
       setError(null);
       setLoading(true);
       setRows([]);
+      setPlaceholderTbcIds(new Set());
       setVisibleCount(12);
       setSearch(""); // avoids "0 results" carryover when switching leagues
 
@@ -452,7 +461,13 @@ export default function TripBuildScreen() {
           : await loadFixturesForLeague(selectedLeague, from, to);
 
         if (cancelled) return;
-        setRows(Array.isArray(res) ? res : []);
+
+        const nextRows = Array.isArray(res) ? res : [];
+        setRows(nextRows);
+
+        // Compute placeholder-TBC ids for this result set
+        // (works for single league + global; conservative logic avoids false positives on near dates)
+        setPlaceholderTbcIds(computeLikelyPlaceholderTbcIds(nextRows));
       } catch (e: any) {
         if (cancelled) return;
         setError(e?.message ?? "Failed to load fixtures.");
@@ -465,12 +480,16 @@ export default function TripBuildScreen() {
     return () => {
       cancelled = true;
     };
-  }, [selectedLeague, from, to]);
+  }, [selectedLeague, from, to, isAllLeaguesSelected]);
 
   /**
    * When a fixture is selected, prefill dates as a 2-night mini-break:
    * - arrival: 1 day before matchday
    * - departure: 1 day after matchday
+   *
+   * TBC RULE:
+   * - If kickoff is TBC, do NOT auto-prefill dates from match day.
+   *   Keep the user’s current chosen dates (or default window dates).
    *
    * In EDIT MODE: do not overwrite the saved dates when the selected fixture is the trip’s own fixture.
    */
@@ -478,12 +497,22 @@ export default function TripBuildScreen() {
     const iso = selectedFixture?.fixture?.date as string | undefined;
     if (!selectedFixture || !iso) return;
 
-    const fixtureId = selectedFixture?.fixture?.id != null ? String(selectedFixture.fixture.id) : null;
+    const fixtureId = fixtureIdStr(selectedFixture);
 
     // If we loaded an existing trip and this is that same match, keep saved dates once.
     if (isEditing && editDatesLockRef.current && editTripMatchId && fixtureId === editTripMatchId) {
       editDatesLockRef.current = false;
 
+      requestAnimationFrame(() => {
+        listRef.current?.scrollTo({ y: 0, animated: true });
+      });
+      return;
+    }
+
+    const tbc = isKickoffTbc(selectedFixture, placeholderTbcIds);
+
+    // If TBC: do not override dates based on a non-confirmed kickoff
+    if (tbc) {
       requestAnimationFrame(() => {
         listRef.current?.scrollTo({ y: 0, animated: true });
       });
@@ -512,13 +541,13 @@ export default function TripBuildScreen() {
     requestAnimationFrame(() => {
       listRef.current?.scrollTo({ y: 0, animated: true });
     });
-  }, [selectedFixture, isEditing, editTripMatchId]);
+  }, [selectedFixture, isEditing, editTripMatchId, placeholderTbcIds]);
 
   const filteredRows = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return rows;
 
-    return rows.filter((r) => {
+    return rows.filter((r: any) => {
       const home = String(r?.teams?.home?.name ?? "").toLowerCase();
       const away = String(r?.teams?.away?.name ?? "").toLowerCase();
       const venue = String(r?.fixture?.venue?.name ?? "").toLowerCase();
@@ -528,7 +557,20 @@ export default function TripBuildScreen() {
     });
   }, [rows, search]);
 
-  const visibleRows = useMemo(() => filteredRows.slice(0, visibleCount), [filteredRows, visibleCount]);
+  // Sort: confirmed kickoff first by date, then TBC last
+  const sortedFilteredRows = useMemo(() => {
+    const copy = [...filteredRows];
+    copy.sort((a: any, b: any) => {
+      const atbc = isKickoffTbc(a, placeholderTbcIds);
+      const btbc = isKickoffTbc(b, placeholderTbcIds);
+      const av = kickoffTimeSortValue(a, atbc);
+      const bv = kickoffTimeSortValue(b, btbc);
+      return av - bv;
+    });
+    return copy;
+  }, [filteredRows, placeholderTbcIds]);
+
+  const visibleRows = useMemo(() => sortedFilteredRows.slice(0, visibleCount), [sortedFilteredRows, visibleCount]);
 
   function openPicker(which: "start" | "end") {
     if (Platform.OS === "web" || !DateTimePicker) return;
@@ -622,11 +664,21 @@ export default function TripBuildScreen() {
     }
   }
 
-  const selHome = selectedFixture?.teams?.home?.name ?? "";
-  const selAway = selectedFixture?.teams?.away?.name ?? "";
-  const selKick = formatUkDateTimeMaybe(selectedFixture?.fixture?.date);
-  const selVenue = selectedFixture?.fixture?.venue?.name ?? "";
-  const selCity = selectedFixture?.fixture?.venue?.city ?? "";
+  const selHome = String(selectedFixture?.teams?.home?.name ?? "").trim();
+  const selAway = String(selectedFixture?.teams?.away?.name ?? "").trim();
+  const selVenue = String(selectedFixture?.fixture?.venue?.name ?? "").trim();
+  const selCity = String(selectedFixture?.fixture?.venue?.city ?? "").trim();
+
+  const selectedTbc = useMemo(() => {
+    if (!selectedFixture) return false;
+    return isKickoffTbc(selectedFixture, placeholderTbcIds);
+  }, [selectedFixture, placeholderTbcIds]);
+
+  const selKick = useMemo(() => {
+    if (!selectedFixture) return "TBC";
+    if (selectedTbc) return "TBC";
+    return formatUkDateTimeMaybe(selectedFixture?.fixture?.date) || "TBC";
+  }, [selectedFixture, selectedTbc]);
 
   const destinationCity = useMemo(() => {
     if (!selectedFixture) return "";
@@ -653,7 +705,7 @@ export default function TripBuildScreen() {
 
   const currentMatchBlock = useMemo(() => {
     if (!isEditing || !editSnapshotRef.current?.fixture) return null;
-    const f = editSnapshotRef.current.fixture;
+    const f = editSnapshotRef.current.fixture as any;
     const home = f?.teams?.home?.name ?? "Home";
     const away = f?.teams?.away?.name ?? "Away";
     const kick = formatUkDateTimeMaybe(f?.fixture?.date);
@@ -733,7 +785,7 @@ export default function TripBuildScreen() {
                 returnKeyType="search"
               />
               <Text style={styles.searchMeta}>
-                Showing {Math.min(visibleCount, filteredRows.length)} of {filteredRows.length}
+                Showing {Math.min(visibleCount, sortedFilteredRows.length)} of {sortedFilteredRows.length}
               </Text>
             </View>
 
@@ -757,31 +809,37 @@ export default function TripBuildScreen() {
               </View>
             ) : null}
 
-            {!loading && !error && filteredRows.length === 0 ? (
+            {!loading && !error && sortedFilteredRows.length === 0 ? (
               <View style={{ marginTop: 12 }}>
                 <EmptyState title="No fixtures found" message="Try a different league window, or search." />
               </View>
             ) : null}
 
-            {!loading && !error && filteredRows.length > 0 ? (
+            {!loading && !error && sortedFilteredRows.length > 0 ? (
               <>
                 <View style={styles.list}>
-                  {visibleRows.map((r, idx) => {
-                    const fixtureId = r?.fixture?.id;
-                    const home = r?.teams?.home?.name ?? "Home";
-                    const away = r?.teams?.away?.name ?? "Away";
-                    const kickoff = formatUkDateTimeMaybe(r?.fixture?.date);
-                    const venue = r?.fixture?.venue?.name ?? "";
-                    const city = r?.fixture?.venue?.city ?? "";
-                    const leagueName = String(r?.league?.name ?? "").trim();
-                    const extra = [leagueName, venue, city].filter(Boolean).join(" • ");
-                    const line2 = extra ? `${kickoff} • ${extra}` : kickoff;
+                  {visibleRows.map((r: any, idx: number) => {
+                    const id = fixtureIdStr(r);
+                    const home = String(r?.teams?.home?.name ?? "").trim() || "Home";
+                    const away = String(r?.teams?.away?.name ?? "").trim() || "Away";
 
-                    const selected = String(selectedFixture?.fixture?.id ?? "") === String(fixtureId ?? "");
+                    const tbc = isKickoffTbc(r, placeholderTbcIds);
+                    const kickoff = tbc ? "TBC" : (formatUkDateTimeMaybe(r?.fixture?.date) || "TBC");
+
+                    const venue = String(r?.fixture?.venue?.name ?? "").trim();
+                    const city = String(r?.fixture?.venue?.city ?? "").trim();
+                    const leagueName = String(r?.league?.name ?? "").trim();
+
+                    const extra = [leagueName, venue, city].filter(Boolean).join(" • ");
+                    const line2 = tbc
+                      ? (extra || "Kickoff time not confirmed")
+                      : (extra ? `${kickoff} • ${extra}` : kickoff);
+
+                    const selected = fixtureIdStr(selectedFixture) === id;
 
                     return (
                       <Pressable
-                        key={String(fixtureId ?? idx)}
+                        key={id || String(idx)}
                         onPress={() => {
                           if (isEditing) editDatesLockRef.current = false;
                           setSelectedFixture(r);
@@ -792,6 +850,7 @@ export default function TripBuildScreen() {
                           <Text style={styles.rowTitle}>
                             {home} vs {away}
                           </Text>
+                          {tbc ? <Text style={styles.tbcTag}>TBC</Text> : null}
                           {selected ? <Text style={styles.selectedTag}>Selected</Text> : null}
                         </View>
                         <Text style={styles.rowMeta}>{line2}</Text>
@@ -801,7 +860,7 @@ export default function TripBuildScreen() {
                   })}
                 </View>
 
-                {visibleCount < filteredRows.length ? (
+                {visibleCount < sortedFilteredRows.length ? (
                   <Pressable onPress={() => setVisibleCount((n) => n + 12)} style={styles.moreBtn}>
                     <Text style={styles.moreText}>Show more</Text>
                   </Pressable>
@@ -823,14 +882,25 @@ export default function TripBuildScreen() {
                 <View style={styles.sheetHeader}>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.sheetKicker}>{isEditing ? "Edit trip details" : "Trip details"}</Text>
-                    <Text style={styles.sheetTitle} numberOfLines={1}>
-                      {selHome && selAway ? `${selHome} vs ${selAway}` : "Selected match"}
-                    </Text>
+
+                    <View style={styles.sheetTitleRow}>
+                      <Text style={styles.sheetTitle} numberOfLines={1}>
+                        {selHome && selAway ? `${selHome} vs ${selAway}` : "Selected match"}
+                      </Text>
+                      {selectedTbc ? <Text style={styles.tbcTagSheet}>TBC</Text> : null}
+                    </View>
+
                     <Text style={styles.sheetSub} numberOfLines={2}>
                       {selKick}
                       {selVenue ? ` • ${selVenue}` : ""}
                       {selCity ? ` • ${selCity}` : ""}
                     </Text>
+
+                    {selectedTbc ? (
+                      <Text style={styles.tbcHint} numberOfLines={2}>
+                        Kickoff time isn’t confirmed yet — your dates won’t auto-adjust from matchday.
+                      </Text>
+                    ) : null}
                   </View>
 
                   <Pressable onPress={closeSheet} style={styles.closeBtn} hitSlop={10}>
@@ -910,7 +980,7 @@ export default function TripBuildScreen() {
 
                       {cityBundle?.hasGuide && (cityBundle.items?.length ?? 0) > 0 ? (
                         <View style={styles.thingsList}>
-                          {cityBundle.items.slice(0, 6).map((it, idx) => (
+                          {cityBundle.items.slice(0, 6).map((it: any, idx: number) => (
                             <View key={`${it.title}-${idx}`} style={styles.thingRow}>
                               <Text style={styles.thingIdx}>{idx + 1}.</Text>
                               <View style={{ flex: 1 }}>
@@ -926,7 +996,7 @@ export default function TripBuildScreen() {
                       {cityBundle?.hasGuide && (cityBundle.quickTips?.length ?? 0) > 0 ? (
                         <View style={styles.tipsBlock}>
                           <Text style={styles.tipsTitle}>Quick tips</Text>
-                          {cityBundle.quickTips.slice(0, 5).map((t, idx) => (
+                          {cityBundle.quickTips.slice(0, 5).map((t: string, idx: number) => (
                             <Text key={`${t}-${idx}`} style={styles.tipLine}>
                               • {t}
                             </Text>
@@ -1091,6 +1161,18 @@ const styles = StyleSheet.create({
   rowTitle: { flex: 1, color: theme.colors.text, fontWeight: "800", fontSize: theme.fontSize.md },
   rowMeta: { marginTop: 4, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm },
 
+  tbcTag: {
+    color: "rgba(242,244,246,0.88)",
+    fontSize: theme.fontSize.xs,
+    fontWeight: "900",
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+    backgroundColor: "rgba(0,0,0,0.22)",
+  },
+
   selectedTag: {
     color: theme.colors.primary,
     fontSize: theme.fontSize.xs,
@@ -1147,8 +1229,25 @@ const styles = StyleSheet.create({
 
   sheetHeader: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
   sheetKicker: { color: theme.colors.primary, fontWeight: "900", fontSize: theme.fontSize.xs },
-  sheetTitle: { marginTop: 6, color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.lg },
+
+  sheetTitleRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 6 },
+  sheetTitle: { flex: 1, color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.lg },
+
+  tbcTagSheet: {
+    color: "rgba(242,244,246,0.88)",
+    fontSize: theme.fontSize.xs,
+    fontWeight: "900",
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+    backgroundColor: "rgba(0,0,0,0.22)",
+  },
+
   sheetSub: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18 },
+
+  tbcHint: { marginTop: 8, color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, lineHeight: 16 },
 
   closeBtn: {
     paddingVertical: 10,
