@@ -142,6 +142,8 @@ function dayMonth(d: Date) {
 }
 
 function pickDateStrip(fromIso: string, days = 10) {
+  // Keep the same behaviour as your version: base day starts at `from` and shows N consecutive days.
+  // Using Z is fine because we only display labels and compare ISO date-only strings.
   const base = new Date(`${fromIso}T00:00:00Z`);
   const out: { iso: string; labelTop: string; labelBottom: string }[] = [];
   for (let i = 0; i < days; i++) {
@@ -407,12 +409,7 @@ export default function FixturesScreen() {
       const venueName = norm(r?.fixture?.venue?.name);
       const venueCity = norm(r?.fixture?.venue?.city);
 
-      return (
-        home.includes(q) ||
-        away.includes(q) ||
-        venueName.includes(q) ||
-        venueCity.includes(q)
-      );
+      return home.includes(q) || away.includes(q) || venueName.includes(q) || venueCity.includes(q);
     },
     [qNorm]
   );
@@ -445,21 +442,12 @@ export default function FixturesScreen() {
     return "Top leagues";
   }, [mode, selectedSingle.label]);
 
-  const toggleMode = useCallback(
-    () => setMode((m) => (m === "single" ? "multi" : "single")),
-    []
-  );
+  const toggleMode = useCallback(() => setMode((m) => (m === "single" ? "multi" : "single")), []);
 
   const goMatchWithContext = useCallback(
     (fixtureIdStr: string, leagueIdForRow?: number, seasonForRow?: number) => {
-      const lid =
-        mode === "single"
-          ? selectedSingle.leagueId
-          : leagueIdForRow ?? selectedSingle.leagueId;
-      const sea =
-        mode === "single"
-          ? selectedSingle.season
-          : seasonForRow ?? selectedSingle.season;
+      const lid = mode === "single" ? selectedSingle.leagueId : leagueIdForRow ?? selectedSingle.leagueId;
+      const sea = mode === "single" ? selectedSingle.season : seasonForRow ?? selectedSingle.season;
 
       router.push({
         pathname: "/match/[id]",
@@ -478,14 +466,8 @@ export default function FixturesScreen() {
 
   const goBuildTripWithContext = useCallback(
     (fixtureIdStr: string, leagueIdForRow?: number, seasonForRow?: number) => {
-      const lid =
-        mode === "single"
-          ? selectedSingle.leagueId
-          : leagueIdForRow ?? selectedSingle.leagueId;
-      const sea =
-        mode === "single"
-          ? selectedSingle.season
-          : seasonForRow ?? selectedSingle.season;
+      const lid = mode === "single" ? selectedSingle.leagueId : leagueIdForRow ?? selectedSingle.leagueId;
+      const sea = mode === "single" ? selectedSingle.season : seasonForRow ?? selectedSingle.season;
 
       router.push({
         pathname: "/trip/build",
@@ -533,10 +515,7 @@ export default function FixturesScreen() {
                 setExpandedId((prev) => (prev === fixtureIdStr ? null : fixtureIdStr));
               }}
               android_ripple={{ color: "rgba(79,224,138,0.10)" }}
-              style={({ pressed }) => [
-                styles.rowMain,
-                pressed && fixtureIdStr ? { opacity: 0.94 } : null,
-              ]}
+              style={({ pressed }) => [styles.rowMain, pressed && fixtureIdStr ? { opacity: 0.94 } : null]}
             >
               <View style={styles.rowInner}>
                 {/* Symmetrical: Home crest | Center text | Away crest */}
@@ -564,12 +543,7 @@ export default function FixturesScreen() {
 
                   {fixtureIdStr ? (
                     <View style={styles.followRow}>
-                      <FollowPill
-                        fixtureId={fixtureIdStr}
-                        leagueId={ctx.leagueId}
-                        season={ctx.season}
-                        row={r}
-                      />
+                      <FollowPill fixtureId={fixtureIdStr} leagueId={ctx.leagueId} season={ctx.season} row={r} />
                     </View>
                   ) : null}
                 </View>
@@ -582,11 +556,7 @@ export default function FixturesScreen() {
               <View style={styles.expandArea}>
                 <Pressable
                   onPress={() => goMatchWithContext(fixtureIdStr, ctx.leagueId, ctx.season)}
-                  style={({ pressed }) => [
-                    styles.expandBtn,
-                    styles.expandBtnGhost,
-                    pressed && { opacity: 0.92 },
-                  ]}
+                  style={({ pressed }) => [styles.expandBtn, styles.expandBtnGhost, pressed && { opacity: 0.92 }]}
                   android_ripple={{ color: "rgba(79,224,138,0.10)" }}
                 >
                   <Text style={styles.expandBtnGhostText}>Match</Text>
@@ -594,11 +564,7 @@ export default function FixturesScreen() {
 
                 <Pressable
                   onPress={() => goBuildTripWithContext(fixtureIdStr, ctx.leagueId, ctx.season)}
-                  style={({ pressed }) => [
-                    styles.expandBtn,
-                    styles.expandBtnPrimary,
-                    pressed && { opacity: 0.92 },
-                  ]}
+                  style={({ pressed }) => [styles.expandBtn, styles.expandBtnPrimary, pressed && { opacity: 0.92 }]}
                   android_ripple={{ color: "rgba(79,224,138,0.12)" }}
                 >
                   <Text style={styles.expandBtnPrimaryText}>Build trip</Text>
@@ -666,30 +632,18 @@ export default function FixturesScreen() {
           </View>
 
           {/* Date strip */}
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.dateRow}
-          >
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dateRow}>
             {dateStrip.map((d) => {
               const active = d.iso === activeDay;
               return (
                 <Pressable
                   key={d.iso}
                   onPress={() => setActiveDay(d.iso)}
-                  style={({ pressed }) => [
-                    styles.datePill,
-                    active && styles.datePillActive,
-                    pressed && { opacity: 0.94 },
-                  ]}
+                  style={({ pressed }) => [styles.datePill, active && styles.datePillActive, pressed && { opacity: 0.94 }]}
                   android_ripple={{ color: "rgba(79,224,138,0.10)" }}
                 >
-                  <Text style={[styles.dateTop, active && styles.dateTopActive]}>
-                    {d.labelTop}
-                  </Text>
-                  <Text style={[styles.dateBottom, active && styles.dateBottomActive]}>
-                    {d.labelBottom}
-                  </Text>
+                  <Text style={[styles.dateTop, active && styles.dateTopActive]}>{d.labelTop}</Text>
+                  <Text style={[styles.dateBottom, active && styles.dateBottomActive]}>{d.labelBottom}</Text>
                 </Pressable>
               );
             })}
@@ -697,27 +651,17 @@ export default function FixturesScreen() {
 
           {/* League pills (single mode only) */}
           {mode === "single" ? (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.leagueRow}
-            >
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.leagueRow}>
               {LEAGUES.map((l) => {
                 const active = l.leagueId === selectedSingle.leagueId;
                 return (
                   <Pressable
                     key={l.leagueId}
                     onPress={() => setSelectedSingle(l)}
-                    style={({ pressed }) => [
-                      styles.leaguePill,
-                      active && styles.leaguePillActive,
-                      pressed && { opacity: 0.94 },
-                    ]}
+                    style={({ pressed }) => [styles.leaguePill, active && styles.leaguePillActive, pressed && { opacity: 0.94 }]}
                     android_ripple={{ color: "rgba(79,224,138,0.10)" }}
                   >
-                    <Text style={[styles.leaguePillText, active && styles.leaguePillTextActive]}>
-                      {l.label}
-                    </Text>
+                    <Text style={[styles.leaguePillText, active && styles.leaguePillTextActive]}>{l.label}</Text>
                     <LeagueFlag code={l.countryCode} />
                   </Pressable>
                 );
@@ -727,11 +671,7 @@ export default function FixturesScreen() {
         </View>
 
         {/* BODY */}
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={styles.content}
-          keyboardShouldPersistTaps="handled"
-        >
+        <ScrollView style={styles.scrollView} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           <GlassCard strength="default" style={styles.card}>
             {loading ? (
               <View style={styles.center}>
@@ -749,10 +689,7 @@ export default function FixturesScreen() {
                 ) : (
                   <View style={styles.list}>
                     {filteredSingle.map((r) =>
-                      renderFixtureRow(r, {
-                        leagueId: selectedSingle.leagueId,
-                        season: selectedSingle.season,
-                      })
+                      renderFixtureRow(r, { leagueId: selectedSingle.leagueId, season: selectedSingle.season })
                     )}
                   </View>
                 )
@@ -775,9 +712,7 @@ export default function FixturesScreen() {
                         </View>
 
                         <View style={styles.list}>
-                          {leagueRows.map((r) =>
-                            renderFixtureRow(r, { leagueId: l.leagueId, season: l.season })
-                          )}
+                          {leagueRows.map((r) => renderFixtureRow(r, { leagueId: l.leagueId, season: l.season }))}
                         </View>
                       </View>
                     );
