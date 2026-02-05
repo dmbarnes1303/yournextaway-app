@@ -12,33 +12,22 @@ export default function TabsLayout() {
   return (
     <Tabs
       initialRouteName="home"
-      screenOptions={({ route }) => {
-        const isGroupRoute = typeof route?.name === "string" && route.name.startsWith("(");
-
-        return {
-          headerShown: false,
-
-          // Hide route groups like "(home)" if they leak into the tab navigator
-          tabBarButton: isGroupRoute ? () => null : undefined,
-          tabBarItemStyle: isGroupRoute ? { display: "none" } : undefined,
-
-          tabBarActiveTintColor: theme.colors.primary,
-          tabBarInactiveTintColor: theme.colors.textSecondary,
-
-          tabBarStyle: {
-            backgroundColor: "rgba(0,0,0,0.85)",
-            borderTopWidth: 1,
-            borderTopColor: theme.colors.border,
-            height: tabBarHeight,
-            paddingBottom: Math.max(insets.bottom, 10),
-            paddingTop: 8,
-          },
-
-          tabBarLabelStyle: {
-            fontSize: 12,
-            fontWeight: "800",
-          },
-        };
+      screenOptions={{
+        headerShown: false,
+        tabBarActiveTintColor: theme.colors.primary,
+        tabBarInactiveTintColor: theme.colors.textSecondary,
+        tabBarStyle: {
+          backgroundColor: "rgba(0,0,0,0.85)",
+          borderTopWidth: 1,
+          borderTopColor: theme.colors.border,
+          height: tabBarHeight,
+          paddingBottom: Math.max(insets.bottom, 10),
+          paddingTop: 8,
+        },
+        tabBarLabelStyle: {
+          fontSize: 12,
+          fontWeight: "800",
+        },
       }}
     >
       <Tabs.Screen

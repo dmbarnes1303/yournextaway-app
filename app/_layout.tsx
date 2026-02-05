@@ -1,17 +1,18 @@
 // app/_layout.tsx
 import "react-native-reanimated";
 import React, { useEffect } from "react";
-import { Stack } from "expo-router";
+import { StyleSheet } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import * as SplashScreen from "expo-splash-screen";
 import { useFonts } from "expo-font";
-import { StyleSheet } from "react-native";
 
 import { theme } from "@/src/constants/theme";
 import BackButton from "@/src/components/BackButton";
 import { ProProvider } from "@/src/context/ProContext";
 
+// Side-effect init (safe in dev; your logger is already web-safe)
 import "@/utils/errorLogger";
 
 SplashScreen.preventAutoHideAsync().catch(() => {
@@ -48,23 +49,22 @@ export default function RootLayout() {
               headerLeft: () => <BackButton fallbackHref="/(tabs)/home" />,
             }}
           >
+            {/* Top-level routes */}
             <Stack.Screen name="index" options={{ headerShown: false }} />
-
             <Stack.Screen name="landing" options={{ headerShown: false }} />
             <Stack.Screen name="onboarding" options={{ headerShown: false }} />
-
             <Stack.Screen name="paywall" options={{ headerTitle: "YourNextAway Pro" }} />
 
+            {/* Tabs group */}
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
 
             {/* Details */}
             <Stack.Screen name="match/[id]" options={{ headerTitle: "Match" }} />
 
-            /**
-             * City routing:
-             * - Canonical: /city/[cityKey]
-             * - Legacy: /city/[slug] redirects to /city/[cityKey]
-             */
+            {/* City routing:
+                - Canonical: /city/[cityKey]
+                - Legacy: /city/[slug] redirects to /city/[cityKey]
+             */}
             <Stack.Screen name="city/[cityKey]" options={{ headerTitle: "City" }} />
             <Stack.Screen name="city/[slug]" options={{ headerTitle: "City" }} />
 
