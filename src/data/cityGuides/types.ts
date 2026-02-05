@@ -15,7 +15,16 @@ export interface CityGuide {
   /** Short intro paragraph */
   overview: string;
 
-  /** TripAdvisor deep link to "Top things to do" (ideally filtered to the city) */
+  /**
+   * Monetised "things to do" deep link.
+   * Primary use: GetYourGuide affiliate landing page for the city.
+   */
+  thingsToDoUrl?: string;
+
+  /**
+   * Legacy / fallback only (avoid showing in UI if monetised link exists).
+   * Keep temporarily while you build coverage; remove later if you want.
+   */
   tripAdvisorTopThingsUrl?: string;
 
   /** Top 10 things to do (with a practical tip for each) */

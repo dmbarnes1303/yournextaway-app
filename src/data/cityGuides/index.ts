@@ -1,3 +1,5 @@
+// src/data/cityGuides/index.ts
+
 import type { CityGuide, CityTopThing } from "./types";
 import { normalizeCityKey } from "@/src/utils/city";
 
@@ -10,13 +12,14 @@ import ligue1CityGuides from "./ligue1";
 export type TripTopThingsBundle = {
   cityKey: string;
   hasGuide: boolean;
-  tripAdvisorUrl?: string;
+  thingsToDoUrl?: string;
+  tripAdvisorUrl?: string; // legacy fallback only
   items: { title: string; description?: string }[];
   quickTips: string[];
 };
 
 /**
- * Unified registry
+ * Unified registry (single source of truth for city guide lookups)
  */
 export const cityGuides: Record<string, CityGuide> = {
   ...premierLeagueCityGuides,
@@ -58,7 +61,8 @@ export function getTopThingsToDoForTrip(cityInput: string): TripTopThingsBundle 
   return {
     cityKey,
     hasGuide: true,
-    tripAdvisorUrl: guide.tripAdvisorTopThingsUrl,
+    thingsToDoUrl: guide.thingsToDoUrl,
+    tripAdvisorUrl: guide.thingsToDoUrl ? undefined : guide.tripAdvisorTopThingsUrl, // only if no affiliate link exists
     items,
     quickTips: (guide.tips ?? []).slice(0, 8),
   };

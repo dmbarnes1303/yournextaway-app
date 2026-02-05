@@ -1,1046 +1,505 @@
+// src/data/cityGuides/premierLeague.ts
 import type { CityGuide } from "./types";
 
+/**
+ * GetYourGuide affiliate entry points (city-level “things to do” pages).
+ * Keep this as a single, obvious map so monetisation doesn’t get scattered.
+ */
+const GYG = {
+  london: "https://www.getyourguide.com/en-gb/london-l57/?partner_id=MAQJREP&utm_medium=online_publisher",
+  manchester:
+    "https://www.getyourguide.com/en-gb/manchester-11128/?partner_id=MAQJREP&utm_medium=online_publisher",
+  liverpool: "https://www.getyourguide.com/en-gb/liverpool-l1210/?partner_id=MAQJREP&utm_medium=online_publisher",
+  birmingham:
+    "https://www.getyourguide.com/en-gb/birmingham-l12525/?partner_id=MAQJREP&utm_medium=online_publisher",
+  "newcastle-upon-tyne":
+    "https://www.getyourguide.com/en-gb/newcastle-upon-tyne-l1444/?partner_id=MAQJREP&utm_medium=online_publisher",
+  leeds: "https://www.getyourguide.com/en-gb/leeds-l11023/?partner_id=MAQJREP&utm_medium=online_publisher",
+  nottingham:
+    "https://www.getyourguide.com/en-gb/nottingham-l1145813/?partner_id=MAQJREP&utm_medium=online_publisher",
+  brighton:
+    "https://www.getyourguide.com/en-gb/brighton-l1440/?partner_id=MAQJREP&utm_medium=online_publisher",
+  bournemouth:
+    "https://www.getyourguide.com/en-gb/bournemouth-l11022/?partner_id=MAQJREP&utm_medium=online_publisher",
+  burnley:
+    "https://www.getyourguide.com/en-gb/burnley-l1100710/?partner_id=MAQJREP&utm_medium=online_publisher",
+  wolverhampton:
+    "https://www.getyourguide.com/en-gb/wolverhampton-l1103158/?partner_id=MAQJREP&utm_medium=online_publisher",
+} as const;
+
 export const premierLeagueCityGuides: Record<string, CityGuide> = {
+  london: {
+    cityId: "london",
+    name: "London",
+    country: "England",
+    thingsToDoUrl: GYG.london,
 
-london: {
-  cityId: "london",
-  name: "London",
-  country: "England",
+    overview:
+      "London isn’t one place — it’s a set of neighbourhoods connected by world-class transport. The winning weekend formula is simple: choose a base on a great Tube line, plan days by area (not by “attractions”), and keep matchday travel deliberately boring. Do that and the city feels smooth instead of chaotic.",
 
-  overview:
-    "London is less a single city and more a collection of villages stitched together by world-class transport. For football travellers, it offers unmatched variety: multiple Premier League clubs, historic stadiums, endless neighbourhood character, and a matchday culture that ranges from polished big-club spectacle to raw local intensity. The key to enjoying London is zoning — pick areas, not endless checklists.",
+    topThings: [
+      { title: "Westminster → South Bank walk", tip: "Free skyline moments. Go near golden hour and you’ll beat most paid viewpoints." },
+      { title: "Borough Market", tip: "Go early or mid-afternoon. Pick 1–2 standout stalls and skip the queue-collector mindset." },
+      { title: "British Museum", tip: "Choose 2–3 galleries max. Trying to “do it all” is a guaranteed fatigue trap." },
+      { title: "Soho & Covent Garden evening", tip: "Anchor it with a booking (dinner or show). London nights are better with one fixed plan." },
+      { title: "Greenwich", tip: "Use the Thames Clipper one way — transport + sightseeing in one clean move." },
+      { title: "Notting Hill & Portobello Road", tip: "Weekday mornings for photos; weekends for atmosphere." },
+      { title: "Camden Markets", tip: "Go for the street food and people-watching. Shopping is optional noise." },
+      { title: "Primrose Hill viewpoint", tip: "Short walk, big payoff. Sunset is obvious for a reason." },
+      { title: "Neighbourhood pub session", tip: "Avoid landmark-adjacent pubs. Walk 5–10 minutes into residential streets for better value and vibe." },
+      { title: "Matchday area wander", tip: "Arrive early and walk around the ground. It’s often the best ‘local’ slice of your day." },
+    ],
 
-  tripAdvisorTopThingsUrl:
-    "https://www.tripadvisor.com/Attractions-g186338-Activities-London_England.html",
+    tips: [
+      "Use contactless — daily caps usually beat single tickets.",
+      "One main area per day is the sweet spot (London punishes zig-zagging).",
+      "Don’t Uber across central: walking + Tube is typically quicker.",
+      "On matchdays, build buffer time for station queues and crowd flow.",
+      "After full-time, walk 10 minutes away before calling a taxi.",
+    ],
 
-  topThings: [
-    {
-      title: "Westminster → South Bank Walk",
-      tip: "Start at Westminster, walk past Big Ben, London Eye, and finish near Tower Bridge. Best at golden hour. Skip paid viewpoints — this walk gives better atmosphere for free."
-    },
-    {
-      title: "Borough Market",
-      tip: "Arrive before noon or mid-afternoon to avoid crush. Focus on one or two food stalls, not everything."
-    },
-    {
-      title: "British Museum",
-      tip: "Choose 2–3 galleries only. Trying to ‘do the whole museum’ is counterproductive."
-    },
-    {
-      title: "Soho & Covent Garden Evening",
-      tip: "Book dinner first, then wander. Soho is better discovered without a strict plan."
-    },
-    {
-      title: "Greenwich",
-      tip: "Take the Thames Clipper boat one way — sightseeing plus transport in one."
-    },
-    {
-      title: "Notting Hill & Portobello Road",
-      tip: "Market days are lively; weekday mornings are calmer for photos."
-    },
-    {
-      title: "Camden Markets",
-      tip: "Great for street food and people-watching. Shopping is secondary."
-    },
-    {
-      title: "Primrose Hill Viewpoint",
-      tip: "Free skyline view, especially good near sunset."
-    },
-    {
-      title: "Neighbourhood Pub Session",
-      tip: "Avoid pubs next to major landmarks. Walk 5 minutes into residential streets."
-    },
-    {
-      title: "Pre-match Area Near Stadium",
-      tip: "Arrive early and soak up the local streets around the ground — often better than central London pre-drinks."
-    }
-  ],
+    food: ["Borough Market", "Dishoom (book ahead)", "Sunday roast (reserve)", "Proper fish & chips", "Late-night kebab if needed"],
 
-  tips: [
-    "Use contactless on Tube and buses — daily caps make it cheaper than expected.",
-    "Walking + Tube beats Uber in central London.",
-    "Book restaurants Thu–Sun, especially on match weekends.",
-    "Treat London as zones: one main area per day.",
-    "Stadium areas empty fast after matches — plan one post-match stop."
-  ],
+    transport:
+      "Contactless works on Tube, buses, and many rail routes. The Underground is fast but harsh at peaks — minimise transfers and use Citymapper/Maps to avoid accidental time-wasters.",
 
-  food: [
-    "Borough Market",
-    "Dishoom (book ahead)",
-    "Traditional Sunday roast (reserve)",
-    "Proper fish & chips",
-    "Late-night kebab after match"
-  ],
+    accommodation:
+      "Prioritise being near a Tube line over being ‘central’. A strong Zone 2 base near a top station usually beats Zone 1 for value and stress.",
+  },
 
-  transport:
-    "Contactless works on Tube, buses, and most trains. The Underground is fast but busy at peaks. Citymapper or Google Maps give accurate live routing.",
-
-  accommodation:
-    "Prioritise being near a Tube line over being ‘central’. Zone 2 near stations often gives better value than Zone 1."
-},
-
-manchester: {
+  manchester: {
     cityId: "manchester",
     name: "Manchester",
     country: "England",
-    tripAdvisorTopThingsUrl: "https://www.tripadvisor.com/Attractions-g187069-Activities-Manchester_Greater_Manchester_England.html",
+    thingsToDoUrl: GYG.manchester,
+
     overview:
-      "Manchester is one of the UK’s best football cities and an easy weekend break even if you never set foot near a stadium. It’s compact, walkable, and built around food, music, nightlife, and industrial heritage. You don’t need an overloaded itinerary here — a couple of strong daytime blocks and relaxed evenings will give you a great trip.",
+      "Manchester is elite for a weekend: compact core, serious food, and neighbourhoods that actually feel different. The best trip has one strong daytime block, one strong evening block, and minimal dead travel time.",
 
     topThings: [
-      {
-        title: "Northern Quarter wander",
-        tip: "Base yourself here if possible. Independent shops, record stores, street art, and casual food spots all within a small grid."
-      },
-      {
-        title: "Manchester Museum",
-        tip: "Free, high quality, and right by the university. Strong natural history and Egypt sections."
-      },
-      {
-        title: "Science and Industry Museum",
-        tip: "Great for understanding why Manchester matters historically. Easy half-day visit."
-      },
-      {
-        title: "Castlefield canals",
-        tip: "Good daytime stroll or early evening walk. Combine with drinks nearby."
-      },
-      {
-        title: "John Rylands Library",
-        tip: "Looks like Hogwarts. Quick visit but genuinely impressive."
-      },
-      {
-        title: "Afflecks",
-        tip: "Multi-floor alternative shopping hub. Best mid-afternoon before it fills up."
-      },
-      {
-        title: "Piccadilly Gardens → Market Street loop",
-        tip: "Busy but central. Use it as a connector rather than a long stop."
-      },
-      {
-        title: "MediaCityUK (Salford Quays)",
-        tip: "Tram out if you’ve got spare time. BBC area, waterside walks, restaurants."
-      },
-      {
-        title: "Etihad Campus area",
-        tip: "If you’re visiting City, arrive early and walk around the complex."
-      },
-      {
-        title: "Old Trafford area",
-        tip: "Large footprint — plan transport in and out rather than wandering aimlessly."
-      }
+      { title: "Northern Quarter wander", tip: "Best all-round base area: bars, cafés, indie shops, and a tight grid you can’t mess up." },
+      { title: "John Rylands Library", tip: "Fastest ‘wow’ stop in the city. Go early if you want it quieter." },
+      { title: "Science and Industry Museum", tip: "A proper half-day if you’re into how cities get built (not just how they party)." },
+      { title: "Castlefield canals", tip: "Great reset walk before dinner. Easy drinks area too." },
+      { title: "Manchester Museum", tip: "Free, good quality, and a strong weather-proof option." },
+      { title: "Afflecks", tip: "More vibe than mission. Mid-afternoon is the sweet spot." },
+      { title: "MediaCityUK (Salford Quays)", tip: "Tram out if you have spare time — waterside + easy food options." },
+      { title: "Piccadilly → Market Street loop", tip: "Use it as a connector, not a destination." },
+      { title: "Etihad Campus area", tip: "If you’re going, arrive early — the scale reads better on foot." },
+      { title: "Old Trafford area", tip: "Plan transport in/out. Distances and crowds punish improvisation." },
     ],
 
     tips: [
-      "Manchester centre is walkable — most trips under 25 minutes on foot.",
-      "Friday and Saturday nights get busy fast; book dinner.",
-      "If you’re doing football and nightlife, rest in the afternoon.",
-      "Avoid taxis immediately after matches — walk 10–15 minutes first.",
-      "Weather changes quickly; bring a light waterproof."
+      "Central Manchester is walkable — taxis are usually wasted money.",
+      "Friday/Saturday dinner fills quickly; book it.",
+      "After matches, walk 10–15 minutes before calling a taxi.",
+      "If you’re doing football + nightlife, schedule an afternoon reset.",
+      "Bring a light waterproof — weather flips fast.",
     ],
 
-    food: [
-      "Street food in Mackie Mayor",
-      "Pizza in Northern Quarter",
-      "Curry Mile (Rusholme)",
-      "Modern British small plates",
-      "Proper breakfast cafés"
-    ],
+    food: ["Mackie Mayor (street food)", "Pizza in Northern Quarter", "Curry Mile (Rusholme)", "Modern British small plates", "Proper breakfast cafés"],
 
     transport:
-      "Trams cover most useful routes including Etihad Campus and Salford Quays. Walking is fastest inside the city centre. Use contactless everywhere.",
+      "Trams cover the most useful routes (Etihad, Quays). Walking wins inside the centre. Contactless is everywhere.",
 
     accommodation:
-      "Northern Quarter and Ancoats are ideal for short stays. Deansgate is central but pricier. Avoid staying far out unless you’re near a tram stop."
+      "Northern Quarter/Ancoats are the cleanest choice. Deansgate is central but pricier. If you stay farther out, be near a tram stop.",
   },
 
-liverpool: {
+  liverpool: {
     cityId: "liverpool",
     name: "Liverpool",
     country: "England",
-    tripAdvisorTopThingsUrl: "https://www.tripadvisor.com/Attractions-g186337-Activities-Liverpool_Merseyside_England.html",
+    thingsToDoUrl: GYG.liverpool,
+
     overview:
-      "Liverpool is compact, friendly, and ideal for a football-focused city break. The waterfront is excellent, nightlife is concentrated, and most major sights sit within a tight radius. You can comfortably cover Liverpool in two days without rushing.",
+      "Liverpool is a low-friction weekend: a compact centre, a proper waterfront, and nightlife that’s concentrated enough to feel lively without needing logistics. Two days is plenty if you keep the plan clean.",
 
     topThings: [
-      {
-        title: "Albert Dock",
-        tip: "Start here. Waterfront walks, museums, and bars all in one area."
-      },
-      {
-        title: "Royal Albert Dock museums",
-        tip: "Tate Liverpool or Maritime Museum are good quick wins."
-      },
-      {
-        title: "The Cavern Quarter",
-        tip: "Short visit for music history. Don’t overstay unless you want live music."
-      },
-      {
-        title: "Liverpool ONE → Pier Head walk",
-        tip: "Easy central route linking shopping to waterfront landmarks."
-      },
-      {
-        title: "Baltic Triangle",
-        tip: "Creative area with breweries, food halls, and bars."
-      },
-      {
-        title: "Anfield area",
-        tip: "Arrive early on matchday and walk around the stadium zone."
-      },
-      {
-        title: "Goodison Park area",
-        tip: "Traditional neighbourhood stadium setting. Pubs fill early."
-      },
-      {
-        title: "Sefton Park",
-        tip: "Nice weather option if you want greenery away from centre."
-      },
-      {
-        title: "Mersey Ferry",
-        tip: "Short scenic trip if you’ve got spare time."
-      },
-      {
-        title: "Georgian Quarter",
-        tip: "Historic streets and calmer pubs."
-      }
+      { title: "Albert Dock", tip: "Start here — waterfront, museums, bars, and the easiest ‘Liverpool’ feeling in one spot." },
+      { title: "Pier Head & waterfront loop", tip: "Best late afternoon into evening when the lights come on." },
+      { title: "Tate Liverpool / Maritime Museum", tip: "Pick one. Don’t try to ‘collect’ museums like trophies." },
+      { title: "Cavern Quarter", tip: "Short visit for music history. Don’t let it become a whole evening by accident." },
+      { title: "Baltic Triangle", tip: "Relaxed drinks + food halls. A strong post-match option." },
+      { title: "Georgian Quarter", tip: "Quieter streets and better pubs for actual conversation." },
+      { title: "Sefton Park", tip: "Morning reset if you stayed out." },
+      { title: "Mersey Ferry", tip: "A simple scenic add-on if you have spare time." },
+      { title: "Matchday area pre-walk", tip: "Arrive early — the build-up is part of the weekend." },
+      { title: "Dockside dinner", tip: "Book it. Walk-ins get punished on weekends." },
     ],
 
     tips: [
-      "City centre is extremely walkable.",
-      "Matchday pubs near stadiums get busy early.",
-      "Book restaurants on Fridays and Saturdays.",
-      "Liverpool nightlife runs late — pace yourself.",
-      "Taxis are cheap but walk a few streets away after matches."
+      "Stay central — it’s the difference between ‘easy’ and ‘annoying’.",
+      "Weekend restaurant demand spikes; book ahead.",
+      "After matches, walk away from the stadium zone before calling taxis.",
+      "Waterfront routes are the fastest way to ‘see’ the city properly.",
+      "Pace the first night — Liverpool weekends run late.",
     ],
 
-    food: [
-      "Baltic Market",
-      "Independent burger joints",
-      "Seafood by the docks",
-      "Italian restaurants",
-      "Traditional pubs with kitchens"
-    ],
+    food: ["Baltic Market", "Independent burger spots", "Seafood by the docks", "Italian in the centre", "Traditional pubs with kitchens"],
 
     transport:
-      "Most trips inside centre are walkable. Merseyrail trains useful for Anfield/Goodison routes plus suburbs. Contactless works everywhere.",
+      "Most central routes are walkable. Merseyrail helps for suburbs. Taxis exist but slow down right after events.",
 
     accommodation:
-      "Albert Dock, Liverpool ONE, and Ropewalks are best bases. Avoid staying too far north or south without rail access."
+      "Albert Dock, Liverpool ONE and Ropewalks are strong bases. Avoid far-out hotels unless you’re on a rail line.",
   },
 
-birmingham: {
+  birmingham: {
     cityId: "birmingham",
     name: "Birmingham",
     country: "England",
-    tripAdvisorTopThingsUrl: "https://www.tripadvisor.com/Attractions-g186402-Activities-Birmingham_West_Midlands_England.html",
+    thingsToDoUrl: GYG.birmingham,
+
     overview:
-      "Birmingham is a large, modern city with strong food culture, easy transport, and distinct neighbourhoods. It works well for football trips because travel is straightforward and accommodation is good value compared to London.",
+      "Birmingham is a practical football weekend: big-city choice, good-value hotels, and simple transport. It’s not a checklist city — pick two strong neighbourhood blocks, then let food and nightlife do the rest.",
 
     topThings: [
-      {
-        title: "Brindleyplace canals",
-        tip: "Good base area for food, bars, and walking."
-      },
-      {
-        title: "Mailbox",
-        tip: "Restaurants, bars, and canal-side walks."
-      },
-      {
-        title: "Bullring & Grand Central",
-        tip: "Central shopping landmark and meeting point."
-      },
-      {
-        title: "Digbeth",
-        tip: "Street art, creative venues, and independent bars."
-      },
-      {
-        title: "Jewellery Quarter",
-        tip: "Historic area with pubs and small museums."
-      },
-      {
-        title: "Cadbury World",
-        tip: "Touristy but popular if you have extra time."
-      },
-      {
-        title: "Victoria Square",
-        tip: "Central square near major attractions."
-      },
-      {
-        title: "Birmingham Museum & Art Gallery",
-        tip: "Strong permanent collection, free entry."
-      },
-      {
-        title: "Villa Park area",
-        tip: "Arrive early and walk around the stadium streets."
-      },
-      {
-        title: "St Andrew’s area",
-        tip: "Traditional matchday pub culture."
-      }
+      { title: "Canals at Brindleyplace", tip: "Best walk-and-eat zone. Easy to make it your evening base." },
+      { title: "Mailbox → canals loop", tip: "A clean route that naturally connects food, bars, and water." },
+      { title: "Jewellery Quarter", tip: "Best neighbourhood feel + pubs. Do it daytime, stay for dinner." },
+      { title: "Digbeth", tip: "Street art and nightlife. Best late afternoon into evening." },
+      { title: "Birmingham Museum & Art Gallery", tip: "High-value free option when weather turns." },
+      { title: "Victoria Square", tip: "Good meeting point. Not a long stop." },
+      { title: "Bullring & Grand Central", tip: "Do it quickly if you need essentials. Don’t burn prime time shopping." },
+      { title: "Cadbury World (optional)", tip: "Only if you genuinely want it — otherwise it’s a time sink." },
+      { title: "Pre-match meal", tip: "Eat early. Match weekends make kitchens chaotic." },
+      { title: "Post-match exit plan", tip: "Queues and slow exits are normal — build buffer time." },
     ],
 
     tips: [
-      "Use trains or trams for stadium travel.",
-      "City centre is spread out — plan by area.",
-      "Digbeth is best for nightlife.",
-      "Book dinner on match weekends.",
-      "Leave time for post-match transport queues."
+      "Plan by neighbourhood: centre + Digbeth + Jewellery Quarter is a clean split.",
+      "If you’re staying out, base near New Street for easy returns.",
+      "Book dinner Fri/Sat — walk-ins get punished.",
+      "Use trains/trams where possible for match travel.",
+      "After full-time, walk first before calling taxis.",
     ],
 
-    food: [
-      "Balti Triangle curry houses",
-      "Independent pizza spots",
-      "Street food in Digbeth",
-      "Modern British bistros",
-      "Canal-side restaurants"
-    ],
+    food: ["Balti Triangle curry", "Independent pizza", "Street food in Digbeth", "Modern British bistros", "Canal-side restaurants"],
 
     transport:
-      "Trains from New Street connect to most areas. Trams cover centre routes. Uber widely available.",
+      "New Street connects everything. Trams cover key centre routes. Uber is common but slow immediately after events.",
 
     accommodation:
-      "Stay near New Street, Brindleyplace, or Jewellery Quarter for easiest access."
+      "Stay near New Street, Brindleyplace, or Jewellery Quarter for the best balance.",
   },
 
-newcastle: {
-  cityId: "newcastle",
-  name: "Newcastle upon Tyne",
-  country: "England",
-  tripAdvisorTopThingsUrl: "https://www.tripadvisor.com/Attractions-g186394-Activities-Newcastle_upon_Tyne_Tyne_and_Wear_England.html",
-  overview:
-    "Newcastle upon Tyne is one of England’s most characterful football cities. Compact, walkable, and built around nightlife, food, and waterfront regeneration, it offers a strong weekend-break feel with a passionate football culture at its core. You can comfortably combine sightseeing, drinking, eating, and matchday atmosphere without long travel times.",
-  topThings: [
-    {
-      title: "Quayside & Millennium Bridge walk",
-      tip: "Walk both sides of the Tyne for views of the bridges, bars, and skyline. Best in the evening.",
-    },
-    {
-      title: "Newcastle Castle",
-      tip: "Small but central and worth doing for city views and historical context.",
-    },
-    {
-      title: "Grey Street & Grainger Town",
-      tip: "Arguably England’s best street for architecture. Combine with shopping or cafés.",
-    },
-    {
-      title: "Tynemouth day trip",
-      tip: "Metro ride to the coast for beach walks, fish & chips, and seaside pubs.",
-    },
-    {
-      title: "Victoria Tunnel",
-      tip: "Book ahead. A guided underground tour explaining wartime and mining history.",
-    },
-    {
-      title: "Baltic Centre for Contemporary Art",
-      tip: "Free entry. Go to the viewing level for river and city panoramas.",
-    },
-    {
-      title: "Ouseburn Valley",
-      tip: "Creative quarter with breweries, street art, live music, and independent venues.",
-    },
-    {
-      title: "Jesmond Dene",
-      tip: "Leafy park with waterfalls and walking trails. Good daytime reset.",
-    },
-    {
-      title: "Shopping in Eldon Square",
-      tip: "Large indoor centre if weather turns bad.",
-    },
-    {
-      title: "St James’ Park area on matchday",
-      tip: "Arrive early to experience pubs, street atmosphere, and fan build-up.",
-    },
-  ],
-  tips: [
-    "Newcastle city centre is very walkable—accommodation location matters less than in bigger cities.",
-    "Friday and Saturday nights are extremely lively; expect busy bars.",
-    "Metro is cheap and easy for airport, coast, and suburbs.",
-    "Book restaurants on match weekends.",
-    "Weather can change quickly—pack layers.",
-  ],
-  food: [
-    "Traditional pub grub",
-    "Seafood in Tynemouth",
-    "Modern British bistros",
-    "Street food in Ouseburn",
-  ],
-  transport:
-    "Tyne & Wear Metro connects airport, city centre, coast, and major districts. Taxis are plentiful at night. Walking covers most central sightseeing.",
-  accommodation:
-    "City Centre and Quayside give best access to nightlife and sightseeing. Jesmond is slightly quieter with good metro links.",
-},
+  "newcastle-upon-tyne": {
+    cityId: "newcastle-upon-tyne",
+    name: "Newcastle upon Tyne",
+    country: "England",
+    thingsToDoUrl: GYG["newcastle-upon-tyne"],
 
-leeds: {
+    overview:
+      "Newcastle is one of England’s best weekend cities: compact centre, proper food scene, and nightlife that’s energetic without needing a car. It’s easy to navigate, feels like a real break in 24–48 hours, and pairs perfectly with a match.",
+
+    topThings: [
+      { title: "Quayside & bridges walk", tip: "Walk both sides of the Tyne — best in the evening when it’s lit." },
+      { title: "Grey Street & Grainger Town", tip: "Architecture + cafés in one neat daytime loop." },
+      { title: "Ouseburn Valley", tip: "Creative quarter with breweries and venues. Ideal chilled evening." },
+      { title: "Baltic Centre (view level)", tip: "Free entry, strong views, low effort." },
+      { title: "Newcastle Castle", tip: "Small but central — worth it for context and viewpoint." },
+      { title: "Tynemouth day trip", tip: "Metro to the coast for a beach walk and proper fish & chips." },
+      { title: "Victoria Tunnel", tip: "Book ahead. Don’t assume walk-ins." },
+      { title: "Jesmond Dene", tip: "The best morning reset if you went hard the night before." },
+      { title: "Eldon Square (only if needed)", tip: "Use it if weather forces you indoors. Otherwise skip." },
+      { title: "Matchday pre-walk", tip: "Arrive early and let the build-up happen — Newcastle does it well." },
+    ],
+
+    tips: [
+      "You can do most of Newcastle on foot — base location matters less than in London.",
+      "Friday/Saturday gets busy fast; book dinner.",
+      "Metro is the cleanest move for airport + coast.",
+      "After matches, expect crowds — build exit time.",
+      "Pack layers: wind and rain can flip quickly.",
+    ],
+
+    food: ["Traditional pub food", "Seafood in Tynemouth", "Modern British bistros", "Street food in Ouseburn"],
+
+    transport:
+      "Tyne & Wear Metro connects airport, city, coast. Walking covers most central routes. Taxis are plentiful at night.",
+
+    accommodation:
+      "City Centre and Quayside are the easiest bases. Jesmond is quieter with strong Metro links.",
+  },
+
+  leeds: {
     cityId: "leeds",
     name: "Leeds",
     country: "England",
-    tripAdvisorTopThingsUrl: "https://www.tripadvisor.com/Attractions-g186411-Activities-Leeds_West_Yorkshire_England.html",
+    thingsToDoUrl: GYG.leeds,
+
     overview:
-      "Leeds is a fast-growing northern city with a strong football identity, busy nightlife, compact centre, and easy access to countryside. It’s big enough to feel energetic but small enough to navigate easily on a weekend break. For football travellers, Leeds offers a traditional English matchday atmosphere combined with a lively city centre before and after games.",
+      "Leeds is a high-output weekend city: compact centre, strong bars, and a simple rhythm — coffee, culture, food, then nightlife. It rewards basic structure and punishes overplanning.",
 
     topThings: [
-      {
-        title: "Leeds United matchday (Elland Road)",
-        tip: "Arrive early and soak up the pubs around Elland Road or in the city centre before heading out. Atmosphere builds well ahead of kick-off.",
-      },
-      {
-        title: "Royal Armouries Museum",
-        tip: "Free entry and genuinely good. Allow 60–90 minutes rather than rushing.",
-      },
-      {
-        title: "Leeds City Museum",
-        tip: "Good short stop if you want culture without committing half a day.",
-      },
-      {
-        title: "Trinity Leeds & Victoria Quarter",
-        tip: "Best central area for shopping, food, and coffee in one walkable zone.",
-      },
-      {
-        title: "Leeds Waterfront / Calls Landing",
-        tip: "Nice riverside walk with bars and restaurants — good early evening spot.",
-      },
-      {
-        title: "Roundhay Park",
-        tip: "Huge park with lakes and views. Taxi or bus out if you’ve got spare time.",
-      },
-      {
-        title: "Kirkstall Abbey",
-        tip: "Impressive ruins and open green space. Combine with a nearby pub stop.",
-      },
-      {
-        title: "Northern Monk Brewery",
-        tip: "Popular local brewery taproom — busy on weekends, but worth it.",
-      },
-      {
-        title: "Corn Exchange",
-        tip: "Architectural highlight with indie shops and cafés.",
-      },
-      {
-        title: "Arcade Club (Kirkstall)",
-        tip: "Massive retro arcade venue if you want something different.",
-      },
+      { title: "Royal Armouries", tip: "Free and genuinely good — give it 60–90 minutes, not five." },
+      { title: "Corn Exchange", tip: "Best small landmark: indie shops + great architecture." },
+      { title: "Trinity Leeds & Victoria Quarter", tip: "A clean central loop for coffee, food and a quick browse." },
+      { title: "Calls Landing / waterfront", tip: "Easy early-evening bar zone by the water." },
+      { title: "Leeds City Museum", tip: "Short, easy cultural stop if you have spare time." },
+      { title: "Roundhay Park", tip: "Big green reset — best on a calm morning." },
+      { title: "Kirkstall Abbey", tip: "Combine with a pub nearby. Don’t overthink it." },
+      { title: "Local brewery session", tip: "Good for a relaxed evening. Busy weekends." },
+      { title: "Matchday logistics", tip: "If you’re heading to Elland Road, decide transport early." },
+      { title: "Evening bar crawl", tip: "Call Lane is the obvious cluster — start earlier than you think." },
     ],
 
     tips: [
-      "Leeds city centre is very walkable — you won’t need transport for most activities.",
-      "Matchdays increase hotel demand noticeably — book early.",
-      "Nightlife clusters around Call Lane and Merrion Street.",
-      "Elland Road isn’t central — plan transport in advance.",
-      "Leeds–Manchester trains are frequent if you’re combining cities.",
+      "Leeds centre is walkable. Don’t default to taxis.",
+      "Match weekends spike hotel demand — book early.",
+      "Nightlife clusters: Call Lane + Merrion Street.",
+      "Elland Road travel needs planning — don’t wing it last minute.",
+      "If you’re combining cities, Leeds–Manchester trains are frequent.",
     ],
 
-    food: [
-      "Trinity Kitchen (street food)",
-      "Bundobust (Indian street food)",
-      "The Man Behind the Curtain (fine dining)",
-      "Ox Club (steak)",
-      "Kirkgate Market food hall",
-    ],
+    food: ["Trinity Kitchen", "Bundobust", "Kirkgate Market food hall", "Steak/modern grills", "Strong brunch cafés"],
 
     transport:
-      "Leeds is a major rail hub with direct connections to London, Manchester, Sheffield, and Newcastle. Buses run frequently across the city. Taxis and ride-hailing are widely available late into the night.",
+      "Leeds is a major rail hub. Buses and taxis fill gaps; most central trips are best on foot.",
 
     accommodation:
-      "Best areas: City Centre, Arena Quarter, or near Leeds Station. Prioritise walkable access to nightlife and rail station rather than suburban hotels.",
+      "City Centre, near the Arena, or near the Station. Prioritise walkability over ‘nice’ rooms.",
   },
 
+  /**
+   * IMPORTANT: only ONE Nottingham entry.
+   */
+  nottingham: {
+    cityId: "nottingham",
+    name: "Nottingham",
+    country: "England",
+    thingsToDoUrl: GYG.nottingham,
 
-nottingham: {
-  cityId: "nottingham",
-  name: "Nottingham",
-  country: "England",
+    overview:
+      "Nottingham is a compact weekend city with real character: historic pubs, independent streets, and just enough heritage to feel distinct without needing a long itinerary. It’s perfect for a football-led break because you can keep everything walkable and efficient.",
 
-  overview:
-    "Nottingham is a compact, characterful English city with deep football heritage and a lively centre that works well for short football-focused breaks. It combines a walkable core, strong pub culture, and enough historical identity to feel distinct without requiring heavy sightseeing. On match weekends, the city has a noticeably busier, more energetic edge, particularly around the river and central pub areas.",
+    topThings: [
+      { title: "Old Market Square", tip: "Use it as your navigation anchor — everything branches cleanly from here." },
+      { title: "Ye Olde Trip to Jerusalem", tip: "Go early. Weekends and matchdays fill fast and the queues are not worth your time." },
+      { title: "Lace Market evening", tip: "Best neighbourhood feel for bars and dinner — more atmosphere than the main shopping streets." },
+      { title: "Hockley wander", tip: "Indie shops, coffee, and casual bars. Best in daylight." },
+      { title: "Nottingham Castle viewpoint", tip: "Treat it as a views stop. Don’t overcommit time to exhibitions unless you’re genuinely into them." },
+      { title: "City of Caves (optional)", tip: "Do it if you want the history. Skip it if your priority is food + matchday." },
+      { title: "River Trent walk", tip: "A simple pre-match reset if the weather behaves." },
+      { title: "Pre-match pub route", tip: "Start central then move gradually towards the ground — don’t camp in one spot too early." },
+      { title: "Post-match plan", tip: "Either leave fast or commit to one drink. Sitting in the middle of the surge is the worst option." },
+      { title: "One good dinner", tip: "Book it. The best places aren’t built for last-minute walk-ins on peak nights." },
+    ],
 
-  tripAdvisorTopThingsUrl:
-    "https://www.tripadvisor.co.uk/Attractions-g186356-Activities-Nottingham_Nottinghamshire_England.html",
+    tips: [
+      "Stay central — your trip will feel twice as smooth.",
+      "On big fixtures, accommodation tightens quickly. Book early.",
+      "Eat earlier on matchdays to avoid queues and rushed kitchens.",
+      "Most of the city works on foot; taxis are rarely necessary.",
+      "Short on time? Do: Hockley + Lace Market + one historic pub.",
+    ],
 
-  topThings: [
-    {
-      title: "Nottingham Castle",
-      tip: "Go mainly for the views over the city rather than the exhibitions. Allow 60–90 minutes, not half a day."
-    },
-    {
-      title: "Old Market Square",
-      tip: "Central reference point for the city. Useful meeting spot before heading to pubs or the stadium."
-    },
-    {
-      title: "Ye Olde Trip to Jerusalem",
-      tip: "One of England’s oldest pubs. Expect crowds on matchdays – arrive early."
-    },
-    {
-      title: "The Lace Market",
-      tip: "Good area for food and bars in the evening. More atmosphere than the main shopping streets."
-    },
-    {
-      title: "River Trent walk",
-      tip: "Easy stroll towards West Bridgford and the stadium area if weather is decent."
-    },
-    {
-      title: "Wollaton Hall & Deer Park",
-      tip: "Short taxi or bus ride. Nice daytime option if you have a spare morning."
-    },
-    {
-      title: "Hockley district",
-      tip: "Independent shops, coffee spots, and casual bars. Best daytime wandering zone."
-    },
-    {
-      title: "National Justice Museum",
-      tip: "Interesting if you like darker history, but optional for short trips."
-    },
-    {
-      title: "Motorpoint Arena area",
-      tip: "Cluster of chain restaurants and bars useful for quick pre-match food."
-    },
-    {
-      title: "Pre-match pub crawl",
-      tip: "Start central, finish closer to the ground rather than only drinking by the stadium."
-    }
-  ],
+    food: ["Gastropubs in the Lace Market", "Independent pizza", "Casual small plates", "Indian near the centre", "Late-night kebab if needed"],
 
-  tips: [
-    "Nottingham city centre is very walkable – you rarely need taxis.",
-    "Book accommodation early for big fixtures; options are limited compared to major cities.",
-    "Pre-match atmosphere is stronger in the city than right next to the stadium.",
-    "Leave extra time after full-time – transport bottlenecks are common.",
-    "One-night stays work well; two nights if you want relaxed pacing."
-  ],
+    transport:
+      "City centre is walkable. Public transport covers suburbs; taxis are easy but slow right after events.",
 
-  food: [
-    "Gastropubs in the Lace Market",
-    "Casual burgers & pizza around Hockley",
-    "Indian restaurants around Maid Marian Way",
-    "Simple pub food before matches"
-  ],
+    accommodation:
+      "City centre or Lace Market gives the best nightlife + easy stadium travel balance.",
+  },
 
-  transport:
-    "Local trams and buses connect the city centre with West Bridgford and surrounding areas. Walking from central Nottingham to the stadium takes roughly 30 minutes. Taxis are plentiful but slow immediately after matches.",
+  brighton: {
+    cityId: "brighton",
+    name: "Brighton",
+    country: "England",
+    thingsToDoUrl: GYG.brighton,
 
-  accommodation:
-    "City centre or Lace Market areas give the best balance of nightlife access and stadium travel. Budget chains fill up quickly on match weekends.",
+    overview:
+      "Brighton is a match weekend with a real ‘get away’ feel: sea air, strong cafés, and an easy day-to-night rhythm. The only rule is logistics — the stadium isn’t central, so plan transport and everything stays smooth.",
 
-  teams: [
-    {
-      name: "Nottingham Forest",
-      teamKey: "nottingham-forest"
-    }
-  ]
-},
+    topThings: [
+      { title: "Seafront walk", tip: "Walk west towards Hove for calmer stretches and better morning coffee." },
+      { title: "The Lanes", tip: "Best for wandering. Do it daytime, then return for drinks." },
+      { title: "North Laine", tip: "Indie shops and food — it feels more ‘Brighton’ than the main strip." },
+      { title: "Brighton Palace Pier", tip: "Do it as a pass-through, not a time sink." },
+      { title: "i360 (weather dependent)", tip: "Only on a clear day. If visibility is poor, skip." },
+      { title: "Town pubs pre-match", tip: "Atmosphere is better in town than near the stadium." },
+      { title: "Falmer travel plan", tip: "Train is the cleanest route. Expect packed carriages on matchdays." },
+      { title: "Beach breakfast", tip: "Perfect morning-after reset if you stayed out." },
+      { title: "Small restaurants", tip: "Brighton excels at casual dining — book Fri/Sat." },
+      { title: "Sunset drinks", tip: "When weather hits, it’s elite. Time it properly." },
+    ],
 
-brighton: {
-  cityId: "brighton",
-  name: "Brighton",
-  country: "England",
+    tips: [
+      "Stay central Brighton or Hove — not near the stadium.",
+      "Use trains to Falmer; it’s the cleanest route.",
+      "Bring layers — coastal wind is common even when it looks fine.",
+      "Book restaurants on Friday/Saturday nights.",
+      "If weather’s rough, pivot to cafés + The Lanes and don’t force the seafront.",
+    ],
 
-  overview:
-    "Brighton is a relaxed seaside city with a creative edge, strong café culture, and one of the most distinctive non-London atmospheres in the Premier League. It works particularly well for football weekends that mix a match with coastal wandering, food, and nightlife. The city centre is compact, but the stadium sits outside the core, making transport planning important.",
+    food: ["Seafood by the seafront", "Independent burgers", "Vegan/vegetarian cafés", "Small wine bars", "Strong brunch spots"],
 
-  tripAdvisorTopThingsUrl:
-    "https://www.tripadvisor.co.uk/Attractions-g186273-Activities-Brighton_East_Sussex_England.html",
+    transport:
+      "Falmer station serves the stadium and is ~10 minutes by train from Brighton Station. Trains are frequent but busy on matchdays.",
 
-  topThings: [
-    {
-      title: "Brighton Palace Pier",
-      tip: "Walk it rather than treating it as a destination. Best at sunset."
-    },
-    {
-      title: "The Lanes",
-      tip: "Small streets full of independent shops, pubs, and cafés. Easy daytime wandering."
-    },
-    {
-      title: "North Laine",
-      tip: "More alternative side of Brighton. Good for food and vintage shops."
-    },
-    {
-      title: "Brighton Beachfront walk",
-      tip: "Go west towards Hove for a calmer stretch."
-    },
-    {
-      title: "British Airways i360",
-      tip: "Only worth it on clear days. Skip if weather is poor."
-    },
-    {
-      title: "Pre-match pubs in city centre",
-      tip: "Better atmosphere than near the stadium itself."
-    },
-    {
-      title: "Seven Sisters day trip",
-      tip: "Only if you have an extra day. Not realistic on tight football weekends."
-    },
-    {
-      title: "Hove promenade",
-      tip: "Quieter than central Brighton and good for breakfast or coffee."
-    },
-    {
-      title: "Street food & small restaurants",
-      tip: "Brighton excels at casual dining rather than fine dining."
-    },
-    {
-      title: "Seafront bars at night",
-      tip: "Weather dependent, but strong summer vibe."
-    }
-  ],
+    accommodation:
+      "Central Brighton or Hove. Avoid staying at Falmer unless you have a specific reason.",
+  },
 
-  tips: [
-    "Stay in central Brighton, not near the stadium.",
-    "Use trains to Falmer for the stadium – easiest option.",
-    "Book restaurants on Friday/Saturday nights.",
-    "Bring layers; coastal wind is common.",
-    "Brighton feels busiest late afternoon through evening."
-  ],
+  burnley: {
+    cityId: "burnley",
+    name: "Burnley",
+    country: "England",
+    thingsToDoUrl: GYG.burnley,
 
-  food: [
-    "Seafood along the seafront",
-    "Independent burger joints",
-    "Vegan & vegetarian cafés",
-    "Small wine bars in The Lanes"
-  ],
+    overview:
+      "Burnley is football-first: compact, local, and straightforward. Keep expectations aligned — this is about matchday and a simple overnight, not a big-city attraction checklist.",
 
-  transport:
-    "Falmer station serves the stadium and is 10 minutes by train from Brighton Station. Trains are frequent but busy on matchdays. Walking around central Brighton covers most needs.",
+    topThings: [
+      { title: "Town centre loop", tip: "Quick loop for food and a feel of the place — don’t stretch it." },
+      { title: "Towneley Park", tip: "Best daytime option if you’re staying overnight." },
+      { title: "Towneley Hall (optional)", tip: "Only if you genuinely have spare time." },
+      { title: "Local breakfast café", tip: "Go early; options thin out quickly." },
+      { title: "Pre-match pubs", tip: "Arrive early if you want a seat — capacity fills fast." },
+      { title: "Post-match pint", tip: "Move quickly after full-time; the good spots fill fast." },
+      { title: "Countryside add-on (if you have a car)", tip: "Lancashire scenery is the real bonus if you extend the trip." },
+      { title: "Keep plans simple", tip: "This isn’t the place to chase 10 attractions in a day." },
+      { title: "Weather realism", tip: "Cold/wet is common — dress like you mean it." },
+      { title: "Transport planning", tip: "Most routes run via Manchester/Preston — check timings early." },
+    ],
 
-  accommodation:
-    "Central Brighton or Hove are best. Avoid staying near Falmer unless necessary.",
+    tips: [
+      "Hotels are limited — book as soon as you commit.",
+      "Plan food before matchday rush, especially if arriving late.",
+      "Dress for cold and wet. Don’t be optimistic.",
+      "If you want nightlife, stay in Manchester and commute.",
+      "Treat it as a focused football stop, not a tourist city.",
+    ],
 
-  teams: [
-    {
-      name: "Brighton & Hove Albion",
-      teamKey: "brighton"
-    }
-  ]
-},
+    food: ["Traditional pubs", "Fish & chips", "Curry houses", "Simple cafés"],
 
-nottingham: {
-  cityId: "nottingham",
-  name: "Nottingham",
-  country: "England",
+    transport:
+      "Burnley Manchester Road is the main station. Town is walkable; taxis fill gaps.",
 
-  overview:
-    "Nottingham is a compact historic city with strong football heritage, a lively nightlife scene, and good value compared to bigger Premier League hubs. It works well for short football trips: walkable centre, simple transport, and plenty of pubs clustered close together.",
+    accommodation:
+      "Limited options in town. Manchester/Blackburn can be practical alternatives.",
+  },
 
-  tripAdvisorTopThingsUrl:
-    "https://www.tripadvisor.co.uk/Attractions-g186356-Activities-Nottingham_Nottinghamshire_England.html",
+  wolverhampton: {
+    cityId: "wolverhampton",
+    name: "Wolverhampton",
+    country: "England",
+    thingsToDoUrl: GYG.wolverhampton,
 
-  topThings: [
-    {
-      title: "Nottingham Castle",
-      tip: "Good viewpoint over the city. Museum itself is optional."
-    },
-    {
-      title: "Old Market Square",
-      tip: "Central hub and easy meeting point."
-    },
-    {
-      title: "Hockley district",
-      tip: "Independent shops, bars, and street art."
-    },
-    {
-      title: "Lace Market",
-      tip: "Historic area now full of bars and restaurants."
-    },
-    {
-      title: "Ye Olde Trip to Jerusalem",
-      tip: "Classic pre-match pub with caves built into the rock."
-    },
-    {
-      title: "Canal-side walk",
-      tip: "Short and pleasant if you want fresh air."
-    },
-    {
-      title: "Pre-match city centre pubs",
-      tip: "Better atmosphere than around the ground itself."
-    },
-    {
-      title: "Caves of Nottingham",
-      tip: "Only if you have spare time."
-    },
-    {
-      title: "Shopping around Victoria Centre",
-      tip: "Useful if killing time."
-    },
-    {
-      title: "Evening bar crawl",
-      tip: "Hockley → Lace Market works well."
-    }
-  ],
+    overview:
+      "Wolverhampton is a focused Midlands base: strong rail links, straightforward matchday, and easy access to Birmingham if you want bigger nightlife. It’s a football-led stop with practical upside.",
 
-  tips: [
-    "Stay central for walkability.",
-    "Book pubs/restaurants on Saturday evenings.",
-    "Allow time walking to the ground.",
-    "Good city for one-night stays.",
-    "Crowds build early on matchdays."
-  ],
+    topThings: [
+      { title: "City centre loop", tip: "Cover the core quickly — use it as a warm-up, not the main event." },
+      { title: "Art Gallery", tip: "Free, easy, and a solid indoor fallback." },
+      { title: "West Park", tip: "Good pre-match walk if weather behaves." },
+      { title: "Grand Theatre (if staying longer)", tip: "Check listings — sometimes there’s a genuinely strong show." },
+      { title: "Black Country Living Museum (nearby)", tip: "Worth it if you have half a day and want something properly different." },
+      { title: "Birmingham side trip", tip: "Trains are quick — use it for nightlife or extra sightseeing." },
+      { title: "Classic pub session", tip: "Traditional pubs tend to beat ‘trendy’ bars here." },
+      { title: "Matchday timing", tip: "Arrive early — queues spike around kick-off." },
+      { title: "Post-match exit", tip: "Walk away from the stadium zone before calling taxis." },
+      { title: "Food anchor", tip: "One decent booking makes the day feel planned without effort." },
+    ],
 
-  food: [
-    "Gastropubs",
-    "Independent pizza",
-    "Street food vendors",
-    "Late-night kebabs"
-  ],
+    tips: [
+      "Book accommodation early for home weekends — availability tightens quickly.",
+      "If you want city energy, use Birmingham and commute.",
+      "Eat earlier on matchdays — kitchens get overwhelmed.",
+      "Weather can be grim — dress properly.",
+      "Keep the plan simple and it’s a great stop.",
+    ],
 
-  transport:
-    "City centre is walkable. Nottingham Forest’s stadium is about 25 minutes walk from Old Market Square. Trams and buses also run.",
+    food: ["British pub food", "Strong Indian/Bangladeshi options", "Casual grills", "Post-match takeaway"],
 
-  accommodation:
-    "City centre or Lace Market area is ideal.",
+    transport:
+      "The station sits next to the centre; most routes are walkable. Trains to Birmingham are frequent and quick.",
 
-  teams: [
-    {
-      name: "Nottingham Forest",
-      teamKey: "nottingham-forest"
-    }
-  ]
-},
+    accommodation:
+      "City centre or near the station is easiest. For more choice, stay in Birmingham and travel over.",
+  },
 
-  
-burnley: {
-  cityId: "burnley",
-  name: "Burnley",
-  country: "England",
-
-  overview:
-    "Burnley is a compact Lancashire town with deep-rooted football identity and a strong matchday tradition. Trips here are about football first, with simple logistics and a very local feel.",
-
-  tripAdvisorTopThingsUrl:
-    "https://www.tripadvisor.co.uk/Attractions-g190820-Activities-Burnley_Lancashire_England.html",
-
-  topThings: [
-    {
-      title: "Turf Moor stadium exterior",
-      tip: "Walk past the stadium pre-match."
-    },
-    {
-      title: "Burnley town centre",
-      tip: "Short wander for food and pubs."
-    },
-    {
-      title: "Towneley Park",
-      tip: "Large park, good if staying overnight."
-    },
-    {
-      title: "Pre-match pub crawl",
-      tip: "Stick to pubs near town centre."
-    },
-    {
-      title: "Post-match pint",
-      tip: "Town centre bars quieter after full time."
-    },
-    {
-      title: "Towneley Hall",
-      tip: "If you have spare time."
-    },
-    {
-      title: "Local breakfast café",
-      tip: "Many open early weekends."
-    },
-    {
-      title: "Canal-side walk",
-      tip: "Short relaxing stroll."
-    },
-    {
-      title: "Nearby Pendle countryside",
-      tip: "Only if you have car."
-    },
-    {
-      title: "Late evening takeaway",
-      tip: "Limited late options."
-    }
-  ],
-
-  tips: [
-    "Town is small — plan food early.",
-    "Weather can be cold and wet.",
-    "Arrive early on matchdays.",
-    "Most travel via Manchester or Preston.",
-    "Very football-focused destination."
-  ],
-
-  food: [
-    "Traditional pubs",
-    "Fish & chips",
-    "Curry houses",
-    "Cafés"
-  ],
-
-  transport:
-    "Burnley Manchester Road station is main rail hub. Stadium walkable from centre.",
-
-  accommodation:
-    "Limited hotels — consider Blackburn or Manchester if needed.",
-
-  teams: [
-    {
-      name: "Burnley",
-      teamKey: "burnley"
-    }
-  ]
-},
-
-wolverhampton: {
-  cityId: "wolverhampton",
-  name: "Wolverhampton",
-  country: "England",
-  tripAdvisorTopThingsUrl: "https://www.tripadvisor.com/Attractions-g186400-Activities-Wolverhampton_West_Midlands_England.html",
-  overview:
-    "Wolverhampton is a compact Midlands city with a strong football identity, industrial heritage, and easy rail links to Birmingham and the wider West Midlands. It works best as a focused football-led break: matchday at Molineux, a solid meal in the city centre, and optional side trips into Birmingham or the Black Country. You’re not coming for grand landmarks — you’re coming for atmosphere, convenience, and a proper English football weekend.",
-
-  topThings: [
-    {
-      title: "Molineux Stadium (Wolverhampton Wanderers)",
-      tip: "Arrive 90 minutes early to soak up pre-match atmosphere around Waterloo Road and the North Bank end. Stadium tours run on non-matchdays and are good value.",
-    },
-    {
-      title: "Wolverhampton City Centre walk",
-      tip: "Loop Queen Square → Victoria Street → Molineux → back through the retail core. You’ll cover most of the centre in under 45 minutes.",
-    },
-    {
-      title: "Wolverhampton Art Gallery",
-      tip: "Free entry, strong Victorian and contemporary collections. Good daytime filler before food or travel.",
-    },
-    {
-      title: "West Park",
-      tip: "Large Victorian park 10 minutes from the centre. Good for a relaxed pre-match walk if weather is decent.",
-    },
-    {
-      title: "Grand Theatre",
-      tip: "Check listings in advance — touring West End shows and comedy often pass through midweek.",
-    },
-    {
-      title: "Black Country Living Museum (nearby Dudley)",
-      tip: "Short train + bus ride. One of the best open-air museums in England if you have a spare half day.",
-    },
-    {
-      title: "Birmingham side trip",
-      tip: "Trains to Birmingham New Street are ~20 minutes. Combine Wolves matchday with Birmingham nightlife easily.",
-    },
-    {
-      title: "Traditional pub crawl",
-      tip: "Focus on older pubs rather than bars — the city does traditional better than trendy.",
-    },
-    {
-      title: "Shopping & street food",
-      tip: "Mander Centre and surrounding streets cover basics. Don’t expect destination shopping.",
-    },
-    {
-      title: "Post-match drinks near Molineux",
-      tip: "Pubs fill fast after full time — move quickly or walk slightly away from the stadium.",
-    },
-  ],
-
-  tips: [
-    "Wolves matches drive most hotel demand — book accommodation as soon as fixtures are confirmed.",
-    "Stay walking distance to Molineux if possible to avoid post-match transport queues.",
-    "If Wolves kick off late afternoon, eat lunch early — many kitchens get overwhelmed on matchdays.",
-    "Use Wolverhampton as a base for Birmingham if prices are cheaper.",
-    "Weather can be grim in winter — bring proper outerwear for standing concourses and queues.",
-  ],
-
-  food: [
-    "Classic British pub food near the centre",
-    "Indian and Bangladeshi restaurants (strong local scene)",
-    "Burgers / casual dining around Queen Square",
-    "Post-match takeaway near the station",
-  ],
-
-  transport:
-    "Wolverhampton railway station sits next to the city centre and is walkable to Molineux. Trains run frequently to Birmingham New Street (~20 mins). Local buses cover the wider West Midlands but most visitors won’t need them.",
-
-  accommodation:
-    "Best areas: city centre or near the station for walkability. Prices spike heavily on Wolves home weekends, so lock hotels early or consider staying in Birmingham and commuting.",
-
-  /* ---------------- Monetisation hooks (for UI wiring) ----------------
-     - Teams in this city:
-       Wolverhampton Wanderers → link to team guide
-
-     - Suggested booking shortcuts:
-       Hotels in Wolverhampton
-       Trains to Wolverhampton
-       Match tickets (Wolves)
-       Things to do in Wolverhampton
-
-     - Fixtures integration:
-       Pull upcoming Wolves home fixtures (next 2 months) and surface here
-  --------------------------------------------------------------------- */
-},
-  
   sunderland: {
-  cityId: "sunderland",
-  name: "Sunderland",
-  country: "England",
-  tripAdvisorTopThingsUrl: "https://www.tripadvisor.com/Attractions-g186401-Activities-Sunderland_Tyne_and_Wear_England.html",
-  overview:
-    "Sunderland is a proud football city on England’s northeast coast, shaped by shipbuilding heritage and a deep-rooted working-class identity. For travellers, it works as a football-first destination: matchday at the Stadium of Light, coastal walks, simple good food, and easy access to Newcastle if you want a bigger nightlife option. Expect authenticity rather than polish.",
+    cityId: "sunderland",
+    name: "Sunderland",
+    country: "England",
 
-  topThings: [
-    {
-      title: "Stadium of Light (Sunderland AFC)",
-      tip: "Arrive early and walk over the Wearmouth Bridge for classic approach views. Stadium tours are worthwhile on non-matchdays.",
-    },
-    {
-      title: "Roker & Seaburn beaches",
-      tip: "Seafront walk with cafés and fish & chip shops. Good morning-after activity.",
-    },
-    {
-      title: "National Glass Centre",
-      tip: "Free entry, quick visit. Ties into Sunderland’s industrial past.",
-    },
-    {
-      title: "Sunderland Museum & Winter Gardens",
-      tip: "Compact, free, and central — easy filler before lunch.",
-    },
-    {
-      title: "Penshaw Monument (nearby)",
-      tip: "Short drive or taxi. Great views over the region if weather is clear.",
-    },
-    {
-      title: "Sunderland city centre walk",
-      tip: "Bridge Street → Keel Square → riverside path gives you a feel for the place.",
-    },
-    {
-      title: "Pre-match pubs near the stadium",
-      tip: "Expect heavy crowds — go 90 minutes early if you want a seat.",
-    },
-    {
-      title: "Post-match drink in Seaburn",
-      tip: "Quieter than city centre after games.",
-    },
-    {
-      title: "Newcastle side trip",
-      tip: "Metro to Newcastle in ~30 minutes for nightlife or extra sightseeing.",
-    },
-    {
-      title: "Coastal fish & chips",
-      tip: "Eat by the sea rather than central chains for better quality.",
-    },
-  ],
+    // No GetYourGuide city page available (your note). Keep undefined.
+    // thingsToDoUrl: undefined,
 
-  tips: [
-    "Sunderland is straightforward but limited for late-night options — Newcastle is your backup plan.",
-    "Book hotels early for big fixtures or derby weekends.",
-    "Wrap up in winter — coastal wind makes it feel colder than inland cities.",
-    "Metro is the easiest way to move between Sunderland and Newcastle.",
-    "Matchday queues for food and drink can be long — eat early.",
-  ],
+    overview:
+      "Sunderland is a football-first coastal stop with simple logistics and a strong local feel. If you want a bigger nightlife layer, pair it with Newcastle (easy by Metro). If you treat Sunderland as an honest match-led trip, it works well.",
 
-  food: [
-    "Fish & chips along Roker / Seaburn",
-    "Traditional pubs near the centre",
-    "Casual Italian / grill restaurants",
-    "Breakfast cafés near the seafront",
-  ],
+    topThings: [
+      { title: "Seaburn & Roker seafront", tip: "Best morning-after reset: coffee, sea air, long walk." },
+      { title: "National Glass Centre", tip: "Quick, free, and actually linked to the city’s identity." },
+      { title: "Penshaw Monument (nearby)", tip: "Worth it if you have transport and clear weather." },
+      { title: "City centre quick loop", tip: "Keep it tight — this isn’t a ‘wander for hours’ centre." },
+      { title: "Newcastle add-on", tip: "If you want nightlife, just do it. Metro makes it easy." },
+      { title: "Coastal fish & chips", tip: "Eat by the sea, not in chain spots." },
+      { title: "Pre-match timing", tip: "Arrive early if you want seats — capacity is limited." },
+      { title: "Post-match plan", tip: "Leave fast or commit to one drink. The middle-of-the-surge option is the worst." },
+      { title: "Weather realism", tip: "Coastal wind makes it feel colder. Dress properly." },
+      { title: "Keep expectations aligned", tip: "It’s about authenticity, not polish — and that’s fine." },
+    ],
 
-  transport:
-    "Sunderland station and Metro connect to Newcastle, Gateshead and the wider Tyne & Wear network. Stadium of Light has its own Metro stop, but walking from the centre is also manageable.",
+    tips: [
+      "If you need more ‘city’, stay in Newcastle and take the Metro.",
+      "Book hotels early on big fixtures/derby weekends.",
+      "Wrap up — coastal wind is no joke.",
+      "Eat early on matchdays to avoid queues.",
+      "Keep it simple: coast + matchday + one decent meal.",
+    ],
 
-  accommodation:
-    "Best areas: city centre or Seaburn seafront. For more choice, stay in Newcastle and travel by Metro.",
+    food: ["Fish & chips by the seafront", "Traditional pubs", "Casual Italian/grill", "Breakfast cafés"],
 
-  /* ---------------- Monetisation hooks (for UI wiring) ----------------
-     - Teams in this city:
-       Sunderland AFC → link to team guide
+    transport:
+      "Sunderland station and Metro connect to Newcastle and wider Tyne & Wear. Stadium of Light has its own Metro stop.",
 
-     - Suggested booking shortcuts:
-       Hotels in Sunderland
-       Trains to Sunderland
-       Match tickets (Sunderland)
-       Things to do in Sunderland
+    accommodation:
+      "City centre or Seaburn seafront. For more choice, stay in Newcastle and commute.",
+  },
 
-     - Fixtures integration:
-       Pull upcoming Sunderland home fixtures (next 2 months) and surface here
-  --------------------------------------------------------------------- */
-},
+  bournemouth: {
+    cityId: "bournemouth",
+    name: "Bournemouth",
+    country: "England",
+    thingsToDoUrl: GYG.bournemouth,
 
+    overview:
+      "Bournemouth is a straight seaside weekend: beach walks, simple dining, and an easy matchday. It’s best when you treat it as a reset — don’t overstuff the itinerary.",
 
-bournemouth: {
-  cityId: "bournemouth",
-  name: "Bournemouth",
-  country: "England",
-  tripAdvisorTopThingsUrl: "https://www.tripadvisor.com/Attractions-g186262-Activities-Bournemouth_Dorset_England.html",
-  overview:
-    "Bournemouth is a classic English seaside town that blends beach culture with a growing Premier League presence thanks to AFC Bournemouth. It’s a relaxed, walkable destination that works well for short football-focused breaks: matchday at the Vitality Stadium, beach time, coastal walks, and easy dining.",
+    topThings: [
+      { title: "Beachfront walk", tip: "Early morning or sunset is best. Midday gets crowded in season." },
+      { title: "Pier stroll", tip: "Quick vibe hit — don’t overcommit time." },
+      { title: "Lower Gardens", tip: "Easy green route linking beach to town." },
+      { title: "Boscombe stretch", tip: "A quieter alternative to central beach." },
+      { title: "Poole Harbour (nearby)", tip: "Good views and restaurants if you extend the trip." },
+      { title: "Jurassic Coast day trip (if longer stay)", tip: "Only if you have real spare time — not on a tight match weekend." },
+      { title: "Town centre bars", tip: "Small cluster. Easy night without chaos." },
+      { title: "Pre-match plan", tip: "Capacity is limited — plan food/drinks early." },
+      { title: "Stadium walk-in timing", tip: "Arrive early — queues build quickly due to concourse size." },
+      { title: "Sunset ender", tip: "Finish on the seafront. Simple, but it works." },
+    ],
 
-  topThings: [
-    {
-      title: "Vitality Stadium (AFC Bournemouth)",
-      tip: "Small, compact ground. Arrive early — queues build quickly due to limited concourse space.",
-    },
-    {
-      title: "Bournemouth Beach",
-      tip: "Best early morning or evening in summer. Daytime gets crowded.",
-    },
-    {
-      title: "Bournemouth Pier",
-      tip: "Quick stroll, photos, and seaside atmosphere.",
-    },
-    {
-      title: "Lower Gardens",
-      tip: "Easy walk between beach and town centre. Good pre-lunch wander.",
-    },
-    {
-      title: "Boscombe Beach & Promenade",
-      tip: "Slightly quieter than Bournemouth central beach.",
-    },
-    {
-      title: "Poole Harbour (nearby)",
-      tip: "Short bus/train trip. Nice harbour views and restaurants.",
-    },
-    {
-      title: "Jurassic Coast day trip",
-      tip: "If staying longer, head towards Lulworth Cove or Durdle Door.",
-    },
-    {
-      title: "Town centre bars",
-      tip: "Compact nightlife cluster around Old Christchurch Road.",
-    },
-    {
-      title: "Pre-match pubs",
-      tip: "Plan ahead — spaces are limited and fill fast.",
-    },
-    {
-      title: "Seafront walk at sunset",
-      tip: "Simple but genuinely good way to end the day.",
-    },
-  ],
+    tips: [
+      "Weekend fixtures tighten hotel availability — book early.",
+      "Vitality Stadium is walkable from centre (~25 mins).",
+      "Eat away from the immediate seafront for better value.",
+      "Weather dictates the vibe — keep an indoor backup.",
+      "Bournemouth works best when it’s relaxed.",
+    ],
 
-  tips: [
-    "Book accommodation early for weekend fixtures — Bournemouth has limited large hotels.",
-    "Expect a family/tourist mix in summer; nightlife is calmer outside peak season.",
-    "Vitality Stadium is walkable from the centre (~25 minutes).",
-    "Eat away from the immediate seafront for better value.",
-    "Weather heavily affects the vibe — plan indoor backup options.",
-  ],
+    food: ["Seafood near the beach", "Casual grills", "Italian in the centre", "Promenade breakfast cafés"],
 
-  food: [
-    "Seafood restaurants near the beach",
-    "Casual burger and grill spots",
-    "Italian restaurants in town centre",
-    "Breakfast cafés along the promenade",
-  ],
+    transport:
+      "Mainline station with direct services from London. Local buses cover town and beaches. Taxis work for short hops.",
 
-  transport:
-    "Bournemouth has a mainline train station with direct services from London. Local buses cover town, beaches and stadium. Taxis are affordable for short hops.",
-
-  accommodation:
-    "Best areas: town centre or West Cliff for walkability. Beachfront hotels cost more in season.",
-
-  /* ---------------- Monetisation hooks (for UI wiring) ----------------
-     - Teams in this city:
-       AFC Bournemouth → link to team guide
-
-     - Suggested booking shortcuts:
-       Hotels in Bournemouth
-       Trains to Bournemouth
-       Match tickets (AFC Bournemouth)
-       Things to do in Bournemouth
-
-     - Fixtures integration:
-       Pull upcoming Bournemouth home fixtures (next 2 months) and surface here
-  --------------------------------------------------------------------- */
-},
-
+    accommodation:
+      "Town centre or West Cliff for walkability. Beachfront costs more in peak season.",
+  },
 };
-
-
 
 export default premierLeagueCityGuides;
