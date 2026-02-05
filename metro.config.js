@@ -1,3 +1,4 @@
+// metro-config.js
 const { getDefaultConfig } = require("expo/metro-config");
 const { FileStore } = require("metro-cache");
 const path = require("path");
@@ -5,9 +6,13 @@ const fs = require("fs");
 
 const config = getDefaultConfig(__dirname);
 
-// ❌ Remove this – it frequently causes ESM/export resolution issues on web
-// config.resolver.unstable_enablePackageExports = true;
+// IMPORTANT: Package exports can pull in ESM-only builds that contain `import.meta`,
+// which will crash Expo Web (Metro) with: "Cannot use 'import.meta' outside a module".
+// Leave this OFF for stability.
+config.resolver = config.resolver || {};
+config.resolver.unstable_enablePackageExports = false;
 
+// Cache store
 config.cacheStores = [
   new FileStore({ root: path.join(__dirname, "node_modules", ".cache", "metro") }),
 ];
@@ -16,7 +21,6 @@ config.cacheStores = [
 const LOG_FILE_PATH = path.join(__dirname, ".natively", "app_console.log");
 const MAX_LOG_SIZE = 5 * 1024 * 1024; // 5MB
 
-// Ensure log directory exists
 const logDir = path.dirname(LOG_FILE_PATH);
 if (!fs.existsSync(logDir)) {
   fs.mkdirSync(logDir, { recursive: true });
@@ -25,45 +29,46 @@ if (!fs.existsSync(logDir)) {
 config.server = config.server || {};
 config.server.enhanceMiddleware = (middleware) => {
   return (req, res, next) => {
-    // DEBUG: log all metro bundle requests
-    if (req.url.includes("index.bundle") || req.url.includes(".bundle")) {
-      console.log("[METRO] Request:", req.method, req.url);
-    }
+    const url = req.url || "";
+    const pathname = url.split("?")[0];
 
-    // Extract pathname without query params for matching
-    const pathname = req.url.split("?")[0];
+    // DEBUG: log metro bundle requests
+    if (url.includes("index.bundle") || url.includes(".bundle")) {
+      console.log("[METRO] Request:", req.method, url);
+    }
 
     // Handle log receiving endpoint
     if (pathname === "/natively-logs" && req.method === "POST") {
-      console.log("[NATIVELY-LOGS] Received POST request");
       let body = "";
-      req.on("data", (chunk) => {
-        body += chunk.toString();
-      });
+      req.on("data", (chunk) => (body += chunk.toString()));
       req.on("end", () => {
         try {
           const logData = JSON.parse(body);
           const timestamp = logData.timestamp || new Date().toISOString();
-          const level = (logData.level || "log").toUpperCase();
-          const message = logData.message || "";
-          const source = logData.source || "";
-          const platform = logData.platform || "";
+          const level = String(logData.level || "log").toUpperCase();
+          const message = String(logData.message || "");
+          const source = String(logData.source || "");
+          const platform = String(logData.platform || "");
 
           const platformInfo = platform ? `[${platform}] ` : "";
           const sourceInfo = source ? `[${source}] ` : "";
           const logLine = `[${timestamp}] ${platformInfo}[${level}] ${sourceInfo}${message}\n`;
 
-          console.log("[NATIVELY-LOGS] Writing log:", logLine.trim());
-
           // Rotate log file if too large
           try {
-            if (fs.existsSync(LOG_FILE_PATH) && fs.statSync(LOG_FILE_PATH).size > MAX_LOG_SIZE) {
+            if (
+              fs.existsSync(LOG_FILE_PATH) &&
+              fs.statSync(LOG_FILE_PATH).size > MAX_LOG_SIZE
+            ) {
               const content = fs.readFileSync(LOG_FILE_PATH, "utf8");
               const lines = content.split("\n");
-              fs.writeFileSync(LOG_FILE_PATH, lines.slice(Math.floor(lines.length / 2)).join("\n"));
+              fs.writeFileSync(
+                LOG_FILE_PATH,
+                lines.slice(Math.floor(lines.length / 2)).join("\n")
+              );
             }
           } catch {
-            // Ignore rotation errors
+            // ignore rotation errors
           }
 
           fs.appendFileSync(LOG_FILE_PATH, logLine);
@@ -72,14 +77,13 @@ config.server.enhanceMiddleware = (middleware) => {
             "Content-Type": "application/json",
             "Access-Control-Allow-Origin": "*",
           });
-          res.end('{"status":"ok"}');
+          res.end(JSON.stringify({ status: "ok" }));
         } catch (e) {
-          console.error("[NATIVELY-LOGS] Error processing log:", e.message);
           res.writeHead(500, {
             "Content-Type": "application/json",
             "Access-Control-Allow-Origin": "*",
           });
-          res.end(JSON.stringify({ error: e.message }));
+          res.end(JSON.stringify({ error: e?.message || String(e) }));
         }
       });
       return;
@@ -87,7 +91,6 @@ config.server.enhanceMiddleware = (middleware) => {
 
     // Handle CORS preflight for log endpoint
     if (pathname === "/natively-logs" && req.method === "OPTIONS") {
-      console.log("[NATIVELY-LOGS] Received OPTIONS preflight request");
       res.writeHead(200, {
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "POST, OPTIONS",

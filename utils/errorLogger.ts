@@ -1,6 +1,5 @@
 // utils/errorLogger.ts
 import { Platform } from "react-native";
-import Constants from "expo-constants";
 
 declare const __DEV__: boolean;
 
@@ -33,6 +32,18 @@ const getPlatformName = (): string => {
   return Platform.OS;
 };
 
+// IMPORTANT: Do NOT import expo-constants at module top-level.
+// That can drag ESM-only code into the web bundle and trigger `import.meta` crashes.
+// We only load it dynamically on native.
+let Constants: any = null;
+if (Platform.OS !== "web") {
+  try {
+    Constants = require("expo-constants").default;
+  } catch {
+    Constants = null;
+  }
+}
+
 let cachedLogServerUrl: string | null = null;
 let urlChecked = false;
 
@@ -40,26 +51,27 @@ const getLogServerUrl = (): string | null => {
   if (urlChecked) return cachedLogServerUrl;
 
   try {
-    // Web: same origin
+    // Web: same origin (only if you later add a /natively-logs endpoint)
     if (Platform.OS === "web" && typeof window !== "undefined") {
       cachedLogServerUrl = `${window.location.origin}/natively-logs`;
       urlChecked = true;
       return cachedLogServerUrl;
     }
 
-    // Native: Expo dev server
-    const experienceUrl = (Constants as any).experienceUrl as string | undefined;
+    // Native: derive from Expo dev server
+    const experienceUrl = Constants?.experienceUrl as string | undefined;
     if (experienceUrl) {
       // exp://192.168.x.x:19000 -> http://192.168.x.x:19000
       const host = experienceUrl.replace("exp://", "").split("/")[0];
-      const isLocal = host.includes("192.168.") || host.includes("10.") || host.includes("localhost");
+      const isLocal =
+        host.includes("192.168.") || host.includes("10.") || host.includes("127.0.0.1") || host.includes("localhost");
       const protocol = isLocal ? "http" : "https";
       cachedLogServerUrl = `${protocol}://${host}/natively-logs`;
       urlChecked = true;
       return cachedLogServerUrl;
     }
 
-    const hostUri = Constants.expoConfig?.hostUri || (Constants as any).manifest?.hostUri;
+    const hostUri = Constants?.expoConfig?.hostUri || Constants?.manifest?.hostUri;
     if (hostUri) {
       const host = String(hostUri).split("/")[0];
       const protocol = host.includes("ngrok") || host.includes(".io") ? "https" : "http";
@@ -81,6 +93,7 @@ const safeRawLog = (...args: any[]) => {
       (window as any).console.log(...args);
       return;
     }
+    // eslint-disable-next-line no-console
     console.log(...args);
   } catch {
     // never throw from logging
@@ -93,9 +106,11 @@ const extractSourceLocation = (stack: string): string => {
 
   for (const line of lines) {
     if (line.includes("errorLogger") || line.includes("node_modules")) continue;
+
     const m =
       line.match(/at\s+\S+\s+\((?:.*\/)?([^/\s:)]+\.[jt]sx?):(\d+):(\d+)\)/) ||
       line.match(/at\s+(?:.*\/)?([^/\s:)]+\.[jt]sx?):(\d+):(\d+)/);
+
     if (m) return `${m[1]}:${m[2]}`;
   }
   return "";
@@ -207,6 +222,7 @@ export const setupErrorLogging = () => {
     queueLog("error", msg, getCallerInfo());
   };
 
+  // Web runtime hooks (safe)
   if (Platform.OS === "web" && typeof window !== "undefined") {
     window.addEventListener("unhandledrejection", (event) => {
       queueLog("error", `UNHANDLED PROMISE REJECTION: ${String((event as any)?.reason)}`, "");
@@ -228,4 +244,4 @@ if (__DEV__) {
   } catch {
     // never crash
   }
-};
+}
