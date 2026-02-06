@@ -1,4 +1,5 @@
 // app/(tabs)/trips.tsx
+
 import React, { useEffect, useMemo, useState, useCallback } from "react";
 import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -8,11 +9,17 @@ import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
 import SectionHeader from "@/src/components/SectionHeader";
 import EmptyState from "@/src/components/EmptyState";
+
 import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
 
 import tripsStore, { type Trip } from "@/src/state/trips";
+import savedItemsStore from "@/src/state/savedItems";
+import type { SavedItem } from "@/src/core/savedItemTypes";
+
 import { formatUkDateOnly } from "@/src/utils/formatters";
+
+/* -------------------------------- Helpers -------------------------------- */
 
 function tripSummaryLine(t: Trip) {
   const a = t.startDate ? formatUkDateOnly(t.startDate) : "—";
@@ -21,76 +28,94 @@ function tripSummaryLine(t: Trip) {
   return `${a} → ${b} • ${n} match${n === 1 ? "" : "es"}`;
 }
 
-function sortTripsUpcomingFirst(trips: Trip[]) {
-  const now = new Date();
-  now.setHours(0, 0, 0, 0);
-  const nowTs = now.getTime();
+function isUpcoming(t: Trip) {
+  if (!t.startDate) return false;
+  const d = new Date(`${t.startDate}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return false;
 
-  return [...trips]
-    .map((t) => {
-      const start = t.startDate ? new Date(`${t.startDate}T00:00:00Z`) : null;
-      const ts = start && !Number.isNaN(start.getTime()) ? start.getTime() : null;
-      return { t, ts };
-    })
-    .sort((a, b) => {
-      const aUpcoming = a.ts != null ? a.ts >= nowTs : false;
-      const bUpcoming = b.ts != null ? b.ts >= nowTs : false;
-
-      if (aUpcoming !== bUpcoming) return aUpcoming ? -1 : 1;
-      if (a.ts != null && b.ts != null && a.ts !== b.ts) return a.ts - b.ts;
-
-      const au = a.t.updatedAt ?? a.t.createdAt ?? 0;
-      const bu = b.t.updatedAt ?? b.t.createdAt ?? 0;
-      return bu - au;
-    })
-    .map((x) => x.t);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return d.getTime() >= today.getTime();
 }
+
+function groupItemsByTrip(items: SavedItem[]) {
+  const map: Record<string, SavedItem[]> = {};
+  for (const it of items) {
+    if (!map[it.tripId]) map[it.tripId] = [];
+    map[it.tripId].push(it);
+  }
+  return map;
+}
+
+/* -------------------------------- Screen -------------------------------- */
 
 export default function TripsScreen() {
   const router = useRouter();
 
-  const [loaded, setLoaded] = useState(tripsStore.getState().loaded);
+  const [loadedTrips, setLoadedTrips] = useState(tripsStore.getState().loaded);
   const [trips, setTrips] = useState<Trip[]>(tripsStore.getState().trips);
+
+  const [loadedItems, setLoadedItems] = useState(savedItemsStore.getState().loaded);
+  const [items, setItems] = useState<SavedItem[]>(savedItemsStore.getState().items);
+
+  /* --------------------------- subscriptions --------------------------- */
 
   useEffect(() => {
     const unsub = tripsStore.subscribe((s) => {
-      setLoaded(s.loaded);
+      setLoadedTrips(s.loaded);
       setTrips(s.trips);
     });
 
-    if (!tripsStore.getState().loaded) tripsStore.loadTrips();
+    if (!tripsStore.getState().loaded) {
+      tripsStore.loadTrips().catch(() => {});
+    }
+
     return unsub;
   }, []);
 
-  const sorted = useMemo(() => sortTripsUpcomingFirst(trips), [trips]);
+  useEffect(() => {
+    const unsub = savedItemsStore.subscribe((s) => {
+      setLoadedItems(s.loaded);
+      setItems(s.items);
+    });
 
-  const { upcoming, past } = useMemo(() => {
-    const now = new Date();
-    now.setHours(0, 0, 0, 0);
-    const nowTs = now.getTime();
-
-    const up: Trip[] = [];
-    const pa: Trip[] = [];
-
-    for (const t of sorted) {
-      if (!t.startDate) {
-        pa.push(t);
-        continue;
-      }
-      const d = new Date(`${t.startDate}T00:00:00Z`);
-      const ts = !Number.isNaN(d.getTime()) ? d.getTime() : null;
-      if (ts == null) pa.push(t);
-      else if (ts >= nowTs) up.push(t);
-      else pa.push(t);
+    if (!savedItemsStore.getState().loaded) {
+      savedItemsStore.load().catch(() => {});
     }
 
-    return { upcoming: up, past: pa };
-  }, [sorted]);
+    return unsub;
+  }, []);
+
+  /* ------------------------------ derived ------------------------------ */
+
+  const itemsByTrip = useMemo(() => groupItemsByTrip(items), [items]);
+
+  const upcoming = useMemo(
+    () => trips.filter(isUpcoming),
+    [trips]
+  );
+
+  const past = useMemo(
+    () => trips.filter((t) => !isUpcoming(t)),
+    [trips]
+  );
+
+  function counts(tripId: string) {
+    const arr = itemsByTrip[tripId] ?? [];
+    return {
+      total: arr.length,
+      pending: arr.filter((x) => x.status === "pending").length,
+      booked: arr.filter((x) => x.status === "booked").length,
+    };
+  }
+
+  /* ------------------------------ actions ------------------------------ */
 
   const openTrip = useCallback(
     (t: Trip) => router.push({ pathname: "/trip/[id]", params: { id: t.id } } as any),
     [router]
   );
+
   const editTrip = useCallback(
     (t: Trip) => router.push({ pathname: "/trip/build", params: { tripId: t.id } } as any),
     [router]
@@ -103,44 +128,24 @@ export default function TripsScreen() {
     ]);
   }, []);
 
-  const goBuild = useCallback(() => router.push("/trip/build"), [router]);
-  const goFixtures = useCallback(() => router.push("/(tabs)/fixtures"), [router]);
+  const goBuild = () => router.push("/trip/build");
+  const goFixtures = () => router.push("/(tabs)/fixtures");
 
-  const showEmpty = loaded && trips.length === 0;
+  const showEmpty = loadedTrips && trips.length === 0;
 
-  const stats = useMemo(() => {
-    const total = trips.length;
-    return { upcoming: upcoming.length, past: past.length, total };
-  }, [past.length, trips.length, upcoming.length]);
+  /* -------------------------------- render -------------------------------- */
 
   return (
-    <Background imageSource={getBackground("trips")} overlayOpacity={0.50}>
-      <SafeAreaView style={styles.container} edges={["top"]}>
+    <Background imageUrl={getBackground("trips")} overlayOpacity={0.50}>
+      <SafeAreaView style={styles.safe} edges={["top"]}>
         <ScrollView style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           <View style={styles.header}>
             <Text style={styles.title}>Trips</Text>
-            <Text style={styles.subtitle}>Saved plans, upcoming breaks, and drafts.</Text>
+            <Text style={styles.subtitle}>Your travel workspaces</Text>
           </View>
 
-          {/* STATS */}
-          <View style={styles.statsRow}>
-            <View style={styles.statPill}>
-              <Text style={styles.statKicker}>Upcoming</Text>
-              <Text style={styles.statValue}>{stats.upcoming}</Text>
-            </View>
-            <View style={styles.statPill}>
-              <Text style={styles.statKicker}>Past</Text>
-              <Text style={styles.statValue}>{stats.past}</Text>
-            </View>
-            <View style={styles.statPill}>
-              <Text style={styles.statKicker}>Total</Text>
-              <Text style={styles.statValue}>{stats.total}</Text>
-            </View>
-          </View>
-
-          {/* LOADING */}
-          {!loaded ? (
-            <GlassCard style={styles.card} strength="default">
+          {!loadedTrips || !loadedItems ? (
+            <GlassCard style={styles.card}>
               <View style={styles.center}>
                 <ActivityIndicator />
                 <Text style={styles.muted}>Loading trips…</Text>
@@ -148,16 +153,13 @@ export default function TripsScreen() {
             </GlassCard>
           ) : null}
 
-          {/* EMPTY */}
           {showEmpty ? (
-            <GlassCard style={styles.card} strength="default">
-              <EmptyState title="No trips yet" message="Start with a fixture, then build the break in one hub." />
-
-              <View style={styles.emptyActions}>
+            <GlassCard style={styles.card}>
+              <EmptyState title="No trips yet" message="Start from a fixture and build the trip." />
+              <View style={{ gap: 10 }}>
                 <Pressable onPress={goBuild} style={[styles.btn, styles.btnPrimary]}>
                   <Text style={styles.btnPrimaryText}>Build trip</Text>
                 </Pressable>
-
                 <Pressable onPress={goFixtures} style={[styles.btn, styles.btnSecondary]}>
                   <Text style={styles.btnSecondaryText}>Browse fixtures</Text>
                 </Pressable>
@@ -165,116 +167,89 @@ export default function TripsScreen() {
             </GlassCard>
           ) : null}
 
-          {/* HAS TRIPS */}
-          {loaded && !showEmpty ? (
-            <>
-              <GlassCard style={styles.card} strength="default">
-                <View style={styles.topRow}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.h1}>Quick action</Text>
-                    <Text style={styles.muted}>Build a new trip when you spot the right fixture.</Text>
-                  </View>
+          {upcoming.length > 0 ? (
+            <View style={styles.section}>
+              <SectionHeader title="Upcoming" subtitle={`${upcoming.length}`} />
+              <View style={styles.list}>
+                {upcoming.map((t) => {
+                  const c = counts(t.id);
 
-                  <Pressable onPress={goBuild} style={styles.pillPrimary}>
-                    <Text style={styles.pillPrimaryText}>Build trip</Text>
-                  </Pressable>
-                </View>
-              </GlassCard>
+                  return (
+                    <GlassCard key={t.id} style={styles.tripCard}>
+                      <Pressable onPress={() => openTrip(t)}>
+                        <Text style={styles.tripTitle}>{t.cityId || "Trip"}</Text>
+                        <Text style={styles.tripMeta}>{tripSummaryLine(t)}</Text>
 
-              <View style={styles.section}>
-                <SectionHeader title="Upcoming" subtitle={`${upcoming.length} trip${upcoming.length === 1 ? "" : "s"}`} />
-                <GlassCard style={styles.card} strength="subtle">
-                  {upcoming.length === 0 ? (
-                    <View style={styles.bucketEmptyWrap}>
-                      <Text style={styles.bucketEmptyTitle}>No upcoming trips</Text>
-                      <Text style={styles.bucketEmptyText}>Build one from Fixtures in under a minute.</Text>
-
-                      <Pressable onPress={goFixtures} style={[styles.btn, styles.btnSecondary, { marginTop: 12 }]}>
-                        <Text style={styles.btnSecondaryText}>Browse fixtures</Text>
+                        <View style={styles.countRow}>
+                          <Text style={styles.count}>Items {c.total}</Text>
+                          <Text style={styles.count}>Pending {c.pending}</Text>
+                          <Text style={styles.count}>Booked {c.booked}</Text>
+                        </View>
                       </Pressable>
-                    </View>
-                  ) : (
-                    <View style={styles.list}>
-                      {upcoming.map((t) => (
-                        <GlassCard key={t.id} style={styles.tripCard} strength="subtle">
-                          <Pressable onPress={() => openTrip(t)} style={styles.tripMain}>
-                            <Text style={styles.tripTitle} numberOfLines={1}>
-                              {t.cityId || "Trip"}
-                            </Text>
-                            <Text style={styles.tripMeta}>{tripSummaryLine(t)}</Text>
-                            {t.notes ? (
-                              <Text style={styles.tripNotes} numberOfLines={2}>
-                                {t.notes}
-                              </Text>
-                            ) : null}
-                          </Pressable>
 
-                          <View style={styles.tripActions}>
-                            <Pressable onPress={() => editTrip(t)} style={[styles.btn, styles.btnSecondary, styles.actionBtn]}>
-                              <Text style={styles.btnSecondaryText}>Edit</Text>
-                            </Pressable>
+                      <View style={styles.actions}>
+                        <Pressable onPress={() => editTrip(t)} style={[styles.actionBtn, styles.btnSecondary]}>
+                          <Text style={styles.btnSecondaryText}>Edit</Text>
+                        </Pressable>
 
-                            <Pressable onPress={() => deleteTrip(t)} style={[styles.btn, styles.btnDanger, styles.actionBtn]}>
-                              <Text style={styles.btnDangerText}>Delete</Text>
-                            </Pressable>
-                          </View>
-                        </GlassCard>
-                      ))}
-                    </View>
-                  )}
-                </GlassCard>
+                        <Pressable onPress={() => deleteTrip(t)} style={[styles.actionBtn, styles.btnDanger]}>
+                          <Text style={styles.btnDangerText}>Delete</Text>
+                        </Pressable>
+                      </View>
+                    </GlassCard>
+                  );
+                })}
               </View>
-
-              <View style={styles.section}>
-                <SectionHeader title="Past & draft" subtitle={`${past.length} item${past.length === 1 ? "" : "s"}`} />
-                <GlassCard style={styles.card} strength="subtle">
-                  {past.length === 0 ? (
-                    <Text style={styles.bucketEmptyText}>No past trips.</Text>
-                  ) : (
-                    <View style={styles.list}>
-                      {past.slice(0, 20).map((t) => (
-                        <GlassCard key={t.id} style={styles.tripCard} strength="subtle">
-                          <Pressable onPress={() => openTrip(t)} style={styles.tripMain}>
-                            <Text style={styles.tripTitle} numberOfLines={1}>
-                              {t.cityId || "Trip"}
-                            </Text>
-                            <Text style={styles.tripMeta}>{tripSummaryLine(t)}</Text>
-                            {t.notes ? (
-                              <Text style={styles.tripNotes} numberOfLines={2}>
-                                {t.notes}
-                              </Text>
-                            ) : null}
-                          </Pressable>
-
-                          <View style={styles.tripActions}>
-                            <Pressable onPress={() => editTrip(t)} style={[styles.btn, styles.btnSecondary, styles.actionBtn]}>
-                              <Text style={styles.btnSecondaryText}>Edit</Text>
-                            </Pressable>
-
-                            <Pressable onPress={() => deleteTrip(t)} style={[styles.btn, styles.btnDanger, styles.actionBtn]}>
-                              <Text style={styles.btnDangerText}>Delete</Text>
-                            </Pressable>
-                          </View>
-                        </GlassCard>
-                      ))}
-
-                      {past.length > 20 ? <Text style={styles.moreInline}>Showing the latest 20.</Text> : null}
-                    </View>
-                  )}
-                </GlassCard>
-              </View>
-            </>
+            </View>
           ) : null}
 
-          <View style={{ height: 10 }} />
+          {past.length > 0 ? (
+            <View style={styles.section}>
+              <SectionHeader title="Past & draft" subtitle={`${past.length}`} />
+              <View style={styles.list}>
+                {past.map((t) => {
+                  const c = counts(t.id);
+
+                  return (
+                    <GlassCard key={t.id} style={styles.tripCard}>
+                      <Pressable onPress={() => openTrip(t)}>
+                        <Text style={styles.tripTitle}>{t.cityId || "Trip"}</Text>
+                        <Text style={styles.tripMeta}>{tripSummaryLine(t)}</Text>
+
+                        <View style={styles.countRow}>
+                          <Text style={styles.count}>Items {c.total}</Text>
+                          <Text style={styles.count}>Pending {c.pending}</Text>
+                          <Text style={styles.count}>Booked {c.booked}</Text>
+                        </View>
+                      </Pressable>
+
+                      <View style={styles.actions}>
+                        <Pressable onPress={() => editTrip(t)} style={[styles.actionBtn, styles.btnSecondary]}>
+                          <Text style={styles.btnSecondaryText}>Edit</Text>
+                        </Pressable>
+
+                        <Pressable onPress={() => deleteTrip(t)} style={[styles.actionBtn, styles.btnDanger]}>
+                          <Text style={styles.btnDangerText}>Delete</Text>
+                        </Pressable>
+                      </View>
+                    </GlassCard>
+                  );
+                })}
+              </View>
+            </View>
+          ) : null}
+
+          <View style={{ height: 20 }} />
         </ScrollView>
       </SafeAreaView>
     </Background>
   );
 }
 
+/* -------------------------------- Styles -------------------------------- */
+
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  safe: { flex: 1 },
   scroll: { flex: 1 },
 
   content: {
@@ -283,73 +258,37 @@ const styles = StyleSheet.create({
     gap: theme.spacing.lg,
   },
 
-  header: { paddingTop: theme.spacing.lg, paddingBottom: theme.spacing.xs },
-  title: {
-    fontSize: theme.fontSize.xxl,
-    fontWeight: theme.fontWeight.black,
-    color: theme.colors.text,
-    marginBottom: theme.spacing.xs,
-  },
-  subtitle: { fontSize: theme.fontSize.sm, color: theme.colors.textSecondary, fontWeight: theme.fontWeight.bold },
+  header: { paddingTop: theme.spacing.lg },
+  title: { color: theme.colors.text, fontSize: theme.fontSize.xxl, fontWeight: theme.fontWeight.black },
+  subtitle: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, fontWeight: "700" },
 
-  statsRow: { flexDirection: "row", gap: 10 },
-  statPill: {
-    flex: 1,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.20)",
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-  },
-  statKicker: { color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: "900" },
-  statValue: { marginTop: 4, color: theme.colors.text, fontSize: theme.fontSize.md, fontWeight: "900" },
+  section: { gap: 10 },
 
-  section: { marginTop: 2 },
+  list: { gap: 10 },
+
   card: { padding: theme.spacing.lg },
 
-  center: { paddingVertical: 12, alignItems: "center", gap: 10 },
-  muted: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18, fontWeight: "700" },
+  tripCard: { padding: theme.spacing.md },
 
-  topRow: { flexDirection: "row", gap: 12, alignItems: "center" },
-  h1: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.md },
+  tripTitle: { color: theme.colors.text, fontSize: theme.fontSize.lg, fontWeight: theme.fontWeight.black },
+  tripMeta: { marginTop: 4, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, fontWeight: "700" },
 
-  emptyActions: { marginTop: 12, gap: 10 },
+  countRow: { marginTop: 8, flexDirection: "row", gap: 14 },
+  count: { color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: "800" },
 
-  btn: { borderRadius: 14, paddingVertical: 14, alignItems: "center", borderWidth: 1 },
+  actions: { marginTop: 12, flexDirection: "row", gap: 10 },
+
+  actionBtn: { flex: 1, paddingVertical: 12, borderRadius: 12, alignItems: "center", borderWidth: 1 },
+
   btnPrimary: { borderColor: "rgba(0,255,136,0.55)", backgroundColor: "rgba(0,0,0,0.34)" },
-  btnPrimaryText: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.md },
-  btnSecondary: { borderColor: "rgba(255,255,255,0.10)", backgroundColor: "rgba(0,0,0,0.18)" },
-  btnSecondaryText: { color: theme.colors.textSecondary, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.md },
+  btnPrimaryText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.md },
 
-  btnDanger: { borderColor: "rgba(255, 80, 80, 0.30)", backgroundColor: "rgba(0,0,0,0.18)" },
-  btnDangerText: { color: "rgba(255, 120, 120, 0.95)", fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.md },
+  btnSecondary: { borderColor: "rgba(255,255,255,0.12)", backgroundColor: "rgba(0,0,0,0.18)" },
+  btnSecondaryText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: theme.fontSize.sm },
 
-  pillPrimary: {
-    borderRadius: 999,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderWidth: 1,
-    borderColor: "rgba(0,255,136,0.55)",
-    backgroundColor: "rgba(0,0,0,0.34)",
-    alignSelf: "flex-start",
-  },
-  pillPrimaryText: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.sm },
+  btnDanger: { borderColor: "rgba(255,80,80,0.35)", backgroundColor: "rgba(0,0,0,0.18)" },
+  btnDangerText: { color: "rgba(255,120,120,0.95)", fontWeight: "900", fontSize: theme.fontSize.sm },
 
-  bucketEmptyWrap: { paddingVertical: 6 },
-  bucketEmptyTitle: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.md },
-  bucketEmptyText: { marginTop: 8, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18, fontWeight: "700" },
-
-  list: { marginTop: 10, gap: 10 },
-  tripCard: { padding: theme.spacing.md, borderRadius: 16 },
-  tripMain: { flex: 1 },
-
-  tripTitle: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.lg },
-  tripMeta: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18, fontWeight: "700" },
-  tripNotes: { marginTop: 8, color: theme.colors.textTertiary, fontSize: theme.fontSize.sm, lineHeight: 18, fontWeight: "700" },
-
-  tripActions: { marginTop: 12, flexDirection: "row", gap: 10 },
-  actionBtn: { flex: 1, paddingVertical: 12 },
-
-  moreInline: { marginTop: 10, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, fontWeight: "700" },
+  center: { paddingVertical: 12, alignItems: "center", gap: 10 },
+  muted: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, fontWeight: "700" },
 });
