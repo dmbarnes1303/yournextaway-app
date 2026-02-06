@@ -12,8 +12,14 @@ import ligue1CityGuides from "./ligue1";
 export type TripTopThingsBundle = {
   cityKey: string;
   hasGuide: boolean;
+
+  /**
+   * Monetised link: GetYourGuide affiliate city/search landing page.
+   * If a guide has no link yet, callers should fall back to buildAffiliateLinks().experiencesUrl
+   * rather than showing TripAdvisor.
+   */
   thingsToDoUrl?: string;
-  tripAdvisorUrl?: string; // legacy fallback only
+
   items: { title: string; description?: string }[];
   quickTips: string[];
 };
@@ -38,7 +44,12 @@ export function getCityGuide(cityInput: string): CityGuide | null {
 }
 
 /**
- * Used in Trip Build panel
+ * Used in Trip Build + Trip Hub
+ *
+ * Policy:
+ * - We never return TripAdvisor URLs anymore.
+ * - If the guide doesn't have a monetised link yet, return undefined and let UI fall back to
+ *   buildAffiliateLinks({ city }).experiencesUrl.
  */
 export function getTopThingsToDoForTrip(cityInput: string): TripTopThingsBundle {
   const cityKey = normalizeCityKey(cityInput);
@@ -61,8 +72,7 @@ export function getTopThingsToDoForTrip(cityInput: string): TripTopThingsBundle 
   return {
     cityKey,
     hasGuide: true,
-    thingsToDoUrl: guide.thingsToDoUrl,
-    tripAdvisorUrl: guide.thingsToDoUrl ? undefined : guide.tripAdvisorTopThingsUrl, // only if no affiliate link exists
+    thingsToDoUrl: guide.thingsToDoUrl || undefined,
     items,
     quickTips: (guide.tips ?? []).slice(0, 8),
   };
