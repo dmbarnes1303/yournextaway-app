@@ -31,8 +31,10 @@ import {
   getRollingWindowIso,
   parseIsoDateOnly,
   toIsoDate,
-  addDaysIso,
   type LeagueOption,
+  nextWeekendWindowIso,
+  windowFromTomorrowIso,
+  type RollingWindowIso,
 } from "@/src/constants/football";
 import { formatUkDateOnly, formatUkDateTimeMaybe } from "@/src/utils/formatters";
 
@@ -179,51 +181,15 @@ function CrestSquare({ row }: { row: FixtureListRow }) {
 
 type ShortcutWindow = { from: string; to: string };
 
-function tomorrowLocal(): Date {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  d.setDate(d.getDate() + 1);
-  return d;
-}
-
-function nextWeekendWindowIso(): ShortcutWindow {
-  const d = tomorrowLocal();
-  const day = d.getDay(); // 0 Sun ... 6 Sat
-  const daysUntilSat = (6 - day + 7) % 7;
-
-  const sat = new Date(d);
-  sat.setDate(sat.getDate() + daysUntilSat);
-  sat.setHours(0, 0, 0, 0);
-
-  const sun = new Date(sat);
-  sun.setDate(sun.getDate() + 1);
-  sun.setHours(0, 0, 0, 0);
-
-  return { from: toIsoDate(sat), to: toIsoDate(sun) };
-}
-
-function windowFromTomorrow(days: number): ShortcutWindow {
-  const start = tomorrowLocal();
-  const from = toIsoDate(start);
-  const to = addDaysIso(from, Math.max(1, days));
-  return { from, to };
-}
-
-function pickRandom<T>(arr: T[]): T | null {
-  if (!Array.isArray(arr) || arr.length === 0) return null;
-  const i = Math.floor(Math.random() * arr.length);
-  return arr[i] ?? null;
-}
-
 type DiscoverWindowKey = "wknd" | "d7" | "d14" | "d30" | "any";
 type DiscoverTripLength = "day" | "1" | "2" | "3" | "any";
 type DiscoverVibe = "big" | "hidden" | "easy" | "nightlife" | "culture" | "warm";
 
 function windowKeyToWindow(key: DiscoverWindowKey): ShortcutWindow {
   if (key === "wknd") return nextWeekendWindowIso();
-  if (key === "d7") return windowFromTomorrow(7);
-  if (key === "d14") return windowFromTomorrow(14);
-  if (key === "d30") return windowFromTomorrow(30);
+  if (key === "d7") return windowFromTomorrowIso(7);
+  if (key === "d14") return windowFromTomorrowIso(14);
+  if (key === "d30") return windowFromTomorrowIso(30);
   return getRollingWindowIso({ days: 60 });
 }
 
@@ -305,7 +271,13 @@ function scoreFixture(r: FixtureListRow): number {
  * - We wire these to LONG PRESS on existing Quick Shortcut cards.
  * - Normal press stays exactly as-is (Build Trip Global).
  */
-function shortcutToDiscoveryPreset(key: DiscoverWindowKey): { intent: DiscoveryIntent; mode: DiscoveryMode; flexDays: 0 | 3 | 7; kickoffWindow: KickoffWindow; sort: "attractiveness" } {
+function shortcutToDiscoveryPreset(key: DiscoverWindowKey): {
+  intent: DiscoveryIntent;
+  mode: DiscoveryMode;
+  flexDays: 0 | 3 | 7;
+  kickoffWindow: KickoffWindow;
+  sort: "attractiveness";
+} {
   if (key === "wknd") {
     return { intent: "weekend48", mode: "standard", flexDays: 3, kickoffWindow: "any", sort: "attractiveness" };
   }
@@ -321,6 +293,12 @@ function shortcutToDiscoveryPreset(key: DiscoverWindowKey): { intent: DiscoveryI
   return { intent: "standard", mode: "standard", flexDays: 7, kickoffWindow: "any", sort: "attractiveness" };
 }
 
+function pickRandom<T>(arr: T[]): T | null {
+  if (!Array.isArray(arr) || arr.length === 0) return null;
+  const i = Math.floor(Math.random() * arr.length);
+  return arr[i] ?? null;
+}
+
 export default function HomeScreen() {
   const router = useRouter();
 
@@ -329,8 +307,8 @@ export default function HomeScreen() {
   // defaults to 90 days (centralised)
   const { from: fromIso, to: toIso } = useMemo(() => getRollingWindowIso(), []);
 
-  // Upcoming matches window is always next 14 days (as agreed)
-  const upcomingWindow = useMemo(() => windowFromTomorrow(14), []);
+  // Upcoming matches window is always next 14 days (as agreed) — inclusive
+  const upcomingWindow = useMemo(() => windowFromTomorrowIso(14), []);
 
   // Trips
   const [loadedTrips, setLoadedTrips] = useState(tripsStore.getState().loaded);
@@ -530,7 +508,7 @@ export default function HomeScreen() {
 
   /**
    * NEW (additive): long-press shortcut cards to open Fixtures with discovery params.
-   * This does NOT change existing behaviour (normal press still builds trip globally).
+   * Standardised: leagueId=0 means "all leagues".
    */
   const goFixturesPreset = useCallback(
     (key: DiscoverWindowKey, w: ShortcutWindow) => {
@@ -539,7 +517,7 @@ export default function HomeScreen() {
       router.push({
         pathname: "/(tabs)/fixtures",
         params: {
-          leagueId: "all",
+          leagueId: "0", // ALL LEAGUES (standard)
           from: w.from,
           to: w.to,
           intent: preset.intent,
@@ -630,9 +608,9 @@ export default function HomeScreen() {
   const quickShortcuts = useMemo(
     () => [
       { key: "wknd", label: "This weekend", sub: "Sat–Sun", window: nextWeekendWindowIso() },
-      { key: "d7", label: "Next 7 days", sub: "Quick break", window: windowFromTomorrow(7) },
-      { key: "d14", label: "Next 14 days", sub: "Pick a match", window: windowFromTomorrow(14) },
-      { key: "d30", label: "Next 30 days", sub: "More options", window: windowFromTomorrow(30) },
+      { key: "d7", label: "Next 7 days", sub: "Quick break", window: windowFromTomorrowIso(7) },
+      { key: "d14", label: "Next 14 days", sub: "Pick a match", window: windowFromTomorrowIso(14) },
+      { key: "d30", label: "Next 30 days", sub: "More options", window: windowFromTomorrowIso(30) },
       { key: "any", label: "Any time", sub: "Browse broadly", window: getRollingWindowIso({ days: 60 }) },
     ],
     []
