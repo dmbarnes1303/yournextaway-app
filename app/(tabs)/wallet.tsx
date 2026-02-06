@@ -25,7 +25,6 @@ import type { SavedItem, WalletAttachment } from "@/src/core/savedItemTypes";
 import { getSavedItemTypeLabel } from "@/src/core/savedItemTypes";
 import { getPartner } from "@/src/core/partners";
 import { openPartnerUrl } from "@/src/services/partnerClicks";
-
 import {
   pickAndStoreAttachmentForItem,
   openAttachment,
@@ -87,7 +86,6 @@ function buildMeta(item: SavedItem) {
   if (domain) bits.push(domain);
 
   if (!item.partnerUrl && item.type === "note") bits.push("Notes");
-
   return bits.join(" • ");
 }
 
@@ -196,73 +194,90 @@ export default function WalletScreen() {
     }
   }, []);
 
-  const openAttachments = useCallback(
-    async (item: SavedItem) => {
-      const atts = Array.isArray(item.attachments) ? item.attachments : [];
-      if (atts.length === 0) {
-        Alert.alert("No attachments yet", "Add a PDF or screenshot to store proof offline.", [
-          { text: "Add attachment", onPress: () => addAttachment(item) },
-          { text: "Close", style: "cancel" },
-        ]);
-        return;
-      }
-
-      if (atts.length === 1) {
-        try {
-          await openAttachment(atts[0]);
-        } catch {
-          Alert.alert("Couldn’t open", "Your device could not open that attachment.");
-        }
-        return;
-      }
-
+  const openAttachments = useCallback(async (item: SavedItem) => {
+    const atts = Array.isArray(item.attachments) ? item.attachments : [];
+    if (atts.length === 0) {
       Alert.alert(
-        "Attachments",
-        "Choose one to open.",
-        [
-          ...atts.slice(0, 6).map((a) => ({
-            text: attachmentLabel(a),
-            onPress: async () => {
-              try {
-                await openAttachment(a);
-              } catch {
-                Alert.alert("Couldn’t open", "Your device could not open that attachment.");
-              }
-            },
-          })),
-          atts.length > 6 ? { text: `+ ${atts.length - 6} more`, onPress: () => {} } : undefined,
-          { text: "Close", style: "cancel" },
-        ].filter(Boolean) as any,
-        { cancelable: true }
+        "No attachments yet",
+        "Add a PDF or screenshot to store your booking proof offline.",
+        [{ text: "Add attachment", onPress: () => addAttachment(item) }, { text: "Close", style: "cancel" }]
       );
-    },
-    [addAttachment]
-  );
+      return;
+    }
 
-  const removeAttachmentAction = useCallback(async (item: SavedItem) => {
+    if (atts.length === 1) {
+      try {
+        await openAttachment(atts[0]);
+      } catch {
+        Alert.alert("Couldn’t open", "Your device could not open that attachment.");
+      }
+      return;
+    }
+
+    Alert.alert(
+      "Attachments",
+      "Choose one to open.",
+      [
+        ...atts.slice(0, 8).map((a) => ({
+          text: attachmentLabel(a),
+          onPress: async () => {
+            try {
+              await openAttachment(a);
+            } catch {
+              Alert.alert("Couldn’t open", "Your device could not open that attachment.");
+            }
+          },
+        })),
+        { text: "Close", style: "cancel" },
+      ] as any,
+      { cancelable: true }
+    );
+  }, [addAttachment]);
+
+  const removeAttachments = useCallback((item: SavedItem) => {
     const atts = Array.isArray(item.attachments) ? item.attachments : [];
     if (atts.length === 0) {
       Alert.alert("No attachments", "This item has no attachments to remove.");
       return;
     }
 
+    if (atts.length === 1) {
+      const a = atts[0];
+      Alert.alert(
+        "Remove attachment?",
+        attachmentLabel(a),
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Remove",
+            style: "destructive",
+            onPress: async () => {
+              try {
+                await savedItemsStore.removeAttachment(item.id, a.id);
+                await deleteAttachmentFile(a); // best-effort
+              } catch {
+                // ok
+              }
+            },
+          },
+        ]
+      );
+      return;
+    }
+
     Alert.alert(
       "Remove attachment",
-      "Pick one to remove. This cannot be undone.",
+      "Pick one to remove from Wallet storage.",
       [
-        ...atts.slice(0, 6).map((a) => ({
+        ...atts.slice(0, 8).map((a) => ({
           text: attachmentLabel(a),
           style: "destructive" as const,
           onPress: async () => {
             try {
               await savedItemsStore.removeAttachment(item.id, a.id);
-            } catch {
-              // ignore
-            }
-            try {
               await deleteAttachmentFile(a);
             } catch {
-              // ignore
+              // ok
             }
           },
         })),
@@ -274,24 +289,20 @@ export default function WalletScreen() {
 
   function openActions(item: SavedItem) {
     const details = getItemDetailsText(item);
-    const attCount = Array.isArray(item.attachments) ? item.attachments.length : 0;
+    const atts = Array.isArray(item.attachments) ? item.attachments : [];
+    const attCount = atts.length;
+    const attLine = attCount ? `\n\nAttachments: ${attCount}` : `\n\nAttachments: none`;
 
+    // ARCHIVED
     if (mode === "archived") {
       Alert.alert(
         item.title || "Archived item",
-        details,
+        details + attLine,
         [
           { text: "Close", style: "cancel" },
           item.partnerUrl ? { text: "Open link", onPress: () => openItemLink(item) } : undefined,
-          attCount > 0
-            ? {
-                text: attCount === 1 ? "Open attachment" : `View attachments (${attCount})`,
-                onPress: () => openAttachments(item),
-              }
-            : undefined,
-          attCount > 0
-            ? { text: "Remove attachment", style: "destructive", onPress: () => removeAttachmentAction(item) }
-            : undefined,
+          attCount ? { text: "Open attachment", onPress: () => openAttachments(item) } : undefined,
+          attCount ? { text: "Remove attachment", style: "destructive", onPress: () => removeAttachments(item) } : undefined,
           { text: "Restore", style: "default", onPress: () => restoreItem(item) },
         ].filter(Boolean) as any,
         { cancelable: true }
@@ -299,22 +310,16 @@ export default function WalletScreen() {
       return;
     }
 
+    // BOOKED
     Alert.alert(
       item.title || "Wallet item",
-      details,
+      details + attLine,
       [
         { text: "Close", style: "cancel" },
         item.partnerUrl ? { text: "Open link", style: "default", onPress: () => openItemLink(item) } : undefined,
-        attCount > 0
-          ? {
-              text: attCount === 1 ? "Open attachment" : `View attachments (${attCount})`,
-              onPress: () => openAttachments(item),
-            }
-          : undefined,
         { text: "Add attachment", onPress: () => addAttachment(item) },
-        attCount > 0
-          ? { text: "Remove attachment", style: "destructive", onPress: () => removeAttachmentAction(item) }
-          : undefined,
+        attCount ? { text: attCount === 1 ? "Open attachment" : "View attachments", onPress: () => openAttachments(item) } : undefined,
+        attCount ? { text: "Remove attachment", style: "destructive", onPress: () => removeAttachments(item) } : undefined,
         { text: "Archive", style: "destructive", onPress: () => archiveItem(item) },
       ].filter(Boolean) as any,
       { cancelable: true }
@@ -426,6 +431,10 @@ export default function WalletScreen() {
     </Background>
   );
 }
+
+/* -------------------------------------------------------------------------- */
+/* styles */
+/* -------------------------------------------------------------------------- */
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
