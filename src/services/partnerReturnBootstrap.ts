@@ -11,22 +11,6 @@ import {
   type LastPartnerClick,
 } from "@/src/services/partnerClicks";
 
-/**
- * Global return prompt bootstrap.
- *
- * Phase-1 bible rules enforced:
- * - Pending is created BEFORE opening partner.
- * - On return, ask "Did you book it?"
- * - If "Booked" -> markBooked (moves into Wallet)
- * - If "Not yet" -> keep Pending
- * - If dismiss -> clearLastClick to avoid loops
- *
- * HARDENING:
- * - Boot only once (even with fast refresh)
- * - Guard against multiple prompts at the same time
- * - Best-effort item lookup for nicer copy
- */
-
 let booted = false;
 let prompting = false;
 
@@ -54,7 +38,6 @@ async function handleReturn(click: LastPartnerClick) {
   prompting = true;
 
   try {
-    // Ensure items are available for lookup (cold start safety)
     if (!savedItemsStore.getState().loaded) {
       try {
         await savedItemsStore.load();
@@ -65,6 +48,10 @@ async function handleReturn(click: LastPartnerClick) {
 
     const partnerName = safePartnerName(click.partnerId);
     const title = safeTitle(click);
+
+    const finish = () => {
+      prompting = false;
+    };
 
     Alert.alert(
       "Did you book it?",
@@ -77,45 +64,34 @@ async function handleReturn(click: LastPartnerClick) {
             try {
               await markNotBooked(click.itemId);
             } finally {
-              prompting = false;
+              finish();
             }
           },
         },
         {
           text: "Booked",
-          style: "default",
           onPress: async () => {
             try {
               await markBooked(click.itemId);
             } finally {
-              prompting = false;
-            }
-          },
-        },
-        {
-          text: "Dismiss",
-          style: "destructive",
-          onPress: () => {
-            try {
-              clearLastClick(click.itemId);
-            } finally {
-              prompting = false;
+              finish();
             }
           },
         },
       ],
-      { cancelable: true, onDismiss: () => {
-        // If user dismisses via tapping outside on Android etc,
-        // clear to avoid re-prompt loops.
-        try {
-          clearLastClick(click.itemId);
-        } finally {
-          prompting = false;
-        }
-      }}
+      {
+        cancelable: true,
+        onDismiss: () => {
+          // Treat dismissal as "not yet", but still clear lastClick to avoid loops
+          try {
+            clearLastClick(click.itemId);
+          } finally {
+            finish();
+          }
+        },
+      }
     );
   } catch {
-    // Never crash app on prompt logic.
     try {
       clearLastClick(click.itemId);
     } finally {
@@ -124,9 +100,6 @@ async function handleReturn(click: LastPartnerClick) {
   }
 }
 
-/**
- * Call once from app startup (RootLayout).
- */
 export function bootstrapPartnerReturnPrompt() {
   if (booted) return;
   booted = true;
