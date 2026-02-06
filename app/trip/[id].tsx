@@ -8,9 +8,6 @@ import {
   Pressable,
   ActivityIndicator,
   Alert,
-  Modal,
-  TextInput,
-  Platform,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
@@ -18,7 +15,7 @@ import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
 import EmptyState from "@/src/components/EmptyState";
-import SectionHeader from "@/src/components/SectionHeader";
+
 import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
 import { parseIsoDateOnly, toIsoDate } from "@/src/constants/football";
@@ -26,16 +23,17 @@ import { parseIsoDateOnly, toIsoDate } from "@/src/constants/football";
 import tripsStore, { type Trip } from "@/src/state/trips";
 import savedItemsStore from "@/src/state/savedItems";
 
-import type { SavedItem, SavedItemStatus, SavedItemType } from "@/src/core/savedItemTypes";
-import { getPartner, inferPartnerIdFromUrl, type PartnerId } from "@/src/core/partners";
+import type { SavedItem } from "@/src/core/savedItemTypes";
+import type { PartnerId } from "@/src/core/partners";
 
 import { beginPartnerClick, openPartnerUrl } from "@/src/services/partnerClicks";
-
 import { getFixtureById } from "@/src/services/apiFootball";
-import { formatUkDateOnly, formatUkDateTimeMaybe } from "@/src/utils/formatters";
+import { formatUkDateOnly } from "@/src/utils/formatters";
 import { buildAffiliateLinks } from "@/src/services/affiliateLinks";
 
-/* ----------------------- helpers ----------------------- */
+/* -------------------------------------------------------------------------- */
+/* helpers */
+/* -------------------------------------------------------------------------- */
 
 function coerceId(v: unknown): string | null {
   if (typeof v === "string") return v.trim() || null;
@@ -62,20 +60,9 @@ function tripStatus(t: Trip): "Draft" | "Upcoming" | "Past" {
   return "Upcoming";
 }
 
-function normalizeUrl(url: string) {
-  if (!/^https?:\/\//i.test(url)) return `https://${url}`;
-  return url;
-}
-
-function shortDomain(url: string) {
-  try {
-    return new URL(normalizeUrl(url)).hostname.replace(/^www\./, "");
-  } catch {
-    return url;
-  }
-}
-
-/* ----------------------- screen ----------------------- */
+/* -------------------------------------------------------------------------- */
+/* screen */
+/* -------------------------------------------------------------------------- */
 
 export default function TripDetailScreen() {
   const router = useRouter();
@@ -85,34 +72,21 @@ export default function TripDetailScreen() {
   const tripId = useMemo(() => coerceId((params as any)?.id), [params]);
 
   const [trip, setTrip] = useState<Trip | null>(null);
-  const [loadedTrips, setLoadedTrips] = useState(tripsStore.getState().loaded);
+  const [tripsLoaded, setTripsLoaded] = useState(tripsStore.getState().loaded);
 
+  const [savedLoaded, setSavedLoaded] = useState(savedItemsStore.getState().loaded);
   const [savedItems, setSavedItems] = useState<SavedItem[]>([]);
-  const [loadedSaved, setLoadedSaved] = useState(savedItemsStore.getState().loaded);
 
   const [fixturesById, setFixturesById] = useState<Record<string, any>>({});
   const [fxLoading, setFxLoading] = useState(false);
-  const [fxError, setFxError] = useState<string | null>(null);
-
-  const [addOpen, setAddOpen] = useState(false);
-  const [newType, setNewType] = useState<SavedItemType>("hotel");
-  const [newTitle, setNewTitle] = useState("");
-  const [newUrl, setNewUrl] = useState("");
-  const [newPriceText, setNewPriceText] = useState("");
-  const [newStatus, setNewStatus] = useState<SavedItemStatus>("saved");
-
-  const [noteText, setNoteText] = useState("");
-  const [tripNotesDraft, setTripNotesDraft] = useState("");
 
   /* ---------------- load trip ---------------- */
 
   useEffect(() => {
     const sync = () => {
       const s = tripsStore.getState();
-      setLoadedTrips(s.loaded);
-      const t = s.trips.find((x) => x.id === tripId) ?? null;
-      setTrip(t);
-      setTripNotesDraft(String(t?.notes ?? ""));
+      setTripsLoaded(s.loaded);
+      setTrip(s.trips.find((x) => x.id === tripId) ?? null);
     };
 
     const unsub = tripsStore.subscribe(sync);
@@ -130,7 +104,7 @@ export default function TripDetailScreen() {
   useEffect(() => {
     const sync = () => {
       const s = savedItemsStore.getState();
-      setLoadedSaved(s.loaded);
+      setSavedLoaded(s.loaded);
       setSavedItems(s.items.filter((x) => x.tripId === tripId));
     };
 
@@ -156,6 +130,7 @@ export default function TripDetailScreen() {
       }
 
       setFxLoading(true);
+
       try {
         const map: Record<string, any> = {};
         for (const id of trip.matchIds) {
@@ -163,8 +138,6 @@ export default function TripDetailScreen() {
           if (r) map[String(id)] = r;
         }
         if (!cancelled) setFixturesById(map);
-      } catch (e: any) {
-        if (!cancelled) setFxError(e?.message ?? "Failed to load matches");
       } finally {
         if (!cancelled) setFxLoading(false);
       }
@@ -195,8 +168,15 @@ export default function TripDetailScreen() {
     });
   }, [trip, cityName]);
 
-  const walletBooked = useMemo(() => savedItems.filter((x) => x.status === "booked"), [savedItems]);
-  const pending = useMemo(() => savedItems.filter((x) => x.status === "pending"), [savedItems]);
+  const booked = useMemo(
+    () => savedItems.filter((x) => x.status === "booked"),
+    [savedItems]
+  );
+
+  const pending = useMemo(
+    () => savedItems.filter((x) => x.status === "pending"),
+    [savedItems]
+  );
 
   /* ---------------- navigation ---------------- */
 
@@ -205,19 +185,25 @@ export default function TripDetailScreen() {
     router.push({ pathname: "/trip/build", params: { tripId: trip.id } } as any);
   }
 
-  /* ---------------- open helpers ---------------- */
+  /* -------------------------------------------------------------------------- */
+  /* STANDARD OPEN FLOW (matches Trip Build) */
+  /* -------------------------------------------------------------------------- */
 
-  async function openUntracked(url: string) {
-    const u = normalizeUrl(url);
+  async function openUntracked(url?: string) {
+    if (!url) return;
     try {
-      await openPartnerUrl(u);
+      await openPartnerUrl(url);
     } catch {
       Alert.alert("Couldn’t open link");
     }
   }
 
-  // ✅ CRITICAL GUARD ADDED HERE
-  async function openTrackedPartner(partnerId: PartnerId, url: string, title: string) {
+  async function openTrackedPartner(args: {
+    partnerId: PartnerId;
+    url: string;
+    title: string;
+    metadata?: Record<string, any>;
+  }) {
     if (!tripId) {
       Alert.alert(
         "Save trip first",
@@ -226,30 +212,30 @@ export default function TripDetailScreen() {
       return;
     }
 
-    if (partnerId === "googlemaps") {
-      await openUntracked(url);
+    if (args.partnerId === "googlemaps") {
+      await openUntracked(args.url);
       return;
     }
-
-    const u = normalizeUrl(url);
 
     try {
       await beginPartnerClick({
         tripId,
-        partnerId,
-        url: u,
-        title,
-        metadata: { city: cityName, tripId },
+        partnerId: args.partnerId,
+        url: args.url,
+        title: args.title,
+        metadata: args.metadata,
       });
     } catch {
-      await openUntracked(u);
+      await openUntracked(args.url);
     }
   }
 
-  /* ---------------- render ---------------- */
+  /* -------------------------------------------------------------------------- */
+  /* render */
+  /* -------------------------------------------------------------------------- */
 
   return (
-    <Background imageUrl={getBackground("trips")} overlayOpacity={0.86}>
+    <Background imageSource={getBackground("trips")} overlayOpacity={0.86}>
       <Stack.Screen
         options={{
           headerShown: true,
@@ -262,7 +248,10 @@ export default function TripDetailScreen() {
       <SafeAreaView style={styles.safe} edges={["bottom"]}>
         <ScrollView
           style={styles.scroll}
-          contentContainerStyle={[styles.content, { paddingBottom: theme.spacing.xxl + insets.bottom }]}
+          contentContainerStyle={[
+            styles.content,
+            { paddingBottom: theme.spacing.xxl + insets.bottom },
+          ]}
         >
           {!tripId && (
             <GlassCard style={styles.card}>
@@ -270,7 +259,7 @@ export default function TripDetailScreen() {
             </GlassCard>
           )}
 
-          {tripId && (!loadedTrips || !loadedSaved) && (
+          {tripId && (!tripsLoaded || !savedLoaded) && (
             <GlassCard style={styles.card}>
               <View style={styles.center}>
                 <ActivityIndicator />
@@ -293,8 +282,9 @@ export default function TripDetailScreen() {
 
                 {pending.length > 0 && (
                   <View style={styles.pendingBanner}>
-                    <Text style={styles.pendingTitle}>
-                      {pending.length} pending booking{pending.length === 1 ? "" : "s"}
+                    <Text style={styles.pendingText}>
+                      {pending.length} pending booking
+                      {pending.length === 1 ? "" : "s"}
                     </Text>
                   </View>
                 )}
@@ -313,48 +303,69 @@ export default function TripDetailScreen() {
 
                   <View style={styles.bookGrid}>
                     <Pressable
-                      onPress={() =>
-                        openTrackedPartner("booking", bookingLinks.hotelsUrl, `Hotels in ${cityName}`)
-                      }
                       style={styles.bookBtn}
+                      onPress={() =>
+                        openTrackedPartner({
+                          partnerId: "booking",
+                          url: bookingLinks.hotelsUrl,
+                          title: `Hotels in ${cityName}`,
+                        })
+                      }
                     >
                       <Text style={styles.bookBtnText}>Hotels</Text>
                     </Pressable>
 
                     <Pressable
-                      onPress={() =>
-                        openTrackedPartner("skyscanner", bookingLinks.flightsUrl, `Flights to ${cityName}`)
-                      }
                       style={styles.bookBtn}
+                      onPress={() =>
+                        openTrackedPartner({
+                          partnerId: "skyscanner",
+                          url: bookingLinks.flightsUrl,
+                          title: `Flights to ${cityName}`,
+                        })
+                      }
                     >
                       <Text style={styles.bookBtnText}>Flights</Text>
                     </Pressable>
 
                     <Pressable
-                      onPress={() =>
-                        openTrackedPartner("omio", bookingLinks.trainsUrl, `Trains to ${cityName}`)
-                      }
                       style={styles.bookBtn}
+                      onPress={() =>
+                        openTrackedPartner({
+                          partnerId: "omio",
+                          url: bookingLinks.trainsUrl,
+                          title: `Trains to ${cityName}`,
+                        })
+                      }
                     >
                       <Text style={styles.bookBtnText}>Trains</Text>
                     </Pressable>
 
                     <Pressable
-                      onPress={() =>
-                        openTrackedPartner(
-                          "getyourguide",
-                          bookingLinks.experiencesUrl,
-                          `Things to do in ${cityName}`
-                        )
-                      }
                       style={styles.bookBtn}
+                      onPress={() =>
+                        openTrackedPartner({
+                          partnerId: "getyourguide",
+                          url: bookingLinks.experiencesUrl,
+                          title: `Things to do in ${cityName}`,
+                          metadata: { city: cityName },
+                        })
+                      }
                     >
-                      <Text style={styles.bookBtnText}>GetYourGuide</Text>
+                      <Text style={styles.bookBtnText}>Things to do</Text>
                     </Pressable>
                   </View>
 
-                  <Pressable onPress={() => openUntracked(bookingLinks.mapsUrl)}>
-                    <Text style={styles.mapsInline}>Open Maps search</Text>
+                  <Pressable
+                    onPress={() =>
+                      openTrackedPartner({
+                        partnerId: "googlemaps",
+                        url: bookingLinks.mapsUrl,
+                        title: `Map of ${cityName}`,
+                      })
+                    }
+                  >
+                    <Text style={styles.mapsInline}>Open maps search</Text>
                   </Pressable>
                 </GlassCard>
               )}
@@ -363,12 +374,12 @@ export default function TripDetailScreen() {
               <GlassCard style={styles.card}>
                 <Text style={styles.sectionTitle}>Wallet</Text>
 
-                {walletBooked.length === 0 ? (
+                {booked.length === 0 ? (
                   <EmptyState title="Nothing booked yet" message="Booked items appear here." />
                 ) : (
-                  walletBooked.map((it) => (
+                  booked.map((it) => (
                     <View key={it.id} style={styles.walletRow}>
-                      <Text style={styles.rowTitle}>{it.title}</Text>
+                      <Text style={styles.walletTitle}>{it.title}</Text>
                     </View>
                   ))
                 )}
@@ -381,7 +392,9 @@ export default function TripDetailScreen() {
   );
 }
 
-/* ---------------- styles ---------------- */
+/* -------------------------------------------------------------------------- */
+/* styles */
+/* -------------------------------------------------------------------------- */
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },
@@ -396,7 +409,6 @@ const styles = StyleSheet.create({
   card: { padding: theme.spacing.lg },
 
   center: { alignItems: "center", gap: 10 },
-
   muted: { color: theme.colors.textSecondary },
 
   hero: { padding: theme.spacing.lg },
@@ -438,7 +450,10 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,200,80,0.15)",
   },
 
-  pendingTitle: { color: "rgba(255,200,80,1)", fontWeight: "900" },
+  pendingText: {
+    color: "rgba(255,200,80,1)",
+    fontWeight: "900",
+  },
 
   heroActions: { marginTop: 12 },
 
@@ -453,7 +468,10 @@ const styles = StyleSheet.create({
     borderColor: "rgba(0,255,136,0.6)",
   },
 
-  btnPrimaryText: { color: theme.colors.text, fontWeight: "900" },
+  btnPrimaryText: {
+    color: theme.colors.text,
+    fontWeight: "900",
+  },
 
   sectionTitle: {
     color: theme.colors.text,
@@ -461,7 +479,11 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
 
-  bookGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  bookGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
 
   bookBtn: {
     width: "48%",
@@ -486,5 +508,5 @@ const styles = StyleSheet.create({
     borderBottomColor: "rgba(255,255,255,0.08)",
   },
 
-  rowTitle: { color: theme.colors.text },
+  walletTitle: { color: theme.colors.text },
 });
