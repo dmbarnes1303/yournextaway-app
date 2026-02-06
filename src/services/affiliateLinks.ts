@@ -4,14 +4,15 @@ import Constants from "expo-constants";
 /**
  * Centralised affiliate URL builder.
  *
- * IMPORTANT:
+ * RULES (Phase-1 spine):
  * - This file ONLY builds URLs.
- * - It does NOT define partner identity.
  * - Partner IDs live in src/core/partners.ts
+ * - Keep output keys stable to avoid screen refactors.
  *
- * Output shape:
- * - Keep legacy keys stable so existing screens don't break.
- * - Add new keys as Phase-1 spine expands (transfers/insurance/claims/tickets).
+ * CRITICAL COMMISSION RULE:
+ * - Do NOT append extra query params to third-party tracking links (TPM, etc).
+ *   Many tracking/redirect systems do not guarantee passthrough and can break attribution.
+ *   Keep those tracking URLs EXACT.
  */
 
 export type AffiliateLinks = {
@@ -23,7 +24,7 @@ export type AffiliateLinks = {
   // Legacy (already used by screens)
   hotelsUrl: string; // Expedia
   flightsUrl: string; // Aviasales
-  trainsUrl: string; // fallback (no trains affiliate yet)
+  trainsUrl: string; // fallback (untracked)
   experiencesUrl: string; // GetYourGuide
   mapsUrl: string; // Google Maps (untracked)
 
@@ -75,60 +76,33 @@ function isIsoDateOnly(s?: string) {
   return !!s && /^\d{4}-\d{2}-\d{2}$/.test(String(s).trim());
 }
 
-/**
- * Append query params to an existing URL safely.
- * - preserves existing query string (your tracking params)
- * - merges additional keys
- */
-function withQuery(baseUrl: string, params: Record<string, string | undefined>) {
-  const raw = String(baseUrl ?? "").trim();
-  if (!raw) return "";
-
-  try {
-    const u = new URL(raw);
-    for (const [k, v] of Object.entries(params)) {
-      const vv = String(v ?? "").trim();
-      if (!vv) continue;
-      u.searchParams.set(k, vv);
-    }
-    return u.toString();
-  } catch {
-    // Worst-case: naive append
-    const pairs = Object.entries(params)
-      .map(([k, v]) => {
-        const vv = String(v ?? "").trim();
-        return vv ? `${enc(k)}=${enc(vv)}` : "";
-      })
-      .filter(Boolean);
-
-    if (pairs.length === 0) return raw;
-    return raw + (raw.includes("?") ? "&" : "?") + pairs.join("&");
-  }
-}
-
 /* -------------------------------------------------------------------------- */
 /* affiliate config */
 /* -------------------------------------------------------------------------- */
 
 /**
- * IDs for partners you already have approved:
- * - Aviasales marker (if you have it)
- * - GetYourGuide partner ID (if you have it)
- * - Expedia affiliate ID optional (program-specific)
+ * Put IDs in app.json -> expo.extra and/or .env as EXPO_PUBLIC_*.
  *
- * Tracking base links (hard-coded as per what you pasted):
- * - KiwiTaxi / AirHelp / SafetyWing / SportsEvents365
+ * You currently have approved:
+ * - Expedia (program-specific linking varies; we use a stable public entry)
+ * - Aviasales (marker-based in many setups)
+ * - GetYourGuide (partner_id)
+ * - KiwiTaxi / AirHelp via TPM tracking links
+ * - SafetyWing direct tracking link
+ * - SportsEvents365 a_aid param
  */
 const AFFILIATE = {
+  // Optional IDs (safe if missing)
   aviasalesMarker: env("EXPO_PUBLIC_AVIASALES_MARKER"),
   gygPartnerId: env("EXPO_PUBLIC_GYG_PARTNER_ID"),
   expediaAffilId: env("EXPO_PUBLIC_EXPEDIA_AFFIL_ID"),
 
-  // ✅ exact tracking links you provided
-  kiwitaxiBase: "https://kiwitaxi.tpm.lv/ZnnAV8eH",
-  airhelpBase: "https://airhelp.tpm.lv/6tipSUue",
-  safetywingBase: "https://safetywing.com/?referenceID=26471369&utm_source=26471369&utm_medium=Ambassador",
-  sportsevents365Base: "https://www.sportsevents365.com/?a_aid=69834e80ec9d3",
+  // ✅ EXACT tracking links provided by you (DO NOT MODIFY)
+  kiwitaxiTracked: "https://kiwitaxi.tpm.lv/ZnnAV8eH",
+  airhelpTracked: "https://airhelp.tpm.lv/6tipSUue",
+  safetywingTracked:
+    "https://safetywing.com/?referenceID=26471369&utm_source=26471369&utm_medium=Ambassador",
+  sportsevents365Tracked: "https://www.sportsevents365.com/?a_aid=69834e80ec9d3",
 };
 
 /* -------------------------------------------------------------------------- */
@@ -150,8 +124,10 @@ export function buildAffiliateLinks(args: {
   const query = safeQueryCity(city, country);
 
   /* -------------------- */
-  /* Hotels: Expedia */
+  /* Hotels: Expedia (approved) */
   /* -------------------- */
+  // Stable public entry point. Some affiliate programs require different deep-link formats;
+  // we keep this resilient and optionally add a generic affcid.
   const expediaParams: string[] = [`destination=${enc(query)}`];
   if (startDate) expediaParams.push(`startDate=${enc(startDate)}`);
   if (endDate) expediaParams.push(`endDate=${enc(endDate)}`);
@@ -159,49 +135,40 @@ export function buildAffiliateLinks(args: {
   const hotelsUrl = `https://www.expedia.co.uk/Hotel-Search?${expediaParams.join("&")}`;
 
   /* -------------------- */
-  /* Flights: Aviasales */
+  /* Flights: Aviasales (approved) */
   /* -------------------- */
   const aviaParams: string[] = [];
   if (AFFILIATE.aviasalesMarker) aviaParams.push(`marker=${enc(AFFILIATE.aviasalesMarker)}`);
+  // Keep destination hint; harmless if ignored.
   aviaParams.push(`destination=${enc(query)}`);
   const flightsUrl = `https://www.aviasales.com/?${aviaParams.join("&")}`;
 
   /* -------------------- */
   /* Trains/Buses: fallback (UNTRACKED until affiliate) */
   /* -------------------- */
-  const trainsUrl = `https://www.google.com/maps/search/?api=1&query=${enc(`${query} train station`)}`;
+  const trainsUrl = `https://www.google.com/maps/search/?api=1&query=${enc(
+    `${query} train station`
+  )}`;
 
   /* -------------------- */
-  /* Experiences: GetYourGuide */
+  /* Experiences: GetYourGuide (approved) */
   /* -------------------- */
+  // Correct search format: /s/?q=<query>&partner_id=<id>
   const gygParams: string[] = [`q=${enc(query)}`];
   if (AFFILIATE.gygPartnerId) gygParams.push(`partner_id=${enc(AFFILIATE.gygPartnerId)}`);
   const experiencesUrl = `https://www.getyourguide.com/s/?${gygParams.join("&")}`;
 
   /* -------------------- */
-  /* Transfers: KiwiTaxi (TRACKED) */
+  /* Transfers / Insurance / Claims / Tickets: TRACKED BASE LINKS (EXACT) */
   /* -------------------- */
-  // We keep your tracking link intact and just add a query hint.
-  const transfersUrl = withQuery(AFFILIATE.kiwitaxiBase, { city: query });
+  // Do not append extra params to tracking URLs. Keep attribution clean.
+  const transfersUrl = AFFILIATE.kiwitaxiTracked;
+  const insuranceUrl = AFFILIATE.safetywingTracked;
+  const claimsUrl = AFFILIATE.airhelpTracked;
+  const ticketsUrl = AFFILIATE.sportsevents365Tracked;
 
   /* -------------------- */
-  /* Insurance: SafetyWing (TRACKED) */
-  /* -------------------- */
-  // Tracking already embedded; add optional destination hint if you want.
-  const insuranceUrl = withQuery(AFFILIATE.safetywingBase, { destination: query });
-
-  /* -------------------- */
-  /* Claims: AirHelp (TRACKED) */
-  /* -------------------- */
-  const claimsUrl = withQuery(AFFILIATE.airhelpBase, { city: query });
-
-  /* -------------------- */
-  /* Tickets: SportsEvents365 (TRACKED) */
-  /* -------------------- */
-  const ticketsUrl = withQuery(AFFILIATE.sportsevents365Base, { q: query });
-
-  /* -------------------- */
-  /* Maps: Google Maps search (UNTRACKED) */
+  /* Maps: Google Maps (UNTRACKED) */
   /* -------------------- */
   const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${enc(query)}`;
 
