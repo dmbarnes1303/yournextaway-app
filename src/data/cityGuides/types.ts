@@ -22,8 +22,9 @@ export interface CityGuide {
   thingsToDoUrl?: string;
 
   /**
-   * Legacy / fallback only (avoid showing in UI if monetised link exists).
-   * Keep temporarily while you build coverage; remove later if you want.
+   * Legacy link (TripAdvisor) - DEPRECATED.
+   * Kept only so older guide files don't break at compile time.
+   * Do not show this in UI. Do not create new values for it.
    */
   tripAdvisorTopThingsUrl?: string;
 
