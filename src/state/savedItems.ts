@@ -42,11 +42,32 @@ type SavedItemsState = {
 
 const STORAGE_KEY = "yna_saved_items_v1";
 
+const VALID_TYPES: ReadonlySet<SavedItemType> = new Set<SavedItemType>([
+  "tickets",
+  "hotel",
+  "flight",
+  "train",
+  "transfer",
+  "things",
+  "insurance",
+  "claim",
+  "note",
+  "other",
+]);
+
+const VALID_STATUSES: ReadonlySet<SavedItemStatus> = new Set<SavedItemStatus>([
+  "saved",
+  "pending",
+  "booked",
+  "archived",
+]);
+
 function now() {
   return Date.now();
 }
 
 async function persist(items: SavedItem[]) {
+  // Best-effort persistence lives in persist.ts, but we still keep this async boundary explicit.
   await writeJson(STORAGE_KEY, items);
 }
 
@@ -56,141 +77,185 @@ function normalizeTripId(tripId: string) {
   return id;
 }
 
+function isValidType(x: any): x is SavedItemType {
+  return typeof x === "string" && VALID_TYPES.has(x as SavedItemType);
+}
+
+function isValidStatus(x: any): x is SavedItemStatus {
+  return typeof x === "string" && VALID_STATUSES.has(x as SavedItemStatus);
+}
+
 function cleanLoadedItem(x: any): SavedItem | null {
   if (!x || typeof x !== "object") return null;
 
-  const id = String(x.id ?? "").trim();
-  const tripId = String(x.tripId ?? "").trim();
-  const type = String(x.type ?? "").trim() as SavedItemType;
-  const status = String(x.status ?? "").trim() as SavedItemStatus;
-  const title = String(x.title ?? "").trim();
+  const id = String((x as any).id ?? "").trim();
+  const tripId = String((x as any).tripId ?? "").trim();
+  const title = String((x as any).title ?? "").trim();
 
-  if (!id || !tripId || !type || !status || !title) return null;
+  const typeRaw = (x as any).type;
+  const statusRaw = (x as any).status;
+
+  if (!id || !tripId || !title) return null;
+  if (!isValidType(typeRaw)) return null;
+  if (!isValidStatus(statusRaw)) return null;
+
+  const createdAt = Number((x as any).createdAt);
+  const updatedAt = Number((x as any).updatedAt);
 
   return {
     id,
     tripId,
-    type,
-    status,
+    type: typeRaw,
+    status: statusRaw,
     title,
-    partnerId: typeof x.partnerId === "string" ? x.partnerId : undefined,
-    partnerUrl: typeof x.partnerUrl === "string" ? x.partnerUrl : undefined,
-    priceText: typeof x.priceText === "string" ? x.priceText : undefined,
-    currency: typeof x.currency === "string" ? x.currency : undefined,
-    metadata: x.metadata && typeof x.metadata === "object" ? x.metadata : undefined,
-    createdAt: Number.isFinite(Number(x.createdAt)) ? Number(x.createdAt) : now(),
-    updatedAt: Number.isFinite(Number(x.updatedAt)) ? Number(x.updatedAt) : now(),
+    partnerId: typeof (x as any).partnerId === "string" ? (x as any).partnerId : undefined,
+    partnerUrl: typeof (x as any).partnerUrl === "string" ? (x as any).partnerUrl : undefined,
+    priceText: typeof (x as any).priceText === "string" ? (x as any).priceText : undefined,
+    currency: typeof (x as any).currency === "string" ? (x as any).currency : undefined,
+    metadata: (x as any).metadata && typeof (x as any).metadata === "object" ? (x as any).metadata : undefined,
+    createdAt: Number.isFinite(createdAt) ? createdAt : now(),
+    updatedAt: Number.isFinite(updatedAt) ? updatedAt : now(),
   };
 }
 
-const useSavedItemsStore = create<SavedItemsState>((set, get) => ({
-  loaded: false,
-  items: [],
-
-  load: async () => {
-    // idempotent
+const useSavedItemsStore = create<SavedItemsState>((set, get) => {
+  async function ensureLoaded() {
     if (get().loaded) return;
+    await get().load();
+  }
 
-    const raw = await readJson<any>(STORAGE_KEY, []);
-    const arr = Array.isArray(raw) ? raw : [];
+  return {
+    loaded: false,
+    items: [],
 
-    const cleaned: SavedItem[] = arr.map(cleanLoadedItem).filter(Boolean) as SavedItem[];
+    load: async () => {
+      // idempotent
+      if (get().loaded) return;
 
-    set({ items: cleaned, loaded: true });
-  },
+      const raw = await readJson<any>(STORAGE_KEY, []);
+      const arr = Array.isArray(raw) ? raw : [];
 
-  getByTrip: (tripId: string) => {
-    const id = String(tripId ?? "").trim();
-    if (!id) return [];
-    return get().items.filter((x) => x.tripId === id);
-  },
+      const cleaned: SavedItem[] = arr.map(cleanLoadedItem).filter(Boolean) as SavedItem[];
 
-  getByTripAndStatus: (tripId: string, status: SavedItemStatus) => {
-    const id = String(tripId ?? "").trim();
-    if (!id) return [];
-    return get().items.filter((x) => x.tripId === id && x.status === status);
-  },
+      set({ items: cleaned, loaded: true });
+    },
 
-  add: async (args) => {
-    const tripId = normalizeTripId(args.tripId);
-    const type = args.type;
-    const status: SavedItemStatus = args.status ?? "saved";
-    const title = String(args.title ?? "").trim();
+    getByTrip: (tripId: string) => {
+      const id = String(tripId ?? "").trim();
+      if (!id) return [];
+      return get().items.filter((x) => x.tripId === id);
+    },
 
-    if (!title) throw new Error("Saved item title is required");
+    getByTripAndStatus: (tripId: string, status: SavedItemStatus) => {
+      const id = String(tripId ?? "").trim();
+      if (!id) return [];
+      return get().items.filter((x) => x.tripId === id && x.status === status);
+    },
 
-    const item: SavedItem = {
-      id: makeSavedItemId(),
-      tripId,
-      type,
-      status,
-      title,
-      partnerId: args.partnerId,
-      partnerUrl: args.partnerUrl,
-      priceText: args.priceText,
-      currency: args.currency,
-      metadata: args.metadata,
-      createdAt: now(),
-      updatedAt: now(),
-    };
+    add: async (args) => {
+      await ensureLoaded();
 
-    const next = [item, ...get().items];
-    set({ items: next, loaded: true });
-    await persist(next);
+      const tripId = normalizeTripId(args.tripId);
+      const type = args.type;
+      const status: SavedItemStatus = args.status ?? "saved";
+      const title = String(args.title ?? "").trim();
 
-    return item;
-  },
+      if (!isValidType(type)) throw new Error("Saved item type is invalid");
+      if (!isValidStatus(status)) throw new Error("Saved item status is invalid");
+      if (!title) throw new Error("Saved item title is required");
 
-  update: async (id, patch) => {
-    const key = String(id ?? "").trim();
-    if (!key) return;
+      const item: SavedItem = {
+        id: makeSavedItemId(),
+        tripId,
+        type,
+        status,
+        title,
+        partnerId: args.partnerId,
+        partnerUrl: args.partnerUrl,
+        priceText: args.priceText,
+        currency: args.currency,
+        metadata: args.metadata,
+        createdAt: now(),
+        updatedAt: now(),
+      };
 
-    const next = get().items.map((x) => {
-      if (x.id !== key) return x;
-      return { ...x, ...patch, updatedAt: now() };
-    });
+      const next = [item, ...get().items];
+      set({ items: next, loaded: true });
+      await persist(next);
 
-    set({ items: next, loaded: true });
-    await persist(next);
-  },
+      return item;
+    },
 
-  transitionStatus: async (id, to) => {
-    const key = String(id ?? "").trim();
-    if (!key) return;
+    update: async (id, patch) => {
+      await ensureLoaded();
 
-    const cur = get().items.find((x) => x.id === key);
-    if (!cur) return;
+      const key = String(id ?? "").trim();
+      if (!key) return;
 
-    assertTransition(cur.status, to);
+      const next = get().items.map((x) => {
+        if (x.id !== key) return x;
 
-    const next = get().items.map((x) => (x.id === key ? { ...x, status: to, updatedAt: now() } : x));
-    set({ items: next, loaded: true });
-    await persist(next);
-  },
+        // Prevent accidental invalid enum writes via patch
+        const nextType = (patch as any).type;
+        const nextStatus = (patch as any).status;
 
-  remove: async (id) => {
-    const key = String(id ?? "").trim();
-    if (!key) return;
+        if (nextType !== undefined && !isValidType(nextType)) return x;
+        if (nextStatus !== undefined && !isValidStatus(nextStatus)) return x;
 
-    const next = get().items.filter((x) => x.id !== key);
-    set({ items: next, loaded: true });
-    await persist(next);
-  },
+        return { ...x, ...patch, updatedAt: now() };
+      });
 
-  clearTrip: async (tripId) => {
-    const id = String(tripId ?? "").trim();
-    if (!id) return;
+      set({ items: next, loaded: true });
+      await persist(next);
+    },
 
-    const next = get().items.filter((x) => x.tripId !== id);
-    set({ items: next, loaded: true });
-    await persist(next);
-  },
+    transitionStatus: async (id, to) => {
+      await ensureLoaded();
 
-  clearAll: async () => {
-    set({ items: [], loaded: true });
-    await persist([]);
-  },
-}));
+      const key = String(id ?? "").trim();
+      if (!key) return;
+      if (!isValidStatus(to)) return;
+
+      const cur = get().items.find((x) => x.id === key);
+      if (!cur) return;
+
+      assertTransition(cur.status, to);
+
+      const next = get().items.map((x) => (x.id === key ? { ...x, status: to, updatedAt: now() } : x));
+      set({ items: next, loaded: true });
+      await persist(next);
+    },
+
+    remove: async (id) => {
+      await ensureLoaded();
+
+      const key = String(id ?? "").trim();
+      if (!key) return;
+
+      const next = get().items.filter((x) => x.id !== key);
+      set({ items: next, loaded: true });
+      await persist(next);
+    },
+
+    clearTrip: async (tripId) => {
+      await ensureLoaded();
+
+      const id = String(tripId ?? "").trim();
+      if (!id) return;
+
+      const next = get().items.filter((x) => x.tripId !== id);
+      set({ items: next, loaded: true });
+      await persist(next);
+    },
+
+    clearAll: async () => {
+      await ensureLoaded();
+
+      set({ items: [], loaded: true });
+      await persist([]);
+    },
+  };
+});
 
 /**
  * tripsStore-style wrapper (keeps your codebase consistent).
