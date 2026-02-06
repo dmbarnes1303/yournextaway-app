@@ -1,197 +1,201 @@
 // src/state/trips.ts
 import { create } from "zustand";
-
-import type { Trip as CoreTrip } from "@/src/core/tripTypes";
-import { makeTripId } from "@/src/core/id";
 import { readJson, writeJson } from "@/src/state/persist";
+import { makeTripId } from "@/src/core/id";
+import type { Trip } from "@/src/core/tripTypes";
+import savedItemsStore from "@/src/state/savedItems";
 
-export type Trip = CoreTrip;
-
-type TripState = {
-  loaded: boolean;
-  trips: Trip[];
-
-  loadTrips: () => Promise<void>;
-
-  addTrip: (input: Partial<Omit<Trip, "id" | "createdAt" | "updatedAt">> & { cityId: string; startDate: string; endDate: string }) => Promise<Trip>;
-
-  updateTrip: (id: string, patch: Partial<Omit<Trip, "id" | "createdAt">>) => Promise<Trip>;
-
-  removeTrip: (id: string) => Promise<void>;
-
-  getTripById: (id: string) => Trip | null;
-
-  /**
-   * Useful during development / resets.
-   */
-  clearAllTrips: () => Promise<void>;
-};
-
-const STORAGE_KEY = "yna_trips_v2";
+const STORAGE_KEY = "yna_trips_v1";
 
 function now() {
   return Date.now();
 }
 
-function normalizeTrip(t: any): Trip | null {
-  if (!t || typeof t !== "object") return null;
+function sortTrips(trips: Trip[]) {
+  const copy = [...trips];
+  copy.sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
+  return copy;
+}
 
-  const id = String(t.id ?? "").trim();
-  const cityId = String(t.cityId ?? "").trim();
-  const startDate = String(t.startDate ?? "").trim();
-  const endDate = String(t.endDate ?? "").trim();
+async function persist(trips: Trip[]) {
+  await writeJson(STORAGE_KEY, trips);
+}
+
+function cleanLoadedTrip(x: any): Trip | null {
+  if (!x || typeof x !== "object") return null;
+
+  const id = String(x.id ?? "").trim();
+  const cityId = String(x.cityId ?? "").trim();
+  const startDate = String(x.startDate ?? "").trim();
+  const endDate = String(x.endDate ?? "").trim();
 
   if (!id || !cityId || !startDate || !endDate) return null;
 
-  const matchIdsRaw = Array.isArray(t.matchIds) ? t.matchIds : [];
-  const matchIds = matchIdsRaw.map((x) => String(x)).filter(Boolean);
+  const matchIds = Array.isArray(x.matchIds) ? x.matchIds.map((m: any) => String(m).trim()).filter(Boolean) : [];
 
-  const createdAt = Number.isFinite(Number(t.createdAt)) ? Number(t.createdAt) : now();
-  const updatedAt = Number.isFinite(Number(t.updatedAt)) ? Number(t.updatedAt) : createdAt;
-
-  const notes = typeof t.notes === "string" ? t.notes : undefined;
-  const citySlug = typeof t.citySlug === "string" ? t.citySlug : undefined;
+  const createdAt = Number.isFinite(Number(x.createdAt)) ? Number(x.createdAt) : now();
+  const updatedAt = Number.isFinite(Number(x.updatedAt)) ? Number(x.updatedAt) : createdAt;
 
   return {
-    id: id as any,
+    id,
     cityId,
-    citySlug,
+    citySlug: typeof x.citySlug === "string" ? x.citySlug : undefined,
     startDate,
     endDate,
     matchIds,
-    notes,
+    notes: typeof x.notes === "string" ? x.notes : undefined,
     createdAt,
     updatedAt,
   };
 }
 
-function sortTrips(trips: Trip[]): Trip[] {
-  // Most recent upcoming (startDate) first; fallback updatedAt desc.
-  const copy = [...trips];
-  copy.sort((a, b) => {
-    if (a.startDate !== b.startDate) return a.startDate < b.startDate ? 1 : -1;
-    return (b.updatedAt ?? 0) - (a.updatedAt ?? 0);
-  });
-  return copy;
-}
+type TripsState = {
+  loaded: boolean;
+  trips: Trip[];
 
-async function persistTrips(trips: Trip[]) {
-  await writeJson(STORAGE_KEY, trips);
-}
+  loadTrips: () => Promise<void>;
 
-const useTripsStore = create<TripState>((set, get) => ({
+  addTrip: (input: {
+    cityId: string;
+    citySlug?: string;
+    startDate: string;
+    endDate: string;
+    matchIds?: string[];
+    notes?: string;
+  }) => Promise<Trip>;
+
+  updateTrip: (tripId: string, patch: Partial<Omit<Trip, "id" | "createdAt">>) => Promise<void>;
+
+  /**
+   * Deletes the trip AND deletes all SavedItems belonging to the trip.
+   * This is the only delete we should use in Phase 1 to prevent orphaned Wallet items.
+   */
+  deleteTripCascade: (tripId: string) => Promise<void>;
+
+  clearAll: () => Promise<void>;
+};
+
+const useTripsStore = create<TripsState>((set, get) => ({
   loaded: false,
   trips: [],
 
   loadTrips: async () => {
-    const raw = await readJson<any[]>(STORAGE_KEY, []);
-    const parsed = raw.map(normalizeTrip).filter(Boolean) as Trip[];
-    set({ trips: sortTrips(parsed), loaded: true });
+    if (get().loaded) return;
+
+    const raw = await readJson<any>(STORAGE_KEY, []);
+    const arr = Array.isArray(raw) ? raw : [];
+    const cleaned = arr.map(cleanLoadedTrip).filter(Boolean) as Trip[];
+
+    set({ trips: sortTrips(cleaned), loaded: true });
   },
 
   addTrip: async (input) => {
-    const id = makeTripId() as unknown as string;
-    const t: Trip = {
-      id: id as any,
-      cityId: String(input.cityId).trim(),
-      citySlug: typeof (input as any).citySlug === "string" ? String((input as any).citySlug).trim() : undefined,
-      startDate: String(input.startDate).trim(),
-      endDate: String(input.endDate).trim(),
-      matchIds: Array.isArray((input as any).matchIds)
-        ? (input as any).matchIds.map((x: any) => String(x)).filter(Boolean)
-        : [],
-      notes: typeof input.notes === "string" ? input.notes : undefined,
+    if (!get().loaded) await get().loadTrips();
+
+    const cityId = String(input.cityId ?? "").trim();
+    const startDate = String(input.startDate ?? "").trim();
+    const endDate = String(input.endDate ?? "").trim();
+
+    if (!cityId) throw new Error("cityId required");
+    if (!startDate) throw new Error("startDate required");
+    if (!endDate) throw new Error("endDate required");
+
+    const trip: Trip = {
+      id: makeTripId(),
+      cityId,
+      citySlug: input.citySlug ? String(input.citySlug).trim() : undefined,
+      startDate,
+      endDate,
+      matchIds: Array.isArray(input.matchIds) ? input.matchIds.map((m) => String(m).trim()).filter(Boolean) : [],
+      notes: input.notes ? String(input.notes) : undefined,
       createdAt: now(),
       updatedAt: now(),
     };
 
-    const next = sortTrips([t, ...get().trips]);
+    const next = sortTrips([trip, ...get().trips]);
     set({ trips: next, loaded: true });
-    await persistTrips(next);
-    return t;
+    await persist(next);
+
+    return trip;
   },
 
-  updateTrip: async (id, patch) => {
-    const cur = get().trips;
-    const idx = cur.findIndex((x) => String(x.id) === String(id));
-    if (idx < 0) throw new Error("Trip not found");
+  updateTrip: async (tripId, patch) => {
+    if (!get().loaded) await get().loadTrips();
 
-    const existing = cur[idx];
+    const id = String(tripId ?? "").trim();
+    if (!id) return;
 
-    const nextTrip: Trip = {
-      ...existing,
-      ...patch,
-      id: existing.id,
-      createdAt: existing.createdAt,
-      updatedAt: now(),
-      cityId: typeof patch.cityId === "string" ? patch.cityId : existing.cityId,
-      startDate: typeof patch.startDate === "string" ? patch.startDate : existing.startDate,
-      endDate: typeof patch.endDate === "string" ? patch.endDate : existing.endDate,
-      matchIds: Array.isArray((patch as any).matchIds)
-        ? (patch as any).matchIds.map((x: any) => String(x)).filter(Boolean)
-        : existing.matchIds,
-      notes: typeof patch.notes === "string" ? patch.notes : existing.notes,
-      citySlug: typeof (patch as any).citySlug === "string" ? String((patch as any).citySlug).trim() : existing.citySlug,
-    };
-
-    const next = [...cur];
-    next[idx] = nextTrip;
+    const next = get().trips.map((t) => {
+      if (t.id !== id) return t;
+      return { ...t, ...patch, updatedAt: now() };
+    });
 
     const sorted = sortTrips(next);
     set({ trips: sorted, loaded: true });
-    await persistTrips(sorted);
-
-    return nextTrip;
+    await persist(sorted);
   },
 
-  removeTrip: async (id) => {
-    const next = get().trips.filter((t) => String(t.id) !== String(id));
-    set({ trips: next, loaded: true });
-    await persistTrips(next);
+  deleteTripCascade: async (tripId) => {
+    if (!get().loaded) await get().loadTrips();
+
+    const id = String(tripId ?? "").trim();
+    if (!id) return;
+
+    // 1) Remove trip
+    const nextTrips = get().trips.filter((t) => t.id !== id);
+    set({ trips: nextTrips, loaded: true });
+    await persist(nextTrips);
+
+    // 2) Remove all SavedItems associated to that trip (prevents orphaned Wallet items)
+    try {
+      await savedItemsStore.clearTrip(id);
+    } catch {
+      // best-effort: trip is gone, but we REALLY want savedItems cleared.
+      // If this fails, you'll see orphaned items again.
+    }
   },
 
-  getTripById: (id) => {
-    const t = get().trips.find((x) => String(x.id) === String(id));
-    return t ?? null;
-  },
-
-  clearAllTrips: async () => {
+  clearAll: async () => {
     set({ trips: [], loaded: true });
-    await persistTrips([]);
+    await persist([]);
+    try {
+      await savedItemsStore.clearAll();
+    } catch {
+      // ignore
+    }
   },
 }));
 
-/**
- * Export pattern matching your current usage:
- * - tripsStore.getState()
- * - tripsStore.loadTrips()
- */
+/* -------------------------------------------------------------------------- */
+/* Wrapper (matches your existing tripsStore usage pattern) */
+/* -------------------------------------------------------------------------- */
+
 const tripsStore = {
   getState: useTripsStore.getState,
   setState: useTripsStore.setState,
-
   subscribe: useTripsStore.subscribe,
 
   loadTrips: async () => {
     await useTripsStore.getState().loadTrips();
   },
 
-  addTrip: async (input: Parameters<TripState["addTrip"]>[0]) => {
+  addTrip: async (input: Parameters<TripsState["addTrip"]>[0]) => {
     return await useTripsStore.getState().addTrip(input);
   },
 
-  updateTrip: async (id: string, patch: Parameters<TripState["updateTrip"]>[1]) => {
-    return await useTripsStore.getState().updateTrip(id, patch);
+  updateTrip: async (tripId: string, patch: Parameters<TripsState["updateTrip"]>[1]) => {
+    await useTripsStore.getState().updateTrip(tripId, patch);
   },
 
-  removeTrip: async (id: string) => {
-    await useTripsStore.getState().removeTrip(id);
+  deleteTripCascade: async (tripId: string) => {
+    await useTripsStore.getState().deleteTripCascade(tripId);
   },
 
-  clearAllTrips: async () => {
-    await useTripsStore.getState().clearAllTrips();
+  clearAll: async () => {
+    await useTripsStore.getState().clearAll();
   },
 };
 
 export default tripsStore;
 export { useTripsStore };
+export type { Trip };
