@@ -11,12 +11,15 @@ import type { SavedItem, SavedItemType } from "@/src/core/savedItemTypes";
  * - create pending before opening partner
  * - when app returns active, prompt user "Booked?"
  *
- * IMPORTANT HARDENING:
+ * HARDENING:
  * - if opening partner fails, roll back the pending item (avoid zombie items)
  * - prevent duplicate prompts by clearing lastClick before invoking onReturn
+ *
+ * ALSO:
+ * - allow recording a click for an EXISTING saved item (so "Open" still triggers the prompt)
  */
 
-type LastPartnerClick = {
+export type LastPartnerClick = {
   itemId: string;
   tripId: string;
   partnerId: PartnerId;
@@ -91,6 +94,73 @@ export function ensurePartnerReturnWatcher(onReturn: (click: LastPartnerClick) =
 }
 
 /**
+ * Ensure store is ready (cold start safety).
+ */
+async function ensureSavedItemsLoaded() {
+  if (!savedItemsStore.getState().loaded) {
+    await savedItemsStore.load();
+  }
+}
+
+/**
+ * Record an existing partner click WITHOUT creating any SavedItem.
+ * Use this when user taps "Open" on an existing item, or any external link you want to track for the return prompt.
+ *
+ * Returns the recorded click, or null if args invalid.
+ */
+export function recordExistingPartnerClick(args: {
+  tripId: string;
+  itemId: string;
+  partnerId?: PartnerId;
+  url: string;
+}): LastPartnerClick | null {
+  const tripId = String(args.tripId ?? "").trim();
+  const itemId = String(args.itemId ?? "").trim();
+  const url = normalizeUrl(args.url);
+
+  if (!tripId || !itemId || !url) return null;
+
+  const partnerId = (args.partnerId ?? "unknown") as PartnerId;
+
+  const click: LastPartnerClick = {
+    tripId,
+    itemId,
+    partnerId,
+    url,
+    createdAt: now(),
+  };
+
+  lastClick = click;
+  return click;
+}
+
+/**
+ * Convenience helper:
+ * - records lastClick for an existing item
+ * - opens the partner URL
+ *
+ * If opening fails, it restores the previous lastClick (so you don't accidentally clear a real pending click).
+ */
+export async function openExistingPartnerUrl(args: {
+  tripId: string;
+  itemId: string;
+  partnerId?: PartnerId;
+  url: string;
+}) {
+  const prev = lastClick;
+  const click = recordExistingPartnerClick(args);
+  if (!click) throw new Error("Invalid partner click args");
+
+  try {
+    await openUrl(click.url);
+  } catch (e) {
+    // restore prior click to avoid losing real context
+    lastClick = prev;
+    throw e;
+  }
+}
+
+/**
  * Begin partner click:
  * - create pending SavedItem
  * - open partner
@@ -123,10 +193,7 @@ export async function beginPartnerClick(args: {
   const url = normalizeUrl(args.url);
   if (!url) throw new Error("url is required");
 
-  // Ensure store is ready (cold start safety)
-  if (!savedItemsStore.getState().loaded) {
-    await savedItemsStore.load();
-  }
+  await ensureSavedItemsLoaded();
 
   const type = args.savedItemType ?? partner.defaultSavedItemType;
 
@@ -160,7 +227,6 @@ export async function beginPartnerClick(args: {
   try {
     await openUrl(url);
   } catch (e) {
-    // rollback the item + click marker
     try {
       await savedItemsStore.remove(item.id);
     } catch {
@@ -180,10 +246,7 @@ export async function markBooked(itemId: string) {
   const id = String(itemId ?? "").trim();
   if (!id) return;
 
-  // Ensure store ready (defensive)
-  if (!savedItemsStore.getState().loaded) {
-    await savedItemsStore.load();
-  }
+  await ensureSavedItemsLoaded();
 
   await savedItemsStore.transitionStatus(id, "booked");
   if (lastClick?.itemId === id) lastClick = null;
