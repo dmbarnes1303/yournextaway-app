@@ -8,14 +8,12 @@ import {
   Pressable,
   ActivityIndicator,
   Alert,
-  Linking,
   Modal,
   TextInput,
   Platform,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import * as WebBrowser from "expo-web-browser";
 
 import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
@@ -29,8 +27,9 @@ import tripsStore, { type Trip } from "@/src/state/trips";
 import savedItemsStore from "@/src/state/savedItems";
 
 import type { SavedItem, SavedItemStatus, SavedItemType } from "@/src/core/savedItemTypes";
-import { getPartner, type PartnerId } from "@/src/core/partners";
-import { beginPartnerClick, openExistingPartnerUrl } from "@/src/services/partnerClicks";
+import { getPartner, inferPartnerIdFromUrl, type PartnerId } from "@/src/core/partners";
+
+import { beginPartnerClick, openPartnerUrl } from "@/src/services/partnerClicks";
 
 import { getFixtureById } from "@/src/services/apiFootball";
 import { formatUkDateOnly, formatUkDateTimeMaybe } from "@/src/utils/formatters";
@@ -77,29 +76,6 @@ function normalizeUrl(url: string): string {
   const u = String(url ?? "").trim();
   if (!u) return "";
   return /^https?:\/\//i.test(u) ? u : `https://${u}`;
-}
-
-async function safeOpenUrl(url: string) {
-  const u = normalizeUrl(url);
-  if (!u) return;
-
-  try {
-    if (Platform.OS === "web") {
-      const can = await Linking.canOpenURL(u);
-      if (!can) throw new Error("Cannot open URL");
-      await Linking.openURL(u);
-      return;
-    }
-
-    await WebBrowser.openBrowserAsync(u, {
-      presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
-      readerMode: false,
-      enableBarCollapsing: true,
-      showTitle: true,
-    });
-  } catch {
-    Alert.alert("Couldn’t open link", "Your device could not open that link.");
-  }
 }
 
 function shortDomain(url: string): string {
@@ -419,8 +395,10 @@ export default function TripDetailScreen() {
       return;
     }
 
-    const url = newUrl.trim();
+    const urlRaw = newUrl.trim();
     const priceText = newPriceText.trim();
+
+    const inferredPartnerId: PartnerId | undefined = urlRaw ? inferPartnerIdFromUrl(urlRaw) : undefined;
 
     try {
       await savedItemsStore.add({
@@ -428,7 +406,8 @@ export default function TripDetailScreen() {
         type: newType,
         status: newStatus,
         title,
-        partnerUrl: url ? normalizeUrl(url) : undefined,
+        partnerId: inferredPartnerId && inferredPartnerId !== "unknown" ? inferredPartnerId : undefined,
+        partnerUrl: urlRaw ? normalizeUrl(urlRaw) : undefined,
         priceText: priceText || undefined,
         metadata: { source: "manual" },
       });
@@ -490,27 +469,25 @@ export default function TripDetailScreen() {
   }
 
   /**
-   * CRITICAL:
-   * "Open" on an existing item should still participate in the return prompt flow.
-   * So we record lastClick + open via partnerClicks.openExistingPartnerUrl().
-   * If anything fails, fall back to safeOpenUrl (never block the user).
+   * STANDARDISED OPEN FLOW:
+   * - Partner CTAs use beginPartnerClick (tracked -> Pending)
+   * - Everything else uses openPartnerUrl (untracked, hardened, in-app browser)
+   *
+   * openPartnerUrl has a global in-flight guard; if user double-taps Open,
+   * it will throw. We swallow that and do nothing (better than duplicate opens).
    */
-  async function openItemLink(item: SavedItem) {
-    const url = String(item.partnerUrl ?? "").trim();
-    if (!url) {
+  async function openUntracked(url: string) {
+    const u = String(url ?? "").trim();
+    if (!u) {
       Alert.alert("No link", "This item doesn’t have a link saved.");
       return;
     }
-
     try {
-      await openExistingPartnerUrl({
-        tripId: item.tripId,
-        itemId: item.id,
-        partnerId: (item.partnerId ?? "unknown") as PartnerId,
-        url,
-      });
-    } catch {
-      await safeOpenUrl(url);
+      await openPartnerUrl(u);
+    } catch (e: any) {
+      const msg = String(e?.message ?? "");
+      if (msg.toLowerCase().includes("already in progress")) return;
+      Alert.alert("Couldn’t open link", "Your device could not open that link.");
     }
   }
 
@@ -526,8 +503,8 @@ export default function TripDetailScreen() {
         metadata: { city: cityName, tripId },
       });
     } catch {
-      // Do not block the user; fall back to opening the URL.
-      await safeOpenUrl(url);
+      // Don’t block the user; fall back to untracked open.
+      await openUntracked(url);
     }
   }
 
@@ -579,7 +556,7 @@ export default function TripDetailScreen() {
 
         <View style={styles.itemActionsCol}>
           {item.partnerUrl ? (
-            <Pressable onPress={() => openItemLink(item)} style={styles.smallBtn}>
+            <Pressable onPress={() => openUntracked(String(item.partnerUrl))} style={styles.smallBtn}>
               <Text style={styles.smallBtnText}>Open</Text>
             </Pressable>
           ) : null}
@@ -748,7 +725,7 @@ export default function TripDetailScreen() {
                 </Pressable>
               </GlassCard>
 
-              {/* BOOK THIS TRIP (partner clicks -> pending items) */}
+              {/* BOOK THIS TRIP (tracked partner clicks -> pending items) */}
               {bookingLinks ? (
                 <View style={styles.section}>
                   <SectionHeader title="Book this trip" subtitle="Partner clicks create Pending items" />
@@ -766,9 +743,7 @@ export default function TripDetailScreen() {
                       </Pressable>
 
                       <Pressable
-                        onPress={() =>
-                          onPartnerShortcut("skyscanner", bookingLinks.flightsUrl, `Flights for ${cityName} trip`)
-                        }
+                        onPress={() => onPartnerShortcut("skyscanner", bookingLinks.flightsUrl, `Flights for ${cityName} trip`)}
                         style={styles.bookBtn}
                       >
                         <Text style={styles.bookBtnText}>Flights</Text>
@@ -792,7 +767,7 @@ export default function TripDetailScreen() {
                     </View>
 
                     {/* Maps is intentionally non-tracked in Phase 1 */}
-                    <Pressable onPress={() => safeOpenUrl(bookingLinks.mapsUrl)} style={styles.mapsInline}>
+                    <Pressable onPress={() => openUntracked(bookingLinks.mapsUrl)} style={styles.mapsInline}>
                       <Text style={styles.mapsInlineText}>Open Maps search</Text>
                     </Pressable>
                   </GlassCard>
@@ -1443,3 +1418,4 @@ const styles = StyleSheet.create({
   sheetBtnPrimary: { borderColor: "rgba(0,255,136,0.55)", backgroundColor: "rgba(0,0,0,0.30)" },
   sheetBtnPrimaryText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
 });
+```0
