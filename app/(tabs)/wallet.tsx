@@ -1,129 +1,187 @@
 // app/(tabs)/wallet.tsx
 
-import React, { useMemo } from "react";
-import { View, Text, StyleSheet, ScrollView, Pressable, Alert } from "react-native";
+import React, { useEffect, useMemo, useState } from "react";
+import { View, Text, StyleSheet, ScrollView, Pressable } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useRouter } from "expo-router";
 
 import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
 import EmptyState from "@/src/components/EmptyState";
+
 import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
 
-import useFollowStore from "@/src/state/followStore";
+import tripsStore, { type Trip } from "@/src/state/trips";
+import savedItemsStore from "@/src/state/savedItems";
+import type { SavedItem } from "@/src/core/savedItemTypes";
+
+/* -------------------------------- Helpers -------------------------------- */
+
+const TYPE_LABEL: Record<string, string> = {
+  tickets: "Tickets",
+  hotel: "Stay",
+  flight: "Flights",
+  train: "Trains",
+  transfer: "Transfers",
+  things: "Things",
+  insurance: "Insurance",
+  claim: "Claim",
+  note: "Note",
+  other: "Other",
+};
+
+function groupByTrip(items: SavedItem[]) {
+  const map: Record<string, SavedItem[]> = {};
+  for (const it of items) {
+    if (!map[it.tripId]) map[it.tripId] = [];
+    map[it.tripId].push(it);
+  }
+  return map;
+}
+
+/* -------------------------------- Screen -------------------------------- */
 
 export default function WalletScreen() {
-  const subtitle = useMemo(() => "Tickets, passes, and booking references", []);
+  const router = useRouter();
 
-  // SAFE: primitive selector, stable, no derived arrays/objects in selector
-  const followingCount = useFollowStore((s) => s.followed.length);
+  const [loadedTrips, setLoadedTrips] = useState(tripsStore.getState().loaded);
+  const [loadedItems, setLoadedItems] = useState(savedItemsStore.getState().loaded);
 
-  function showHowItWorks() {
-    Alert.alert(
-      "Wallet (coming soon)",
-      "This is where your match tickets, transport/hotel references, and any digital passes will live.\n\nFor now, it’s a preview screen so you can see the structure."
-    );
+  const [trips, setTrips] = useState<Trip[]>([]);
+  const [booked, setBooked] = useState<SavedItem[]>([]);
+
+  /* ----------------------------- subscriptions ---------------------------- */
+
+  useEffect(() => {
+    const sync = () => {
+      const t = tripsStore.getState();
+      setLoadedTrips(t.loaded);
+      setTrips(t.trips);
+    };
+
+    const unsub = tripsStore.subscribe(sync);
+    sync();
+
+    if (!tripsStore.getState().loaded) {
+      tripsStore.loadTrips().catch(() => {});
+    }
+
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
+    const sync = () => {
+      const s = savedItemsStore.getState();
+      setLoadedItems(s.loaded);
+      setBooked(s.items.filter((x) => x.status === "booked"));
+    };
+
+    const unsub = savedItemsStore.subscribe(sync);
+    sync();
+
+    if (!savedItemsStore.getState().loaded) {
+      savedItemsStore.load().catch(() => {});
+    }
+
+    return () => unsub();
+  }, []);
+
+  /* ------------------------------ derived -------------------------------- */
+
+  const byTrip = useMemo(() => groupByTrip(booked), [booked]);
+
+  const orderedTrips = useMemo(() => {
+    return trips
+      .filter((t) => byTrip[t.id]?.length)
+      .sort((a, b) => a.startDate.localeCompare(b.startDate));
+  }, [trips, byTrip]);
+
+  function openTrip(tripId: string) {
+    router.push({ pathname: "/trip/[id]", params: { id: tripId } } as any);
   }
 
-  function showAddDemo() {
-    Alert.alert(
-      "Demo only",
-      "Ticket storage isn’t wired up yet.\n\nWhen it is, you’ll be able to save confirmations here from your trips."
-    );
-  }
+  /* -------------------------------- render -------------------------------- */
 
   return (
-    <Background imageSource={getBackground("wallet")} overlayOpacity={0.86}>
-      <SafeAreaView style={styles.container} edges={["top"]}>
-        <ScrollView style={styles.scrollView} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+    <Background imageUrl={getBackground("wallet")} overlayOpacity={0.86}>
+      <SafeAreaView style={styles.safe} edges={["top"]}>
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+        >
           <View style={styles.header}>
             <Text style={styles.title}>Wallet</Text>
-            <Text style={styles.subtitle}>{subtitle}</Text>
+            <Text style={styles.subtitle}>Your booked items, stored offline</Text>
           </View>
 
-          <View style={styles.statsRow}>
-            <View style={styles.statPill}>
-              <Text style={styles.statKicker}>Items</Text>
-              <Text style={styles.statValue}>0</Text>
-            </View>
-            <View style={styles.statPill}>
-              <Text style={styles.statKicker}>Following</Text>
-              <Text style={styles.statValue}>{followingCount}</Text>
-            </View>
-            <View style={styles.statPill}>
-              <Text style={styles.statKicker}>Status</Text>
-              <Text style={styles.statValue}>Preview</Text>
-            </View>
-          </View>
+          {!loadedTrips || !loadedItems ? (
+            <GlassCard style={styles.card} strength="default">
+              <Text style={styles.muted}>Loading wallet…</Text>
+            </GlassCard>
+          ) : orderedTrips.length === 0 ? (
+            <GlassCard style={styles.card} strength="default">
+              <EmptyState
+                title="No bookings yet"
+                message="When you confirm bookings inside trips, they appear here."
+              />
+            </GlassCard>
+          ) : (
+            orderedTrips.map((trip) => {
+              const items = byTrip[trip.id] ?? [];
 
-          <GlassCard style={styles.card} strength="default">
-            <Text style={styles.cardTitle}>Your trip essentials, in one place</Text>
-            <Text style={styles.cardBody}>
-              When you’re travelling, you don’t want to dig through emails. Wallet will store confirmations and passes so you can leave the house with confidence.
-            </Text>
+              return (
+                <View key={trip.id} style={styles.section}>
+                  <Pressable onPress={() => openTrip(trip.id)}>
+                    <Text style={styles.tripTitle}>
+                      {trip.cityId || "Trip"}
+                    </Text>
+                    <Text style={styles.tripMeta}>
+                      {trip.startDate} → {trip.endDate}
+                    </Text>
+                  </Pressable>
 
-            <View style={styles.btnRow}>
-              <Pressable onPress={showHowItWorks} style={[styles.btn, styles.btnPrimary]}>
-                <Text style={styles.btnPrimaryText}>How it works</Text>
-                <Text style={styles.btnHint}>What will appear here</Text>
-              </Pressable>
+                  <GlassCard style={styles.card} strength="default">
+                    <View style={{ gap: 10 }}>
+                      {items.map((it) => (
+                        <View key={it.id} style={styles.row}>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.rowTitle} numberOfLines={1}>
+                              {it.title}
+                            </Text>
+                            <Text style={styles.rowMeta}>
+                              {TYPE_LABEL[it.type] || it.type}
+                            </Text>
+                          </View>
 
-              <Pressable onPress={showAddDemo} style={[styles.btn, styles.btnSecondary]}>
-                <Text style={styles.btnSecondaryText}>Add (demo)</Text>
-                <Text style={styles.btnHint}>Not stored yet</Text>
-              </Pressable>
-            </View>
-
-            <View style={styles.divider} />
-
-            <View style={styles.previewList}>
-              <View style={styles.previewRow}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.previewTitle}>Match tickets</Text>
-                  <Text style={styles.previewText}>QR codes, PDFs, and entry details for the match.</Text>
+                          <Pressable
+                            onPress={() => openTrip(trip.id)}
+                            style={styles.openBtn}
+                          >
+                            <Text style={styles.openText}>View</Text>
+                          </Pressable>
+                        </View>
+                      ))}
+                    </View>
+                  </GlassCard>
                 </View>
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>Coming soon</Text>
-                </View>
-              </View>
+              );
+            })
+          )}
 
-              <View style={styles.previewRow}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.previewTitle}>Transport</Text>
-                  <Text style={styles.previewText}>Flights, trains, and transfer confirmations.</Text>
-                </View>
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>Coming soon</Text>
-                </View>
-              </View>
-
-              <View style={styles.previewRow}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.previewTitle}>Stay</Text>
-                  <Text style={styles.previewText}>Hotel references, check-in details, and address links.</Text>
-                </View>
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>Coming soon</Text>
-                </View>
-              </View>
-            </View>
-          </GlassCard>
-
-          <GlassCard style={styles.card} strength="subtle">
-            <EmptyState title="Nothing saved yet" message="When ticket and booking storage is enabled, your items will show up here." />
-            <Text style={styles.smallNote}>Tip: build a trip first — Wallet will eventually pull items directly from your Trip hub.</Text>
-          </GlassCard>
-
-          <View style={{ height: 10 }} />
+          <View style={{ height: 20 }} />
         </ScrollView>
       </SafeAreaView>
     </Background>
   );
 }
 
+/* -------------------------------- Styles -------------------------------- */
+
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  scrollView: { flex: 1 },
+  safe: { flex: 1 },
+  scroll: { flex: 1 },
 
   content: {
     paddingHorizontal: theme.spacing.lg,
@@ -131,83 +189,84 @@ const styles = StyleSheet.create({
     gap: theme.spacing.lg,
   },
 
-  header: { paddingTop: theme.spacing.lg, paddingBottom: theme.spacing.xs },
+  header: {
+    paddingTop: theme.spacing.lg,
+    paddingBottom: theme.spacing.xs,
+  },
 
   title: {
+    color: theme.colors.text,
     fontSize: theme.fontSize.xxl,
     fontWeight: theme.fontWeight.black,
+  },
+
+  subtitle: {
+    marginTop: 6,
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSize.sm,
+    fontWeight: theme.fontWeight.bold,
+  },
+
+  section: { gap: 8 },
+
+  tripTitle: {
     color: theme.colors.text,
-    marginBottom: theme.spacing.xs,
+    fontSize: theme.fontSize.lg,
+    fontWeight: theme.fontWeight.black,
   },
 
-  subtitle: { fontSize: theme.fontSize.sm, color: theme.colors.textSecondary, fontWeight: theme.fontWeight.bold },
-
-  statsRow: { flexDirection: "row", gap: 10 },
-  statPill: {
-    flex: 1,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.20)",
-    paddingVertical: 10,
-    paddingHorizontal: 12,
+  tripMeta: {
+    marginTop: 2,
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSize.sm,
+    fontWeight: theme.fontWeight.bold,
   },
-  statKicker: { color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: "900" },
-  statValue: { marginTop: 4, color: theme.colors.text, fontSize: theme.fontSize.md, fontWeight: "900" },
 
   card: { padding: theme.spacing.lg },
 
-  cardTitle: { color: theme.colors.text, fontSize: theme.fontSize.md, fontWeight: "900" },
-  cardBody: { marginTop: 8, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18, fontWeight: "700" },
-
-  btnRow: { marginTop: 14, flexDirection: "row", gap: 10 },
-
-  btn: {
-    flex: 1,
-    paddingVertical: 12,
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 10,
     paddingHorizontal: 12,
     borderRadius: 14,
     borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 2,
-  },
-
-  btnPrimary: { borderColor: "rgba(0,255,136,0.55)", backgroundColor: "rgba(0,0,0,0.34)" },
-  btnPrimaryText: { color: theme.colors.text, fontSize: theme.fontSize.sm, fontWeight: "900" },
-
-  btnSecondary: { borderColor: "rgba(255,255,255,0.14)", backgroundColor: "rgba(0,0,0,0.20)" },
-  btnSecondaryText: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, fontWeight: "900" },
-
-  btnHint: { marginTop: 2, color: theme.colors.textTertiary, fontSize: theme.fontSize.xs, fontWeight: "800" },
-
-  divider: { marginTop: 14, height: 1, backgroundColor: "rgba(255,255,255,0.10)" },
-
-  previewList: { marginTop: 14, gap: 10 },
-
-  previewRow: {
-    borderRadius: 16,
-    borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
     backgroundColor: "rgba(0,0,0,0.18)",
-    padding: 14,
-    flexDirection: "row",
-    gap: 12,
-    alignItems: "flex-start",
   },
 
-  previewTitle: { color: theme.colors.text, fontSize: theme.fontSize.md, fontWeight: "900" },
-  previewText: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18, fontWeight: "700" },
+  rowTitle: {
+    color: theme.colors.text,
+    fontSize: theme.fontSize.md,
+    fontWeight: theme.fontWeight.black,
+  },
 
-  badge: {
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    backgroundColor: "rgba(0,0,0,0.22)",
+  rowMeta: {
+    marginTop: 4,
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSize.sm,
+    fontWeight: theme.fontWeight.bold,
+  },
+
+  openBtn: {
     paddingVertical: 8,
-    paddingHorizontal: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(0,255,136,0.55)",
+    backgroundColor: "rgba(0,0,0,0.28)",
   },
-  badgeText: { color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: "900" },
 
-  smallNote: { marginTop: 10, color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, lineHeight: 16, fontWeight: "700" },
+  openText: {
+    color: theme.colors.text,
+    fontWeight: theme.fontWeight.black,
+    fontSize: theme.fontSize.xs,
+  },
+
+  muted: {
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSize.sm,
+    fontWeight: theme.fontWeight.bold,
+  },
 });
