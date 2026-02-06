@@ -1,6 +1,12 @@
 // src/services/partnerReturnBootstrap.ts
 import { Alert } from "react-native";
-import { ensurePartnerReturnWatcher, markBooked, markNotBooked } from "@/src/services/partnerClicks";
+import {
+  ensurePartnerReturnWatcher,
+  markBooked,
+  markNotBooked,
+  clearLastClick,
+  type LastPartnerClick,
+} from "@/src/services/partnerClicks";
 import savedItemsStore from "@/src/state/savedItems";
 import { getPartner } from "@/src/core/partners";
 
@@ -11,9 +17,8 @@ import { getPartner } from "@/src/core/partners";
  * Later: replace Alert with your Trip Workspace confirmation screen.
  */
 export function bootstrapPartnerReturnPrompt() {
-  ensurePartnerReturnWatcher(async (click) => {
+  ensurePartnerReturnWatcher(async (click: LastPartnerClick) => {
     try {
-      // Defensive: load store if needed so lookup works on cold start
       if (!savedItemsStore.getState().loaded) {
         await savedItemsStore.load();
       }
@@ -33,12 +38,23 @@ export function bootstrapPartnerReturnPrompt() {
         "Did you complete your booking?",
         `We opened ${partnerName}. Mark this as booked?`,
         [
-          { text: "Not yet", style: "cancel", onPress: () => markNotBooked(click.itemId) },
-          { text: "Booked", onPress: () => markBooked(click.itemId) },
-        ]
+          {
+            text: "Not yet",
+            style: "cancel",
+            onPress: () => markNotBooked(click.itemId),
+          },
+          {
+            text: "Booked",
+            onPress: () => markBooked(click.itemId),
+          },
+        ],
+        {
+          cancelable: true,
+          onDismiss: () => clearLastClick(click.itemId),
+        } as any
       );
     } catch {
-      // hard fail should never crash the app
+      // never crash on return
     }
   });
 }
