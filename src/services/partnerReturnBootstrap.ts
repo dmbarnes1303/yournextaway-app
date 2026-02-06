@@ -14,14 +14,12 @@ import {
 let booted = false;
 let prompting = false;
 
-function safeTitle(click: LastPartnerClick): string {
+async function ensureSavedItemsLoaded() {
+  if (savedItemsStore.getState().loaded) return;
   try {
-    const s = savedItemsStore.getState();
-    const item = s.items.find((x) => x.id === click.itemId);
-    const t = String(item?.title ?? "").trim();
-    return t || "Your booking";
+    await savedItemsStore.load();
   } catch {
-    return "Your booking";
+    // best-effort
   }
 }
 
@@ -33,25 +31,58 @@ function safePartnerName(pid: PartnerId): string {
   }
 }
 
+function getItemForClick(click: LastPartnerClick) {
+  try {
+    return savedItemsStore.getState().items.find((x) => x.id === click.itemId) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function safeItemTitle(fallback: string, title?: string | null) {
+  const t = String(title ?? "").trim();
+  return t || fallback || "Your booking";
+}
+
+async function archivePendingItem(itemId: string) {
+  try {
+    await ensureSavedItemsLoaded();
+    await savedItemsStore.transitionStatus(itemId, "archived");
+  } catch {
+    // ignore
+  } finally {
+    clearLastClick(itemId);
+  }
+}
+
 async function handleReturn(click: LastPartnerClick) {
   if (prompting) return;
   prompting = true;
 
+  const finish = () => {
+    prompting = false;
+  };
+
   try {
-    if (!savedItemsStore.getState().loaded) {
-      try {
-        await savedItemsStore.load();
-      } catch {
-        // ignore
-      }
+    await ensureSavedItemsLoaded();
+
+    const item = getItemForClick(click);
+
+    // If item is missing, already booked, or not pending anymore, do NOT prompt.
+    if (!item) {
+      clearLastClick(click.itemId);
+      finish();
+      return;
+    }
+
+    if (item.status !== "pending") {
+      clearLastClick(click.itemId);
+      finish();
+      return;
     }
 
     const partnerName = safePartnerName(click.partnerId);
-    const title = safeTitle(click);
-
-    const finish = () => {
-      prompting = false;
-    };
+    const title = safeItemTitle("Your booking", item.title);
 
     Alert.alert(
       "Did you book it?",
@@ -62,7 +93,18 @@ async function handleReturn(click: LastPartnerClick) {
           style: "cancel",
           onPress: async () => {
             try {
-              await markNotBooked(click.itemId);
+              await markNotBooked(click.itemId); // keeps pending (Phase 1)
+            } finally {
+              finish();
+            }
+          },
+        },
+        {
+          text: "Archive",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await archivePendingItem(click.itemId);
             } finally {
               finish();
             }
@@ -72,7 +114,7 @@ async function handleReturn(click: LastPartnerClick) {
           text: "Booked",
           onPress: async () => {
             try {
-              await markBooked(click.itemId);
+              await markBooked(click.itemId); // pending -> booked
             } finally {
               finish();
             }
@@ -82,7 +124,7 @@ async function handleReturn(click: LastPartnerClick) {
       {
         cancelable: true,
         onDismiss: () => {
-          // Treat dismissal as "not yet", but still clear lastClick to avoid loops
+          // Treat dismissal as “not yet”, but clear click to avoid re-prompt loops.
           try {
             clearLastClick(click.itemId);
           } finally {
@@ -95,7 +137,7 @@ async function handleReturn(click: LastPartnerClick) {
     try {
       clearLastClick(click.itemId);
     } finally {
-      prompting = false;
+      finish();
     }
   }
 }
