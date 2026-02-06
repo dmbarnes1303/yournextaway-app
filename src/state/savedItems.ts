@@ -56,41 +56,45 @@ function normalizeTripId(tripId: string) {
   return id;
 }
 
+function cleanLoadedItem(x: any): SavedItem | null {
+  if (!x || typeof x !== "object") return null;
+
+  const id = String(x.id ?? "").trim();
+  const tripId = String(x.tripId ?? "").trim();
+  const type = String(x.type ?? "").trim() as SavedItemType;
+  const status = String(x.status ?? "").trim() as SavedItemStatus;
+  const title = String(x.title ?? "").trim();
+
+  if (!id || !tripId || !type || !status || !title) return null;
+
+  return {
+    id,
+    tripId,
+    type,
+    status,
+    title,
+    partnerId: typeof x.partnerId === "string" ? x.partnerId : undefined,
+    partnerUrl: typeof x.partnerUrl === "string" ? x.partnerUrl : undefined,
+    priceText: typeof x.priceText === "string" ? x.priceText : undefined,
+    currency: typeof x.currency === "string" ? x.currency : undefined,
+    metadata: x.metadata && typeof x.metadata === "object" ? x.metadata : undefined,
+    createdAt: Number.isFinite(Number(x.createdAt)) ? Number(x.createdAt) : now(),
+    updatedAt: Number.isFinite(Number(x.updatedAt)) ? Number(x.updatedAt) : now(),
+  };
+}
+
 const useSavedItemsStore = create<SavedItemsState>((set, get) => ({
   loaded: false,
   items: [],
 
   load: async () => {
+    // idempotent
+    if (get().loaded) return;
+
     const raw = await readJson<any>(STORAGE_KEY, []);
     const arr = Array.isArray(raw) ? raw : [];
-    const cleaned: SavedItem[] = arr
-      .map((x: any) => {
-        if (!x || typeof x !== "object") return null;
 
-        const id = String(x.id ?? "").trim();
-        const tripId = String(x.tripId ?? "").trim();
-        const type = String(x.type ?? "").trim() as SavedItemType;
-        const status = String(x.status ?? "").trim() as SavedItemStatus;
-        const title = String(x.title ?? "").trim();
-
-        if (!id || !tripId || !type || !status || !title) return null;
-
-        return {
-          id,
-          tripId,
-          type,
-          status,
-          title,
-          partnerId: typeof x.partnerId === "string" ? x.partnerId : undefined,
-          partnerUrl: typeof x.partnerUrl === "string" ? x.partnerUrl : undefined,
-          priceText: typeof x.priceText === "string" ? x.priceText : undefined,
-          currency: typeof x.currency === "string" ? x.currency : undefined,
-          metadata: x.metadata && typeof x.metadata === "object" ? x.metadata : undefined,
-          createdAt: Number.isFinite(Number(x.createdAt)) ? Number(x.createdAt) : now(),
-          updatedAt: Number.isFinite(Number(x.updatedAt)) ? Number(x.updatedAt) : now(),
-        } as SavedItem;
-      })
-      .filter(Boolean) as SavedItem[];
+    const cleaned: SavedItem[] = arr.map(cleanLoadedItem).filter(Boolean) as SavedItem[];
 
     set({ items: cleaned, loaded: true });
   },
