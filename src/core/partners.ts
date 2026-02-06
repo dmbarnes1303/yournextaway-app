@@ -1,24 +1,17 @@
 // src/core/partners.ts
+import type { SavedItemType } from "@/src/core/savedItemTypes";
+
 /**
  * Partner registry = single source of truth for:
  * - partner IDs
  * - labels
- * - which SavedItem.type to create for clicks
+ * - default SavedItem.type
  *
- * IMPORTANT:
- * - Do not scatter partner names/logic across screens.
- * - Screens call partnerClicks.beginPartnerClick() with partnerId + url.
+ * Screens should NOT hardcode partner strings.
+ * They call beginPartnerClick({ partnerId, url, ... }).
  */
 
-import type { SavedItemType } from "@/src/core/savedItemTypes";
-
-export type PartnerId =
-  | "booking"
-  | "skyscanner"
-  | "omio"
-  | "getyourguide"
-  | "googlemaps"
-  | "unknown";
+export type PartnerId = "booking" | "skyscanner" | "omio" | "getyourguide" | "googlemaps" | "unknown";
 
 export type PartnerCategory = "stay" | "travel" | "things" | "links";
 
@@ -27,15 +20,10 @@ export type Partner = {
   name: string;
   category: PartnerCategory;
 
-  /**
-   * Default SavedItem type when user clicks this partner.
-   * (Screens can override if needed.)
-   */
+  /** Default SavedItem type when user clicks this partner. */
   defaultSavedItemType: SavedItemType;
 
-  /**
-   * Optional: domains used for “best effort” return detection or URL sanity checks later.
-   */
+  /** Optional: domains used for best-effort validation/inference later. */
   domains?: string[];
 };
 
@@ -86,4 +74,23 @@ export const PARTNERS: Record<PartnerId, Partner> = {
 export function getPartner(id: string | null | undefined): Partner {
   const key = String(id ?? "").trim().toLowerCase() as PartnerId;
   return PARTNERS[key] ?? PARTNERS.unknown;
+}
+
+/**
+ * Optional helper (Phase 2+): infer partner from a URL.
+ * Harmless to ship now; useful when you ingest arbitrary links later.
+ */
+export function inferPartnerIdFromUrl(url: string): PartnerId {
+  const u = String(url ?? "").trim().toLowerCase();
+  if (!u) return "unknown";
+
+  const host = u.replace(/^https?:\/\//, "").split("/")[0] ?? "";
+  const h = host.replace(/^www\./, "");
+
+  for (const [pid, p] of Object.entries(PARTNERS) as Array<[PartnerId, Partner]>) {
+    if (!p.domains?.length) continue;
+    if (p.domains.some((d) => h === d || h.endsWith(`.${d}`))) return pid;
+  }
+
+  return "unknown";
 }
