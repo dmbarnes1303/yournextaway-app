@@ -30,7 +30,7 @@ import savedItemsStore from "@/src/state/savedItems";
 
 import type { SavedItem, SavedItemStatus, SavedItemType } from "@/src/core/savedItemTypes";
 import { getPartner, type PartnerId } from "@/src/core/partners";
-import { beginPartnerClick } from "@/src/services/partnerClicks";
+import { beginPartnerClick, openExistingPartnerUrl } from "@/src/services/partnerClicks";
 
 import { getFixtureById } from "@/src/services/apiFootball";
 import { formatUkDateOnly, formatUkDateTimeMaybe } from "@/src/utils/formatters";
@@ -489,13 +489,29 @@ export default function TripDetailScreen() {
     }
   }
 
+  /**
+   * CRITICAL:
+   * "Open" on an existing item should still participate in the return prompt flow.
+   * So we record lastClick + open via partnerClicks.openExistingPartnerUrl().
+   * If anything fails, fall back to safeOpenUrl (never block the user).
+   */
   async function openItemLink(item: SavedItem) {
     const url = String(item.partnerUrl ?? "").trim();
     if (!url) {
       Alert.alert("No link", "This item doesn’t have a link saved.");
       return;
     }
-    await safeOpenUrl(url);
+
+    try {
+      await openExistingPartnerUrl({
+        tripId: item.tripId,
+        itemId: item.id,
+        partnerId: (item.partnerId ?? "unknown") as PartnerId,
+        url,
+      });
+    } catch {
+      await safeOpenUrl(url);
+    }
   }
 
   async function onPartnerShortcut(partnerId: PartnerId, url: string, title: string) {
@@ -750,7 +766,9 @@ export default function TripDetailScreen() {
                       </Pressable>
 
                       <Pressable
-                        onPress={() => onPartnerShortcut("skyscanner", bookingLinks.flightsUrl, `Flights for ${cityName} trip`)}
+                        onPress={() =>
+                          onPartnerShortcut("skyscanner", bookingLinks.flightsUrl, `Flights for ${cityName} trip`)
+                        }
                         style={styles.bookBtn}
                       >
                         <Text style={styles.bookBtnText}>Flights</Text>
@@ -764,7 +782,9 @@ export default function TripDetailScreen() {
                       </Pressable>
 
                       <Pressable
-                        onPress={() => onPartnerShortcut("getyourguide", bookingLinks.experiencesUrl, `GetYourGuide: ${cityName}`)}
+                        onPress={() =>
+                          onPartnerShortcut("getyourguide", bookingLinks.experiencesUrl, `GetYourGuide: ${cityName}`)
+                        }
                         style={styles.bookBtn}
                       >
                         <Text style={styles.bookBtnText}>GetYourGuide</Text>
