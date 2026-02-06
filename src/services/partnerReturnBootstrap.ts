@@ -1,6 +1,8 @@
 // src/services/partnerReturnBootstrap.ts
 import { Alert } from "react-native";
 
+import savedItemsStore from "@/src/state/savedItems";
+import { getPartner, type PartnerId } from "@/src/core/partners";
 import {
   ensurePartnerReturnWatcher,
   markBooked,
@@ -9,87 +11,127 @@ import {
   type LastPartnerClick,
 } from "@/src/services/partnerClicks";
 
-import savedItemsStore from "@/src/state/savedItems";
-import { getPartner } from "@/src/core/partners";
-
 /**
- * Call once at app boot (e.g. app/_layout.tsx).
+ * Global return prompt bootstrap.
  *
- * Phase 1 behaviour:
- * - When returning from partner, ask if booking completed
- * - If booked → transition to booked
- * - If not yet → remain pending
- * - If dismissed → do nothing but clear lastClick
+ * Phase-1 bible rules enforced:
+ * - Pending is created BEFORE opening partner.
+ * - On return, ask "Did you book it?"
+ * - If "Booked" -> markBooked (moves into Wallet)
+ * - If "Not yet" -> keep Pending
+ * - If dismiss -> clearLastClick to avoid loops
  *
- * This file is the SINGLE authority for:
- * - when user is prompted
- * - when lastClick is cleared
+ * HARDENING:
+ * - Boot only once (even with fast refresh)
+ * - Guard against multiple prompts at the same time
+ * - Best-effort item lookup for nicer copy
  */
-export function bootstrapPartnerReturnPrompt() {
-  ensurePartnerReturnWatcher(async (click: LastPartnerClick) => {
-    try {
-      // Ensure store ready (cold start safe)
-      if (!savedItemsStore.getState().loaded) {
+
+let booted = false;
+let prompting = false;
+
+function safeTitle(click: LastPartnerClick): string {
+  try {
+    const s = savedItemsStore.getState();
+    const item = s.items.find((x) => x.id === click.itemId);
+    const t = String(item?.title ?? "").trim();
+    return t || "Your booking";
+  } catch {
+    return "Your booking";
+  }
+}
+
+function safePartnerName(pid: PartnerId): string {
+  try {
+    return getPartner(pid).name;
+  } catch {
+    return "Partner";
+  }
+}
+
+async function handleReturn(click: LastPartnerClick) {
+  if (prompting) return;
+  prompting = true;
+
+  try {
+    // Ensure items are available for lookup (cold start safety)
+    if (!savedItemsStore.getState().loaded) {
+      try {
         await savedItemsStore.load();
-      }
-
-      const item = savedItemsStore
-        .getState()
-        .items.find((x) => x.id === click.itemId);
-
-      if (!item) {
-        clearLastClick(click.itemId);
-        return;
-      }
-
-      let partnerName = "the partner";
-      try {
-        const p = getPartner(click.partnerId);
-        if (p?.name) partnerName = p.name;
-      } catch {
-        // ignore
-      }
-
-      Alert.alert(
-        "Did you complete your booking?",
-        `We opened ${partnerName}. Mark this as booked?`,
-        [
-          {
-            text: "Not yet",
-            style: "cancel",
-            onPress: async () => {
-              try {
-                await markNotBooked(click.itemId);
-              } finally {
-                clearLastClick(click.itemId);
-              }
-            },
-          },
-          {
-            text: "Booked",
-            onPress: async () => {
-              try {
-                await markBooked(click.itemId);
-              } finally {
-                clearLastClick(click.itemId);
-              }
-            },
-          },
-        ],
-        {
-          cancelable: true,
-          onDismiss: () => {
-            clearLastClick(click.itemId);
-          },
-        }
-      );
-    } catch {
-      // never crash on return
-      try {
-        clearLastClick(click.itemId);
       } catch {
         // ignore
       }
     }
+
+    const partnerName = safePartnerName(click.partnerId);
+    const title = safeTitle(click);
+
+    Alert.alert(
+      "Did you book it?",
+      `${partnerName}\n\n${title}\n\nIf you booked it, we’ll move it into Wallet.`,
+      [
+        {
+          text: "Not yet",
+          style: "cancel",
+          onPress: async () => {
+            try {
+              await markNotBooked(click.itemId);
+            } finally {
+              prompting = false;
+            }
+          },
+        },
+        {
+          text: "Booked",
+          style: "default",
+          onPress: async () => {
+            try {
+              await markBooked(click.itemId);
+            } finally {
+              prompting = false;
+            }
+          },
+        },
+        {
+          text: "Dismiss",
+          style: "destructive",
+          onPress: () => {
+            try {
+              clearLastClick(click.itemId);
+            } finally {
+              prompting = false;
+            }
+          },
+        },
+      ],
+      { cancelable: true, onDismiss: () => {
+        // If user dismisses via tapping outside on Android etc,
+        // clear to avoid re-prompt loops.
+        try {
+          clearLastClick(click.itemId);
+        } finally {
+          prompting = false;
+        }
+      }}
+    );
+  } catch {
+    // Never crash app on prompt logic.
+    try {
+      clearLastClick(click.itemId);
+    } finally {
+      prompting = false;
+    }
+  }
+}
+
+/**
+ * Call once from app startup (RootLayout).
+ */
+export function bootstrapPartnerReturnPrompt() {
+  if (booted) return;
+  booted = true;
+
+  ensurePartnerReturnWatcher(async (click) => {
+    await handleReturn(click);
   });
 }
