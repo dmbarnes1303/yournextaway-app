@@ -5,6 +5,7 @@ import * as WebBrowser from "expo-web-browser";
 import savedItemsStore from "@/src/state/savedItems";
 import { getPartner, type PartnerId } from "@/src/core/partners";
 import type { SavedItem, SavedItemType } from "@/src/core/savedItemTypes";
+import { getSavedItemTypeLabel } from "@/src/core/savedItemTypes";
 
 /**
  * Phase 1 return detection:
@@ -62,7 +63,7 @@ function isRecent(click: LastPartnerClick) {
  * Consume lastClick exactly once and invoke handler.
  * This is the ONLY place we should clear lastClick for prompting.
  */
-async function triggerReturnIfPresent(reason: "appstate" | "browser_dismiss") {
+async function triggerReturnIfPresent(_reason: "appstate" | "browser_dismiss") {
   if (!lastClick) return;
 
   // Avoid zombie prompts
@@ -96,8 +97,6 @@ async function openUrlInternal(url: string) {
     return;
   }
 
-  // NOTE: openBrowserAsync typically keeps app "active".
-  // The promise resolves when the in-app browser is dismissed.
   await WebBrowser.openBrowserAsync(u, {
     presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
     readerMode: false,
@@ -117,15 +116,9 @@ export function getPartnerClicksDebugState() {
   };
 }
 
-/**
- * Call near app startup (e.g. root layout).
- * Safe to call multiple times.
- *
- * Key behaviour:
- * - The subscription is created only once.
- * - The handler is updated every time this is called.
- */
-export function ensurePartnerReturnWatcher(onReturn: (click: LastPartnerClick) => void | Promise<void>) {
+export function ensurePartnerReturnWatcher(
+  onReturn: (click: LastPartnerClick) => void | Promise<void>
+) {
   onReturnHandler = onReturn;
 
   if (subscribed) return;
@@ -136,10 +129,8 @@ export function ensurePartnerReturnWatcher(onReturn: (click: LastPartnerClick) =
   const sub = AppState.addEventListener("change", (next) => {
     const becameActive = Boolean(String(lastState).match(/inactive|background/)) && next === "active";
     lastState = next;
-
     if (!becameActive) return;
 
-    // AppState-based return (covers true backgrounding)
     triggerReturnIfPresent("appstate");
   });
 
@@ -148,9 +139,6 @@ export function ensurePartnerReturnWatcher(onReturn: (click: LastPartnerClick) =
 
 /**
  * Use when you want to open a link WITHOUT creating a pending item.
- * (Example: maps, generic links, or existing saved items.)
- *
- * Hardened with the same in-flight guard as beginPartnerClick.
  */
 export async function openPartnerUrl(url: string) {
   const u = normalizeUrl(url);
@@ -163,6 +151,47 @@ export async function openPartnerUrl(url: string) {
     await openUrlInternal(u);
   } finally {
     opening = false;
+  }
+}
+
+function cleanCity(meta?: Record<string, any>): string | null {
+  const raw = meta?.city ?? meta?.destination ?? meta?.place;
+  const s = String(raw ?? "").trim();
+  return s || null;
+}
+
+function buildDefaultTitle(args: {
+  partnerId: PartnerId;
+  partnerName: string;
+  type: SavedItemType;
+  metadata?: Record<string, any>;
+}): string {
+  const city = cleanCity(args.metadata);
+  const label = getSavedItemTypeLabel(args.type);
+
+  // Use your Phase-1 language, not generic “search”
+  switch (args.type) {
+    case "hotel":
+      return city ? `Stay: Hotels in ${city}` : `Stay: Hotels`;
+    case "flight":
+      return city ? `Flights to ${city}` : `Flights`;
+    case "train":
+      return city ? `Trains to ${city}` : `Trains`;
+    case "transfer":
+      return city ? `Transfers in ${city}` : `Transfers`;
+    case "things":
+      return city ? `Experiences in ${city}` : `Experiences`;
+    case "tickets":
+      return city ? `Match tickets for ${city}` : `Match tickets`;
+    case "insurance":
+      return city ? `Protect yourself: Travel insurance for ${city}` : `Protect yourself: Travel insurance`;
+    case "claim":
+      return `Protect yourself: Compensation help`;
+    case "note":
+    case "other":
+      return "Notes";
+    default:
+      return city ? `${label}: ${city}` : `${label}: ${args.partnerName}`;
   }
 }
 
@@ -192,20 +221,21 @@ export async function beginPartnerClick(args: {
     const url = normalizeUrl(args.url);
     if (!url) throw new Error("url is required");
 
-    // Ensure store is ready (cold start safety)
     if (!savedItemsStore.getState().loaded) {
       await savedItemsStore.load();
     }
 
-    const type = args.savedItemType ?? partner.defaultSavedItemType;
+    const type = (args.savedItemType ?? partner.defaultSavedItemType) as SavedItemType;
 
     const title =
       String(args.title ?? "").trim() ||
-      (partner.id === "getyourguide"
-        ? `GetYourGuide: ${String(args.metadata?.city ?? "").trim() || "Things to do"}`
-        : `${partner.name} search`);
+      buildDefaultTitle({
+        partnerId: partner.id,
+        partnerName: partner.name,
+        type,
+        metadata: args.metadata,
+      });
 
-    // Create pending item BEFORE opening partner (by design)
     const item = await savedItemsStore.add({
       tripId,
       type,
@@ -216,7 +246,6 @@ export async function beginPartnerClick(args: {
       metadata: args.metadata,
     });
 
-    // Stash click for return prompt (consumed by watcher or browser dismiss)
     lastClick = {
       itemId: item.id,
       tripId,
@@ -225,12 +254,8 @@ export async function beginPartnerClick(args: {
       createdAt: now(),
     };
 
-    // Open partner. If this fails, rollback item to avoid “zombie pending”.
     try {
       await openUrlInternal(url);
-
-      // CRITICAL: in-app browser dismissal often does NOT change AppState.
-      // Trigger prompt here as a second, reliable return signal.
       await triggerReturnIfPresent("browser_dismiss");
     } catch (e) {
       try {
@@ -248,9 +273,6 @@ export async function beginPartnerClick(args: {
   }
 }
 
-/**
- * UI calls this after the “Did you book it?” prompt.
- */
 export async function markBooked(itemId: string) {
   const id = String(itemId ?? "").trim();
   if (!id) return;
@@ -263,19 +285,12 @@ export async function markBooked(itemId: string) {
   if (lastClick?.itemId === id) lastClick = null;
 }
 
-/**
- * UI calls this if user says “not yet”.
- * We keep it pending for Phase 1.
- */
 export async function markNotBooked(itemId: string) {
   const id = String(itemId ?? "").trim();
   if (!id) return;
   if (lastClick?.itemId === id) lastClick = null;
 }
 
-/**
- * If a user dismisses the prompt, call this to avoid re-prompt loops.
- */
 export function clearLastClick(itemId?: string) {
   if (!lastClick) return;
 
@@ -292,10 +307,6 @@ export function getLastClick(): LastPartnerClick | null {
   return lastClick;
 }
 
-/**
- * Optional: dev/test cleanup.
- * Not used in prod, but helpful if you ever need to tear down listeners.
- */
 export function __unsafeResetPartnerClickStateForDevOnly() {
   try {
     appStateSub?.remove?.();
