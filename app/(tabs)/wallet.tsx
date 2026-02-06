@@ -1,5 +1,4 @@
 // app/(tabs)/wallet.tsx
-
 import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
@@ -11,6 +10,7 @@ import {
   Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useRouter } from "expo-router";
 
 import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
@@ -23,6 +23,7 @@ import tripsStore, { type Trip } from "@/src/state/trips";
 import savedItemsStore from "@/src/state/savedItems";
 
 import type { SavedItem } from "@/src/core/savedItemTypes";
+import { getPartner } from "@/src/core/partners";
 import { openPartnerUrl } from "@/src/services/partnerClicks";
 
 /* -------------------------------------------------------------------------- */
@@ -49,11 +50,22 @@ function shortDomain(url?: string) {
   }
 }
 
+function partnerName(id?: string) {
+  if (!id) return null;
+  try {
+    return getPartner(id as any)?.name ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /* -------------------------------------------------------------------------- */
 /* Screen */
 /* -------------------------------------------------------------------------- */
 
 export default function WalletScreen() {
+  const router = useRouter();
+
   const [tripsLoaded, setTripsLoaded] = useState(tripsStore.getState().loaded);
   const [savedLoaded, setSavedLoaded] = useState(savedItemsStore.getState().loaded);
 
@@ -84,12 +96,18 @@ export default function WalletScreen() {
 
   /* ------------------------------- Selectors -------------------------------- */
 
+  const pending = useMemo(
+    () => items.filter((i) => i.status === "pending"),
+    [items]
+  );
+
   const booked = useMemo(
     () => items.filter((i) => i.status === "booked"),
     [items]
   );
 
-  const grouped = useMemo(() => groupByTrip(booked), [booked]);
+  const pendingByTrip = useMemo(() => groupByTrip(pending), [pending]);
+  const bookedByTrip = useMemo(() => groupByTrip(booked), [booked]);
 
   const tripById = useMemo(() => {
     const map = new Map<string, Trip>();
@@ -114,6 +132,78 @@ export default function WalletScreen() {
     }
   }
 
+  function goTrip(tripId: string) {
+    router.push({ pathname: "/trip/[id]", params: { id: tripId } } as any);
+  }
+
+  /* -------------------------------------------------------------------------- */
+
+  function Section({
+    title,
+    grouped,
+  }: {
+    title: string;
+    grouped: Map<string, SavedItem[]>;
+  }) {
+    if (grouped.size === 0) return null;
+
+    return (
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>{title}</Text>
+
+        {[...grouped.entries()].map(([tripId, tripItems]) => {
+          const trip = tripById.get(tripId);
+          const tripTitle = trip?.cityId || "Trip";
+
+          return (
+            <View key={tripId} style={{ gap: 8 }}>
+              <Pressable onPress={() => goTrip(tripId)}>
+                <Text style={styles.tripTitle}>{tripTitle}</Text>
+              </Pressable>
+
+              <GlassCard style={styles.card} strength="subtle">
+                <View style={{ gap: 10 }}>
+                  {tripItems.map((it) => {
+                    const pName = partnerName(it.partnerId);
+                    const domain = shortDomain(it.partnerUrl);
+
+                    return (
+                      <Pressable
+                        key={it.id}
+                        onPress={() => openItem(it)}
+                        style={styles.itemRow}
+                      >
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.itemTitle} numberOfLines={1}>
+                            {it.title}
+                          </Text>
+
+                          <Text style={styles.itemMeta} numberOfLines={1}>
+                            {it.type.toUpperCase()}
+                            {pName ? ` • ${pName}` : ""}
+                            {domain ? ` • ${domain}` : ""}
+                          </Text>
+
+                          {it.priceText ? (
+                            <Text style={styles.priceLine}>
+                              {it.priceText}
+                            </Text>
+                          ) : null}
+                        </View>
+
+                        <Text style={styles.chev}>›</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </GlassCard>
+            </View>
+          );
+        })}
+      </View>
+    );
+  }
+
   /* -------------------------------------------------------------------------- */
 
   return (
@@ -127,7 +217,7 @@ export default function WalletScreen() {
           <View style={styles.header}>
             <Text style={styles.title}>Wallet</Text>
             <Text style={styles.subtitle}>
-              Your confirmed bookings and passes
+              Your booking confirmations & pending items
             </Text>
           </View>
 
@@ -142,62 +232,19 @@ export default function WalletScreen() {
           )}
 
           {/* EMPTY */}
-          {!loading && booked.length === 0 && (
+          {!loading && pending.length === 0 && booked.length === 0 && (
             <GlassCard style={styles.card}>
               <EmptyState
-                title="Nothing booked yet"
-                message="When you confirm bookings in a trip, they appear here."
+                title="Wallet empty"
+                message="When you start booking trips, items appear here."
               />
             </GlassCard>
           )}
 
-          {/* CONTENT */}
-          {!loading && booked.length > 0 && (
+          {!loading && (
             <>
-              {[...grouped.entries()].map(([tripId, tripItems]) => {
-                const trip = tripById.get(tripId);
-                const title = trip?.cityId || "Trip";
-
-                return (
-                  <View key={tripId} style={styles.section}>
-                    <Text style={styles.sectionTitle}>{title}</Text>
-
-                    <GlassCard style={styles.card} strength="subtle">
-                      <View style={{ gap: 10 }}>
-                        {tripItems.map((it) => (
-                          <Pressable
-                            key={it.id}
-                            onPress={() => openItem(it)}
-                            style={styles.itemRow}
-                          >
-                            <View style={{ flex: 1 }}>
-                              <Text style={styles.itemTitle} numberOfLines={1}>
-                                {it.title}
-                              </Text>
-
-                              <Text style={styles.itemMeta} numberOfLines={1}>
-                                {it.type.toUpperCase()}
-                                {it.partnerId ? ` • ${it.partnerId}` : ""}
-                                {it.partnerUrl
-                                  ? ` • ${shortDomain(it.partnerUrl)}`
-                                  : ""}
-                              </Text>
-
-                              {it.priceText ? (
-                                <Text style={styles.priceLine}>
-                                  {it.priceText}
-                                </Text>
-                              ) : null}
-                            </View>
-
-                            <Text style={styles.chev}>›</Text>
-                          </Pressable>
-                        ))}
-                      </View>
-                    </GlassCard>
-                  </View>
-                );
-              })}
+              <Section title="Pending" grouped={pendingByTrip} />
+              <Section title="Booked" grouped={bookedByTrip} />
             </>
           )}
 
@@ -240,10 +287,15 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeight.bold,
   },
 
-  section: { marginTop: 2 },
+  section: { gap: 12 },
 
   sectionTitle: {
-    marginBottom: 8,
+    color: theme.colors.text,
+    fontSize: theme.fontSize.lg,
+    fontWeight: theme.fontWeight.black,
+  },
+
+  tripTitle: {
     color: theme.colors.text,
     fontSize: theme.fontSize.md,
     fontWeight: theme.fontWeight.black,
