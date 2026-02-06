@@ -15,6 +15,7 @@ import type { SavedItem, SavedItemType } from "@/src/core/savedItemTypes";
  * - prevent double-taps / concurrent opens (opening guard)
  * - if opening partner fails, roll back the pending item
  * - prevent duplicate prompts by clearing lastClick before invoking onReturn
+ * - allow watcher handler to be UPDATED on subsequent calls (Fast Refresh safe)
  */
 
 export type LastPartnerClick = {
@@ -26,11 +27,15 @@ export type LastPartnerClick = {
 };
 
 let lastClick: LastPartnerClick | null = null;
+
 let subscribed = false;
+let appStateSub: { remove: () => void } | null = null;
+
+let onReturnHandler: ((click: LastPartnerClick) => void | Promise<void>) | null = null;
 
 /**
  * Global in-flight guard.
- * This prevents double-taps creating multiple pending items and corrupting lastClick.
+ * Prevents double-taps creating multiple pending items and corrupting lastClick.
  */
 let opening = false;
 
@@ -44,7 +49,7 @@ function normalizeUrl(url: string): string {
   return /^https?:\/\//i.test(u) ? u : `https://${u}`;
 }
 
-async function openUrl(url: string) {
+async function openUrlInternal(url: string) {
   const u = normalizeUrl(url);
   if (!u) throw new Error("URL is required");
 
@@ -55,7 +60,6 @@ async function openUrl(url: string) {
     return;
   }
 
-  // Native: consistent in-app browser
   await WebBrowser.openBrowserAsync(u, {
     presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
     readerMode: false,
@@ -76,16 +80,22 @@ export function getPartnerClicksDebugState() {
 }
 
 /**
- * Call once near app startup (e.g. root layout).
- * Safe to call multiple times; subscribes only once.
+ * Call near app startup (e.g. root layout).
+ * Safe to call multiple times.
+ *
+ * Key behaviour:
+ * - The subscription is created only once.
+ * - The handler is updated every time this is called.
  */
 export function ensurePartnerReturnWatcher(onReturn: (click: LastPartnerClick) => void | Promise<void>) {
+  onReturnHandler = onReturn;
+
   if (subscribed) return;
   subscribed = true;
 
   let lastState = AppState.currentState;
 
-  AppState.addEventListener("change", (next) => {
+  const sub = AppState.addEventListener("change", (next) => {
     const becameActive = Boolean(lastState.match(/inactive|background/)) && next === "active";
     lastState = next;
 
@@ -102,14 +112,20 @@ export function ensurePartnerReturnWatcher(onReturn: (click: LastPartnerClick) =
     const click = lastClick;
     lastClick = null;
 
-    Promise.resolve(onReturn(click)).catch(() => {
+    const handler = onReturnHandler;
+    if (!handler) return;
+
+    Promise.resolve(handler(click)).catch(() => {
       // swallow: never crash app on return prompt
     });
   });
+
+  // RN returns a subscription with remove()
+  appStateSub = sub as any;
 }
 
 /**
- * Use this when you want to open a link WITHOUT creating a pending item.
+ * Use when you want to open a link WITHOUT creating a pending item.
  * (Example: maps, generic links, or existing saved items.)
  *
  * Hardened with the same in-flight guard as beginPartnerClick.
@@ -122,7 +138,7 @@ export async function openPartnerUrl(url: string) {
   opening = true;
 
   try {
-    await openUrl(u);
+    await openUrlInternal(u);
   } finally {
     opening = false;
   }
@@ -138,19 +154,8 @@ export async function beginPartnerClick(args: {
   tripId: string;
   partnerId: PartnerId;
   url: string;
-
-  /**
-   * Optional override.
-   * Default comes from partner registry.
-   */
   savedItemType?: SavedItemType;
-
-  /**
-   * User-visible title used for the saved item.
-   * Keep it short.
-   */
   title?: string;
-
   metadata?: Record<string, any>;
 }): Promise<SavedItem> {
   if (opening) throw new Error("Partner open already in progress");
@@ -200,7 +205,7 @@ export async function beginPartnerClick(args: {
 
     // Open partner. If this fails, rollback item to avoid “zombie pending”.
     try {
-      await openUrl(url);
+      await openUrlInternal(url);
     } catch (e) {
       try {
         await savedItemsStore.remove(item.id);
@@ -224,7 +229,6 @@ export async function markBooked(itemId: string) {
   const id = String(itemId ?? "").trim();
   if (!id) return;
 
-  // Ensure store ready (defensive)
   if (!savedItemsStore.getState().loaded) {
     await savedItemsStore.load();
   }
@@ -240,8 +244,6 @@ export async function markBooked(itemId: string) {
 export async function markNotBooked(itemId: string) {
   const id = String(itemId ?? "").trim();
   if (!id) return;
-
-  // no transition; remains pending
   if (lastClick?.itemId === id) lastClick = null;
 }
 
@@ -262,4 +264,21 @@ export function clearLastClick(itemId?: string) {
 
 export function getLastClick(): LastPartnerClick | null {
   return lastClick;
+}
+
+/**
+ * Optional: dev/test cleanup.
+ * Not used in prod, but helpful if you ever need to tear down listeners.
+ */
+export function __unsafeResetPartnerClickStateForDevOnly() {
+  try {
+    appStateSub?.remove?.();
+  } catch {
+    // ignore
+  }
+  appStateSub = null;
+  subscribed = false;
+  onReturnHandler = null;
+  lastClick = null;
+  opening = false;
 }
