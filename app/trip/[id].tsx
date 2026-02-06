@@ -24,10 +24,15 @@ import tripsStore, { type Trip } from "@/src/state/trips";
 import savedItemsStore from "@/src/state/savedItems";
 
 import type { SavedItem } from "@/src/core/savedItemTypes";
-import { getSavedItemTypeLabel, getSavedItemTypeGroup } from "@/src/core/savedItemTypes";
-import { getPartner, type PartnerId } from "@/src/core/partners";
+import {
+  getSavedItemGroupKey,
+  getSavedItemGroupTitle,
+  groupOrder,
+} from "@/src/core/savedItemTypes";
 
+import type { PartnerId } from "@/src/core/partners";
 import { beginPartnerClick, openPartnerUrl } from "@/src/services/partnerClicks";
+
 import { getFixtureById } from "@/src/services/apiFootball";
 import { formatUkDateOnly } from "@/src/utils/formatters";
 import { buildAffiliateLinks } from "@/src/services/affiliateLinks";
@@ -61,83 +66,17 @@ function tripStatus(t: Trip): "Draft" | "Upcoming" | "Past" {
   return "Upcoming";
 }
 
-function shortDomain(url?: string) {
-  if (!url) return "";
-  try {
-    const u = new URL(url);
-    return u.hostname.replace(/^www\./, "");
-  } catch {
-    return url;
+function groupByBucket(items: SavedItem[]) {
+  const map = new Map<string, SavedItem[]>();
+  for (const it of items) {
+    const key = getSavedItemGroupKey(it.type);
+    const arr = map.get(key) ?? [];
+    arr.push(it);
+    map.set(key, arr);
   }
-}
-
-function enc(v: string) {
-  return encodeURIComponent(v);
-}
-
-function addQueryParams(url: string, params: Record<string, string | undefined>) {
-  const base = String(url ?? "").trim();
-  if (!base) return base;
-
-  const entries = Object.entries(params).filter(([, v]) => !!v);
-  if (entries.length === 0) return base;
-
-  const joiner = base.includes("?") ? "&" : "?";
-  const qs = entries.map(([k, v]) => `${enc(k)}=${enc(String(v))}`).join("&");
-  return `${base}${joiner}${qs}`;
-}
-
-/**
- * Your tracking base links (provided)
- * Keep here until you decide to centralise into a config module.
- */
-const AFF_BASE = {
-  kiwitaxi: "https://kiwitaxi.tpm.lv/ZnnAV8eH",
-  airhelp: "https://airhelp.tpm.lv/6tipSUue",
-  safetywing:
-    "https://safetywing.com/?referenceID=26471369&utm_source=26471369&utm_medium=Ambassador",
-  sportsevents365: "https://www.sportsevents365.com/?a_aid=69834e80ec9d3",
-};
-
-type WalletGroupKey =
-  | "Match Tickets"
-  | "Stay"
-  | "Flights"
-  | "Trains & buses"
-  | "Transfers"
-  | "Experiences"
-  | "Protect yourself"
-  | "Notes";
-
-function groupBookedItems(booked: SavedItem[]) {
-  const order: WalletGroupKey[] = [
-    "Match Tickets",
-    "Stay",
-    "Flights",
-    "Trains & buses",
-    "Transfers",
-    "Experiences",
-    "Protect yourself",
-    "Notes",
-  ];
-
-  const buckets = new Map<WalletGroupKey, SavedItem[]>();
-  for (const g of order) buckets.set(g, []);
-
-  for (const it of booked) {
-    const g = getSavedItemTypeGroup(it.type) as WalletGroupKey;
-    (buckets.get(g) ?? buckets.get("Notes")!).push(it);
-  }
-
-  // within group: most recently updated first
-  for (const g of order) {
-    const arr = buckets.get(g)!;
-    arr.sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
-  }
-
-  return order
-    .map((g) => ({ group: g, items: buckets.get(g)! }))
-    .filter((x) => x.items.length > 0);
+  const entries = [...map.entries()];
+  entries.sort((a, b) => groupOrder(a[0] as any) - groupOrder(b[0] as any));
+  return entries;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -239,7 +178,7 @@ export default function TripDetailScreen() {
     return fixturesById[first]?.fixture?.venue?.city || "Trip";
   }, [trip, fixturesById]);
 
-  const bookingLinks = useMemo(() => {
+  const links = useMemo(() => {
     if (!trip || !cityName || cityName === "Trip") return null;
     return buildAffiliateLinks({
       city: cityName,
@@ -251,14 +190,9 @@ export default function TripDetailScreen() {
   const booked = useMemo(() => savedItems.filter((x) => x.status === "booked"), [savedItems]);
   const pending = useMemo(() => savedItems.filter((x) => x.status === "pending"), [savedItems]);
 
-  const hints = useMemo(() => {
-    const city = cityName && cityName !== "Trip" ? cityName : undefined;
-    const startDate = trip?.startDate;
-    const endDate = trip?.endDate;
-    return { city, startDate, endDate };
-  }, [cityName, trip]);
+  const bookedBuckets = useMemo(() => groupByBucket(booked), [booked]);
 
-  const walletSections = useMemo(() => groupBookedItems(booked), [booked]);
+  const loading = Boolean(tripId) && (!tripsLoaded || !savedLoaded);
 
   /* ---------------- navigation ---------------- */
 
@@ -284,6 +218,7 @@ export default function TripDetailScreen() {
     partnerId: PartnerId;
     url: string;
     title: string;
+    savedItemType?: any;
     metadata?: Record<string, any>;
   }) {
     if (!tripId) {
@@ -305,6 +240,7 @@ export default function TripDetailScreen() {
         partnerId: args.partnerId,
         url: args.url,
         title: args.title,
+        savedItemType: args.savedItemType,
         metadata: args.metadata,
       });
     } catch {
@@ -313,36 +249,8 @@ export default function TripDetailScreen() {
   }
 
   /* -------------------------------------------------------------------------- */
-  /* Partner URLs (tracked) */
-  /* -------------------------------------------------------------------------- */
-
-  const ticketsUrl = useMemo(() => {
-    return addQueryParams(AFF_BASE.sportsevents365, {
-      q: hints.city ? `${hints.city} match tickets` : "match tickets",
-    });
-  }, [hints.city]);
-
-  const transfersUrl = useMemo(() => {
-    return addQueryParams(AFF_BASE.kiwitaxi, {
-      city: hints.city,
-      startDate: hints.startDate,
-      endDate: hints.endDate,
-    });
-  }, [hints.city, hints.startDate, hints.endDate]);
-
-  const safetyWingUrl = useMemo(() => {
-    return addQueryParams(AFF_BASE.safetywing, { destination: hints.city });
-  }, [hints.city]);
-
-  const airHelpUrl = useMemo(() => {
-    return addQueryParams(AFF_BASE.airhelp, { trip: hints.city });
-  }, [hints.city]);
-
-  /* -------------------------------------------------------------------------- */
   /* render */
   /* -------------------------------------------------------------------------- */
-
-  const loading = Boolean(tripId) && (!tripsLoaded || !savedLoaded);
 
   return (
     <Background imageSource={getBackground("trips")} overlayOpacity={0.86}>
@@ -406,7 +314,7 @@ export default function TripDetailScreen() {
               </GlassCard>
 
               {/* BOOK YOUR TRIP */}
-              {bookingLinks && (
+              {links && (
                 <GlassCard style={styles.card}>
                   <Text style={styles.sectionTitle}>Book your trip</Text>
 
@@ -416,13 +324,10 @@ export default function TripDetailScreen() {
                       onPress={() =>
                         openTrackedPartner({
                           partnerId: "expedia",
-                          url: bookingLinks.hotelsUrl,
-                          title: `Hotels in ${cityName}`,
-                          metadata: {
-                            city: cityName,
-                            startDate: trip.startDate,
-                            endDate: trip.endDate,
-                          },
+                          url: links.hotelsUrl,
+                          title: `Stay: Hotels in ${cityName}`,
+                          savedItemType: "hotel",
+                          metadata: { city: cityName, startDate: trip.startDate, endDate: trip.endDate },
                         })
                       }
                     >
@@ -435,8 +340,9 @@ export default function TripDetailScreen() {
                       onPress={() =>
                         openTrackedPartner({
                           partnerId: "aviasales",
-                          url: bookingLinks.flightsUrl,
+                          url: links.flightsUrl,
                           title: `Flights to ${cityName}`,
+                          savedItemType: "flight",
                           metadata: { city: cityName },
                         })
                       }
@@ -450,13 +356,10 @@ export default function TripDetailScreen() {
                       onPress={() =>
                         openTrackedPartner({
                           partnerId: "kiwitaxi",
-                          url: transfersUrl,
+                          url: links.transfersUrl,
                           title: `Transfers in ${cityName}`,
-                          metadata: {
-                            city: cityName,
-                            startDate: trip.startDate,
-                            endDate: trip.endDate,
-                          },
+                          savedItemType: "transfer",
+                          metadata: { city: cityName, startDate: trip.startDate, endDate: trip.endDate },
                         })
                       }
                     >
@@ -469,8 +372,9 @@ export default function TripDetailScreen() {
                       onPress={() =>
                         openTrackedPartner({
                           partnerId: "getyourguide",
-                          url: bookingLinks.experiencesUrl,
+                          url: links.experiencesUrl,
                           title: `Experiences in ${cityName}`,
+                          savedItemType: "things",
                           metadata: { city: cityName },
                         })
                       }
@@ -480,7 +384,7 @@ export default function TripDetailScreen() {
                     </Pressable>
                   </View>
 
-                  <Pressable onPress={() => openUntracked(bookingLinks.mapsUrl)}>
+                  <Pressable onPress={() => openUntracked(links.mapsUrl)}>
                     <Text style={styles.mapsInline}>Open maps search</Text>
                   </Pressable>
 
@@ -489,130 +393,97 @@ export default function TripDetailScreen() {
               )}
 
               {/* MATCH TICKETS */}
-              <GlassCard style={styles.card}>
-                <Text style={styles.sectionTitle}>Match tickets</Text>
+              {links && (
+                <GlassCard style={styles.card}>
+                  <Text style={styles.sectionTitle}>Match tickets</Text>
 
-                <Pressable
-                  style={styles.wideBtn}
-                  onPress={() =>
-                    openTrackedPartner({
-                      partnerId: "sportsevents365",
-                      url: ticketsUrl,
-                      title: `Match tickets for ${cityName}`,
-                      metadata: { city: cityName },
-                    })
-                  }
-                >
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.wideBtnTitle}>Find tickets</Text>
-                    <Text style={styles.wideBtnSub}>SportsEvents365</Text>
-                  </View>
-                  <Text style={styles.chev}>›</Text>
-                </Pressable>
-              </GlassCard>
+                  <Pressable
+                    style={styles.wideBtn}
+                    onPress={() =>
+                      openTrackedPartner({
+                        partnerId: "sportsevents365",
+                        url: links.ticketsUrl,
+                        title: `Match tickets for ${cityName}`,
+                        savedItemType: "tickets",
+                        metadata: { city: cityName },
+                      })
+                    }
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.wideBtnTitle}>Find tickets</Text>
+                      <Text style={styles.wideBtnSub}>SportsEvents365</Text>
+                    </View>
+                    <Text style={styles.chev}>›</Text>
+                  </Pressable>
+                </GlassCard>
+              )}
 
               {/* PROTECT YOURSELF */}
-              <GlassCard style={styles.card}>
-                <Text style={styles.sectionTitle}>Protect yourself</Text>
+              {links && (
+                <GlassCard style={styles.card}>
+                  <Text style={styles.sectionTitle}>Protect yourself</Text>
 
-                <Pressable
-                  style={styles.wideBtn}
-                  onPress={() =>
-                    openTrackedPartner({
-                      partnerId: "safetywing",
-                      url: safetyWingUrl,
-                      title: `Travel insurance for ${cityName}`,
-                      metadata: {
-                        city: cityName,
-                        startDate: trip.startDate,
-                        endDate: trip.endDate,
-                      },
-                    })
-                  }
-                >
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.wideBtnTitle}>Travel insurance</Text>
-                    <Text style={styles.wideBtnSub}>SafetyWing</Text>
+                  <View style={{ gap: 10 }}>
+                    <Pressable
+                      style={styles.wideBtn}
+                      onPress={() =>
+                        openTrackedPartner({
+                          partnerId: "safetywing",
+                          url: links.insuranceUrl,
+                          title: `Protect yourself: Travel insurance for ${cityName}`,
+                          savedItemType: "insurance",
+                          metadata: { city: cityName, startDate: trip.startDate, endDate: trip.endDate },
+                        })
+                      }
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.wideBtnTitle}>Travel insurance</Text>
+                        <Text style={styles.wideBtnSub}>SafetyWing</Text>
+                      </View>
+                      <Text style={styles.chev}>›</Text>
+                    </Pressable>
+
+                    <Pressable
+                      style={styles.wideBtn}
+                      onPress={() =>
+                        openTrackedPartner({
+                          partnerId: "airhelp",
+                          url: links.claimsUrl,
+                          title: `Protect yourself: Compensation help`,
+                          savedItemType: "claim",
+                          metadata: { city: cityName },
+                        })
+                      }
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.wideBtnTitle}>Claims & compensation</Text>
+                        <Text style={styles.wideBtnSub}>AirHelp</Text>
+                      </View>
+                      <Text style={styles.chev}>›</Text>
+                    </Pressable>
                   </View>
-                  <Text style={styles.chev}>›</Text>
-                </Pressable>
-              </GlassCard>
+                </GlassCard>
+              )}
 
-              {/* CLAIMS */}
-              <GlassCard style={styles.card}>
-                <Text style={styles.sectionTitle}>Claims & compensation</Text>
-
-                <Pressable
-                  style={styles.wideBtn}
-                  onPress={() =>
-                    openTrackedPartner({
-                      partnerId: "airhelp",
-                      url: airHelpUrl,
-                      title: `Flight compensation help`,
-                      metadata: { city: cityName },
-                    })
-                  }
-                >
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.wideBtnTitle}>Check compensation</Text>
-                    <Text style={styles.wideBtnSub}>AirHelp</Text>
-                  </View>
-                  <Text style={styles.chev}>›</Text>
-                </Pressable>
-              </GlassCard>
-
-              {/* WALLET */}
+              {/* WALLET SNAPSHOT */}
               <GlassCard style={styles.card}>
                 <Text style={styles.sectionTitle}>Wallet</Text>
 
                 {booked.length === 0 ? (
                   <EmptyState title="Nothing booked yet" message="Booked items appear here." />
                 ) : (
-                  <View style={{ gap: 12 }}>
-                    {walletSections.map((sec) => (
-                      <View key={sec.group} style={{ gap: 8 }}>
-                        <Text style={styles.walletGroupTitle}>{sec.group}</Text>
+                  <View style={{ gap: 14 }}>
+                    {bookedBuckets.map(([bucketKey, bucketItems]) => (
+                      <View key={bucketKey} style={{ gap: 10 }}>
+                        <Text style={styles.bucketTitle}>
+                          {getSavedItemGroupTitle(bucketKey as any)}
+                        </Text>
 
-                        <GlassCard strength="subtle" style={styles.walletInnerCard}>
-                          <View style={{ gap: 10 }}>
-                            {sec.items.map((it) => {
-                              const typeLabel = getSavedItemTypeLabel(it.type);
-                              const partnerName = it.partnerId ? getPartner(it.partnerId).name : null;
-
-                              return (
-                                <Pressable
-                                  key={it.id}
-                                  style={styles.walletItemRow}
-                                  onPress={() => {
-                                    if (!it.partnerUrl) {
-                                      Alert.alert("No link", "This item has no saved link.");
-                                      return;
-                                    }
-                                    openUntracked(it.partnerUrl);
-                                  }}
-                                >
-                                  <View style={{ flex: 1 }}>
-                                    <Text style={styles.walletTitle} numberOfLines={1}>
-                                      {it.title}
-                                    </Text>
-
-                                    <Text style={styles.walletMeta} numberOfLines={1}>
-                                      {typeLabel}
-                                      {partnerName ? ` • ${partnerName}` : ""}
-                                      {it.partnerUrl ? ` • ${shortDomain(it.partnerUrl)}` : ""}
-                                    </Text>
-
-                                    {it.priceText ? (
-                                      <Text style={styles.walletPrice}>{it.priceText}</Text>
-                                    ) : null}
-                                  </View>
-
-                                  <Text style={styles.chev}>›</Text>
-                                </Pressable>
-                              );
-                            })}
+                        {bucketItems.map((it) => (
+                          <View key={it.id} style={styles.walletRow}>
+                            <Text style={styles.walletTitle}>{it.title}</Text>
                           </View>
-                        </GlassCard>
+                        ))}
                       </View>
                     ))}
                   </View>
@@ -625,10 +496,6 @@ export default function TripDetailScreen() {
     </Background>
   );
 }
-
-/* -------------------------------------------------------------------------- */
-/* styles */
-/* -------------------------------------------------------------------------- */
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },
@@ -714,6 +581,13 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
 
+  bucketTitle: {
+    color: theme.colors.textSecondary,
+    fontWeight: "900",
+    fontSize: 12,
+    letterSpacing: 0.2,
+  },
+
   bookGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -756,39 +630,11 @@ const styles = StyleSheet.create({
 
   chev: { color: theme.colors.textSecondary, fontSize: 24, marginTop: -2 },
 
-  walletGroupTitle: {
-    color: theme.colors.text,
-    fontWeight: "900",
-    fontSize: theme.fontSize.sm,
+  walletRow: {
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255,255,255,0.08)",
   },
 
-  walletInnerCard: { padding: theme.spacing.md },
-
-  walletItemRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.18)",
-  },
-
-  walletTitle: { color: theme.colors.text, fontWeight: "900" },
-
-  walletMeta: {
-    marginTop: 4,
-    color: theme.colors.textSecondary,
-    fontWeight: "800",
-    fontSize: 12,
-  },
-
-  walletPrice: {
-    marginTop: 6,
-    color: "rgba(242,244,246,0.92)",
-    fontSize: theme.fontSize.sm,
-    fontWeight: "900",
-  },
+  walletTitle: { color: theme.colors.text },
 });
