@@ -1,6 +1,16 @@
 // utils/errorLogger.ts
 /* eslint-disable no-console */
 
+/**
+ * Crash-proof console wrapper for RN + Web.
+ *
+ * Goals:
+ * - NEVER crash the app (even if console methods are missing or weirdly patched)
+ * - Prefix all logs with a stable tag
+ * - Fast Refresh safe (won’t stack wrappers repeatedly)
+ * - Best-effort global error forwarding via ErrorUtils when available
+ */
+
 type ConsoleMethod = (...args: any[]) => void;
 
 type SafeConsole = {
@@ -11,8 +21,19 @@ type SafeConsole = {
   debug?: ConsoleMethod;
 };
 
+type Originals = {
+  log?: ConsoleMethod;
+  info?: ConsoleMethod;
+  warn?: ConsoleMethod;
+  error?: ConsoleMethod;
+  debug?: ConsoleMethod;
+};
+
+function prefix() {
+  return "[YNA]";
+}
+
 function getConsole(): SafeConsole {
-  // RN + web safe
   const c = (globalThis as any)?.console;
   return c && typeof c === "object" ? (c as SafeConsole) : {};
 }
@@ -21,83 +42,93 @@ function isFn(x: any): x is ConsoleMethod {
   return typeof x === "function";
 }
 
-function safeInvoke(fn: ConsoleMethod | undefined, thisArg: any, args: any[]) {
+function safeCall(fn: ConsoleMethod | undefined, thisArg: any, args: any[]) {
   if (!isFn(fn)) return;
   try {
-    // apply is safer than relying on proto hacks
     fn.apply(thisArg, args);
   } catch {
-    // never let logging crash the app
+    // swallow — logging must never crash runtime
   }
 }
 
-function formatPrefix() {
-  return "[YNA]";
+function wrap(
+  methodName: keyof Originals,
+  originals: Originals,
+  getThisArg: () => any
+): ConsoleMethod {
+  return (...args: any[]) => {
+    const c = getConsole();
+    const thisArg = getThisArg() ?? c;
+
+    // Always try original first (so we don't recurse into our own wrapper)
+    safeCall(originals[methodName], thisArg, [prefix(), ...args]);
+
+    // Phase 2 hook (remote logging) can go here — MUST be best-effort.
+    // try { remoteSend(methodName, args) } catch {}
+  };
 }
 
-/**
- * This file should NEVER crash the app.
- * It only wraps console methods to:
- * - prefix logs
- * - optionally forward somewhere later (Phase 2)
- *
- * It must be RN-safe:
- * - no window-only assumptions
- * - no __proto__ games
- */
 (function install() {
+  const g = globalThis as any;
+
+  // Single global slot so Fast Refresh doesn’t wrap repeatedly.
+  const KEY = "__yna_error_logger__";
+
+  // If already installed, do nothing.
+  if (g[KEY]?.installed) return;
+
   const c = getConsole();
 
-  // capture originals once
-  const original = {
-    log: c.log,
-    info: c.info,
-    warn: c.warn,
-    error: c.error,
-    debug: c.debug,
+  const originals: Originals = {
+    log: isFn(c.log) ? c.log : undefined,
+    info: isFn(c.info) ? c.info : undefined,
+    warn: isFn(c.warn) ? c.warn : undefined,
+    error: isFn(c.error) ? c.error : undefined,
+    debug: isFn(c.debug) ? c.debug : undefined,
   };
 
-  // guard: don’t double-install (fast refresh)
-  const markerKey = "__yna_logger_installed__";
-  const anyGlobal = globalThis as any;
-  if (anyGlobal[markerKey]) return;
-  anyGlobal[markerKey] = true;
+  // Persist installation state + originals (so wrappers always call the true original)
+  g[KEY] = { installed: true, originals };
 
-  function wrap(methodName: keyof typeof original) {
-    const orig = original[methodName];
-    return (...args: any[]) => {
-      // Always print using the original method if it exists
-      safeInvoke(orig, c, [formatPrefix(), ...args]);
+  const getThisArg = () => getConsole();
 
-      // If you later add remote logging, do it here,
-      // BUT keep it best-effort and never throw.
-      // try { remoteSend(methodName, args) } catch {}
-    };
-  }
+  // Override only if the method exists and is callable
+  if (isFn(c.log)) c.log = wrap("log", originals, getThisArg);
+  if (isFn(c.info)) c.info = wrap("info", originals, getThisArg);
+  if (isFn(c.warn)) c.warn = wrap("warn", originals, getThisArg);
+  if (isFn(c.error)) c.error = wrap("error", originals, getThisArg);
+  if (isFn(c.debug)) c.debug = wrap("debug", originals, getThisArg);
 
-  // Only override if there’s something to override
-  if (isFn(c.log)) c.log = wrap("log");
-  if (isFn(c.info)) c.info = wrap("info");
-  if (isFn(c.warn)) c.warn = wrap("warn");
-  if (isFn(c.error)) c.error = wrap("error");
-  if (isFn(c.debug)) c.debug = wrap("debug");
-
-  // Also catch unhandled errors (best-effort, RN safe)
+  // Best-effort global error handler (RN only usually).
   try {
-    const prevHandler = (ErrorUtils as any)?.getGlobalHandler?.();
-    (ErrorUtils as any)?.setGlobalHandler?.((err: any, isFatal?: boolean) => {
-      try {
-        safeInvoke(original.error, c, [formatPrefix(), "GlobalError", isFatal ? "(fatal)" : "", err]);
-      } catch {
-        // ignore
-      }
-      try {
-        if (typeof prevHandler === "function") prevHandler(err, isFatal);
-      } catch {
-        // ignore
-      }
-    });
+    const EU = (g as any)?.ErrorUtils;
+    const getHandler = EU?.getGlobalHandler;
+    const setHandler = EU?.setGlobalHandler;
+
+    if (isFn(getHandler) && isFn(setHandler)) {
+      const prevHandler = getHandler();
+
+      setHandler((err: any, isFatal?: boolean) => {
+        try {
+          const cc = getConsole();
+          safeCall(originals.error ?? originals.log, cc, [
+            prefix(),
+            "GlobalError",
+            isFatal ? "(fatal)" : "",
+            err,
+          ]);
+        } catch {
+          // ignore
+        }
+
+        try {
+          if (isFn(prevHandler)) prevHandler(err, isFatal);
+        } catch {
+          // ignore
+        }
+      });
+    }
   } catch {
-    // ErrorUtils may not exist in some environments
+    // ignore
   }
 })();
