@@ -3,6 +3,10 @@
 export type TripId = string;
 export type SavedItemId = string;
 
+/**
+ * SavedItemType is an internal enum.
+ * UI labels are derived via getSavedItemTypeLabel().
+ */
 export type SavedItemType =
   | "tickets"
   | "hotel"
@@ -26,7 +30,7 @@ export type SavedItem = {
 
   title: string;
 
-  /** Which partner created this item (expedia/aviasales/etc) */
+  /** Which partner created this item (expedia/aviasales/gyg/etc) */
   partnerId?: string;
 
   /** Deep link / affiliate URL that user clicked */
@@ -36,7 +40,6 @@ export type SavedItem = {
    * Price display policy:
    * - show exact price when known
    * - otherwise show "View live price"
-   * Store whatever we have; UI decides presentation.
    */
   priceText?: string;
   currency?: string;
@@ -46,6 +49,38 @@ export type SavedItem = {
   createdAt: number;
   updatedAt: number;
 };
+
+/**
+ * UI label mapping.
+ * Brutal truth: "claim" is NOT "Protect yourself".
+ * Claims are *after* something goes wrong (compensation/refunds).
+ * Insurance is "Protect yourself".
+ */
+export function getSavedItemTypeLabel(type: SavedItemType): string {
+  switch (type) {
+    case "tickets":
+      return "Match tickets";
+    case "things":
+      return "Experiences";
+    case "hotel":
+      return "Hotels";
+    case "flight":
+      return "Flights";
+    case "train":
+      return "Trains & buses";
+    case "transfer":
+      return "Transfers";
+    case "insurance":
+      return "Protect yourself";
+    case "claim":
+      return "Claims & compensation";
+    case "note":
+    case "other":
+      return "Notes";
+    default:
+      return "Notes";
+  }
+}
 
 const TRANSITIONS: Record<SavedItemStatus, SavedItemStatus[]> = {
   saved: ["pending", "archived"],
@@ -61,121 +96,5 @@ export function canTransition(from: SavedItemStatus, to: SavedItemStatus): boole
 export function assertTransition(from: SavedItemStatus, to: SavedItemStatus): void {
   if (!canTransition(from, to)) {
     throw new Error(`Invalid status transition: ${from} → ${to}`);
-  }
-}
-
-/* -------------------------------------------------------------------------- */
-/* User-facing labels (Phase 1) */
-/* -------------------------------------------------------------------------- */
-
-/**
- * These are the EXACT bucket words you want in the UI.
- * Keep this as the single source of truth for display copy.
- */
-export function getSavedItemTypeLabel(type: SavedItemType): string {
-  switch (type) {
-    case "tickets":
-      return "Match tickets";
-    case "things":
-      return "Experiences";
-    case "insurance":
-    case "claim":
-      return "Protect yourself";
-    case "note":
-    case "other":
-      return "Notes";
-
-    // Supporting buckets (still useful in Wallet)
-    case "hotel":
-      return "Stay";
-    case "flight":
-      return "Flights";
-    case "train":
-      return "Trains";
-    case "transfer":
-      return "Transfers";
-    default:
-      return "Notes";
-  }
-}
-
-/**
- * Group key for consistent ordering + grouping.
- */
-export type SavedItemGroupKey =
-  | "match_tickets"
-  | "stay"
-  | "flights"
-  | "trains"
-  | "transfers"
-  | "experiences"
-  | "protect"
-  | "notes";
-
-export function getSavedItemGroupKey(type: SavedItemType): SavedItemGroupKey {
-  switch (type) {
-    case "tickets":
-      return "match_tickets";
-    case "hotel":
-      return "stay";
-    case "flight":
-      return "flights";
-    case "train":
-      return "trains";
-    case "transfer":
-      return "transfers";
-    case "things":
-      return "experiences";
-    case "insurance":
-    case "claim":
-      return "protect";
-    case "note":
-    case "other":
-    default:
-      return "notes";
-  }
-}
-
-export function getSavedItemGroupTitle(key: SavedItemGroupKey): string {
-  switch (key) {
-    case "match_tickets":
-      return "Match tickets";
-    case "stay":
-      return "Stay";
-    case "flights":
-      return "Flights";
-    case "trains":
-      return "Trains & buses";
-    case "transfers":
-      return "Transfers";
-    case "experiences":
-      return "Experiences";
-    case "protect":
-      return "Protect yourself";
-    case "notes":
-      return "Notes";
-  }
-}
-
-export function groupOrder(key: SavedItemGroupKey): number {
-  switch (key) {
-    case "match_tickets":
-      return 0;
-    case "stay":
-      return 1;
-    case "flights":
-      return 2;
-    case "trains":
-      return 3;
-    case "transfers":
-      return 4;
-    case "experiences":
-      return 5;
-    case "protect":
-      return 6;
-    case "notes":
-      return 7;
-    default:
-      return 99;
   }
 }
