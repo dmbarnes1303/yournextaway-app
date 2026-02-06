@@ -1,5 +1,6 @@
 // src/core/tripTypes.ts
 
+export type Id = string;
 export type TripId = string;
 
 export type Trip = {
@@ -24,6 +25,53 @@ export type Trip = {
   matchIds: string[];
 
   notes?: string;
+
+  createdAt: number;
+  updatedAt: number;
+};
+
+/* -------------------------------------------------------------------------- */
+/* Wallet (manual entries) - Phase 1 */
+/* -------------------------------------------------------------------------- */
+
+export type WalletCategory =
+  | "tickets"
+  | "stay"
+  | "flight"
+  | "train"
+  | "transfer"
+  | "things"
+  | "insurance"
+  | "claim"
+  | "other";
+
+export type WalletItemType = "text" | "link";
+
+export type WalletItem = {
+  id: Id;
+
+  /**
+   * Optional: if set, item appears under that Trip in Wallet.
+   * If missing, it’s “Unassigned”.
+   */
+  tripId?: Id;
+
+  type: WalletItemType;
+
+  title: string;
+  subtitle?: string;
+
+  /**
+   * For "text" items we use `reference` as the stored content.
+   */
+  reference?: string;
+
+  /**
+   * For "link" items we use `sourceUrl`.
+   */
+  sourceUrl?: string;
+
+  category?: WalletCategory;
 
   createdAt: number;
   updatedAt: number;
