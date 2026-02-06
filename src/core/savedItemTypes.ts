@@ -2,11 +2,7 @@
 
 export type TripId = string;
 export type SavedItemId = string;
-export type WalletAttachmentId = string;
 
-/**
- * Internal enum (stable). UI labels come from getSavedItemTypeLabel().
- */
 export type SavedItemType =
   | "tickets"
   | "hotel"
@@ -21,24 +17,31 @@ export type SavedItemType =
 
 export type SavedItemStatus = "saved" | "pending" | "booked" | "archived";
 
-export type WalletAttachmentKind = "image" | "pdf" | "file";
+/* -------------------------------------------------------------------------- */
+/* Wallet Attachments (Phase 1) */
+/* -------------------------------------------------------------------------- */
+
+export type WalletAttachmentKind = "pdf" | "image" | "file";
 
 export type WalletAttachment = {
-  id: WalletAttachmentId;
+  id: string;
 
   kind: WalletAttachmentKind;
 
-  /** Local file URI (FileSystem.documentDirectory...) */
-  uri: string;
-
-  /** Optional original filename */
+  /** Original filename when known (nice to show in UI) */
   name?: string;
 
-  /** e.g. image/jpeg, application/pdf */
+  /** MIME type when known */
   mimeType?: string;
 
-  /** Bytes (best-effort) */
+  /** Byte size when known */
   size?: number;
+
+  /**
+   * Local, app-owned URI (FileSystem.documentDirectory/...)
+   * This is what we open/share.
+   */
+  uri: string;
 
   createdAt: number;
 };
@@ -52,28 +55,16 @@ export type SavedItem = {
 
   title: string;
 
-  /** Which partner created this item (expedia/aviasales/gyg/etc) */
   partnerId?: string;
-
-  /** Deep link / affiliate URL that user clicked */
   partnerUrl?: string;
 
-  /**
-   * Price display policy:
-   * - show exact price when known
-   * - otherwise show "View live price"
-   */
   priceText?: string;
   currency?: string;
 
   metadata?: Record<string, any>;
 
-  /**
-   * Wallet proof (offline-first):
-   * - screenshots (images)
-   * - PDFs (tickets / confirmations)
-   */
-  attachments: WalletAttachment[];
+  /** Phase-1: offline proof (PDF/screenshots/etc) */
+  attachments?: WalletAttachment[];
 
   createdAt: number;
   updatedAt: number;
@@ -86,7 +77,7 @@ export type SavedItem = {
  * - tickets => Match tickets
  * - things  => Experiences
  * - insurance => Protect yourself
- * - claim => Claims & compensation
+ * - claim => Claims & compensation (NOT "Protect yourself")
  * - note/other => Notes
  */
 export function getSavedItemTypeLabel(type: SavedItemType): string {
