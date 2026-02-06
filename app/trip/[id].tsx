@@ -8,7 +8,6 @@ import {
   Pressable,
   ActivityIndicator,
   Alert,
-  Linking,
   Modal,
   TextInput,
   Platform,
@@ -25,10 +24,13 @@ import { theme } from "@/src/constants/theme";
 import { parseIsoDateOnly, toIsoDate } from "@/src/constants/football";
 
 import tripsStore, { type Trip, type TripLinkItem, type TripItineraryItem } from "@/src/state/trips";
+import { useWalletStore } from "@/src/state/walletStore";
 import { getFixtureById } from "@/src/services/apiFootball";
 import { formatUkDateOnly, formatUkDateTimeMaybe } from "@/src/utils/formatters";
+
 import { getTopThingsToDoForTrip } from "@/src/data/cityGuides";
-import { buildAffiliateLinks, buildAffiliateLinkItems, normalizeUrlForCompare } from "@/src/services/affiliateLinks";
+import { getPartnerLinksForTrip } from "@/src/services/partnerRegistry";
+import { openPartnerUrl } from "@/src/services/partnerOpen";
 
 /* -------------------------------- Helpers -------------------------------- */
 
@@ -52,7 +54,7 @@ function summaryLine(t: Trip) {
 }
 
 /**
- * Trip status must use the same "date-only" semantics as the rest of the app:
+ * Trip status uses date-only semantics:
  * - local-midnight parsing for YYYY-MM-DD
  * - today is based on local date
  */
@@ -67,22 +69,6 @@ function tripStatus(t: Trip): "Draft" | "Upcoming" | "Past" {
 
   if (end.getTime() < today.getTime()) return "Past";
   return "Upcoming";
-}
-
-async function safeOpenUrl(url: string) {
-  const u = String(url ?? "").trim();
-  if (!u) return;
-
-  const hasScheme = /^https?:\/\//i.test(u);
-  const candidate = hasScheme ? u : `https://${u}`;
-
-  try {
-    const can = await Linking.canOpenURL(candidate);
-    if (!can) throw new Error("Cannot open URL");
-    await Linking.openURL(candidate);
-  } catch {
-    Alert.alert("Couldn’t open link", "Your device could not open that link.");
-  }
 }
 
 function shortDomain(url: string): string {
@@ -103,7 +89,7 @@ function makeId(prefix: string) {
 
 /* -------------------------------- Screen -------------------------------- */
 
-type AddKind = "link" | "itinerary" | "note";
+type AddKind = "link" | "itinerary" | "note" | "wallet_link" | "wallet_text";
 
 export default function TripDetailScreen() {
   const router = useRouter();
@@ -137,6 +123,17 @@ export default function TripDetailScreen() {
 
   // Add note quick
   const [quickNote, setQuickNote] = useState("");
+
+  // Wallet quick add
+  const [walletTitle, setWalletTitle] = useState("");
+  const [walletUrl, setWalletUrl] = useState("");
+  const [walletText, setWalletText] = useState("");
+
+  const wallet = useWalletStore();
+  const walletItemsForTrip = useMemo(() => {
+    if (!tripId) return [];
+    return wallet.getByTrip(tripId);
+  }, [wallet.items, wallet.loaded, tripId]);
 
   // Subscribe to trips store + load if needed
   useEffect(() => {
@@ -178,6 +175,14 @@ export default function TripDetailScreen() {
       unsub();
     };
   }, [tripId]);
+
+  // Wallet store load
+  useEffect(() => {
+    if (!wallet.loaded) {
+      wallet.load().catch(() => {});
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wallet.loaded]);
 
   // Load fixtures for trip.matchIds (all of them, not just first)
   useEffect(() => {
@@ -223,7 +228,7 @@ export default function TripDetailScreen() {
   const status = useMemo(() => (trip ? tripStatus(trip) : "Draft"), [trip]);
 
   const cityName = useMemo(() => {
-    const fromTrip = String(trip?.cityId ?? "").trim();
+    const fromTrip = String(trip?.cityName ?? trip?.cityId ?? "").trim();
     if (fromTrip) return fromTrip;
 
     // fallback: first loaded fixture city
@@ -233,27 +238,22 @@ export default function TripDetailScreen() {
     if (fromFixture) return fromFixture;
 
     return "Trip";
-  }, [trip?.cityId, trip?.matchIds, fixturesById]);
+  }, [trip?.cityName, trip?.cityId, trip?.matchIds, fixturesById]);
+
+  const partnerLinks = useMemo(() => {
+    if (!trip) return [];
+    if (!cityName || cityName === "Trip") return [];
+    return getPartnerLinksForTrip({
+      city: cityName,
+      startDate: trip.startDate as any,
+      endDate: trip.endDate as any,
+    });
+  }, [trip, cityName]);
 
   const cityBundle = useMemo(() => {
     if (!cityName || cityName === "Trip") return null;
     return getTopThingsToDoForTrip(cityName);
   }, [cityName]);
-
-  const bookingLinks = useMemo(() => {
-    if (!trip) return null;
-    if (!cityName || cityName === "Trip") return null;
-    return buildAffiliateLinks({
-      city: cityName,
-      startDate: trip.startDate,
-      endDate: trip.endDate,
-    });
-  }, [trip, cityName]);
-
-  const bookingItems = useMemo(() => {
-    if (!bookingLinks) return [];
-    return buildAffiliateLinkItems(bookingLinks);
-  }, [bookingLinks]);
 
   const links = useMemo(() => (trip?.links ?? []).slice(), [trip?.links]);
   const itinerary = useMemo(() => (trip?.itinerary ?? []).slice(), [trip?.itinerary]);
@@ -318,13 +318,19 @@ export default function TripDetailScreen() {
 
     // reset forms lightly
     setQuickNote("");
+
     setLinkTitle("");
     setLinkUrl("");
     setLinkGroup("links");
+
     setItTitle("");
     setItDate(trip.startDate ?? "");
     setItTime("");
     setItNotes("");
+
+    setWalletTitle("");
+    setWalletUrl("");
+    setWalletText("");
   }
 
   function closeAdd() {
@@ -418,6 +424,52 @@ export default function TripDetailScreen() {
     }
   }
 
+  async function saveWalletLink() {
+    if (!tripId) return;
+
+    const title = walletTitle.trim() || "Link";
+    const url = walletUrl.trim();
+    if (!url) {
+      Alert.alert("Missing URL", "Paste a link first.");
+      return;
+    }
+
+    try {
+      await wallet.addLink({
+        tripId,
+        title,
+        subtitle: cityName && cityName !== "Trip" ? cityName : undefined,
+        url,
+      });
+      closeAdd();
+    } catch {
+      Alert.alert("Couldn’t save", "Something went wrong saving that wallet link.");
+    }
+  }
+
+  async function saveWalletText() {
+    if (!tripId) return;
+
+    const title = walletTitle.trim() || "Reference";
+    const text = walletText.trim();
+    if (!text) {
+      Alert.alert("Empty", "Type something first.");
+      return;
+    }
+
+    try {
+      await wallet.addText({
+        tripId,
+        title,
+        subtitle: cityName && cityName !== "Trip" ? cityName : undefined,
+        text,
+      });
+      closeAdd();
+    } catch {
+      Alert.alert("Couldn’t save", "Something went wrong saving that wallet note.");
+    }
+  }
+
   async function removeLink(id: string) {
     if (!trip) return;
 
@@ -460,34 +512,21 @@ export default function TripDetailScreen() {
     router.push({ pathname: "/match/[id]", params: { id: fixtureId } } as any);
   }
 
-  async function saveBookingShortcuts() {
-    if (!trip) return;
-    if (bookingItems.length === 0) return;
-
-    const existing = new Set((trip.links ?? []).map((l) => normalizeUrlForCompare(l.url)));
-    const toAdd = bookingItems.filter((it) => !existing.has(normalizeUrlForCompare(it.url)));
-
-    if (toAdd.length === 0) {
-      Alert.alert("Already saved", "Your booking shortcuts are already in this trip.");
-      return;
-    }
-
-    try {
-      for (const it of toAdd) {
-        await tripsStore.addLink(trip.id, {
-          id: makeId("lnk"),
-          title: it.title,
-          url: it.url,
-          group: it.group,
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-        });
-      }
-
-      Alert.alert("Saved", `Added ${toAdd.length} shortcut${toAdd.length === 1 ? "" : "s"} to your trip links.`);
-    } catch {
-      Alert.alert("Couldn’t save", "Something went wrong saving the shortcuts.");
-    }
+  async function removeWalletItem(id: string) {
+    Alert.alert("Remove from Wallet?", "This removes it from this device wallet.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Remove",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await wallet.remove(id);
+          } catch {
+            Alert.alert("Couldn’t remove", "Something went wrong removing that wallet item.");
+          }
+        },
+      },
+    ]);
   }
 
   return (
@@ -568,37 +607,39 @@ export default function TripDetailScreen() {
               </GlassCard>
 
               {/* BOOK THIS TRIP */}
-              {bookingLinks ? (
+              {partnerLinks.length ? (
                 <View style={styles.section}>
-                  <SectionHeader title="Book this trip" subtitle="Fast links (affiliate-ready later)" />
+                  <SectionHeader title="Book this trip" subtitle="Outbound links (affiliate swap later)" />
                   <GlassCard style={styles.card} strength="default">
                     <Text style={styles.bookSub}>
-                      Shortcuts for {cityName}. You can open links now, and later we’ll attach affiliate IDs centrally.
+                      These open in an in-app browser tab for reliability. Affiliate IDs can be attached centrally later.
                     </Text>
 
                     <View style={styles.bookGrid}>
-                      <Pressable onPress={() => safeOpenUrl(bookingLinks.hotelsUrl)} style={[styles.bookBtn, styles.bookBtnPrimary]}>
-                        <Text style={styles.bookBtnText}>Hotels</Text>
-                      </Pressable>
-                      <Pressable onPress={() => safeOpenUrl(bookingLinks.flightsUrl)} style={styles.bookBtn}>
-                        <Text style={styles.bookBtnText}>Flights</Text>
-                      </Pressable>
-                      <Pressable onPress={() => safeOpenUrl(bookingLinks.trainsUrl)} style={styles.bookBtn}>
-                        <Text style={styles.bookBtnText}>Trains</Text>
-                      </Pressable>
-                      <Pressable onPress={() => safeOpenUrl(bookingLinks.experiencesUrl)} style={styles.bookBtn}>
-                        <Text style={styles.bookBtnText}>Experiences</Text>
-                      </Pressable>
+                      {partnerLinks.slice(0, 4).map((p) => (
+                        <Pressable
+                          key={p.id}
+                          onPress={() => openPartnerUrl(p.url, p.openMode)}
+                          style={[styles.bookBtn, p.title === "Hotels" && styles.bookBtnPrimary]}
+                        >
+                          <Text style={styles.bookBtnText}>{p.title}</Text>
+                        </Pressable>
+                      ))}
                     </View>
 
-                    <View style={{ flexDirection: "row", gap: 10, marginTop: 12 }}>
-                      <Pressable onPress={() => safeOpenUrl(bookingLinks.mapsUrl)} style={[styles.halfBtn, styles.halfBtnGhost]}>
-                        <Text style={styles.halfBtnGhostText}>Maps</Text>
-                      </Pressable>
-                      <Pressable onPress={saveBookingShortcuts} style={[styles.halfBtn, styles.halfBtnPrimary]}>
-                        <Text style={styles.halfBtnPrimaryText}>Save shortcuts</Text>
-                      </Pressable>
-                    </View>
+                    {partnerLinks.length > 4 ? (
+                      <View style={{ flexDirection: "row", gap: 10, marginTop: 12 }}>
+                        {partnerLinks.slice(4, 6).map((p, idx) => (
+                          <Pressable
+                            key={p.id}
+                            onPress={() => openPartnerUrl(p.url, p.openMode)}
+                            style={[styles.halfBtn, idx === 1 ? styles.halfBtnPrimary : styles.halfBtnGhost]}
+                          >
+                            <Text style={idx === 1 ? styles.halfBtnPrimaryText : styles.halfBtnGhostText}>{p.title}</Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    ) : null}
                   </GlassCard>
                 </View>
               ) : null}
@@ -655,6 +696,70 @@ export default function TripDetailScreen() {
                 </GlassCard>
               </View>
 
+              {/* WALLET */}
+              <View style={styles.section}>
+                <SectionHeader title="Wallet" subtitle="Confirmations, references, saved links" />
+                <GlassCard style={styles.card} strength="default">
+                  {!wallet.loaded ? (
+                    <View style={styles.center}>
+                      <ActivityIndicator />
+                      <Text style={styles.muted}>Loading wallet…</Text>
+                    </View>
+                  ) : walletItemsForTrip.length === 0 ? (
+                    <>
+                      <EmptyState title="Nothing in your wallet yet" message="Save a confirmation link or reference so it’s available offline later." />
+                      <View style={{ flexDirection: "row", gap: 10, marginTop: 12 }}>
+                        <Pressable onPress={() => openAdd("wallet_link")} style={[styles.halfBtn, styles.halfBtnPrimary]}>
+                          <Text style={styles.halfBtnPrimaryText}>Add link</Text>
+                        </Pressable>
+                        <Pressable onPress={() => openAdd("wallet_text")} style={[styles.halfBtn, styles.halfBtnGhost]}>
+                          <Text style={styles.halfBtnGhostText}>Add reference</Text>
+                        </Pressable>
+                      </View>
+                    </>
+                  ) : (
+                    <>
+                      <View style={{ gap: 10 }}>
+                        {walletItemsForTrip.slice(0, 20).map((w) => {
+                          const meta = [w.type?.toUpperCase?.() ?? "ITEM", w.subtitle ?? ""].filter(Boolean).join(" • ");
+                          return (
+                            <View key={w.id} style={styles.linkRow}>
+                              <Pressable
+                                style={{ flex: 1 }}
+                                onPress={() => {
+                                  if (w.sourceUrl) openPartnerUrl(w.sourceUrl);
+                                }}
+                              >
+                                <Text style={styles.rowTitle} numberOfLines={1}>
+                                  {w.title}
+                                </Text>
+                                <Text style={styles.rowMeta} numberOfLines={1}>
+                                  {w.sourceUrl ? shortDomain(w.sourceUrl) : meta}
+                                </Text>
+                              </Pressable>
+
+                              <Pressable onPress={() => removeWalletItem(w.id)} style={styles.smallDangerBtn}>
+                                <Text style={styles.smallDangerText}>Remove</Text>
+                              </Pressable>
+                            </View>
+                          );
+                        })}
+                        {walletItemsForTrip.length > 20 ? <Text style={styles.moreInline}>Showing the first 20 items.</Text> : null}
+                      </View>
+
+                      <View style={{ flexDirection: "row", gap: 10, marginTop: 12 }}>
+                        <Pressable onPress={() => openAdd("wallet_link")} style={[styles.halfBtn, styles.halfBtnPrimary]}>
+                          <Text style={styles.halfBtnPrimaryText}>Add link</Text>
+                        </Pressable>
+                        <Pressable onPress={() => openAdd("wallet_text")} style={[styles.halfBtn, styles.halfBtnGhost]}>
+                          <Text style={styles.halfBtnGhostText}>Add reference</Text>
+                        </Pressable>
+                      </View>
+                    </>
+                  )}
+                </GlassCard>
+              </View>
+
               {/* STAY */}
               <View style={styles.section}>
                 <SectionHeader title="Stay" subtitle="Hotels, apartments, saved options" />
@@ -676,7 +781,7 @@ export default function TripDetailScreen() {
                     <View style={{ gap: 10 }}>
                       {groupedLinks.stay.map((l) => (
                         <View key={l.id} style={styles.linkRow}>
-                          <Pressable style={{ flex: 1 }} onPress={() => safeOpenUrl(l.url)}>
+                          <Pressable style={{ flex: 1 }} onPress={() => openPartnerUrl(l.url)}>
                             <Text style={styles.rowTitle} numberOfLines={1}>
                               {l.title}
                             </Text>
@@ -724,7 +829,7 @@ export default function TripDetailScreen() {
                     <View style={{ gap: 10 }}>
                       {groupedLinks.travel.map((l) => (
                         <View key={l.id} style={styles.linkRow}>
-                          <Pressable style={{ flex: 1 }} onPress={() => safeOpenUrl(l.url)}>
+                          <Pressable style={{ flex: 1 }} onPress={() => openPartnerUrl(l.url)}>
                             <Text style={styles.rowTitle} numberOfLines={1}>
                               {l.title}
                             </Text>
@@ -775,7 +880,7 @@ export default function TripDetailScreen() {
                           <Text style={styles.bucketTitle}>Tickets</Text>
                           {groupedLinks.tickets.map((l) => (
                             <View key={l.id} style={styles.linkRow}>
-                              <Pressable style={{ flex: 1 }} onPress={() => safeOpenUrl(l.url)}>
+                              <Pressable style={{ flex: 1 }} onPress={() => openPartnerUrl(l.url)}>
                                 <Text style={styles.rowTitle} numberOfLines={1}>
                                   {l.title}
                                 </Text>
@@ -796,7 +901,7 @@ export default function TripDetailScreen() {
                           <Text style={styles.bucketTitle}>Links</Text>
                           {groupedLinks.links.map((l) => (
                             <View key={l.id} style={styles.linkRow}>
-                              <Pressable style={{ flex: 1 }} onPress={() => safeOpenUrl(l.url)}>
+                              <Pressable style={{ flex: 1 }} onPress={() => openPartnerUrl(l.url)}>
                                 <Text style={styles.rowTitle} numberOfLines={1}>
                                   {l.title}
                                 </Text>
@@ -939,12 +1044,6 @@ export default function TripDetailScreen() {
                           ))}
                         </View>
                       ) : null}
-
-                      {cityBundle.tripAdvisorUrl ? (
-                        <Pressable onPress={() => safeOpenUrl(cityBundle.tripAdvisorUrl)} style={[styles.linkBtn, { marginTop: 12 }]}>
-                          <Text style={styles.linkText}>Open TripAdvisor</Text>
-                        </Pressable>
-                      ) : null}
                     </>
                   )}
                 </GlassCard>
@@ -971,7 +1070,7 @@ export default function TripDetailScreen() {
                       {cityName || "Trip"}
                     </Text>
                     <Text style={styles.sheetSub} numberOfLines={2}>
-                      Choose what you want to save — link, itinerary item, or quick note.
+                      Add a link, itinerary item, quick note, or wallet reference.
                     </Text>
                   </View>
 
@@ -986,6 +1085,8 @@ export default function TripDetailScreen() {
                     { k: "link", label: "Link" },
                     { k: "itinerary", label: "Itinerary" },
                     { k: "note", label: "Note" },
+                    { k: "wallet_link", label: "Wallet link" },
+                    { k: "wallet_text", label: "Wallet ref" },
                   ] as Array<{ k: AddKind; label: string }>).map((t) => {
                     const active = addKind === t.k;
                     return (
@@ -1014,11 +1115,7 @@ export default function TripDetailScreen() {
                         ] as Array<{ g: TripLinkItem["group"]; label: string }>).map((x) => {
                           const active = linkGroup === x.g;
                           return (
-                            <Pressable
-                              key={x.g}
-                              onPress={() => setLinkGroup(x.g)}
-                              style={[styles.groupPill, active && styles.groupPillActive]}
-                            >
+                            <Pressable key={x.g} onPress={() => setLinkGroup(x.g)} style={[styles.groupPill, active && styles.groupPillActive]}>
                               <Text style={[styles.groupText, active && styles.groupTextActive]}>{x.label}</Text>
                             </Pressable>
                           );
@@ -1038,7 +1135,7 @@ export default function TripDetailScreen() {
                       <TextInput
                         value={linkUrl}
                         onChangeText={setLinkUrl}
-                        placeholder="Paste a URL (Booking, Google Maps, airline, etc.)"
+                        placeholder="Paste a URL"
                         placeholderTextColor={theme.colors.textSecondary}
                         style={styles.input}
                         autoCapitalize="none"
@@ -1119,14 +1216,13 @@ export default function TripDetailScreen() {
                   {addKind === "note" ? (
                     <View style={{ marginTop: 10, gap: 10 }}>
                       <Text style={styles.noteHint}>
-                        This app doesn’t have a dedicated wallet yet. For now, quick notes are appended to the trip’s Notes
-                        block so you don’t lose anything.
+                        Quick notes append to the trip Notes block.
                       </Text>
 
                       <TextInput
                         value={quickNote}
                         onChangeText={setQuickNote}
-                        placeholder="Quick note (e.g. “Hotel: citizenM or Premier Inn”)"
+                        placeholder="Quick note (e.g. “Train 09:10, platform 3”)"
                         placeholderTextColor={theme.colors.textSecondary}
                         style={[styles.input, styles.textarea]}
                         multiline
@@ -1140,6 +1236,73 @@ export default function TripDetailScreen() {
 
                         <Pressable onPress={saveQuickNote} style={[styles.sheetBtn, styles.sheetBtnPrimary]}>
                           <Text style={styles.sheetBtnPrimaryText}>Save note</Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                  ) : null}
+
+                  {/* WALLET LINK */}
+                  {addKind === "wallet_link" ? (
+                    <View style={{ marginTop: 10, gap: 10 }}>
+                      <TextInput
+                        value={walletTitle}
+                        onChangeText={setWalletTitle}
+                        placeholder="Title (e.g. “Hotel confirmation”)"
+                        placeholderTextColor={theme.colors.textSecondary}
+                        style={styles.input}
+                        autoCapitalize="sentences"
+                        autoCorrect={false}
+                      />
+                      <TextInput
+                        value={walletUrl}
+                        onChangeText={setWalletUrl}
+                        placeholder="Paste confirmation link / booking page"
+                        placeholderTextColor={theme.colors.textSecondary}
+                        style={styles.input}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        keyboardType={Platform.OS === "ios" ? "url" : "default"}
+                      />
+
+                      <View style={styles.sheetActions}>
+                        <Pressable onPress={closeAdd} style={[styles.sheetBtn, styles.sheetBtnGhost]}>
+                          <Text style={styles.sheetBtnGhostText}>Cancel</Text>
+                        </Pressable>
+                        <Pressable onPress={saveWalletLink} style={[styles.sheetBtn, styles.sheetBtnPrimary]}>
+                          <Text style={styles.sheetBtnPrimaryText}>Save to wallet</Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                  ) : null}
+
+                  {/* WALLET TEXT */}
+                  {addKind === "wallet_text" ? (
+                    <View style={{ marginTop: 10, gap: 10 }}>
+                      <TextInput
+                        value={walletTitle}
+                        onChangeText={setWalletTitle}
+                        placeholder="Title (e.g. “Booking reference”)"
+                        placeholderTextColor={theme.colors.textSecondary}
+                        style={styles.input}
+                        autoCapitalize="sentences"
+                        autoCorrect={false}
+                      />
+                      <TextInput
+                        value={walletText}
+                        onChangeText={setWalletText}
+                        placeholder="Paste reference / confirmation details"
+                        placeholderTextColor={theme.colors.textSecondary}
+                        style={[styles.input, styles.textarea]}
+                        multiline
+                        textAlignVertical="top"
+                      />
+
+                      <View style={styles.sheetActions}>
+                        <Pressable onPress={closeAdd} style={[styles.sheetBtn, styles.sheetBtnGhost]}>
+                          <Text style={styles.sheetBtnGhostText}>Cancel</Text>
+                        </Pressable>
+                        <Pressable onPress={saveWalletText} style={[styles.sheetBtn, styles.sheetBtnPrimary]}>
+                          <Text style={styles.sheetBtnPrimaryText}>Save to wallet</Text>
                         </Pressable>
                       </View>
                     </View>
@@ -1404,10 +1567,10 @@ const styles = StyleSheet.create({
   },
   closeText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
 
-  tabRow: { marginTop: 12, flexDirection: "row", gap: 10 },
+  tabRow: { marginTop: 12, flexDirection: "row", gap: 10, flexWrap: "wrap" },
   tabPill: {
-    flex: 1,
     paddingVertical: 10,
+    paddingHorizontal: 12,
     borderRadius: 999,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.12)",
