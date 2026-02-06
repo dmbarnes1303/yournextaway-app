@@ -4,20 +4,21 @@ export type TripId = string;
 export type SavedItemId = string;
 
 /**
- * STORAGE KEYS — do not rename without a migration.
- * UI wording must come from SAVED_ITEM_TYPE_META.
+ * IMPORTANT: These are STORAGE KEYS.
+ * Do NOT rename these union values once you have real users/data.
+ * If you want different wording in the UI, use the label helpers below.
  */
 export type SavedItemType =
-  | "tickets"
-  | "hotel"
-  | "flight"
-  | "train"
-  | "transfer"
-  | "things"
-  | "insurance"
-  | "claim"
-  | "note"
-  | "other";
+  | "tickets"   // UI: Match tickets
+  | "hotel"     // UI: Stay
+  | "flight"    // UI: Flights
+  | "train"     // UI: Trains & buses
+  | "transfer"  // UI: Transfers
+  | "things"    // UI: Experiences
+  | "insurance" // UI: Protect yourself
+  | "claim"     // UI: Protect yourself (claims/comp)
+  | "note"      // UI: Notes
+  | "other";    // UI: Notes
 
 export type SavedItemStatus = "saved" | "pending" | "booked" | "archived";
 
@@ -30,7 +31,7 @@ export type SavedItem = {
 
   title: string;
 
-  /** Which partner created this item (expedia/aviasales/gyg/etc). */
+  /** Which partner created this item (expedia/aviasales/gyg/etc) */
   partnerId?: string;
 
   /** Deep link / affiliate URL that user clicked */
@@ -51,10 +52,43 @@ export type SavedItem = {
   updatedAt: number;
 };
 
+/* -------------------------------------------------------------------------- */
+/* UI wording helpers (safe, because they don't change stored keys) */
+/* -------------------------------------------------------------------------- */
+
+export function getSavedItemTypeLabel(type: SavedItemType): string {
+  switch (type) {
+    case "tickets":
+      return "Match tickets";
+    case "hotel":
+      return "Stay";
+    case "flight":
+      return "Flights";
+    case "train":
+      return "Trains & buses";
+    case "transfer":
+      return "Transfers";
+    case "things":
+      return "Experiences";
+    case "insurance":
+      return "Travel insurance";
+    case "claim":
+      return "Claims & compensation";
+    case "note":
+    case "other":
+      return "Notes";
+    default:
+      return "Notes";
+  }
+}
+
 /**
- * UI group names (Phase-1 bible wording)
+ * Higher-level grouping label used for Wallet sections.
+ * (This is what you were asking for: “Tickets should be Match Tickets”, etc.)
  */
-export type SavedItemTypeGroup =
+export function getSavedItemTypeGroup(
+  type: SavedItemType
+):
   | "Match Tickets"
   | "Stay"
   | "Flights"
@@ -62,46 +96,34 @@ export type SavedItemTypeGroup =
   | "Transfers"
   | "Experiences"
   | "Protect yourself"
-  | "Notes";
-
-/**
- * UI wording map.
- * - tickets -> Match Tickets
- * - things -> Experiences
- * - claim -> Protect yourself
- * - note/other -> Notes
- */
-export const SAVED_ITEM_TYPE_META: Record<
-  SavedItemType,
-  { label: string; group: SavedItemTypeGroup; shortLabel?: string }
-> = {
-  tickets: { label: "Match Tickets", group: "Match Tickets", shortLabel: "Tickets" },
-  hotel: { label: "Hotel", group: "Stay" },
-  flight: { label: "Flight", group: "Flights" },
-  train: { label: "Train / bus", group: "Trains & buses", shortLabel: "Train" },
-  transfer: { label: "Transfer", group: "Transfers" },
-  things: { label: "Experiences", group: "Experiences" },
-  insurance: { label: "Travel insurance", group: "Protect yourself", shortLabel: "Insurance" },
-
-  // AirHelp etc ends up here in Phase 1 wording
-  claim: { label: "Protect yourself", group: "Protect yourself" },
-
-  // Notes bucket
-  note: { label: "Notes", group: "Notes" },
-  other: { label: "Notes", group: "Notes" },
-};
-
-export function getSavedItemTypeLabel(type: SavedItemType): string {
-  return SAVED_ITEM_TYPE_META[type]?.label ?? String(type);
+  | "Notes" {
+  switch (type) {
+    case "tickets":
+      return "Match Tickets";
+    case "hotel":
+      return "Stay";
+    case "flight":
+      return "Flights";
+    case "train":
+      return "Trains & buses";
+    case "transfer":
+      return "Transfers";
+    case "things":
+      return "Experiences";
+    case "insurance":
+    case "claim":
+      return "Protect yourself";
+    case "note":
+    case "other":
+    default:
+      return "Notes";
+  }
 }
 
-export function getSavedItemTypeGroup(type: SavedItemType): SavedItemTypeGroup {
-  return SAVED_ITEM_TYPE_META[type]?.group ?? "Notes";
-}
+/* -------------------------------------------------------------------------- */
+/* status transitions */
+/* -------------------------------------------------------------------------- */
 
-/**
- * Status transitions
- */
 const TRANSITIONS: Record<SavedItemStatus, SavedItemStatus[]> = {
   saved: ["pending", "archived"],
   pending: ["booked", "archived"],
