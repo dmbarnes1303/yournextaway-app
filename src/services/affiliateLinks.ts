@@ -1,11 +1,18 @@
 // src/services/affiliateLinks.ts
-
 import type { TripLinkItem } from "@/src/state/trips";
+import Constants from "expo-constants";
 
 /**
- * Centralised link builder.
- * V1: plain deep links (no affiliate tags yet).
- * V2: add affiliate params in ONE place (config below).
+ * Centralised affiliate link builder.
+ *
+ * IMPORTANT:
+ * - Keep ALL partner IDs here (single source of truth).
+ * - UI/screens should only call buildAffiliateLinks().
+ *
+ * Notes:
+ * - GetYourGuide search URLs should use:
+ *   https://www.getyourguide.com/s/?q=<query>&partner_id=<id>
+ *   (NOT /s/<query>) 1
  */
 
 export type AffiliateLinkKind = "hotels" | "flights" | "trains" | "experiences" | "maps";
@@ -23,16 +30,35 @@ export type AffiliateLinks = {
 };
 
 type AffiliateConfig = {
-  bookingAffiliateId?: string;
-  skyscannerAffilId?: string;
-  omioPartnerId?: string;
-  getYourGuidePartnerId?: string;
-  viatorAid?: string;
+  bookingAffiliateId?: string; // Booking.com: aid=
+  skyscannerAffilId?: string; // Skyscanner: associateid=
+  omioPartnerId?: string; // Omio: partner_id=
+  getYourGuidePartnerId?: string; // GetYourGuide: partner_id=
+  viatorAid?: string; // reserved
 };
 
-// Later: fill these once you sign up.
-// Keep them here so you never sprinkle IDs across UI/screens.
-const AFFILIATE: AffiliateConfig = {};
+function env(name: string): string | undefined {
+  const extra = (Constants?.expoConfig as any)?.extra ?? (Constants as any)?.manifest?.extra ?? {};
+  const v =
+    (extra && typeof extra[name] === "string" ? String(extra[name]) : undefined) ??
+    (typeof process !== "undefined" && (process as any)?.env && typeof (process as any).env[name] === "string"
+      ? String((process as any).env[name])
+      : undefined);
+  const s = String(v ?? "").trim();
+  return s || undefined;
+}
+
+/**
+ * Put your IDs in app.json -> expo.extra and/or .env as EXPO_PUBLIC_*.
+ * Example:
+ * EXPO_PUBLIC_GYG_PARTNER_ID=XXXXXXX
+ */
+const AFFILIATE: AffiliateConfig = {
+  bookingAffiliateId: env("EXPO_PUBLIC_BOOKING_AID"),
+  skyscannerAffilId: env("EXPO_PUBLIC_SKYSCANNER_ASSOCIATE_ID"),
+  omioPartnerId: env("EXPO_PUBLIC_OMIO_PARTNER_ID"),
+  getYourGuidePartnerId: env("EXPO_PUBLIC_GYG_PARTNER_ID"),
+};
 
 function enc(v: string): string {
   return encodeURIComponent(v);
@@ -53,6 +79,11 @@ function safeQueryCity(city: string, country?: string) {
   return co ? `${c}, ${co}` : c;
 }
 
+function isIsoDateOnly(s?: string): boolean {
+  if (!s) return false;
+  return /^\d{4}-\d{2}-\d{2}$/.test(String(s).trim());
+}
+
 export function buildAffiliateLinks(args: {
   city: string;
   country?: string;
@@ -61,8 +92,8 @@ export function buildAffiliateLinks(args: {
 }): AffiliateLinks {
   const city = cleanCity(args.city);
   const country = cleanCountry(args.country);
-  const startDate = args.startDate ? String(args.startDate).trim() : undefined;
-  const endDate = args.endDate ? String(args.endDate).trim() : undefined;
+  const startDate = isIsoDateOnly(args.startDate) ? String(args.startDate).trim() : undefined;
+  const endDate = isIsoDateOnly(args.endDate) ? String(args.endDate).trim() : undefined;
 
   const query = safeQueryCity(city, country);
 
@@ -72,17 +103,15 @@ export function buildAffiliateLinks(args: {
   const bookingBase = "https://www.booking.com/searchresults.html";
   const bookingParams: string[] = [`ss=${enc(query)}`];
 
-  if (startDate && /^\d{4}-\d{2}-\d{2}$/.test(startDate)) bookingParams.push(`checkin=${enc(startDate)}`);
-  if (endDate && /^\d{4}-\d{2}-\d{2}$/.test(endDate)) bookingParams.push(`checkout=${enc(endDate)}`);
+  if (startDate) bookingParams.push(`checkin=${enc(startDate)}`);
+  if (endDate) bookingParams.push(`checkout=${enc(endDate)}`);
 
-  if (AFFILIATE.bookingAffiliateId) {
-    bookingParams.push(`aid=${enc(AFFILIATE.bookingAffiliateId)}`);
-  }
+  if (AFFILIATE.bookingAffiliateId) bookingParams.push(`aid=${enc(AFFILIATE.bookingAffiliateId)}`);
 
   const hotelsUrl = `${bookingBase}?${bookingParams.join("&")}`;
 
   // --------------------
-  // Flights: Skyscanner (generic entry)
+  // Flights: Skyscanner entry
   // --------------------
   const flightsBase = "https://www.skyscanner.net/transport/flights/";
   const flightsUrl = AFFILIATE.skyscannerAffilId
@@ -98,12 +127,13 @@ export function buildAffiliateLinks(args: {
     : `${omioBase}?utm_source=yna&utm_medium=app&utm_campaign=trains`;
 
   // --------------------
-  // Experiences: GetYourGuide search
+  // Experiences: GetYourGuide SEARCH (correct format)
+  // https://www.getyourguide.com/s/?q=<query>&partner_id=<id> 2
   // --------------------
   const gygBase = "https://www.getyourguide.com/s/";
-  const experiencesUrl = AFFILIATE.getYourGuidePartnerId
-    ? `${gygBase}${enc(query)}?partner_id=${enc(AFFILIATE.getYourGuidePartnerId)}`
-    : `${gygBase}${enc(query)}`;
+  const gygParams: string[] = [`q=${enc(query)}`];
+  if (AFFILIATE.getYourGuidePartnerId) gygParams.push(`partner_id=${enc(AFFILIATE.getYourGuidePartnerId)}`);
+  const experiencesUrl = `${gygBase}?${gygParams.join("&")}`;
 
   // --------------------
   // Maps: Google Maps search
@@ -130,7 +160,7 @@ export function buildAffiliateLinkItems(
     { title: "Hotels (search)", url: links.hotelsUrl, group: "stay" },
     { title: "Flights (search)", url: links.flightsUrl, group: "travel" },
     { title: "Trains / coaches (search)", url: links.trainsUrl, group: "travel" },
-    { title: "Experiences (things to do)", url: links.experiencesUrl, group: "links" },
+    { title: "GetYourGuide (things to do)", url: links.experiencesUrl, group: "links" },
     { title: "Maps (search)", url: links.mapsUrl, group: "links" },
   ];
 }
