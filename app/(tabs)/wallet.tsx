@@ -1,4 +1,5 @@
 // app/(tabs)/wallet.tsx
+
 import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
@@ -10,7 +11,6 @@ import {
   Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
 
 import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
@@ -23,6 +23,7 @@ import tripsStore, { type Trip } from "@/src/state/trips";
 import savedItemsStore from "@/src/state/savedItems";
 
 import type { SavedItem } from "@/src/core/savedItemTypes";
+import { getSavedItemTypeLabel } from "@/src/core/savedItemTypes";
 import { getPartner } from "@/src/core/partners";
 import { openPartnerUrl } from "@/src/services/partnerClicks";
 
@@ -50,29 +51,16 @@ function shortDomain(url?: string) {
   }
 }
 
-function partnerName(id?: string) {
-  if (!id) return null;
-  try {
-    return getPartner(id as any)?.name ?? null;
-  } catch {
-    return null;
-  }
-}
-
 /* -------------------------------------------------------------------------- */
 /* Screen */
 /* -------------------------------------------------------------------------- */
 
 export default function WalletScreen() {
-  const router = useRouter();
-
   const [tripsLoaded, setTripsLoaded] = useState(tripsStore.getState().loaded);
   const [savedLoaded, setSavedLoaded] = useState(savedItemsStore.getState().loaded);
 
   const [trips, setTrips] = useState<Trip[]>(tripsStore.getState().trips);
   const [items, setItems] = useState<SavedItem[]>(savedItemsStore.getState().items);
-
-  /* ----------------------------- Subscriptions ----------------------------- */
 
   useEffect(() => {
     const unsubTrips = tripsStore.subscribe((s) => {
@@ -94,20 +82,8 @@ export default function WalletScreen() {
     };
   }, []);
 
-  /* ------------------------------- Selectors -------------------------------- */
-
-  const pending = useMemo(
-    () => items.filter((i) => i.status === "pending"),
-    [items]
-  );
-
-  const booked = useMemo(
-    () => items.filter((i) => i.status === "booked"),
-    [items]
-  );
-
-  const pendingByTrip = useMemo(() => groupByTrip(pending), [pending]);
-  const bookedByTrip = useMemo(() => groupByTrip(booked), [booked]);
+  const booked = useMemo(() => items.filter((i) => i.status === "booked"), [items]);
+  const grouped = useMemo(() => groupByTrip(booked), [booked]);
 
   const tripById = useMemo(() => {
     const map = new Map<string, Trip>();
@@ -116,8 +92,6 @@ export default function WalletScreen() {
   }, [trips]);
 
   const loading = !tripsLoaded || !savedLoaded;
-
-  /* -------------------------------------------------------------------------- */
 
   async function openItem(item: SavedItem) {
     if (!item.partnerUrl) {
@@ -132,80 +106,6 @@ export default function WalletScreen() {
     }
   }
 
-  function goTrip(tripId: string) {
-    router.push({ pathname: "/trip/[id]", params: { id: tripId } } as any);
-  }
-
-  /* -------------------------------------------------------------------------- */
-
-  function Section({
-    title,
-    grouped,
-  }: {
-    title: string;
-    grouped: Map<string, SavedItem[]>;
-  }) {
-    if (grouped.size === 0) return null;
-
-    return (
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>{title}</Text>
-
-        {[...grouped.entries()].map(([tripId, tripItems]) => {
-          const trip = tripById.get(tripId);
-          const tripTitle = trip?.cityId || "Trip";
-
-          return (
-            <View key={tripId} style={{ gap: 8 }}>
-              <Pressable onPress={() => goTrip(tripId)}>
-                <Text style={styles.tripTitle}>{tripTitle}</Text>
-              </Pressable>
-
-              <GlassCard style={styles.card} strength="subtle">
-                <View style={{ gap: 10 }}>
-                  {tripItems.map((it) => {
-                    const pName = partnerName(it.partnerId);
-                    const domain = shortDomain(it.partnerUrl);
-
-                    return (
-                      <Pressable
-                        key={it.id}
-                        onPress={() => openItem(it)}
-                        style={styles.itemRow}
-                      >
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.itemTitle} numberOfLines={1}>
-                            {it.title}
-                          </Text>
-
-                          <Text style={styles.itemMeta} numberOfLines={1}>
-                            {it.type.toUpperCase()}
-                            {pName ? ` • ${pName}` : ""}
-                            {domain ? ` • ${domain}` : ""}
-                          </Text>
-
-                          {it.priceText ? (
-                            <Text style={styles.priceLine}>
-                              {it.priceText}
-                            </Text>
-                          ) : null}
-                        </View>
-
-                        <Text style={styles.chev}>›</Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              </GlassCard>
-            </View>
-          );
-        })}
-      </View>
-    );
-  }
-
-  /* -------------------------------------------------------------------------- */
-
   return (
     <Background imageSource={getBackground("wallet")} overlayOpacity={0.86}>
       <SafeAreaView style={styles.container} edges={["top"]}>
@@ -216,12 +116,9 @@ export default function WalletScreen() {
         >
           <View style={styles.header}>
             <Text style={styles.title}>Wallet</Text>
-            <Text style={styles.subtitle}>
-              Your booking confirmations & pending items
-            </Text>
+            <Text style={styles.subtitle}>Your confirmed bookings and passes</Text>
           </View>
 
-          {/* LOADING */}
           {loading && (
             <GlassCard style={styles.card}>
               <View style={styles.center}>
@@ -231,20 +128,62 @@ export default function WalletScreen() {
             </GlassCard>
           )}
 
-          {/* EMPTY */}
-          {!loading && pending.length === 0 && booked.length === 0 && (
+          {!loading && booked.length === 0 && (
             <GlassCard style={styles.card}>
               <EmptyState
-                title="Wallet empty"
-                message="When you start booking trips, items appear here."
+                title="Nothing booked yet"
+                message="When you confirm bookings in a trip, they appear here."
               />
             </GlassCard>
           )}
 
-          {!loading && (
+          {!loading && booked.length > 0 && (
             <>
-              <Section title="Pending" grouped={pendingByTrip} />
-              <Section title="Booked" grouped={bookedByTrip} />
+              {[...grouped.entries()].map(([tripId, tripItems]) => {
+                const trip = tripById.get(tripId);
+                const title = trip?.cityId || "Trip";
+
+                return (
+                  <View key={tripId} style={styles.section}>
+                    <Text style={styles.sectionTitle}>{title}</Text>
+
+                    <GlassCard style={styles.card} strength="subtle">
+                      <View style={{ gap: 10 }}>
+                        {tripItems.map((it) => {
+                          const partnerName = it.partnerId ? getPartner(it.partnerId).name : null;
+                          const typeLabel = getSavedItemTypeLabel(it.type);
+
+                          return (
+                            <Pressable
+                              key={it.id}
+                              onPress={() => openItem(it)}
+                              style={styles.itemRow}
+                            >
+                              <View style={{ flex: 1 }}>
+                                <Text style={styles.itemTitle} numberOfLines={1}>
+                                  {it.title}
+                                </Text>
+
+                                <Text style={styles.itemMeta} numberOfLines={1}>
+                                  {typeLabel}
+                                  {partnerName ? ` • ${partnerName}` : ""}
+                                  {it.partnerUrl ? ` • ${shortDomain(it.partnerUrl)}` : ""}
+                                </Text>
+
+                                {it.priceText ? (
+                                  <Text style={styles.priceLine}>{it.priceText}</Text>
+                                ) : null}
+                              </View>
+
+                              <Text style={styles.chev}>›</Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                    </GlassCard>
+                  </View>
+                );
+              })}
             </>
           )}
 
@@ -254,10 +193,6 @@ export default function WalletScreen() {
     </Background>
   );
 }
-
-/* -------------------------------------------------------------------------- */
-/* Styles */
-/* -------------------------------------------------------------------------- */
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
@@ -287,15 +222,10 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeight.bold,
   },
 
-  section: { gap: 12 },
+  section: { marginTop: 2 },
 
   sectionTitle: {
-    color: theme.colors.text,
-    fontSize: theme.fontSize.lg,
-    fontWeight: theme.fontWeight.black,
-  },
-
-  tripTitle: {
+    marginBottom: 8,
     color: theme.colors.text,
     fontSize: theme.fontSize.md,
     fontWeight: theme.fontWeight.black,
