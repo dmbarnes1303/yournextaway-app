@@ -4,8 +4,7 @@ export type TripId = string;
 export type SavedItemId = string;
 
 /**
- * SavedItemType is an internal enum.
- * UI labels are derived via getSavedItemTypeLabel().
+ * Internal enum (stable). UI labels come from getSavedItemTypeLabel().
  */
 export type SavedItemType =
   | "tickets"
@@ -51,10 +50,14 @@ export type SavedItem = {
 };
 
 /**
- * UI label mapping.
- * Brutal truth: "claim" is NOT "Protect yourself".
- * Claims are *after* something goes wrong (compensation/refunds).
- * Insurance is "Protect yourself".
+ * Display labels (what users see).
+ *
+ * Your requested wording:
+ * - tickets => Match tickets
+ * - things  => Experiences
+ * - insurance => Protect yourself
+ * - claim => Claims & compensation (NOT "Protect yourself" — that's insurance)
+ * - note/other => Notes
  */
 export function getSavedItemTypeLabel(type: SavedItemType): string {
   switch (type) {
@@ -62,6 +65,13 @@ export function getSavedItemTypeLabel(type: SavedItemType): string {
       return "Match tickets";
     case "things":
       return "Experiences";
+    case "claim":
+      return "Claims & compensation";
+    case "insurance":
+      return "Protect yourself";
+    case "note":
+    case "other":
+      return "Notes";
     case "hotel":
       return "Hotels";
     case "flight":
@@ -70,13 +80,6 @@ export function getSavedItemTypeLabel(type: SavedItemType): string {
       return "Trains & buses";
     case "transfer":
       return "Transfers";
-    case "insurance":
-      return "Protect yourself";
-    case "claim":
-      return "Claims & compensation";
-    case "note":
-    case "other":
-      return "Notes";
     default:
       return "Notes";
   }
