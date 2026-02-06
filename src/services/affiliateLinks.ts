@@ -27,15 +27,15 @@ export type AffiliateLinks = {
   experiencesUrl: string; // GetYourGuide
   mapsUrl: string; // Google Maps (untracked)
 
-  // Phase-1 approved additions
-  transfersUrl: string; // KiwiTaxi
-  insuranceUrl: string; // SafetyWing
-  claimsUrl: string; // AirHelp
-  ticketsUrl: string; // SportsEvents365
+  // Approved additions (Phase 1)
+  transfersUrl: string; // KiwiTaxi (tracked)
+  insuranceUrl: string; // SafetyWing (tracked)
+  claimsUrl: string; // AirHelp (tracked)
+  ticketsUrl: string; // SportsEvents365 (tracked)
 };
 
 /* -------------------------------------------------------------------------- */
-/* env helpers */
+/* helpers */
 /* -------------------------------------------------------------------------- */
 
 function env(name: string): string | undefined {
@@ -51,29 +51,6 @@ function env(name: string): string | undefined {
   const s = String(v ?? "").trim();
   return s || undefined;
 }
-
-/**
- * Suggested keys (keep consistent once live):
- * - EXPO_PUBLIC_AVIASALES_MARKER
- * - EXPO_PUBLIC_GYG_PARTNER_ID
- * - EXPO_PUBLIC_EXPEDIA_AFFIL_ID         (optional; program-specific)
- * - EXPO_PUBLIC_KIWITAXI_AFFIL_ID        (optional)
- * - EXPO_PUBLIC_SAFETYWING_AFFIL_ID      (optional)
- * - EXPO_PUBLIC_AIRHELP_AFFIL_ID         (optional)
- * - EXPO_PUBLIC_SPORTSEVENTS365_AFFIL_ID (optional)
- */
-const AFFILIATE = {
-  aviasalesMarker: env("EXPO_PUBLIC_AVIASALES_MARKER"),
-  gygPartnerId: env("EXPO_PUBLIC_GYG_PARTNER_ID"),
-  expediaAffilId: env("EXPO_PUBLIC_EXPEDIA_AFFIL_ID"),
-
-  kiwitaxiAffilId: env("EXPO_PUBLIC_KIWITAXI_AFFIL_ID"),
-  safetywingAffilId: env("EXPO_PUBLIC_SAFETYWING_AFFIL_ID"),
-  airhelpAffilId: env("EXPO_PUBLIC_AIRHELP_AFFIL_ID"),
-  sportsevents365AffilId: env("EXPO_PUBLIC_SPORTSEVENTS365_AFFIL_ID"),
-};
-
-/* -------------------------------------------------------------------------- */
 
 function enc(v: string) {
   return encodeURIComponent(v);
@@ -98,6 +75,62 @@ function isIsoDateOnly(s?: string) {
   return !!s && /^\d{4}-\d{2}-\d{2}$/.test(String(s).trim());
 }
 
+/**
+ * Append query params to an existing URL safely.
+ * - preserves existing query string (your tracking params)
+ * - merges additional keys
+ */
+function withQuery(baseUrl: string, params: Record<string, string | undefined>) {
+  const raw = String(baseUrl ?? "").trim();
+  if (!raw) return "";
+
+  try {
+    const u = new URL(raw);
+    for (const [k, v] of Object.entries(params)) {
+      const vv = String(v ?? "").trim();
+      if (!vv) continue;
+      u.searchParams.set(k, vv);
+    }
+    return u.toString();
+  } catch {
+    // Worst-case: naive append
+    const pairs = Object.entries(params)
+      .map(([k, v]) => {
+        const vv = String(v ?? "").trim();
+        return vv ? `${enc(k)}=${enc(vv)}` : "";
+      })
+      .filter(Boolean);
+
+    if (pairs.length === 0) return raw;
+    return raw + (raw.includes("?") ? "&" : "?") + pairs.join("&");
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* affiliate config */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * IDs for partners you already have approved:
+ * - Aviasales marker (if you have it)
+ * - GetYourGuide partner ID (if you have it)
+ * - Expedia affiliate ID optional (program-specific)
+ *
+ * Tracking base links (hard-coded as per what you pasted):
+ * - KiwiTaxi / AirHelp / SafetyWing / SportsEvents365
+ */
+const AFFILIATE = {
+  aviasalesMarker: env("EXPO_PUBLIC_AVIASALES_MARKER"),
+  gygPartnerId: env("EXPO_PUBLIC_GYG_PARTNER_ID"),
+  expediaAffilId: env("EXPO_PUBLIC_EXPEDIA_AFFIL_ID"),
+
+  // ✅ exact tracking links you provided
+  kiwitaxiBase: "https://kiwitaxi.tpm.lv/ZnnAV8eH",
+  airhelpBase: "https://airhelp.tpm.lv/6tipSUue",
+  safetywingBase: "https://safetywing.com/?referenceID=26471369&utm_source=26471369&utm_medium=Ambassador",
+  sportsevents365Base: "https://www.sportsevents365.com/?a_aid=69834e80ec9d3",
+};
+
 /* -------------------------------------------------------------------------- */
 /* public */
 /* -------------------------------------------------------------------------- */
@@ -119,14 +152,10 @@ export function buildAffiliateLinks(args: {
   /* -------------------- */
   /* Hotels: Expedia */
   /* -------------------- */
-  // Stable public search entry (affiliate deep links vary by program).
   const expediaParams: string[] = [`destination=${enc(query)}`];
   if (startDate) expediaParams.push(`startDate=${enc(startDate)}`);
   if (endDate) expediaParams.push(`endDate=${enc(endDate)}`);
-
-  // Generic optional tag (harmless if ignored by Expedia).
   if (AFFILIATE.expediaAffilId) expediaParams.push(`affcid=${enc(AFFILIATE.expediaAffilId)}`);
-
   const hotelsUrl = `https://www.expedia.co.uk/Hotel-Search?${expediaParams.join("&")}`;
 
   /* -------------------- */
@@ -134,10 +163,7 @@ export function buildAffiliateLinks(args: {
   /* -------------------- */
   const aviaParams: string[] = [];
   if (AFFILIATE.aviasalesMarker) aviaParams.push(`marker=${enc(AFFILIATE.aviasalesMarker)}`);
-
-  // Best-effort hint; Aviasales may ignore, but URL still valid.
   aviaParams.push(`destination=${enc(query)}`);
-
   const flightsUrl = `https://www.aviasales.com/?${aviaParams.join("&")}`;
 
   /* -------------------- */
@@ -148,44 +174,31 @@ export function buildAffiliateLinks(args: {
   /* -------------------- */
   /* Experiences: GetYourGuide */
   /* -------------------- */
-  // Correct search format: https://www.getyourguide.com/s/?q=<query>&partner_id=<id>
   const gygParams: string[] = [`q=${enc(query)}`];
   if (AFFILIATE.gygPartnerId) gygParams.push(`partner_id=${enc(AFFILIATE.gygPartnerId)}`);
   const experiencesUrl = `https://www.getyourguide.com/s/?${gygParams.join("&")}`;
 
   /* -------------------- */
-  /* Transfers: KiwiTaxi */
+  /* Transfers: KiwiTaxi (TRACKED) */
   /* -------------------- */
-  // Stable entry: we pass city as query. Affiliate programs vary; keep optional tag.
-  const kiwiParams: string[] = [`query=${enc(query)}`];
-  if (AFFILIATE.kiwitaxiAffilId) kiwiParams.push(`aff_id=${enc(AFFILIATE.kiwitaxiAffilId)}`);
-  const transfersUrl = `https://kiwitaxi.com/?${kiwiParams.join("&")}`;
+  // We keep your tracking link intact and just add a query hint.
+  const transfersUrl = withQuery(AFFILIATE.kiwitaxiBase, { city: query });
 
   /* -------------------- */
-  /* Insurance: SafetyWing */
+  /* Insurance: SafetyWing (TRACKED) */
   /* -------------------- */
-  // Stable entry (affiliate tracking varies by program).
-  const swParams: string[] = [];
-  if (AFFILIATE.safetywingAffilId) swParams.push(`aff=${enc(AFFILIATE.safetywingAffilId)}`);
-  const insuranceUrl = swParams.length
-    ? `https://safetywing.com/?${swParams.join("&")}`
-    : `https://safetywing.com/`;
+  // Tracking already embedded; add optional destination hint if you want.
+  const insuranceUrl = withQuery(AFFILIATE.safetywingBase, { destination: query });
 
   /* -------------------- */
-  /* Claims: AirHelp */
+  /* Claims: AirHelp (TRACKED) */
   /* -------------------- */
-  // Stable entry (affiliate tracking varies by program).
-  const ahParams: string[] = [];
-  if (AFFILIATE.airhelpAffilId) ahParams.push(`aff=${enc(AFFILIATE.airhelpAffilId)}`);
-  const claimsUrl = ahParams.length ? `https://www.airhelp.com/?${ahParams.join("&")}` : `https://www.airhelp.com/`;
+  const claimsUrl = withQuery(AFFILIATE.airhelpBase, { city: query });
 
   /* -------------------- */
-  /* Tickets: SportsEvents365 */
+  /* Tickets: SportsEvents365 (TRACKED) */
   /* -------------------- */
-  // Stable entry: their site is event-driven; query city as best-effort.
-  const seParams: string[] = [`q=${enc(query)}`];
-  if (AFFILIATE.sportsevents365AffilId) seParams.push(`aff=${enc(AFFILIATE.sportsevents365AffilId)}`);
-  const ticketsUrl = `https://www.sportsevents365.com/?${seParams.join("&")}`;
+  const ticketsUrl = withQuery(AFFILIATE.sportsevents365Base, { q: query });
 
   /* -------------------- */
   /* Maps: Google Maps search (UNTRACKED) */
@@ -209,9 +222,6 @@ export function buildAffiliateLinks(args: {
   };
 }
 
-/**
- * Simple helper for comparisons / dedupe.
- */
 export function normalizeUrlForCompare(url: string): string {
   return String(url ?? "").trim().toLowerCase();
 }
