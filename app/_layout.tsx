@@ -15,16 +15,15 @@ import { ProProvider } from "@/src/context/ProContext";
 // Side-effect init (safe in dev; your logger is already web-safe)
 import "@/utils/errorLogger";
 
-import tripsStore from "@/src/state/trips";
 import savedItemsStore from "@/src/state/savedItems";
 import { bootstrapPartnerReturnPrompt } from "@/src/services/partnerReturnBootstrap";
+
+// DEV overlay
+import PartnerClicksDebugOverlay from "@/src/components/PartnerClicksDebugOverlay";
 
 SplashScreen.preventAutoHideAsync().catch(() => {
   // ignore
 });
-
-// Hard guard: ensure we don't double-bootstrap on dev refresh edge cases
-let didBootSpine = false;
 
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
@@ -34,24 +33,19 @@ export default function RootLayout() {
   useEffect(() => {
     if (!fontsLoaded) return;
 
-    if (!didBootSpine) {
-      didBootSpine = true;
+    (async () => {
+      try {
+        await savedItemsStore.load();
+      } catch {
+        // ignore (best-effort)
+      }
 
-      // Boot initialisation (Phase 1 spine) - best effort, never block UI
-      (async () => {
-        try {
-          await Promise.allSettled([tripsStore.loadTrips(), savedItemsStore.load()]);
-        } catch {
-          // ignore (Promise.allSettled shouldn't throw, but keep it bulletproof)
-        }
-
-        try {
-          bootstrapPartnerReturnPrompt();
-        } catch {
-          // ignore (best-effort)
-        }
-      })();
-    }
+      try {
+        bootstrapPartnerReturnPrompt();
+      } catch {
+        // ignore (best-effort)
+      }
+    })();
 
     SplashScreen.hideAsync().catch(() => {
       // ignore
@@ -66,6 +60,8 @@ export default function RootLayout() {
 
       <GestureHandlerRootView style={styles.flex}>
         <ProProvider>
+          {__DEV__ ? <PartnerClicksDebugOverlay /> : null}
+
           <Stack
             screenOptions={{
               headerShown: true,
@@ -88,10 +84,7 @@ export default function RootLayout() {
             {/* Details */}
             <Stack.Screen name="match/[id]" options={{ headerTitle: "Match" }} />
 
-            {/* City routing:
-                - Canonical: /city/[cityKey]
-                - Legacy: /city/[slug] redirects to /city/[cityKey]
-             */}
+            {/* City routing */}
             <Stack.Screen name="city/[cityKey]" options={{ headerTitle: "City" }} />
             <Stack.Screen name="city/[slug]" options={{ headerTitle: "City" }} />
 
