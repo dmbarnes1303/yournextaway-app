@@ -7,15 +7,13 @@ import { getPartner, type PartnerId } from "@/src/core/partners";
 import type { SavedItem, SavedItemType } from "@/src/core/savedItemTypes";
 
 /**
- * We keep “return detection” deliberately simple for Phase 1.
- * Deep link/referrer detection across partners is unreliable.
+ * Phase 1 return detection:
+ * - create pending before opening partner
+ * - when app returns active, prompt user "Booked?"
  *
- * Primary path (later):
- * - platform deep link / referrer signals (where possible)
- *
- * Phase 1 fallback:
- * - always create pending
- * - when app returns to active, show a prompt: “Did you book it?”
+ * IMPORTANT HARDENING:
+ * - if opening partner fails, roll back the pending item (avoid zombie items)
+ * - prevent duplicate prompts by clearing lastClick before invoking onReturn
  */
 
 type LastPartnerClick = {
@@ -50,6 +48,7 @@ async function openUrl(url: string) {
     return;
   }
 
+  // Native: consistent in-app browser
   await WebBrowser.openBrowserAsync(u, {
     presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
     readerMode: false,
@@ -59,17 +58,17 @@ async function openUrl(url: string) {
 }
 
 /**
- * Call once near app startup (e.g. root layout) to enable “return prompt” detection.
- * You can safely call it multiple times; it will only subscribe once.
+ * Call once near app startup (e.g. root layout).
+ * Safe to call multiple times; subscribes only once.
  */
-export function ensurePartnerReturnWatcher(onReturn: (click: LastPartnerClick) => void) {
+export function ensurePartnerReturnWatcher(onReturn: (click: LastPartnerClick) => void | Promise<void>) {
   if (subscribed) return;
   subscribed = true;
 
   let lastState = AppState.currentState;
 
   AppState.addEventListener("change", (next) => {
-    const becameActive = lastState.match(/inactive|background/) && next === "active";
+    const becameActive = Boolean(lastState.match(/inactive|background/)) && next === "active";
     lastState = next;
 
     if (!becameActive) return;
@@ -81,7 +80,13 @@ export function ensurePartnerReturnWatcher(onReturn: (click: LastPartnerClick) =
       return;
     }
 
-    onReturn(lastClick);
+    // Prevent re-entrant / duplicate prompts if app toggles active twice quickly.
+    const click = lastClick;
+    lastClick = null;
+
+    Promise.resolve(onReturn(click)).catch(() => {
+      // swallow: never crash app on return prompt
+    });
   });
 }
 
@@ -97,17 +102,14 @@ export async function beginPartnerClick(args: {
   url: string;
 
   /**
-   * Optional override (rare).
+   * Optional override.
    * Default comes from partner registry.
    */
   savedItemType?: SavedItemType;
 
   /**
    * User-visible title used for the saved item.
-   * Keep it short. Examples:
-   * - "Hotel options in Berlin"
-   * - "Flights for Rome trip"
-   * - "GetYourGuide: Barcelona"
+   * Keep it short.
    */
   title?: string;
 
@@ -117,18 +119,24 @@ export async function beginPartnerClick(args: {
   if (!tripId) throw new Error("tripId is required");
 
   const partner = getPartner(args.partnerId);
+
   const url = normalizeUrl(args.url);
   if (!url) throw new Error("url is required");
+
+  // Ensure store is ready (cold start safety)
+  if (!savedItemsStore.getState().loaded) {
+    await savedItemsStore.load();
+  }
 
   const type = args.savedItemType ?? partner.defaultSavedItemType;
 
   const title =
     String(args.title ?? "").trim() ||
     (partner.id === "getyourguide"
-      ? `GetYourGuide: ${args.metadata?.city ?? "Things to do"}`
+      ? `GetYourGuide: ${String(args.metadata?.city ?? "").trim() || "Things to do"}`
       : `${partner.name} search`);
 
-  // Create pending item BEFORE opening partner
+  // Create pending item BEFORE opening partner (by design)
   const item = await savedItemsStore.add({
     tripId,
     type,
@@ -139,6 +147,7 @@ export async function beginPartnerClick(args: {
     metadata: args.metadata,
   });
 
+  // Stash click for return prompt (cleared by watcher when app resumes)
   lastClick = {
     itemId: item.id,
     tripId,
@@ -147,42 +156,62 @@ export async function beginPartnerClick(args: {
     createdAt: now(),
   };
 
-  // Open partner
-  await openUrl(url);
+  // Open partner. If this fails, rollback item to avoid “zombie pending”.
+  try {
+    await openUrl(url);
+  } catch (e) {
+    // rollback the item + click marker
+    try {
+      await savedItemsStore.remove(item.id);
+    } catch {
+      // ignore
+    }
+    if (lastClick?.itemId === item.id) lastClick = null;
+    throw e;
+  }
 
   return item;
 }
 
 /**
- * The UI calls this after the “Did you book it?” prompt.
+ * UI calls this after the “Did you book it?” prompt.
  */
 export async function markBooked(itemId: string) {
   const id = String(itemId ?? "").trim();
   if (!id) return;
+
+  // Ensure store ready (defensive)
+  if (!savedItemsStore.getState().loaded) {
+    await savedItemsStore.load();
+  }
+
   await savedItemsStore.transitionStatus(id, "booked");
   if (lastClick?.itemId === id) lastClick = null;
 }
 
 /**
- * The UI calls this if user says “not yet”.
- * We keep it pending; optionally you can set to saved later.
+ * UI calls this if user says “not yet”.
+ * We keep it pending for Phase 1.
  */
 export async function markNotBooked(itemId: string) {
   const id = String(itemId ?? "").trim();
   if (!id) return;
+
   // no transition; remains pending
   if (lastClick?.itemId === id) lastClick = null;
 }
 
 /**
- * If a user dismisses the prompt, you can call this to avoid re-prompt loops.
+ * If a user dismisses the prompt, call this to avoid re-prompt loops.
  */
 export function clearLastClick(itemId?: string) {
   if (!lastClick) return;
+
   if (!itemId) {
     lastClick = null;
     return;
   }
+
   const id = String(itemId ?? "").trim();
   if (id && lastClick.itemId === id) lastClick = null;
 }
