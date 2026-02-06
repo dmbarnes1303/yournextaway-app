@@ -8,7 +8,7 @@ import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
 import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
-import { getRollingWindowIso } from "@/src/constants/football";
+import { getRollingWindowIso, normalizeWindowIso } from "@/src/constants/football";
 
 import { normalizeCityKey } from "@/src/utils/city";
 import { cityGuides } from "@/src/data/cityGuides";
@@ -29,12 +29,17 @@ export default function CityKeyRedirect() {
   const router = useRouter();
   const params = useLocalSearchParams();
 
-  const cityKeyRaw = useMemo(() => coerceString((params as any)?.cityKey) ?? "", [params]);
-  const cityKey = useMemo(() => normalizeCityKey(cityKeyRaw), [cityKeyRaw]);
+  const raw = useMemo(() => coerceString((params as any)?.cityKey) ?? "", [params]);
+  const cityKey = useMemo(() => (raw ? normalizeCityKey(raw) : ""), [raw]);
 
   const rolling = useMemo(() => getRollingWindowIso(), []);
-  const from = useMemo(() => coerceString((params as any)?.from) ?? rolling.from, [params, rolling.from]);
-  const to = useMemo(() => coerceString((params as any)?.to) ?? rolling.to, [params, rolling.to]);
+  const fromParam = useMemo(() => coerceString((params as any)?.from), [params]);
+  const toParam = useMemo(() => coerceString((params as any)?.to), [params]);
+
+  const window = useMemo(() => {
+    const w = { from: fromParam ?? rolling.from, to: toParam ?? rolling.to };
+    return normalizeWindowIso(w);
+  }, [fromParam, toParam, rolling.from, rolling.to]);
 
   const exists = useMemo(() => !!(cityKey && cityGuides[cityKey]), [cityKey]);
 
@@ -43,10 +48,10 @@ export default function CityKeyRedirect() {
     if (!exists) return;
 
     router.replace({
-      pathname: "/city/[cityKey]",
-      params: { cityKey, from, to },
+      pathname: "/city/[slug]",
+      params: { slug: cityKey, from: window.from, to: window.to },
     } as any);
-  }, [router, cityKey, exists, from, to]);
+  }, [router, cityKey, exists, window.from, window.to]);
 
   return (
     <Background imageUrl={getBackground("home")} overlayOpacity={0.88}>
