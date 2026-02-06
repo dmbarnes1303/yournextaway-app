@@ -60,6 +60,34 @@ function tripStatus(t: Trip): "Draft" | "Upcoming" | "Past" {
   return "Upcoming";
 }
 
+function enc(v: string) {
+  return encodeURIComponent(v);
+}
+
+function addQueryParams(url: string, params: Record<string, string | undefined>) {
+  const base = String(url ?? "").trim();
+  if (!base) return base;
+
+  const entries = Object.entries(params).filter(([, v]) => !!v);
+  if (entries.length === 0) return base;
+
+  const joiner = base.includes("?") ? "&" : "?";
+  const qs = entries.map(([k, v]) => `${enc(k)}=${enc(String(v))}`).join("&");
+  return `${base}${joiner}${qs}`;
+}
+
+/**
+ * Your affiliate bases (you provided these).
+ * Keep them here until you decide to centralise into a config module.
+ */
+const AFF_BASE = {
+  kiwitaxi: "https://kiwitaxi.tpm.lv/ZnnAV8eH",
+  airhelp: "https://airhelp.tpm.lv/6tipSUue",
+  // SafetyWing already has tracking baked in.
+  safetywing: "https://safetywing.com/?referenceID=26471369&utm_source=26471369&utm_medium=Ambassador",
+  sportsevents365: "https://www.sportsevents365.com/?a_aid=69834e80ec9d3",
+};
+
 /* -------------------------------------------------------------------------- */
 /* screen */
 /* -------------------------------------------------------------------------- */
@@ -168,15 +196,15 @@ export default function TripDetailScreen() {
     });
   }, [trip, cityName]);
 
-  const booked = useMemo(
-    () => savedItems.filter((x) => x.status === "booked"),
-    [savedItems]
-  );
+  const booked = useMemo(() => savedItems.filter((x) => x.status === "booked"), [savedItems]);
+  const pending = useMemo(() => savedItems.filter((x) => x.status === "pending"), [savedItems]);
 
-  const pending = useMemo(
-    () => savedItems.filter((x) => x.status === "pending"),
-    [savedItems]
-  );
+  const hints = useMemo(() => {
+    const city = cityName && cityName !== "Trip" ? cityName : undefined;
+    const startDate = trip?.startDate;
+    const endDate = trip?.endDate;
+    return { city, startDate, endDate };
+  }, [cityName, trip]);
 
   /* ---------------- navigation ---------------- */
 
@@ -186,7 +214,7 @@ export default function TripDetailScreen() {
   }
 
   /* -------------------------------------------------------------------------- */
-  /* STANDARD OPEN FLOW (matches Trip Build) */
+  /* STANDARD OPEN FLOW */
   /* -------------------------------------------------------------------------- */
 
   async function openUntracked(url?: string) {
@@ -231,8 +259,41 @@ export default function TripDetailScreen() {
   }
 
   /* -------------------------------------------------------------------------- */
+  /* URLs for partners that are NOT in buildAffiliateLinks() yet */
+  /* -------------------------------------------------------------------------- */
+
+  const ticketsUrl = useMemo(() => {
+    // sportsEvents365 supports deep search patterns but varies; keep it safe.
+    // We just add a query hint so you can land near relevant results.
+    return addQueryParams(AFF_BASE.sportsevents365, {
+      q: hints.city ? `${hints.city} match tickets` : "match tickets",
+    });
+  }, [hints.city]);
+
+  const transfersUrl = useMemo(() => {
+    // KiWiTaxi: add hints only (safe, even if ignored by their landing page).
+    return addQueryParams(AFF_BASE.kiwitaxi, {
+      city: hints.city,
+      startDate: hints.startDate,
+      endDate: hints.endDate,
+    });
+  }, [hints.city, hints.startDate, hints.endDate]);
+
+  const safetyWingUrl = useMemo(() => {
+    // Already tracked; optionally add destination hint.
+    return addQueryParams(AFF_BASE.safetywing, { destination: hints.city });
+  }, [hints.city]);
+
+  const airHelpUrl = useMemo(() => {
+    // AirHelp: add a simple context hint.
+    return addQueryParams(AFF_BASE.airhelp, { trip: hints.city });
+  }, [hints.city]);
+
+  /* -------------------------------------------------------------------------- */
   /* render */
   /* -------------------------------------------------------------------------- */
+
+  const loading = tripId && (!tripsLoaded || !savedLoaded);
 
   return (
     <Background imageSource={getBackground("trips")} overlayOpacity={0.86}>
@@ -259,7 +320,7 @@ export default function TripDetailScreen() {
             </GlassCard>
           )}
 
-          {tripId && (!tripsLoaded || !savedLoaded) && (
+          {loading && (
             <GlassCard style={styles.card}>
               <View style={styles.center}>
                 <ActivityIndicator />
@@ -283,8 +344,7 @@ export default function TripDetailScreen() {
                 {pending.length > 0 && (
                   <View style={styles.pendingBanner}>
                     <Text style={styles.pendingText}>
-                      {pending.length} pending booking
-                      {pending.length === 1 ? "" : "s"}
+                      {pending.length} pending booking{pending.length === 1 ? "" : "s"}
                     </Text>
                   </View>
                 )}
@@ -296,49 +356,55 @@ export default function TripDetailScreen() {
                 </View>
               </GlassCard>
 
-              {/* BOOK */}
+              {/* BOOK YOUR TRIP */}
               {bookingLinks && (
                 <GlassCard style={styles.card}>
-                  <Text style={styles.sectionTitle}>Book this trip</Text>
+                  <Text style={styles.sectionTitle}>Book your trip</Text>
 
                   <View style={styles.bookGrid}>
                     <Pressable
                       style={styles.bookBtn}
                       onPress={() =>
                         openTrackedPartner({
-                          partnerId: "booking",
+                          partnerId: "expedia",
                           url: bookingLinks.hotelsUrl,
                           title: `Hotels in ${cityName}`,
+                          metadata: { city: cityName, startDate: trip.startDate, endDate: trip.endDate },
                         })
                       }
                     >
                       <Text style={styles.bookBtnText}>Hotels</Text>
+                      <Text style={styles.bookBtnSub}>Expedia</Text>
                     </Pressable>
 
                     <Pressable
                       style={styles.bookBtn}
                       onPress={() =>
                         openTrackedPartner({
-                          partnerId: "skyscanner",
+                          partnerId: "aviasales",
                           url: bookingLinks.flightsUrl,
                           title: `Flights to ${cityName}`,
+                          metadata: { city: cityName },
                         })
                       }
                     >
                       <Text style={styles.bookBtnText}>Flights</Text>
+                      <Text style={styles.bookBtnSub}>Aviasales</Text>
                     </Pressable>
 
                     <Pressable
                       style={styles.bookBtn}
                       onPress={() =>
                         openTrackedPartner({
-                          partnerId: "omio",
-                          url: bookingLinks.trainsUrl,
-                          title: `Trains to ${cityName}`,
+                          partnerId: "kiwitaxi",
+                          url: transfersUrl,
+                          title: `Transfers in ${cityName}`,
+                          metadata: { city: cityName, startDate: trip.startDate, endDate: trip.endDate },
                         })
                       }
                     >
-                      <Text style={styles.bookBtnText}>Trains</Text>
+                      <Text style={styles.bookBtnText}>Transfers</Text>
+                      <Text style={styles.bookBtnSub}>KiwiTaxi</Text>
                     </Pressable>
 
                     <Pressable
@@ -347,28 +413,94 @@ export default function TripDetailScreen() {
                         openTrackedPartner({
                           partnerId: "getyourguide",
                           url: bookingLinks.experiencesUrl,
-                          title: `Things to do in ${cityName}`,
+                          title: `Experiences in ${cityName}`,
                           metadata: { city: cityName },
                         })
                       }
                     >
-                      <Text style={styles.bookBtnText}>Things to do</Text>
+                      <Text style={styles.bookBtnText}>Experiences</Text>
+                      <Text style={styles.bookBtnSub}>GetYourGuide</Text>
                     </Pressable>
                   </View>
 
-                  <Pressable
-                    onPress={() =>
-                      openTrackedPartner({
-                        partnerId: "googlemaps",
-                        url: bookingLinks.mapsUrl,
-                        title: `Map of ${cityName}`,
-                      })
-                    }
-                  >
+                  <Pressable onPress={() => openUntracked(bookingLinks.mapsUrl)}>
                     <Text style={styles.mapsInline}>Open maps search</Text>
                   </Pressable>
+
+                  {fxLoading ? (
+                    <Text style={styles.mutedInline}>Loading match details…</Text>
+                  ) : null}
                 </GlassCard>
               )}
+
+              {/* MATCH TICKETS */}
+              <GlassCard style={styles.card}>
+                <Text style={styles.sectionTitle}>Match tickets</Text>
+
+                <Pressable
+                  style={styles.wideBtn}
+                  onPress={() =>
+                    openTrackedPartner({
+                      partnerId: "sportsevents365",
+                      url: ticketsUrl,
+                      title: `Match tickets for ${cityName}`,
+                      metadata: { city: cityName },
+                    })
+                  }
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.wideBtnTitle}>Find tickets</Text>
+                    <Text style={styles.wideBtnSub}>SportsEvents365</Text>
+                  </View>
+                  <Text style={styles.chev}>›</Text>
+                </Pressable>
+              </GlassCard>
+
+              {/* PROTECT YOURSELF */}
+              <GlassCard style={styles.card}>
+                <Text style={styles.sectionTitle}>Protect yourself</Text>
+
+                <Pressable
+                  style={styles.wideBtn}
+                  onPress={() =>
+                    openTrackedPartner({
+                      partnerId: "safetywing",
+                      url: safetyWingUrl,
+                      title: `Travel insurance for ${cityName}`,
+                      metadata: { city: cityName, startDate: trip.startDate, endDate: trip.endDate },
+                    })
+                  }
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.wideBtnTitle}>Travel insurance</Text>
+                    <Text style={styles.wideBtnSub}>SafetyWing</Text>
+                  </View>
+                  <Text style={styles.chev}>›</Text>
+                </Pressable>
+              </GlassCard>
+
+              {/* CLAIMS */}
+              <GlassCard style={styles.card}>
+                <Text style={styles.sectionTitle}>Claims & compensation</Text>
+
+                <Pressable
+                  style={styles.wideBtn}
+                  onPress={() =>
+                    openTrackedPartner({
+                      partnerId: "airhelp",
+                      url: airHelpUrl,
+                      title: `Flight compensation help`,
+                      metadata: { city: cityName },
+                    })
+                  }
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.wideBtnTitle}>Check compensation</Text>
+                    <Text style={styles.wideBtnSub}>AirHelp</Text>
+                  </View>
+                  <Text style={styles.chev}>›</Text>
+                </Pressable>
+              </GlassCard>
 
               {/* WALLET */}
               <GlassCard style={styles.card}>
@@ -410,6 +542,7 @@ const styles = StyleSheet.create({
 
   center: { alignItems: "center", gap: 10 },
   muted: { color: theme.colors.textSecondary },
+  mutedInline: { marginTop: 10, color: theme.colors.textSecondary, textAlign: "center" },
 
   hero: { padding: theme.spacing.lg },
 
@@ -492,15 +625,34 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: 12,
     alignItems: "center",
+    paddingHorizontal: 10,
   },
 
-  bookBtnText: { color: theme.colors.text },
+  bookBtnText: { color: theme.colors.text, fontWeight: "900" },
+  bookBtnSub: { marginTop: 4, color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12 },
 
   mapsInline: {
     marginTop: 10,
     color: theme.colors.textSecondary,
     textAlign: "center",
   },
+
+  wideBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.15)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+  },
+
+  wideBtnTitle: { color: theme.colors.text, fontWeight: "900" },
+  wideBtnSub: { marginTop: 4, color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12 },
+
+  chev: { color: theme.colors.textSecondary, fontSize: 24, marginTop: -2 },
 
   walletRow: {
     paddingVertical: 10,
