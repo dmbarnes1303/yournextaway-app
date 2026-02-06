@@ -2,6 +2,7 @@
 
 export type TripId = string;
 export type SavedItemId = string;
+export type WalletAttachmentId = string;
 
 /**
  * Internal enum (stable). UI labels come from getSavedItemTypeLabel().
@@ -19,6 +20,28 @@ export type SavedItemType =
   | "other";
 
 export type SavedItemStatus = "saved" | "pending" | "booked" | "archived";
+
+export type WalletAttachmentKind = "image" | "pdf" | "file";
+
+export type WalletAttachment = {
+  id: WalletAttachmentId;
+
+  kind: WalletAttachmentKind;
+
+  /** Local file URI (FileSystem.documentDirectory...) */
+  uri: string;
+
+  /** Optional original filename */
+  name?: string;
+
+  /** e.g. image/jpeg, application/pdf */
+  mimeType?: string;
+
+  /** Bytes (best-effort) */
+  size?: number;
+
+  createdAt: number;
+};
 
 export type SavedItem = {
   id: SavedItemId;
@@ -45,6 +68,13 @@ export type SavedItem = {
 
   metadata?: Record<string, any>;
 
+  /**
+   * Wallet proof (offline-first):
+   * - screenshots (images)
+   * - PDFs (tickets / confirmations)
+   */
+  attachments: WalletAttachment[];
+
   createdAt: number;
   updatedAt: number;
 };
@@ -56,7 +86,7 @@ export type SavedItem = {
  * - tickets => Match tickets
  * - things  => Experiences
  * - insurance => Protect yourself
- * - claim => Claims & compensation (NOT "Protect yourself" — that's insurance)
+ * - claim => Claims & compensation
  * - note/other => Notes
  */
 export function getSavedItemTypeLabel(type: SavedItemType): string {
