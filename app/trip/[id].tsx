@@ -158,7 +158,6 @@ export default function TripDetailScreen() {
     };
 
     const unsub = tripsStore.subscribe(() => sync());
-
     sync();
 
     (async () => {
@@ -205,7 +204,7 @@ export default function TripDetailScreen() {
         }
 
         if (cancelled) return;
-        setFixturesById(next);
+        setFixturesById(next(...next);
       } catch (e: any) {
         if (cancelled) return;
         setFxError(e?.message ?? "Match details couldn’t be loaded.");
@@ -254,6 +253,19 @@ export default function TripDetailScreen() {
     if (!bookingLinks) return [];
     return buildAffiliateLinkItems(bookingLinks);
   }, [bookingLinks]);
+
+  // GetYourGuide: prefer city guide monetised deep link, otherwise use central affiliate search URL
+  const getYourGuideUrl = useMemo(() => {
+    const guideUrl = String(cityBundle?.thingsToDoUrl ?? "").trim();
+    if (guideUrl) return guideUrl;
+
+    const affiliateUrl = String(bookingLinks?.experiencesUrl ?? "").trim();
+    if (affiliateUrl) return affiliateUrl;
+
+    return null;
+  }, [cityBundle?.thingsToDoUrl, bookingLinks?.experiencesUrl]);
+
+  const mapsUrl = bookingLinks?.mapsUrl ?? null;
 
   const links = useMemo(() => (trip?.links ?? []).slice(), [trip?.links]);
   const itinerary = useMemo(() => (trip?.itinerary ?? []).slice(), [trip?.itinerary]);
@@ -323,10 +335,8 @@ export default function TripDetailScreen() {
     setLinkTitle("");
     setLinkUrl("");
 
-    // CRITICAL: do not stomp linkGroup when caller explicitly set a section group
     if (nextKind === "link") {
       if (opts?.linkGroup) setLinkGroup(opts.linkGroup);
-      // else keep existing selection (better UX than always forcing "links")
     } else {
       setLinkGroup("links");
     }
@@ -500,9 +510,6 @@ export default function TripDetailScreen() {
     }
   }
 
-  const getYourGuideUrl = bookingLinks?.experiencesUrl ?? null;
-  const mapsUrl = bookingLinks?.mapsUrl ?? null;
-
   return (
     <Background imageUrl={getBackground("trips")} overlayOpacity={0.86}>
       <Stack.Screen
@@ -602,7 +609,10 @@ export default function TripDetailScreen() {
                       <Pressable onPress={() => safeOpenUrl(bookingLinks.trainsUrl)} style={styles.bookBtn}>
                         <Text style={styles.bookBtnText}>Trains</Text>
                       </Pressable>
-                      <Pressable onPress={() => safeOpenUrl(bookingLinks.experiencesUrl)} style={styles.bookBtn}>
+                      <Pressable
+                        onPress={() => bookingLinks.experiencesUrl && safeOpenUrl(bookingLinks.experiencesUrl)}
+                        style={styles.bookBtn}
+                      >
                         <Text style={styles.bookBtnText}>GetYourGuide</Text>
                       </Pressable>
                     </View>
@@ -885,7 +895,9 @@ export default function TripDetailScreen() {
                     <>
                       <Text style={styles.cityBlockTitle}>Top things to do</Text>
                       <Text style={styles.cityBlockSub}>
-                        {cityBundle.hasGuide ? "Curated picks + quick tips." : "No curated guide yet — use GetYourGuide to browse live options."}
+                        {cityBundle.hasGuide
+                          ? "Curated picks + quick tips."
+                          : "No curated guide yet — use GetYourGuide to browse live options."}
                       </Text>
 
                       {cityBundle.hasGuide && (cityBundle.items?.length ?? 0) > 0 ? (
@@ -899,7 +911,9 @@ export default function TripDetailScreen() {
                               </View>
                             </View>
                           ))}
-                          {(cityBundle.items?.length ?? 0) > 6 ? <Text style={styles.moreInline}>More in the full city guide.</Text> : null}
+                          {(cityBundle.items?.length ?? 0) > 6 ? (
+                            <Text style={styles.moreInline}>More in the full city guide.</Text>
+                          ) : null}
                         </View>
                       ) : null}
 
