@@ -9,11 +9,16 @@ import type { SavedItem, SavedItemType } from "@/src/core/savedItemTypes";
 /**
  * Phase 1 return detection:
  * - create pending before opening partner
- * - when app returns active, prompt user "Booked?"
+ * - prompt user "Booked?" when they return
+ *
+ * IMPORTANT REALITY:
+ * - On iOS/Android, WebBrowser.openBrowserAsync often DOES NOT background the app,
+ *   so AppState return detection may NOT fire.
+ * - Therefore we also trigger the return handler when the in-app browser is dismissed.
  *
  * HARDENING:
  * - prevent double-taps / concurrent opens (opening guard)
- * - if opening partner fails, roll back the pending item
+ * - rollback pending item if opening fails
  * - prevent duplicate prompts by clearing lastClick before invoking onReturn
  * - allow watcher handler to be UPDATED on subsequent calls (Fast Refresh safe)
  */
@@ -49,6 +54,37 @@ function normalizeUrl(url: string): string {
   return /^https?:\/\//i.test(u) ? u : `https://${u}`;
 }
 
+function isRecent(click: LastPartnerClick) {
+  return now() - click.createdAt <= 1000 * 60 * 60 * 6; // 6 hours
+}
+
+/**
+ * Consume lastClick exactly once and invoke handler.
+ * This is the ONLY place we should clear lastClick for prompting.
+ */
+async function triggerReturnIfPresent(reason: "appstate" | "browser_dismiss") {
+  if (!lastClick) return;
+
+  // Avoid zombie prompts
+  if (!isRecent(lastClick)) {
+    lastClick = null;
+    return;
+  }
+
+  const handler = onReturnHandler;
+  if (!handler) return;
+
+  // Prevent re-entrant / duplicate prompts
+  const click = lastClick;
+  lastClick = null;
+
+  try {
+    await Promise.resolve(handler(click));
+  } catch {
+    // swallow: never crash app on return prompt
+  }
+}
+
 async function openUrlInternal(url: string) {
   const u = normalizeUrl(url);
   if (!u) throw new Error("URL is required");
@@ -60,6 +96,8 @@ async function openUrlInternal(url: string) {
     return;
   }
 
+  // NOTE: openBrowserAsync typically keeps app "active".
+  // The promise resolves when the in-app browser is dismissed.
   await WebBrowser.openBrowserAsync(u, {
     presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
     readerMode: false,
@@ -96,31 +134,15 @@ export function ensurePartnerReturnWatcher(onReturn: (click: LastPartnerClick) =
   let lastState = AppState.currentState;
 
   const sub = AppState.addEventListener("change", (next) => {
-    const becameActive = Boolean(lastState.match(/inactive|background/)) && next === "active";
+    const becameActive = Boolean(String(lastState).match(/inactive|background/)) && next === "active";
     lastState = next;
 
     if (!becameActive) return;
-    if (!lastClick) return;
 
-    // Only prompt if it’s recent (avoid zombie prompts)
-    if (now() - lastClick.createdAt > 1000 * 60 * 60 * 6) {
-      lastClick = null;
-      return;
-    }
-
-    // Prevent re-entrant / duplicate prompts if app toggles active twice quickly.
-    const click = lastClick;
-    lastClick = null;
-
-    const handler = onReturnHandler;
-    if (!handler) return;
-
-    Promise.resolve(handler(click)).catch(() => {
-      // swallow: never crash app on return prompt
-    });
+    // AppState-based return (covers true backgrounding)
+    triggerReturnIfPresent("appstate");
   });
 
-  // RN returns a subscription with remove()
   appStateSub = sub as any;
 }
 
@@ -194,7 +216,7 @@ export async function beginPartnerClick(args: {
       metadata: args.metadata,
     });
 
-    // Stash click for return prompt (cleared by watcher when app resumes)
+    // Stash click for return prompt (consumed by watcher or browser dismiss)
     lastClick = {
       itemId: item.id,
       tripId,
@@ -206,6 +228,10 @@ export async function beginPartnerClick(args: {
     // Open partner. If this fails, rollback item to avoid “zombie pending”.
     try {
       await openUrlInternal(url);
+
+      // CRITICAL: in-app browser dismissal often does NOT change AppState.
+      // Trigger prompt here as a second, reliable return signal.
+      await triggerReturnIfPresent("browser_dismiss");
     } catch (e) {
       try {
         await savedItemsStore.remove(item.id);
