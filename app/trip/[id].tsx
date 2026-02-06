@@ -15,6 +15,7 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
+import * as WebBrowser from "expo-web-browser";
 
 import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
@@ -28,7 +29,7 @@ import tripsStore, { type Trip } from "@/src/state/trips";
 import savedItemsStore from "@/src/state/savedItems";
 
 import type { SavedItem, SavedItemStatus, SavedItemType } from "@/src/core/savedItemTypes";
-import { getPartner, inferPartnerIdFromUrl, type PartnerId } from "@/src/core/partners";
+import { getPartner, type PartnerId } from "@/src/core/partners";
 import { beginPartnerClick } from "@/src/services/partnerClicks";
 
 import { getFixtureById } from "@/src/services/apiFootball";
@@ -72,17 +73,30 @@ function tripStatus(t: Trip): "Draft" | "Upcoming" | "Past" {
   return "Upcoming";
 }
 
-async function safeOpenUrl(url: string) {
+function normalizeUrl(url: string): string {
   const u = String(url ?? "").trim();
+  if (!u) return "";
+  return /^https?:\/\//i.test(u) ? u : `https://${u}`;
+}
+
+async function safeOpenUrl(url: string) {
+  const u = normalizeUrl(url);
   if (!u) return;
 
-  const hasScheme = /^https?:\/\//i.test(u);
-  const candidate = hasScheme ? u : `https://${u}`;
-
   try {
-    const can = await Linking.canOpenURL(candidate);
-    if (!can) throw new Error("Cannot open URL");
-    await Linking.openURL(candidate);
+    if (Platform.OS === "web") {
+      const can = await Linking.canOpenURL(u);
+      if (!can) throw new Error("Cannot open URL");
+      await Linking.openURL(u);
+      return;
+    }
+
+    await WebBrowser.openBrowserAsync(u, {
+      presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
+      readerMode: false,
+      enableBarCollapsing: true,
+      showTitle: true,
+    });
   } catch {
     Alert.alert("Couldn’t open link", "Your device could not open that link.");
   }
@@ -92,8 +106,7 @@ function shortDomain(url: string): string {
   const u = String(url ?? "").trim();
   if (!u) return "";
   try {
-    const hasScheme = /^https?:\/\//i.test(u);
-    const parsed = new URL(hasScheme ? u : `https://${u}`);
+    const parsed = new URL(normalizeUrl(u));
     return parsed.hostname.replace(/^www\./, "");
   } catch {
     return u.replace(/^https?:\/\//i, "").split("/")[0] ?? u;
@@ -361,7 +374,6 @@ export default function TripDetailScreen() {
         onPress: async () => {
           try {
             await tripsStore.removeTrip(trip.id);
-            // also clear saved items for this trip to avoid orphan wallet entries
             try {
               await savedItemsStore.clearTrip(trip.id);
             } catch {
@@ -390,7 +402,6 @@ export default function TripDetailScreen() {
       setNewStatus("saved");
       setNoteText("");
     } else {
-      // note
       setNoteText("");
     }
   }
@@ -411,19 +422,15 @@ export default function TripDetailScreen() {
     const url = newUrl.trim();
     const priceText = newPriceText.trim();
 
-    // If user pasted a URL, infer partnerId for metadata/display consistency (optional)
-    const inferredPartnerId: PartnerId | undefined = url ? inferPartnerIdFromUrl(url) : undefined;
-
     try {
       await savedItemsStore.add({
         tripId,
         type: newType,
         status: newStatus,
         title,
-        partnerId: inferredPartnerId && inferredPartnerId !== "unknown" ? inferredPartnerId : undefined,
-        partnerUrl: url ? url : undefined,
+        partnerUrl: url ? normalizeUrl(url) : undefined,
         priceText: priceText || undefined,
-        metadata: url ? { source: "manual" } : { source: "manual" },
+        metadata: { source: "manual" },
       });
 
       closeAdd();
@@ -447,7 +454,7 @@ export default function TripDetailScreen() {
         type: "note",
         status: "saved",
         title: text.length > 60 ? `${text.slice(0, 60)}…` : text,
-        metadata: { note: text },
+        metadata: { note: text, source: "quick_note" },
       });
       closeAdd();
     } catch {
@@ -482,7 +489,7 @@ export default function TripDetailScreen() {
     }
   }
 
-  async function openPartner(item: SavedItem) {
+  async function openItemLink(item: SavedItem) {
     const url = String(item.partnerUrl ?? "").trim();
     if (!url) {
       Alert.alert("No link", "This item doesn’t have a link saved.");
@@ -493,6 +500,7 @@ export default function TripDetailScreen() {
 
   async function onPartnerShortcut(partnerId: PartnerId, url: string, title: string) {
     if (!tripId) return;
+
     try {
       await beginPartnerClick({
         tripId,
@@ -502,7 +510,8 @@ export default function TripDetailScreen() {
         metadata: { city: cityName, tripId },
       });
     } catch {
-      Alert.alert("Couldn’t open", "Your device could not open that partner link.");
+      // Do not block the user; fall back to opening the URL.
+      await safeOpenUrl(url);
     }
   }
 
@@ -554,7 +563,7 @@ export default function TripDetailScreen() {
 
         <View style={styles.itemActionsCol}>
           {item.partnerUrl ? (
-            <Pressable onPress={() => openPartner(item)} style={styles.smallBtn}>
+            <Pressable onPress={() => openItemLink(item)} style={styles.smallBtn}>
               <Text style={styles.smallBtnText}>Open</Text>
             </Pressable>
           ) : null}
@@ -734,43 +743,35 @@ export default function TripDetailScreen() {
 
                     <View style={styles.bookGrid}>
                       <Pressable
-                        onPress={() =>
-                          onPartnerShortcut("booking", bookingLinks.hotelsUrl, `Hotel options in ${cityName}`)
-                        }
+                        onPress={() => onPartnerShortcut("booking", bookingLinks.hotelsUrl, `Hotel options in ${cityName}`)}
                         style={[styles.bookBtn, styles.bookBtnPrimary]}
                       >
                         <Text style={styles.bookBtnText}>Hotels</Text>
                       </Pressable>
 
                       <Pressable
-                        onPress={() =>
-                          onPartnerShortcut("skyscanner", bookingLinks.flightsUrl, `Flights for ${cityName} trip`)
-                        }
+                        onPress={() => onPartnerShortcut("skyscanner", bookingLinks.flightsUrl, `Flights for ${cityName} trip`)}
                         style={styles.bookBtn}
                       >
                         <Text style={styles.bookBtnText}>Flights</Text>
                       </Pressable>
 
                       <Pressable
-                        onPress={() =>
-                          onPartnerShortcut("omio", bookingLinks.trainsUrl, `Trains / coaches to ${cityName}`)
-                        }
+                        onPress={() => onPartnerShortcut("omio", bookingLinks.trainsUrl, `Trains / coaches to ${cityName}`)}
                         style={styles.bookBtn}
                       >
                         <Text style={styles.bookBtnText}>Trains</Text>
                       </Pressable>
 
                       <Pressable
-                        onPress={() =>
-                          onPartnerShortcut("getyourguide", bookingLinks.experiencesUrl, `GetYourGuide: ${cityName}`)
-                        }
+                        onPress={() => onPartnerShortcut("getyourguide", bookingLinks.experiencesUrl, `GetYourGuide: ${cityName}`)}
                         style={styles.bookBtn}
                       >
                         <Text style={styles.bookBtnText}>GetYourGuide</Text>
                       </Pressable>
                     </View>
 
-                    {/* Maps should NOT create pending items */}
+                    {/* Maps is intentionally non-tracked in Phase 1 */}
                     <Pressable onPress={() => safeOpenUrl(bookingLinks.mapsUrl)} style={styles.mapsInline}>
                       <Text style={styles.mapsInlineText}>Open Maps search</Text>
                     </Pressable>
@@ -1093,6 +1094,7 @@ export default function TripDetailScreen() {
 /* -------------------------------- Styles -------------------------------- */
 
 const styles = StyleSheet.create({
+  // Your original styles unchanged below
   safe: { flex: 1 },
   scroll: { flex: 1 },
 
