@@ -1,73 +1,89 @@
 // src/core/partners.ts
+/**
+ * Partner registry = single source of truth for:
+ * - partner IDs
+ * - labels
+ * - which SavedItem.type to create for clicks
+ *
+ * IMPORTANT:
+ * - Do not scatter partner names/logic across screens.
+ * - Screens call partnerClicks.beginPartnerClick() with partnerId + url.
+ */
 
-import type { PartnerID } from "./id";
-import { asPartnerId } from "./id";
+import type { SavedItemType } from "@/src/core/savedItemTypes";
 
-export type PartnerCategory =
-  | "tickets"
-  | "stay"
-  | "flights"
-  | "trains"
-  | "transfers"
-  | "things"
-  | "insurance";
+export type PartnerId =
+  | "booking"
+  | "skyscanner"
+  | "omio"
+  | "getyourguide"
+  | "googlemaps"
+  | "unknown";
+
+export type PartnerCategory = "stay" | "travel" | "things" | "links";
 
 export type Partner = {
-  id: PartnerID;
+  id: PartnerId;
   name: string;
-  categories: PartnerCategory[];
-  deepLinkCapable: boolean;
+  category: PartnerCategory;
 
   /**
-   * Optional tracking/templating metadata.
-   * UI must NOT build URLs itself; it can request URLs from a link builder layer.
+   * Default SavedItem type when user clicks this partner.
+   * (Screens can override if needed.)
    */
-  websiteDomain?: string;
+  defaultSavedItemType: SavedItemType;
+
+  /**
+   * Optional: domains used for “best effort” return detection or URL sanity checks later.
+   */
+  domains?: string[];
 };
 
-export const PARTNERS: Record<string, Partner> = {
+export const PARTNERS: Record<PartnerId, Partner> = {
   booking: {
-    id: asPartnerId("booking" as any),
+    id: "booking",
     name: "Booking.com",
-    categories: ["stay"],
-    deepLinkCapable: true,
-    websiteDomain: "booking.com",
+    category: "stay",
+    defaultSavedItemType: "hotel",
+    domains: ["booking.com"],
   },
-
   skyscanner: {
-    id: asPartnerId("skyscanner" as any),
+    id: "skyscanner",
     name: "Skyscanner",
-    categories: ["flights"],
-    deepLinkCapable: true,
-    websiteDomain: "skyscanner.net",
+    category: "travel",
+    defaultSavedItemType: "flight",
+    domains: ["skyscanner.net", "skyscanner.com"],
   },
-
   omio: {
-    id: asPartnerId("omio" as any),
+    id: "omio",
     name: "Omio",
-    categories: ["trains"],
-    deepLinkCapable: true,
-    websiteDomain: "omio.com",
+    category: "travel",
+    defaultSavedItemType: "train",
+    domains: ["omio.com"],
   },
-
   getyourguide: {
-    id: asPartnerId("getyourguide" as any),
+    id: "getyourguide",
     name: "GetYourGuide",
-    categories: ["things"],
-    deepLinkCapable: true,
-    websiteDomain: "getyourguide.com",
+    category: "things",
+    defaultSavedItemType: "things",
+    domains: ["getyourguide.com"],
   },
-
   googlemaps: {
-    id: asPartnerId("googlemaps" as any),
+    id: "googlemaps",
     name: "Google Maps",
-    categories: ["things", "transfers", "stay", "trains", "flights"],
-    deepLinkCapable: true,
-    websiteDomain: "google.com",
+    category: "links",
+    defaultSavedItemType: "other",
+    domains: ["google.com", "maps.google.com"],
   },
-} as const;
+  unknown: {
+    id: "unknown",
+    name: "Partner",
+    category: "links",
+    defaultSavedItemType: "other",
+  },
+};
 
-export function getPartner(id: PartnerID): Partner | null {
-  const found = Object.values(PARTNERS).find((p) => p.id === id);
-  return found ?? null;
+export function getPartner(id: string | null | undefined): Partner {
+  const key = String(id ?? "").trim().toLowerCase() as PartnerId;
+  return PARTNERS[key] ?? PARTNERS.unknown;
 }
