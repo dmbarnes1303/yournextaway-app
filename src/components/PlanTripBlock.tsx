@@ -1,88 +1,115 @@
 // src/components/PlanTripBlock.tsx
 import React, { useMemo } from "react";
-import { View, Text, StyleSheet, Pressable, Linking } from "react-native";
+import { View, Text, StyleSheet, Pressable, Alert } from "react-native";
+
 import GlassCard from "@/src/components/GlassCard";
 import { theme } from "@/src/constants/theme";
-import { buildFlightsUrl, buildHotelsUrl, buildTicketsUrl } from "@/src/constants/affiliates";
+import { openPartnerUrl } from "@/src/services/partnerClicks";
+import { buildAffiliateLinks } from "@/src/services/affiliateLinks";
 
 type Props = {
+  city: string;
+  startDate?: string;
+  endDate?: string;
   title?: string;
-  cityName?: string;
-  country?: string;
-  teamName?: string;
-  onBuildTrip?: () => void;
 };
 
-export default function PlanTripBlock(props: Props) {
-  const flightsUrl = useMemo(
-    () => buildFlightsUrl({ cityName: props.cityName, country: props.country }),
-    [props.cityName, props.country]
-  );
+function safeCity(v: any) {
+  const s = String(v ?? "").trim();
+  return s || "";
+}
 
-  const hotelsUrl = useMemo(
-    () => buildHotelsUrl({ cityName: props.cityName, country: props.country }),
-    [props.cityName, props.country]
-  );
-
-  const ticketsUrl = useMemo(
-    () => buildTicketsUrl({ teamName: props.teamName, cityName: props.cityName }),
-    [props.teamName, props.cityName]
-  );
-
-  function open(url: string) {
-    Linking.openURL(url).catch(() => {});
+async function openUrl(url?: string) {
+  if (!url) {
+    Alert.alert("Missing link", "No link available for this action yet.");
+    return;
   }
+  try {
+    await openPartnerUrl(url);
+  } catch {
+    Alert.alert("Couldn’t open link", "Your device could not open that link.");
+  }
+}
+
+export default function PlanTripBlock({ city, startDate, endDate, title }: Props) {
+  const cityName = useMemo(() => safeCity(city), [city]);
+
+  const links = useMemo(() => {
+    if (!cityName) return null;
+    return buildAffiliateLinks({
+      city: cityName,
+      startDate,
+      endDate,
+    });
+  }, [cityName, startDate, endDate]);
+
+  if (!links) return null;
 
   return (
-    <GlassCard style={styles.card} intensity={22}>
-      <Text style={styles.h2}>{props.title ?? "Plan your trip"}</Text>
-      <Text style={styles.sub}>
-        Quick actions to turn browsing into a real weekend away.
+    <GlassCard style={styles.card}>
+      <Text style={styles.title}>{title ?? "Book this trip"}</Text>
+      <Text style={styles.subtitle}>
+        These open partner search pages for {cityName}.
       </Text>
 
       <View style={styles.grid}>
-        <Pressable onPress={() => open(flightsUrl)} style={styles.action}>
-          <Text style={styles.actionTitle}>Find flights</Text>
-          <Text style={styles.actionSub}>Search routes & prices</Text>
+        <Pressable style={styles.btn} onPress={() => openUrl(links.hotelsUrl)}>
+          <Text style={styles.btnText}>Hotels</Text>
         </Pressable>
 
-        <Pressable onPress={() => open(hotelsUrl)} style={styles.action}>
-          <Text style={styles.actionTitle}>Find hotels</Text>
-          <Text style={styles.actionSub}>Pick a base to stay</Text>
+        <Pressable style={styles.btn} onPress={() => openUrl(links.flightsUrl)}>
+          <Text style={styles.btnText}>Flights</Text>
         </Pressable>
 
-        <Pressable onPress={() => open(ticketsUrl)} style={styles.action}>
-          <Text style={styles.actionTitle}>Find tickets</Text>
-          <Text style={styles.actionSub}>Check availability</Text>
+        <Pressable style={styles.btn} onPress={() => openUrl(links.trainsUrl)}>
+          <Text style={styles.btnText}>Trains</Text>
         </Pressable>
 
-        <Pressable onPress={props.onBuildTrip} style={[styles.action, styles.actionPrimary]} disabled={!props.onBuildTrip}>
-          <Text style={styles.actionTitle}>Build trip</Text>
-          <Text style={styles.actionSub}>Save a plan in the app</Text>
+        <Pressable style={styles.btn} onPress={() => openUrl(links.experiencesUrl)}>
+          <Text style={styles.btnText}>Experiences</Text>
         </Pressable>
       </View>
+
+      <Pressable onPress={() => openUrl(links.mapsUrl)} style={{ marginTop: 10 }}>
+        <Text style={styles.maps}>Open maps search</Text>
+      </Pressable>
     </GlassCard>
   );
 }
 
 const styles = StyleSheet.create({
   card: { padding: theme.spacing.lg },
-  h2: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.lg },
-  sub: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18 },
-
-  grid: { marginTop: 12, gap: 10 },
-  action: {
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 14,
+  title: {
+    color: theme.colors.text,
+    fontWeight: theme.fontWeight.black,
+    fontSize: theme.fontSize.md,
+  },
+  subtitle: {
+    marginTop: 6,
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSize.sm,
+    fontWeight: theme.fontWeight.bold,
+  },
+  grid: {
+    marginTop: 12,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  btn: {
+    width: "48%",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
+    borderColor: "rgba(255,255,255,0.15)",
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: "center",
+    paddingHorizontal: 10,
     backgroundColor: "rgba(0,0,0,0.18)",
   },
-  actionPrimary: {
-    borderColor: "rgba(0,255,136,0.45)",
-    backgroundColor: "rgba(0,0,0,0.22)",
+  btnText: { color: theme.colors.text, fontWeight: theme.fontWeight.black },
+  maps: {
+    color: theme.colors.textSecondary,
+    textAlign: "center",
+    fontWeight: theme.fontWeight.bold,
   },
-  actionTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
-  actionSub: { marginTop: 4, color: theme.colors.textSecondary, fontWeight: "700", fontSize: theme.fontSize.xs },
 });
