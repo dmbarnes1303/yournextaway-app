@@ -24,11 +24,16 @@ import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
 import { parseIsoDateOnly, toIsoDate } from "@/src/constants/football";
 
-import tripsStore, { type Trip, type TripLinkItem, type TripItineraryItem } from "@/src/state/trips";
+import tripsStore, { type Trip } from "@/src/state/trips";
+import savedItemsStore from "@/src/state/savedItems";
+
+import type { SavedItem, SavedItemStatus, SavedItemType } from "@/src/core/savedItemTypes";
+import { getPartner, inferPartnerIdFromUrl, type PartnerId } from "@/src/core/partners";
+import { beginPartnerClick } from "@/src/services/partnerClicks";
+
 import { getFixtureById } from "@/src/services/apiFootball";
 import { formatUkDateOnly, formatUkDateTimeMaybe } from "@/src/utils/formatters";
-import { getTopThingsToDoForTrip } from "@/src/data/cityGuides";
-import { buildAffiliateLinks, buildAffiliateLinkItems, normalizeUrlForCompare } from "@/src/services/affiliateLinks";
+import { buildAffiliateLinks } from "@/src/services/affiliateLinks";
 
 /* -------------------------------- Helpers -------------------------------- */
 
@@ -52,9 +57,7 @@ function summaryLine(t: Trip) {
 }
 
 /**
- * Trip status must use the same "date-only" semantics as the rest of the app:
- * - local-midnight parsing for YYYY-MM-DD
- * - today is based on local date
+ * Date-only semantics: local-midnight parsing for YYYY-MM-DD.
  */
 function tripStatus(t: Trip): "Draft" | "Upcoming" | "Past" {
   const start = t.startDate ? parseIsoDateOnly(t.startDate) : null;
@@ -97,13 +100,50 @@ function shortDomain(url: string): string {
   }
 }
 
-function makeId(prefix: string) {
-  return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 9)}`;
+/* ----------------------------- SavedItem utils ---------------------------- */
+
+const TYPE_LABEL: Record<SavedItemType, string> = {
+  tickets: "Tickets",
+  hotel: "Stay",
+  flight: "Flights",
+  train: "Trains",
+  transfer: "Transfers",
+  things: "Things to do",
+  insurance: "Insurance",
+  claim: "Claims",
+  note: "Notes",
+  other: "Other",
+};
+
+const STATUS_LABEL: Record<SavedItemStatus, string> = {
+  saved: "Saved",
+  pending: "Pending",
+  booked: "Booked",
+  archived: "Archived",
+};
+
+function statusOrder(s: SavedItemStatus): number {
+  // show Pending first, then Saved, then Booked, then Archived
+  return s === "pending" ? 0 : s === "saved" ? 1 : s === "booked" ? 2 : 3;
+}
+
+function sortItems(a: SavedItem, b: SavedItem) {
+  const so = statusOrder(a.status) - statusOrder(b.status);
+  if (so !== 0) return so;
+  return (b.updatedAt ?? 0) - (a.updatedAt ?? 0);
+}
+
+function canTransition(from: SavedItemStatus, to: SavedItemStatus): boolean {
+  if (from === "saved") return to === "pending" || to === "archived";
+  if (from === "pending") return to === "booked" || to === "archived";
+  if (from === "booked") return to === "archived";
+  if (from === "archived") return to === "saved";
+  return false;
 }
 
 /* -------------------------------- Screen -------------------------------- */
 
-type AddKind = "link" | "itinerary" | "note";
+type AddModalMode = "add" | "note";
 
 export default function TripDetailScreen() {
   const router = useRouter();
@@ -112,33 +152,35 @@ export default function TripDetailScreen() {
 
   const tripId = useMemo(() => coerceId((params as any)?.id), [params]);
 
-  const [loaded, setLoaded] = useState(tripsStore.getState().loaded);
+  const [loadedTrips, setLoadedTrips] = useState(tripsStore.getState().loaded);
   const [trip, setTrip] = useState<Trip | null>(null);
 
-  // Fixtures for match cards (lazy: only load those in trip.matchIds)
+  const [loadedSaved, setLoadedSaved] = useState(savedItemsStore.getState().loaded);
+  const [savedItems, setSavedItems] = useState<SavedItem[]>([]);
+
+  // Fixtures for match cards
   const [fxLoading, setFxLoading] = useState(false);
   const [fxError, setFxError] = useState<string | null>(null);
   const [fixturesById, setFixturesById] = useState<Record<string, any>>({});
 
-  // Add item modal
+  // Add modal
   const [addOpen, setAddOpen] = useState(false);
-  const [addKind, setAddKind] = useState<AddKind>("link");
+  const [addMode, setAddMode] = useState<AddModalMode>("add");
 
-  // Add link form
-  const [linkTitle, setLinkTitle] = useState("");
-  const [linkUrl, setLinkUrl] = useState("");
-  const [linkGroup, setLinkGroup] = useState<TripLinkItem["group"]>("links");
+  // Add item form
+  const [newType, setNewType] = useState<SavedItemType>("hotel");
+  const [newTitle, setNewTitle] = useState("");
+  const [newUrl, setNewUrl] = useState("");
+  const [newPriceText, setNewPriceText] = useState("");
+  const [newStatus, setNewStatus] = useState<SavedItemStatus>("saved");
 
-  // Add itinerary form
-  const [itTitle, setItTitle] = useState("");
-  const [itDate, setItDate] = useState(""); // YYYY-MM-DD optional
-  const [itTime, setItTime] = useState(""); // HH:MM optional
-  const [itNotes, setItNotes] = useState("");
+  // Quick note form (SavedItem note)
+  const [noteText, setNoteText] = useState("");
 
-  // Add note quick
-  const [quickNote, setQuickNote] = useState("");
+  // Legacy trip notes (still in Trip model)
+  const [tripNotesDraft, setTripNotesDraft] = useState("");
 
-  // Subscribe to trips store + load if needed
+  // Subscribe to trips + load if needed
   useEffect(() => {
     let mounted = true;
 
@@ -146,7 +188,7 @@ export default function TripDetailScreen() {
       const s = tripsStore.getState();
       if (!mounted) return;
 
-      setLoaded(s.loaded);
+      setLoadedTrips(s.loaded);
 
       if (!tripId) {
         setTrip(null);
@@ -155,6 +197,7 @@ export default function TripDetailScreen() {
 
       const t = s.trips.find((x) => x.id === tripId) ?? null;
       setTrip(t);
+      setTripNotesDraft(String(t?.notes ?? ""));
     };
 
     const unsub = tripsStore.subscribe(() => sync());
@@ -178,7 +221,47 @@ export default function TripDetailScreen() {
     };
   }, [tripId]);
 
-  // Load fixtures for trip.matchIds (all of them, not just first)
+  // Subscribe to saved items + load if needed
+  useEffect(() => {
+    let mounted = true;
+
+    const sync = () => {
+      const s = savedItemsStore.getState();
+      if (!mounted) return;
+
+      setLoadedSaved(s.loaded);
+
+      if (!tripId) {
+        setSavedItems([]);
+        return;
+      }
+
+      const items = s.items.filter((x) => x.tripId === tripId).slice().sort(sortItems);
+      setSavedItems(items);
+    };
+
+    const unsub = savedItemsStore.subscribe(() => sync());
+    sync();
+
+    (async () => {
+      if (!savedItemsStore.getState().loaded) {
+        try {
+          await savedItemsStore.load();
+        } catch {
+          // best-effort
+        } finally {
+          sync();
+        }
+      }
+    })();
+
+    return () => {
+      mounted = false;
+      unsub();
+    };
+  }, [tripId]);
+
+  // Load fixtures for trip.matchIds
   useEffect(() => {
     let cancelled = false;
 
@@ -195,16 +278,13 @@ export default function TripDetailScreen() {
 
       try {
         const next: Record<string, any> = {};
-
-        // Sequential is fine for V1; keeps API usage simple.
         for (const id of ids) {
           if (cancelled) return;
           const r = await getFixtureById(id);
           if (r) next[id] = r;
         }
-
         if (cancelled) return;
-        setFixturesById(next(...next);
+        setFixturesById(next);
       } catch (e: any) {
         if (cancelled) return;
         setFxError(e?.message ?? "Match details couldn’t be loaded.");
@@ -225,7 +305,6 @@ export default function TripDetailScreen() {
     const fromTrip = String(trip?.cityId ?? "").trim();
     if (fromTrip) return fromTrip;
 
-    // fallback: first loaded fixture city
     const firstMatchId = trip?.matchIds?.[0] ? String(trip.matchIds[0]) : null;
     const firstFx = firstMatchId ? fixturesById[firstMatchId] : null;
     const fromFixture = String(firstFx?.fixture?.venue?.city ?? "").trim();
@@ -233,11 +312,6 @@ export default function TripDetailScreen() {
 
     return "Trip";
   }, [trip?.cityId, trip?.matchIds, fixturesById]);
-
-  const cityBundle = useMemo(() => {
-    if (!cityName || cityName === "Trip") return null;
-    return getTopThingsToDoForTrip(cityName);
-  }, [cityName]);
 
   const bookingLinks = useMemo(() => {
     if (!trip) return null;
@@ -249,61 +323,34 @@ export default function TripDetailScreen() {
     });
   }, [trip, cityName]);
 
-  const bookingItems = useMemo(() => {
-    if (!bookingLinks) return [];
-    return buildAffiliateLinkItems(bookingLinks);
-  }, [bookingLinks]);
-
-  // GetYourGuide: prefer city guide monetised deep link, otherwise use central affiliate search URL
-  const getYourGuideUrl = useMemo(() => {
-    const guideUrl = String(cityBundle?.thingsToDoUrl ?? "").trim();
-    if (guideUrl) return guideUrl;
-
-    const affiliateUrl = String(bookingLinks?.experiencesUrl ?? "").trim();
-    if (affiliateUrl) return affiliateUrl;
-
-    return null;
-  }, [cityBundle?.thingsToDoUrl, bookingLinks?.experiencesUrl]);
-
-  const mapsUrl = bookingLinks?.mapsUrl ?? null;
-
-  const links = useMemo(() => (trip?.links ?? []).slice(), [trip?.links]);
-  const itinerary = useMemo(() => (trip?.itinerary ?? []).slice(), [trip?.itinerary]);
-
-  const groupedLinks = useMemo(() => {
-    const base = {
-      stay: [] as TripLinkItem[],
-      travel: [] as TripLinkItem[],
-      tickets: [] as TripLinkItem[],
-      links: [] as TripLinkItem[],
+  const savedByType = useMemo(() => {
+    const base: Record<SavedItemType, SavedItem[]> = {
+      tickets: [],
+      hotel: [],
+      flight: [],
+      train: [],
+      transfer: [],
+      things: [],
+      insurance: [],
+      claim: [],
+      note: [],
+      other: [],
     };
-    for (const l of links) {
-      const g = (l.group ?? "links") as TripLinkItem["group"];
-      (base[g] ?? base.links).push(l);
+    for (const it of savedItems) {
+      (base[it.type] ?? base.other).push(it);
     }
     return base;
-  }, [links]);
+  }, [savedItems]);
 
-  const itinerarySorted = useMemo(() => {
-    const arr = itinerary.slice();
-    arr.sort((a, b) => {
-      const ad = String(a.date ?? "").trim();
-      const bd = String(b.date ?? "").trim();
-      if (ad && bd && ad !== bd) return ad.localeCompare(bd);
-      const at = String(a.time ?? "").trim();
-      const bt = String(b.time ?? "").trim();
-      if (at && bt && at !== bt) return at.localeCompare(bt);
-      return (b.updatedAt ?? b.createdAt ?? 0) - (a.updatedAt ?? a.createdAt ?? 0);
-    });
-    return arr;
-  }, [itinerary]);
+  const walletBooked = useMemo(() => savedItems.filter((x) => x.status === "booked"), [savedItems]);
+  const pending = useMemo(() => savedItems.filter((x) => x.status === "pending"), [savedItems]);
 
-  function onEdit() {
+  function onEditTrip() {
     if (!trip) return;
     router.push({ pathname: "/trip/build", params: { tripId: trip.id } } as any);
   }
 
-  async function onDelete() {
+  async function onDeleteTrip() {
     if (!trip) return;
 
     Alert.alert("Delete trip?", "This will remove the trip from this device.", [
@@ -314,6 +361,12 @@ export default function TripDetailScreen() {
         onPress: async () => {
           try {
             await tripsStore.removeTrip(trip.id);
+            // also clear saved items for this trip to avoid orphan wallet entries
+            try {
+              await savedItemsStore.clearTrip(trip.id);
+            } catch {
+              // ignore
+            }
             router.replace("/(tabs)/trips");
           } catch {
             Alert.alert("Couldn’t delete", "Something went wrong removing this trip.");
@@ -323,151 +376,94 @@ export default function TripDetailScreen() {
     ]);
   }
 
-  function openAdd(kind?: AddKind, opts?: { linkGroup?: TripLinkItem["group"] }) {
+  function openAdd(mode: AddModalMode, presetType?: SavedItemType) {
     if (!trip) return;
 
-    const nextKind = kind ?? "link";
-    setAddKind(nextKind);
+    setAddMode(mode);
     setAddOpen(true);
 
-    // reset forms lightly
-    setQuickNote("");
-    setLinkTitle("");
-    setLinkUrl("");
-
-    if (nextKind === "link") {
-      if (opts?.linkGroup) setLinkGroup(opts.linkGroup);
+    if (mode === "add") {
+      setNewType(presetType ?? "hotel");
+      setNewTitle("");
+      setNewUrl("");
+      setNewPriceText("");
+      setNewStatus("saved");
+      setNoteText("");
     } else {
-      setLinkGroup("links");
+      // note
+      setNoteText("");
     }
-
-    setItTitle("");
-    setItDate(trip.startDate ?? "");
-    setItTime("");
-    setItNotes("");
   }
 
   function closeAdd() {
     setAddOpen(false);
   }
 
-  async function saveAddLink() {
-    if (!trip) return;
+  async function saveNewItem() {
+    if (!tripId) return;
 
-    const title = linkTitle.trim();
-    const url = linkUrl.trim();
-
-    if (!url) {
-      Alert.alert("Missing URL", "Paste a link first.");
-      return;
-    }
-
-    const item: TripLinkItem = {
-      id: makeId("lnk"),
-      title: title || shortDomain(url) || "Link",
-      url,
-      group: linkGroup,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    };
-
-    try {
-      await tripsStore.addLink(trip.id, item);
-      closeAdd();
-    } catch {
-      Alert.alert("Couldn’t save", "Something went wrong saving that link.");
-    }
-  }
-
-  async function saveAddItinerary() {
-    if (!trip) return;
-
-    const title = itTitle.trim();
+    const title = newTitle.trim();
     if (!title) {
-      Alert.alert("Missing title", "Give the itinerary item a name.");
+      Alert.alert("Missing title", "Give this item a short title.");
       return;
     }
 
-    const date = itDate.trim();
-    const time = itTime.trim();
-    const notes = itNotes.trim();
+    const url = newUrl.trim();
+    const priceText = newPriceText.trim();
 
-    if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-      Alert.alert("Invalid date", "Use YYYY-MM-DD (or leave it blank).");
-      return;
-    }
-    if (time && !/^\d{2}:\d{2}$/.test(time)) {
-      Alert.alert("Invalid time", "Use HH:MM (or leave it blank).");
-      return;
-    }
-
-    const item: TripItineraryItem = {
-      id: makeId("it"),
-      title,
-      date: date || undefined,
-      time: time || undefined,
-      notes: notes || undefined,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    };
+    // If user pasted a URL, infer partnerId for metadata/display consistency (optional)
+    const inferredPartnerId: PartnerId | undefined = url ? inferPartnerIdFromUrl(url) : undefined;
 
     try {
-      await tripsStore.addItineraryItem(trip.id, item);
+      await savedItemsStore.add({
+        tripId,
+        type: newType,
+        status: newStatus,
+        title,
+        partnerId: inferredPartnerId && inferredPartnerId !== "unknown" ? inferredPartnerId : undefined,
+        partnerUrl: url ? url : undefined,
+        priceText: priceText || undefined,
+        metadata: url ? { source: "manual" } : { source: "manual" },
+      });
+
       closeAdd();
     } catch {
-      Alert.alert("Couldn’t save", "Something went wrong saving that itinerary item.");
+      Alert.alert("Couldn’t save", "Something went wrong saving that item.");
     }
   }
 
-  async function saveQuickNote() {
-    if (!trip) return;
-    const qn = quickNote.trim();
-    if (!qn) {
+  async function saveNewNote() {
+    if (!tripId) return;
+
+    const text = noteText.trim();
+    if (!text) {
       Alert.alert("Empty note", "Type something first.");
       return;
     }
 
-    const existing = String(trip.notes ?? "").trim();
-    const merged = existing ? `${existing}\n\n• ${qn}` : `• ${qn}`;
-
     try {
-      await tripsStore.updateTrip(trip.id, { notes: merged });
+      await savedItemsStore.add({
+        tripId,
+        type: "note",
+        status: "saved",
+        title: text.length > 60 ? `${text.slice(0, 60)}…` : text,
+        metadata: { note: text },
+      });
       closeAdd();
     } catch {
       Alert.alert("Couldn’t save", "Something went wrong saving that note.");
     }
   }
 
-  async function removeLink(id: string) {
-    if (!trip) return;
-
-    Alert.alert("Remove link?", "This removes it from the trip.", [
+  async function removeItem(item: SavedItem) {
+    Alert.alert("Remove item?", "This removes it from the trip.", [
       { text: "Cancel", style: "cancel" },
       {
         text: "Remove",
         style: "destructive",
         onPress: async () => {
           try {
-            await tripsStore.removeLink(trip.id, id);
-          } catch {
-            Alert.alert("Couldn’t remove", "Something went wrong removing that link.");
-          }
-        },
-      },
-    ]);
-  }
-
-  async function removeItineraryItem(id: string) {
-    if (!trip) return;
-
-    Alert.alert("Remove itinerary item?", "This removes it from the trip.", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Remove",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            await tripsStore.removeItineraryItem(trip.id, id);
+            await savedItemsStore.remove(item.id);
           } catch {
             Alert.alert("Couldn’t remove", "Something went wrong removing that item.");
           }
@@ -476,38 +472,164 @@ export default function TripDetailScreen() {
     ]);
   }
 
+  async function transition(item: SavedItem, to: SavedItemStatus) {
+    if (!canTransition(item.status, to)) return;
+
+    try {
+      await savedItemsStore.transitionStatus(item.id, to);
+    } catch {
+      Alert.alert("Couldn’t update", "Something went wrong updating that item.");
+    }
+  }
+
+  async function openPartner(item: SavedItem) {
+    const url = String(item.partnerUrl ?? "").trim();
+    if (!url) {
+      Alert.alert("No link", "This item doesn’t have a link saved.");
+      return;
+    }
+    await safeOpenUrl(url);
+  }
+
+  async function onPartnerShortcut(partnerId: PartnerId, url: string, title: string) {
+    if (!tripId) return;
+    try {
+      await beginPartnerClick({
+        tripId,
+        partnerId,
+        url,
+        title,
+        metadata: { city: cityName, tripId },
+      });
+    } catch {
+      Alert.alert("Couldn’t open", "Your device could not open that partner link.");
+    }
+  }
+
+  async function saveLegacyTripNotes() {
+    if (!trip) return;
+    const next = tripNotesDraft.trim();
+
+    try {
+      await tripsStore.updateTrip(trip.id, { notes: next || undefined });
+      Alert.alert("Saved", "Trip notes updated.");
+    } catch {
+      Alert.alert("Couldn’t save", "Something went wrong saving trip notes.");
+    }
+  }
+
   function openMatch(fixtureId: string) {
     router.push({ pathname: "/match/[id]", params: { id: fixtureId } } as any);
   }
 
-  async function saveBookingShortcuts() {
-    if (!trip) return;
-    if (bookingItems.length === 0) return;
+  function ItemRow({ item }: { item: SavedItem }) {
+    const partner = item.partnerId ? getPartner(item.partnerId) : null;
+    const domain = item.partnerUrl ? shortDomain(item.partnerUrl) : "";
+    const price = String(item.priceText ?? "").trim();
 
-    const existing = new Set((trip.links ?? []).map((l) => normalizeUrlForCompare(l.url)));
-    const toAdd = bookingItems.filter((it) => !existing.has(normalizeUrlForCompare(it.url)));
+    return (
+      <View style={styles.itemRow}>
+        <View style={{ flex: 1 }}>
+          <View style={styles.itemTop}>
+            <Text style={styles.rowTitle} numberOfLines={1}>
+              {item.title}
+            </Text>
+            <View style={styles.statusPillSmall}>
+              <Text style={styles.statusTextSmall}>{STATUS_LABEL[item.status]}</Text>
+            </View>
+          </View>
 
-    if (toAdd.length === 0) {
-      Alert.alert("Already saved", "Your booking shortcuts are already in this trip.");
-      return;
-    }
+          <Text style={styles.rowMeta} numberOfLines={1}>
+            {TYPE_LABEL[item.type]}
+            {partner ? ` • ${partner.name}` : ""}
+            {domain ? ` • ${domain}` : ""}
+          </Text>
 
-    try {
-      for (const it of toAdd) {
-        await tripsStore.addLink(trip.id, {
-          id: makeId("lnk"),
-          title: it.title,
-          url: it.url,
-          group: it.group,
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-        });
-      }
+          {price ? (
+            <Text style={styles.priceLine} numberOfLines={1}>
+              {price}
+            </Text>
+          ) : null}
+        </View>
 
-      Alert.alert("Saved", `Added ${toAdd.length} shortcut${toAdd.length === 1 ? "" : "s"} to your trip links.`);
-    } catch {
-      Alert.alert("Couldn’t save", "Something went wrong saving the shortcuts.");
-    }
+        <View style={styles.itemActionsCol}>
+          {item.partnerUrl ? (
+            <Pressable onPress={() => openPartner(item)} style={styles.smallBtn}>
+              <Text style={styles.smallBtnText}>Open</Text>
+            </Pressable>
+          ) : null}
+
+          {item.status === "pending" ? (
+            <Pressable onPress={() => transition(item, "booked")} style={[styles.smallBtn, styles.smallBtnPrimary]}>
+              <Text style={styles.smallBtnPrimaryText}>Booked</Text>
+            </Pressable>
+          ) : null}
+
+          {item.status === "saved" ? (
+            <Pressable onPress={() => transition(item, "pending")} style={styles.smallBtn}>
+              <Text style={styles.smallBtnText}>Set pending</Text>
+            </Pressable>
+          ) : null}
+
+          {item.status !== "archived" ? (
+            <Pressable onPress={() => transition(item, "archived")} style={styles.smallBtnDanger}>
+              <Text style={styles.smallBtnDangerText}>Archive</Text>
+            </Pressable>
+          ) : (
+            <Pressable onPress={() => transition(item, "saved")} style={styles.smallBtn}>
+              <Text style={styles.smallBtnText}>Restore</Text>
+            </Pressable>
+          )}
+
+          <Pressable onPress={() => removeItem(item)} style={styles.smallBtnDangerGhost}>
+            <Text style={styles.smallBtnDangerText}>Remove</Text>
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
+
+  function Section({
+    title,
+    subtitle,
+    types,
+    emptyTitle,
+    emptyMsg,
+    addType,
+  }: {
+    title: string;
+    subtitle: string;
+    types: SavedItemType[];
+    emptyTitle: string;
+    emptyMsg: string;
+    addType: SavedItemType;
+  }) {
+    const items = types.flatMap((t) => savedByType[t] ?? []).slice().sort(sortItems);
+
+    return (
+      <View style={styles.section}>
+        <SectionHeader title={title} subtitle={subtitle} />
+        <GlassCard style={styles.card} strength="default">
+          {items.length === 0 ? (
+            <>
+              <EmptyState title={emptyTitle} message={emptyMsg} />
+              <Pressable onPress={() => openAdd("add", addType)} style={styles.linkBtn}>
+                <Text style={styles.linkText}>Add item</Text>
+              </Pressable>
+            </>
+          ) : (
+            <View style={{ gap: 10 }}>
+              {items.map((it) => (
+                <ItemRow key={it.id} item={it} />
+              ))}
+              <Pressable onPress={() => openAdd("add", addType)} style={styles.linkBtn}>
+                <Text style={styles.linkText}>Add another</Text>
+              </Pressable>
+            </View>
+          )}
+        </GlassCard>
+      </View>
+    );
   }
 
   return (
@@ -536,7 +658,7 @@ export default function TripDetailScreen() {
             </GlassCard>
           ) : null}
 
-          {tripId && !loaded ? (
+          {tripId && (!loadedTrips || !loadedSaved) ? (
             <GlassCard style={styles.card} strength="strong">
               <View style={styles.center}>
                 <ActivityIndicator />
@@ -545,7 +667,7 @@ export default function TripDetailScreen() {
             </GlassCard>
           ) : null}
 
-          {tripId && loaded && !trip ? (
+          {tripId && loadedTrips && loadedSaved && !trip ? (
             <GlassCard style={styles.card} strength="strong">
               <EmptyState title="Trip not found" message="It may have been deleted or not saved on this device." />
               <Pressable onPress={() => router.replace("/(tabs)/trips")} style={styles.linkBtn}>
@@ -560,7 +682,7 @@ export default function TripDetailScreen() {
               <GlassCard style={styles.hero} strength="strong">
                 <View style={styles.heroTop}>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.kicker}>TRIP HUB</Text>
+                    <Text style={styles.kicker}>TRIP WORKSPACE</Text>
                     <Text style={styles.cityTitle} numberOfLines={1}>
                       {cityName}
                     </Text>
@@ -572,62 +694,105 @@ export default function TripDetailScreen() {
                   </View>
                 </View>
 
+                {/* Spine signals */}
+                {pending.length > 0 ? (
+                  <View style={styles.pendingBanner}>
+                    <Text style={styles.pendingTitle}>Pending bookings</Text>
+                    <Text style={styles.pendingSub}>
+                      {pending.length} item{pending.length === 1 ? "" : "s"} awaiting confirmation.
+                    </Text>
+                  </View>
+                ) : null}
+
                 <View style={styles.heroActions}>
-                  <Pressable onPress={onEdit} style={[styles.btn, styles.btnPrimary]}>
+                  <Pressable onPress={onEditTrip} style={[styles.btn, styles.btnPrimary]}>
                     <Text style={styles.btnPrimaryText}>Edit trip</Text>
                   </Pressable>
 
-                  <Pressable onPress={() => openAdd("link")} style={[styles.btn, styles.btnSecondary]}>
+                  <Pressable onPress={() => openAdd("add")} style={[styles.btn, styles.btnSecondary]}>
                     <Text style={styles.btnSecondaryText}>Add item</Text>
                   </Pressable>
                 </View>
 
-                <Pressable onPress={onDelete} style={styles.deleteInline}>
+                <Pressable onPress={() => openAdd("note")} style={styles.noteInline}>
+                  <Text style={styles.noteInlineText}>+ Quick note</Text>
+                </Pressable>
+
+                <Pressable onPress={onDeleteTrip} style={styles.deleteInline}>
                   <Text style={styles.deleteInlineText}>Delete trip</Text>
                 </Pressable>
               </GlassCard>
 
-              {/* BOOK THIS TRIP */}
+              {/* BOOK THIS TRIP (partner clicks -> pending items) */}
               {bookingLinks ? (
                 <View style={styles.section}>
-                  <SectionHeader title="Book this trip" subtitle="Fast links (affiliate-ready)" />
+                  <SectionHeader title="Book this trip" subtitle="Partner clicks create Pending items" />
                   <GlassCard style={styles.card} strength="default">
                     <Text style={styles.bookSub}>
-                      Shortcuts for {cityName}. These open partner search pages using your configured affiliate IDs.
+                      These open partner search pages for {cityName}. When you return, you’ll be asked if you booked it.
                     </Text>
 
                     <View style={styles.bookGrid}>
                       <Pressable
-                        onPress={() => safeOpenUrl(bookingLinks.hotelsUrl)}
+                        onPress={() =>
+                          onPartnerShortcut("booking", bookingLinks.hotelsUrl, `Hotel options in ${cityName}`)
+                        }
                         style={[styles.bookBtn, styles.bookBtnPrimary]}
                       >
                         <Text style={styles.bookBtnText}>Hotels</Text>
                       </Pressable>
-                      <Pressable onPress={() => safeOpenUrl(bookingLinks.flightsUrl)} style={styles.bookBtn}>
+
+                      <Pressable
+                        onPress={() =>
+                          onPartnerShortcut("skyscanner", bookingLinks.flightsUrl, `Flights for ${cityName} trip`)
+                        }
+                        style={styles.bookBtn}
+                      >
                         <Text style={styles.bookBtnText}>Flights</Text>
                       </Pressable>
-                      <Pressable onPress={() => safeOpenUrl(bookingLinks.trainsUrl)} style={styles.bookBtn}>
+
+                      <Pressable
+                        onPress={() =>
+                          onPartnerShortcut("omio", bookingLinks.trainsUrl, `Trains / coaches to ${cityName}`)
+                        }
+                        style={styles.bookBtn}
+                      >
                         <Text style={styles.bookBtnText}>Trains</Text>
                       </Pressable>
+
                       <Pressable
-                        onPress={() => bookingLinks.experiencesUrl && safeOpenUrl(bookingLinks.experiencesUrl)}
+                        onPress={() =>
+                          onPartnerShortcut("getyourguide", bookingLinks.experiencesUrl, `GetYourGuide: ${cityName}`)
+                        }
                         style={styles.bookBtn}
                       >
                         <Text style={styles.bookBtnText}>GetYourGuide</Text>
                       </Pressable>
                     </View>
 
-                    <View style={{ flexDirection: "row", gap: 10, marginTop: 12 }}>
-                      <Pressable onPress={() => safeOpenUrl(bookingLinks.mapsUrl)} style={[styles.halfBtn, styles.halfBtnGhost]}>
-                        <Text style={styles.halfBtnGhostText}>Maps</Text>
-                      </Pressable>
-                      <Pressable onPress={saveBookingShortcuts} style={[styles.halfBtn, styles.halfBtnPrimary]}>
-                        <Text style={styles.halfBtnPrimaryText}>Save shortcuts</Text>
-                      </Pressable>
-                    </View>
+                    {/* Maps should NOT create pending items */}
+                    <Pressable onPress={() => safeOpenUrl(bookingLinks.mapsUrl)} style={styles.mapsInline}>
+                      <Text style={styles.mapsInlineText}>Open Maps search</Text>
+                    </Pressable>
                   </GlassCard>
                 </View>
               ) : null}
+
+              {/* WALLET (Booked) */}
+              <View style={styles.section}>
+                <SectionHeader title="Wallet" subtitle="Booked items (Phase 1 list)" />
+                <GlassCard style={styles.card} strength="default">
+                  {walletBooked.length === 0 ? (
+                    <EmptyState title="Nothing booked yet" message="When you confirm bookings, they show up here." />
+                  ) : (
+                    <View style={{ gap: 10 }}>
+                      {walletBooked.map((it) => (
+                        <ItemRow key={it.id} item={it} />
+                      ))}
+                    </View>
+                  )}
+                </GlassCard>
+              </View>
 
               {/* MATCHES */}
               <View style={styles.section}>
@@ -645,7 +810,7 @@ export default function TripDetailScreen() {
                   {!fxLoading && !fxError && (trip.matchIds?.length ?? 0) === 0 ? (
                     <>
                       <EmptyState title="No matches yet" message="Edit the trip to choose a fixture." />
-                      <Pressable onPress={onEdit} style={styles.linkBtn}>
+                      <Pressable onPress={onEditTrip} style={styles.linkBtn}>
                         <Text style={styles.linkText}>Edit trip</Text>
                       </Pressable>
                     </>
@@ -665,7 +830,7 @@ export default function TripDetailScreen() {
                         const meta = extra ? `${kick} • ${extra}` : kick;
 
                         return (
-                          <Pressable key={`${id}-${idx}`} onPress={() => openMatch(id)} style={styles.itemRow}>
+                          <Pressable key={`${id}-${idx}`} onPress={() => openMatch(id)} style={styles.matchRow}>
                             <View style={{ flex: 1 }}>
                               <Text style={styles.rowTitle}>
                                 {home} vs {away}
@@ -681,268 +846,86 @@ export default function TripDetailScreen() {
                 </GlassCard>
               </View>
 
-              {/* STAY */}
+              {/* WORKSPACE SECTIONS (SavedItems) */}
+              <Section
+                title="Stay"
+                subtitle="Hotels, apartments, saved options"
+                types={["hotel"]}
+                emptyTitle="Nothing saved"
+                emptyMsg="Add a hotel option, shortlist, or booking reference."
+                addType="hotel"
+              />
+
+              <Section
+                title="Travel"
+                subtitle="Flights, trains, transfers, parking"
+                types={["flight", "train", "transfer"]}
+                emptyTitle="Nothing saved"
+                emptyMsg="Add flight/train options or transfers."
+                addType="flight"
+              />
+
+              <Section
+                title="Things to do"
+                subtitle="Activities, tours, ideas"
+                types={["things"]}
+                emptyTitle="Nothing saved"
+                emptyMsg="Add a GetYourGuide option or any activity link."
+                addType="things"
+              />
+
+              <Section
+                title="Tickets"
+                subtitle="Match tickets or entry confirmations"
+                types={["tickets"]}
+                emptyTitle="Nothing saved"
+                emptyMsg="Add a ticket link or reference."
+                addType="tickets"
+              />
+
+              <Section
+                title="Insurance"
+                subtitle="Policies, quotes, documents"
+                types={["insurance"]}
+                emptyTitle="Nothing saved"
+                emptyMsg="Add an insurance quote or policy reference."
+                addType="insurance"
+              />
+
+              <Section
+                title="Claims"
+                subtitle="Delays, refunds, compensation tracking"
+                types={["claim"]}
+                emptyTitle="Nothing saved"
+                emptyMsg="Add claim references or notes."
+                addType="claim"
+              />
+
+              <Section
+                title="Notes & other"
+                subtitle="Anything else you want attached to this trip"
+                types={["note", "other"]}
+                emptyTitle="Nothing saved"
+                emptyMsg="Add a note or any miscellaneous item."
+                addType="note"
+              />
+
+              {/* Legacy Trip Notes (keep temporarily; migrate later) */}
               <View style={styles.section}>
-                <SectionHeader title="Stay" subtitle="Hotels, apartments, saved options" />
+                <SectionHeader title="Trip notes" subtitle="Legacy field (we’ll migrate to SavedItems later)" />
                 <GlassCard style={styles.card} strength="default">
-                  {groupedLinks.stay.length === 0 ? (
-                    <>
-                      <EmptyState title="Nothing saved" message="Add a booking link or a note for your stay." />
-                      <Pressable onPress={() => openAdd("link", { linkGroup: "stay" })} style={styles.linkBtn}>
-                        <Text style={styles.linkText}>Add stay link</Text>
-                      </Pressable>
-                    </>
-                  ) : (
-                    <View style={{ gap: 10 }}>
-                      {groupedLinks.stay.map((l) => (
-                        <View key={l.id} style={styles.linkRow}>
-                          <Pressable style={{ flex: 1 }} onPress={() => safeOpenUrl(l.url)}>
-                            <Text style={styles.rowTitle} numberOfLines={1}>
-                              {l.title}
-                            </Text>
-                            <Text style={styles.rowMeta} numberOfLines={1}>
-                              {shortDomain(l.url)}
-                            </Text>
-                          </Pressable>
-                          <Pressable onPress={() => removeLink(l.id)} style={styles.smallDangerBtn}>
-                            <Text style={styles.smallDangerText}>Remove</Text>
-                          </Pressable>
-                        </View>
-                      ))}
-                      <Pressable onPress={() => openAdd("link", { linkGroup: "stay" })} style={styles.linkBtn}>
-                        <Text style={styles.linkText}>Add another</Text>
-                      </Pressable>
-                    </View>
-                  )}
-                </GlassCard>
-              </View>
-
-              {/* TRAVEL */}
-              <View style={styles.section}>
-                <SectionHeader title="Travel" subtitle="Flights, trains, transfers, parking" />
-                <GlassCard style={styles.card} strength="default">
-                  {groupedLinks.travel.length === 0 ? (
-                    <>
-                      <EmptyState title="Nothing saved" message="Add a flight/train link or any travel reference." />
-                      <Pressable onPress={() => openAdd("link", { linkGroup: "travel" })} style={styles.linkBtn}>
-                        <Text style={styles.linkText}>Add travel link</Text>
-                      </Pressable>
-                    </>
-                  ) : (
-                    <View style={{ gap: 10 }}>
-                      {groupedLinks.travel.map((l) => (
-                        <View key={l.id} style={styles.linkRow}>
-                          <Pressable style={{ flex: 1 }} onPress={() => safeOpenUrl(l.url)}>
-                            <Text style={styles.rowTitle} numberOfLines={1}>
-                              {l.title}
-                            </Text>
-                            <Text style={styles.rowMeta} numberOfLines={1}>
-                              {shortDomain(l.url)}
-                            </Text>
-                          </Pressable>
-                          <Pressable onPress={() => removeLink(l.id)} style={styles.smallDangerBtn}>
-                            <Text style={styles.smallDangerText}>Remove</Text>
-                          </Pressable>
-                        </View>
-                      ))}
-                      <Pressable onPress={() => openAdd("link", { linkGroup: "travel" })} style={styles.linkBtn}>
-                        <Text style={styles.linkText}>Add another</Text>
-                      </Pressable>
-                    </View>
-                  )}
-                </GlassCard>
-              </View>
-
-              {/* TICKETS & LINKS */}
-              <View style={styles.section}>
-                <SectionHeader title="Tickets & Links" subtitle="Anything you want quick access to" />
-                <GlassCard style={styles.card} strength="default">
-                  {groupedLinks.tickets.length === 0 && groupedLinks.links.length === 0 ? (
-                    <>
-                      <EmptyState title="Nothing saved" message="Add any useful link (tickets, maps, reservations, etc.)." />
-                      <Pressable onPress={() => openAdd("link", { linkGroup: "links" })} style={styles.linkBtn}>
-                        <Text style={styles.linkText}>Add link</Text>
-                      </Pressable>
-                    </>
-                  ) : (
-                    <View style={{ gap: 10 }}>
-                      {groupedLinks.tickets.length > 0 ? (
-                        <>
-                          <Text style={styles.bucketTitle}>Tickets</Text>
-                          {groupedLinks.tickets.map((l) => (
-                            <View key={l.id} style={styles.linkRow}>
-                              <Pressable style={{ flex: 1 }} onPress={() => safeOpenUrl(l.url)}>
-                                <Text style={styles.rowTitle} numberOfLines={1}>
-                                  {l.title}
-                                </Text>
-                                <Text style={styles.rowMeta} numberOfLines={1}>
-                                  {shortDomain(l.url)}
-                                </Text>
-                              </Pressable>
-                              <Pressable onPress={() => removeLink(l.id)} style={styles.smallDangerBtn}>
-                                <Text style={styles.smallDangerText}>Remove</Text>
-                              </Pressable>
-                            </View>
-                          ))}
-                        </>
-                      ) : null}
-
-                      {groupedLinks.links.length > 0 ? (
-                        <>
-                          <Text style={styles.bucketTitle}>Links</Text>
-                          {groupedLinks.links.map((l) => (
-                            <View key={l.id} style={styles.linkRow}>
-                              <Pressable style={{ flex: 1 }} onPress={() => safeOpenUrl(l.url)}>
-                                <Text style={styles.rowTitle} numberOfLines={1}>
-                                  {l.title}
-                                </Text>
-                                <Text style={styles.rowMeta} numberOfLines={1}>
-                                  {shortDomain(l.url)}
-                                </Text>
-                              </Pressable>
-                              <Pressable onPress={() => removeLink(l.id)} style={styles.smallDangerBtn}>
-                                <Text style={styles.smallDangerText}>Remove</Text>
-                              </Pressable>
-                            </View>
-                          ))}
-                        </>
-                      ) : null}
-
-                      <View style={{ flexDirection: "row", gap: 10 }}>
-                        <Pressable onPress={() => openAdd("link", { linkGroup: "tickets" })} style={[styles.halfBtn, styles.halfBtnPrimary]}>
-                          <Text style={styles.halfBtnPrimaryText}>Add ticket link</Text>
-                        </Pressable>
-                        <Pressable onPress={() => openAdd("link", { linkGroup: "links" })} style={[styles.halfBtn, styles.halfBtnGhost]}>
-                          <Text style={styles.halfBtnGhostText}>Add link</Text>
-                        </Pressable>
-                      </View>
-                    </View>
-                  )}
-                </GlassCard>
-              </View>
-
-              {/* ITINERARY */}
-              <View style={styles.section}>
-                <SectionHeader title="Itinerary" subtitle="Your plan, by day/time" />
-                <GlassCard style={styles.card} strength="default">
-                  {itinerarySorted.length === 0 ? (
-                    <>
-                      <EmptyState title="No itinerary yet" message="Add a couple of anchor points for your break." />
-                      <Pressable onPress={() => openAdd("itinerary")} style={styles.linkBtn}>
-                        <Text style={styles.linkText}>Add itinerary item</Text>
-                      </Pressable>
-                    </>
-                  ) : (
-                    <View style={{ gap: 10 }}>
-                      {itinerarySorted.slice(0, 30).map((it) => {
-                        const when = [it.date ? formatUkDateOnly(it.date) : "", it.time ?? ""].filter(Boolean).join(" • ");
-                        return (
-                          <View key={it.id} style={styles.itRow}>
-                            <View style={{ flex: 1 }}>
-                              <Text style={styles.rowTitle}>{it.title}</Text>
-                              {when ? <Text style={styles.rowMeta}>{when}</Text> : null}
-                              {it.notes ? (
-                                <Text style={styles.rowMeta} numberOfLines={2}>
-                                  {it.notes}
-                                </Text>
-                              ) : null}
-                            </View>
-                            <Pressable onPress={() => removeItineraryItem(it.id)} style={styles.smallDangerBtn}>
-                              <Text style={styles.smallDangerText}>Remove</Text>
-                            </Pressable>
-                          </View>
-                        );
-                      })}
-                      {itinerarySorted.length > 30 ? <Text style={styles.moreInline}>Showing the first 30 items.</Text> : null}
-
-                      <Pressable onPress={() => openAdd("itinerary")} style={styles.linkBtn}>
-                        <Text style={styles.linkText}>Add another</Text>
-                      </Pressable>
-                    </View>
-                  )}
-                </GlassCard>
-              </View>
-
-              {/* NOTES */}
-              <View style={styles.section}>
-                <SectionHeader title="Notes" subtitle="Your running notes for this trip" />
-                <GlassCard style={styles.card} strength="default">
-                  {String(trip.notes ?? "").trim() ? (
-                    <>
-                      <Text style={styles.notesText}>{String(trip.notes ?? "").trim()}</Text>
-                      <Pressable onPress={() => openAdd("note")} style={styles.linkBtn}>
-                        <Text style={styles.linkText}>Add quick note</Text>
-                      </Pressable>
-                    </>
-                  ) : (
-                    <>
-                      <EmptyState title="No notes yet" message="Add quick reminders: hotel options, train times, places to eat." />
-                      <Pressable onPress={() => openAdd("note")} style={styles.linkBtn}>
-                        <Text style={styles.linkText}>Add note</Text>
-                      </Pressable>
-                    </>
-                  )}
-                </GlassCard>
-              </View>
-
-              {/* IN THE CITY */}
-              <View style={styles.section}>
-                <SectionHeader title="In the city" subtitle="Quick inspiration for your break" />
-                <GlassCard style={styles.card} strength="default">
-                  {!cityBundle ? (
-                    <EmptyState title="No city bundle" message="Link a match with a venue city to see curated picks." />
-                  ) : (
-                    <>
-                      <Text style={styles.cityBlockTitle}>Top things to do</Text>
-                      <Text style={styles.cityBlockSub}>
-                        {cityBundle.hasGuide
-                          ? "Curated picks + quick tips."
-                          : "No curated guide yet — use GetYourGuide to browse live options."}
-                      </Text>
-
-                      {cityBundle.hasGuide && (cityBundle.items?.length ?? 0) > 0 ? (
-                        <View style={styles.thingsList}>
-                          {cityBundle.items.slice(0, 6).map((it, idx) => (
-                            <View key={`${it.title}-${idx}`} style={styles.thingRow}>
-                              <Text style={styles.thingIdx}>{idx + 1}.</Text>
-                              <View style={{ flex: 1 }}>
-                                <Text style={styles.thingTitle}>{it.title}</Text>
-                                {it.description ? <Text style={styles.thingDesc}>{it.description}</Text> : null}
-                              </View>
-                            </View>
-                          ))}
-                          {(cityBundle.items?.length ?? 0) > 6 ? (
-                            <Text style={styles.moreInline}>More in the full city guide.</Text>
-                          ) : null}
-                        </View>
-                      ) : null}
-
-                      {cityBundle.hasGuide && (cityBundle.quickTips?.length ?? 0) > 0 ? (
-                        <View style={styles.tipsBlock}>
-                          <Text style={styles.tipsTitle}>Quick tips</Text>
-                          {cityBundle.quickTips.slice(0, 5).map((t, idx) => (
-                            <Text key={`${t}-${idx}`} style={styles.tipLine}>
-                              • {t}
-                            </Text>
-                          ))}
-                        </View>
-                      ) : null}
-
-                      <View style={{ flexDirection: "row", gap: 10, marginTop: 12 }}>
-                        {mapsUrl ? (
-                          <Pressable onPress={() => safeOpenUrl(mapsUrl)} style={[styles.halfBtn, styles.halfBtnGhost]}>
-                            <Text style={styles.halfBtnGhostText}>Maps search</Text>
-                          </Pressable>
-                        ) : null}
-
-                        {getYourGuideUrl ? (
-                          <Pressable onPress={() => safeOpenUrl(getYourGuideUrl)} style={[styles.halfBtn, styles.halfBtnPrimary]}>
-                            <Text style={styles.halfBtnPrimaryText}>GetYourGuide</Text>
-                          </Pressable>
-                        ) : null}
-                      </View>
-                    </>
-                  )}
+                  <TextInput
+                    value={tripNotesDraft}
+                    onChangeText={setTripNotesDraft}
+                    placeholder="General notes (optional)"
+                    placeholderTextColor={theme.colors.textSecondary}
+                    style={[styles.input, styles.textarea]}
+                    multiline
+                    textAlignVertical="top"
+                  />
+                  <Pressable onPress={saveLegacyTripNotes} style={[styles.saveBtn]}>
+                    <Text style={styles.saveText}>Save notes</Text>
+                  </Pressable>
                 </GlassCard>
               </View>
 
@@ -951,7 +934,7 @@ export default function TripDetailScreen() {
           ) : null}
         </ScrollView>
 
-        {/* ADD ITEM MODAL */}
+        {/* ADD MODAL */}
         <Modal visible={addOpen} transparent animationType="slide" onRequestClose={closeAdd}>
           <View style={styles.modalWrap}>
             <Pressable style={styles.modalBackdrop} onPress={closeAdd} />
@@ -962,12 +945,14 @@ export default function TripDetailScreen() {
 
                 <View style={styles.sheetHeader}>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.sheetKicker}>Add to trip</Text>
+                    <Text style={styles.sheetKicker}>{addMode === "note" ? "Quick note" : "Add item"}</Text>
                     <Text style={styles.sheetTitle} numberOfLines={1}>
                       {cityName || "Trip"}
                     </Text>
                     <Text style={styles.sheetSub} numberOfLines={2}>
-                      Choose what you want to save — link, itinerary item, or quick note.
+                      {addMode === "note"
+                        ? "Saved as a Notes item in your trip workspace."
+                        : "Saved items power your trip workspace and wallet pipeline."}
                     </Text>
                   </View>
 
@@ -976,151 +961,17 @@ export default function TripDetailScreen() {
                   </Pressable>
                 </View>
 
-                {/* Kind tabs */}
-                <View style={styles.tabRow}>
-                  {([
-                    { k: "link", label: "Link" },
-                    { k: "itinerary", label: "Itinerary" },
-                    { k: "note", label: "Note" },
-                  ] as Array<{ k: AddKind; label: string }>).map((t) => {
-                    const active = addKind === t.k;
-                    return (
-                      <Pressable key={t.k} onPress={() => setAddKind(t.k)} style={[styles.tabPill, active && styles.tabPillActive]}>
-                        <Text style={[styles.tabText, active && styles.tabTextActive]}>{t.label}</Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-
                 <ScrollView
-                  style={{ maxHeight: 520 }}
+                  style={{ maxHeight: 560 }}
                   contentContainerStyle={{ paddingBottom: theme.spacing.md }}
                   showsVerticalScrollIndicator={false}
                   keyboardShouldPersistTaps="handled"
                 >
-                  {/* LINK */}
-                  {addKind === "link" ? (
-                    <View style={{ marginTop: 10, gap: 10 }}>
-                      <View style={styles.groupRow}>
-                        {([
-                          { g: "stay", label: "Stay" },
-                          { g: "travel", label: "Travel" },
-                          { g: "tickets", label: "Tickets" },
-                          { g: "links", label: "Links" },
-                        ] as Array<{ g: TripLinkItem["group"]; label: string }>).map((x) => {
-                          const active = linkGroup === x.g;
-                          return (
-                            <Pressable
-                              key={x.g}
-                              onPress={() => setLinkGroup(x.g)}
-                              style={[styles.groupPill, active && styles.groupPillActive]}
-                            >
-                              <Text style={[styles.groupText, active && styles.groupTextActive]}>{x.label}</Text>
-                            </Pressable>
-                          );
-                        })}
-                      </View>
-
-                      <TextInput
-                        value={linkTitle}
-                        onChangeText={setLinkTitle}
-                        placeholder="Title (optional, e.g. “Hotel shortlist”)"
-                        placeholderTextColor={theme.colors.textSecondary}
-                        style={styles.input}
-                        autoCapitalize="sentences"
-                        autoCorrect={false}
-                      />
-
-                      <TextInput
-                        value={linkUrl}
-                        onChangeText={setLinkUrl}
-                        placeholder="Paste a URL (Booking, Maps, airline, etc.)"
-                        placeholderTextColor={theme.colors.textSecondary}
-                        style={styles.input}
-                        autoCapitalize="none"
-                        autoCorrect={false}
-                        keyboardType={Platform.OS === "ios" ? "url" : "default"}
-                      />
-
-                      <View style={styles.sheetActions}>
-                        <Pressable onPress={closeAdd} style={[styles.sheetBtn, styles.sheetBtnGhost]}>
-                          <Text style={styles.sheetBtnGhostText}>Cancel</Text>
-                        </Pressable>
-
-                        <Pressable onPress={saveAddLink} style={[styles.sheetBtn, styles.sheetBtnPrimary]}>
-                          <Text style={styles.sheetBtnPrimaryText}>Save link</Text>
-                        </Pressable>
-                      </View>
-                    </View>
-                  ) : null}
-
-                  {/* ITINERARY */}
-                  {addKind === "itinerary" ? (
+                  {addMode === "note" ? (
                     <View style={{ marginTop: 10, gap: 10 }}>
                       <TextInput
-                        value={itTitle}
-                        onChangeText={setItTitle}
-                        placeholder="What are you doing? (e.g. “Dinner reservation”)"
-                        placeholderTextColor={theme.colors.textSecondary}
-                        style={styles.input}
-                        autoCapitalize="sentences"
-                        autoCorrect={false}
-                      />
-
-                      <View style={{ flexDirection: "row", gap: 10 }}>
-                        <TextInput
-                          value={itDate}
-                          onChangeText={setItDate}
-                          placeholder="Date (YYYY-MM-DD)"
-                          placeholderTextColor={theme.colors.textSecondary}
-                          style={[styles.input, { flex: 1 }]}
-                          autoCapitalize="none"
-                          autoCorrect={false}
-                        />
-
-                        <TextInput
-                          value={itTime}
-                          onChangeText={setItTime}
-                          placeholder="Time (HH:MM)"
-                          placeholderTextColor={theme.colors.textSecondary}
-                          style={[styles.input, { flex: 1 }]}
-                          autoCapitalize="none"
-                          autoCorrect={false}
-                        />
-                      </View>
-
-                      <TextInput
-                        value={itNotes}
-                        onChangeText={setItNotes}
-                        placeholder="Notes (optional)"
-                        placeholderTextColor={theme.colors.textSecondary}
-                        style={[styles.input, styles.textarea]}
-                        multiline
-                        textAlignVertical="top"
-                      />
-
-                      <View style={styles.sheetActions}>
-                        <Pressable onPress={closeAdd} style={[styles.sheetBtn, styles.sheetBtnGhost]}>
-                          <Text style={styles.sheetBtnGhostText}>Cancel</Text>
-                        </Pressable>
-
-                        <Pressable onPress={saveAddItinerary} style={[styles.sheetBtn, styles.sheetBtnPrimary]}>
-                          <Text style={styles.sheetBtnPrimaryText}>Save item</Text>
-                        </Pressable>
-                      </View>
-                    </View>
-                  ) : null}
-
-                  {/* NOTE */}
-                  {addKind === "note" ? (
-                    <View style={{ marginTop: 10, gap: 10 }}>
-                      <Text style={styles.noteHint}>
-                        For now, quick notes are appended to the trip’s Notes block so you don’t lose anything.
-                      </Text>
-
-                      <TextInput
-                        value={quickNote}
-                        onChangeText={setQuickNote}
+                        value={noteText}
+                        onChangeText={setNoteText}
                         placeholder="Quick note (e.g. “Hotel: citizenM or Premier Inn”)"
                         placeholderTextColor={theme.colors.textSecondary}
                         style={[styles.input, styles.textarea]}
@@ -1133,12 +984,102 @@ export default function TripDetailScreen() {
                           <Text style={styles.sheetBtnGhostText}>Cancel</Text>
                         </Pressable>
 
-                        <Pressable onPress={saveQuickNote} style={[styles.sheetBtn, styles.sheetBtnPrimary]}>
+                        <Pressable onPress={saveNewNote} style={[styles.sheetBtn, styles.sheetBtnPrimary]}>
                           <Text style={styles.sheetBtnPrimaryText}>Save note</Text>
                         </Pressable>
                       </View>
                     </View>
-                  ) : null}
+                  ) : (
+                    <View style={{ marginTop: 10, gap: 10 }}>
+                      {/* Type pills */}
+                      <View style={styles.typeRow}>
+                        {(
+                          [
+                            "hotel",
+                            "flight",
+                            "train",
+                            "transfer",
+                            "things",
+                            "tickets",
+                            "insurance",
+                            "claim",
+                            "note",
+                            "other",
+                          ] as SavedItemType[]
+                        ).map((t) => {
+                          const active = newType === t;
+                          return (
+                            <Pressable
+                              key={t}
+                              onPress={() => setNewType(t)}
+                              style={[styles.typePill, active && styles.typePillActive]}
+                            >
+                              <Text style={[styles.typeText, active && styles.typeTextActive]}>{TYPE_LABEL[t]}</Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+
+                      {/* Status pills */}
+                      <View style={styles.statusRow}>
+                        {(["saved", "pending", "booked", "archived"] as SavedItemStatus[]).map((s) => {
+                          const active = newStatus === s;
+                          return (
+                            <Pressable
+                              key={s}
+                              onPress={() => setNewStatus(s)}
+                              style={[styles.statusPickPill, active && styles.statusPickPillActive]}
+                            >
+                              <Text style={[styles.statusPickText, active && styles.statusPickTextActive]}>
+                                {STATUS_LABEL[s]}
+                              </Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+
+                      <TextInput
+                        value={newTitle}
+                        onChangeText={setNewTitle}
+                        placeholder="Title (required) — e.g. “Hotel shortlist”"
+                        placeholderTextColor={theme.colors.textSecondary}
+                        style={styles.input}
+                        autoCapitalize="sentences"
+                        autoCorrect={false}
+                      />
+
+                      <TextInput
+                        value={newUrl}
+                        onChangeText={setNewUrl}
+                        placeholder="Link (optional) — Booking, airline, Maps, etc."
+                        placeholderTextColor={theme.colors.textSecondary}
+                        style={styles.input}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        keyboardType={Platform.OS === "ios" ? "url" : "default"}
+                      />
+
+                      <TextInput
+                        value={newPriceText}
+                        onChangeText={setNewPriceText}
+                        placeholder='Price text (optional) — “£220” or “View live price”'
+                        placeholderTextColor={theme.colors.textSecondary}
+                        style={styles.input}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                      />
+
+                      <View style={styles.sheetActions}>
+                        <Pressable onPress={closeAdd} style={[styles.sheetBtn, styles.sheetBtnGhost]}>
+                          <Text style={styles.sheetBtnGhostText}>Cancel</Text>
+                        </Pressable>
+
+                        <Pressable onPress={saveNewItem} style={[styles.sheetBtn, styles.sheetBtnPrimary]}>
+                          <Text style={styles.sheetBtnPrimaryText}>Save item</Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                  )}
                 </ScrollView>
               </View>
             </SafeAreaView>
@@ -1201,6 +1142,17 @@ const styles = StyleSheet.create({
   },
   statusText: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.xs },
 
+  pendingBanner: {
+    marginTop: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255, 210, 80, 0.25)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+    padding: 12,
+  },
+  pendingTitle: { color: "rgba(255, 210, 80, 0.95)", fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.sm },
+  pendingSub: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18 },
+
   heroActions: { marginTop: 14, flexDirection: "row", gap: 10 },
 
   btn: {
@@ -1223,7 +1175,10 @@ const styles = StyleSheet.create({
   },
   btnSecondaryText: { color: theme.colors.textSecondary, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.sm },
 
-  deleteInline: { marginTop: 10, alignSelf: "center", paddingVertical: 6, paddingHorizontal: 10 },
+  noteInline: { marginTop: 10, alignSelf: "center", paddingVertical: 6, paddingHorizontal: 10 },
+  noteInlineText: { color: "rgba(0,255,136,0.90)", fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.sm },
+
+  deleteInline: { marginTop: 6, alignSelf: "center", paddingVertical: 6, paddingHorizontal: 10 },
   deleteInlineText: {
     color: "rgba(255, 120, 120, 0.95)",
     fontWeight: theme.fontWeight.black,
@@ -1263,7 +1218,18 @@ const styles = StyleSheet.create({
   },
   bookBtnText: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.sm },
 
-  itemRow: {
+  mapsInline: {
+    marginTop: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.16)",
+    alignItems: "center",
+  },
+  mapsInlineText: { color: theme.colors.textSecondary, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.sm },
+
+  matchRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
@@ -1275,6 +1241,19 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.18)",
   },
 
+  itemRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+  },
+
+  itemTop: { flexDirection: "row", alignItems: "center", gap: 10 },
   rowTitle: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.md },
   rowMeta: {
     marginTop: 4,
@@ -1283,48 +1262,60 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     fontWeight: theme.fontWeight.bold,
   },
+  priceLine: {
+    marginTop: 6,
+    color: "rgba(242,244,246,0.92)",
+    fontSize: theme.fontSize.sm,
+    fontWeight: theme.fontWeight.black,
+  },
+
   chev: { color: theme.colors.textSecondary, fontSize: 24, marginTop: -2 },
 
-  linkRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 14,
+  statusPillSmall: {
+    borderRadius: 999,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
+    borderColor: "rgba(255,255,255,0.14)",
     backgroundColor: "rgba(0,0,0,0.18)",
+    paddingVertical: 4,
+    paddingHorizontal: 8,
   },
+  statusTextSmall: { color: theme.colors.textSecondary, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.xs },
 
-  itRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 10,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.18)",
-  },
+  itemActionsCol: { gap: 8, alignItems: "flex-end" },
 
-  smallDangerBtn: {
-    paddingVertical: 10,
-    paddingHorizontal: 12,
+  smallBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 10,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "rgba(255, 80, 80, 0.30)",
-    backgroundColor: "rgba(0,0,0,0.18)",
-    alignSelf: "flex-start",
+    borderColor: "rgba(255,255,255,0.14)",
+    backgroundColor: "rgba(0,0,0,0.16)",
   },
-  smallDangerText: { color: "rgba(255, 120, 120, 0.95)", fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.xs },
+  smallBtnText: { color: theme.colors.textSecondary, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.xs },
 
-  bucketTitle: { marginTop: 6, color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.sm },
+  smallBtnPrimary: {
+    borderColor: "rgba(0,255,136,0.55)",
+    backgroundColor: "rgba(0,0,0,0.24)",
+  },
+  smallBtnPrimaryText: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.xs },
 
-  moreInline: { marginTop: 10, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm },
-
-  notesText: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18 },
+  smallBtnDanger: {
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255, 120, 120, 0.35)",
+    backgroundColor: "rgba(0,0,0,0.16)",
+  },
+  smallBtnDangerGhost: {
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255, 120, 120, 0.22)",
+    backgroundColor: "rgba(0,0,0,0.10)",
+  },
+  smallBtnDangerText: { color: "rgba(255, 120, 120, 0.95)", fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.xs },
 
   linkBtn: {
     marginTop: 12,
@@ -1337,30 +1328,28 @@ const styles = StyleSheet.create({
   },
   linkText: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.sm },
 
-  halfBtn: {
-    flex: 1,
-    borderRadius: 12,
-    paddingVertical: 12,
-    alignItems: "center",
+  input: {
     borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: "rgba(0,0,0,0.22)",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: Platform.OS === "ios" ? 12 : 10,
+    color: theme.colors.text,
+    fontSize: theme.fontSize.md,
   },
-  halfBtnPrimary: { borderColor: "rgba(0,255,136,0.55)", backgroundColor: "rgba(0,0,0,0.30)" },
-  halfBtnPrimaryText: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.sm },
-  halfBtnGhost: { borderColor: "rgba(255,255,255,0.12)", backgroundColor: "rgba(0,0,0,0.18)" },
-  halfBtnGhostText: { color: theme.colors.textSecondary, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.sm },
+  textarea: { minHeight: 120 },
 
-  cityBlockTitle: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.md },
-  cityBlockSub: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18 },
-
-  thingsList: { marginTop: 10, gap: 10 },
-  thingRow: { flexDirection: "row", gap: 10, alignItems: "flex-start" },
-  thingIdx: { width: 18, color: theme.colors.primary, fontWeight: theme.fontWeight.black },
-  thingTitle: { color: theme.colors.text, fontWeight: theme.fontWeight.black },
-  thingDesc: { marginTop: 4, color: theme.colors.textSecondary, lineHeight: 18 },
-
-  tipsBlock: { marginTop: 12 },
-  tipsTitle: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.sm, marginBottom: 6 },
-  tipLine: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18 },
+  saveBtn: {
+    marginTop: 12,
+    paddingVertical: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(0,255,136,0.55)",
+    backgroundColor: "rgba(0,0,0,0.30)",
+    alignItems: "center",
+  },
+  saveText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.md },
 
   /* Modal sheet */
   modalWrap: { flex: 1, justifyContent: "flex-end" },
@@ -1399,22 +1388,8 @@ const styles = StyleSheet.create({
   },
   closeText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
 
-  tabRow: { marginTop: 12, flexDirection: "row", gap: 10 },
-  tabPill: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    backgroundColor: "rgba(0,0,0,0.18)",
-    alignItems: "center",
-  },
-  tabPillActive: { borderColor: "rgba(0,255,136,0.55)", backgroundColor: "rgba(0,0,0,0.30)" },
-  tabText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: theme.fontSize.sm },
-  tabTextActive: { color: theme.colors.text },
-
-  groupRow: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
-  groupPill: {
+  typeRow: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  typePill: {
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 999,
@@ -1422,9 +1397,22 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.12)",
     backgroundColor: "rgba(0,0,0,0.18)",
   },
-  groupPillActive: { borderColor: "rgba(0,255,136,0.55)", backgroundColor: "rgba(0,0,0,0.30)" },
-  groupText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: theme.fontSize.xs },
-  groupTextActive: { color: theme.colors.text },
+  typePillActive: { borderColor: "rgba(0,255,136,0.55)", backgroundColor: "rgba(0,0,0,0.30)" },
+  typeText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: theme.fontSize.xs },
+  typeTextActive: { color: theme.colors.text },
+
+  statusRow: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  statusPickPill: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+  },
+  statusPickPillActive: { borderColor: "rgba(0,255,136,0.55)", backgroundColor: "rgba(0,0,0,0.30)" },
+  statusPickText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: theme.fontSize.xs },
+  statusPickTextActive: { color: theme.colors.text },
 
   sheetActions: { marginTop: 12, flexDirection: "row", gap: 10 },
   sheetBtn: { flex: 1, borderRadius: 12, paddingVertical: 12, alignItems: "center", borderWidth: 1 },
@@ -1432,23 +1420,4 @@ const styles = StyleSheet.create({
   sheetBtnGhostText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: theme.fontSize.sm },
   sheetBtnPrimary: { borderColor: "rgba(0,255,136,0.55)", backgroundColor: "rgba(0,0,0,0.30)" },
   sheetBtnPrimaryText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
-
-  noteHint: {
-    color: theme.colors.textSecondary,
-    fontSize: theme.fontSize.sm,
-    lineHeight: 18,
-    fontWeight: theme.fontWeight.bold,
-  },
-
-  input: {
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    backgroundColor: "rgba(0,0,0,0.22)",
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: Platform.OS === "ios" ? 12 : 10,
-    color: theme.colors.text,
-    fontSize: theme.fontSize.md,
-  },
-  textarea: { minHeight: 90 },
 });
