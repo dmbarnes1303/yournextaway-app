@@ -35,6 +35,11 @@ export default function RootLayout() {
     if (didInitRef.current) return;
     didInitRef.current = true;
 
+    // Hide splash as soon as fonts are ready. Don’t block on best-effort boot tasks.
+    SplashScreen.hideAsync().catch(() => {
+      // ignore
+    });
+
     (async () => {
       try {
         await savedItemsStore.load();
@@ -47,10 +52,6 @@ export default function RootLayout() {
       } catch {
         // ignore (best-effort)
       }
-
-      SplashScreen.hideAsync().catch(() => {
-        // ignore
-      });
     })();
   }, [fontsLoaded]);
 
@@ -74,22 +75,27 @@ export default function RootLayout() {
               headerLeft: () => <BackButton fallbackHref="/(tabs)/home" />,
             }}
           >
+            {/* Top-level routes */}
             <Stack.Screen name="index" options={{ headerShown: false }} />
             <Stack.Screen name="landing" options={{ headerShown: false }} />
             <Stack.Screen name="onboarding" options={{ headerShown: false }} />
             <Stack.Screen name="paywall" options={{ headerTitle: "YourNextAway Pro" }} />
 
+            {/* Tabs */}
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
 
+            {/* Details */}
             <Stack.Screen name="match/[id]" options={{ headerTitle: "Match" }} />
 
-            {/* City routing: keep ONLY ONE dynamic route in /city */}
+            {/* City (ONLY these two) */}
             <Stack.Screen name="city/[slug]" options={{ headerTitle: "City" }} />
             <Stack.Screen name="city/key/[cityKey]" options={{ headerTitle: "City" }} />
 
+            {/* Team / Stadium */}
             <Stack.Screen name="team/[teamKey]" options={{ headerTitle: "Team" }} />
             <Stack.Screen name="stadium/[slug]" options={{ headerTitle: "Stadium" }} />
 
+            {/* Trips */}
             <Stack.Screen name="trip/build" options={{ headerTitle: "Build Trip" }} />
             <Stack.Screen name="trip/[id]" options={{ headerTitle: "Trip Details" }} />
           </Stack>
