@@ -6,24 +6,39 @@ import { getPartner } from "@/src/core/partners";
 
 /**
  * Call once at app boot (e.g. app/_layout.tsx useEffect).
- * This is a minimal Phase-1 fallback prompt.
+ * Minimal Phase-1 fallback prompt.
  *
- * You can replace this Alert UI later with your Trip Workspace confirmation screen.
+ * Later: replace Alert with your Trip Workspace confirmation screen.
  */
 export function bootstrapPartnerReturnPrompt() {
   ensurePartnerReturnWatcher(async (click) => {
-    const item = savedItemsStore.getState().items.find((x) => x.id === click.itemId);
-    if (!item) return;
+    try {
+      // Defensive: load store if needed so lookup works on cold start
+      if (!savedItemsStore.getState().loaded) {
+        await savedItemsStore.load();
+      }
 
-    const partner = getPartner(click.partnerId);
+      const item = savedItemsStore.getState().items.find((x) => x.id === click.itemId);
+      if (!item) return;
 
-    Alert.alert(
-      "Did you complete your booking?",
-      `We opened ${partner.name}. Mark this as booked?`,
-      [
-        { text: "Not yet", style: "cancel", onPress: () => markNotBooked(click.itemId) },
-        { text: "Booked", onPress: () => markBooked(click.itemId) },
-      ]
-    );
+      let partnerName = "the partner";
+      try {
+        const partner = getPartner(click.partnerId);
+        if (partner?.name) partnerName = partner.name;
+      } catch {
+        // ignore
+      }
+
+      Alert.alert(
+        "Did you complete your booking?",
+        `We opened ${partnerName}. Mark this as booked?`,
+        [
+          { text: "Not yet", style: "cancel", onPress: () => markNotBooked(click.itemId) },
+          { text: "Booked", onPress: () => markBooked(click.itemId) },
+        ]
+      );
+    } catch {
+      // hard fail should never crash the app
+    }
   });
 }
