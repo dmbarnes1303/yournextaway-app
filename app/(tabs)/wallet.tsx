@@ -1,14 +1,6 @@
 // app/(tabs)/wallet.tsx
 import React, { useEffect, useMemo, useState, useCallback } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  Pressable,
-  ActivityIndicator,
-  Alert,
-} from "react-native";
+import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import Background from "@/src/components/Background";
@@ -25,15 +17,7 @@ import type { SavedItem, WalletAttachment } from "@/src/core/savedItemTypes";
 import { getSavedItemTypeLabel } from "@/src/core/savedItemTypes";
 import { getPartner } from "@/src/core/partners";
 import { openPartnerUrl } from "@/src/services/partnerClicks";
-import {
-  pickAndStoreAttachmentForItem,
-  openAttachment,
-  deleteAttachmentFile,
-} from "@/src/services/walletAttachments";
-
-/* -------------------------------------------------------------------------- */
-/* Helpers */
-/* -------------------------------------------------------------------------- */
+import { pickAndStoreAttachmentForItem, openAttachment, deleteAttachmentFile } from "@/src/services/walletAttachments";
 
 type WalletMode = "booked" | "archived";
 
@@ -66,6 +50,17 @@ function safePartnerName(partnerId?: string) {
   }
 }
 
+function buildMeta(item: SavedItem) {
+  const typeLabel = getSavedItemTypeLabel(item.type);
+  const partnerName = safePartnerName(item.partnerId);
+  const domain = item.partnerUrl ? shortDomain(item.partnerUrl) : "";
+
+  const bits = [typeLabel];
+  if (partnerName) bits.push(partnerName);
+  if (domain) bits.push(domain);
+  return bits.join(" • ");
+}
+
 function getItemDetailsText(item: SavedItem) {
   const metaText = typeof item.metadata?.text === "string" ? item.metadata.text.trim() : "";
   if (metaText) return metaText;
@@ -76,28 +71,11 @@ function getItemDetailsText(item: SavedItem) {
   return bits.join("\n") || "No extra details saved.";
 }
 
-function buildMeta(item: SavedItem) {
-  const typeLabel = getSavedItemTypeLabel(item.type);
-  const partnerName = safePartnerName(item.partnerId);
-  const domain = item.partnerUrl ? shortDomain(item.partnerUrl) : "";
-
-  const bits = [typeLabel];
-  if (partnerName) bits.push(partnerName);
-  if (domain) bits.push(domain);
-
-  if (!item.partnerUrl && item.type === "note") bits.push("Notes");
-  return bits.join(" • ");
-}
-
 function attachmentLabel(att: WalletAttachment) {
   const kind = att.kind === "pdf" ? "PDF" : att.kind === "image" ? "Image" : "File";
   const name = String(att.name ?? "").trim();
   return name ? `${kind}: ${name}` : `${kind} attachment`;
 }
-
-/* -------------------------------------------------------------------------- */
-/* Screen */
-/* -------------------------------------------------------------------------- */
 
 export default function WalletScreen() {
   const [mode, setMode] = useState<WalletMode>("booked");
@@ -130,6 +108,15 @@ export default function WalletScreen() {
 
   const loading = !tripsLoaded || !savedLoaded;
 
+  const tripIds = useMemo(() => new Set(trips.map((t) => String(t.id))), [trips]);
+
+  // Enforce your rule: if trip doesn't exist, wallet item should not exist.
+  useEffect(() => {
+    if (!tripsLoaded || !savedLoaded) return;
+    const valid = trips.map((t) => String(t.id));
+    savedItemsStore.clearOrphans(valid, { deleteAttachmentFiles: true }).catch(() => {});
+  }, [tripsLoaded, savedLoaded, trips]);
+
   const tripById = useMemo(() => {
     const map = new Map<string, Trip>();
     for (const t of trips) map.set(String(t.id), t);
@@ -137,50 +124,26 @@ export default function WalletScreen() {
   }, [trips]);
 
   const visible = useMemo(() => {
-    if (mode === "archived") return items.filter((i) => i.status === "archived");
-    return items.filter((i) => i.status === "booked");
-  }, [items, mode]);
+    // hide orphans immediately in UI (even before clearOrphans completes)
+    const inTrips = items.filter((i) => tripIds.has(String(i.tripId)));
+
+    if (mode === "archived") return inTrips.filter((i) => i.status === "archived");
+    return inTrips.filter((i) => i.status === "booked");
+  }, [items, mode, tripIds]);
 
   const grouped = useMemo(() => groupByTrip(visible), [visible]);
 
   const counts = useMemo(() => {
     let booked = 0;
     let archived = 0;
+
     for (const it of items) {
+      if (!tripIds.has(String(it.tripId))) continue;
       if (it.status === "booked") booked++;
       if (it.status === "archived") archived++;
     }
     return { booked, archived };
-  }, [items]);
-
-  async function openItemLink(item: SavedItem) {
-    if (!item.partnerUrl) {
-      Alert.alert(item.title || "Item", getItemDetailsText(item));
-      return;
-    }
-
-    try {
-      await openPartnerUrl(item.partnerUrl);
-    } catch {
-      Alert.alert("Couldn’t open link", "Your device could not open that link.");
-    }
-  }
-
-  async function archiveItem(item: SavedItem) {
-    try {
-      await savedItemsStore.transitionStatus(item.id, "archived");
-    } catch {
-      Alert.alert("Couldn’t archive", "That item can’t be archived right now.");
-    }
-  }
-
-  async function restoreItem(item: SavedItem) {
-    try {
-      await savedItemsStore.transitionStatus(item.id, "saved");
-    } catch {
-      Alert.alert("Couldn’t restore", "That item can’t be restored right now.");
-    }
-  }
+  }, [items, tripIds]);
 
   const addAttachment = useCallback(async (item: SavedItem) => {
     try {
@@ -197,11 +160,10 @@ export default function WalletScreen() {
   const openAttachments = useCallback(async (item: SavedItem) => {
     const atts = Array.isArray(item.attachments) ? item.attachments : [];
     if (atts.length === 0) {
-      Alert.alert(
-        "No attachments yet",
-        "Add a PDF or screenshot to store your booking proof offline.",
-        [{ text: "Add attachment", onPress: () => addAttachment(item) }, { text: "Close", style: "cancel" }]
-      );
+      Alert.alert("No attachments", "Add a PDF or screenshot first.", [
+        { text: "Add attachment", onPress: () => addAttachment(item) },
+        { text: "Close", style: "cancel" },
+      ]);
       return;
     }
 
@@ -243,38 +205,34 @@ export default function WalletScreen() {
 
     if (atts.length === 1) {
       const a = atts[0];
-      Alert.alert(
-        "Remove attachment?",
-        attachmentLabel(a),
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Remove",
-            style: "destructive",
-            onPress: async () => {
-              try {
-                await savedItemsStore.removeAttachment(item.id, a.id);
-                await deleteAttachmentFile(a); // best-effort
-              } catch {
-                // ok
-              }
-            },
+      Alert.alert("Remove attachment?", attachmentLabel(a), [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Remove",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await savedItemsStore.removeAttachment(item.id, a.id, { deleteAttachmentFiles: true });
+              await deleteAttachmentFile(a);
+            } catch {
+              // ok
+            }
           },
-        ]
-      );
+        },
+      ]);
       return;
     }
 
     Alert.alert(
       "Remove attachment",
-      "Pick one to remove from Wallet storage.",
+      "Pick one to remove.",
       [
         ...atts.slice(0, 8).map((a) => ({
           text: attachmentLabel(a),
           style: "destructive" as const,
           onPress: async () => {
             try {
-              await savedItemsStore.removeAttachment(item.id, a.id);
+              await savedItemsStore.removeAttachment(item.id, a.id, { deleteAttachmentFiles: true });
               await deleteAttachmentFile(a);
             } catch {
               // ok
@@ -287,42 +245,70 @@ export default function WalletScreen() {
     );
   }, []);
 
+  async function openItemLink(item: SavedItem) {
+    if (!item.partnerUrl) {
+      Alert.alert(item.title || "Item", getItemDetailsText(item));
+      return;
+    }
+
+    try {
+      await openPartnerUrl(item.partnerUrl);
+    } catch {
+      Alert.alert("Couldn’t open link", "Your device could not open that link.");
+    }
+  }
+
+  async function archiveItem(item: SavedItem) {
+    try {
+      await savedItemsStore.transitionStatus(item.id, "archived");
+    } catch {
+      Alert.alert("Couldn’t archive", "That item can’t be archived right now.");
+    }
+  }
+
+  async function restoreItem(item: SavedItem) {
+    try {
+      await savedItemsStore.transitionStatus(item.id, "saved");
+    } catch {
+      Alert.alert("Couldn’t restore", "That item can’t be restored right now.");
+    }
+  }
+
   function openActions(item: SavedItem) {
     const details = getItemDetailsText(item);
     const atts = Array.isArray(item.attachments) ? item.attachments : [];
     const attCount = atts.length;
-    const attLine = attCount ? `\n\nAttachments: ${attCount}` : `\n\nAttachments: none`;
 
-    // ARCHIVED
+    const base = `${details}\n\nAttachments: ${attCount || "none"}`;
+
+    const openAttLabel = attCount <= 1 ? "Open attachment" : "View attachments";
+
     if (mode === "archived") {
       Alert.alert(
         item.title || "Archived item",
-        details + attLine,
+        base,
         [
           { text: "Close", style: "cancel" },
           item.partnerUrl ? { text: "Open link", onPress: () => openItemLink(item) } : undefined,
-          attCount ? { text: "Open attachment", onPress: () => openAttachments(item) } : undefined,
-          attCount ? { text: "Remove attachment", style: "destructive", onPress: () => removeAttachments(item) } : undefined,
-          { text: "Restore", style: "default", onPress: () => restoreItem(item) },
-        ].filter(Boolean) as any,
-        { cancelable: true }
+          attCount ? { text: openAttLabel, onPress: () => openAttachments(item) } : undefined,
+          attCount ? { text: "Delete attachment", style: "destructive", onPress: () => removeAttachments(item) } : undefined,
+          { text: "Restore", onPress: () => restoreItem(item) },
+        ].filter(Boolean) as any
       );
       return;
     }
 
-    // BOOKED
     Alert.alert(
       item.title || "Wallet item",
-      details + attLine,
+      base,
       [
         { text: "Close", style: "cancel" },
-        item.partnerUrl ? { text: "Open link", style: "default", onPress: () => openItemLink(item) } : undefined,
+        item.partnerUrl ? { text: "Open link", onPress: () => openItemLink(item) } : undefined,
         { text: "Add attachment", onPress: () => addAttachment(item) },
-        attCount ? { text: attCount === 1 ? "Open attachment" : "View attachments", onPress: () => openAttachments(item) } : undefined,
-        attCount ? { text: "Remove attachment", style: "destructive", onPress: () => removeAttachments(item) } : undefined,
+        attCount ? { text: openAttLabel, onPress: () => openAttachments(item) } : undefined,
+        attCount ? { text: "Delete attachment", style: "destructive", onPress: () => removeAttachments(item) } : undefined,
         { text: "Archive", style: "destructive", onPress: () => archiveItem(item) },
-      ].filter(Boolean) as any,
-      { cancelable: true }
+      ].filter(Boolean) as any
     );
   }
 
@@ -337,19 +323,13 @@ export default function WalletScreen() {
 
           <GlassCard style={styles.toggleCard} strength="subtle">
             <View style={styles.toggleRow}>
-              <Pressable
-                onPress={() => setMode("booked")}
-                style={[styles.toggleBtn, mode === "booked" && styles.toggleBtnActive]}
-              >
+              <Pressable onPress={() => setMode("booked")} style={[styles.toggleBtn, mode === "booked" && styles.toggleBtnActive]}>
                 <Text style={[styles.toggleText, mode === "booked" && styles.toggleTextActive]}>
                   Booked ({counts.booked})
                 </Text>
               </Pressable>
 
-              <Pressable
-                onPress={() => setMode("archived")}
-                style={[styles.toggleBtn, mode === "archived" && styles.toggleBtnActive]}
-              >
+              <Pressable onPress={() => setMode("archived")} style={[styles.toggleBtn, mode === "archived" && styles.toggleBtnActive]}>
                 <Text style={[styles.toggleText, mode === "archived" && styles.toggleTextActive]}>
                   Archived ({counts.archived})
                 </Text>
@@ -373,7 +353,7 @@ export default function WalletScreen() {
                 message={
                   mode === "archived"
                     ? "When you archive items, they’ll show up here."
-                    : "When you confirm bookings in a trip, they appear here. Add a PDF or screenshot to store proof offline."
+                    : "When you confirm bookings in a trip, they appear here."
                 }
               />
             </GlassCard>
@@ -393,26 +373,16 @@ export default function WalletScreen() {
                       <View style={{ gap: 10 }}>
                         {tripItems.map((it) => {
                           const attCount = Array.isArray(it.attachments) ? it.attachments.length : 0;
-
                           return (
                             <Pressable key={it.id} onPress={() => openActions(it)} style={styles.itemRow}>
                               <View style={{ flex: 1 }}>
-                                <Text style={styles.itemTitle} numberOfLines={1}>
-                                  {it.title}
-                                </Text>
-
+                                <Text style={styles.itemTitle} numberOfLines={1}>{it.title}</Text>
                                 <Text style={styles.itemMeta} numberOfLines={1}>
                                   {buildMeta(it)}
                                   {attCount ? ` • ${attCount} attachment${attCount === 1 ? "" : "s"}` : ""}
                                 </Text>
-
-                                {it.priceText ? (
-                                  <Text style={styles.priceLine} numberOfLines={1}>
-                                    {it.priceText}
-                                  </Text>
-                                ) : null}
+                                {it.priceText ? <Text style={styles.priceLine} numberOfLines={1}>{it.priceText}</Text> : null}
                               </View>
-
                               <Text style={styles.chev}>›</Text>
                             </Pressable>
                           );
@@ -432,10 +402,6 @@ export default function WalletScreen() {
   );
 }
 
-/* -------------------------------------------------------------------------- */
-/* styles */
-/* -------------------------------------------------------------------------- */
-
 const styles = StyleSheet.create({
   container: { flex: 1 },
   scroll: { flex: 1 },
@@ -446,30 +412,12 @@ const styles = StyleSheet.create({
     gap: theme.spacing.lg,
   },
 
-  header: {
-    paddingTop: theme.spacing.lg,
-    paddingBottom: theme.spacing.xs,
-  },
-
-  title: {
-    fontSize: theme.fontSize.xxl,
-    fontWeight: theme.fontWeight.black,
-    color: theme.colors.text,
-  },
-
-  subtitle: {
-    marginTop: 4,
-    fontSize: theme.fontSize.sm,
-    color: theme.colors.textSecondary,
-    fontWeight: theme.fontWeight.bold,
-  },
+  header: { paddingTop: theme.spacing.lg, paddingBottom: theme.spacing.xs },
+  title: { fontSize: theme.fontSize.xxl, fontWeight: theme.fontWeight.black, color: theme.colors.text },
+  subtitle: { marginTop: 4, fontSize: theme.fontSize.sm, color: theme.colors.textSecondary, fontWeight: theme.fontWeight.bold },
 
   toggleCard: { padding: 10 },
-
-  toggleRow: {
-    flexDirection: "row",
-    gap: 10,
-  },
+  toggleRow: { flexDirection: "row", gap: 10 },
 
   toggleBtn: {
     flex: 1,
@@ -486,24 +434,11 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,255,136,0.10)",
   },
 
-  toggleText: {
-    color: theme.colors.textSecondary,
-    fontWeight: theme.fontWeight.black,
-    fontSize: theme.fontSize.sm,
-  },
-
-  toggleTextActive: {
-    color: theme.colors.text,
-  },
+  toggleText: { color: theme.colors.textSecondary, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.sm },
+  toggleTextActive: { color: theme.colors.text },
 
   section: { marginTop: 2 },
-
-  sectionTitle: {
-    marginBottom: 8,
-    color: theme.colors.text,
-    fontSize: theme.fontSize.md,
-    fontWeight: theme.fontWeight.black,
-  },
+  sectionTitle: { marginBottom: 8, color: theme.colors.text, fontSize: theme.fontSize.md, fontWeight: theme.fontWeight.black },
 
   card: { padding: theme.spacing.lg },
 
@@ -522,29 +457,11 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.18)",
   },
 
-  itemTitle: {
-    color: theme.colors.text,
-    fontWeight: theme.fontWeight.black,
-    fontSize: theme.fontSize.md,
-  },
+  itemTitle: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.md },
 
-  itemMeta: {
-    marginTop: 4,
-    color: theme.colors.textSecondary,
-    fontSize: theme.fontSize.sm,
-    fontWeight: theme.fontWeight.bold,
-  },
+  itemMeta: { marginTop: 4, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, fontWeight: theme.fontWeight.bold },
 
-  priceLine: {
-    marginTop: 6,
-    color: "rgba(242,244,246,0.92)",
-    fontSize: theme.fontSize.sm,
-    fontWeight: theme.fontWeight.black,
-  },
+  priceLine: { marginTop: 6, color: "rgba(242,244,246,0.92)", fontSize: theme.fontSize.sm, fontWeight: theme.fontWeight.black },
 
-  chev: {
-    color: theme.colors.textSecondary,
-    fontSize: 24,
-    marginTop: -2,
-  },
+  chev: { color: theme.colors.textSecondary, fontSize: 24, marginTop: -2 },
 });
