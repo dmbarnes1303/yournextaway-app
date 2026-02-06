@@ -1,5 +1,6 @@
 // src/state/trips.ts
 import storage from "@/src/services/storage";
+import type { SavedItem, Trip as CoreTrip, Id } from "@/src/core/tripTypes";
 
 /**
  * Trips store (no external state libs)
@@ -11,6 +12,11 @@ import storage from "@/src/services/storage";
  * - Guard against concurrent loads / race conditions
  * - Normalize persisted shape (avoid empty strings/arrays unless meaningful)
  * - CRITICAL: never overwrite storage before hydration completes
+ *
+ * Spine alignment (Phase 1):
+ * - Trip includes: title, cityName/citySlug, fixtureId/matchIds, date range
+ * - Adds "saved" items (SavedItem[]) for saved→pending→booked pipeline
+ * - Keeps legacy "links" + "itinerary" for now (UI uses them)
  */
 
 export type TripLinkGroup = "stay" | "travel" | "tickets" | "links";
@@ -34,12 +40,24 @@ export type TripItineraryItem = {
   updatedAt?: number;
 };
 
+/**
+ * Local Trip shape = CoreTrip + legacy fields we still render.
+ * IMPORTANT: keep it stable for current screens.
+ */
 export type Trip = {
   id: string;
 
+  title?: string;
+
+  // Prefer cityName, but keep old cityId/citySlug for compatibility
+  cityName?: string;
   cityId?: string;
   citySlug?: string;
 
+  // Spine (fixture-centric)
+  fixtureId?: string;
+
+  // Legacy (some screens still use matchIds)
   matchIds?: string[];
 
   // ISO date-only: YYYY-MM-DD
@@ -48,8 +66,12 @@ export type Trip = {
 
   notes?: string;
 
+  // Legacy organiser (kept for now)
   links?: TripLinkItem[];
   itinerary?: TripItineraryItem[];
+
+  // Spine SavedItem pipeline
+  saved?: SavedItem[];
 
   createdAt?: number;
   updatedAt?: number;
@@ -63,6 +85,7 @@ type TripsState = {
 type Listener = (s: TripsState) => void;
 
 // Current + legacy keys (migration safety)
+const STORAGE_KEY_V3 = "yna.trips.v3"; // new canonical
 const STORAGE_KEY_V2 = "yna.trips.v2";
 const STORAGE_KEY_V1 = "yna.trips.v1";
 
@@ -105,7 +128,6 @@ function isTimeHHMM(s: unknown): s is string {
 }
 
 function normUrl(x: unknown): string {
-  // Keep permissive; UI/safeOpenUrl can handle missing scheme.
   return normString(x);
 }
 
@@ -156,11 +178,52 @@ function normalizeItineraryItem(input: any): TripItineraryItem | null {
   };
 }
 
+function normalizeSavedItem(input: any, tripId: string): SavedItem | null {
+  if (!input || typeof input !== "object") return null;
+
+  const id = normString(input.id);
+  const category = normString(input.category) as any;
+  const status = normString(input.status) as any;
+  const title = normString(input.title);
+
+  if (!id || !title) return null;
+
+  // Minimal defensive shape: keep unknown fields out
+  const createdAt = typeof input.createdAt === "number" ? input.createdAt : now();
+  const updatedAt = typeof input.updatedAt === "number" ? input.updatedAt : createdAt;
+
+  const provider = normString(input.provider) || "other";
+
+  const out: SavedItem = {
+    id,
+    tripId,
+    category: category || "other",
+    status: status || "saved",
+    title,
+    subtitle: normString(input.subtitle) || undefined,
+    provider: provider as any,
+    partner: input.partner && typeof input.partner === "object" ? input.partner : undefined,
+    price: input.price && typeof input.price === "object" ? input.price : undefined,
+    reference: normString(input.reference) || undefined,
+    notes: normString(input.notes) || undefined,
+    walletItemIds: Array.isArray(input.walletItemIds) ? input.walletItemIds.map((x: any) => normString(x)).filter(Boolean) : undefined,
+    createdAt,
+    updatedAt,
+  };
+
+  return out;
+}
+
 function compactTrip(t: Trip): Trip {
   const out: Trip = { ...t };
 
+  if (!normString(out.title)) delete out.title;
+
+  if (!normString(out.cityName)) delete out.cityName;
   if (!normString(out.cityId)) delete out.cityId;
   if (!normString(out.citySlug)) delete out.citySlug;
+
+  if (!normString(out.fixtureId)) delete out.fixtureId;
 
   if (!isIsoDateOnly(out.startDate)) delete out.startDate;
   if (!isIsoDateOnly(out.endDate)) delete out.endDate;
@@ -185,6 +248,14 @@ function compactTrip(t: Trip): Trip {
     else delete out.itinerary;
   }
 
+  if (Array.isArray(out.saved)) {
+    const saved = out.saved
+      .map((x: any) => normalizeSavedItem(x, out.id))
+      .filter(Boolean) as SavedItem[];
+    if (saved.length) out.saved = saved;
+    else delete out.saved;
+  }
+
   return out;
 }
 
@@ -203,16 +274,52 @@ function normalizeTrip(input: any): Trip | null {
   const itineraryRaw = Array.isArray(input.itinerary) ? input.itinerary : [];
   const itinerary = itineraryRaw.map((x: any) => normalizeItineraryItem(x)).filter(Boolean) as TripItineraryItem[];
 
+  const savedRaw = Array.isArray(input.saved) ? input.saved : [];
+  const saved = savedRaw.map((x: any) => normalizeSavedItem(x, id)).filter(Boolean) as SavedItem[];
+
+  // Derive fixtureId if missing but matchIds has at least one
+  const fixtureId =
+    typeof input.fixtureId === "string"
+      ? normString(input.fixtureId) || undefined
+      : matchIds.length
+        ? matchIds[0]
+        : undefined;
+
+  // cityName: prefer input.cityName, else allow old cityId fallback
+  const cityName =
+    typeof input.cityName === "string"
+      ? normString(input.cityName) || undefined
+      : typeof input.cityId === "string"
+        ? normString(input.cityId) || undefined
+        : undefined;
+
+  const title =
+    typeof input.title === "string"
+      ? normString(input.title) || undefined
+      : cityName
+        ? `${cityName} trip`
+        : undefined;
+
   const t: Trip = {
     id,
+    title,
+
+    cityName,
     cityId: typeof input.cityId === "string" ? normString(input.cityId) || undefined : undefined,
     citySlug: typeof input.citySlug === "string" ? normString(input.citySlug) || undefined : undefined,
+
+    fixtureId,
     matchIds: matchIds.length ? matchIds : undefined,
+
     startDate: isIsoDateOnly(input.startDate) ? input.startDate : undefined,
     endDate: isIsoDateOnly(input.endDate) ? input.endDate : undefined,
+
     notes: typeof input.notes === "string" ? normString(input.notes) || undefined : undefined,
+
     links: links.length ? links : undefined,
     itinerary: itinerary.length ? itinerary : undefined,
+    saved: saved.length ? saved : undefined,
+
     createdAt: typeof input.createdAt === "number" ? input.createdAt : undefined,
     updatedAt: typeof input.updatedAt === "number" ? input.updatedAt : undefined,
   };
@@ -253,7 +360,7 @@ async function persist(trips: Trip[]): Promise<void> {
   if (!hydrated) return;
   try {
     const compacted = trips.map(compactTrip);
-    await storage.setJSON(STORAGE_KEY_V2, compacted);
+    await storage.setJSON(STORAGE_KEY_V3, compacted);
   } catch {
     // ignore (best-effort)
   }
@@ -269,17 +376,27 @@ async function loadTrips(): Promise<void> {
 
   loadPromise = (async () => {
     try {
-      // Try current key first
-      const savedV2 = await storage.getJSON<any>(STORAGE_KEY_V2);
-      let trips = normalizeTripsList(savedV2);
+      // Try v3 first
+      const savedV3 = await storage.getJSON<any>(STORAGE_KEY_V3);
+      let trips = normalizeTripsList(savedV3);
 
-      // Fallback to legacy key if v2 empty / missing
+      // Fallback v2
+      if (trips.length === 0) {
+        const savedV2 = await storage.getJSON<any>(STORAGE_KEY_V2);
+        const v2Trips = normalizeTripsList(savedV2);
+        if (v2Trips.length) {
+          trips = v2Trips;
+          hydrated = true;
+          await persist(trips);
+        }
+      }
+
+      // Fallback v1
       if (trips.length === 0) {
         const savedV1 = await storage.getJSON<any>(STORAGE_KEY_V1);
-        const legacyTrips = normalizeTripsList(savedV1);
-        if (legacyTrips.length) {
-          trips = legacyTrips;
-          // Mark hydrated BEFORE migrate persist so we don't block the write.
+        const v1Trips = normalizeTripsList(savedV1);
+        if (v1Trips.length) {
+          trips = v1Trips;
           hydrated = true;
           await persist(trips);
         }
@@ -312,16 +429,30 @@ async function addTrip(patch: Omit<Trip, "id"> & Partial<Pick<Trip, "id">>): Pro
 
   const id = normString((patch as any)?.id) || safeId();
 
+  const matchIds = patch.matchIds?.map((x) => normString(x)).filter(Boolean);
+
+  const cityName = normString(patch.cityName) || (typeof patch.cityId === "string" ? normString(patch.cityId) : "") || undefined;
+
   const t: Trip = compactTrip({
     id,
+    title: normString(patch.title) || (cityName ? `${cityName} trip` : undefined),
+
+    cityName,
     cityId: patch.cityId,
     citySlug: patch.citySlug,
-    matchIds: patch.matchIds?.map((x) => normString(x)).filter(Boolean),
+
+    fixtureId: normString(patch.fixtureId) || (matchIds?.[0] ?? undefined),
+    matchIds: matchIds?.length ? matchIds : undefined,
+
     startDate: patch.startDate,
     endDate: patch.endDate,
+
     notes: normString(patch.notes) || undefined,
+
     links: Array.isArray(patch.links) ? patch.links.slice() : undefined,
     itinerary: Array.isArray(patch.itinerary) ? patch.itinerary.slice() : undefined,
+    saved: Array.isArray(patch.saved) ? patch.saved.slice() : undefined,
+
     createdAt: now(),
     updatedAt: now(),
   });
@@ -341,12 +472,36 @@ async function updateTrip(id: string, patch: Partial<Omit<Trip, "id">>): Promise
   const next = state.trips.map((t) => {
     if (t.id !== tid) return t;
 
+    const nextMatchIds = patch.matchIds ? patch.matchIds.map((x) => normString(x)).filter(Boolean) : t.matchIds;
+
     const merged: Trip = compactTrip({
       ...t,
       ...patch,
-      matchIds: patch.matchIds ? patch.matchIds.map((x) => normString(x)).filter(Boolean) : t.matchIds,
+
+      // Keep derived fields consistent
+      title:
+        typeof patch.title === "string"
+          ? normString(patch.title) || undefined
+          : t.title,
+
+      cityName:
+        typeof patch.cityName === "string"
+          ? normString(patch.cityName) || undefined
+          : typeof patch.cityId === "string"
+            ? normString(patch.cityId) || undefined
+            : t.cityName,
+
+      fixtureId:
+        typeof patch.fixtureId === "string"
+          ? normString(patch.fixtureId) || undefined
+          : nextMatchIds?.[0] ?? t.fixtureId,
+
+      matchIds: nextMatchIds,
+
       links: patch.links ? patch.links.slice() : t.links,
       itinerary: patch.itinerary ? patch.itinerary.slice() : t.itinerary,
+      saved: patch.saved ? patch.saved.slice() : t.saved,
+
       notes: typeof patch.notes === "string" ? normString(patch.notes) || undefined : t.notes,
       updatedAt: now(),
     });
@@ -453,6 +608,98 @@ async function removeItineraryItem(tripId: string, itemId: string): Promise<void
   await persist(next);
 }
 
+/* --------------------------- SavedItem (spine) --------------------------- */
+
+function newSavedId(prefix = "s") {
+  return `${prefix}_${now().toString(36)}_${Math.random().toString(36).slice(2, 9)}`;
+}
+
+async function addSavedItem(tripId: string, item: Omit<SavedItem, "id" | "tripId" | "createdAt" | "updatedAt"> & Partial<Pick<SavedItem, "id">>) {
+  await ensureLoaded();
+
+  const tid = normString(tripId);
+  if (!tid) return;
+
+  const next = state.trips.map((t) => {
+    if (t.id !== tid) return t;
+
+    const saved = Array.isArray(t.saved) ? t.saved.slice() : [];
+
+    const id = normString((item as any)?.id) || newSavedId("sv");
+    const createdAt = now();
+
+    const toAdd: SavedItem = {
+      id,
+      tripId: tid,
+      category: item.category,
+      status: item.status,
+      title: normString(item.title) || "Saved item",
+      subtitle: normString(item.subtitle) || undefined,
+      provider: item.provider,
+      partner: item.partner,
+      price: item.price,
+      reference: normString(item.reference) || undefined,
+      notes: normString(item.notes) || undefined,
+      walletItemIds: item.walletItemIds,
+      createdAt,
+      updatedAt: createdAt,
+    };
+
+    saved.unshift(toAdd);
+    return compactTrip({ ...t, saved, updatedAt: now() });
+  });
+
+  setState({ trips: next, loaded: true });
+  await persist(next);
+}
+
+async function updateSavedItem(tripId: string, savedId: string, patch: Partial<Omit<SavedItem, "id" | "tripId">>) {
+  await ensureLoaded();
+
+  const tid = normString(tripId);
+  const sid = normString(savedId);
+  if (!tid || !sid) return;
+
+  const next = state.trips.map((t) => {
+    if (t.id !== tid) return t;
+
+    const saved = (t.saved ?? []).map((s) => {
+      if (s.id !== sid) return s;
+      return {
+        ...s,
+        ...patch,
+        title: typeof patch.title === "string" ? normString(patch.title) || s.title : s.title,
+        subtitle: typeof patch.subtitle === "string" ? normString(patch.subtitle) || undefined : s.subtitle,
+        reference: typeof patch.reference === "string" ? normString(patch.reference) || undefined : s.reference,
+        notes: typeof patch.notes === "string" ? normString(patch.notes) || undefined : s.notes,
+        updatedAt: now(),
+      };
+    });
+
+    return compactTrip({ ...t, saved: saved.length ? saved : undefined, updatedAt: now() });
+  });
+
+  setState({ trips: next, loaded: true });
+  await persist(next);
+}
+
+async function removeSavedItem(tripId: string, savedId: string) {
+  await ensureLoaded();
+
+  const tid = normString(tripId);
+  const sid = normString(savedId);
+  if (!tid || !sid) return;
+
+  const next = state.trips.map((t) => {
+    if (t.id !== tid) return t;
+    const saved = (t.saved ?? []).filter((s) => s.id !== sid);
+    return compactTrip({ ...t, saved: saved.length ? saved : undefined, updatedAt: now() });
+  });
+
+  setState({ trips: next, loaded: true });
+  await persist(next);
+}
+
 /* ------------------------------ Store API ------------------------------ */
 
 function getState(): TripsState {
@@ -477,6 +724,11 @@ const tripsStore = {
   removeLink,
   addItineraryItem,
   removeItineraryItem,
+
+  // spine
+  addSavedItem,
+  updateSavedItem,
+  removeSavedItem,
 };
 
 export default tripsStore;
