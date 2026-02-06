@@ -42,6 +42,8 @@ import { getTopThingsToDoForTrip } from "@/src/data/cityGuides";
 import { buildAffiliateLinks } from "@/src/services/affiliateLinks";
 
 import { computeLikelyPlaceholderTbcIds, isKickoffTbc } from "@/src/utils/kickoffTbc";
+import { beginPartnerClick } from "@/src/services/partnerClicks";
+import type { PartnerId } from "@/src/core/partners";
 
 /**
  * Expo Router params can be string | string[] | undefined.
@@ -91,7 +93,6 @@ async function safeOpenUrl(url: string) {
       return;
     }
 
-    // Native: open in an in-app browser for consistency.
     await WebBrowser.openBrowserAsync(candidate, {
       presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
       readerMode: false,
@@ -130,7 +131,7 @@ function fixtureIdStr(r: any): string {
 }
 
 function kickoffTimeSortValue(r: any, isTbc: boolean): number {
-  if (isTbc) return Number.POSITIVE_INFINITY; // push to bottom
+  if (isTbc) return Number.POSITIVE_INFINITY;
   const raw = r?.fixture?.date ? String(r.fixture.date) : "";
   const t = raw ? new Date(raw).getTime() : Number.POSITIVE_INFINITY;
   return Number.isFinite(t) ? t : Number.POSITIVE_INFINITY;
@@ -237,7 +238,6 @@ export default function TripBuildScreen() {
   );
 
   // Dates + notes
-  // Baseline: align to route "from" as a 2-night mini-break when no match selected
   const [startIso, setStartIso] = useState(from);
   const [endIso, setEndIso] = useState(addDaysIso(from, 2));
   const [notes, setNotes] = useState("");
@@ -269,7 +269,6 @@ export default function TripBuildScreen() {
       setEndIso(snap.endIso);
       setNotes(snap.notes);
       setError(null);
-
       setSelectedFixture(null);
       return;
     }
@@ -637,6 +636,33 @@ export default function TripBuildScreen() {
     }
   }
 
+  // Partner click helper (Phase-1 spine)
+  async function openPartner(args: {
+    partnerId: PartnerId;
+    url: string;
+    title: string;
+    metadata?: Record<string, any>;
+  }) {
+    // Must have a real tripId to track pending/booked.
+    if (!routeTripId) {
+      Alert.alert("Save trip first", "Booking links create trackable items. Save the trip, then open partners from the Trip Hub.");
+      return;
+    }
+
+    try {
+      await beginPartnerClick({
+        tripId: routeTripId,
+        partnerId: args.partnerId,
+        url: args.url,
+        title: args.title,
+        metadata: args.metadata,
+      });
+    } catch {
+      // fallback: still open the URL so user isn't blocked
+      await safeOpenUrl(args.url);
+    }
+  }
+
   const selHome = String(selectedFixture?.teams?.home?.name ?? "").trim();
   const selAway = String(selectedFixture?.teams?.away?.name ?? "").trim();
   const selVenue = String(selectedFixture?.fixture?.venue?.name ?? "").trim();
@@ -903,40 +929,101 @@ export default function TripBuildScreen() {
                     </Pressable>
                   </View>
 
-                  {/* BOOK THIS TRIP */}
+                  {/* BOOK THIS TRIP (spine-correct) */}
                   {bookingLinks ? (
                     <View style={styles.bookBlock}>
                       <View style={styles.bookTop}>
                         <View style={{ flex: 1 }}>
                           <Text style={styles.bookKicker}>BOOK THIS TRIP</Text>
                           <Text style={styles.bookTitle}>Hotels, travel, experiences</Text>
-                          <Text style={styles.bookSub}>Open partner search pages for {destinationCity}.</Text>
+                          <Text style={styles.bookSub}>
+                            {isEditing
+                              ? `These clicks create trackable items for ${destinationCity}.`
+                              : "Save the trip to unlock trackable booking links."}
+                          </Text>
                         </View>
                       </View>
 
                       <View style={styles.bookGrid}>
                         <Pressable
-                          onPress={() => safeOpenUrl(bookingLinks.hotelsUrl)}
+                          onPress={() =>
+                            isEditing
+                              ? openPartner({
+                                  partnerId: "booking",
+                                  url: bookingLinks.hotelsUrl,
+                                  title: `Hotels in ${destinationCity}`,
+                                  metadata: { city: destinationCity },
+                                })
+                              : onSave()
+                          }
                           style={[styles.bookBtn, styles.bookBtnPrimary]}
                         >
-                          <Text style={styles.bookBtnText}>Hotels</Text>
+                          <Text style={styles.bookBtnText}>{isEditing ? "Hotels" : "Save trip"}</Text>
                         </Pressable>
 
-                        <Pressable onPress={() => safeOpenUrl(bookingLinks.flightsUrl)} style={styles.bookBtn}>
-                          <Text style={styles.bookBtnText}>Flights</Text>
+                        <Pressable
+                          onPress={() =>
+                            isEditing
+                              ? openPartner({
+                                  partnerId: "skyscanner",
+                                  url: bookingLinks.flightsUrl,
+                                  title: `Flights for ${destinationCity}`,
+                                  metadata: { city: destinationCity },
+                                })
+                              : onSave()
+                          }
+                          style={styles.bookBtn}
+                        >
+                          <Text style={styles.bookBtnText}>{isEditing ? "Flights" : "Save trip"}</Text>
                         </Pressable>
 
-                        <Pressable onPress={() => safeOpenUrl(bookingLinks.trainsUrl)} style={styles.bookBtn}>
-                          <Text style={styles.bookBtnText}>Trains</Text>
+                        <Pressable
+                          onPress={() =>
+                            isEditing
+                              ? openPartner({
+                                  partnerId: "omio",
+                                  url: bookingLinks.trainsUrl,
+                                  title: `Trains for ${destinationCity}`,
+                                  metadata: { city: destinationCity },
+                                })
+                              : onSave()
+                          }
+                          style={styles.bookBtn}
+                        >
+                          <Text style={styles.bookBtnText}>{isEditing ? "Trains" : "Save trip"}</Text>
                         </Pressable>
 
-                        <Pressable onPress={() => safeOpenUrl(bookingLinks.experiencesUrl)} style={styles.bookBtn}>
-                          <Text style={styles.bookBtnText}>GetYourGuide</Text>
+                        <Pressable
+                          onPress={() =>
+                            isEditing
+                              ? openPartner({
+                                  partnerId: "getyourguide",
+                                  url: bookingLinks.experiencesUrl,
+                                  title: `GetYourGuide: ${destinationCity}`,
+                                  metadata: { city: destinationCity },
+                                })
+                              : onSave()
+                          }
+                          style={styles.bookBtn}
+                        >
+                          <Text style={styles.bookBtnText}>{isEditing ? "GetYourGuide" : "Save trip"}</Text>
                         </Pressable>
                       </View>
 
-                      <Pressable onPress={() => safeOpenUrl(bookingLinks.mapsUrl)} style={styles.bookInlineLink}>
-                        <Text style={styles.bookInlineLinkText}>Open Maps search</Text>
+                      <Pressable
+                        onPress={() =>
+                          isEditing
+                            ? openPartner({
+                                partnerId: "googlemaps",
+                                url: bookingLinks.mapsUrl,
+                                title: `Maps: ${destinationCity}`,
+                                metadata: { city: destinationCity },
+                              })
+                            : onSave()
+                        }
+                        style={styles.bookInlineLink}
+                      >
+                        <Text style={styles.bookInlineLinkText}>{isEditing ? "Open Maps search" : "Save trip to continue"}</Text>
                       </Pressable>
                     </View>
                   ) : null}
@@ -953,7 +1040,19 @@ export default function TripBuildScreen() {
                         </View>
 
                         {thingsToDoUrl ? (
-                          <Pressable onPress={() => safeOpenUrl(thingsToDoUrl)} style={styles.taBtn}>
+                          <Pressable
+                            onPress={() =>
+                              isEditing
+                                ? openPartner({
+                                    partnerId: "getyourguide",
+                                    url: thingsToDoUrl,
+                                    title: `GetYourGuide: ${destinationCity}`,
+                                    metadata: { city: destinationCity },
+                                  })
+                                : safeOpenUrl(thingsToDoUrl)
+                            }
+                            style={styles.taBtn}
+                          >
                             <Text style={styles.taBtnText}>GetYourGuide</Text>
                           </Pressable>
                         ) : null}
@@ -970,9 +1069,7 @@ export default function TripBuildScreen() {
                               </View>
                             </View>
                           ))}
-                          {(cityBundle.items?.length ?? 0) > 6 ? (
-                            <Text style={styles.moreInline}>More in the full city guide.</Text>
-                          ) : null}
+                          {(cityBundle.items?.length ?? 0) > 6 ? <Text style={styles.moreInline}>More in the full city guide.</Text> : null}
                         </View>
                       ) : null}
 
