@@ -33,8 +33,10 @@ export type SavedItem = {
   partnerUrl?: string;
 
   /**
-   * Price display policy: show exact price when known, otherwise "View live price".
-   * Store whatever we have here; UI decides presentation.
+   * Price display policy:
+   * - show exact price when known
+   * - otherwise show "View live price"
+   * Store whatever we have; UI decides presentation.
    */
   priceText?: string;
   currency?: string;
