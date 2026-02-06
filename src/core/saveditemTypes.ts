@@ -1,69 +1,63 @@
 // src/core/savedItemTypes.ts
 
-import type { PartnerID, SavedItemID, TripID } from "./id";
+export type TripId = string;
+export type SavedItemId = string;
 
 export type SavedItemType =
-  | "ticket"
+  | "tickets"
   | "hotel"
   | "flight"
   | "train"
   | "transfer"
-  | "experience"
+  | "things"
   | "insurance"
   | "claim"
-  | "note";
+  | "note"
+  | "other";
 
-export type SavedItemStatus = "saved" | "pending" | "booked" | "cancelled";
+export type SavedItemStatus = "saved" | "pending" | "booked" | "archived";
 
-/**
- * Bible-locked rules:
- * - Atomic unit across all categories
- * - No totals, no conversions
- * - Prices are display text only (or "View live price")
- * - Status machine is strict (no booked->saved etc.)
- */
 export type SavedItem = {
-  id: SavedItemID;
-  tripId: TripID;
+  id: SavedItemId;
+  tripId: TripId;
 
   type: SavedItemType;
   status: SavedItemStatus;
 
   title: string;
 
-  partnerId?: PartnerID; // optional for Notes/Claims etc
-  partnerUrl?: string; // what the user opened/booked from
+  /** Which partner created this item (booking/skyscanner/omio/gyg/etc) */
+  partnerId?: string;
 
-  priceText?: string; // "£123" | "€45" | "View live price"
-  currency?: string; // optional; can be inferred later if you want
-
-  createdAt: number; // epoch ms
-  updatedAt: number; // epoch ms
+  /** Deep link / affiliate URL that user clicked */
+  partnerUrl?: string;
 
   /**
-   * Catch-all for partner-specific details you might need later:
-   * confirmation refs, flight numbers, hotel address, etc.
-   * Must remain backward compatible.
+   * Price display policy: show exact price when known, otherwise "View live price".
+   * Store whatever we have here; UI decides presentation.
    */
+  priceText?: string;
+  currency?: string;
+
   metadata?: Record<string, any>;
+
+  createdAt: number;
+  updatedAt: number;
+};
+
+const TRANSITIONS: Record<SavedItemStatus, SavedItemStatus[]> = {
+  saved: ["pending", "archived"],
+  pending: ["booked", "archived"],
+  booked: ["archived"],
+  archived: ["saved"],
 };
 
 export function canTransition(from: SavedItemStatus, to: SavedItemStatus): boolean {
-  if (from === to) return true;
-
-  // Allowed:
-  // saved -> pending
-  // pending -> booked
-  // pending -> cancelled
-  // saved -> cancelled
-  if (from === "saved" && (to === "pending" || to === "cancelled")) return true;
-  if (from === "pending" && (to === "booked" || to === "cancelled")) return true;
-
-  return false;
+  return (TRANSITIONS[from] ?? []).includes(to);
 }
 
-export function assertTransition(from: SavedItemStatus, to: SavedItemStatus) {
+export function assertTransition(from: SavedItemStatus, to: SavedItemStatus): void {
   if (!canTransition(from, to)) {
-    throw new Error(`Invalid status transition: ${from} -> ${to}`);
+    throw new Error(`Invalid status transition: ${from} → ${to}`);
   }
 }
