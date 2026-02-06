@@ -1,21 +1,29 @@
 // src/state/savedItems.ts
 import { create } from "zustand";
 
+import { readJson, writeJson } from "@/src/state/persist";
+import { makeSavedItemId } from "@/src/core/id";
 import type { SavedItem, SavedItemStatus, SavedItemType } from "@/src/core/savedItemTypes";
 import { assertTransition } from "@/src/core/savedItemTypes";
-import { makeSavedItemId } from "@/src/core/id";
-import { readJson, writeJson } from "@/src/state/persist";
 
 type SavedItemsState = {
   loaded: boolean;
+
+  /** All items across all trips */
   items: SavedItem[];
 
-  loadSavedItems: () => Promise<void>;
+  load: () => Promise<void>;
 
-  addItem: (input: {
+  /** Trip-scoped selectors */
+  getByTrip: (tripId: string) => SavedItem[];
+  getByTripAndStatus: (tripId: string, status: SavedItemStatus) => SavedItem[];
+
+  /** Core mutations */
+  add: (args: {
     tripId: string;
     type: SavedItemType;
     title: string;
+    status?: SavedItemStatus;
     partnerId?: string;
     partnerUrl?: string;
     priceText?: string;
@@ -23,16 +31,13 @@ type SavedItemsState = {
     metadata?: Record<string, any>;
   }) => Promise<SavedItem>;
 
-  updateItem: (id: string, patch: Partial<Omit<SavedItem, "id" | "createdAt">>) => Promise<SavedItem>;
+  update: (id: string, patch: Partial<Omit<SavedItem, "id" | "tripId" | "createdAt">>) => Promise<void>;
 
-  transitionStatus: (id: string, nextStatus: SavedItemStatus) => Promise<SavedItem>;
+  transitionStatus: (id: string, to: SavedItemStatus) => Promise<void>;
 
-  removeItem: (id: string) => Promise<void>;
-
-  listByTrip: (tripId: string) => SavedItem[];
-  listBookedForWallet: () => SavedItem[];
-
-  clearAllSavedItems: () => Promise<void>;
+  remove: (id: string) => Promise<void>;
+  clearTrip: (tripId: string) => Promise<void>;
+  clearAll: () => Promise<void>;
 };
 
 const STORAGE_KEY = "yna_saved_items_v1";
@@ -41,181 +46,190 @@ function now() {
   return Date.now();
 }
 
-function normalizeItem(x: any): SavedItem | null {
-  if (!x || typeof x !== "object") return null;
-
-  const id = String(x.id ?? "").trim();
-  const tripId = String(x.tripId ?? "").trim();
-  const type = String(x.type ?? "").trim() as SavedItemType;
-  const status = String(x.status ?? "").trim() as SavedItemStatus;
-  const title = String(x.title ?? "").trim();
-
-  if (!id || !tripId || !type || !status || !title) return null;
-
-  const createdAt = Number.isFinite(Number(x.createdAt)) ? Number(x.createdAt) : now();
-  const updatedAt = Number.isFinite(Number(x.updatedAt)) ? Number(x.updatedAt) : createdAt;
-
-  return {
-    id: id as any,
-    tripId: tripId as any,
-    type,
-    status,
-    title,
-    partnerId: typeof x.partnerId === "string" ? x.partnerId : undefined,
-    partnerUrl: typeof x.partnerUrl === "string" ? x.partnerUrl : undefined,
-    priceText: typeof x.priceText === "string" ? x.priceText : undefined,
-    currency: typeof x.currency === "string" ? x.currency : undefined,
-    createdAt,
-    updatedAt,
-    metadata: x.metadata && typeof x.metadata === "object" ? x.metadata : undefined,
-  };
-}
-
 async function persist(items: SavedItem[]) {
   await writeJson(STORAGE_KEY, items);
 }
 
-function sortItems(items: SavedItem[]): SavedItem[] {
-  const copy = [...items];
-  copy.sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
-  return copy;
+function normalizeTripId(tripId: string) {
+  const id = String(tripId ?? "").trim();
+  if (!id) throw new Error("tripId is required");
+  return id;
 }
 
 const useSavedItemsStore = create<SavedItemsState>((set, get) => ({
   loaded: false,
   items: [],
 
-  loadSavedItems: async () => {
-    const raw = await readJson<any[]>(STORAGE_KEY, []);
-    const parsed = raw.map(normalizeItem).filter(Boolean) as SavedItem[];
-    set({ items: sortItems(parsed), loaded: true });
+  load: async () => {
+    const raw = await readJson<any>(STORAGE_KEY, []);
+    const arr = Array.isArray(raw) ? raw : [];
+    const cleaned: SavedItem[] = arr
+      .map((x: any) => {
+        if (!x || typeof x !== "object") return null;
+
+        const id = String(x.id ?? "").trim();
+        const tripId = String(x.tripId ?? "").trim();
+        const type = String(x.type ?? "").trim() as SavedItemType;
+        const status = String(x.status ?? "").trim() as SavedItemStatus;
+        const title = String(x.title ?? "").trim();
+
+        if (!id || !tripId || !type || !status || !title) return null;
+
+        return {
+          id,
+          tripId,
+          type,
+          status,
+          title,
+          partnerId: typeof x.partnerId === "string" ? x.partnerId : undefined,
+          partnerUrl: typeof x.partnerUrl === "string" ? x.partnerUrl : undefined,
+          priceText: typeof x.priceText === "string" ? x.priceText : undefined,
+          currency: typeof x.currency === "string" ? x.currency : undefined,
+          metadata: x.metadata && typeof x.metadata === "object" ? x.metadata : undefined,
+          createdAt: Number.isFinite(Number(x.createdAt)) ? Number(x.createdAt) : now(),
+          updatedAt: Number.isFinite(Number(x.updatedAt)) ? Number(x.updatedAt) : now(),
+        } as SavedItem;
+      })
+      .filter(Boolean) as SavedItem[];
+
+    set({ items: cleaned, loaded: true });
   },
 
-  addItem: async (input) => {
-    const id = makeSavedItemId() as unknown as string;
+  getByTrip: (tripId: string) => {
+    const id = String(tripId ?? "").trim();
+    if (!id) return [];
+    return get().items.filter((x) => x.tripId === id);
+  },
+
+  getByTripAndStatus: (tripId: string, status: SavedItemStatus) => {
+    const id = String(tripId ?? "").trim();
+    if (!id) return [];
+    return get().items.filter((x) => x.tripId === id && x.status === status);
+  },
+
+  add: async (args) => {
+    const tripId = normalizeTripId(args.tripId);
+    const type = args.type;
+    const status: SavedItemStatus = args.status ?? "saved";
+    const title = String(args.title ?? "").trim();
+
+    if (!title) throw new Error("Saved item title is required");
 
     const item: SavedItem = {
-      id: id as any,
-      tripId: String(input.tripId) as any,
-      type: input.type,
-      status: "saved",
-      title: String(input.title).trim(),
-      partnerId: input.partnerId ? String(input.partnerId) : undefined,
-      partnerUrl: input.partnerUrl ? String(input.partnerUrl) : undefined,
-      priceText: input.priceText ? String(input.priceText) : undefined,
-      currency: input.currency ? String(input.currency) : undefined,
-      metadata: input.metadata,
+      id: makeSavedItemId(),
+      tripId,
+      type,
+      status,
+      title,
+      partnerId: args.partnerId,
+      partnerUrl: args.partnerUrl,
+      priceText: args.priceText,
+      currency: args.currency,
+      metadata: args.metadata,
       createdAt: now(),
       updatedAt: now(),
     };
 
-    const next = sortItems([item, ...get().items]);
+    const next = [item, ...get().items];
     set({ items: next, loaded: true });
     await persist(next);
 
     return item;
   },
 
-  updateItem: async (id, patch) => {
-    const cur = get().items;
-    const idx = cur.findIndex((x) => String(x.id) === String(id));
-    if (idx < 0) throw new Error("Saved item not found");
+  update: async (id, patch) => {
+    const key = String(id ?? "").trim();
+    if (!key) return;
 
-    const existing = cur[idx];
+    const next = get().items.map((x) => {
+      if (x.id !== key) return x;
+      return { ...x, ...patch, updatedAt: now() };
+    });
 
-    const nextItem: SavedItem = {
-      ...existing,
-      ...patch,
-      id: existing.id,
-      createdAt: existing.createdAt,
-      updatedAt: now(),
-    };
-
-    const next = [...cur];
-    next[idx] = nextItem;
-
-    const sorted = sortItems(next);
-    set({ items: sorted, loaded: true });
-    await persist(sorted);
-
-    return nextItem;
-  },
-
-  transitionStatus: async (id, nextStatus) => {
-    const cur = get().items;
-    const idx = cur.findIndex((x) => String(x.id) === String(id));
-    if (idx < 0) throw new Error("Saved item not found");
-
-    const existing = cur[idx];
-    assertTransition(existing.status, nextStatus);
-
-    const nextItem: SavedItem = {
-      ...existing,
-      status: nextStatus,
-      updatedAt: now(),
-    };
-
-    const next = [...cur];
-    next[idx] = nextItem;
-
-    const sorted = sortItems(next);
-    set({ items: sorted, loaded: true });
-    await persist(sorted);
-
-    return nextItem;
-  },
-
-  removeItem: async (id) => {
-    const next = get().items.filter((x) => String(x.id) !== String(id));
     set({ items: next, loaded: true });
     await persist(next);
   },
 
-  listByTrip: (tripId) => {
-    return get().items.filter((x) => String(x.tripId) === String(tripId));
+  transitionStatus: async (id, to) => {
+    const key = String(id ?? "").trim();
+    if (!key) return;
+
+    const cur = get().items.find((x) => x.id === key);
+    if (!cur) return;
+
+    assertTransition(cur.status, to);
+
+    const next = get().items.map((x) => (x.id === key ? { ...x, status: to, updatedAt: now() } : x));
+    set({ items: next, loaded: true });
+    await persist(next);
   },
 
-  listBookedForWallet: () => {
-    // Wallet reads BOOKED only. Pending stays in workspace until confirmed.
-    return get().items.filter((x) => x.status === "booked");
+  remove: async (id) => {
+    const key = String(id ?? "").trim();
+    if (!key) return;
+
+    const next = get().items.filter((x) => x.id !== key);
+    set({ items: next, loaded: true });
+    await persist(next);
   },
 
-  clearAllSavedItems: async () => {
+  clearTrip: async (tripId) => {
+    const id = String(tripId ?? "").trim();
+    if (!id) return;
+
+    const next = get().items.filter((x) => x.tripId !== id);
+    set({ items: next, loaded: true });
+    await persist(next);
+  },
+
+  clearAll: async () => {
     set({ items: [], loaded: true });
     await persist([]);
   },
 }));
 
 /**
- * Mirror tripsStore pattern for consistency.
+ * tripsStore-style wrapper (keeps your codebase consistent).
  */
 const savedItemsStore = {
   getState: useSavedItemsStore.getState,
   setState: useSavedItemsStore.setState,
   subscribe: useSavedItemsStore.subscribe,
 
-  loadSavedItems: async () => {
-    await useSavedItemsStore.getState().loadSavedItems();
+  load: async () => {
+    await useSavedItemsStore.getState().load();
   },
 
-  addItem: async (input: Parameters<SavedItemsState["addItem"]>[0]) => {
-    return await useSavedItemsStore.getState().addItem(input);
+  getByTrip: (tripId: string) => {
+    return useSavedItemsStore.getState().getByTrip(tripId);
   },
 
-  updateItem: async (id: string, patch: Parameters<SavedItemsState["updateItem"]>[1]) => {
-    return await useSavedItemsStore.getState().updateItem(id, patch);
+  getByTripAndStatus: (tripId: string, status: SavedItemStatus) => {
+    return useSavedItemsStore.getState().getByTripAndStatus(tripId, status);
   },
 
-  transitionStatus: async (id: string, nextStatus: SavedItemStatus) => {
-    return await useSavedItemsStore.getState().transitionStatus(id, nextStatus);
+  add: async (args: Parameters<SavedItemsState["add"]>[0]) => {
+    return await useSavedItemsStore.getState().add(args);
   },
 
-  removeItem: async (id: string) => {
-    await useSavedItemsStore.getState().removeItem(id);
+  update: async (id: string, patch: Parameters<SavedItemsState["update"]>[1]) => {
+    await useSavedItemsStore.getState().update(id, patch);
   },
 
-  clearAllSavedItems: async () => {
-    await useSavedItemsStore.getState().clearAllSavedItems();
+  transitionStatus: async (id: string, to: SavedItemStatus) => {
+    await useSavedItemsStore.getState().transitionStatus(id, to);
+  },
+
+  remove: async (id: string) => {
+    await useSavedItemsStore.getState().remove(id);
+  },
+
+  clearTrip: async (tripId: string) => {
+    await useSavedItemsStore.getState().clearTrip(tripId);
+  },
+
+  clearAll: async () => {
+    await useSavedItemsStore.getState().clearAll();
   },
 };
 
