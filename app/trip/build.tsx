@@ -15,6 +15,7 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Stack, useRouter, useLocalSearchParams } from "expo-router";
+import * as WebBrowser from "expo-web-browser";
 
 import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
@@ -76,10 +77,27 @@ function safeCityName(input: unknown): string {
 }
 
 async function safeOpenUrl(url: string) {
+  const u = String(url ?? "").trim();
+  if (!u) return;
+
+  const hasScheme = /^https?:\/\//i.test(u);
+  const candidate = hasScheme ? u : `https://${u}`;
+
   try {
-    const can = await Linking.canOpenURL(url);
-    if (!can) throw new Error("Cannot open URL");
-    await Linking.openURL(url);
+    if (Platform.OS === "web") {
+      const can = await Linking.canOpenURL(candidate);
+      if (!can) throw new Error("Cannot open URL");
+      await Linking.openURL(candidate);
+      return;
+    }
+
+    // Native: open in an in-app browser for consistency.
+    await WebBrowser.openBrowserAsync(candidate, {
+      presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
+      readerMode: false,
+      enableBarCollapsing: true,
+      showTitle: true,
+    });
   } catch {
     Alert.alert("Couldn’t open link", "Your device could not open that link.");
   }
@@ -180,7 +198,6 @@ export default function TripBuildScreen() {
 
   // Apply league/season from route params (for fixtures list browsing)
   useEffect(() => {
-    // If Home passed global=1, force All leagues unless a specific leagueId is explicitly provided
     if (routeGlobal && !routeLeagueId) {
       setSelectedLeague(ALL_LEAGUES);
       return;
@@ -245,11 +262,6 @@ export default function TripBuildScreen() {
     return b.getTime() > a.getTime();
   }
 
-  /**
-   * Close behaviour:
-   * - Create mode: close sheet.
-   * - Edit mode: discard unsaved changes back to snapshot AND close sheet.
-   */
   function closeSheet() {
     if (isEditing && editSnapshotRef.current) {
       const snap = editSnapshotRef.current;
@@ -276,7 +288,6 @@ export default function TripBuildScreen() {
 
   /**
    * EDIT MODE: load trip + prefill fields + load its fixture.
-   * Also captures a snapshot so Close can discard changes.
    */
   useEffect(() => {
     let cancelled = false;
@@ -337,7 +348,6 @@ export default function TripBuildScreen() {
         setSelectedFixture(r);
         editSnapshotRef.current = { fixture: r, startIso: nextStart, endIso: nextEnd, notes: nextNotes };
 
-        // Sync league selection when possible
         const apiLeagueId = r?.league?.id;
         if (typeof apiLeagueId === "number") {
           const match = LEAGUES.find((l) => l.leagueId === apiLeagueId);
@@ -428,8 +438,6 @@ export default function TripBuildScreen() {
     );
 
     const flat = results.flat();
-
-    // De-dupe by fixture id
     const seen = new Set<string>();
     const deduped: FixtureListRow[] = [];
     for (const r of flat) {
@@ -439,7 +447,6 @@ export default function TripBuildScreen() {
       seen.add(id);
       deduped.push(r);
     }
-
     return deduped;
   }
 
@@ -453,7 +460,7 @@ export default function TripBuildScreen() {
       setRows([]);
       setPlaceholderTbcIds(new Set());
       setVisibleCount(12);
-      setSearch(""); // avoids "0 results" carryover when switching leagues
+      setSearch("");
 
       try {
         const res = isAllLeaguesSelected(selectedLeague)
@@ -464,9 +471,6 @@ export default function TripBuildScreen() {
 
         const nextRows = Array.isArray(res) ? res : [];
         setRows(nextRows);
-
-        // Compute placeholder-TBC ids for this result set
-        // (works for single league + global; conservative logic avoids false positives on near dates)
         setPlaceholderTbcIds(computeLikelyPlaceholderTbcIds(nextRows));
       } catch (e: any) {
         if (cancelled) return;
@@ -483,15 +487,9 @@ export default function TripBuildScreen() {
   }, [selectedLeague, from, to, isAllLeaguesSelected]);
 
   /**
-   * When a fixture is selected, prefill dates as a 2-night mini-break:
-   * - arrival: 1 day before matchday
-   * - departure: 1 day after matchday
-   *
-   * TBC RULE:
-   * - If kickoff is TBC, do NOT auto-prefill dates from match day.
-   *   Keep the user’s current chosen dates (or default window dates).
-   *
-   * In EDIT MODE: do not overwrite the saved dates when the selected fixture is the trip’s own fixture.
+   * Auto-prefill dates:
+   * default: 1 day before matchday to 1 day after matchday
+   * if kickoff is TBC: do not auto-adjust
    */
   useEffect(() => {
     const iso = selectedFixture?.fixture?.date as string | undefined;
@@ -499,23 +497,15 @@ export default function TripBuildScreen() {
 
     const fixtureId = fixtureIdStr(selectedFixture);
 
-    // If we loaded an existing trip and this is that same match, keep saved dates once.
     if (isEditing && editDatesLockRef.current && editTripMatchId && fixtureId === editTripMatchId) {
       editDatesLockRef.current = false;
-
-      requestAnimationFrame(() => {
-        listRef.current?.scrollTo({ y: 0, animated: true });
-      });
+      requestAnimationFrame(() => listRef.current?.scrollTo({ y: 0, animated: true }));
       return;
     }
 
     const tbc = isKickoffTbc(selectedFixture, placeholderTbcIds);
-
-    // If TBC: do not override dates based on a non-confirmed kickoff
     if (tbc) {
-      requestAnimationFrame(() => {
-        listRef.current?.scrollTo({ y: 0, animated: true });
-      });
+      requestAnimationFrame(() => listRef.current?.scrollTo({ y: 0, animated: true }));
       return;
     }
 
@@ -523,7 +513,6 @@ export default function TripBuildScreen() {
     if (Number.isNaN(d.getTime())) return;
 
     const matchDay = toIsoDate(d);
-
     const start = clampFromIsoToTomorrow(addDaysIso(matchDay, -1));
     const end = addDaysIso(matchDay, 1);
 
@@ -532,15 +521,10 @@ export default function TripBuildScreen() {
     const startDt = parseIsoDateOnly(start);
     const endDt = parseIsoDateOnly(end);
 
-    if (startDt && endDt && endDt.getTime() <= startDt.getTime()) {
-      setEndIso(addDaysIso(start, 2));
-    } else {
-      setEndIso(end);
-    }
+    if (startDt && endDt && endDt.getTime() <= startDt.getTime()) setEndIso(addDaysIso(start, 2));
+    else setEndIso(end);
 
-    requestAnimationFrame(() => {
-      listRef.current?.scrollTo({ y: 0, animated: true });
-    });
+    requestAnimationFrame(() => listRef.current?.scrollTo({ y: 0, animated: true }));
   }, [selectedFixture, isEditing, editTripMatchId, placeholderTbcIds]);
 
   const filteredRows = useMemo(() => {
@@ -557,7 +541,6 @@ export default function TripBuildScreen() {
     });
   }, [rows, search]);
 
-  // Sort: confirmed kickoff first by date, then TBC last
   const sortedFilteredRows = useMemo(() => {
     const copy = [...filteredRows];
     copy.sort((a: any, b: any) => {
@@ -587,22 +570,14 @@ export default function TripBuildScreen() {
 
     if (picker.which === "start") {
       setStartIso(iso);
-
       const end = parseIsoDateOnly(endIso);
       const nextStart = parseIsoDateOnly(iso);
-
-      if (end && nextStart && end.getTime() <= nextStart.getTime()) {
-        setEndIso(addDaysIso(iso, 2));
-      }
+      if (end && nextStart && end.getTime() <= nextStart.getTime()) setEndIso(addDaysIso(iso, 2));
     } else {
       setEndIso(iso);
-
       const start = parseIsoDateOnly(startIso);
       const nextEnd = parseIsoDateOnly(iso);
-
-      if (start && nextEnd && nextEnd.getTime() <= start.getTime()) {
-        setEndIso(addDaysIso(startIso, 2));
-      }
+      if (start && nextEnd && nextEnd.getTime() <= start.getTime()) setEndIso(addDaysIso(startIso, 2));
     }
 
     if (Platform.OS === "android") setPicker((p) => ({ ...p, open: false }));
@@ -642,9 +617,7 @@ export default function TripBuildScreen() {
 
       if (isEditing && routeTripId) {
         await tripsStore.updateTrip(routeTripId, patch);
-
         editSnapshotRef.current = { fixture: selectedFixture, startIso, endIso, notes: notes.trim() };
-
         setSelectedFixture(null);
         router.replace({ pathname: "/trip/[id]", params: { id: routeTripId } });
         return;
@@ -824,16 +797,14 @@ export default function TripBuildScreen() {
                     const away = String(r?.teams?.away?.name ?? "").trim() || "Away";
 
                     const tbc = isKickoffTbc(r, placeholderTbcIds);
-                    const kickoff = tbc ? "TBC" : (formatUkDateTimeMaybe(r?.fixture?.date) || "TBC");
+                    const kickoff = tbc ? "TBC" : formatUkDateTimeMaybe(r?.fixture?.date) || "TBC";
 
                     const venue = String(r?.fixture?.venue?.name ?? "").trim();
                     const city = String(r?.fixture?.venue?.city ?? "").trim();
                     const leagueName = String(r?.league?.name ?? "").trim();
 
                     const extra = [leagueName, venue, city].filter(Boolean).join(" • ");
-                    const line2 = tbc
-                      ? (extra || "Kickoff time not confirmed")
-                      : (extra ? `${kickoff} • ${extra}` : kickoff);
+                    const line2 = tbc ? extra || "Kickoff time not confirmed" : extra ? `${kickoff} • ${extra}` : kickoff;
 
                     const selected = fixtureIdStr(selectedFixture) === id;
 
@@ -932,23 +903,31 @@ export default function TripBuildScreen() {
                       <View style={styles.bookTop}>
                         <View style={{ flex: 1 }}>
                           <Text style={styles.bookKicker}>BOOK THIS TRIP</Text>
-                          <Text style={styles.bookTitle}>Hotels, travel, things to do</Text>
-                          <Text style={styles.bookSub}>Quick search links for {destinationCity}. Affiliate IDs plug in later.</Text>
+                          <Text style={styles.bookTitle}>Hotels, travel, experiences</Text>
+                          <Text style={styles.bookSub}>
+                            Open partner search pages for {destinationCity}. (Affiliate IDs configured centrally.)
+                          </Text>
                         </View>
                       </View>
 
                       <View style={styles.bookGrid}>
-                        <Pressable onPress={() => safeOpenUrl(bookingLinks.hotelsUrl)} style={[styles.bookBtn, styles.bookBtnPrimary]}>
+                        <Pressable
+                          onPress={() => safeOpenUrl(bookingLinks.hotelsUrl)}
+                          style={[styles.bookBtn, styles.bookBtnPrimary]}
+                        >
                           <Text style={styles.bookBtnText}>Hotels</Text>
                         </Pressable>
+
                         <Pressable onPress={() => safeOpenUrl(bookingLinks.flightsUrl)} style={styles.bookBtn}>
                           <Text style={styles.bookBtnText}>Flights</Text>
                         </Pressable>
+
                         <Pressable onPress={() => safeOpenUrl(bookingLinks.trainsUrl)} style={styles.bookBtn}>
                           <Text style={styles.bookBtnText}>Trains</Text>
                         </Pressable>
+
                         <Pressable onPress={() => safeOpenUrl(bookingLinks.experiencesUrl)} style={styles.bookBtn}>
-                          <Text style={styles.bookBtnText}>Experiences</Text>
+                          <Text style={styles.bookBtnText}>GetYourGuide</Text>
                         </Pressable>
                       </View>
 
@@ -965,9 +944,7 @@ export default function TripBuildScreen() {
                           <Text style={styles.cityBlockKicker}>In {destinationCity}</Text>
                           <Text style={styles.cityBlockTitle}>Top things to do</Text>
                           <Text style={styles.cityBlockSub}>
-                            {cityBundle?.hasGuide
-                              ? "Curated picks + quick tips. Link out for more."
-                              : "No curated guide yet — link out for the best current picks."}
+                            {cityBundle?.hasGuide ? "Curated picks + quick tips." : "No curated guide yet — use GetYourGuide."}
                           </Text>
                         </View>
 
@@ -989,7 +966,9 @@ export default function TripBuildScreen() {
                               </View>
                             </View>
                           ))}
-                          {(cityBundle.items?.length ?? 0) > 6 ? <Text style={styles.moreInline}>More in the full city guide.</Text> : null}
+                          {(cityBundle.items?.length ?? 0) > 6 ? (
+                            <Text style={styles.moreInline}>More in the full city guide.</Text>
+                          ) : null}
                         </View>
                       ) : null}
 
@@ -1006,7 +985,6 @@ export default function TripBuildScreen() {
                     </View>
                   ) : null}
 
-                  {/* Date fallback for web/no picker */}
                   {Platform.OS === "web" || !DateTimePicker ? (
                     <View style={{ marginTop: 10, gap: 8 }}>
                       <Text style={styles.fallbackNote}>Date picker not available here. Edit ISO dates (YYYY-MM-DD).</Text>
@@ -1077,6 +1055,7 @@ export default function TripBuildScreen() {
 }
 
 const styles = StyleSheet.create({
+  // (unchanged styles from your current file)
   safe: { flex: 1 },
   scroll: { flex: 1 },
 
@@ -1203,7 +1182,6 @@ const styles = StyleSheet.create({
   },
   moreText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
 
-  // Modal sheet
   modalWrap: { flex: 1, justifyContent: "flex-end" },
   modalBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.55)" },
 
@@ -1246,7 +1224,6 @@ const styles = StyleSheet.create({
   },
 
   sheetSub: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18 },
-
   tbcHint: { marginTop: 8, color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, lineHeight: 16 },
 
   closeBtn: {
@@ -1273,7 +1250,6 @@ const styles = StyleSheet.create({
   dateLabel: { color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: "800" },
   dateValue: { marginTop: 6, color: theme.colors.text, fontSize: theme.fontSize.md, fontWeight: "900" },
 
-  // Book block
   bookBlock: {
     marginTop: 12,
     borderRadius: 14,
