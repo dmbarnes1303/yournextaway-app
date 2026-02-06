@@ -1,7 +1,9 @@
 // src/state/followStore.ts
+import { Platform } from "react-native";
 import { create } from "zustand";
-import { persist, createJSONStorage } from "zustand/middleware";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { persist, createJSONStorage, type StateStorage } from "zustand/middleware";
+
+import storage from "@/src/services/storage";
 
 export type FollowAlertPrefs = {
   // Core: the one you explicitly care about
@@ -111,11 +113,30 @@ function mergeAlerts(base: FollowAlertPrefs, patch?: Partial<FollowAlertPrefs>):
   };
 }
 
+/**
+ * Web-safe persisted storage for Zustand.
+ * Uses our best-effort storage wrapper which:
+ * - Web: localStorage (fallback mem)
+ * - Native: AsyncStorage (fallback mem)
+ */
+const followPersistStorage: StateStorage = {
+  getItem: async (name) => {
+    // Zustand expects string | null
+    const v = await storage.getString(name);
+    return v;
+  },
+  setItem: async (name, value) => {
+    await storage.setString(name, value);
+  },
+  removeItem: async (name) => {
+    await storage.remove(name);
+  },
+};
+
 const useFollowStore = create<FollowState>()(
   persist(
     (set, get) => ({
       defaultAlerts: { ...DEFAULT_FOLLOW_ALERTS },
-
       followed: [],
 
       isFollowing: (fixtureId: string) => {
@@ -130,7 +151,6 @@ const useFollowStore = create<FollowState>()(
 
         set((state) => {
           const filtered = state.followed.filter((x) => x.fixtureId !== id);
-
           const alerts = mergeAlerts(state.defaultAlerts, m.alerts);
 
           const next: FollowedMatch = {
@@ -247,8 +267,11 @@ const useFollowStore = create<FollowState>()(
     {
       name: "followedMatches",
       version: 3,
-      storage: createJSONStorage(() => AsyncStorage),
+      storage: createJSONStorage(() => followPersistStorage),
+
+      // only persist what matters
       partialize: (state) => ({ followed: state.followed, defaultAlerts: state.defaultAlerts }),
+
       migrate: (persistedState) => {
         const s = persistedState as any;
 
