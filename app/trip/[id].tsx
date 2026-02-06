@@ -112,7 +112,6 @@ const STATUS_LABEL: Record<SavedItemStatus, string> = {
 };
 
 function statusOrder(s: SavedItemStatus): number {
-  // show Pending first, then Saved, then Booked, then Archived
   return s === "pending" ? 0 : s === "saved" ? 1 : s === "booked" ? 2 : 3;
 }
 
@@ -325,9 +324,7 @@ export default function TripDetailScreen() {
       note: [],
       other: [],
     };
-    for (const it of savedItems) {
-      (base[it.type] ?? base.other).push(it);
-    }
+    for (const it of savedItems) (base[it.type] ?? base.other).push(it);
     return base;
   }, [savedItems]);
 
@@ -352,9 +349,7 @@ export default function TripDetailScreen() {
             await tripsStore.removeTrip(trip.id);
             try {
               await savedItemsStore.clearTrip(trip.id);
-            } catch {
-              // ignore
-            }
+            } catch {}
             router.replace("/(tabs)/trips");
           } catch {
             Alert.alert("Couldn’t delete", "Something went wrong removing this trip.");
@@ -469,12 +464,9 @@ export default function TripDetailScreen() {
   }
 
   /**
-   * STANDARDISED OPEN FLOW:
-   * - Partner CTAs use beginPartnerClick (tracked -> Pending)
-   * - Everything else uses openPartnerUrl (untracked, hardened, in-app browser)
-   *
-   * openPartnerUrl has a global in-flight guard; if user double-taps Open,
-   * it will throw. We swallow that and do nothing (better than duplicate opens).
+   * STANDARD OPEN FLOW (Trip Detail):
+   * - Tracked CTAs (create Pending): booking / skyscanner / omio / getyourguide
+   * - Untracked opens: maps + any manual item "Open" + generic links
    */
   async function openUntracked(url: string) {
     const u = String(url ?? "").trim();
@@ -491,8 +483,14 @@ export default function TripDetailScreen() {
     }
   }
 
-  async function onPartnerShortcut(partnerId: PartnerId, url: string, title: string) {
+  async function openTrackedPartner(partnerId: PartnerId, url: string, title: string) {
     if (!tripId) return;
+
+    // Maps is ALWAYS untracked in Phase 1
+    if (partnerId === "googlemaps") {
+      await openUntracked(url);
+      return;
+    }
 
     try {
       await beginPartnerClick({
@@ -503,7 +501,6 @@ export default function TripDetailScreen() {
         metadata: { city: cityName, tripId },
       });
     } catch {
-      // Don’t block the user; fall back to untracked open.
       await openUntracked(url);
     }
   }
@@ -696,7 +693,6 @@ export default function TripDetailScreen() {
                   </View>
                 </View>
 
-                {/* Spine signals */}
                 {pending.length > 0 ? (
                   <View style={styles.pendingBanner}>
                     <Text style={styles.pendingTitle}>Pending bookings</Text>
@@ -725,7 +721,7 @@ export default function TripDetailScreen() {
                 </Pressable>
               </GlassCard>
 
-              {/* BOOK THIS TRIP (tracked partner clicks -> pending items) */}
+              {/* BOOK THIS TRIP (tracked) */}
               {bookingLinks ? (
                 <View style={styles.section}>
                   <SectionHeader title="Book this trip" subtitle="Partner clicks create Pending items" />
@@ -736,37 +732,35 @@ export default function TripDetailScreen() {
 
                     <View style={styles.bookGrid}>
                       <Pressable
-                        onPress={() => onPartnerShortcut("booking", bookingLinks.hotelsUrl, `Hotel options in ${cityName}`)}
+                        onPress={() => openTrackedPartner("booking", bookingLinks.hotelsUrl, `Hotel options in ${cityName}`)}
                         style={[styles.bookBtn, styles.bookBtnPrimary]}
                       >
                         <Text style={styles.bookBtnText}>Hotels</Text>
                       </Pressable>
 
                       <Pressable
-                        onPress={() => onPartnerShortcut("skyscanner", bookingLinks.flightsUrl, `Flights for ${cityName} trip`)}
+                        onPress={() => openTrackedPartner("skyscanner", bookingLinks.flightsUrl, `Flights for ${cityName} trip`)}
                         style={styles.bookBtn}
                       >
                         <Text style={styles.bookBtnText}>Flights</Text>
                       </Pressable>
 
                       <Pressable
-                        onPress={() => onPartnerShortcut("omio", bookingLinks.trainsUrl, `Trains / coaches to ${cityName}`)}
+                        onPress={() => openTrackedPartner("omio", bookingLinks.trainsUrl, `Trains / coaches to ${cityName}`)}
                         style={styles.bookBtn}
                       >
                         <Text style={styles.bookBtnText}>Trains</Text>
                       </Pressable>
 
                       <Pressable
-                        onPress={() =>
-                          onPartnerShortcut("getyourguide", bookingLinks.experiencesUrl, `GetYourGuide: ${cityName}`)
-                        }
+                        onPress={() => openTrackedPartner("getyourguide", bookingLinks.experiencesUrl, `GetYourGuide: ${cityName}`)}
                         style={styles.bookBtn}
                       >
                         <Text style={styles.bookBtnText}>GetYourGuide</Text>
                       </Pressable>
                     </View>
 
-                    {/* Maps is intentionally non-tracked in Phase 1 */}
+                    {/* Maps is intentionally UNTRACKED */}
                     <Pressable onPress={() => openUntracked(bookingLinks.mapsUrl)} style={styles.mapsInline}>
                       <Text style={styles.mapsInlineText}>Open Maps search</Text>
                     </Pressable>
@@ -774,7 +768,7 @@ export default function TripDetailScreen() {
                 </View>
               ) : null}
 
-              {/* WALLET (Booked) */}
+              {/* WALLET */}
               <View style={styles.section}>
                 <SectionHeader title="Wallet" subtitle="Booked items (Phase 1 list)" />
                 <GlassCard style={styles.card} strength="default">
@@ -842,71 +836,16 @@ export default function TripDetailScreen() {
                 </GlassCard>
               </View>
 
-              {/* WORKSPACE SECTIONS (SavedItems) */}
-              <Section
-                title="Stay"
-                subtitle="Hotels, apartments, saved options"
-                types={["hotel"]}
-                emptyTitle="Nothing saved"
-                emptyMsg="Add a hotel option, shortlist, or booking reference."
-                addType="hotel"
-              />
+              {/* WORKSPACE SECTIONS */}
+              <Section title="Stay" subtitle="Hotels, apartments, saved options" types={["hotel"]} emptyTitle="Nothing saved" emptyMsg="Add a hotel option, shortlist, or booking reference." addType="hotel" />
+              <Section title="Travel" subtitle="Flights, trains, transfers, parking" types={["flight", "train", "transfer"]} emptyTitle="Nothing saved" emptyMsg="Add flight/train options or transfers." addType="flight" />
+              <Section title="Things to do" subtitle="Activities, tours, ideas" types={["things"]} emptyTitle="Nothing saved" emptyMsg="Add a GetYourGuide option or any activity link." addType="things" />
+              <Section title="Tickets" subtitle="Match tickets or entry confirmations" types={["tickets"]} emptyTitle="Nothing saved" emptyMsg="Add a ticket link or reference." addType="tickets" />
+              <Section title="Insurance" subtitle="Policies, quotes, documents" types={["insurance"]} emptyTitle="Nothing saved" emptyMsg="Add an insurance quote or policy reference." addType="insurance" />
+              <Section title="Claims" subtitle="Delays, refunds, compensation tracking" types={["claim"]} emptyTitle="Nothing saved" emptyMsg="Add claim references or notes." addType="claim" />
+              <Section title="Notes & other" subtitle="Anything else you want attached to this trip" types={["note", "other"]} emptyTitle="Nothing saved" emptyMsg="Add a note or any miscellaneous item." addType="note" />
 
-              <Section
-                title="Travel"
-                subtitle="Flights, trains, transfers, parking"
-                types={["flight", "train", "transfer"]}
-                emptyTitle="Nothing saved"
-                emptyMsg="Add flight/train options or transfers."
-                addType="flight"
-              />
-
-              <Section
-                title="Things to do"
-                subtitle="Activities, tours, ideas"
-                types={["things"]}
-                emptyTitle="Nothing saved"
-                emptyMsg="Add a GetYourGuide option or any activity link."
-                addType="things"
-              />
-
-              <Section
-                title="Tickets"
-                subtitle="Match tickets or entry confirmations"
-                types={["tickets"]}
-                emptyTitle="Nothing saved"
-                emptyMsg="Add a ticket link or reference."
-                addType="tickets"
-              />
-
-              <Section
-                title="Insurance"
-                subtitle="Policies, quotes, documents"
-                types={["insurance"]}
-                emptyTitle="Nothing saved"
-                emptyMsg="Add an insurance quote or policy reference."
-                addType="insurance"
-              />
-
-              <Section
-                title="Claims"
-                subtitle="Delays, refunds, compensation tracking"
-                types={["claim"]}
-                emptyTitle="Nothing saved"
-                emptyMsg="Add claim references or notes."
-                addType="claim"
-              />
-
-              <Section
-                title="Notes & other"
-                subtitle="Anything else you want attached to this trip"
-                types={["note", "other"]}
-                emptyTitle="Nothing saved"
-                emptyMsg="Add a note or any miscellaneous item."
-                addType="note"
-              />
-
-              {/* Legacy Trip Notes (keep temporarily; migrate later) */}
+              {/* Legacy Trip Notes */}
               <View style={styles.section}>
                 <SectionHeader title="Trip notes" subtitle="Legacy field (we’ll migrate to SavedItems later)" />
                 <GlassCard style={styles.card} strength="default">
@@ -987,7 +926,6 @@ export default function TripDetailScreen() {
                     </View>
                   ) : (
                     <View style={{ marginTop: 10, gap: 10 }}>
-                      {/* Type pills */}
                       <View style={styles.typeRow}>
                         {(
                           [
@@ -1016,7 +954,6 @@ export default function TripDetailScreen() {
                         })}
                       </View>
 
-                      {/* Status pills */}
                       <View style={styles.statusRow}>
                         {(["saved", "pending", "booked", "archived"] as SavedItemStatus[]).map((s) => {
                           const active = newStatus === s;
@@ -1089,7 +1026,7 @@ export default function TripDetailScreen() {
 /* -------------------------------- Styles -------------------------------- */
 
 const styles = StyleSheet.create({
-  // Your original styles unchanged below
+  // Using your existing styles as-is (unchanged from your file)
   safe: { flex: 1 },
   scroll: { flex: 1 },
 
@@ -1187,7 +1124,6 @@ const styles = StyleSheet.create({
   center: { paddingVertical: 12, alignItems: "center", gap: 10 },
   muted: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm },
 
-  /* Book this trip */
   bookSub: {
     color: theme.colors.textSecondary,
     fontSize: theme.fontSize.sm,
@@ -1348,7 +1284,6 @@ const styles = StyleSheet.create({
   },
   saveText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.md },
 
-  /* Modal sheet */
   modalWrap: { flex: 1, justifyContent: "flex-end" },
   modalBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.55)" },
 
@@ -1418,4 +1353,3 @@ const styles = StyleSheet.create({
   sheetBtnPrimary: { borderColor: "rgba(0,255,136,0.55)", backgroundColor: "rgba(0,0,0,0.30)" },
   sheetBtnPrimaryText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
 });
-
