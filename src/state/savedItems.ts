@@ -3,7 +3,12 @@ import { create } from "zustand";
 
 import { readJson, writeJson } from "@/src/state/persist";
 import { makeSavedItemId } from "@/src/core/id";
-import type { SavedItem, SavedItemStatus, SavedItemType } from "@/src/core/savedItemTypes";
+import type {
+  SavedItem,
+  SavedItemStatus,
+  SavedItemType,
+  WalletAttachment,
+} from "@/src/core/savedItemTypes";
 import { assertTransition } from "@/src/core/savedItemTypes";
 
 /* -------------------------------------------------------------------------- */
@@ -36,9 +41,17 @@ type SavedItemsState = {
   }) => Promise<SavedItem>;
 
   /** Field updates ONLY (status changes must use transitionStatus) */
-  update: (id: string, patch: Partial<Omit<SavedItem, "id" | "tripId" | "createdAt" | "status">>) => Promise<void>;
+  update: (
+    id: string,
+    patch: Partial<Omit<SavedItem, "id" | "tripId" | "createdAt" | "status">>
+  ) => Promise<void>;
 
   transitionStatus: (id: string, to: SavedItemStatus) => Promise<void>;
+
+  /** Attachments */
+  addAttachment: (itemId: string, att: WalletAttachment) => Promise<void>;
+  removeAttachment: (itemId: string, attachmentId: string) => Promise<void>;
+  clearAttachments: (itemId: string) => Promise<void>;
 
   remove: (id: string) => Promise<void>;
   clearTrip: (tripId: string) => Promise<void>;
@@ -119,6 +132,34 @@ function normalizeTripId(tripId: string) {
 }
 
 /* -------------------------------------------------------------------------- */
+/* Attachments normalisation */
+/* -------------------------------------------------------------------------- */
+
+function cleanAttachment(x: any): WalletAttachment | null {
+  if (!x || typeof x !== "object") return null;
+
+  const id = String(x.id ?? "").trim();
+  const uri = String(x.uri ?? "").trim();
+  const kind = String(x.kind ?? "").trim();
+
+  if (!id || !uri) return null;
+
+  const safeKind =
+    kind === "image" || kind === "pdf" || kind === "file" ? (kind as any) : "file";
+
+  const createdAt = Number(x.createdAt);
+  return {
+    id,
+    uri,
+    kind: safeKind,
+    name: typeof x.name === "string" ? x.name : undefined,
+    mimeType: typeof x.mimeType === "string" ? x.mimeType : undefined,
+    size: Number.isFinite(Number(x.size)) ? Number(x.size) : undefined,
+    createdAt: Number.isFinite(createdAt) ? createdAt : now(),
+  };
+}
+
+/* -------------------------------------------------------------------------- */
 /* Normalisation */
 /* -------------------------------------------------------------------------- */
 
@@ -138,6 +179,9 @@ function cleanLoadedItem(x: any): SavedItem | null {
   const createdAt = Number(x.createdAt);
   const updatedAt = Number(x.updatedAt);
 
+  const attachmentsRaw = Array.isArray(x.attachments) ? x.attachments : [];
+  const attachments = attachmentsRaw.map(cleanAttachment).filter(Boolean) as WalletAttachment[];
+
   return {
     id,
     tripId,
@@ -149,6 +193,7 @@ function cleanLoadedItem(x: any): SavedItem | null {
     priceText: typeof x.priceText === "string" ? x.priceText : undefined,
     currency: typeof x.currency === "string" ? x.currency : undefined,
     metadata: typeof x.metadata === "object" ? x.metadata : undefined,
+    attachments,
     createdAt: Number.isFinite(createdAt) ? createdAt : now(),
     updatedAt: Number.isFinite(updatedAt) ? updatedAt : now(),
   };
@@ -213,6 +258,7 @@ const useSavedItemsStore = create<SavedItemsState>((set, get) => {
         priceText: args.priceText,
         currency: args.currency,
         metadata: args.metadata,
+        attachments: [],
         createdAt: now(),
         updatedAt: now(),
       };
@@ -235,6 +281,9 @@ const useSavedItemsStore = create<SavedItemsState>((set, get) => {
 
         const nextType = (patch as any).type;
         if (nextType !== undefined && !isValidType(nextType)) return x;
+
+        const nextAttachments = (patch as any).attachments;
+        if (nextAttachments !== undefined && !Array.isArray(nextAttachments)) return x;
 
         return {
           ...x,
@@ -263,6 +312,64 @@ const useSavedItemsStore = create<SavedItemsState>((set, get) => {
         x.id === key ? { ...x, status: to, updatedAt: now() } : x
       );
 
+      const sorted = sortItems(next);
+      set({ items: sorted, loaded: true });
+      await persist(sorted);
+    },
+
+    addAttachment: async (itemId, att) => {
+      await ensureLoaded();
+
+      const id = String(itemId ?? "").trim();
+      if (!id) return;
+
+      const next = get().items.map((x) => {
+        if (x.id !== id) return x;
+
+        const existing = Array.isArray(x.attachments) ? x.attachments : [];
+        const withoutDup = existing.filter((a) => a.id !== att.id);
+
+        return {
+          ...x,
+          attachments: [att, ...withoutDup],
+          updatedAt: now(),
+        };
+      });
+
+      const sorted = sortItems(next);
+      set({ items: sorted, loaded: true });
+      await persist(sorted);
+    },
+
+    removeAttachment: async (itemId, attachmentId) => {
+      await ensureLoaded();
+
+      const id = String(itemId ?? "").trim();
+      const aid = String(attachmentId ?? "").trim();
+      if (!id || !aid) return;
+
+      const next = get().items.map((x) => {
+        if (x.id !== id) return x;
+        const existing = Array.isArray(x.attachments) ? x.attachments : [];
+        return {
+          ...x,
+          attachments: existing.filter((a) => a.id !== aid),
+          updatedAt: now(),
+        };
+      });
+
+      const sorted = sortItems(next);
+      set({ items: sorted, loaded: true });
+      await persist(sorted);
+    },
+
+    clearAttachments: async (itemId) => {
+      await ensureLoaded();
+
+      const id = String(itemId ?? "").trim();
+      if (!id) return;
+
+      const next = get().items.map((x) => (x.id === id ? { ...x, attachments: [], updatedAt: now() } : x));
       const sorted = sortItems(next);
       set({ items: sorted, loaded: true });
       await persist(sorted);
@@ -327,6 +434,18 @@ const savedItemsStore = {
 
   transitionStatus: async (id: string, to: SavedItemStatus) => {
     await useSavedItemsStore.getState().transitionStatus(id, to);
+  },
+
+  addAttachment: async (itemId: string, att: WalletAttachment) => {
+    await useSavedItemsStore.getState().addAttachment(itemId, att);
+  },
+
+  removeAttachment: async (itemId: string, attachmentId: string) => {
+    await useSavedItemsStore.getState().removeAttachment(itemId, attachmentId);
+  },
+
+  clearAttachments: async (itemId: string) => {
+    await useSavedItemsStore.getState().clearAttachments(itemId);
   },
 
   remove: async (id: string) => {
