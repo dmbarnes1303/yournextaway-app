@@ -46,13 +46,33 @@ function shortDomain(url?: string) {
     const u = new URL(url);
     return u.hostname.replace(/^www\./, "");
   } catch {
-    return url;
+    return "";
   }
+}
+
+function safePartnerName(partnerId?: string) {
+  if (!partnerId) return null;
+  try {
+    return getPartner(partnerId).name;
+  } catch {
+    return null;
+  }
+}
+
+function getItemDetailsText(item: SavedItem) {
+  const metaText = typeof item.metadata?.text === "string" ? item.metadata.text.trim() : "";
+  if (metaText) return metaText;
+
+  // fallback: show something useful instead of “No link”
+  const bits: string[] = [];
+  if (item.priceText) bits.push(item.priceText);
+  if (item.partnerUrl) bits.push(item.partnerUrl);
+  return bits.join("\n") || "No extra details saved.";
 }
 
 /* -------------------------------------------------------------------------- */
 /* Screen */
- /* -------------------------------------------------------------------------- */
+/* -------------------------------------------------------------------------- */
 
 export default function WalletScreen() {
   const [tripsLoaded, setTripsLoaded] = useState(tripsStore.getState().loaded);
@@ -81,8 +101,15 @@ export default function WalletScreen() {
     };
   }, []);
 
+  const loading = !tripsLoaded || !savedLoaded;
+
   const booked = useMemo(() => items.filter((i) => i.status === "booked"), [items]);
-  const grouped = useMemo(() => groupByTrip(booked), [booked]);
+
+  const grouped = useMemo(() => {
+    // keep ordering stable: items already sorted in store, but groupByTrip loses map order;
+    // we’ll just accept Map insertion order based on first appearance in booked[]
+    return groupByTrip(booked);
+  }, [booked]);
 
   const tripById = useMemo(() => {
     const map = new Map<string, Trip>();
@@ -90,11 +117,9 @@ export default function WalletScreen() {
     return map;
   }, [trips]);
 
-  const loading = !tripsLoaded || !savedLoaded;
-
-  async function openItem(item: SavedItem) {
+  async function openItemLink(item: SavedItem) {
     if (!item.partnerUrl) {
-      Alert.alert("No link", "This item has no saved link.");
+      Alert.alert(item.title || "Item", getItemDetailsText(item));
       return;
     }
 
@@ -103,6 +128,32 @@ export default function WalletScreen() {
     } catch {
       Alert.alert("Couldn’t open link", "Your device could not open that link.");
     }
+  }
+
+  async function archiveItem(item: SavedItem) {
+    try {
+      await savedItemsStore.transitionStatus(item.id, "archived");
+    } catch {
+      Alert.alert("Couldn’t archive", "That item can’t be archived right now.");
+    }
+  }
+
+  function openActions(item: SavedItem) {
+    const hasLink = Boolean(item.partnerUrl);
+    const details = getItemDetailsText(item);
+
+    Alert.alert(
+      item.title || "Wallet item",
+      details,
+      [
+        { text: "Close", style: "cancel" },
+        hasLink
+          ? { text: "Open link", style: "default", onPress: () => openItemLink(item) }
+          : { text: "View details", style: "default" },
+        { text: "Archive", style: "destructive", onPress: () => archiveItem(item) },
+      ].filter(Boolean) as any,
+      { cancelable: true }
+    );
   }
 
   return (
@@ -115,7 +166,7 @@ export default function WalletScreen() {
         >
           <View style={styles.header}>
             <Text style={styles.title}>Wallet</Text>
-            <Text style={styles.subtitle}>Your confirmed bookings and passes</Text>
+            <Text style={styles.subtitle}>Your confirmed bookings and saved essentials</Text>
           </View>
 
           {loading && (
@@ -140,7 +191,7 @@ export default function WalletScreen() {
             <>
               {[...grouped.entries()].map(([tripId, tripItems]) => {
                 const trip = tripById.get(tripId);
-                const title = trip?.cityId || "Trip";
+                const title = (trip?.cityId || "").trim() || "Trip";
 
                 return (
                   <View key={tripId} style={styles.section}>
@@ -149,13 +200,20 @@ export default function WalletScreen() {
                     <GlassCard style={styles.card} strength="subtle">
                       <View style={{ gap: 10 }}>
                         {tripItems.map((it) => {
-                          const partnerName = it.partnerId ? getPartner(it.partnerId).name : null;
+                          const partnerName = safePartnerName(it.partnerId);
                           const typeLabel = getSavedItemTypeLabel(it.type);
+                          const domain = it.partnerUrl ? shortDomain(it.partnerUrl) : "";
+
+                          const meta =
+                            typeLabel +
+                            (partnerName ? ` • ${partnerName}` : "") +
+                            (domain ? ` • ${domain}` : "") +
+                            (!it.partnerUrl && it.type === "note" ? ` • Notes` : "");
 
                           return (
                             <Pressable
                               key={it.id}
-                              onPress={() => openItem(it)}
+                              onPress={() => openActions(it)}
                               style={styles.itemRow}
                             >
                               <View style={{ flex: 1 }}>
@@ -164,13 +222,13 @@ export default function WalletScreen() {
                                 </Text>
 
                                 <Text style={styles.itemMeta} numberOfLines={1}>
-                                  {typeLabel}
-                                  {partnerName ? ` • ${partnerName}` : ""}
-                                  {it.partnerUrl ? ` • ${shortDomain(it.partnerUrl)}` : ""}
+                                  {meta}
                                 </Text>
 
                                 {it.priceText ? (
-                                  <Text style={styles.priceLine}>{it.priceText}</Text>
+                                  <Text style={styles.priceLine} numberOfLines={1}>
+                                    {it.priceText}
+                                  </Text>
                                 ) : null}
                               </View>
 
@@ -192,6 +250,10 @@ export default function WalletScreen() {
     </Background>
   );
 }
+
+/* -------------------------------------------------------------------------- */
+/* styles */
+/* -------------------------------------------------------------------------- */
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
