@@ -1,4 +1,5 @@
 // app/(tabs)/trips.tsx
+
 import React, { useEffect, useMemo, useState, useCallback } from "react";
 import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -46,6 +47,11 @@ function groupItemsByTrip(items: SavedItem[]) {
   return map;
 }
 
+function errText(e: any) {
+  const msg = String(e?.message ?? e ?? "").trim();
+  return msg || "Unknown error";
+}
+
 /* -------------------------------- Screen -------------------------------- */
 
 export default function TripsScreen() {
@@ -63,7 +69,10 @@ export default function TripsScreen() {
       setTrips(s.trips);
     });
 
-    if (!tripsStore.getState().loaded) tripsStore.loadTrips().catch(() => {});
+    if (!tripsStore.getState().loaded) {
+      tripsStore.loadTrips().catch(() => {});
+    }
+
     return unsub;
   }, []);
 
@@ -73,11 +82,14 @@ export default function TripsScreen() {
       setItems(s.items);
     });
 
-    if (!savedItemsStore.getState().loaded) savedItemsStore.load().catch(() => {});
+    if (!savedItemsStore.getState().loaded) {
+      savedItemsStore.load().catch(() => {});
+    }
+
     return unsub;
   }, []);
 
-  // Keep storage consistent: if trip list changes, clear orphan wallet items.
+  // keep wallet consistent when trips list changes
   useEffect(() => {
     if (!loadedTrips || !loadedItems) return;
     const valid = trips.map((t) => String(t.id));
@@ -98,15 +110,22 @@ export default function TripsScreen() {
     };
   }
 
-  const openTrip = useCallback((t: Trip) => router.push({ pathname: "/trip/[id]", params: { id: t.id } } as any), [router]);
-  const editTrip = useCallback((t: Trip) => router.push({ pathname: "/trip/build", params: { tripId: t.id } } as any), [router]);
+  const openTrip = useCallback(
+    (t: Trip) => router.push({ pathname: "/trip/[id]", params: { id: t.id } } as any),
+    [router]
+  );
+
+  const editTrip = useCallback(
+    (t: Trip) => router.push({ pathname: "/trip/build", params: { tripId: t.id } } as any),
+    [router]
+  );
 
   const deleteTrip = useCallback((t: Trip) => {
     const c = counts(t.id);
 
     Alert.alert(
       "Delete trip?",
-      `This will remove the trip and ${c.total} saved item${c.total === 1 ? "" : "s"} from this device (including any stored attachments).`,
+      `This will remove the trip and ${c.total} saved item${c.total === 1 ? "" : "s"} from this device (including stored attachments).`,
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -114,15 +133,13 @@ export default function TripsScreen() {
           style: "destructive",
           onPress: async () => {
             try {
+              // 1) clear wallet items first (and their files)
               await savedItemsStore.clearTrip(t.id, { deleteAttachmentFiles: true });
-            } catch {
-              // ok
-            }
 
-            try {
+              // 2) then delete trip
               await tripsStore.removeTrip(t.id);
-            } catch {
-              Alert.alert("Couldn’t delete", "Try again.");
+            } catch (e) {
+              Alert.alert("Couldn’t delete", errText(e));
             }
           },
         },
@@ -245,6 +262,8 @@ export default function TripsScreen() {
     </Background>
   );
 }
+
+/* -------------------------------- Styles -------------------------------- */
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },
