@@ -10,12 +10,10 @@ import {
   ActivityIndicator,
   Platform,
   Modal,
-  Linking,
   Alert,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Stack, useRouter, useLocalSearchParams } from "expo-router";
-import * as WebBrowser from "expo-web-browser";
 
 import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
@@ -42,7 +40,7 @@ import { getTopThingsToDoForTrip } from "@/src/data/cityGuides";
 import { buildAffiliateLinks } from "@/src/services/affiliateLinks";
 
 import { computeLikelyPlaceholderTbcIds, isKickoffTbc } from "@/src/utils/kickoffTbc";
-import { beginPartnerClick } from "@/src/services/partnerClicks";
+import { beginPartnerClick, openPartnerUrl } from "@/src/services/partnerClicks";
 import type { PartnerId } from "@/src/core/partners";
 
 /**
@@ -76,32 +74,6 @@ function paramBool(v: unknown): boolean {
 function safeCityName(input: unknown): string {
   const s = String(input ?? "").trim();
   return s || "your destination";
-}
-
-async function safeOpenUrl(url: string) {
-  const u = String(url ?? "").trim();
-  if (!u) return;
-
-  const hasScheme = /^https?:\/\//i.test(u);
-  const candidate = hasScheme ? u : `https://${u}`;
-
-  try {
-    if (Platform.OS === "web") {
-      const can = await Linking.canOpenURL(candidate);
-      if (!can) throw new Error("Cannot open URL");
-      await Linking.openURL(candidate);
-      return;
-    }
-
-    await WebBrowser.openBrowserAsync(candidate, {
-      presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
-      readerMode: false,
-      enableBarCollapsing: true,
-      showTitle: true,
-    });
-  } catch {
-    Alert.alert("Couldn’t open link", "Your device could not open that link.");
-  }
 }
 
 /**
@@ -636,16 +608,39 @@ export default function TripBuildScreen() {
     }
   }
 
-  // Partner click helper (Phase-1 spine)
-  async function openPartner(args: {
+  /**
+   * STANDARD OPEN FLOW (this screen):
+   * - Tracked partners ONLY when we have a real tripId (edit mode).
+   * - Otherwise: untracked open (in-app browser) so users can explore, but it does NOT create Pending.
+   * - Maps is ALWAYS untracked (even in edit mode).
+   */
+  async function openUntracked(url?: string) {
+    const u = String(url ?? "").trim();
+    if (!u) return;
+    try {
+      await openPartnerUrl(u);
+    } catch (e: any) {
+      const msg = String(e?.message ?? "");
+      if (msg.toLowerCase().includes("already in progress")) return;
+      Alert.alert("Couldn’t open link", "Your device could not open that link.");
+    }
+  }
+
+  async function openTrackedPartner(args: {
     partnerId: PartnerId;
     url: string;
     title: string;
     metadata?: Record<string, any>;
   }) {
-    // Must have a real tripId to track pending/booked.
+    // No tripId => cannot create a trackable Pending item by definition.
     if (!routeTripId) {
-      Alert.alert("Save trip first", "Booking links create trackable items. Save the trip, then open partners from the Trip Hub.");
+      await openUntracked(args.url);
+      return;
+    }
+
+    // Maps should never be tracked.
+    if (args.partnerId === "googlemaps") {
+      await openUntracked(args.url);
       return;
     }
 
@@ -658,8 +653,7 @@ export default function TripBuildScreen() {
         metadata: args.metadata,
       });
     } catch {
-      // fallback: still open the URL so user isn't blocked
-      await safeOpenUrl(args.url);
+      await openUntracked(args.url);
     }
   }
 
@@ -702,7 +696,7 @@ export default function TripBuildScreen() {
     });
   }, [destinationCity, startIso, endIso]);
 
-  // Prefer a curated guide deep link if present, otherwise fall back to generic affiliate search.
+  // Prefer curated deep link if present, otherwise fall back to affiliate search.
   const thingsToDoUrl = useMemo(() => {
     if (!destinationCity) return null;
     return cityBundle?.thingsToDoUrl || bookingLinks?.experiencesUrl || null;
@@ -929,7 +923,7 @@ export default function TripBuildScreen() {
                     </Pressable>
                   </View>
 
-                  {/* BOOK THIS TRIP (spine-correct) */}
+                  {/* BOOK THIS TRIP */}
                   {bookingLinks ? (
                     <View style={styles.bookBlock}>
                       <View style={styles.bookTop}>
@@ -939,7 +933,7 @@ export default function TripBuildScreen() {
                           <Text style={styles.bookSub}>
                             {isEditing
                               ? `These clicks create trackable items for ${destinationCity}.`
-                              : "Save the trip to unlock trackable booking links."}
+                              : "Save the trip first to create trackable items. You can still browse links now."}
                           </Text>
                         </View>
                       </View>
@@ -948,83 +942,78 @@ export default function TripBuildScreen() {
                         <Pressable
                           onPress={() =>
                             isEditing
-                              ? openPartner({
+                              ? openTrackedPartner({
                                   partnerId: "booking",
                                   url: bookingLinks.hotelsUrl,
                                   title: `Hotels in ${destinationCity}`,
                                   metadata: { city: destinationCity },
                                 })
-                              : onSave()
+                              : openUntracked(bookingLinks.hotelsUrl)
                           }
                           style={[styles.bookBtn, styles.bookBtnPrimary]}
                         >
-                          <Text style={styles.bookBtnText}>{isEditing ? "Hotels" : "Save trip"}</Text>
+                          <Text style={styles.bookBtnText}>Hotels</Text>
                         </Pressable>
 
                         <Pressable
                           onPress={() =>
                             isEditing
-                              ? openPartner({
+                              ? openTrackedPartner({
                                   partnerId: "skyscanner",
                                   url: bookingLinks.flightsUrl,
                                   title: `Flights for ${destinationCity}`,
                                   metadata: { city: destinationCity },
                                 })
-                              : onSave()
+                              : openUntracked(bookingLinks.flightsUrl)
                           }
                           style={styles.bookBtn}
                         >
-                          <Text style={styles.bookBtnText}>{isEditing ? "Flights" : "Save trip"}</Text>
+                          <Text style={styles.bookBtnText}>Flights</Text>
                         </Pressable>
 
                         <Pressable
                           onPress={() =>
                             isEditing
-                              ? openPartner({
+                              ? openTrackedPartner({
                                   partnerId: "omio",
                                   url: bookingLinks.trainsUrl,
                                   title: `Trains for ${destinationCity}`,
                                   metadata: { city: destinationCity },
                                 })
-                              : onSave()
+                              : openUntracked(bookingLinks.trainsUrl)
                           }
                           style={styles.bookBtn}
                         >
-                          <Text style={styles.bookBtnText}>{isEditing ? "Trains" : "Save trip"}</Text>
+                          <Text style={styles.bookBtnText}>Trains</Text>
                         </Pressable>
 
                         <Pressable
                           onPress={() =>
                             isEditing
-                              ? openPartner({
+                              ? openTrackedPartner({
                                   partnerId: "getyourguide",
                                   url: bookingLinks.experiencesUrl,
                                   title: `GetYourGuide: ${destinationCity}`,
                                   metadata: { city: destinationCity },
                                 })
-                              : onSave()
+                              : openUntracked(bookingLinks.experiencesUrl)
                           }
                           style={styles.bookBtn}
                         >
-                          <Text style={styles.bookBtnText}>{isEditing ? "GetYourGuide" : "Save trip"}</Text>
+                          <Text style={styles.bookBtnText}>GetYourGuide</Text>
                         </Pressable>
                       </View>
 
-                      <Pressable
-                        onPress={() =>
-                          isEditing
-                            ? openPartner({
-                                partnerId: "googlemaps",
-                                url: bookingLinks.mapsUrl,
-                                title: `Maps: ${destinationCity}`,
-                                metadata: { city: destinationCity },
-                              })
-                            : onSave()
-                        }
-                        style={styles.bookInlineLink}
-                      >
-                        <Text style={styles.bookInlineLinkText}>{isEditing ? "Open Maps search" : "Save trip to continue"}</Text>
+                      {/* Maps is ALWAYS untracked */}
+                      <Pressable onPress={() => openUntracked(bookingLinks.mapsUrl)} style={styles.bookInlineLink}>
+                        <Text style={styles.bookInlineLinkText}>Open Maps search</Text>
                       </Pressable>
+
+                      {!isEditing ? (
+                        <Pressable onPress={onSave} disabled={saving} style={[styles.saveBtn, saving && { opacity: 0.7 }]}>
+                          <Text style={styles.saveText}>{saving ? "Saving…" : "Save Trip (to track bookings)"}</Text>
+                        </Pressable>
+                      ) : null}
                     </View>
                   ) : null}
 
@@ -1043,13 +1032,13 @@ export default function TripBuildScreen() {
                           <Pressable
                             onPress={() =>
                               isEditing
-                                ? openPartner({
+                                ? openTrackedPartner({
                                     partnerId: "getyourguide",
                                     url: thingsToDoUrl,
                                     title: `GetYourGuide: ${destinationCity}`,
                                     metadata: { city: destinationCity },
                                   })
-                                : safeOpenUrl(thingsToDoUrl)
+                                : openUntracked(thingsToDoUrl)
                             }
                             style={styles.taBtn}
                           >
