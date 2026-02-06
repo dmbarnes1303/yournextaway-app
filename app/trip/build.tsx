@@ -676,6 +676,12 @@ export default function TripBuildScreen() {
     });
   }, [destinationCity, startIso, endIso]);
 
+  // Prefer a curated guide deep link if present, otherwise fall back to generic affiliate search.
+  const thingsToDoUrl = useMemo(() => {
+    if (!destinationCity) return null;
+    return cityBundle?.thingsToDoUrl || bookingLinks?.experiencesUrl || null;
+  }, [destinationCity, cityBundle?.thingsToDoUrl, bookingLinks?.experiencesUrl]);
+
   const currentMatchBlock = useMemo(() => {
     if (!isEditing || !editSnapshotRef.current?.fixture) return null;
     const f = editSnapshotRef.current.fixture as any;
@@ -904,9 +910,7 @@ export default function TripBuildScreen() {
                         <View style={{ flex: 1 }}>
                           <Text style={styles.bookKicker}>BOOK THIS TRIP</Text>
                           <Text style={styles.bookTitle}>Hotels, travel, experiences</Text>
-                          <Text style={styles.bookSub}>
-                            Open partner search pages for {destinationCity}. (Affiliate IDs configured centrally.)
-                          </Text>
+                          <Text style={styles.bookSub}>Open partner search pages for {destinationCity}.</Text>
                         </View>
                       </View>
 
@@ -948,9 +952,9 @@ export default function TripBuildScreen() {
                           </Text>
                         </View>
 
-                        {cityBundle?.tripAdvisorUrl ? (
-                          <Pressable onPress={() => safeOpenUrl(cityBundle.tripAdvisorUrl)} style={styles.taBtn}>
-                            <Text style={styles.taBtnText}>TripAdvisor</Text>
+                        {thingsToDoUrl ? (
+                          <Pressable onPress={() => safeOpenUrl(thingsToDoUrl)} style={styles.taBtn}>
+                            <Text style={styles.taBtnText}>GetYourGuide</Text>
                           </Pressable>
                         ) : null}
                       </View>
