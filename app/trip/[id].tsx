@@ -8,6 +8,8 @@ import {
   Pressable,
   ActivityIndicator,
   Alert,
+  TextInput,
+  Keyboard,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
@@ -23,8 +25,9 @@ import { parseIsoDateOnly, toIsoDate } from "@/src/constants/football";
 import tripsStore, { type Trip } from "@/src/state/trips";
 import savedItemsStore from "@/src/state/savedItems";
 
-import type { SavedItem } from "@/src/core/savedItemTypes";
-import type { PartnerId } from "@/src/core/partners";
+import type { SavedItem, SavedItemStatus, SavedItemType } from "@/src/core/savedItemTypes";
+import { getSavedItemTypeLabel } from "@/src/core/savedItemTypes";
+import { getPartner, type PartnerId } from "@/src/core/partners";
 
 import { beginPartnerClick, openPartnerUrl } from "@/src/services/partnerClicks";
 import { getFixtureById } from "@/src/services/apiFootball";
@@ -60,6 +63,54 @@ function tripStatus(t: Trip): "Draft" | "Upcoming" | "Past" {
   return "Upcoming";
 }
 
+function cleanNoteText(v: string) {
+  return String(v ?? "").replace(/\r\n/g, "\n").trim();
+}
+
+function noteTitleFromText(text: string) {
+  const t = cleanNoteText(text);
+  if (!t) return "Note";
+  const firstLine = t.split("\n")[0]?.trim() || "";
+  return firstLine.length > 42 ? firstLine.slice(0, 42).trim() + "…" : firstLine;
+}
+
+function safePartnerName(item: SavedItem) {
+  if (!item.partnerId) return null;
+  return getPartner(item.partnerId).name;
+}
+
+function safeTypeLabel(type: SavedItemType) {
+  try {
+    return getSavedItemTypeLabel(type);
+  } catch {
+    return "Notes";
+  }
+}
+
+function shortDomain(url?: string) {
+  if (!url) return "";
+  try {
+    const u = new URL(url);
+    return u.hostname.replace(/^www\./, "");
+  } catch {
+    return "";
+  }
+}
+
+function buildMetaLine(item: SavedItem) {
+  const bits: string[] = [];
+  bits.push(safeTypeLabel(item.type));
+  const p = safePartnerName(item);
+  if (p) bits.push(p);
+
+  if (item.partnerUrl) {
+    const d = shortDomain(item.partnerUrl);
+    if (d) bits.push(d);
+  }
+
+  return bits.join(" • ");
+}
+
 /* -------------------------------------------------------------------------- */
 /* screen */
 /* -------------------------------------------------------------------------- */
@@ -79,6 +130,9 @@ export default function TripDetailScreen() {
 
   const [fixturesById, setFixturesById] = useState<Record<string, any>>({});
   const [fxLoading, setFxLoading] = useState(false);
+
+  const [noteText, setNoteText] = useState("");
+  const [noteSaving, setNoteSaving] = useState(false);
 
   /* ---------------- load trip ---------------- */
 
@@ -168,8 +222,14 @@ export default function TripDetailScreen() {
     });
   }, [trip, cityName]);
 
-  const booked = useMemo(() => savedItems.filter((x) => x.status === "booked"), [savedItems]);
   const pending = useMemo(() => savedItems.filter((x) => x.status === "pending"), [savedItems]);
+  const booked = useMemo(() => savedItems.filter((x) => x.status === "booked"), [savedItems]);
+
+  const notes = useMemo(() => {
+    // Notes are "note" type, keep only active ones (saved + pending if you ever use pending notes)
+    // For Phase 1: treat notes as "saved".
+    return savedItems.filter((x) => x.type === "note" && x.status !== "archived");
+  }, [savedItems]);
 
   /* ---------------- navigation ---------------- */
 
@@ -221,6 +281,104 @@ export default function TripDetailScreen() {
     } catch {
       await openUntracked(args.url);
     }
+  }
+
+  /* -------------------------------------------------------------------------- */
+  /* workspace actions */
+  /* -------------------------------------------------------------------------- */
+
+  async function openSavedItem(item: SavedItem) {
+    if (!item.partnerUrl) {
+      // Notes (or unlinked items)
+      const text = String(item.metadata?.text ?? "").trim();
+      Alert.alert(item.title || "Notes", text || "No details saved.");
+      return;
+    }
+
+    try {
+      await openPartnerUrl(item.partnerUrl);
+    } catch {
+      Alert.alert("Couldn’t open link");
+    }
+  }
+
+  async function archiveItem(item: SavedItem) {
+    try {
+      await savedItemsStore.transitionStatus(item.id, "archived");
+    } catch {
+      Alert.alert("Couldn’t archive", "That item can’t be archived right now.");
+    }
+  }
+
+  async function markBooked(item: SavedItem) {
+    try {
+      await savedItemsStore.transitionStatus(item.id, "booked");
+    } catch {
+      Alert.alert("Couldn’t mark booked", "That item can’t be marked booked right now.");
+    }
+  }
+
+  function confirmArchive(item: SavedItem) {
+    Alert.alert(
+      "Archive this item?",
+      "Archived items are hidden from the trip workspace. You can restore them later (Phase 2).",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Archive", style: "destructive", onPress: () => archiveItem(item) },
+      ]
+    );
+  }
+
+  function confirmMarkBooked(item: SavedItem) {
+    Alert.alert(
+      "Mark as booked?",
+      "Only do this if you completed the booking and want it in Wallet.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Mark booked", style: "default", onPress: () => markBooked(item) },
+      ]
+    );
+  }
+
+  async function addNote() {
+    const text = cleanNoteText(noteText);
+    if (!tripId) return;
+
+    if (!text) {
+      Alert.alert("Add a note", "Type something first.");
+      return;
+    }
+
+    setNoteSaving(true);
+    try {
+      await savedItemsStore.add({
+        tripId,
+        type: "note",
+        status: "saved",
+        title: noteTitleFromText(text),
+        metadata: { text },
+      });
+
+      setNoteText("");
+      Keyboard.dismiss();
+    } catch {
+      Alert.alert("Couldn’t save note");
+    } finally {
+      setNoteSaving(false);
+    }
+  }
+
+  function openNoteActions(item: SavedItem) {
+    const text = String(item.metadata?.text ?? "").trim();
+    Alert.alert(
+      item.title || "Notes",
+      text || "No details saved.",
+      [
+        { text: "Close", style: "cancel" },
+        { text: "Archive", style: "destructive", onPress: () => archiveItem(item) },
+      ],
+      { cancelable: true }
+    );
   }
 
   /* -------------------------------------------------------------------------- */
@@ -286,6 +444,89 @@ export default function TripDetailScreen() {
                     <Text style={styles.btnPrimaryText}>Edit trip</Text>
                   </Pressable>
                 </View>
+              </GlassCard>
+
+              {/* PENDING BOOKINGS (critical) */}
+              <GlassCard style={styles.card}>
+                <Text style={styles.sectionTitle}>Pending</Text>
+
+                {pending.length === 0 ? (
+                  <EmptyState
+                    title="No pending bookings"
+                    message="When you click a partner link, it appears here until you confirm it’s booked."
+                  />
+                ) : (
+                  <View style={{ gap: 10 }}>
+                    {pending.map((it) => (
+                      <View key={it.id} style={styles.itemRow}>
+                        <Pressable style={{ flex: 1 }} onPress={() => openSavedItem(it)}>
+                          <Text style={styles.itemTitle} numberOfLines={1}>
+                            {it.title}
+                          </Text>
+                          <Text style={styles.itemMeta} numberOfLines={1}>
+                            {buildMetaLine(it)}
+                          </Text>
+                          {it.priceText ? <Text style={styles.priceLine}>{it.priceText}</Text> : null}
+                        </Pressable>
+
+                        <View style={styles.itemActions}>
+                          <Pressable onPress={() => confirmMarkBooked(it)} style={styles.smallBtn}>
+                            <Text style={styles.smallBtnText}>Booked</Text>
+                          </Pressable>
+                          <Pressable onPress={() => confirmArchive(it)} style={[styles.smallBtn, styles.smallBtnDanger]}>
+                            <Text style={styles.smallBtnText}>Archive</Text>
+                          </Pressable>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </GlassCard>
+
+              {/* NOTES (critical: real workspace, not just affiliate buttons) */}
+              <GlassCard style={styles.card}>
+                <Text style={styles.sectionTitle}>Notes</Text>
+
+                <View style={styles.noteBox}>
+                  <TextInput
+                    value={noteText}
+                    onChangeText={setNoteText}
+                    placeholder="Add a note (tickets, hotel shortlist, reminders, anything)…"
+                    placeholderTextColor={theme.colors.textSecondary}
+                    style={styles.noteInput}
+                    multiline
+                  />
+
+                  <Pressable
+                    onPress={addNote}
+                    disabled={noteSaving}
+                    style={[styles.noteSaveBtn, noteSaving && { opacity: 0.7 }]}
+                  >
+                    <Text style={styles.noteSaveText}>{noteSaving ? "Saving…" : "Save note"}</Text>
+                  </Pressable>
+                </View>
+
+                {notes.length === 0 ? (
+                  <View style={{ marginTop: 10 }}>
+                    <EmptyState title="No notes yet" message="Notes you save for this trip appear here." />
+                  </View>
+                ) : (
+                  <View style={{ gap: 10, marginTop: 10 }}>
+                    {notes.map((it) => (
+                      <Pressable key={it.id} onPress={() => openNoteActions(it)} style={styles.noteRow}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.itemTitle} numberOfLines={1}>
+                            {it.title}
+                          </Text>
+                          <Text style={styles.itemMeta} numberOfLines={1}>
+                            Notes
+                          </Text>
+                        </View>
+                        <Text style={styles.chev}>›</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                )}
               </GlassCard>
 
               {/* BOOK YOUR TRIP */}
@@ -359,9 +600,7 @@ export default function TripDetailScreen() {
                     <Text style={styles.mapsInline}>Open maps search</Text>
                   </Pressable>
 
-                  {fxLoading ? (
-                    <Text style={styles.mutedInline}>Loading match details…</Text>
-                  ) : null}
+                  {fxLoading ? <Text style={styles.mutedInline}>Loading match details…</Text> : null}
                 </GlassCard>
               )}
 
@@ -447,11 +686,21 @@ export default function TripDetailScreen() {
                 {booked.length === 0 ? (
                   <EmptyState title="Nothing booked yet" message="Booked items appear here." />
                 ) : (
-                  booked.map((it) => (
-                    <View key={it.id} style={styles.walletRow}>
-                      <Text style={styles.walletTitle}>{it.title}</Text>
-                    </View>
-                  ))
+                  <View style={{ gap: 10 }}>
+                    {booked.map((it) => (
+                      <Pressable key={it.id} onPress={() => openSavedItem(it)} style={styles.noteRow}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.itemTitle} numberOfLines={1}>
+                            {it.title}
+                          </Text>
+                          <Text style={styles.itemMeta} numberOfLines={1}>
+                            {buildMetaLine(it)}
+                          </Text>
+                        </View>
+                        <Text style={styles.chev}>›</Text>
+                      </Pressable>
+                    ))}
+                  </View>
                 )}
               </GlassCard>
             </>
@@ -461,6 +710,10 @@ export default function TripDetailScreen() {
     </Background>
   );
 }
+
+/* -------------------------------------------------------------------------- */
+/* styles */
+/* -------------------------------------------------------------------------- */
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },
@@ -546,6 +799,101 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
 
+  /* Pending rows */
+  itemRow: {
+    flexDirection: "row",
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+    alignItems: "center",
+  },
+
+  itemTitle: {
+    color: theme.colors.text,
+    fontWeight: "900",
+  },
+
+  itemMeta: {
+    marginTop: 4,
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
+    fontSize: 12,
+  },
+
+  priceLine: {
+    marginTop: 6,
+    color: "rgba(242,244,246,0.92)",
+    fontSize: 12,
+    fontWeight: "900",
+  },
+
+  itemActions: {
+    gap: 8,
+    alignItems: "flex-end",
+  },
+
+  smallBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.15)",
+    backgroundColor: "rgba(0,0,0,0.15)",
+  },
+
+  smallBtnDanger: {
+    borderColor: "rgba(255,80,80,0.35)",
+  },
+
+  smallBtnText: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 12,
+  },
+
+  /* Notes */
+  noteBox: {
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    borderRadius: 14,
+    backgroundColor: "rgba(0,0,0,0.18)",
+    padding: 12,
+  },
+
+  noteInput: {
+    minHeight: 80,
+    color: theme.colors.text,
+    textAlignVertical: "top",
+  },
+
+  noteSaveBtn: {
+    marginTop: 10,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(0,255,136,0.55)",
+    alignItems: "center",
+  },
+
+  noteSaveText: { color: theme.colors.text, fontWeight: "900" },
+
+  noteRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+  },
+
+  /* Book grid */
   bookGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -587,12 +935,4 @@ const styles = StyleSheet.create({
   wideBtnSub: { marginTop: 4, color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12 },
 
   chev: { color: theme.colors.textSecondary, fontSize: 24, marginTop: -2 },
-
-  walletRow: {
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(255,255,255,0.08)",
-  },
-
-  walletTitle: { color: theme.colors.text },
 });
