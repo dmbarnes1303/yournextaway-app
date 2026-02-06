@@ -4,9 +4,8 @@ export type TripId = string;
 export type SavedItemId = string;
 
 /**
- * IMPORTANT:
- * These are STORAGE KEYS. Do NOT rename casually, or you’ll break persisted data.
- * If you want different UI names, use SAVED_ITEM_TYPE_META below.
+ * STORAGE KEYS — do not rename without a migration.
+ * UI wording must come from SAVED_ITEM_TYPE_META.
  */
 export type SavedItemType =
   | "tickets"
@@ -53,13 +52,7 @@ export type SavedItem = {
 };
 
 /**
- * UI taxonomy (Bible):
- * - tickets -> "Match Tickets"
- * - things  -> "Experiences"
- * - claim   -> "Protect yourself"
- * - note/other -> "Notes"
- *
- * This avoids breaking persisted data while giving you perfect UI language.
+ * UI group names (Phase-1 bible wording)
  */
 export type SavedItemTypeGroup =
   | "Match Tickets"
@@ -71,29 +64,29 @@ export type SavedItemTypeGroup =
   | "Protect yourself"
   | "Notes";
 
+/**
+ * UI wording map.
+ * - tickets -> Match Tickets
+ * - things -> Experiences
+ * - claim -> Protect yourself
+ * - note/other -> Notes
+ */
 export const SAVED_ITEM_TYPE_META: Record<
   SavedItemType,
   { label: string; group: SavedItemTypeGroup; shortLabel?: string }
 > = {
   tickets: { label: "Match Tickets", group: "Match Tickets", shortLabel: "Tickets" },
-
   hotel: { label: "Hotel", group: "Stay" },
-
   flight: { label: "Flight", group: "Flights" },
-
   train: { label: "Train / bus", group: "Trains & buses", shortLabel: "Train" },
-
   transfer: { label: "Transfer", group: "Transfers" },
-
   things: { label: "Experiences", group: "Experiences" },
-
   insurance: { label: "Travel insurance", group: "Protect yourself", shortLabel: "Insurance" },
 
-  // You asked to label "claim" as Protect Yourself (even though it's "claims/comp").
-  // If you later split "claim" into "claims" and "protection", this is the one place to update.
+  // AirHelp etc ends up here in Phase 1 wording
   claim: { label: "Protect yourself", group: "Protect yourself" },
 
-  // Notes bucket: both map into the same UI label/group
+  // Notes bucket
   note: { label: "Notes", group: "Notes" },
   other: { label: "Notes", group: "Notes" },
 };
@@ -107,9 +100,7 @@ export function getSavedItemTypeGroup(type: SavedItemType): SavedItemTypeGroup {
 }
 
 /**
- * Status transitions:
- * saved -> pending -> booked -> archived
- * plus: saved/pending/booked can be archived; archived can be restored to saved.
+ * Status transitions
  */
 const TRANSITIONS: Record<SavedItemStatus, SavedItemStatus[]> = {
   saved: ["pending", "archived"],
