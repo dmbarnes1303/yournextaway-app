@@ -25,6 +25,7 @@ import type { SavedItem, WalletAttachment } from "@/src/core/savedItemTypes";
 import { getSavedItemTypeLabel } from "@/src/core/savedItemTypes";
 import { getPartner } from "@/src/core/partners";
 import { openPartnerUrl } from "@/src/services/partnerClicks";
+
 import {
   pickAndStoreAttachmentForItem,
   openAttachment,
@@ -195,17 +196,27 @@ export default function WalletScreen() {
     }
   }, []);
 
-  const openAttachmentPicker = useCallback((item: SavedItem) => {
+  const openAttachments = useCallback(async (item: SavedItem) => {
     const atts = Array.isArray(item.attachments) ? item.attachments : [];
     if (atts.length === 0) {
-      Alert.alert(
-        "No attachments yet",
-        "Add a PDF or screenshot to store your booking proof offline.",
-        [{ text: "Add attachment", onPress: () => addAttachment(item) }, { text: "Close", style: "cancel" }]
-      );
+      Alert.alert("No attachments yet", "Add a PDF or screenshot to store proof offline.", [
+        { text: "Add attachment", onPress: () => addAttachment(item) },
+        { text: "Close", style: "cancel" },
+      ]);
       return;
     }
 
+    // MVP: if only 1, open directly (no extra taps)
+    if (atts.length === 1) {
+      try {
+        await openAttachment(atts[0]);
+      } catch {
+        Alert.alert("Couldn’t open", "Your device could not open that attachment.");
+      }
+      return;
+    }
+
+    // 2+: picker
     Alert.alert(
       "Attachments",
       "Choose one to open.",
@@ -220,7 +231,9 @@ export default function WalletScreen() {
             }
           },
         })),
-        atts.length > 6 ? { text: `+ ${atts.length - 6} more`, onPress: () => {} } : undefined,
+        atts.length > 6
+          ? { text: `+ ${atts.length - 6} more`, onPress: () => {} }
+          : undefined,
         { text: "Close", style: "cancel" },
       ].filter(Boolean) as any,
       { cancelable: true }
@@ -246,7 +259,7 @@ export default function WalletScreen() {
               await savedItemsStore.removeAttachment(item.id, a.id);
               await deleteAttachmentFile(a);
             } catch {
-              // if file delete fails we still removed metadata — acceptable in Phase 1
+              // best-effort: even if file delete fails, metadata removal is fine for MVP
             }
           },
         })),
@@ -259,15 +272,20 @@ export default function WalletScreen() {
   function openActions(item: SavedItem) {
     const details = getItemDetailsText(item);
     const attCount = Array.isArray(item.attachments) ? item.attachments.length : 0;
-    const attLine = attCount ? `\n\nAttachments: ${attCount}` : `\n\nAttachments: none`;
 
     if (mode === "archived") {
       Alert.alert(
         item.title || "Archived item",
-        details + attLine,
+        details,
         [
           { text: "Close", style: "cancel" },
           item.partnerUrl ? { text: "Open link", onPress: () => openItemLink(item) } : undefined,
+          attCount > 0
+            ? {
+                text: attCount === 1 ? "Open attachment" : `View attachments (${attCount})`,
+                onPress: () => openAttachments(item),
+              }
+            : undefined,
           { text: "Restore", style: "default", onPress: () => restoreItem(item) },
         ].filter(Boolean) as any,
         { cancelable: true }
@@ -278,13 +296,25 @@ export default function WalletScreen() {
     // booked
     Alert.alert(
       item.title || "Wallet item",
-      details + attLine,
+      details,
       [
         { text: "Close", style: "cancel" },
         item.partnerUrl ? { text: "Open link", style: "default", onPress: () => openItemLink(item) } : undefined,
+
+        // Attachments: always visible as actions (not hidden in body text)
+        attCount > 0
+          ? {
+              text: attCount === 1 ? "Open attachment" : `View attachments (${attCount})`,
+              onPress: () => openAttachments(item),
+            }
+          : undefined,
+
         { text: "Add attachment", onPress: () => addAttachment(item) },
-        { text: `View attachments (${attCount})`, onPress: () => openAttachmentPicker(item) },
-        attCount ? { text: "Remove attachment", style: "destructive", onPress: () => removeAttachmentAction(item) } : undefined,
+
+        attCount > 0
+          ? { text: "Remove attachment", style: "destructive", onPress: () => removeAttachmentAction(item) }
+          : undefined,
+
         { text: "Archive", style: "destructive", onPress: () => archiveItem(item) },
       ].filter(Boolean) as any,
       { cancelable: true }
