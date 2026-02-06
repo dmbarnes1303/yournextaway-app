@@ -89,6 +89,18 @@ function shortDomain(url: string): string {
   }
 }
 
+function safePartnerName(partnerId?: string): string | null {
+  const id = String(partnerId ?? "").trim();
+  if (!id) return null;
+  try {
+    // getPartner expects a valid PartnerId; stored values can drift.
+    const p = getPartner(id as any);
+    return p?.name ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /* ----------------------------- SavedItem utils ---------------------------- */
 
 const TYPE_LABEL: Record<SavedItemType, string> = {
@@ -469,11 +481,14 @@ export default function TripDetailScreen() {
    * - Untracked opens: maps + any manual item "Open" + generic links
    */
   async function openUntracked(url: string) {
-    const u = String(url ?? "").trim();
-    if (!u) {
+    const u0 = String(url ?? "").trim();
+    if (!u0) {
       Alert.alert("No link", "This item doesn’t have a link saved.");
       return;
     }
+
+    const u = normalizeUrl(u0);
+
     try {
       await openPartnerUrl(u);
     } catch (e: any) {
@@ -492,16 +507,18 @@ export default function TripDetailScreen() {
       return;
     }
 
+    const u = normalizeUrl(String(url ?? ""));
+
     try {
       await beginPartnerClick({
         tripId,
         partnerId,
-        url,
+        url: u,
         title,
         metadata: { city: cityName, tripId },
       });
     } catch {
-      await openUntracked(url);
+      await openUntracked(u);
     }
   }
 
@@ -522,7 +539,7 @@ export default function TripDetailScreen() {
   }
 
   function ItemRow({ item }: { item: SavedItem }) {
-    const partner = item.partnerId ? getPartner(item.partnerId) : null;
+    const partnerName = safePartnerName(item.partnerId);
     const domain = item.partnerUrl ? shortDomain(item.partnerUrl) : "";
     const price = String(item.priceText ?? "").trim();
 
@@ -540,7 +557,7 @@ export default function TripDetailScreen() {
 
           <Text style={styles.rowMeta} numberOfLines={1}>
             {TYPE_LABEL[item.type]}
-            {partner ? ` • ${partner.name}` : ""}
+            {partnerName ? ` • ${partnerName}` : ""}
             {domain ? ` • ${domain}` : ""}
           </Text>
 
@@ -739,7 +756,9 @@ export default function TripDetailScreen() {
                       </Pressable>
 
                       <Pressable
-                        onPress={() => openTrackedPartner("skyscanner", bookingLinks.flightsUrl, `Flights for ${cityName} trip`)}
+                        onPress={() =>
+                          openTrackedPartner("skyscanner", bookingLinks.flightsUrl, `Flights for ${cityName} trip`)
+                        }
                         style={styles.bookBtn}
                       >
                         <Text style={styles.bookBtnText}>Flights</Text>
@@ -753,7 +772,9 @@ export default function TripDetailScreen() {
                       </Pressable>
 
                       <Pressable
-                        onPress={() => openTrackedPartner("getyourguide", bookingLinks.experiencesUrl, `GetYourGuide: ${cityName}`)}
+                        onPress={() =>
+                          openTrackedPartner("getyourguide", bookingLinks.experiencesUrl, `GetYourGuide: ${cityName}`)
+                        }
                         style={styles.bookBtn}
                       >
                         <Text style={styles.bookBtnText}>GetYourGuide</Text>
@@ -837,13 +858,62 @@ export default function TripDetailScreen() {
               </View>
 
               {/* WORKSPACE SECTIONS */}
-              <Section title="Stay" subtitle="Hotels, apartments, saved options" types={["hotel"]} emptyTitle="Nothing saved" emptyMsg="Add a hotel option, shortlist, or booking reference." addType="hotel" />
-              <Section title="Travel" subtitle="Flights, trains, transfers, parking" types={["flight", "train", "transfer"]} emptyTitle="Nothing saved" emptyMsg="Add flight/train options or transfers." addType="flight" />
-              <Section title="Things to do" subtitle="Activities, tours, ideas" types={["things"]} emptyTitle="Nothing saved" emptyMsg="Add a GetYourGuide option or any activity link." addType="things" />
-              <Section title="Tickets" subtitle="Match tickets or entry confirmations" types={["tickets"]} emptyTitle="Nothing saved" emptyMsg="Add a ticket link or reference." addType="tickets" />
-              <Section title="Insurance" subtitle="Policies, quotes, documents" types={["insurance"]} emptyTitle="Nothing saved" emptyMsg="Add an insurance quote or policy reference." addType="insurance" />
-              <Section title="Claims" subtitle="Delays, refunds, compensation tracking" types={["claim"]} emptyTitle="Nothing saved" emptyMsg="Add claim references or notes." addType="claim" />
-              <Section title="Notes & other" subtitle="Anything else you want attached to this trip" types={["note", "other"]} emptyTitle="Nothing saved" emptyMsg="Add a note or any miscellaneous item." addType="note" />
+              <Section
+                title="Stay"
+                subtitle="Hotels, apartments, saved options"
+                types={["hotel"]}
+                emptyTitle="Nothing saved"
+                emptyMsg="Add a hotel option, shortlist, or booking reference."
+                addType="hotel"
+              />
+              <Section
+                title="Travel"
+                subtitle="Flights, trains, transfers, parking"
+                types={["flight", "train", "transfer"]}
+                emptyTitle="Nothing saved"
+                emptyMsg="Add flight/train options or transfers."
+                addType="flight"
+              />
+              <Section
+                title="Things to do"
+                subtitle="Activities, tours, ideas"
+                types={["things"]}
+                emptyTitle="Nothing saved"
+                emptyMsg="Add a GetYourGuide option or any activity link."
+                addType="things"
+              />
+              <Section
+                title="Tickets"
+                subtitle="Match tickets or entry confirmations"
+                types={["tickets"]}
+                emptyTitle="Nothing saved"
+                emptyMsg="Add a ticket link or reference."
+                addType="tickets"
+              />
+              <Section
+                title="Insurance"
+                subtitle="Policies, quotes, documents"
+                types={["insurance"]}
+                emptyTitle="Nothing saved"
+                emptyMsg="Add an insurance quote or policy reference."
+                addType="insurance"
+              />
+              <Section
+                title="Claims"
+                subtitle="Delays, refunds, compensation tracking"
+                types={["claim"]}
+                emptyTitle="Nothing saved"
+                emptyMsg="Add claim references or notes."
+                addType="claim"
+              />
+              <Section
+                title="Notes & other"
+                subtitle="Anything else you want attached to this trip"
+                types={["note", "other"]}
+                emptyTitle="Nothing saved"
+                emptyMsg="Add a note or any miscellaneous item."
+                addType="note"
+              />
 
               {/* Legacy Trip Notes */}
               <View style={styles.section}>
