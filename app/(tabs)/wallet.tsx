@@ -30,6 +30,8 @@ import { openPartnerUrl } from "@/src/services/partnerClicks";
 /* Helpers */
 /* -------------------------------------------------------------------------- */
 
+type WalletMode = "booked" | "archived";
+
 function groupByTrip(items: SavedItem[]) {
   const map = new Map<string, SavedItem[]>();
   for (const it of items) {
@@ -63,11 +65,25 @@ function getItemDetailsText(item: SavedItem) {
   const metaText = typeof item.metadata?.text === "string" ? item.metadata.text.trim() : "";
   if (metaText) return metaText;
 
-  // fallback: show something useful instead of “No link”
   const bits: string[] = [];
   if (item.priceText) bits.push(item.priceText);
   if (item.partnerUrl) bits.push(item.partnerUrl);
   return bits.join("\n") || "No extra details saved.";
+}
+
+function buildMeta(item: SavedItem) {
+  const typeLabel = getSavedItemTypeLabel(item.type);
+  const partnerName = safePartnerName(item.partnerId);
+  const domain = item.partnerUrl ? shortDomain(item.partnerUrl) : "";
+
+  const bits = [typeLabel];
+  if (partnerName) bits.push(partnerName);
+  if (domain) bits.push(domain);
+
+  // If it’s a note in Wallet (rare but possible), make it obvious
+  if (!item.partnerUrl && item.type === "note") bits.push("Notes");
+
+  return bits.join(" • ");
 }
 
 /* -------------------------------------------------------------------------- */
@@ -75,6 +91,8 @@ function getItemDetailsText(item: SavedItem) {
 /* -------------------------------------------------------------------------- */
 
 export default function WalletScreen() {
+  const [mode, setMode] = useState<WalletMode>("booked");
+
   const [tripsLoaded, setTripsLoaded] = useState(tripsStore.getState().loaded);
   const [savedLoaded, setSavedLoaded] = useState(savedItemsStore.getState().loaded);
 
@@ -103,19 +121,28 @@ export default function WalletScreen() {
 
   const loading = !tripsLoaded || !savedLoaded;
 
-  const booked = useMemo(() => items.filter((i) => i.status === "booked"), [items]);
-
-  const grouped = useMemo(() => {
-    // keep ordering stable: items already sorted in store, but groupByTrip loses map order;
-    // we’ll just accept Map insertion order based on first appearance in booked[]
-    return groupByTrip(booked);
-  }, [booked]);
-
   const tripById = useMemo(() => {
     const map = new Map<string, Trip>();
     for (const t of trips) map.set(String(t.id), t);
     return map;
   }, [trips]);
+
+  const visible = useMemo(() => {
+    if (mode === "archived") return items.filter((i) => i.status === "archived");
+    return items.filter((i) => i.status === "booked");
+  }, [items, mode]);
+
+  const grouped = useMemo(() => groupByTrip(visible), [visible]);
+
+  const counts = useMemo(() => {
+    let booked = 0;
+    let archived = 0;
+    for (const it of items) {
+      if (it.status === "booked") booked++;
+      if (it.status === "archived") archived++;
+    }
+    return { booked, archived };
+  }, [items]);
 
   async function openItemLink(item: SavedItem) {
     if (!item.partnerUrl) {
@@ -138,20 +165,45 @@ export default function WalletScreen() {
     }
   }
 
+  async function restoreItem(item: SavedItem) {
+    // archived -> saved (supported by your state machine)
+    try {
+      await savedItemsStore.transitionStatus(item.id, "saved");
+    } catch {
+      Alert.alert("Couldn’t restore", "That item can’t be restored right now.");
+    }
+  }
+
   function openActions(item: SavedItem) {
-    const hasLink = Boolean(item.partnerUrl);
     const details = getItemDetailsText(item);
 
+    if (mode === "archived") {
+      Alert.alert(
+        item.title || "Archived item",
+        details,
+        [
+          { text: "Close", style: "cancel" },
+          item.partnerUrl
+            ? { text: "Open link", onPress: () => openItemLink(item) }
+            : { text: "View details", onPress: () => {} },
+          { text: "Restore", style: "default", onPress: () => restoreItem(item) },
+        ] as any,
+        { cancelable: true }
+      );
+      return;
+    }
+
+    // booked
     Alert.alert(
       item.title || "Wallet item",
       details,
       [
         { text: "Close", style: "cancel" },
-        hasLink
+        item.partnerUrl
           ? { text: "Open link", style: "default", onPress: () => openItemLink(item) }
-          : { text: "View details", style: "default" },
+          : { text: "View details", style: "default", onPress: () => {} },
         { text: "Archive", style: "destructive", onPress: () => archiveItem(item) },
-      ].filter(Boolean) as any,
+      ] as any,
       { cancelable: true }
     );
   }
@@ -166,8 +218,31 @@ export default function WalletScreen() {
         >
           <View style={styles.header}>
             <Text style={styles.title}>Wallet</Text>
-            <Text style={styles.subtitle}>Your confirmed bookings and saved essentials</Text>
+            <Text style={styles.subtitle}>Your confirmed bookings and stored essentials</Text>
           </View>
+
+          {/* Mode toggle */}
+          <GlassCard style={styles.toggleCard} strength="subtle">
+            <View style={styles.toggleRow}>
+              <Pressable
+                onPress={() => setMode("booked")}
+                style={[styles.toggleBtn, mode === "booked" && styles.toggleBtnActive]}
+              >
+                <Text style={[styles.toggleText, mode === "booked" && styles.toggleTextActive]}>
+                  Booked ({counts.booked})
+                </Text>
+              </Pressable>
+
+              <Pressable
+                onPress={() => setMode("archived")}
+                style={[styles.toggleBtn, mode === "archived" && styles.toggleBtnActive]}
+              >
+                <Text style={[styles.toggleText, mode === "archived" && styles.toggleTextActive]}>
+                  Archived ({counts.archived})
+                </Text>
+              </Pressable>
+            </View>
+          </GlassCard>
 
           {loading && (
             <GlassCard style={styles.card}>
@@ -178,16 +253,20 @@ export default function WalletScreen() {
             </GlassCard>
           )}
 
-          {!loading && booked.length === 0 && (
+          {!loading && visible.length === 0 && (
             <GlassCard style={styles.card}>
               <EmptyState
-                title="Nothing booked yet"
-                message="When you confirm bookings in a trip, they appear here."
+                title={mode === "archived" ? "No archived items" : "Nothing booked yet"}
+                message={
+                  mode === "archived"
+                    ? "When you archive items, they’ll show up here."
+                    : "When you confirm bookings in a trip, they appear here."
+                }
               />
             </GlassCard>
           )}
 
-          {!loading && booked.length > 0 && (
+          {!loading && visible.length > 0 && (
             <>
               {[...grouped.entries()].map(([tripId, tripItems]) => {
                 const trip = tripById.get(tripId);
@@ -199,43 +278,27 @@ export default function WalletScreen() {
 
                     <GlassCard style={styles.card} strength="subtle">
                       <View style={{ gap: 10 }}>
-                        {tripItems.map((it) => {
-                          const partnerName = safePartnerName(it.partnerId);
-                          const typeLabel = getSavedItemTypeLabel(it.type);
-                          const domain = it.partnerUrl ? shortDomain(it.partnerUrl) : "";
+                        {tripItems.map((it) => (
+                          <Pressable key={it.id} onPress={() => openActions(it)} style={styles.itemRow}>
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.itemTitle} numberOfLines={1}>
+                                {it.title}
+                              </Text>
 
-                          const meta =
-                            typeLabel +
-                            (partnerName ? ` • ${partnerName}` : "") +
-                            (domain ? ` • ${domain}` : "") +
-                            (!it.partnerUrl && it.type === "note" ? ` • Notes` : "");
+                              <Text style={styles.itemMeta} numberOfLines={1}>
+                                {buildMeta(it)}
+                              </Text>
 
-                          return (
-                            <Pressable
-                              key={it.id}
-                              onPress={() => openActions(it)}
-                              style={styles.itemRow}
-                            >
-                              <View style={{ flex: 1 }}>
-                                <Text style={styles.itemTitle} numberOfLines={1}>
-                                  {it.title}
+                              {it.priceText ? (
+                                <Text style={styles.priceLine} numberOfLines={1}>
+                                  {it.priceText}
                                 </Text>
+                              ) : null}
+                            </View>
 
-                                <Text style={styles.itemMeta} numberOfLines={1}>
-                                  {meta}
-                                </Text>
-
-                                {it.priceText ? (
-                                  <Text style={styles.priceLine} numberOfLines={1}>
-                                    {it.priceText}
-                                  </Text>
-                                ) : null}
-                              </View>
-
-                              <Text style={styles.chev}>›</Text>
-                            </Pressable>
-                          );
-                        })}
+                            <Text style={styles.chev}>›</Text>
+                          </Pressable>
+                        ))}
                       </View>
                     </GlassCard>
                   </View>
@@ -281,6 +344,38 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSize.sm,
     color: theme.colors.textSecondary,
     fontWeight: theme.fontWeight.bold,
+  },
+
+  toggleCard: { padding: 10 },
+
+  toggleRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+
+  toggleBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    backgroundColor: "rgba(0,0,0,0.12)",
+    alignItems: "center",
+  },
+
+  toggleBtnActive: {
+    borderColor: "rgba(0,255,136,0.55)",
+    backgroundColor: "rgba(0,255,136,0.10)",
+  },
+
+  toggleText: {
+    color: theme.colors.textSecondary,
+    fontWeight: theme.fontWeight.black,
+    fontSize: theme.fontSize.sm,
+  },
+
+  toggleTextActive: {
+    color: theme.colors.text,
   },
 
   section: { marginTop: 2 },
