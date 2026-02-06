@@ -54,7 +54,7 @@ export default function PlanTripBlock({ city, startDate, endDate, title }: Props
 
       <View style={styles.grid}>
         <Pressable style={styles.btn} onPress={() => openUrl(links.hotelsUrl)}>
-          <Text style={styles.btnText}>Hotels</Text>
+          <Text>HOTELS (NEW TEST)</Text>
         </Pressable>
 
         <Pressable style={styles.btn} onPress={() => openUrl(links.flightsUrl)}>
