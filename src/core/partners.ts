@@ -13,30 +13,16 @@ import type { SavedItemType } from "@/src/core/savedItemTypes";
 
 export type PartnerId =
   | "getyourguide"
-  | "safetywing"
+  | "expedia"
   | "aviasales"
   | "kiwitaxi"
-  | "tiqets"
-  | "klook"
-  | "welcomepickups"
-  | "ekta"
+  | "safetywing"
   | "airhelp"
-  | "wegotrip"
-  | "searadar"
-  | "compensair"
   | "sportsevents365"
-  | "expedia"
   | "googlemaps"
   | "unknown";
 
-export type PartnerCategory =
-  | "stay"
-  | "travel"
-  | "things"
-  | "insurance"
-  | "claims"
-  | "tickets"
-  | "links";
+export type PartnerCategory = "stay" | "flights" | "transfers" | "experiences" | "insurance" | "claims" | "tickets" | "links";
 
 export type Partner = {
   id: PartnerId;
@@ -51,43 +37,6 @@ export type Partner = {
 };
 
 export const PARTNERS: Record<PartnerId, Partner> = {
-  /* -------------------- Things / activities -------------------- */
-  getyourguide: {
-    id: "getyourguide",
-    name: "GetYourGuide",
-    category: "things",
-    defaultSavedItemType: "things",
-    domains: ["getyourguide.com"],
-  },
-  tiqets: {
-    id: "tiqets",
-    name: "Tiqets",
-    category: "things",
-    defaultSavedItemType: "things",
-    domains: ["tiqets.com"],
-  },
-  klook: {
-    id: "klook",
-    name: "Klook",
-    category: "things",
-    defaultSavedItemType: "things",
-    domains: ["klook.com"],
-  },
-  wegotrip: {
-    id: "wegotrip",
-    name: "WeGoTrip",
-    category: "things",
-    defaultSavedItemType: "things",
-    domains: ["wegotrip.com"],
-  },
-  searadar: {
-    id: "searadar",
-    name: "SeaRadar",
-    category: "things",
-    defaultSavedItemType: "things",
-    domains: ["searadar.com"],
-  },
-
   /* -------------------- Stay -------------------- */
   expedia: {
     id: "expedia",
@@ -97,27 +46,31 @@ export const PARTNERS: Record<PartnerId, Partner> = {
     domains: ["expedia.com", "expedia.co.uk", "expedia.ie"],
   },
 
-  /* -------------------- Travel -------------------- */
+  /* -------------------- Flights -------------------- */
   aviasales: {
     id: "aviasales",
-    name: "AVIASALES",
-    category: "travel",
+    name: "Aviasales",
+    category: "flights",
     defaultSavedItemType: "flight",
     domains: ["aviasales.com", "aviasales.ru", "aviasales.net"],
   },
+
+  /* -------------------- Transfers -------------------- */
   kiwitaxi: {
     id: "kiwitaxi",
     name: "KiwiTaxi",
-    category: "travel",
+    category: "transfers",
     defaultSavedItemType: "transfer",
     domains: ["kiwitaxi.com"],
   },
-  welcomepickups: {
-    id: "welcomepickups",
-    name: "Welcome Pickups",
-    category: "travel",
-    defaultSavedItemType: "transfer",
-    domains: ["welcomepickups.com"],
+
+  /* -------------------- Experiences -------------------- */
+  getyourguide: {
+    id: "getyourguide",
+    name: "GetYourGuide",
+    category: "experiences",
+    defaultSavedItemType: "things",
+    domains: ["getyourguide.com"],
   },
 
   /* -------------------- Insurance -------------------- */
@@ -137,13 +90,6 @@ export const PARTNERS: Record<PartnerId, Partner> = {
     defaultSavedItemType: "claim",
     domains: ["airhelp.com"],
   },
-  compensair: {
-    id: "compensair",
-    name: "Compensair",
-    category: "claims",
-    defaultSavedItemType: "claim",
-    domains: ["compensair.com"],
-  },
 
   /* -------------------- Tickets / events -------------------- */
   sportsevents365: {
@@ -154,13 +100,7 @@ export const PARTNERS: Record<PartnerId, Partner> = {
     domains: ["sportsevents365.com"],
   },
 
-  /* -------------------- Other / link tools -------------------- */
-  ekta: {
-    id: "ekta",
-    name: "Ekta",
-    category: "links",
-    defaultSavedItemType: "other",
-  },
+  /* -------------------- Untracked link tools -------------------- */
   googlemaps: {
     id: "googlemaps",
     name: "Google Maps",
@@ -168,6 +108,7 @@ export const PARTNERS: Record<PartnerId, Partner> = {
     defaultSavedItemType: "other",
     domains: ["google.com", "maps.google.com"],
   },
+
   unknown: {
     id: "unknown",
     name: "Partner",
