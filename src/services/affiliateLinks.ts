@@ -8,6 +8,9 @@ import Constants from "expo-constants";
  * - This file ONLY builds URLs.
  * - It does NOT define partner identity.
  * - Partner IDs live in src/core/partners.ts
+ *
+ * Keep the output shape stable so screens don't need refactors:
+ * { hotelsUrl, flightsUrl, trainsUrl, experiencesUrl, mapsUrl }
  */
 
 export type AffiliateLinks = {
@@ -16,11 +19,11 @@ export type AffiliateLinks = {
   startDate?: string; // YYYY-MM-DD
   endDate?: string; // YYYY-MM-DD
 
-  hotelsUrl: string;
-  flightsUrl: string;
-  trainsUrl: string;
-  experiencesUrl: string;
-  mapsUrl: string;
+  hotelsUrl: string; // Expedia (approved)
+  flightsUrl: string; // AVIASALES (approved)
+  trainsUrl: string; // fallback (no trains affiliate approved yet)
+  experiencesUrl: string; // GetYourGuide (approved)
+  mapsUrl: string; // Google Maps
 };
 
 /* -------------------------------------------------------------------------- */
@@ -28,11 +31,7 @@ export type AffiliateLinks = {
 /* -------------------------------------------------------------------------- */
 
 function env(name: string): string | undefined {
-  const extra =
-    (Constants?.expoConfig as any)?.extra ??
-    (Constants as any)?.manifest?.extra ??
-    {};
-
+  const extra = (Constants?.expoConfig as any)?.extra ?? (Constants as any)?.manifest?.extra ?? {};
   const v =
     (extra && typeof extra[name] === "string" ? String(extra[name]) : undefined) ??
     (typeof process !== "undefined" &&
@@ -45,11 +44,18 @@ function env(name: string): string | undefined {
   return s || undefined;
 }
 
+/**
+ * Put IDs in app.json -> expo.extra and/or .env as EXPO_PUBLIC_*.
+ *
+ * Suggested env keys (you can rename later, but keep consistent once live):
+ * - EXPO_PUBLIC_AVIASALES_MARKER
+ * - EXPO_PUBLIC_GYG_PARTNER_ID
+ * - EXPO_PUBLIC_EXPEDIA_AFFIL_ID   (optional; expedia affiliate deep links vary by program)
+ */
 const AFFILIATE = {
-  bookingAid: env("EXPO_PUBLIC_BOOKING_AID"),
-  skyscannerAssociateId: env("EXPO_PUBLIC_SKYSCANNER_ASSOCIATE_ID"),
-  omioPartnerId: env("EXPO_PUBLIC_OMIO_PARTNER_ID"),
-  getYourGuidePartnerId: env("EXPO_PUBLIC_GYG_PARTNER_ID"),
+  aviasalesMarker: env("EXPO_PUBLIC_AVIASALES_MARKER"),
+  gygPartnerId: env("EXPO_PUBLIC_GYG_PARTNER_ID"),
+  expediaAffilId: env("EXPO_PUBLIC_EXPEDIA_AFFIL_ID"),
 };
 
 /* -------------------------------------------------------------------------- */
@@ -67,12 +73,14 @@ function cleanCountry(input?: string) {
   return s || undefined;
 }
 
-function safeQuery(city: string, country?: string) {
-  return country ? `${city}, ${country}` : city;
+function safeQueryCity(city: string, country?: string) {
+  const c = cleanCity(city);
+  const co = cleanCountry(country);
+  return co ? `${c}, ${co}` : c;
 }
 
 function isIsoDateOnly(s?: string) {
-  return !!s && /^\d{4}-\d{2}-\d{2}$/.test(String(s));
+  return !!s && /^\d{4}-\d{2}-\d{2}$/.test(String(s).trim());
 }
 
 /* -------------------------------------------------------------------------- */
@@ -88,90 +96,55 @@ export function buildAffiliateLinks(args: {
   const city = cleanCity(args.city);
   const country = cleanCountry(args.country);
 
-  const startDate = isIsoDateOnly(args.startDate)
-    ? String(args.startDate)
-    : undefined;
+  const startDate = isIsoDateOnly(args.startDate) ? String(args.startDate).trim() : undefined;
+  const endDate = isIsoDateOnly(args.endDate) ? String(args.endDate).trim() : undefined;
 
-  const endDate = isIsoDateOnly(args.endDate)
-    ? String(args.endDate)
-    : undefined;
-
-  const query = safeQuery(city, country);
+  const query = safeQueryCity(city, country);
 
   /* -------------------- */
-  /* Hotels (Booking.com) */
+  /* Hotels: Expedia (approved) */
   /* -------------------- */
+  // Expedia URLs can vary by locale/program; this is a stable public search entry.
+  // If you have an affiliate ID, we append it as a generic affcid for now (harmless if ignored).
+  const expediaParams: string[] = [`destination=${enc(query)}`];
+  if (startDate) expediaParams.push(`startDate=${enc(startDate)}`);
+  if (endDate) expediaParams.push(`endDate=${enc(endDate)}`);
+  if (AFFILIATE.expediaAffilId) expediaParams.push(`affcid=${enc(AFFILIATE.expediaAffilId)}`);
 
-  const bookingParams: string[] = [`ss=${enc(query)}`];
-
-  if (startDate) bookingParams.push(`checkin=${enc(startDate)}`);
-  if (endDate) bookingParams.push(`checkout=${enc(endDate)}`);
-  if (AFFILIATE.bookingAid) bookingParams.push(`aid=${enc(AFFILIATE.bookingAid)}`);
-
-  const hotelsUrl =
-    "https://www.booking.com/searchresults.html?" +
-    bookingParams.join("&");
+  const hotelsUrl = `https://www.expedia.co.uk/Hotel-Search?${expediaParams.join("&")}`;
 
   /* -------------------- */
-  /* Flights (Skyscanner) */
+  /* Flights: AVIASALES (approved) */
   /* -------------------- */
+  // AVIASALES commonly uses a "marker" for attribution in many affiliate setups.
+  // We keep this resilient: even without marker, it remains a working entry page.
+  const aviaParams: string[] = [];
+  if (AFFILIATE.aviasalesMarker) aviaParams.push(`marker=${enc(AFFILIATE.aviasalesMarker)}`);
+  // Best-effort: pass destination as a query hint (Aviasales will still work if ignored).
+  aviaParams.push(`destination=${enc(query)}`);
 
-  const flightsParams: string[] = [];
-
-  if (AFFILIATE.skyscannerAssociateId) {
-    flightsParams.push(
-      `associateid=${enc(AFFILIATE.skyscannerAssociateId)}`
-    );
-  }
-
-  // Let Skyscanner handle location inference from query
-  flightsParams.push(`destination=${enc(query)}`);
-
-  const flightsUrl =
-    "https://www.skyscanner.net/?" +
-    flightsParams.join("&");
+  const flightsUrl = `https://www.aviasales.com/?${aviaParams.join("&")}`;
 
   /* -------------------- */
-  /* Trains (Omio) */
+  /* Trains: fallback (no trains affiliate approved yet) */
   /* -------------------- */
-
-  const trainsParams: string[] = [];
-
-  if (AFFILIATE.omioPartnerId) {
-    trainsParams.push(`partner_id=${enc(AFFILIATE.omioPartnerId)}`);
-  }
-
-  trainsParams.push("utm_source=yna");
-  trainsParams.push("utm_medium=app");
-  trainsParams.push("utm_campaign=trains");
-
-  const trainsUrl =
-    "https://www.omio.com/?" +
-    trainsParams.join("&");
+  // Keep "trainsUrl" for screen compatibility, but route to a reasonable transit search.
+  // This is intentionally UNTRACKED for now.
+  const trainsUrl = `https://www.google.com/maps/search/?api=1&query=${enc(`${query} train`)}`;
 
   /* -------------------- */
-  /* Experiences (GetYourGuide search) */
+  /* Experiences: GetYourGuide (approved) */
   /* -------------------- */
-
+  // Correct search format:
+  // https://www.getyourguide.com/s/?q=<query>&partner_id=<id>
   const gygParams: string[] = [`q=${enc(query)}`];
-
-  if (AFFILIATE.getYourGuidePartnerId) {
-    gygParams.push(
-      `partner_id=${enc(AFFILIATE.getYourGuidePartnerId)}`
-    );
-  }
-
-  const experiencesUrl =
-    "https://www.getyourguide.com/s/?" +
-    gygParams.join("&");
+  if (AFFILIATE.gygPartnerId) gygParams.push(`partner_id=${enc(AFFILIATE.gygPartnerId)}`);
+  const experiencesUrl = `https://www.getyourguide.com/s/?${gygParams.join("&")}`;
 
   /* -------------------- */
-  /* Maps (Google Maps) */
+  /* Maps: Google Maps search */
   /* -------------------- */
-
-  const mapsUrl =
-    "https://www.google.com/maps/search/?api=1&query=" +
-    enc(query);
+  const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${enc(query)}`;
 
   return {
     city,
