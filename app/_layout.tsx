@@ -41,12 +41,14 @@ export default function RootLayout() {
     });
 
     (async () => {
+      // savedItems is required for click->pending->wallet pipeline
       try {
         await savedItemsStore.load();
       } catch {
         // ignore (best-effort)
       }
 
+      // partner click return watcher + booked prompt
       try {
         bootstrapPartnerReturnPrompt();
       } catch {
