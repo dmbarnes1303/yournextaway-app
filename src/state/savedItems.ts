@@ -1,4 +1,3 @@
-// src/state/savedItems.ts
 import { create } from "zustand";
 
 import { readJson, writeJson } from "@/src/state/persist";
@@ -17,17 +16,13 @@ import { assertTransition } from "@/src/core/savedItemTypes";
 
 type SavedItemsState = {
   loaded: boolean;
-
-  /** All items across all trips */
   items: SavedItem[];
 
   load: () => Promise<void>;
 
-  /** Trip-scoped selectors */
   getByTrip: (tripId: string) => SavedItem[];
   getByTripAndStatus: (tripId: string, status: SavedItemStatus) => SavedItem[];
 
-  /** Core mutations */
   add: (args: {
     tripId: string;
     type: SavedItemType;
@@ -40,15 +35,15 @@ type SavedItemsState = {
     metadata?: Record<string, any>;
   }) => Promise<SavedItem>;
 
-  /** Field updates ONLY (status changes must use transitionStatus) */
   update: (
     id: string,
-    patch: Partial<Omit<SavedItem, "id" | "tripId" | "createdAt" | "status">>
+    patch: Partial<
+      Omit<SavedItem, "id" | "tripId" | "createdAt" | "status" | "attachments">
+    >
   ) => Promise<void>;
 
   transitionStatus: (id: string, to: SavedItemStatus) => Promise<void>;
 
-  /** Attachments (Phase 1) */
   addAttachment: (itemId: string, att: WalletAttachment) => Promise<void>;
   removeAttachment: (itemId: string, attachmentId: string) => Promise<void>;
 
@@ -65,7 +60,7 @@ const STORAGE_KEY = "yna_saved_items_v1";
 /* Validation */
 /* -------------------------------------------------------------------------- */
 
-const VALID_TYPES: ReadonlySet<SavedItemType> = new Set([
+const VALID_TYPES = new Set<SavedItemType>([
   "tickets",
   "hotel",
   "flight",
@@ -78,7 +73,7 @@ const VALID_TYPES: ReadonlySet<SavedItemType> = new Set([
   "other",
 ]);
 
-const VALID_STATUSES: ReadonlySet<SavedItemStatus> = new Set([
+const VALID_STATUSES = new Set<SavedItemStatus>([
   "saved",
   "pending",
   "booked",
@@ -86,11 +81,11 @@ const VALID_STATUSES: ReadonlySet<SavedItemStatus> = new Set([
 ]);
 
 function isValidType(x: any): x is SavedItemType {
-  return typeof x === "string" && VALID_TYPES.has(x as SavedItemType);
+  return typeof x === "string" && VALID_TYPES.has(x as any);
 }
 
 function isValidStatus(x: any): x is SavedItemStatus {
-  return typeof x === "string" && VALID_STATUSES.has(x as SavedItemStatus);
+  return typeof x === "string" && VALID_STATUSES.has(x as any);
 }
 
 function now() {
@@ -98,24 +93,22 @@ function now() {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Ordering */
+/* Sorting */
 /* -------------------------------------------------------------------------- */
 
-function statusOrder(s: SavedItemStatus): number {
+function statusRank(s: SavedItemStatus) {
   if (s === "pending") return 0;
   if (s === "saved") return 1;
   if (s === "booked") return 2;
-  return 3; // archived
+  return 3;
 }
 
-function sortItems(items: SavedItem[]): SavedItem[] {
-  const copy = [...items];
-  copy.sort((a, b) => {
-    const so = statusOrder(a.status) - statusOrder(b.status);
-    if (so !== 0) return so;
+function sortItems(items: SavedItem[]) {
+  return [...items].sort((a, b) => {
+    const r = statusRank(a.status) - statusRank(b.status);
+    if (r !== 0) return r;
     return (b.updatedAt ?? 0) - (a.updatedAt ?? 0);
   });
-  return copy;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -124,27 +117,24 @@ async function persist(items: SavedItem[]) {
   await writeJson(STORAGE_KEY, items);
 }
 
-function normalizeTripId(tripId: string) {
-  const id = String(tripId ?? "").trim();
-  if (!id) throw new Error("tripId is required");
-  return id;
+function normId(v: any) {
+  return String(v ?? "").trim();
 }
 
 /* -------------------------------------------------------------------------- */
-/* Attachments normalization */
+/* Attachment normalization */
 /* -------------------------------------------------------------------------- */
 
 function cleanAttachment(x: any): WalletAttachment | null {
   if (!x || typeof x !== "object") return null;
 
-  const id = String(x.id ?? "").trim();
-  const uri = String(x.uri ?? "").trim();
-  const kind = String(x.kind ?? "").trim();
+  const id = normId(x.id);
+  const uri = normId(x.uri);
+  const kind = normId(x.kind);
 
   if (!id || !uri) return null;
   if (kind !== "pdf" && kind !== "image" && kind !== "file") return null;
 
-  const createdAt = Number(x.createdAt);
   return {
     id,
     uri,
@@ -152,29 +142,29 @@ function cleanAttachment(x: any): WalletAttachment | null {
     name: typeof x.name === "string" ? x.name : undefined,
     mimeType: typeof x.mimeType === "string" ? x.mimeType : undefined,
     size: Number.isFinite(Number(x.size)) ? Number(x.size) : undefined,
-    createdAt: Number.isFinite(createdAt) ? createdAt : now(),
+    createdAt: Number.isFinite(Number(x.createdAt)) ? Number(x.createdAt) : now(),
   };
 }
 
 /* -------------------------------------------------------------------------- */
-/* Normalisation */
+/* Item normalization */
 /* -------------------------------------------------------------------------- */
 
 function cleanLoadedItem(x: any): SavedItem | null {
   if (!x || typeof x !== "object") return null;
 
-  const id = String(x.id ?? "").trim();
-  const tripId = String(x.tripId ?? "").trim();
-  const title = String(x.title ?? "").trim();
-  const type = x.type;
-  const status = x.status;
+  const id = normId(x.id);
+  const tripId = normId(x.tripId);
+  const title = normId(x.title);
 
   if (!id || !tripId || !title) return null;
-  if (!isValidType(type)) return null;
-  if (!isValidStatus(status)) return null;
+  if (!isValidType(x.type)) return null;
+  if (!isValidStatus(x.status)) return null;
 
-  const createdAt = Number(x.createdAt);
-  const updatedAt = Number(x.updatedAt);
+  const meta =
+    x.metadata && typeof x.metadata === "object" && !Array.isArray(x.metadata)
+      ? (x.metadata as Record<string, any>)
+      : undefined;
 
   const attsRaw = Array.isArray(x.attachments) ? x.attachments : [];
   const attachments = attsRaw.map(cleanAttachment).filter(Boolean) as WalletAttachment[];
@@ -182,17 +172,20 @@ function cleanLoadedItem(x: any): SavedItem | null {
   return {
     id,
     tripId,
-    type,
-    status,
+    type: x.type,
+    status: x.status,
     title,
+
     partnerId: typeof x.partnerId === "string" ? x.partnerId : undefined,
     partnerUrl: typeof x.partnerUrl === "string" ? x.partnerUrl : undefined,
     priceText: typeof x.priceText === "string" ? x.priceText : undefined,
     currency: typeof x.currency === "string" ? x.currency : undefined,
-    metadata: typeof x.metadata === "object" ? x.metadata : undefined,
+    metadata: meta,
+
     attachments: attachments.length ? attachments : undefined,
-    createdAt: Number.isFinite(createdAt) ? createdAt : now(),
-    updatedAt: Number.isFinite(updatedAt) ? updatedAt : now(),
+
+    createdAt: Number.isFinite(Number(x.createdAt)) ? Number(x.createdAt) : now(),
+    updatedAt: Number.isFinite(Number(x.updatedAt)) ? Number(x.updatedAt) : now(),
   };
 }
 
@@ -202,8 +195,7 @@ function cleanLoadedItem(x: any): SavedItem | null {
 
 const useSavedItemsStore = create<SavedItemsState>((set, get) => {
   async function ensureLoaded() {
-    if (get().loaded) return;
-    await get().load();
+    if (!get().loaded) await get().load();
   }
 
   return {
@@ -213,21 +205,22 @@ const useSavedItemsStore = create<SavedItemsState>((set, get) => {
     load: async () => {
       if (get().loaded) return;
 
-      const raw = await readJson<any>(STORAGE_KEY, []);
-      const arr = Array.isArray(raw) ? raw : [];
+      const raw = await readJson<any[]>(STORAGE_KEY, []);
+      const cleaned = (Array.isArray(raw) ? raw : [])
+        .map(cleanLoadedItem)
+        .filter(Boolean) as SavedItem[];
 
-      const cleaned = arr.map(cleanLoadedItem).filter(Boolean) as SavedItem[];
       set({ items: sortItems(cleaned), loaded: true });
     },
 
     getByTrip: (tripId) => {
-      const id = String(tripId ?? "").trim();
+      const id = normId(tripId);
       if (!id) return [];
       return get().items.filter((x) => x.tripId === id);
     },
 
     getByTripAndStatus: (tripId, status) => {
-      const id = String(tripId ?? "").trim();
+      const id = normId(tripId);
       if (!id) return [];
       return get().items.filter((x) => x.tripId === id && x.status === status);
     },
@@ -235,27 +228,32 @@ const useSavedItemsStore = create<SavedItemsState>((set, get) => {
     add: async (args) => {
       await ensureLoaded();
 
-      const tripId = normalizeTripId(args.tripId);
-      const type = args.type;
-      const status: SavedItemStatus = args.status ?? "saved";
-      const title = String(args.title ?? "").trim();
+      const tripId = normId(args.tripId);
+      if (!tripId) throw new Error("tripId required");
 
-      if (!isValidType(type)) throw new Error("Invalid saved item type");
-      if (!isValidStatus(status)) throw new Error("Invalid saved item status");
+      if (!isValidType(args.type)) throw new Error("Invalid type");
+
+      const status: SavedItemStatus = args.status ?? "saved";
+      if (!isValidStatus(status)) throw new Error("Invalid status");
+
+      const title = normId(args.title);
       if (!title) throw new Error("Title required");
 
       const item: SavedItem = {
         id: makeSavedItemId(),
         tripId,
-        type,
+        type: args.type,
         status,
         title,
+
         partnerId: args.partnerId,
         partnerUrl: args.partnerUrl,
         priceText: args.priceText,
         currency: args.currency,
         metadata: args.metadata,
+
         attachments: undefined,
+
         createdAt: now(),
         updatedAt: now(),
       };
@@ -270,23 +268,19 @@ const useSavedItemsStore = create<SavedItemsState>((set, get) => {
     update: async (id, patch) => {
       await ensureLoaded();
 
-      const key = String(id ?? "").trim();
+      const key = normId(id);
       if (!key) return;
 
       const next = get().items.map((x) => {
         if (x.id !== key) return x;
 
-        const nextType = (patch as any).type;
-        if (nextType !== undefined && !isValidType(nextType)) return x;
-
-        // do NOT allow status changes here
+        if ((patch as any).attachments !== undefined) return x;
         if ((patch as any).status !== undefined) return x;
 
-        return {
-          ...x,
-          ...patch,
-          updatedAt: now(),
-        };
+        const t = (patch as any).type;
+        if (t !== undefined && !isValidType(t)) return x;
+
+        return { ...x, ...patch, updatedAt: now() };
       });
 
       const sorted = sortItems(next);
@@ -297,7 +291,7 @@ const useSavedItemsStore = create<SavedItemsState>((set, get) => {
     transitionStatus: async (id, to) => {
       await ensureLoaded();
 
-      const key = String(id ?? "").trim();
+      const key = normId(id);
       if (!key || !isValidStatus(to)) return;
 
       const cur = get().items.find((x) => x.id === key);
@@ -317,16 +311,15 @@ const useSavedItemsStore = create<SavedItemsState>((set, get) => {
     addAttachment: async (itemId, att) => {
       await ensureLoaded();
 
-      const id = String(itemId ?? "").trim();
-      if (!id) return;
-      if (!att || typeof att !== "object") throw new Error("Attachment required");
+      const id = normId(itemId);
+      if (!id || !att) return;
 
       const next = get().items.map((x) => {
         if (x.id !== id) return x;
 
         const existing = Array.isArray(x.attachments) ? x.attachments : [];
-        // prevent dup ids
         const filtered = existing.filter((a) => a.id !== att.id);
+
         return {
           ...x,
           attachments: [att, ...filtered],
@@ -342,8 +335,8 @@ const useSavedItemsStore = create<SavedItemsState>((set, get) => {
     removeAttachment: async (itemId, attachmentId) => {
       await ensureLoaded();
 
-      const id = String(itemId ?? "").trim();
-      const aid = String(attachmentId ?? "").trim();
+      const id = normId(itemId);
+      const aid = normId(attachmentId);
       if (!id || !aid) return;
 
       const next = get().items.map((x) => {
@@ -351,6 +344,7 @@ const useSavedItemsStore = create<SavedItemsState>((set, get) => {
 
         const existing = Array.isArray(x.attachments) ? x.attachments : [];
         const kept = existing.filter((a) => a.id !== aid);
+
         return {
           ...x,
           attachments: kept.length ? kept : undefined,
@@ -365,7 +359,7 @@ const useSavedItemsStore = create<SavedItemsState>((set, get) => {
 
     remove: async (id) => {
       await ensureLoaded();
-      const key = String(id ?? "").trim();
+      const key = normId(id);
       if (!key) return;
 
       const next = get().items.filter((x) => x.id !== key);
@@ -375,7 +369,7 @@ const useSavedItemsStore = create<SavedItemsState>((set, get) => {
 
     clearTrip: async (tripId) => {
       await ensureLoaded();
-      const id = String(tripId ?? "").trim();
+      const id = normId(tripId);
       if (!id) return;
 
       const next = get().items.filter((x) => x.tripId !== id);
@@ -392,7 +386,7 @@ const useSavedItemsStore = create<SavedItemsState>((set, get) => {
 });
 
 /* -------------------------------------------------------------------------- */
-/* Wrapper (matches tripsStore pattern) */
+/* Wrapper */
 /* -------------------------------------------------------------------------- */
 
 const savedItemsStore = {
@@ -404,45 +398,37 @@ const savedItemsStore = {
     await useSavedItemsStore.getState().load();
   },
 
-  getByTrip: (tripId: string) => {
-    return useSavedItemsStore.getState().getByTrip(tripId);
-  },
+  getByTrip: (tripId: string) =>
+    useSavedItemsStore.getState().getByTrip(tripId),
 
-  getByTripAndStatus: (tripId: string, status: SavedItemStatus) => {
-    return useSavedItemsStore.getState().getByTripAndStatus(tripId, status);
-  },
+  getByTripAndStatus: (tripId: string, status: SavedItemStatus) =>
+    useSavedItemsStore.getState().getByTripAndStatus(tripId, status),
 
-  add: async (args: Parameters<SavedItemsState["add"]>[0]) => {
-    return await useSavedItemsStore.getState().add(args);
-  },
+  add: async (args: Parameters<SavedItemsState["add"]>[0]) =>
+    useSavedItemsStore.getState().add(args),
 
-  update: async (id: string, patch: Parameters<SavedItemsState["update"]>[1]) => {
-    await useSavedItemsStore.getState().update(id, patch);
-  },
+  update: async (
+    id: string,
+    patch: Parameters<SavedItemsState["update"]>[1]
+  ) => useSavedItemsStore.getState().update(id, patch),
 
-  transitionStatus: async (id: string, to: SavedItemStatus) => {
-    await useSavedItemsStore.getState().transitionStatus(id, to);
-  },
+  transitionStatus: async (id: string, to: SavedItemStatus) =>
+    useSavedItemsStore.getState().transitionStatus(id, to),
 
-  addAttachment: async (itemId: string, att: WalletAttachment) => {
-    await useSavedItemsStore.getState().addAttachment(itemId, att);
-  },
+  addAttachment: async (itemId: string, att: WalletAttachment) =>
+    useSavedItemsStore.getState().addAttachment(itemId, att),
 
-  removeAttachment: async (itemId: string, attachmentId: string) => {
-    await useSavedItemsStore.getState().removeAttachment(itemId, attachmentId);
-  },
+  removeAttachment: async (itemId: string, attachmentId: string) =>
+    useSavedItemsStore.getState().removeAttachment(itemId, attachmentId),
 
-  remove: async (id: string) => {
-    await useSavedItemsStore.getState().remove(id);
-  },
+  remove: async (id: string) =>
+    useSavedItemsStore.getState().remove(id),
 
-  clearTrip: async (tripId: string) => {
-    await useSavedItemsStore.getState().clearTrip(tripId);
-  },
+  clearTrip: async (tripId: string) =>
+    useSavedItemsStore.getState().clearTrip(tripId),
 
-  clearAll: async () => {
-    await useSavedItemsStore.getState().clearAll();
-  },
+  clearAll: async () =>
+    useSavedItemsStore.getState().clearAll(),
 };
 
 export default savedItemsStore;
