@@ -16,6 +16,11 @@ import { deleteAttachmentFile } from "@/src/services/walletAttachments";
 /* Types */
 /* -------------------------------------------------------------------------- */
 
+type ClearOpts = {
+  /** Best-effort delete files in app-owned storage */
+  deleteAttachmentFiles?: boolean;
+};
+
 type SavedItemsState = {
   loaded: boolean;
 
@@ -51,11 +56,18 @@ type SavedItemsState = {
 
   /** Attachments (Phase 1) */
   addAttachment: (itemId: string, att: WalletAttachment) => Promise<void>;
-  removeAttachment: (itemId: string, attachmentId: string) => Promise<void>;
+  removeAttachment: (itemId: string, attachmentId: string, opts?: ClearOpts) => Promise<void>;
 
-  remove: (id: string) => Promise<void>;
-  clearTrip: (tripId: string) => Promise<void>;
-  clearAll: () => Promise<void>;
+  remove: (id: string, opts?: ClearOpts) => Promise<void>;
+  clearTrip: (tripId: string, opts?: ClearOpts) => Promise<void>;
+
+  /**
+   * Remove any items whose tripId is NOT in the provided set.
+   * Use this to keep Wallet empty when there are no trips.
+   */
+  clearOrphans: (validTripIds: string[], opts?: ClearOpts) => Promise<void>;
+
+  clearAll: (opts?: ClearOpts) => Promise<void>;
 };
 
 /* -------------------------------------------------------------------------- */
@@ -198,10 +210,13 @@ function cleanLoadedItem(x: any): SavedItem | null {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Attachment file deletion (best-effort) */
+/* File deletion helpers */
 /* -------------------------------------------------------------------------- */
 
-async function tryDeleteFiles(atts: WalletAttachment[]) {
+async function deleteAllAttachmentsForItem(item: SavedItem) {
+  const atts = Array.isArray(item.attachments) ? item.attachments : [];
+  if (atts.length === 0) return;
+
   for (const a of atts) {
     try {
       await deleteAttachmentFile(a);
@@ -342,7 +357,6 @@ const useSavedItemsStore = create<SavedItemsState>((set, get) => {
         const existing = Array.isArray(x.attachments) ? x.attachments : [];
         // prevent dup ids
         const filtered = existing.filter((a) => a.id !== att.id);
-
         return {
           ...x,
           attachments: [att, ...filtered],
@@ -355,27 +369,22 @@ const useSavedItemsStore = create<SavedItemsState>((set, get) => {
       await persist(sorted);
     },
 
-    removeAttachment: async (itemId, attachmentId) => {
+    removeAttachment: async (itemId, attachmentId, opts) => {
       await ensureLoaded();
 
       const id = String(itemId ?? "").trim();
       const aid = String(attachmentId ?? "").trim();
       if (!id || !aid) return;
 
-      // delete file first (best-effort), then remove metadata
       const cur = get().items.find((x) => x.id === id);
-      const existing = Array.isArray(cur?.attachments) ? (cur!.attachments as WalletAttachment[]) : [];
-      const target = existing.find((a) => a.id === aid);
-      if (target) {
-        await tryDeleteFiles([target]);
-      }
+      const atts = Array.isArray(cur?.attachments) ? cur!.attachments! : [];
+      const toDelete = atts.find((a) => a.id === aid);
 
       const next = get().items.map((x) => {
         if (x.id !== id) return x;
 
-        const ex = Array.isArray(x.attachments) ? x.attachments : [];
-        const kept = ex.filter((a) => a.id !== aid);
-
+        const existing = Array.isArray(x.attachments) ? x.attachments : [];
+        const kept = existing.filter((a) => a.id !== aid);
         return {
           ...x,
           attachments: kept.length ? kept : undefined,
@@ -386,57 +395,79 @@ const useSavedItemsStore = create<SavedItemsState>((set, get) => {
       const sorted = sortItems(next);
       set({ items: sorted, loaded: true });
       await persist(sorted);
+
+      if (opts?.deleteAttachmentFiles && toDelete) {
+        try {
+          await deleteAttachmentFile(toDelete);
+        } catch {
+          // best-effort
+        }
+      }
     },
 
-    remove: async (id) => {
+    remove: async (id, opts) => {
       await ensureLoaded();
-
       const key = String(id ?? "").trim();
       if (!key) return;
 
-      // if removing an item entirely, delete any attachments too
       const cur = get().items.find((x) => x.id === key);
-      const atts = Array.isArray(cur?.attachments) ? (cur!.attachments as WalletAttachment[]) : [];
-      if (atts.length) await tryDeleteFiles(atts);
-
       const next = get().items.filter((x) => x.id !== key);
+
       set({ items: next, loaded: true });
       await persist(next);
+
+      if (opts?.deleteAttachmentFiles && cur) {
+        await deleteAllAttachmentsForItem(cur);
+      }
     },
 
-    clearTrip: async (tripId) => {
+    clearTrip: async (tripId, opts) => {
       await ensureLoaded();
-
       const id = String(tripId ?? "").trim();
       if (!id) return;
 
-      // delete all attachments for items in this trip
-      const tripItems = get().items.filter((x) => x.tripId === id);
-      const allAtts: WalletAttachment[] = [];
-      for (const it of tripItems) {
-        const atts = Array.isArray(it.attachments) ? it.attachments : [];
-        allAtts.push(...atts);
-      }
-      if (allAtts.length) await tryDeleteFiles(allAtts);
-
+      const doomed = get().items.filter((x) => x.tripId === id);
       const next = get().items.filter((x) => x.tripId !== id);
+
       set({ items: next, loaded: true });
       await persist(next);
+
+      if (opts?.deleteAttachmentFiles) {
+        for (const it of doomed) {
+          await deleteAllAttachmentsForItem(it);
+        }
+      }
     },
 
-    clearAll: async () => {
+    clearOrphans: async (validTripIds, opts) => {
       await ensureLoaded();
 
-      // delete everything we can
-      const allAtts: WalletAttachment[] = [];
-      for (const it of get().items) {
-        const atts = Array.isArray(it.attachments) ? it.attachments : [];
-        allAtts.push(...atts);
-      }
-      if (allAtts.length) await tryDeleteFiles(allAtts);
+      const setIds = new Set((validTripIds ?? []).map((x) => String(x).trim()).filter(Boolean));
+      const doomed = get().items.filter((x) => !setIds.has(String(x.tripId)));
+      const next = get().items.filter((x) => setIds.has(String(x.tripId)));
 
+      set({ items: next, loaded: true });
+      await persist(next);
+
+      if (opts?.deleteAttachmentFiles) {
+        for (const it of doomed) {
+          await deleteAllAttachmentsForItem(it);
+        }
+      }
+    },
+
+    clearAll: async (opts) => {
+      await ensureLoaded();
+
+      const doomed = get().items;
       set({ items: [], loaded: true });
       await persist([]);
+
+      if (opts?.deleteAttachmentFiles) {
+        for (const it of doomed) {
+          await deleteAllAttachmentsForItem(it);
+        }
+      }
     },
   };
 });
@@ -478,20 +509,24 @@ const savedItemsStore = {
     await useSavedItemsStore.getState().addAttachment(itemId, att);
   },
 
-  removeAttachment: async (itemId: string, attachmentId: string) => {
-    await useSavedItemsStore.getState().removeAttachment(itemId, attachmentId);
+  removeAttachment: async (itemId: string, attachmentId: string, opts?: ClearOpts) => {
+    await useSavedItemsStore.getState().removeAttachment(itemId, attachmentId, opts);
   },
 
-  remove: async (id: string) => {
-    await useSavedItemsStore.getState().remove(id);
+  remove: async (id: string, opts?: ClearOpts) => {
+    await useSavedItemsStore.getState().remove(id, opts);
   },
 
-  clearTrip: async (tripId: string) => {
-    await useSavedItemsStore.getState().clearTrip(tripId);
+  clearTrip: async (tripId: string, opts?: ClearOpts) => {
+    await useSavedItemsStore.getState().clearTrip(tripId, opts);
   },
 
-  clearAll: async () => {
-    await useSavedItemsStore.getState().clearAll();
+  clearOrphans: async (validTripIds: string[], opts?: ClearOpts) => {
+    await useSavedItemsStore.getState().clearOrphans(validTripIds, opts);
+  },
+
+  clearAll: async (opts?: ClearOpts) => {
+    await useSavedItemsStore.getState().clearAll(opts);
   },
 };
 
