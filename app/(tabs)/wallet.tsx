@@ -23,7 +23,11 @@ import tripsStore, { type Trip } from "@/src/state/trips";
 import savedItemsStore from "@/src/state/savedItems";
 
 import type { SavedItem } from "@/src/core/savedItemTypes";
-import { getSavedItemTypeLabel } from "@/src/core/savedItemTypes";
+import {
+  getSavedItemGroupKey,
+  getSavedItemGroupTitle,
+  groupOrder,
+} from "@/src/core/savedItemTypes";
 import { getPartner } from "@/src/core/partners";
 import { openPartnerUrl } from "@/src/services/partnerClicks";
 
@@ -39,6 +43,19 @@ function groupByTrip(items: SavedItem[]) {
     map.set(it.tripId, arr);
   }
   return map;
+}
+
+function groupByBucket(items: SavedItem[]) {
+  const map = new Map<string, SavedItem[]>();
+  for (const it of items) {
+    const key = getSavedItemGroupKey(it.type);
+    const arr = map.get(key) ?? [];
+    arr.push(it);
+    map.set(key, arr);
+  }
+  const entries = [...map.entries()];
+  entries.sort((a, b) => groupOrder(a[0] as any) - groupOrder(b[0] as any));
+  return entries;
 }
 
 function shortDomain(url?: string) {
@@ -83,7 +100,7 @@ export default function WalletScreen() {
   }, []);
 
   const booked = useMemo(() => items.filter((i) => i.status === "booked"), [items]);
-  const grouped = useMemo(() => groupByTrip(booked), [booked]);
+  const groupedByTrip = useMemo(() => groupByTrip(booked), [booked]);
 
   const tripById = useMemo(() => {
     const map = new Map<string, Trip>();
@@ -139,46 +156,54 @@ export default function WalletScreen() {
 
           {!loading && booked.length > 0 && (
             <>
-              {[...grouped.entries()].map(([tripId, tripItems]) => {
+              {[...groupedByTrip.entries()].map(([tripId, tripItems]) => {
                 const trip = tripById.get(tripId);
                 const title = trip?.cityId || "Trip";
+
+                const bucketEntries = groupByBucket(tripItems);
 
                 return (
                   <View key={tripId} style={styles.section}>
                     <Text style={styles.sectionTitle}>{title}</Text>
 
                     <GlassCard style={styles.card} strength="subtle">
-                      <View style={{ gap: 10 }}>
-                        {tripItems.map((it) => {
-                          const partnerName = it.partnerId ? getPartner(it.partnerId).name : null;
-                          const typeLabel = getSavedItemTypeLabel(it.type);
+                      <View style={{ gap: 14 }}>
+                        {bucketEntries.map(([bucketKey, bucketItems]) => (
+                          <View key={bucketKey} style={{ gap: 10 }}>
+                            <Text style={styles.bucketTitle}>
+                              {getSavedItemGroupTitle(bucketKey as any)}
+                            </Text>
 
-                          return (
-                            <Pressable
-                              key={it.id}
-                              onPress={() => openItem(it)}
-                              style={styles.itemRow}
-                            >
-                              <View style={{ flex: 1 }}>
-                                <Text style={styles.itemTitle} numberOfLines={1}>
-                                  {it.title}
-                                </Text>
+                            {bucketItems.map((it) => {
+                              const partnerName = it.partnerId ? getPartner(it.partnerId).name : null;
 
-                                <Text style={styles.itemMeta} numberOfLines={1}>
-                                  {typeLabel}
-                                  {partnerName ? ` • ${partnerName}` : ""}
-                                  {it.partnerUrl ? ` • ${shortDomain(it.partnerUrl)}` : ""}
-                                </Text>
+                              return (
+                                <Pressable
+                                  key={it.id}
+                                  onPress={() => openItem(it)}
+                                  style={styles.itemRow}
+                                >
+                                  <View style={{ flex: 1 }}>
+                                    <Text style={styles.itemTitle} numberOfLines={1}>
+                                      {it.title}
+                                    </Text>
 
-                                {it.priceText ? (
-                                  <Text style={styles.priceLine}>{it.priceText}</Text>
-                                ) : null}
-                              </View>
+                                    <Text style={styles.itemMeta} numberOfLines={1}>
+                                      {partnerName ? partnerName : "Saved"}
+                                      {it.partnerUrl ? ` • ${shortDomain(it.partnerUrl)}` : ""}
+                                    </Text>
 
-                              <Text style={styles.chev}>›</Text>
-                            </Pressable>
-                          );
-                        })}
+                                    {it.priceText ? (
+                                      <Text style={styles.priceLine}>{it.priceText}</Text>
+                                    ) : null}
+                                  </View>
+
+                                  <Text style={styles.chev}>›</Text>
+                                </Pressable>
+                              );
+                            })}
+                          </View>
+                        ))}
                       </View>
                     </GlassCard>
                   </View>
@@ -229,6 +254,13 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     fontSize: theme.fontSize.md,
     fontWeight: theme.fontWeight.black,
+  },
+
+  bucketTitle: {
+    color: theme.colors.textSecondary,
+    fontWeight: theme.fontWeight.black,
+    fontSize: theme.fontSize.sm,
+    letterSpacing: 0.2,
   },
 
   card: { padding: theme.spacing.lg },
