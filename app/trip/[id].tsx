@@ -24,15 +24,9 @@ import tripsStore, { type Trip } from "@/src/state/trips";
 import savedItemsStore from "@/src/state/savedItems";
 
 import type { SavedItem } from "@/src/core/savedItemTypes";
-import {
-  getSavedItemGroupKey,
-  getSavedItemGroupTitle,
-  groupOrder,
-} from "@/src/core/savedItemTypes";
-
 import type { PartnerId } from "@/src/core/partners";
-import { beginPartnerClick, openPartnerUrl } from "@/src/services/partnerClicks";
 
+import { beginPartnerClick, openPartnerUrl } from "@/src/services/partnerClicks";
 import { getFixtureById } from "@/src/services/apiFootball";
 import { formatUkDateOnly } from "@/src/utils/formatters";
 import { buildAffiliateLinks } from "@/src/services/affiliateLinks";
@@ -64,19 +58,6 @@ function tripStatus(t: Trip): "Draft" | "Upcoming" | "Past" {
 
   if (end.getTime() < today.getTime()) return "Past";
   return "Upcoming";
-}
-
-function groupByBucket(items: SavedItem[]) {
-  const map = new Map<string, SavedItem[]>();
-  for (const it of items) {
-    const key = getSavedItemGroupKey(it.type);
-    const arr = map.get(key) ?? [];
-    arr.push(it);
-    map.set(key, arr);
-  }
-  const entries = [...map.entries()];
-  entries.sort((a, b) => groupOrder(a[0] as any) - groupOrder(b[0] as any));
-  return entries;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -137,7 +118,7 @@ export default function TripDetailScreen() {
     return () => unsub();
   }, [tripId]);
 
-  /* ---------------- load fixtures ---------------- */
+  /* ---------------- load fixtures (for fallback city name) ---------------- */
 
   useEffect(() => {
     let cancelled = false;
@@ -178,7 +159,7 @@ export default function TripDetailScreen() {
     return fixturesById[first]?.fixture?.venue?.city || "Trip";
   }, [trip, fixturesById]);
 
-  const links = useMemo(() => {
+  const bookingLinks = useMemo(() => {
     if (!trip || !cityName || cityName === "Trip") return null;
     return buildAffiliateLinks({
       city: cityName,
@@ -190,10 +171,6 @@ export default function TripDetailScreen() {
   const booked = useMemo(() => savedItems.filter((x) => x.status === "booked"), [savedItems]);
   const pending = useMemo(() => savedItems.filter((x) => x.status === "pending"), [savedItems]);
 
-  const bookedBuckets = useMemo(() => groupByBucket(booked), [booked]);
-
-  const loading = Boolean(tripId) && (!tripsLoaded || !savedLoaded);
-
   /* ---------------- navigation ---------------- */
 
   function onEditTrip() {
@@ -202,7 +179,7 @@ export default function TripDetailScreen() {
   }
 
   /* -------------------------------------------------------------------------- */
-  /* STANDARD OPEN FLOW */
+  /* STANDARD OPEN FLOW (Phase-1 spine) */
   /* -------------------------------------------------------------------------- */
 
   async function openUntracked(url?: string) {
@@ -218,7 +195,6 @@ export default function TripDetailScreen() {
     partnerId: PartnerId;
     url: string;
     title: string;
-    savedItemType?: any;
     metadata?: Record<string, any>;
   }) {
     if (!tripId) {
@@ -240,7 +216,6 @@ export default function TripDetailScreen() {
         partnerId: args.partnerId,
         url: args.url,
         title: args.title,
-        savedItemType: args.savedItemType,
         metadata: args.metadata,
       });
     } catch {
@@ -249,8 +224,8 @@ export default function TripDetailScreen() {
   }
 
   /* -------------------------------------------------------------------------- */
-  /* render */
-  /* -------------------------------------------------------------------------- */
+
+  const loading = Boolean(tripId && (!tripsLoaded || !savedLoaded));
 
   return (
     <Background imageSource={getBackground("trips")} overlayOpacity={0.86}>
@@ -314,7 +289,7 @@ export default function TripDetailScreen() {
               </GlassCard>
 
               {/* BOOK YOUR TRIP */}
-              {links && (
+              {bookingLinks && (
                 <GlassCard style={styles.card}>
                   <Text style={styles.sectionTitle}>Book your trip</Text>
 
@@ -324,14 +299,13 @@ export default function TripDetailScreen() {
                       onPress={() =>
                         openTrackedPartner({
                           partnerId: "expedia",
-                          url: links.hotelsUrl,
-                          title: `Stay: Hotels in ${cityName}`,
-                          savedItemType: "hotel",
+                          url: bookingLinks.hotelsUrl,
+                          title: `Hotels in ${cityName}`,
                           metadata: { city: cityName, startDate: trip.startDate, endDate: trip.endDate },
                         })
                       }
                     >
-                      <Text style={styles.bookBtnText}>Stay</Text>
+                      <Text style={styles.bookBtnText}>Hotels</Text>
                       <Text style={styles.bookBtnSub}>Expedia</Text>
                     </Pressable>
 
@@ -340,9 +314,8 @@ export default function TripDetailScreen() {
                       onPress={() =>
                         openTrackedPartner({
                           partnerId: "aviasales",
-                          url: links.flightsUrl,
+                          url: bookingLinks.flightsUrl,
                           title: `Flights to ${cityName}`,
-                          savedItemType: "flight",
                           metadata: { city: cityName },
                         })
                       }
@@ -356,9 +329,8 @@ export default function TripDetailScreen() {
                       onPress={() =>
                         openTrackedPartner({
                           partnerId: "kiwitaxi",
-                          url: links.transfersUrl,
+                          url: bookingLinks.transfersUrl,
                           title: `Transfers in ${cityName}`,
-                          savedItemType: "transfer",
                           metadata: { city: cityName, startDate: trip.startDate, endDate: trip.endDate },
                         })
                       }
@@ -372,9 +344,8 @@ export default function TripDetailScreen() {
                       onPress={() =>
                         openTrackedPartner({
                           partnerId: "getyourguide",
-                          url: links.experiencesUrl,
+                          url: bookingLinks.experiencesUrl,
                           title: `Experiences in ${cityName}`,
-                          savedItemType: "things",
                           metadata: { city: cityName },
                         })
                       }
@@ -384,16 +355,18 @@ export default function TripDetailScreen() {
                     </Pressable>
                   </View>
 
-                  <Pressable onPress={() => openUntracked(links.mapsUrl)}>
+                  <Pressable onPress={() => openUntracked(bookingLinks.mapsUrl)}>
                     <Text style={styles.mapsInline}>Open maps search</Text>
                   </Pressable>
 
-                  {fxLoading ? <Text style={styles.mutedInline}>Loading match details…</Text> : null}
+                  {fxLoading ? (
+                    <Text style={styles.mutedInline}>Loading match details…</Text>
+                  ) : null}
                 </GlassCard>
               )}
 
               {/* MATCH TICKETS */}
-              {links && (
+              {bookingLinks && (
                 <GlassCard style={styles.card}>
                   <Text style={styles.sectionTitle}>Match tickets</Text>
 
@@ -402,9 +375,8 @@ export default function TripDetailScreen() {
                     onPress={() =>
                       openTrackedPartner({
                         partnerId: "sportsevents365",
-                        url: links.ticketsUrl,
-                        title: `Match tickets for ${cityName}`,
-                        savedItemType: "tickets",
+                        url: bookingLinks.ticketsUrl,
+                        title: `Match tickets`,
                         metadata: { city: cityName },
                       })
                     }
@@ -419,74 +391,67 @@ export default function TripDetailScreen() {
               )}
 
               {/* PROTECT YOURSELF */}
-              {links && (
+              {bookingLinks && (
                 <GlassCard style={styles.card}>
                   <Text style={styles.sectionTitle}>Protect yourself</Text>
 
-                  <View style={{ gap: 10 }}>
-                    <Pressable
-                      style={styles.wideBtn}
-                      onPress={() =>
-                        openTrackedPartner({
-                          partnerId: "safetywing",
-                          url: links.insuranceUrl,
-                          title: `Protect yourself: Travel insurance for ${cityName}`,
-                          savedItemType: "insurance",
-                          metadata: { city: cityName, startDate: trip.startDate, endDate: trip.endDate },
-                        })
-                      }
-                    >
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.wideBtnTitle}>Travel insurance</Text>
-                        <Text style={styles.wideBtnSub}>SafetyWing</Text>
-                      </View>
-                      <Text style={styles.chev}>›</Text>
-                    </Pressable>
-
-                    <Pressable
-                      style={styles.wideBtn}
-                      onPress={() =>
-                        openTrackedPartner({
-                          partnerId: "airhelp",
-                          url: links.claimsUrl,
-                          title: `Protect yourself: Compensation help`,
-                          savedItemType: "claim",
-                          metadata: { city: cityName },
-                        })
-                      }
-                    >
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.wideBtnTitle}>Claims & compensation</Text>
-                        <Text style={styles.wideBtnSub}>AirHelp</Text>
-                      </View>
-                      <Text style={styles.chev}>›</Text>
-                    </Pressable>
-                  </View>
+                  <Pressable
+                    style={styles.wideBtn}
+                    onPress={() =>
+                      openTrackedPartner({
+                        partnerId: "safetywing",
+                        url: bookingLinks.insuranceUrl,
+                        title: `Travel insurance`,
+                        metadata: { city: cityName, startDate: trip.startDate, endDate: trip.endDate },
+                      })
+                    }
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.wideBtnTitle}>Travel insurance</Text>
+                      <Text style={styles.wideBtnSub}>SafetyWing</Text>
+                    </View>
+                    <Text style={styles.chev}>›</Text>
+                  </Pressable>
                 </GlassCard>
               )}
 
-              {/* WALLET SNAPSHOT */}
+              {/* CLAIMS */}
+              {bookingLinks && (
+                <GlassCard style={styles.card}>
+                  <Text style={styles.sectionTitle}>Claims & compensation</Text>
+
+                  <Pressable
+                    style={styles.wideBtn}
+                    onPress={() =>
+                      openTrackedPartner({
+                        partnerId: "airhelp",
+                        url: bookingLinks.claimsUrl,
+                        title: `Check compensation`,
+                        metadata: { city: cityName },
+                      })
+                    }
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.wideBtnTitle}>Check compensation</Text>
+                      <Text style={styles.wideBtnSub}>AirHelp</Text>
+                    </View>
+                    <Text style={styles.chev}>›</Text>
+                  </Pressable>
+                </GlassCard>
+              )}
+
+              {/* WALLET (quick peek) */}
               <GlassCard style={styles.card}>
                 <Text style={styles.sectionTitle}>Wallet</Text>
 
                 {booked.length === 0 ? (
                   <EmptyState title="Nothing booked yet" message="Booked items appear here." />
                 ) : (
-                  <View style={{ gap: 14 }}>
-                    {bookedBuckets.map(([bucketKey, bucketItems]) => (
-                      <View key={bucketKey} style={{ gap: 10 }}>
-                        <Text style={styles.bucketTitle}>
-                          {getSavedItemGroupTitle(bucketKey as any)}
-                        </Text>
-
-                        {bucketItems.map((it) => (
-                          <View key={it.id} style={styles.walletRow}>
-                            <Text style={styles.walletTitle}>{it.title}</Text>
-                          </View>
-                        ))}
-                      </View>
-                    ))}
-                  </View>
+                  booked.map((it) => (
+                    <View key={it.id} style={styles.walletRow}>
+                      <Text style={styles.walletTitle}>{it.title}</Text>
+                    </View>
+                  ))
                 )}
               </GlassCard>
             </>
@@ -579,13 +544,6 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     fontWeight: "900",
     marginBottom: 8,
-  },
-
-  bucketTitle: {
-    color: theme.colors.textSecondary,
-    fontWeight: "900",
-    fontSize: 12,
-    letterSpacing: 0.2,
   },
 
   bookGrid: {
