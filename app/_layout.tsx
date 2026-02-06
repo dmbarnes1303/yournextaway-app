@@ -1,6 +1,6 @@
 // app/_layout.tsx
 import "react-native-reanimated";
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import { StyleSheet } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { Stack } from "expo-router";
@@ -12,13 +12,11 @@ import { theme } from "@/src/constants/theme";
 import BackButton from "@/src/components/BackButton";
 import { ProProvider } from "@/src/context/ProContext";
 
-// Side-effect init (safe in dev; your logger is already web-safe)
 import "@/utils/errorLogger";
 
 import savedItemsStore from "@/src/state/savedItems";
 import { bootstrapPartnerReturnPrompt } from "@/src/services/partnerReturnBootstrap";
 
-// DEV overlay
 import PartnerClicksDebugOverlay from "@/src/components/PartnerClicksDebugOverlay";
 
 SplashScreen.preventAutoHideAsync().catch(() => {
@@ -30,8 +28,12 @@ export default function RootLayout() {
     SpaceMono: require("../assets/fonts/SpaceMono-Regular.ttf"),
   });
 
+  const didInitRef = useRef(false);
+
   useEffect(() => {
     if (!fontsLoaded) return;
+    if (didInitRef.current) return;
+    didInitRef.current = true;
 
     (async () => {
       try {
@@ -45,11 +47,11 @@ export default function RootLayout() {
       } catch {
         // ignore (best-effort)
       }
-    })();
 
-    SplashScreen.hideAsync().catch(() => {
-      // ignore
-    });
+      SplashScreen.hideAsync().catch(() => {
+        // ignore
+      });
+    })();
   }, [fontsLoaded]);
 
   if (!fontsLoaded) return null;
@@ -72,26 +74,22 @@ export default function RootLayout() {
               headerLeft: () => <BackButton fallbackHref="/(tabs)/home" />,
             }}
           >
-            {/* Top-level routes */}
             <Stack.Screen name="index" options={{ headerShown: false }} />
             <Stack.Screen name="landing" options={{ headerShown: false }} />
             <Stack.Screen name="onboarding" options={{ headerShown: false }} />
             <Stack.Screen name="paywall" options={{ headerTitle: "YourNextAway Pro" }} />
 
-            {/* Tabs group */}
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
 
-            {/* Details */}
             <Stack.Screen name="match/[id]" options={{ headerTitle: "Match" }} />
 
-            {/* City routing */}
-            <Stack.Screen name="city/[cityKey]" options={{ headerTitle: "City" }} />
+            {/* City routing: keep ONLY ONE dynamic route in /city */}
             <Stack.Screen name="city/[slug]" options={{ headerTitle: "City" }} />
+            <Stack.Screen name="city/key/[cityKey]" options={{ headerTitle: "City" }} />
 
             <Stack.Screen name="team/[teamKey]" options={{ headerTitle: "Team" }} />
             <Stack.Screen name="stadium/[slug]" options={{ headerTitle: "Stadium" }} />
 
-            {/* Trips */}
             <Stack.Screen name="trip/build" options={{ headerTitle: "Build Trip" }} />
             <Stack.Screen name="trip/[id]" options={{ headerTitle: "Trip Details" }} />
           </Stack>
