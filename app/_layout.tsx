@@ -12,13 +12,11 @@ import { theme } from "@/src/constants/theme";
 import BackButton from "@/src/components/BackButton";
 import { ProProvider } from "@/src/context/ProContext";
 
-// Stores / spine boot
-import tripsStore from "@/src/state/trips";
-import savedItemsStore from "@/src/state/savedItems";
-import { bootstrapPartnerReturnPrompt } from "@/src/services/partnerReturnBootstrap";
-
 // Side-effect init (safe in dev; your logger is already web-safe)
 import "@/utils/errorLogger";
+
+import savedItemsStore from "@/src/state/savedItems";
+import { bootstrapPartnerReturnPrompt } from "@/src/services/partnerReturnBootstrap";
 
 SplashScreen.preventAutoHideAsync().catch(() => {
   // ignore
@@ -30,45 +28,26 @@ export default function RootLayout() {
   });
 
   useEffect(() => {
-    let cancelled = false;
+    if (!fontsLoaded) return;
 
-    async function boot() {
-      if (!fontsLoaded) return;
+    // Boot initialisation (Phase 1 spine)
+    (async () => {
+      try {
+        await savedItemsStore.load();
+      } catch {
+        // ignore (best-effort)
+      }
 
       try {
-        // Load state spine early (offline-first stores)
-        const loads: Promise<any>[] = [];
-
-        if (!tripsStore.getState().loaded) {
-          loads.push(tripsStore.loadTrips());
-        }
-
-        if (!savedItemsStore.getState().loaded) {
-          loads.push(savedItemsStore.load());
-        }
-
-        await Promise.all(loads);
-
-        if (cancelled) return;
-
-        // Phase-1 fallback prompt when returning from partner
         bootstrapPartnerReturnPrompt();
       } catch {
-        // No hard crash at boot; missing persistence should be fixed, not fatal here.
-      } finally {
-        if (!cancelled) {
-          SplashScreen.hideAsync().catch(() => {
-            // ignore
-          });
-        }
+        // ignore (best-effort)
       }
-    }
+    })();
 
-    boot();
-
-    return () => {
-      cancelled = true;
-    };
+    SplashScreen.hideAsync().catch(() => {
+      // ignore
+    });
   }, [fontsLoaded]);
 
   if (!fontsLoaded) return null;
