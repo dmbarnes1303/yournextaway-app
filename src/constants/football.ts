@@ -33,6 +33,14 @@ export const LEAGUES: LeagueOption[] = [
 // Date helpers
 // --------------------
 
+/**
+ * CONTRACT (locked):
+ * - from/to are ISO date-only "YYYY-MM-DD"
+ * - from is clamped to TOMORROW (never includes today/past)
+ * - to is INCLUSIVE (the final date included in the window)
+ * - days means "number of included days" (days=1 => from==to)
+ */
+
 export function toIsoDate(date: Date): string {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, "0");
@@ -84,42 +92,89 @@ export function clampFromIsoToTomorrow(fromIso: string): string {
   return fromDate.getTime() < tmrDate.getTime() ? tmr : fromIso;
 }
 
+function isIsoDateOnly(s?: string): boolean {
+  return !!s && /^\d{4}-\d{2}-\d{2}$/.test(String(s).trim());
+}
+
 /**
  * Normalise a window so it is always valid and never includes past/today:
  * - clamps `from` to tomorrow
- * - ensures `to >= from` (if not, sets `to = from + days`)
+ * - ensures `to >= from` (if not, sets `to = from + (daysIfInvalidTo-1)`)
  */
 export function normalizeWindowIso(
   input: { from: string; to: string },
   daysIfInvalidTo = 90
 ): RollingWindowIso {
-  const from = clampFromIsoToTomorrow(input.from);
+  const from = clampFromIsoToTomorrow(String(input.from ?? "").trim());
 
-  const toDate = parseIsoDateOnly(input.to);
   const fromDate = parseIsoDateOnly(from);
+  const toRaw = String(input.to ?? "").trim();
+  const toDate = parseIsoDateOnly(toRaw);
 
-  if (!toDate || !fromDate) {
-    return { from, to: addDaysIso(from, daysIfInvalidTo) };
+  const safeDays = Math.max(1, Number(daysIfInvalidTo) || 90);
+  const fallbackTo = addDaysIso(from, safeDays - 1);
+
+  if (!fromDate) {
+    // If from itself is unparsable, clampFromIsoToTomorrow already returned tomorrowIso(),
+    // but keep a safe fallback anyway.
+    return { from: tomorrowIso(), to: addDaysIso(tomorrowIso(), safeDays - 1) };
+  }
+
+  if (!isIsoDateOnly(toRaw) || !toDate) {
+    return { from, to: fallbackTo };
   }
 
   if (toDate.getTime() < fromDate.getTime()) {
-    return { from, to: addDaysIso(from, daysIfInvalidTo) };
+    return { from, to: fallbackTo };
   }
 
-  return { from, to: input.to };
+  return { from, to: toRaw };
 }
 
 /**
  * Central fixture date window (rolling).
  * IMPORTANT: Defaults to TOMORROW onwards (excludes past + today).
- * Default is 90 days.
+ * days is inclusive length. Default is 90 days.
  */
 export function getRollingWindowIso(opts?: { days?: number; start?: Date }): RollingWindowIso {
-  const days = opts?.days ?? 90;
+  const days = Math.max(1, Number(opts?.days ?? 90) || 90);
   const start = opts?.start ?? tomorrowLocal();
 
   const from = toIsoDate(start);
-  const to = addDaysIso(from, days);
+  const to = addDaysIso(from, days - 1);
 
   return normalizeWindowIso({ from, to }, days);
+}
+
+/**
+ * Helper: window starting tomorrow for N inclusive days.
+ */
+export function windowFromTomorrowIso(days: number): RollingWindowIso {
+  const safeDays = Math.max(1, Number(days) || 1);
+  const from = tomorrowIso();
+  const to = addDaysIso(from, safeDays - 1);
+  return normalizeWindowIso({ from, to }, safeDays);
+}
+
+/**
+ * Helper: next weekend (Sat–Sun) from tomorrow onwards.
+ * Returns an inclusive window: { from: Saturday, to: Sunday }.
+ */
+export function nextWeekendWindowIso(): RollingWindowIso {
+  const d = tomorrowLocal();
+  const day = d.getDay(); // 0 Sun ... 6 Sat
+  const daysUntilSat = (6 - day + 7) % 7;
+
+  const sat = new Date(d);
+  sat.setHours(0, 0, 0, 0);
+  sat.setDate(sat.getDate() + daysUntilSat);
+
+  const sun = new Date(sat);
+  sun.setHours(0, 0, 0, 0);
+  sun.setDate(sun.getDate() + 1);
+
+  const from = toIsoDate(sat);
+  const to = toIsoDate(sun);
+
+  return normalizeWindowIso({ from, to }, 2);
 }
