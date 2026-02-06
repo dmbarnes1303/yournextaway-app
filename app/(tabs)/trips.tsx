@@ -1,7 +1,14 @@
 // app/(tabs)/trips.tsx
-
 import React, { useEffect, useMemo, useState, useCallback } from "react";
-import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  Pressable,
+  ActivityIndicator,
+  Alert,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 
@@ -90,15 +97,8 @@ export default function TripsScreen() {
 
   const itemsByTrip = useMemo(() => groupItemsByTrip(items), [items]);
 
-  const upcoming = useMemo(
-    () => trips.filter(isUpcoming),
-    [trips]
-  );
-
-  const past = useMemo(
-    () => trips.filter((t) => !isUpcoming(t)),
-    [trips]
-  );
+  const upcoming = useMemo(() => trips.filter(isUpcoming), [trips]);
+  const past = useMemo(() => trips.filter((t) => !isUpcoming(t)), [trips]);
 
   function counts(tripId: string) {
     const arr = itemsByTrip[tripId] ?? [];
@@ -122,29 +122,50 @@ export default function TripsScreen() {
   );
 
   const deleteTrip = useCallback((t: Trip) => {
-    Alert.alert("Delete trip?", "This will remove the trip from this device.", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: async () => tripsStore.removeTrip(t.id) },
-    ]);
-  }, []);
+    const c = counts(t.id);
+
+    Alert.alert(
+      "Delete trip?",
+      `This will permanently delete:\n\n• Trip: ${t.cityId || "Trip"}\n• Wallet items: ${c.total}\n• Attachments stored for this trip\n\nThis cannot be undone.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await tripsStore.deleteTripCascade(t.id);
+            } catch {
+              Alert.alert("Couldn’t delete", "Try again.");
+            }
+          },
+        },
+      ]
+    );
+  }, [itemsByTrip]);
 
   const goBuild = () => router.push("/trip/build");
   const goFixtures = () => router.push("/(tabs)/fixtures");
 
-  const showEmpty = loadedTrips && trips.length === 0;
+  const loading = !loadedTrips || !loadedItems;
+  const showEmpty = !loading && trips.length === 0;
 
   /* -------------------------------- render -------------------------------- */
 
   return (
-    <Background imageUrl={getBackground("trips")} overlayOpacity={0.50}>
+    <Background imageSource={getBackground("trips")} overlayOpacity={0.86}>
       <SafeAreaView style={styles.safe} edges={["top"]}>
-        <ScrollView style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+        >
           <View style={styles.header}>
             <Text style={styles.title}>Trips</Text>
             <Text style={styles.subtitle}>Your travel workspaces</Text>
           </View>
 
-          {!loadedTrips || !loadedItems ? (
+          {loading ? (
             <GlassCard style={styles.card}>
               <View style={styles.center}>
                 <ActivityIndicator />
@@ -167,7 +188,7 @@ export default function TripsScreen() {
             </GlassCard>
           ) : null}
 
-          {upcoming.length > 0 ? (
+          {!loading && upcoming.length > 0 ? (
             <View style={styles.section}>
               <SectionHeader title="Upcoming" subtitle={`${upcoming.length}`} />
               <View style={styles.list}>
@@ -175,7 +196,7 @@ export default function TripsScreen() {
                   const c = counts(t.id);
 
                   return (
-                    <GlassCard key={t.id} style={styles.tripCard}>
+                    <GlassCard key={t.id} style={styles.tripCard} strength="subtle">
                       <Pressable onPress={() => openTrip(t)}>
                         <Text style={styles.tripTitle}>{t.cityId || "Trip"}</Text>
                         <Text style={styles.tripMeta}>{tripSummaryLine(t)}</Text>
@@ -203,7 +224,7 @@ export default function TripsScreen() {
             </View>
           ) : null}
 
-          {past.length > 0 ? (
+          {!loading && past.length > 0 ? (
             <View style={styles.section}>
               <SectionHeader title="Past & draft" subtitle={`${past.length}`} />
               <View style={styles.list}>
@@ -211,7 +232,7 @@ export default function TripsScreen() {
                   const c = counts(t.id);
 
                   return (
-                    <GlassCard key={t.id} style={styles.tripCard}>
+                    <GlassCard key={t.id} style={styles.tripCard} strength="subtle">
                       <Pressable onPress={() => openTrip(t)}>
                         <Text style={styles.tripTitle}>{t.cityId || "Trip"}</Text>
                         <Text style={styles.tripMeta}>{tripSummaryLine(t)}</Text>
@@ -263,11 +284,9 @@ const styles = StyleSheet.create({
   subtitle: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, fontWeight: "700" },
 
   section: { gap: 10 },
-
   list: { gap: 10 },
 
   card: { padding: theme.spacing.lg },
-
   tripCard: { padding: theme.spacing.md },
 
   tripTitle: { color: theme.colors.text, fontSize: theme.fontSize.lg, fontWeight: theme.fontWeight.black },
@@ -277,8 +296,9 @@ const styles = StyleSheet.create({
   count: { color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: "800" },
 
   actions: { marginTop: 12, flexDirection: "row", gap: 10 },
-
   actionBtn: { flex: 1, paddingVertical: 12, borderRadius: 12, alignItems: "center", borderWidth: 1 },
+
+  btn: { paddingVertical: 12, borderRadius: 12, alignItems: "center", borderWidth: 1 },
 
   btnPrimary: { borderColor: "rgba(0,255,136,0.55)", backgroundColor: "rgba(0,0,0,0.34)" },
   btnPrimaryText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.md },
