@@ -20,37 +20,49 @@ function formatUkDateTime(iso?: string | null) {
   });
 }
 
-// Cache channel init (Android) so we don’t repeat work.
-let _channelReady = false;
+// Cache channel init (Android) so we don’t spam setNotificationChannelAsync
+let _channelReady: Promise<void> | null = null;
 
-export async function ensureKickoffChannel() {
+async function ensureKickoffChannel() {
+  if (Platform.OS !== "android") return;
+
+  if (_channelReady) return _channelReady;
+
+  _channelReady = (async () => {
+    try {
+      await Notifications.setNotificationChannelAsync("kickoff", {
+        name: "Kickoff updates",
+        importance: Notifications.AndroidImportance.DEFAULT,
+        sound: "default",
+      });
+    } catch {
+      // ignore
+    }
+  })();
+
+  return _channelReady;
+}
+
+export async function hasKickoffNotificationsPermission(): Promise<boolean> {
   try {
-    if (Platform.OS !== "android") return true;
-    if (_channelReady) return true;
-
-    await Notifications.setNotificationChannelAsync("kickoff", {
-      name: "Kickoff updates",
-      importance: Notifications.AndroidImportance.DEFAULT,
-      sound: "default",
-    });
-
-    _channelReady = true;
-    return true;
+    await ensureKickoffChannel();
+    const perms = await Notifications.getPermissionsAsync();
+    return perms.status === "granted";
   } catch {
     return false;
   }
 }
 
 /**
- * Call this ONLY when user enables kickoff alerts in UI.
- * Returns true if permissions are granted after the call.
+ * Call ONLY on explicit user intent (e.g. toggle ON).
+ * This may show the OS permission prompt.
  */
 export async function requestKickoffNotificationsPermission(): Promise<boolean> {
   try {
     await ensureKickoffChannel();
 
-    const perms = await Notifications.getPermissionsAsync();
-    if (perms.status === "granted") return true;
+    const current = await Notifications.getPermissionsAsync();
+    if (current.status === "granted") return true;
 
     const req = await Notifications.requestPermissionsAsync();
     return req.status === "granted";
@@ -60,20 +72,8 @@ export async function requestKickoffNotificationsPermission(): Promise<boolean> 
 }
 
 /**
- * Soft-check (no prompt). Useful for UI hints / conditional scheduling.
- */
-export async function hasKickoffNotificationsPermission(): Promise<boolean> {
-  try {
-    const perms = await Notifications.getPermissionsAsync();
-    return perms.status === "granted";
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Schedules an immediate local notification.
- * NOTE: This will NOT prompt by itself. If permissions are not granted, it will no-op.
+ * IMPORTANT: This MUST NOT prompt.
+ * It will only schedule if permission is already granted.
  */
 export async function notifyKickoffChanged(args: {
   fixtureId: string;
@@ -83,25 +83,25 @@ export async function notifyKickoffChanged(args: {
   prevKickoffIso?: string | null;
   nextKickoffIso?: string | null;
 }) {
+  const ok = await hasKickoffNotificationsPermission();
+  if (!ok) return;
+
+  const fixtureId = safeStr(args.fixtureId);
+  if (!fixtureId) return;
+
+  const home = safeStr(args.homeName) || "Home";
+  const away = safeStr(args.awayName) || "Away";
+  const league = safeStr(args.leagueName);
+
+  const prevTxt = formatUkDateTime(args.prevKickoffIso ?? null);
+  const nextTxt = formatUkDateTime(args.nextKickoffIso ?? null);
+
+  const title = `Kickoff updated: ${home} vs ${away}`;
+  const body = league
+    ? `${league}\n${prevTxt} → ${nextTxt}\nTap to view.`
+    : `${prevTxt} → ${nextTxt}\nTap to view.`;
+
   try {
-    const fixtureId = safeStr(args.fixtureId);
-    if (!fixtureId) return;
-
-    const okPerms = await hasKickoffNotificationsPermission();
-    if (!okPerms) return;
-
-    await ensureKickoffChannel();
-
-    const home = safeStr(args.homeName) || "Home";
-    const away = safeStr(args.awayName) || "Away";
-    const league = safeStr(args.leagueName);
-
-    const prevTxt = formatUkDateTime(args.prevKickoffIso ?? null);
-    const nextTxt = formatUkDateTime(args.nextKickoffIso ?? null);
-
-    const title = `Kickoff updated: ${home} vs ${away}`;
-    const body = league ? `${league}\n${prevTxt} → ${nextTxt}\nTap to view.` : `${prevTxt} → ${nextTxt}\nTap to view.`;
-
     await Notifications.scheduleNotificationAsync({
       content: {
         title,
@@ -112,6 +112,6 @@ export async function notifyKickoffChanged(args: {
       trigger: null,
     });
   } catch {
-    // never crash
+    // ignore
   }
 }
