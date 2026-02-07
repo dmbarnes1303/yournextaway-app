@@ -1,21 +1,17 @@
 // src/state/followStore.ts
-import { Platform } from "react-native";
 import { create } from "zustand";
 import { persist, createJSONStorage, type StateStorage } from "zustand/middleware";
 
 import storage from "@/src/services/storage";
 
 export type FollowAlertPrefs = {
-  // Core: the one you explicitly care about
-  kickoffConfirmed: boolean; // notify when kickoff date/time becomes confirmed / changes
+  kickoffConfirmed: boolean;
 
-  // Travel signals (future):
   flightPriceDrops: boolean;
   stayPriceDrops: boolean;
   ticketAvailability: boolean;
 
-  // Utility:
-  reminders: boolean; // e.g. 7d / 24h pre-kickoff reminders later
+  reminders: boolean;
 };
 
 export const DEFAULT_FOLLOW_ALERTS: FollowAlertPrefs = {
@@ -28,6 +24,7 @@ export const DEFAULT_FOLLOW_ALERTS: FollowAlertPrefs = {
 
 export type FollowedMatch = {
   fixtureId: string;
+
   leagueId: number;
   season: number;
 
@@ -41,7 +38,7 @@ export type FollowedMatch = {
   alerts: FollowAlertPrefs;
 
   createdAt: string; // ISO
-  lastSeenAt?: string; // ISO (when we last refreshed snapshot from API)
+  lastSeenAt?: string; // ISO
 };
 
 export type FollowSnapshot = {
@@ -54,34 +51,23 @@ export type FollowSnapshot = {
   season?: number;
 };
 
-type FollowState = {
-  // Global defaults (applied when you follow a match)
-  defaultAlerts: FollowAlertPrefs;
+type FollowInput = Omit<FollowedMatch, "createdAt" | "lastSeenAt" | "alerts"> & {
+  alerts?: Partial<FollowAlertPrefs>;
+};
 
+type FollowState = {
+  defaultAlerts: FollowAlertPrefs;
   followed: FollowedMatch[];
 
   isFollowing: (fixtureId: string) => boolean;
 
-  follow: (
-    m: Omit<FollowedMatch, "createdAt" | "lastSeenAt" | "alerts"> & {
-      alerts?: Partial<FollowAlertPrefs>;
-    }
-  ) => void;
-
+  follow: (m: FollowInput) => void;
   unfollow: (fixtureId: string) => void;
-
-  toggle: (
-    m: Omit<FollowedMatch, "createdAt" | "lastSeenAt" | "alerts"> & {
-      alerts?: Partial<FollowAlertPrefs>;
-    }
-  ) => void;
+  toggle: (m: FollowInput) => void;
 
   upsertKickoff: (fixtureId: string, kickoffIso: string | null) => void;
-
-  // Used by Fixtures fetches to keep followed matches fresh.
   upsertLatestSnapshot: (fixtureId: string, patch: FollowSnapshot) => void;
 
-  // Alert preference management
   setDefaultAlerts: (patch: Partial<FollowAlertPrefs>) => void;
   setAlertsForFixture: (fixtureId: string, patch: Partial<FollowAlertPrefs>) => void;
   toggleAlertForFixture: (fixtureId: string, key: keyof FollowAlertPrefs) => void;
@@ -115,13 +101,9 @@ function mergeAlerts(base: FollowAlertPrefs, patch?: Partial<FollowAlertPrefs>):
 
 /**
  * Web-safe persisted storage for Zustand.
- * Uses our best-effort storage wrapper which:
- * - Web: localStorage (fallback mem)
- * - Native: AsyncStorage (fallback mem)
  */
 const followPersistStorage: StateStorage = {
   getItem: async (name) => {
-    // Zustand expects string | null
     const v = await storage.getString(name);
     return v;
   },
@@ -225,7 +207,7 @@ const useFollowStore = create<FollowState>()(
               venue: patch.venue !== undefined ? (patch.venue ?? null) : x.venue,
               city: patch.city !== undefined ? (patch.city ?? null) : x.city,
 
-              // alerts intentionally NOT touched here — user prefs are sacred
+              // user prefs are sacred
               lastSeenAt: nowIso(),
             };
           }),
@@ -268,8 +250,6 @@ const useFollowStore = create<FollowState>()(
       name: "followedMatches",
       version: 3,
       storage: createJSONStorage(() => followPersistStorage),
-
-      // only persist what matters
       partialize: (state) => ({ followed: state.followed, defaultAlerts: state.defaultAlerts }),
 
       migrate: (persistedState) => {
@@ -303,7 +283,6 @@ const useFollowStore = create<FollowState>()(
           };
         });
 
-        // drop any garbage entries with no id
         const cleaned = followed.filter((x) => !!x.fixtureId);
 
         return { followed: cleaned, defaultAlerts };
