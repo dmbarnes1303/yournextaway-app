@@ -1,164 +1,75 @@
 // src/services/followRefresh.ts
-import { AppState, type AppStateStatus, Alert } from "react-native";
+import { AppState, type AppStateStatus } from "react-native";
 
-import { getFixtureById, type FixtureListRow } from "@/src/services/apiFootball";
-import useFollowStore, { type ApplyFixtureUpdateResult, type FollowSnapshot } from "@/src/state/followStore";
-import { kickoffIsoOrNull, isKickoffTbc } from "@/src/utils/kickoffTbc";
+import { refreshFollowedMatches } from "@/src/services/followedMatchesRefresh";
 
 /**
- * Phase 1 follow refresh:
- * - Re-fetch followed fixtures (rate-limit friendly)
- * - Apply snapshot patch via applyFixtureUpdate (gives us diff result)
- * - If kickoff changed and alerts.kickoffConfirmed is enabled, raise an in-app alert
+ * Compatibility wrapper.
  *
- * No push, no background fetch yet. Just correctness on foreground + manual triggers.
+ * Old Phase-1 used:
+ * - getFixtureById
+ * - applyFixtureUpdate
+ * - Alert.alert
+ *
+ * New truth:
+ * - refreshFollowedMatches() diffs kickoffIso vs previous kickoffIso
+ * - if changed and alerts.kickoffConfirmed enabled, it triggers a local notification
+ * - no in-app Alert spam
+ *
+ * Keep this module ONLY so existing imports don’t break.
  */
 
-type RefreshOptions = {
-  concurrency?: number;
-  minMinutesBetweenRefreshes?: number;
-  showInAppAlerts?: boolean;
+export type RefreshOptions = {
+  /** Limits how many followed fixtures we refresh per run (keeps API friendly). */
+  limit?: number;
 };
 
-const DEFAULTS: Required<RefreshOptions> = {
-  concurrency: 4,
-  minMinutesBetweenRefreshes: 10,
-  showInAppAlerts: true,
-};
-
-let _lastRefreshAtMs = 0;
-
-function nowMs() {
-  return Date.now();
+export async function refreshFollowedMatchesCompat(opts?: RefreshOptions) {
+  // Under the hood this:
+  // - reads followed fixtures from followStore
+  // - fetches latest fixture rows (bounded)
+  // - applies applyFixtureUpdate per fixture
+  // - schedules local notifications for kickoff changes (when enabled)
+  return await refreshFollowedMatches({ limit: opts?.limit });
 }
 
-function minutesSince(ms: number) {
-  return (nowMs() - ms) / (1000 * 60);
-}
-
-function normId(id: unknown) {
-  return String(id ?? "").trim();
-}
-
-function safeStr(v: unknown): string | null {
-  const s = String(v ?? "").trim();
-  return s ? s : null;
-}
-
-function toPatchFromRow(row: FixtureListRow): FollowSnapshot {
-  const kickoffIso = kickoffIsoOrNull(row);
-  const kickoffLikelyTbc = isKickoffTbc(row) ? true : false;
-
-  return {
-    kickoffIso,
-    kickoffLikelyTbc,
-
-    venue: safeStr(row?.fixture?.venue?.name),
-    city: safeStr(row?.fixture?.venue?.city),
-
-    leagueId: row?.league?.id ?? undefined,
-    season: (row as any)?.league?.season ?? undefined,
-
-    homeTeamId: row?.teams?.home?.id ?? undefined,
-    awayTeamId: row?.teams?.away?.id ?? undefined,
-
-    homeName: safeStr(row?.teams?.home?.name),
-    awayName: safeStr(row?.teams?.away?.name),
-    leagueName: safeStr(row?.league?.name),
-
-    round: safeStr(row?.league?.round),
-  };
-}
-
-async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
-  const results: R[] = new Array(items.length) as any;
-  let i = 0;
-
-  async function worker() {
-    while (i < items.length) {
-      const idx = i++;
-      results[idx] = await fn(items[idx]);
-    }
-  }
-
-  const n = Math.max(1, Math.min(limit, items.length));
-  await Promise.all(Array.from({ length: n }).map(worker));
-  return results;
-}
-
-function describeChange(res: ApplyFixtureUpdateResult, meta?: { title?: string }) {
-  const prev = res.prevKickoffIso ? new Date(res.prevKickoffIso).toLocaleString("en-GB") : "TBC";
-  const next = res.nextKickoffIso ? new Date(res.nextKickoffIso).toLocaleString("en-GB") : "TBC";
-  const t = meta?.title ? `${meta.title}` : `Match #${res.fixtureId}`;
-  return { title: "Kickoff updated", message: `${t}\n${prev} → ${next}` };
-}
-
-function shouldThrottle(minMinutesBetweenRefreshes: number) {
-  if (_lastRefreshAtMs === 0) return false;
-  return minutesSince(_lastRefreshAtMs) < minMinutesBetweenRefreshes;
-}
-
+/**
+ * Backwards-compatible name (older code imports refreshFollowedMatches from here).
+ * Prefer importing directly from "@/src/services/followedMatchesRefresh" going forward.
+ */
 export async function refreshFollowedMatches(opts?: RefreshOptions) {
-  const o = { ...DEFAULTS, ...(opts ?? {}) };
-
-  if (shouldThrottle(o.minMinutesBetweenRefreshes)) {
-    return { refreshed: 0, changed: 0, results: [] as ApplyFixtureUpdateResult[] };
-  }
-
-  const { followed, applyFixtureUpdate } = useFollowStore.getState();
-  const ids = followed.map((m) => normId(m.fixtureId)).filter(Boolean);
-
-  if (ids.length === 0) {
-    _lastRefreshAtMs = nowMs();
-    return { refreshed: 0, changed: 0, results: [] as ApplyFixtureUpdateResult[] };
-  }
-
-  const results = await mapLimit(ids, o.concurrency, async (fixtureId) => {
-    try {
-      const row = await getFixtureById(fixtureId);
-      if (!row) return null;
-
-      const patch = toPatchFromRow(row);
-      const res = applyFixtureUpdate(fixtureId, patch);
-      return res ?? null;
-    } catch {
-      return null;
-    }
-  });
-
-  _lastRefreshAtMs = nowMs();
-
-  const applied = results.filter(Boolean) as ApplyFixtureUpdateResult[];
-  const changed = applied.filter((r) => r.existed && r.kickoffChanged);
-
-  if (o.showInAppAlerts) {
-    for (const r of changed) {
-      if (!r.shouldNotifyKickoff) continue;
-      const m = useFollowStore.getState().followed.find((x) => x.fixtureId === r.fixtureId);
-      const title = m?.homeName && m?.awayName ? `${m.homeName} vs ${m.awayName}` : undefined;
-      const msg = describeChange(r, { title });
-      Alert.alert(msg.title, msg.message);
-    }
-  }
-
-  return { refreshed: applied.length, changed: changed.length, results: applied };
+  return await refreshFollowedMatchesCompat(opts);
 }
 
+/**
+ * Backwards-compatible auto refresh helper.
+ *
+ * NOTE:
+ * Your app/_layout.tsx already owns the real refresh orchestration.
+ * Keep this only if something else still calls it.
+ */
 export function startFollowAutoRefresh(opts?: RefreshOptions & { intervalMinutes?: number }) {
   const intervalMinutes = Math.max(0, Number(opts?.intervalMinutes ?? 0));
-  let timer: any = null;
+
+  let timer: ReturnType<typeof setInterval> | null = null;
   let lastState: AppStateStatus = AppState.currentState;
+
+  const run = () => {
+    refreshFollowedMatchesCompat({ limit: opts?.limit }).catch(() => null);
+  };
 
   const onState = (next: AppStateStatus) => {
     const wasBg = lastState !== "active";
     lastState = next;
 
     if (next === "active" && wasBg) {
-      refreshFollowedMatches(opts).catch(() => null);
+      run();
+
       if (intervalMinutes > 0) {
         if (timer) clearInterval(timer);
-        timer = setInterval(() => refreshFollowedMatches(opts).catch(() => null), intervalMinutes * 60 * 1000);
+        timer = setInterval(run, intervalMinutes * 60 * 1000);
       }
+      return;
     }
 
     if (next !== "active") {
@@ -170,9 +81,9 @@ export function startFollowAutoRefresh(opts?: RefreshOptions & { intervalMinutes
   const sub = AppState.addEventListener("change", onState);
 
   if (AppState.currentState === "active") {
-    refreshFollowedMatches(opts).catch(() => null);
+    run();
     if (intervalMinutes > 0) {
-      timer = setInterval(() => refreshFollowedMatches(opts).catch(() => null), intervalMinutes * 60 * 1000);
+      timer = setInterval(run, intervalMinutes * 60 * 1000);
     }
   }
 
