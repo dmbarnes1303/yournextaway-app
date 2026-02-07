@@ -96,13 +96,12 @@ export type FixtureListRow = {
 };
 
 // --------------------
-// In-memory caching (V1 critical stability fix)
-// - dedupes concurrent calls
-// - TTL reduces repeated calls across screens
+// In-memory caching
 // --------------------
 
 const FIXTURES_TTL_MS = 10 * 60 * 1000; // 10 minutes
 const FIXTURE_BY_ID_TTL_MS = 30 * 60 * 1000; // 30 minutes
+const FIXTURES_BY_ROUND_TTL_MS = 30 * 60 * 1000; // 30 minutes (round lists are stable-ish)
 
 type CacheEntry<T> = {
   ts: number;
@@ -112,6 +111,7 @@ type CacheEntry<T> = {
 
 const fixturesCache = new Map<string, CacheEntry<FixtureListRow[]>>();
 const fixtureByIdCache = new Map<string, CacheEntry<FixtureListRow | null>>();
+const fixturesByRoundCache = new Map<string, CacheEntry<FixtureListRow[]>>();
 
 function now() {
   return Date.now();
@@ -127,6 +127,10 @@ function fixturesKey(params: { league: number; season: number; from: string; to:
 
 function fixtureIdKey(id: string | number) {
   return `fixture:${String(id)}`;
+}
+
+function fixturesByRoundKey(params: { league: number; season: number; round: string }) {
+  return `fixturesRound:${params.league}:${params.season}:${params.round}`;
 }
 
 export async function getFixtures(params: {
@@ -196,7 +200,50 @@ export async function getFixtureById(fixtureId: string | number): Promise<Fixtur
   return inflight;
 }
 
+/**
+ * Fetch all fixtures for a given league/season/round.
+ * This is the key to “Likely TBC” clustering on the Match screen.
+ */
+export async function getFixturesByRound(params: {
+  league: number;
+  season: number;
+  round: string;
+}): Promise<FixtureListRow[]> {
+  const round = String(params.round ?? "").trim();
+  if (!round) return [];
+
+  const key = fixturesByRoundKey({ league: params.league, season: params.season, round });
+  const existing = fixturesByRoundCache.get(key);
+
+  if (existing?.value && isFresh(existing.ts, FIXTURES_BY_ROUND_TTL_MS)) {
+    return existing.value;
+  }
+
+  if (existing?.inflight) return existing.inflight;
+
+  const qs = enc({
+    league: params.league,
+    season: params.season,
+    round,
+  });
+
+  const inflight = apiGet<FixtureListRow[]>(`/fixtures${qs}`)
+    .then((rows) => (Array.isArray(rows) ? rows : []))
+    .then((rows) => {
+      fixturesByRoundCache.set(key, { ts: now(), value: rows });
+      return rows;
+    })
+    .catch((err) => {
+      fixturesByRoundCache.delete(key);
+      throw err;
+    });
+
+  fixturesByRoundCache.set(key, { ts: now(), inflight });
+  return inflight;
+}
+
 export function __clearApiFootballCache() {
   fixturesCache.clear();
   fixtureByIdCache.clear();
+  fixturesByRoundCache.clear();
 }
