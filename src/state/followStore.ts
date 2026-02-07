@@ -5,12 +5,10 @@ import { persist, createJSONStorage, type StateStorage } from "zustand/middlewar
 import storage from "@/src/services/storage";
 
 export type FollowAlertPrefs = {
-  kickoffConfirmed: boolean;
-
+  kickoffConfirmed: boolean; // notify when kickoff date/time becomes confirmed / changes
   flightPriceDrops: boolean;
   stayPriceDrops: boolean;
   ticketAvailability: boolean;
-
   reminders: boolean;
 };
 
@@ -31,6 +29,11 @@ export type FollowedMatch = {
   homeTeamId: number;
   awayTeamId: number;
 
+  // HUMAN LABELS (critical for "Following" list UX)
+  homeName: string | null;
+  awayName: string | null;
+  leagueName: string | null;
+
   kickoffIso: string | null; // null = TBC / unknown
   venue: string | null;
   city: string | null;
@@ -45,14 +48,16 @@ export type FollowSnapshot = {
   kickoffIso?: string | null;
   venue?: string | null;
   city?: string | null;
+
   homeTeamId?: number;
   awayTeamId?: number;
   leagueId?: number;
   season?: number;
-};
 
-type FollowInput = Omit<FollowedMatch, "createdAt" | "lastSeenAt" | "alerts"> & {
-  alerts?: Partial<FollowAlertPrefs>;
+  // NEW (optional snapshot label refresh)
+  homeName?: string | null;
+  awayName?: string | null;
+  leagueName?: string | null;
 };
 
 type FollowState = {
@@ -61,9 +66,19 @@ type FollowState = {
 
   isFollowing: (fixtureId: string) => boolean;
 
-  follow: (m: FollowInput) => void;
+  follow: (
+    m: Omit<FollowedMatch, "createdAt" | "lastSeenAt" | "alerts"> & {
+      alerts?: Partial<FollowAlertPrefs>;
+    }
+  ) => void;
+
   unfollow: (fixtureId: string) => void;
-  toggle: (m: FollowInput) => void;
+
+  toggle: (
+    m: Omit<FollowedMatch, "createdAt" | "lastSeenAt" | "alerts"> & {
+      alerts?: Partial<FollowAlertPrefs>;
+    }
+  ) => void;
 
   upsertKickoff: (fixtureId: string, kickoffIso: string | null) => void;
   upsertLatestSnapshot: (fixtureId: string, patch: FollowSnapshot) => void;
@@ -77,6 +92,11 @@ type FollowState = {
 
 function normalizeId(id: unknown) {
   return String(id ?? "").trim();
+}
+
+function cleanName(v: unknown): string | null {
+  const s = String(v ?? "").trim();
+  return s ? s : null;
 }
 
 function nowIso() {
@@ -101,6 +121,9 @@ function mergeAlerts(base: FollowAlertPrefs, patch?: Partial<FollowAlertPrefs>):
 
 /**
  * Web-safe persisted storage for Zustand.
+ * Uses our best-effort storage wrapper:
+ * - Web: localStorage (fallback mem)
+ * - Native: AsyncStorage (fallback mem)
  */
 const followPersistStorage: StateStorage = {
   getItem: async (name) => {
@@ -143,6 +166,10 @@ const useFollowStore = create<FollowState>()(
 
             homeTeamId: clampNum(m.homeTeamId),
             awayTeamId: clampNum(m.awayTeamId),
+
+            homeName: cleanName(m.homeName),
+            awayName: cleanName(m.awayName),
+            leagueName: cleanName(m.leagueName),
 
             kickoffIso: m.kickoffIso ?? null,
             venue: m.venue ?? null,
@@ -203,11 +230,16 @@ const useFollowStore = create<FollowState>()(
               homeTeamId: patch.homeTeamId != null ? clampNum(patch.homeTeamId, x.homeTeamId) : x.homeTeamId,
               awayTeamId: patch.awayTeamId != null ? clampNum(patch.awayTeamId, x.awayTeamId) : x.awayTeamId,
 
+              // Names: only overwrite if patch explicitly provides (including null)
+              homeName: patch.homeName !== undefined ? (cleanName(patch.homeName) ?? null) : x.homeName,
+              awayName: patch.awayName !== undefined ? (cleanName(patch.awayName) ?? null) : x.awayName,
+              leagueName: patch.leagueName !== undefined ? (cleanName(patch.leagueName) ?? null) : x.leagueName,
+
               kickoffIso: patch.kickoffIso !== undefined ? (patch.kickoffIso ?? null) : x.kickoffIso,
               venue: patch.venue !== undefined ? (patch.venue ?? null) : x.venue,
               city: patch.city !== undefined ? (patch.city ?? null) : x.city,
 
-              // user prefs are sacred
+              // alerts NEVER touched here
               lastSeenAt: nowIso(),
             };
           }),
@@ -248,8 +280,9 @@ const useFollowStore = create<FollowState>()(
     }),
     {
       name: "followedMatches",
-      version: 3,
+      version: 4, // bump version due to new fields
       storage: createJSONStorage(() => followPersistStorage),
+
       partialize: (state) => ({ followed: state.followed, defaultAlerts: state.defaultAlerts }),
 
       migrate: (persistedState) => {
@@ -266,11 +299,17 @@ const useFollowStore = create<FollowState>()(
 
           return {
             fixtureId: normalizeId(x?.fixtureId),
+
             leagueId: clampNum(x?.leagueId),
             season: clampNum(x?.season),
 
             homeTeamId: clampNum(x?.homeTeamId),
             awayTeamId: clampNum(x?.awayTeamId),
+
+            // NEW: handle old persisted data without names
+            homeName: cleanName(x?.homeName),
+            awayName: cleanName(x?.awayName),
+            leagueName: cleanName(x?.leagueName),
 
             kickoffIso: x?.kickoffIso ?? null,
             venue: x?.venue ?? null,
@@ -284,7 +323,6 @@ const useFollowStore = create<FollowState>()(
         });
 
         const cleaned = followed.filter((x) => !!x.fixtureId);
-
         return { followed: cleaned, defaultAlerts };
       },
     }
