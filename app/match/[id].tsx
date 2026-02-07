@@ -175,7 +175,7 @@ export default function MatchDetailScreen() {
   const [error, setError] = useState<string | null>(null);
   const [row, setRow] = useState<FixtureListRow | null>(null);
 
-  // Round clustering (for “Likely TBC”)
+  // Round clustering (for “likely placeholder”)
   const [placeholderIds, setPlaceholderIds] = useState<Set<string> | null>(null);
   const [clusterLoading, setClusterLoading] = useState(false);
 
@@ -289,7 +289,7 @@ export default function MatchDetailScreen() {
         setPlaceholderIds(computeLikelyPlaceholderTbcIds(roundRows));
       } catch {
         if (cancelled) return;
-        // If we can’t compute, fail “open” (don’t label as Likely TBC)
+        // If we can’t compute, fail “open” (don’t label as likely placeholder)
         setPlaceholderIds(new Set());
       } finally {
         if (!cancelled) setClusterLoading(false);
@@ -327,13 +327,14 @@ export default function MatchDetailScreen() {
     return isKickoffTbc(row, placeholderIds ?? undefined);
   }, [row, placeholderIds]);
 
-  const tbcSecondary = useMemo(() => {
+  // Make copy deterministic (no “likely” in primary label)
+  const kickoffSecondary = useMemo(() => {
     if (!row) return null;
     const iso = kickoffIsoOrNull(row);
     if (!iso) return "Kickoff time not set yet";
     const daysAway = daysUntilIso(iso);
     if (daysAway <= CONFIRMED_WITHIN_DAYS) return null;
-    return tbc ? "Likely placeholder (TV schedule not confirmed)" : null;
+    return tbc ? "TV schedule pending" : null;
   }, [row, tbc]);
 
   const ticketsUrl = useMemo(
@@ -348,10 +349,11 @@ export default function MatchDetailScreen() {
   const ticketsSub = useMemo(() => {
     if (home && away) {
       const when = kickoffDateOnly ? ` • ${kickoffDateOnly}` : "";
-      return `${home} vs ${away}${when}`;
+      const base = `${home} vs ${away}${when}`;
+      return tbc ? `${base} • Prices may change once kickoff is confirmed` : base;
     }
-    return "Open ticket search";
-  }, [home, away, kickoffDateOnly]);
+    return tbc ? "Ticket availability may change once kickoff is confirmed" : "Open ticket search";
+  }, [home, away, kickoffDateOnly, tbc]);
 
   const directionsSub = useMemo(() => {
     const v = subtitleOrFallback(venue, "Search stadium location");
@@ -388,7 +390,11 @@ export default function MatchDetailScreen() {
 
   const onShare = useCallback(async () => {
     const title = `${home} vs ${away}`;
-    const when = tbc ? "Kickoff: likely placeholder" : kickoffDisplay ? `Kickoff: ${kickoffDisplay}` : "Kickoff: —";
+    const when = tbc
+      ? `Kickoff: TBC${kickoffDisplay ? ` (${kickoffDisplay})` : ""}`
+      : kickoffDisplay
+      ? `Kickoff: ${kickoffDisplay}`
+      : "Kickoff: —";
     const where = place ? `Venue: ${place}` : "Venue: —";
     const meta = `League: ${leagueName} • Season: ${String(effectiveSeason)}`;
 
@@ -453,7 +459,7 @@ export default function MatchDetailScreen() {
       return;
     }
 
-    const line1 = tbc ? "We’ll alert you when kickoff is confirmed." : "We’ll alert you if kickoff changes.";
+    const line1 = tbc ? "We’ll alert you when kickoff is confirmed or changes." : "We’ll alert you if kickoff changes.";
     const line2 = user
       ? "Sync + notifications can be added next."
       : "Sign in later to sync across devices and enable email/push alerts.";
@@ -522,7 +528,11 @@ export default function MatchDetailScreen() {
                 <View style={styles.topRow}>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.kicker}>{leagueName}</Text>
-                    {round ? <Text style={styles.roundLine} numberOfLines={1}>{round}</Text> : null}
+                    {round ? (
+                      <Text style={styles.roundLine} numberOfLines={1}>
+                        {round}
+                      </Text>
+                    ) : null}
                   </View>
 
                   <Pressable onPress={onToggleFollow} style={[styles.watchPill, followed && styles.watchPillActive]}>
@@ -536,14 +546,32 @@ export default function MatchDetailScreen() {
                   {home} vs {away}
                 </Text>
 
+                {/* Explicit kickoff status chips */}
+                <View style={styles.chipRow}>
+                  {tbc ? (
+                    <>
+                      <View style={[styles.chip, styles.chipTbc]}>
+                        <Text style={[styles.chipText, styles.chipTextTbc]}>Kickoff TBC</Text>
+                      </View>
+                      <View style={styles.chip}>
+                        <Text style={styles.chipText}>TV schedule pending</Text>
+                      </View>
+                    </>
+                  ) : (
+                    <View style={[styles.chip, styles.chipConfirmed]}>
+                      <Text style={[styles.chipText, styles.chipTextConfirmed]}>Kickoff confirmed</Text>
+                    </View>
+                  )}
+                </View>
+
                 <View style={styles.metaBlock}>
                   <Text style={styles.metaLine}>
                     <Text style={styles.metaLabel}>Kickoff: </Text>
-                    {tbc ? (kickoffDisplay || "—") : kickoffDisplay || "—"}
+                    {kickoffDisplay || "—"}
                   </Text>
 
-                  {tbcSecondary ? (
-                    <Text style={styles.metaSecondary}>{tbcSecondary}</Text>
+                  {kickoffSecondary ? (
+                    <Text style={styles.metaSecondary}>{kickoffSecondary}</Text>
                   ) : clusterLoading ? (
                     <Text style={styles.metaSecondary}>Checking schedule…</Text>
                   ) : null}
@@ -563,7 +591,7 @@ export default function MatchDetailScreen() {
                   <View style={styles.followInfo}>
                     <Text style={styles.followInfoTitle}>Following</Text>
                     <Text style={styles.followInfoBody}>
-                      {tbc ? "We’ll notify you when kickoff time is confirmed." : "We’ll notify you if kickoff time changes."}
+                      {tbc ? "We’ll notify you when kickoff is confirmed or changes." : "We’ll notify you if kickoff changes."}
                     </Text>
                   </View>
                 ) : null}
@@ -733,6 +761,22 @@ const styles = StyleSheet.create({
   },
   watchPillText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: 12 },
   watchPillTextActive: { color: "rgba(79,224,138,0.92)" },
+
+  // NEW: kickoff chips
+  chipRow: { marginTop: 10, flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  chip: {
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+  },
+  chipText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: 12 },
+  chipTbc: { borderColor: "rgba(255,200,0,0.22)", backgroundColor: "rgba(255,200,0,0.06)" },
+  chipTextTbc: { color: "rgba(255,220,140,0.92)" },
+  chipConfirmed: { borderColor: "rgba(0,255,136,0.28)", backgroundColor: "rgba(0,255,136,0.08)" },
+  chipTextConfirmed: { color: "rgba(79,224,138,0.92)" },
 
   metaBlock: { marginTop: 12, gap: 6 },
   metaLine: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18, fontWeight: "700" },
