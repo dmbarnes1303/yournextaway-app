@@ -8,20 +8,26 @@ import type { SavedItem, SavedItemType } from "@/src/core/savedItemTypes";
 import { getSavedItemTypeLabel } from "@/src/core/savedItemTypes";
 
 /**
- * Phase 1 return detection (Option B):
- * - beginPartnerClick creates a pending item, stores lastClick
- * - prompt on return (AppState OR browser dismiss)
+ * Phase 1 partner return detection:
+ * - A *tracked* open sets/keeps a SavedItem in "pending" and stores lastClick
+ * - On return (AppState active OR browser dismiss), UI can prompt:
+ *   YES  -> booked
+ *   NO   -> saved
+ *   NOT NOW -> keep pending
  *
- * Option B semantics:
- * - YES  => pending -> booked
- * - NO   => pending -> saved
- * - NOT NOW => keep pending (but stop immediate re-prompt)
- *
- * HARDENING:
+ * Hardening:
  * - global opening guard
- * - rollback pending item if opening fails
- * - avoid zombie prompts (age limit)
- * - avoid "instant dismiss" pending rot by auto-demoting pending->saved
+ * - rollback if open fails (only if we created a new pending item)
+ * - avoid stale zombie prompts (age limit)
+ * - avoid instant-dismiss rot: if browser was open too briefly, don't prompt;
+ *   instead auto-demote pending -> saved.
+ *
+ * De-duplication (important):
+ * - If an existing item already represents this same partner URL for this trip,
+ *   we REUSE it (prefer pending > saved > booked) instead of creating duplicates.
+ * - If reused item is "saved", we promote to "pending" before opening so the
+ *   return prompt remains valid.
+ * - If reused item is "booked", we do NOT promote or prompt; we just open untracked.
  */
 
 export type LastPartnerClick = {
@@ -79,6 +85,23 @@ async function tryTransitionPendingToSaved(itemId: string) {
 
   try {
     await savedItemsStore.transitionStatus(id, "saved");
+  } catch {
+    // ignore
+  }
+}
+
+async function tryTransitionSavedToPending(itemId: string) {
+  const id = String(itemId ?? "").trim();
+  if (!id) return;
+
+  await ensureSavedItemsLoaded();
+  const cur = savedItemsStore.getState().items.find((x) => x.id === id);
+  if (!cur) return;
+
+  if (cur.status !== "saved") return;
+
+  try {
+    await savedItemsStore.transitionStatus(id, "pending");
   } catch {
     // ignore
   }
@@ -229,7 +252,7 @@ function buildDefaultTitle(args: {
     case "insurance":
       return city ? `Protect yourself: Travel insurance for ${city}` : `Protect yourself: Travel insurance`;
     case "claim":
-      return `Protect yourself: Compensation help`;
+      return `Claims & compensation: Compensation help`;
     case "note":
     case "other":
       return "Notes";
@@ -239,10 +262,50 @@ function buildDefaultTitle(args: {
 }
 
 /**
+ * Reuse policy:
+ * - Match by tripId + partnerId + partnerUrl (normalized) + type
+ * - Prefer pending (already tracked) > saved (promote to pending) > booked (open untracked)
+ */
+function findReusableItem(args: {
+  tripId: string;
+  partnerId: PartnerId;
+  url: string;
+  type: SavedItemType;
+}): SavedItem | null {
+  const tripId = String(args.tripId ?? "").trim();
+  const url = normalizeUrl(args.url);
+  if (!tripId || !url) return null;
+
+  const items = savedItemsStore.getState().items;
+
+  const matches = items.filter((x) => {
+    if (String(x.tripId) !== tripId) return false;
+    if (String(x.partnerId ?? "") !== String(args.partnerId)) return false;
+    if (normalizeUrl(String(x.partnerUrl ?? "")) !== url) return false;
+    if (String(x.type) !== String(args.type)) return false;
+    return true;
+  });
+
+  if (matches.length === 0) return null;
+
+  const pending = matches.find((m) => m.status === "pending");
+  if (pending) return pending;
+
+  const saved = matches.find((m) => m.status === "saved");
+  if (saved) return saved;
+
+  const booked = matches.find((m) => m.status === "booked");
+  if (booked) return booked;
+
+  // archived (ignore for reuse here)
+  return null;
+}
+
+/**
  * Public: tracked partner click
- * - creates pending SavedItem
- * - opens partner
- * - stores lastClick so return prompt can happen
+ * - reuses existing item when possible (prevents duplicates)
+ * - ensures item is pending before open if we intend to prompt on return
+ * - stores lastClick only when return prompting is relevant
  */
 export async function beginPartnerClick(args: {
   tripId: string;
@@ -255,6 +318,9 @@ export async function beginPartnerClick(args: {
   if (opening) throw new Error("Partner open already in progress");
   opening = true;
 
+  let createdNew = false;
+  let item: SavedItem | null = null;
+
   try {
     const tripId = String(args.tripId ?? "").trim();
     if (!tripId) throw new Error("tripId is required");
@@ -264,41 +330,71 @@ export async function beginPartnerClick(args: {
     const url = normalizeUrl(args.url);
     if (!url) throw new Error("url is required");
 
-    if (!savedItemsStore.getState().loaded) {
-      await savedItemsStore.load();
-    }
+    await ensureSavedItemsLoaded();
 
     const type = (args.savedItemType ?? partner.defaultSavedItemType) as SavedItemType;
 
-    const title =
-      String(args.title ?? "").trim() ||
-      buildDefaultTitle({
-        partnerId: partner.id,
-        partnerName: partner.name,
+    // 1) Reuse if possible
+    const reusable = findReusableItem({ tripId, partnerId: partner.id, url, type });
+
+    if (reusable) {
+      item = reusable;
+
+      // If it's booked, don't re-track / re-prompt.
+      if (item.status === "booked") {
+        await openUntrackedUrl(url);
+        return item;
+      }
+
+      // If it's saved, promote to pending so the return prompt makes sense.
+      if (item.status === "saved") {
+        await tryTransitionSavedToPending(item.id);
+        // refresh from store (title/status might have changed)
+        item = savedItemsStore.getState().items.find((x) => x.id === item!.id) ?? item;
+      }
+    }
+
+    // 2) If no reusable item, create a new pending one
+    if (!item) {
+      const title =
+        String(args.title ?? "").trim() ||
+        buildDefaultTitle({
+          partnerId: partner.id,
+          partnerName: partner.name,
+          type,
+          metadata: args.metadata,
+        });
+
+      item = await savedItemsStore.add({
+        tripId,
         type,
+        status: "pending",
+        title,
+        partnerId: partner.id,
+        partnerUrl: url,
         metadata: args.metadata,
       });
 
-    const item = await savedItemsStore.add({
-      tripId,
-      type,
-      status: "pending",
-      title,
-      partnerId: partner.id,
-      partnerUrl: url,
-      metadata: args.metadata,
-    });
+      createdNew = true;
+    }
 
+    // 3) Track lastClick for return prompt (pending only)
     const openedAt = now();
-    lastClick = {
-      itemId: item.id,
-      tripId,
-      partnerId: partner.id,
-      url,
-      createdAt: openedAt,
-      openedAt,
-    };
+    if (item.status === "pending") {
+      lastClick = {
+        itemId: item.id,
+        tripId,
+        partnerId: partner.id,
+        url,
+        createdAt: openedAt,
+        openedAt,
+      };
+    } else {
+      // if something drifted, don't keep a stale click
+      lastClick = null;
+    }
 
+    // 4) Open partner
     try {
       const res = await openUrlInternal(url);
 
@@ -311,13 +407,16 @@ export async function beginPartnerClick(args: {
         await triggerReturnIfPresent("browser_dismiss", { openDurationMs });
       }
     } catch (e) {
-      // Rollback pending item if opening fails
-      try {
-        await savedItemsStore.remove(item.id);
-      } catch {
-        // ignore
+      // Only rollback if we created a brand new item for this click.
+      if (createdNew && item) {
+        try {
+          await savedItemsStore.remove(item.id);
+        } catch {
+          // ignore
+        }
       }
-      if (lastClick?.itemId === item.id) lastClick = null;
+
+      if (lastClick?.itemId === item?.id) lastClick = null;
       throw e;
     }
 
@@ -327,7 +426,7 @@ export async function beginPartnerClick(args: {
   }
 }
 
-/** YES flow */
+/** YES flow (pending -> booked) */
 export async function markBooked(itemId: string) {
   const id = String(itemId ?? "").trim();
   if (!id) return;
@@ -337,7 +436,7 @@ export async function markBooked(itemId: string) {
   if (lastClick?.itemId === id) lastClick = null;
 }
 
-/** NO flow (Option B): pending -> saved */
+/** NO flow (pending -> saved) */
 export async function markNotBooked(itemId: string) {
   const id = String(itemId ?? "").trim();
   if (!id) return;
