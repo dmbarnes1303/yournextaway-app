@@ -24,7 +24,7 @@ import storage from "@/src/services/storage";
 
 import useFollowStore, { type FollowedMatch } from "@/src/state/followStore";
 import { refreshFollowedMatches } from "@/src/services/followRefresh";
-import { requestKickoffNotificationsPermission } from "@/src/services/followKickoffNotifications";
+import { ensureNotificationsReady } from "@/src/services/followKickoffNotifications";
 
 /* -------------------------------------------------------------------------- */
 /* Row UI */
@@ -147,7 +147,7 @@ function normalizeStr(v: unknown) {
 }
 
 /**
- * Heuristic TBC detection for FOLLOWED matches (no API status available here):
+ * Heuristic TBC detection for FOLLOWED matches:
  * - If no kickoffIso => TBC
  * - If kickoff <= 21 days away => confirmed
  * - If >= 7 fixtures in same (leagueId+season+round) share same kickoff minute => likely placeholder => TBC
@@ -251,9 +251,7 @@ function formatLastRefreshed(ms: number | null) {
 const STORAGE_KEYS = {
   seenLanding: "yna:seenLanding",
   setupComplete: "yna:setupComplete",
-
   plan: "yna:plan",
-
   homeAirport: "yna:profile.homeAirport",
   currency: "yna:profile.currency",
   language: "yna:profile.language",
@@ -377,9 +375,6 @@ export default function ProfileScreen() {
   const unfollow = useFollowStore((s) => s.unfollow);
   const setDefaultAlerts = useFollowStore((s) => s.setDefaultAlerts);
   const defaultAlerts = useFollowStore((s) => s.defaultAlerts);
-
-  // Batch update
-  const setKickoffConfirmedForAll = useFollowStore((s) => s.setKickoffConfirmedForAll);
 
   // Permission-gated toggle state
   const [kickoffToggleBusy, setKickoffToggleBusy] = useState(false);
@@ -613,7 +608,8 @@ export default function ProfileScreen() {
     setRefreshSummary(null);
 
     try {
-      const rows = await refreshFollowedMatches({ limit: 25 });
+      // User-driven refresh: fine to run refresh, but refresh itself will NOT prompt for permissions.
+      const rows = await refreshFollowedMatches({ limit: 25, concurrency: 3 });
 
       setLastRefreshedAt(Date.now());
 
@@ -632,41 +628,37 @@ export default function ProfileScreen() {
     async (nextValue: boolean) => {
       if (kickoffToggleBusy) return;
 
-      // OFF: no permission needed. Batch-update existing follows too.
+      // OFF never needs permission
       if (!nextValue) {
         setDefaultAlerts({ kickoffConfirmed: false });
-        setKickoffConfirmedForAll(false);
         return;
       }
 
-      // ON: explicit intent → request permission here.
+      // ON = explicit user action → permission prompt allowed
       setKickoffToggleBusy(true);
 
       try {
-        const granted = await requestKickoffNotificationsPermission();
+        const ok = await ensureNotificationsReady({ request: true });
 
-        if (!granted) {
-          // Keep UI honest: remain OFF + batch-update to OFF
+        if (!ok) {
           setDefaultAlerts({ kickoffConfirmed: false });
-          setKickoffConfirmedForAll(false);
 
           Alert.alert(
             "Notifications disabled",
-            "To get kickoff alerts, enable notifications for YourNextAway in your phone settings, then turn this on again.",
-            [{ text: "OK" }]
+            "To enable kickoff alerts, allow notifications for YourNextAway in your phone settings, then toggle this on again.",
+            [{ text: "OK" }],
+            { cancelable: true }
           );
 
           return;
         }
 
-        // Permission granted: turn on defaults + batch-update existing follows
         setDefaultAlerts({ kickoffConfirmed: true });
-        setKickoffConfirmedForAll(true);
       } finally {
         setKickoffToggleBusy(false);
       }
     },
-    [kickoffToggleBusy, setDefaultAlerts, setKickoffConfirmedForAll]
+    [kickoffToggleBusy, setDefaultAlerts]
   );
 
   return (
