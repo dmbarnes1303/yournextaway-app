@@ -1,5 +1,5 @@
 // app/trip/build.tsx
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -8,7 +8,6 @@ import {
   Pressable,
   TextInput,
   ActivityIndicator,
-  Alert,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
@@ -23,20 +22,9 @@ import { theme } from "@/src/constants/theme";
 import { getFixtures, getFixtureById, type FixtureListRow } from "@/src/services/apiFootball";
 import tripsStore, { type Trip } from "@/src/state/trips";
 
-import {
-  LEAGUES,
-  getRollingWindowIso,
-  clampFromIsoToTomorrow,
-  addDaysIso,
-  normalizeWindowIso,
-  type LeagueOption,
-} from "@/src/constants/football";
-
+import { LEAGUES, addDaysIso, clampFromIsoToTomorrow, type LeagueOption } from "@/src/constants/football";
 import { formatUkDateTimeMaybe } from "@/src/utils/formatters";
 import { computeLikelyPlaceholderTbcIds, isKickoffTbc } from "@/src/utils/kickoffTbc";
-
-import { beginPartnerClick, openPartnerUrl } from "@/src/services/partnerClicks";
-import type { PartnerId } from "@/src/core/partners";
 
 /* -------------------------------------------------------------------------- */
 /* helpers */
@@ -48,22 +36,17 @@ function paramString(v: unknown): string | null {
   return null;
 }
 
-function paramNumber(v: unknown): number | null {
-  const s = paramString(v);
-  if (!s) return null;
-  const n = Number(s);
-  return Number.isFinite(n) ? n : null;
-}
-
-function paramBool(v: unknown): boolean {
-  const s = paramString(v);
-  if (!s) return false;
-  return s === "1" || s === "true" || s === "yes";
-}
-
 function fixtureIdStr(r: any): string {
   const id = r?.fixture?.id;
   return id != null ? String(id) : "";
+}
+
+function fixtureDateOnly(r: FixtureListRow | null): string | null {
+  const raw = r?.fixture?.date;
+  if (!raw) return null;
+  const s = String(raw);
+  const m = s.match(/^(\d{4}-\d{2}-\d{2})/);
+  return m?.[1] ?? null;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -75,73 +58,33 @@ export default function TripBuildScreen() {
   const params = useLocalSearchParams();
   const insets = useSafeAreaInsets();
 
-  /* -------------------------------- params -------------------------------- */
-
   const routeTripId = useMemo(() => paramString((params as any)?.tripId), [params]);
   const isEditing = !!routeTripId;
 
   const routeFixtureId = useMemo(() => paramString((params as any)?.fixtureId), [params]);
-  const routeLeagueId = useMemo(() => paramNumber((params as any)?.leagueId), [params]);
-  const routeSeason = useMemo(() => paramNumber((params as any)?.season), [params]);
-  const routeGlobal = useMemo(() => paramBool((params as any)?.global), [params]);
 
-  /* ------------------------------ date window ------------------------------ */
-
-  const rolling = useMemo(() => getRollingWindowIso(), []);
-  const fromParam = useMemo(() => paramString((params as any)?.from), [params]);
-  const toParam = useMemo(() => paramString((params as any)?.to), [params]);
-
-  const window = useMemo(
-    () =>
-      normalizeWindowIso({
-        from: fromParam ?? rolling.from,
-        to: toParam ?? rolling.to,
-      }),
-    [fromParam, toParam, rolling]
-  );
-
-  const from = useMemo(() => clampFromIsoToTomorrow(window.from), [window.from]);
-  const to = useMemo(() => window.to, [window.to]);
-
-  /* -------------------------------- leagues -------------------------------- */
-
-  const ALL_LEAGUES: LeagueOption & { key: string } = {
-    label: "All leagues",
-    leagueId: 0,
-    season: routeSeason ?? LEAGUES[0].season,
-    countryCode: "EU",
-    key: "all",
-  };
-
-  const leagueOptions = useMemo(() => [ALL_LEAGUES, ...LEAGUES], [ALL_LEAGUES]);
-
-  const [selectedLeague, setSelectedLeague] = useState<LeagueOption>(
-    routeGlobal
-      ? ALL_LEAGUES
-      : LEAGUES.find((l) => l.leagueId === routeLeagueId) ?? LEAGUES[0]
-  );
-
-  /* -------------------------------- state -------------------------------- */
-
-  const [rows, setRows] = useState<FixtureListRow[]>([]);
-  const [placeholderTbcIds, setPlaceholderTbcIds] = useState<Set<string>>(new Set());
+  // If fixtureId is provided and we're NOT editing, this is the “Build trip from fixture” flow.
+  const isPrefilledFlow = !!routeFixtureId && !isEditing;
 
   const [loading, setLoading] = useState(false);
   const [prefillLoading, setPrefillLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [rows, setRows] = useState<FixtureListRow[]>([]);
+  const [placeholderTbcIds, setPlaceholderTbcIds] = useState<Set<string>>(new Set());
+
   const [search, setSearch] = useState("");
   const [visibleCount, setVisibleCount] = useState(12);
 
   const [selectedFixture, setSelectedFixture] = useState<FixtureListRow | null>(null);
 
-  const [startIso, setStartIso] = useState(from);
-  const [endIso, setEndIso] = useState(addDaysIso(from, 2));
+  const [startIso, setStartIso] = useState(clampFromIsoToTomorrow(new Date().toISOString().slice(0, 10)));
+  const [endIso, setEndIso] = useState(addDaysIso(startIso, 2));
   const [notes, setNotes] = useState("");
 
   /* -------------------------------------------------------------------------- */
-  /* load edit trip */
+  /* Load edit trip */
   /* -------------------------------------------------------------------------- */
 
   useEffect(() => {
@@ -152,10 +95,7 @@ export default function TripBuildScreen() {
     async function run() {
       setPrefillLoading(true);
 
-      if (!tripsStore.getState().loaded) {
-        await tripsStore.loadTrips();
-      }
-
+      if (!tripsStore.getState().loaded) await tripsStore.loadTrips();
       if (cancelled) return;
 
       const t = tripsStore.getState().trips.find((x) => x.id === routeTripId) ?? null;
@@ -186,60 +126,91 @@ export default function TripBuildScreen() {
   }, [routeTripId]);
 
   /* -------------------------------------------------------------------------- */
-  /* prefill fixture */
+  /* Prefill fixture (new trip) */
   /* -------------------------------------------------------------------------- */
 
   useEffect(() => {
-    if (isEditing) return;
+    if (!isPrefilledFlow) return;
     if (!routeFixtureId) return;
 
     let cancelled = false;
 
     async function run() {
       setPrefillLoading(true);
-      const r = await getFixtureById(routeFixtureId);
-      if (!cancelled) setSelectedFixture(r);
-      setPrefillLoading(false);
+      setError(null);
+
+      try {
+        const r = await getFixtureById(routeFixtureId);
+        if (cancelled) return;
+
+        setSelectedFixture(r);
+
+        const d0 = fixtureDateOnly(r);
+        if (d0) {
+          const start = clampFromIsoToTomorrow(d0);
+          setStartIso(start);
+          setEndIso(addDaysIso(start, 2));
+        }
+      } catch {
+        if (!cancelled) setError("Couldn’t load that fixture.");
+      } finally {
+        if (!cancelled) setPrefillLoading(false);
+      }
     }
 
     run();
     return () => {
       cancelled = true;
     };
-  }, [routeFixtureId, isEditing]);
+  }, [routeFixtureId, isPrefilledFlow]);
 
   /* -------------------------------------------------------------------------- */
-  /* load fixtures */
+  /* Fallback picker mode (only when NOT prefilled) */
   /* -------------------------------------------------------------------------- */
+
+  const ALL_LEAGUES: LeagueOption & { key: string } = useMemo(
+    () => ({
+      label: "All leagues",
+      leagueId: 0,
+      season: LEAGUES[0].season,
+      countryCode: "EU",
+      key: "all",
+    }),
+    []
+  );
+
+  const leagueOptions = useMemo(() => [ALL_LEAGUES, ...LEAGUES], [ALL_LEAGUES]);
+
+  const [selectedLeague, setSelectedLeague] = useState<LeagueOption>(ALL_LEAGUES);
 
   useEffect(() => {
+    if (isEditing) return;
+    if (isPrefilledFlow) return; // critical: do NOT load fixture lists in prefilled flow
+
     let cancelled = false;
 
     async function run() {
       setLoading(true);
-      setRows([]);
+      setError(null);
 
       try {
+        // Small rolling window for picker only (tomorrow -> +30 days)
+        const from = clampFromIsoToTomorrow(new Date().toISOString().slice(0, 10));
+        const to = addDaysIso(from, 30);
+
         let res: FixtureListRow[] = [];
 
         if (selectedLeague.leagueId === 0) {
           const batches = await Promise.all(
-            LEAGUES.map((l) =>
-              getFixtures({ league: l.leagueId, season: l.season, from, to })
-            )
+            LEAGUES.map((l) => getFixtures({ league: l.leagueId, season: l.season, from, to }))
           );
           res = batches.flat();
         } else {
-          res =
-            (await getFixtures({
-              league: selectedLeague.leagueId,
-              season: selectedLeague.season,
-              from,
-              to,
-            })) || [];
+          res = (await getFixtures({ league: selectedLeague.leagueId, season: selectedLeague.season, from, to })) || [];
         }
 
         if (!cancelled) {
+          res.sort((a, b) => String(a?.fixture?.date ?? "").localeCompare(String(b?.fixture?.date ?? "")));
           setRows(res);
           setPlaceholderTbcIds(computeLikelyPlaceholderTbcIds(res));
         }
@@ -254,11 +225,7 @@ export default function TripBuildScreen() {
     return () => {
       cancelled = true;
     };
-  }, [selectedLeague, from, to]);
-
-  /* -------------------------------------------------------------------------- */
-  /* derived */
-  /* -------------------------------------------------------------------------- */
+  }, [selectedLeague, isEditing, isPrefilledFlow]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -273,13 +240,10 @@ export default function TripBuildScreen() {
     });
   }, [rows, search]);
 
-  const visibleRows = useMemo(
-    () => filtered.slice(0, visibleCount),
-    [filtered, visibleCount]
-  );
+  const visibleRows = useMemo(() => filtered.slice(0, visibleCount), [filtered, visibleCount]);
 
   /* -------------------------------------------------------------------------- */
-  /* save trip */
+  /* Save trip */
   /* -------------------------------------------------------------------------- */
 
   async function onSave() {
@@ -292,8 +256,7 @@ export default function TripBuildScreen() {
     setError(null);
 
     const fixtureId = String(selectedFixture.fixture.id);
-    const city =
-      String(selectedFixture?.fixture?.venue?.city ?? "").trim() || "Trip";
+    const city = String(selectedFixture?.fixture?.venue?.city ?? "").trim() || "Trip";
 
     const patch: Partial<Omit<Trip, "id">> = {
       cityId: city,
@@ -304,12 +267,14 @@ export default function TripBuildScreen() {
     };
 
     try {
+      if (!tripsStore.getState().loaded) await tripsStore.loadTrips();
+
       if (isEditing && routeTripId) {
         await tripsStore.updateTrip(routeTripId, patch);
-        router.replace({ pathname: "/trip/[id]", params: { id: routeTripId } });
+        router.replace({ pathname: "/trip/[id]", params: { id: routeTripId } } as any);
       } else {
         const t = await tripsStore.addTrip(patch as any);
-        router.replace({ pathname: "/trip/[id]", params: { id: t.id } });
+        router.replace({ pathname: "/trip/[id]", params: { id: t.id } } as any);
       }
     } catch {
       setError("Failed to save trip.");
@@ -319,56 +284,24 @@ export default function TripBuildScreen() {
   }
 
   /* -------------------------------------------------------------------------- */
-  /* STANDARD OPEN FLOW (critical) */
-  /* -------------------------------------------------------------------------- */
-
-  async function openUntracked(url?: string) {
-    if (!url) return;
-    try {
-      await openPartnerUrl(url);
-    } catch {
-      Alert.alert("Couldn’t open link");
-    }
-  }
-
-  async function openTrackedPartner(args: {
-    partnerId: PartnerId;
-    url: string;
-    title: string;
-    metadata?: Record<string, any>;
-  }) {
-    if (!routeTripId) {
-      Alert.alert(
-        "Save trip first",
-        "Save this trip before booking so we can track your confirmations in Wallet."
-      );
-      return;
-    }
-
-    if (args.partnerId === "googlemaps") {
-      await openUntracked(args.url);
-      return;
-    }
-
-    try {
-      await beginPartnerClick({
-        tripId: routeTripId,
-        partnerId: args.partnerId,
-        url: args.url,
-        title: args.title,
-        metadata: args.metadata,
-      });
-    } catch {
-      await openUntracked(args.url);
-    }
-  }
-
-  /* -------------------------------------------------------------------------- */
   /* UI */
   /* -------------------------------------------------------------------------- */
 
+  const selectedTitle = useMemo(() => {
+    const h = String(selectedFixture?.teams?.home?.name ?? "Home");
+    const a = String(selectedFixture?.teams?.away?.name ?? "Away");
+    return `${h} vs ${a}`;
+  }, [selectedFixture]);
+
+  const selectedKick = useMemo(() => {
+    if (!selectedFixture) return "TBC";
+    const tbc = isKickoffTbc(selectedFixture, placeholderTbcIds);
+    if (tbc) return "TBC";
+    return formatUkDateTimeMaybe(selectedFixture?.fixture?.date) || "TBC";
+  }, [selectedFixture, placeholderTbcIds]);
+
   return (
-    <Background imageSource={getBackground("trips")}>
+    <Background imageSource={getBackground("trips")} overlayOpacity={0.86}>
       <Stack.Screen
         options={{
           headerShown: true,
@@ -386,106 +319,136 @@ export default function TripBuildScreen() {
             paddingBottom: theme.spacing.xxl + insets.bottom,
             gap: theme.spacing.lg,
           }}
+          keyboardShouldPersistTaps="handled"
         >
-          <GlassCard>
-            <Text style={styles.h1}>Pick a match</Text>
-
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              {leagueOptions.map((l) => {
-                const active = l.leagueId === selectedLeague.leagueId;
-                return (
-                  <Pressable
-                    key={l.key ?? String(l.leagueId)}
-                    onPress={() => setSelectedLeague(l)}
-                    style={[
-                      styles.leaguePill,
-                      active && styles.leaguePillActive,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.leaguePillText,
-                        active && styles.leaguePillTextActive,
-                      ]}
-                    >
-                      {l.label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
-
-            <TextInput
-              value={search}
-              onChangeText={(t) => {
-                setSearch(t);
-                setVisibleCount(12);
-              }}
-              placeholder="Search team / venue / city"
-              placeholderTextColor={theme.colors.textSecondary}
-              style={styles.search}
-            />
-
-            {loading || prefillLoading ? (
+          {(loading || prefillLoading) && (
+            <GlassCard>
               <View style={styles.center}>
                 <ActivityIndicator />
                 <Text style={styles.muted}>Loading…</Text>
               </View>
-            ) : null}
+            </GlassCard>
+          )}
 
-            {!loading && visibleRows.length === 0 ? (
-              <EmptyState
-                title="No fixtures"
-                message="Try another league or date window."
+          {!prefillLoading && error && (
+            <GlassCard>
+              <EmptyState title="Problem" message={error} />
+            </GlassCard>
+          )}
+
+          {/* Prefilled flow: show summary only (no picker) */}
+          {isPrefilledFlow && !prefillLoading && selectedFixture ? (
+            <GlassCard>
+              <Text style={styles.h1}>Selected match</Text>
+
+              <View style={styles.summaryBox}>
+                <Text style={styles.summaryTitle}>{selectedTitle}</Text>
+                <Text style={styles.summaryMeta}>{selectedKick}</Text>
+                <Text style={styles.summaryMeta}>
+                  {String(selectedFixture?.fixture?.venue?.name ?? "").trim() || "Venue TBC"}
+                  {String(selectedFixture?.fixture?.venue?.city ?? "").trim()
+                    ? ` • ${String(selectedFixture?.fixture?.venue?.city ?? "").trim()}`
+                    : ""}
+                </Text>
+              </View>
+
+              <Text style={styles.label}>Notes (optional)</Text>
+              <TextInput
+                value={notes}
+                onChangeText={setNotes}
+                placeholder="Anything you want to remember…"
+                placeholderTextColor={theme.colors.textSecondary}
+                style={styles.notes}
+                multiline
               />
-            ) : null}
+            </GlassCard>
+          ) : null}
 
-            {visibleRows.map((r, i) => {
-              const id = fixtureIdStr(r);
-              const home = r?.teams?.home?.name ?? "Home";
-              const away = r?.teams?.away?.name ?? "Away";
-              const selected = fixtureIdStr(selectedFixture) === id;
+          {/* Picker mode (only if not prefilled and not editing prefilled) */}
+          {!isPrefilledFlow && !prefillLoading && !error ? (
+            <GlassCard>
+              <Text style={styles.h1}>Pick a match</Text>
 
-              const tbc = isKickoffTbc(r, placeholderTbcIds);
-              const kick = tbc
-                ? "TBC"
-                : formatUkDateTimeMaybe(r?.fixture?.date) || "TBC";
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 12 }}>
+                {leagueOptions.map((l) => {
+                  const active = l.leagueId === selectedLeague.leagueId;
+                  return (
+                    <Pressable
+                      key={l.key ?? String(l.leagueId)}
+                      onPress={() => setSelectedLeague(l)}
+                      style={[styles.leaguePill, active && styles.leaguePillActive]}
+                    >
+                      <Text style={[styles.leaguePillText, active && styles.leaguePillTextActive]}>
+                        {l.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
 
-              return (
-                <Pressable
-                  key={id || i}
-                  onPress={() => setSelectedFixture(r)}
-                  style={[
-                    styles.pickRow,
-                    selected && styles.pickRowSelected,
-                  ]}
-                >
-                  <Text style={styles.rowTitle}>
-                    {home} vs {away}
-                  </Text>
-                  <Text style={styles.rowMeta}>{kick}</Text>
+              <TextInput
+                value={search}
+                onChangeText={(t) => {
+                  setSearch(t);
+                  setVisibleCount(12);
+                }}
+                placeholder="Search team / venue / city"
+                placeholderTextColor={theme.colors.textSecondary}
+                style={styles.search}
+              />
+
+              {visibleRows.length === 0 && !loading ? (
+                <EmptyState title="No fixtures" message="Try another league." />
+              ) : null}
+
+              {visibleRows.map((r, i) => {
+                const id = fixtureIdStr(r);
+                const home = r?.teams?.home?.name ?? "Home";
+                const away = r?.teams?.away?.name ?? "Away";
+                const selected = fixtureIdStr(selectedFixture) === id;
+
+                const tbc = isKickoffTbc(r, placeholderTbcIds);
+                const kick = tbc ? "TBC" : formatUkDateTimeMaybe(r?.fixture?.date) || "TBC";
+
+                return (
+                  <Pressable
+                    key={id || String(i)}
+                    onPress={() => setSelectedFixture(r)}
+                    style={[styles.pickRow, selected && styles.pickRowSelected]}
+                  >
+                    <Text style={styles.rowTitle}>
+                      {home} vs {away}
+                    </Text>
+                    <Text style={styles.rowMeta}>{kick}</Text>
+                  </Pressable>
+                );
+              })}
+
+              {visibleCount < filtered.length ? (
+                <Pressable onPress={() => setVisibleCount((n) => n + 12)} style={styles.moreBtn}>
+                  <Text style={styles.moreText}>Show more</Text>
                 </Pressable>
-              );
-            })}
+              ) : null}
 
-            {visibleCount < filtered.length ? (
-              <Pressable
-                onPress={() => setVisibleCount((n) => n + 12)}
-                style={styles.moreBtn}
-              >
-                <Text style={styles.moreText}>Show more</Text>
-              </Pressable>
-            ) : null}
-          </GlassCard>
+              <Text style={styles.label}>Notes (optional)</Text>
+              <TextInput
+                value={notes}
+                onChangeText={setNotes}
+                placeholder="Anything you want to remember…"
+                placeholderTextColor={theme.colors.textSecondary}
+                style={styles.notes}
+                multiline
+              />
+            </GlassCard>
+          ) : null}
 
+          {/* Save */}
           <Pressable
             onPress={onSave}
-            disabled={saving}
-            style={[styles.saveBtn, saving && { opacity: 0.7 }]}
+            disabled={saving || prefillLoading}
+            style={[styles.saveBtn, (saving || prefillLoading) && { opacity: 0.7 }]}
           >
-            <Text style={styles.saveText}>
-              {saving ? "Saving…" : isEditing ? "Update Trip" : "Save Trip"}
-            </Text>
+            <Text style={styles.saveText}>{saving ? "Saving…" : isEditing ? "Update Trip" : "Save Trip"}</Text>
           </Pressable>
 
           {error ? <Text style={styles.err}>{error}</Text> : null}
@@ -507,6 +470,34 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
 
+  summaryBox: {
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: 14,
+    padding: 12,
+    backgroundColor: "rgba(0,0,0,0.20)",
+  },
+  summaryTitle: { color: theme.colors.text, fontWeight: "900", fontSize: 16 },
+  summaryMeta: { color: theme.colors.textSecondary, marginTop: 6, fontWeight: "700" },
+
+  label: {
+    marginTop: 14,
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
+  },
+
+  notes: {
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: "rgba(0,0,0,0.25)",
+    borderRadius: 12,
+    padding: 12,
+    color: theme.colors.text,
+    minHeight: 84,
+    textAlignVertical: "top",
+  },
+
   leaguePill: {
     marginRight: 10,
     paddingVertical: 8,
@@ -520,7 +511,7 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.primary,
     backgroundColor: "rgba(0,0,0,0.45)",
   },
-  leaguePillText: { color: theme.colors.textSecondary },
+  leaguePillText: { color: theme.colors.textSecondary, fontWeight: "900" },
   leaguePillTextActive: { color: theme.colors.text },
 
   search: {
@@ -533,8 +524,8 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
   },
 
-  center: { paddingVertical: 14, alignItems: "center" },
-  muted: { color: theme.colors.textSecondary },
+  center: { paddingVertical: 14, alignItems: "center", gap: 10 },
+  muted: { color: theme.colors.textSecondary, fontWeight: "800" },
 
   pickRow: {
     marginTop: 10,
@@ -549,8 +540,8 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.35)",
   },
 
-  rowTitle: { color: theme.colors.text, fontWeight: "800" },
-  rowMeta: { color: theme.colors.textSecondary, marginTop: 4 },
+  rowTitle: { color: theme.colors.text, fontWeight: "900" },
+  rowMeta: { color: theme.colors.textSecondary, marginTop: 4, fontWeight: "800" },
 
   moreBtn: {
     marginTop: 12,
@@ -560,7 +551,7 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border,
     alignItems: "center",
   },
-  moreText: { color: theme.colors.text, fontWeight: "800" },
+  moreText: { color: theme.colors.text, fontWeight: "900" },
 
   saveBtn: {
     marginTop: 10,
@@ -576,6 +567,6 @@ const styles = StyleSheet.create({
   err: {
     marginTop: 10,
     color: "rgba(255,80,80,0.95)",
-    fontWeight: "800",
+    fontWeight: "900",
   },
 });
