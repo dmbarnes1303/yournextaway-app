@@ -29,9 +29,12 @@ function cleanLoadedTrip(x: any): Trip | null {
   const startDate = String(x.startDate ?? "").trim();
   const endDate = String(x.endDate ?? "").trim();
 
+  // Phase 1: require these to keep trip rows stable
   if (!id || !cityId || !startDate || !endDate) return null;
 
-  const matchIds = Array.isArray(x.matchIds) ? x.matchIds.map((m: any) => String(m).trim()).filter(Boolean) : [];
+  const matchIds = Array.isArray(x.matchIds)
+    ? x.matchIds.map((m: any) => String(m).trim()).filter(Boolean)
+    : [];
 
   const createdAt = Number.isFinite(Number(x.createdAt)) ? Number(x.createdAt) : now();
   const updatedAt = Number.isFinite(Number(x.updatedAt)) ? Number(x.updatedAt) : createdAt;
@@ -67,10 +70,17 @@ type TripsState = {
   updateTrip: (tripId: string, patch: Partial<Omit<Trip, "id" | "createdAt">>) => Promise<void>;
 
   /**
-   * Deletes the trip AND deletes all SavedItems belonging to the trip.
-   * This is the only delete we should use in Phase 1 to prevent orphaned Wallet items.
+   * Canonical delete for Phase 1.
+   * Deletes all wallet items + attachment files for this trip, THEN deletes the trip.
+   * If cascade fails, we DO NOT delete the trip (prevents ghost wallet state).
    */
   deleteTripCascade: (tripId: string) => Promise<void>;
+
+  /**
+   * Backwards compatible alias.
+   * Old screens call removeTrip() — we route it to deleteTripCascade().
+   */
+  removeTrip: (tripId: string) => Promise<void>;
 
   clearAll: () => Promise<void>;
 };
@@ -106,7 +116,9 @@ const useTripsStore = create<TripsState>((set, get) => ({
       citySlug: input.citySlug ? String(input.citySlug).trim() : undefined,
       startDate,
       endDate,
-      matchIds: Array.isArray(input.matchIds) ? input.matchIds.map((m) => String(m).trim()).filter(Boolean) : [],
+      matchIds: Array.isArray(input.matchIds)
+        ? input.matchIds.map((m) => String(m).trim()).filter(Boolean)
+        : [],
       notes: input.notes ? String(input.notes) : undefined,
       createdAt: now(),
       updatedAt: now(),
@@ -125,12 +137,9 @@ const useTripsStore = create<TripsState>((set, get) => ({
     const id = String(tripId ?? "").trim();
     if (!id) return;
 
-    const next = get().trips.map((t) => {
-      if (t.id !== id) return t;
-      return { ...t, ...patch, updatedAt: now() };
-    });
-
+    const next = get().trips.map((t) => (t.id === id ? { ...t, ...patch, updatedAt: now() } : t));
     const sorted = sortTrips(next);
+
     set({ trips: sorted, loaded: true });
     await persist(sorted);
   },
@@ -141,27 +150,59 @@ const useTripsStore = create<TripsState>((set, get) => ({
     const id = String(tripId ?? "").trim();
     if (!id) return;
 
-    // 1) Remove trip
-    const nextTrips = get().trips.filter((t) => t.id !== id);
-    set({ trips: nextTrips, loaded: true });
-    await persist(nextTrips);
+    // Ensure saved items store is loaded too (avoid edge cases on fresh install)
+    if (!savedItemsStore.getState().loaded) {
+      try {
+        await savedItemsStore.load();
+      } catch {
+        // if saved items can't load, deleting is unsafe (could orphan files/items)
+        throw new Error("Wallet not ready. Try again.");
+      }
+    }
 
-    // 2) Remove all SavedItems associated to that trip (prevents orphaned Wallet items)
+    // 1) Delete saved items + attachments FIRST.
+    // If this fails, abort trip deletion — prevents orphaned wallet state.
     try {
       await savedItemsStore.clearTrip(id);
     } catch {
-      // best-effort: trip is gone, but we REALLY want savedItems cleared.
-      // If this fails, you'll see orphaned items again.
+      throw new Error("Couldn’t remove wallet items for this trip. Try again.");
+    }
+
+    // 2) Now delete the trip
+    const existing = get().trips;
+    if (!existing.some((t) => t.id === id)) return;
+
+    const nextTrips = existing.filter((t) => t.id !== id);
+    set({ trips: nextTrips, loaded: true });
+
+    try {
+      await persist(nextTrips);
+    } catch {
+      // Persist failed. We can't reliably restore deleted wallet items,
+      // so surface a hard error.
+      throw new Error("Couldn’t save trip deletion. Try again.");
     }
   },
 
+  removeTrip: async (tripId) => {
+    await get().deleteTripCascade(tripId);
+  },
+
   clearAll: async () => {
-    set({ trips: [], loaded: true });
-    await persist([]);
+    // Clear wallet first to avoid orphans if trip persist fails
     try {
+      if (!savedItemsStore.getState().loaded) await savedItemsStore.load();
       await savedItemsStore.clearAll();
     } catch {
-      // ignore
+      throw new Error("Couldn’t clear wallet. Try again.");
+    }
+
+    set({ trips: [], loaded: true });
+
+    try {
+      await persist([]);
+    } catch {
+      throw new Error("Couldn’t clear trips. Try again.");
     }
   },
 }));
@@ -189,6 +230,11 @@ const tripsStore = {
 
   deleteTripCascade: async (tripId: string) => {
     await useTripsStore.getState().deleteTripCascade(tripId);
+  },
+
+  // Back-compat: screens that call removeTrip keep working
+  removeTrip: async (tripId: string) => {
+    await useTripsStore.getState().removeTrip(tripId);
   },
 
   clearAll: async () => {
