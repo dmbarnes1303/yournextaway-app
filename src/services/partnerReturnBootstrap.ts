@@ -10,6 +10,7 @@ import {
   type LastPartnerClick,
   markBooked,
   markNotBooked,
+  dismissReturnPrompt,
 } from "@/src/services/partnerClicks";
 
 import { pickAndStoreAttachmentForItem } from "@/src/services/walletAttachments";
@@ -17,11 +18,14 @@ import { pickAndStoreAttachmentForItem } from "@/src/services/walletAttachments"
 /**
  * Phase-1 truth:
  * We cannot reliably detect “booking completed” from affiliates.
- * So we prompt on return: Yes → mark booked, No → keep pending.
+ *
+ * Option B:
+ * - Yes -> booked
+ * - No  -> saved (not pending)
+ * - Not now -> keep pending
  *
  * Enhancement:
- * After Yes → show confirmation (“Added to Wallet”) and offer to add booking proof (PDF/screenshot).
- * Android-safe: keep button counts low and avoid nested alerts firing in same tick.
+ * After Yes -> show confirmation (“Added to Wallet”) and offer to add booking proof (PDF/screenshot).
  */
 
 let bootstrapped = false;
@@ -80,7 +84,9 @@ async function promptAddProof(itemId: string) {
   } catch (e: any) {
     const msg = String(e?.message ?? "");
     if (msg === "cancelled") return;
-    Alert.alert("Couldn’t add attachment", msg || "Try again.", [{ text: "OK" }], { cancelable: true });
+    Alert.alert("Couldn’t add attachment", msg || "Try again.", [{ text: "OK" }], {
+      cancelable: true,
+    });
   }
 }
 
@@ -91,7 +97,6 @@ function showBookedConfirmationAndProofPrompt(item: SavedItem | null) {
   const title = String(item?.title ?? "").trim() || "Booking";
   const atts = getAttachments(item);
 
-  // If they already have proof stored, just confirm the Wallet update.
   if (atts.length > 0) {
     Alert.alert(
       "Added to Wallet",
@@ -102,8 +107,6 @@ function showBookedConfirmationAndProofPrompt(item: SavedItem | null) {
     return;
   }
 
-  // Otherwise: confirm + offer proof upload.
-  // Keep button count low for Android reliability.
   Alert.alert(
     "Added to Wallet",
     `"${title}" is now marked as booked.\n\nWant to add booking proof (PDF/screenshot) for offline access?`,
@@ -111,12 +114,7 @@ function showBookedConfirmationAndProofPrompt(item: SavedItem | null) {
       { text: "Not now", style: "cancel" },
       {
         text: "Add booking proof",
-        onPress: () => {
-          // Run picker after alert closes
-          defer(() => {
-            promptAddProof(itemId);
-          });
-        },
+        onPress: () => defer(() => promptAddProof(itemId)),
       },
     ],
     { cancelable: true }
@@ -131,7 +129,6 @@ export function bootstrapPartnerReturnPrompt() {
     const itemId = String(click?.itemId ?? "").trim();
     if (!itemId) return;
 
-    // Don’t stack prompts for the same item.
     if (inFlightForItem.has(itemId)) return;
     inFlightForItem.add(itemId);
 
@@ -155,43 +152,49 @@ export function bootstrapPartnerReturnPrompt() {
           return;
         }
 
-        // Re-read item from store after transition (so UI state is correct).
         await ensureSavedItemsLoaded();
         const updated = savedItemsStore.getState().items.find((x) => x.id === itemId) ?? null;
 
-        // Show confirmation + offer to add proof, but not in the same tick.
         defer(() => showBookedConfirmationAndProofPrompt(updated));
       };
 
-      // Android: max 3 buttons.
+      const onNo = async () => {
+        // Option B: move pending -> saved
+        await markNotBooked(itemId);
+      };
+
+      const onNotNow = async () => {
+        // keep pending; just stop re-prompt loops
+        dismissReturnPrompt(itemId);
+      };
+
+      // Android: max 3 buttons
       if (Platform.OS === "android") {
         Alert.alert(
           "Did you book it?",
           message,
           [
-            { text: "Not now", style: "cancel", onPress: () => markNotBooked(itemId) },
-            { text: "No", onPress: () => markNotBooked(itemId) },
-            { text: "Yes — booked", onPress: onYesBooked },
+            { text: "Not now", style: "cancel", onPress: () => onNotNow() },
+            { text: "No", onPress: () => onNo() },
+            { text: "Yes — booked", onPress: () => onYesBooked() },
           ],
           { cancelable: true }
         );
         return;
       }
 
-      // iOS: keep identical for now (same behaviour, predictable UX).
+      // iOS: keep identical for predictable UX
       Alert.alert(
         "Did you book it?",
         message,
         [
-          { text: "Not now", style: "cancel", onPress: () => markNotBooked(itemId) },
-          { text: "No", onPress: () => markNotBooked(itemId) },
-          { text: "Yes — booked", onPress: onYesBooked },
+          { text: "Not now", style: "cancel", onPress: () => onNotNow() },
+          { text: "No", onPress: () => onNo() },
+          { text: "Yes — booked", onPress: () => onYesBooked() },
         ],
         { cancelable: true }
       );
     } finally {
-      // Remove after the initial prompt is shown/handled.
-      // If user hits Yes and then uploads proof, that flow is separate and doesn’t need this lock.
       defer(() => inFlightForItem.delete(String(click?.itemId ?? "").trim()));
     }
   });
