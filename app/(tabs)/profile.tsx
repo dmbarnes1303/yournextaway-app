@@ -126,6 +126,109 @@ function leagueLine(m: FollowedMatch) {
   return ln ? ln : null;
 }
 
+function daysUntilIso(iso: string) {
+  const t = new Date(iso).getTime();
+  if (!Number.isFinite(t)) return Number.POSITIVE_INFINITY;
+  return (t - Date.now()) / (1000 * 60 * 60 * 24);
+}
+
+function isoMinuteKey(iso: string) {
+  const s = String(iso ?? "").trim();
+  const m = s.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})/);
+  return m?.[1] ?? s.slice(0, 16);
+}
+
+function normalizeStr(v: unknown) {
+  const s = String(v ?? "").trim();
+  return s ? s : null;
+}
+
+/**
+ * Heuristic TBC detection for FOLLOWED matches (no API status available here):
+ * - If no kickoffIso => TBC
+ * - If kickoff <= 21 days away => confirmed
+ * - If >= 7 fixtures in same (leagueId+season+round) share same kickoff minute => likely placeholder => TBC
+ */
+function computeLikelyPlaceholderTbcIdsFromFollowed(followed: FollowedMatch[]) {
+  const CONFIRMED_WITHIN_DAYS = 21;
+  const CLUSTER_THRESHOLD = 7;
+
+  const out = new Set<string>();
+  if (!Array.isArray(followed) || followed.length === 0) return out;
+
+  // Group by leagueId+season+round
+  const groups = new Map<string, FollowedMatch[]>();
+
+  for (const m of followed) {
+    const fixtureId = String(m.fixtureId ?? "").trim();
+    const kickoffIso = String(m.kickoffIso ?? "").trim();
+    if (!fixtureId) continue;
+
+    if (!kickoffIso) {
+      out.add(fixtureId);
+      continue;
+    }
+
+    if (daysUntilIso(kickoffIso) <= CONFIRMED_WITHIN_DAYS) continue;
+
+    const leagueId = Number((m as any).leagueId ?? 0) || 0;
+    const season = Number((m as any).season ?? 0) || 0;
+    const round = normalizeStr((m as any).round);
+
+    if (!leagueId || !season || !round) continue;
+
+    const key = `${leagueId}:${season}:${round}`;
+    const arr = groups.get(key) ?? [];
+    arr.push(m);
+    groups.set(key, arr);
+  }
+
+  for (const groupRows of groups.values()) {
+    if (groupRows.length < CLUSTER_THRESHOLD) continue;
+
+    const counts = new Map<string, number>();
+    for (const m of groupRows) {
+      const iso = String(m.kickoffIso ?? "").trim();
+      if (!iso) continue;
+      const k = isoMinuteKey(iso);
+      counts.set(k, (counts.get(k) ?? 0) + 1);
+    }
+
+    let topKey: string | null = null;
+    let topCount = 0;
+    for (const [k, c] of counts.entries()) {
+      if (c > topCount) {
+        topKey = k;
+        topCount = c;
+      }
+    }
+
+    if (!topKey || topCount < CLUSTER_THRESHOLD) continue;
+
+    for (const m of groupRows) {
+      const id = String(m.fixtureId ?? "").trim();
+      const iso = String(m.kickoffIso ?? "").trim();
+      if (!id || !iso) continue;
+      if (isoMinuteKey(iso) === topKey) out.add(id);
+    }
+  }
+
+  return out;
+}
+
+function isKickoffLikelyTbcForFollowed(m: FollowedMatch, likelyTbcIds: Set<string>) {
+  const CONFIRMED_WITHIN_DAYS = 21;
+
+  const id = String(m.fixtureId ?? "").trim();
+  const iso = String(m.kickoffIso ?? "").trim();
+
+  if (!iso) return true;
+  if (daysUntilIso(iso) <= CONFIRMED_WITHIN_DAYS) return false;
+
+  if (id && likelyTbcIds.has(id)) return true;
+  return false;
+}
+
 /* -------------------------------------------------------------------------- */
 /* Storage keys */
 /* -------------------------------------------------------------------------- */
@@ -309,6 +412,9 @@ export default function ProfileScreen() {
 
   const followedPreview = useMemo(() => followedSorted.slice(0, 6), [followedSorted]);
 
+  // Likely placeholder TBC inference across FOLLOWED list (based on leagueId+season+round clustering)
+  const likelyTbcIds = useMemo(() => computeLikelyPlaceholderTbcIdsFromFollowed(followed), [followed]);
+
   // Load persisted settings once
   useEffect(() => {
     let mounted = true;
@@ -480,7 +586,11 @@ export default function ProfileScreen() {
             </View>
 
             <View style={[styles.logoMask, { width: logoSize, height: logoSize }]} pointerEvents="none">
-              <Image source={LOGO} style={{ width: logoSize, height: logoSize, transform: [{ scale: 1.18 }] }} resizeMode="cover" />
+              <Image
+                source={LOGO}
+                style={{ width: logoSize, height: logoSize, transform: [{ scale: 1.18 }] }}
+                resizeMode="cover"
+              />
             </View>
           </View>
 
@@ -544,7 +654,10 @@ export default function ProfileScreen() {
                 <Text style={styles.followingDefaultsKicker}>Default alert</Text>
                 <View style={styles.followingDefaultsRow}>
                   <Text style={styles.followingDefaultsValue}>Kickoff</Text>
-                  <Switch value={!!defaultAlerts.kickoffConfirmed} onValueChange={(v) => setDefaultAlerts({ kickoffConfirmed: v })} />
+                  <Switch
+                    value={!!defaultAlerts.kickoffConfirmed}
+                    onValueChange={(v) => setDefaultAlerts({ kickoffConfirmed: v })}
+                  />
                 </View>
               </View>
             </View>
@@ -563,6 +676,9 @@ export default function ProfileScreen() {
                   const last = idx === followedPreview.length - 1;
                   const title = matchTitle(m);
                   const league = leagueLine(m);
+
+                  const kickoffLikelyTbc = isKickoffLikelyTbcForFollowed(m, likelyTbcIds);
+                  const kickoffChip = kickoffLikelyTbc ? "Kickoff TBC" : "Kickoff set";
 
                   return (
                     <View key={m.fixtureId} style={[styles.followRow, last && styles.followRowLast]}>
@@ -588,7 +704,7 @@ export default function ProfileScreen() {
 
                         <View style={styles.followTagRow}>
                           <View style={styles.followTag}>
-                            <Text style={styles.followTagText}>{m.kickoffIso ? "Kickoff set" : "Kickoff TBC"}</Text>
+                            <Text style={styles.followTagText}>{kickoffChip}</Text>
                           </View>
 
                           {m.alerts?.kickoffConfirmed ? (
