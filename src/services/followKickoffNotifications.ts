@@ -20,36 +20,76 @@ function formatUkDateTime(iso?: string | null) {
   });
 }
 
-// Cache permission/channel init so we don’t spam permission checks.
-let _readyPromise: Promise<boolean> | null = null;
+// Cache only SUCCESS. Never cache a permanent false, because users can change permissions later.
+let _ready = false;
+let _inflight: Promise<boolean> | null = null;
 
-export async function ensureNotificationsReady() {
-  if (_readyPromise) return await _readyPromise;
+async function ensureAndroidChannel() {
+  if (Platform.OS !== "android") return;
 
-  _readyPromise = (async () => {
+  await Notifications.setNotificationChannelAsync("kickoff", {
+    name: "Kickoff updates",
+    importance: Notifications.AndroidImportance.DEFAULT,
+    sound: "default",
+  });
+}
+
+async function hasPermissionGranted(): Promise<boolean> {
+  try {
+    const perms = await Notifications.getPermissionsAsync();
+    return perms.status === "granted";
+  } catch {
+    return false;
+  }
+}
+
+async function requestPermission(): Promise<boolean> {
+  try {
+    const req = await Notifications.requestPermissionsAsync();
+    return req.status === "granted";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Ensure notification infra is ready.
+ *
+ * - request=false: NEVER triggers a permission prompt (safe for background/auto refresh)
+ * - request=true : prompts if needed (use only from an explicit user action, e.g. a toggle)
+ */
+export async function ensureNotificationsReady(opts?: { request?: boolean }) {
+  const request = opts?.request !== false;
+
+  if (_ready) return true;
+  if (_inflight) return await _inflight;
+
+  _inflight = (async () => {
     try {
-      // Android: channel required
-      if (Platform.OS === "android") {
-        await Notifications.setNotificationChannelAsync("kickoff", {
-          name: "Kickoff updates",
-          importance: Notifications.AndroidImportance.DEFAULT,
-          sound: "default",
-        });
+      await ensureAndroidChannel();
+
+      const granted = await hasPermissionGranted();
+      if (granted) {
+        _ready = true;
+        return true;
       }
 
-      const perms = await Notifications.getPermissionsAsync();
-      if (perms.status !== "granted") {
-        const req = await Notifications.requestPermissionsAsync();
-        if (req.status !== "granted") return false;
-      }
+      if (!request) return false;
 
+      const afterReq = await requestPermission();
+      if (!afterReq) return false;
+
+      _ready = true;
       return true;
     } catch {
       return false;
+    } finally {
+      // Always clear inflight so future calls can re-check after user changes Settings.
+      _inflight = null;
     }
   })();
 
-  return await _readyPromise;
+  return await _inflight;
 }
 
 export async function notifyKickoffChanged(args: {
@@ -60,7 +100,8 @@ export async function notifyKickoffChanged(args: {
   prevKickoffIso?: string | null;
   nextKickoffIso?: string | null;
 }) {
-  const ok = await ensureNotificationsReady();
+  // IMPORTANT: do not prompt here (could be called from auto-refresh).
+  const ok = await ensureNotificationsReady({ request: false });
   if (!ok) return;
 
   const fixtureId = safeStr(args.fixtureId);
@@ -74,9 +115,7 @@ export async function notifyKickoffChanged(args: {
   const nextTxt = formatUkDateTime(args.nextKickoffIso ?? null);
 
   const title = `Kickoff updated: ${home} vs ${away}`;
-  const body = league
-    ? `${league}\n${prevTxt} → ${nextTxt}\nTap to view.`
-    : `${prevTxt} → ${nextTxt}\nTap to view.`;
+  const body = league ? `${league}\n${prevTxt} → ${nextTxt}\nTap to view.` : `${prevTxt} → ${nextTxt}\nTap to view.`;
 
   await Notifications.scheduleNotificationAsync({
     content: {
