@@ -10,6 +10,7 @@ import {
   Image,
   useWindowDimensions,
   Switch,
+  ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -22,6 +23,7 @@ import { theme } from "@/src/constants/theme";
 import storage from "@/src/services/storage";
 
 import useFollowStore, { type FollowedMatch } from "@/src/state/followStore";
+import { refreshFollowedMatches } from "@/src/services/followRefresh";
 
 /* -------------------------------------------------------------------------- */
 /* Row UI */
@@ -156,7 +158,6 @@ function computeLikelyPlaceholderTbcIdsFromFollowed(followed: FollowedMatch[]) {
   const out = new Set<string>();
   if (!Array.isArray(followed) || followed.length === 0) return out;
 
-  // Group by leagueId+season+round
   const groups = new Map<string, FollowedMatch[]>();
 
   for (const m of followed) {
@@ -227,6 +228,19 @@ function isKickoffLikelyTbcForFollowed(m: FollowedMatch, likelyTbcIds: Set<strin
 
   if (id && likelyTbcIds.has(id)) return true;
   return false;
+}
+
+function formatLastRefreshed(ms: number | null) {
+  if (!ms) return "Last refreshed: —";
+  const d = new Date(ms);
+  if (Number.isNaN(d.getTime())) return "Last refreshed: —";
+  return `Last refreshed: ${d.toLocaleString("en-GB", {
+    weekday: "short",
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  })}`;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -355,13 +369,18 @@ export default function ProfileScreen() {
   const displayName = useMemo(() => "Guest Traveller", []);
   const email = useMemo(() => "Not Signed In", []);
 
-  // Subscribe to derived state so UI updates immediately
+  // Follow store
   const followed = useFollowStore((s) => s.followed);
   const followingCount = followed.length;
 
   const unfollow = useFollowStore((s) => s.unfollow);
   const setDefaultAlerts = useFollowStore((s) => s.setDefaultAlerts);
   const defaultAlerts = useFollowStore((s) => s.defaultAlerts);
+
+  // Manual refresh UI state
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<number | null>(null);
+  const [refreshSummary, setRefreshSummary] = useState<string | null>(null);
 
   const [loading, setLoading] = useState(true);
 
@@ -574,6 +593,41 @@ export default function ProfileScreen() {
     [unfollow]
   );
 
+  const onRefreshFollowing = useCallback(async () => {
+    if (refreshing) return;
+
+    if (followingCount === 0) {
+      setRefreshSummary("Nothing to refresh — you’re not following any matches.");
+      setLastRefreshedAt(Date.now());
+      return;
+    }
+
+    setRefreshing(true);
+    setRefreshSummary(null);
+
+    try {
+      const res = await refreshFollowedMatches({
+        showInAppAlerts: true, // Phase 1: in-app alerts on kickoff changes
+      });
+
+      setLastRefreshedAt(Date.now());
+
+      // Note: service may throttle and return refreshed=0 even though user tapped.
+      const summary = `Checked ${res.refreshed} • Kickoff changes ${res.changed}`;
+      setRefreshSummary(summary);
+
+      if (res.refreshed === 0 && res.changed === 0) {
+        // Likely throttled or no followed; keep it subtle.
+        // No alert needed.
+      }
+    } catch {
+      setLastRefreshedAt(Date.now());
+      setRefreshSummary("Refresh failed (network or rate limit). Try again.");
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refreshing, followingCount]);
+
   return (
     <Background imageUrl={getBackground("profile")} overlayOpacity={0.78}>
       <SafeAreaView style={styles.container} edges={["top"]}>
@@ -659,6 +713,26 @@ export default function ProfileScreen() {
                     onValueChange={(v) => setDefaultAlerts({ kickoffConfirmed: v })}
                   />
                 </View>
+              </View>
+            </View>
+
+            {/* Manual refresh controls */}
+            <View style={styles.refreshBar}>
+              <Pressable
+                onPress={onRefreshFollowing}
+                disabled={refreshing}
+                style={({ pressed }) => [
+                  styles.refreshBtn,
+                  refreshing && styles.refreshBtnDisabled,
+                  { opacity: pressed ? 0.9 : 1 },
+                ]}
+              >
+                {refreshing ? <ActivityIndicator /> : <Text style={styles.refreshBtnText}>Refresh Following</Text>}
+              </Pressable>
+
+              <View style={{ flex: 1 }}>
+                <Text style={styles.refreshMeta}>{formatLastRefreshed(lastRefreshedAt)}</Text>
+                {refreshSummary ? <Text style={styles.refreshMeta2}>{refreshSummary}</Text> : null}
               </View>
             </View>
 
@@ -1039,6 +1113,34 @@ const styles = StyleSheet.create({
   followingDefaultsKicker: { color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: theme.fontWeight.black },
   followingDefaultsRow: { marginTop: 6, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
   followingDefaultsValue: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.sm },
+
+  refreshBar: {
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255,255,255,0.10)",
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: 12,
+    flexDirection: "row",
+    gap: 12,
+    alignItems: "center",
+  },
+  refreshBtn: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(0,255,136,0.35)",
+    backgroundColor: "rgba(0,0,0,0.22)",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    minWidth: 160,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  refreshBtnDisabled: {
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.16)",
+  },
+  refreshBtnText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.xs },
+  refreshMeta: { color: theme.colors.textSecondary, fontWeight: "800", fontSize: theme.fontSize.xs },
+  refreshMeta2: { marginTop: 4, color: theme.colors.textTertiary, fontWeight: "800", fontSize: theme.fontSize.xs },
 
   followEmpty: { paddingHorizontal: theme.spacing.lg, paddingTop: 6, paddingBottom: theme.spacing.lg },
   followEmptyTitle: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.md },
