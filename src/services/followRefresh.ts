@@ -1,33 +1,26 @@
 // src/services/followRefresh.ts
 import { AppState, type AppStateStatus } from "react-native";
-
-import {
-  refreshFollowedMatches as refreshFollowedMatchesCore,
-} from "@/src/services/followedMatchesRefresh";
+import { refreshFollowedMatches as refreshFollowedMatchesCore } from "@/src/services/followedMatchesRefresh";
 
 /**
  * Compatibility wrapper.
  *
- * Old Phase-1 used:
- * - getFixtureById
- * - applyFixtureUpdate
- * - Alert.alert
- *
- * New truth:
- * - refreshFollowedMatchesCore() diffs kickoffIso vs previous kickoffIso
- * - if changed and alerts.kickoffConfirmed enabled, it triggers a local notification
- * - no in-app Alert spam
- *
  * Keep this module ONLY so existing imports don’t break.
+ * New truth lives in "@/src/services/followedMatchesRefresh".
  */
 
 export type RefreshOptions = {
   /** Limits how many followed fixtures we refresh per run (keeps API friendly). */
   limit?: number;
+  /** Concurrency for API calls (bounded in core). */
+  concurrency?: number;
 };
 
 export async function refreshFollowedMatchesCompat(opts?: RefreshOptions) {
-  return await refreshFollowedMatchesCore({ limit: opts?.limit });
+  return await refreshFollowedMatchesCore({
+    limit: opts?.limit,
+    concurrency: opts?.concurrency,
+  });
 }
 
 /**
@@ -42,7 +35,7 @@ export async function refreshFollowedMatches(opts?: RefreshOptions) {
  * Backwards-compatible auto refresh helper.
  *
  * NOTE:
- * Your app/_layout.tsx already owns the real refresh orchestration.
+ * app/_layout.tsx owns the real orchestration now.
  * Keep this only if something else still calls it.
  */
 export function startFollowAutoRefresh(opts?: RefreshOptions & { intervalMinutes?: number }) {
@@ -52,7 +45,7 @@ export function startFollowAutoRefresh(opts?: RefreshOptions & { intervalMinutes
   let lastState: AppStateStatus = AppState.currentState;
 
   const run = () => {
-    refreshFollowedMatchesCompat({ limit: opts?.limit }).catch(() => null);
+    refreshFollowedMatchesCompat({ limit: opts?.limit, concurrency: opts?.concurrency }).catch(() => null);
   };
 
   const onState = (next: AppStateStatus) => {
@@ -79,9 +72,7 @@ export function startFollowAutoRefresh(opts?: RefreshOptions & { intervalMinutes
 
   if (AppState.currentState === "active") {
     run();
-    if (intervalMinutes > 0) {
-      timer = setInterval(run, intervalMinutes * 60 * 1000);
-    }
+    if (intervalMinutes > 0) timer = setInterval(run, intervalMinutes * 60 * 1000);
   }
 
   return () => {
