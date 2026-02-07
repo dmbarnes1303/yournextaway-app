@@ -5,8 +5,10 @@ import savedItemsStore from "@/src/state/savedItems";
 import type { SavedItem } from "@/src/core/savedItemTypes";
 import { pickAndStoreAttachmentForItem } from "@/src/services/walletAttachments";
 
+/**
+ * Small delay avoids nested Alert timing quirks (esp Android)
+ */
 function defer(fn: () => void) {
-  // avoid nested Alert timing quirks (esp Android)
   setTimeout(fn, 60);
 }
 
@@ -24,10 +26,14 @@ function getAttachments(item: SavedItem | null) {
 }
 
 async function promptAddProof(itemId: string) {
+  const id = String(itemId ?? "").trim();
+  if (!id) return;
+
   try {
-    const att = await pickAndStoreAttachmentForItem(itemId);
+    const att = await pickAndStoreAttachmentForItem(id);
+
     await ensureSavedItemsLoaded();
-    await savedItemsStore.addAttachment(itemId, att);
+    await savedItemsStore.addAttachment(id, att);
 
     Alert.alert("Saved", "Booking proof stored in Wallet for offline access.", [{ text: "OK" }], {
       cancelable: true,
@@ -35,14 +41,19 @@ async function promptAddProof(itemId: string) {
   } catch (e: any) {
     const msg = String(e?.message ?? "");
     if (msg === "cancelled") return;
-    Alert.alert("Couldn’t add attachment", msg || "Try again.", [{ text: "OK" }], { cancelable: true });
+    Alert.alert("Couldn’t add attachment", msg || "Try again.", [{ text: "OK" }], {
+      cancelable: true,
+    });
   }
 }
 
 /**
- * After an item is marked booked, call this to:
- * - show confirmation
- * - offer proof upload if no attachments exist
+ * Call after an item is marked "booked".
+ * - Always confirms it was added to Wallet
+ * - If no attachments exist, offers proof upload (PDF/screenshot) for offline access
+ *
+ * Android reliability rules:
+ * - keep <= 2 actions (+ implicit cancelable) to avoid flaky nested alert behavior
  */
 export async function confirmBookedAndOfferProof(itemId: string) {
   const id = String(itemId ?? "").trim();
@@ -54,38 +65,28 @@ export async function confirmBookedAndOfferProof(itemId: string) {
   const title = String(item?.title ?? "").trim() || "Booking";
   const atts = getAttachments(item);
 
+  // If proof already exists, don't ask again.
   if (atts.length > 0) {
-    Alert.alert(
-      "Added to Wallet",
-      `"${title}" is now marked as booked and saved in your Wallet.`,
-      [{ text: "OK" }],
-      { cancelable: true }
-    );
+    Alert.alert("Added to Wallet", `"${title}" is booked and saved in your Wallet.`, [{ text: "OK" }], {
+      cancelable: true,
+    });
     return;
   }
 
-  // keep button count low for Android reliability
+  const message =
+    `"${title}" is now marked as booked.\n\n` +
+    `Want to add booking proof (PDF/screenshot) for offline access?`;
+
   const buttons =
     Platform.OS === "android"
       ? [
           { text: "Not now", style: "cancel" as const },
-          {
-            text: "Add booking proof",
-            onPress: () => defer(() => promptAddProof(id)),
-          },
+          { text: "Add booking proof", onPress: () => defer(() => promptAddProof(id)) },
         ]
       : [
           { text: "Not now", style: "cancel" as const },
-          {
-            text: "Add booking proof",
-            onPress: () => defer(() => promptAddProof(id)),
-          },
+          { text: "Add booking proof", onPress: () => defer(() => promptAddProof(id)) },
         ];
 
-  Alert.alert(
-    "Added to Wallet",
-    `"${title}" is now marked as booked.\n\nWant to add booking proof (PDF/screenshot) for offline access?`,
-    buttons as any,
-    { cancelable: true }
-  );
+  Alert.alert("Added to Wallet", message, buttons as any, { cancelable: true });
 }
