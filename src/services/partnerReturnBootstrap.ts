@@ -1,152 +1,121 @@
 // src/services/partnerReturnBootstrap.ts
-import { Alert } from "react-native";
+import { Alert, Platform } from "react-native";
 
 import savedItemsStore from "@/src/state/savedItems";
-import { getPartner, type PartnerId } from "@/src/core/partners";
+import { getPartner } from "@/src/core/partners";
+import type { SavedItem } from "@/src/core/savedItemTypes";
+
 import {
   ensurePartnerReturnWatcher,
+  type LastPartnerClick,
   markBooked,
   markNotBooked,
-  clearLastClick,
-  type LastPartnerClick,
 } from "@/src/services/partnerClicks";
 
-let booted = false;
-let prompting = false;
+/**
+ * Phase-1 truth:
+ * We cannot reliably detect “booking completed” from affiliates.
+ * So we prompt on return: Yes → mark booked, No → keep pending.
+ *
+ * This must be bootstrapped at app root so it works from any screen.
+ */
 
-async function ensureSavedItemsLoaded() {
-  if (savedItemsStore.getState().loaded) return;
+let bootstrapped = false;
+
+function safePartnerName(partnerId: string) {
   try {
-    await savedItemsStore.load();
+    return getPartner(partnerId as any).name;
   } catch {
-    // best-effort
+    return "partner";
   }
 }
 
-function safePartnerName(pid: PartnerId): string {
+async function findItem(click: LastPartnerClick): Promise<SavedItem | null> {
   try {
-    return getPartner(pid).name;
-  } catch {
-    return "Partner";
-  }
-}
-
-function getItemForClick(click: LastPartnerClick) {
-  try {
-    return savedItemsStore.getState().items.find((x) => x.id === click.itemId) ?? null;
-  } catch {
-    return null;
-  }
-}
-
-function safeItemTitle(fallback: string, title?: string | null) {
-  const t = String(title ?? "").trim();
-  return t || fallback || "Your booking";
-}
-
-async function archivePendingItem(itemId: string) {
-  try {
-    await ensureSavedItemsLoaded();
-    await savedItemsStore.transitionStatus(itemId, "archived");
+    if (!savedItemsStore.getState().loaded) {
+      await savedItemsStore.load();
+    }
   } catch {
     // ignore
-  } finally {
-    clearLastClick(itemId);
   }
+
+  const items = savedItemsStore.getState().items;
+  const item = items.find((x) => x.id === click.itemId) ?? null;
+  return item;
 }
 
-async function handleReturn(click: LastPartnerClick) {
-  if (prompting) return;
-  prompting = true;
+function shouldPrompt(item: SavedItem | null) {
+  if (!item) return false;
+  // If user already handled it elsewhere, do nothing.
+  if (item.status === "booked" || item.status === "archived") return false;
+  // We only prompt for pending items (created by beginPartnerClick)
+  if (item.status !== "pending") return false;
+  return true;
+}
 
-  const finish = () => {
-    prompting = false;
-  };
+export function bootstrapPartnerReturnPrompt() {
+  if (bootstrapped) return;
+  bootstrapped = true;
 
-  try {
-    await ensureSavedItemsLoaded();
-
-    const item = getItemForClick(click);
-
-    // If item is missing, already booked, or not pending anymore, do NOT prompt.
-    if (!item) {
-      clearLastClick(click.itemId);
-      finish();
-      return;
-    }
-
-    if (item.status !== "pending") {
-      clearLastClick(click.itemId);
-      finish();
-      return;
-    }
+  ensurePartnerReturnWatcher(async (click) => {
+    const item = await findItem(click);
+    if (!shouldPrompt(item)) return;
 
     const partnerName = safePartnerName(click.partnerId);
-    const title = safeItemTitle("Your booking", item.title);
+    const title = String(item?.title ?? "").trim() || "this booking";
 
+    // Android Alert can be a bit “strict” with button counts.
+    // Keep it to 3 buttons max on Android for reliability.
+    const isAndroid = Platform.OS === "android";
+
+    const message =
+      `You just returned from ${partnerName}.\n\n` +
+      `Did you book:\n"${title}"?\n\n` +
+      `We can’t auto-detect checkout success, so you confirm it here.`;
+
+    if (isAndroid) {
+      Alert.alert(
+        "Did you book it?",
+        message,
+        [
+          { text: "Not now", style: "cancel", onPress: () => markNotBooked(click.itemId) },
+          { text: "No", onPress: () => markNotBooked(click.itemId) },
+          {
+            text: "Yes — booked",
+            onPress: async () => {
+              try {
+                await markBooked(click.itemId);
+              } catch {
+                // If anything fails, do not crash; leave it pending.
+              }
+            },
+          },
+        ],
+        { cancelable: true }
+      );
+      return;
+    }
+
+    // iOS can handle a slightly richer prompt if you want later,
+    // but keep it identical for now.
     Alert.alert(
       "Did you book it?",
-      `${partnerName}\n\n${title}\n\nIf you booked it, we’ll move it into Wallet.`,
+      message,
       [
+        { text: "Not now", style: "cancel", onPress: () => markNotBooked(click.itemId) },
+        { text: "No", onPress: () => markNotBooked(click.itemId) },
         {
-          text: "Not yet",
-          style: "cancel",
+          text: "Yes — booked",
           onPress: async () => {
             try {
-              await markNotBooked(click.itemId); // keeps pending (Phase 1)
-            } finally {
-              finish();
-            }
-          },
-        },
-        {
-          text: "Archive",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await archivePendingItem(click.itemId);
-            } finally {
-              finish();
-            }
-          },
-        },
-        {
-          text: "Booked",
-          onPress: async () => {
-            try {
-              await markBooked(click.itemId); // pending -> booked
-            } finally {
-              finish();
+              await markBooked(click.itemId);
+            } catch {
+              // leave pending
             }
           },
         },
       ],
-      {
-        cancelable: true,
-        onDismiss: () => {
-          // Treat dismissal as “not yet”, but clear click to avoid re-prompt loops.
-          try {
-            clearLastClick(click.itemId);
-          } finally {
-            finish();
-          }
-        },
-      }
+      { cancelable: true }
     );
-  } catch {
-    try {
-      clearLastClick(click.itemId);
-    } finally {
-      finish();
-    }
-  }
-}
-
-export function bootstrapPartnerReturnPrompt() {
-  if (booted) return;
-  booted = true;
-
-  ensurePartnerReturnWatcher(async (click) => {
-    await handleReturn(click);
   });
 }
