@@ -49,11 +49,7 @@ function daysUntil(iso: string, now: Date) {
  * If you pass `placeholderIds` (computed from a fixtures list), this becomes accurate.
  * If you don't, it only uses explicit TBD/TBA + missing kickoff + <=21 day rule.
  */
-export function isKickoffTbc(
-  row: FixtureListRow,
-  placeholderIds?: Set<string>,
-  opts?: { now?: Date }
-) {
+export function isKickoffTbc(row: FixtureListRow, placeholderIds?: Set<string>, opts?: { now?: Date }) {
   const now = opts?.now ?? new Date();
 
   const id = normalizeId(row?.fixture?.id);
@@ -70,7 +66,6 @@ export function isKickoffTbc(
   if (placeholderIds && id && placeholderIds.has(id)) return true;
 
   // Otherwise unknown — default to "not TBC" to avoid misleading UI
-  // (we only call it TBC when we have explicit signal or cluster evidence)
   return false;
 }
 
@@ -163,4 +158,4 @@ export function computeLikelyPlaceholderTbcIds(
   }
 
   return out;
-  }
+}
