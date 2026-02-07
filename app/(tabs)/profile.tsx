@@ -112,6 +112,20 @@ function compactPlace(venue?: string | null, city?: string | null) {
   return parts.length ? parts.join(" • ") : "Venue: —";
 }
 
+function matchTitle(m: FollowedMatch) {
+  const h = String((m as any).homeName ?? "").trim();
+  const a = String((m as any).awayName ?? "").trim();
+  if (h && a) return `${h} vs ${a}`;
+  if (h) return `${h} vs —`;
+  if (a) return `— vs ${a}`;
+  return `Match #${String(m.fixtureId ?? "").trim()}`;
+}
+
+function leagueLine(m: FollowedMatch) {
+  const ln = String((m as any).leagueName ?? "").trim();
+  return ln ? ln : null;
+}
+
 /* -------------------------------------------------------------------------- */
 /* Storage keys */
 /* -------------------------------------------------------------------------- */
@@ -238,7 +252,7 @@ export default function ProfileScreen() {
   const displayName = useMemo(() => "Guest Traveller", []);
   const email = useMemo(() => "Not Signed In", []);
 
-  // IMPORTANT: subscribe to derived state so UI updates immediately
+  // Subscribe to derived state so UI updates immediately
   const followed = useFollowStore((s) => s.followed);
   const followingCount = followed.length;
 
@@ -286,7 +300,7 @@ export default function ProfileScreen() {
     ];
   }, [currency]);
 
-  // Following list presentation: newest first already, but we’ll defensively sort by createdAt desc
+  // Following list: newest first
   const followedSorted = useMemo(() => {
     const copy = [...followed];
     copy.sort((a, b) => String(b.createdAt ?? "").localeCompare(String(a.createdAt ?? "")));
@@ -448,11 +462,7 @@ export default function ProfileScreen() {
 
       Alert.alert("Unfollow match?", "You’ll stop getting kickoff-confirmed alerts for this match.", [
         { text: "Cancel", style: "cancel" },
-        {
-          text: "Unfollow",
-          style: "destructive",
-          onPress: () => unfollow(id),
-        },
+        { text: "Unfollow", style: "destructive", onPress: () => unfollow(id) },
       ]);
     },
     [unfollow]
@@ -470,11 +480,7 @@ export default function ProfileScreen() {
             </View>
 
             <View style={[styles.logoMask, { width: logoSize, height: logoSize }]} pointerEvents="none">
-              <Image
-                source={LOGO}
-                style={{ width: logoSize, height: logoSize, transform: [{ scale: 1.18 }] }}
-                resizeMode="cover"
-              />
+              <Image source={LOGO} style={{ width: logoSize, height: logoSize, transform: [{ scale: 1.18 }] }} resizeMode="cover" />
             </View>
           </View>
 
@@ -524,7 +530,7 @@ export default function ProfileScreen() {
             </View>
           </GlassCard>
 
-          {/* FOLLOWING (THIS is what you were missing) */}
+          {/* FOLLOWING */}
           <GlassCard style={[styles.card, { padding: 0 }]} strength="subtle" noPadding>
             <View style={styles.listHeader}>
               <View style={{ flex: 1 }}>
@@ -538,10 +544,7 @@ export default function ProfileScreen() {
                 <Text style={styles.followingDefaultsKicker}>Default alert</Text>
                 <View style={styles.followingDefaultsRow}>
                   <Text style={styles.followingDefaultsValue}>Kickoff</Text>
-                  <Switch
-                    value={!!defaultAlerts.kickoffConfirmed}
-                    onValueChange={(v) => setDefaultAlerts({ kickoffConfirmed: v })}
-                  />
+                  <Switch value={!!defaultAlerts.kickoffConfirmed} onValueChange={(v) => setDefaultAlerts({ kickoffConfirmed: v })} />
                 </View>
               </View>
             </View>
@@ -558,6 +561,9 @@ export default function ProfileScreen() {
               <>
                 {followedPreview.map((m, idx) => {
                   const last = idx === followedPreview.length - 1;
+                  const title = matchTitle(m);
+                  const league = leagueLine(m);
+
                   return (
                     <View key={m.fixtureId} style={[styles.followRow, last && styles.followRowLast]}>
                       <Pressable
@@ -565,8 +571,14 @@ export default function ProfileScreen() {
                         style={({ pressed }) => [styles.followRowMain, { opacity: pressed ? 0.85 : 1 }]}
                       >
                         <Text style={styles.followRowTitle} numberOfLines={1}>
-                          Match #{m.fixtureId}
+                          {title}
                         </Text>
+
+                        {league ? (
+                          <Text style={styles.followRowLeague} numberOfLines={1}>
+                            {league}
+                          </Text>
+                        ) : null}
 
                         <Text style={styles.followRowSub} numberOfLines={1}>
                           {safeIsoToUkDateTime(m.kickoffIso)}
@@ -576,10 +588,9 @@ export default function ProfileScreen() {
 
                         <View style={styles.followTagRow}>
                           <View style={styles.followTag}>
-                            <Text style={styles.followTagText}>
-                              {m.kickoffIso ? "Kickoff set" : "Kickoff TBC"}
-                            </Text>
+                            <Text style={styles.followTagText}>{m.kickoffIso ? "Kickoff set" : "Kickoff TBC"}</Text>
                           </View>
+
                           {m.alerts?.kickoffConfirmed ? (
                             <View style={[styles.followTag, styles.followTagOn]}>
                               <Text style={[styles.followTagText, styles.followTagTextOn]}>Alert on</Text>
@@ -847,16 +858,10 @@ const styles = StyleSheet.create({
     gap: 2,
   },
 
-  btnPrimary: {
-    borderColor: "rgba(0,255,136,0.50)",
-    backgroundColor: "rgba(0,0,0,0.30)",
-  },
+  btnPrimary: { borderColor: "rgba(0,255,136,0.50)", backgroundColor: "rgba(0,0,0,0.30)" },
   btnPrimaryText: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.sm },
 
-  btnGhost: {
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.18)",
-  },
+  btnGhost: { borderColor: "rgba(255,255,255,0.10)", backgroundColor: "rgba(0,0,0,0.18)" },
   btnGhostText: { color: theme.colors.textSecondary, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.sm },
 
   btnMeta: { color: theme.colors.textTertiary, fontSize: theme.fontSize.xs, fontWeight: "800" },
@@ -919,11 +924,7 @@ const styles = StyleSheet.create({
   followingDefaultsRow: { marginTop: 6, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
   followingDefaultsValue: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.sm },
 
-  followEmpty: {
-    paddingHorizontal: theme.spacing.lg,
-    paddingTop: 6,
-    paddingBottom: theme.spacing.lg,
-  },
+  followEmpty: { paddingHorizontal: theme.spacing.lg, paddingTop: 6, paddingBottom: theme.spacing.lg },
   followEmptyTitle: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.md },
   followEmptyBody: { marginTop: 6, color: theme.colors.textSecondary, fontWeight: "700", lineHeight: 18, fontSize: theme.fontSize.sm },
 
@@ -940,6 +941,7 @@ const styles = StyleSheet.create({
 
   followRowMain: { flex: 1 },
   followRowTitle: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.md },
+  followRowLeague: { marginTop: 6, color: theme.colors.primary, fontWeight: "900", fontSize: theme.fontSize.xs, opacity: 0.92 },
   followRowSub: { marginTop: 6, color: theme.colors.textSecondary, fontWeight: "700", fontSize: theme.fontSize.sm },
 
   followTagRow: { marginTop: 10, flexDirection: "row", gap: 8, flexWrap: "wrap" },
@@ -965,12 +967,7 @@ const styles = StyleSheet.create({
   },
   unfollowText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: theme.fontSize.xs },
 
-  followFooterNote: {
-    borderTopWidth: 1,
-    borderTopColor: "rgba(255,255,255,0.10)",
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: 12,
-  },
+  followFooterNote: { borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.10)", paddingHorizontal: theme.spacing.lg, paddingVertical: 12 },
   followFooterText: { color: theme.colors.textTertiary, fontWeight: "800", fontSize: theme.fontSize.xs },
 
   footerNote: {
