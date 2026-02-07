@@ -168,7 +168,7 @@ export default function MatchDetailScreen() {
   const toggleFollow = useFollowStore((s) => s.toggle);
   const upsertLatestSnapshot = useFollowStore((s) => s.upsertLatestSnapshot);
 
-  // IMPORTANT: subscribe to the boolean, not the isFollowing function
+  // IMPORTANT: subscribe to the boolean (reactive), not the isFollowing fn
   const fixtureIdFromRow = row?.fixture?.id != null ? String(row.fixture.id) : "";
   const fixtureId = useMemo(() => fixtureIdFromRow || (id ?? ""), [fixtureIdFromRow, id]);
 
@@ -342,12 +342,18 @@ export default function MatchDetailScreen() {
       season: sea,
       homeTeamId,
       awayTeamId,
+
+      // ✅ Store human-friendly labels at follow-time (so Following list is real)
+      homeName: home,
+      awayName: away,
+      leagueName: leagueName,
+
       kickoffIso: row ? kickoffIsoOrNull(row) : null,
       venue: row?.fixture?.venue?.name ? String(row.fixture.venue.name) : null,
       city: row?.fixture?.venue?.city ? String(row.fixture.venue.city) : null,
-    });
+    } as any);
 
-    // Best-effort: snapshot right away (doesn't affect instant UI now that followed is reactive)
+    // Best-effort: snapshot refresh (also includes names)
     if (row && willFollow) {
       upsertLatestSnapshot(fixtureId, {
         kickoffIso: kickoffIsoOrNull(row),
@@ -357,6 +363,10 @@ export default function MatchDetailScreen() {
         awayTeamId: row?.teams?.away?.id ?? undefined,
         leagueId: row?.league?.id ?? undefined,
         season: (row as any)?.league?.season ?? routeSeason ?? undefined,
+
+        homeName: home,
+        awayName: away,
+        leagueName: leagueName,
       });
     }
 
@@ -378,6 +388,9 @@ export default function MatchDetailScreen() {
     row,
     effectiveLeagueId,
     effectiveSeason,
+    home,
+    away,
+    leagueName,
     tbc,
     user,
     showToast,
@@ -458,7 +471,6 @@ export default function MatchDetailScreen() {
                   </Text>
                 </View>
 
-                {/* This now appears immediately because `followed` is reactive */}
                 {followed ? (
                   <View style={styles.followInfo}>
                     <Text style={styles.followInfoTitle}>Following</Text>
@@ -565,9 +577,7 @@ export default function MatchDetailScreen() {
 
                 <View style={styles.opsItem}>
                   <Text style={styles.opsTitle}>Bag policy and entry</Text>
-                  <Text style={styles.opsBody}>
-                    Policies vary. If you’re carrying a bag, double-check restrictions before you travel.
-                  </Text>
+                  <Text style={styles.opsBody}>Policies vary. If you’re carrying a bag, double-check restrictions before you travel.</Text>
                   <Pressable onPress={() => safeOpenUrl(stadiumInfoUrl)} style={styles.inlineBtn}>
                     <Text style={styles.inlineBtnText}>Search stadium entry rules</Text>
                   </Pressable>
