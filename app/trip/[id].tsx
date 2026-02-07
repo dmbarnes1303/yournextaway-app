@@ -25,11 +25,11 @@ import { parseIsoDateOnly, toIsoDate } from "@/src/constants/football";
 import tripsStore, { type Trip } from "@/src/state/trips";
 import savedItemsStore from "@/src/state/savedItems";
 
-import type { SavedItem, SavedItemStatus, SavedItemType } from "@/src/core/savedItemTypes";
+import type { SavedItem, SavedItemType } from "@/src/core/savedItemTypes";
 import { getSavedItemTypeLabel } from "@/src/core/savedItemTypes";
 import { getPartner, type PartnerId } from "@/src/core/partners";
 
-import { beginPartnerClick, openPartnerUrl } from "@/src/services/partnerClicks";
+import { beginPartnerClick, openUntrackedUrl } from "@/src/services/partnerClicks";
 import { getFixtureById } from "@/src/services/apiFootball";
 import { formatUkDateOnly } from "@/src/utils/formatters";
 import { buildAffiliateLinks } from "@/src/services/affiliateLinks";
@@ -172,7 +172,7 @@ export default function TripDetailScreen() {
     return () => unsub();
   }, [tripId]);
 
-  /* ---------------- load fixtures (for fallback city name) ---------------- */
+  /* ---------------- load fixtures (fallback city name) ---------------- */
 
   useEffect(() => {
     let cancelled = false;
@@ -225,11 +225,7 @@ export default function TripDetailScreen() {
   const pending = useMemo(() => savedItems.filter((x) => x.status === "pending"), [savedItems]);
   const booked = useMemo(() => savedItems.filter((x) => x.status === "booked"), [savedItems]);
 
-  const notes = useMemo(() => {
-    // Notes are "note" type, keep only active ones (saved + pending if you ever use pending notes)
-    // For Phase 1: treat notes as "saved".
-    return savedItems.filter((x) => x.type === "note" && x.status !== "archived");
-  }, [savedItems]);
+  const notes = useMemo(() => savedItems.filter((x) => x.type === "note" && x.status !== "archived"), [savedItems]);
 
   /* ---------------- navigation ---------------- */
 
@@ -239,13 +235,13 @@ export default function TripDetailScreen() {
   }
 
   /* -------------------------------------------------------------------------- */
-  /* STANDARD OPEN FLOW (Phase-1 spine) */
+  /* OPEN FLOW */
   /* -------------------------------------------------------------------------- */
 
   async function openUntracked(url?: string) {
     if (!url) return;
     try {
-      await openPartnerUrl(url);
+      await openUntrackedUrl(url);
     } catch {
       Alert.alert("Couldn’t open link");
     }
@@ -258,13 +254,11 @@ export default function TripDetailScreen() {
     metadata?: Record<string, any>;
   }) {
     if (!tripId) {
-      Alert.alert(
-        "Save trip first",
-        "Save this trip before booking so we can track your confirmations in Wallet."
-      );
+      Alert.alert("Save trip first", "Save this trip before booking so we can store it in Wallet.");
       return;
     }
 
+    // Maps is always untracked
     if (args.partnerId === "googlemaps") {
       await openUntracked(args.url);
       return;
@@ -279,6 +273,7 @@ export default function TripDetailScreen() {
         metadata: args.metadata,
       });
     } catch {
+      // If tracked open fails, at least open it untracked.
       await openUntracked(args.url);
     }
   }
@@ -289,17 +284,13 @@ export default function TripDetailScreen() {
 
   async function openSavedItem(item: SavedItem) {
     if (!item.partnerUrl) {
-      // Notes (or unlinked items)
       const text = String(item.metadata?.text ?? "").trim();
       Alert.alert(item.title || "Notes", text || "No details saved.");
       return;
     }
 
-    try {
-      await openPartnerUrl(item.partnerUrl);
-    } catch {
-      Alert.alert("Couldn’t open link");
-    }
+    // Opening an existing item must NOT create a new pending item or prompts.
+    await openUntracked(item.partnerUrl);
   }
 
   async function archiveItem(item: SavedItem) {
@@ -310,7 +301,7 @@ export default function TripDetailScreen() {
     }
   }
 
-  async function markBooked(item: SavedItem) {
+  async function markBookedLocal(item: SavedItem) {
     try {
       await savedItemsStore.transitionStatus(item.id, "booked");
     } catch {
@@ -330,14 +321,10 @@ export default function TripDetailScreen() {
   }
 
   function confirmMarkBooked(item: SavedItem) {
-    Alert.alert(
-      "Mark as booked?",
-      "Only do this if you completed the booking and want it in Wallet.",
-      [
-        { text: "Cancel", style: "cancel" },
-        { text: "Mark booked", style: "default", onPress: () => markBooked(item) },
-      ]
-    );
+    Alert.alert("Mark as booked?", "Only do this if you completed the booking and want it in Wallet.", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Mark booked", style: "default", onPress: () => markBookedLocal(item) },
+    ]);
   }
 
   async function addNote() {
@@ -399,10 +386,7 @@ export default function TripDetailScreen() {
       <SafeAreaView style={styles.safe} edges={["bottom"]}>
         <ScrollView
           style={styles.scroll}
-          contentContainerStyle={[
-            styles.content,
-            { paddingBottom: theme.spacing.xxl + insets.bottom },
-          ]}
+          contentContainerStyle={[styles.content, { paddingBottom: theme.spacing.xxl + insets.bottom }]}
         >
           {!tripId && (
             <GlassCard style={styles.card}>
@@ -421,7 +405,6 @@ export default function TripDetailScreen() {
 
           {trip && (
             <>
-              {/* HERO */}
               <GlassCard style={styles.hero}>
                 <Text style={styles.kicker}>TRIP WORKSPACE</Text>
                 <Text style={styles.cityTitle}>{cityName}</Text>
@@ -446,7 +429,6 @@ export default function TripDetailScreen() {
                 </View>
               </GlassCard>
 
-              {/* PENDING BOOKINGS (critical) */}
               <GlassCard style={styles.card}>
                 <Text style={styles.sectionTitle}>Pending</Text>
 
@@ -483,7 +465,6 @@ export default function TripDetailScreen() {
                 )}
               </GlassCard>
 
-              {/* NOTES (critical: real workspace, not just affiliate buttons) */}
               <GlassCard style={styles.card}>
                 <Text style={styles.sectionTitle}>Notes</Text>
 
@@ -529,7 +510,6 @@ export default function TripDetailScreen() {
                 )}
               </GlassCard>
 
-              {/* BOOK YOUR TRIP */}
               {bookingLinks && (
                 <GlassCard style={styles.card}>
                   <Text style={styles.sectionTitle}>Book your trip</Text>
@@ -604,7 +584,6 @@ export default function TripDetailScreen() {
                 </GlassCard>
               )}
 
-              {/* MATCH TICKETS */}
               {bookingLinks && (
                 <GlassCard style={styles.card}>
                   <Text style={styles.sectionTitle}>Match tickets</Text>
@@ -629,7 +608,6 @@ export default function TripDetailScreen() {
                 </GlassCard>
               )}
 
-              {/* PROTECT YOURSELF */}
               {bookingLinks && (
                 <GlassCard style={styles.card}>
                   <Text style={styles.sectionTitle}>Protect yourself</Text>
@@ -654,7 +632,6 @@ export default function TripDetailScreen() {
                 </GlassCard>
               )}
 
-              {/* CLAIMS */}
               {bookingLinks && (
                 <GlassCard style={styles.card}>
                   <Text style={styles.sectionTitle}>Claims & compensation</Text>
@@ -679,7 +656,6 @@ export default function TripDetailScreen() {
                 </GlassCard>
               )}
 
-              {/* WALLET (quick peek) */}
               <GlassCard style={styles.card}>
                 <Text style={styles.sectionTitle}>Wallet</Text>
 
@@ -799,7 +775,6 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
 
-  /* Pending rows */
   itemRow: {
     flexDirection: "row",
     gap: 12,
@@ -855,7 +830,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
 
-  /* Notes */
   noteBox: {
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
@@ -893,7 +867,6 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.18)",
   },
 
-  /* Book grid */
   bookGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
