@@ -8,7 +8,6 @@ import {
   Pressable,
   ActivityIndicator,
   Alert,
-  Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -91,14 +90,14 @@ function buildMeta(item: SavedItem) {
   return bits.join(" • ");
 }
 
+function getAttachments(item: SavedItem) {
+  return Array.isArray(item.attachments) ? item.attachments : [];
+}
+
 function attachmentLabel(att: WalletAttachment) {
   const kind = att.kind === "pdf" ? "PDF" : att.kind === "image" ? "Image" : "File";
   const name = String(att.name ?? "").trim();
   return name ? `${kind}: ${name}` : `${kind} attachment`;
-}
-
-function getAttachments(item: SavedItem) {
-  return Array.isArray(item.attachments) ? item.attachments : [];
 }
 
 /* -------------------------------------------------------------------------- */
@@ -113,6 +112,9 @@ export default function WalletScreen() {
 
   const [trips, setTrips] = useState<Trip[]>(tripsStore.getState().trips);
   const [items, setItems] = useState<SavedItem[]>(savedItemsStore.getState().items);
+
+  // Attachment manager UI state (single item at a time)
+  const [manageItemId, setManageItemId] = useState<string | null>(null);
 
   useEffect(() => {
     const unsubTrips = tripsStore.subscribe((s) => {
@@ -171,6 +173,15 @@ export default function WalletScreen() {
     return { booked, archived };
   }, [items, validTripIds]);
 
+  const managingItem = useMemo(() => {
+    if (!manageItemId) return null;
+    return items.find((x) => x.id === manageItemId) ?? null;
+  }, [manageItemId, items]);
+
+  const managingAttachments = useMemo(() => {
+    return managingItem ? getAttachments(managingItem) : [];
+  }, [managingItem]);
+
   const addAttachment = useCallback(async (item: SavedItem) => {
     try {
       const att = await pickAndStoreAttachmentForItem(item.id);
@@ -212,123 +223,62 @@ export default function WalletScreen() {
     }
   }, []);
 
-  const openAttachmentMenu = useCallback((item: SavedItem) => {
-    const atts = getAttachments(item);
+  const openCoreActions = useCallback(
+    (item: SavedItem) => {
+      const details = getItemDetailsText(item);
+      const attCount = getAttachments(item).length;
+      const attLine = attCount ? `\n\nAttachments: ${attCount}` : `\n\nAttachments: none`;
 
-    if (atts.length === 0) {
-      Alert.alert(
-        "No attachments",
-        "Add a PDF or screenshot to store booking proof offline.",
-        [
-          { text: "Close", style: "cancel" },
-          { text: "Add attachment", onPress: () => addAttachment(item) },
-        ]
-      );
-      return;
-    }
-
-    // Step 1: pick attachment to open or manage
-    Alert.alert(
-      "Attachments",
-      "Pick one.",
-      [
+      const buttons: any[] = [
         { text: "Close", style: "cancel" },
-        ...atts.slice(0, 8).map((a) => ({
-          text: attachmentLabel(a),
+        item.partnerUrl ? { text: "Open link", onPress: () => openItemLink(item) } : undefined,
+        {
+          text: attCount ? `Manage attachments (${attCount})` : "Add attachment",
           onPress: () => {
-            // Step 2: action menu for that attachment
-            Alert.alert(
-              attachmentLabel(a),
-              "What do you want to do?",
-              [
-                { text: "Close", style: "cancel" },
-                {
-                  text: "Open",
-                  onPress: async () => {
-                    try {
-                      await openAttachment(a);
-                    } catch {
-                      Alert.alert("Couldn’t open", "Your device could not open that attachment.");
-                    }
-                  },
-                },
-                {
-                  text: "Delete",
-                  style: "destructive",
-                  onPress: async () => {
-                    try {
-                      await savedItemsStore.removeAttachment(item.id, a.id);
-                      await deleteAttachmentFile(a);
-                    } catch {
-                      Alert.alert("Couldn’t delete", "Try again.");
-                    }
-                  },
-                },
-              ],
-              { cancelable: true }
-            );
+            if (attCount) setManageItemId(item.id);
+            else addAttachment(item);
           },
-        })),
-      ],
-      { cancelable: true }
-    );
-  }, [addAttachment]);
-
-  function openActions(item: SavedItem) {
-    const details = getItemDetailsText(item);
-    const atts = getAttachments(item);
-    const attCount = atts.length;
-
-    const attLine = attCount
-      ? `\n\nAttachments: ${attCount}`
-      : `\n\nAttachments: none`;
-
-    // Android hard limit: keep the first menu SMALL and route to submenus.
-    const showCoreMenu = () => {
-      const common: any[] = [
-        { text: "Close", style: "cancel" },
-        item.partnerUrl ? { text: "Open link", onPress: () => openItemLink(item) } : undefined,
-        { text: attCount ? `Attachments (${attCount})` : "Add attachment", onPress: () => openAttachmentMenu(item) },
-      ].filter(Boolean);
-
-      // Third actionable slot depends on mode
-      if (mode === "archived") {
-        common.push({ text: "Restore", onPress: () => restoreItem(item) });
-      } else {
-        common.push({ text: "Archive", style: "destructive", onPress: () => archiveItem(item) });
-      }
-
-      // On Android you’ll only reliably get 3 buttons — so we enforce a 3-button menu:
-      if (Platform.OS === "android") {
-        // Force: Close + (Open link or Attachments) + (Archive/Restore)
-        const btns: any[] = [{ text: "Close", style: "cancel" }];
-
-        if (item.partnerUrl) btns.push({ text: "Open link", onPress: () => openItemLink(item) });
-        else btns.push({ text: attCount ? `Attachments (${attCount})` : "Add attachment", onPress: () => openAttachmentMenu(item) });
-
-        if (mode === "archived") btns.push({ text: "Restore", onPress: () => restoreItem(item) });
-        else btns.push({ text: "Archive", style: "destructive", onPress: () => archiveItem(item) });
-
-        Alert.alert(item.title || "Wallet item", details + attLine, btns, { cancelable: true });
-        return;
-      }
-
-      // iOS can show more; include all options.
-      const iosButtons: any[] = [
-        { text: "Close", style: "cancel" },
-        item.partnerUrl ? { text: "Open link", onPress: () => openItemLink(item) } : undefined,
-        { text: "Add attachment", onPress: () => addAttachment(item) },
-        attCount ? { text: `Manage attachments (${attCount})`, onPress: () => openAttachmentMenu(item) } : undefined,
+        },
         mode === "archived"
           ? { text: "Restore", onPress: () => restoreItem(item) }
           : { text: "Archive", style: "destructive", onPress: () => archiveItem(item) },
       ].filter(Boolean);
 
-      Alert.alert(item.title || "Wallet item", details + attLine, iosButtons, { cancelable: true });
-    };
+      // Keep <= 3 actions + cancel (Android reliability)
+      Alert.alert(item.title || "Wallet item", details + attLine, buttons.slice(0, 4), { cancelable: true });
+    },
+    [mode, openItemLink, addAttachment, archiveItem, restoreItem]
+  );
 
-    showCoreMenu();
-  }
+  const openAttachmentRow = useCallback(async (att: WalletAttachment) => {
+    try {
+      await openAttachment(att);
+    } catch (e: any) {
+      Alert.alert("Couldn’t open", String(e?.message ?? "Your device could not open that attachment."));
+    }
+  }, []);
+
+  const deleteAttachmentRow = useCallback(async (item: SavedItem, att: WalletAttachment) => {
+    Alert.alert(
+      "Delete attachment?",
+      "This removes the stored file from this device.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await savedItemsStore.removeAttachment(item.id, att.id);
+              await deleteAttachmentFile(att);
+            } catch {
+              Alert.alert("Couldn’t delete", "Try again.");
+            }
+          },
+        },
+      ]
+    );
+  }, []);
 
   return (
     <Background imageSource={getBackground("wallet")} overlayOpacity={0.86}>
@@ -339,6 +289,60 @@ export default function WalletScreen() {
             <Text style={styles.subtitle}>Your confirmed bookings and stored essentials</Text>
           </View>
 
+          {/* Attachment manager (reliable; no nested alerts) */}
+          {managingItem && (
+            <GlassCard style={styles.managerCard} strength="subtle">
+              <View style={styles.managerHeader}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.managerTitle} numberOfLines={1}>
+                    Attachments
+                  </Text>
+                  <Text style={styles.managerSub} numberOfLines={1}>
+                    {managingItem.title || "Item"} • {managingAttachments.length} file{managingAttachments.length === 1 ? "" : "s"}
+                  </Text>
+                </View>
+
+                <Pressable onPress={() => setManageItemId(null)} style={styles.managerClose}>
+                  <Text style={styles.managerCloseText}>Close</Text>
+                </Pressable>
+              </View>
+
+              <View style={{ gap: 10 }}>
+                <Pressable onPress={() => addAttachment(managingItem)} style={styles.managerAddBtn}>
+                  <Text style={styles.managerAddText}>Add attachment</Text>
+                </Pressable>
+
+                {managingAttachments.length === 0 ? (
+                  <View style={{ paddingVertical: 6 }}>
+                    <Text style={styles.muted}>No attachments yet.</Text>
+                  </View>
+                ) : (
+                  managingAttachments.map((a) => (
+                    <View key={a.id} style={styles.attRow}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.attTitle} numberOfLines={1}>
+                          {attachmentLabel(a)}
+                        </Text>
+                        <Text style={styles.attMeta} numberOfLines={1}>
+                          Stored offline
+                        </Text>
+                      </View>
+
+                      <Pressable onPress={() => openAttachmentRow(a)} style={styles.attBtn}>
+                        <Text style={styles.attBtnText}>Open</Text>
+                      </Pressable>
+
+                      <Pressable onPress={() => deleteAttachmentRow(managingItem, a)} style={[styles.attBtn, styles.attBtnDanger]}>
+                        <Text style={styles.attBtnText}>Delete</Text>
+                      </Pressable>
+                    </View>
+                  ))
+                )}
+              </View>
+            </GlassCard>
+          )}
+
+          {/* Mode toggle */}
           <GlassCard style={styles.toggleCard} strength="subtle">
             <View style={styles.toggleRow}>
               <Pressable
@@ -399,7 +403,7 @@ export default function WalletScreen() {
                           const attCount = getAttachments(it).length;
 
                           return (
-                            <Pressable key={it.id} onPress={() => openActions(it)} style={styles.itemRow}>
+                            <Pressable key={it.id} onPress={() => openCoreActions(it)} style={styles.itemRow}>
                               <View style={{ flex: 1 }}>
                                 <Text style={styles.itemTitle} numberOfLines={1}>
                                   {it.title}
@@ -416,6 +420,12 @@ export default function WalletScreen() {
                                   </Text>
                                 ) : null}
                               </View>
+
+                              {attCount ? (
+                                <Pressable onPress={() => setManageItemId(it.id)} style={styles.managePill}>
+                                  <Text style={styles.managePillText}>Manage</Text>
+                                </Pressable>
+                              ) : null}
 
                               <Text style={styles.chev}>›</Text>
                             </Pressable>
@@ -467,6 +477,56 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
     fontWeight: theme.fontWeight.bold,
   },
+
+  managerCard: { padding: theme.spacing.lg },
+  managerHeader: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 12 },
+  managerTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.md },
+  managerSub: { marginTop: 4, color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12 },
+
+  managerClose: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    backgroundColor: "rgba(0,0,0,0.12)",
+  },
+  managerCloseText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: 12 },
+
+  managerAddBtn: {
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(0,255,136,0.55)",
+    backgroundColor: "rgba(0,0,0,0.12)",
+    alignItems: "center",
+  },
+  managerAddText: { color: theme.colors.text, fontWeight: "900" },
+
+  attRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+  },
+  attTitle: { color: theme.colors.text, fontWeight: "900" },
+  attMeta: { marginTop: 4, color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12 },
+
+  attBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.15)",
+    backgroundColor: "rgba(0,0,0,0.15)",
+  },
+  attBtnDanger: { borderColor: "rgba(255,80,80,0.35)" },
+  attBtnText: { color: theme.colors.text, fontWeight: "900", fontSize: 12 },
 
   toggleCard: { padding: 10 },
 
@@ -545,6 +605,16 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSize.sm,
     fontWeight: theme.fontWeight.black,
   },
+
+  managePill: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(0,255,136,0.35)",
+    backgroundColor: "rgba(0,255,136,0.08)",
+  },
+  managePillText: { color: theme.colors.text, fontWeight: "900", fontSize: 12 },
 
   chev: {
     color: theme.colors.textSecondary,
