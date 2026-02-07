@@ -12,7 +12,7 @@ import {
   Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 
 import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
@@ -26,6 +26,7 @@ import { formatUkDateTimeMaybe } from "@/src/utils/formatters";
 import { getFlagImageUrl } from "@/src/utils/flagImages";
 
 import tripsStore from "@/src/state/trips";
+import useFollowStore from "@/src/state/followStore";
 import { computeLikelyPlaceholderTbcIds, isKickoffTbc, kickoffIsoOrNull } from "@/src/utils/kickoffTbc";
 
 /* -------------------------------------------------------------------------- */
@@ -36,8 +37,21 @@ const DAYS_AHEAD = 365;
 const MAX_MULTI_LEAGUES = 10;
 
 /* -------------------------------------------------------------------------- */
+/* Param helpers
+ * -------------------------------------------------------------------------- */
+
+function coerceString(v: any): string | null {
+  const s = String(v ?? "").trim();
+  return s ? s : null;
+}
+
+function coerceNumber(v: any): number | null {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+/* -------------------------------------------------------------------------- */
 /* UTC-safe date helpers (prevents DST duplication)
- * NOTE: Strip is UTC; API uses ISO. This avoids repeated/shifted days around DST.
  * -------------------------------------------------------------------------- */
 
 function isoFromUtcParts(y: number, m0: number, d: number) {
@@ -148,7 +162,11 @@ function initials(name: string) {
 function TeamCrest({ name, logo }: { name: string; logo?: string | null }) {
   return (
     <View style={styles.crestWrap}>
-      {logo ? <Image source={{ uri: logo }} style={styles.crestImg} resizeMode="contain" /> : <Text style={styles.crestFallback}>{initials(name)}</Text>}
+      {logo ? (
+        <Image source={{ uri: logo }} style={styles.crestImg} resizeMode="contain" />
+      ) : (
+        <Text style={styles.crestFallback}>{initials(name)}</Text>
+      )}
     </View>
   );
 }
@@ -179,10 +197,19 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promis
 
 export default function FixturesScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams();
 
   // 365-day strip starting TOMORROW (never show today)
   const minIso = useMemo(() => tomorrowIsoUtc(), []);
   const maxIso = useMemo(() => addDaysIsoUtc(minIso, DAYS_AHEAD - 1), [minIso]);
+
+  // Route overrides (optional): leagueId, from, to
+  const routeLeagueId = useMemo(() => coerceNumber((params as any)?.leagueId), [params]);
+  const routeFrom = useMemo(() => coerceString((params as any)?.from), [params]);
+  const routeTo = useMemo(() => coerceString((params as any)?.to), [params]);
+
+  const initialFrom = useMemo(() => clampIsoToWindow(routeFrom ?? minIso, minIso, maxIso), [routeFrom, minIso, maxIso]);
+  const initialTo = useMemo(() => clampIsoToWindow(routeTo ?? initialFrom, minIso, maxIso), [routeTo, initialFrom, minIso, maxIso]);
 
   const dateStrip = useMemo(() => {
     return Array.from({ length: DAYS_AHEAD }).map((_, i) => {
@@ -197,14 +224,30 @@ export default function FixturesScreen() {
   }, [minIso]);
 
   // Range selection: start → end → reset
-  const [rangeFrom, setRangeFrom] = useState<string>(minIso);
-  const [rangeTo, setRangeTo] = useState<string>(minIso);
+  const [rangeFrom, setRangeFrom] = useState<string>(initialFrom);
+  const [rangeTo, setRangeTo] = useState<string>(initialTo);
 
   const normalizedRange = useMemo(() => normalizeRange(rangeFrom, rangeTo), [rangeFrom, rangeTo]);
   const isRange = useMemo(() => normalizedRange.from !== normalizedRange.to, [normalizedRange]);
 
   // Leagues: multi-select up to 10, default = All (empty array => all leagues)
-  const [selectedLeagueIds, setSelectedLeagueIds] = useState<number[]>([]);
+  const [selectedLeagueIds, setSelectedLeagueIds] = useState<number[]>(() => {
+    if (routeLeagueId && Number.isFinite(routeLeagueId)) return [routeLeagueId];
+    return [];
+  });
+
+  // Follow state (fast lookup)
+  const followed = useFollowStore((s) => s.followed);
+  const toggleFollow = useFollowStore((s) => s.toggle);
+
+  const followedIdSet = useMemo(() => {
+    const set = new Set<string>();
+    for (const f of followed) {
+      const id = String(f.fixtureId ?? "").trim();
+      if (id) set.add(id);
+    }
+    return set;
+  }, [followed]);
 
   const leagueSubtitle = useMemo(() => {
     if (selectedLeagueIds.length === 0) return "All leagues";
@@ -314,7 +357,8 @@ export default function FixturesScreen() {
         norm(r?.teams?.home?.name).includes(qNorm) ||
         norm(r?.teams?.away?.name).includes(qNorm) ||
         norm(r?.fixture?.venue?.name).includes(qNorm) ||
-        norm(r?.fixture?.venue?.city).includes(qNorm)
+        norm(r?.fixture?.venue?.city).includes(qNorm) ||
+        norm(r?.league?.name).includes(qNorm)
       );
     });
   }, [rows, isRange, normalizedRange.from, qNorm]);
@@ -343,28 +387,87 @@ export default function FixturesScreen() {
     return iso === from || iso === to;
   }
 
-  function goMatch(id: string) {
-    router.push({ pathname: "/match/[id]", params: { id } } as any);
+  function goMatch(id: string, ctx?: { leagueId?: number | null; season?: number | null }) {
+    const fid = String(id ?? "").trim();
+    if (!fid) return;
+
+    router.push({
+      pathname: "/match/[id]",
+      params: {
+        id: fid,
+        from: normalizedRange.from,
+        to: normalizedRange.to,
+        ...(ctx?.leagueId ? { leagueId: String(ctx.leagueId) } : {}),
+        ...(ctx?.season ? { season: String(ctx.season) } : {}),
+      },
+    } as any);
   }
 
-  function goTripOrBuild(fixtureId: string) {
-    const existingTripId = resolveTripForFixture(fixtureId);
+  function goTripOrBuild(fixtureId: string, ctx?: { leagueId?: number | null; season?: number | null }) {
+    const fid = String(fixtureId ?? "").trim();
+    if (!fid) return;
+
+    const existingTripId = resolveTripForFixture(fid);
 
     if (existingTripId) {
       router.push({ pathname: "/trip/[id]", params: { id: existingTripId } } as any);
       return;
     }
 
-    router.push({ pathname: "/trip/build", params: { fixtureId } } as any);
+    router.push({
+      pathname: "/trip/build",
+      params: {
+        fixtureId: fid,
+        from: normalizedRange.from,
+        to: normalizedRange.to,
+        ...(ctx?.leagueId ? { leagueId: String(ctx.leagueId) } : {}),
+        ...(ctx?.season ? { season: String(ctx.season) } : {}),
+      },
+    } as any);
   }
 
-  const renderRow = (r: FixtureListRow, index: number) => {
+  const onToggleFollowFromRow = useCallback(
+    (r: FixtureListRow) => {
+      const fixtureId = r?.fixture?.id != null ? String(r.fixture.id) : "";
+      if (!fixtureId) return;
+
+      const leagueId = r?.league?.id != null ? Number(r.league.id) : 0;
+      const season = (r as any)?.league?.season != null ? Number((r as any).league.season) : 0;
+
+      const homeTeamId = r?.teams?.home?.id != null ? Number(r.teams.home.id) : 0;
+      const awayTeamId = r?.teams?.away?.id != null ? Number(r.teams.away.id) : 0;
+
+      const homeName = r?.teams?.home?.name != null ? String(r.teams.home.name) : null;
+      const awayName = r?.teams?.away?.name != null ? String(r.teams.away.name) : null;
+      const leagueName = r?.league?.name != null ? String(r.league.name) : null;
+
+      const round = r?.league?.round != null ? String(r.league.round) : null;
+
+      toggleFollow({
+        fixtureId,
+        leagueId,
+        season,
+        homeTeamId,
+        awayTeamId,
+        homeName,
+        awayName,
+        leagueName,
+        round,
+        kickoffIso: kickoffIsoOrNull(r),
+        venue: r?.fixture?.venue?.name != null ? String(r.fixture.venue.name) : null,
+        city: r?.fixture?.venue?.city != null ? String(r.fixture.venue.city) : null,
+      });
+    },
+    [toggleFollow]
+  );
+
+  const renderRow = (r: FixtureListRow) => {
     const fixtureId = r?.fixture?.id != null ? String(r.fixture.id) : "";
     if (!fixtureId) return null;
 
     // Make row keys bulletproof across multi-league merges
-    const leagueId = r?.league?.id != null ? String(r.league.id) : "L";
-    const rowKey = `${leagueId}-${fixtureId}`;
+    const leagueIdStr = r?.league?.id != null ? String(r.league.id) : "L";
+    const rowKey = `${leagueIdStr}-${fixtureId}`;
 
     const expanded = expandedKey === rowKey;
 
@@ -376,57 +479,89 @@ export default function FixturesScreen() {
 
     const kickoff = kickoffPresentation(r, placeholderIds);
 
+    const isFollowed = followedIdSet.has(fixtureId);
+
+    const ctxLeagueId = r?.league?.id != null ? Number(r.league.id) : null;
+    const ctxSeason = (r as any)?.league?.season != null ? Number((r as any).league.season) : null;
+
     return (
       <View key={rowKey} style={styles.rowWrap}>
-        <GlassCard noPadding style={styles.rowCard}>
-          <Pressable onPress={() => setExpandedKey(expanded ? null : rowKey)} style={styles.rowMain}>
+        <GlassCard noPadding style={styles.rowCard} strength="subtle">
+          <View style={styles.rowMain}>
             <View style={styles.rowInner}>
               <TeamCrest name={home} logo={r?.teams?.home?.logo} />
 
-              <View style={styles.centerBlock}>
-                <Text style={styles.teamLine}>{home}</Text>
-                <Text style={styles.vs}>vs</Text>
-                <Text style={styles.teamLine}>{away}</Text>
-
-                <View style={styles.metaStack}>
-                  <Text style={styles.meta} numberOfLines={2}>
-                    {kickoff.primary}
-                    {venue || city ? ` • ${[venue, city].filter(Boolean).join(" • ")}` : ""}
+              <Pressable
+                onPress={() => setExpandedKey(expanded ? null : rowKey)}
+                style={({ pressed }) => [styles.centerPress, { opacity: pressed ? 0.88 : 1 }]}
+              >
+                <View style={styles.centerBlock}>
+                  <Text style={styles.teamLine} numberOfLines={1}>
+                    {home}
+                  </Text>
+                  <Text style={styles.vs}>vs</Text>
+                  <Text style={styles.teamLine} numberOfLines={1}>
+                    {away}
                   </Text>
 
-                  {kickoff.secondary ? (
-                    <Text style={styles.metaSecondary} numberOfLines={1}>
-                      {kickoff.secondary}
+                  <View style={styles.metaStack}>
+                    <Text style={styles.meta} numberOfLines={2}>
+                      {kickoff.primary}
+                      {venue || city ? ` • ${[venue, city].filter(Boolean).join(" • ")}` : ""}
                     </Text>
-                  ) : null}
 
-                  <View style={styles.badgeRow}>
-                    {kickoff.likelyTbc ? (
-                      <View style={[styles.badge, styles.badgeWarn]}>
-                        <Text style={[styles.badgeText, styles.badgeTextWarn]}>Likely TBC</Text>
-                      </View>
-                    ) : (
-                      <View style={styles.badge}>
-                        <Text style={styles.badgeText}>Confirmed</Text>
-                      </View>
-                    )}
+                    {kickoff.secondary ? (
+                      <Text style={styles.metaSecondary} numberOfLines={1}>
+                        {kickoff.secondary}
+                      </Text>
+                    ) : null}
 
-                    <Text style={styles.tapHint}>Tap for actions</Text>
+                    <View style={styles.badgeRow}>
+                      {kickoff.likelyTbc ? (
+                        <View style={[styles.badge, styles.badgeWarn]}>
+                          <Text style={[styles.badgeText, styles.badgeTextWarn]}>Likely TBC</Text>
+                        </View>
+                      ) : (
+                        <View style={styles.badge}>
+                          <Text style={styles.badgeText}>Confirmed</Text>
+                        </View>
+                      )}
+
+                      <Text style={styles.tapHint}>Tap for actions</Text>
+                    </View>
                   </View>
                 </View>
-              </View>
+              </Pressable>
 
-              <TeamCrest name={away} logo={r?.teams?.away?.logo} />
+              <View style={styles.rightCol}>
+                <TeamCrest name={away} logo={r?.teams?.away?.logo} />
+
+                <Pressable
+                  onPress={() => onToggleFollowFromRow(r)}
+                  style={({ pressed }) => [
+                    styles.followPill,
+                    isFollowed && styles.followPillOn,
+                    { opacity: pressed ? 0.9 : 1 },
+                  ]}
+                >
+                  <Text style={[styles.followPillText, isFollowed && styles.followPillTextOn]}>
+                    {isFollowed ? "Following" : "Follow"}
+                  </Text>
+                </Pressable>
+              </View>
             </View>
-          </Pressable>
+          </View>
 
           {expanded ? (
             <View style={styles.expandArea}>
-              <Pressable onPress={() => goMatch(fixtureId)} style={styles.expandGhost}>
+              <Pressable onPress={() => goMatch(fixtureId, { leagueId: ctxLeagueId, season: ctxSeason })} style={styles.expandGhost}>
                 <Text style={styles.expandGhostText}>Match</Text>
               </Pressable>
 
-              <Pressable onPress={() => goTripOrBuild(fixtureId)} style={styles.expandPrimary}>
+              <Pressable
+                onPress={() => goTripOrBuild(fixtureId, { leagueId: ctxLeagueId, season: ctxSeason })}
+                style={styles.expandPrimary}
+              >
                 <Text style={styles.expandPrimaryText}>Build trip</Text>
               </Pressable>
             </View>
@@ -446,7 +581,7 @@ export default function FixturesScreen() {
           <TextInput
             value={query}
             onChangeText={setQuery}
-            placeholder="Search team, city, or venue"
+            placeholder="Search team, city, venue, or league"
             placeholderTextColor={theme.colors.textTertiary}
             style={styles.search}
           />
@@ -478,7 +613,10 @@ export default function FixturesScreen() {
 
           {/* Leagues: All + multi-select */}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 12 }}>
-            <Pressable onPress={setAllLeagues} style={[styles.leaguePill, selectedLeagueIds.length === 0 && styles.leaguePillActive]}>
+            <Pressable
+              onPress={setAllLeagues}
+              style={[styles.leaguePill, selectedLeagueIds.length === 0 && styles.leaguePillActive]}
+            >
               <Text style={styles.leagueText}>All leagues</Text>
             </Pressable>
 
@@ -504,7 +642,7 @@ export default function FixturesScreen() {
         </View>
 
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-          <GlassCard style={styles.card}>
+          <GlassCard style={styles.card} strength="default">
             {loading && (
               <View style={styles.center}>
                 <ActivityIndicator />
@@ -623,7 +761,8 @@ const styles = StyleSheet.create({
   crestImg: { width: 30, height: 30 },
   crestFallback: { color: theme.colors.textSecondary, fontWeight: "900" },
 
-  centerBlock: { flex: 1, alignItems: "center", gap: 6 },
+  centerPress: { flex: 1 },
+  centerBlock: { alignItems: "center", gap: 6 },
 
   teamLine: { color: theme.colors.text, fontSize: 15, fontWeight: "800" },
   vs: { color: theme.colors.textSecondary, fontSize: 12 },
@@ -649,6 +788,26 @@ const styles = StyleSheet.create({
   badgeTextWarn: { color: "rgba(255,210,77,0.92)" },
 
   tapHint: { color: theme.colors.textTertiary, fontSize: 11, fontWeight: "800" },
+
+  rightCol: { alignItems: "center", gap: 8 },
+
+  followPill: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    backgroundColor: "rgba(0,0,0,0.16)",
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    minWidth: 86,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  followPillOn: {
+    borderColor: "rgba(79,224,138,0.35)",
+    backgroundColor: "rgba(79,224,138,0.10)",
+  },
+  followPillText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: 11 },
+  followPillTextOn: { color: "rgba(79,224,138,0.92)" },
 
   expandArea: { flexDirection: "row", gap: 10, padding: 12 },
 
