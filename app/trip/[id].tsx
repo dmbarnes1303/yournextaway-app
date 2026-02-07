@@ -34,6 +34,8 @@ import { getFixtureById } from "@/src/services/apiFootball";
 import { formatUkDateOnly } from "@/src/utils/formatters";
 import { buildAffiliateLinks } from "@/src/services/affiliateLinks";
 
+import { confirmBookedAndOfferProof } from "@/src/services/bookingProof";
+
 /* -------------------------------------------------------------------------- */
 /* helpers */
 /* -------------------------------------------------------------------------- */
@@ -116,10 +118,14 @@ function buildMetaLine(item: SavedItem) {
   return bits.join(" • ");
 }
 
+function defer(fn: () => void) {
+  setTimeout(fn, 60);
+}
+
 /**
  * Option B truth:
  * Transition graph does NOT allow saved -> booked directly.
- * So we perform: saved -> pending -> booked (and pending -> booked is allowed).
+ * So we perform: saved -> pending -> booked.
  */
 async function forceToBooked(itemId: string) {
   const id = String(itemId ?? "").trim();
@@ -262,16 +268,10 @@ export default function TripDetailScreen() {
   }, [trip, cityName]);
 
   const pending = useMemo(() => savedItems.filter((x) => x.status === "pending"), [savedItems]);
-  const saved = useMemo(
-    () => savedItems.filter((x) => x.status === "saved" && x.type !== "note"),
-    [savedItems]
-  );
+  const saved = useMemo(() => savedItems.filter((x) => x.status === "saved" && x.type !== "note"), [savedItems]);
   const booked = useMemo(() => savedItems.filter((x) => x.status === "booked"), [savedItems]);
 
-  const notes = useMemo(
-    () => savedItems.filter((x) => x.type === "note" && x.status !== "archived"),
-    [savedItems]
-  );
+  const notes = useMemo(() => savedItems.filter((x) => x.type === "note" && x.status !== "archived"), [savedItems]);
 
   /* ---------------- navigation ---------------- */
 
@@ -293,12 +293,7 @@ export default function TripDetailScreen() {
     }
   }
 
-  async function openTrackedPartner(args: {
-    partnerId: PartnerId;
-    url: string;
-    title: string;
-    metadata?: Record<string, any>;
-  }) {
+  async function openTrackedPartner(args: { partnerId: PartnerId; url: string; title: string; metadata?: Record<string, any> }) {
     if (!tripId) {
       Alert.alert("Save trip first", "Save this trip before booking so we can store it in Wallet.");
       return;
@@ -356,6 +351,12 @@ export default function TripDetailScreen() {
   async function markBookedSmart(item: SavedItem) {
     try {
       await forceToBooked(item.id);
+
+      // Keep UX consistent with partner return:
+      // show confirmation + offer proof upload if none exists.
+      defer(() => {
+        confirmBookedAndOfferProof(item.id).catch(() => null);
+      });
     } catch {
       Alert.alert("Couldn’t mark booked", "That item can’t be marked booked right now.");
     }
@@ -373,14 +374,10 @@ export default function TripDetailScreen() {
   }
 
   function confirmMarkBooked(item: SavedItem) {
-    Alert.alert(
-      "Mark as booked?",
-      "Only do this if you completed the booking and want it in Wallet.",
-      [
-        { text: "Cancel", style: "cancel" },
-        { text: "Mark booked", style: "default", onPress: () => markBookedSmart(item) },
-      ]
-    );
+    Alert.alert("Mark as booked?", "Only do this if you completed the booking and want it in Wallet.", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Mark booked", style: "default", onPress: () => markBookedSmart(item) },
+    ]);
   }
 
   function confirmMoveToPending(item: SavedItem) {
@@ -453,10 +450,7 @@ export default function TripDetailScreen() {
       <SafeAreaView style={styles.safe} edges={["bottom"]}>
         <ScrollView
           style={styles.scroll}
-          contentContainerStyle={[
-            styles.content,
-            { paddingBottom: theme.spacing.xxl + insets.bottom },
-          ]}
+          contentContainerStyle={[styles.content, { paddingBottom: theme.spacing.xxl + insets.bottom }]}
         >
           {!tripId && (
             <GlassCard style={styles.card}>
@@ -511,7 +505,7 @@ export default function TripDetailScreen() {
                 </View>
               </GlassCard>
 
-              {/* PENDING (unknown outcome) */}
+              {/* PENDING */}
               <GlassCard style={styles.card}>
                 <Text style={styles.sectionTitle}>Pending</Text>
 
@@ -542,10 +536,7 @@ export default function TripDetailScreen() {
                           <Pressable onPress={() => confirmMarkBooked(it)} style={styles.smallBtn}>
                             <Text style={styles.smallBtnText}>Booked</Text>
                           </Pressable>
-                          <Pressable
-                            onPress={() => confirmArchive(it)}
-                            style={[styles.smallBtn, styles.smallBtnDanger]}
-                          >
+                          <Pressable onPress={() => confirmArchive(it)} style={[styles.smallBtn, styles.smallBtnDanger]}>
                             <Text style={styles.smallBtnText}>Archive</Text>
                           </Pressable>
                         </View>
@@ -555,7 +546,7 @@ export default function TripDetailScreen() {
                 )}
               </GlassCard>
 
-              {/* SAVED (user said "No" on return, keep as shortlist) */}
+              {/* SAVED */}
               <GlassCard style={styles.card}>
                 <Text style={styles.sectionTitle}>Saved</Text>
 
@@ -589,10 +580,7 @@ export default function TripDetailScreen() {
                           <Pressable onPress={() => confirmMoveToPending(it)} style={styles.smallBtn}>
                             <Text style={styles.smallBtnText}>Pending</Text>
                           </Pressable>
-                          <Pressable
-                            onPress={() => confirmArchive(it)}
-                            style={[styles.smallBtn, styles.smallBtnDanger]}
-                          >
+                          <Pressable onPress={() => confirmArchive(it)} style={[styles.smallBtn, styles.smallBtnDanger]}>
                             <Text style={styles.smallBtnText}>Archive</Text>
                           </Pressable>
                         </View>
@@ -616,11 +604,7 @@ export default function TripDetailScreen() {
                     multiline
                   />
 
-                  <Pressable
-                    onPress={addNote}
-                    disabled={noteSaving}
-                    style={[styles.noteSaveBtn, noteSaving && { opacity: 0.7 }]}
-                  >
+                  <Pressable onPress={addNote} disabled={noteSaving} style={[styles.noteSaveBtn, noteSaving && { opacity: 0.7 }]}>
                     <Text style={styles.noteSaveText}>{noteSaving ? "Saving…" : "Save note"}</Text>
                   </Pressable>
                 </View>
@@ -798,7 +782,7 @@ export default function TripDetailScreen() {
                 </GlassCard>
               )}
 
-              {/* WALLET PREVIEW (Booked only) */}
+              {/* WALLET PREVIEW */}
               <GlassCard style={styles.card}>
                 <Text style={styles.sectionTitle}>Wallet</Text>
 
