@@ -107,47 +107,6 @@ function defer(fn: () => void) {
   setTimeout(fn, 60);
 }
 
-/**
- * Option B reality:
- * - saved items may need to become booked manually later
- * - your transition graph doesn't allow saved -> booked directly,
- *   so we do saved -> pending -> booked (safe + deterministic)
- */
-async function forceToBooked(itemId: string) {
-  const id = String(itemId ?? "").trim();
-  if (!id) return;
-
-  if (!savedItemsStore.getState().loaded) {
-    try {
-      await savedItemsStore.load();
-    } catch {
-      // ignore
-    }
-  }
-
-  const cur = savedItemsStore.getState().items.find((x) => x.id === id);
-  if (!cur) return;
-
-  try {
-    if (cur.status === "booked") return;
-
-    if (cur.status === "saved") {
-      await savedItemsStore.transitionStatus(id, "pending");
-      await savedItemsStore.transitionStatus(id, "booked");
-      return;
-    }
-
-    if (cur.status === "pending") {
-      await savedItemsStore.transitionStatus(id, "booked");
-      return;
-    }
-
-    // archived -> restore elsewhere
-  } catch {
-    // ignore
-  }
-}
-
 /* -------------------------------------------------------------------------- */
 /* Screen */
 /* -------------------------------------------------------------------------- */
@@ -253,7 +212,7 @@ export default function WalletScreen() {
     }
 
     try {
-      // Opening an existing Wallet item must be UNTRACKED (no prompts / no pending creation)
+      // Opening an existing Wallet item must be UNTRACKED
       await openUntrackedUrl(item.partnerUrl);
     } catch {
       Alert.alert("Couldn’t open link", "Your device could not open that link.");
@@ -278,7 +237,7 @@ export default function WalletScreen() {
 
   const markBookedFromWallet = useCallback(async (item: SavedItem) => {
     try {
-      await forceToBooked(item.id);
+      await savedItemsStore.transitionStatus(item.id, "booked");
 
       // Keep UX consistent everywhere: confirm + offer proof upload
       defer(() => {
@@ -295,10 +254,7 @@ export default function WalletScreen() {
       const attCount = getAttachments(item).length;
       const attLine = attCount ? `\n\nAttachments: ${attCount}` : `\n\nAttachments: none`;
 
-      // Build actions in priority order.
       const actions: any[] = [];
-
-      // Always include Close (Android requires a cancel-ish path)
       actions.push({ text: "Close", style: "cancel" });
 
       if (item.partnerUrl) {
@@ -324,7 +280,7 @@ export default function WalletScreen() {
         actions.push({ text: "Archive", style: "destructive", onPress: () => archiveItem(item) });
       }
 
-      // HARD RULE: Android max 3 buttons.
+      // Android reliability: keep <= 3 buttons
       const maxButtons = Platform.OS === "android" ? 3 : 5;
 
       Alert.alert(item.title || "Wallet item", details + attLine, actions.slice(0, maxButtons), {
@@ -508,7 +464,11 @@ export default function WalletScreen() {
                           const attCount = getAttachments(it).length;
 
                           return (
-                            <Pressable key={it.id} onPress={() => openCoreActions(it)} style={styles.itemRow}>
+                            <Pressable
+                              key={it.id}
+                              onPress={() => openCoreActions(it)}
+                              style={styles.itemRow}
+                            >
                               <View style={{ flex: 1 }}>
                                 <Text style={styles.itemTitle} numberOfLines={1}>
                                   {it.title}
