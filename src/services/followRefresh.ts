@@ -8,10 +8,10 @@ import { kickoffIsoOrNull, isKickoffTbc } from "@/src/utils/kickoffTbc";
 /**
  * Phase 1 follow refresh:
  * - Re-fetch followed fixtures (rate-limit friendly)
- * - Apply snapshot patch via applyFixtureUpdate (gives us diff result)
- * - If kickoff changed and alerts.kickoffConfirmed is enabled, raise an in-app alert
+ * - Apply snapshot patch via applyFixtureUpdate (diff result)
+ * - If kickoff changed and alerts.kickoffConfirmed is enabled, raise in-app alert
  *
- * No push, no background fetch yet. Just correctness on foreground + manual triggers.
+ * No push, no background fetch yet. Foreground + manual triggers only.
  */
 
 type RefreshOptions = {
@@ -48,11 +48,16 @@ function safeStr(v: unknown): string | null {
   return s ? s : null;
 }
 
+function shouldThrottle(minMinutesBetweenRefreshes: number) {
+  if (_lastRefreshAtMs === 0) return false;
+  return minutesSince(_lastRefreshAtMs) < minMinutesBetweenRefreshes;
+}
+
 function toPatchFromRow(row: FixtureListRow): FollowSnapshot {
   const kickoffIso = kickoffIsoOrNull(row);
 
-  // Heuristic: compute likely TBC using the kickoffTbc util.
-  // NOTE: this call without placeholderIds relies on explicit TBD/TBA + missing KO + 21-day rule.
+  // Heuristic: without placeholderIds, isKickoffTbc uses:
+  // explicit TBD/TBA OR missing KO OR within-21-day rule.
   const kickoffLikelyTbc = isKickoffTbc(row) ? true : false;
 
   return {
@@ -68,7 +73,7 @@ function toPatchFromRow(row: FixtureListRow): FollowSnapshot {
     homeTeamId: row?.teams?.home?.id ?? undefined,
     awayTeamId: row?.teams?.away?.id ?? undefined,
 
-    // Keep names fresh if API supplies them (but we already store at follow-time)
+    // Keep names fresh if API supplies them (we also capture at follow-time)
     homeName: safeStr(row?.teams?.home?.name),
     awayName: safeStr(row?.teams?.away?.name),
     leagueName: safeStr(row?.league?.name),
@@ -93,16 +98,35 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promis
   return results;
 }
 
-function describeChange(res: ApplyFixtureUpdateResult, meta?: { title?: string }) {
-  const prev = res.prevKickoffIso ? new Date(res.prevKickoffIso).toLocaleString("en-GB") : "TBC";
-  const next = res.nextKickoffIso ? new Date(res.nextKickoffIso).toLocaleString("en-GB") : "TBC";
-  const t = meta?.title ? `${meta.title}` : `Match #${res.fixtureId}`;
-  return { title: "Kickoff updated", message: `${t}\n${prev} → ${next}` };
+function fmtKo(iso: string | null) {
+  if (!iso) return "TBC";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "TBC";
+  return d.toLocaleString("en-GB");
 }
 
-function shouldThrottle(minMinutesBetweenRefreshes: number) {
-  if (_lastRefreshAtMs === 0) return false;
-  return minutesSince(_lastRefreshAtMs) < minMinutesBetweenRefreshes;
+function titleForFixtureId(fixtureId: string) {
+  const m = useFollowStore.getState().followed.find((x) => x.fixtureId === fixtureId);
+  if (m?.homeName && m?.awayName) return `${m.homeName} vs ${m.awayName}`;
+  return `Match #${fixtureId}`;
+}
+
+function buildAlertSummary(changes: ApplyFixtureUpdateResult[]) {
+  // Keep the alert readable; don’t dump 50 lines into a modal.
+  const maxLines = 6;
+
+  const lines = changes.slice(0, maxLines).map((r) => {
+    const t = titleForFixtureId(r.fixtureId);
+    return `${t}\n${fmtKo(r.prevKickoffIso)} → ${fmtKo(r.nextKickoffIso)}`;
+  });
+
+  const remaining = changes.length - lines.length;
+  if (remaining > 0) lines.push(`+ ${remaining} more updated`);
+
+  const title = changes.length === 1 ? "Kickoff updated" : `${changes.length} kickoffs updated`;
+  const message = lines.join("\n\n");
+
+  return { title, message };
 }
 
 export async function refreshFollowedMatches(opts?: RefreshOptions) {
@@ -127,11 +151,9 @@ export async function refreshFollowedMatches(opts?: RefreshOptions) {
 
       const patch = toPatchFromRow(row);
       const res = applyFixtureUpdate(fixtureId, patch);
-
-      // res can be null if fixtureId was invalid
       return res ?? null;
     } catch {
-      // Non-fatal per-fixture failures (rate limit / network / API)
+      // non-fatal per-fixture failures
       return null;
     }
   });
@@ -142,13 +164,12 @@ export async function refreshFollowedMatches(opts?: RefreshOptions) {
   const changed = applied.filter((r) => r.existed && r.kickoffChanged);
 
   if (o.showInAppAlerts) {
-    // Phase 1: show alerts only while app is active, and only for kickoff changes with user pref enabled.
-    for (const r of changed) {
-      if (!r.shouldNotifyKickoff) continue;
-      const m = useFollowStore.getState().followed.find((x) => x.fixtureId === r.fixtureId);
-      const title = m?.homeName && m?.awayName ? `${m.homeName} vs ${m.awayName}` : undefined;
-      const msg = describeChange(r, { title });
-      Alert.alert(msg.title, msg.message);
+    // Only notify the ones the user opted into
+    const notify = changed.filter((r) => r.shouldNotifyKickoff);
+
+    if (notify.length > 0) {
+      const { title, message } = buildAlertSummary(notify);
+      Alert.alert(title, message);
     }
   }
 
@@ -160,12 +181,23 @@ export async function refreshFollowedMatches(opts?: RefreshOptions) {
  * - refresh when app returns to foreground
  * - optional interval while active
  *
- * This is Phase 1 only — not background fetch.
+ * Phase 1 only — not background fetch.
  */
 export function startFollowAutoRefresh(opts?: RefreshOptions & { intervalMinutes?: number }) {
   const intervalMinutes = Math.max(0, Number(opts?.intervalMinutes ?? 0));
   let timer: any = null;
   let lastState: AppStateStatus = AppState.currentState;
+
+  const clearTimer = () => {
+    if (timer) clearInterval(timer);
+    timer = null;
+  };
+
+  const startTimer = () => {
+    if (intervalMinutes <= 0) return;
+    clearTimer();
+    timer = setInterval(() => refreshFollowedMatches(opts).catch(() => null), intervalMinutes * 60 * 1000);
+  };
 
   const onState = (next: AppStateStatus) => {
     const wasBg = lastState !== "active";
@@ -173,26 +205,21 @@ export function startFollowAutoRefresh(opts?: RefreshOptions & { intervalMinutes
 
     if (next === "active" && wasBg) {
       refreshFollowedMatches(opts).catch(() => null);
-      if (intervalMinutes > 0) {
-        if (timer) clearInterval(timer);
-        timer = setInterval(() => refreshFollowedMatches(opts).catch(() => null), intervalMinutes * 60 * 1000);
-      }
+      startTimer();
+      return;
     }
 
     if (next !== "active") {
-      if (timer) clearInterval(timer);
-      timer = null;
+      clearTimer();
     }
   };
 
   const sub = AppState.addEventListener("change", onState);
 
-  // kick once on start if active
+  // Kick once on start if already active
   if (AppState.currentState === "active") {
     refreshFollowedMatches(opts).catch(() => null);
-    if (intervalMinutes > 0) {
-      timer = setInterval(() => refreshFollowedMatches(opts).catch(() => null), intervalMinutes * 60 * 1000);
-    }
+    startTimer();
   }
 
   return () => {
@@ -201,6 +228,6 @@ export function startFollowAutoRefresh(opts?: RefreshOptions & { intervalMinutes
     } catch {
       // ignore
     }
-    if (timer) clearInterval(timer);
+    clearTimer();
   };
-  }
+}
