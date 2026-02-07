@@ -1,25 +1,27 @@
 // app/_layout.tsx
 import "@/src/utils/errorLogger";
 import React, { useEffect, useRef } from "react";
-import { Stack } from "expo-router";
+import { Stack, useRouter } from "expo-router";
 import { AppState, type AppStateStatus } from "react-native";
+import * as Notifications from "expo-notifications";
 
 import { ProProvider } from "@/src/context/ProContext";
 import { bootstrapPartnerReturnPrompt } from "@/src/services/partnerReturnBootstrap";
-
 import { refreshFollowedMatches } from "@/src/services/followedMatchesRefresh";
-import useFollowStore from "@/src/state/followStore";
 
 export default function RootLayout() {
+  const router = useRouter();
+
   // Guards against stacked listeners / intervals during Fast Refresh
   const startedRef = useRef(false);
 
   const appStateSubRef = useRef<{ remove: () => void } | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const startupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const lastRefreshAtRef = useRef<number>(0);
   const refreshInFlightRef = useRef(false);
+
+  const notifSubRef = useRef<{ remove: () => void } | null>(null);
 
   useEffect(() => {
     if (startedRef.current) return;
@@ -28,27 +30,29 @@ export default function RootLayout() {
     // Phase-1 spine: partner click → return → “Booked?” prompt
     bootstrapPartnerReturnPrompt();
 
+    // Notification tap → open match
+    try {
+      notifSubRef.current = Notifications.addNotificationResponseReceivedListener((resp) => {
+        const data: any = resp?.notification?.request?.content?.data ?? {};
+        const kind = String(data?.kind ?? "").trim();
+        const fixtureId = String(data?.fixtureId ?? "").trim();
+
+        if (kind === "kickoff_update" && fixtureId) {
+          router.push({ pathname: "/match/[id]", params: { id: fixtureId } } as any);
+        }
+      });
+    } catch {
+      // ignore
+    }
+
     // NOTE:
     // Do NOT request notification permissions here.
     // Request them only when the user enables kickoffConfirmed in the UI.
-
     const minMinutesBetweenRefreshes = 10;
     const intervalMinutes = 15;
 
-    const hasFollowedMatches = () => {
-      try {
-        return (useFollowStore.getState().followed?.length ?? 0) > 0;
-      } catch {
-        return false;
-      }
-    };
-
     const canRun = (reason: "startup" | "foreground" | "interval") => {
-      // Don’t waste API calls if there’s nothing to refresh.
-      if (!hasFollowedMatches()) return false;
-
       if (reason === "startup") return true;
-
       const now = Date.now();
       const minMs = minMinutesBetweenRefreshes * 60 * 1000;
       return now - lastRefreshAtRef.current >= minMs;
@@ -74,9 +78,6 @@ export default function RootLayout() {
       if (intervalMinutes <= 0) return;
       if (intervalRef.current) return;
 
-      // Only poll if there are followed matches; otherwise do nothing.
-      if (!hasFollowedMatches()) return;
-
       intervalRef.current = setInterval(() => {
         runRefresh("interval").catch(() => null);
       }, intervalMinutes * 60 * 1000);
@@ -93,19 +94,8 @@ export default function RootLayout() {
       }
     };
 
-    const clearStartupTimer = () => {
-      if (!startupTimerRef.current) return;
-      try {
-        clearTimeout(startupTimerRef.current);
-      } catch {
-        // ignore
-      } finally {
-        startupTimerRef.current = null;
-      }
-    };
-
     // Startup refresh (delay so persisted stores rehydrate)
-    startupTimerRef.current = setTimeout(() => {
+    const startupTimer = setTimeout(() => {
       runRefresh("startup").catch(() => null);
     }, 900);
 
@@ -118,8 +108,6 @@ export default function RootLayout() {
       lastState = next;
 
       if (becameActive) {
-        // If we come back to foreground, we don’t want an old startup timer firing too.
-        clearStartupTimer();
         runRefresh("foreground").catch(() => null);
         startInterval();
       }
@@ -131,17 +119,11 @@ export default function RootLayout() {
 
     appStateSubRef.current = AppState.addEventListener("change", onAppState) as any;
 
-    // If we mount while already active:
-    // - do a foreground refresh (after rehydrate timer is still pending)
-    // - start interval only if there are followed matches
-    if (AppState.currentState === "active") {
-      // Don’t double-fire with startup timer; keep the delayed startup refresh as the first hit.
-      // But we can still start interval if there are followed matches.
-      startInterval();
-    }
+    // If we mount while already active, start interval
+    if (AppState.currentState === "active") startInterval();
 
     return () => {
-      clearStartupTimer();
+      clearTimeout(startupTimer);
 
       try {
         appStateSubRef.current?.remove?.();
@@ -153,9 +135,17 @@ export default function RootLayout() {
 
       stopInterval();
 
+      try {
+        notifSubRef.current?.remove?.();
+      } catch {
+        // ignore
+      } finally {
+        notifSubRef.current = null;
+      }
+
       startedRef.current = false;
     };
-  }, []);
+  }, [router]);
 
   return (
     <ProProvider>
