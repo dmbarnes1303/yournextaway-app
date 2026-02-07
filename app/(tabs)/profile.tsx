@@ -23,7 +23,7 @@ import { theme } from "@/src/constants/theme";
 import storage from "@/src/services/storage";
 
 import useFollowStore, { type FollowedMatch } from "@/src/state/followStore";
-import { refreshFollowedMatches } from "@/src/services/followRefresh";
+import { refreshFollowedMatches } from "@/src/services/followedMatchesRefresh";
 import { ensureNotificationsReady } from "@/src/services/followKickoffNotifications";
 
 /* -------------------------------------------------------------------------- */
@@ -251,7 +251,9 @@ function formatLastRefreshed(ms: number | null) {
 const STORAGE_KEYS = {
   seenLanding: "yna:seenLanding",
   setupComplete: "yna:setupComplete",
+
   plan: "yna:plan",
+
   homeAirport: "yna:profile.homeAirport",
   currency: "yna:profile.currency",
   language: "yna:profile.language",
@@ -368,12 +370,13 @@ export default function ProfileScreen() {
   const displayName = useMemo(() => "Guest Traveller", []);
   const email = useMemo(() => "Not Signed In", []);
 
-  // Follow store
   const followed = useFollowStore((s) => s.followed);
   const followingCount = followed.length;
 
   const unfollow = useFollowStore((s) => s.unfollow);
-  const setDefaultAlerts = useFollowStore((s) => s.setDefaultAlerts);
+
+  // IMPORTANT: we want batch update + default update together
+  const setKickoffConfirmedDefaultAndAll = useFollowStore((s) => s.setKickoffConfirmedDefaultAndAll);
   const defaultAlerts = useFollowStore((s) => s.defaultAlerts);
 
   // Permission-gated toggle state
@@ -424,7 +427,6 @@ export default function ProfileScreen() {
     ];
   }, [currency]);
 
-  // Following list: newest first
   const followedSorted = useMemo(() => {
     const copy = [...followed];
     copy.sort((a, b) => String(b.createdAt ?? "").localeCompare(String(a.createdAt ?? "")));
@@ -433,7 +435,6 @@ export default function ProfileScreen() {
 
   const followedPreview = useMemo(() => followedSorted.slice(0, 6), [followedSorted]);
 
-  // Likely placeholder TBC inference across FOLLOWED list
   const likelyTbcIds = useMemo(() => computeLikelyPlaceholderTbcIdsFromFollowed(followed), [followed]);
 
   // Load persisted settings once
@@ -456,7 +457,6 @@ export default function ProfileScreen() {
         if (!mounted) return;
 
         setSetupComplete(storedSetup === "true");
-
         if (storedPlan === "free" || storedPlan === "premium") setPlan(storedPlan);
         if (storedAirport) setHomeAirport(storedAirport);
         if (storedCurrency) setCurrency(storedCurrency);
@@ -495,19 +495,16 @@ export default function ProfileScreen() {
     })();
   }, [alerts, budgetTarget, currency, homeAirport, language, loading, plan]);
 
-  const finishSetup = useCallback(
-    async () => {
-      try {
-        await storage.setString(STORAGE_KEYS.setupComplete, "true");
-        setSetupComplete(true);
-        router.replace("/(tabs)/home");
-      } catch {
-        setSetupComplete(true);
-        router.replace("/(tabs)/home");
-      }
-    },
-    [router]
-  );
+  const finishSetup = useCallback(async () => {
+    try {
+      await storage.setString(STORAGE_KEYS.setupComplete, "true");
+    } catch {
+      // ignore
+    } finally {
+      setSetupComplete(true);
+      router.replace("/(tabs)/home");
+    }
+  }, [router]);
 
   const resetSetup = useCallback(() => {
     Alert.alert("Reset setup?", "This will make the app show Landing again on next launch.", [
@@ -608,9 +605,7 @@ export default function ProfileScreen() {
     setRefreshSummary(null);
 
     try {
-      // User-driven refresh: fine to run refresh, but refresh itself will NOT prompt for permissions.
       const rows = await refreshFollowedMatches({ limit: 25, concurrency: 3 });
-
       setLastRefreshedAt(Date.now());
 
       const refreshed = rows.filter((r: any) => r?.refreshed).length;
@@ -628,20 +623,21 @@ export default function ProfileScreen() {
     async (nextValue: boolean) => {
       if (kickoffToggleBusy) return;
 
-      // OFF never needs permission
+      // OFF never needs permission: batch update + default in one go
       if (!nextValue) {
-        setDefaultAlerts({ kickoffConfirmed: false });
+        setKickoffConfirmedDefaultAndAll(false);
         return;
       }
 
-      // ON = explicit user action → permission prompt allowed
+      // ON = explicit user action → request permission here
       setKickoffToggleBusy(true);
 
       try {
         const ok = await ensureNotificationsReady({ request: true });
 
         if (!ok) {
-          setDefaultAlerts({ kickoffConfirmed: false });
+          // keep everything OFF if permission denied
+          setKickoffConfirmedDefaultAndAll(false);
 
           Alert.alert(
             "Notifications disabled",
@@ -649,16 +645,15 @@ export default function ProfileScreen() {
             [{ text: "OK" }],
             { cancelable: true }
           );
-
           return;
         }
 
-        setDefaultAlerts({ kickoffConfirmed: true });
+        setKickoffConfirmedDefaultAndAll(true);
       } finally {
         setKickoffToggleBusy(false);
       }
     },
-    [kickoffToggleBusy, setDefaultAlerts]
+    [kickoffToggleBusy, setKickoffConfirmedDefaultAndAll]
   );
 
   return (
