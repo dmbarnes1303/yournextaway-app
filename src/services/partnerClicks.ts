@@ -8,18 +8,20 @@ import type { SavedItem, SavedItemType } from "@/src/core/savedItemTypes";
 import { getSavedItemTypeLabel } from "@/src/core/savedItemTypes";
 
 /**
- * Phase 1 return detection:
+ * Phase 1 return detection (Option B):
  * - beginPartnerClick creates a pending item, stores lastClick
  * - prompt on return (AppState OR browser dismiss)
+ *
+ * Option B semantics:
+ * - YES  => pending -> booked
+ * - NO   => pending -> saved (keep as a saved idea/link, not a "pending booking")
+ * - NOT NOW => keep pending
  *
  * HARDENING:
  * - global opening guard
  * - rollback pending item if opening fails
  * - avoid zombie prompts (age limit)
- * - avoid false prompts for instant dismiss (min open duration)
- * - single, explicit public API:
- *    - beginPartnerClick() tracked
- *    - openUntrackedUrl() untracked
+ * - avoid "instant dismiss" zombie pending items by auto-demoting pending->saved
  */
 
 export type LastPartnerClick = {
@@ -56,32 +58,72 @@ function isRecent(click: LastPartnerClick) {
   return now() - click.createdAt <= 1000 * 60 * 60 * 6; // 6 hours
 }
 
+async function ensureSavedItemsLoaded() {
+  if (savedItemsStore.getState().loaded) return;
+  try {
+    await savedItemsStore.load();
+  } catch {
+    // ignore
+  }
+}
+
+async function tryTransitionPendingToSaved(itemId: string) {
+  const id = String(itemId ?? "").trim();
+  if (!id) return;
+
+  await ensureSavedItemsLoaded();
+  const cur = savedItemsStore.getState().items.find((x) => x.id === id);
+  if (!cur) return;
+
+  // Only demote if still pending (don’t stomp manual changes)
+  if (cur.status !== "pending") return;
+
+  try {
+    await savedItemsStore.transitionStatus(id, "saved");
+  } catch {
+    // ignore (assertTransition could throw if policy changes)
+  }
+}
+
 /**
  * Consume lastClick exactly once and invoke handler.
- * This is the ONLY place we clear lastClick.
+ * This is the ONLY place we clear lastClick for prompting.
+ *
+ * Instant dismiss policy:
+ * - If browser dismisses too fast, we DO NOT prompt,
+ *   but we DO auto-demote pending -> saved so Pending doesn't rot.
  */
-async function triggerReturnIfPresent(reason: "appstate" | "browser_dismiss", meta?: { openDurationMs?: number }) {
+async function triggerReturnIfPresent(
+  reason: "appstate" | "browser_dismiss",
+  meta?: { openDurationMs?: number }
+) {
   if (!lastClick) return;
 
-  // Avoid zombie prompts
+  // Avoid zombie prompts (stale lastClick)
   if (!isRecent(lastClick)) {
     lastClick = null;
     return;
   }
 
-  // Avoid false prompts for instant dismiss
-  // (accidental taps / quick peek)
+  const click = lastClick;
+
+  // Avoid false prompts for instant dismiss (accidental tap / quick peek)
   const minOpenMs = 8000;
   const dur = Number(meta?.openDurationMs ?? 0);
   if (reason === "browser_dismiss" && dur > 0 && dur < minOpenMs) {
     lastClick = null;
+    // critical: don’t leave a dead pending item
+    await tryTransitionPendingToSaved(click.itemId);
     return;
   }
 
   const handler = onReturnHandler;
+
+  // If there is no handler yet, don't clear lastClick (so bootstrap can attach),
+  // but also don't prompt.
   if (!handler) return;
 
-  const click = lastClick;
+  // Clear exactly once (prevents duplicate prompts)
   lastClick = null;
 
   try {
@@ -118,7 +160,9 @@ export function getPartnerClicksDebugState() {
   return { opening, subscribed, lastClick };
 }
 
-export function ensurePartnerReturnWatcher(onReturn: (click: LastPartnerClick) => void | Promise<void>) {
+export function ensurePartnerReturnWatcher(
+  onReturn: (click: LastPartnerClick) => void | Promise<void>
+) {
   onReturnHandler = onReturn;
 
   if (subscribed) return;
@@ -131,7 +175,7 @@ export function ensurePartnerReturnWatcher(onReturn: (click: LastPartnerClick) =
     lastState = next;
     if (!becameActive) return;
 
-    triggerReturnIfPresent("appstate");
+    triggerReturnIfPresent("appstate").catch(() => null);
   });
 
   appStateSub = sub as any;
@@ -290,34 +334,47 @@ export async function beginPartnerClick(args: {
   }
 }
 
+/** YES flow */
 export async function markBooked(itemId: string) {
   const id = String(itemId ?? "").trim();
   if (!id) return;
 
-  if (!savedItemsStore.getState().loaded) {
-    await savedItemsStore.load();
-  }
+  await ensureSavedItemsLoaded();
 
   await savedItemsStore.transitionStatus(id, "booked");
   if (lastClick?.itemId === id) lastClick = null;
 }
 
+/**
+ * Option B: NO flow
+ * - pending -> saved
+ */
 export async function markNotBooked(itemId: string) {
   const id = String(itemId ?? "").trim();
   if (!id) return;
+
+  await tryTransitionPendingToSaved(id);
   if (lastClick?.itemId === id) lastClick = null;
 }
 
-export function clearLastClick(itemId?: string) {
+/**
+ * Option B: NOT NOW flow
+ * - keep pending
+ * - just clear lastClick so we don't prompt again instantly
+ */
+export function dismissReturnPrompt(itemId?: string) {
   if (!lastClick) return;
-
   if (!itemId) {
     lastClick = null;
     return;
   }
-
   const id = String(itemId ?? "").trim();
   if (id && lastClick.itemId === id) lastClick = null;
+}
+
+export function clearLastClick(itemId?: string) {
+  // kept for backwards compatibility
+  dismissReturnPrompt(itemId);
 }
 
 export function getLastClick(): LastPartnerClick | null {
@@ -335,4 +392,4 @@ export function __unsafeResetPartnerClickStateForDevOnly() {
   onReturnHandler = null;
   lastClick = null;
   opening = false;
-}
+  }
