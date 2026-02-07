@@ -53,18 +53,33 @@ function safeExt(name?: string, mimeType?: string): string {
   return "";
 }
 
-function normalizePickerResult(res: any) {
-  const canceled =
-    res?.canceled === true || String(res?.type ?? "").toLowerCase() === "cancel";
+type PickerParsed =
+  | { canceled: true }
+  | {
+      canceled: false;
+      uri: string;
+      name?: string;
+      mimeType?: string;
+      size?: number;
+    };
 
-  if (canceled) return { canceled: true as const };
+function normalizePickerResult(res: any): PickerParsed {
+  // expo-document-picker has varied shapes across versions:
+  // - { canceled: boolean, assets: [...] }
+  // - { type: "cancel" | "success", uri, name, mimeType, size }
+  const canceled =
+    res?.canceled === true ||
+    String(res?.type ?? "").toLowerCase() === "cancel" ||
+    String(res?.type ?? "").toLowerCase() === "canceled";
+
+  if (canceled) return { canceled: true };
 
   const asset = Array.isArray(res?.assets) ? res.assets[0] : res;
   const uri = String(asset?.uri ?? "").trim();
   if (!uri) throw new Error("No file selected");
 
   return {
-    canceled: false as const,
+    canceled: false,
     uri,
     name: typeof asset?.name === "string" ? asset.name : undefined,
     mimeType: typeof asset?.mimeType === "string" ? asset.mimeType : undefined,
@@ -93,6 +108,7 @@ export async function pickAndStoreAttachmentForItem(_itemId: string): Promise<Wa
   // Copy into app-owned storage (offline)
   try {
     await FileSystem.copyAsync({ from: parsed.uri, to: dest });
+
     return {
       id: id("att"),
       kind,
@@ -117,23 +133,33 @@ export async function pickAndStoreAttachmentForItem(_itemId: string): Promise<Wa
 }
 
 async function openNativeUri(uri: string) {
-  // Android: file:// often fails. Convert to content:// where possible.
+  const raw = String(uri ?? "").trim();
+  if (!raw) throw new Error("Missing attachment URI");
+
+  // Web: just open URL-ish
+  if (Platform.OS === "web") {
+    await Linking.openURL(raw);
+    return;
+  }
+
+  // Android: file:// often fails; prefer content:// when possible.
   if (Platform.OS === "android") {
     try {
-      // getContentUriAsync expects a file URI (no scheme sometimes in expo FS)
-      const fileUri = uri.startsWith("file://") ? uri : `file://${uri}`;
+      const fileUri = raw.startsWith("file://") ? raw : `file://${raw}`;
       const contentUri = await FileSystem.getContentUriAsync(fileUri);
       const can = await Linking.canOpenURL(contentUri);
       if (!can) throw new Error("Cannot open content URI");
       await Linking.openURL(contentUri);
       return;
     } catch {
-      // fall through to generic
+      // fall through
     }
   }
 
-  // iOS: file:// usually works
-  const url = uri.startsWith("file://") || uri.startsWith("content://") ? uri : `file://${uri}`;
+  // iOS (and Android fallback): try file:// or raw content://
+  const url =
+    raw.startsWith("file://") || raw.startsWith("content://") ? raw : `file://${raw}`;
+
   const can = await Linking.canOpenURL(url);
   if (!can) throw new Error("Cannot open attachment");
   await Linking.openURL(url);
@@ -157,12 +183,6 @@ export async function openAttachment(att: WalletAttachment) {
     // fall through
   }
 
-  // Web: just open URL
-  if (Platform.OS === "web") {
-    await Linking.openURL(uri);
-    return;
-  }
-
   await openNativeUri(uri);
 }
 
@@ -178,4 +198,4 @@ export async function deleteAttachmentFile(att: WalletAttachment) {
   } catch {
     // best-effort
   }
-                                       }
+}
