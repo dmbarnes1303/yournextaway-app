@@ -47,11 +47,6 @@ function groupItemsByTrip(items: SavedItem[]) {
   return map;
 }
 
-function errText(e: any) {
-  const msg = String(e?.message ?? e ?? "").trim();
-  return msg || "Unknown error";
-}
-
 /* -------------------------------- Screen -------------------------------- */
 
 export default function TripsScreen() {
@@ -62,6 +57,8 @@ export default function TripsScreen() {
 
   const [loadedItems, setLoadedItems] = useState(savedItemsStore.getState().loaded);
   const [items, setItems] = useState<SavedItem[]>(savedItemsStore.getState().items);
+
+  /* --------------------------- subscriptions --------------------------- */
 
   useEffect(() => {
     const unsub = tripsStore.subscribe((s) => {
@@ -89,12 +86,7 @@ export default function TripsScreen() {
     return unsub;
   }, []);
 
-  // keep wallet consistent when trips list changes
-  useEffect(() => {
-    if (!loadedTrips || !loadedItems) return;
-    const valid = trips.map((t) => String(t.id));
-    savedItemsStore.clearOrphans(valid, { deleteAttachmentFiles: true }).catch(() => {});
-  }, [loadedTrips, loadedItems, trips]);
+  /* ------------------------------ derived ------------------------------ */
 
   const itemsByTrip = useMemo(() => groupItemsByTrip(items), [items]);
 
@@ -110,6 +102,8 @@ export default function TripsScreen() {
     };
   }
 
+  /* ------------------------------ actions ------------------------------ */
+
   const openTrip = useCallback(
     (t: Trip) => router.push({ pathname: "/trip/[id]", params: { id: t.id } } as any),
     [router]
@@ -121,11 +115,15 @@ export default function TripsScreen() {
   );
 
   const deleteTrip = useCallback((t: Trip) => {
-    const c = counts(t.id);
+    const tripId = String(t?.id ?? "").trim();
+    if (!tripId) return;
+
+    const title = (t.cityId || "Trip").trim() || "Trip";
+    const c = counts(tripId);
 
     Alert.alert(
       "Delete trip?",
-      `This will remove the trip and ${c.total} saved item${c.total === 1 ? "" : "s"} from this device (including stored attachments).`,
+      `This will permanently remove:\n\n• Trip: ${title}\n• Items: ${c.total} (Booked: ${c.booked}, Pending: ${c.pending})\n• Any stored attachments (PDFs/screenshots)\n\nThis cannot be undone.`,
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -133,24 +131,27 @@ export default function TripsScreen() {
           style: "destructive",
           onPress: async () => {
             try {
-              // 1) clear wallet items first (and their files)
-              await savedItemsStore.clearTrip(t.id, { deleteAttachmentFiles: true });
+              // 1) Remove the trip first. If this fails, we DO NOT wipe wallet data.
+              await tripsStore.removeTrip(tripId);
 
-              // 2) then delete trip
-              await tripsStore.removeTrip(t.id);
-            } catch (e) {
-              Alert.alert("Couldn’t delete", errText(e));
+              // 2) Cascade-delete wallet items + attachment files for this trip
+              await savedItemsStore.clearTrip(tripId);
+            } catch (e: any) {
+              const msg = String(e?.message ?? "").trim();
+              Alert.alert("Couldn’t delete", msg || "Try again.");
             }
           },
         },
       ]
     );
-  }, [itemsByTrip]);
+  }, [itemsByTrip, trips]);
 
   const goBuild = () => router.push("/trip/build");
   const goFixtures = () => router.push("/(tabs)/fixtures");
 
   const showEmpty = loadedTrips && trips.length === 0;
+
+  /* -------------------------------- render -------------------------------- */
 
   return (
     <Background imageUrl={getBackground("trips")} overlayOpacity={0.50}>
@@ -280,9 +281,11 @@ const styles = StyleSheet.create({
   subtitle: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, fontWeight: "700" },
 
   section: { gap: 10 },
+
   list: { gap: 10 },
 
   card: { padding: theme.spacing.lg },
+
   tripCard: { padding: theme.spacing.md },
 
   tripTitle: { color: theme.colors.text, fontSize: theme.fontSize.lg, fontWeight: theme.fontWeight.black },
@@ -292,6 +295,7 @@ const styles = StyleSheet.create({
   count: { color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: "800" },
 
   actions: { marginTop: 12, flexDirection: "row", gap: 10 },
+
   actionBtn: { flex: 1, paddingVertical: 12, borderRadius: 12, alignItems: "center", borderWidth: 1 },
 
   btnPrimary: { borderColor: "rgba(0,255,136,0.55)", backgroundColor: "rgba(0,0,0,0.34)" },
@@ -305,4 +309,6 @@ const styles = StyleSheet.create({
 
   center: { paddingVertical: 12, alignItems: "center", gap: 10 },
   muted: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, fontWeight: "700" },
+
+  btn: { paddingVertical: 14, borderRadius: 12, alignItems: "center", borderWidth: 1 },
 });
