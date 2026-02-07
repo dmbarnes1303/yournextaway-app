@@ -23,7 +23,7 @@ import EmptyState from "@/src/components/EmptyState";
 import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
 
-import { getFixtureById, type FixtureListRow } from "@/src/services/apiFootball";
+import { getFixtureById, getFixturesByRound, type FixtureListRow } from "@/src/services/apiFootball";
 import {
   getRollingWindowIso,
   toIsoDate,
@@ -36,11 +36,16 @@ import { formatUkDateTimeMaybe } from "@/src/utils/formatters";
 
 import authStore from "@/src/state/auth";
 import useFollowStore from "@/src/state/followStore";
-import { isKickoffTbc, kickoffIsoOrNull } from "@/src/utils/kickoffTbc";
+import {
+  computeLikelyPlaceholderTbcIds,
+  isKickoffTbc,
+  kickoffIsoOrNull,
+  CONFIRMED_WITHIN_DAYS,
+} from "@/src/utils/kickoffTbc";
 
 function currentFootballSeasonStartYear(now = new Date()): number {
   const y = now.getFullYear();
-  const m = now.getMonth();
+  const m = now.getMonth(); // 0=Jan
   return m >= 6 ? y : y - 1;
 }
 
@@ -122,12 +127,19 @@ function buildTransportUrl(venue?: string, city?: string) {
   return `https://www.google.com/search?q=${enc(q)}`;
 }
 
+function daysUntilIso(iso: string) {
+  const t = new Date(iso).getTime();
+  if (!Number.isFinite(t)) return Number.POSITIVE_INFINITY;
+  return (t - Date.now()) / (1000 * 60 * 60 * 24);
+}
+
 type ToastState = { visible: false } | { visible: true; title: string; message?: string };
 
 export default function MatchDetailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
 
+  // auth (optional for future sync + email/push)
   const booted = authStore((s) => s.booted);
   const user = authStore((s) => s.user);
   const initAuth = authStore((s) => s.init);
@@ -140,6 +152,7 @@ export default function MatchDetailScreen() {
 
   const id = useMemo(() => coerceString((params as any)?.id), [params]);
 
+  // Routing context
   const rolling = useMemo(() => getRollingWindowIso(), []);
 
   const window = useMemo(() => {
@@ -162,8 +175,15 @@ export default function MatchDetailScreen() {
   const [error, setError] = useState<string | null>(null);
   const [row, setRow] = useState<FixtureListRow | null>(null);
 
-  const toggleFollow = useFollowStore((s) => s.toggle);
+  // Round clustering (for “Likely TBC”)
+  const [placeholderIds, setPlaceholderIds] = useState<Set<string> | null>(null);
+  const [clusterLoading, setClusterLoading] = useState(false);
 
+  // follow store actions
+  const toggleFollow = useFollowStore((s) => s.toggle);
+  const upsertLatestSnapshot = useFollowStore((s) => s.upsertLatestSnapshot);
+
+  // IMPORTANT: subscribe to the boolean, not the isFollowing function
   const fixtureIdFromRow = row?.fixture?.id != null ? String(row.fixture.id) : "";
   const fixtureId = useMemo(() => fixtureIdFromRow || (id ?? ""), [fixtureIdFromRow, id]);
 
@@ -178,8 +198,10 @@ export default function MatchDetailScreen() {
     )
   );
 
+  // sign-in UI
   const [email, setEmail] = useState("");
 
+  // non-blocking toast
   const [toast, setToast] = useState<ToastState>({ visible: false });
   const toastTimer = useRef<any>(null);
 
@@ -195,6 +217,7 @@ export default function MatchDetailScreen() {
     };
   }, []);
 
+  // Load match
   useEffect(() => {
     let cancelled = false;
 
@@ -207,6 +230,7 @@ export default function MatchDetailScreen() {
       setLoading(true);
       setError(null);
       setRow(null);
+      setPlaceholderIds(null);
 
       try {
         const r = await getFixtureById(id);
@@ -232,6 +256,52 @@ export default function MatchDetailScreen() {
     };
   }, [id]);
 
+  // Load round fixtures for clustering (only when it matters)
+  useEffect(() => {
+    let cancelled = false;
+
+    async function runCluster() {
+      if (!row) return;
+
+      const leagueId = row?.league?.id ?? routeLeagueId ?? null;
+      const season = (row as any)?.league?.season ?? routeSeason ?? currentFootballSeasonStartYear();
+      const round = String(row?.league?.round ?? "").trim();
+
+      const iso = kickoffIsoOrNull(row);
+      const daysAway = iso ? daysUntilIso(iso) : Number.POSITIVE_INFINITY;
+
+      // If within confirmed window, don’t waste requests
+      if (iso && daysAway <= CONFIRMED_WITHIN_DAYS) {
+        setPlaceholderIds(new Set());
+        return;
+      }
+
+      // Need league/season/round to do cluster evidence
+      if (!leagueId || !season || !round) {
+        setPlaceholderIds(new Set());
+        return;
+      }
+
+      setClusterLoading(true);
+      try {
+        const roundRows = await getFixturesByRound({ league: leagueId, season, round });
+        if (cancelled) return;
+        setPlaceholderIds(computeLikelyPlaceholderTbcIds(roundRows));
+      } catch {
+        if (cancelled) return;
+        // If we can’t compute, fail “open” (don’t label as Likely TBC)
+        setPlaceholderIds(new Set());
+      } finally {
+        if (!cancelled) setClusterLoading(false);
+      }
+    }
+
+    runCluster();
+    return () => {
+      cancelled = true;
+    };
+  }, [row, routeLeagueId, routeSeason]);
+
   const home = row?.teams?.home?.name ?? "Home";
   const away = row?.teams?.away?.name ?? "Away";
 
@@ -252,7 +322,19 @@ export default function MatchDetailScreen() {
 
   const round = String(row?.league?.round ?? "").trim() || null;
 
-  const tbc = useMemo(() => (row ? isKickoffTbc(row) : true), [row]);
+  const tbc = useMemo(() => {
+    if (!row) return true;
+    return isKickoffTbc(row, placeholderIds ?? undefined);
+  }, [row, placeholderIds]);
+
+  const tbcSecondary = useMemo(() => {
+    if (!row) return null;
+    const iso = kickoffIsoOrNull(row);
+    if (!iso) return "Kickoff time not set yet";
+    const daysAway = daysUntilIso(iso);
+    if (daysAway <= CONFIRMED_WITHIN_DAYS) return null;
+    return tbc ? "Likely placeholder (TV schedule not confirmed)" : null;
+  }, [row, tbc]);
 
   const ticketsUrl = useMemo(
     () => buildTicketsUrl(home, away, kickoffDateOnly, leagueName),
@@ -306,7 +388,7 @@ export default function MatchDetailScreen() {
 
   const onShare = useCallback(async () => {
     const title = `${home} vs ${away}`;
-    const when = tbc ? "Kickoff: TBC" : kickoffDisplay ? `Kickoff: ${kickoffDisplay}` : "Kickoff: —";
+    const when = tbc ? "Kickoff: likely placeholder" : kickoffDisplay ? `Kickoff: ${kickoffDisplay}` : "Kickoff: —";
     const where = place ? `Venue: ${place}` : "Venue: —";
     const meta = `League: ${leagueName} • Season: ${String(effectiveSeason)}`;
 
@@ -337,16 +419,34 @@ export default function MatchDetailScreen() {
       homeTeamId,
       awayTeamId,
 
-      // IMPORTANT: store human-readable labels + round at follow-time
-      homeName: home,
-      awayName: away,
-      leagueName,
+      homeName: home ? String(home) : null,
+      awayName: away ? String(away) : null,
+      leagueName: leagueName ? String(leagueName) : null,
       round,
 
       kickoffIso: row ? kickoffIsoOrNull(row) : null,
       venue: row?.fixture?.venue?.name ? String(row.fixture.venue.name) : null,
       city: row?.fixture?.venue?.city ? String(row.fixture.venue.city) : null,
     });
+
+    // Best-effort: snapshot right away
+    if (row && willFollow) {
+      upsertLatestSnapshot(fixtureId, {
+        kickoffIso: kickoffIsoOrNull(row),
+        venue: row?.fixture?.venue?.name ? String(row.fixture.venue.name) : null,
+        city: row?.fixture?.venue?.city ? String(row.fixture.venue.city) : null,
+
+        homeTeamId: row?.teams?.home?.id ?? undefined,
+        awayTeamId: row?.teams?.away?.id ?? undefined,
+        leagueId: row?.league?.id ?? undefined,
+        season: (row as any)?.league?.season ?? routeSeason ?? undefined,
+
+        homeName: home ? String(home) : null,
+        awayName: away ? String(away) : null,
+        leagueName: leagueName ? String(leagueName) : null,
+        round,
+      });
+    }
 
     if (!willFollow) {
       showToast("Unfollowed", "Removed from your followed list on this device.");
@@ -359,7 +459,23 @@ export default function MatchDetailScreen() {
       : "Sign in later to sync across devices and enable email/push alerts.";
 
     showToast("Following", `${line1} ${line2}`);
-  }, [fixtureId, followed, toggleFollow, row, effectiveLeagueId, effectiveSeason, home, away, leagueName, round, tbc, user, showToast]);
+  }, [
+    fixtureId,
+    followed,
+    toggleFollow,
+    row,
+    effectiveLeagueId,
+    effectiveSeason,
+    tbc,
+    user,
+    showToast,
+    upsertLatestSnapshot,
+    routeSeason,
+    home,
+    away,
+    leagueName,
+    round,
+  ]);
 
   const onSendMagicLink = useCallback(async () => {
     const e = String(email ?? "").trim();
@@ -404,7 +520,10 @@ export default function MatchDetailScreen() {
             {!loading && !error && row ? (
               <>
                 <View style={styles.topRow}>
-                  <Text style={styles.kicker}>{leagueName}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.kicker}>{leagueName}</Text>
+                    {round ? <Text style={styles.roundLine} numberOfLines={1}>{round}</Text> : null}
+                  </View>
 
                   <Pressable onPress={onToggleFollow} style={[styles.watchPill, followed && styles.watchPillActive]}>
                     <Text style={[styles.watchPillText, followed && styles.watchPillTextActive]}>
@@ -420,8 +539,14 @@ export default function MatchDetailScreen() {
                 <View style={styles.metaBlock}>
                   <Text style={styles.metaLine}>
                     <Text style={styles.metaLabel}>Kickoff: </Text>
-                    {tbc ? "TBC (league confirms later)" : kickoffDisplay || "—"}
+                    {tbc ? (kickoffDisplay || "—") : kickoffDisplay || "—"}
                   </Text>
+
+                  {tbcSecondary ? (
+                    <Text style={styles.metaSecondary}>{tbcSecondary}</Text>
+                  ) : clusterLoading ? (
+                    <Text style={styles.metaSecondary}>Checking schedule…</Text>
+                  ) : null}
 
                   <Text style={styles.metaLine}>
                     <Text style={styles.metaLabel}>Venue: </Text>
@@ -524,6 +649,44 @@ export default function MatchDetailScreen() {
               </>
             ) : null}
           </GlassCard>
+
+          {!loading && !error && row ? (
+            <GlassCard style={styles.card} intensity={22}>
+              <Text style={styles.h2}>Matchday essentials</Text>
+              <Text style={styles.muted}>Neutral traveller view: arrive smoothly, enjoy the city, keep it simple.</Text>
+
+              <View style={styles.opsList}>
+                <View style={styles.opsItem}>
+                  <Text style={styles.opsTitle}>Arrive early</Text>
+                  <Text style={styles.opsBody}>Aim for 60–90 minutes before kickoff if you’re collecting tickets or navigating security.</Text>
+                </View>
+
+                <View style={styles.opsItem}>
+                  <Text style={styles.opsTitle}>Bag policy and entry</Text>
+                  <Text style={styles.opsBody}>Policies vary. If you’re carrying a bag, double-check restrictions before you travel.</Text>
+                  <Pressable onPress={() => safeOpenUrl(stadiumInfoUrl)} style={styles.inlineBtn}>
+                    <Text style={styles.inlineBtnText}>Search stadium entry rules</Text>
+                  </Pressable>
+                </View>
+
+                <View style={styles.opsItem}>
+                  <Text style={styles.opsTitle}>Transport plan</Text>
+                  <Text style={styles.opsBody}>Public transport is usually easiest; event traffic and parking are unpredictable near kickoff.</Text>
+                  <Pressable onPress={() => safeOpenUrl(transportUrl)} style={styles.inlineBtn}>
+                    <Text style={styles.inlineBtnText}>Search transport options</Text>
+                  </Pressable>
+                </View>
+
+                <View style={styles.opsItem}>
+                  <Text style={styles.opsTitle}>Food & drinks nearby</Text>
+                  <Text style={styles.opsBody}>Pick something walkable so you’re not rushing. Atmosphere is often best around the stadium district.</Text>
+                  <Pressable onPress={() => safeOpenUrl(foodDrinkUrl)} style={styles.inlineBtn}>
+                    <Text style={styles.inlineBtnText}>Search nearby spots</Text>
+                  </Pressable>
+                </View>
+              </View>
+            </GlassCard>
+          ) : null}
         </ScrollView>
 
         {toast.visible ? (
@@ -543,13 +706,17 @@ const styles = StyleSheet.create({
   container: { flex: 1, paddingTop: 100 },
   scrollView: { flex: 1 },
   content: { paddingHorizontal: theme.spacing.lg, paddingBottom: theme.spacing.xxl, gap: theme.spacing.lg },
+
   card: { padding: theme.spacing.lg },
 
   center: { paddingVertical: theme.spacing.xl, alignItems: "center", gap: 10 },
   muted: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18, fontWeight: "700" },
 
   topRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 10 },
+
   kicker: { color: theme.colors.primary, fontSize: theme.fontSize.xs, fontWeight: "900", letterSpacing: 0.6 },
+  roundLine: { marginTop: 4, color: theme.colors.textTertiary, fontSize: 12, fontWeight: "800" },
+
   title: { marginTop: 8, fontSize: theme.fontSize.xl, fontWeight: "900", color: theme.colors.text, lineHeight: 30 },
 
   watchPill: {
@@ -570,6 +737,7 @@ const styles = StyleSheet.create({
   metaBlock: { marginTop: 12, gap: 6 },
   metaLine: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18, fontWeight: "700" },
   metaLabel: { color: theme.colors.text, fontWeight: "900" },
+  metaSecondary: { color: theme.colors.textTertiary, fontSize: 12, fontWeight: "800" },
 
   followInfo: {
     marginTop: 12,
@@ -581,6 +749,8 @@ const styles = StyleSheet.create({
   },
   followInfoTitle: { color: theme.colors.text, fontWeight: "900", fontSize: 13 },
   followInfoBody: { marginTop: 6, color: theme.colors.textSecondary, fontWeight: "700", fontSize: 12, lineHeight: 16 },
+
+  h2: { marginTop: 2, fontSize: theme.fontSize.lg, fontWeight: "900", color: theme.colors.text },
 
   signInBox: {
     marginTop: 14,
@@ -647,6 +817,29 @@ const styles = StyleSheet.create({
   smallBtnText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.xs },
 
   smallPrint: { marginTop: 12, color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: "700" },
+
+  opsList: { marginTop: 12, gap: 12 },
+  opsItem: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+    padding: 12,
+  },
+  opsTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
+  opsBody: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18, fontWeight: "700" },
+
+  inlineBtn: {
+    marginTop: 10,
+    alignSelf: "flex-start",
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(0,255,136,0.35)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+  },
+  inlineBtnText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.xs },
 
   toastWrap: {
     position: "absolute",
