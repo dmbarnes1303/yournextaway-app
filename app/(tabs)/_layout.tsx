@@ -1,13 +1,82 @@
 // app/(tabs)/_layout.tsx
-import React from "react";
-import { Tabs } from "expo-router";
+import React, { useEffect, useRef } from "react";
+import { Tabs, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import * as Notifications from "expo-notifications";
+
 import { theme } from "@/src/constants/theme";
 
+function safeStr(v: unknown) {
+  const s = String(v ?? "").trim();
+  return s || "";
+}
+
+function extractFixtureIdFromNotificationData(data: any): string | null {
+  const kind = safeStr(data?.kind);
+  const fixtureId = safeStr(data?.fixtureId);
+
+  if (kind === "kickoff_update" && fixtureId) return fixtureId;
+
+  // fallback: if you ever send fixtureId without kind
+  if (fixtureId) return fixtureId;
+
+  return null;
+}
+
 export default function TabsLayout() {
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   const tabBarHeight = 60 + Math.max(insets.bottom, 10);
+
+  // Guard against double-processing when app resumes + listener fires
+  const lastHandledKeyRef = useRef<string>("");
+
+  useEffect(() => {
+    let mounted = true;
+
+    const handleResponse = (response: Notifications.NotificationResponse) => {
+      try {
+        const data = response?.notification?.request?.content?.data ?? {};
+        const fixtureId = extractFixtureIdFromNotificationData(data);
+        if (!fixtureId) return;
+
+        const key = `${fixtureId}:${safeStr(data?.kind) || "unknown"}`;
+        if (lastHandledKeyRef.current === key) return;
+        lastHandledKeyRef.current = key;
+
+        // Route to match details
+        router.push({ pathname: "/match/[id]", params: { id: fixtureId } } as any);
+      } catch {
+        // ignore
+      }
+    };
+
+    // 1) Cold start / background-tap: grab the last response once on mount
+    (async () => {
+      try {
+        const last = await Notifications.getLastNotificationResponseAsync();
+        if (!mounted || !last) return;
+        handleResponse(last);
+      } catch {
+        // ignore
+      }
+    })();
+
+    // 2) Foreground/background: listen for taps
+    const sub = Notifications.addNotificationResponseReceivedListener((response) => {
+      handleResponse(response);
+    });
+
+    return () => {
+      mounted = false;
+      try {
+        sub.remove();
+      } catch {
+        // ignore
+      }
+    };
+  }, [router]);
 
   return (
     <Tabs
