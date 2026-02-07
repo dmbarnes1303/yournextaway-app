@@ -14,14 +14,14 @@ import { getSavedItemTypeLabel } from "@/src/core/savedItemTypes";
  *
  * Option B semantics:
  * - YES  => pending -> booked
- * - NO   => pending -> saved (keep as a saved idea/link, not a "pending booking")
- * - NOT NOW => keep pending
+ * - NO   => pending -> saved
+ * - NOT NOW => keep pending (but stop immediate re-prompt)
  *
  * HARDENING:
  * - global opening guard
  * - rollback pending item if opening fails
  * - avoid zombie prompts (age limit)
- * - avoid "instant dismiss" zombie pending items by auto-demoting pending->saved
+ * - avoid "instant dismiss" pending rot by auto-demoting pending->saved
  */
 
 export type LastPartnerClick = {
@@ -31,7 +31,7 @@ export type LastPartnerClick = {
   url: string;
 
   createdAt: number;
-  openedAt: number; // when browser actually opened
+  openedAt: number;
 };
 
 let lastClick: LastPartnerClick | null = null;
@@ -75,23 +75,21 @@ async function tryTransitionPendingToSaved(itemId: string) {
   const cur = savedItemsStore.getState().items.find((x) => x.id === id);
   if (!cur) return;
 
-  // Only demote if still pending (don’t stomp manual changes)
   if (cur.status !== "pending") return;
 
   try {
     await savedItemsStore.transitionStatus(id, "saved");
   } catch {
-    // ignore (assertTransition could throw if policy changes)
+    // ignore
   }
 }
 
 /**
  * Consume lastClick exactly once and invoke handler.
- * This is the ONLY place we clear lastClick for prompting.
  *
  * Instant dismiss policy:
- * - If browser dismisses too fast, we DO NOT prompt,
- *   but we DO auto-demote pending -> saved so Pending doesn't rot.
+ * - if browser dismisses too fast => do NOT prompt
+ * - BUT auto-demote pending -> saved so Pending doesn't rot
  */
 async function triggerReturnIfPresent(
   reason: "appstate" | "browser_dismiss",
@@ -99,7 +97,6 @@ async function triggerReturnIfPresent(
 ) {
   if (!lastClick) return;
 
-  // Avoid zombie prompts (stale lastClick)
   if (!isRecent(lastClick)) {
     lastClick = null;
     return;
@@ -107,23 +104,20 @@ async function triggerReturnIfPresent(
 
   const click = lastClick;
 
-  // Avoid false prompts for instant dismiss (accidental tap / quick peek)
   const minOpenMs = 8000;
   const dur = Number(meta?.openDurationMs ?? 0);
   if (reason === "browser_dismiss" && dur > 0 && dur < minOpenMs) {
     lastClick = null;
-    // critical: don’t leave a dead pending item
     await tryTransitionPendingToSaved(click.itemId);
     return;
   }
 
   const handler = onReturnHandler;
 
-  // If there is no handler yet, don't clear lastClick (so bootstrap can attach),
-  // but also don't prompt.
+  // If handler not registered yet, keep lastClick so bootstrap can attach later.
   if (!handler) return;
 
-  // Clear exactly once (prevents duplicate prompts)
+  // Clear exactly once
   lastClick = null;
 
   try {
@@ -151,7 +145,6 @@ async function openUrlInternal(url: string) {
     showTitle: true,
   });
 
-  // res.type commonly: "opened" | "cancel" | "dismiss" (varies)
   return res;
 }
 
@@ -160,9 +153,7 @@ export function getPartnerClicksDebugState() {
   return { opening, subscribed, lastClick };
 }
 
-export function ensurePartnerReturnWatcher(
-  onReturn: (click: LastPartnerClick) => void | Promise<void>
-) {
+export function ensurePartnerReturnWatcher(onReturn: (click: LastPartnerClick) => void | Promise<void>) {
   onReturnHandler = onReturn;
 
   if (subscribed) return;
@@ -200,6 +191,11 @@ export async function openUntrackedUrl(url: string) {
   } finally {
     opening = false;
   }
+}
+
+/** Backwards-compat alias used by Wallet */
+export async function openPartnerUrl(url: string) {
+  return await openUntrackedUrl(url);
 }
 
 function cleanCity(meta?: Record<string, any>): string | null {
@@ -306,13 +302,10 @@ export async function beginPartnerClick(args: {
     try {
       const res = await openUrlInternal(url);
 
-      // Browser dismissed: prompt now (but guarded against instant dismiss).
       const openDurationMs = now() - openedAt;
 
-      // Only treat a real “dismiss/cancel/closed” as a return event.
-      // If the platform returns "opened" and keeps app active, do nothing here.
-      const type = String((res as any)?.type ?? "").toLowerCase();
-      const isDismissLike = type === "dismiss" || type === "cancel";
+      const t = String((res as any)?.type ?? "").toLowerCase();
+      const isDismissLike = t === "dismiss" || t === "cancel";
 
       if (isDismissLike) {
         await triggerReturnIfPresent("browser_dismiss", { openDurationMs });
@@ -340,15 +333,11 @@ export async function markBooked(itemId: string) {
   if (!id) return;
 
   await ensureSavedItemsLoaded();
-
   await savedItemsStore.transitionStatus(id, "booked");
   if (lastClick?.itemId === id) lastClick = null;
 }
 
-/**
- * Option B: NO flow
- * - pending -> saved
- */
+/** NO flow (Option B): pending -> saved */
 export async function markNotBooked(itemId: string) {
   const id = String(itemId ?? "").trim();
   if (!id) return;
@@ -357,23 +346,21 @@ export async function markNotBooked(itemId: string) {
   if (lastClick?.itemId === id) lastClick = null;
 }
 
-/**
- * Option B: NOT NOW flow
- * - keep pending
- * - just clear lastClick so we don't prompt again instantly
- */
+/** NOT NOW flow: keep pending, clear lastClick so it doesn’t re-prompt instantly */
 export function dismissReturnPrompt(itemId?: string) {
   if (!lastClick) return;
+
   if (!itemId) {
     lastClick = null;
     return;
   }
+
   const id = String(itemId ?? "").trim();
   if (id && lastClick.itemId === id) lastClick = null;
 }
 
+/** Backwards compat */
 export function clearLastClick(itemId?: string) {
-  // kept for backwards compatibility
   dismissReturnPrompt(itemId);
 }
 
@@ -392,4 +379,4 @@ export function __unsafeResetPartnerClickStateForDevOnly() {
   onReturnHandler = null;
   lastClick = null;
   opening = false;
-  }
+}
