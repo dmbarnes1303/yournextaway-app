@@ -10,12 +10,11 @@ function withHttps(url: string) {
 }
 
 /**
- * POLICY (locked for Phase 1):
- * - Native: open with expo-web-browser (Chrome Custom Tabs / SFSafariVC)
- * - Web: window open via Linking
- * - Fallback: system browser if needed
+ * Generic URL opener with explicit naming.
+ * Do NOT use this for tracked partner clicks.
+ * Use beginPartnerClick() for tracked flow.
  */
-export async function openPartnerUrl(url: string, mode: PartnerOpenMode = "in_app_browser") {
+export async function openUrlWithMode(url: string, mode: PartnerOpenMode = "in_app_browser") {
   const candidate = withHttps(url);
   if (!candidate) return;
 
@@ -34,7 +33,6 @@ export async function openPartnerUrl(url: string, mode: PartnerOpenMode = "in_ap
       return;
     }
 
-    // Default: in-app browser tab (NOT a WebView)
     await WebBrowser.openBrowserAsync(candidate, {
       presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
       readerMode: false,
