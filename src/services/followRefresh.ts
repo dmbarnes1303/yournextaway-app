@@ -1,7 +1,9 @@
 // src/services/followRefresh.ts
 import { AppState, type AppStateStatus } from "react-native";
 
-import { refreshFollowedMatches } from "@/src/services/followedMatchesRefresh";
+import {
+  refreshFollowedMatches as refreshFollowedMatchesCore,
+} from "@/src/services/followedMatchesRefresh";
 
 /**
  * Compatibility wrapper.
@@ -12,7 +14,7 @@ import { refreshFollowedMatches } from "@/src/services/followedMatchesRefresh";
  * - Alert.alert
  *
  * New truth:
- * - refreshFollowedMatches() diffs kickoffIso vs previous kickoffIso
+ * - refreshFollowedMatchesCore() diffs kickoffIso vs previous kickoffIso
  * - if changed and alerts.kickoffConfirmed enabled, it triggers a local notification
  * - no in-app Alert spam
  *
@@ -25,12 +27,7 @@ export type RefreshOptions = {
 };
 
 export async function refreshFollowedMatchesCompat(opts?: RefreshOptions) {
-  // Under the hood this:
-  // - reads followed fixtures from followStore
-  // - fetches latest fixture rows (bounded)
-  // - applies applyFixtureUpdate per fixture
-  // - schedules local notifications for kickoff changes (when enabled)
-  return await refreshFollowedMatches({ limit: opts?.limit });
+  return await refreshFollowedMatchesCore({ limit: opts?.limit });
 }
 
 /**
