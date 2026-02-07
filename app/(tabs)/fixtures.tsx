@@ -26,45 +26,54 @@ import { formatUkDateTimeMaybe } from "@/src/utils/formatters";
 import { getFlagImageUrl } from "@/src/utils/flagImages";
 
 import tripsStore from "@/src/state/trips";
-import {
-  computeLikelyPlaceholderTbcIds,
-  isKickoffTbc,
-} from "@/src/utils/kickoffTbc";
+import { computeLikelyPlaceholderTbcIds, isKickoffTbc } from "@/src/utils/kickoffTbc";
 
 /* -------------------------------------------------------------------------- */
-/* Date helpers */
+/* Constants */
 /* -------------------------------------------------------------------------- */
 
 const DAYS_AHEAD = 365;
 const MAX_MULTI_LEAGUES = 10;
 
-function isoDateOnly(d: Date) {
-  return d.toISOString().slice(0, 10);
+/* -------------------------------------------------------------------------- */
+/* UTC-safe date helpers (prevents DST duplication) */
+/* -------------------------------------------------------------------------- */
+
+function isoFromUtcParts(y: number, m0: number, d: number) {
+  // m0 is 0-based month
+  const ms = Date.UTC(y, m0, d, 0, 0, 0, 0);
+  return new Date(ms).toISOString().slice(0, 10);
 }
 
-function addDays(date: Date, days: number) {
-  const d = new Date(date);
-  d.setDate(d.getDate() + days);
-  return d;
-}
-
-function tomorrowIso() {
+function utcTodayIso() {
   const now = new Date();
-  const t = addDays(now, 1);
-  // normalize to UTC midnight-ish via ISO slice
-  return isoDateOnly(t);
+  return isoFromUtcParts(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+}
+
+function addDaysIsoUtc(iso: string, days: number) {
+  const base = new Date(`${iso}T00:00:00.000Z`);
+  const ms = base.getTime() + days * 24 * 60 * 60 * 1000;
+  return new Date(ms).toISOString().slice(0, 10);
+}
+
+function tomorrowIsoUtc() {
+  return addDaysIsoUtc(utcTodayIso(), 1);
 }
 
 function clampIsoToWindow(iso: string, minIso: string, maxIso: string) {
-  if (!iso) return minIso;
-  if (iso < minIso) return minIso;
-  if (iso > maxIso) return maxIso;
-  return iso;
+  const s = String(iso ?? "").trim();
+  if (!s) return minIso;
+  if (s < minIso) return minIso;
+  if (s > maxIso) return maxIso;
+  return s;
 }
 
 function normalizeRange(fromIso: string, toIso: string) {
-  if (fromIso <= toIso) return { from: fromIso, to: toIso };
-  return { from: toIso, to: fromIso };
+  const a = String(fromIso ?? "").trim();
+  const b = String(toIso ?? "").trim();
+  if (!a) return { from: b, to: b };
+  if (!b) return { from: a, to: a };
+  return a <= b ? { from: a, to: b } : { from: b, to: a };
 }
 
 /* -------------------------------------------------------------------------- */
@@ -88,12 +97,11 @@ function kickoffLabel(r: FixtureListRow, placeholderIds?: Set<string>) {
   if (tbc) return "TBC";
   const raw = r?.fixture?.date;
   if (!raw) return "TBC";
-  const pretty = formatUkDateTimeMaybe(String(raw));
-  return pretty || "TBC";
+  return formatUkDateTimeMaybe(String(raw)) || "TBC";
 }
 
 /**
- * If a fixture already belongs to an existing trip, we send user to that trip workspace.
+ * If a fixture already belongs to an existing trip, route to that trip workspace.
  */
 function resolveTripForFixture(fixtureId: string): string | null {
   const trips = tripsStore.getState().trips;
@@ -132,14 +140,10 @@ function TeamCrest({ name, logo }: { name: string; logo?: string | null }) {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Concurrency-limited fetch (prevents API/JS thread meltdown) */
+/* Concurrency-limited fetch (protects perf + rate limits) */
 /* -------------------------------------------------------------------------- */
 
-async function mapLimit<T, R>(
-  items: T[],
-  limit: number,
-  fn: (item: T) => Promise<R>
-): Promise<R[]> {
+async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
   const results: R[] = new Array(items.length) as any;
   let i = 0;
 
@@ -150,30 +154,26 @@ async function mapLimit<T, R>(
     }
   }
 
-  const workers = Array.from({ length: Math.max(1, Math.min(limit, items.length)) }).map(worker);
-  await Promise.all(workers);
+  const n = Math.max(1, Math.min(limit, items.length));
+  await Promise.all(Array.from({ length: n }).map(worker));
   return results;
 }
 
 /* -------------------------------------------------------------------------- */
 /* Screen */
- /* -------------------------------------------------------------------------- */
+/* -------------------------------------------------------------------------- */
 
 export default function FixturesScreen() {
   const router = useRouter();
 
-  // Build 365-day strip starting TOMORROW (never show today)
-  const minIso = useMemo(() => tomorrowIso(), []);
-  const maxIso = useMemo(() => {
-    const d = new Date(`${minIso}T00:00:00Z`);
-    return isoDateOnly(addDays(d, DAYS_AHEAD - 1));
-  }, [minIso]);
+  // 365-day strip starting TOMORROW (never show today)
+  const minIso = useMemo(() => tomorrowIsoUtc(), []);
+  const maxIso = useMemo(() => addDaysIsoUtc(minIso, DAYS_AHEAD - 1), [minIso]);
 
   const dateStrip = useMemo(() => {
-    const base = new Date(`${minIso}T00:00:00Z`);
     return Array.from({ length: DAYS_AHEAD }).map((_, i) => {
-      const d = addDays(base, i);
-      const iso = isoDateOnly(d);
+      const iso = addDaysIsoUtc(minIso, i);
+      const d = new Date(`${iso}T00:00:00.000Z`); // safe for label formatting
       return {
         iso,
         labelTop: d.toLocaleDateString("en-GB", { weekday: "short" }),
@@ -182,15 +182,14 @@ export default function FixturesScreen() {
     });
   }, [minIso]);
 
-  // Range selection (Option A)
+  // Range selection (Option A): start → end → reset
   const [rangeFrom, setRangeFrom] = useState<string>(minIso);
   const [rangeTo, setRangeTo] = useState<string>(minIso);
 
-  // If user selects a true range, we treat as range mode.
-  const isRange = useMemo(() => rangeFrom !== rangeTo, [rangeFrom, rangeTo]);
   const normalizedRange = useMemo(() => normalizeRange(rangeFrom, rangeTo), [rangeFrom, rangeTo]);
+  const isRange = useMemo(() => normalizedRange.from !== normalizedRange.to, [normalizedRange]);
 
-  // Leagues: multi-select up to 10, default = All (empty array)
+  // Leagues: multi-select up to 10, default = All (empty array => all leagues)
   const [selectedLeagueIds, setSelectedLeagueIds] = useState<number[]>([]);
 
   const leagueSubtitle = useMemo(() => {
@@ -211,10 +210,7 @@ export default function FixturesScreen() {
   const toggleLeague = useCallback((leagueId: number) => {
     setSelectedLeagueIds((prev) => {
       const has = prev.includes(leagueId);
-      if (has) {
-        const next = prev.filter((x) => x !== leagueId);
-        return next;
-      }
+      if (has) return prev.filter((x) => x !== leagueId);
 
       if (prev.length >= MAX_MULTI_LEAGUES) {
         Alert.alert("Max leagues reached", `You can select up to ${MAX_MULTI_LEAGUES} leagues at once.`);
@@ -237,11 +233,11 @@ export default function FixturesScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [rows, setRows] = useState<FixtureListRow[]>([]);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [expandedKey, setExpandedKey] = useState<string | null>(null);
 
   const placeholderIds = useMemo(() => computeLikelyPlaceholderTbcIds(rows), [rows]);
 
-  // Fetch only for the selected day/range (critical)
+  // Fetch only for selected day/range
   const fetchFrom = normalizedRange.from;
   const fetchTo = normalizedRange.to;
 
@@ -252,11 +248,9 @@ export default function FixturesScreen() {
       setLoading(true);
       setError(null);
       setRows([]);
-      setExpandedId(null);
+      setExpandedKey(null);
 
       try {
-        // For a given day/range, fetch across selected leagues.
-        // Concurrency kept low to protect perf and rate limits.
         const batches = await mapLimit(selectedLeagues, 4, async (l) => {
           const res = await getFixtures({
             league: l.leagueId,
@@ -269,8 +263,8 @@ export default function FixturesScreen() {
 
         if (cancelled) return;
 
-        // Flatten and sort by kickoff date asc (stable UX)
         const flat = batches.flat();
+
         flat.sort((a, b) => {
           const da = String(a?.fixture?.date ?? "");
           const db = String(b?.fixture?.date ?? "");
@@ -295,10 +289,8 @@ export default function FixturesScreen() {
   const filtered = useMemo(() => {
     const base = rows;
 
-    // If single-day mode, keep only that day (because API window = day anyway, but keep defensive)
-    const dayFiltered = !isRange
-      ? base.filter((r) => fixtureIsoDateOnly(r) === rangeFrom)
-      : base;
+    // If single-day mode, keep only that day (defensive)
+    const dayFiltered = !isRange ? base.filter((r) => fixtureIsoDateOnly(r) === normalizedRange.from) : base;
 
     if (!qNorm) return dayFiltered;
 
@@ -310,20 +302,18 @@ export default function FixturesScreen() {
         norm(r?.fixture?.venue?.city).includes(qNorm)
       );
     });
-  }, [rows, isRange, rangeFrom, qNorm]);
+  }, [rows, isRange, normalizedRange.from, qNorm]);
 
   function handleDateTap(iso: string) {
     const d = clampIsoToWindow(iso, minIso, maxIso);
 
     // Option A: start → end → reset
     if (rangeFrom === rangeTo) {
-      // currently single day
       if (d === rangeFrom) return;
       setRangeTo(d);
       return;
     }
 
-    // currently a range: third tap resets to new single day
     setRangeFrom(d);
     setRangeTo(d);
   }
@@ -342,23 +332,26 @@ export default function FixturesScreen() {
     router.push({ pathname: "/match/[id]", params: { id } } as any);
   }
 
-  function goTripOrBuild(id: string) {
-    const existingTripId = resolveTripForFixture(id);
+  function goTripOrBuild(fixtureId: string) {
+    const existingTripId = resolveTripForFixture(fixtureId);
 
     if (existingTripId) {
       router.push({ pathname: "/trip/[id]", params: { id: existingTripId } } as any);
       return;
     }
 
-    // Correct: Build Trip should prefill, not show another fixtures feed
-    router.push({ pathname: "/trip/build", params: { fixtureId: id } } as any);
+    router.push({ pathname: "/trip/build", params: { fixtureId } } as any);
   }
 
-  const renderRow = (r: FixtureListRow) => {
-    const id = r?.fixture?.id ? String(r.fixture.id) : "";
-    if (!id) return null;
+  const renderRow = (r: FixtureListRow, index: number) => {
+    const fixtureId = r?.fixture?.id != null ? String(r.fixture.id) : "";
+    if (!fixtureId) return null;
 
-    const expanded = expandedId === id;
+    // Make row keys bulletproof across multi-league merges
+    const leagueId = r?.league?.id != null ? String(r.league.id) : "L";
+    const rowKey = `${leagueId}-${fixtureId}`;
+
+    const expanded = expandedKey === rowKey;
 
     const home = String(r?.teams?.home?.name ?? "Home");
     const away = String(r?.teams?.away?.name ?? "Away");
@@ -368,9 +361,9 @@ export default function FixturesScreen() {
     const city = r?.fixture?.venue?.city ?? "";
 
     return (
-      <View key={id} style={styles.rowWrap}>
+      <View key={rowKey} style={styles.rowWrap}>
         <GlassCard noPadding style={styles.rowCard}>
-          <Pressable onPress={() => setExpandedId(expanded ? null : id)} style={styles.rowMain}>
+          <Pressable onPress={() => setExpandedKey(expanded ? null : rowKey)} style={styles.rowMain}>
             <View style={styles.rowInner}>
               <TeamCrest name={home} logo={r?.teams?.home?.logo} />
 
@@ -391,11 +384,11 @@ export default function FixturesScreen() {
 
           {expanded ? (
             <View style={styles.expandArea}>
-              <Pressable onPress={() => goMatch(id)} style={styles.expandGhost}>
+              <Pressable onPress={() => goMatch(fixtureId)} style={styles.expandGhost}>
                 <Text style={styles.expandGhostText}>Match</Text>
               </Pressable>
 
-              <Pressable onPress={() => goTripOrBuild(id)} style={styles.expandPrimary}>
+              <Pressable onPress={() => goTripOrBuild(fixtureId)} style={styles.expandPrimary}>
                 <Text style={styles.expandPrimaryText}>Build trip</Text>
               </Pressable>
             </View>
@@ -422,14 +415,14 @@ export default function FixturesScreen() {
 
           {/* Date strip (tomorrow -> +365) */}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 12 }}>
-            {dateStrip.map((d) => {
+            {dateStrip.map((d, i) => {
               const inRange = isInSelectedRange(d.iso);
               const edge = isRangeEdge(d.iso);
-              const active = !isRange && d.iso === rangeFrom;
+              const active = !isRange && d.iso === normalizedRange.from;
 
               return (
                 <Pressable
-                  key={d.iso}
+                  key={`${d.iso}-${i}`} // <-- prevents duplicate key even if upstream date logic ever repeats
                   onPress={() => handleDateTap(d.iso)}
                   style={[
                     styles.datePill,
@@ -449,10 +442,7 @@ export default function FixturesScreen() {
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 12 }}>
             <Pressable
               onPress={setAllLeagues}
-              style={[
-                styles.leaguePill,
-                selectedLeagueIds.length === 0 && styles.leaguePillActive,
-              ]}
+              style={[styles.leaguePill, selectedLeagueIds.length === 0 && styles.leaguePillActive]}
             >
               <Text style={styles.leagueText}>All leagues</Text>
             </Pressable>
@@ -461,12 +451,9 @@ export default function FixturesScreen() {
               const selected = selectedLeagueIds.length === 0 ? false : selectedLeagueIds.includes(l.leagueId);
               return (
                 <Pressable
-                  key={l.leagueId}
+                  key={`league-${l.leagueId}`}
                   onPress={() => toggleLeague(l.leagueId)}
-                  style={[
-                    styles.leaguePill,
-                    selected && styles.leaguePillActive,
-                  ]}
+                  style={[styles.leaguePill, selected && styles.leaguePillActive]}
                 >
                   <Text style={styles.leagueText}>{l.label}</Text>
                   <LeagueFlag code={l.countryCode} />
@@ -476,9 +463,7 @@ export default function FixturesScreen() {
           </ScrollView>
 
           <Text style={styles.helperLine}>
-            {isRange
-              ? `Showing ${normalizedRange.from} → ${normalizedRange.to}`
-              : `Showing ${rangeFrom}`}
+            {isRange ? `Showing ${normalizedRange.from} → ${normalizedRange.to}` : `Showing ${normalizedRange.from}`}
             {selectedLeagueIds.length ? ` • ${selectedLeagueIds.length}/${MAX_MULTI_LEAGUES} leagues` : ""}
           </Text>
         </View>
@@ -572,7 +557,10 @@ const styles = StyleSheet.create({
     marginRight: 8,
     backgroundColor: "rgba(0,0,0,0.12)",
   },
-  leaguePillActive: { borderColor: "rgba(79,224,138,0.55)", backgroundColor: "rgba(79,224,138,0.08)" },
+  leaguePillActive: {
+    borderColor: "rgba(79,224,138,0.55)",
+    backgroundColor: "rgba(79,224,138,0.08)",
+  },
   leagueText: { color: theme.colors.textSecondary, fontWeight: "700" },
 
   content: { padding: theme.spacing.lg },
@@ -580,7 +568,6 @@ const styles = StyleSheet.create({
 
   rowWrap: { marginBottom: 10 },
   rowCard: { borderRadius: 18 },
-  rowMain: {},
 
   rowInner: {
     padding: 14,
