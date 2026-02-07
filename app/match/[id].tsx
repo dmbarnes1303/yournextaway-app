@@ -40,7 +40,7 @@ import { isKickoffTbc, kickoffIsoOrNull } from "@/src/utils/kickoffTbc";
 
 function currentFootballSeasonStartYear(now = new Date()): number {
   const y = now.getFullYear();
-  const m = now.getMonth(); // 0=Jan
+  const m = now.getMonth();
   return m >= 6 ? y : y - 1;
 }
 
@@ -128,7 +128,6 @@ export default function MatchDetailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
 
-  // auth (optional for future sync + email/push)
   const booted = authStore((s) => s.booted);
   const user = authStore((s) => s.user);
   const initAuth = authStore((s) => s.init);
@@ -141,7 +140,6 @@ export default function MatchDetailScreen() {
 
   const id = useMemo(() => coerceString((params as any)?.id), [params]);
 
-  // Routing context
   const rolling = useMemo(() => getRollingWindowIso(), []);
 
   const window = useMemo(() => {
@@ -164,11 +162,8 @@ export default function MatchDetailScreen() {
   const [error, setError] = useState<string | null>(null);
   const [row, setRow] = useState<FixtureListRow | null>(null);
 
-  // follow store actions
   const toggleFollow = useFollowStore((s) => s.toggle);
-  const upsertLatestSnapshot = useFollowStore((s) => s.upsertLatestSnapshot);
 
-  // IMPORTANT: subscribe to the boolean (reactive), not the isFollowing fn
   const fixtureIdFromRow = row?.fixture?.id != null ? String(row.fixture.id) : "";
   const fixtureId = useMemo(() => fixtureIdFromRow || (id ?? ""), [fixtureIdFromRow, id]);
 
@@ -183,10 +178,8 @@ export default function MatchDetailScreen() {
     )
   );
 
-  // sign-in UI
   const [email, setEmail] = useState("");
 
-  // non-blocking toast
   const [toast, setToast] = useState<ToastState>({ visible: false });
   const toastTimer = useRef<any>(null);
 
@@ -256,6 +249,8 @@ export default function MatchDetailScreen() {
   const apiSeason = (row as any)?.league?.season;
   const effectiveSeason =
     routeSeason ?? (typeof apiSeason === "number" ? apiSeason : null) ?? currentFootballSeasonStartYear();
+
+  const round = String(row?.league?.round ?? "").trim() || null;
 
   const tbc = useMemo(() => (row ? isKickoffTbc(row) : true), [row]);
 
@@ -329,7 +324,6 @@ export default function MatchDetailScreen() {
 
     const willFollow = !followed;
 
-    // Never block follow — store what we have.
     const homeTeamId = row?.teams?.home?.id ?? 0;
     const awayTeamId = row?.teams?.away?.id ?? 0;
 
@@ -343,32 +337,16 @@ export default function MatchDetailScreen() {
       homeTeamId,
       awayTeamId,
 
-      // ✅ Store human-friendly labels at follow-time (so Following list is real)
+      // IMPORTANT: store human-readable labels + round at follow-time
       homeName: home,
       awayName: away,
-      leagueName: leagueName,
+      leagueName,
+      round,
 
       kickoffIso: row ? kickoffIsoOrNull(row) : null,
       venue: row?.fixture?.venue?.name ? String(row.fixture.venue.name) : null,
       city: row?.fixture?.venue?.city ? String(row.fixture.venue.city) : null,
-    } as any);
-
-    // Best-effort: snapshot refresh (also includes names)
-    if (row && willFollow) {
-      upsertLatestSnapshot(fixtureId, {
-        kickoffIso: kickoffIsoOrNull(row),
-        venue: row?.fixture?.venue?.name ? String(row.fixture.venue.name) : null,
-        city: row?.fixture?.venue?.city ? String(row.fixture.venue.city) : null,
-        homeTeamId: row?.teams?.home?.id ?? undefined,
-        awayTeamId: row?.teams?.away?.id ?? undefined,
-        leagueId: row?.league?.id ?? undefined,
-        season: (row as any)?.league?.season ?? routeSeason ?? undefined,
-
-        homeName: home,
-        awayName: away,
-        leagueName: leagueName,
-      });
-    }
+    });
 
     if (!willFollow) {
       showToast("Unfollowed", "Removed from your followed list on this device.");
@@ -381,22 +359,7 @@ export default function MatchDetailScreen() {
       : "Sign in later to sync across devices and enable email/push alerts.";
 
     showToast("Following", `${line1} ${line2}`);
-  }, [
-    fixtureId,
-    followed,
-    toggleFollow,
-    row,
-    effectiveLeagueId,
-    effectiveSeason,
-    home,
-    away,
-    leagueName,
-    tbc,
-    user,
-    showToast,
-    upsertLatestSnapshot,
-    routeSeason,
-  ]);
+  }, [fixtureId, followed, toggleFollow, row, effectiveLeagueId, effectiveSeason, home, away, leagueName, round, tbc, user, showToast]);
 
   const onSendMagicLink = useCallback(async () => {
     const e = String(email ?? "").trim();
@@ -561,50 +524,6 @@ export default function MatchDetailScreen() {
               </>
             ) : null}
           </GlassCard>
-
-          {!loading && !error && row ? (
-            <GlassCard style={styles.card} intensity={22}>
-              <Text style={styles.h2}>Matchday essentials</Text>
-              <Text style={styles.muted}>Neutral traveller view: arrive smoothly, enjoy the city, keep it simple.</Text>
-
-              <View style={styles.opsList}>
-                <View style={styles.opsItem}>
-                  <Text style={styles.opsTitle}>Arrive early</Text>
-                  <Text style={styles.opsBody}>
-                    Aim for 60–90 minutes before kickoff if you’re collecting tickets or navigating security.
-                  </Text>
-                </View>
-
-                <View style={styles.opsItem}>
-                  <Text style={styles.opsTitle}>Bag policy and entry</Text>
-                  <Text style={styles.opsBody}>Policies vary. If you’re carrying a bag, double-check restrictions before you travel.</Text>
-                  <Pressable onPress={() => safeOpenUrl(stadiumInfoUrl)} style={styles.inlineBtn}>
-                    <Text style={styles.inlineBtnText}>Search stadium entry rules</Text>
-                  </Pressable>
-                </View>
-
-                <View style={styles.opsItem}>
-                  <Text style={styles.opsTitle}>Transport plan</Text>
-                  <Text style={styles.opsBody}>
-                    Public transport is usually easiest; event traffic and parking are unpredictable near kickoff.
-                  </Text>
-                  <Pressable onPress={() => safeOpenUrl(transportUrl)} style={styles.inlineBtn}>
-                    <Text style={styles.inlineBtnText}>Search transport options</Text>
-                  </Pressable>
-                </View>
-
-                <View style={styles.opsItem}>
-                  <Text style={styles.opsTitle}>Food & drinks nearby</Text>
-                  <Text style={styles.opsBody}>
-                    Pick something walkable so you’re not rushing. Atmosphere is often best around the stadium district.
-                  </Text>
-                  <Pressable onPress={() => safeOpenUrl(foodDrinkUrl)} style={styles.inlineBtn}>
-                    <Text style={styles.inlineBtnText}>Search nearby spots</Text>
-                  </Pressable>
-                </View>
-              </View>
-            </GlassCard>
-          ) : null}
         </ScrollView>
 
         {toast.visible ? (
@@ -624,14 +543,12 @@ const styles = StyleSheet.create({
   container: { flex: 1, paddingTop: 100 },
   scrollView: { flex: 1 },
   content: { paddingHorizontal: theme.spacing.lg, paddingBottom: theme.spacing.xxl, gap: theme.spacing.lg },
-
   card: { padding: theme.spacing.lg },
 
   center: { paddingVertical: theme.spacing.xl, alignItems: "center", gap: 10 },
   muted: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18, fontWeight: "700" },
 
   topRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 10 },
-
   kicker: { color: theme.colors.primary, fontSize: theme.fontSize.xs, fontWeight: "900", letterSpacing: 0.6 },
   title: { marginTop: 8, fontSize: theme.fontSize.xl, fontWeight: "900", color: theme.colors.text, lineHeight: 30 },
 
@@ -664,8 +581,6 @@ const styles = StyleSheet.create({
   },
   followInfoTitle: { color: theme.colors.text, fontWeight: "900", fontSize: 13 },
   followInfoBody: { marginTop: 6, color: theme.colors.textSecondary, fontWeight: "700", fontSize: 12, lineHeight: 16 },
-
-  h2: { marginTop: 2, fontSize: theme.fontSize.lg, fontWeight: "900", color: theme.colors.text },
 
   signInBox: {
     marginTop: 14,
@@ -732,29 +647,6 @@ const styles = StyleSheet.create({
   smallBtnText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.xs },
 
   smallPrint: { marginTop: 12, color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: "700" },
-
-  opsList: { marginTop: 12, gap: 12 },
-  opsItem: {
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.18)",
-    padding: 12,
-  },
-  opsTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
-  opsBody: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18, fontWeight: "700" },
-
-  inlineBtn: {
-    marginTop: 10,
-    alignSelf: "flex-start",
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "rgba(0,255,136,0.35)",
-    backgroundColor: "rgba(0,0,0,0.18)",
-  },
-  inlineBtnText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.xs },
 
   toastWrap: {
     position: "absolute",
