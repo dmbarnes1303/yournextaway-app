@@ -29,7 +29,6 @@ function cleanLoadedTrip(x: any): Trip | null {
   const startDate = String(x.startDate ?? "").trim();
   const endDate = String(x.endDate ?? "").trim();
 
-  // Phase 1: require these to keep trip rows stable
   if (!id || !cityId || !startDate || !endDate) return null;
 
   const matchIds = Array.isArray(x.matchIds)
@@ -70,17 +69,10 @@ type TripsState = {
   updateTrip: (tripId: string, patch: Partial<Omit<Trip, "id" | "createdAt">>) => Promise<void>;
 
   /**
-   * Canonical delete for Phase 1.
-   * Deletes all wallet items + attachment files for this trip, THEN deletes the trip.
-   * If cascade fails, we DO NOT delete the trip (prevents ghost wallet state).
+   * Deletes the trip AND deletes all SavedItems (and attachment files) belonging to the trip.
+   * This is the only delete we should use in Phase 1 to prevent orphaned Wallet items/files.
    */
   deleteTripCascade: (tripId: string) => Promise<void>;
-
-  /**
-   * Backwards compatible alias.
-   * Old screens call removeTrip() — we route it to deleteTripCascade().
-   */
-  removeTrip: (tripId: string) => Promise<void>;
 
   clearAll: () => Promise<void>;
 };
@@ -137,9 +129,12 @@ const useTripsStore = create<TripsState>((set, get) => ({
     const id = String(tripId ?? "").trim();
     if (!id) return;
 
-    const next = get().trips.map((t) => (t.id === id ? { ...t, ...patch, updatedAt: now() } : t));
-    const sorted = sortTrips(next);
+    const next = get().trips.map((t) => {
+      if (t.id !== id) return t;
+      return { ...t, ...patch, updatedAt: now() };
+    });
 
+    const sorted = sortTrips(next);
     set({ trips: sorted, loaded: true });
     await persist(sorted);
   },
@@ -150,59 +145,35 @@ const useTripsStore = create<TripsState>((set, get) => ({
     const id = String(tripId ?? "").trim();
     if (!id) return;
 
-    // Ensure saved items store is loaded too (avoid edge cases on fresh install)
-    if (!savedItemsStore.getState().loaded) {
-      try {
-        await savedItemsStore.load();
-      } catch {
-        // if saved items can't load, deleting is unsafe (could orphan files/items)
-        throw new Error("Wallet not ready. Try again.");
-      }
-    }
-
-    // 1) Delete saved items + attachments FIRST.
-    // If this fails, abort trip deletion — prevents orphaned wallet state.
-    try {
-      await savedItemsStore.clearTrip(id);
-    } catch {
-      throw new Error("Couldn’t remove wallet items for this trip. Try again.");
-    }
-
-    // 2) Now delete the trip
-    const existing = get().trips;
-    if (!existing.some((t) => t.id === id)) return;
-
-    const nextTrips = existing.filter((t) => t.id !== id);
+    // 1) Remove trip
+    const nextTrips = get().trips.filter((t) => t.id !== id);
     set({ trips: nextTrips, loaded: true });
+    await persist(nextTrips);
 
+    // 2) Remove all SavedItems + their attachment files
     try {
-      await persist(nextTrips);
+      await savedItemsStore.clearTrip(id, { deleteAttachmentFiles: true });
     } catch {
-      // Persist failed. We can't reliably restore deleted wallet items,
-      // so surface a hard error.
-      throw new Error("Couldn’t save trip deletion. Try again.");
+      // best-effort
     }
-  },
 
-  removeTrip: async (tripId) => {
-    await get().deleteTripCascade(tripId);
+    // 3) Optional hardening: clear any lingering orphans (belt & braces)
+    try {
+      const valid = nextTrips.map((t) => String(t.id));
+      await savedItemsStore.clearOrphans(valid, { deleteAttachmentFiles: true });
+    } catch {
+      // best-effort
+    }
   },
 
   clearAll: async () => {
-    // Clear wallet first to avoid orphans if trip persist fails
-    try {
-      if (!savedItemsStore.getState().loaded) await savedItemsStore.load();
-      await savedItemsStore.clearAll();
-    } catch {
-      throw new Error("Couldn’t clear wallet. Try again.");
-    }
-
     set({ trips: [], loaded: true });
+    await persist([]);
 
     try {
-      await persist([]);
+      await savedItemsStore.clearAll({ deleteAttachmentFiles: true });
     } catch {
-      throw new Error("Couldn’t clear trips. Try again.");
+      // ignore
     }
   },
 }));
@@ -232,9 +203,9 @@ const tripsStore = {
     await useTripsStore.getState().deleteTripCascade(tripId);
   },
 
-  // Back-compat: screens that call removeTrip keep working
+  // Backwards-compat alias so older screens don't break:
   removeTrip: async (tripId: string) => {
-    await useTripsStore.getState().removeTrip(tripId);
+    await useTripsStore.getState().deleteTripCascade(tripId);
   },
 
   clearAll: async () => {
