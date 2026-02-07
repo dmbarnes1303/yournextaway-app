@@ -24,7 +24,8 @@ import savedItemsStore from "@/src/state/savedItems";
 import type { SavedItem, WalletAttachment } from "@/src/core/savedItemTypes";
 import { getSavedItemTypeLabel } from "@/src/core/savedItemTypes";
 import { getPartner } from "@/src/core/partners";
-import { openPartnerUrl } from "@/src/services/partnerClicks";
+
+import { openUntrackedUrl } from "@/src/services/partnerClicks";
 import {
   pickAndStoreAttachmentForItem,
   openAttachment,
@@ -35,7 +36,7 @@ import {
 /* Helpers */
 /* -------------------------------------------------------------------------- */
 
-type WalletMode = "booked" | "archived";
+type WalletMode = "booked" | "saved" | "archived";
 
 function groupByTrip(items: SavedItem[]) {
   const map = new Map<string, SavedItem[]>();
@@ -100,6 +101,47 @@ function attachmentLabel(att: WalletAttachment) {
   return name ? `${kind}: ${name}` : `${kind} attachment`;
 }
 
+/**
+ * Option B reality:
+ * - saved items may need to become booked manually later
+ * - your transition graph doesn't allow saved -> booked directly,
+ *   so we do saved -> pending -> booked (safe + deterministic)
+ */
+async function forceToBooked(itemId: string) {
+  const id = String(itemId ?? "").trim();
+  if (!id) return;
+
+  if (!savedItemsStore.getState().loaded) {
+    try {
+      await savedItemsStore.load();
+    } catch {
+      // ignore
+    }
+  }
+
+  const cur = savedItemsStore.getState().items.find((x) => x.id === id);
+  if (!cur) return;
+
+  try {
+    if (cur.status === "booked") return;
+
+    if (cur.status === "saved") {
+      await savedItemsStore.transitionStatus(id, "pending");
+      await savedItemsStore.transitionStatus(id, "booked");
+      return;
+    }
+
+    if (cur.status === "pending") {
+      await savedItemsStore.transitionStatus(id, "booked");
+      return;
+    }
+
+    // archived -> (restore elsewhere)
+  } catch {
+    // ignore
+  }
+}
+
 /* -------------------------------------------------------------------------- */
 /* Screen */
 /* -------------------------------------------------------------------------- */
@@ -154,6 +196,8 @@ export default function WalletScreen() {
     const base =
       mode === "archived"
         ? items.filter((i) => i.status === "archived")
+        : mode === "saved"
+        ? items.filter((i) => i.status === "saved")
         : items.filter((i) => i.status === "booked");
 
     // Hide ghost items if cascade deletion ever failed.
@@ -164,13 +208,15 @@ export default function WalletScreen() {
 
   const counts = useMemo(() => {
     let booked = 0;
+    let saved = 0;
     let archived = 0;
     for (const it of items) {
       if (!validTripIds.has(String(it.tripId))) continue;
       if (it.status === "booked") booked++;
+      if (it.status === "saved") saved++;
       if (it.status === "archived") archived++;
     }
-    return { booked, archived };
+    return { booked, saved, archived };
   }, [items, validTripIds]);
 
   const managingItem = useMemo(() => {
@@ -201,7 +247,8 @@ export default function WalletScreen() {
     }
 
     try {
-      await openPartnerUrl(item.partnerUrl);
+      // Opening an existing Wallet item must be UNTRACKED (no prompts / no pending creation)
+      await openUntrackedUrl(item.partnerUrl);
     } catch {
       Alert.alert("Couldn’t open link", "Your device could not open that link.");
     }
@@ -223,6 +270,14 @@ export default function WalletScreen() {
     }
   }, []);
 
+  const markBookedFromWallet = useCallback(async (item: SavedItem) => {
+    try {
+      await forceToBooked(item.id);
+    } catch {
+      Alert.alert("Couldn’t mark booked", "Try again.");
+    }
+  }, []);
+
   const openCoreActions = useCallback(
     (item: SavedItem) => {
       const details = getItemDetailsText(item);
@@ -239,15 +294,23 @@ export default function WalletScreen() {
             else addAttachment(item);
           },
         },
+
+        // In Saved/Booked views, allow manual "Mark booked" (useful if they booked later)
+        mode !== "archived"
+          ? { text: "Mark booked", onPress: () => markBookedFromWallet(item) }
+          : undefined,
+
         mode === "archived"
           ? { text: "Restore", onPress: () => restoreItem(item) }
           : { text: "Archive", style: "destructive", onPress: () => archiveItem(item) },
       ].filter(Boolean);
 
-      // Keep <= 3 actions + cancel (Android reliability)
-      Alert.alert(item.title || "Wallet item", details + attLine, buttons.slice(0, 4), { cancelable: true });
+      // Android reliability: keep <= 4 buttons total
+      Alert.alert(item.title || "Wallet item", details + attLine, buttons.slice(0, 4), {
+        cancelable: true,
+      });
     },
-    [mode, openItemLink, addAttachment, archiveItem, restoreItem]
+    [mode, openItemLink, addAttachment, archiveItem, restoreItem, markBookedFromWallet]
   );
 
   const openAttachmentRow = useCallback(async (att: WalletAttachment) => {
@@ -259,34 +322,34 @@ export default function WalletScreen() {
   }, []);
 
   const deleteAttachmentRow = useCallback(async (item: SavedItem, att: WalletAttachment) => {
-    Alert.alert(
-      "Delete attachment?",
-      "This removes the stored file from this device.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await savedItemsStore.removeAttachment(item.id, att.id);
-              await deleteAttachmentFile(att);
-            } catch {
-              Alert.alert("Couldn’t delete", "Try again.");
-            }
-          },
+    Alert.alert("Delete attachment?", "This removes the stored file from this device.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await savedItemsStore.removeAttachment(item.id, att.id);
+            await deleteAttachmentFile(att);
+          } catch {
+            Alert.alert("Couldn’t delete", "Try again.");
+          }
         },
-      ]
-    );
+      },
+    ]);
   }, []);
 
   return (
     <Background imageSource={getBackground("wallet")} overlayOpacity={0.86}>
       <SafeAreaView style={styles.container} edges={["top"]}>
-        <ScrollView style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+        >
           <View style={styles.header}>
             <Text style={styles.title}>Wallet</Text>
-            <Text style={styles.subtitle}>Your confirmed bookings and stored essentials</Text>
+            <Text style={styles.subtitle}>Your bookings, saved links, and stored proof</Text>
           </View>
 
           {/* Attachment manager (reliable; no nested alerts) */}
@@ -298,7 +361,8 @@ export default function WalletScreen() {
                     Attachments
                   </Text>
                   <Text style={styles.managerSub} numberOfLines={1}>
-                    {managingItem.title || "Item"} • {managingAttachments.length} file{managingAttachments.length === 1 ? "" : "s"}
+                    {managingItem.title || "Item"} • {managingAttachments.length} file
+                    {managingAttachments.length === 1 ? "" : "s"}
                   </Text>
                 </View>
 
@@ -332,7 +396,10 @@ export default function WalletScreen() {
                         <Text style={styles.attBtnText}>Open</Text>
                       </Pressable>
 
-                      <Pressable onPress={() => deleteAttachmentRow(managingItem, a)} style={[styles.attBtn, styles.attBtnDanger]}>
+                      <Pressable
+                        onPress={() => deleteAttachmentRow(managingItem, a)}
+                        style={[styles.attBtn, styles.attBtnDanger]}
+                      >
                         <Text style={styles.attBtnText}>Delete</Text>
                       </Pressable>
                     </View>
@@ -351,6 +418,15 @@ export default function WalletScreen() {
               >
                 <Text style={[styles.toggleText, mode === "booked" && styles.toggleTextActive]}>
                   Booked ({counts.booked})
+                </Text>
+              </Pressable>
+
+              <Pressable
+                onPress={() => setMode("saved")}
+                style={[styles.toggleBtn, mode === "saved" && styles.toggleBtnActive]}
+              >
+                <Text style={[styles.toggleText, mode === "saved" && styles.toggleTextActive]}>
+                  Saved ({counts.saved})
                 </Text>
               </Pressable>
 
@@ -377,10 +453,18 @@ export default function WalletScreen() {
           {!loading && visible.length === 0 && (
             <GlassCard style={styles.card}>
               <EmptyState
-                title={mode === "archived" ? "No archived items" : "Nothing booked yet"}
+                title={
+                  mode === "archived"
+                    ? "No archived items"
+                    : mode === "saved"
+                    ? "No saved items"
+                    : "Nothing booked yet"
+                }
                 message={
                   mode === "archived"
                     ? "When you archive items, they’ll show up here."
+                    : mode === "saved"
+                    ? "When you choose “No” after returning from a partner, we keep the link here as Saved."
                     : "When you confirm bookings in a trip, they appear here. Add a PDF or screenshot to store proof offline."
                 }
               />
@@ -529,11 +613,7 @@ const styles = StyleSheet.create({
   attBtnText: { color: theme.colors.text, fontWeight: "900", fontSize: 12 },
 
   toggleCard: { padding: 10 },
-
-  toggleRow: {
-    flexDirection: "row",
-    gap: 10,
-  },
+  toggleRow: { flexDirection: "row", gap: 10 },
 
   toggleBtn: {
     flex: 1,
@@ -556,9 +636,7 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSize.sm,
   },
 
-  toggleTextActive: {
-    color: theme.colors.text,
-  },
+  toggleTextActive: { color: theme.colors.text },
 
   section: { marginTop: 2 },
 
@@ -616,9 +694,5 @@ const styles = StyleSheet.create({
   },
   managePillText: { color: theme.colors.text, fontWeight: "900", fontSize: 12 },
 
-  chev: {
-    color: theme.colors.textSecondary,
-    fontSize: 24,
-    marginTop: -2,
-  },
+  chev: { color: theme.colors.textSecondary, fontSize: 24, marginTop: -2 },
 });
