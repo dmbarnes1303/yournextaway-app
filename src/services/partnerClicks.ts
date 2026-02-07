@@ -9,19 +9,17 @@ import { getSavedItemTypeLabel } from "@/src/core/savedItemTypes";
 
 /**
  * Phase 1 return detection:
- * - create pending before opening partner
- * - prompt user "Booked?" when they return
- *
- * IMPORTANT REALITY:
- * - On iOS/Android, WebBrowser.openBrowserAsync often DOES NOT background the app,
- *   so AppState return detection may NOT fire.
- * - Therefore we also trigger the return handler when the in-app browser is dismissed.
+ * - beginPartnerClick creates a pending item, stores lastClick
+ * - prompt on return (AppState OR browser dismiss)
  *
  * HARDENING:
- * - prevent double-taps / concurrent opens (opening guard)
+ * - global opening guard
  * - rollback pending item if opening fails
- * - prevent duplicate prompts by clearing lastClick before invoking onReturn
- * - allow watcher handler to be UPDATED on subsequent calls (Fast Refresh safe)
+ * - avoid zombie prompts (age limit)
+ * - avoid false prompts for instant dismiss (min open duration)
+ * - single, explicit public API:
+ *    - beginPartnerClick() tracked
+ *    - openUntrackedUrl() untracked
  */
 
 export type LastPartnerClick = {
@@ -29,7 +27,9 @@ export type LastPartnerClick = {
   tripId: string;
   partnerId: PartnerId;
   url: string;
+
   createdAt: number;
+  openedAt: number; // when browser actually opened
 };
 
 let lastClick: LastPartnerClick | null = null;
@@ -39,10 +39,7 @@ let appStateSub: { remove: () => void } | null = null;
 
 let onReturnHandler: ((click: LastPartnerClick) => void | Promise<void>) | null = null;
 
-/**
- * Global in-flight guard.
- * Prevents double-taps creating multiple pending items and corrupting lastClick.
- */
+/** Prevent double-taps / concurrent opens */
 let opening = false;
 
 function now() {
@@ -61,9 +58,9 @@ function isRecent(click: LastPartnerClick) {
 
 /**
  * Consume lastClick exactly once and invoke handler.
- * This is the ONLY place we should clear lastClick for prompting.
+ * This is the ONLY place we clear lastClick.
  */
-async function triggerReturnIfPresent(_reason: "appstate" | "browser_dismiss") {
+async function triggerReturnIfPresent(reason: "appstate" | "browser_dismiss", meta?: { openDurationMs?: number }) {
   if (!lastClick) return;
 
   // Avoid zombie prompts
@@ -72,17 +69,25 @@ async function triggerReturnIfPresent(_reason: "appstate" | "browser_dismiss") {
     return;
   }
 
+  // Avoid false prompts for instant dismiss
+  // (accidental taps / quick peek)
+  const minOpenMs = 8000;
+  const dur = Number(meta?.openDurationMs ?? 0);
+  if (reason === "browser_dismiss" && dur > 0 && dur < minOpenMs) {
+    lastClick = null;
+    return;
+  }
+
   const handler = onReturnHandler;
   if (!handler) return;
 
-  // Prevent re-entrant / duplicate prompts
   const click = lastClick;
   lastClick = null;
 
   try {
     await Promise.resolve(handler(click));
   } catch {
-    // swallow: never crash app on return prompt
+    // never crash app on return prompt
   }
 }
 
@@ -94,31 +99,26 @@ async function openUrlInternal(url: string) {
     const can = await Linking.canOpenURL(u);
     if (!can) throw new Error("Cannot open URL");
     await Linking.openURL(u);
-    return;
+    return { type: "opened" as const };
   }
 
-  await WebBrowser.openBrowserAsync(u, {
+  const res = await WebBrowser.openBrowserAsync(u, {
     presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
     readerMode: false,
     enableBarCollapsing: true,
     showTitle: true,
   });
+
+  // res.type commonly: "opened" | "cancel" | "dismiss" (varies)
+  return res;
 }
 
-/**
- * Dev overlay + diagnostics
- */
+/** Dev diagnostics */
 export function getPartnerClicksDebugState() {
-  return {
-    opening,
-    subscribed,
-    lastClick,
-  };
+  return { opening, subscribed, lastClick };
 }
 
-export function ensurePartnerReturnWatcher(
-  onReturn: (click: LastPartnerClick) => void | Promise<void>
-) {
+export function ensurePartnerReturnWatcher(onReturn: (click: LastPartnerClick) => void | Promise<void>) {
   onReturnHandler = onReturn;
 
   if (subscribed) return;
@@ -138,9 +138,13 @@ export function ensurePartnerReturnWatcher(
 }
 
 /**
- * Use when you want to open a link WITHOUT creating a pending item.
+ * Public: open a URL WITHOUT creating a pending item and WITHOUT prompts.
+ * Use this for:
+ * - maps
+ * - opening existing saved items
+ * - any “just open it” links
  */
-export async function openPartnerUrl(url: string) {
+export async function openUntrackedUrl(url: string) {
   const u = normalizeUrl(url);
   if (!u) throw new Error("url is required");
 
@@ -169,7 +173,6 @@ function buildDefaultTitle(args: {
   const city = cleanCity(args.metadata);
   const label = getSavedItemTypeLabel(args.type);
 
-  // Use your Phase-1 language, not generic “search”
   switch (args.type) {
     case "hotel":
       return city ? `Stay: Hotels in ${city}` : `Stay: Hotels`;
@@ -196,10 +199,10 @@ function buildDefaultTitle(args: {
 }
 
 /**
- * Begin partner click:
- * - create pending SavedItem
- * - open partner
- * - store lastClick for fallback prompt on return
+ * Public: tracked partner click
+ * - creates pending SavedItem
+ * - opens partner
+ * - stores lastClick so return prompt can happen
  */
 export async function beginPartnerClick(args: {
   tripId: string;
@@ -246,18 +249,32 @@ export async function beginPartnerClick(args: {
       metadata: args.metadata,
     });
 
+    const openedAt = now();
     lastClick = {
       itemId: item.id,
       tripId,
       partnerId: partner.id,
       url,
-      createdAt: now(),
+      createdAt: openedAt,
+      openedAt,
     };
 
     try {
-      await openUrlInternal(url);
-      await triggerReturnIfPresent("browser_dismiss");
+      const res = await openUrlInternal(url);
+
+      // Browser dismissed: prompt now (but guarded against instant dismiss).
+      const openDurationMs = now() - openedAt;
+
+      // Only treat a real “dismiss/cancel/closed” as a return event.
+      // If the platform returns "opened" and keeps app active, do nothing here.
+      const type = String((res as any)?.type ?? "").toLowerCase();
+      const isDismissLike = type === "dismiss" || type === "cancel";
+
+      if (isDismissLike) {
+        await triggerReturnIfPresent("browser_dismiss", { openDurationMs });
+      }
     } catch (e) {
+      // Rollback pending item if opening fails
       try {
         await savedItemsStore.remove(item.id);
       } catch {
