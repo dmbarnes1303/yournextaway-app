@@ -24,7 +24,7 @@ import storage from "@/src/services/storage";
 
 import useFollowStore, { type FollowedMatch } from "@/src/state/followStore";
 import { refreshFollowedMatches } from "@/src/services/followRefresh";
-import { ensureNotificationsReady } from "@/src/services/followKickoffNotifications";
+import { requestKickoffNotificationsPermission } from "@/src/services/followKickoffNotifications";
 
 /* -------------------------------------------------------------------------- */
 /* Row UI */
@@ -378,6 +378,9 @@ export default function ProfileScreen() {
   const setDefaultAlerts = useFollowStore((s) => s.setDefaultAlerts);
   const defaultAlerts = useFollowStore((s) => s.defaultAlerts);
 
+  // Batch update
+  const setKickoffConfirmedForAll = useFollowStore((s) => s.setKickoffConfirmedForAll);
+
   // Permission-gated toggle state
   const [kickoffToggleBusy, setKickoffToggleBusy] = useState(false);
 
@@ -610,8 +613,6 @@ export default function ProfileScreen() {
     setRefreshSummary(null);
 
     try {
-      // This path is user-driven, so it’s fine if notifications are already enabled.
-      // It will NOT prompt for permission (notifyKickoffChanged now uses request:false).
       const rows = await refreshFollowedMatches({ limit: 25 });
 
       setLastRefreshedAt(Date.now());
@@ -631,38 +632,41 @@ export default function ProfileScreen() {
     async (nextValue: boolean) => {
       if (kickoffToggleBusy) return;
 
-      // OFF never needs permission
+      // OFF: no permission needed. Batch-update existing follows too.
       if (!nextValue) {
         setDefaultAlerts({ kickoffConfirmed: false });
+        setKickoffConfirmedForAll(false);
         return;
       }
 
-      // ON = explicit user action → request permission here (best opt-in)
+      // ON: explicit intent → request permission here.
       setKickoffToggleBusy(true);
 
       try {
-        const ok = await ensureNotificationsReady({ request: true });
+        const granted = await requestKickoffNotificationsPermission();
 
-        if (!ok) {
-          // Snap back OFF, and be explicit why (otherwise users think it’s broken)
+        if (!granted) {
+          // Keep UI honest: remain OFF + batch-update to OFF
           setDefaultAlerts({ kickoffConfirmed: false });
+          setKickoffConfirmedForAll(false);
 
           Alert.alert(
             "Notifications disabled",
-            "To enable kickoff alerts, allow notifications for YourNextAway in your phone settings, then toggle this on again.",
-            [{ text: "OK" }],
-            { cancelable: true }
+            "To get kickoff alerts, enable notifications for YourNextAway in your phone settings, then turn this on again.",
+            [{ text: "OK" }]
           );
 
           return;
         }
 
+        // Permission granted: turn on defaults + batch-update existing follows
         setDefaultAlerts({ kickoffConfirmed: true });
+        setKickoffConfirmedForAll(true);
       } finally {
         setKickoffToggleBusy(false);
       }
     },
-    [kickoffToggleBusy, setDefaultAlerts]
+    [kickoffToggleBusy, setDefaultAlerts, setKickoffConfirmedForAll]
   );
 
   return (
