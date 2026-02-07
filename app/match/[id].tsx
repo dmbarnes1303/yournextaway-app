@@ -1,5 +1,5 @@
 // app/match/[id].tsx
-import React, { useEffect, useMemo, useState, useCallback } from "react";
+import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -122,6 +122,10 @@ function buildTransportUrl(venue?: string, city?: string) {
   return `https://www.google.com/search?q=${enc(q)}`;
 }
 
+type ToastState =
+  | { visible: false }
+  | { visible: true; title: string; message?: string };
+
 export default function MatchDetailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
@@ -169,6 +173,22 @@ export default function MatchDetailScreen() {
 
   // sign-in UI
   const [email, setEmail] = useState("");
+
+  // non-blocking feedback toast
+  const [toast, setToast] = useState<ToastState>({ visible: false });
+  const toastTimer = useRef<any>(null);
+
+  const showToast = useCallback((title: string, message?: string) => {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    setToast({ visible: true, title, message });
+    toastTimer.current = setTimeout(() => setToast({ visible: false }), 2200);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -227,7 +247,10 @@ export default function MatchDetailScreen() {
     return id ?? "";
   }, [row, id]);
 
-  const followed = useMemo(() => (fixtureId ? storeIsFollowing(fixtureId) : false), [fixtureId, storeIsFollowing]);
+  const followed = useMemo(
+    () => (fixtureId ? storeIsFollowing(fixtureId) : false),
+    [fixtureId, storeIsFollowing]
+  );
 
   const home = row?.teams?.home?.name ?? "Home";
   const away = row?.teams?.away?.name ?? "Away";
@@ -315,18 +338,18 @@ export default function MatchDetailScreen() {
   }, [home, away, tbc, kickoffDisplay, place, leagueName, effectiveSeason, ticketsUrl, mapsUrl]);
 
   const onToggleFollow = useCallback(() => {
-    if (!row || !fixtureId) return;
+    if (!fixtureId) return;
 
+    // Determine NEXT state up front (fixes backwards messaging).
+    const willFollow = !storeIsFollowing(fixtureId);
+
+    // Never block follow. Missing ids are normal in early data.
+    // We store what we have and keep snapshots fresh later.
     const homeTeamId = row?.teams?.home?.id ?? 0;
     const awayTeamId = row?.teams?.away?.id ?? 0;
 
     const lid = effectiveLeagueId ?? 0;
     const sea = typeof effectiveSeason === "number" ? effectiveSeason : 0;
-
-    if (!lid || !sea || !homeTeamId || !awayTeamId) {
-      Alert.alert("Can’t follow yet", "This fixture is missing required data. Try again later.");
-      return;
-    }
 
     toggleFollow({
       fixtureId,
@@ -334,28 +357,48 @@ export default function MatchDetailScreen() {
       season: sea,
       homeTeamId,
       awayTeamId,
-      kickoffIso: kickoffIsoOrNull(row), // null when TBC/explicit unknown
+      kickoffIso: row ? kickoffIsoOrNull(row) : null,
       venue: row?.fixture?.venue?.name ? String(row.fixture.venue.name) : null,
       city: row?.fixture?.venue?.city ? String(row.fixture.venue.city) : null,
     });
 
-    // Messaging that doesn’t lie
-    if (!user) {
-      Alert.alert(
-        followed ? "Unfollowed" : "Following",
-        followed
-          ? "Removed from your followed list on this device."
-          : "Following on this device. Sign in later to sync across devices and enable email/push alerts."
-      );
-    } else {
-      Alert.alert(
-        followed ? "Unfollowed" : "Following",
-        followed
-          ? "Removed from your followed list."
-          : "We’ll alert you when kickoff is confirmed/changes (sync + notifications can be added next)."
-      );
+    if (!willFollow) {
+      showToast("Unfollowed", "Removed from your followed list on this device.");
+      return;
     }
-  }, [row, fixtureId, toggleFollow, effectiveLeagueId, effectiveSeason, user, followed]);
+
+    // If we just followed, also upsert a snapshot immediately (best-effort).
+    if (row) {
+      upsertLatestSnapshot(fixtureId, {
+        kickoffIso: kickoffIsoOrNull(row),
+        venue: row?.fixture?.venue?.name ? String(row.fixture.venue.name) : null,
+        city: row?.fixture?.venue?.city ? String(row.fixture.venue.city) : null,
+        homeTeamId: row?.teams?.home?.id ?? undefined,
+        awayTeamId: row?.teams?.away?.id ?? undefined,
+        leagueId: row?.league?.id ?? undefined,
+        season: (row as any)?.league?.season ?? routeSeason ?? undefined,
+      });
+    }
+
+    const line1 = tbc ? "We’ll alert you when kickoff is confirmed." : "We’ll alert you if kickoff changes.";
+    const line2 = user
+      ? "Sync + notifications can be added next."
+      : "Sign in later to sync across devices and enable email/push alerts.";
+
+    showToast("Following", `${line1} ${line2}`);
+  }, [
+    fixtureId,
+    storeIsFollowing,
+    toggleFollow,
+    row,
+    effectiveLeagueId,
+    effectiveSeason,
+    tbc,
+    user,
+    showToast,
+    upsertLatestSnapshot,
+    routeSeason,
+  ]);
 
   const onSendMagicLink = useCallback(async () => {
     const e = String(email ?? "").trim();
@@ -429,6 +472,17 @@ export default function MatchDetailScreen() {
                     {String(effectiveSeason)}
                   </Text>
                 </View>
+
+                {followed ? (
+                  <View style={styles.followInfo}>
+                    <Text style={styles.followInfoTitle}>Following</Text>
+                    <Text style={styles.followInfoBody}>
+                      {tbc
+                        ? "We’ll notify you when kickoff time is confirmed."
+                        : "We’ll notify you if kickoff time changes."}
+                    </Text>
+                  </View>
+                ) : null}
 
                 {!user ? (
                   <View style={styles.signInBox}>
@@ -556,6 +610,16 @@ export default function MatchDetailScreen() {
             </GlassCard>
           ) : null}
         </ScrollView>
+
+        {/* Non-blocking toast */}
+        {toast.visible ? (
+          <View pointerEvents="none" style={styles.toastWrap}>
+            <View style={styles.toast}>
+              <Text style={styles.toastTitle}>{toast.title}</Text>
+              {toast.message ? <Text style={styles.toastMsg}>{toast.message}</Text> : null}
+            </View>
+          </View>
+        ) : null}
       </SafeAreaView>
     </Background>
   );
@@ -594,6 +658,17 @@ const styles = StyleSheet.create({
   metaBlock: { marginTop: 12, gap: 6 },
   metaLine: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18, fontWeight: "700" },
   metaLabel: { color: theme.colors.text, fontWeight: "900" },
+
+  followInfo: {
+    marginTop: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(79,224,138,0.22)",
+    backgroundColor: "rgba(79,224,138,0.07)",
+    padding: 12,
+  },
+  followInfoTitle: { color: theme.colors.text, fontWeight: "900", fontSize: 13 },
+  followInfoBody: { marginTop: 6, color: theme.colors.textSecondary, fontWeight: "700", fontSize: 12, lineHeight: 16 },
 
   h2: { marginTop: 2, fontSize: theme.fontSize.lg, fontWeight: "900", color: theme.colors.text },
 
@@ -685,4 +760,21 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.18)",
   },
   inlineBtnText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.xs },
+
+  toastWrap: {
+    position: "absolute",
+    left: theme.spacing.lg,
+    right: theme.spacing.lg,
+    bottom: theme.spacing.lg,
+  },
+  toast: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.78)",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  toastTitle: { color: theme.colors.text, fontWeight: "900", fontSize: 13 },
+  toastMsg: { marginTop: 4, color: theme.colors.textSecondary, fontWeight: "700", fontSize: 12, lineHeight: 16 },
 });
