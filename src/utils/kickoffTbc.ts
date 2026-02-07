@@ -5,25 +5,26 @@ import type { FixtureListRow } from "@/src/services/apiFootball";
  * We infer "likely TBC" when:
  * 1) API explicitly signals TBD/TBA via status.short
  * 2) fixture has no kickoff date
- * 3) fixture is > 21 days away AND belongs to a round where >= 7 fixtures share the exact same kickoff timestamp
+ * 3) fixture is > CONFIRMED_WITHIN_DAYS away AND belongs to a round where
+ *    >= PLACEHOLDER_CLUSTER_THRESHOLD fixtures share the exact same kickoff timestamp (bucketed to minute)
  *
  * This is a heuristic. It will not be perfect, but it’s pragmatic and matches real scheduling behaviour.
  */
 
-const CONFIRMED_WITHIN_DAYS = 21;
-const PLACEHOLDER_CLUSTER_THRESHOLD = 7;
+export const CONFIRMED_WITHIN_DAYS = 21;
+export const PLACEHOLDER_CLUSTER_THRESHOLD = 7;
 
 function normalizeId(id: unknown) {
   return String(id ?? "").trim();
 }
 
-function kickoffIso(r: { fixture?: { date?: string } } | null | undefined): string | null {
-  const raw = r?.fixture?.date ? String(r.fixture.date) : "";
+export function kickoffIsoOrNull(row: FixtureListRow | null | undefined): string | null {
+  const raw = row?.fixture?.date ? String(row.fixture.date) : "";
   return raw.trim() ? raw.trim() : null;
 }
 
-function statusShort(r: FixtureListRow | null | undefined): string {
-  return String(r?.fixture?.status?.short ?? "").trim().toUpperCase();
+function statusShort(row: FixtureListRow | null | undefined): string {
+  return String(row?.fixture?.status?.short ?? "").trim().toUpperCase();
 }
 
 function isExplicitTbcStatus(short: string) {
@@ -31,53 +32,79 @@ function isExplicitTbcStatus(short: string) {
 }
 
 function toMinuteKey(iso: string) {
-  // ISO from API Football usually contains seconds; bucket to minute.
   // "2026-04-19T14:00:00+00:00" -> "2026-04-19T14:00"
   const m = iso.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})/);
   return m?.[1] ?? iso.slice(0, 16);
 }
 
-function daysUntil(iso: string) {
+function daysUntil(iso: string, now: Date) {
   const t = new Date(iso).getTime();
   if (!Number.isFinite(t)) return Number.POSITIVE_INFINITY;
-  const ms = t - Date.now();
+  const ms = t - now.getTime();
   return ms / (1000 * 60 * 60 * 24);
 }
 
-export function isKickoffTbc(row: FixtureListRow, placeholderIds?: Set<string>) {
+/**
+ * Quick check for a single row.
+ * If you pass `placeholderIds` (computed from a fixtures list), this becomes accurate.
+ * If you don't, it only uses explicit TBD/TBA + missing kickoff + <=21 day rule.
+ */
+export function isKickoffTbc(
+  row: FixtureListRow,
+  placeholderIds?: Set<string>,
+  opts?: { now?: Date }
+) {
+  const now = opts?.now ?? new Date();
+
   const id = normalizeId(row?.fixture?.id);
-  const iso = kickoffIso(row);
+  const iso = kickoffIsoOrNull(row);
   const short = statusShort(row);
 
   if (isExplicitTbcStatus(short)) return true;
   if (!iso) return true;
 
   // Anything within the "late window" is treated as confirmed
-  if (daysUntil(iso) <= CONFIRMED_WITHIN_DAYS) return false;
+  if (daysUntil(iso, now) <= CONFIRMED_WITHIN_DAYS) return false;
 
   // If caller gave placeholder set, trust it
   if (placeholderIds && id && placeholderIds.has(id)) return true;
 
+  // Otherwise unknown — default to "not TBC" to avoid misleading UI
+  // (we only call it TBC when we have explicit signal or cluster evidence)
   return false;
 }
 
 /**
  * Compute likely placeholder (TBC) fixture ids from a set of fixtures.
- * Uses league.round grouping and kickoff timestamp clustering.
+ * Uses league+season+round grouping and kickoff timestamp clustering.
  */
-export function computeLikelyPlaceholderTbcIds(rows: FixtureListRow[]): Set<string> {
+export function computeLikelyPlaceholderTbcIds(
+  rows: FixtureListRow[],
+  opts?: { now?: Date; confirmedWithinDays?: number; threshold?: number }
+): Set<string> {
   const out = new Set<string>();
   if (!Array.isArray(rows) || rows.length === 0) return out;
 
-  // 1) Respect explicit TBD/TBA signals
+  const now = opts?.now ?? new Date();
+  const confirmedWithinDays = opts?.confirmedWithinDays ?? CONFIRMED_WITHIN_DAYS;
+  const threshold = opts?.threshold ?? PLACEHOLDER_CLUSTER_THRESHOLD;
+
+  // 1) Respect explicit TBD/TBA signals + missing kickoff
   for (const r of rows) {
     const id = normalizeId(r?.fixture?.id);
     if (!id) continue;
+
     const short = statusShort(r);
-    if (isExplicitTbcStatus(short)) out.add(id);
+    if (isExplicitTbcStatus(short)) {
+      out.add(id);
+      continue;
+    }
+
+    const iso = kickoffIsoOrNull(r);
+    if (!iso) out.add(id);
   }
 
-  // 2) Group by league+season+round
+  // 2) Group eligible fixtures by league+season+round (only those > confirmedWithinDays away)
   type GroupKey = string;
   const groups = new Map<GroupKey, FixtureListRow[]>();
 
@@ -85,14 +112,11 @@ export function computeLikelyPlaceholderTbcIds(rows: FixtureListRow[]): Set<stri
     const id = normalizeId(r?.fixture?.id);
     if (!id) continue;
 
-    const iso = kickoffIso(r);
-    if (!iso) {
-      out.add(id);
-      continue;
-    }
+    const iso = kickoffIsoOrNull(r);
+    if (!iso) continue;
 
-    // Within 21 days => confirmed, do not mark as placeholder
-    if (daysUntil(iso) <= CONFIRMED_WITHIN_DAYS) continue;
+    // within X days => treat as confirmed (don’t call it placeholder)
+    if (daysUntil(iso, now) <= confirmedWithinDays) continue;
 
     const leagueId = r?.league?.id != null ? String(r.league.id) : "";
     const season = r?.league?.season != null ? String(r.league.season) : "";
@@ -105,13 +129,13 @@ export function computeLikelyPlaceholderTbcIds(rows: FixtureListRow[]): Set<stri
     groups.set(key, arr);
   }
 
-  // 3) For each group, count kickoff timestamp clusters
+  // 3) For each group, count kickoff timestamp clusters (minute-bucketed)
   for (const groupRows of groups.values()) {
-    if (groupRows.length < PLACEHOLDER_CLUSTER_THRESHOLD) continue;
+    if (groupRows.length < threshold) continue;
 
     const counts = new Map<string, number>();
     for (const r of groupRows) {
-      const iso = kickoffIso(r);
+      const iso = kickoffIsoOrNull(r);
       if (!iso) continue;
       const k = toMinuteKey(iso);
       counts.set(k, (counts.get(k) ?? 0) + 1);
@@ -127,16 +151,16 @@ export function computeLikelyPlaceholderTbcIds(rows: FixtureListRow[]): Set<stri
       }
     }
 
-    if (!topKey || topCount < PLACEHOLDER_CLUSTER_THRESHOLD) continue;
+    if (!topKey || topCount < threshold) continue;
 
     // Mark fixtures that match the cluster
     for (const r of groupRows) {
       const id = normalizeId(r?.fixture?.id);
-      const iso = kickoffIso(r);
+      const iso = kickoffIsoOrNull(r);
       if (!id || !iso) continue;
       if (toMinuteKey(iso) === topKey) out.add(id);
     }
   }
 
   return out;
-}
+  }
