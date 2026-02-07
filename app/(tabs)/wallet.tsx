@@ -8,6 +8,7 @@ import {
   Pressable,
   ActivityIndicator,
   Alert,
+  Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -96,6 +97,10 @@ function attachmentLabel(att: WalletAttachment) {
   return name ? `${kind}: ${name}` : `${kind} attachment`;
 }
 
+function getAttachments(item: SavedItem) {
+  return Array.isArray(item.attachments) ? item.attachments : [];
+}
+
 /* -------------------------------------------------------------------------- */
 /* Screen */
 /* -------------------------------------------------------------------------- */
@@ -149,7 +154,7 @@ export default function WalletScreen() {
         ? items.filter((i) => i.status === "archived")
         : items.filter((i) => i.status === "booked");
 
-    // Defensive: if trip deletion ever fails to cascade, Wallet still won’t show ghost items.
+    // Hide ghost items if cascade deletion ever failed.
     return base.filter((i) => validTripIds.has(String(i.tripId)));
   }, [items, mode, validTripIds]);
 
@@ -166,35 +171,6 @@ export default function WalletScreen() {
     return { booked, archived };
   }, [items, validTripIds]);
 
-  async function openItemLink(item: SavedItem) {
-    if (!item.partnerUrl) {
-      Alert.alert(item.title || "Item", getItemDetailsText(item));
-      return;
-    }
-
-    try {
-      await openPartnerUrl(item.partnerUrl);
-    } catch {
-      Alert.alert("Couldn’t open link", "Your device could not open that link.");
-    }
-  }
-
-  async function archiveItem(item: SavedItem) {
-    try {
-      await savedItemsStore.transitionStatus(item.id, "archived");
-    } catch {
-      Alert.alert("Couldn’t archive", "That item can’t be archived right now.");
-    }
-  }
-
-  async function restoreItem(item: SavedItem) {
-    try {
-      await savedItemsStore.transitionStatus(item.id, "saved");
-    } catch {
-      Alert.alert("Couldn’t restore", "That item can’t be restored right now.");
-    }
-  }
-
   const addAttachment = useCallback(async (item: SavedItem) => {
     try {
       const att = await pickAndStoreAttachmentForItem(item.id);
@@ -207,121 +183,151 @@ export default function WalletScreen() {
     }
   }, []);
 
-  const openAttachmentList = useCallback((item: SavedItem) => {
-    const atts = Array.isArray(item.attachments) ? item.attachments : [];
-    if (atts.length === 0) {
-      Alert.alert(
-        "No attachments yet",
-        "Add a PDF or screenshot to store your booking proof offline.",
-        [{ text: "Add attachment", onPress: () => addAttachment(item) }, { text: "Close", style: "cancel" }]
-      );
-      return;
-    }
-
-    Alert.alert(
-      "Attachments",
-      "Choose one to open.",
-      [
-        ...atts.slice(0, 8).map((a) => ({
-          text: attachmentLabel(a),
-          onPress: async () => {
-            try {
-              await openAttachment(a);
-            } catch {
-              Alert.alert("Couldn’t open", "Your device could not open that attachment.");
-            }
-          },
-        })),
-        { text: "Close", style: "cancel" },
-      ] as any,
-      { cancelable: true }
-    );
-  }, [addAttachment]);
-
-  const deleteAttachmentMenu = useCallback((item: SavedItem) => {
-    const atts = Array.isArray(item.attachments) ? item.attachments : [];
-    if (atts.length === 0) {
-      Alert.alert("No attachments", "This item has no attachments to delete.");
-      return;
-    }
-
-    Alert.alert(
-      "Delete attachment",
-      "Pick the attachment to delete from Wallet storage.",
-      [
-        ...atts.slice(0, 8).map((a) => ({
-          text: attachmentLabel(a),
-          style: "destructive" as const,
-          onPress: async () => {
-            try {
-              // remove metadata first (UI updates instantly)
-              await savedItemsStore.removeAttachment(item.id, a.id);
-              // then delete file best-effort
-              await deleteAttachmentFile(a);
-            } catch {
-              Alert.alert("Couldn’t delete", "Try again.");
-            }
-          },
-        })),
-        { text: "Cancel", style: "cancel" },
-      ] as any,
-      { cancelable: true }
-    );
-  }, []);
-
-  async function openSingleAttachment(item: SavedItem) {
-    const atts = Array.isArray(item.attachments) ? item.attachments : [];
-    if (atts.length !== 1) {
-      openAttachmentList(item);
+  const openItemLink = useCallback(async (item: SavedItem) => {
+    if (!item.partnerUrl) {
+      Alert.alert(item.title || "Item", getItemDetailsText(item));
       return;
     }
 
     try {
-      await openAttachment(atts[0]);
+      await openPartnerUrl(item.partnerUrl);
     } catch {
-      Alert.alert("Couldn’t open", "Your device could not open that attachment.");
+      Alert.alert("Couldn’t open link", "Your device could not open that link.");
     }
-  }
+  }, []);
 
-  function openActions(item: SavedItem) {
-    const details = getItemDetailsText(item);
-    const atts = Array.isArray(item.attachments) ? item.attachments : [];
-    const attCount = atts.length;
+  const archiveItem = useCallback(async (item: SavedItem) => {
+    try {
+      await savedItemsStore.transitionStatus(item.id, "archived");
+    } catch {
+      Alert.alert("Couldn’t archive", "That item can’t be archived right now.");
+    }
+  }, []);
 
-    const attLine = attCount ? `\n\nAttachments: ${attCount}` : `\n\nAttachments: none`;
+  const restoreItem = useCallback(async (item: SavedItem) => {
+    try {
+      await savedItemsStore.transitionStatus(item.id, "saved");
+    } catch {
+      Alert.alert("Couldn’t restore", "That item can’t be restored right now.");
+    }
+  }, []);
 
-    if (mode === "archived") {
+  const openAttachmentMenu = useCallback((item: SavedItem) => {
+    const atts = getAttachments(item);
+
+    if (atts.length === 0) {
       Alert.alert(
-        item.title || "Archived item",
-        details + attLine,
+        "No attachments",
+        "Add a PDF or screenshot to store booking proof offline.",
         [
           { text: "Close", style: "cancel" },
-          item.partnerUrl ? { text: "Open link", onPress: () => openItemLink(item) } : undefined,
-          attCount === 1 ? { text: "Open attachment", onPress: () => openSingleAttachment(item) } : undefined,
-          attCount > 1 ? { text: "View attachments", onPress: () => openAttachmentList(item) } : undefined,
-          attCount ? { text: "Delete attachment", style: "destructive", onPress: () => deleteAttachmentMenu(item) } : undefined,
-          { text: "Restore", style: "default", onPress: () => restoreItem(item) },
-        ].filter(Boolean) as any,
-        { cancelable: true }
+          { text: "Add attachment", onPress: () => addAttachment(item) },
+        ]
       );
       return;
     }
 
-    // booked
+    // Step 1: pick attachment to open or manage
     Alert.alert(
-      item.title || "Wallet item",
-      details + attLine,
+      "Attachments",
+      "Pick one.",
       [
         { text: "Close", style: "cancel" },
-        item.partnerUrl ? { text: "Open link", style: "default", onPress: () => openItemLink(item) } : undefined,
-        { text: "Add attachment", onPress: () => addAttachment(item) },
-        attCount === 1 ? { text: "Open attachment", onPress: () => openSingleAttachment(item) } : undefined,
-        attCount > 1 ? { text: `View attachments (${attCount})`, onPress: () => openAttachmentList(item) } : undefined,
-        attCount ? { text: "Delete attachment", style: "destructive", onPress: () => deleteAttachmentMenu(item) } : undefined,
-        { text: "Archive", style: "destructive", onPress: () => archiveItem(item) },
-      ].filter(Boolean) as any,
+        ...atts.slice(0, 8).map((a) => ({
+          text: attachmentLabel(a),
+          onPress: () => {
+            // Step 2: action menu for that attachment
+            Alert.alert(
+              attachmentLabel(a),
+              "What do you want to do?",
+              [
+                { text: "Close", style: "cancel" },
+                {
+                  text: "Open",
+                  onPress: async () => {
+                    try {
+                      await openAttachment(a);
+                    } catch {
+                      Alert.alert("Couldn’t open", "Your device could not open that attachment.");
+                    }
+                  },
+                },
+                {
+                  text: "Delete",
+                  style: "destructive",
+                  onPress: async () => {
+                    try {
+                      await savedItemsStore.removeAttachment(item.id, a.id);
+                      await deleteAttachmentFile(a);
+                    } catch {
+                      Alert.alert("Couldn’t delete", "Try again.");
+                    }
+                  },
+                },
+              ],
+              { cancelable: true }
+            );
+          },
+        })),
+      ],
       { cancelable: true }
     );
+  }, [addAttachment]);
+
+  function openActions(item: SavedItem) {
+    const details = getItemDetailsText(item);
+    const atts = getAttachments(item);
+    const attCount = atts.length;
+
+    const attLine = attCount
+      ? `\n\nAttachments: ${attCount}`
+      : `\n\nAttachments: none`;
+
+    // Android hard limit: keep the first menu SMALL and route to submenus.
+    const showCoreMenu = () => {
+      const common: any[] = [
+        { text: "Close", style: "cancel" },
+        item.partnerUrl ? { text: "Open link", onPress: () => openItemLink(item) } : undefined,
+        { text: attCount ? `Attachments (${attCount})` : "Add attachment", onPress: () => openAttachmentMenu(item) },
+      ].filter(Boolean);
+
+      // Third actionable slot depends on mode
+      if (mode === "archived") {
+        common.push({ text: "Restore", onPress: () => restoreItem(item) });
+      } else {
+        common.push({ text: "Archive", style: "destructive", onPress: () => archiveItem(item) });
+      }
+
+      // On Android you’ll only reliably get 3 buttons — so we enforce a 3-button menu:
+      if (Platform.OS === "android") {
+        // Force: Close + (Open link or Attachments) + (Archive/Restore)
+        const btns: any[] = [{ text: "Close", style: "cancel" }];
+
+        if (item.partnerUrl) btns.push({ text: "Open link", onPress: () => openItemLink(item) });
+        else btns.push({ text: attCount ? `Attachments (${attCount})` : "Add attachment", onPress: () => openAttachmentMenu(item) });
+
+        if (mode === "archived") btns.push({ text: "Restore", onPress: () => restoreItem(item) });
+        else btns.push({ text: "Archive", style: "destructive", onPress: () => archiveItem(item) });
+
+        Alert.alert(item.title || "Wallet item", details + attLine, btns, { cancelable: true });
+        return;
+      }
+
+      // iOS can show more; include all options.
+      const iosButtons: any[] = [
+        { text: "Close", style: "cancel" },
+        item.partnerUrl ? { text: "Open link", onPress: () => openItemLink(item) } : undefined,
+        { text: "Add attachment", onPress: () => addAttachment(item) },
+        attCount ? { text: `Manage attachments (${attCount})`, onPress: () => openAttachmentMenu(item) } : undefined,
+        mode === "archived"
+          ? { text: "Restore", onPress: () => restoreItem(item) }
+          : { text: "Archive", style: "destructive", onPress: () => archiveItem(item) },
+      ].filter(Boolean);
+
+      Alert.alert(item.title || "Wallet item", details + attLine, iosButtons, { cancelable: true });
+    };
+
+    showCoreMenu();
   }
 
   return (
@@ -390,7 +396,7 @@ export default function WalletScreen() {
                     <GlassCard style={styles.card} strength="subtle">
                       <View style={{ gap: 10 }}>
                         {tripItems.map((it) => {
-                          const attCount = Array.isArray(it.attachments) ? it.attachments.length : 0;
+                          const attCount = getAttachments(it).length;
 
                           return (
                             <Pressable key={it.id} onPress={() => openActions(it)} style={styles.itemRow}>
