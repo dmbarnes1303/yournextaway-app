@@ -20,31 +20,38 @@ function formatUkDateTime(iso?: string | null) {
   });
 }
 
-// Cache only SUCCESS. Never cache a permanent false, because users can change permissions later.
-let _ready = false;
-let _inflight: Promise<boolean> | null = null;
+// Cache channel init (Android) so we don’t repeat work.
+let _channelReady = false;
 
-async function ensureAndroidChannel() {
-  if (Platform.OS !== "android") return;
-
-  await Notifications.setNotificationChannelAsync("kickoff", {
-    name: "Kickoff updates",
-    importance: Notifications.AndroidImportance.DEFAULT,
-    sound: "default",
-  });
-}
-
-async function hasPermissionGranted(): Promise<boolean> {
+export async function ensureKickoffChannel() {
   try {
-    const perms = await Notifications.getPermissionsAsync();
-    return perms.status === "granted";
+    if (Platform.OS !== "android") return true;
+    if (_channelReady) return true;
+
+    await Notifications.setNotificationChannelAsync("kickoff", {
+      name: "Kickoff updates",
+      importance: Notifications.AndroidImportance.DEFAULT,
+      sound: "default",
+    });
+
+    _channelReady = true;
+    return true;
   } catch {
     return false;
   }
 }
 
-async function requestPermission(): Promise<boolean> {
+/**
+ * Call this ONLY when user enables kickoff alerts in UI.
+ * Returns true if permissions are granted after the call.
+ */
+export async function requestKickoffNotificationsPermission(): Promise<boolean> {
   try {
+    await ensureKickoffChannel();
+
+    const perms = await Notifications.getPermissionsAsync();
+    if (perms.status === "granted") return true;
+
     const req = await Notifications.requestPermissionsAsync();
     return req.status === "granted";
   } catch {
@@ -53,45 +60,21 @@ async function requestPermission(): Promise<boolean> {
 }
 
 /**
- * Ensure notification infra is ready.
- *
- * - request=false: NEVER triggers a permission prompt (safe for background/auto refresh)
- * - request=true : prompts if needed (use only from an explicit user action, e.g. a toggle)
+ * Soft-check (no prompt). Useful for UI hints / conditional scheduling.
  */
-export async function ensureNotificationsReady(opts?: { request?: boolean }) {
-  const request = opts?.request !== false;
-
-  if (_ready) return true;
-  if (_inflight) return await _inflight;
-
-  _inflight = (async () => {
-    try {
-      await ensureAndroidChannel();
-
-      const granted = await hasPermissionGranted();
-      if (granted) {
-        _ready = true;
-        return true;
-      }
-
-      if (!request) return false;
-
-      const afterReq = await requestPermission();
-      if (!afterReq) return false;
-
-      _ready = true;
-      return true;
-    } catch {
-      return false;
-    } finally {
-      // Always clear inflight so future calls can re-check after user changes Settings.
-      _inflight = null;
-    }
-  })();
-
-  return await _inflight;
+export async function hasKickoffNotificationsPermission(): Promise<boolean> {
+  try {
+    const perms = await Notifications.getPermissionsAsync();
+    return perms.status === "granted";
+  } catch {
+    return false;
+  }
 }
 
+/**
+ * Schedules an immediate local notification.
+ * NOTE: This will NOT prompt by itself. If permissions are not granted, it will no-op.
+ */
 export async function notifyKickoffChanged(args: {
   fixtureId: string;
   homeName?: string | null;
@@ -100,30 +83,35 @@ export async function notifyKickoffChanged(args: {
   prevKickoffIso?: string | null;
   nextKickoffIso?: string | null;
 }) {
-  // IMPORTANT: do not prompt here (could be called from auto-refresh).
-  const ok = await ensureNotificationsReady({ request: false });
-  if (!ok) return;
+  try {
+    const fixtureId = safeStr(args.fixtureId);
+    if (!fixtureId) return;
 
-  const fixtureId = safeStr(args.fixtureId);
-  if (!fixtureId) return;
+    const okPerms = await hasKickoffNotificationsPermission();
+    if (!okPerms) return;
 
-  const home = safeStr(args.homeName) || "Home";
-  const away = safeStr(args.awayName) || "Away";
-  const league = safeStr(args.leagueName);
+    await ensureKickoffChannel();
 
-  const prevTxt = formatUkDateTime(args.prevKickoffIso ?? null);
-  const nextTxt = formatUkDateTime(args.nextKickoffIso ?? null);
+    const home = safeStr(args.homeName) || "Home";
+    const away = safeStr(args.awayName) || "Away";
+    const league = safeStr(args.leagueName);
 
-  const title = `Kickoff updated: ${home} vs ${away}`;
-  const body = league ? `${league}\n${prevTxt} → ${nextTxt}\nTap to view.` : `${prevTxt} → ${nextTxt}\nTap to view.`;
+    const prevTxt = formatUkDateTime(args.prevKickoffIso ?? null);
+    const nextTxt = formatUkDateTime(args.nextKickoffIso ?? null);
 
-  await Notifications.scheduleNotificationAsync({
-    content: {
-      title,
-      body,
-      data: { kind: "kickoff_update", fixtureId },
-      sound: "default",
-    },
-    trigger: null,
-  });
+    const title = `Kickoff updated: ${home} vs ${away}`;
+    const body = league ? `${league}\n${prevTxt} → ${nextTxt}\nTap to view.` : `${prevTxt} → ${nextTxt}\nTap to view.`;
+
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title,
+        body,
+        data: { kind: "kickoff_update", fixtureId },
+        sound: "default",
+      },
+      trigger: null,
+    });
+  } catch {
+    // never crash
+  }
 }
