@@ -112,9 +112,12 @@ export function getSavedItemTypeLabel(type: SavedItemType): string {
  * - "pending" means: we opened a partner and we still don't know outcome
  * - If user answers "No", we move pending -> saved (keep it as a saved link/idea, not booked)
  * - If user answers "Not now", we leave it pending
+ *
+ * IMPORTANT:
+ * Users can book later from a Saved shortlist, so allow saved -> booked directly.
  */
 const TRANSITIONS: Record<SavedItemStatus, SavedItemStatus[]> = {
-  saved: ["pending", "archived"],
+  saved: ["pending", "booked", "archived"], // ✅ allow saved → booked
   pending: ["booked", "archived", "saved"], // ✅ allow pending → saved
   booked: ["archived"],
   archived: ["saved"],
