@@ -27,14 +27,15 @@ export default function RootLayout() {
     // Phase-1 spine: partner click → return → “Booked?” prompt
     bootstrapPartnerReturnPrompt();
 
-    // Prepare notifications early (permission prompt will only show if not granted).
-    // If user denies, we just silently skip scheduling.
+    // Optional: pre-warm notifications.
+    // Product risk: this may prompt too early and get denied.
     ensureNotificationsReady().catch(() => null);
 
     const minMinutesBetweenRefreshes = 10;
     const intervalMinutes = 15;
 
-    const shouldRunNow = () => {
+    const canRun = (reason: "startup" | "foreground" | "interval") => {
+      if (reason === "startup") return true;
       const now = Date.now();
       const minMs = minMinutesBetweenRefreshes * 60 * 1000;
       return now - lastRefreshAtRef.current >= minMs;
@@ -42,14 +43,13 @@ export default function RootLayout() {
 
     const runRefresh = async (reason: "startup" | "foreground" | "interval") => {
       if (refreshInFlightRef.current) return;
-      if (!shouldRunNow() && reason !== "startup") return;
+      if (!canRun(reason)) return;
 
       refreshInFlightRef.current = true;
       lastRefreshAtRef.current = Date.now();
 
       try {
-        // Keep it bounded. You can raise later once you add batching.
-        await refreshFollowedMatches({ limit: 25 });
+        await refreshFollowedMatches({ limit: 25, concurrency: 3 });
       } catch {
         // Never crash root on refresh failures
       } finally {
@@ -57,26 +57,53 @@ export default function RootLayout() {
       }
     };
 
-    // Startup refresh (slight delay so persisted stores rehydrate)
+    const startInterval = () => {
+      if (intervalMinutes <= 0) return;
+      if (intervalRef.current) return;
+
+      intervalRef.current = setInterval(() => {
+        runRefresh("interval").catch(() => null);
+      }, intervalMinutes * 60 * 1000);
+    };
+
+    const stopInterval = () => {
+      if (!intervalRef.current) return;
+      try {
+        clearInterval(intervalRef.current);
+      } catch {
+        // ignore
+      } finally {
+        intervalRef.current = null;
+      }
+    };
+
+    // Startup refresh (delay so persisted stores rehydrate)
     const startupTimer = setTimeout(() => {
       runRefresh("startup").catch(() => null);
     }, 900);
 
-    // Foreground refresh
+    // Foreground/background management
     let lastState: AppStateStatus = AppState.currentState;
 
-    appStateSubRef.current = AppState.addEventListener("change", (next) => {
+    const onAppState = (next: AppStateStatus) => {
       const becameActive = Boolean(String(lastState).match(/inactive|background/)) && next === "active";
+      const becameInactive = lastState === "active" && next !== "active";
       lastState = next;
 
-      if (!becameActive) return;
-      runRefresh("foreground").catch(() => null);
-    }) as any;
+      if (becameActive) {
+        runRefresh("foreground").catch(() => null);
+        startInterval();
+      }
 
-    // Interval refresh while app is open
-    intervalRef.current = setInterval(() => {
-      runRefresh("interval").catch(() => null);
-    }, intervalMinutes * 60 * 1000);
+      if (becameInactive) {
+        stopInterval();
+      }
+    };
+
+    appStateSubRef.current = AppState.addEventListener("change", onAppState) as any;
+
+    // If we mount while already active, start interval
+    if (AppState.currentState === "active") startInterval();
 
     return () => {
       clearTimeout(startupTimer);
@@ -89,13 +116,7 @@ export default function RootLayout() {
         appStateSubRef.current = null;
       }
 
-      try {
-        if (intervalRef.current) clearInterval(intervalRef.current);
-      } catch {
-        // ignore
-      } finally {
-        intervalRef.current = null;
-      }
+      stopInterval();
 
       startedRef.current = false;
     };
