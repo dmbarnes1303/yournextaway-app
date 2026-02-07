@@ -13,7 +13,7 @@ import {
   dismissReturnPrompt,
 } from "@/src/services/partnerClicks";
 
-import { pickAndStoreAttachmentForItem } from "@/src/services/walletAttachments";
+import { confirmBookedAndOfferProof } from "@/src/services/bookingProof";
 
 /**
  * Phase-1 truth:
@@ -25,7 +25,7 @@ import { pickAndStoreAttachmentForItem } from "@/src/services/walletAttachments"
  * - Not now -> keep pending
  *
  * Enhancement:
- * After Yes -> show confirmation (“Added to Wallet”) and offer to add booking proof (PDF/screenshot).
+ * After Yes -> show confirmation + offer booking proof upload (if none exists).
  */
 
 let bootstrapped = false;
@@ -59,66 +59,11 @@ async function findItem(click: LastPartnerClick): Promise<SavedItem | null> {
 function shouldPrompt(item: SavedItem | null) {
   if (!item) return false;
   if (item.status === "booked" || item.status === "archived") return false;
-  if (item.status !== "pending") return false;
-  return true;
-}
-
-function getAttachments(item: SavedItem | null) {
-  const atts = Array.isArray(item?.attachments) ? item!.attachments! : [];
-  return atts;
+  return item.status === "pending";
 }
 
 function defer(fn: () => void) {
-  // Avoid nested Alert timing quirks (esp. Android)
   setTimeout(fn, 60);
-}
-
-async function promptAddProof(itemId: string) {
-  try {
-    const att = await pickAndStoreAttachmentForItem(itemId);
-    await ensureSavedItemsLoaded();
-    await savedItemsStore.addAttachment(itemId, att);
-    Alert.alert("Saved", "Booking proof stored in Wallet for offline access.", [{ text: "OK" }], {
-      cancelable: true,
-    });
-  } catch (e: any) {
-    const msg = String(e?.message ?? "");
-    if (msg === "cancelled") return;
-    Alert.alert("Couldn’t add attachment", msg || "Try again.", [{ text: "OK" }], {
-      cancelable: true,
-    });
-  }
-}
-
-function showBookedConfirmationAndProofPrompt(item: SavedItem | null) {
-  const itemId = String(item?.id ?? "").trim();
-  if (!itemId) return;
-
-  const title = String(item?.title ?? "").trim() || "Booking";
-  const atts = getAttachments(item);
-
-  if (atts.length > 0) {
-    Alert.alert(
-      "Added to Wallet",
-      `"${title}" is now marked as booked and saved in your Wallet.`,
-      [{ text: "OK" }],
-      { cancelable: true }
-    );
-    return;
-  }
-
-  Alert.alert(
-    "Added to Wallet",
-    `"${title}" is now marked as booked.\n\nWant to add booking proof (PDF/screenshot) for offline access?`,
-    [
-      { text: "Not now", style: "cancel" },
-      {
-        text: "Add booking proof",
-        onPress: () => defer(() => promptAddProof(itemId)),
-      },
-    ],
-    { cancelable: true }
-  );
 }
 
 export function bootstrapPartnerReturnPrompt() {
@@ -152,48 +97,41 @@ export function bootstrapPartnerReturnPrompt() {
           return;
         }
 
-        await ensureSavedItemsLoaded();
-        const updated = savedItemsStore.getState().items.find((x) => x.id === itemId) ?? null;
-
-        defer(() => showBookedConfirmationAndProofPrompt(updated));
+        // Confirm + offer proof upload (not in same tick)
+        defer(() => {
+          confirmBookedAndOfferProof(itemId).catch(() => null);
+        });
       };
 
       const onNo = async () => {
         // Option B: move pending -> saved
-        await markNotBooked(itemId);
+        try {
+          await markNotBooked(itemId);
+        } catch {
+          // ignore
+        }
       };
 
       const onNotNow = async () => {
-        // keep pending; just stop re-prompt loops
+        // keep pending; stop re-prompt loops
         dismissReturnPrompt(itemId);
       };
 
       // Android: max 3 buttons
-      if (Platform.OS === "android") {
-        Alert.alert(
-          "Did you book it?",
-          message,
-          [
-            { text: "Not now", style: "cancel", onPress: () => onNotNow() },
-            { text: "No", onPress: () => onNo() },
-            { text: "Yes — booked", onPress: () => onYesBooked() },
-          ],
-          { cancelable: true }
-        );
-        return;
-      }
+      const buttons =
+        Platform.OS === "android"
+          ? [
+              { text: "Not now", style: "cancel" as const, onPress: () => onNotNow() },
+              { text: "No", onPress: () => onNo() },
+              { text: "Yes — booked", onPress: () => onYesBooked() },
+            ]
+          : [
+              { text: "Not now", style: "cancel" as const, onPress: () => onNotNow() },
+              { text: "No", onPress: () => onNo() },
+              { text: "Yes — booked", onPress: () => onYesBooked() },
+            ];
 
-      // iOS: keep identical for predictable UX
-      Alert.alert(
-        "Did you book it?",
-        message,
-        [
-          { text: "Not now", style: "cancel", onPress: () => onNotNow() },
-          { text: "No", onPress: () => onNo() },
-          { text: "Yes — booked", onPress: () => onYesBooked() },
-        ],
-        { cancelable: true }
-      );
+      Alert.alert("Did you book it?", message, buttons as any, { cancelable: true });
     } finally {
       defer(() => inFlightForItem.delete(String(click?.itemId ?? "").trim()));
     }
