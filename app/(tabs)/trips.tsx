@@ -1,5 +1,4 @@
 // app/(tabs)/trips.tsx
-
 import React, { useEffect, useMemo, useState, useCallback } from "react";
 import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -115,15 +114,11 @@ export default function TripsScreen() {
   );
 
   const deleteTrip = useCallback((t: Trip) => {
-    const tripId = String(t?.id ?? "").trim();
-    if (!tripId) return;
-
-    const title = (t.cityId || "Trip").trim() || "Trip";
-    const c = counts(tripId);
+    const c = counts(t.id);
 
     Alert.alert(
       "Delete trip?",
-      `This will permanently remove:\n\n• Trip: ${title}\n• Items: ${c.total} (Booked: ${c.booked}, Pending: ${c.pending})\n• Any stored attachments (PDFs/screenshots)\n\nThis cannot be undone.`,
+      `This will remove the trip and its Wallet items from this device.\n\nItems: ${c.total} • Pending: ${c.pending} • Booked: ${c.booked}\n\nThis cannot be undone.`,
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -131,20 +126,15 @@ export default function TripsScreen() {
           style: "destructive",
           onPress: async () => {
             try {
-              // 1) Remove the trip first. If this fails, we DO NOT wipe wallet data.
-              await tripsStore.removeTrip(tripId);
-
-              // 2) Cascade-delete wallet items + attachment files for this trip
-              await savedItemsStore.clearTrip(tripId);
-            } catch (e: any) {
-              const msg = String(e?.message ?? "").trim();
-              Alert.alert("Couldn’t delete", msg || "Try again.");
+              await tripsStore.deleteTripCascade(t.id);
+            } catch {
+              Alert.alert("Couldn’t delete", "Try again.");
             }
           },
         },
       ]
     );
-  }, [itemsByTrip, trips]);
+  }, [itemsByTrip]);
 
   const goBuild = () => router.push("/trip/build");
   const goFixtures = () => router.push("/(tabs)/fixtures");
@@ -281,11 +271,9 @@ const styles = StyleSheet.create({
   subtitle: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, fontWeight: "700" },
 
   section: { gap: 10 },
-
   list: { gap: 10 },
 
   card: { padding: theme.spacing.lg },
-
   tripCard: { padding: theme.spacing.md },
 
   tripTitle: { color: theme.colors.text, fontSize: theme.fontSize.lg, fontWeight: theme.fontWeight.black },
@@ -309,6 +297,4 @@ const styles = StyleSheet.create({
 
   center: { paddingVertical: 12, alignItems: "center", gap: 10 },
   muted: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, fontWeight: "700" },
-
-  btn: { paddingVertical: 14, borderRadius: 12, alignItems: "center", borderWidth: 1 },
 });
