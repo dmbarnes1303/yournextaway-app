@@ -27,7 +27,7 @@ async function ensureDir() {
   try {
     await FileSystem.makeDirectoryAsync(DIR, { intermediates: true });
   } catch {
-    // ignore (we’ll fail later on copy if truly broken)
+    // ignore
   }
 }
 
@@ -36,7 +36,7 @@ function inferKind(name?: string, mimeType?: string): WalletAttachmentKind {
   const m = String(mimeType ?? "").toLowerCase();
 
   if (m.includes("pdf") || n.endsWith(".pdf")) return "pdf";
-  if (m.startsWith("image/") || n.match(/\.(png|jpg|jpeg|webp|heic)$/)) return "image";
+  if (m.startsWith("image/") || /\.(png|jpg|jpeg|webp|heic)$/i.test(n)) return "image";
   return "file";
 }
 
@@ -53,8 +53,26 @@ function safeExt(name?: string, mimeType?: string): string {
   return "";
 }
 
+function normalizePickerResult(res: any) {
+  const canceled =
+    res?.canceled === true || String(res?.type ?? "").toLowerCase() === "cancel";
+
+  if (canceled) return { canceled: true as const };
+
+  const asset = Array.isArray(res?.assets) ? res.assets[0] : res;
+  const uri = String(asset?.uri ?? "").trim();
+  if (!uri) throw new Error("No file selected");
+
+  return {
+    canceled: false as const,
+    uri,
+    name: typeof asset?.name === "string" ? asset.name : undefined,
+    mimeType: typeof asset?.mimeType === "string" ? asset.mimeType : undefined,
+    size: Number.isFinite(Number(asset?.size)) ? Number(asset.size) : undefined,
+  };
+}
+
 export async function pickAndStoreAttachmentForItem(_itemId: string): Promise<WalletAttachment> {
-  // itemId currently unused, but kept because you’ll want per-item folders later.
   await ensureDir();
 
   const res = await DocumentPicker.getDocumentAsync({
@@ -63,58 +81,69 @@ export async function pickAndStoreAttachmentForItem(_itemId: string): Promise<Wa
     type: "*/*",
   });
 
-  // SDK differences: res.canceled vs res.type === "cancel"
-  const canceled =
-    (res as any)?.canceled === true || String((res as any)?.type ?? "").toLowerCase() === "cancel";
-  if (canceled) throw new Error("cancelled");
+  const parsed = normalizePickerResult(res as any);
+  if (parsed.canceled) throw new Error("cancelled");
 
-  const asset = Array.isArray((res as any)?.assets) ? (res as any).assets[0] : (res as any);
-  const uri = String(asset?.uri ?? "").trim();
-  if (!uri) throw new Error("No file selected");
-
-  const name = typeof asset?.name === "string" ? asset.name : undefined;
-  const mimeType = typeof asset?.mimeType === "string" ? asset.mimeType : undefined;
-  const size = Number.isFinite(Number(asset?.size)) ? Number(asset.size) : undefined;
-
-  const kind = inferKind(name, mimeType);
-  const ext = safeExt(name, mimeType);
+  const kind = inferKind(parsed.name, parsed.mimeType);
+  const ext = safeExt(parsed.name, parsed.mimeType);
 
   const storedName = `${id("wallet")}${ext}`;
   const dest = `${DIR}${storedName}`;
 
-  // Copy into app-owned storage
+  // Copy into app-owned storage (offline)
   try {
-    await FileSystem.copyAsync({ from: uri, to: dest });
-  } catch (e) {
-    // If copy fails, don’t crash the app — but we can’t promise offline storage.
-    // Still return an attachment pointing to original uri (best-effort).
+    await FileSystem.copyAsync({ from: parsed.uri, to: dest });
     return {
       id: id("att"),
       kind,
-      name,
-      mimeType,
-      size,
-      uri,
+      name: parsed.name,
+      mimeType: parsed.mimeType,
+      size: parsed.size,
+      uri: dest,
+      createdAt: now(),
+    };
+  } catch {
+    // Best-effort fallback: keep original URI (may not be offline)
+    return {
+      id: id("att"),
+      kind,
+      name: parsed.name,
+      mimeType: parsed.mimeType,
+      size: parsed.size,
+      uri: parsed.uri,
       createdAt: now(),
     };
   }
+}
 
-  return {
-    id: id("att"),
-    kind,
-    name,
-    mimeType,
-    size,
-    uri: dest,
-    createdAt: now(),
-  };
+async function openNativeUri(uri: string) {
+  // Android: file:// often fails. Convert to content:// where possible.
+  if (Platform.OS === "android") {
+    try {
+      // getContentUriAsync expects a file URI (no scheme sometimes in expo FS)
+      const fileUri = uri.startsWith("file://") ? uri : `file://${uri}`;
+      const contentUri = await FileSystem.getContentUriAsync(fileUri);
+      const can = await Linking.canOpenURL(contentUri);
+      if (!can) throw new Error("Cannot open content URI");
+      await Linking.openURL(contentUri);
+      return;
+    } catch {
+      // fall through to generic
+    }
+  }
+
+  // iOS: file:// usually works
+  const url = uri.startsWith("file://") || uri.startsWith("content://") ? uri : `file://${uri}`;
+  const can = await Linking.canOpenURL(url);
+  if (!can) throw new Error("Cannot open attachment");
+  await Linking.openURL(url);
 }
 
 export async function openAttachment(att: WalletAttachment) {
   const uri = String(att?.uri ?? "").trim();
   if (!uri) throw new Error("Missing attachment URI");
 
-  // Best result in Expo: share sheet (user can open in Drive/Files/PDF viewer/etc)
+  // Best UX: share sheet (user can open in Files/Drive/PDF viewer, etc.)
   try {
     const canShare = await Sharing.isAvailableAsync();
     if (canShare) {
@@ -128,17 +157,13 @@ export async function openAttachment(att: WalletAttachment) {
     // fall through
   }
 
-  // Fallback: attempt to open directly
+  // Web: just open URL
   if (Platform.OS === "web") {
     await Linking.openURL(uri);
     return;
   }
 
-  // Native Linking sometimes needs file://
-  const url = uri.startsWith("file://") ? uri : `file://${uri}`;
-  const can = await Linking.canOpenURL(url);
-  if (!can) throw new Error("Cannot open attachment");
-  await Linking.openURL(url);
+  await openNativeUri(uri);
 }
 
 export async function deleteAttachmentFile(att: WalletAttachment) {
@@ -153,4 +178,4 @@ export async function deleteAttachmentFile(att: WalletAttachment) {
   } catch {
     // best-effort
   }
-}
+                                       }
