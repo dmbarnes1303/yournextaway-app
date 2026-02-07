@@ -26,7 +26,7 @@ import { formatUkDateTimeMaybe } from "@/src/utils/formatters";
 import { getFlagImageUrl } from "@/src/utils/flagImages";
 
 import tripsStore from "@/src/state/trips";
-import { computeLikelyPlaceholderTbcIds, isKickoffTbc } from "@/src/utils/kickoffTbc";
+import { computeLikelyPlaceholderTbcIds, isKickoffTbc, kickoffIsoOrNull } from "@/src/utils/kickoffTbc";
 
 /* -------------------------------------------------------------------------- */
 /* Constants */
@@ -36,11 +36,11 @@ const DAYS_AHEAD = 365;
 const MAX_MULTI_LEAGUES = 10;
 
 /* -------------------------------------------------------------------------- */
-/* UTC-safe date helpers (prevents DST duplication) */
-/* -------------------------------------------------------------------------- */
+/* UTC-safe date helpers (prevents DST duplication)
+ * NOTE: Strip is UTC; API uses ISO. This avoids repeated/shifted days around DST.
+ * -------------------------------------------------------------------------- */
 
 function isoFromUtcParts(y: number, m0: number, d: number) {
-  // m0 is 0-based month
   const ms = Date.UTC(y, m0, d, 0, 0, 0, 0);
   return new Date(ms).toISOString().slice(0, 10);
 }
@@ -77,27 +77,45 @@ function normalizeRange(fromIso: string, toIso: string) {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Fixture helpers */
-/* -------------------------------------------------------------------------- */
+/* Fixture helpers
+ * -------------------------------------------------------------------------- */
 
 function norm(s: unknown) {
   return String(s ?? "").trim().toLowerCase();
 }
 
 function fixtureIsoDateOnly(r: FixtureListRow): string | null {
-  const raw = r?.fixture?.date;
-  if (!raw) return null;
-  const s = String(raw);
-  const m = s.match(/^(\d{4}-\d{2}-\d{2})/);
+  const iso = kickoffIsoOrNull(r);
+  if (!iso) return null;
+  const m = iso.match(/^(\d{4}-\d{2}-\d{2})/);
   return m?.[1] ?? null;
 }
 
-function kickoffLabel(r: FixtureListRow, placeholderIds?: Set<string>) {
-  const tbc = isKickoffTbc(r, placeholderIds);
-  if (tbc) return "TBC";
-  const raw = r?.fixture?.date;
-  if (!raw) return "TBC";
-  return formatUkDateTimeMaybe(String(raw)) || "TBC";
+/**
+ * UI label:
+ * - If likely placeholder (clustered), show "Likely TBC" but keep the provisional time as secondary text.
+ * - If no kickoff, show "TBC".
+ * - Else show the formatted kickoff.
+ */
+function kickoffPresentation(r: FixtureListRow, placeholderIds?: Set<string>) {
+  const likelyTbc = isKickoffTbc(r, placeholderIds);
+  const iso = kickoffIsoOrNull(r);
+
+  if (!iso) {
+    return { primary: "TBC", secondary: "Kickoff time not set yet", likelyTbc: true };
+  }
+
+  const formatted = formatUkDateTimeMaybe(iso) || "TBC";
+
+  if (likelyTbc) {
+    return {
+      primary: formatted,
+      secondary: "Likely placeholder (TV schedule not confirmed)",
+      likelyTbc: true,
+    };
+  }
+
+  return { primary: formatted, secondary: null as string | null, likelyTbc: false };
 }
 
 /**
@@ -110,8 +128,8 @@ function resolveTripForFixture(fixtureId: string): string | null {
 }
 
 /* -------------------------------------------------------------------------- */
-/* League UI helpers */
-/* -------------------------------------------------------------------------- */
+/* League UI helpers
+ * -------------------------------------------------------------------------- */
 
 function LeagueFlag({ code }: { code: string }) {
   const url = getFlagImageUrl(code);
@@ -130,18 +148,14 @@ function initials(name: string) {
 function TeamCrest({ name, logo }: { name: string; logo?: string | null }) {
   return (
     <View style={styles.crestWrap}>
-      {logo ? (
-        <Image source={{ uri: logo }} style={styles.crestImg} resizeMode="contain" />
-      ) : (
-        <Text style={styles.crestFallback}>{initials(name)}</Text>
-      )}
+      {logo ? <Image source={{ uri: logo }} style={styles.crestImg} resizeMode="contain" /> : <Text style={styles.crestFallback}>{initials(name)}</Text>}
     </View>
   );
 }
 
 /* -------------------------------------------------------------------------- */
-/* Concurrency-limited fetch (protects perf + rate limits) */
-/* -------------------------------------------------------------------------- */
+/* Concurrency-limited fetch (protects perf + rate limits)
+ * -------------------------------------------------------------------------- */
 
 async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
   const results: R[] = new Array(items.length) as any;
@@ -160,8 +174,8 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promis
 }
 
 /* -------------------------------------------------------------------------- */
-/* Screen */
-/* -------------------------------------------------------------------------- */
+/* Screen
+ * -------------------------------------------------------------------------- */
 
 export default function FixturesScreen() {
   const router = useRouter();
@@ -173,7 +187,7 @@ export default function FixturesScreen() {
   const dateStrip = useMemo(() => {
     return Array.from({ length: DAYS_AHEAD }).map((_, i) => {
       const iso = addDaysIsoUtc(minIso, i);
-      const d = new Date(`${iso}T00:00:00.000Z`); // safe for label formatting
+      const d = new Date(`${iso}T00:00:00.000Z`);
       return {
         iso,
         labelTop: d.toLocaleDateString("en-GB", { weekday: "short" }),
@@ -182,7 +196,7 @@ export default function FixturesScreen() {
     });
   }, [minIso]);
 
-  // Range selection (Option A): start → end → reset
+  // Range selection: start → end → reset
   const [rangeFrom, setRangeFrom] = useState<string>(minIso);
   const [rangeTo, setRangeTo] = useState<string>(minIso);
 
@@ -235,6 +249,7 @@ export default function FixturesScreen() {
   const [rows, setRows] = useState<FixtureListRow[]>([]);
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
 
+  // Compute placeholder ids from the fetched set (works for single day or ranges)
   const placeholderIds = useMemo(() => computeLikelyPlaceholderTbcIds(rows), [rows]);
 
   // Fetch only for selected day/range
@@ -307,7 +322,7 @@ export default function FixturesScreen() {
   function handleDateTap(iso: string) {
     const d = clampIsoToWindow(iso, minIso, maxIso);
 
-    // Option A: start → end → reset
+    // start → end → reset
     if (rangeFrom === rangeTo) {
       if (d === rangeFrom) return;
       setRangeTo(d);
@@ -356,9 +371,10 @@ export default function FixturesScreen() {
     const home = String(r?.teams?.home?.name ?? "Home");
     const away = String(r?.teams?.away?.name ?? "Away");
 
-    const kickoff = kickoffLabel(r, placeholderIds);
     const venue = r?.fixture?.venue?.name ?? "";
     const city = r?.fixture?.venue?.city ?? "";
+
+    const kickoff = kickoffPresentation(r, placeholderIds);
 
     return (
       <View key={rowKey} style={styles.rowWrap}>
@@ -371,11 +387,33 @@ export default function FixturesScreen() {
                 <Text style={styles.teamLine}>{home}</Text>
                 <Text style={styles.vs}>vs</Text>
                 <Text style={styles.teamLine}>{away}</Text>
-                <Text style={styles.meta}>
-                  {kickoff}
-                  {venue || city ? ` • ${[venue, city].filter(Boolean).join(" • ")}` : ""}
-                </Text>
-                <Text style={styles.tapHint}>Tap for actions</Text>
+
+                <View style={styles.metaStack}>
+                  <Text style={styles.meta} numberOfLines={2}>
+                    {kickoff.primary}
+                    {venue || city ? ` • ${[venue, city].filter(Boolean).join(" • ")}` : ""}
+                  </Text>
+
+                  {kickoff.secondary ? (
+                    <Text style={styles.metaSecondary} numberOfLines={1}>
+                      {kickoff.secondary}
+                    </Text>
+                  ) : null}
+
+                  <View style={styles.badgeRow}>
+                    {kickoff.likelyTbc ? (
+                      <View style={[styles.badge, styles.badgeWarn]}>
+                        <Text style={[styles.badgeText, styles.badgeTextWarn]}>Likely TBC</Text>
+                      </View>
+                    ) : (
+                      <View style={styles.badge}>
+                        <Text style={styles.badgeText}>Confirmed</Text>
+                      </View>
+                    )}
+
+                    <Text style={styles.tapHint}>Tap for actions</Text>
+                  </View>
+                </View>
               </View>
 
               <TeamCrest name={away} logo={r?.teams?.away?.logo} />
@@ -399,7 +437,7 @@ export default function FixturesScreen() {
   };
 
   return (
-    <Background imageSource={getBackground("fixtures")} overlayOpacity={0.86}>
+    <Background imageUrl={getBackground("fixtures")} overlayOpacity={0.86}>
       <SafeAreaView style={styles.container} edges={["top"]}>
         <View style={styles.header}>
           <Text style={styles.title}>Fixtures</Text>
@@ -422,7 +460,7 @@ export default function FixturesScreen() {
 
               return (
                 <Pressable
-                  key={`${d.iso}-${i}`} // <-- prevents duplicate key even if upstream date logic ever repeats
+                  key={`${d.iso}-${i}`}
                   onPress={() => handleDateTap(d.iso)}
                   style={[
                     styles.datePill,
@@ -440,10 +478,7 @@ export default function FixturesScreen() {
 
           {/* Leagues: All + multi-select */}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 12 }}>
-            <Pressable
-              onPress={setAllLeagues}
-              style={[styles.leaguePill, selectedLeagueIds.length === 0 && styles.leaguePillActive]}
-            >
+            <Pressable onPress={setAllLeagues} style={[styles.leaguePill, selectedLeagueIds.length === 0 && styles.leaguePillActive]}>
               <Text style={styles.leagueText}>All leagues</Text>
             </Pressable>
 
@@ -492,8 +527,8 @@ export default function FixturesScreen() {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Styles */
-/* -------------------------------------------------------------------------- */
+/* Styles
+ * -------------------------------------------------------------------------- */
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
@@ -569,6 +604,7 @@ const styles = StyleSheet.create({
   rowWrap: { marginBottom: 10 },
   rowCard: { borderRadius: 18 },
 
+  rowMain: {},
   rowInner: {
     padding: 14,
     flexDirection: "row",
@@ -587,12 +623,32 @@ const styles = StyleSheet.create({
   crestImg: { width: 30, height: 30 },
   crestFallback: { color: theme.colors.textSecondary, fontWeight: "900" },
 
-  centerBlock: { flex: 1, alignItems: "center", gap: 4 },
+  centerBlock: { flex: 1, alignItems: "center", gap: 6 },
 
   teamLine: { color: theme.colors.text, fontSize: 15, fontWeight: "800" },
   vs: { color: theme.colors.textSecondary, fontSize: 12 },
+
+  metaStack: { alignItems: "center", gap: 6 },
   meta: { color: theme.colors.textSecondary, fontSize: 12, textAlign: "center" },
-  tapHint: { color: theme.colors.textTertiary, fontSize: 11 },
+  metaSecondary: { color: theme.colors.textTertiary, fontSize: 11, textAlign: "center", fontWeight: "800" },
+
+  badgeRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  badge: {
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+    paddingVertical: 5,
+    paddingHorizontal: 9,
+    borderRadius: 999,
+  },
+  badgeWarn: {
+    borderColor: "rgba(255,210,77,0.30)",
+    backgroundColor: "rgba(255,210,77,0.10)",
+  },
+  badgeText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: 11 },
+  badgeTextWarn: { color: "rgba(255,210,77,0.92)" },
+
+  tapHint: { color: theme.colors.textTertiary, fontSize: 11, fontWeight: "800" },
 
   expandArea: { flexDirection: "row", gap: 10, padding: 12 },
 
