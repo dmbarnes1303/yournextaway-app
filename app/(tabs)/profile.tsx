@@ -23,9 +23,7 @@ import { theme } from "@/src/constants/theme";
 import storage from "@/src/services/storage";
 
 import useFollowStore, { type FollowedMatch } from "@/src/state/followStore";
-
-// New refresh truth: returns per-fixture results, schedules local notifications when needed
-import { refreshFollowedMatches } from "@/src/services/followedMatchesRefresh";
+import { refreshFollowedMatches } from "@/src/services/followRefresh";
 import { ensureNotificationsReady } from "@/src/services/followKickoffNotifications";
 
 /* -------------------------------------------------------------------------- */
@@ -149,7 +147,7 @@ function normalizeStr(v: unknown) {
 }
 
 /**
- * Heuristic TBC detection for FOLLOWED matches:
+ * Heuristic TBC detection for FOLLOWED matches (no API status available here):
  * - If no kickoffIso => TBC
  * - If kickoff <= 21 days away => confirmed
  * - If >= 7 fixtures in same (leagueId+season+round) share same kickoff minute => likely placeholder => TBC
@@ -380,6 +378,9 @@ export default function ProfileScreen() {
   const setDefaultAlerts = useFollowStore((s) => s.setDefaultAlerts);
   const defaultAlerts = useFollowStore((s) => s.defaultAlerts);
 
+  // Permission-gated toggle state
+  const [kickoffToggleBusy, setKickoffToggleBusy] = useState(false);
+
   // Manual refresh UI state
   const [refreshing, setRefreshing] = useState(false);
   const [lastRefreshedAt, setLastRefreshedAt] = useState<number | null>(null);
@@ -434,7 +435,7 @@ export default function ProfileScreen() {
 
   const followedPreview = useMemo(() => followedSorted.slice(0, 6), [followedSorted]);
 
-  // Likely placeholder TBC inference across FOLLOWED list (based on leagueId+season+round clustering)
+  // Likely placeholder TBC inference across FOLLOWED list
   const likelyTbcIds = useMemo(() => computeLikelyPlaceholderTbcIdsFromFollowed(followed), [followed]);
 
   // Load persisted settings once
@@ -596,31 +597,6 @@ export default function ProfileScreen() {
     [unfollow]
   );
 
-  const onToggleKickoffDefault = useCallback(
-    async (v: boolean) => {
-      if (!v) {
-        setDefaultAlerts({ kickoffConfirmed: false });
-        return;
-      }
-
-      // Ask ONLY when user opts in.
-      const ok = await ensureNotificationsReady().catch(() => false);
-
-      if (!ok) {
-        setDefaultAlerts({ kickoffConfirmed: false });
-        Alert.alert(
-          "Notifications disabled",
-          "To get kickoff alerts, enable notifications in your phone settings for YourNextAway."
-        );
-        return;
-      }
-
-      setDefaultAlerts({ kickoffConfirmed: true });
-      Alert.alert("Kickoff alerts on", "We’ll notify you if kickoff is confirmed or changes.");
-    },
-    [setDefaultAlerts]
-  );
-
   const onRefreshFollowing = useCallback(async () => {
     if (refreshing) return;
 
@@ -634,15 +610,15 @@ export default function ProfileScreen() {
     setRefreshSummary(null);
 
     try {
-      // Returns per-fixture results: { fixtureId, refreshed, notified, error? }
-      const res = await refreshFollowedMatches({ limit: 25 });
+      // This path is user-driven, so it’s fine if notifications are already enabled.
+      // It will NOT prompt for permission (notifyKickoffChanged now uses request:false).
+      const rows = await refreshFollowedMatches({ limit: 25 });
 
       setLastRefreshedAt(Date.now());
 
-      const refreshedCount = res.filter((r) => r.refreshed).length;
-      const notifiedCount = res.filter((r) => r.notified).length;
-      const summary = `Checked ${refreshedCount} • Alerts sent ${notifiedCount}`;
-      setRefreshSummary(summary);
+      const refreshed = rows.filter((r: any) => r?.refreshed).length;
+      const notified = rows.filter((r: any) => r?.notified).length;
+      setRefreshSummary(`Checked ${refreshed} • Kickoff notifications ${notified}`);
     } catch {
       setLastRefreshedAt(Date.now());
       setRefreshSummary("Refresh failed (network or rate limit). Try again.");
@@ -650,6 +626,44 @@ export default function ProfileScreen() {
       setRefreshing(false);
     }
   }, [refreshing, followingCount]);
+
+  const onToggleKickoffDefault = useCallback(
+    async (nextValue: boolean) => {
+      if (kickoffToggleBusy) return;
+
+      // OFF never needs permission
+      if (!nextValue) {
+        setDefaultAlerts({ kickoffConfirmed: false });
+        return;
+      }
+
+      // ON = explicit user action → request permission here (best opt-in)
+      setKickoffToggleBusy(true);
+
+      try {
+        const ok = await ensureNotificationsReady({ request: true });
+
+        if (!ok) {
+          // Snap back OFF, and be explicit why (otherwise users think it’s broken)
+          setDefaultAlerts({ kickoffConfirmed: false });
+
+          Alert.alert(
+            "Notifications disabled",
+            "To enable kickoff alerts, allow notifications for YourNextAway in your phone settings, then toggle this on again.",
+            [{ text: "OK" }],
+            { cancelable: true }
+          );
+
+          return;
+        }
+
+        setDefaultAlerts({ kickoffConfirmed: true });
+      } finally {
+        setKickoffToggleBusy(false);
+      }
+    },
+    [kickoffToggleBusy, setDefaultAlerts]
+  );
 
   return (
     <Background imageUrl={getBackground("profile")} overlayOpacity={0.78}>
@@ -723,7 +737,7 @@ export default function ProfileScreen() {
               <View style={{ flex: 1 }}>
                 <Text style={styles.sectionH}>Following</Text>
                 <Text style={styles.listSub}>
-                  Kickoff alerts. {followingCount ? `${followingCount} saved.` : "None yet."}
+                  Kickoff alerts (local notifications). {followingCount ? `${followingCount} saved.` : "None yet."}
                 </Text>
               </View>
 
@@ -731,7 +745,11 @@ export default function ProfileScreen() {
                 <Text style={styles.followingDefaultsKicker}>Default alert</Text>
                 <View style={styles.followingDefaultsRow}>
                   <Text style={styles.followingDefaultsValue}>Kickoff</Text>
-                  <Switch value={!!defaultAlerts.kickoffConfirmed} onValueChange={onToggleKickoffDefault} />
+                  <Switch
+                    value={!!defaultAlerts.kickoffConfirmed}
+                    onValueChange={onToggleKickoffDefault}
+                    disabled={kickoffToggleBusy}
+                  />
                 </View>
               </View>
             </View>
@@ -761,7 +779,7 @@ export default function ProfileScreen() {
                 <Text style={styles.followEmptyTitle}>You’re not following any matches</Text>
                 <Text style={styles.followEmptyBody}>
                   Open a match and tap <Text style={{ fontWeight: "900", color: theme.colors.text }}>Follow</Text>. We’ll
-                  notify you when kickoff is confirmed/changes.
+                  notify you if kickoff is confirmed/changes.
                 </Text>
               </View>
             ) : (
@@ -993,12 +1011,7 @@ const styles = StyleSheet.create({
   identityTop: { flexDirection: "row", alignItems: "center", gap: 12 },
 
   name: { color: theme.colors.text, fontSize: theme.fontSize.lg, fontWeight: theme.fontWeight.black },
-  meta: {
-    marginTop: 6,
-    color: theme.colors.textSecondary,
-    fontSize: theme.fontSize.sm,
-    fontWeight: theme.fontWeight.bold,
-  },
+  meta: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, fontWeight: theme.fontWeight.bold },
 
   followingPill: {
     marginTop: 10,
@@ -1135,18 +1148,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     minWidth: 165,
   },
-  followingDefaultsKicker: {
-    color: theme.colors.textSecondary,
-    fontSize: theme.fontSize.xs,
-    fontWeight: theme.fontWeight.black,
-  },
-  followingDefaultsRow: {
-    marginTop: 6,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-  },
+  followingDefaultsKicker: { color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: theme.fontWeight.black },
+  followingDefaultsRow: { marginTop: 6, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
   followingDefaultsValue: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.sm },
 
   refreshBar: {
@@ -1179,13 +1182,7 @@ const styles = StyleSheet.create({
 
   followEmpty: { paddingHorizontal: theme.spacing.lg, paddingTop: 6, paddingBottom: theme.spacing.lg },
   followEmptyTitle: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.md },
-  followEmptyBody: {
-    marginTop: 6,
-    color: theme.colors.textSecondary,
-    fontWeight: "700",
-    lineHeight: 18,
-    fontSize: theme.fontSize.sm,
-  },
+  followEmptyBody: { marginTop: 6, color: theme.colors.textSecondary, fontWeight: "700", lineHeight: 18, fontSize: theme.fontSize.sm },
 
   followRow: {
     borderTopWidth: 1,
@@ -1226,12 +1223,7 @@ const styles = StyleSheet.create({
   },
   unfollowText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: theme.fontSize.xs },
 
-  followFooterNote: {
-    borderTopWidth: 1,
-    borderTopColor: "rgba(255,255,255,0.10)",
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: 12,
-  },
+  followFooterNote: { borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.10)", paddingHorizontal: theme.spacing.lg, paddingVertical: 12 },
   followFooterText: { color: theme.colors.textTertiary, fontWeight: "800", fontSize: theme.fontSize.xs },
 
   footerNote: {
