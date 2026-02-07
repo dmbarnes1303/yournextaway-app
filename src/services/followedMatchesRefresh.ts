@@ -15,6 +15,10 @@ function clampLimit(v: unknown, min: number, max: number, fallback: number) {
 }
 
 function pickFixtureSnapshot(fx: any) {
+  // API-Football typical shape:
+  // fx.fixture.date, fx.fixture.venue.name/city
+  // fx.league.id/name/season/round
+  // fx.teams.home.id/name, fx.teams.away.id/name
   const kickoffIso = cleanStr(fx?.fixture?.date);
   const venue = cleanStr(fx?.fixture?.venue?.name);
   const city = cleanStr(fx?.fixture?.venue?.city);
@@ -72,12 +76,12 @@ export async function refreshFollowedMatches(opts?: { limit?: number; concurrenc
   const concurrency = clampLimit(opts?.concurrency, 1, 6, 3);
 
   const store = useFollowStore.getState();
-  const followed = store.followed.slice(0, limit);
+  const followed = Array.isArray(store.followed) ? store.followed.slice(0, limit) : [];
 
   if (followed.length === 0) return [] as RefreshResultRow[];
 
   const ids = followed
-    .map((f) => String(f.fixtureId ?? "").trim())
+    .map((f) => String((f as any)?.fixtureId ?? "").trim())
     .filter(Boolean);
 
   const rows = await mapLimit(ids, concurrency, async (fixtureId): Promise<RefreshResultRow> => {
@@ -91,12 +95,15 @@ export async function refreshFollowedMatches(opts?: { limit?: number; concurrenc
         kickoffIso: snap.kickoffIso,
         venue: snap.venue,
         city: snap.city,
+
         leagueId: snap.leagueId,
         season: snap.season,
         leagueName: snap.leagueName,
         round: snap.round,
+
         homeTeamId: snap.homeTeamId,
         awayTeamId: snap.awayTeamId,
+
         homeName: snap.homeName,
         awayName: snap.awayName,
         // kickoffLikelyTbc intentionally omitted → store infers via heuristic
@@ -104,13 +111,12 @@ export async function refreshFollowedMatches(opts?: { limit?: number; concurrenc
 
       let notified = false;
 
-      // “shouldNotifyKickoff” already means:
+      // shouldNotifyKickoff already implies:
       // - alerts.kickoffConfirmed enabled
       // - kickoffIso actually changed (prev vs next)
       if (r?.existed && r.shouldNotifyKickoff) {
         // Prefer store names (follow-time labels), fallback to refreshed snapshot
-        const latest =
-          useFollowStore.getState().followed.find((x) => x.fixtureId === fixtureId) ?? null;
+        const latest = useFollowStore.getState().followed.find((x) => x.fixtureId === fixtureId) ?? null;
 
         await notifyKickoffChanged({
           fixtureId,
@@ -121,7 +127,7 @@ export async function refreshFollowedMatches(opts?: { limit?: number; concurrenc
           nextKickoffIso: r.nextKickoffIso,
         });
 
-        // No extra “notified” persistence needed:
+        // No “notified” persistence needed:
         // after applyFixtureUpdate, prevKickoffIso becomes nextKickoffIso,
         // so future refreshes won’t re-trigger unless KO changes again.
         notified = true;
@@ -139,4 +145,4 @@ export async function refreshFollowedMatches(opts?: { limit?: number; concurrenc
   });
 
   return rows;
-  }
+}
