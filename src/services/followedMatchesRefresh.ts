@@ -15,10 +15,6 @@ function clampLimit(v: unknown, min: number, max: number, fallback: number) {
 }
 
 function pickFixtureSnapshot(fx: any) {
-  // API-Football typical shape:
-  // fx.fixture.date, fx.fixture.venue.name/city
-  // fx.league.id/name/season/round
-  // fx.teams.home.id/name, fx.teams.away.id/name
   const kickoffIso = cleanStr(fx?.fixture?.date);
   const venue = cleanStr(fx?.fixture?.venue?.name);
   const city = cleanStr(fx?.fixture?.venue?.city);
@@ -91,7 +87,9 @@ export async function refreshFollowedMatches(opts?: { limit?: number; concurrenc
 
       const snap = pickFixtureSnapshot(fx);
 
-      const r = useFollowStore.getState().applyFixtureUpdate(fixtureId, {
+      const followState = useFollowStore.getState();
+
+      const r = followState.applyFixtureUpdate(fixtureId, {
         kickoffIso: snap.kickoffIso,
         venue: snap.venue,
         city: snap.city,
@@ -111,9 +109,6 @@ export async function refreshFollowedMatches(opts?: { limit?: number; concurrenc
 
       let notified = false;
 
-      // shouldNotifyKickoff already implies:
-      // - alerts.kickoffConfirmed enabled
-      // - kickoffIso actually changed (prev vs next)
       if (r?.existed && r.shouldNotifyKickoff) {
         // Prefer store names (follow-time labels), fallback to refreshed snapshot
         const latest = useFollowStore.getState().followed.find((x) => x.fixtureId === fixtureId) ?? null;
@@ -127,9 +122,9 @@ export async function refreshFollowedMatches(opts?: { limit?: number; concurrenc
           nextKickoffIso: r.nextKickoffIso,
         });
 
-        // No “notified” persistence needed:
-        // after applyFixtureUpdate, prevKickoffIso becomes nextKickoffIso,
-        // so future refreshes won’t re-trigger unless KO changes again.
+        // CRITICAL: persist anti-spam key so we don’t re-notify for same kickoff across restarts.
+        useFollowStore.getState().markKickoffNotified(fixtureId, r.nextKickoffIso);
+
         notified = true;
       }
 
