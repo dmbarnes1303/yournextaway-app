@@ -23,9 +23,7 @@ import { theme } from "@/src/constants/theme";
 import storage from "@/src/services/storage";
 
 import useFollowStore, { type FollowedMatch } from "@/src/state/followStore";
-
-// ✅ Use notification-aware refresh + permission request
-import { refreshFollowedMatches as refreshFollowedMatchesPush } from "@/src/services/followedMatchesRefresh";
+import { refreshFollowedMatches } from "@/src/services/followRefresh";
 import { ensureNotificationsReady } from "@/src/services/followKickoffNotifications";
 
 /* -------------------------------------------------------------------------- */
@@ -149,7 +147,7 @@ function normalizeStr(v: unknown) {
 }
 
 /**
- * Heuristic TBC detection for FOLLOWED matches:
+ * Heuristic TBC detection for FOLLOWED matches (no API status available here):
  * - If no kickoffIso => TBC
  * - If kickoff <= 21 days away => confirmed
  * - If >= 7 fixtures in same (leagueId+season+round) share same kickoff minute => likely placeholder => TBC
@@ -401,8 +399,6 @@ export default function ProfileScreen() {
   const [activePicker, setActivePicker] = useState<null | "airport" | "currency" | "language" | "budget" | "plan">(null);
   const closePicker = useCallback(() => setActivePicker(null), []);
 
-  const [kickoffToggleBusy, setKickoffToggleBusy] = useState(false);
-
   const logoSize = useMemo(() => {
     const max = 86;
     const min = 62;
@@ -598,47 +594,6 @@ export default function ProfileScreen() {
     [unfollow]
   );
 
-  /**
-   * ✅ Permission gating:
-   * - Only request permission when the user turns Kickoff alerts ON.
-   * - If denied: revert toggle back OFF (so UI reflects reality).
-   */
-  const onToggleKickoffDefault = useCallback(
-    async (nextOn: boolean) => {
-      if (kickoffToggleBusy) return;
-
-      // Turning OFF never needs permissions
-      if (!nextOn) {
-        setDefaultAlerts({ kickoffConfirmed: false });
-        return;
-      }
-
-      setKickoffToggleBusy(true);
-
-      try {
-        const ok = await ensureNotificationsReady();
-        if (!ok) {
-          // Revert and explain
-          setDefaultAlerts({ kickoffConfirmed: false });
-          Alert.alert(
-            "Notifications disabled",
-            "To get kickoff updates, allow notifications when prompted (or enable them in Settings)."
-          );
-          return;
-        }
-
-        setDefaultAlerts({ kickoffConfirmed: true });
-        Alert.alert("Kickoff alerts enabled", "We’ll notify you when kickoff time is confirmed or changes.");
-      } catch {
-        setDefaultAlerts({ kickoffConfirmed: false });
-        Alert.alert("Couldn’t enable alerts", "Try again. If it keeps failing, check notification permissions in Settings.");
-      } finally {
-        setKickoffToggleBusy(false);
-      }
-    },
-    [kickoffToggleBusy, setDefaultAlerts]
-  );
-
   const onRefreshFollowing = useCallback(async () => {
     if (refreshing) return;
 
@@ -652,16 +607,14 @@ export default function ProfileScreen() {
     setRefreshSummary(null);
 
     try {
-      const res = await refreshFollowedMatchesPush({ limit: 25 });
+      const results = await refreshFollowedMatches({ limit: 25 });
 
       setLastRefreshedAt(Date.now());
 
-      const refreshed = res.filter((r) => r.refreshed).length;
-      const notified = res.filter((r) => r.notified).length;
-      const failed = res.filter((r) => !r.refreshed).length;
+      const refreshed = Array.isArray(results) ? results.filter((r) => r?.refreshed).length : 0;
+      const notified = Array.isArray(results) ? results.filter((r) => r?.notified).length : 0;
 
-      const summary = `Checked ${refreshed} • Notified ${notified}${failed ? ` • Failed ${failed}` : ""}`;
-      setRefreshSummary(summary);
+      setRefreshSummary(`Checked ${refreshed} • Notifications ${notified}`);
     } catch {
       setLastRefreshedAt(Date.now());
       setRefreshSummary("Refresh failed (network or rate limit). Try again.");
@@ -669,6 +622,26 @@ export default function ProfileScreen() {
       setRefreshing(false);
     }
   }, [refreshing, followingCount]);
+
+  const onToggleDefaultKickoffAlert = useCallback(
+    (v: boolean) => {
+      (async () => {
+        if (v) {
+          const ok = await ensureNotificationsReady().catch(() => false);
+          if (!ok) {
+            Alert.alert(
+              "Notifications off",
+              "To get kickoff alerts, enable notifications in your system settings."
+            );
+            setDefaultAlerts({ kickoffConfirmed: false });
+            return;
+          }
+        }
+        setDefaultAlerts({ kickoffConfirmed: v });
+      })();
+    },
+    [setDefaultAlerts]
+  );
 
   return (
     <Background imageUrl={getBackground("profile")} overlayOpacity={0.78}>
@@ -742,7 +715,7 @@ export default function ProfileScreen() {
               <View style={{ flex: 1 }}>
                 <Text style={styles.sectionH}>Following</Text>
                 <Text style={styles.listSub}>
-                  Kickoff alerts (Phase 1). {followingCount ? `${followingCount} saved.` : "None yet."}
+                  Kickoff-confirmed alerts (Phase 1: local). {followingCount ? `${followingCount} saved.` : "None yet."}
                 </Text>
               </View>
 
@@ -750,11 +723,7 @@ export default function ProfileScreen() {
                 <Text style={styles.followingDefaultsKicker}>Default alert</Text>
                 <View style={styles.followingDefaultsRow}>
                   <Text style={styles.followingDefaultsValue}>Kickoff</Text>
-                  <Switch
-                    value={!!defaultAlerts.kickoffConfirmed}
-                    onValueChange={onToggleKickoffDefault}
-                    disabled={kickoffToggleBusy}
-                  />
+                  <Switch value={!!defaultAlerts.kickoffConfirmed} onValueChange={onToggleDefaultKickoffAlert} />
                 </View>
               </View>
             </View>
@@ -784,7 +753,7 @@ export default function ProfileScreen() {
                 <Text style={styles.followEmptyTitle}>You’re not following any matches</Text>
                 <Text style={styles.followEmptyBody}>
                   Open a match and tap <Text style={{ fontWeight: "900", color: theme.colors.text }}>Follow</Text>. We’ll
-                  notify you when kickoff is confirmed/changes.
+                  notify you when kickoff is confirmed/changes (if notifications are enabled).
                 </Text>
               </View>
             ) : (
@@ -868,7 +837,12 @@ export default function ProfileScreen() {
               onPress={() => setActivePicker("airport")}
             />
             <Row title="Plan" subtitle="Free or Premium" value={planSummary} onPress={() => setActivePicker("plan")} />
-            <Row title="Currency" subtitle="Budgets and comparisons" value={currency} onPress={() => setActivePicker("currency")} />
+            <Row
+              title="Currency"
+              subtitle="Budgets and comparisons"
+              value={currency}
+              onPress={() => setActivePicker("currency")}
+            />
             <Row title="Language" subtitle="App language" value={language} onPress={() => setActivePicker("language")} />
             <Row
               title="Budget"
@@ -1016,7 +990,12 @@ const styles = StyleSheet.create({
   identityTop: { flexDirection: "row", alignItems: "center", gap: 12 },
 
   name: { color: theme.colors.text, fontSize: theme.fontSize.lg, fontWeight: theme.fontWeight.black },
-  meta: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, fontWeight: theme.fontWeight.bold },
+  meta: {
+    marginTop: 6,
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSize.sm,
+    fontWeight: theme.fontWeight.bold,
+  },
 
   followingPill: {
     marginTop: 10,
@@ -1031,7 +1010,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
   },
-  followingKicker: { color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: theme.fontWeight.black },
+  followingKicker: {
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSize.xs,
+    fontWeight: theme.fontWeight.black,
+  },
   followingValue: { color: theme.colors.text, fontSize: theme.fontSize.sm, fontWeight: theme.fontWeight.black },
 
   planPill: {
@@ -1044,7 +1027,12 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
   },
   planPillLabel: { color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: theme.fontWeight.black },
-  planPillValue: { marginTop: 2, color: theme.colors.primary, fontSize: theme.fontSize.sm, fontWeight: theme.fontWeight.black },
+  planPillValue: {
+    marginTop: 2,
+    color: theme.colors.primary,
+    fontSize: theme.fontSize.sm,
+    fontWeight: theme.fontWeight.black,
+  },
 
   divider: {
     marginTop: 14,
@@ -1153,8 +1141,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     minWidth: 165,
   },
-  followingDefaultsKicker: { color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: theme.fontWeight.black },
-  followingDefaultsRow: { marginTop: 6, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
+  followingDefaultsKicker: {
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSize.xs,
+    fontWeight: theme.fontWeight.black,
+  },
+  followingDefaultsRow: {
+    marginTop: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
   followingDefaultsValue: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.sm },
 
   refreshBar: {
@@ -1187,7 +1185,13 @@ const styles = StyleSheet.create({
 
   followEmpty: { paddingHorizontal: theme.spacing.lg, paddingTop: 6, paddingBottom: theme.spacing.lg },
   followEmptyTitle: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.md },
-  followEmptyBody: { marginTop: 6, color: theme.colors.textSecondary, fontWeight: "700", lineHeight: 18, fontSize: theme.fontSize.sm },
+  followEmptyBody: {
+    marginTop: 6,
+    color: theme.colors.textSecondary,
+    fontWeight: "700",
+    lineHeight: 18,
+    fontSize: theme.fontSize.sm,
+  },
 
   followRow: {
     borderTopWidth: 1,
@@ -1202,7 +1206,13 @@ const styles = StyleSheet.create({
 
   followRowMain: { flex: 1 },
   followRowTitle: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.md },
-  followRowLeague: { marginTop: 6, color: theme.colors.primary, fontWeight: "900", fontSize: theme.fontSize.xs, opacity: 0.92 },
+  followRowLeague: {
+    marginTop: 6,
+    color: theme.colors.primary,
+    fontWeight: "900",
+    fontSize: theme.fontSize.xs,
+    opacity: 0.92,
+  },
   followRowSub: { marginTop: 6, color: theme.colors.textSecondary, fontWeight: "700", fontSize: theme.fontSize.sm },
 
   followTagRow: { marginTop: 10, flexDirection: "row", gap: 8, flexWrap: "wrap" },
@@ -1228,7 +1238,12 @@ const styles = StyleSheet.create({
   },
   unfollowText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: theme.fontSize.xs },
 
-  followFooterNote: { borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.10)", paddingHorizontal: theme.spacing.lg, paddingVertical: 12 },
+  followFooterNote: {
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255,255,255,0.10)",
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: 12,
+  },
   followFooterText: { color: theme.colors.textTertiary, fontWeight: "800", fontSize: theme.fontSize.xs },
 
   footerNote: {
