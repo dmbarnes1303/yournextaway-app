@@ -3,12 +3,7 @@ import { create } from "zustand";
 
 import { readJson, writeJson } from "@/src/state/persist";
 import { makeSavedItemId } from "@/src/core/id";
-import type {
-  SavedItem,
-  SavedItemStatus,
-  SavedItemType,
-  WalletAttachment,
-} from "@/src/core/savedItemTypes";
+import type { SavedItem, SavedItemStatus, SavedItemType, WalletAttachment } from "@/src/core/savedItemTypes";
 import { assertTransition } from "@/src/core/savedItemTypes";
 import { deleteAttachmentFile } from "@/src/services/walletAttachments";
 
@@ -47,10 +42,7 @@ type SavedItemsState = {
   }) => Promise<SavedItem>;
 
   /** Field updates ONLY (status changes must use transitionStatus) */
-  update: (
-    id: string,
-    patch: Partial<Omit<SavedItem, "id" | "tripId" | "createdAt" | "status">>
-  ) => Promise<void>;
+  update: (id: string, patch: Partial<Omit<SavedItem, "id" | "tripId" | "createdAt" | "status">>) => Promise<void>;
 
   transitionStatus: (id: string, to: SavedItemStatus) => Promise<void>;
 
@@ -61,12 +53,7 @@ type SavedItemsState = {
   remove: (id: string, opts?: ClearOpts) => Promise<void>;
   clearTrip: (tripId: string, opts?: ClearOpts) => Promise<void>;
 
-  /**
-   * Remove any items whose tripId is NOT in the provided set.
-   * Use this to keep Wallet empty when there are no trips.
-   */
   clearOrphans: (validTripIds: string[], opts?: ClearOpts) => Promise<void>;
-
   clearAll: (opts?: ClearOpts) => Promise<void>;
 };
 
@@ -91,12 +78,7 @@ const VALID_TYPES: ReadonlySet<SavedItemType> = new Set([
   "other",
 ]);
 
-const VALID_STATUSES: ReadonlySet<SavedItemStatus> = new Set([
-  "saved",
-  "pending",
-  "booked",
-  "archived",
-]);
+const VALID_STATUSES: ReadonlySet<SavedItemStatus> = new Set(["saved", "pending", "booked", "archived"]);
 
 function isValidType(x: any): x is SavedItemType {
   return typeof x === "string" && VALID_TYPES.has(x as SavedItemType);
@@ -108,6 +90,10 @@ function isValidStatus(x: any): x is SavedItemStatus {
 
 function now() {
   return Date.now();
+}
+
+function isPlainObject(v: any): v is Record<string, any> {
+  return !!v && typeof v === "object" && !Array.isArray(v);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -132,10 +118,23 @@ function sortItems(items: SavedItem[]): SavedItem[] {
 }
 
 /* -------------------------------------------------------------------------- */
+/* Persistence queue (prevents interleaved writes) */
+/* -------------------------------------------------------------------------- */
 
-async function persist(items: SavedItem[]) {
-  await writeJson(STORAGE_KEY, items);
+let writeQueue: Promise<void> = Promise.resolve();
+
+function persistQueued(items: SavedItem[]) {
+  // Serialize writes to avoid last-write-wins with stale state.
+  writeQueue = writeQueue
+    .catch(() => {
+      // swallow previous persist errors so queue continues
+    })
+    .then(() => writeJson(STORAGE_KEY, items));
+
+  return writeQueue;
 }
+
+/* -------------------------------------------------------------------------- */
 
 function normalizeTripId(tripId: string) {
   const id = String(tripId ?? "").trim();
@@ -202,7 +201,7 @@ function cleanLoadedItem(x: any): SavedItem | null {
     partnerUrl: typeof x.partnerUrl === "string" ? x.partnerUrl : undefined,
     priceText: typeof x.priceText === "string" ? x.priceText : undefined,
     currency: typeof x.currency === "string" ? x.currency : undefined,
-    metadata: typeof x.metadata === "object" ? x.metadata : undefined,
+    metadata: isPlainObject(x.metadata) ? x.metadata : undefined,
     attachments: attachments.length ? attachments : undefined,
     createdAt: Number.isFinite(createdAt) ? createdAt : now(),
     updatedAt: Number.isFinite(updatedAt) ? updatedAt : now(),
@@ -231,9 +230,18 @@ async function deleteAllAttachmentsForItem(item: SavedItem) {
 /* -------------------------------------------------------------------------- */
 
 const useSavedItemsStore = create<SavedItemsState>((set, get) => {
+  // Prevent double-load races
+  let loadPromise: Promise<void> | null = null;
+
   async function ensureLoaded() {
     if (get().loaded) return;
     await get().load();
+  }
+
+  function setAndPersist(nextItems: SavedItem[]) {
+    const sorted = sortItems(nextItems);
+    set({ items: sorted, loaded: true });
+    return persistQueued(sorted);
   }
 
   return {
@@ -242,12 +250,18 @@ const useSavedItemsStore = create<SavedItemsState>((set, get) => {
 
     load: async () => {
       if (get().loaded) return;
+      if (loadPromise) return loadPromise;
 
-      const raw = await readJson<any>(STORAGE_KEY, []);
-      const arr = Array.isArray(raw) ? raw : [];
+      loadPromise = (async () => {
+        const raw = await readJson<any>(STORAGE_KEY, []);
+        const arr = Array.isArray(raw) ? raw : [];
+        const cleaned = arr.map(cleanLoadedItem).filter(Boolean) as SavedItem[];
+        set({ items: sortItems(cleaned), loaded: true });
+      })().finally(() => {
+        loadPromise = null;
+      });
 
-      const cleaned = arr.map(cleanLoadedItem).filter(Boolean) as SavedItem[];
-      set({ items: sortItems(cleaned), loaded: true });
+      return loadPromise;
     },
 
     getByTrip: (tripId) => {
@@ -280,20 +294,18 @@ const useSavedItemsStore = create<SavedItemsState>((set, get) => {
         type,
         status,
         title,
-        partnerId: args.partnerId,
-        partnerUrl: args.partnerUrl,
-        priceText: args.priceText,
-        currency: args.currency,
-        metadata: args.metadata,
+        partnerId: typeof args.partnerId === "string" ? args.partnerId : undefined,
+        partnerUrl: typeof args.partnerUrl === "string" ? args.partnerUrl : undefined,
+        priceText: typeof args.priceText === "string" ? args.priceText : undefined,
+        currency: typeof args.currency === "string" ? args.currency : undefined,
+        metadata: isPlainObject(args.metadata) ? args.metadata : undefined,
         attachments: undefined,
         createdAt: now(),
         updatedAt: now(),
       };
 
-      const next = sortItems([item, ...get().items]);
-      set({ items: next, loaded: true });
-      await persist(next);
-
+      const next = [item, ...get().items];
+      await setAndPersist(next);
       return item;
     },
 
@@ -312,16 +324,20 @@ const useSavedItemsStore = create<SavedItemsState>((set, get) => {
         // do NOT allow status changes here
         if ((patch as any).status !== undefined) return x;
 
+        const nextMeta = (patch as any).metadata;
+        const safePatch: any = { ...patch };
+        if (nextMeta !== undefined) {
+          safePatch.metadata = isPlainObject(nextMeta) ? nextMeta : undefined;
+        }
+
         return {
           ...x,
-          ...patch,
+          ...safePatch,
           updatedAt: now(),
         };
       });
 
-      const sorted = sortItems(next);
-      set({ items: sorted, loaded: true });
-      await persist(sorted);
+      await setAndPersist(next);
     },
 
     transitionStatus: async (id, to) => {
@@ -333,15 +349,11 @@ const useSavedItemsStore = create<SavedItemsState>((set, get) => {
       const cur = get().items.find((x) => x.id === key);
       if (!cur) return;
 
+      // Throws if invalid transition (that’s good)
       assertTransition(cur.status, to);
 
-      const next = get().items.map((x) =>
-        x.id === key ? { ...x, status: to, updatedAt: now() } : x
-      );
-
-      const sorted = sortItems(next);
-      set({ items: sorted, loaded: true });
-      await persist(sorted);
+      const next = get().items.map((x) => (x.id === key ? { ...x, status: to, updatedAt: now() } : x));
+      await setAndPersist(next);
     },
 
     addAttachment: async (itemId, att) => {
@@ -355,8 +367,8 @@ const useSavedItemsStore = create<SavedItemsState>((set, get) => {
         if (x.id !== id) return x;
 
         const existing = Array.isArray(x.attachments) ? x.attachments : [];
-        // prevent dup ids
         const filtered = existing.filter((a) => a.id !== att.id);
+
         return {
           ...x,
           attachments: [att, ...filtered],
@@ -364,9 +376,7 @@ const useSavedItemsStore = create<SavedItemsState>((set, get) => {
         };
       });
 
-      const sorted = sortItems(next);
-      set({ items: sorted, loaded: true });
-      await persist(sorted);
+      await setAndPersist(next);
     },
 
     removeAttachment: async (itemId, attachmentId, opts) => {
@@ -385,6 +395,7 @@ const useSavedItemsStore = create<SavedItemsState>((set, get) => {
 
         const existing = Array.isArray(x.attachments) ? x.attachments : [];
         const kept = existing.filter((a) => a.id !== aid);
+
         return {
           ...x,
           attachments: kept.length ? kept : undefined,
@@ -392,9 +403,7 @@ const useSavedItemsStore = create<SavedItemsState>((set, get) => {
         };
       });
 
-      const sorted = sortItems(next);
-      set({ items: sorted, loaded: true });
-      await persist(sorted);
+      await setAndPersist(next);
 
       if (opts?.deleteAttachmentFiles && toDelete) {
         try {
@@ -407,14 +416,14 @@ const useSavedItemsStore = create<SavedItemsState>((set, get) => {
 
     remove: async (id, opts) => {
       await ensureLoaded();
+
       const key = String(id ?? "").trim();
       if (!key) return;
 
       const cur = get().items.find((x) => x.id === key);
       const next = get().items.filter((x) => x.id !== key);
 
-      set({ items: next, loaded: true });
-      await persist(next);
+      await setAndPersist(next);
 
       if (opts?.deleteAttachmentFiles && cur) {
         await deleteAllAttachmentsForItem(cur);
@@ -423,14 +432,14 @@ const useSavedItemsStore = create<SavedItemsState>((set, get) => {
 
     clearTrip: async (tripId, opts) => {
       await ensureLoaded();
+
       const id = String(tripId ?? "").trim();
       if (!id) return;
 
       const doomed = get().items.filter((x) => x.tripId === id);
       const next = get().items.filter((x) => x.tripId !== id);
 
-      set({ items: next, loaded: true });
-      await persist(next);
+      await setAndPersist(next);
 
       if (opts?.deleteAttachmentFiles) {
         for (const it of doomed) {
@@ -446,8 +455,7 @@ const useSavedItemsStore = create<SavedItemsState>((set, get) => {
       const doomed = get().items.filter((x) => !setIds.has(String(x.tripId)));
       const next = get().items.filter((x) => setIds.has(String(x.tripId)));
 
-      set({ items: next, loaded: true });
-      await persist(next);
+      await setAndPersist(next);
 
       if (opts?.deleteAttachmentFiles) {
         for (const it of doomed) {
@@ -460,8 +468,7 @@ const useSavedItemsStore = create<SavedItemsState>((set, get) => {
       await ensureLoaded();
 
       const doomed = get().items;
-      set({ items: [], loaded: true });
-      await persist([]);
+      await setAndPersist([]);
 
       if (opts?.deleteAttachmentFiles) {
         for (const it of doomed) {
