@@ -122,40 +122,6 @@ function defer(fn: () => void) {
   setTimeout(fn, 60);
 }
 
-/**
- * Option B truth:
- * Transition graph does NOT allow saved -> booked directly.
- * So we perform: saved -> pending -> booked.
- */
-async function forceToBooked(itemId: string) {
-  const id = String(itemId ?? "").trim();
-  if (!id) return;
-
-  if (!savedItemsStore.getState().loaded) {
-    try {
-      await savedItemsStore.load();
-    } catch {
-      // ignore
-    }
-  }
-
-  const cur = savedItemsStore.getState().items.find((x) => x.id === id);
-  if (!cur) return;
-
-  if (cur.status === "booked") return;
-
-  if (cur.status === "saved") {
-    await savedItemsStore.transitionStatus(id, "pending");
-    await savedItemsStore.transitionStatus(id, "booked");
-    return;
-  }
-
-  if (cur.status === "pending") {
-    await savedItemsStore.transitionStatus(id, "booked");
-    return;
-  }
-}
-
 /* -------------------------------------------------------------------------- */
 /* screen */
 /* -------------------------------------------------------------------------- */
@@ -268,10 +234,16 @@ export default function TripDetailScreen() {
   }, [trip, cityName]);
 
   const pending = useMemo(() => savedItems.filter((x) => x.status === "pending"), [savedItems]);
-  const saved = useMemo(() => savedItems.filter((x) => x.status === "saved" && x.type !== "note"), [savedItems]);
+  const saved = useMemo(
+    () => savedItems.filter((x) => x.status === "saved" && x.type !== "note"),
+    [savedItems]
+  );
   const booked = useMemo(() => savedItems.filter((x) => x.status === "booked"), [savedItems]);
 
-  const notes = useMemo(() => savedItems.filter((x) => x.type === "note" && x.status !== "archived"), [savedItems]);
+  const notes = useMemo(
+    () => savedItems.filter((x) => x.type === "note" && x.status !== "archived"),
+    [savedItems]
+  );
 
   /* ---------------- navigation ---------------- */
 
@@ -293,7 +265,12 @@ export default function TripDetailScreen() {
     }
   }
 
-  async function openTrackedPartner(args: { partnerId: PartnerId; url: string; title: string; metadata?: Record<string, any> }) {
+  async function openTrackedPartner(args: {
+    partnerId: PartnerId;
+    url: string;
+    title: string;
+    metadata?: Record<string, any>;
+  }) {
     if (!tripId) {
       Alert.alert("Save trip first", "Save this trip before booking so we can store it in Wallet.");
       return;
@@ -350,7 +327,7 @@ export default function TripDetailScreen() {
 
   async function markBookedSmart(item: SavedItem) {
     try {
-      await forceToBooked(item.id);
+      await savedItemsStore.transitionStatus(item.id, "booked");
 
       // Keep UX consistent with partner return:
       // show confirmation + offer proof upload if none exists.
@@ -374,10 +351,14 @@ export default function TripDetailScreen() {
   }
 
   function confirmMarkBooked(item: SavedItem) {
-    Alert.alert("Mark as booked?", "Only do this if you completed the booking and want it in Wallet.", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Mark booked", style: "default", onPress: () => markBookedSmart(item) },
-    ]);
+    Alert.alert(
+      "Mark as booked?",
+      "Only do this if you completed the booking and want it in Wallet.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Mark booked", style: "default", onPress: () => markBookedSmart(item) },
+      ]
+    );
   }
 
   function confirmMoveToPending(item: SavedItem) {
@@ -450,7 +431,10 @@ export default function TripDetailScreen() {
       <SafeAreaView style={styles.safe} edges={["bottom"]}>
         <ScrollView
           style={styles.scroll}
-          contentContainerStyle={[styles.content, { paddingBottom: theme.spacing.xxl + insets.bottom }]}
+          contentContainerStyle={[
+            styles.content,
+            { paddingBottom: theme.spacing.xxl + insets.bottom },
+          ]}
         >
           {!tripId && (
             <GlassCard style={styles.card}>
@@ -536,7 +520,10 @@ export default function TripDetailScreen() {
                           <Pressable onPress={() => confirmMarkBooked(it)} style={styles.smallBtn}>
                             <Text style={styles.smallBtnText}>Booked</Text>
                           </Pressable>
-                          <Pressable onPress={() => confirmArchive(it)} style={[styles.smallBtn, styles.smallBtnDanger]}>
+                          <Pressable
+                            onPress={() => confirmArchive(it)}
+                            style={[styles.smallBtn, styles.smallBtnDanger]}
+                          >
                             <Text style={styles.smallBtnText}>Archive</Text>
                           </Pressable>
                         </View>
@@ -580,7 +567,10 @@ export default function TripDetailScreen() {
                           <Pressable onPress={() => confirmMoveToPending(it)} style={styles.smallBtn}>
                             <Text style={styles.smallBtnText}>Pending</Text>
                           </Pressable>
-                          <Pressable onPress={() => confirmArchive(it)} style={[styles.smallBtn, styles.smallBtnDanger]}>
+                          <Pressable
+                            onPress={() => confirmArchive(it)}
+                            style={[styles.smallBtn, styles.smallBtnDanger]}
+                          >
                             <Text style={styles.smallBtnText}>Archive</Text>
                           </Pressable>
                         </View>
@@ -604,19 +594,32 @@ export default function TripDetailScreen() {
                     multiline
                   />
 
-                  <Pressable onPress={addNote} disabled={noteSaving} style={[styles.noteSaveBtn, noteSaving && { opacity: 0.7 }]}>
-                    <Text style={styles.noteSaveText}>{noteSaving ? "Saving…" : "Save note"}</Text>
+                  <Pressable
+                    onPress={addNote}
+                    disabled={noteSaving}
+                    style={[styles.noteSaveBtn, noteSaving && { opacity: 0.7 }]}
+                  >
+                    <Text style={styles.noteSaveText}>
+                      {noteSaving ? "Saving…" : "Save note"}
+                    </Text>
                   </Pressable>
                 </View>
 
                 {notes.length === 0 ? (
                   <View style={{ marginTop: 10 }}>
-                    <EmptyState title="No notes yet" message="Notes you save for this trip appear here." />
+                    <EmptyState
+                      title="No notes yet"
+                      message="Notes you save for this trip appear here."
+                    />
                   </View>
                 ) : (
                   <View style={{ gap: 10, marginTop: 10 }}>
                     {notes.map((it) => (
-                      <Pressable key={it.id} onPress={() => openNoteActions(it)} style={styles.noteRow}>
+                      <Pressable
+                        key={it.id}
+                        onPress={() => openNoteActions(it)}
+                        style={styles.noteRow}
+                      >
                         <View style={{ flex: 1 }}>
                           <Text style={styles.itemTitle} numberOfLines={1}>
                             {it.title}
@@ -645,7 +648,11 @@ export default function TripDetailScreen() {
                           partnerId: "expedia",
                           url: bookingLinks.hotelsUrl,
                           title: `Hotels in ${cityName}`,
-                          metadata: { city: cityName, startDate: trip.startDate, endDate: trip.endDate },
+                          metadata: {
+                            city: cityName,
+                            startDate: trip.startDate,
+                            endDate: trip.endDate,
+                          },
                         })
                       }
                     >
@@ -675,7 +682,11 @@ export default function TripDetailScreen() {
                           partnerId: "kiwitaxi",
                           url: bookingLinks.transfersUrl,
                           title: `Transfers in ${cityName}`,
-                          metadata: { city: cityName, startDate: trip.startDate, endDate: trip.endDate },
+                          metadata: {
+                            city: cityName,
+                            startDate: trip.startDate,
+                            endDate: trip.endDate,
+                          },
                         })
                       }
                     >
@@ -703,7 +714,9 @@ export default function TripDetailScreen() {
                     <Text style={styles.mapsInline}>Open maps search</Text>
                   </Pressable>
 
-                  {fxLoading ? <Text style={styles.mutedInline}>Loading match details…</Text> : null}
+                  {fxLoading ? (
+                    <Text style={styles.mutedInline}>Loading match details…</Text>
+                  ) : null}
                 </GlassCard>
               )}
 
@@ -744,7 +757,11 @@ export default function TripDetailScreen() {
                         partnerId: "safetywing",
                         url: bookingLinks.insuranceUrl,
                         title: `Travel insurance`,
-                        metadata: { city: cityName, startDate: trip.startDate, endDate: trip.endDate },
+                        metadata: {
+                          city: cityName,
+                          startDate: trip.startDate,
+                          endDate: trip.endDate,
+                        },
                       })
                     }
                   >
@@ -791,7 +808,11 @@ export default function TripDetailScreen() {
                 ) : (
                   <View style={{ gap: 10 }}>
                     {booked.map((it) => (
-                      <Pressable key={it.id} onPress={() => openSavedItem(it)} style={styles.noteRow}>
+                      <Pressable
+                        key={it.id}
+                        onPress={() => openSavedItem(it)}
+                        style={styles.noteRow}
+                      >
                         <View style={{ flex: 1 }}>
                           <Text style={styles.itemTitle} numberOfLines={1}>
                             {it.title}
@@ -1023,7 +1044,12 @@ const styles = StyleSheet.create({
   },
 
   bookBtnText: { color: theme.colors.text, fontWeight: "900" },
-  bookBtnSub: { marginTop: 4, color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12 },
+  bookBtnSub: {
+    marginTop: 4,
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
+    fontSize: 12,
+  },
 
   mapsInline: {
     marginTop: 10,
@@ -1044,7 +1070,12 @@ const styles = StyleSheet.create({
   },
 
   wideBtnTitle: { color: theme.colors.text, fontWeight: "900" },
-  wideBtnSub: { marginTop: 4, color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12 },
+  wideBtnSub: {
+    marginTop: 4,
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
+    fontSize: 12,
+  },
 
   chev: { color: theme.colors.textSecondary, fontSize: 24, marginTop: -2 },
 });
