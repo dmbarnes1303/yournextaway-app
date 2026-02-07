@@ -8,7 +8,6 @@ import { ProProvider } from "@/src/context/ProContext";
 import { bootstrapPartnerReturnPrompt } from "@/src/services/partnerReturnBootstrap";
 
 import { refreshFollowedMatches } from "@/src/services/followedMatchesRefresh";
-import { ensureNotificationsReady } from "@/src/services/followKickoffNotifications";
 
 export default function RootLayout() {
   // Guards against stacked listeners / intervals during Fast Refresh
@@ -27,10 +26,9 @@ export default function RootLayout() {
     // Phase-1 spine: partner click → return → “Booked?” prompt
     bootstrapPartnerReturnPrompt();
 
-    // Optional: pre-warm notifications.
-    // Product risk: this may prompt too early and get denied.
-    ensureNotificationsReady().catch(() => null);
-
+    // NOTE:
+    // Do NOT request notification permissions here.
+    // Request them only when the user enables kickoffConfirmed in the UI.
     const minMinutesBetweenRefreshes = 10;
     const intervalMinutes = 15;
 
@@ -117,7 +115,6 @@ export default function RootLayout() {
       }
 
       stopInterval();
-
       startedRef.current = false;
     };
   }, []);
@@ -141,13 +138,6 @@ export default function RootLayout() {
 
         {/* Modal */}
         <Stack.Screen name="modal" options={{ presentation: "modal" }} />
-
-        {/**
-         * NOTE:
-         * - Removed "fixture/[id]" because your app navigates to /match/[id].
-         * - Removed "city/[cityKey]" because it conflicts with city/[slug].
-         * If those files still exist, delete/rename them properly in the tree.
-         */}
       </Stack>
     </ProProvider>
   );
