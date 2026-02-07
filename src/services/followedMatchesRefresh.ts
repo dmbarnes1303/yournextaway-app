@@ -8,11 +8,13 @@ function cleanStr(v: unknown): string | null {
   return s ? s : null;
 }
 
+function clampLimit(v: unknown, min: number, max: number, fallback: number) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(min, Math.min(max, n));
+}
+
 function pickFixtureSnapshot(fx: any) {
-  // API-Football typical shape:
-  // fx.fixture.date, fx.fixture.venue.name/city
-  // fx.league.id/name/season/round
-  // fx.teams.home.id/name, fx.teams.away.id/name
   const kickoffIso = cleanStr(fx?.fixture?.date);
   const venue = cleanStr(fx?.fixture?.venue?.name);
   const city = cleanStr(fx?.fixture?.venue?.city);
@@ -42,29 +44,46 @@ function pickFixtureSnapshot(fx: any) {
   };
 }
 
-export async function refreshFollowedMatches(opts?: { limit?: number }) {
-  const limit = Math.max(1, Math.min(50, Number(opts?.limit ?? 25)));
+async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const results: R[] = new Array(items.length) as any;
+  let i = 0;
+
+  async function worker() {
+    while (i < items.length) {
+      const idx = i++;
+      results[idx] = await fn(items[idx]);
+    }
+  }
+
+  const n = Math.max(1, Math.min(limit, items.length));
+  await Promise.all(Array.from({ length: n }).map(worker));
+  return results;
+}
+
+export type RefreshResultRow = {
+  fixtureId: string;
+  refreshed: boolean;
+  notified: boolean;
+  error?: string;
+};
+
+export async function refreshFollowedMatches(opts?: { limit?: number; concurrency?: number }) {
+  const limit = clampLimit(opts?.limit, 1, 50, 25);
+  const concurrency = clampLimit(opts?.concurrency, 1, 6, 3);
 
   const store = useFollowStore.getState();
   const followed = store.followed.slice(0, limit);
 
-  const results: Array<{
-    fixtureId: string;
-    refreshed: boolean;
-    notified: boolean;
-    error?: string;
-  }> = [];
+  if (followed.length === 0) return [] as RefreshResultRow[];
 
-  for (const f of followed) {
-    const fixtureId = String(f.fixtureId ?? "").trim();
-    if (!fixtureId) continue;
+  const ids = followed
+    .map((f) => String(f.fixtureId ?? "").trim())
+    .filter(Boolean);
 
+  const rows = await mapLimit(ids, concurrency, async (fixtureId): Promise<RefreshResultRow> => {
     try {
       const fx = await getFixtureById(fixtureId);
-      if (!fx) {
-        results.push({ fixtureId, refreshed: false, notified: false, error: "no_fixture" });
-        continue;
-      }
+      if (!fx) return { fixtureId, refreshed: false, notified: false, error: "no_fixture" };
 
       const snap = pickFixtureSnapshot(fx);
 
@@ -80,14 +99,18 @@ export async function refreshFollowedMatches(opts?: { limit?: number }) {
         awayTeamId: snap.awayTeamId,
         homeName: snap.homeName,
         awayName: snap.awayName,
-        // kickoffLikelyTbc intentionally omitted → store will infer based on your heuristic
+        // kickoffLikelyTbc intentionally omitted → store infers via heuristic
       });
 
       let notified = false;
 
+      // “shouldNotifyKickoff” already means:
+      // - alerts.kickoffConfirmed enabled
+      // - kickoffIso actually changed (prev vs next)
       if (r?.existed && r.shouldNotifyKickoff) {
-        // Use human-readable names saved in store (or refreshed snapshot)
-        const latest = useFollowStore.getState().followed.find((x) => x.fixtureId === fixtureId) ?? null;
+        // Prefer store names (follow-time labels), fallback to refreshed snapshot
+        const latest =
+          useFollowStore.getState().followed.find((x) => x.fixtureId === fixtureId) ?? null;
 
         await notifyKickoffChanged({
           fixtureId,
@@ -98,21 +121,22 @@ export async function refreshFollowedMatches(opts?: { limit?: number }) {
           nextKickoffIso: r.nextKickoffIso,
         });
 
-        // Anti-spam: persist that we notified for this kickoffIso
-        useFollowStore.getState().markKickoffNotified(fixtureId, r.nextKickoffIso);
+        // No extra “notified” persistence needed:
+        // after applyFixtureUpdate, prevKickoffIso becomes nextKickoffIso,
+        // so future refreshes won’t re-trigger unless KO changes again.
         notified = true;
       }
 
-      results.push({ fixtureId, refreshed: true, notified });
+      return { fixtureId, refreshed: true, notified };
     } catch (e: any) {
-      results.push({
+      return {
         fixtureId,
         refreshed: false,
         notified: false,
         error: String(e?.message ?? "refresh_failed"),
-      });
+      };
     }
-  }
+  });
 
-  return results;
-}
+  return rows;
+  }
