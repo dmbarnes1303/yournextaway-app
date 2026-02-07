@@ -122,9 +122,7 @@ function buildTransportUrl(venue?: string, city?: string) {
   return `https://www.google.com/search?q=${enc(q)}`;
 }
 
-type ToastState =
-  | { visible: false }
-  | { visible: true; title: string; message?: string };
+type ToastState = { visible: false } | { visible: true; title: string; message?: string };
 
 export default function MatchDetailScreen() {
   const router = useRouter();
@@ -166,15 +164,29 @@ export default function MatchDetailScreen() {
   const [error, setError] = useState<string | null>(null);
   const [row, setRow] = useState<FixtureListRow | null>(null);
 
-  // follow store
-  const storeIsFollowing = useFollowStore((s) => s.isFollowing);
+  // follow store actions
   const toggleFollow = useFollowStore((s) => s.toggle);
   const upsertLatestSnapshot = useFollowStore((s) => s.upsertLatestSnapshot);
+
+  // IMPORTANT: subscribe to the boolean, not the isFollowing function
+  const fixtureIdFromRow = row?.fixture?.id != null ? String(row.fixture.id) : "";
+  const fixtureId = useMemo(() => fixtureIdFromRow || (id ?? ""), [fixtureIdFromRow, id]);
+
+  const followed = useFollowStore(
+    useCallback(
+      (s) => {
+        const fid = String(fixtureId ?? "").trim();
+        if (!fid) return false;
+        return s.followed.some((x) => x.fixtureId === fid);
+      },
+      [fixtureId]
+    )
+  );
 
   // sign-in UI
   const [email, setEmail] = useState("");
 
-  // non-blocking feedback toast
+  // non-blocking toast
   const [toast, setToast] = useState<ToastState>({ visible: false });
   const toastTimer = useRef<any>(null);
 
@@ -213,20 +225,6 @@ export default function MatchDetailScreen() {
         }
 
         setRow(r);
-
-        // Keep snapshot fresh if already followed (and harmless if not)
-        const fid = r?.fixture?.id != null ? String(r.fixture.id) : "";
-        if (fid && storeIsFollowing(fid)) {
-          upsertLatestSnapshot(fid, {
-            kickoffIso: kickoffIsoOrNull(r),
-            venue: r?.fixture?.venue?.name ? String(r.fixture.venue.name) : null,
-            city: r?.fixture?.venue?.city ? String(r.fixture.venue.city) : null,
-            homeTeamId: r?.teams?.home?.id ?? undefined,
-            awayTeamId: r?.teams?.away?.id ?? undefined,
-            leagueId: r?.league?.id ?? undefined,
-            season: (r as any)?.league?.season ?? routeSeason ?? undefined,
-          });
-        }
       } catch (e: any) {
         if (cancelled) return;
         setError(e?.message ?? "Failed to load match details.");
@@ -239,18 +237,7 @@ export default function MatchDetailScreen() {
     return () => {
       cancelled = true;
     };
-  }, [id, routeSeason, storeIsFollowing, upsertLatestSnapshot]);
-
-  const fixtureId = useMemo(() => {
-    const apiId = row?.fixture?.id;
-    if (apiId != null) return String(apiId);
-    return id ?? "";
-  }, [row, id]);
-
-  const followed = useMemo(
-    () => (fixtureId ? storeIsFollowing(fixtureId) : false),
-    [fixtureId, storeIsFollowing]
-  );
+  }, [id]);
 
   const home = row?.teams?.home?.name ?? "Home";
   const away = row?.teams?.away?.name ?? "Away";
@@ -340,11 +327,9 @@ export default function MatchDetailScreen() {
   const onToggleFollow = useCallback(() => {
     if (!fixtureId) return;
 
-    // Determine NEXT state up front (fixes backwards messaging).
-    const willFollow = !storeIsFollowing(fixtureId);
+    const willFollow = !followed;
 
-    // Never block follow. Missing ids are normal in early data.
-    // We store what we have and keep snapshots fresh later.
+    // Never block follow — store what we have.
     const homeTeamId = row?.teams?.home?.id ?? 0;
     const awayTeamId = row?.teams?.away?.id ?? 0;
 
@@ -362,13 +347,8 @@ export default function MatchDetailScreen() {
       city: row?.fixture?.venue?.city ? String(row.fixture.venue.city) : null,
     });
 
-    if (!willFollow) {
-      showToast("Unfollowed", "Removed from your followed list on this device.");
-      return;
-    }
-
-    // If we just followed, also upsert a snapshot immediately (best-effort).
-    if (row) {
+    // Best-effort: snapshot right away (doesn't affect instant UI now that followed is reactive)
+    if (row && willFollow) {
       upsertLatestSnapshot(fixtureId, {
         kickoffIso: kickoffIsoOrNull(row),
         venue: row?.fixture?.venue?.name ? String(row.fixture.venue.name) : null,
@@ -380,6 +360,11 @@ export default function MatchDetailScreen() {
       });
     }
 
+    if (!willFollow) {
+      showToast("Unfollowed", "Removed from your followed list on this device.");
+      return;
+    }
+
     const line1 = tbc ? "We’ll alert you when kickoff is confirmed." : "We’ll alert you if kickoff changes.";
     const line2 = user
       ? "Sync + notifications can be added next."
@@ -388,7 +373,7 @@ export default function MatchDetailScreen() {
     showToast("Following", `${line1} ${line2}`);
   }, [
     fixtureId,
-    storeIsFollowing,
+    followed,
     toggleFollow,
     row,
     effectiveLeagueId,
@@ -473,13 +458,12 @@ export default function MatchDetailScreen() {
                   </Text>
                 </View>
 
+                {/* This now appears immediately because `followed` is reactive */}
                 {followed ? (
                   <View style={styles.followInfo}>
                     <Text style={styles.followInfoTitle}>Following</Text>
                     <Text style={styles.followInfoBody}>
-                      {tbc
-                        ? "We’ll notify you when kickoff time is confirmed."
-                        : "We’ll notify you if kickoff time changes."}
+                      {tbc ? "We’ll notify you when kickoff time is confirmed." : "We’ll notify you if kickoff time changes."}
                     </Text>
                   </View>
                 ) : null}
@@ -581,7 +565,9 @@ export default function MatchDetailScreen() {
 
                 <View style={styles.opsItem}>
                   <Text style={styles.opsTitle}>Bag policy and entry</Text>
-                  <Text style={styles.opsBody}>Policies vary. If you’re carrying a bag, double-check restrictions before you travel.</Text>
+                  <Text style={styles.opsBody}>
+                    Policies vary. If you’re carrying a bag, double-check restrictions before you travel.
+                  </Text>
                   <Pressable onPress={() => safeOpenUrl(stadiumInfoUrl)} style={styles.inlineBtn}>
                     <Text style={styles.inlineBtnText}>Search stadium entry rules</Text>
                   </Pressable>
@@ -611,7 +597,6 @@ export default function MatchDetailScreen() {
           ) : null}
         </ScrollView>
 
-        {/* Non-blocking toast */}
         {toast.visible ? (
           <View pointerEvents="none" style={styles.toastWrap}>
             <View style={styles.toast}>
