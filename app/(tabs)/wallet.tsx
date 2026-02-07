@@ -8,6 +8,7 @@ import {
   Pressable,
   ActivityIndicator,
   Alert,
+  Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -31,6 +32,7 @@ import {
   openAttachment,
   deleteAttachmentFile,
 } from "@/src/services/walletAttachments";
+import { confirmBookedAndOfferProof } from "@/src/services/bookingProof";
 
 /* -------------------------------------------------------------------------- */
 /* Helpers */
@@ -101,6 +103,10 @@ function attachmentLabel(att: WalletAttachment) {
   return name ? `${kind}: ${name}` : `${kind} attachment`;
 }
 
+function defer(fn: () => void) {
+  setTimeout(fn, 60);
+}
+
 /**
  * Option B reality:
  * - saved items may need to become booked manually later
@@ -136,7 +142,7 @@ async function forceToBooked(itemId: string) {
       return;
     }
 
-    // archived -> (restore elsewhere)
+    // archived -> restore elsewhere
   } catch {
     // ignore
   }
@@ -273,6 +279,11 @@ export default function WalletScreen() {
   const markBookedFromWallet = useCallback(async (item: SavedItem) => {
     try {
       await forceToBooked(item.id);
+
+      // Keep UX consistent everywhere: confirm + offer proof upload
+      defer(() => {
+        confirmBookedAndOfferProof(item.id).catch(() => null);
+      });
     } catch {
       Alert.alert("Couldn’t mark booked", "Try again.");
     }
@@ -284,29 +295,39 @@ export default function WalletScreen() {
       const attCount = getAttachments(item).length;
       const attLine = attCount ? `\n\nAttachments: ${attCount}` : `\n\nAttachments: none`;
 
-      const buttons: any[] = [
-        { text: "Close", style: "cancel" },
-        item.partnerUrl ? { text: "Open link", onPress: () => openItemLink(item) } : undefined,
-        {
-          text: attCount ? `Manage attachments (${attCount})` : "Add attachment",
-          onPress: () => {
-            if (attCount) setManageItemId(item.id);
-            else addAttachment(item);
-          },
+      // Build actions in priority order.
+      const actions: any[] = [];
+
+      // Always include Close (Android requires a cancel-ish path)
+      actions.push({ text: "Close", style: "cancel" });
+
+      if (item.partnerUrl) {
+        actions.push({ text: "Open link", onPress: () => openItemLink(item) });
+      }
+
+      actions.push({
+        text: attCount ? `Manage attachments (${attCount})` : "Add attachment",
+        onPress: () => {
+          if (attCount) setManageItemId(item.id);
+          else addAttachment(item);
         },
+      });
 
-        // In Saved/Booked views, allow manual "Mark booked" (useful if they booked later)
-        mode !== "archived"
-          ? { text: "Mark booked", onPress: () => markBookedFromWallet(item) }
-          : undefined,
+      // Only show "Mark booked" if not archived
+      if (mode !== "archived") {
+        actions.push({ text: "Mark booked", onPress: () => markBookedFromWallet(item) });
+      }
 
-        mode === "archived"
-          ? { text: "Restore", onPress: () => restoreItem(item) }
-          : { text: "Archive", style: "destructive", onPress: () => archiveItem(item) },
-      ].filter(Boolean);
+      if (mode === "archived") {
+        actions.push({ text: "Restore", onPress: () => restoreItem(item) });
+      } else {
+        actions.push({ text: "Archive", style: "destructive", onPress: () => archiveItem(item) });
+      }
 
-      // Android reliability: keep <= 4 buttons total
-      Alert.alert(item.title || "Wallet item", details + attLine, buttons.slice(0, 4), {
+      // HARD RULE: Android max 3 buttons.
+      const maxButtons = Platform.OS === "android" ? 3 : 5;
+
+      Alert.alert(item.title || "Wallet item", details + attLine, actions.slice(0, maxButtons), {
         cancelable: true,
       });
     },
@@ -352,7 +373,7 @@ export default function WalletScreen() {
             <Text style={styles.subtitle}>Your bookings, saved links, and stored proof</Text>
           </View>
 
-          {/* Attachment manager (reliable; no nested alerts) */}
+          {/* Attachment manager (reliable; avoids nested alerts) */}
           {managingItem && (
             <GlassCard style={styles.managerCard} strength="subtle">
               <View style={styles.managerHeader}>
