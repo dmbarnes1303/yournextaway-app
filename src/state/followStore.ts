@@ -51,14 +51,6 @@ export type FollowedMatch = {
 
   alerts: FollowAlertPrefs;
 
-  /**
-   * Anti-spam:
-   * We store the last kickoff "key" we already notified for.
-   * - ISO kickoff => that ISO string (minute precision from API is fine)
-   * - TBC/null   => "__TBC__"
-   */
-  kickoffNotifiedKey?: string | null;
-
   createdAt: string;
   lastSeenAt?: string;
 };
@@ -83,10 +75,7 @@ export type FollowSnapshot = {
   kickoffLikelyTbc?: boolean | null;
 };
 
-type FollowPayload = Omit<
-  FollowedMatch,
-  "createdAt" | "lastSeenAt" | "alerts" | "kickoffLikelyTbc" | "kickoffNotifiedKey"
-> & {
+type FollowPayload = Omit<FollowedMatch, "createdAt" | "lastSeenAt" | "alerts" | "kickoffLikelyTbc"> & {
   alerts?: Partial<FollowAlertPrefs>;
   kickoffLikelyTbc?: boolean | null;
 };
@@ -98,6 +87,11 @@ export type ApplyFixtureUpdateResult = {
   kickoffChanged: boolean;
   becameConfirmed: boolean;
 
+  /**
+   * True when:
+   * - user enabled alerts.kickoffConfirmed
+   * - kickoffIso changed (prev vs next)
+   */
   shouldNotifyKickoff: boolean;
 
   prevKickoffIso: string | null;
@@ -105,9 +99,6 @@ export type ApplyFixtureUpdateResult = {
 
   prevLikelyTbc: boolean | null;
   nextLikelyTbc: boolean | null;
-
-  prevNotifiedKey: string | null;
-  nextNotifiedKey: string | null;
 };
 
 type FollowState = {
@@ -123,21 +114,11 @@ type FollowState = {
   upsertKickoff: (fixtureId: string, kickoffIso: string | null) => void;
   upsertLatestSnapshot: (fixtureId: string, patch: FollowSnapshot) => void;
 
-  /**
-   * Phase 2 hook:
-   * Apply updates AND return “what changed” in one step so background refresh / push can key off it.
-   */
   applyFixtureUpdate: (fixtureId: string, patch: FollowSnapshot) => ApplyFixtureUpdateResult | null;
 
   setDefaultAlerts: (patch: Partial<FollowAlertPrefs>) => void;
   setAlertsForFixture: (fixtureId: string, patch: Partial<FollowAlertPrefs>) => void;
   toggleAlertForFixture: (fixtureId: string, key: keyof FollowAlertPrefs) => void;
-
-  /**
-   * Anti-spam hook:
-   * Persist that we have already notified for a given kickoff value.
-   */
-  markKickoffNotified: (fixtureId: string, kickoffIso: string | null) => void;
 
   clearAll: () => void;
 };
@@ -171,17 +152,12 @@ function mergeAlerts(base: FollowAlertPrefs, patch?: Partial<FollowAlertPrefs>):
   };
 }
 
-function kickoffKey(kickoffIso: string | null) {
-  const iso = String(kickoffIso ?? "").trim();
-  return iso ? iso : "__TBC__";
-}
-
 /**
  * Heuristic helper for “likely TBC”.
  * - Anything within 21 days: treat as confirmed.
  * - Otherwise: if >= threshold fixtures share same KO within (leagueId+season+round), treat as likely TBC.
  *
- * NOTE: This is imperfect by nature. It’s a best-effort signal, not truth.
+ * NOTE: It’s a best-effort signal, not truth.
  */
 function inferLikelyTbc(opts: {
   fixtureKickoffIso: string | null;
@@ -204,7 +180,7 @@ function inferLikelyTbc(opts: {
     clusterThreshold = 7,
   } = opts;
 
-  if (!fixtureKickoffIso) return true; // no KO => definitely TBC
+  if (!fixtureKickoffIso) return true;
 
   const d = new Date(fixtureKickoffIso);
   if (Number.isNaN(d.getTime())) return true;
@@ -213,7 +189,6 @@ function inferLikelyTbc(opts: {
   const days = ms / (1000 * 60 * 60 * 24);
   if (days <= daysConfirmedCutoff) return false;
 
-  // Need round to do reliable cluster inference. Without it, avoid over-claiming.
   const r = String(round ?? "").trim();
   if (!r) return null;
 
@@ -232,7 +207,6 @@ function inferLikelyTbc(opts: {
 
   if (sameKo.length >= clusterThreshold) return true;
 
-  // Not clustered enough to call it TBC.
   return false;
 }
 
@@ -287,6 +261,7 @@ const useFollowStore = create<FollowState>()(
             homeName: cleanStr(m.homeName),
             awayName: cleanStr(m.awayName),
             leagueName: cleanStr(m.leagueName),
+
             round: cleanStr(m.round),
 
             kickoffIso,
@@ -296,8 +271,6 @@ const useFollowStore = create<FollowState>()(
             city: m.city ?? null,
 
             alerts,
-
-            kickoffNotifiedKey: null,
 
             createdAt: nowIso(),
             lastSeenAt: nowIso(),
@@ -341,24 +314,30 @@ const useFollowStore = create<FollowState>()(
           followed: state.followed.map((x) => {
             if (x.fixtureId !== id) return x;
 
-            const nextKickoffIso = patch.kickoffIso !== undefined ? (patch.kickoffIso ?? null) : x.kickoffIso;
+            const nextKickoffIso =
+              patch.kickoffIso !== undefined ? (patch.kickoffIso ?? null) : x.kickoffIso;
+
             const nextRound = patch.round !== undefined ? cleanStr(patch.round) : x.round;
+
+            const nextLeagueId = patch.leagueId != null ? clampNum(patch.leagueId, x.leagueId) : x.leagueId;
+            const nextSeason = patch.season != null ? clampNum(patch.season, x.season) : x.season;
 
             const nextLikelyTbc =
               patch.kickoffLikelyTbc !== undefined
                 ? patch.kickoffLikelyTbc
                 : inferLikelyTbc({
                     fixtureKickoffIso: nextKickoffIso,
-                    leagueId: patch.leagueId != null ? clampNum(patch.leagueId, x.leagueId) : x.leagueId,
-                    season: patch.season != null ? clampNum(patch.season, x.season) : x.season,
+                    leagueId: nextLeagueId,
+                    season: nextSeason,
                     round: nextRound,
                     allFollowed: state.followed,
                   });
 
             return {
               ...x,
-              leagueId: patch.leagueId != null ? clampNum(patch.leagueId, x.leagueId) : x.leagueId,
-              season: patch.season != null ? clampNum(patch.season, x.season) : x.season,
+
+              leagueId: nextLeagueId,
+              season: nextSeason,
 
               homeTeamId: patch.homeTeamId != null ? clampNum(patch.homeTeamId, x.homeTeamId) : x.homeTeamId,
               awayTeamId: patch.awayTeamId != null ? clampNum(patch.awayTeamId, x.awayTeamId) : x.awayTeamId,
@@ -366,10 +345,11 @@ const useFollowStore = create<FollowState>()(
               homeName: patch.homeName !== undefined ? cleanStr(patch.homeName) : x.homeName,
               awayName: patch.awayName !== undefined ? cleanStr(patch.awayName) : x.awayName,
               leagueName: patch.leagueName !== undefined ? cleanStr(patch.leagueName) : x.leagueName,
+
               round: nextRound,
 
               kickoffIso: nextKickoffIso,
-              kickoffLikelyTbc: nextLikelyTbc ?? x.kickoffLikelyTbc ?? null,
+              kickoffLikelyTbc: (nextLikelyTbc ?? x.kickoffLikelyTbc ?? null) as any,
 
               venue: patch.venue !== undefined ? (patch.venue ?? null) : x.venue,
               city: patch.city !== undefined ? (patch.city ?? null) : x.city,
@@ -384,8 +364,8 @@ const useFollowStore = create<FollowState>()(
         const id = normalizeId(fixtureId);
         if (!id) return null;
 
-        const stateBefore = get();
-        const existing = stateBefore.followed.find((x) => x.fixtureId === id);
+        const before = get();
+        const existing = before.followed.find((x) => x.fixtureId === id);
 
         if (!existing) {
           return {
@@ -398,17 +378,15 @@ const useFollowStore = create<FollowState>()(
             nextKickoffIso: null,
             prevLikelyTbc: null,
             nextLikelyTbc: null,
-            prevNotifiedKey: null,
-            nextNotifiedKey: null,
           };
         }
 
         const prevKickoffIso = existing.kickoffIso ?? null;
         const prevLikelyTbc = existing.kickoffLikelyTbc ?? null;
 
-        const nextKickoffIso = patch.kickoffIso !== undefined ? (patch.kickoffIso ?? null) : prevKickoffIso;
+        const nextKickoffIso =
+          patch.kickoffIso !== undefined ? (patch.kickoffIso ?? null) : prevKickoffIso;
 
-        // Compute next round/league/season first (used for inference)
         const nextLeagueId = patch.leagueId != null ? clampNum(patch.leagueId, existing.leagueId) : existing.leagueId;
         const nextSeason = patch.season != null ? clampNum(patch.season, existing.season) : existing.season;
         const nextRound = patch.round !== undefined ? cleanStr(patch.round) : existing.round;
@@ -421,31 +399,23 @@ const useFollowStore = create<FollowState>()(
                 leagueId: nextLeagueId,
                 season: nextSeason,
                 round: nextRound,
-                allFollowed: stateBefore.followed,
+                allFollowed: before.followed,
               });
 
         const kickoffChanged = prevKickoffIso !== nextKickoffIso;
+
+        // “became confirmed” = previously TBC-ish (or null) → now likely confirmed
         const becameConfirmed = (prevLikelyTbc === true || prevKickoffIso === null) && nextLikelyTbc === false;
 
-        const prevNotifiedKey = cleanStr(existing.kickoffNotifiedKey) ?? null;
-        const nextNotifiedKey = kickoffKey(nextKickoffIso);
+        const shouldNotifyKickoff = !!existing.alerts?.kickoffConfirmed && kickoffChanged;
 
-        const wantsKickoffAlerts = !!existing.alerts?.kickoffConfirmed;
-
-        // Notify if:
-        // - user enabled kickoffConfirmed
-        // - kickoff changed (diff)
-        // - we have NOT already notified for this new kickoff key
-        const shouldNotifyKickoff =
-          wantsKickoffAlerts && kickoffChanged && (prevNotifiedKey == null || prevNotifiedKey !== nextNotifiedKey);
-
-        // Apply patch in-store (single write)
+        // Apply patch (single write)
         get().upsertLatestSnapshot(id, {
           ...patch,
           kickoffIso: nextKickoffIso,
-          round: nextRound,
           leagueId: nextLeagueId,
           season: nextSeason,
+          round: nextRound,
           kickoffLikelyTbc: nextLikelyTbc ?? null,
         });
 
@@ -459,12 +429,11 @@ const useFollowStore = create<FollowState>()(
           nextKickoffIso,
           prevLikelyTbc,
           nextLikelyTbc: (nextLikelyTbc ?? null) as any,
-          prevNotifiedKey,
-          nextNotifiedKey,
         };
       },
 
-      setDefaultAlerts: (patch) => set((state) => ({ defaultAlerts: mergeAlerts(state.defaultAlerts, patch) })),
+      setDefaultAlerts: (patch) =>
+        set((state) => ({ defaultAlerts: mergeAlerts(state.defaultAlerts, patch) })),
 
       setAlertsForFixture: (fixtureId, patch) => {
         const id = normalizeId(fixtureId);
@@ -490,22 +459,11 @@ const useFollowStore = create<FollowState>()(
         }));
       },
 
-      markKickoffNotified: (fixtureId, kickoffIso) => {
-        const id = normalizeId(fixtureId);
-        if (!id) return;
-
-        const key = kickoffKey(kickoffIso ?? null);
-
-        set((state) => ({
-          followed: state.followed.map((x) => (x.fixtureId === id ? { ...x, kickoffNotifiedKey: key } : x)),
-        }));
-      },
-
       clearAll: () => set({ followed: [] }),
     }),
     {
       name: "followedMatches",
-      version: 6,
+      version: 7,
       storage: createJSONStorage(() => followPersistStorage),
       partialize: (state) => ({ followed: state.followed, defaultAlerts: state.defaultAlerts }),
 
@@ -525,11 +483,6 @@ const useFollowStore = create<FollowState>()(
 
             const alerts = mergeAlerts(defaultAlerts, x?.alerts ?? undefined);
 
-            const kickoffIso = x?.kickoffIso ?? null;
-
-            // Accept legacy fields if present, otherwise null
-            const kickoffNotifiedKey = cleanStr(x?.kickoffNotifiedKey) ?? null;
-
             return {
               fixtureId: id,
 
@@ -542,9 +495,10 @@ const useFollowStore = create<FollowState>()(
               homeName: cleanStr(x?.homeName),
               awayName: cleanStr(x?.awayName),
               leagueName: cleanStr(x?.leagueName),
+
               round: cleanStr(x?.round),
 
-              kickoffIso,
+              kickoffIso: x?.kickoffIso ?? null,
               kickoffLikelyTbc:
                 x?.kickoffLikelyTbc === true ? true : x?.kickoffLikelyTbc === false ? false : null,
 
@@ -552,8 +506,6 @@ const useFollowStore = create<FollowState>()(
               city: x?.city ?? null,
 
               alerts,
-
-              kickoffNotifiedKey,
 
               createdAt: x?.createdAt ?? nowIso(),
               lastSeenAt: x?.lastSeenAt ?? x?.createdAt ?? nowIso(),
