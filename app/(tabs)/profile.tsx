@@ -147,10 +147,10 @@ function normalizeStr(v: unknown) {
 }
 
 /**
- * Heuristic TBC detection for FOLLOWED matches:
+ * Fallback heuristic ONLY when store has kickoffLikelyTbc === null:
  * - If no kickoffIso => TBC
- * - If kickoff <= 21 days away => confirmed
- * - If >= 7 fixtures in same (leagueId+season+round) share same kickoff minute => likely placeholder => TBC
+ * - If <= 21 days away => confirmed
+ * - Else: if >= 7 followed fixtures in same (leagueId+season+round) share same kickoff minute => likely placeholder => TBC
  */
 function computeLikelyPlaceholderTbcIdsFromFollowed(followed: FollowedMatch[]) {
   const CONFIRMED_WITHIN_DAYS = 21;
@@ -218,17 +218,29 @@ function computeLikelyPlaceholderTbcIdsFromFollowed(followed: FollowedMatch[]) {
   return out;
 }
 
-function isKickoffLikelyTbcForFollowed(m: FollowedMatch, likelyTbcIds: Set<string>) {
-  const CONFIRMED_WITHIN_DAYS = 21;
+function kickoffStateForFollowed(m: FollowedMatch, fallbackLikelyTbcIds: Set<string>) {
+  // Store-first:
+  // kickoffLikelyTbc:
+  //   true  => TBC
+  //   false => confirmed
+  //   null  => unknown, use fallback inference
+  const storeFlag = (m as any)?.kickoffLikelyTbc;
+  if (storeFlag === true) return { isTbc: true, secondary: "TV schedule pending" };
+  if (storeFlag === false) return { isTbc: false, secondary: null };
 
+  // Unknown => fallback:
   const id = String(m.fixtureId ?? "").trim();
   const iso = String(m.kickoffIso ?? "").trim();
 
-  if (!iso) return true;
-  if (daysUntilIso(iso) <= CONFIRMED_WITHIN_DAYS) return false;
+  if (!iso) return { isTbc: true, secondary: "Kickoff time not set yet" };
 
-  if (id && likelyTbcIds.has(id)) return true;
-  return false;
+  // within 21 days => treat as confirmed for UX
+  if (daysUntilIso(iso) <= 21) return { isTbc: false, secondary: null };
+
+  if (id && fallbackLikelyTbcIds.has(id)) return { isTbc: true, secondary: "TV schedule pending" };
+
+  // if we can't infer, be conservative: don't claim "confirmed"
+  return { isTbc: true, secondary: "Kickoff may change" };
 }
 
 function formatLastRefreshed(ms: number | null) {
@@ -375,7 +387,7 @@ export default function ProfileScreen() {
 
   const unfollow = useFollowStore((s) => s.unfollow);
 
-  // IMPORTANT: we want batch update + default update together
+  // IMPORTANT: batch update + default update together
   const setKickoffConfirmedDefaultAndAll = useFollowStore((s) => s.setKickoffConfirmedDefaultAndAll);
   const defaultAlerts = useFollowStore((s) => s.defaultAlerts);
 
@@ -435,7 +447,8 @@ export default function ProfileScreen() {
 
   const followedPreview = useMemo(() => followedSorted.slice(0, 6), [followedSorted]);
 
-  const likelyTbcIds = useMemo(() => computeLikelyPlaceholderTbcIdsFromFollowed(followed), [followed]);
+  // Fallback inference only used when store kickoffLikelyTbc is null
+  const fallbackLikelyTbcIds = useMemo(() => computeLikelyPlaceholderTbcIdsFromFollowed(followed), [followed]);
 
   // Load persisted settings once
   useEffect(() => {
@@ -546,7 +559,7 @@ export default function ProfileScreen() {
   const openFAQ = useCallback(() => {
     showInfo(
       "FAQ",
-      "How it works:\n• Start with a fixture\n• Follow it to get kickoff-confirmed alerts\n• Save it as a trip\n• Build everything else in one hub (travel, stay, tickets, what to do)\n\nIf anything feels unclear, we tighten the flow."
+      "How it works:\n• Start with a fixture\n• Follow it for kickoff alerts\n• Save it as a trip\n• Build everything else in one place (travel, stay, tickets, what to do)\n\nIf anything feels unclear, we tighten the flow."
     );
   }, []);
 
@@ -584,7 +597,7 @@ export default function ProfileScreen() {
       const id = String(m.fixtureId ?? "").trim();
       if (!id) return;
 
-      Alert.alert("Unfollow match?", "You’ll stop getting kickoff-confirmed alerts for this match.", [
+      Alert.alert("Unfollow match?", "You’ll stop getting kickoff alerts for this match.", [
         { text: "Cancel", style: "cancel" },
         { text: "Unfollow", style: "destructive", onPress: () => unfollow(id) },
       ]);
@@ -770,7 +783,7 @@ export default function ProfileScreen() {
                 <Text style={styles.followEmptyTitle}>You’re not following any matches</Text>
                 <Text style={styles.followEmptyBody}>
                   Open a match and tap <Text style={{ fontWeight: "900", color: theme.colors.text }}>Follow</Text>. We’ll
-                  notify you if kickoff is confirmed/changes.
+                  notify you if kickoff changes.
                 </Text>
               </View>
             ) : (
@@ -780,8 +793,7 @@ export default function ProfileScreen() {
                   const title = matchTitle(m);
                   const league = leagueLine(m);
 
-                  const kickoffLikelyTbc = isKickoffLikelyTbcForFollowed(m, likelyTbcIds);
-                  const kickoffChip = kickoffLikelyTbc ? "Kickoff TBC" : "Kickoff set";
+                  const ko = kickoffStateForFollowed(m, fallbackLikelyTbcIds);
 
                   return (
                     <View key={m.fixtureId} style={[styles.followRow, last && styles.followRowLast]}>
@@ -806,9 +818,22 @@ export default function ProfileScreen() {
                         </Text>
 
                         <View style={styles.followTagRow}>
-                          <View style={styles.followTag}>
-                            <Text style={styles.followTagText}>{kickoffChip}</Text>
-                          </View>
+                          {ko.isTbc ? (
+                            <>
+                              <View style={[styles.followTag, styles.followTagTbc]}>
+                                <Text style={[styles.followTagText, styles.followTagTextTbc]}>Kickoff TBC</Text>
+                              </View>
+                              {ko.secondary ? (
+                                <View style={styles.followTag}>
+                                  <Text style={styles.followTagText}>{ko.secondary}</Text>
+                                </View>
+                              ) : null}
+                            </>
+                          ) : (
+                            <View style={[styles.followTag, styles.followTagConfirmed]}>
+                              <Text style={[styles.followTagText, styles.followTagTextConfirmed]}>Kickoff confirmed</Text>
+                            </View>
+                          )}
 
                           {m.alerts?.kickoffConfirmed ? (
                             <View style={[styles.followTag, styles.followTagOn]}>
@@ -832,7 +857,7 @@ export default function ProfileScreen() {
                 {followingCount > followedPreview.length ? (
                   <View style={styles.followFooterNote}>
                     <Text style={styles.followFooterText}>
-                      Showing {followedPreview.length} of {followingCount}. (We can add a “View all” screen next.)
+                      Showing {followedPreview.length} of {followingCount}. (Add “View all” later.)
                     </Text>
                   </View>
                 ) : null}
@@ -854,7 +879,12 @@ export default function ProfileScreen() {
               onPress={() => setActivePicker("airport")}
             />
             <Row title="Plan" subtitle="Free or Premium" value={planSummary} onPress={() => setActivePicker("plan")} />
-            <Row title="Currency" subtitle="Budgets and comparisons" value={currency} onPress={() => setActivePicker("currency")} />
+            <Row
+              title="Currency"
+              subtitle="Budgets and comparisons"
+              value={currency}
+              onPress={() => setActivePicker("currency")}
+            />
             <Row title="Language" subtitle="App language" value={language} onPress={() => setActivePicker("language")} />
             <Row
               title="Budget"
@@ -1203,6 +1233,13 @@ const styles = StyleSheet.create({
   followTagOn: { borderColor: "rgba(79,224,138,0.35)", backgroundColor: "rgba(79,224,138,0.10)" },
   followTagText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: theme.fontSize.xs },
   followTagTextOn: { color: "rgba(79,224,138,0.92)" },
+
+  // New: explicit kickoff chips
+  followTagTbc: { borderColor: "rgba(255,200,0,0.22)", backgroundColor: "rgba(255,200,0,0.06)" },
+  followTagTextTbc: { color: "rgba(255,220,140,0.92)" },
+
+  followTagConfirmed: { borderColor: "rgba(0,255,136,0.28)", backgroundColor: "rgba(0,255,136,0.08)" },
+  followTagTextConfirmed: { color: "rgba(79,224,138,0.92)" },
 
   unfollowBtn: {
     borderRadius: 12,
