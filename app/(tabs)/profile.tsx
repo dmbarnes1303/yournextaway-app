@@ -21,7 +21,11 @@ import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
 import storage from "@/src/services/storage";
 
-import useFollowStore from "@/src/state/followStore";
+import useFollowStore, { type FollowedMatch } from "@/src/state/followStore";
+
+/* -------------------------------------------------------------------------- */
+/* Row UI */
+/* -------------------------------------------------------------------------- */
 
 type RowProps = {
   title: string;
@@ -65,6 +69,10 @@ function showInfo(title: string, body: string) {
   Alert.alert(title, body);
 }
 
+/* -------------------------------------------------------------------------- */
+/* Helpers */
+/* -------------------------------------------------------------------------- */
+
 function getCountryCodeBestEffort(): string {
   try {
     const locale = Intl.DateTimeFormat().resolvedOptions().locale || "";
@@ -83,11 +91,35 @@ function getCountryCodeBestEffort(): string {
   return "GB";
 }
 
+function safeIsoToUkDateTime(iso?: string | null) {
+  if (!iso) return "Kickoff: TBC";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "Kickoff: TBC";
+  return d.toLocaleString("en-GB", {
+    weekday: "short",
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function compactPlace(venue?: string | null, city?: string | null) {
+  const v = String(venue ?? "").trim();
+  const c = String(city ?? "").trim();
+  const parts = [v, c].filter(Boolean);
+  return parts.length ? parts.join(" • ") : "Venue: —";
+}
+
+/* -------------------------------------------------------------------------- */
+/* Storage keys */
+/* -------------------------------------------------------------------------- */
+
 const STORAGE_KEYS = {
   seenLanding: "yna:seenLanding",
   setupComplete: "yna:setupComplete",
 
-  // Optional plan (not a gate)
   plan: "yna:plan",
 
   homeAirport: "yna:profile.homeAirport",
@@ -99,6 +131,10 @@ const STORAGE_KEYS = {
 
 type PlanValue = "not_set" | "free" | "premium";
 type AlertsValue = "On" | "Off";
+
+/* -------------------------------------------------------------------------- */
+/* Options */
+/* -------------------------------------------------------------------------- */
 
 const AIRPORTS_BY_COUNTRY: Record<string, SelectOption[]> = {
   GB: [
@@ -190,6 +226,10 @@ function planLabel(plan: PlanValue) {
   return "Not set";
 }
 
+/* -------------------------------------------------------------------------- */
+/* Screen */
+/* -------------------------------------------------------------------------- */
+
 export default function ProfileScreen() {
   const router = useRouter();
   const { width } = useWindowDimensions();
@@ -198,7 +238,13 @@ export default function ProfileScreen() {
   const displayName = useMemo(() => "Guest Traveller", []);
   const email = useMemo(() => "Not Signed In", []);
 
-  const followingCount = useFollowStore((s) => s.followed.length);
+  // IMPORTANT: subscribe to derived state so UI updates immediately
+  const followed = useFollowStore((s) => s.followed);
+  const followingCount = followed.length;
+
+  const unfollow = useFollowStore((s) => s.unfollow);
+  const setDefaultAlerts = useFollowStore((s) => s.setDefaultAlerts);
+  const defaultAlerts = useFollowStore((s) => s.defaultAlerts);
 
   const [loading, setLoading] = useState(true);
 
@@ -239,6 +285,15 @@ export default function ProfileScreen() {
       { label: `${currency} 750`, value: "750" },
     ];
   }, [currency]);
+
+  // Following list presentation: newest first already, but we’ll defensively sort by createdAt desc
+  const followedSorted = useMemo(() => {
+    const copy = [...followed];
+    copy.sort((a, b) => String(b.createdAt ?? "").localeCompare(String(a.createdAt ?? "")));
+    return copy;
+  }, [followed]);
+
+  const followedPreview = useMemo(() => followedSorted.slice(0, 6), [followedSorted]);
 
   // Load persisted settings once
   useEffect(() => {
@@ -306,7 +361,6 @@ export default function ProfileScreen() {
         setSetupComplete(true);
         router.replace("/(tabs)/home");
       } catch {
-        // Even if persistence fails, keep UX moving.
         setSetupComplete(true);
         router.replace("/(tabs)/home");
       }
@@ -354,7 +408,7 @@ export default function ProfileScreen() {
   const openFAQ = useCallback(() => {
     showInfo(
       "FAQ",
-      "How it works:\n• Start with a fixture\n• Save it as a trip\n• Build everything else in one hub (travel, stay, tickets, what to do)\n\nIf anything feels unclear, we tighten the flow."
+      "How it works:\n• Start with a fixture\n• Follow it to get kickoff-confirmed alerts\n• Save it as a trip\n• Build everything else in one hub (travel, stay, tickets, what to do)\n\nIf anything feels unclear, we tighten the flow."
     );
   }, []);
 
@@ -378,6 +432,32 @@ export default function ProfileScreen() {
 
   const planSummary = useMemo(() => planLabel(plan), [plan]);
 
+  const openMatch = useCallback(
+    (fixtureId: string) => {
+      const id = String(fixtureId ?? "").trim();
+      if (!id) return;
+      router.push({ pathname: "/match/[id]", params: { id } } as any);
+    },
+    [router]
+  );
+
+  const confirmUnfollow = useCallback(
+    (m: FollowedMatch) => {
+      const id = String(m.fixtureId ?? "").trim();
+      if (!id) return;
+
+      Alert.alert("Unfollow match?", "You’ll stop getting kickoff-confirmed alerts for this match.", [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Unfollow",
+          style: "destructive",
+          onPress: () => unfollow(id),
+        },
+      ]);
+    },
+    [unfollow]
+  );
+
   return (
     <Background imageUrl={getBackground("profile")} overlayOpacity={0.78}>
       <SafeAreaView style={styles.container} edges={["top"]}>
@@ -390,7 +470,11 @@ export default function ProfileScreen() {
             </View>
 
             <View style={[styles.logoMask, { width: logoSize, height: logoSize }]} pointerEvents="none">
-              <Image source={LOGO} style={{ width: logoSize, height: logoSize, transform: [{ scale: 1.18 }] }} resizeMode="cover" />
+              <Image
+                source={LOGO}
+                style={{ width: logoSize, height: logoSize, transform: [{ scale: 1.18 }] }}
+                resizeMode="cover"
+              />
             </View>
           </View>
 
@@ -438,6 +522,92 @@ export default function ProfileScreen() {
                 <Text style={styles.btnMeta}>Show Landing next launch</Text>
               </Pressable>
             </View>
+          </GlassCard>
+
+          {/* FOLLOWING (THIS is what you were missing) */}
+          <GlassCard style={[styles.card, { padding: 0 }]} strength="subtle" noPadding>
+            <View style={styles.listHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.sectionH}>Following</Text>
+                <Text style={styles.listSub}>
+                  Kickoff-confirmed alerts (Phase 1: local). {followingCount ? `${followingCount} saved.` : "None yet."}
+                </Text>
+              </View>
+
+              <View style={styles.followingDefaultsPill}>
+                <Text style={styles.followingDefaultsKicker}>Default alert</Text>
+                <View style={styles.followingDefaultsRow}>
+                  <Text style={styles.followingDefaultsValue}>Kickoff</Text>
+                  <Switch
+                    value={!!defaultAlerts.kickoffConfirmed}
+                    onValueChange={(v) => setDefaultAlerts({ kickoffConfirmed: v })}
+                  />
+                </View>
+              </View>
+            </View>
+
+            {followedPreview.length === 0 ? (
+              <View style={styles.followEmpty}>
+                <Text style={styles.followEmptyTitle}>You’re not following any matches</Text>
+                <Text style={styles.followEmptyBody}>
+                  Open a match and tap <Text style={{ fontWeight: "900", color: theme.colors.text }}>Follow</Text>. We’ll
+                  alert you when kickoff is confirmed/changes.
+                </Text>
+              </View>
+            ) : (
+              <>
+                {followedPreview.map((m, idx) => {
+                  const last = idx === followedPreview.length - 1;
+                  return (
+                    <View key={m.fixtureId} style={[styles.followRow, last && styles.followRowLast]}>
+                      <Pressable
+                        onPress={() => openMatch(m.fixtureId)}
+                        style={({ pressed }) => [styles.followRowMain, { opacity: pressed ? 0.85 : 1 }]}
+                      >
+                        <Text style={styles.followRowTitle} numberOfLines={1}>
+                          Match #{m.fixtureId}
+                        </Text>
+
+                        <Text style={styles.followRowSub} numberOfLines={1}>
+                          {safeIsoToUkDateTime(m.kickoffIso)}
+                          {" • "}
+                          {compactPlace(m.venue, m.city)}
+                        </Text>
+
+                        <View style={styles.followTagRow}>
+                          <View style={styles.followTag}>
+                            <Text style={styles.followTagText}>
+                              {m.kickoffIso ? "Kickoff set" : "Kickoff TBC"}
+                            </Text>
+                          </View>
+                          {m.alerts?.kickoffConfirmed ? (
+                            <View style={[styles.followTag, styles.followTagOn]}>
+                              <Text style={[styles.followTagText, styles.followTagTextOn]}>Alert on</Text>
+                            </View>
+                          ) : (
+                            <View style={styles.followTag}>
+                              <Text style={styles.followTagText}>Alert off</Text>
+                            </View>
+                          )}
+                        </View>
+                      </Pressable>
+
+                      <Pressable onPress={() => confirmUnfollow(m)} style={styles.unfollowBtn}>
+                        <Text style={styles.unfollowText}>Unfollow</Text>
+                      </Pressable>
+                    </View>
+                  );
+                })}
+
+                {followingCount > followedPreview.length ? (
+                  <View style={styles.followFooterNote}>
+                    <Text style={styles.followFooterText}>
+                      Showing {followedPreview.length} of {followingCount}. (We can add a “View all” screen next.)
+                    </Text>
+                  </View>
+                ) : null}
+              </>
+            )}
           </GlassCard>
 
           {/* DEFAULTS */}
@@ -554,6 +724,10 @@ export default function ProfileScreen() {
     </Background>
   );
 }
+
+/* -------------------------------------------------------------------------- */
+/* Styles */
+/* -------------------------------------------------------------------------- */
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
@@ -685,14 +859,15 @@ const styles = StyleSheet.create({
   },
   btnGhostText: { color: theme.colors.textSecondary, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.sm },
 
-  btnDisabled: { opacity: 0.6 },
-
   btnMeta: { color: theme.colors.textTertiary, fontSize: theme.fontSize.xs, fontWeight: "800" },
 
   listHeader: {
     paddingHorizontal: theme.spacing.lg,
     paddingTop: theme.spacing.lg,
     paddingBottom: 10,
+    flexDirection: "row",
+    gap: 12,
+    alignItems: "flex-start",
   },
 
   listSub: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, fontWeight: "700" },
@@ -728,6 +903,75 @@ const styles = StyleSheet.create({
   switchWrap: { marginRight: 2 },
 
   chev: { color: theme.colors.textSecondary, fontSize: 26, marginTop: -2 },
+
+  /* ------------------------------ Following UI ----------------------------- */
+
+  followingDefaultsPill: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    minWidth: 165,
+  },
+  followingDefaultsKicker: { color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: theme.fontWeight.black },
+  followingDefaultsRow: { marginTop: 6, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
+  followingDefaultsValue: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.sm },
+
+  followEmpty: {
+    paddingHorizontal: theme.spacing.lg,
+    paddingTop: 6,
+    paddingBottom: theme.spacing.lg,
+  },
+  followEmptyTitle: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.md },
+  followEmptyBody: { marginTop: 6, color: theme.colors.textSecondary, fontWeight: "700", lineHeight: 18, fontSize: theme.fontSize.sm },
+
+  followRow: {
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255,255,255,0.10)",
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: 12,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+  },
+  followRowLast: {},
+
+  followRowMain: { flex: 1 },
+  followRowTitle: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.md },
+  followRowSub: { marginTop: 6, color: theme.colors.textSecondary, fontWeight: "700", fontSize: theme.fontSize.sm },
+
+  followTagRow: { marginTop: 10, flexDirection: "row", gap: 8, flexWrap: "wrap" },
+  followTag: {
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+  },
+  followTagOn: { borderColor: "rgba(79,224,138,0.35)", backgroundColor: "rgba(79,224,138,0.10)" },
+  followTagText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: theme.fontSize.xs },
+  followTagTextOn: { color: "rgba(79,224,138,0.92)" },
+
+  unfollowBtn: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+  },
+  unfollowText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: theme.fontSize.xs },
+
+  followFooterNote: {
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255,255,255,0.10)",
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: 12,
+  },
+  followFooterText: { color: theme.colors.textTertiary, fontWeight: "800", fontSize: theme.fontSize.xs },
 
   footerNote: {
     textAlign: "center",
