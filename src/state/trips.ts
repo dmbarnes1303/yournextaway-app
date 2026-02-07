@@ -70,7 +70,6 @@ type TripsState = {
 
   /**
    * Deletes the trip AND deletes all SavedItems (and attachment files) belonging to the trip.
-   * This is the only delete we should use in Phase 1 to prevent orphaned Wallet items/files.
    */
   deleteTripCascade: (tripId: string) => Promise<void>;
 
@@ -157,7 +156,7 @@ const useTripsStore = create<TripsState>((set, get) => ({
       // best-effort
     }
 
-    // 3) Optional hardening: clear any lingering orphans (belt & braces)
+    // 3) Optional hardening: clear any lingering orphans
     try {
       const valid = nextTrips.map((t) => String(t.id));
       await savedItemsStore.clearOrphans(valid, { deleteAttachmentFiles: true });
@@ -179,7 +178,7 @@ const useTripsStore = create<TripsState>((set, get) => ({
 }));
 
 /* -------------------------------------------------------------------------- */
-/* Wrapper (matches your existing tripsStore usage pattern) */
+/* Wrapper */
 /* -------------------------------------------------------------------------- */
 
 const tripsStore = {
@@ -203,13 +202,28 @@ const tripsStore = {
     await useTripsStore.getState().deleteTripCascade(tripId);
   },
 
-  // Backwards-compat alias so older screens don't break:
+  // Backwards-compat alias
   removeTrip: async (tripId: string) => {
     await useTripsStore.getState().deleteTripCascade(tripId);
   },
 
   clearAll: async () => {
     await useTripsStore.getState().clearAll();
+  },
+
+  /**
+   * Lookup helpers for Follow → Trip conversion.
+   */
+  getTripByMatchId: (fixtureId: string) => {
+    const id = String(fixtureId ?? "").trim();
+    if (!id) return null;
+    const s = useTripsStore.getState();
+    return s.trips.find((t) => Array.isArray(t.matchIds) && t.matchIds.includes(id)) ?? null;
+  },
+
+  getTripIdByMatchId: (fixtureId: string) => {
+    const t = tripsStore.getTripByMatchId(fixtureId);
+    return t?.id ?? null;
   },
 };
 
