@@ -51,6 +51,14 @@ export type FollowedMatch = {
 
   alerts: FollowAlertPrefs;
 
+  /**
+   * Anti-spam persistence:
+   * - If kickoff flips back/forth due to API quirks, we only notify once per unique kickoffIso value.
+   * - After a successful notify, call markKickoffNotified(fixtureId, kickoffIso).
+   */
+  lastNotifiedKickoffIso: string | null;
+  lastNotifiedAt: string | null;
+
   createdAt: string;
   lastSeenAt?: string;
 };
@@ -75,7 +83,10 @@ export type FollowSnapshot = {
   kickoffLikelyTbc?: boolean | null;
 };
 
-type FollowPayload = Omit<FollowedMatch, "createdAt" | "lastSeenAt" | "alerts" | "kickoffLikelyTbc"> & {
+type FollowPayload = Omit<
+  FollowedMatch,
+  "createdAt" | "lastSeenAt" | "alerts" | "kickoffLikelyTbc" | "lastNotifiedKickoffIso" | "lastNotifiedAt"
+> & {
   alerts?: Partial<FollowAlertPrefs>;
   kickoffLikelyTbc?: boolean | null;
 };
@@ -91,6 +102,7 @@ export type ApplyFixtureUpdateResult = {
    * True when:
    * - user enabled alerts.kickoffConfirmed
    * - kickoffIso changed (prev vs next)
+   * - we have not already notified for this exact next kickoffIso
    */
   shouldNotifyKickoff: boolean;
 
@@ -99,6 +111,8 @@ export type ApplyFixtureUpdateResult = {
 
   prevLikelyTbc: boolean | null;
   nextLikelyTbc: boolean | null;
+
+  lastNotifiedKickoffIso: string | null;
 };
 
 type FollowState = {
@@ -116,6 +130,12 @@ type FollowState = {
 
   applyFixtureUpdate: (fixtureId: string, patch: FollowSnapshot) => ApplyFixtureUpdateResult | null;
 
+  /**
+   * Call this ONLY after a successful notification send.
+   * This is what prevents repeated notifications for the same kickoffIso.
+   */
+  markKickoffNotified: (fixtureId: string, kickoffIso: string | null) => void;
+
   setDefaultAlerts: (patch: Partial<FollowAlertPrefs>) => void;
   setAlertsForFixture: (fixtureId: string, patch: Partial<FollowAlertPrefs>) => void;
   toggleAlertForFixture: (fixtureId: string, key: keyof FollowAlertPrefs) => void;
@@ -125,6 +145,11 @@ type FollowState = {
    * This is what your Profile “Default alert” toggle should do.
    */
   setKickoffConfirmedForAll: (enabled: boolean) => void;
+
+  /**
+   * Convenience: sets default + batch for existing.
+   */
+  setKickoffConfirmedDefaultAndAll: (enabled: boolean) => void;
 
   clearAll: () => void;
 };
@@ -162,6 +187,8 @@ function mergeAlerts(base: FollowAlertPrefs, patch?: Partial<FollowAlertPrefs>):
  * Heuristic helper for “likely TBC”.
  * - Anything within 21 days: treat as confirmed.
  * - Otherwise: if >= threshold fixtures share same KO within (leagueId+season+round), treat as likely TBC.
+ *
+ * NOTE: It’s a best-effort signal, not truth.
  */
 function inferLikelyTbc(opts: {
   fixtureKickoffIso: string | null;
@@ -276,6 +303,9 @@ const useFollowStore = create<FollowState>()(
 
             alerts,
 
+            lastNotifiedKickoffIso: null,
+            lastNotifiedAt: null,
+
             createdAt: nowIso(),
             lastSeenAt: nowIso(),
           };
@@ -382,6 +412,7 @@ const useFollowStore = create<FollowState>()(
             nextKickoffIso: null,
             prevLikelyTbc: null,
             nextLikelyTbc: null,
+            lastNotifiedKickoffIso: null,
           };
         }
 
@@ -391,8 +422,10 @@ const useFollowStore = create<FollowState>()(
         const nextKickoffIso =
           patch.kickoffIso !== undefined ? (patch.kickoffIso ?? null) : prevKickoffIso;
 
-        const nextLeagueId = patch.leagueId != null ? clampNum(patch.leagueId, existing.leagueId) : existing.leagueId;
-        const nextSeason = patch.season != null ? clampNum(patch.season, existing.season) : existing.season;
+        const nextLeagueId =
+          patch.leagueId != null ? clampNum(patch.leagueId, existing.leagueId) : existing.leagueId;
+        const nextSeason =
+          patch.season != null ? clampNum(patch.season, existing.season) : existing.season;
         const nextRound = patch.round !== undefined ? cleanStr(patch.round) : existing.round;
 
         const nextLikelyTbc =
@@ -408,10 +441,18 @@ const useFollowStore = create<FollowState>()(
 
         const kickoffChanged = prevKickoffIso !== nextKickoffIso;
 
+        // “became confirmed” = previously TBC-ish (or null) → now likely confirmed
         const becameConfirmed = (prevLikelyTbc === true || prevKickoffIso === null) && nextLikelyTbc === false;
 
-        const shouldNotifyKickoff = !!existing.alerts?.kickoffConfirmed && kickoffChanged;
+        const lastNotifiedKickoffIso = existing.lastNotifiedKickoffIso ?? null;
 
+        // Anti-spam: only notify if we haven't already notified for THIS next kickoff value.
+        const nextIsNewForNotify = nextKickoffIso != null && nextKickoffIso !== lastNotifiedKickoffIso;
+
+        const shouldNotifyKickoff =
+          !!existing.alerts?.kickoffConfirmed && kickoffChanged && nextIsNewForNotify;
+
+        // Apply snapshot (single write)
         get().upsertLatestSnapshot(id, {
           ...patch,
           kickoffIso: nextKickoffIso,
@@ -431,11 +472,31 @@ const useFollowStore = create<FollowState>()(
           nextKickoffIso,
           prevLikelyTbc,
           nextLikelyTbc: (nextLikelyTbc ?? null) as any,
+          lastNotifiedKickoffIso,
         };
       },
 
-      setDefaultAlerts: (patch) =>
-        set((state) => ({ defaultAlerts: mergeAlerts(state.defaultAlerts, patch) })),
+      markKickoffNotified: (fixtureId, kickoffIso) => {
+        const id = normalizeId(fixtureId);
+        if (!id) return;
+
+        const iso = kickoffIso != null ? String(kickoffIso).trim() : "";
+        const nextIso = iso ? iso : null;
+
+        set((state) => ({
+          followed: state.followed.map((x) => {
+            if (x.fixtureId !== id) return x;
+            return {
+              ...x,
+              lastNotifiedKickoffIso: nextIso,
+              lastNotifiedAt: nowIso(),
+              lastSeenAt: nowIso(),
+            };
+          }),
+        }));
+      },
+
+      setDefaultAlerts: (patch) => set((state) => ({ defaultAlerts: mergeAlerts(state.defaultAlerts, patch) })),
 
       setAlertsForFixture: (fixtureId, patch) => {
         const id = normalizeId(fixtureId);
@@ -473,11 +534,25 @@ const useFollowStore = create<FollowState>()(
         }));
       },
 
+      setKickoffConfirmedDefaultAndAll: (enabled) => {
+        const v = !!enabled;
+        set((state) => ({
+          defaultAlerts: { ...state.defaultAlerts, kickoffConfirmed: v },
+          followed: state.followed.map((x) => ({
+            ...x,
+            alerts: {
+              ...(x.alerts ?? state.defaultAlerts),
+              kickoffConfirmed: v,
+            },
+          })),
+        }));
+      },
+
       clearAll: () => set({ followed: [] }),
     }),
     {
       name: "followedMatches",
-      version: 7,
+      version: 8, // bumped for anti-spam fields + new actions
       storage: createJSONStorage(() => followPersistStorage),
       partialize: (state) => ({ followed: state.followed, defaultAlerts: state.defaultAlerts }),
 
@@ -497,6 +572,9 @@ const useFollowStore = create<FollowState>()(
 
             const alerts = mergeAlerts(defaultAlerts, x?.alerts ?? undefined);
 
+            const lastNotifiedKickoffIso = cleanStr(x?.lastNotifiedKickoffIso);
+            const lastNotifiedAt = cleanStr(x?.lastNotifiedAt);
+
             return {
               fixtureId: id,
 
@@ -513,13 +591,15 @@ const useFollowStore = create<FollowState>()(
               round: cleanStr(x?.round),
 
               kickoffIso: x?.kickoffIso ?? null,
-              kickoffLikelyTbc:
-                x?.kickoffLikelyTbc === true ? true : x?.kickoffLikelyTbc === false ? false : null,
+              kickoffLikelyTbc: x?.kickoffLikelyTbc === true ? true : x?.kickoffLikelyTbc === false ? false : null,
 
               venue: x?.venue ?? null,
               city: x?.city ?? null,
 
               alerts,
+
+              lastNotifiedKickoffIso: lastNotifiedKickoffIso ?? null,
+              lastNotifiedAt: lastNotifiedAt ?? null,
 
               createdAt: x?.createdAt ?? nowIso(),
               lastSeenAt: x?.lastSeenAt ?? x?.createdAt ?? nowIso(),
