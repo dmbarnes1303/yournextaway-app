@@ -49,6 +49,12 @@ export type FollowedMatch = {
   venue: string | null;
   city: string | null;
 
+  /**
+   * Sportsevents365 event id (enables exact deep-links: /event/{id})
+   * null/undefined means we only have "search" level routing.
+   */
+  sportsevents365EventId: number | null;
+
   alerts: FollowAlertPrefs;
 
   /**
@@ -81,6 +87,8 @@ export type FollowSnapshot = {
   round?: string | null;
 
   kickoffLikelyTbc?: boolean | null;
+
+  sportsevents365EventId?: number | null;
 };
 
 type FollowPayload = Omit<
@@ -170,6 +178,15 @@ function clampNum(n: unknown, fallback = 0) {
 function cleanStr(v: unknown): string | null {
   const s = String(v ?? "").trim();
   return s ? s : null;
+}
+
+function cleanMaybeNumber(v: unknown): number | null {
+  if (v === null || v === undefined) return null;
+  const n = Number(v);
+  if (!Number.isFinite(n)) return null;
+  if (n <= 0) return null;
+  // event ids should be integers; but don’t break if they send numeric string
+  return Math.trunc(n);
 }
 
 function mergeAlerts(base: FollowAlertPrefs, patch?: Partial<FollowAlertPrefs>): FollowAlertPrefs {
@@ -301,6 +318,8 @@ const useFollowStore = create<FollowState>()(
             venue: m.venue ?? null,
             city: m.city ?? null,
 
+            sportsevents365EventId: cleanMaybeNumber((m as any)?.sportsevents365EventId) ?? null,
+
             alerts,
 
             lastNotifiedKickoffIso: null,
@@ -348,9 +367,7 @@ const useFollowStore = create<FollowState>()(
           followed: state.followed.map((x) => {
             if (x.fixtureId !== id) return x;
 
-            const nextKickoffIso =
-              patch.kickoffIso !== undefined ? (patch.kickoffIso ?? null) : x.kickoffIso;
-
+            const nextKickoffIso = patch.kickoffIso !== undefined ? (patch.kickoffIso ?? null) : x.kickoffIso;
             const nextRound = patch.round !== undefined ? cleanStr(patch.round) : x.round;
 
             const nextLeagueId = patch.leagueId != null ? clampNum(patch.leagueId, x.leagueId) : x.leagueId;
@@ -366,6 +383,11 @@ const useFollowStore = create<FollowState>()(
                     round: nextRound,
                     allFollowed: state.followed,
                   });
+
+            const nextSe365EventId =
+              patch.sportsevents365EventId !== undefined
+                ? cleanMaybeNumber(patch.sportsevents365EventId)
+                : x.sportsevents365EventId ?? null;
 
             return {
               ...x,
@@ -387,6 +409,8 @@ const useFollowStore = create<FollowState>()(
 
               venue: patch.venue !== undefined ? (patch.venue ?? null) : x.venue,
               city: patch.city !== undefined ? (patch.city ?? null) : x.city,
+
+              sportsevents365EventId: nextSe365EventId,
 
               lastSeenAt: nowIso(),
             };
@@ -419,13 +443,10 @@ const useFollowStore = create<FollowState>()(
         const prevKickoffIso = existing.kickoffIso ?? null;
         const prevLikelyTbc = existing.kickoffLikelyTbc ?? null;
 
-        const nextKickoffIso =
-          patch.kickoffIso !== undefined ? (patch.kickoffIso ?? null) : prevKickoffIso;
+        const nextKickoffIso = patch.kickoffIso !== undefined ? (patch.kickoffIso ?? null) : prevKickoffIso;
 
-        const nextLeagueId =
-          patch.leagueId != null ? clampNum(patch.leagueId, existing.leagueId) : existing.leagueId;
-        const nextSeason =
-          patch.season != null ? clampNum(patch.season, existing.season) : existing.season;
+        const nextLeagueId = patch.leagueId != null ? clampNum(patch.leagueId, existing.leagueId) : existing.leagueId;
+        const nextSeason = patch.season != null ? clampNum(patch.season, existing.season) : existing.season;
         const nextRound = patch.round !== undefined ? cleanStr(patch.round) : existing.round;
 
         const nextLikelyTbc =
@@ -449,8 +470,7 @@ const useFollowStore = create<FollowState>()(
         // Anti-spam: only notify if we haven't already notified for THIS next kickoff value.
         const nextIsNewForNotify = nextKickoffIso != null && nextKickoffIso !== lastNotifiedKickoffIso;
 
-        const shouldNotifyKickoff =
-          !!existing.alerts?.kickoffConfirmed && kickoffChanged && nextIsNewForNotify;
+        const shouldNotifyKickoff = !!existing.alerts?.kickoffConfirmed && kickoffChanged && nextIsNewForNotify;
 
         // Apply snapshot (single write)
         get().upsertLatestSnapshot(id, {
@@ -460,6 +480,7 @@ const useFollowStore = create<FollowState>()(
           season: nextSeason,
           round: nextRound,
           kickoffLikelyTbc: nextLikelyTbc ?? null,
+          // sportsevents365EventId will be handled by upsertLatestSnapshot if included
         });
 
         return {
@@ -552,7 +573,7 @@ const useFollowStore = create<FollowState>()(
     }),
     {
       name: "followedMatches",
-      version: 8, // bumped for anti-spam fields + new actions
+      version: 9, // bumped: adds sportsevents365EventId persistence
       storage: createJSONStorage(() => followPersistStorage),
       partialize: (state) => ({ followed: state.followed, defaultAlerts: state.defaultAlerts }),
 
@@ -575,6 +596,12 @@ const useFollowStore = create<FollowState>()(
             const lastNotifiedKickoffIso = cleanStr(x?.lastNotifiedKickoffIso);
             const lastNotifiedAt = cleanStr(x?.lastNotifiedAt);
 
+            const se365Id =
+              cleanMaybeNumber(x?.sportsevents365EventId) ??
+              cleanMaybeNumber(x?.se365EventId) ??
+              cleanMaybeNumber(x?.sportsevents365_event_id) ??
+              null;
+
             return {
               fixtureId: id,
 
@@ -595,6 +622,8 @@ const useFollowStore = create<FollowState>()(
 
               venue: x?.venue ?? null,
               city: x?.city ?? null,
+
+              sportsevents365EventId: se365Id,
 
               alerts,
 
