@@ -1,8 +1,5 @@
-
-
-
 {
-  "name": "Natively",
+  "name": "yournextaway",
   "version": "1.0.0",
   "main": "index.ts",
   "private": true,
@@ -11,8 +8,9 @@
     "android": "cross-env EXPO_NO_TELEMETRY=1 npx expo start --android -c",
     "ios": "cross-env EXPO_NO_TELEMETRY=1 npx expo start --ios -c",
     "web": "cross-env EXPO_NO_TELEMETRY=1 npx expo start --web -c",
+    "devclient": "cross-env EXPO_NO_TELEMETRY=1 npx expo start --dev-client --clear",
     "build:web": "npx expo export -p web && npx workbox generateSW workbox-config.js",
-    "build:android": "npx expo prebuild -p android",
+    "prebuild:android": "npx expo prebuild -p android",
     "eas:build:android": "npx eas build -p android",
     "lint": "eslint ."
   },
@@ -33,7 +31,6 @@
     "@types/difflib": "^0.2.7",
     "better-auth": "^1.3.34",
     "difflib": "^0.2.4",
-    "eas": "^0.1.0",
     "expo": "~54.0.33",
     "expo-blur": "^15.0.6",
     "expo-constants": "~18.0.8",
@@ -79,6 +76,7 @@
     "@typescript-eslint/parser": "^6.21.0",
     "babel-plugin-module-resolver": "^5.0.2",
     "cross-env": "^7.0.3",
+    "eas-cli": "^14.5.0",
     "eslint": "^8.57.0",
     "eslint-config-expo": "~10.0.0",
     "eslint-plugin-import": "^2.31.0",
