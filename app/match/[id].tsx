@@ -105,18 +105,37 @@ function daysUntilIso(iso: string) {
 }
 
 /**
- * Ticket routing
- * - Default: Sportsevents365 (affiliate)
- * - Option: official home club tickets
- * - Option: Google fallback
+ * -----------------------------
+ * Sportsevents365 Ticket Routing
+ * -----------------------------
+ * Goal: land user on the EXACT event page whenever possible.
+ * Reality: without SE365 event IDs, "query params on homepage" does not deep link.
  *
- * IMPORTANT:
- * We cannot reliably deep-link to the *exact* Sportsevents365 event page without their event ID.
- * Best practical approach: send to SE365 with affiliate ID + a match query appended.
- * This should still set affiliate attribution, and lands the user in-context.
+ * Strategy:
+ * 1) If we have SE365 event id => open /event/{id}?a_aid=...
+ * 2) Else => open SE365 search page (affiliate param preserved) and show the exact string to paste.
+ * 3) Official tickets always available as trust option.
+ * 4) Google fallback is explicit last resort.
  */
 const SE365_AID = "69834e80ec9d3";
-const SE365_BASE = `https://www.sportsevents365.com/?a_aid=${SE365_AID}`;
+const SE365_EVENT_BASE = "https://www.sportsevents365.com/event";
+const SE365_SEARCH_BASE = "https://www.sportsevents365.com/search";
+
+// Manual overrides: force exact deep-links for high-intent fixtures.
+// Key format: `${home} vs ${away}|${YYYY-MM-DD}`
+const SE365_EVENT_OVERRIDES: Record<string, number> = {
+  // Example you’re testing:
+  "Tottenham Hotspur vs Arsenal|2026-02-22": 369672, // replace with correct id once confirmed
+  // If SE365 uses "Tottenham vs Arsenal" naming, add BOTH keys:
+  "Tottenham vs Arsenal|2026-02-22": 369672,
+};
+
+function buildMatchKey(home?: string, away?: string, kickoffDateOnly?: string) {
+  const h = String(home ?? "").trim();
+  const a = String(away ?? "").trim();
+  const d = String(kickoffDateOnly ?? "").trim();
+  return `${h} vs ${a}|${d}`;
+}
 
 function buildMatchQuery(home?: string, away?: string, kickoffDateOnly?: string, league?: string) {
   const vs = home && away ? `${home} vs ${away}` : "match";
@@ -125,17 +144,22 @@ function buildMatchQuery(home?: string, away?: string, kickoffDateOnly?: string,
   return `${vs}${when}${extra}`.trim();
 }
 
-function buildSportsevents365Url(matchQuery: string) {
-  // We try a harmless query param. If SE365 ignores it, user still lands with affiliate cookie set.
-  // If SE365 supports it, even better.
-  return `${SE365_BASE}&q=${enc(matchQuery)}`;
+function buildSE365EventUrl(eventId: number) {
+  // Keep affiliate param on the exact event page.
+  return `${SE365_EVENT_BASE}/${eventId}?a_aid=${SE365_AID}`;
+}
+
+function buildSE365SearchUrl(matchQuery: string) {
+  // Best-effort: open SE365 search page with affiliate param + query.
+  // If SE365 changes their search parameter, users still land on their site with attribution and can paste the query.
+  return `${SE365_SEARCH_BASE}?a_aid=${SE365_AID}&q=${enc(matchQuery)}`;
 }
 
 function buildGoogleTicketsUrl(matchQuery: string) {
   return `https://www.google.com/search?q=${enc(matchQuery + " tickets")}`;
 }
 
-// A small, opinionated mapping for common clubs. Extend this over time.
+// A small, opinionated mapping for common clubs. Extend over time.
 const OFFICIAL_TICKETS_BY_TEAM: Record<string, string> = {
   "arsenal": "https://www.arsenal.com/tickets",
   "tottenham": "https://www.tottenhamhotspur.com/tickets/",
@@ -172,14 +196,11 @@ function buildOfficialTicketsUrl(homeTeamName?: string) {
   const key = normalizeTeamKey(homeTeamName);
   if (!key) return null;
 
-  // direct match
   if (OFFICIAL_TICKETS_BY_TEAM[key]) return OFFICIAL_TICKETS_BY_TEAM[key];
 
-  // light heuristics for partial matches
   const foundKey = Object.keys(OFFICIAL_TICKETS_BY_TEAM).find((k) => key === k || key.includes(k) || k.includes(key));
   if (foundKey) return OFFICIAL_TICKETS_BY_TEAM[foundKey];
 
-  // fallback: search the club site generally (not perfect but safer than random reseller pages)
   return `https://www.google.com/search?q=${enc(homeTeamName + " official tickets")}`;
 }
 
@@ -223,6 +244,9 @@ export default function MatchDetailScreen() {
   }, [booted, initAuth]);
 
   const id = useMemo(() => coerceString((params as any)?.id), [params]);
+
+  // Optional route-provided SE365 event id (future: pass from fixtures list once you have IDs)
+  const routeSe365EventId = useMemo(() => coerceNumber((params as any)?.se365EventId), [params]);
 
   // Routing context
   const rolling = useMemo(() => getRollingWindowIso(), []);
@@ -419,7 +443,34 @@ export default function MatchDetailScreen() {
     [home, away, kickoffDateOnly, leagueName]
   );
 
-  const sportsevents365Url = useMemo(() => buildSportsevents365Url(matchQuery), [matchQuery]);
+  // Determine SE365 event id using (priority):
+  // 1) route param
+  // 2) row-provided property (future)
+  // 3) manual override map
+  const se365EventId = useMemo(() => {
+    const fromRoute = typeof routeSe365EventId === "number" && routeSe365EventId > 0 ? routeSe365EventId : null;
+    const fromRow = (() => {
+      const anyRow = row as any;
+      const v =
+        anyRow?.fixture?.sportsevents365EventId ??
+        anyRow?.fixture?.se365EventId ??
+        anyRow?.sportsevents365EventId ??
+        anyRow?.se365EventId;
+      return typeof v === "number" && v > 0 ? v : null;
+    })();
+    if (fromRoute) return fromRoute;
+    if (fromRow) return fromRow;
+
+    const key = buildMatchKey(home, away, kickoffDateOnly);
+    const v = SE365_EVENT_OVERRIDES[key];
+    return typeof v === "number" && v > 0 ? v : null;
+  }, [routeSe365EventId, row, home, away, kickoffDateOnly]);
+
+  const se365PrimaryUrl = useMemo(() => {
+    if (se365EventId) return buildSE365EventUrl(se365EventId);
+    return buildSE365SearchUrl(matchQuery);
+  }, [se365EventId, matchQuery]);
+
   const officialTicketsUrl = useMemo(() => buildOfficialTicketsUrl(home), [home]);
   const googleTicketsUrl = useMemo(() => buildGoogleTicketsUrl(matchQuery), [matchQuery]);
 
@@ -431,8 +482,11 @@ export default function MatchDetailScreen() {
   const ticketsSub = useMemo(() => {
     const when = kickoffDateOnly ? ` • ${kickoffDateOnly}` : "";
     const base = `${home} vs ${away}${when}`;
-    return tbc ? `${base} • Availability/prices may change when kickoff is confirmed` : base;
-  }, [home, away, kickoffDateOnly, tbc]);
+    if (se365EventId) return `${base} • Opens the exact match page`;
+    return tbc
+      ? `${base} • Match page not listed yet — opens SE365 search (affiliate) + copy/paste query`
+      : `${base} • Match page not listed yet — opens SE365 search (affiliate) + copy/paste query`;
+  }, [home, away, kickoffDateOnly, tbc, se365EventId]);
 
   const directionsSub = useMemo(() => {
     const v = subtitleOrFallback(venue, "Search stadium location");
@@ -477,18 +531,35 @@ export default function MatchDetailScreen() {
     const where = place ? `Venue: ${place}` : "Venue: —";
     const meta = `League: ${leagueName} • Season: ${String(effectiveSeason)}`;
 
+    const seLine = se365EventId
+      ? `Tickets (Sportsevents365 match page): ${se365PrimaryUrl}\n`
+      : `Tickets (Sportsevents365 search): ${se365PrimaryUrl}\nPaste in search: ${matchQuery}\n`;
+
     const message =
       `${title}\n${when}\n${where}\n${meta}\n\n` +
-      `Tickets (Sportsevents365): ${sportsevents365Url}\n` +
+      seLine +
       (officialTicketsUrl ? `Official tickets: ${officialTicketsUrl}\n` : "") +
       `Maps: ${mapsUrl}`;
 
     try {
-      await Share.share(Platform.OS === "ios" ? { message, url: sportsevents365Url } : { message });
+      await Share.share(Platform.OS === "ios" ? { message, url: se365PrimaryUrl } : { message });
     } catch {
       // non-critical
     }
-  }, [home, away, tbc, kickoffDisplay, place, leagueName, effectiveSeason, sportsevents365Url, officialTicketsUrl, mapsUrl]);
+  }, [
+    home,
+    away,
+    tbc,
+    kickoffDisplay,
+    place,
+    leagueName,
+    effectiveSeason,
+    se365EventId,
+    se365PrimaryUrl,
+    matchQuery,
+    officialTicketsUrl,
+    mapsUrl,
+  ]);
 
   const onToggleFollow = useCallback(() => {
     if (!fixtureId) return;
@@ -516,6 +587,9 @@ export default function MatchDetailScreen() {
       kickoffIso: row ? kickoffIsoOrNull(row) : null,
       venue: row?.fixture?.venue?.name ? String(row.fixture.venue.name) : null,
       city: row?.fixture?.venue?.city ? String(row.fixture.venue.city) : null,
+
+      // NEW: Persist SE365 event id if we have it
+      sportsevents365EventId: se365EventId ?? null,
     });
 
     if (row && willFollow) {
@@ -533,7 +607,10 @@ export default function MatchDetailScreen() {
         awayName: away ? String(away) : null,
         leagueName: leagueName ? String(leagueName) : null,
         round,
-      });
+
+        // NEW
+        sportsevents365EventId: se365EventId ?? null,
+      } as any);
     }
 
     if (!willFollow) {
@@ -563,6 +640,7 @@ export default function MatchDetailScreen() {
     away,
     leagueName,
     round,
+    se365EventId,
   ]);
 
   const onSendMagicLink = useCallback(async () => {
@@ -583,14 +661,23 @@ export default function MatchDetailScreen() {
   }, [email, signInWithMagicLink]);
 
   const onTicketsPress = useCallback(() => {
-    // Don’t silently punt to Google. Force a deliberate choice.
     openTicketModal();
   }, [openTicketModal]);
 
   const openSportsevents365 = useCallback(async () => {
     closeTicketModal();
-    await safeOpenUrl(sportsevents365Url);
-  }, [closeTicketModal, sportsevents365Url]);
+
+    // If no event id, we still open SE365 (affiliate) and tell the user what to paste.
+    if (!se365EventId) {
+      // Small but important UX: give the user the query so they can paste if SE365 ignores URL params.
+      Alert.alert(
+        "Search on Sportsevents365",
+        `If it doesn’t land on the exact match, tap the search icon and paste:\n\n${matchQuery}`
+      );
+    }
+
+    await safeOpenUrl(se365PrimaryUrl);
+  }, [closeTicketModal, se365EventId, matchQuery, se365PrimaryUrl]);
 
   const openOfficialTickets = useCallback(async () => {
     closeTicketModal();
@@ -779,6 +866,11 @@ export default function MatchDetailScreen() {
                 </View>
 
                 <Text style={styles.smallPrint}>Match ID: {fixtureId}</Text>
+                {se365EventId ? (
+                  <Text style={styles.smallPrint}>SE365 Event ID: {String(se365EventId)}</Text>
+                ) : (
+                  <Text style={styles.smallPrint}>SE365 Event ID: — (opens SE365 search)</Text>
+                )}
               </>
             ) : null}
           </GlassCard>
@@ -842,8 +934,12 @@ export default function MatchDetailScreen() {
 
               <View style={styles.modalBtnCol}>
                 <Pressable onPress={openSportsevents365} style={[styles.modalBtn, styles.modalBtnPrimary]}>
-                  <Text style={styles.modalBtnTitle}>Sportsevents365 (affiliate)</Text>
-                  <Text style={styles.modalBtnSub}>{matchQuery}</Text>
+                  <Text style={styles.modalBtnTitle}>
+                    {se365EventId ? "Sportsevents365 (match page • affiliate)" : "Sportsevents365 (search • affiliate)"}
+                  </Text>
+                  <Text style={styles.modalBtnSub}>
+                    {se365EventId ? `Event #${String(se365EventId)}` : `Paste: ${matchQuery}`}
+                  </Text>
                 </Pressable>
 
                 <Pressable
@@ -852,14 +948,12 @@ export default function MatchDetailScreen() {
                   disabled={!officialTicketsUrl}
                 >
                   <Text style={styles.modalBtnTitle}>Official tickets (home club)</Text>
-                  <Text style={styles.modalBtnSub}>
-                    {officialTicketsUrl ? home : "No official link mapped yet"}
-                  </Text>
+                  <Text style={styles.modalBtnSub}>{officialTicketsUrl ? home : "No official link mapped yet"}</Text>
                 </Pressable>
 
                 <Pressable onPress={openGoogleFallback} style={[styles.modalBtn, styles.modalBtnSecondary]}>
                   <Text style={styles.modalBtnTitle}>Google fallback</Text>
-                  <Text style={styles.modalBtnSub}>Search the web for this match</Text>
+                  <Text style={styles.modalBtnSub}>Last resort web search</Text>
                 </Pressable>
 
                 <Pressable onPress={closeTicketModal} style={[styles.modalBtn, styles.modalBtnGhost]}>
@@ -868,7 +962,8 @@ export default function MatchDetailScreen() {
               </View>
 
               <Text style={styles.modalFootnote}>
-                Note: exact Sportsevents365 match deep-links require their event ID. This routes using your affiliate link + a match query.
+                Note: exact Sportsevents365 deep-links require their event ID. Until IDs are supplied, we open SE365 search and show the
+                exact query to paste.
               </Text>
             </Pressable>
           </Pressable>
@@ -1007,7 +1102,7 @@ const styles = StyleSheet.create({
   },
   smallBtnText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.xs },
 
-  smallPrint: { marginTop: 12, color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: "700" },
+  smallPrint: { marginTop: 8, color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: "700" },
 
   opsList: { marginTop: 12, gap: 12 },
   opsItem: {
