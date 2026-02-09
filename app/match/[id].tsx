@@ -1,4 +1,3 @@
-// app/match/[id].tsx
 import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import {
   View,
@@ -13,6 +12,7 @@ import {
   Platform,
   TextInput,
   Keyboard,
+  Modal,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
@@ -98,12 +98,89 @@ async function openMapsPreferNative(query: string) {
   }
 }
 
-function buildTicketsUrl(home?: string, away?: string, kickoffDateOnly?: string, league?: string) {
+function daysUntilIso(iso: string) {
+  const t = new Date(iso).getTime();
+  if (!Number.isFinite(t)) return Number.POSITIVE_INFINITY;
+  return (t - Date.now()) / (1000 * 60 * 60 * 24);
+}
+
+/**
+ * Ticket routing
+ * - Default: Sportsevents365 (affiliate)
+ * - Option: official home club tickets
+ * - Option: Google fallback
+ *
+ * IMPORTANT:
+ * We cannot reliably deep-link to the *exact* Sportsevents365 event page without their event ID.
+ * Best practical approach: send to SE365 with affiliate ID + a match query appended.
+ * This should still set affiliate attribution, and lands the user in-context.
+ */
+const SE365_AID = "69834e80ec9d3";
+const SE365_BASE = `https://www.sportsevents365.com/?a_aid=${SE365_AID}`;
+
+function buildMatchQuery(home?: string, away?: string, kickoffDateOnly?: string, league?: string) {
   const vs = home && away ? `${home} vs ${away}` : "match";
   const when = kickoffDateOnly ? ` ${kickoffDateOnly}` : "";
   const extra = league ? ` ${league}` : "";
-  const q = `${vs}${when}${extra} tickets`;
-  return `https://www.google.com/search?q=${enc(q)}`;
+  return `${vs}${when}${extra}`.trim();
+}
+
+function buildSportsevents365Url(matchQuery: string) {
+  // We try a harmless query param. If SE365 ignores it, user still lands with affiliate cookie set.
+  // If SE365 supports it, even better.
+  return `${SE365_BASE}&q=${enc(matchQuery)}`;
+}
+
+function buildGoogleTicketsUrl(matchQuery: string) {
+  return `https://www.google.com/search?q=${enc(matchQuery + " tickets")}`;
+}
+
+// A small, opinionated mapping for common clubs. Extend this over time.
+const OFFICIAL_TICKETS_BY_TEAM: Record<string, string> = {
+  "arsenal": "https://www.arsenal.com/tickets",
+  "tottenham": "https://www.tottenhamhotspur.com/tickets/",
+  "tottenham hotspur": "https://www.tottenhamhotspur.com/tickets/",
+  "spurs": "https://www.tottenhamhotspur.com/tickets/",
+  "chelsea": "https://www.chelseafc.com/en/tickets",
+  "liverpool": "https://www.liverpoolfc.com/tickets",
+  "manchester united": "https://tickets.manutd.com/",
+  "manchester city": "https://www.mancity.com/tickets",
+  "newcastle": "https://book.nufc.co.uk/",
+  "west ham": "https://www.whufc.com/tickets",
+  "barcelona": "https://www.fcbarcelona.com/en/tickets/football",
+  "real madrid": "https://www.realmadrid.com/en/tickets",
+  "atletico madrid": "https://en.atleticodemadrid.com/tickets",
+  "paris saint-germain": "https://billetterie.psg.fr/en/",
+  "psg": "https://billetterie.psg.fr/en/",
+  "roma": "https://www.asroma.com/en/tickets",
+  "lazio": "https://www.sslazio.it/en/tickets",
+  "juventus": "https://tickets.juventus.com/",
+  "inter": "https://www.inter.it/en/tickets",
+  "ac milan": "https://www.acmilan.com/en/tickets",
+  "bayern munich": "https://tickets.fcbayern.com/",
+  "borussia dortmund": "https://www.bvb.de/eng/Tickets",
+};
+
+function normalizeTeamKey(name?: string) {
+  return String(name ?? "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function buildOfficialTicketsUrl(homeTeamName?: string) {
+  const key = normalizeTeamKey(homeTeamName);
+  if (!key) return null;
+
+  // direct match
+  if (OFFICIAL_TICKETS_BY_TEAM[key]) return OFFICIAL_TICKETS_BY_TEAM[key];
+
+  // light heuristics for partial matches
+  const foundKey = Object.keys(OFFICIAL_TICKETS_BY_TEAM).find((k) => key === k || key.includes(k) || k.includes(key));
+  if (foundKey) return OFFICIAL_TICKETS_BY_TEAM[foundKey];
+
+  // fallback: search the club site generally (not perfect but safer than random reseller pages)
+  return `https://www.google.com/search?q=${enc(homeTeamName + " official tickets")}`;
 }
 
 function buildMapsVenueUrl(venue?: string, city?: string) {
@@ -127,13 +204,8 @@ function buildTransportUrl(venue?: string, city?: string) {
   return `https://www.google.com/search?q=${enc(q)}`;
 }
 
-function daysUntilIso(iso: string) {
-  const t = new Date(iso).getTime();
-  if (!Number.isFinite(t)) return Number.POSITIVE_INFINITY;
-  return (t - Date.now()) / (1000 * 60 * 60 * 24);
-}
-
 type ToastState = { visible: false } | { visible: true; title: string; message?: string };
+type TicketModalState = { open: boolean };
 
 export default function MatchDetailScreen() {
   const router = useRouter();
@@ -216,6 +288,12 @@ export default function MatchDetailScreen() {
       if (toastTimer.current) clearTimeout(toastTimer.current);
     };
   }, []);
+
+  // Tickets modal
+  const [ticketModal, setTicketModal] = useState<TicketModalState>({ open: false });
+
+  const closeTicketModal = useCallback(() => setTicketModal({ open: false }), []);
+  const openTicketModal = useCallback(() => setTicketModal({ open: true }), []);
 
   // Load match
   useEffect(() => {
@@ -327,7 +405,6 @@ export default function MatchDetailScreen() {
     return isKickoffTbc(row, placeholderIds ?? undefined);
   }, [row, placeholderIds]);
 
-  // Make copy deterministic (no “likely” in primary label)
   const kickoffSecondary = useMemo(() => {
     if (!row) return null;
     const iso = kickoffIsoOrNull(row);
@@ -337,22 +414,24 @@ export default function MatchDetailScreen() {
     return tbc ? "TV schedule pending" : null;
   }, [row, tbc]);
 
-  const ticketsUrl = useMemo(
-    () => buildTicketsUrl(home, away, kickoffDateOnly, leagueName),
+  const matchQuery = useMemo(
+    () => buildMatchQuery(home, away, kickoffDateOnly, leagueName),
     [home, away, kickoffDateOnly, leagueName]
   );
+
+  const sportsevents365Url = useMemo(() => buildSportsevents365Url(matchQuery), [matchQuery]);
+  const officialTicketsUrl = useMemo(() => buildOfficialTicketsUrl(home), [home]);
+  const googleTicketsUrl = useMemo(() => buildGoogleTicketsUrl(matchQuery), [matchQuery]);
+
   const mapsUrl = useMemo(() => buildMapsVenueUrl(venue, city), [venue, city]);
   const stadiumInfoUrl = useMemo(() => buildStadiumInfoUrl(venue, home, city), [venue, home, city]);
   const foodDrinkUrl = useMemo(() => buildFoodDrinkUrl(venue, city), [venue, city]);
   const transportUrl = useMemo(() => buildTransportUrl(venue, city), [venue, city]);
 
   const ticketsSub = useMemo(() => {
-    if (home && away) {
-      const when = kickoffDateOnly ? ` • ${kickoffDateOnly}` : "";
-      const base = `${home} vs ${away}${when}`;
-      return tbc ? `${base} • Prices may change once kickoff is confirmed` : base;
-    }
-    return tbc ? "Ticket availability may change once kickoff is confirmed" : "Open ticket search";
+    const when = kickoffDateOnly ? ` • ${kickoffDateOnly}` : "";
+    const base = `${home} vs ${away}${when}`;
+    return tbc ? `${base} • Availability/prices may change when kickoff is confirmed` : base;
   }, [home, away, kickoffDateOnly, tbc]);
 
   const directionsSub = useMemo(() => {
@@ -398,14 +477,18 @@ export default function MatchDetailScreen() {
     const where = place ? `Venue: ${place}` : "Venue: —";
     const meta = `League: ${leagueName} • Season: ${String(effectiveSeason)}`;
 
-    const message = `${title}\n${when}\n${where}\n${meta}\n\nTickets: ${ticketsUrl}\nMaps: ${mapsUrl}`;
+    const message =
+      `${title}\n${when}\n${where}\n${meta}\n\n` +
+      `Tickets (Sportsevents365): ${sportsevents365Url}\n` +
+      (officialTicketsUrl ? `Official tickets: ${officialTicketsUrl}\n` : "") +
+      `Maps: ${mapsUrl}`;
 
     try {
-      await Share.share(Platform.OS === "ios" ? { message, url: ticketsUrl } : { message });
+      await Share.share(Platform.OS === "ios" ? { message, url: sportsevents365Url } : { message });
     } catch {
       // non-critical
     }
-  }, [home, away, tbc, kickoffDisplay, place, leagueName, effectiveSeason, ticketsUrl, mapsUrl]);
+  }, [home, away, tbc, kickoffDisplay, place, leagueName, effectiveSeason, sportsevents365Url, officialTicketsUrl, mapsUrl]);
 
   const onToggleFollow = useCallback(() => {
     if (!fixtureId) return;
@@ -435,7 +518,6 @@ export default function MatchDetailScreen() {
       city: row?.fixture?.venue?.city ? String(row.fixture.venue.city) : null,
     });
 
-    // Best-effort: snapshot right away
     if (row && willFollow) {
       upsertLatestSnapshot(fixtureId, {
         kickoffIso: kickoffIsoOrNull(row),
@@ -500,6 +582,30 @@ export default function MatchDetailScreen() {
     }
   }, [email, signInWithMagicLink]);
 
+  const onTicketsPress = useCallback(() => {
+    // Don’t silently punt to Google. Force a deliberate choice.
+    openTicketModal();
+  }, [openTicketModal]);
+
+  const openSportsevents365 = useCallback(async () => {
+    closeTicketModal();
+    await safeOpenUrl(sportsevents365Url);
+  }, [closeTicketModal, sportsevents365Url]);
+
+  const openOfficialTickets = useCallback(async () => {
+    closeTicketModal();
+    if (!officialTicketsUrl) {
+      Alert.alert("Official tickets unavailable", "We don’t have an official ticket link for this club yet.");
+      return;
+    }
+    await safeOpenUrl(officialTicketsUrl);
+  }, [closeTicketModal, officialTicketsUrl]);
+
+  const openGoogleFallback = useCallback(async () => {
+    closeTicketModal();
+    await safeOpenUrl(googleTicketsUrl);
+  }, [closeTicketModal, googleTicketsUrl]);
+
   return (
     <Background imageUrl={getBackground("fixtures")}>
       <Stack.Screen
@@ -546,7 +652,6 @@ export default function MatchDetailScreen() {
                   {home} vs {away}
                 </Text>
 
-                {/* Explicit kickoff status chips */}
                 <View style={styles.chipRow}>
                   {tbc ? (
                     <>
@@ -631,7 +736,7 @@ export default function MatchDetailScreen() {
                 )}
 
                 <View style={styles.ctaGrid}>
-                  <Pressable onPress={() => safeOpenUrl(ticketsUrl)} style={[styles.bigBtn, styles.bigBtnPrimary]}>
+                  <Pressable onPress={onTicketsPress} style={[styles.bigBtn, styles.bigBtnPrimary]}>
                     <Text style={styles.bigKicker}>Tickets</Text>
                     <Text style={styles.bigTitle}>Find tickets</Text>
                     <Text style={styles.bigSub}>{ticketsSub}</Text>
@@ -725,6 +830,49 @@ export default function MatchDetailScreen() {
             </View>
           </View>
         ) : null}
+
+        {/* Ticket Source Modal */}
+        <Modal visible={ticketModal.open} transparent animationType="fade" onRequestClose={closeTicketModal}>
+          <Pressable style={styles.modalBackdrop} onPress={closeTicketModal}>
+            <Pressable style={styles.modalCard} onPress={() => null}>
+              <Text style={styles.modalTitle}>Tickets</Text>
+              <Text style={styles.modalBody}>
+                Choose where you want to source tickets. Sportsevents365 uses your affiliate link. Official tickets take you to the home club.
+              </Text>
+
+              <View style={styles.modalBtnCol}>
+                <Pressable onPress={openSportsevents365} style={[styles.modalBtn, styles.modalBtnPrimary]}>
+                  <Text style={styles.modalBtnTitle}>Sportsevents365 (affiliate)</Text>
+                  <Text style={styles.modalBtnSub}>{matchQuery}</Text>
+                </Pressable>
+
+                <Pressable
+                  onPress={openOfficialTickets}
+                  style={[styles.modalBtn, styles.modalBtnSecondary, !officialTicketsUrl && styles.modalBtnDisabled]}
+                  disabled={!officialTicketsUrl}
+                >
+                  <Text style={styles.modalBtnTitle}>Official tickets (home club)</Text>
+                  <Text style={styles.modalBtnSub}>
+                    {officialTicketsUrl ? home : "No official link mapped yet"}
+                  </Text>
+                </Pressable>
+
+                <Pressable onPress={openGoogleFallback} style={[styles.modalBtn, styles.modalBtnSecondary]}>
+                  <Text style={styles.modalBtnTitle}>Google fallback</Text>
+                  <Text style={styles.modalBtnSub}>Search the web for this match</Text>
+                </Pressable>
+
+                <Pressable onPress={closeTicketModal} style={[styles.modalBtn, styles.modalBtnGhost]}>
+                  <Text style={styles.modalBtnGhostText}>Cancel</Text>
+                </Pressable>
+              </View>
+
+              <Text style={styles.modalFootnote}>
+                Note: exact Sportsevents365 match deep-links require their event ID. This routes using your affiliate link + a match query.
+              </Text>
+            </Pressable>
+          </Pressable>
+        </Modal>
       </SafeAreaView>
     </Background>
   );
@@ -762,7 +910,6 @@ const styles = StyleSheet.create({
   watchPillText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: 12 },
   watchPillTextActive: { color: "rgba(79,224,138,0.92)" },
 
-  // NEW: kickoff chips
   chipRow: { marginTop: 10, flexDirection: "row", flexWrap: "wrap", gap: 8 },
   chip: {
     borderWidth: 1,
@@ -901,4 +1048,36 @@ const styles = StyleSheet.create({
   },
   toastTitle: { color: theme.colors.text, fontWeight: "900", fontSize: 13 },
   toastMsg: { marginTop: 4, color: theme.colors.textSecondary, fontWeight: "700", fontSize: 12, lineHeight: 16 },
+
+  // Modal
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.62)",
+    justifyContent: "center",
+    paddingHorizontal: theme.spacing.lg,
+  },
+  modalCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    backgroundColor: "rgba(10,10,10,0.92)",
+    padding: 14,
+  },
+  modalTitle: { color: theme.colors.text, fontWeight: "900", fontSize: 16 },
+  modalBody: { marginTop: 8, color: theme.colors.textSecondary, fontWeight: "700", fontSize: 12, lineHeight: 16 },
+  modalBtnCol: { marginTop: 12, gap: 10 },
+  modalBtn: {
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+  },
+  modalBtnPrimary: { borderColor: "rgba(0,255,136,0.55)", backgroundColor: "rgba(0,0,0,0.34)" },
+  modalBtnSecondary: { borderColor: "rgba(255,255,255,0.10)", backgroundColor: "rgba(0,0,0,0.22)" },
+  modalBtnDisabled: { opacity: 0.45 },
+  modalBtnTitle: { color: theme.colors.text, fontWeight: "900", fontSize: 13 },
+  modalBtnSub: { marginTop: 6, color: theme.colors.textSecondary, fontWeight: "700", fontSize: 12, lineHeight: 16 },
+  modalBtnGhost: { borderColor: "rgba(255,255,255,0.10)", backgroundColor: "transparent" },
+  modalBtnGhostText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: 12, textAlign: "center" },
+  modalFootnote: { marginTop: 10, color: theme.colors.textTertiary, fontWeight: "800", fontSize: 11, lineHeight: 14 },
 });
