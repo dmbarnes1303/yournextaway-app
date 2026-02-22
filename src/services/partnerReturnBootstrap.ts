@@ -13,13 +13,6 @@ import {
 import savedItemsStore from "@/src/state/savedItems";
 import { confirmBookedAndOfferProof } from "@/src/services/bookingProof";
 
-/**
- * Global bootstrap for:
- * partner click → return detection → “Booked?” prompt
- *
- * Called once from app/_layout.tsx
- */
-
 let bootstrapped = false;
 let prompting = false;
 
@@ -45,7 +38,6 @@ async function ensureSavedLoaded() {
 async function handleReturn(click: LastPartnerClick) {
   if (prompting) return;
 
-  // If we don’t have the item anymore, just clear prompt state and bail.
   await ensureSavedLoaded();
   const itemExists = savedItemsStore.getState().items.some((x) => x.id === click.itemId);
   if (!itemExists) {
@@ -65,7 +57,6 @@ async function handleReturn(click: LastPartnerClick) {
         text: "Not now",
         style: "cancel",
         onPress: () => {
-          // Keep status pending, but avoid immediate reprompt
           Promise.resolve(dismissReturnPrompt(click.itemId)).finally(() => {
             prompting = false;
           });
@@ -86,7 +77,6 @@ async function handleReturn(click: LastPartnerClick) {
         onPress: () => {
           (async () => {
             await markBooked(click.itemId);
-            // Phase-1 Wallet proof: prompt to add PDF/screenshot if missing
             try {
               await confirmBookedAndOfferProof(click.itemId);
             } catch {
@@ -106,12 +96,16 @@ export function bootstrapPartnerReturnPrompt() {
   if (bootstrapped) return;
   bootstrapped = true;
 
-  // Register watcher (AppState -> active)
+  // ✅ Crash-proof guard (prevents the exact error you hit)
+  if (typeof ensurePartnerReturnWatcher !== "function") {
+    console.warn(
+      "[partnerReturnBootstrap] ensurePartnerReturnWatcher is not a function. Metro cache / duplicate module likely."
+    );
+    return;
+  }
+
   ensurePartnerReturnWatcher((click) => handleReturn(click));
 
-  // Optional: if there’s an already-cached lastClick (e.g. browser dismiss path),
-  // prompt shortly after boot so user doesn’t miss it.
-  // Safe: handleReturn() is guarded against duplicates.
   setTimeout(() => {
     const click = getLastClick();
     if (click) handleReturn(click).catch(() => null);
