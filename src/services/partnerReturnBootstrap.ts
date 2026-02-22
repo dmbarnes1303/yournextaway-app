@@ -1,47 +1,39 @@
 // src/services/partnerReturnBootstrap.ts
-import { Alert, Platform } from "react-native";
-
-import savedItemsStore from "@/src/state/savedItems";
-import { getPartner } from "@/src/core/partners";
-import type { SavedItem } from "@/src/core/savedItemTypes";
+import { Alert } from "react-native";
 
 import {
   ensurePartnerReturnWatcher,
-  type LastPartnerClick,
+  getLastClick,
   markBooked,
   markNotBooked,
   dismissReturnPrompt,
+  type LastPartnerClick,
 } from "@/src/services/partnerClicks";
 
+import savedItemsStore from "@/src/state/savedItems";
 import { confirmBookedAndOfferProof } from "@/src/services/bookingProof";
 
 /**
- * Phase-1 truth:
- * We cannot reliably detect “booking completed” from affiliates.
+ * Global bootstrap for:
+ * partner click → return detection → “Booked?” prompt
  *
- * Option B:
- * - Yes -> booked
- * - No  -> saved (not pending)
- * - Not now -> keep pending
- *
- * Enhancement:
- * After Yes -> show confirmation + offer booking proof upload (if none exists).
+ * Called once from app/_layout.tsx
  */
 
 let bootstrapped = false;
+let prompting = false;
 
-/** Prevent duplicate prompts / double-handling */
-const inFlightForItem = new Set<string>();
-
-function safePartnerName(partnerId: string) {
+function safeTitleFromClick(click: LastPartnerClick): string {
   try {
-    return getPartner(partnerId as any).name;
+    const it = savedItemsStore.getState().items.find((x) => x.id === click.itemId);
+    const t = String(it?.title ?? "").trim();
+    return t || "Your booking";
   } catch {
-    return "partner";
+    return "Your booking";
   }
 }
 
-async function ensureSavedItemsLoaded() {
+async function ensureSavedLoaded() {
   if (savedItemsStore.getState().loaded) return;
   try {
     await savedItemsStore.load();
@@ -50,90 +42,78 @@ async function ensureSavedItemsLoaded() {
   }
 }
 
-async function findItem(click: LastPartnerClick): Promise<SavedItem | null> {
-  await ensureSavedItemsLoaded();
-  const items = savedItemsStore.getState().items;
-  return items.find((x) => x.id === click.itemId) ?? null;
-}
+async function handleReturn(click: LastPartnerClick) {
+  if (prompting) return;
 
-function shouldPrompt(item: SavedItem | null) {
-  if (!item) return false;
-  if (item.status === "booked" || item.status === "archived") return false;
-  return item.status === "pending";
-}
+  // If we don’t have the item anymore, just clear prompt state and bail.
+  await ensureSavedLoaded();
+  const itemExists = savedItemsStore.getState().items.some((x) => x.id === click.itemId);
+  if (!itemExists) {
+    await dismissReturnPrompt(click.itemId);
+    return;
+  }
 
-function defer(fn: () => void) {
-  setTimeout(fn, 60);
+  prompting = true;
+
+  const title = safeTitleFromClick(click);
+
+  Alert.alert(
+    "Did you complete the booking?",
+    title,
+    [
+      {
+        text: "Not now",
+        style: "cancel",
+        onPress: () => {
+          // Keep status pending, but avoid immediate reprompt
+          Promise.resolve(dismissReturnPrompt(click.itemId)).finally(() => {
+            prompting = false;
+          });
+        },
+      },
+      {
+        text: "No",
+        style: "default",
+        onPress: () => {
+          Promise.resolve(markNotBooked(click.itemId)).finally(() => {
+            prompting = false;
+          });
+        },
+      },
+      {
+        text: "Yes",
+        style: "default",
+        onPress: () => {
+          (async () => {
+            await markBooked(click.itemId);
+            // Phase-1 Wallet proof: prompt to add PDF/screenshot if missing
+            try {
+              await confirmBookedAndOfferProof(click.itemId);
+            } catch {
+              // ignore
+            }
+          })().finally(() => {
+            prompting = false;
+          });
+        },
+      },
+    ],
+    { cancelable: true }
+  );
 }
 
 export function bootstrapPartnerReturnPrompt() {
   if (bootstrapped) return;
   bootstrapped = true;
 
-  ensurePartnerReturnWatcher(async (click) => {
-    const itemId = String(click?.itemId ?? "").trim();
-    if (!itemId) return;
+  // Register watcher (AppState -> active)
+  ensurePartnerReturnWatcher((click) => handleReturn(click));
 
-    if (inFlightForItem.has(itemId)) return;
-    inFlightForItem.add(itemId);
-
-    try {
-      const item = await findItem(click);
-      if (!shouldPrompt(item)) return;
-
-      const partnerName = safePartnerName(String(click.partnerId));
-      const title = String(item?.title ?? "").trim() || "this booking";
-
-      const message =
-        `You just returned from ${partnerName}.\n\n` +
-        `Did you book:\n"${title}"?\n\n` +
-        `We can’t auto-detect checkout success, so you confirm it here.`;
-
-      const onYesBooked = async () => {
-        try {
-          await markBooked(itemId);
-        } catch {
-          // leave pending
-          return;
-        }
-
-        // Confirm + offer proof upload (not in same tick)
-        defer(() => {
-          confirmBookedAndOfferProof(itemId).catch(() => null);
-        });
-      };
-
-      const onNo = async () => {
-        // Option B: move pending -> saved
-        try {
-          await markNotBooked(itemId);
-        } catch {
-          // ignore
-        }
-      };
-
-      const onNotNow = async () => {
-        // keep pending; stop re-prompt loops
-        dismissReturnPrompt(itemId);
-      };
-
-      // Android: max 3 buttons
-      const buttons =
-        Platform.OS === "android"
-          ? [
-              { text: "Not now", style: "cancel" as const, onPress: () => onNotNow() },
-              { text: "No", onPress: () => onNo() },
-              { text: "Yes — booked", onPress: () => onYesBooked() },
-            ]
-          : [
-              { text: "Not now", style: "cancel" as const, onPress: () => onNotNow() },
-              { text: "No", onPress: () => onNo() },
-              { text: "Yes — booked", onPress: () => onYesBooked() },
-            ];
-
-      Alert.alert("Did you book it?", message, buttons as any, { cancelable: true });
-    } finally {
-      defer(() => inFlightForItem.delete(String(click?.itemId ?? "").trim()));
-    }
-  });
+  // Optional: if there’s an already-cached lastClick (e.g. browser dismiss path),
+  // prompt shortly after boot so user doesn’t miss it.
+  // Safe: handleReturn() is guarded against duplicates.
+  setTimeout(() => {
+    const click = getLastClick();
+    if (click) handleReturn(click).catch(() => null);
+  }, 600);
 }
