@@ -283,6 +283,7 @@ export default function TripDetailScreen() {
     partnerId: PartnerId;
     url: string;
     title: string;
+    savedItemType?: SavedItemType;
     metadata?: Record<string, any>;
   }) {
     if (!tripId) {
@@ -300,6 +301,7 @@ export default function TripDetailScreen() {
         tripId,
         partnerId: args.partnerId,
         url: args.url,
+        savedItemType: args.savedItemType,
         title: args.title,
         metadata: args.metadata,
       });
@@ -626,11 +628,7 @@ export default function TripDetailScreen() {
                 ) : (
                   <View style={{ gap: 10, marginTop: 10 }}>
                     {notes.map((it) => (
-                      <Pressable
-                        key={it.id}
-                        onPress={() => openNoteActions(it)}
-                        style={styles.noteRow}
-                      >
+                      <Pressable key={it.id} onPress={() => openNoteActions(it)} style={styles.noteRow}>
                         <View style={{ flex: 1 }}>
                           <Text style={styles.itemTitle} numberOfLines={1}>
                             {it.title}
@@ -656,8 +654,9 @@ export default function TripDetailScreen() {
                       style={styles.bookBtn}
                       onPress={() =>
                         openTrackedPartner({
-                          partnerId: "expedia",
+                          partnerId: "expedia_stays",
                           url: bookingLinks.hotelsUrl,
+                          savedItemType: "hotel",
                           title: `Hotels in ${cityName}`,
                           metadata: {
                             city: cityName,
@@ -677,6 +676,7 @@ export default function TripDetailScreen() {
                         openTrackedPartner({
                           partnerId: "aviasales",
                           url: bookingLinks.flightsUrl,
+                          savedItemType: "flight",
                           title: `Flights to ${cityName}`,
                           metadata: { city: cityName },
                         })
@@ -692,6 +692,7 @@ export default function TripDetailScreen() {
                         openTrackedPartner({
                           partnerId: "kiwitaxi",
                           url: bookingLinks.transfersUrl,
+                          savedItemType: "transfer",
                           title: `Transfers in ${cityName}`,
                           metadata: {
                             city: cityName,
@@ -711,6 +712,7 @@ export default function TripDetailScreen() {
                         openTrackedPartner({
                           partnerId: "getyourguide",
                           url: bookingLinks.experiencesUrl,
+                          savedItemType: "things",
                           title: `Experiences in ${cityName}`,
                           metadata: { city: cityName },
                         })
@@ -740,6 +742,7 @@ export default function TripDetailScreen() {
                       openTrackedPartner({
                         partnerId: "sportsevents365",
                         url: bookingLinks.ticketsUrl,
+                        savedItemType: "tickets",
                         title: `Match tickets`,
                         metadata: { city: cityName },
                       })
@@ -765,6 +768,7 @@ export default function TripDetailScreen() {
                       openTrackedPartner({
                         partnerId: "safetywing",
                         url: bookingLinks.insuranceUrl,
+                        savedItemType: "insurance",
                         title: `Travel insurance`,
                         metadata: {
                           city: cityName,
@@ -794,6 +798,7 @@ export default function TripDetailScreen() {
                       openTrackedPartner({
                         partnerId: "airhelp",
                         url: bookingLinks.claimsUrl,
+                        savedItemType: "claim",
                         title: `Check compensation`,
                         metadata: { city: cityName },
                       })
