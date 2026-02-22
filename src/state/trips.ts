@@ -4,6 +4,7 @@ import { readJson, writeJson } from "@/src/state/persist";
 import { makeTripId } from "@/src/core/id";
 import type { Trip } from "@/src/core/tripTypes";
 import savedItemsStore from "@/src/state/savedItems";
+import { MOCK_TRIP_SEEDS } from "@/src/data/mockTrips";
 
 const STORAGE_KEY = "yna_trips_v1";
 
@@ -74,6 +75,9 @@ type TripsState = {
   deleteTripCascade: (tripId: string) => Promise<void>;
 
   clearAll: () => Promise<void>;
+
+  /** Dev convenience: seed mock trips if none exist */
+  seedMockTrips: () => Promise<void>;
 };
 
 const useTripsStore = create<TripsState>((set, get) => ({
@@ -87,7 +91,15 @@ const useTripsStore = create<TripsState>((set, get) => ({
     const arr = Array.isArray(raw) ? raw : [];
     const cleaned = arr.map(cleanLoadedTrip).filter(Boolean) as Trip[];
 
-    set({ trips: sortTrips(cleaned), loaded: true });
+    const sorted = sortTrips(cleaned);
+    set({ trips: sorted, loaded: true });
+
+    // Dev-only: if you have zero trips, seed a couple so UI isn't dead
+    // IMPORTANT: won't run in production builds.
+    // @ts-ignore
+    if (typeof __DEV__ !== "undefined" && __DEV__ && sorted.length === 0) {
+      await get().seedMockTrips();
+    }
   },
 
   addTrip: async (input) => {
@@ -175,6 +187,22 @@ const useTripsStore = create<TripsState>((set, get) => ({
       // ignore
     }
   },
+
+  seedMockTrips: async () => {
+    if (!get().loaded) await get().loadTrips();
+    if (get().trips.length > 0) return;
+
+    for (const seed of MOCK_TRIP_SEEDS) {
+      await get().addTrip({
+        cityId: seed.cityId,
+        citySlug: seed.citySlug,
+        startDate: seed.startDate,
+        endDate: seed.endDate,
+        matchIds: seed.matchIds ?? [],
+        notes: seed.notes,
+      });
+    }
+  },
 }));
 
 /* -------------------------------------------------------------------------- */
@@ -209,6 +237,10 @@ const tripsStore = {
 
   clearAll: async () => {
     await useTripsStore.getState().clearAll();
+  },
+
+  seedMockTrips: async () => {
+    await useTripsStore.getState().seedMockTrips();
   },
 
   /**
