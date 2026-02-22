@@ -21,12 +21,10 @@ export function buildMockSavedItemsForSeed(args: {
 }) {
   const { tripId, cityName, startDate, endDate, matchTitle } = args;
 
-  // NOTE: partnerUrl can be left blank; your UI handles notes + opens untracked for URLs.
-  // This is just to populate the workspace with realistic items + statuses.
   const items: SavedItemSeed[] = [
     {
       type: "tickets",
-      title: matchTitle ? `Tickets shortlist — ${matchTitle}` : `Tickets shortlist`,
+      title: matchTitle ? `Tickets shortlist — ${matchTitle}` : "Tickets shortlist",
       status: "saved",
       partnerId: "sportsevents365",
       priceText: "View live availability",
@@ -96,7 +94,7 @@ export function buildMockSavedItemsForSeed(args: {
           `Trip plan:\n` +
           `• Arrive: ${startDate}\n` +
           `• Leave: ${endDate}\n` +
-          `• Keep 2–3 hotel options saved\n` +
+          `• Save 2–3 hotel options\n` +
           `• Confirm kickoff time before booking anything non-refundable`,
       },
     },
