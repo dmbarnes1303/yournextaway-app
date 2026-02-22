@@ -4,6 +4,7 @@ import { readJson, writeJson } from "@/src/state/persist";
 import { makeTripId } from "@/src/core/id";
 import type { Trip } from "@/src/core/tripTypes";
 import savedItemsStore from "@/src/state/savedItems";
+
 import { MOCK_TRIP_SEEDS } from "@/src/data/mockTrips";
 import { buildMockSavedItemsForSeed } from "@/src/data/mockTripItems";
 
@@ -77,7 +78,7 @@ type TripsState = {
 
   clearAll: () => Promise<void>;
 
-  /** Dev convenience: seed mock trips if none exist */
+  /** Dev convenience: seed mock trips + items if none exist */
   seedMockTrips: () => Promise<void>;
 };
 
@@ -95,7 +96,7 @@ const useTripsStore = create<TripsState>((set, get) => ({
     const sorted = sortTrips(cleaned);
     set({ trips: sorted, loaded: true });
 
-    // Dev-only: seed if empty so UI isn't dead.
+    // Dev-only: if you have zero trips, seed a couple so UI isn't dead.
     // @ts-ignore
     if (typeof __DEV__ !== "undefined" && __DEV__ && sorted.length === 0) {
       await get().seedMockTrips();
@@ -192,7 +193,7 @@ const useTripsStore = create<TripsState>((set, get) => ({
     if (!get().loaded) await get().loadTrips();
     if (get().trips.length > 0) return;
 
-    // ensure saved items store loaded before we add
+    // Ensure saved items store loaded before adding items
     try {
       await savedItemsStore.load();
     } catch {
@@ -209,10 +210,10 @@ const useTripsStore = create<TripsState>((set, get) => ({
         notes: seed.notes,
       });
 
-      // Seed items for this trip (safe: saved items store accepts partnerId as string)
+      // Build realistic saved items for the trip workspace
       const matchTitle =
         seed.matchIds && seed.matchIds.length
-          ? seed.matchIds[0].replace(/-/g, " ").toUpperCase()
+          ? seed.matchIds[0].replace(/-/g, " ")
           : undefined;
 
       const built = buildMockSavedItemsForSeed({
