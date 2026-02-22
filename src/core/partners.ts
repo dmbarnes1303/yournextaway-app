@@ -1,142 +1,190 @@
 // src/core/partners.ts
-import type { SavedItemType } from "@/src/core/savedItemTypes";
 
-/**
- * Partner registry = single source of truth for:
- * - partner IDs (ONLY ones you actually have / want live)
- * - labels
- * - default SavedItem.type
- *
- * Screens should NOT hardcode partner strings.
- * They call beginPartnerClick({ partnerId, url, ... }).
- */
-
-export type PartnerId =
-  | "getyourguide"
-  | "expedia"
-  | "aviasales"
-  | "kiwitaxi"
-  | "safetywing"
-  | "airhelp"
-  | "sportsevents365"
-  | "googlemaps"
-  | "unknown";
-
-export type PartnerCategory = "stay" | "flights" | "transfers" | "experiences" | "insurance" | "claims" | "tickets" | "links";
+export type PartnerCategory =
+  | "tickets"
+  | "flights"
+  | "stays"
+  | "transfers"
+  | "experiences"
+  | "insurance"
+  | "compensation"
+  | "utility";
 
 export type Partner = {
-  id: PartnerId;
+  id: string;
   name: string;
   category: PartnerCategory;
-
-  /** Default SavedItem type when user clicks this partner. */
-  defaultSavedItemType: SavedItemType;
-
-  /** Optional: domains used for best-effort inference/validation. */
-  domains?: string[];
+  affiliate: boolean;
+  api: boolean;
+  deepLinkBase?: string;
 };
 
-export const PARTNERS: Record<PartnerId, Partner> = {
-  /* -------------------- Stay -------------------- */
-  expedia: {
-    id: "expedia",
-    name: "Expedia",
-    category: "stay",
-    defaultSavedItemType: "hotel",
-    domains: ["expedia.com", "expedia.co.uk", "expedia.ie"],
+export const PARTNERS: Partner[] = [
+  // Utility (non-monetised)
+  {
+    id: "googlemaps",
+    name: "Google Maps",
+    category: "utility",
+    affiliate: false,
+    api: false,
+    deepLinkBase: "https://www.google.com/maps",
   },
 
-  /* -------------------- Flights -------------------- */
-  aviasales: {
-    id: "aviasales",
-    name: "Aviasales",
-    category: "flights",
-    defaultSavedItemType: "flight",
-    domains: ["aviasales.com", "aviasales.ru", "aviasales.net"],
-  },
-
-  /* -------------------- Transfers -------------------- */
-  kiwitaxi: {
-    id: "kiwitaxi",
-    name: "KiwiTaxi",
-    category: "transfers",
-    defaultSavedItemType: "transfer",
-    domains: ["kiwitaxi.com"],
-  },
-
-  /* -------------------- Experiences -------------------- */
-  getyourguide: {
-    id: "getyourguide",
-    name: "GetYourGuide",
-    category: "experiences",
-    defaultSavedItemType: "things",
-    domains: ["getyourguide.com"],
-  },
-
-  /* -------------------- Insurance -------------------- */
-  safetywing: {
-    id: "safetywing",
-    name: "SafetyWing",
-    category: "insurance",
-    defaultSavedItemType: "insurance",
-    domains: ["safetywing.com"],
-  },
-
-  /* -------------------- Claims / compensation -------------------- */
-  airhelp: {
-    id: "airhelp",
-    name: "AirHelp",
-    category: "claims",
-    defaultSavedItemType: "claim",
-    domains: ["airhelp.com"],
-  },
-
-  /* -------------------- Tickets / events -------------------- */
-  sportsevents365: {
+  // Tickets
+  {
     id: "sportsevents365",
     name: "SportsEvents365",
     category: "tickets",
-    defaultSavedItemType: "tickets",
-    domains: ["sportsevents365.com"],
+    affiliate: true,
+    api: true,
+    deepLinkBase: "https://www.sportsevents365.com/",
+  },
+  {
+    id: "seatpick",
+    name: "SeatPick",
+    category: "tickets",
+    affiliate: true,
+    api: false,
+    deepLinkBase: "https://seatpick.com/",
   },
 
-  /* -------------------- Untracked link tools -------------------- */
-  googlemaps: {
-    id: "googlemaps",
-    name: "Google Maps",
-    category: "links",
-    defaultSavedItemType: "other",
-    domains: ["google.com", "maps.google.com"],
+  // Flights
+  {
+    id: "expedia",
+    name: "Expedia",
+    category: "flights",
+    affiliate: true,
+    api: false,
+    deepLinkBase: "https://www.expedia.com/",
+  },
+  {
+    id: "aviasales",
+    name: "AviaSales",
+    category: "flights",
+    affiliate: true,
+    api: false,
+    deepLinkBase: "https://www.aviasales.com/",
   },
 
-  unknown: {
-    id: "unknown",
-    name: "Partner",
-    category: "links",
-    defaultSavedItemType: "other",
+  // Stays (Expedia is also your stays coverage)
+  {
+    id: "expedia_stays",
+    name: "Expedia",
+    category: "stays",
+    affiliate: true,
+    api: false,
+    deepLinkBase: "https://www.expedia.com/Hotels",
   },
-};
 
-export function getPartner(id: string | null | undefined): Partner {
-  const key = String(id ?? "").trim().toLowerCase() as PartnerId;
-  return PARTNERS[key] ?? PARTNERS.unknown;
+  // Transfers
+  {
+    id: "kiwitaxi",
+    name: "KiwiTaxi",
+    category: "transfers",
+    affiliate: true,
+    api: false,
+    deepLinkBase: "https://kiwitaxi.com/",
+  },
+  {
+    id: "welcomepickups",
+    name: "Welcome Pickups",
+    category: "transfers",
+    affiliate: true,
+    api: false,
+    deepLinkBase: "https://www.welcomepickups.com/",
+  },
+
+  // Experiences
+  {
+    id: "tiqets",
+    name: "Tiqets",
+    category: "experiences",
+    affiliate: true,
+    api: false,
+    deepLinkBase: "https://www.tiqets.com/",
+  },
+  {
+    id: "klook",
+    name: "Klook",
+    category: "experiences",
+    affiliate: true,
+    api: false,
+    deepLinkBase: "https://www.klook.com/",
+  },
+  {
+    id: "getyourguide",
+    name: "GetYourGuide",
+    category: "experiences",
+    affiliate: true,
+    api: false,
+    deepLinkBase: "https://www.getyourguide.com/",
+  },
+  {
+    id: "wegotrip",
+    name: "WeGoTrip",
+    category: "experiences",
+    affiliate: true,
+    api: false,
+    deepLinkBase: "https://wegotrip.com/",
+  },
+
+  // Insurance
+  {
+    id: "safetywing",
+    name: "SafetyWing",
+    category: "insurance",
+    affiliate: true,
+    api: false,
+    deepLinkBase: "https://safetywing.com/",
+  },
+  {
+    id: "ekta",
+    name: "EKTA",
+    category: "insurance",
+    affiliate: true,
+    api: false,
+    deepLinkBase: "https://ektatraveling.com/",
+  },
+
+  // Compensation
+  {
+    id: "airhelp",
+    name: "AirHelp",
+    category: "compensation",
+    affiliate: true,
+    api: false,
+    deepLinkBase: "https://www.airhelp.com/",
+  },
+  {
+    id: "compensair",
+    name: "Compensair",
+    category: "compensation",
+    affiliate: true,
+    api: false,
+    deepLinkBase: "https://www.compensair.com/",
+  },
+];
+
+export type PartnerId = (typeof PARTNERS)[number]["id"];
+
+export function getPartnersByCategory(category: PartnerCategory): Partner[] {
+  return PARTNERS.filter((p) => p.category === category);
+}
+
+export function getPartnerOrNull(id: string): Partner | null {
+  return PARTNERS.find((p) => p.id === id) ?? null;
 }
 
 /**
- * Optional helper: infer partner from a URL.
- * Useful when you ingest arbitrary links.
+ * Strict accessor: throws if partner id is unknown.
+ * Use when it should be impossible for id to be invalid.
  */
-export function inferPartnerIdFromUrl(url: string): PartnerId {
-  const u = String(url ?? "").trim().toLowerCase();
-  if (!u) return "unknown";
+export function getPartner(id: PartnerId | string): Partner {
+  const p = getPartnerOrNull(String(id));
+  if (!p) throw new Error(`Unknown partner id: ${String(id)}`);
+  return p;
+}
 
-  const host = u.replace(/^https?:\/\//, "").split("/")[0] ?? "";
-  const h = host.replace(/^www\./, "");
-
-  for (const [pid, p] of Object.entries(PARTNERS) as Array<[PartnerId, Partner]>) {
-    if (!p.domains?.length) continue;
-    if (p.domains.some((d) => h === d || h.endsWith(`.${d}`))) return pid;
-  }
-
-  return "unknown";
+export function isPartnerId(id: string): id is PartnerId {
+  return PARTNERS.some((p) => p.id === id);
 }
