@@ -1,194 +1,527 @@
-// src/services/affiliateLinks.ts
-import Constants from "expo-constants";
+// src/services/partnerClicks.ts
+import { AppState, Linking, Platform } from "react-native";
+import * as WebBrowser from "expo-web-browser";
+
+import savedItemsStore from "@/src/state/savedItems";
+import { getPartner, type PartnerId, type PartnerCategory } from "@/src/core/partners";
+import type { SavedItem, SavedItemType } from "@/src/core/savedItemTypes";
+import { getSavedItemTypeLabel } from "@/src/core/savedItemTypes";
+import { readJson, writeJson } from "@/src/state/persist";
 
 /**
- * Centralised affiliate URL builder.
+ * Phase 1 partner return detection:
+ * - tracked open ensures a SavedItem exists in "pending" and stores lastClick
+ * - on return (AppState active OR browser dismiss), UI can prompt:
+ *   YES -> booked
+ *   NO -> saved
+ *   NOT NOW -> keep pending
  *
- * RULES (Phase-1 spine):
- * - This file ONLY builds URLs.
- * - Partner IDs live in src/core/partners.ts
- * - Keep output keys stable to avoid screen refactors.
+ * Hardening:
+ * - global opening guard
+ * - rollback if open fails (only if we created a new pending item)
+ * - avoid stale zombie prompts (age limit)
+ * - avoid instant-dismiss rot: if browser was open too briefly, don't prompt;
+ *   instead auto-demote pending -> saved.
  *
- * CRITICAL COMMISSION RULE:
- * - Do NOT append extra query params to third-party tracking links (TPM, etc).
- *   Many tracking/redirect systems do not guarantee passthrough and can break attribution.
- *   Keep those tracking URLs EXACT.
+ * De-duplication:
+ * - Reuse existing matching item (pending > saved > booked)
+ * - If saved is reused, promote to pending before opening
+ * - If booked is reused, open untracked (no prompt)
  */
 
-export type AffiliateLinks = {
-  city: string;
-  country?: string;
-  startDate?: string; // YYYY-MM-DD
-  endDate?: string; // YYYY-MM-DD
-
-  // Legacy (already used by screens)
-  hotelsUrl: string; // Expedia
-  flightsUrl: string; // Aviasales
-  trainsUrl: string; // fallback (untracked)
-  experiencesUrl: string; // GetYourGuide
-  mapsUrl: string; // Google Maps (untracked)
-
-  // Approved additions (Phase 1)
-  transfersUrl: string; // KiwiTaxi (tracked)
-  insuranceUrl: string; // SafetyWing (tracked)
-  claimsUrl: string; // AirHelp (tracked)
-  ticketsUrl: string; // SportsEvents365 (tracked)
+export type LastPartnerClick = {
+  itemId: string;
+  tripId: string;
+  partnerId: PartnerId;
+  url: string;
+  createdAt: number;
+  openedAt: number;
 };
 
-/* -------------------------------------------------------------------------- */
-/* helpers */
-/* -------------------------------------------------------------------------- */
+const STORAGE_KEY = "yna_last_partner_click_v1";
 
-function env(name: string): string | undefined {
-  const extra = (Constants?.expoConfig as any)?.extra ?? (Constants as any)?.manifest?.extra ?? {};
-  const v =
-    (extra && typeof extra[name] === "string" ? String(extra[name]) : undefined) ??
-    (typeof process !== "undefined" &&
-    (process as any)?.env &&
-    typeof (process as any).env[name] === "string"
-      ? String((process as any).env[name])
-      : undefined);
+let lastClick: LastPartnerClick | null = null;
+let lastClickLoaded = false;
 
-  const s = String(v ?? "").trim();
-  return s || undefined;
+let subscribed = false;
+let appStateSub: { remove: () => void } | null = null;
+
+let onReturnHandler: ((click: LastPartnerClick) => void | Promise<void>) | null = null;
+
+/** Prevent double-taps / concurrent opens */
+let opening = false;
+
+function now() {
+  return Date.now();
 }
 
-function enc(v: string) {
-  return encodeURIComponent(v);
+function normalizeUrl(url: string): string {
+  const raw = String(url ?? "").trim();
+  if (!raw) return "";
+
+  const withProto = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+
+  try {
+    const u = new URL(withProto);
+    const host = u.hostname.toLowerCase();
+    const pathname = u.pathname || "/";
+    const search = u.search || "";
+    const proto = (u.protocol || "https:").toLowerCase();
+    return `${proto}//${host}${pathname}${search}`.trim();
+  } catch {
+    return withProto.trim();
+  }
 }
 
-function cleanCity(input: string) {
-  return String(input ?? "").trim();
+function isRecent(click: LastPartnerClick) {
+  return now() - click.createdAt <= 1000 * 60 * 60 * 6; // 6 hours
 }
 
-function cleanCountry(input?: string) {
-  const s = String(input ?? "").trim();
-  return s || undefined;
+async function persistLastClick(next: LastPartnerClick | null) {
+  lastClick = next;
+  try {
+    await writeJson(STORAGE_KEY, next);
+  } catch {
+    // best-effort
+  }
 }
 
-function safeQueryCity(city: string, country?: string) {
-  const c = cleanCity(city);
-  const co = cleanCountry(country);
-  return co ? `${c}, ${co}` : c;
-}
+async function loadLastClickOnce() {
+  if (lastClickLoaded) return;
+  lastClickLoaded = true;
 
-function isIsoDateOnly(s?: string) {
-  return !!s && /^\d{4}-\d{2}-\d{2}$/.test(String(s).trim());
-}
+  try {
+    const raw = await readJson<any>(STORAGE_KEY, null);
+    if (!raw || typeof raw !== "object") return;
 
-/* -------------------------------------------------------------------------- */
-/* affiliate config */
-/* -------------------------------------------------------------------------- */
+    const itemId = String(raw.itemId ?? "").trim();
+    const tripId = String(raw.tripId ?? "").trim();
+    const partnerId = String(raw.partnerId ?? "").trim() as PartnerId;
+    const url = normalizeUrl(String(raw.url ?? ""));
+    const createdAt = Number(raw.createdAt);
+    const openedAt = Number(raw.openedAt);
 
-/**
- * Put IDs in app.json -> expo.extra and/or .env as EXPO_PUBLIC_*.
- *
- * You currently have approved:
- * - Expedia (program-specific linking varies; we use a stable public entry)
- * - Aviasales (marker-based in many setups)
- * - GetYourGuide (partner_id)
- * - KiwiTaxi / AirHelp via TPM tracking links
- * - SafetyWing direct tracking link
- * - SportsEvents365 a_aid param
- */
-const AFFILIATE = {
-  // Optional IDs (safe if missing)
-  aviasalesMarker: env("EXPO_PUBLIC_AVIASALES_MARKER"),
-  gygPartnerId: env("EXPO_PUBLIC_GYG_PARTNER_ID"),
-  expediaAffilId: env("EXPO_PUBLIC_EXPEDIA_AFFIL_ID"),
+    if (!itemId || !tripId || !partnerId || !url) return;
+    if (!Number.isFinite(createdAt) || !Number.isFinite(openedAt)) return;
 
-  // ✅ EXACT tracking links provided by you (DO NOT MODIFY)
-  kiwitaxiTracked: "https://kiwitaxi.tpm.lv/ZnnAV8eH",
-  airhelpTracked: "https://airhelp.tpm.lv/6tipSUue",
-  safetywingTracked:
-    "https://safetywing.com/?referenceID=26471369&utm_source=26471369&utm_medium=Ambassador",
-  sportsevents365Tracked: "https://www.sportsevents365.com/?a_aid=69834e80ec9d3",
-};
-
-/* -------------------------------------------------------------------------- */
-/* public */
-/* -------------------------------------------------------------------------- */
-
-export function buildAffiliateLinks(args: {
-  city: string;
-  country?: string;
-  startDate?: string;
-  endDate?: string;
-}): AffiliateLinks {
-  const city = cleanCity(args.city);
-  const country = cleanCountry(args.country);
-
-  const startDate = isIsoDateOnly(args.startDate) ? String(args.startDate).trim() : undefined;
-  const endDate = isIsoDateOnly(args.endDate) ? String(args.endDate).trim() : undefined;
-
-  const query = safeQueryCity(city, country);
-
-  /* -------------------- */
-  /* Hotels: Expedia (approved) */
-  /* -------------------- */
-  // Stable public entry point. Some affiliate programs require different deep-link formats;
-  // we keep this resilient and optionally add a generic affcid.
-  const expediaParams: string[] = [`destination=${enc(query)}`];
-  if (startDate) expediaParams.push(`startDate=${enc(startDate)}`);
-  if (endDate) expediaParams.push(`endDate=${enc(endDate)}`);
-  if (AFFILIATE.expediaAffilId) expediaParams.push(`affcid=${enc(AFFILIATE.expediaAffilId)}`);
-  const hotelsUrl = `https://www.expedia.co.uk/Hotel-Search?${expediaParams.join("&")}`;
-
-  /* -------------------- */
-  /* Flights: Aviasales (approved) */
-  /* -------------------- */
-  const aviaParams: string[] = [];
-  if (AFFILIATE.aviasalesMarker) aviaParams.push(`marker=${enc(AFFILIATE.aviasalesMarker)}`);
-  // Keep destination hint; harmless if ignored.
-  aviaParams.push(`destination=${enc(query)}`);
-  const flightsUrl = `https://www.aviasales.com/?${aviaParams.join("&")}`;
-
-  /* -------------------- */
-  /* Trains/Buses: fallback (UNTRACKED until affiliate) */
-  /* -------------------- */
-  const trainsUrl = `https://www.google.com/maps/search/?api=1&query=${enc(
-    `${query} train station`
-  )}`;
-
-  /* -------------------- */
-  /* Experiences: GetYourGuide (approved) */
-  /* -------------------- */
-  // Correct search format: /s/?q=<query>&partner_id=<id>
-  const gygParams: string[] = [`q=${enc(query)}`];
-  if (AFFILIATE.gygPartnerId) gygParams.push(`partner_id=${enc(AFFILIATE.gygPartnerId)}`);
-  const experiencesUrl = `https://www.getyourguide.com/s/?${gygParams.join("&")}`;
-
-  /* -------------------- */
-  /* Transfers / Insurance / Claims / Tickets: TRACKED BASE LINKS (EXACT) */
-  /* -------------------- */
-  // Do not append extra params to tracking URLs. Keep attribution clean.
-  const transfersUrl = AFFILIATE.kiwitaxiTracked;
-  const insuranceUrl = AFFILIATE.safetywingTracked;
-  const claimsUrl = AFFILIATE.airhelpTracked;
-  const ticketsUrl = AFFILIATE.sportsevents365Tracked;
-
-  /* -------------------- */
-  /* Maps: Google Maps (UNTRACKED) */
-  /* -------------------- */
-  const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${enc(query)}`;
-
-  return {
-    city,
-    country,
-    startDate,
-    endDate,
-    hotelsUrl,
-    flightsUrl,
-    trainsUrl,
-    experiencesUrl,
-    mapsUrl,
-    transfersUrl,
-    insuranceUrl,
-    claimsUrl,
-    ticketsUrl,
-  };
-}
-
-export function normalizeUrlForCompare(url: string): string {
-  return String(url ?? "").trim().toLowerCase();
+    const candidate: LastPartnerClick = { itemId, tripId, partnerId, url, createdAt, openedAt };
+    if (!isRecent(candidate)) {
+      await persistLastClick(null);
+      return;
     }
+
+    lastClick = candidate;
+  } catch {
+    // ignore
+  }
+}
+
+async function ensureSavedItemsLoaded() {
+  if (savedItemsStore.getState().loaded) return;
+  try {
+    await savedItemsStore.load();
+  } catch {
+    // ignore
+  }
+}
+
+async function tryTransitionPendingToSaved(itemId: string) {
+  const id = String(itemId ?? "").trim();
+  if (!id) return;
+
+  await ensureSavedItemsLoaded();
+  const cur = savedItemsStore.getState().items.find((x) => x.id === id);
+  if (!cur) return;
+
+  if (cur.status !== "pending") return;
+
+  try {
+    await savedItemsStore.transitionStatus(id, "saved");
+  } catch {
+    // ignore
+  }
+}
+
+async function tryTransitionSavedToPending(itemId: string) {
+  const id = String(itemId ?? "").trim();
+  if (!id) return;
+
+  await ensureSavedItemsLoaded();
+  const cur = savedItemsStore.getState().items.find((x) => x.id === id);
+  if (!cur) return;
+
+  if (cur.status !== "saved") return;
+
+  try {
+    await savedItemsStore.transitionStatus(id, "pending");
+  } catch {
+    // ignore
+  }
+}
+
+function defaultTypeForCategory(category: PartnerCategory): SavedItemType {
+  switch (category) {
+    case "tickets":
+      return "tickets";
+    case "flights":
+      return "flight";
+    case "stays":
+      return "hotel";
+    case "transfers":
+      return "transfer";
+    case "experiences":
+      return "things";
+    case "insurance":
+      return "insurance";
+    case "compensation":
+      return "claim";
+    case "utility":
+    default:
+      return "other";
+  }
+}
+
+async function openUrlInternal(url: string) {
+  const u = normalizeUrl(url);
+  if (!u) throw new Error("URL is required");
+
+  if (Platform.OS === "web") {
+    // Web: canOpenURL is unreliable; just open a new tab.
+    window.open(u, "_blank", "noopener,noreferrer");
+    return { type: "opened" as const };
+  }
+
+  // Native:
+  return await WebBrowser.openBrowserAsync(u, {
+    presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
+    readerMode: false,
+    enableBarCollapsing: true,
+    showTitle: true,
+  });
+}
+
+/**
+ * Consume lastClick exactly once and invoke handler.
+ *
+ * Instant dismiss policy:
+ * - if browser dismisses too fast => do NOT prompt
+ * - auto-demote pending -> saved so Pending doesn't rot
+ */
+async function triggerReturnIfPresent(
+  reason: "appstate" | "browser_dismiss",
+  meta?: { openDurationMs?: number }
+) {
+  await loadLastClickOnce();
+  if (!lastClick) return;
+
+  if (!isRecent(lastClick)) {
+    await persistLastClick(null);
+    return;
+  }
+
+  const click = lastClick;
+
+  const minOpenMs = 8000;
+  const dur = Number(meta?.openDurationMs ?? 0);
+
+  if (reason === "browser_dismiss" && dur > 0 && dur < minOpenMs) {
+    await persistLastClick(null);
+    await tryTransitionPendingToSaved(click.itemId);
+    return;
+  }
+
+  const handler = onReturnHandler;
+  if (!handler) return; // keep lastClick persisted until handler exists
+
+  await persistLastClick(null);
+
+  try {
+    await Promise.resolve(handler(click));
+  } catch {
+    // never crash app on return prompt
+  }
+}
+
+/** Dev diagnostics */
+export function getPartnerClicksDebugState() {
+  return { opening, subscribed, lastClick };
+}
+
+/**
+ * ✅ IMPORTANT: This MUST be a named export and MUST exist.
+ * Root uses this via partnerReturnBootstrap.
+ */
+export function ensurePartnerReturnWatcher(onReturn: (click: LastPartnerClick) => void | Promise<void>) {
+  onReturnHandler = onReturn;
+
+  if (subscribed) return;
+  subscribed = true;
+
+  loadLastClickOnce().catch(() => null);
+
+  let lastState = AppState.currentState;
+
+  const sub = AppState.addEventListener("change", (next) => {
+    const becameActive = Boolean(String(lastState).match(/inactive|background/)) && next === "active";
+    lastState = next;
+    if (!becameActive) return;
+
+    triggerReturnIfPresent("appstate").catch(() => null);
+  });
+
+  appStateSub = sub as any;
+}
+
+/**
+ * Public: open a URL WITHOUT creating a pending item and WITHOUT prompts.
+ */
+export async function openUntrackedUrl(url: string) {
+  const u = normalizeUrl(url);
+  if (!u) throw new Error("url is required");
+
+  if (opening) throw new Error("Partner open already in progress");
+  opening = true;
+
+  try {
+    await openUrlInternal(u);
+  } finally {
+    opening = false;
+  }
+}
+
+/** Backwards-compat alias used by Wallet */
+export async function openPartnerUrl(url: string) {
+  return await openUntrackedUrl(url);
+}
+
+function cleanCity(meta?: Record<string, any>): string | null {
+  const raw = meta?.city ?? meta?.destination ?? meta?.place;
+  const s = String(raw ?? "").trim();
+  return s || null;
+}
+
+function buildDefaultTitle(args: {
+  partnerName: string;
+  type: SavedItemType;
+  metadata?: Record<string, any>;
+}): string {
+  const city = cleanCity(args.metadata);
+  const label = getSavedItemTypeLabel(args.type);
+
+  switch (args.type) {
+    case "hotel":
+      return city ? `Stay: Hotels in ${city}` : `Stay: Hotels`;
+    case "flight":
+      return city ? `Flights to ${city}` : `Flights`;
+    case "train":
+      return city ? `Trains to ${city}` : `Trains`;
+    case "transfer":
+      return city ? `Transfers in ${city}` : `Transfers`;
+    case "things":
+      return city ? `Experiences in ${city}` : `Experiences`;
+    case "tickets":
+      return city ? `Match tickets for ${city}` : `Match tickets`;
+    case "insurance":
+      return city ? `Protect yourself: Travel insurance for ${city}` : `Protect yourself: Travel insurance`;
+    case "claim":
+      return `Claims & compensation: Compensation help`;
+    default:
+      return city ? `${label}: ${city}` : `${label}: ${args.partnerName}`;
+  }
+}
+
+function findReusableItem(args: {
+  tripId: string;
+  partnerId: PartnerId;
+  url: string;
+  type: SavedItemType;
+}): SavedItem | null {
+  const tripId = String(args.tripId ?? "").trim();
+  const url = normalizeUrl(args.url);
+  if (!tripId || !url) return null;
+
+  const items = savedItemsStore.getState().items;
+
+  const matches = items.filter((x) => {
+    if (String(x.tripId) !== tripId) return false;
+    if (String(x.partnerId ?? "") !== String(args.partnerId)) return false;
+    if (normalizeUrl(String(x.partnerUrl ?? "")) !== url) return false;
+    if (String(x.type) !== String(args.type)) return false;
+    return true;
+  });
+
+  if (matches.length === 0) return null;
+
+  return (
+    matches.find((m) => m.status === "pending") ??
+    matches.find((m) => m.status === "saved") ??
+    matches.find((m) => m.status === "booked") ??
+    null
+  );
+}
+
+export async function beginPartnerClick(args: {
+  tripId: string;
+  partnerId: PartnerId;
+  url: string;
+  savedItemType?: SavedItemType;
+  title?: string;
+  metadata?: Record<string, any>;
+}): Promise<SavedItem> {
+  if (opening) throw new Error("Partner open already in progress");
+  opening = true;
+
+  let createdNew = false;
+  let item: SavedItem | null = null;
+
+  try {
+    const tripId = String(args.tripId ?? "").trim();
+    if (!tripId) throw new Error("tripId is required");
+
+    const partner = getPartner(args.partnerId);
+
+    const url = normalizeUrl(args.url);
+    if (!url) throw new Error("url is required");
+
+    await ensureSavedItemsLoaded();
+
+    const type: SavedItemType = args.savedItemType ?? defaultTypeForCategory(partner.category);
+
+    const reusable = findReusableItem({ tripId, partnerId: partner.id as PartnerId, url, type });
+
+    if (reusable) {
+      item = reusable;
+
+      if (item.status === "booked") {
+        await openUntrackedUrl(url);
+        return item;
+      }
+
+      if (item.status === "saved") {
+        await tryTransitionSavedToPending(item.id);
+        item = savedItemsStore.getState().items.find((x) => x.id === item!.id) ?? item;
+      }
+    }
+
+    if (!item) {
+      const title =
+        String(args.title ?? "").trim() ||
+        buildDefaultTitle({
+          partnerName: partner.name,
+          type,
+          metadata: args.metadata,
+        });
+
+      item = await savedItemsStore.add({
+        tripId,
+        type,
+        status: "pending",
+        title,
+        partnerId: partner.id,
+        partnerUrl: url,
+        metadata: args.metadata,
+      });
+
+      createdNew = true;
+    }
+
+    const openedAt = now();
+    if (item.status === "pending") {
+      await persistLastClick({
+        itemId: item.id,
+        tripId,
+        partnerId: partner.id as PartnerId,
+        url,
+        createdAt: openedAt,
+        openedAt,
+      });
+    } else {
+      await persistLastClick(null);
+    }
+
+    try {
+      const res = await openUrlInternal(url);
+      const openDurationMs = now() - openedAt;
+
+      const t = String((res as any)?.type ?? "").toLowerCase();
+      const isDismissLike = t === "dismiss" || t === "cancel";
+
+      if (isDismissLike) {
+        await triggerReturnIfPresent("browser_dismiss", { openDurationMs });
+      }
+    } catch (e) {
+      if (createdNew && item) {
+        try {
+          await savedItemsStore.remove(item.id);
+        } catch {
+          // ignore
+        }
+      }
+      await persistLastClick(null);
+      throw e;
+    }
+
+    return item;
+  } finally {
+    opening = false;
+  }
+}
+
+export async function markBooked(itemId: string) {
+  const id = String(itemId ?? "").trim();
+  if (!id) return;
+
+  await ensureSavedItemsLoaded();
+  await savedItemsStore.transitionStatus(id, "booked");
+
+  if (lastClick?.itemId === id) {
+    await persistLastClick(null);
+  }
+}
+
+export async function markNotBooked(itemId: string) {
+  const id = String(itemId ?? "").trim();
+  if (!id) return;
+
+  await tryTransitionPendingToSaved(id);
+
+  if (lastClick?.itemId === id) {
+    await persistLastClick(null);
+  }
+}
+
+export async function dismissReturnPrompt(itemId?: string) {
+  if (!lastClick) return;
+
+  if (!itemId) {
+    await persistLastClick(null);
+    return;
+  }
+
+  const id = String(itemId ?? "").trim();
+  if (id && lastClick.itemId === id) {
+    await persistLastClick(null);
+  }
+}
+
+export function clearLastClick(itemId?: string) {
+  void dismissReturnPrompt(itemId);
+}
+
+export function getLastClick(): LastPartnerClick | null {
+  return lastClick;
+}
+
+export function __unsafeResetPartnerClickStateForDevOnly() {
+  try {
+    appStateSub?.remove?.();
+  } catch {
+    // ignore
+  }
+  appStateSub = null;
+  subscribed = false;
+  onReturnHandler = null;
+  void persistLastClick(null);
+  opening = false;
+  lastClickLoaded = false;
+        }
