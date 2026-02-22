@@ -4,7 +4,7 @@ export type MockTripSeed = {
   cityId: string;
   citySlug?: string;
   startDate: string; // ISO date-only
-  endDate: string;   // ISO date-only
+  endDate: string; // ISO date-only
   matchIds?: string[];
   notes?: string;
 };
