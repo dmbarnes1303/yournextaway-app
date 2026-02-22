@@ -1,481 +1,194 @@
-// src/services/partnerClicks.ts
-import { AppState, Linking, Platform } from "react-native";
-import * as WebBrowser from "expo-web-browser";
-
-import savedItemsStore from "@/src/state/savedItems";
-import { getPartner, type PartnerId } from "@/src/core/partners";
-import type { SavedItem, SavedItemType } from "@/src/core/savedItemTypes";
-import { getSavedItemTypeLabel } from "@/src/core/savedItemTypes";
+// src/services/affiliateLinks.ts
+import Constants from "expo-constants";
 
 /**
- * Phase 1 partner return detection:
- * - A *tracked* open sets/keeps a SavedItem in "pending" and stores lastClick
- * - On return (AppState active OR browser dismiss), UI can prompt:
- *   YES  -> booked
- *   NO   -> saved
- *   NOT NOW -> keep pending
+ * Centralised affiliate URL builder.
  *
- * Hardening:
- * - global opening guard
- * - rollback if open fails (only if we created a new pending item)
- * - avoid stale zombie prompts (age limit)
- * - avoid instant-dismiss rot: if browser was open too briefly, don't prompt;
- *   instead auto-demote pending -> saved.
+ * RULES (Phase-1 spine):
+ * - This file ONLY builds URLs.
+ * - Partner IDs live in src/core/partners.ts
+ * - Keep output keys stable to avoid screen refactors.
  *
- * De-duplication (important):
- * - If an existing item already represents this same partner URL for this trip,
- *   we REUSE it (prefer pending > saved > booked) instead of creating duplicates.
- * - If reused item is "saved", we promote to "pending" before opening so the
- *   return prompt remains valid.
- * - If reused item is "booked", we do NOT promote or prompt; we just open untracked.
+ * CRITICAL COMMISSION RULE:
+ * - Do NOT append extra query params to third-party tracking links (TPM, etc).
+ *   Many tracking/redirect systems do not guarantee passthrough and can break attribution.
+ *   Keep those tracking URLs EXACT.
  */
 
-export type LastPartnerClick = {
-  itemId: string;
-  tripId: string;
-  partnerId: PartnerId;
-  url: string;
+export type AffiliateLinks = {
+  city: string;
+  country?: string;
+  startDate?: string; // YYYY-MM-DD
+  endDate?: string; // YYYY-MM-DD
 
-  createdAt: number;
-  openedAt: number;
+  // Legacy (already used by screens)
+  hotelsUrl: string; // Expedia
+  flightsUrl: string; // Aviasales
+  trainsUrl: string; // fallback (untracked)
+  experiencesUrl: string; // GetYourGuide
+  mapsUrl: string; // Google Maps (untracked)
+
+  // Approved additions (Phase 1)
+  transfersUrl: string; // KiwiTaxi (tracked)
+  insuranceUrl: string; // SafetyWing (tracked)
+  claimsUrl: string; // AirHelp (tracked)
+  ticketsUrl: string; // SportsEvents365 (tracked)
 };
 
-let lastClick: LastPartnerClick | null = null;
+/* -------------------------------------------------------------------------- */
+/* helpers */
+/* -------------------------------------------------------------------------- */
 
-let subscribed = false;
-let appStateSub: { remove: () => void } | null = null;
+function env(name: string): string | undefined {
+  const extra = (Constants?.expoConfig as any)?.extra ?? (Constants as any)?.manifest?.extra ?? {};
+  const v =
+    (extra && typeof extra[name] === "string" ? String(extra[name]) : undefined) ??
+    (typeof process !== "undefined" &&
+    (process as any)?.env &&
+    typeof (process as any).env[name] === "string"
+      ? String((process as any).env[name])
+      : undefined);
 
-let onReturnHandler: ((click: LastPartnerClick) => void | Promise<void>) | null = null;
-
-/** Prevent double-taps / concurrent opens */
-let opening = false;
-
-function now() {
-  return Date.now();
+  const s = String(v ?? "").trim();
+  return s || undefined;
 }
 
-function normalizeUrl(url: string): string {
-  const u = String(url ?? "").trim();
-  if (!u) return "";
-  return /^https?:\/\//i.test(u) ? u : `https://${u}`;
+function enc(v: string) {
+  return encodeURIComponent(v);
 }
 
-function isRecent(click: LastPartnerClick) {
-  return now() - click.createdAt <= 1000 * 60 * 60 * 6; // 6 hours
+function cleanCity(input: string) {
+  return String(input ?? "").trim();
 }
 
-async function ensureSavedItemsLoaded() {
-  if (savedItemsStore.getState().loaded) return;
-  try {
-    await savedItemsStore.load();
-  } catch {
-    // ignore
-  }
+function cleanCountry(input?: string) {
+  const s = String(input ?? "").trim();
+  return s || undefined;
 }
 
-async function tryTransitionPendingToSaved(itemId: string) {
-  const id = String(itemId ?? "").trim();
-  if (!id) return;
-
-  await ensureSavedItemsLoaded();
-  const cur = savedItemsStore.getState().items.find((x) => x.id === id);
-  if (!cur) return;
-
-  if (cur.status !== "pending") return;
-
-  try {
-    await savedItemsStore.transitionStatus(id, "saved");
-  } catch {
-    // ignore
-  }
+function safeQueryCity(city: string, country?: string) {
+  const c = cleanCity(city);
+  const co = cleanCountry(country);
+  return co ? `${c}, ${co}` : c;
 }
 
-async function tryTransitionSavedToPending(itemId: string) {
-  const id = String(itemId ?? "").trim();
-  if (!id) return;
-
-  await ensureSavedItemsLoaded();
-  const cur = savedItemsStore.getState().items.find((x) => x.id === id);
-  if (!cur) return;
-
-  if (cur.status !== "saved") return;
-
-  try {
-    await savedItemsStore.transitionStatus(id, "pending");
-  } catch {
-    // ignore
-  }
+function isIsoDateOnly(s?: string) {
+  return !!s && /^\d{4}-\d{2}-\d{2}$/.test(String(s).trim());
 }
+
+/* -------------------------------------------------------------------------- */
+/* affiliate config */
+/* -------------------------------------------------------------------------- */
 
 /**
- * Consume lastClick exactly once and invoke handler.
+ * Put IDs in app.json -> expo.extra and/or .env as EXPO_PUBLIC_*.
  *
- * Instant dismiss policy:
- * - if browser dismisses too fast => do NOT prompt
- * - BUT auto-demote pending -> saved so Pending doesn't rot
+ * You currently have approved:
+ * - Expedia (program-specific linking varies; we use a stable public entry)
+ * - Aviasales (marker-based in many setups)
+ * - GetYourGuide (partner_id)
+ * - KiwiTaxi / AirHelp via TPM tracking links
+ * - SafetyWing direct tracking link
+ * - SportsEvents365 a_aid param
  */
-async function triggerReturnIfPresent(
-  reason: "appstate" | "browser_dismiss",
-  meta?: { openDurationMs?: number }
-) {
-  if (!lastClick) return;
+const AFFILIATE = {
+  // Optional IDs (safe if missing)
+  aviasalesMarker: env("EXPO_PUBLIC_AVIASALES_MARKER"),
+  gygPartnerId: env("EXPO_PUBLIC_GYG_PARTNER_ID"),
+  expediaAffilId: env("EXPO_PUBLIC_EXPEDIA_AFFIL_ID"),
 
-  if (!isRecent(lastClick)) {
-    lastClick = null;
-    return;
-  }
+  // ✅ EXACT tracking links provided by you (DO NOT MODIFY)
+  kiwitaxiTracked: "https://kiwitaxi.tpm.lv/ZnnAV8eH",
+  airhelpTracked: "https://airhelp.tpm.lv/6tipSUue",
+  safetywingTracked:
+    "https://safetywing.com/?referenceID=26471369&utm_source=26471369&utm_medium=Ambassador",
+  sportsevents365Tracked: "https://www.sportsevents365.com/?a_aid=69834e80ec9d3",
+};
 
-  const click = lastClick;
+/* -------------------------------------------------------------------------- */
+/* public */
+/* -------------------------------------------------------------------------- */
 
-  const minOpenMs = 8000;
-  const dur = Number(meta?.openDurationMs ?? 0);
-  if (reason === "browser_dismiss" && dur > 0 && dur < minOpenMs) {
-    lastClick = null;
-    await tryTransitionPendingToSaved(click.itemId);
-    return;
-  }
+export function buildAffiliateLinks(args: {
+  city: string;
+  country?: string;
+  startDate?: string;
+  endDate?: string;
+}): AffiliateLinks {
+  const city = cleanCity(args.city);
+  const country = cleanCountry(args.country);
 
-  const handler = onReturnHandler;
+  const startDate = isIsoDateOnly(args.startDate) ? String(args.startDate).trim() : undefined;
+  const endDate = isIsoDateOnly(args.endDate) ? String(args.endDate).trim() : undefined;
 
-  // If handler not registered yet, keep lastClick so bootstrap can attach later.
-  if (!handler) return;
+  const query = safeQueryCity(city, country);
 
-  // Clear exactly once
-  lastClick = null;
+  /* -------------------- */
+  /* Hotels: Expedia (approved) */
+  /* -------------------- */
+  // Stable public entry point. Some affiliate programs require different deep-link formats;
+  // we keep this resilient and optionally add a generic affcid.
+  const expediaParams: string[] = [`destination=${enc(query)}`];
+  if (startDate) expediaParams.push(`startDate=${enc(startDate)}`);
+  if (endDate) expediaParams.push(`endDate=${enc(endDate)}`);
+  if (AFFILIATE.expediaAffilId) expediaParams.push(`affcid=${enc(AFFILIATE.expediaAffilId)}`);
+  const hotelsUrl = `https://www.expedia.co.uk/Hotel-Search?${expediaParams.join("&")}`;
 
-  try {
-    await Promise.resolve(handler(click));
-  } catch {
-    // never crash app on return prompt
-  }
+  /* -------------------- */
+  /* Flights: Aviasales (approved) */
+  /* -------------------- */
+  const aviaParams: string[] = [];
+  if (AFFILIATE.aviasalesMarker) aviaParams.push(`marker=${enc(AFFILIATE.aviasalesMarker)}`);
+  // Keep destination hint; harmless if ignored.
+  aviaParams.push(`destination=${enc(query)}`);
+  const flightsUrl = `https://www.aviasales.com/?${aviaParams.join("&")}`;
+
+  /* -------------------- */
+  /* Trains/Buses: fallback (UNTRACKED until affiliate) */
+  /* -------------------- */
+  const trainsUrl = `https://www.google.com/maps/search/?api=1&query=${enc(
+    `${query} train station`
+  )}`;
+
+  /* -------------------- */
+  /* Experiences: GetYourGuide (approved) */
+  /* -------------------- */
+  // Correct search format: /s/?q=<query>&partner_id=<id>
+  const gygParams: string[] = [`q=${enc(query)}`];
+  if (AFFILIATE.gygPartnerId) gygParams.push(`partner_id=${enc(AFFILIATE.gygPartnerId)}`);
+  const experiencesUrl = `https://www.getyourguide.com/s/?${gygParams.join("&")}`;
+
+  /* -------------------- */
+  /* Transfers / Insurance / Claims / Tickets: TRACKED BASE LINKS (EXACT) */
+  /* -------------------- */
+  // Do not append extra params to tracking URLs. Keep attribution clean.
+  const transfersUrl = AFFILIATE.kiwitaxiTracked;
+  const insuranceUrl = AFFILIATE.safetywingTracked;
+  const claimsUrl = AFFILIATE.airhelpTracked;
+  const ticketsUrl = AFFILIATE.sportsevents365Tracked;
+
+  /* -------------------- */
+  /* Maps: Google Maps (UNTRACKED) */
+  /* -------------------- */
+  const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${enc(query)}`;
+
+  return {
+    city,
+    country,
+    startDate,
+    endDate,
+    hotelsUrl,
+    flightsUrl,
+    trainsUrl,
+    experiencesUrl,
+    mapsUrl,
+    transfersUrl,
+    insuranceUrl,
+    claimsUrl,
+    ticketsUrl,
+  };
 }
 
-async function openUrlInternal(url: string) {
-  const u = normalizeUrl(url);
-  if (!u) throw new Error("URL is required");
-
-  if (Platform.OS === "web") {
-    const can = await Linking.canOpenURL(u);
-    if (!can) throw new Error("Cannot open URL");
-    await Linking.openURL(u);
-    return { type: "opened" as const };
-  }
-
-  const res = await WebBrowser.openBrowserAsync(u, {
-    presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
-    readerMode: false,
-    enableBarCollapsing: true,
-    showTitle: true,
-  });
-
-  return res;
-}
-
-/** Dev diagnostics */
-export function getPartnerClicksDebugState() {
-  return { opening, subscribed, lastClick };
-}
-
-export function ensurePartnerReturnWatcher(onReturn: (click: LastPartnerClick) => void | Promise<void>) {
-  onReturnHandler = onReturn;
-
-  if (subscribed) return;
-  subscribed = true;
-
-  let lastState = AppState.currentState;
-
-  const sub = AppState.addEventListener("change", (next) => {
-    const becameActive = Boolean(String(lastState).match(/inactive|background/)) && next === "active";
-    lastState = next;
-    if (!becameActive) return;
-
-    triggerReturnIfPresent("appstate").catch(() => null);
-  });
-
-  appStateSub = sub as any;
-}
-
-/**
- * Public: open a URL WITHOUT creating a pending item and WITHOUT prompts.
- * Use this for:
- * - maps
- * - opening existing saved items
- * - any “just open it” links
- */
-export async function openUntrackedUrl(url: string) {
-  const u = normalizeUrl(url);
-  if (!u) throw new Error("url is required");
-
-  if (opening) throw new Error("Partner open already in progress");
-  opening = true;
-
-  try {
-    await openUrlInternal(u);
-  } finally {
-    opening = false;
-  }
-}
-
-/** Backwards-compat alias used by Wallet */
-export async function openPartnerUrl(url: string) {
-  return await openUntrackedUrl(url);
-}
-
-function cleanCity(meta?: Record<string, any>): string | null {
-  const raw = meta?.city ?? meta?.destination ?? meta?.place;
-  const s = String(raw ?? "").trim();
-  return s || null;
-}
-
-function buildDefaultTitle(args: {
-  partnerId: PartnerId;
-  partnerName: string;
-  type: SavedItemType;
-  metadata?: Record<string, any>;
-}): string {
-  const city = cleanCity(args.metadata);
-  const label = getSavedItemTypeLabel(args.type);
-
-  switch (args.type) {
-    case "hotel":
-      return city ? `Stay: Hotels in ${city}` : `Stay: Hotels`;
-    case "flight":
-      return city ? `Flights to ${city}` : `Flights`;
-    case "train":
-      return city ? `Trains to ${city}` : `Trains`;
-    case "transfer":
-      return city ? `Transfers in ${city}` : `Transfers`;
-    case "things":
-      return city ? `Experiences in ${city}` : `Experiences`;
-    case "tickets":
-      return city ? `Match tickets for ${city}` : `Match tickets`;
-    case "insurance":
-      return city ? `Protect yourself: Travel insurance for ${city}` : `Protect yourself: Travel insurance`;
-    case "claim":
-      return `Claims & compensation: Compensation help`;
-    case "note":
-    case "other":
-      return "Notes";
-    default:
-      return city ? `${label}: ${city}` : `${label}: ${args.partnerName}`;
-  }
-}
-
-/**
- * Reuse policy:
- * - Match by tripId + partnerId + partnerUrl (normalized) + type
- * - Prefer pending (already tracked) > saved (promote to pending) > booked (open untracked)
- */
-function findReusableItem(args: {
-  tripId: string;
-  partnerId: PartnerId;
-  url: string;
-  type: SavedItemType;
-}): SavedItem | null {
-  const tripId = String(args.tripId ?? "").trim();
-  const url = normalizeUrl(args.url);
-  if (!tripId || !url) return null;
-
-  const items = savedItemsStore.getState().items;
-
-  const matches = items.filter((x) => {
-    if (String(x.tripId) !== tripId) return false;
-    if (String(x.partnerId ?? "") !== String(args.partnerId)) return false;
-    if (normalizeUrl(String(x.partnerUrl ?? "")) !== url) return false;
-    if (String(x.type) !== String(args.type)) return false;
-    return true;
-  });
-
-  if (matches.length === 0) return null;
-
-  const pending = matches.find((m) => m.status === "pending");
-  if (pending) return pending;
-
-  const saved = matches.find((m) => m.status === "saved");
-  if (saved) return saved;
-
-  const booked = matches.find((m) => m.status === "booked");
-  if (booked) return booked;
-
-  // archived (ignore for reuse here)
-  return null;
-}
-
-/**
- * Public: tracked partner click
- * - reuses existing item when possible (prevents duplicates)
- * - ensures item is pending before open if we intend to prompt on return
- * - stores lastClick only when return prompting is relevant
- */
-export async function beginPartnerClick(args: {
-  tripId: string;
-  partnerId: PartnerId;
-  url: string;
-  savedItemType?: SavedItemType;
-  title?: string;
-  metadata?: Record<string, any>;
-}): Promise<SavedItem> {
-  if (opening) throw new Error("Partner open already in progress");
-  opening = true;
-
-  let createdNew = false;
-  let item: SavedItem | null = null;
-
-  try {
-    const tripId = String(args.tripId ?? "").trim();
-    if (!tripId) throw new Error("tripId is required");
-
-    const partner = getPartner(args.partnerId);
-
-    const url = normalizeUrl(args.url);
-    if (!url) throw new Error("url is required");
-
-    await ensureSavedItemsLoaded();
-
-    const type = (args.savedItemType ?? partner.defaultSavedItemType) as SavedItemType;
-
-    // 1) Reuse if possible
-    const reusable = findReusableItem({ tripId, partnerId: partner.id, url, type });
-
-    if (reusable) {
-      item = reusable;
-
-      // If it's booked, don't re-track / re-prompt.
-      if (item.status === "booked") {
-        await openUntrackedUrl(url);
-        return item;
-      }
-
-      // If it's saved, promote to pending so the return prompt makes sense.
-      if (item.status === "saved") {
-        await tryTransitionSavedToPending(item.id);
-        // refresh from store (title/status might have changed)
-        item = savedItemsStore.getState().items.find((x) => x.id === item!.id) ?? item;
-      }
+export function normalizeUrlForCompare(url: string): string {
+  return String(url ?? "").trim().toLowerCase();
     }
-
-    // 2) If no reusable item, create a new pending one
-    if (!item) {
-      const title =
-        String(args.title ?? "").trim() ||
-        buildDefaultTitle({
-          partnerId: partner.id,
-          partnerName: partner.name,
-          type,
-          metadata: args.metadata,
-        });
-
-      item = await savedItemsStore.add({
-        tripId,
-        type,
-        status: "pending",
-        title,
-        partnerId: partner.id,
-        partnerUrl: url,
-        metadata: args.metadata,
-      });
-
-      createdNew = true;
-    }
-
-    // 3) Track lastClick for return prompt (pending only)
-    const openedAt = now();
-    if (item.status === "pending") {
-      lastClick = {
-        itemId: item.id,
-        tripId,
-        partnerId: partner.id,
-        url,
-        createdAt: openedAt,
-        openedAt,
-      };
-    } else {
-      // if something drifted, don't keep a stale click
-      lastClick = null;
-    }
-
-    // 4) Open partner
-    try {
-      const res = await openUrlInternal(url);
-
-      const openDurationMs = now() - openedAt;
-
-      const t = String((res as any)?.type ?? "").toLowerCase();
-      const isDismissLike = t === "dismiss" || t === "cancel";
-
-      if (isDismissLike) {
-        await triggerReturnIfPresent("browser_dismiss", { openDurationMs });
-      }
-    } catch (e) {
-      // Only rollback if we created a brand new item for this click.
-      if (createdNew && item) {
-        try {
-          await savedItemsStore.remove(item.id);
-        } catch {
-          // ignore
-        }
-      }
-
-      if (lastClick?.itemId === item?.id) lastClick = null;
-      throw e;
-    }
-
-    return item;
-  } finally {
-    opening = false;
-  }
-}
-
-/** YES flow (pending -> booked) */
-export async function markBooked(itemId: string) {
-  const id = String(itemId ?? "").trim();
-  if (!id) return;
-
-  await ensureSavedItemsLoaded();
-  await savedItemsStore.transitionStatus(id, "booked");
-  if (lastClick?.itemId === id) lastClick = null;
-}
-
-/** NO flow (pending -> saved) */
-export async function markNotBooked(itemId: string) {
-  const id = String(itemId ?? "").trim();
-  if (!id) return;
-
-  await tryTransitionPendingToSaved(id);
-  if (lastClick?.itemId === id) lastClick = null;
-}
-
-/** NOT NOW flow: keep pending, clear lastClick so it doesn’t re-prompt instantly */
-export function dismissReturnPrompt(itemId?: string) {
-  if (!lastClick) return;
-
-  if (!itemId) {
-    lastClick = null;
-    return;
-  }
-
-  const id = String(itemId ?? "").trim();
-  if (id && lastClick.itemId === id) lastClick = null;
-}
-
-/** Backwards compat */
-export function clearLastClick(itemId?: string) {
-  dismissReturnPrompt(itemId);
-}
-
-export function getLastClick(): LastPartnerClick | null {
-  return lastClick;
-}
-
-export function __unsafeResetPartnerClickStateForDevOnly() {
-  try {
-    appStateSub?.remove?.();
-  } catch {
-    // ignore
-  }
-  appStateSub = null;
-  subscribed = false;
-  onReturnHandler = null;
-  lastClick = null;
-  opening = false;
-}
