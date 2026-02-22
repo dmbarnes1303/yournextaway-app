@@ -5,6 +5,7 @@ import { makeTripId } from "@/src/core/id";
 import type { Trip } from "@/src/core/tripTypes";
 import savedItemsStore from "@/src/state/savedItems";
 import { MOCK_TRIP_SEEDS } from "@/src/data/mockTrips";
+import { buildMockSavedItemsForSeed } from "@/src/data/mockTripItems";
 
 const STORAGE_KEY = "yna_trips_v1";
 
@@ -94,8 +95,7 @@ const useTripsStore = create<TripsState>((set, get) => ({
     const sorted = sortTrips(cleaned);
     set({ trips: sorted, loaded: true });
 
-    // Dev-only: if you have zero trips, seed a couple so UI isn't dead
-    // IMPORTANT: won't run in production builds.
+    // Dev-only: seed if empty so UI isn't dead.
     // @ts-ignore
     if (typeof __DEV__ !== "undefined" && __DEV__ && sorted.length === 0) {
       await get().seedMockTrips();
@@ -192,8 +192,15 @@ const useTripsStore = create<TripsState>((set, get) => ({
     if (!get().loaded) await get().loadTrips();
     if (get().trips.length > 0) return;
 
+    // ensure saved items store loaded before we add
+    try {
+      await savedItemsStore.load();
+    } catch {
+      // best-effort
+    }
+
     for (const seed of MOCK_TRIP_SEEDS) {
-      await get().addTrip({
+      const trip = await get().addTrip({
         cityId: seed.cityId,
         citySlug: seed.citySlug,
         startDate: seed.startDate,
@@ -201,6 +208,38 @@ const useTripsStore = create<TripsState>((set, get) => ({
         matchIds: seed.matchIds ?? [],
         notes: seed.notes,
       });
+
+      // Seed items for this trip (safe: saved items store accepts partnerId as string)
+      const matchTitle =
+        seed.matchIds && seed.matchIds.length
+          ? seed.matchIds[0].replace(/-/g, " ").toUpperCase()
+          : undefined;
+
+      const built = buildMockSavedItemsForSeed({
+        tripId: trip.id,
+        cityName: seed.cityId,
+        startDate: seed.startDate,
+        endDate: seed.endDate,
+        matchTitle,
+      });
+
+      for (const it of built.items) {
+        try {
+          await savedItemsStore.add({
+            tripId: built.tripId,
+            type: it.type,
+            status: it.status,
+            title: it.title,
+            partnerId: it.partnerId,
+            partnerUrl: it.partnerUrl,
+            priceText: it.priceText,
+            currency: it.currency,
+            metadata: it.metadata,
+          });
+        } catch {
+          // best-effort; don't block seeding if one item fails
+        }
+      }
     }
   },
 }));
