@@ -28,17 +28,15 @@ export const PARTNERS: Partner[] = [
     category: "tickets",
     affiliate: true,
     api: true,
-    deepLinkBase: "https://www.sportsevents365.com/"
+    deepLinkBase: "https://www.sportsevents365.com/",
   },
-
-  // SeatPick placeholder (pending approval)
   {
     id: "seatpick",
     name: "SeatPick",
     category: "tickets",
     affiliate: true,
     api: false,
-    deepLinkBase: "https://seatpick.com/"
+    deepLinkBase: "https://seatpick.com/",
   },
 
   // =====================
@@ -50,7 +48,7 @@ export const PARTNERS: Partner[] = [
     category: "flights",
     affiliate: true,
     api: false,
-    deepLinkBase: "https://www.expedia.com/"
+    deepLinkBase: "https://www.expedia.com/",
   },
   {
     id: "aviasales",
@@ -58,7 +56,7 @@ export const PARTNERS: Partner[] = [
     category: "flights",
     affiliate: true,
     api: false,
-    deepLinkBase: "https://www.aviasales.com/"
+    deepLinkBase: "https://www.aviasales.com/",
   },
 
   // =====================
@@ -70,7 +68,7 @@ export const PARTNERS: Partner[] = [
     category: "stays",
     affiliate: true,
     api: false,
-    deepLinkBase: "https://www.expedia.com/Hotels"
+    deepLinkBase: "https://www.expedia.com/Hotels",
   },
 
   // =====================
@@ -82,7 +80,7 @@ export const PARTNERS: Partner[] = [
     category: "transfers",
     affiliate: true,
     api: false,
-    deepLinkBase: "https://kiwitaxi.com/"
+    deepLinkBase: "https://kiwitaxi.com/",
   },
   {
     id: "welcomepickups",
@@ -90,7 +88,7 @@ export const PARTNERS: Partner[] = [
     category: "transfers",
     affiliate: true,
     api: false,
-    deepLinkBase: "https://www.welcomepickups.com/"
+    deepLinkBase: "https://www.welcomepickups.com/",
   },
   {
     id: "klook_transfers",
@@ -98,7 +96,7 @@ export const PARTNERS: Partner[] = [
     category: "transfers",
     affiliate: true,
     api: false,
-    deepLinkBase: "https://www.klook.com/"
+    deepLinkBase: "https://www.klook.com/",
   },
 
   // =====================
@@ -110,7 +108,7 @@ export const PARTNERS: Partner[] = [
     category: "experiences",
     affiliate: true,
     api: false,
-    deepLinkBase: "https://www.tiqets.com/"
+    deepLinkBase: "https://www.tiqets.com/",
   },
   {
     id: "klook",
@@ -118,7 +116,7 @@ export const PARTNERS: Partner[] = [
     category: "experiences",
     affiliate: true,
     api: false,
-    deepLinkBase: "https://www.klook.com/"
+    deepLinkBase: "https://www.klook.com/",
   },
   {
     id: "getyourguide",
@@ -126,7 +124,7 @@ export const PARTNERS: Partner[] = [
     category: "experiences",
     affiliate: true,
     api: false,
-    deepLinkBase: "https://www.getyourguide.com/"
+    deepLinkBase: "https://www.getyourguide.com/",
   },
   {
     id: "wegotrip",
@@ -134,7 +132,7 @@ export const PARTNERS: Partner[] = [
     category: "experiences",
     affiliate: true,
     api: false,
-    deepLinkBase: "https://wegotrip.com/"
+    deepLinkBase: "https://wegotrip.com/",
   },
 
   // =====================
@@ -146,7 +144,7 @@ export const PARTNERS: Partner[] = [
     category: "insurance",
     affiliate: true,
     api: false,
-    deepLinkBase: "https://safetywing.com/"
+    deepLinkBase: "https://safetywing.com/",
   },
   {
     id: "ekta",
@@ -154,7 +152,7 @@ export const PARTNERS: Partner[] = [
     category: "insurance",
     affiliate: true,
     api: false,
-    deepLinkBase: "https://ektatraveling.com/"
+    deepLinkBase: "https://ektatraveling.com/",
   },
 
   // =====================
@@ -166,7 +164,7 @@ export const PARTNERS: Partner[] = [
     category: "compensation",
     affiliate: true,
     api: false,
-    deepLinkBase: "https://www.airhelp.com/"
+    deepLinkBase: "https://www.airhelp.com/",
   },
   {
     id: "compensair",
@@ -174,6 +172,32 @@ export const PARTNERS: Partner[] = [
     category: "compensation",
     affiliate: true,
     api: false,
-    deepLinkBase: "https://www.compensair.com/"
-  }
+    deepLinkBase: "https://www.compensair.com/",
+  },
 ];
+
+// --------- selectors / helpers ---------
+
+export type PartnerId = (typeof PARTNERS)[number]["id"];
+
+export function getPartnersByCategory(category: PartnerCategory): Partner[] {
+  return PARTNERS.filter((p) => p.category === category);
+}
+
+export function getPartnerOrNull(id: string): Partner | null {
+  return PARTNERS.find((p) => p.id === id) ?? null;
+}
+
+/**
+ * Strict accessor: throws if partner id is unknown.
+ * Use for "should never happen" code paths.
+ */
+export function getPartner(id: string): Partner {
+  const p = getPartnerOrNull(id);
+  if (!p) throw new Error(`Unknown partner id: ${id}`);
+  return p;
+}
+
+export function isPartnerId(id: string): id is PartnerId {
+  return PARTNERS.some((p) => p.id === id);
+}
