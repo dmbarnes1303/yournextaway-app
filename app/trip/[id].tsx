@@ -46,6 +46,13 @@ function coerceId(v: unknown): string | null {
   return null;
 }
 
+function isNumericId(v: unknown): v is string {
+  if (typeof v !== "string") return false;
+  const s = v.trim();
+  if (!s) return false;
+  return /^[0-9]+$/.test(s);
+}
+
 function summaryLine(t: Trip) {
   const a = t.startDate ? formatUkDateOnly(t.startDate) : "—";
   const b = t.endDate ? formatUkDateOnly(t.endDate) : "—";
@@ -189,8 +196,15 @@ export default function TripDetailScreen() {
     let cancelled = false;
 
     async function run() {
-      if (!trip?.matchIds?.length) {
+      const idsRaw = Array.isArray(trip?.matchIds) ? trip!.matchIds : [];
+      const ids = idsRaw.map((x) => String(x).trim()).filter(Boolean);
+
+      // ✅ skip fetch entirely for mock ids (non-numeric)
+      const numericIds = ids.filter(isNumericId);
+
+      if (numericIds.length === 0) {
         setFixturesById({});
+        setFxLoading(false);
         return;
       }
 
@@ -198,7 +212,7 @@ export default function TripDetailScreen() {
 
       try {
         const map: Record<string, any> = {};
-        for (const id of trip.matchIds) {
+        for (const id of numericIds) {
           const r = await getFixtureById(String(id));
           if (r) map[String(id)] = r;
         }
@@ -607,10 +621,7 @@ export default function TripDetailScreen() {
 
                 {notes.length === 0 ? (
                   <View style={{ marginTop: 10 }}>
-                    <EmptyState
-                      title="No notes yet"
-                      message="Notes you save for this trip appear here."
-                    />
+                    <EmptyState title="No notes yet" message="Notes you save for this trip appear here." />
                   </View>
                 ) : (
                   <View style={{ gap: 10, marginTop: 10 }}>
@@ -714,9 +725,7 @@ export default function TripDetailScreen() {
                     <Text style={styles.mapsInline}>Open maps search</Text>
                   </Pressable>
 
-                  {fxLoading ? (
-                    <Text style={styles.mutedInline}>Loading match details…</Text>
-                  ) : null}
+                  {fxLoading ? <Text style={styles.mutedInline}>Loading match details…</Text> : null}
                 </GlassCard>
               )}
 
@@ -808,11 +817,7 @@ export default function TripDetailScreen() {
                 ) : (
                   <View style={{ gap: 10 }}>
                     {booked.map((it) => (
-                      <Pressable
-                        key={it.id}
-                        onPress={() => openSavedItem(it)}
-                        style={styles.noteRow}
-                      >
+                      <Pressable key={it.id} onPress={() => openSavedItem(it)} style={styles.noteRow}>
                         <View style={{ flex: 1 }}>
                           <Text style={styles.itemTitle} numberOfLines={1}>
                             {it.title}
