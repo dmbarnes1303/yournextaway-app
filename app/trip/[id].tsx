@@ -66,7 +66,6 @@ function summaryLine(t: Trip) {
 }
 
 function tripStatus(t: Trip): "Upcoming" | "Past" {
-  // Trips store enforces start/end in persistence, but keep it safe.
   const start = t.startDate ? parseIsoDateOnly(t.startDate) : null;
   const end = t.endDate ? parseIsoDateOnly(t.endDate) : null;
   if (!start || !end) return "Upcoming";
@@ -205,7 +204,6 @@ function formatKickoffMeta(row?: FixtureListRow | null): { line: string; tbc: bo
   const tbc = looksTbc || midnight;
 
   if (tbc) {
-    // Still show date if we have it; time is unreliable.
     return { line: `Kickoff: ${datePart} • TBC`, tbc: true };
   }
 
@@ -769,7 +767,10 @@ export default function TripDetailScreen() {
                 <Text style={styles.sectionTitle}>Matches</Text>
 
                 {numericMatchIds.length === 0 ? (
-                  <EmptyState title="No matches added" message="Add a match to unlock match-specific tickets and planning." />
+                  <EmptyState
+                    title="No matches added"
+                    message="Add a match to unlock match-specific tickets and planning."
+                  />
                 ) : (
                   <View style={{ gap: 10 }}>
                     {numericMatchIds.map((mid) => {
@@ -839,6 +840,32 @@ export default function TripDetailScreen() {
                 {fxLoading ? <Text style={styles.mutedInline}>Loading match details…</Text> : null}
               </GlassCard>
 
+              {/* MATCH TICKETS */}
+              {bookingLinks && (
+                <GlassCard style={styles.card}>
+                  <Text style={styles.sectionTitle}>Match tickets</Text>
+
+                  <Pressable
+                    style={styles.wideBtn}
+                    onPress={() =>
+                      openTrackedPartner({
+                        partnerId: "sportsevents365",
+                        url: bookingLinks.ticketsUrl,
+                        savedItemType: "tickets",
+                        title: `Match tickets`,
+                        metadata: { city: cityName },
+                      })
+                    }
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.wideBtnTitle}>Find tickets</Text>
+                      <Text style={styles.wideBtnSub}>SportsEvents365</Text>
+                    </View>
+                    <Text style={styles.chev}>›</Text>
+                  </Pressable>
+                </GlassCard>
+              )}
+
               {/* PENDING */}
               <GlassCard style={styles.card}>
                 <Text style={styles.sectionTitle}>Pending</Text>
@@ -875,7 +902,10 @@ export default function TripDetailScreen() {
                           <Pressable onPress={() => confirmMarkBooked(it)} style={styles.smallBtn}>
                             <Text style={styles.smallBtnText}>Booked</Text>
                           </Pressable>
-                          <Pressable onPress={() => confirmArchive(it)} style={[styles.smallBtn, styles.smallBtnDanger]}>
+                          <Pressable
+                            onPress={() => confirmArchive(it)}
+                            style={[styles.smallBtn, styles.smallBtnDanger]}
+                          >
                             <Text style={styles.smallBtnText}>Archive</Text>
                           </Pressable>
                         </View>
@@ -890,7 +920,10 @@ export default function TripDetailScreen() {
                 <Text style={styles.sectionTitle}>Booked (in Wallet)</Text>
 
                 {booked.length === 0 ? (
-                  <EmptyState title="No booked items yet" message="When you confirm a booking, it will show here and in Wallet." />
+                  <EmptyState
+                    title="No booked items yet"
+                    message="When you confirm a booking, it will show here and in Wallet."
+                  />
                 ) : (
                   <View style={{ gap: 10 }}>
                     {booked.map((it) => (
@@ -919,7 +952,10 @@ export default function TripDetailScreen() {
                             <Text style={styles.smallBtnText}>Wallet</Text>
                           </Pressable>
 
-                          <Pressable onPress={() => confirmArchive(it)} style={[styles.smallBtn, styles.smallBtnDanger]}>
+                          <Pressable
+                            onPress={() => confirmArchive(it)}
+                            style={[styles.smallBtn, styles.smallBtnDanger]}
+                          >
                             <Text style={styles.smallBtnText}>Archive</Text>
                           </Pressable>
                         </View>
@@ -934,7 +970,10 @@ export default function TripDetailScreen() {
                 <Text style={styles.sectionTitle}>Saved</Text>
 
                 {saved.length === 0 ? (
-                  <EmptyState title="No saved items" message="If you answer “No” after returning from a partner, we keep the link here as Saved." />
+                  <EmptyState
+                    title="No saved items"
+                    message="If you answer “No” after returning from a partner, we keep the link here as Saved."
+                  />
                 ) : (
                   <View style={{ gap: 10 }}>
                     {saved.map((it) => (
@@ -967,7 +1006,10 @@ export default function TripDetailScreen() {
                             <Text style={styles.smallBtnText}>Pending</Text>
                           </Pressable>
 
-                          <Pressable onPress={() => confirmArchive(it)} style={[styles.smallBtn, styles.smallBtnDanger]}>
+                          <Pressable
+                            onPress={() => confirmArchive(it)}
+                            style={[styles.smallBtn, styles.smallBtnDanger]}
+                          >
                             <Text style={styles.smallBtnText}>Archive</Text>
                           </Pressable>
                         </View>
@@ -991,7 +1033,11 @@ export default function TripDetailScreen() {
                     multiline
                   />
 
-                  <Pressable onPress={addNote} disabled={noteSaving} style={[styles.noteSaveBtn, noteSaving && { opacity: 0.7 }]}>
+                  <Pressable
+                    onPress={addNote}
+                    disabled={noteSaving}
+                    style={[styles.noteSaveBtn, noteSaving && { opacity: 0.7 }]}
+                  >
                     <Text style={styles.noteSaveText}>{noteSaving ? "Saving…" : "Save note"}</Text>
                   </Pressable>
                 </View>
@@ -1370,7 +1416,14 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
 
-  matchHint: { marginTop: 6, color: theme.colors.textTertiary, fontWeight: "900", fontSize: 11 },
+  // 🔒 Safe: don't rely on theme.colors.textTertiary existing
+  matchHint: {
+    marginTop: 6,
+    color: theme.colors.textSecondary,
+    fontWeight: "900",
+    fontSize: 11,
+    opacity: 0.9,
+  },
 
   crestWrap: {
     width: 40,
