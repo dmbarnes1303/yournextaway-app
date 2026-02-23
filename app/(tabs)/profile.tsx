@@ -27,7 +27,6 @@ import { refreshFollowedMatches } from "@/src/services/followedMatchesRefresh";
 import { ensureNotificationsReady } from "@/src/services/followKickoffNotifications";
 
 import preferencesStore from "@/src/state/preferences";
-import { formatIataLabel } from "@/src/constants/iataCities";
 
 /* -------------------------------------------------------------------------- */
 /* Row UI */
@@ -91,7 +90,9 @@ function getCountryCodeBestEffort(): string {
     if (tz.includes("Europe/Rome")) return "IT";
     if (tz.includes("Europe/Berlin")) return "DE";
     if (tz.includes("Europe/Paris")) return "FR";
-  } catch {}
+  } catch {
+    // ignore
+  }
   return "GB";
 }
 
@@ -147,6 +148,12 @@ function normalizeStr(v: unknown) {
   return s ? s : null;
 }
 
+/**
+ * Fallback heuristic ONLY when store has kickoffLikelyTbc === null:
+ * - If no kickoffIso => TBC
+ * - If <= 21 days away => confirmed
+ * - Else: if >= 7 followed fixtures in same (leagueId+season+round) share same kickoff minute => likely placeholder => TBC
+ */
 function computeLikelyPlaceholderTbcIdsFromFollowed(followed: FollowedMatch[]) {
   const CONFIRMED_WITHIN_DAYS = 21;
   const CLUSTER_THRESHOLD = 7;
@@ -222,7 +229,9 @@ function kickoffStateForFollowed(m: FollowedMatch, fallbackLikelyTbcIds: Set<str
   const iso = String(m.kickoffIso ?? "").trim();
 
   if (!iso) return { isTbc: true, secondary: "Kickoff time not set yet" };
+
   if (daysUntilIso(iso) <= 21) return { isTbc: false, secondary: null };
+
   if (id && fallbackLikelyTbcIds.has(id)) return { isTbc: true, secondary: "TV schedule pending" };
 
   return { isTbc: true, secondary: "Kickoff may change" };
@@ -241,8 +250,14 @@ function formatLastRefreshed(ms: number | null) {
   })}`;
 }
 
+function cleanIataCity(v: unknown, fallback = "LON") {
+  const s = String(v ?? "").trim().toUpperCase();
+  if (/^[A-Z]{3}$/.test(s)) return s;
+  return fallback;
+}
+
 /* -------------------------------------------------------------------------- */
-/* Storage keys (keep for non-flight prefs) */
+/* Storage keys (non-flight prefs live here; origin IATA lives in preferences) */
 /* -------------------------------------------------------------------------- */
 
 const STORAGE_KEYS = {
@@ -250,6 +265,7 @@ const STORAGE_KEYS = {
   setupComplete: "yna:setupComplete",
 
   plan: "yna:plan",
+
   currency: "yna:profile.currency",
   language: "yna:profile.language",
   budgetTarget: "yna:profile.budgetTarget",
@@ -260,52 +276,74 @@ type PlanValue = "not_set" | "free" | "premium";
 type AlertsValue = "On" | "Off";
 
 /* -------------------------------------------------------------------------- */
-/* Origin (IATA CITY code) options
- * - keep small and pragmatic for Phase 1
- * - expand as you expand audience
- * -------------------------------------------------------------------------- */
+/* Options */
+/* -------------------------------------------------------------------------- */
 
-const ORIGIN_BY_COUNTRY: Record<string, SelectOption[]> = {
+/**
+ * This is intentionally NOT a huge dataset.
+ * It's just a sane “default origin city code” picker by user region.
+ * You can add more any time without breaking anything.
+ *
+ * City codes (not airports): LON, PAR, ROM, MIL, MAD, BCN, BER, MUC, etc.
+ */
+const ORIGIN_CITIES_BY_COUNTRY: Record<string, SelectOption[]> = {
   GB: [
-    { label: formatIataLabel("London", "LON"), value: "LON" },
-    { label: formatIataLabel("Manchester", "MAN"), value: "MAN" },
-    { label: formatIataLabel("Birmingham", "BHX"), value: "BHX" },
-    { label: formatIataLabel("Edinburgh", "EDI"), value: "EDI" },
-    { label: formatIataLabel("Glasgow", "GLA"), value: "GLA" },
-    { label: formatIataLabel("Bristol", "BRS"), value: "BRS" },
-    { label: formatIataLabel("Newcastle", "NCL"), value: "NCL" },
-    { label: formatIataLabel("Liverpool", "LPL"), value: "LPL" },
-    { label: formatIataLabel("Leeds", "LBA"), value: "LBA" },
+    { label: "London (LON)", value: "LON" },
+    { label: "Manchester (MAN)", value: "MAN" },
+    { label: "Birmingham (BHQ)", value: "BHQ" }, // NOTE: "BHQ" is NOT a standard city code; leaving here would be wrong.
   ],
+  // We include the big city codes for each country. Keep this short and useful.
   ES: [
-    { label: formatIataLabel("Madrid", "MAD"), value: "MAD" },
-    { label: formatIataLabel("Barcelona", "BCN"), value: "BCN" },
-    { label: formatIataLabel("Málaga", "AGP"), value: "AGP" },
-    { label: formatIataLabel("Valencia", "VLC"), value: "VLC" },
-    { label: formatIataLabel("Seville", "SVQ"), value: "SVQ" },
-    { label: formatIataLabel("Bilbao", "BIO"), value: "BIO" },
+    { label: "Madrid (MAD)", value: "MAD" },
+    { label: "Barcelona (BCN)", value: "BCN" },
+    { label: "Valencia (VLC)", value: "VLC" },
+    { label: "Seville (SVQ)", value: "SVQ" },
+    { label: "Málaga (AGP)", value: "AGP" },
+    { label: "Bilbao (BIO)", value: "BIO" },
   ],
   IT: [
-    { label: formatIataLabel("Rome", "ROM"), value: "ROM" },
-    { label: formatIataLabel("Milan", "MIL"), value: "MIL" },
-    { label: formatIataLabel("Naples", "NAP"), value: "NAP" },
-    { label: formatIataLabel("Turin", "TRN"), value: "TRN" },
-    { label: formatIataLabel("Venice", "VCE"), value: "VCE" },
+    { label: "Rome (ROM)", value: "ROM" },
+    { label: "Milan (MIL)", value: "MIL" },
+    { label: "Venice (VCE)", value: "VCE" },
+    { label: "Naples (NAP)", value: "NAP" },
+    { label: "Turin (TRN)", value: "TRN" },
+    { label: "Bologna (BLQ)", value: "BLQ" },
+    { label: "Florence (FLR)", value: "FLR" },
   ],
   DE: [
-    { label: formatIataLabel("Frankfurt", "FRA"), value: "FRA" },
-    { label: formatIataLabel("Munich", "MUC"), value: "MUC" },
-    { label: formatIataLabel("Berlin", "BER"), value: "BER" },
-    { label: formatIataLabel("Düsseldorf", "DUS"), value: "DUS" },
-    { label: formatIataLabel("Hamburg", "HAM"), value: "HAM" },
-    { label: formatIataLabel("Cologne", "CGN"), value: "CGN" },
+    { label: "Berlin (BER)", value: "BER" },
+    { label: "Munich (MUC)", value: "MUC" },
+    { label: "Frankfurt (FRA)", value: "FRA" },
+    { label: "Hamburg (HAM)", value: "HAM" },
+    { label: "Cologne (CGN)", value: "CGN" },
+    { label: "Düsseldorf (DUS)", value: "DUS" },
+    { label: "Stuttgart (STR)", value: "STR" },
   ],
   FR: [
-    { label: formatIataLabel("Paris", "PAR"), value: "PAR" },
-    { label: formatIataLabel("Nice", "NCE"), value: "NCE" },
-    { label: formatIataLabel("Lyon", "LYS"), value: "LYS" },
-    { label: formatIataLabel("Marseille", "MRS"), value: "MRS" },
-    { label: formatIataLabel("Toulouse", "TLS"), value: "TLS" },
+    { label: "Paris (PAR)", value: "PAR" },
+    { label: "Nice (NCE)", value: "NCE" },
+    { label: "Lyon (LYS)", value: "LYS" },
+    { label: "Marseille (MRS)", value: "MRS" },
+    { label: "Toulouse (TLS)", value: "TLS" },
+    { label: "Bordeaux (BOD)", value: "BOD" },
+  ],
+};
+
+/**
+ * Brutal honesty: the GB list above included "BHQ" (wrong).
+ * Fix it here: remove it and use real IATA city/metro codes only.
+ * (MAN is fine; LON is fine; Birmingham uses BHX airport code, but the “city code” is effectively BHX in many systems.)
+ */
+const ORIGIN_CITIES_BY_COUNTRY_FIXED: Record<string, SelectOption[]> = {
+  ...ORIGIN_CITIES_BY_COUNTRY,
+  GB: [
+    { label: "London (LON)", value: "LON" },
+    { label: "Manchester (MAN)", value: "MAN" },
+    { label: "Birmingham (BHX)", value: "BHX" },
+    { label: "Edinburgh (EDI)", value: "EDI" },
+    { label: "Glasgow (GLA)", value: "GLA" },
+    { label: "Bristol (BRS)", value: "BRS" },
+    { label: "Newcastle (NCL)", value: "NCL" },
   ],
 };
 
@@ -334,9 +372,10 @@ function planLabel(plan: PlanValue) {
   return "Not set";
 }
 
-function iataPretty(code: string) {
-  const up = String(code ?? "").trim().toUpperCase();
-  return /^[A-Z]{3}$/.test(up) ? up : "Not set";
+function originLabelFromOptions(code: string, options: SelectOption[]) {
+  const c = cleanIataCity(code, "LON");
+  const found = options.find((o) => String(o.value).toUpperCase() === c);
+  return found ? String(found.label) : `${c}`;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -353,6 +392,7 @@ export default function ProfileScreen() {
 
   const followed = useFollowStore((s) => s.followed);
   const followingCount = followed.length;
+
   const unfollow = useFollowStore((s) => s.unfollow);
 
   const setKickoffConfirmedDefaultAndAll = useFollowStore((s) => s.setKickoffConfirmedDefaultAndAll);
@@ -368,10 +408,11 @@ export default function ProfileScreen() {
 
   const countryCode = useMemo(() => getCountryCodeBestEffort(), []);
   const originOptions = useMemo(
-    () => ORIGIN_BY_COUNTRY[countryCode] ?? ORIGIN_BY_COUNTRY.GB,
+    () => ORIGIN_CITIES_BY_COUNTRY_FIXED[countryCode] ?? ORIGIN_CITIES_BY_COUNTRY_FIXED.GB,
     [countryCode]
   );
 
+  // Non-flight prefs (still stored in storage)
   const [plan, setPlan] = useState<PlanValue>("not_set");
   const [currency, setCurrency] = useState(countryCode === "GB" ? "GBP" : "EUR");
   const [language, setLanguage] = useState("English");
@@ -379,12 +420,13 @@ export default function ProfileScreen() {
   const [alerts, setAlerts] = useState<AlertsValue>("Off");
   const [setupComplete, setSetupComplete] = useState(false);
 
-  // Origin pref comes from preferencesStore
-  const [originIata, setOriginIata] = useState(preferencesStore.getState().preferredOriginIata);
+  // Flight origin is from preferencesStore (single source of truth)
+  const [prefsLoaded, setPrefsLoaded] = useState(preferencesStore.getState().loaded);
+  const [preferredOriginIata, setPreferredOriginIata] = useState(
+    cleanIataCity(preferencesStore.getState().preferredOriginIata, "LON")
+  );
 
-  const [activePicker, setActivePicker] = useState<
-    null | "origin" | "currency" | "language" | "budget" | "plan"
-  >(null);
+  const [activePicker, setActivePicker] = useState<null | "origin" | "currency" | "language" | "budget" | "plan">(null);
   const closePicker = useCallback(() => setActivePicker(null), []);
 
   const logoSize = useMemo(() => {
@@ -418,19 +460,33 @@ export default function ProfileScreen() {
   }, [followed]);
 
   const followedPreview = useMemo(() => followedSorted.slice(0, 6), [followedSorted]);
-  const fallbackLikelyTbcIds = useMemo(
-    () => computeLikelyPlaceholderTbcIdsFromFollowed(followed),
-    [followed]
-  );
 
-  // Load persisted settings once (and preferencesStore)
+  const fallbackLikelyTbcIds = useMemo(() => computeLikelyPlaceholderTbcIdsFromFollowed(followed), [followed]);
+
+  // Subscribe to preferencesStore
+  useEffect(() => {
+    const sync = () => {
+      const s = preferencesStore.getState();
+      setPrefsLoaded(s.loaded);
+      setPreferredOriginIata(cleanIataCity(s.preferredOriginIata, "LON"));
+    };
+
+    const unsub = preferencesStore.subscribe(sync);
+    sync();
+
+    if (!preferencesStore.getState().loaded) {
+      preferencesStore.load().finally(sync);
+    }
+
+    return () => unsub();
+  }, []);
+
+  // Load persisted non-flight settings once
   useEffect(() => {
     let mounted = true;
 
     (async () => {
       try {
-        await preferencesStore.load();
-
         const [storedSetup, storedPlan, storedCurrency, storedLanguage, storedBudget, storedAlerts] =
           await Promise.all([
             storage.getString(STORAGE_KEYS.setupComplete),
@@ -442,8 +498,6 @@ export default function ProfileScreen() {
           ]);
 
         if (!mounted) return;
-
-        setOriginIata(preferencesStore.getState().preferredOriginIata);
 
         setSetupComplete(storedSetup === "true");
         if (storedPlan === "free" || storedPlan === "premium") setPlan(storedPlan);
@@ -458,17 +512,12 @@ export default function ProfileScreen() {
       }
     })();
 
-    const unsub = preferencesStore.subscribe((s) => {
-      setOriginIata(s.preferredOriginIata);
-    });
-
     return () => {
       mounted = false;
-      unsub();
     };
   }, []);
 
-  // Persist changes for non-preferencesStore fields
+  // Persist non-flight changes
   useEffect(() => {
     if (loading) return;
 
@@ -481,7 +530,9 @@ export default function ProfileScreen() {
           storage.setString(STORAGE_KEYS.budgetTarget, budgetTarget),
           storage.setString(STORAGE_KEYS.alerts, alerts),
         ]);
-      } catch {}
+      } catch {
+        // ignore
+      }
     })();
   }, [alerts, budgetTarget, currency, language, loading, plan]);
 
@@ -489,6 +540,7 @@ export default function ProfileScreen() {
     try {
       await storage.setString(STORAGE_KEYS.setupComplete, "true");
     } catch {
+      // ignore
     } finally {
       setSetupComplete(true);
       router.replace("/(tabs)/home");
@@ -513,14 +565,15 @@ export default function ProfileScreen() {
               storage.setString(STORAGE_KEYS.alerts, "Off"),
             ]);
 
-            await preferencesStore.clearAll();
-
             setSetupComplete(false);
             setPlan("not_set");
             setCurrency(countryCode === "GB" ? "GBP" : "EUR");
             setLanguage("English");
             setBudgetTarget("Not Set");
             setAlerts("Off");
+
+            // Reset origin IATA too (single source of truth)
+            await preferencesStore.setPreferredOriginIata("LON");
 
             Alert.alert("Reset complete", "Landing will show again next time you open the app.");
           } catch {
@@ -531,6 +584,7 @@ export default function ProfileScreen() {
     ]);
   }, [countryCode]);
 
+  // Info / legal
   const openFAQ = useCallback(() => {
     showInfo(
       "FAQ",
@@ -617,11 +671,13 @@ export default function ProfileScreen() {
       }
 
       setKickoffToggleBusy(true);
+
       try {
         const ok = await ensureNotificationsReady({ request: true });
 
         if (!ok) {
           setKickoffConfirmedDefaultAndAll(false);
+
           Alert.alert(
             "Notifications disabled",
             "To enable kickoff alerts, allow notifications for YourNextAway in your phone settings, then toggle this on again.",
@@ -639,19 +695,23 @@ export default function ProfileScreen() {
     [kickoffToggleBusy, setKickoffConfirmedDefaultAndAll]
   );
 
-  const originValueLabel = useMemo(() => {
-    const v = iataPretty(originIata);
-    return v === "Not set" ? "Not set" : v;
-  }, [originIata]);
+  const originSummary = useMemo(() => {
+    return originLabelFromOptions(preferredOriginIata, originOptions);
+  }, [preferredOriginIata, originOptions]);
+
+  const setOrigin = useCallback(
+    async (code: string) => {
+      const next = cleanIataCity(code, "LON");
+      setPreferredOriginIata(next); // optimistic UI
+      await preferencesStore.setPreferredOriginIata(next);
+    },
+    [setPreferredOriginIata]
+  );
 
   return (
     <Background imageUrl={getBackground("profile")} overlayOpacity={0.78}>
       <SafeAreaView style={styles.container} edges={["top"]}>
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={styles.content}
-          showsVerticalScrollIndicator={false}
-        >
+        <ScrollView style={styles.scrollView} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           {/* HEADER */}
           <View style={styles.headerRow}>
             <View style={{ flex: 1 }}>
@@ -737,6 +797,7 @@ export default function ProfileScreen() {
               </View>
             </View>
 
+            {/* Manual refresh controls */}
             <View style={styles.refreshBar}>
               <Pressable
                 onPress={onRefreshFollowing}
@@ -831,6 +892,14 @@ export default function ProfileScreen() {
                     </View>
                   );
                 })}
+
+                {followingCount > followedPreview.length ? (
+                  <View style={styles.followFooterNote}>
+                    <Text style={styles.followFooterText}>
+                      Showing {followedPreview.length} of {followingCount}. (Add “View all” later.)
+                    </Text>
+                  </View>
+                ) : null}
               </>
             )}
           </GlassCard>
@@ -843,9 +912,9 @@ export default function ProfileScreen() {
             </View>
 
             <Row
-              title="Home origin (IATA)"
-              subtitle="Used for flight comparisons (city code)"
-              value={originValueLabel}
+              title="Home origin (flights)"
+              subtitle="IATA city/metro code used for flight searches"
+              value={prefsLoaded ? originSummary : "Loading…"}
               onPress={() => setActivePicker("origin")}
             />
 
@@ -913,18 +982,14 @@ export default function ProfileScreen() {
         <SelectModal
           visible={activePicker === "origin"}
           title="Home origin (IATA)"
-          subtitle={`Select a departure city code (${countryCode}).`}
+          subtitle={`Select an origin city code (${countryCode}).`}
           options={originOptions}
-          selectedValue={iataPretty(originIata) === "Not set" ? "" : iataPretty(originIata)}
+          selectedValue={preferredOriginIata}
           onClose={closePicker}
-          onSelect={(v) => {
-            const up = String(v ?? "").trim().toUpperCase();
-            if (!/^[A-Z]{3}$/.test(up)) return;
-            preferencesStore.setPreferredOriginIata(up).catch(() => null);
-          }}
+          onSelect={(v) => setOrigin(String(v))}
           allowClear
-          clearLabel="Clear origin"
-          clearValue=""
+          clearLabel="Reset to London (LON)"
+          clearValue="LON"
         />
 
         <SelectModal
@@ -965,7 +1030,7 @@ export default function ProfileScreen() {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Styles (same as your prior, unchanged) */
+/* Styles */
 /* -------------------------------------------------------------------------- */
 
 const styles = StyleSheet.create({
@@ -1137,6 +1202,8 @@ const styles = StyleSheet.create({
 
   chev: { color: theme.colors.textSecondary, fontSize: 26, marginTop: -2 },
 
+  /* ------------------------------ Following UI ----------------------------- */
+
   followingDefaultsPill: {
     borderRadius: 14,
     borderWidth: 1,
@@ -1226,6 +1293,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   unfollowText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: theme.fontSize.xs },
+
+  followFooterNote: { borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.10)", paddingHorizontal: theme.spacing.lg, paddingVertical: 12 },
+  followFooterText: { color: theme.colors.textTertiary, fontWeight: "800", fontSize: theme.fontSize.xs },
 
   footerNote: {
     textAlign: "center",
