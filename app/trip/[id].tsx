@@ -65,13 +65,14 @@ function summaryLine(t: Trip) {
   return `${a} → ${b} • ${n} match${n === 1 ? "" : "es"}`;
 }
 
-function tripStatus(t: Trip): "Draft" | "Upcoming" | "Past" {
+function tripStatus(t: Trip): "Upcoming" | "Past" {
+  // Trips store enforces start/end in persistence, but keep it safe.
   const start = t.startDate ? parseIsoDateOnly(t.startDate) : null;
   const end = t.endDate ? parseIsoDateOnly(t.endDate) : null;
-  if (!start || !end) return "Draft";
+  if (!start || !end) return "Upcoming";
 
   const today = parseIsoDateOnly(toIsoDate(new Date()));
-  if (!today) return "Draft";
+  if (!today) return "Upcoming";
 
   if (end.getTime() < today.getTime()) return "Past";
   return "Upcoming";
@@ -173,6 +174,43 @@ function safeFixtureTitle(r: FixtureListRow | null | undefined, fallbackId: stri
   if (home) return `${home} match`;
   if (away) return `${away} match`;
   return `Match ${fallbackId}`;
+}
+
+function parseIsoToDate(iso?: string): Date | null {
+  const s = String(iso ?? "").trim();
+  if (!s) return null;
+  const d = new Date(s);
+  return Number.isFinite(d.getTime()) ? d : null;
+}
+
+function formatKickoffMeta(row?: FixtureListRow | null): { line: string; tbc: boolean } {
+  const iso = row?.fixture?.date;
+  const d = parseIsoToDate(iso);
+
+  const short = String(row?.fixture?.status?.short ?? "").trim().toUpperCase();
+  const long = String(row?.fixture?.status?.long ?? "").trim();
+
+  // Conservative: treat typical API short-codes as TBC-ish.
+  const looksTbc = short === "TBD" || short === "TBA" || short === "NS" || short === "PST";
+
+  if (!d) {
+    return { line: looksTbc ? "Kickoff: TBC" : "Kickoff: —", tbc: true };
+  }
+
+  const datePart = d.toLocaleDateString("en-GB", { weekday: "short", day: "2-digit", month: "short" });
+  const timePart = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+
+  // Some APIs may set 00:00 for unknown time. Treat midnight as "likely TBC".
+  const midnight = d.getHours() === 0 && d.getMinutes() === 0;
+  const tbc = looksTbc || midnight;
+
+  if (tbc) {
+    // Still show date if we have it; time is unreliable.
+    return { line: `Kickoff: ${datePart} • TBC`, tbc: true };
+  }
+
+  const statusHint = long ? ` • ${long}` : "";
+  return { line: `Kickoff: ${datePart} • ${timePart}${statusHint}`, tbc: false };
 }
 
 /* -------------------------------------------------------------------------- */
@@ -281,7 +319,6 @@ export default function TripDetailScreen() {
       const idsRaw = Array.isArray(trip?.matchIds) ? trip!.matchIds : [];
       const ids = idsRaw.map((x) => String(x).trim()).filter(Boolean);
 
-      // ✅ skip fetch entirely for mock ids (non-numeric)
       const numericIds = ids.filter(isNumericId);
 
       if (numericIds.length === 0) {
@@ -312,7 +349,7 @@ export default function TripDetailScreen() {
 
   /* ---------------- derived ---------------- */
 
-  const status = useMemo(() => (trip ? tripStatus(trip) : "Draft"), [trip]);
+  const status = useMemo(() => (trip ? tripStatus(trip) : "Upcoming"), [trip]);
 
   const cityName = useMemo(() => {
     if (trip?.cityId) return trip.cityId;
@@ -323,7 +360,6 @@ export default function TripDetailScreen() {
   const bookingLinks = useMemo(() => {
     if (!trip || !cityName || cityName === "Trip") return null;
 
-    // ✅ pass preferred origin into affiliate builder (NO stores inside affiliateLinks.ts)
     return buildAffiliateLinks({
       city: cityName,
       startDate: trip.startDate,
@@ -333,7 +369,10 @@ export default function TripDetailScreen() {
   }, [trip, cityName, originIata]);
 
   const pending = useMemo(() => savedItems.filter((x) => x.status === "pending"), [savedItems]);
-  const saved = useMemo(() => savedItems.filter((x) => x.status === "saved" && x.type !== "note"), [savedItems]);
+  const saved = useMemo(
+    () => savedItems.filter((x) => x.status === "saved" && x.type !== "note"),
+    [savedItems]
+  );
   const booked = useMemo(() => savedItems.filter((x) => x.status === "booked"), [savedItems]);
 
   const notes = useMemo(
@@ -395,7 +434,6 @@ export default function TripDetailScreen() {
     const leagueId = r?.league?.id != null ? String(r.league.id) : undefined;
     const season = r?.league?.season != null ? String(r.league.season) : undefined;
 
-    // Pass trip window if present (helps "back to fixtures" context on Match screen)
     const from = trip?.startDate ? String(trip.startDate) : undefined;
     const to = trip?.endDate ? String(trip.endDate) : undefined;
 
@@ -460,20 +498,17 @@ export default function TripDetailScreen() {
   /* -------------------------------------------------------------------------- */
 
   async function openSavedItem(item: SavedItem) {
-    // Notes
     if (!item.partnerUrl) {
       const text = String(item.metadata?.text ?? "").trim();
       Alert.alert(item.title || "Notes", text || "No details saved.");
       return;
     }
 
-    // Booked/Archived: open untracked (no prompts)
     if (item.status === "booked" || item.status === "archived") {
       await openUntracked(item.partnerUrl);
       return;
     }
 
-    // Saved/Pending: open TRACKED so we can prompt on return.
     const pid = String(item.partnerId ?? "").trim();
     if (!pid || pid === "googlemaps") {
       await openUntracked(item.partnerUrl);
@@ -729,7 +764,7 @@ export default function TripDetailScreen() {
                 {!originLoaded ? <Text style={styles.mutedInline}>Loading departure preference…</Text> : null}
               </GlassCard>
 
-              {/* MATCHES (routes to Match screen for tickets + follow + details) */}
+              {/* MATCHES */}
               <GlassCard style={styles.card}>
                 <Text style={styles.sectionTitle}>Matches</Text>
 
@@ -743,14 +778,14 @@ export default function TripDetailScreen() {
 
                       const leagueName = String(r?.league?.name ?? "").trim();
                       const round = String(r?.league?.round ?? "").trim();
+
                       const venue = String(r?.fixture?.venue?.name ?? "").trim();
                       const city = String(r?.fixture?.venue?.city ?? "").trim();
 
-                      const metaBits = [
-                        leagueName || null,
-                        round || null,
-                        [venue, city].filter(Boolean).join(" • ") || null,
-                      ].filter(Boolean);
+                      const kickoff = formatKickoffMeta(r);
+
+                      const meta1 = [leagueName || null, round || null].filter(Boolean).join(" • ");
+                      const meta2 = [venue || null, city || null].filter(Boolean).join(" • ");
 
                       const homeName = String(r?.teams?.home?.name ?? "Home");
                       const awayName = String(r?.teams?.away?.name ?? "Away");
@@ -760,18 +795,33 @@ export default function TripDetailScreen() {
                           <TeamCrest name={homeName} logo={r?.teams?.home?.logo} />
 
                           <View style={{ flex: 1 }}>
-                            <Text style={styles.matchTitle} numberOfLines={1}>
-                              {title}
+                            <View style={styles.matchTitleRow}>
+                              <Text style={styles.matchTitle} numberOfLines={1}>
+                                {title}
+                              </Text>
+                              {kickoff.tbc ? (
+                                <View style={styles.tbcPill}>
+                                  <Text style={styles.tbcText}>TBC</Text>
+                                </View>
+                              ) : null}
+                            </View>
+
+                            <Text style={styles.matchMeta} numberOfLines={1}>
+                              {kickoff.line}
                             </Text>
-                            {metaBits.length ? (
-                              <Text style={styles.matchMeta} numberOfLines={2}>
-                                {metaBits.join(" • ")}
-                              </Text>
-                            ) : (
+
+                            {meta1 ? (
                               <Text style={styles.matchMeta} numberOfLines={1}>
-                                Match details loading…
+                                {meta1}
                               </Text>
-                            )}
+                            ) : null}
+
+                            {meta2 ? (
+                              <Text style={styles.matchMeta} numberOfLines={1}>
+                                {meta2}
+                              </Text>
+                            ) : null}
+
                             <Text style={styles.matchHint} numberOfLines={1}>
                               Open match → Home tickets, directions, follow alerts
                             </Text>
@@ -813,6 +863,7 @@ export default function TripDetailScreen() {
                           <Text style={styles.itemMeta} numberOfLines={1}>
                             {buildMetaLine(it)}
                           </Text>
+
                           {it.priceText ? (
                             <Text style={styles.priceLine} numberOfLines={1}>
                               {it.priceText}
@@ -1291,8 +1342,34 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.10)",
     backgroundColor: "rgba(0,0,0,0.18)",
   },
-  matchTitle: { color: theme.colors.text, fontWeight: "900" },
-  matchMeta: { marginTop: 4, color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12, lineHeight: 16 },
+
+  matchTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+
+  matchTitle: { color: theme.colors.text, fontWeight: "900", flexShrink: 1 },
+
+  tbcPill: {
+    borderWidth: 1,
+    borderColor: "rgba(255,200,80,0.40)",
+    backgroundColor: "rgba(255,200,80,0.10)",
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+
+  tbcText: { color: "rgba(255,200,80,1)", fontWeight: "900", fontSize: 11 },
+
+  matchMeta: {
+    marginTop: 4,
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
+    fontSize: 12,
+    lineHeight: 16,
+  },
+
   matchHint: { marginTop: 6, color: theme.colors.textTertiary, fontWeight: "900", fontSize: 11 },
 
   crestWrap: {
@@ -1303,7 +1380,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+
   crestImg: { width: 26, height: 26 },
+
   crestFallback: { color: theme.colors.textSecondary, fontWeight: "900" },
 
   itemRow: {
@@ -1457,6 +1536,7 @@ const styles = StyleSheet.create({
   },
 
   bookBtnText: { color: theme.colors.text, fontWeight: "900" },
+
   bookBtnSub: {
     marginTop: 4,
     color: theme.colors.textSecondary,
@@ -1483,6 +1563,7 @@ const styles = StyleSheet.create({
   },
 
   wideBtnTitle: { color: theme.colors.text, fontWeight: "900" },
+
   wideBtnSub: {
     marginTop: 4,
     color: theme.colors.textSecondary,
