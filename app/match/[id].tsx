@@ -158,26 +158,98 @@ function buildGoogleHomeTicketsUrl(matchQuery: string) {
   return `https://www.google.com/search?q=${enc(matchQuery + " home tickets")}`;
 }
 
+/**
+ * Official ticket portals (HOME CLUB).
+ * We store multiple aliases per club because API names vary:
+ * - "AFC Bournemouth" vs "Bournemouth"
+ * - "Wolves" vs "Wolverhampton Wanderers"
+ * - "Brighton" vs "Brighton & Hove Albion"
+ */
 const OFFICIAL_TICKETS_BY_TEAM: Record<string, string> = {
+  // Arsenal
   "arsenal": "https://www.arsenal.com/tickets",
+  "arsenal fc": "https://www.arsenal.com/tickets",
+
+  // Aston Villa
   "aston villa": "https://www.avfc.co.uk/tickets",
+  "aston villa fc": "https://www.avfc.co.uk/tickets",
+
+  // Bournemouth
   "bournemouth": "https://www.afcb.co.uk/tickets",
+  "afc bournemouth": "https://www.afcb.co.uk/tickets",
+
+  // Brentford
   "brentford": "https://www.brentfordfc.com/en/tickets",
+  "brentford fc": "https://www.brentfordfc.com/en/tickets",
+
+  // Brighton
   "brighton": "https://www.brightonandhovealbion.com/tickets",
+  "brighton & hove albion": "https://www.brightonandhovealbion.com/tickets",
+  "brighton and hove albion": "https://www.brightonandhovealbion.com/tickets",
+
+  // Burnley (official eTicketing portal)
+  "burnley": "https://www.eticketing.co.uk/burnleyfc/",
+  "burnley fc": "https://www.eticketing.co.uk/burnleyfc/",
+
+  // Chelsea
   "chelsea": "https://www.chelseafc.com/en/tickets",
+  "chelsea fc": "https://www.chelseafc.com/en/tickets",
+
+  // Crystal Palace
   "crystal palace": "https://www.cpfc.co.uk/tickets",
+  "crystal palace fc": "https://www.cpfc.co.uk/tickets",
+
+  // Everton
   "everton": "https://www.evertonfc.com/tickets",
+  "everton fc": "https://www.evertonfc.com/tickets",
+
+  // Fulham
   "fulham": "https://www.fulhamfc.com/tickets",
-  "ipswich town": "https://www.itfc.co.uk/tickets",
-  "leicester city": "https://www.lcfc.com/tickets",
+  "fulham fc": "https://www.fulhamfc.com/tickets",
+
+  // Leeds United (official ticketing portal)
+  "leeds": "https://tickets.leedsunited.com",
+  "leeds united": "https://tickets.leedsunited.com",
+  "leeds united fc": "https://tickets.leedsunited.com",
+
+  // Liverpool
   "liverpool": "https://www.liverpoolfc.com/tickets",
+  "liverpool fc": "https://www.liverpoolfc.com/tickets",
+
+  // Manchester City
   "manchester city": "https://www.mancity.com/tickets",
+  "man city": "https://www.mancity.com/tickets",
+  "manchester city fc": "https://www.mancity.com/tickets",
+
+  // Manchester United
   "manchester united": "https://tickets.manutd.com/",
+  "man united": "https://tickets.manutd.com/",
+  "manchester utd": "https://tickets.manutd.com/",
+  "man utd": "https://tickets.manutd.com/",
+
+  // Newcastle United
   "newcastle united": "https://book.nufc.co.uk/",
+  "newcastle": "https://book.nufc.co.uk/",
+  "newcastle utd": "https://book.nufc.co.uk/",
+
+  // Nottingham Forest
   "nottingham forest": "https://tickets.nottinghamforest.co.uk/",
-  "southampton": "https://www.southamptonfc.com/tickets",
+  "forest": "https://tickets.nottinghamforest.co.uk/",
+
+  // Sunderland (official ticketing portal)
+  "sunderland": "https://tickets.safc.com",
+  "sunderland afc": "https://tickets.safc.com",
+
+  // Tottenham Hotspur
   "tottenham hotspur": "https://www.tottenhamhotspur.com/tickets/",
+  "tottenham": "https://www.tottenhamhotspur.com/tickets/",
+  "spurs": "https://www.tottenhamhotspur.com/tickets/",
+
+  // West Ham United
   "west ham united": "https://www.whufc.com/tickets",
+  "west ham": "https://www.whufc.com/tickets",
+
+  // Wolves
   "wolverhampton wanderers": "https://ticketswolves.co.uk/",
   "wolves": "https://ticketswolves.co.uk/",
 };
