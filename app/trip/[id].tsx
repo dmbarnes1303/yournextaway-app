@@ -10,6 +10,7 @@ import {
   Alert,
   TextInput,
   Keyboard,
+  Image,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
@@ -31,7 +32,7 @@ import { getSavedItemTypeLabel } from "@/src/core/savedItemTypes";
 import { getPartner, type PartnerId } from "@/src/core/partners";
 
 import { beginPartnerClick, openUntrackedUrl } from "@/src/services/partnerClicks";
-import { getFixtureById } from "@/src/services/apiFootball";
+import { getFixtureById, type FixtureListRow } from "@/src/services/apiFootball";
 import { formatUkDateOnly } from "@/src/utils/formatters";
 import { buildAffiliateLinks } from "@/src/services/affiliateLinks";
 
@@ -145,6 +146,35 @@ function cleanUpper3(v: unknown, fallback: string) {
   return /^[A-Z]{3}$/.test(s) ? s : fallback;
 }
 
+function initials(name: string) {
+  const clean = String(name ?? "").trim();
+  if (!clean) return "—";
+  const parts = clean.split(/\s+/g).filter(Boolean);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+}
+
+function TeamCrest({ name, logo }: { name: string; logo?: string | null }) {
+  return (
+    <View style={styles.crestWrap}>
+      {logo ? (
+        <Image source={{ uri: logo }} style={styles.crestImg} resizeMode="contain" />
+      ) : (
+        <Text style={styles.crestFallback}>{initials(name)}</Text>
+      )}
+    </View>
+  );
+}
+
+function safeFixtureTitle(r: FixtureListRow | null | undefined, fallbackId: string) {
+  const home = String(r?.teams?.home?.name ?? "").trim();
+  const away = String(r?.teams?.away?.name ?? "").trim();
+  if (home && away) return `${home} vs ${away}`;
+  if (home) return `${home} match`;
+  if (away) return `${away} match`;
+  return `Match ${fallbackId}`;
+}
+
 /* -------------------------------------------------------------------------- */
 /* screen */
 /* -------------------------------------------------------------------------- */
@@ -162,7 +192,7 @@ export default function TripDetailScreen() {
   const [savedLoaded, setSavedLoaded] = useState(savedItemsStore.getState().loaded);
   const [savedItems, setSavedItems] = useState<SavedItem[]>([]);
 
-  const [fixturesById, setFixturesById] = useState<Record<string, any>>({});
+  const [fixturesById, setFixturesById] = useState<Record<string, FixtureListRow>>({});
   const [fxLoading, setFxLoading] = useState(false);
 
   const [noteText, setNoteText] = useState("");
@@ -242,7 +272,7 @@ export default function TripDetailScreen() {
     };
   }, []);
 
-  /* ---------------- load fixtures (fallback city name) ---------------- */
+  /* ---------------- load fixtures (for match list + city fallback) ---------------- */
 
   useEffect(() => {
     let cancelled = false;
@@ -263,7 +293,7 @@ export default function TripDetailScreen() {
       setFxLoading(true);
 
       try {
-        const map: Record<string, any> = {};
+        const map: Record<string, FixtureListRow> = {};
         for (const id of numericIds) {
           const r = await getFixtureById(String(id));
           if (r) map[String(id)] = r;
@@ -287,13 +317,13 @@ export default function TripDetailScreen() {
   const cityName = useMemo(() => {
     if (trip?.cityId) return trip.cityId;
     const first = trip?.matchIds?.[0];
-    return fixturesById[first]?.fixture?.venue?.city || "Trip";
+    return fixturesById[String(first ?? "")]?.fixture?.venue?.city || "Trip";
   }, [trip, fixturesById]);
 
   const bookingLinks = useMemo(() => {
     if (!trip || !cityName || cityName === "Trip") return null;
 
-    // ✅ pass preferred origin into affiliate builder (no stores inside affiliateLinks.ts)
+    // ✅ pass preferred origin into affiliate builder (NO stores inside affiliateLinks.ts)
     return buildAffiliateLinks({
       city: cityName,
       startDate: trip.startDate,
@@ -303,16 +333,20 @@ export default function TripDetailScreen() {
   }, [trip, cityName, originIata]);
 
   const pending = useMemo(() => savedItems.filter((x) => x.status === "pending"), [savedItems]);
-  const saved = useMemo(
-    () => savedItems.filter((x) => x.status === "saved" && x.type !== "note"),
-    [savedItems]
-  );
+  const saved = useMemo(() => savedItems.filter((x) => x.status === "saved" && x.type !== "note"), [savedItems]);
   const booked = useMemo(() => savedItems.filter((x) => x.status === "booked"), [savedItems]);
 
   const notes = useMemo(
     () => savedItems.filter((x) => x.type === "note" && x.status !== "archived"),
     [savedItems]
   );
+
+  const matchIds = useMemo(() => {
+    const raw = Array.isArray(trip?.matchIds) ? trip!.matchIds : [];
+    return raw.map((x) => String(x).trim()).filter(Boolean);
+  }, [trip?.matchIds]);
+
+  const numericMatchIds = useMemo(() => matchIds.filter(isNumericId), [matchIds]);
 
   /* -------------------------------------------------------------------------- */
   /* DEV-ONLY: opportunistic city→IATA detector */
@@ -352,6 +386,29 @@ export default function TripDetailScreen() {
 
   function onViewWallet() {
     router.push("/wallet" as any);
+  }
+
+  function openMatch(matchId: string) {
+    if (!matchId) return;
+
+    const r = fixturesById[String(matchId)];
+    const leagueId = r?.league?.id != null ? String(r.league.id) : undefined;
+    const season = r?.league?.season != null ? String(r.league.season) : undefined;
+
+    // Pass trip window if present (helps "back to fixtures" context on Match screen)
+    const from = trip?.startDate ? String(trip.startDate) : undefined;
+    const to = trip?.endDate ? String(trip.endDate) : undefined;
+
+    router.push({
+      pathname: "/match/[id]",
+      params: {
+        id: String(matchId),
+        ...(from ? { from } : {}),
+        ...(to ? { to } : {}),
+        ...(leagueId ? { leagueId } : {}),
+        ...(season ? { season } : {}),
+      },
+    } as any);
   }
 
   /* -------------------------------------------------------------------------- */
@@ -669,9 +726,67 @@ export default function TripDetailScreen() {
                   </Pressable>
                 </View>
 
-                {!originLoaded ? (
-                  <Text style={styles.mutedInline}>Loading departure preference…</Text>
-                ) : null}
+                {!originLoaded ? <Text style={styles.mutedInline}>Loading departure preference…</Text> : null}
+              </GlassCard>
+
+              {/* MATCHES (routes to Match screen for tickets + follow + details) */}
+              <GlassCard style={styles.card}>
+                <Text style={styles.sectionTitle}>Matches</Text>
+
+                {numericMatchIds.length === 0 ? (
+                  <EmptyState title="No matches added" message="Add a match to unlock match-specific tickets and planning." />
+                ) : (
+                  <View style={{ gap: 10 }}>
+                    {numericMatchIds.map((mid) => {
+                      const r = fixturesById[String(mid)];
+                      const title = safeFixtureTitle(r, mid);
+
+                      const leagueName = String(r?.league?.name ?? "").trim();
+                      const round = String(r?.league?.round ?? "").trim();
+                      const venue = String(r?.fixture?.venue?.name ?? "").trim();
+                      const city = String(r?.fixture?.venue?.city ?? "").trim();
+
+                      const metaBits = [
+                        leagueName || null,
+                        round || null,
+                        [venue, city].filter(Boolean).join(" • ") || null,
+                      ].filter(Boolean);
+
+                      const homeName = String(r?.teams?.home?.name ?? "Home");
+                      const awayName = String(r?.teams?.away?.name ?? "Away");
+
+                      return (
+                        <Pressable key={mid} onPress={() => openMatch(mid)} style={styles.matchRow}>
+                          <TeamCrest name={homeName} logo={r?.teams?.home?.logo} />
+
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.matchTitle} numberOfLines={1}>
+                              {title}
+                            </Text>
+                            {metaBits.length ? (
+                              <Text style={styles.matchMeta} numberOfLines={2}>
+                                {metaBits.join(" • ")}
+                              </Text>
+                            ) : (
+                              <Text style={styles.matchMeta} numberOfLines={1}>
+                                Match details loading…
+                              </Text>
+                            )}
+                            <Text style={styles.matchHint} numberOfLines={1}>
+                              Open match → Home tickets, directions, follow alerts
+                            </Text>
+                          </View>
+
+                          <TeamCrest name={awayName} logo={r?.teams?.away?.logo} />
+
+                          <Text style={styles.chev}>›</Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                )}
+
+                {fxLoading ? <Text style={styles.mutedInline}>Loading match details…</Text> : null}
               </GlassCard>
 
               {/* PENDING */}
@@ -709,10 +824,7 @@ export default function TripDetailScreen() {
                           <Pressable onPress={() => confirmMarkBooked(it)} style={styles.smallBtn}>
                             <Text style={styles.smallBtnText}>Booked</Text>
                           </Pressable>
-                          <Pressable
-                            onPress={() => confirmArchive(it)}
-                            style={[styles.smallBtn, styles.smallBtnDanger]}
-                          >
+                          <Pressable onPress={() => confirmArchive(it)} style={[styles.smallBtn, styles.smallBtnDanger]}>
                             <Text style={styles.smallBtnText}>Archive</Text>
                           </Pressable>
                         </View>
@@ -727,10 +839,7 @@ export default function TripDetailScreen() {
                 <Text style={styles.sectionTitle}>Booked (in Wallet)</Text>
 
                 {booked.length === 0 ? (
-                  <EmptyState
-                    title="No booked items yet"
-                    message="When you confirm a booking, it will show here and in Wallet."
-                  />
+                  <EmptyState title="No booked items yet" message="When you confirm a booking, it will show here and in Wallet." />
                 ) : (
                   <View style={{ gap: 10 }}>
                     {booked.map((it) => (
@@ -759,10 +868,7 @@ export default function TripDetailScreen() {
                             <Text style={styles.smallBtnText}>Wallet</Text>
                           </Pressable>
 
-                          <Pressable
-                            onPress={() => confirmArchive(it)}
-                            style={[styles.smallBtn, styles.smallBtnDanger]}
-                          >
+                          <Pressable onPress={() => confirmArchive(it)} style={[styles.smallBtn, styles.smallBtnDanger]}>
                             <Text style={styles.smallBtnText}>Archive</Text>
                           </Pressable>
                         </View>
@@ -777,10 +883,7 @@ export default function TripDetailScreen() {
                 <Text style={styles.sectionTitle}>Saved</Text>
 
                 {saved.length === 0 ? (
-                  <EmptyState
-                    title="No saved items"
-                    message="If you answer “No” after returning from a partner, we keep the link here as Saved."
-                  />
+                  <EmptyState title="No saved items" message="If you answer “No” after returning from a partner, we keep the link here as Saved." />
                 ) : (
                   <View style={{ gap: 10 }}>
                     {saved.map((it) => (
@@ -813,10 +916,7 @@ export default function TripDetailScreen() {
                             <Text style={styles.smallBtnText}>Pending</Text>
                           </Pressable>
 
-                          <Pressable
-                            onPress={() => confirmArchive(it)}
-                            style={[styles.smallBtn, styles.smallBtnDanger]}
-                          >
+                          <Pressable onPress={() => confirmArchive(it)} style={[styles.smallBtn, styles.smallBtnDanger]}>
                             <Text style={styles.smallBtnText}>Archive</Text>
                           </Pressable>
                         </View>
@@ -834,17 +934,13 @@ export default function TripDetailScreen() {
                   <TextInput
                     value={noteText}
                     onChangeText={setNoteText}
-                    placeholder="Add a note (home tickets, hotel shortlist, reminders, anything)…"
+                    placeholder="Add a note (tickets, hotel shortlist, reminders, anything)…"
                     placeholderTextColor={theme.colors.textSecondary}
                     style={styles.noteInput}
                     multiline
                   />
 
-                  <Pressable
-                    onPress={addNote}
-                    disabled={noteSaving}
-                    style={[styles.noteSaveBtn, noteSaving && { opacity: 0.7 }]}
-                  >
+                  <Pressable onPress={addNote} disabled={noteSaving} style={[styles.noteSaveBtn, noteSaving && { opacity: 0.7 }]}>
                     <Text style={styles.noteSaveText}>{noteSaving ? "Saving…" : "Save note"}</Text>
                   </Pressable>
                 </View>
@@ -953,34 +1049,6 @@ export default function TripDetailScreen() {
 
                   <Pressable onPress={() => openUntracked(bookingLinks.mapsUrl)}>
                     <Text style={styles.mapsInline}>Open maps search</Text>
-                  </Pressable>
-
-                  {fxLoading ? <Text style={styles.mutedInline}>Loading match details…</Text> : null}
-                </GlassCard>
-              )}
-
-              {/* HOME TICKETS (HOST CLUB) */}
-              {bookingLinks && (
-                <GlassCard style={styles.card}>
-                  <Text style={styles.sectionTitle}>Home tickets (host club)</Text>
-
-                  <Pressable
-                    style={styles.wideBtn}
-                    onPress={() =>
-                      openTrackedPartner({
-                        partnerId: "sportsevents365",
-                        url: bookingLinks.ticketsUrl,
-                        savedItemType: "tickets",
-                        title: `Home tickets (host club)`,
-                        metadata: { city: cityName },
-                      })
-                    }
-                  >
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.wideBtnTitle}>Find home tickets</Text>
-                      <Text style={styles.wideBtnSub}>Sportsevents365</Text>
-                    </View>
-                    <Text style={styles.chev}>›</Text>
                   </Pressable>
                 </GlassCard>
               )}
@@ -1210,6 +1278,33 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     marginBottom: 8,
   },
+
+  /* Matches list */
+  matchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+  },
+  matchTitle: { color: theme.colors.text, fontWeight: "900" },
+  matchMeta: { marginTop: 4, color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12, lineHeight: 16 },
+  matchHint: { marginTop: 6, color: theme.colors.textTertiary, fontWeight: "900", fontSize: 11 },
+
+  crestWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  crestImg: { width: 26, height: 26 },
+  crestFallback: { color: theme.colors.textSecondary, fontWeight: "900" },
 
   itemRow: {
     flexDirection: "row",
