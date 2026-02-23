@@ -1,5 +1,6 @@
 // src/services/affiliateLinks.ts
 import Constants from "expo-constants";
+import { toIataCityCode } from "@/src/constants/iataCityCodes";
 
 /**
  * Centralised affiliate URL builder.
@@ -90,31 +91,6 @@ function formatDdMm(dateIso?: string): string | null {
   return `${d}${m}`;
 }
 
-function cityToIata(city: string): string | null {
-  // Phase-1 pragmatic map. Expand later (or replace with API / dataset).
-  const map: Record<string, string> = {
-    Barcelona: "BCN",
-    Madrid: "MAD",
-    Rome: "FCO",
-    Milan: "MXP",
-    Paris: "CDG",
-    Lisbon: "LIS",
-    Porto: "OPO",
-    Amsterdam: "AMS",
-    Berlin: "BER",
-    Munich: "MUC",
-    Vienna: "VIE",
-    Prague: "PRG",
-    Budapest: "BUD",
-    // UK (handy)
-    London: "LON",
-    Manchester: "MAN",
-  };
-
-  const key = Object.keys(map).find((k) => k.toLowerCase() === city.trim().toLowerCase());
-  return key ? map[key] : null;
-}
-
 /* -------------------------------------------------------------------------- */
 /* affiliate config */
 /* -------------------------------------------------------------------------- */
@@ -136,7 +112,10 @@ const AFFILIATE = {
   gygPartnerId: env("EXPO_PUBLIC_GYG_PARTNER_ID"),
   expediaAffilId: env("EXPO_PUBLIC_EXPEDIA_AFFIL_ID"),
 
-  // Optional default origin airport for flights (Phase-1: configurable without code change)
+  /**
+   * Optional default ORIGIN IATA CITY/AIRPORT code (Phase-1 config).
+   * Recommended: "LON" (London Any) as a sane UK default.
+   */
   defaultOriginIata: env("EXPO_PUBLIC_DEFAULT_ORIGIN_IATA"),
 
   // ✅ EXACT tracking links provided by you (DO NOT MODIFY)
@@ -175,23 +154,24 @@ export function buildAffiliateLinks(args: {
   const hotelsUrl = `https://www.expedia.co.uk/Hotel-Search?${expediaParams.join("&")}`;
 
   /* -------------------- */
-  /* Flights: Aviasales (prefilled via search URL when possible) */
+  /* Flights: Aviasales (prefill via search URL when possible) */
   /* -------------------- */
-  const destIata = cityToIata(city);
+  const destIataCity = toIataCityCode(city);
 
+  // Prefer configured default origin, otherwise LON (UK sane default)
   const originIata = isIata(AFFILIATE.defaultOriginIata)
     ? String(AFFILIATE.defaultOriginIata).trim().toUpperCase()
-    : "MAN"; // Phase-1 default
+    : "LON";
 
   let flightsUrl: string;
 
-  if (destIata && startDate && endDate) {
+  if (destIataCity && startDate && endDate) {
     const dd = formatDdMm(startDate);
     const rd = formatDdMm(endDate);
 
     if (dd && rd) {
       flightsUrl =
-        `https://www.aviasales.com/search/${originIata}${dd}${destIata}${rd}` +
+        `https://www.aviasales.com/search/${originIata}${dd}${destIataCity}${rd}` +
         (AFFILIATE.aviasalesMarker ? `?marker=${enc(AFFILIATE.aviasalesMarker)}` : "");
     } else {
       flightsUrl =
@@ -199,6 +179,7 @@ export function buildAffiliateLinks(args: {
         (AFFILIATE.aviasalesMarker ? `?marker=${enc(AFFILIATE.aviasalesMarker)}` : "");
     }
   } else {
+    // Fallback home page (still tracked via marker if present)
     flightsUrl =
       `https://www.aviasales.com/` +
       (AFFILIATE.aviasalesMarker ? `?marker=${enc(AFFILIATE.aviasalesMarker)}` : "");
@@ -207,9 +188,7 @@ export function buildAffiliateLinks(args: {
   /* -------------------- */
   /* Trains/Buses: fallback (UNTRACKED until affiliate) */
   /* -------------------- */
-  const trainsUrl = `https://www.google.com/maps/search/?api=1&query=${enc(
-    `${query} train station`
-  )}`;
+  const trainsUrl = `https://www.google.com/maps/search/?api=1&query=${enc(`${query} train station`)}`;
 
   /* -------------------- */
   /* Experiences: GetYourGuide (approved) */
@@ -250,4 +229,4 @@ export function buildAffiliateLinks(args: {
 
 export function normalizeUrlForCompare(url: string): string {
   return String(url ?? "").trim().toLowerCase();
-    }
+}
