@@ -24,12 +24,11 @@ import { parseIsoDateOnly, toIsoDate } from "@/src/constants/football";
 
 import tripsStore, { type Trip } from "@/src/state/trips";
 import savedItemsStore from "@/src/state/savedItems";
+import preferencesStore from "@/src/state/preferences";
 
 import type { SavedItem, SavedItemType } from "@/src/core/savedItemTypes";
 import { getSavedItemTypeLabel } from "@/src/core/savedItemTypes";
 import { getPartner, type PartnerId } from "@/src/core/partners";
-
-import preferencesStore from "@/src/state/preferences";
 
 import { beginPartnerClick, openUntrackedUrl } from "@/src/services/partnerClicks";
 import { getFixtureById } from "@/src/services/apiFootball";
@@ -39,7 +38,7 @@ import { buildAffiliateLinks } from "@/src/services/affiliateLinks";
 import { confirmBookedAndOfferProof } from "@/src/services/bookingProof";
 
 // ✅ Opportunistic IATA detection (dev-only)
-import { getIataCityCodeForCity, cityKeyForDebug } from "@/src/constants/iataCities";
+import { getIataCityCodeForCity, debugCityKey } from "@/src/data/iataCityCodes";
 
 /* -------------------------------------------------------------------------- */
 /* helpers */
@@ -141,6 +140,11 @@ function statusLabel(s: SavedItem["status"]) {
   return "Archived";
 }
 
+function cleanUpper3(v: unknown, fallback: string) {
+  const s = String(v ?? "").trim().toUpperCase();
+  return /^[A-Z]{3}$/.test(s) ? s : fallback;
+}
+
 /* -------------------------------------------------------------------------- */
 /* screen */
 /* -------------------------------------------------------------------------- */
@@ -167,9 +171,9 @@ export default function TripDetailScreen() {
   // ✅ dev-only: avoid spamming the same unknown city alert repeatedly
   const [devWarnedCityKey, setDevWarnedCityKey] = useState<string | null>(null);
 
-  // Preferences (origin city code)
-  const [prefsLoaded, setPrefsLoaded] = useState(preferencesStore.getState().loaded);
-  const [originIata, setOriginIata] = useState(preferencesStore.getState().preferredOriginIata);
+  // ✅ preferred origin IATA (for flight deep links)
+  const [originLoaded, setOriginLoaded] = useState<boolean>(preferencesStore.getState().loaded);
+  const [originIata, setOriginIata] = useState<string>(preferencesStore.getPreferredOriginIata());
 
   /* ---------------- load trip ---------------- */
 
@@ -209,13 +213,16 @@ export default function TripDetailScreen() {
     return () => unsub();
   }, [tripId]);
 
-  /* ---------------- load preferences ---------------- */
+  /* ---------------- load preferences (origin IATA) ---------------- */
 
   useEffect(() => {
+    let mounted = true;
+
     const sync = () => {
       const s = preferencesStore.getState();
-      setPrefsLoaded(s.loaded);
-      setOriginIata(String(s.preferredOriginIata ?? "LON").trim().toUpperCase());
+      if (!mounted) return;
+      setOriginLoaded(!!s.loaded);
+      setOriginIata(cleanUpper3(s.preferredOriginIata, "LON"));
     };
 
     const unsub = preferencesStore.subscribe(sync);
@@ -225,7 +232,14 @@ export default function TripDetailScreen() {
       preferencesStore.load().finally(sync);
     }
 
-    return () => unsub();
+    return () => {
+      mounted = false;
+      try {
+        unsub();
+      } catch {
+        // ignore
+      }
+    };
   }, []);
 
   /* ---------------- load fixtures (fallback city name) ---------------- */
@@ -279,13 +293,12 @@ export default function TripDetailScreen() {
   const bookingLinks = useMemo(() => {
     if (!trip || !cityName || cityName === "Trip") return null;
 
-    // Use IATA CITY code for destination when available (e.g., LON, NYC), not "closest airport".
-    // Falls back to Aviasales homepage if missing mapping/dates.
+    // ✅ pass preferred origin into affiliate builder (no stores inside affiliateLinks.ts)
     return buildAffiliateLinks({
       city: cityName,
       startDate: trip.startDate,
       endDate: trip.endDate,
-      originIata: originIata || "LON",
+      originIata: cleanUpper3(originIata, "LON"),
     });
   }, [trip, cityName, originIata]);
 
@@ -316,7 +329,7 @@ export default function TripDetailScreen() {
     const code = getIataCityCodeForCity(city);
     if (code) return;
 
-    const key = cityKeyForDebug(city);
+    const key = debugCityKey(city);
     if (!key) return;
 
     if (devWarnedCityKey === key) return;
@@ -324,7 +337,7 @@ export default function TripDetailScreen() {
 
     Alert.alert(
       "Missing IATA mapping (dev)",
-      `City: ${city}\n\nNormalized key:\n${key}\n\nAdd it to src/constants/iataCities.ts`,
+      `City: ${city}\n\nNormalized key:\n${key}\n\nAdd it to src/data/iataCityCodes.ts`,
       [{ text: "OK" }],
       { cancelable: true }
     );
@@ -404,7 +417,6 @@ export default function TripDetailScreen() {
     }
 
     // Saved/Pending: open TRACKED so we can prompt on return.
-    // This reuses the existing item (no duplicates) and will promote saved -> pending before opening.
     const pid = String(item.partnerId ?? "").trim();
     if (!pid || pid === "googlemaps") {
       await openUntracked(item.partnerUrl);
@@ -571,11 +583,11 @@ export default function TripDetailScreen() {
 
   /* -------------------------------------------------------------------------- */
 
-  const loading = Boolean(tripId && (!tripsLoaded || !savedLoaded || !prefsLoaded));
+  const loading = Boolean(tripId && (!tripsLoaded || !savedLoaded));
   const showHeroBanners = pending.length > 0 || saved.length > 0 || booked.length > 0;
 
   return (
-    <Background imageUrl={getBackground("trips")} overlayOpacity={0.86}>
+    <Background imageSource={getBackground("trips")} overlayOpacity={0.86}>
       <Stack.Screen
         options={{
           headerShown: true,
@@ -589,7 +601,6 @@ export default function TripDetailScreen() {
         <ScrollView
           style={styles.scroll}
           contentContainerStyle={[styles.content, { paddingBottom: theme.spacing.xxl + insets.bottom }]}
-          showsVerticalScrollIndicator={false}
         >
           {!tripId && (
             <GlassCard style={styles.card}>
@@ -658,9 +669,9 @@ export default function TripDetailScreen() {
                   </Pressable>
                 </View>
 
-                <Text style={styles.originHint}>
-                  Flight origin: <Text style={{ fontWeight: "900", color: theme.colors.text }}>{originIata || "LON"}</Text>
-                </Text>
+                {!originLoaded ? (
+                  <Text style={styles.mutedInline}>Loading departure preference…</Text>
+                ) : null}
               </GlassCard>
 
               {/* PENDING */}
@@ -698,7 +709,10 @@ export default function TripDetailScreen() {
                           <Pressable onPress={() => confirmMarkBooked(it)} style={styles.smallBtn}>
                             <Text style={styles.smallBtnText}>Booked</Text>
                           </Pressable>
-                          <Pressable onPress={() => confirmArchive(it)} style={[styles.smallBtn, styles.smallBtnDanger]}>
+                          <Pressable
+                            onPress={() => confirmArchive(it)}
+                            style={[styles.smallBtn, styles.smallBtnDanger]}
+                          >
                             <Text style={styles.smallBtnText}>Archive</Text>
                           </Pressable>
                         </View>
@@ -713,7 +727,10 @@ export default function TripDetailScreen() {
                 <Text style={styles.sectionTitle}>Booked (in Wallet)</Text>
 
                 {booked.length === 0 ? (
-                  <EmptyState title="No booked items yet" message="When you confirm a booking, it will show here and in Wallet." />
+                  <EmptyState
+                    title="No booked items yet"
+                    message="When you confirm a booking, it will show here and in Wallet."
+                  />
                 ) : (
                   <View style={{ gap: 10 }}>
                     {booked.map((it) => (
@@ -742,7 +759,10 @@ export default function TripDetailScreen() {
                             <Text style={styles.smallBtnText}>Wallet</Text>
                           </Pressable>
 
-                          <Pressable onPress={() => confirmArchive(it)} style={[styles.smallBtn, styles.smallBtnDanger]}>
+                          <Pressable
+                            onPress={() => confirmArchive(it)}
+                            style={[styles.smallBtn, styles.smallBtnDanger]}
+                          >
                             <Text style={styles.smallBtnText}>Archive</Text>
                           </Pressable>
                         </View>
@@ -793,7 +813,10 @@ export default function TripDetailScreen() {
                             <Text style={styles.smallBtnText}>Pending</Text>
                           </Pressable>
 
-                          <Pressable onPress={() => confirmArchive(it)} style={[styles.smallBtn, styles.smallBtnDanger]}>
+                          <Pressable
+                            onPress={() => confirmArchive(it)}
+                            style={[styles.smallBtn, styles.smallBtnDanger]}
+                          >
                             <Text style={styles.smallBtnText}>Archive</Text>
                           </Pressable>
                         </View>
@@ -817,7 +840,11 @@ export default function TripDetailScreen() {
                     multiline
                   />
 
-                  <Pressable onPress={addNote} disabled={noteSaving} style={[styles.noteSaveBtn, noteSaving && { opacity: 0.7 }]}>
+                  <Pressable
+                    onPress={addNote}
+                    disabled={noteSaving}
+                    style={[styles.noteSaveBtn, noteSaving && { opacity: 0.7 }]}
+                  >
                     <Text style={styles.noteSaveText}>{noteSaving ? "Saving…" : "Save note"}</Text>
                   </Pressable>
                 </View>
@@ -879,7 +906,7 @@ export default function TripDetailScreen() {
                           url: bookingLinks.flightsUrl,
                           savedItemType: "flight",
                           title: `Flights to ${cityName}`,
-                          metadata: { city: cityName, originIata: originIata || "LON" },
+                          metadata: { city: cityName, originIata: cleanUpper3(originIata, "LON") },
                         })
                       }
                     >
@@ -1068,8 +1095,8 @@ const styles = StyleSheet.create({
   card: { padding: theme.spacing.lg },
 
   center: { alignItems: "center", gap: 10 },
-  muted: { color: theme.colors.textSecondary, fontWeight: "700" },
-  mutedInline: { marginTop: 10, color: theme.colors.textSecondary, textAlign: "center", fontWeight: "700" },
+  muted: { color: theme.colors.textSecondary },
+  mutedInline: { marginTop: 10, color: theme.colors.textSecondary, textAlign: "center" },
 
   hero: { padding: theme.spacing.lg },
 
@@ -1089,7 +1116,6 @@ const styles = StyleSheet.create({
   heroMeta: {
     marginTop: 6,
     color: theme.colors.textSecondary,
-    fontWeight: "700",
   },
 
   heroTopRow: {
@@ -1109,7 +1135,7 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
   },
 
-  statusText: { color: theme.colors.text, fontWeight: "900" },
+  statusText: { color: theme.colors.text },
 
   walletBtn: {
     borderWidth: 1,
@@ -1123,13 +1149,6 @@ const styles = StyleSheet.create({
   walletBtnText: {
     color: theme.colors.text,
     fontWeight: "900",
-    fontSize: 12,
-  },
-
-  originHint: {
-    marginTop: 10,
-    color: theme.colors.textSecondary,
-    fontWeight: "800",
     fontSize: 12,
   },
 
@@ -1179,7 +1198,6 @@ const styles = StyleSheet.create({
 
   btnPrimary: {
     borderColor: "rgba(0,255,136,0.6)",
-    backgroundColor: "rgba(0,0,0,0.18)",
   },
 
   btnPrimaryText: {
@@ -1302,7 +1320,6 @@ const styles = StyleSheet.create({
     minHeight: 80,
     color: theme.colors.text,
     textAlignVertical: "top",
-    fontWeight: "700",
   },
 
   noteSaveBtn: {
@@ -1312,7 +1329,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(0,255,136,0.55)",
     alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.16)",
   },
 
   noteSaveText: { color: theme.colors.text, fontWeight: "900" },
@@ -1343,7 +1359,6 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     alignItems: "center",
     paddingHorizontal: 10,
-    backgroundColor: "rgba(0,0,0,0.10)",
   },
 
   bookBtnText: { color: theme.colors.text, fontWeight: "900" },
@@ -1358,7 +1373,6 @@ const styles = StyleSheet.create({
     marginTop: 10,
     color: theme.colors.textSecondary,
     textAlign: "center",
-    fontWeight: "800",
   },
 
   wideBtn: {
