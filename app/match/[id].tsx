@@ -47,6 +47,9 @@ import {
 import { getTicketGuide } from "@/src/data/ticketGuides";
 import type { TicketDifficulty } from "@/src/data/ticketGuides/types";
 
+import { getMatchdayLogistics } from "@/src/data/matchdayLogistics";
+import type { MatchdayLogistics, LogisticsStop } from "@/src/data/matchdayLogistics/types";
+
 /* -------------------------------------------------------------------------- */
 /* helpers */
 /* -------------------------------------------------------------------------- */
@@ -113,6 +116,31 @@ function daysUntilIso(iso: string) {
   return (t - Date.now()) / (1000 * 60 * 60 * 24);
 }
 
+function stopTypeLabel(t: LogisticsStop["type"]) {
+  switch (t) {
+    case "train":
+      return "Train";
+    case "metro":
+      return "Metro";
+    case "tram":
+      return "Tram";
+    case "bus":
+      return "Bus";
+    case "ferry":
+      return "Ferry";
+    case "walk":
+      return "Walk";
+    default:
+      return "Other";
+  }
+}
+
+function parkingLabel(a: MatchdayLogistics["parking"]["availability"]) {
+  if (a === "easy") return "Easy";
+  if (a === "medium") return "Medium";
+  return "Hard";
+}
+
 /* -------------------------------------------------------------------------- */
 /* Home-ticket routing (Sportsevents365 + Official) */
 /* -------------------------------------------------------------------------- */
@@ -161,12 +189,9 @@ function buildGoogleHomeTicketsUrl(matchQuery: string) {
 /**
  * Official home tickets mapping.
  * NOTE: keep keys simple + lowercase; normalizeTeamKey() and fuzzy match handle minor variations.
- * We include EPL + LaLiga here.
  */
 const OFFICIAL_TICKETS_BY_TEAM: Record<string, string> = {
-  // ---------------------------
-  // Premier League (EPL)
-  // ---------------------------
+  // Premier League (example set — keep as-is in your app)
   "arsenal": "https://www.arsenal.com/tickets",
   "aston villa": "https://www.avfc.co.uk/tickets",
   "bournemouth": "https://www.afcb.co.uk/tickets",
@@ -190,237 +215,6 @@ const OFFICIAL_TICKETS_BY_TEAM: Record<string, string> = {
   "west ham united": "https://www.whufc.com/tickets",
   "wolverhampton wanderers": "https://ticketswolves.co.uk/",
   "wolves": "https://ticketswolves.co.uk/",
-
-  // ---------------------------
-  // LaLiga (20-team list you sent)
-  // ---------------------------
-  "barcelona": "https://www.fcbarcelona.com/en/tickets/football",
-  "fc barcelona": "https://www.fcbarcelona.com/en/tickets/football",
-  "real madrid": "https://www.realmadrid.com/en/tickets",
-  "real madrid cf": "https://www.realmadrid.com/en/tickets",
-  "villarreal": "https://villarrealcf.es/entradas/",
-  "villarreal cf": "https://villarrealcf.es/entradas/",
-  "atletico madrid": "https://www.atleticodemadrid.com/entradas",
-  "atlético madrid": "https://www.atleticodemadrid.com/entradas",
-  "atletico de madrid": "https://www.atleticodemadrid.com/entradas",
-  "atlético de madrid": "https://www.atleticodemadrid.com/entradas",
-  "real betis": "https://www.realbetisbalompie.es/entradas/",
-  "real betis balompie": "https://www.realbetisbalompie.es/entradas/",
-  "celta vigo": "https://rccelta.es/entradas/",
-  "rc celta": "https://rccelta.es/entradas/",
-  "espanyol": "https://www.rcdespanyol.com/en/tickets",
-  "rcd espanyol": "https://www.rcdespanyol.com/en/tickets",
-  "athletic club": "https://www.athletic-club.eus/en/tickets",
-  "osasuna": "https://www.osasuna.es/entradas",
-  "real sociedad": "https://www.realsociedad.eus/en/tickets",
-  "sevilla": "https://www.sevillafc.es/en/tickets",
-  "getafe": "https://www.getafecf.com/entradas",
-  "girona": "https://www.gironafc.cat/en/entrades",
-  "rayo vallecano": "https://www.rayovallecano.es/entradas",
-  "deportivo alaves": "https://www.deportivoalaves.com/en/tickets",
-  "deportivo alavés": "https://www.deportivoalaves.com/en/tickets",
-  "valencia": "https://www.valenciacf.com/en/tickets",
-  "elche": "https://www.elchecf.es/entradas",
-  "mallorca": "https://www.rcdmallorca.es/en/tickets",
-  "levante": "https://www.levanteud.com/entradas",
-  "real oviedo": "https://www.realoviedo.es/entradas",
-
-  // ---------------------------
-// Bundesliga (18-team list)
-// ---------------------------
-"bayern munich": "https://tickets.fcbayern.com/",
-"fc bayern munich": "https://tickets.fcbayern.com/",
-"fc bayern münchen": "https://tickets.fcbayern.com/",
-"bayern münchen": "https://tickets.fcbayern.com/",
-
-"borussia dortmund": "https://tickets.bvb.de/",
-"bvb": "https://tickets.bvb.de/",
-"bvb dortmund": "https://tickets.bvb.de/",
-
-"hoffenheim": "https://www.achtzehn99.de/tickets/online-kaufen",
-"tsg hoffenheim": "https://www.achtzehn99.de/tickets/online-kaufen",
-"tsg 1899 hoffenheim": "https://www.achtzehn99.de/tickets/online-kaufen",
-
-"vfb stuttgart": "https://shop.vfb.de/tickets/",
-"stuttgart": "https://shop.vfb.de/tickets/",
-
-"rb leipzig": "https://dauerkarten.rbleipzig.com/",
-"leipzig": "https://dauerkarten.rbleipzig.com/",
-
-"bayer leverkusen": "https://www.bayer04.de/en-us/page/tickets",
-"bayer 04 leverkusen": "https://www.bayer04.de/en-us/page/tickets",
-"leverkusen": "https://www.bayer04.de/en-us/page/tickets",
-
-"freiburg": "https://www.scfreiburg.com/en/tickets/",
-"sc freiburg": "https://www.scfreiburg.com/en/tickets/",
-
-"eintracht frankfurt": "https://ticketing.eintracht.de/",
-"frankfurt": "https://ticketing.eintracht.de/",
-
-"union berlin": "https://tickets.union-zeughaus.de/",
-"1. fc union berlin": "https://tickets.union-zeughaus.de/",
-"fc union berlin": "https://tickets.union-zeughaus.de/",
-
-"augsburg": "https://tickets.fcaugsburg.de/",
-"fc augsburg": "https://tickets.fcaugsburg.de/",
-
-"hamburger sv": "https://www.hsv.de/tickets",
-"hsv": "https://www.hsv.de/tickets",
-
-"fc cologne": "https://fc-tickets.de/",
-"1. fc cologne": "https://fc-tickets.de/",
-"1. fc köln": "https://fc-tickets.de/",
-"cologne": "https://fc-tickets.de/",
-"köln": "https://fc-tickets.de/",
-
-"mainz 05": "https://www.mainz05.de/tickets/",
-"mainz": "https://www.mainz05.de/tickets/",
-"1. fsv mainz 05": "https://www.mainz05.de/tickets/",
-
-"borussia m'gladbach": "https://tickets.borussia.de/",
-"borussia mönchengladbach": "https://tickets.borussia.de/",
-"m'gladbach": "https://tickets.borussia.de/",
-"gladbach": "https://tickets.borussia.de/",
-
-"wolfsburg": "https://tickets.vfl-wolfsburg.de/",
-"vfl wolfsburg": "https://tickets.vfl-wolfsburg.de/",
-
-"st. pauli": "https://www.fcstpauli.com/tickets/",
-"st pauli": "https://www.fcstpauli.com/tickets/",
-"fc st. pauli": "https://www.fcstpauli.com/tickets/",
-"fc st pauli": "https://www.fcstpauli.com/tickets/",
-
-"werder bremen": "https://www.werder.de/tickets/",
-"werder": "https://www.werder.de/tickets/",
-
-"fc heidenheim": "https://tickets.fc-heidenheim.de/",
-"heidenheim": "https://tickets.fc-heidenheim.de/",
-"1. fc heidenheim": "https://tickets.fc-heidenheim.de/",
-"1. fc heidenheim 1846": "https://tickets.fc-heidenheim.de/",
-
-  // ---------------------------
-// Serie A (20-team list)
-// ---------------------------
-"inter": "https://www.inter.it/en/tickets",
-"inter milan": "https://www.inter.it/en/tickets",
-"fc internazionale": "https://www.inter.it/en/tickets",
-"internazionale": "https://www.inter.it/en/tickets",
-
-"ac milan": "https://www.acmilan.com/en/tickets",
-"milan": "https://www.acmilan.com/en/tickets",
-
-"as roma": "https://www.asroma.com/en/tickets",
-"roma": "https://www.asroma.com/en/tickets",
-
-"napoli": "https://sscnapoli.it/en/tickets/",
-"ssc napoli": "https://sscnapoli.it/en/tickets/",
-
-"juventus": "https://www.juventus.com/en/tickets",
-"juve": "https://www.juventus.com/en/tickets",
-
-"como": "https://comofootball.com/en/tickets",
-"como 1907": "https://comofootball.com/en/tickets",
-
-"atalanta": "https://www.atalanta.it/en/tickets/",
-"atalanta bc": "https://www.atalanta.it/en/tickets/",
-
-"sassuolo": "https://www.sassuolocalcio.it/en/tickets/",
-"us sassuolo": "https://www.sassuolocalcio.it/en/tickets/",
-
-"lazio": "https://www.sslazio.it/en/biglietteria",
-"ss lazio": "https://www.sslazio.it/en/biglietteria",
-
-"bologna": "https://www.bolognafc.it/en/tickets/",
-"bologna fc": "https://www.bolognafc.it/en/tickets/",
-
-"udinese": "https://www.udinese.it/Biglietteria",
-"udinese calcio": "https://www.udinese.it/Biglietteria",
-
-"parma": "https://www.parmacalcio1913.com/en/tickets/",
-"parma calcio": "https://www.parmacalcio1913.com/en/tickets/",
-
-"cagliari": "https://www.cagliaricalcio.com/en/tickets/",
-"cagliari calcio": "https://www.cagliaricalcio.com/en/tickets/",
-
-"genoa": "https://genoacfc.it/en/tickets/",
-"genoa cfc": "https://genoacfc.it/en/tickets/",
-
-"torino": "https://www.torinofc.it/en/tickets",
-"torino fc": "https://www.torinofc.it/en/tickets",
-
-"fiorentina": "https://www.acffiorentina.com/en/tickets",
-"acf fiorentina": "https://www.acffiorentina.com/en/tickets",
-
-"cremonese": "https://www.uscremonese.it/biglietteria/",
-"us cremonese": "https://www.uscremonese.it/biglietteria/",
-
-"lecce": "https://www.uslecce.it/page/52943331342/biglietteria",
-"us lecce": "https://www.uslecce.it/page/52943331342/biglietteria",
-
-"pisa": "https://pisasportingclub.com/en/tickets/",
-"pisa sc": "https://pisasportingclub.com/en/tickets/",
-
-"hellas verona": "https://www.hellasverona.it/en/tickets",
-"verona": "https://www.hellasverona.it/en/tickets",
-
-// ---------------------------
-// Ligue 1 (18-team list)
-// ---------------------------
-"paris saint-germain": "https://www.psg.fr/tickets",
-"psg": "https://www.psg.fr/tickets",
-
-"lens": "https://billetterie.rclens.fr/",
-"rc lens": "https://billetterie.rclens.fr/",
-
-"lyon": "https://billetterie.ol.fr/",
-"olympique lyonnais": "https://billetterie.ol.fr/",
-
-"marseille": "https://www.om.fr/en/tickets",
-"olympique de marseille": "https://www.om.fr/en/tickets",
-"om": "https://www.om.fr/en/tickets",
-
-"lille": "https://billetterie.losc.fr/",
-"losc": "https://billetterie.losc.fr/",
-
-"rennes": "https://billetterie.staderennais.com/",
-"stade rennais": "https://billetterie.staderennais.com/",
-
-"strasbourg": "https://billetterie.rcstrasbourgalsace.fr/",
-"rc strasbourg": "https://billetterie.rcstrasbourgalsace.fr/",
-
-"monaco": "https://billetterie.asmonaco.com/",
-"as monaco": "https://billetterie.asmonaco.com/",
-
-"lorient": "https://billetterie.fclorient.bzh/",
-"fc lorient": "https://billetterie.fclorient.bzh/",
-
-"toulouse": "https://billetterie.toulousefc.com/",
-"toulouse fc": "https://billetterie.toulousefc.com/",
-
-"brest": "https://billetterie.sb29.bzh/",
-"stade brestois": "https://billetterie.sb29.bzh/",
-
-"angers": "https://billetterie.angers-sco.fr/",
-"angers sco": "https://billetterie.angers-sco.fr/",
-
-"le havre": "https://billetterie.hac-foot.com/",
-"hac": "https://billetterie.hac-foot.com/",
-
-"nice": "https://billetterie.ogcnice.com/",
-"ogc nice": "https://billetterie.ogcnice.com/",
-
-"paris fc": "https://billetterie.parisfc.fr/",
-
-"auxerre": "https://billetterie.aja.fr/",
-"aj auxerre": "https://billetterie.aja.fr/",
-
-"nantes": "https://billetterie.fcnantes.com/",
-"fc nantes": "https://billetterie.fcnantes.com/",
-
-"metz": "https://billetterie.fcmetz.com/",
-"fc metz": "https://billetterie.fcmetz.com/",
-
-
 };
 
 function normalizeTeamKey(name?: string) {
@@ -436,9 +230,7 @@ function buildOfficialHomeTicketsUrl(homeTeamName?: string) {
 
   if (OFFICIAL_TICKETS_BY_TEAM[key]) return OFFICIAL_TICKETS_BY_TEAM[key];
 
-  const foundKey = Object.keys(OFFICIAL_TICKETS_BY_TEAM).find(
-    (k) => key === k || key.includes(k) || k.includes(key)
-  );
+  const foundKey = Object.keys(OFFICIAL_TICKETS_BY_TEAM).find((k) => key === k || key.includes(k) || k.includes(key));
   if (foundKey) return OFFICIAL_TICKETS_BY_TEAM[foundKey];
 
   // Fallback: make the intent explicit (official + home tickets)
@@ -446,7 +238,7 @@ function buildOfficialHomeTicketsUrl(homeTeamName?: string) {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Logistics links (FB feedback: food/drink, transport, parking, disruption) */
+/* Logistics links */
 /* -------------------------------------------------------------------------- */
 
 function buildMapsVenueUrl(venue?: string, city?: string) {
@@ -545,6 +337,8 @@ function stabilityLabel(s: TripStability) {
 type ToastState = { visible: false } | { visible: true; title: string; message?: string };
 type TicketModalState = { open: boolean };
 
+type SectionKey = "transport" | "parking" | "food" | "stay";
+
 export default function MatchDetailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
@@ -632,6 +426,22 @@ export default function MatchDetailScreen() {
   const [ticketModal, setTicketModal] = useState<TicketModalState>({ open: false });
   const closeTicketModal = useCallback(() => setTicketModal({ open: false }), []);
   const openTicketModal = useCallback(() => setTicketModal({ open: true }), []);
+
+  // Matchday logistics UX state (section expand/collapse)
+  const [openSections, setOpenSections] = useState<Record<SectionKey, boolean>>({
+    transport: true,
+    parking: false,
+    food: false,
+    stay: false,
+  });
+
+  const toggleSection = useCallback((k: SectionKey) => {
+    setOpenSections((prev) => ({ ...prev, [k]: !prev[k] }));
+  }, []);
+
+  const openOnly = useCallback((k: SectionKey) => {
+    setOpenSections({ transport: false, parking: false, food: false, stay: false, [k]: true });
+  }, []);
 
   // Load match
   useEffect(() => {
@@ -752,10 +562,7 @@ export default function MatchDetailScreen() {
     return tbc ? "TV schedule pending" : null;
   }, [row, tbc]);
 
-  const matchQuery = useMemo(
-    () => buildMatchQuery(home, away, kickoffDateOnly, leagueName),
-    [home, away, kickoffDateOnly, leagueName]
-  );
+  const matchQuery = useMemo(() => buildMatchQuery(home, away, kickoffDateOnly, leagueName), [home, away, kickoffDateOnly, leagueName]);
 
   // Determine SE365 event id using (priority):
   // 1) route param
@@ -800,6 +607,15 @@ export default function MatchDetailScreen() {
   const taxiUrl = useMemo(() => buildTaxiRideshareUrl(venue, city), [venue, city]);
   const disruptionUrl = useMemo(() => buildDisruptionUrl(city), [city]);
 
+  const logistics = useMemo(() => {
+    return getMatchdayLogistics({ homeTeamName: home, leagueName });
+  }, [home, leagueName]);
+
+  const venueQuery = useMemo(() => {
+    const q = [venue || logistics?.stadium, city || logistics?.city].filter(Boolean).join(" ").trim();
+    return q || "";
+  }, [venue, city, logistics?.stadium, logistics?.city]);
+
   // Ticket guide (HOME CLUB ONLY)
   const ticketGuide = useMemo(() => getTicketGuide(home), [home]);
 
@@ -827,10 +643,10 @@ export default function MatchDetailScreen() {
   }, [home, away, kickoffDateOnly, se365EventId, ticketGuide]);
 
   const directionsSub = useMemo(() => {
-    const v = subtitleOrFallback(venue, "Search stadium location");
-    const c = subtitleOrFallback(city, "");
+    const v = subtitleOrFallback(venue || logistics?.stadium, "Search stadium location");
+    const c = subtitleOrFallback(city || logistics?.city, "");
     return [v, c].filter(Boolean).join(" • ");
-  }, [venue, city]);
+  }, [venue, city, logistics?.stadium, logistics?.city]);
 
   const onPlanTrip = useCallback(() => {
     if (!fixtureId) return;
@@ -965,9 +781,7 @@ export default function MatchDetailScreen() {
     }
 
     const line1 = tbc ? "We’ll alert you when kickoff is confirmed or changes." : "We’ll alert you if kickoff changes.";
-    const line2 = user
-      ? "Sync + notifications can be added next."
-      : "Sign in later to sync across devices and enable email/push alerts.";
+    const line2 = user ? "Sync + notifications can be added next." : "Sign in later to sync across devices and enable email/push alerts.";
     showToast("Following", `${line1} ${line2}`);
   }, [
     fixtureId,
@@ -1080,12 +894,48 @@ export default function MatchDetailScreen() {
 
   const weekendPlanningBody = useMemo(() => {
     const isEpl = String(leagueName ?? "").toLowerCase().includes("premier league");
-    const hint = isEpl
-      ? "In this league, kickoff timing can move due to TV scheduling."
-      : "Kickoff timing can move while schedules are being finalised.";
-
+    const hint = isEpl ? "In this league, kickoff timing can move due to TV scheduling." : "Kickoff timing can move while schedules are being finalised.";
     return `${hint} If you’re booking the weekend anyway, stay flexible and treat the kickoff slot as a bonus once confirmed.`;
   }, [leagueName]);
+
+  const logisticsSubtitle = useMemo(() => {
+    if (!logistics) return "We’ll show tailored tips when we have them for this club.";
+    const v = logistics.stadium ? logistics.stadium : "Stadium";
+    const c = logistics.city ? logistics.city : "";
+    const cc = logistics.country ? logistics.country : "";
+    return [v, c, cc].filter(Boolean).join(" • ");
+  }, [logistics]);
+
+  const transportStops = useMemo(() => {
+    if (!logistics?.transport?.primaryStops?.length) return [];
+    return logistics.transport.primaryStops.slice(0, 4);
+  }, [logistics]);
+
+  const transportTips = useMemo(() => {
+    if (!logistics?.transport?.tips?.length) return [];
+    return logistics.transport.tips.slice(0, 3);
+  }, [logistics]);
+
+  const arrivalTips = useMemo(() => {
+    if (!logistics?.arrivalTips?.length) return [];
+    return logistics.arrivalTips.slice(0, 3);
+  }, [logistics]);
+
+  const stayBest = useMemo(() => {
+    if (!logistics?.stay?.bestAreas?.length) return [];
+    return logistics.stay.bestAreas.slice(0, 3);
+  }, [logistics]);
+
+  const stayBudget = useMemo(() => {
+    if (!logistics?.stay?.budgetAreas?.length) return [];
+    return logistics.stay.budgetAreas.slice(0, 3);
+  }, [logistics]);
+
+  const parkingNotes = useMemo(() => {
+    if (!logistics?.parking) return null;
+    const extras = logistics.parking.officialLots?.slice(0, 2) ?? [];
+    return { availability: logistics.parking.availability, summary: logistics.parking.summary, extras };
+  }, [logistics]);
 
   return (
     <Background imageSource={getBackground("fixtures")} overlayOpacity={0.86}>
@@ -1290,7 +1140,7 @@ export default function MatchDetailScreen() {
 
                   <Pressable
                     onPress={async () => {
-                      const q = [venue, city].filter(Boolean).join(" ").trim();
+                      const q = venueQuery || [venue, city].filter(Boolean).join(" ").trim();
                       if (!q) return safeOpenUrl(mapsUrl);
                       await openMapsPreferNative(q);
                     }}
@@ -1324,38 +1174,6 @@ export default function MatchDetailScreen() {
                   </Pressable>
                 </View>
 
-                <View style={styles.quickGrid}>
-                  <Pressable onPress={() => safeOpenUrl(foodDrinkUrl)} style={styles.quickBtn}>
-                    <Text style={styles.quickTitle}>Food & drink</Text>
-                    <Text style={styles.quickSub}>Pubs, bars, restaurants</Text>
-                  </Pressable>
-
-                  <Pressable onPress={() => safeOpenUrl(transportUrl)} style={styles.quickBtn}>
-                    <Text style={styles.quickTitle}>Transport</Text>
-                    <Text style={styles.quickSub}>Train / tram / metro routes</Text>
-                  </Pressable>
-
-                  <Pressable onPress={() => safeOpenUrl(parkingUrl)} style={styles.quickBtn}>
-                    <Text style={styles.quickTitle}>Parking</Text>
-                    <Text style={styles.quickSub}>Parking + park & ride</Text>
-                  </Pressable>
-
-                  <Pressable onPress={() => safeOpenUrl(cheapHotelsUrl)} style={styles.quickBtn}>
-                    <Text style={styles.quickTitle}>Cheap hotels</Text>
-                    <Text style={styles.quickSub}>Near stadium / city area</Text>
-                  </Pressable>
-
-                  <Pressable onPress={() => safeOpenUrl(taxiUrl)} style={styles.quickBtn}>
-                    <Text style={styles.quickTitle}>Taxi / rideshare</Text>
-                    <Text style={styles.quickSub}>Pickup points + options</Text>
-                  </Pressable>
-
-                  <Pressable onPress={() => safeOpenUrl(disruptionUrl)} style={styles.quickBtn}>
-                    <Text style={styles.quickTitle}>Disruption</Text>
-                    <Text style={styles.quickSub}>Strikes / closures today</Text>
-                  </Pressable>
-                </View>
-
                 <Text style={styles.smallPrint}>Match ID: {fixtureId}</Text>
                 {se365EventId ? (
                   <Text style={styles.smallPrint}>SE365 Event ID: {String(se365EventId)}</Text>
@@ -1368,64 +1186,278 @@ export default function MatchDetailScreen() {
 
           {!loading && !error && row ? (
             <GlassCard style={styles.card} intensity={22}>
-              <Text style={styles.h2}>Matchday essentials</Text>
-              <Text style={styles.muted}>Neutral traveller view: arrive smoothly, enjoy the city, keep it simple.</Text>
-
-              <View style={styles.opsList}>
-                <View style={styles.opsItem}>
-                  <Text style={styles.opsTitle}>Arrive early</Text>
-                  <Text style={styles.opsBody}>
-                    Aim for 60–90 minutes before kickoff if you’re picking up home tickets or navigating security.
-                  </Text>
+              <View style={styles.sectionTopRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.h2}>Matchday logistics</Text>
+                  <Text style={styles.muted}>Neutral traveller view: arrive smoothly, enjoy the city, keep it simple.</Text>
                 </View>
 
-                <View style={styles.opsItem}>
-                  <Text style={styles.opsTitle}>Bag policy and entry</Text>
-                  <Text style={styles.opsBody}>Policies vary. If you’re carrying a bag, double-check restrictions before you travel.</Text>
-                  <Pressable onPress={() => safeOpenUrl(stadiumInfoUrl)} style={styles.inlineBtn}>
-                    <Text style={styles.inlineBtnText}>Search stadium entry rules</Text>
-                  </Pressable>
-                </View>
+                {logistics ? (
+                  <View style={styles.badge}>
+                    <Text style={styles.badgeText}>TAILORED</Text>
+                  </View>
+                ) : (
+                  <View style={[styles.badge, styles.badgeMuted]}>
+                    <Text style={[styles.badgeText, styles.badgeTextMuted]}>BASIC</Text>
+                  </View>
+                )}
+              </View>
 
-                <View style={styles.opsItem}>
-                  <Text style={styles.opsTitle}>Transport plan</Text>
-                  <Text style={styles.opsBody}>
-                    Public transport is usually easiest; event traffic and parking are unpredictable near kickoff.
-                  </Text>
-                  <Pressable onPress={() => safeOpenUrl(transportUrl)} style={styles.inlineBtn}>
-                    <Text style={styles.inlineBtnText}>Search transport options</Text>
-                  </Pressable>
-                </View>
+              <Text style={styles.logisticsSub}>{logisticsSubtitle}</Text>
 
-                <View style={styles.opsItem}>
-                  <Text style={styles.opsTitle}>Food & drinks nearby</Text>
-                  <Text style={styles.opsBody}>
-                    Pick something walkable so you’re not rushing. Atmosphere is often best around the stadium district.
-                  </Text>
-                  <Pressable onPress={() => safeOpenUrl(foodDrinkUrl)} style={styles.inlineBtn}>
-                    <Text style={styles.inlineBtnText}>Search nearby spots</Text>
-                  </Pressable>
-                </View>
+              <View style={styles.sectionPills}>
+                <Pressable onPress={() => openOnly("transport")} style={[styles.pill, openSections.transport && styles.pillActive]}>
+                  <Text style={[styles.pillText, openSections.transport && styles.pillTextActive]}>Transport</Text>
+                </Pressable>
+                <Pressable onPress={() => openOnly("parking")} style={[styles.pill, openSections.parking && styles.pillActive]}>
+                  <Text style={[styles.pillText, openSections.parking && styles.pillTextActive]}>Parking</Text>
+                </Pressable>
+                <Pressable onPress={() => openOnly("food")} style={[styles.pill, openSections.food && styles.pillActive]}>
+                  <Text style={[styles.pillText, openSections.food && styles.pillTextActive]}>Food</Text>
+                </Pressable>
+                <Pressable onPress={() => openOnly("stay")} style={[styles.pill, openSections.stay && styles.pillActive]}>
+                  <Text style={[styles.pillText, openSections.stay && styles.pillTextActive]}>Stay</Text>
+                </Pressable>
+              </View>
 
-                <View style={styles.opsItem}>
-                  <Text style={styles.opsTitle}>Cheap hotel shortcut</Text>
-                  <Text style={styles.opsBody}>
-                    If you’re staying near the stadium, check cancellation and late check-in rules so match timing doesn’t trap you.
-                  </Text>
-                  <Pressable onPress={() => safeOpenUrl(cheapHotelsUrl)} style={styles.inlineBtn}>
-                    <Text style={styles.inlineBtnText}>Search cheap hotels</Text>
-                  </Pressable>
-                </View>
+              <View style={styles.logisticsActions}>
+                <Pressable
+                  onPress={async () => {
+                    const q = venueQuery || [venue, city].filter(Boolean).join(" ").trim();
+                    if (!q) return safeOpenUrl(mapsUrl);
+                    await openMapsPreferNative(q);
+                  }}
+                  style={[styles.actionBtn, styles.actionBtnPrimary]}
+                >
+                  <Text style={styles.actionKicker}>Directions</Text>
+                  <Text style={styles.actionTitle}>Open maps</Text>
+                </Pressable>
 
-                <View style={styles.opsItem}>
-                  <Text style={styles.opsTitle}>Disruption check</Text>
-                  <Text style={styles.opsBody}>
-                    Strikes and closures can ruin “easy” transfers. A quick check before you set off saves money and stress.
-                  </Text>
-                  <Pressable onPress={() => safeOpenUrl(disruptionUrl)} style={styles.inlineBtn}>
-                    <Text style={styles.inlineBtnText}>Check disruption</Text>
-                  </Pressable>
-                </View>
+                <Pressable onPress={() => safeOpenUrl(transportUrl)} style={[styles.actionBtn, styles.actionBtnSecondary]}>
+                  <Text style={styles.actionKicker}>Transport</Text>
+                  <Text style={styles.actionTitle}>Routes</Text>
+                </Pressable>
+
+                <Pressable onPress={() => safeOpenUrl(parkingUrl)} style={[styles.actionBtn, styles.actionBtnSecondary]}>
+                  <Text style={styles.actionKicker}>Parking</Text>
+                  <Text style={styles.actionTitle}>Plan</Text>
+                </Pressable>
+
+                <Pressable onPress={() => safeOpenUrl(foodDrinkUrl)} style={[styles.actionBtn, styles.actionBtnSecondary]}>
+                  <Text style={styles.actionKicker}>Food</Text>
+                  <Text style={styles.actionTitle}>Nearby</Text>
+                </Pressable>
+              </View>
+
+              {/* Transport */}
+              <View style={styles.sectionWrap}>
+                <Pressable onPress={() => toggleSection("transport")} style={styles.sectionHeader}>
+                  <Text style={styles.sectionTitle}>Transport</Text>
+                  <Text style={styles.sectionHint}>{openSections.transport ? "Hide" : "Show"}</Text>
+                </Pressable>
+
+                {openSections.transport ? (
+                  <View style={styles.sectionBody}>
+                    {transportStops.length ? (
+                      <>
+                        <Text style={styles.sectionKicker}>Best stops</Text>
+                        <View style={styles.list}>
+                          {transportStops.map((s, idx) => (
+                            <View key={`${s.name}-${idx}`} style={styles.listRow}>
+                              <View style={styles.listDot} />
+                              <View style={{ flex: 1 }}>
+                                <Text style={styles.listTitle}>
+                                  {s.name} <Text style={styles.listMeta}>• {stopTypeLabel(s.type)}</Text>
+                                </Text>
+                                {s.notes ? <Text style={styles.listBody}>{s.notes}</Text> : null}
+                              </View>
+                            </View>
+                          ))}
+                        </View>
+                      </>
+                    ) : (
+                      <Text style={styles.sectionFallback}>
+                        Use the transport search buttons above — we’ll add tailored stops for this club soon.
+                      </Text>
+                    )}
+
+                    {transportTips.length ? (
+                      <>
+                        <Text style={[styles.sectionKicker, { marginTop: 10 }]}>Quick tips</Text>
+                        <View style={styles.bullets}>
+                          {transportTips.map((t, i) => (
+                            <Text key={`${t}-${i}`} style={styles.bullet}>
+                              • {t}
+                            </Text>
+                          ))}
+                        </View>
+                      </>
+                    ) : null}
+
+                    {arrivalTips.length ? (
+                      <>
+                        <Text style={[styles.sectionKicker, { marginTop: 10 }]}>Arrival</Text>
+                        <View style={styles.bullets}>
+                          {arrivalTips.map((t, i) => (
+                            <Text key={`${t}-${i}`} style={styles.bullet}>
+                              • {t}
+                            </Text>
+                          ))}
+                        </View>
+                      </>
+                    ) : null}
+
+                    <View style={styles.sectionLinksRow}>
+                      <Pressable onPress={() => safeOpenUrl(transportUrl)} style={styles.inlineBtn}>
+                        <Text style={styles.inlineBtnText}>Search transport options</Text>
+                      </Pressable>
+                      <Pressable onPress={() => safeOpenUrl(disruptionUrl)} style={styles.inlineBtn}>
+                        <Text style={styles.inlineBtnText}>Check disruption</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                ) : null}
+              </View>
+
+              {/* Parking */}
+              <View style={styles.sectionWrap}>
+                <Pressable onPress={() => toggleSection("parking")} style={styles.sectionHeader}>
+                  <Text style={styles.sectionTitle}>Parking</Text>
+                  <Text style={styles.sectionHint}>{openSections.parking ? "Hide" : "Show"}</Text>
+                </Pressable>
+
+                {openSections.parking ? (
+                  <View style={styles.sectionBody}>
+                    {parkingNotes ? (
+                      <>
+                        <View style={styles.parkingRow}>
+                          <View style={styles.parkingChip}>
+                            <Text style={styles.parkingChipText}>Availability: {parkingLabel(parkingNotes.availability)}</Text>
+                          </View>
+                        </View>
+
+                        <Text style={styles.sectionBodyText}>{parkingNotes.summary}</Text>
+
+                        {parkingNotes.extras?.length ? (
+                          <View style={[styles.bullets, { marginTop: 8 }]}>
+                            {parkingNotes.extras.map((t, i) => (
+                              <Text key={`${t}-${i}`} style={styles.bullet}>
+                                • {t}
+                              </Text>
+                            ))}
+                          </View>
+                        ) : null}
+                      </>
+                    ) : (
+                      <Text style={styles.sectionFallback}>Use the parking search button above — we’ll add tailored parking guidance for this club soon.</Text>
+                    )}
+
+                    <View style={styles.sectionLinksRow}>
+                      <Pressable onPress={() => safeOpenUrl(parkingUrl)} style={styles.inlineBtn}>
+                        <Text style={styles.inlineBtnText}>Search parking + park & ride</Text>
+                      </Pressable>
+                      <Pressable onPress={() => safeOpenUrl(taxiUrl)} style={styles.inlineBtn}>
+                        <Text style={styles.inlineBtnText}>Taxi / rideshare pickup</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                ) : null}
+              </View>
+
+              {/* Food */}
+              <View style={styles.sectionWrap}>
+                <Pressable onPress={() => toggleSection("food")} style={styles.sectionHeader}>
+                  <Text style={styles.sectionTitle}>Food & drink</Text>
+                  <Text style={styles.sectionHint}>{openSections.food ? "Hide" : "Show"}</Text>
+                </Pressable>
+
+                {openSections.food ? (
+                  <View style={styles.sectionBody}>
+                    {logistics?.foodDrink?.length ? (
+                      <View style={styles.list}>
+                        {logistics.foodDrink.slice(0, 4).map((r, idx) => (
+                          <View key={`${r.name}-${idx}`} style={styles.listRow}>
+                            <View style={styles.listDot} />
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.listTitle}>{r.name}</Text>
+                              {r.notes ? <Text style={styles.listBody}>{r.notes}</Text> : null}
+                            </View>
+                          </View>
+                        ))}
+                      </View>
+                    ) : (
+                      <Text style={styles.sectionFallback}>
+                        Keep it simple: pick something walkable so you’re not rushing. Use the search button for live results.
+                      </Text>
+                    )}
+
+                    <View style={styles.sectionLinksRow}>
+                      <Pressable onPress={() => safeOpenUrl(foodDrinkUrl)} style={styles.inlineBtn}>
+                        <Text style={styles.inlineBtnText}>Search nearby food & drink</Text>
+                      </Pressable>
+                      <Pressable onPress={() => safeOpenUrl(stadiumInfoUrl)} style={styles.inlineBtn}>
+                        <Text style={styles.inlineBtnText}>Bag policy / entry rules</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                ) : null}
+              </View>
+
+              {/* Stay */}
+              <View style={styles.sectionWrap}>
+                <Pressable onPress={() => toggleSection("stay")} style={styles.sectionHeader}>
+                  <Text style={styles.sectionTitle}>Where to stay</Text>
+                  <Text style={styles.sectionHint}>{openSections.stay ? "Hide" : "Show"}</Text>
+                </Pressable>
+
+                {openSections.stay ? (
+                  <View style={styles.sectionBody}>
+                    {stayBest.length || stayBudget.length ? (
+                      <>
+                        {stayBest.length ? (
+                          <>
+                            <Text style={styles.sectionKicker}>Best areas</Text>
+                            <View style={styles.bullets}>
+                              {stayBest.map((a, i) => (
+                                <Text key={`${a.area}-${i}`} style={styles.bullet}>
+                                  • {a.area}
+                                  {a.notes ? ` — ${a.notes}` : ""}
+                                </Text>
+                              ))}
+                            </View>
+                          </>
+                        ) : null}
+
+                        {stayBudget.length ? (
+                          <>
+                            <Text style={[styles.sectionKicker, { marginTop: 10 }]}>Budget areas</Text>
+                            <View style={styles.bullets}>
+                              {stayBudget.map((a, i) => (
+                                <Text key={`${a.area}-${i}`} style={styles.bullet}>
+                                  • {a.area}
+                                  {a.notes ? ` — ${a.notes}` : ""}
+                                </Text>
+                              ))}
+                            </View>
+                          </>
+                        ) : null}
+                      </>
+                    ) : (
+                      <Text style={styles.sectionFallback}>
+                        Staying near the stadium can be practical, but read the details (late check-in, cancellation). Use the hotels search for live options.
+                      </Text>
+                    )}
+
+                    <View style={styles.sectionLinksRow}>
+                      <Pressable onPress={() => safeOpenUrl(cheapHotelsUrl)} style={styles.inlineBtn}>
+                        <Text style={styles.inlineBtnText}>Search cheap hotels</Text>
+                      </Pressable>
+                      <Pressable onPress={() => safeOpenUrl(transportUrl)} style={styles.inlineBtn}>
+                        <Text style={styles.inlineBtnText}>Check routes from hotel areas</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                ) : null}
               </View>
             </GlassCard>
           ) : null}
@@ -1453,9 +1485,7 @@ export default function MatchDetailScreen() {
                   <Text style={styles.modalBtnTitle}>
                     {se365EventId ? "Sportsevents365 (match page • affiliate)" : "Sportsevents365 (search • affiliate)"}
                   </Text>
-                  <Text style={styles.modalBtnSub}>
-                    {se365EventId ? `Event #${String(se365EventId)}` : `Paste: ${matchQuery}`}
-                  </Text>
+                  <Text style={styles.modalBtnSub}>{se365EventId ? `Event #${String(se365EventId)}` : `Paste: ${matchQuery}`}</Text>
                 </Pressable>
 
                 <Pressable
@@ -1684,34 +1714,105 @@ const styles = StyleSheet.create({
   },
   smallBtnText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.xs },
 
-  quickGrid: { marginTop: 12, flexDirection: "row", flexWrap: "wrap", gap: 10 },
-  quickBtn: {
+  smallPrint: { marginTop: 8, color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: "700" },
+
+  // Logistics card UX
+  sectionTopRow: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 10 },
+  badge: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(0,255,136,0.30)",
+    backgroundColor: "rgba(0,255,136,0.10)",
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+  },
+  badgeMuted: { borderColor: "rgba(255,255,255,0.12)", backgroundColor: "rgba(0,0,0,0.16)" },
+  badgeText: { color: "rgba(79,224,138,0.92)", fontWeight: "900", fontSize: 11, letterSpacing: 0.3 },
+  badgeTextMuted: { color: theme.colors.textSecondary },
+
+  logisticsSub: { marginTop: 10, color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12, lineHeight: 16 },
+
+  sectionPills: { marginTop: 12, flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  pill: {
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.16)",
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+  },
+  pillActive: { borderColor: "rgba(0,255,136,0.30)", backgroundColor: "rgba(0,255,136,0.08)" },
+  pillText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: 12 },
+  pillTextActive: { color: "rgba(79,224,138,0.92)" },
+
+  logisticsActions: { marginTop: 12, flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  actionBtn: {
     width: "48%",
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.18)",
     paddingVertical: 12,
     paddingHorizontal: 12,
   },
-  quickTitle: { color: theme.colors.text, fontWeight: "900", fontSize: 13 },
-  quickSub: { marginTop: 6, color: theme.colors.textSecondary, fontWeight: "700", fontSize: 12, lineHeight: 16 },
+  actionBtnPrimary: { borderColor: "rgba(0,255,136,0.55)", backgroundColor: "rgba(0,0,0,0.34)" },
+  actionBtnSecondary: { borderColor: "rgba(255,255,255,0.10)", backgroundColor: "rgba(0,0,0,0.22)" },
+  actionKicker: { color: theme.colors.primary, fontWeight: "900", fontSize: 11, letterSpacing: 0.2 },
+  actionTitle: { marginTop: 6, color: theme.colors.text, fontWeight: "900", fontSize: 13 },
 
-  smallPrint: { marginTop: 8, color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: "700" },
-
-  opsList: { marginTop: 12, gap: 12 },
-  opsItem: {
+  sectionWrap: {
+    marginTop: 12,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
     backgroundColor: "rgba(0,0,0,0.18)",
-    padding: 12,
+    overflow: "hidden",
   },
-  opsTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
-  opsBody: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18, fontWeight: "700" },
+  sectionHeader: {
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  sectionTitle: { color: theme.colors.text, fontWeight: "900", fontSize: 13 },
+  sectionHint: { color: theme.colors.textTertiary, fontWeight: "900", fontSize: 12 },
+  sectionBody: { paddingHorizontal: 12, paddingBottom: 12 },
+  sectionKicker: { marginTop: 4, color: theme.colors.text, fontWeight: "900", fontSize: 12 },
+  sectionBodyText: { marginTop: 8, color: theme.colors.textSecondary, fontWeight: "700", fontSize: 12, lineHeight: 16 },
+  sectionFallback: { marginTop: 8, color: theme.colors.textSecondary, fontWeight: "700", fontSize: 12, lineHeight: 16 },
+
+  list: { marginTop: 8, gap: 10 },
+  listRow: { flexDirection: "row", gap: 10, alignItems: "flex-start" },
+  listDot: {
+    marginTop: 6,
+    width: 8,
+    height: 8,
+    borderRadius: 99,
+    borderWidth: 1,
+    borderColor: "rgba(0,255,136,0.45)",
+    backgroundColor: "rgba(0,0,0,0.22)",
+  },
+  listTitle: { color: theme.colors.text, fontWeight: "900", fontSize: 12, lineHeight: 16 },
+  listMeta: { color: theme.colors.textTertiary, fontWeight: "900" },
+  listBody: { marginTop: 3, color: theme.colors.textSecondary, fontWeight: "700", fontSize: 12, lineHeight: 16 },
+
+  bullets: { marginTop: 8, gap: 6 },
+  bullet: { color: theme.colors.textSecondary, fontWeight: "700", fontSize: 12, lineHeight: 16 },
+
+  sectionLinksRow: { marginTop: 10, flexDirection: "row", flexWrap: "wrap", gap: 10 },
+
+  parkingRow: { marginTop: 8, flexDirection: "row", gap: 10, alignItems: "center" },
+  parkingChip: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.16)",
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+  },
+  parkingChipText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: 12 },
 
   inlineBtn: {
-    marginTop: 10,
     alignSelf: "flex-start",
     paddingVertical: 8,
     paddingHorizontal: 10,
