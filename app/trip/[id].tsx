@@ -206,7 +206,6 @@ export default function TripDetailScreen() {
       const idsRaw = Array.isArray(trip?.matchIds) ? trip!.matchIds : [];
       const ids = idsRaw.map((x) => String(x).trim()).filter(Boolean);
 
-      // ✅ skip fetch entirely for mock ids (non-numeric)
       const numericIds = ids.filter(isNumericId);
 
       if (numericIds.length === 0) {
@@ -274,7 +273,6 @@ export default function TripDetailScreen() {
   }
 
   function onViewWallet() {
-    // tabs route -> app/(tabs)/wallet.tsx => "/wallet"
     router.push("/wallet" as any);
   }
 
@@ -333,7 +331,6 @@ export default function TripDetailScreen() {
       return;
     }
 
-    // Opening an existing item must NOT create new pending item / prompts.
     await openUntracked(item.partnerUrl);
   }
 
@@ -353,20 +350,9 @@ export default function TripDetailScreen() {
     }
   }
 
-  async function moveToSaved(item: SavedItem) {
-    try {
-      await savedItemsStore.transitionStatus(item.id, "saved");
-    } catch {
-      Alert.alert("Couldn’t move", "That item can’t be moved right now.");
-    }
-  }
-
   async function markBookedSmart(item: SavedItem) {
     try {
       await savedItemsStore.transitionStatus(item.id, "booked");
-
-      // Keep UX consistent with partner return:
-      // show confirmation + offer proof upload if none exists.
       defer(() => {
         confirmBookedAndOfferProof(item.id).catch(() => null);
       });
@@ -404,17 +390,6 @@ export default function TripDetailScreen() {
       [
         { text: "Cancel", style: "cancel" },
         { text: "Move", style: "default", onPress: () => moveToPending(item) },
-      ]
-    );
-  }
-
-  function confirmMoveToSaved(item: SavedItem) {
-    Alert.alert(
-      "Move to Saved?",
-      "Saved items won’t prompt on return. Use this if you decided not to book (but want the link kept).",
-      [
-        { text: "Cancel", style: "cancel" },
-        { text: "Move", style: "default", onPress: () => moveToSaved(item) },
       ]
     );
   }
@@ -481,7 +456,6 @@ export default function TripDetailScreen() {
   /* -------------------------------------------------------------------------- */
 
   const loading = Boolean(tripId && (!tripsLoaded || !savedLoaded));
-
   const showHeroBanners = pending.length > 0 || saved.length > 0 || booked.length > 0;
 
   return (
@@ -595,6 +569,7 @@ export default function TripDetailScreen() {
                           <Text style={styles.itemMeta} numberOfLines={1}>
                             {buildMetaLine(it)}
                           </Text>
+
                           {it.priceText ? (
                             <Text style={styles.priceLine} numberOfLines={1}>
                               {it.priceText}
@@ -605,55 +580,6 @@ export default function TripDetailScreen() {
                         <View style={styles.itemActions}>
                           <Pressable onPress={() => confirmMarkBooked(it)} style={styles.smallBtn}>
                             <Text style={styles.smallBtnText}>Booked</Text>
-                          </Pressable>
-                          <Pressable
-                            onPress={() => confirmArchive(it)}
-                            style={[styles.smallBtn, styles.smallBtnDanger]}
-                          >
-                            <Text style={styles.smallBtnText}>Archive</Text>
-                          </Pressable>
-                        </View>
-                      </View>
-                    ))}
-                  </View>
-                )}
-              </GlassCard>
-
-              {/* BOOKED (INLINE) */}
-              <GlassCard style={styles.card}>
-                <Text style={styles.sectionTitle}>Booked (in Wallet)</Text>
-
-                {booked.length === 0 ? (
-                  <EmptyState
-                    title="No booked items yet"
-                    message="When you confirm a booking, it will show here and in Wallet."
-                  />
-                ) : (
-                  <View style={{ gap: 10 }}>
-                    {booked.map((it) => (
-                      <View key={it.id} style={styles.itemRow}>
-                        <Pressable style={{ flex: 1 }} onPress={() => openSavedItem(it)}>
-                          <View style={styles.itemTitleRow}>
-                            <Text style={styles.itemTitle} numberOfLines={1}>
-                              {it.title}
-                            </Text>
-                            <StatusBadge s={it.status} />
-                          </View>
-
-                          <Text style={styles.itemMeta} numberOfLines={1}>
-                            {buildMetaLine(it)}
-                          </Text>
-
-                          {it.priceText ? (
-                            <Text style={styles.priceLine} numberOfLines={1}>
-                              {it.priceText}
-                            </Text>
-                          ) : null}
-                        </Pressable>
-
-                        <View style={styles.itemActions}>
-                          <Pressable onPress={onViewWallet} style={styles.smallBtn}>
-                            <Text style={styles.smallBtnText}>Wallet</Text>
                           </Pressable>
 
                           <Pressable
@@ -942,7 +868,7 @@ export default function TripDetailScreen() {
                 </GlassCard>
               )}
 
-              {/* WALLET PREVIEW (kept) */}
+              {/* WALLET PREVIEW */}
               <GlassCard style={styles.card}>
                 <View style={styles.walletHeaderRow}>
                   <Text style={styles.sectionTitle}>Wallet</Text>
@@ -962,9 +888,13 @@ export default function TripDetailScreen() {
                         style={styles.noteRow}
                       >
                         <View style={{ flex: 1 }}>
-                          <Text style={styles.itemTitle} numberOfLines={1}>
-                            {it.title}
-                          </Text>
+                          <View style={styles.itemTitleRow}>
+                            <Text style={styles.itemTitle} numberOfLines={1}>
+                              {it.title}
+                            </Text>
+                            <StatusBadge s={it.status} />
+                          </View>
+
                           <Text style={styles.itemMeta} numberOfLines={1}>
                             {buildMetaLine(it)}
                           </Text>
