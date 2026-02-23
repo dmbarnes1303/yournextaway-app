@@ -9,6 +9,9 @@ import { ProProvider } from "@/src/context/ProContext";
 import { bootstrapPartnerReturnPrompt } from "@/src/services/partnerReturnBootstrap";
 import { refreshFollowedMatches } from "@/src/services/followedMatchesRefresh";
 
+// ✅ Load persisted preferences early (origin IATA, etc.)
+import preferencesStore from "@/src/state/preferences";
+
 export default function RootLayout() {
   const router = useRouter();
 
@@ -29,6 +32,10 @@ export default function RootLayout() {
 
     // Phase-1 spine: partner click → return → “Booked?” prompt
     bootstrapPartnerReturnPrompt();
+
+    // ✅ Rehydrate preferences early so affiliateLinks can use saved origin from first use
+    // Do NOT block render; best-effort only.
+    preferencesStore.load().catch(() => null);
 
     // Notification tap → open match
     try {
@@ -108,6 +115,9 @@ export default function RootLayout() {
       lastState = next;
 
       if (becameActive) {
+        // ✅ Safety: ensure prefs are loaded if app was killed/fast-refreshed oddly
+        preferencesStore.load().catch(() => null);
+
         runRefresh("foreground").catch(() => null);
         startInterval();
       }
