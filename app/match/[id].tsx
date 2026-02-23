@@ -224,6 +224,203 @@ const OFFICIAL_TICKETS_BY_TEAM: Record<string, string> = {
   "mallorca": "https://www.rcdmallorca.es/en/tickets",
   "levante": "https://www.levanteud.com/entradas",
   "real oviedo": "https://www.realoviedo.es/entradas",
+
+  // ---------------------------
+// Bundesliga (18-team list)
+// ---------------------------
+"bayern munich": "https://tickets.fcbayern.com/",
+"fc bayern munich": "https://tickets.fcbayern.com/",
+"fc bayern münchen": "https://tickets.fcbayern.com/",
+"bayern münchen": "https://tickets.fcbayern.com/",
+
+"borussia dortmund": "https://tickets.bvb.de/",
+"bvb": "https://tickets.bvb.de/",
+"bvb dortmund": "https://tickets.bvb.de/",
+
+"hoffenheim": "https://www.achtzehn99.de/tickets/online-kaufen",
+"tsg hoffenheim": "https://www.achtzehn99.de/tickets/online-kaufen",
+"tsg 1899 hoffenheim": "https://www.achtzehn99.de/tickets/online-kaufen",
+
+"vfb stuttgart": "https://shop.vfb.de/tickets/",
+"stuttgart": "https://shop.vfb.de/tickets/",
+
+"rb leipzig": "https://dauerkarten.rbleipzig.com/",
+"leipzig": "https://dauerkarten.rbleipzig.com/",
+
+"bayer leverkusen": "https://www.bayer04.de/en-us/page/tickets",
+"bayer 04 leverkusen": "https://www.bayer04.de/en-us/page/tickets",
+"leverkusen": "https://www.bayer04.de/en-us/page/tickets",
+
+"freiburg": "https://www.scfreiburg.com/en/tickets/",
+"sc freiburg": "https://www.scfreiburg.com/en/tickets/",
+
+"eintracht frankfurt": "https://ticketing.eintracht.de/",
+"frankfurt": "https://ticketing.eintracht.de/",
+
+"union berlin": "https://tickets.union-zeughaus.de/",
+"1. fc union berlin": "https://tickets.union-zeughaus.de/",
+"fc union berlin": "https://tickets.union-zeughaus.de/",
+
+"augsburg": "https://tickets.fcaugsburg.de/",
+"fc augsburg": "https://tickets.fcaugsburg.de/",
+
+"hamburger sv": "https://www.hsv.de/tickets",
+"hsv": "https://www.hsv.de/tickets",
+
+"fc cologne": "https://fc-tickets.de/",
+"1. fc cologne": "https://fc-tickets.de/",
+"1. fc köln": "https://fc-tickets.de/",
+"cologne": "https://fc-tickets.de/",
+"köln": "https://fc-tickets.de/",
+
+"mainz 05": "https://www.mainz05.de/tickets/",
+"mainz": "https://www.mainz05.de/tickets/",
+"1. fsv mainz 05": "https://www.mainz05.de/tickets/",
+
+"borussia m'gladbach": "https://tickets.borussia.de/",
+"borussia mönchengladbach": "https://tickets.borussia.de/",
+"m'gladbach": "https://tickets.borussia.de/",
+"gladbach": "https://tickets.borussia.de/",
+
+"wolfsburg": "https://tickets.vfl-wolfsburg.de/",
+"vfl wolfsburg": "https://tickets.vfl-wolfsburg.de/",
+
+"st. pauli": "https://www.fcstpauli.com/tickets/",
+"st pauli": "https://www.fcstpauli.com/tickets/",
+"fc st. pauli": "https://www.fcstpauli.com/tickets/",
+"fc st pauli": "https://www.fcstpauli.com/tickets/",
+
+"werder bremen": "https://www.werder.de/tickets/",
+"werder": "https://www.werder.de/tickets/",
+
+"fc heidenheim": "https://tickets.fc-heidenheim.de/",
+"heidenheim": "https://tickets.fc-heidenheim.de/",
+"1. fc heidenheim": "https://tickets.fc-heidenheim.de/",
+"1. fc heidenheim 1846": "https://tickets.fc-heidenheim.de/",
+
+  // ---------------------------
+// Serie A (20-team list)
+// ---------------------------
+"inter": "https://www.inter.it/en/tickets",
+"inter milan": "https://www.inter.it/en/tickets",
+"fc internazionale": "https://www.inter.it/en/tickets",
+"internazionale": "https://www.inter.it/en/tickets",
+
+"ac milan": "https://www.acmilan.com/en/tickets",
+"milan": "https://www.acmilan.com/en/tickets",
+
+"as roma": "https://www.asroma.com/en/tickets",
+"roma": "https://www.asroma.com/en/tickets",
+
+"napoli": "https://sscnapoli.it/en/tickets/",
+"ssc napoli": "https://sscnapoli.it/en/tickets/",
+
+"juventus": "https://www.juventus.com/en/tickets",
+"juve": "https://www.juventus.com/en/tickets",
+
+"como": "https://comofootball.com/en/tickets",
+"como 1907": "https://comofootball.com/en/tickets",
+
+"atalanta": "https://www.atalanta.it/en/tickets/",
+"atalanta bc": "https://www.atalanta.it/en/tickets/",
+
+"sassuolo": "https://www.sassuolocalcio.it/en/tickets/",
+"us sassuolo": "https://www.sassuolocalcio.it/en/tickets/",
+
+"lazio": "https://www.sslazio.it/en/biglietteria",
+"ss lazio": "https://www.sslazio.it/en/biglietteria",
+
+"bologna": "https://www.bolognafc.it/en/tickets/",
+"bologna fc": "https://www.bolognafc.it/en/tickets/",
+
+"udinese": "https://www.udinese.it/Biglietteria",
+"udinese calcio": "https://www.udinese.it/Biglietteria",
+
+"parma": "https://www.parmacalcio1913.com/en/tickets/",
+"parma calcio": "https://www.parmacalcio1913.com/en/tickets/",
+
+"cagliari": "https://www.cagliaricalcio.com/en/tickets/",
+"cagliari calcio": "https://www.cagliaricalcio.com/en/tickets/",
+
+"genoa": "https://genoacfc.it/en/tickets/",
+"genoa cfc": "https://genoacfc.it/en/tickets/",
+
+"torino": "https://www.torinofc.it/en/tickets",
+"torino fc": "https://www.torinofc.it/en/tickets",
+
+"fiorentina": "https://www.acffiorentina.com/en/tickets",
+"acf fiorentina": "https://www.acffiorentina.com/en/tickets",
+
+"cremonese": "https://www.uscremonese.it/biglietteria/",
+"us cremonese": "https://www.uscremonese.it/biglietteria/",
+
+"lecce": "https://www.uslecce.it/page/52943331342/biglietteria",
+"us lecce": "https://www.uslecce.it/page/52943331342/biglietteria",
+
+"pisa": "https://pisasportingclub.com/en/tickets/",
+"pisa sc": "https://pisasportingclub.com/en/tickets/",
+
+"hellas verona": "https://www.hellasverona.it/en/tickets",
+"verona": "https://www.hellasverona.it/en/tickets",
+
+// ---------------------------
+// Ligue 1 (18-team list)
+// ---------------------------
+"paris saint-germain": "https://www.psg.fr/tickets",
+"psg": "https://www.psg.fr/tickets",
+
+"lens": "https://billetterie.rclens.fr/",
+"rc lens": "https://billetterie.rclens.fr/",
+
+"lyon": "https://billetterie.ol.fr/",
+"olympique lyonnais": "https://billetterie.ol.fr/",
+
+"marseille": "https://www.om.fr/en/tickets",
+"olympique de marseille": "https://www.om.fr/en/tickets",
+"om": "https://www.om.fr/en/tickets",
+
+"lille": "https://billetterie.losc.fr/",
+"losc": "https://billetterie.losc.fr/",
+
+"rennes": "https://billetterie.staderennais.com/",
+"stade rennais": "https://billetterie.staderennais.com/",
+
+"strasbourg": "https://billetterie.rcstrasbourgalsace.fr/",
+"rc strasbourg": "https://billetterie.rcstrasbourgalsace.fr/",
+
+"monaco": "https://billetterie.asmonaco.com/",
+"as monaco": "https://billetterie.asmonaco.com/",
+
+"lorient": "https://billetterie.fclorient.bzh/",
+"fc lorient": "https://billetterie.fclorient.bzh/",
+
+"toulouse": "https://billetterie.toulousefc.com/",
+"toulouse fc": "https://billetterie.toulousefc.com/",
+
+"brest": "https://billetterie.sb29.bzh/",
+"stade brestois": "https://billetterie.sb29.bzh/",
+
+"angers": "https://billetterie.angers-sco.fr/",
+"angers sco": "https://billetterie.angers-sco.fr/",
+
+"le havre": "https://billetterie.hac-foot.com/",
+"hac": "https://billetterie.hac-foot.com/",
+
+"nice": "https://billetterie.ogcnice.com/",
+"ogc nice": "https://billetterie.ogcnice.com/",
+
+"paris fc": "https://billetterie.parisfc.fr/",
+
+"auxerre": "https://billetterie.aja.fr/",
+"aj auxerre": "https://billetterie.aja.fr/",
+
+"nantes": "https://billetterie.fcnantes.com/",
+"fc nantes": "https://billetterie.fcnantes.com/",
+
+"metz": "https://billetterie.fcmetz.com/",
+"fc metz": "https://billetterie.fcmetz.com/",
+
+
 };
 
 function normalizeTeamKey(name?: string) {
