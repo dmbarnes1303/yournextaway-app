@@ -228,7 +228,10 @@ export default function FixturesScreen() {
   const routeFrom = useMemo(() => coerceString((params as any)?.from), [params]);
   const routeTo = useMemo(() => coerceString((params as any)?.to), [params]);
 
-  const initialFrom = useMemo(() => clampIsoToWindow(routeFrom ?? minIso, minIso, maxIso), [routeFrom, minIso, maxIso]);
+  const initialFrom = useMemo(
+    () => clampIsoToWindow(routeFrom ?? minIso, minIso, maxIso),
+    [routeFrom, minIso, maxIso]
+  );
   const initialTo = useMemo(
     () => clampIsoToWindow(routeTo ?? initialFrom, minIso, maxIso),
     [routeTo, initialFrom, minIso, maxIso]
@@ -507,6 +510,7 @@ export default function FixturesScreen() {
     const ctxLeagueId = r?.league?.id != null ? Number(r.league.id) : null;
     const ctxSeason = (r as any)?.league?.season != null ? Number((r as any).league.season) : null;
 
+    // IMPORTANT: this is home-club difficulty only (no away ticket messaging anywhere).
     const ticketDifficulty = home ? getTicketDifficultyBadge(home) : null;
 
     return (
@@ -554,7 +558,7 @@ export default function FixturesScreen() {
 
                       {ticketDifficulty ? (
                         <View style={styles.badge}>
-                          <Text style={styles.badgeText}>Tickets: {ticketDifficultyLabel(ticketDifficulty)}</Text>
+                          <Text style={styles.badgeText}>Home tickets: {ticketDifficultyLabel(ticketDifficulty)}</Text>
                         </View>
                       ) : null}
 
