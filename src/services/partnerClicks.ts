@@ -1,5 +1,5 @@
 // src/services/partnerClicks.ts
-import { AppState, Linking, Platform } from "react-native";
+import { AppState, Platform } from "react-native";
 import * as WebBrowser from "expo-web-browser";
 
 import savedItemsStore from "@/src/state/savedItems";
@@ -23,10 +23,12 @@ import { readJson, writeJson } from "@/src/state/persist";
  * - avoid instant-dismiss rot: if browser was open too briefly, don't prompt;
  *   instead auto-demote pending -> saved.
  *
- * De-duplication:
- * - Reuse existing matching item (pending > saved > booked)
- * - If saved is reused, promote to pending before opening
- * - If booked is reused, open untracked (no prompt)
+ * De-duplication (CRITICAL FIX):
+ * - Identity is (tripId + partnerId + type). URL changes are normal.
+ * - Reuse existing matching item (pending > saved > booked), regardless of URL.
+ * - When reusing, update partnerUrl to the new URL (best-effort).
+ * - If booked is reused: open untracked (no prompt).
+ * - Best-effort cleanup: archive duplicates with same identity.
  */
 
 export type LastPartnerClick = {
@@ -322,7 +324,9 @@ function buildDefaultTitle(args: {
     case "tickets":
       return city ? `Match tickets for ${city}` : `Match tickets`;
     case "insurance":
-      return city ? `Protect yourself: Travel insurance for ${city}` : `Protect yourself: Travel insurance`;
+      return city
+        ? `Protect yourself: Travel insurance for ${city}`
+        : `Protect yourself: Travel insurance`;
     case "claim":
       return `Claims & compensation: Compensation help`;
     default:
@@ -330,34 +334,76 @@ function buildDefaultTitle(args: {
   }
 }
 
-function findReusableItem(args: {
+/**
+ * Identity-based match:
+ * - SAME tripId + partnerId + type (ignore URL)
+ * - Prefer: pending > saved > booked
+ * - Ignore archived unless that's all we have
+ */
+function findReusableItemByIdentity(args: {
   tripId: string;
   partnerId: PartnerId;
-  url: string;
   type: SavedItemType;
 }): SavedItem | null {
   const tripId = String(args.tripId ?? "").trim();
-  const url = normalizeUrl(args.url);
-  if (!tripId || !url) return null;
+  if (!tripId) return null;
 
   const items = savedItemsStore.getState().items;
 
   const matches = items.filter((x) => {
     if (String(x.tripId) !== tripId) return false;
     if (String(x.partnerId ?? "") !== String(args.partnerId)) return false;
-    if (normalizeUrl(String(x.partnerUrl ?? "")) !== url) return false;
     if (String(x.type) !== String(args.type)) return false;
     return true;
   });
 
   if (matches.length === 0) return null;
 
-  return (
-    matches.find((m) => m.status === "pending") ??
-    matches.find((m) => m.status === "saved") ??
-    matches.find((m) => m.status === "booked") ??
-    null
-  );
+  const byUpdated = (a: SavedItem, b: SavedItem) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0);
+
+  const pending = matches.filter((m) => m.status === "pending").sort(byUpdated)[0];
+  if (pending) return pending;
+
+  const saved = matches.filter((m) => m.status === "saved").sort(byUpdated)[0];
+  if (saved) return saved;
+
+  const booked = matches.filter((m) => m.status === "booked").sort(byUpdated)[0];
+  if (booked) return booked;
+
+  // last resort
+  const archived = matches.filter((m) => m.status === "archived").sort(byUpdated)[0];
+  return archived ?? null;
+}
+
+/**
+ * Best-effort cleanup: archive duplicates sharing same (tripId, partnerId, type),
+ * keeping the "winner" (usually pending/saved/booked chosen by the selector).
+ */
+async function archiveIdentityDuplicates(winner: SavedItem) {
+  try {
+    await ensureSavedItemsLoaded();
+    const items = savedItemsStore.getState().items;
+
+    const same = items.filter(
+      (x) =>
+        x.id !== winner.id &&
+        String(x.tripId) === String(winner.tripId) &&
+        String(x.partnerId ?? "") === String(winner.partnerId ?? "") &&
+        String(x.type) === String(winner.type) &&
+        x.status !== "archived"
+    );
+
+    // If there are duplicates, archive them. Don’t delete (safer).
+    for (const dup of same) {
+      try {
+        await savedItemsStore.transitionStatus(dup.id, "archived");
+      } catch {
+        // ignore
+      }
+    }
+  } catch {
+    // ignore
+  }
 }
 
 export async function beginPartnerClick(args: {
@@ -387,12 +433,30 @@ export async function beginPartnerClick(args: {
 
     const type: SavedItemType = args.savedItemType ?? defaultTypeForCategory(partner.category);
 
-    const reusable = findReusableItem({ tripId, partnerId: partner.id as PartnerId, url, type });
+    // ✅ FIX: reuse by identity, not URL
+    const reusable = findReusableItemByIdentity({ tripId, partnerId: partner.id as PartnerId, type });
 
     if (reusable) {
       item = reusable;
 
+      // Best-effort: keep the freshest URL on the item so Wallet opens the right place.
+      if (normalizeUrl(String(item.partnerUrl ?? "")) !== url) {
+        try {
+          await savedItemsStore.update(item.id, {
+            partnerUrl: url,
+            metadata: args.metadata ?? item.metadata,
+          });
+          item = savedItemsStore.getState().items.find((x) => x.id === item!.id) ?? item;
+        } catch {
+          // ignore
+        }
+      }
+
+      // Cleanup any existing duplicates for this identity (best-effort)
+      void archiveIdentityDuplicates(item).catch(() => null);
+
       if (item.status === "booked") {
+        // Phase-1 rule: booked stays booked. Open without prompt.
         await openUntrackedUrl(url);
         return item;
       }
@@ -400,6 +464,16 @@ export async function beginPartnerClick(args: {
       if (item.status === "saved") {
         await tryTransitionSavedToPending(item.id);
         item = savedItemsStore.getState().items.find((x) => x.id === item!.id) ?? item;
+      }
+
+      // If it was archived (rare): bring it back to pending for a fresh attempt.
+      if (item.status === "archived") {
+        try {
+          await savedItemsStore.transitionStatus(item.id, "pending");
+          item = savedItemsStore.getState().items.find((x) => x.id === item!.id) ?? item;
+        } catch {
+          // ignore
+        }
       }
     }
 
@@ -426,6 +500,7 @@ export async function beginPartnerClick(args: {
     }
 
     const openedAt = now();
+
     if (item.status === "pending") {
       await persistLastClick({
         itemId: item.id,
@@ -472,7 +547,14 @@ export async function markBooked(itemId: string) {
   if (!id) return;
 
   await ensureSavedItemsLoaded();
+
+  const cur = savedItemsStore.getState().items.find((x) => x.id === id);
   await savedItemsStore.transitionStatus(id, "booked");
+
+  // If we can, clean duplicates of same identity so “Pending” doesn’t show a twin.
+  if (cur) {
+    void archiveIdentityDuplicates({ ...cur, status: "booked" }).catch(() => null);
+  }
 
   if (lastClick?.itemId === id) {
     await persistLastClick(null);
@@ -524,4 +606,4 @@ export function __unsafeResetPartnerClickStateForDevOnly() {
   void persistLastClick(null);
   opening = false;
   lastClickLoaded = false;
-        }
+                                           }
