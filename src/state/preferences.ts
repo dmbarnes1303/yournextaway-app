@@ -32,7 +32,7 @@ function extractIataFromAny(input: unknown): string | null {
   const m = raw.match(/\(([A-Z]{3})\)/i);
   if (m?.[1]) return String(m[1]).toUpperCase();
 
-  // If it contains " ABC " (rare)
+  // If it contains " ABC " or similar
   const m2 = raw.match(/\b([A-Z]{3})\b/i);
   if (m2?.[1]) return String(m2[1]).toUpperCase();
 
@@ -100,10 +100,25 @@ export const usePreferencesStore = create<PreferencesState>((set, get) => ({
 /* Wrapper (matches your other stores style) */
 /* -------------------------------------------------------------------------- */
 
+type Unsubscribe = () => void;
+
 const preferencesStore = {
   getState: usePreferencesStore.getState,
   setState: usePreferencesStore.setState,
-  subscribe: usePreferencesStore.subscribe,
+
+  /**
+   * Subscribe helper that supports no-arg listeners (common pattern in your app).
+   * We just ignore the state args and call your callback.
+   */
+  subscribe: (listener: () => void): Unsubscribe => {
+    return usePreferencesStore.subscribe(() => {
+      try {
+        listener();
+      } catch {
+        // ignore listener errors
+      }
+    });
+  },
 
   load: async () => {
     await usePreferencesStore.getState().load();
