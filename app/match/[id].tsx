@@ -159,99 +159,71 @@ function buildGoogleHomeTicketsUrl(matchQuery: string) {
 }
 
 /**
- * Official ticket portals (HOME CLUB).
- * We store multiple aliases per club because API names vary:
- * - "AFC Bournemouth" vs "Bournemouth"
- * - "Wolves" vs "Wolverhampton Wanderers"
- * - "Brighton" vs "Brighton & Hove Albion"
+ * Official home tickets mapping.
+ * NOTE: keep keys simple + lowercase; normalizeTeamKey() and fuzzy match handle minor variations.
+ * We include EPL + LaLiga here.
  */
 const OFFICIAL_TICKETS_BY_TEAM: Record<string, string> = {
-  // Arsenal
+  // ---------------------------
+  // Premier League (EPL)
+  // ---------------------------
   "arsenal": "https://www.arsenal.com/tickets",
-  "arsenal fc": "https://www.arsenal.com/tickets",
-
-  // Aston Villa
   "aston villa": "https://www.avfc.co.uk/tickets",
-  "aston villa fc": "https://www.avfc.co.uk/tickets",
-
-  // Bournemouth
   "bournemouth": "https://www.afcb.co.uk/tickets",
   "afc bournemouth": "https://www.afcb.co.uk/tickets",
-
-  // Brentford
   "brentford": "https://www.brentfordfc.com/en/tickets",
-  "brentford fc": "https://www.brentfordfc.com/en/tickets",
-
-  // Brighton
   "brighton": "https://www.brightonandhovealbion.com/tickets",
   "brighton & hove albion": "https://www.brightonandhovealbion.com/tickets",
-  "brighton and hove albion": "https://www.brightonandhovealbion.com/tickets",
-
-  // Burnley (official eTicketing portal)
-  "burnley": "https://www.eticketing.co.uk/burnleyfc/",
-  "burnley fc": "https://www.eticketing.co.uk/burnleyfc/",
-
-  // Chelsea
   "chelsea": "https://www.chelseafc.com/en/tickets",
-  "chelsea fc": "https://www.chelseafc.com/en/tickets",
-
-  // Crystal Palace
   "crystal palace": "https://www.cpfc.co.uk/tickets",
-  "crystal palace fc": "https://www.cpfc.co.uk/tickets",
-
-  // Everton
   "everton": "https://www.evertonfc.com/tickets",
-  "everton fc": "https://www.evertonfc.com/tickets",
-
-  // Fulham
   "fulham": "https://www.fulhamfc.com/tickets",
-  "fulham fc": "https://www.fulhamfc.com/tickets",
-
-  // Leeds United (official ticketing portal)
-  "leeds": "https://tickets.leedsunited.com",
-  "leeds united": "https://tickets.leedsunited.com",
-  "leeds united fc": "https://tickets.leedsunited.com",
-
-  // Liverpool
+  "ipswich town": "https://www.itfc.co.uk/tickets",
+  "leicester city": "https://www.lcfc.com/tickets",
   "liverpool": "https://www.liverpoolfc.com/tickets",
-  "liverpool fc": "https://www.liverpoolfc.com/tickets",
-
-  // Manchester City
   "manchester city": "https://www.mancity.com/tickets",
-  "man city": "https://www.mancity.com/tickets",
-  "manchester city fc": "https://www.mancity.com/tickets",
-
-  // Manchester United
   "manchester united": "https://tickets.manutd.com/",
-  "man united": "https://tickets.manutd.com/",
-  "manchester utd": "https://tickets.manutd.com/",
-  "man utd": "https://tickets.manutd.com/",
-
-  // Newcastle United
   "newcastle united": "https://book.nufc.co.uk/",
-  "newcastle": "https://book.nufc.co.uk/",
-  "newcastle utd": "https://book.nufc.co.uk/",
-
-  // Nottingham Forest
   "nottingham forest": "https://tickets.nottinghamforest.co.uk/",
-  "forest": "https://tickets.nottinghamforest.co.uk/",
-
-  // Sunderland (official ticketing portal)
-  "sunderland": "https://tickets.safc.com",
-  "sunderland afc": "https://tickets.safc.com",
-
-  // Tottenham Hotspur
+  "southampton": "https://www.southamptonfc.com/tickets",
   "tottenham hotspur": "https://www.tottenhamhotspur.com/tickets/",
-  "tottenham": "https://www.tottenhamhotspur.com/tickets/",
-  "spurs": "https://www.tottenhamhotspur.com/tickets/",
-
-  // West Ham United
   "west ham united": "https://www.whufc.com/tickets",
-  "west ham": "https://www.whufc.com/tickets",
-
-  // Wolves
   "wolverhampton wanderers": "https://ticketswolves.co.uk/",
   "wolves": "https://ticketswolves.co.uk/",
+
+  // ---------------------------
+  // LaLiga (20-team list you sent)
+  // ---------------------------
+  "barcelona": "https://www.fcbarcelona.com/en/tickets/football",
+  "fc barcelona": "https://www.fcbarcelona.com/en/tickets/football",
+  "real madrid": "https://www.realmadrid.com/en/tickets",
+  "real madrid cf": "https://www.realmadrid.com/en/tickets",
+  "villarreal": "https://villarrealcf.es/entradas/",
+  "villarreal cf": "https://villarrealcf.es/entradas/",
+  "atletico madrid": "https://www.atleticodemadrid.com/entradas",
+  "atlético madrid": "https://www.atleticodemadrid.com/entradas",
+  "atletico de madrid": "https://www.atleticodemadrid.com/entradas",
+  "atlético de madrid": "https://www.atleticodemadrid.com/entradas",
+  "real betis": "https://www.realbetisbalompie.es/entradas/",
+  "real betis balompie": "https://www.realbetisbalompie.es/entradas/",
+  "celta vigo": "https://rccelta.es/entradas/",
+  "rc celta": "https://rccelta.es/entradas/",
+  "espanyol": "https://www.rcdespanyol.com/en/tickets",
+  "rcd espanyol": "https://www.rcdespanyol.com/en/tickets",
+  "athletic club": "https://www.athletic-club.eus/en/tickets",
+  "osasuna": "https://www.osasuna.es/entradas",
+  "real sociedad": "https://www.realsociedad.eus/en/tickets",
+  "sevilla": "https://www.sevillafc.es/en/tickets",
+  "getafe": "https://www.getafecf.com/entradas",
+  "girona": "https://www.gironafc.cat/en/entrades",
+  "rayo vallecano": "https://www.rayovallecano.es/entradas",
+  "deportivo alaves": "https://www.deportivoalaves.com/en/tickets",
+  "deportivo alavés": "https://www.deportivoalaves.com/en/tickets",
+  "valencia": "https://www.valenciacf.com/en/tickets",
+  "elche": "https://www.elchecf.es/entradas",
+  "mallorca": "https://www.rcdmallorca.es/en/tickets",
+  "levante": "https://www.levanteud.com/entradas",
+  "real oviedo": "https://www.realoviedo.es/entradas",
 };
 
 function normalizeTeamKey(name?: string) {
@@ -292,7 +264,6 @@ function buildStadiumInfoUrl(venue?: string, homeTeam?: string, city?: string) {
 }
 
 function buildFoodDrinkUrl(venue?: string, city?: string) {
-  // Split to bias towards actual options, not generic pages
   const q = [venue || "", city || "", "best pubs bars restaurants near"].join(" ").trim();
   return `https://www.google.com/search?q=${enc(q)}`;
 }
@@ -308,7 +279,6 @@ function buildParkingUrl(venue?: string, city?: string) {
 }
 
 function buildCheapHotelsUrl(venue?: string, city?: string) {
-  // This is deliberately “search-y” (works worldwide, no partner dependency).
   const q = [venue || "", city || "", "cheap hotels near"].join(" ").trim();
   return `https://www.google.com/search?q=${enc(q)}`;
 }
@@ -366,7 +336,6 @@ function computeTripStability(args: { kickoffTbc: boolean; difficulty?: TicketDi
   if (!kickoffTbc && (difficulty === "easy" || difficulty === "medium")) return "stable";
   if (kickoffTbc && (difficulty === "very_hard" || difficulty === "hard")) return "uncertain";
 
-  // everything else: workable if you plan around it
   return "flexible";
 }
 
@@ -1017,7 +986,6 @@ export default function MatchDetailScreen() {
                   </Text>
                 </View>
 
-                {/* Weekend-first planning (only when kickoff is not locked) */}
                 {tbc ? (
                   <View style={styles.planningBox}>
                     <Text style={styles.planningTitle}>Planning tip</Text>
@@ -1035,7 +1003,6 @@ export default function MatchDetailScreen() {
                   </View>
                 ) : null}
 
-                {/* Home ticket guide block */}
                 <View style={styles.ticketGuideBox}>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.ticketGuideTitle}>Home ticket guide</Text>
@@ -1160,7 +1127,6 @@ export default function MatchDetailScreen() {
                   </Pressable>
                 </View>
 
-                {/* Logistics quick actions (FB feedback) */}
                 <View style={styles.quickGrid}>
                   <Pressable onPress={() => safeOpenUrl(foodDrinkUrl)} style={styles.quickBtn}>
                     <Text style={styles.quickTitle}>Food & drink</Text>
@@ -1277,14 +1243,12 @@ export default function MatchDetailScreen() {
           </View>
         ) : null}
 
-        {/* Home Ticket Source Modal (Sportsevents365 + Official are equal) */}
         <Modal visible={ticketModal.open} transparent animationType="fade" onRequestClose={closeTicketModal}>
           <Pressable style={styles.modalBackdrop} onPress={closeTicketModal}>
             <Pressable style={styles.modalCard} onPress={() => null}>
               <Text style={styles.modalTitle}>Home tickets</Text>
               <Text style={styles.modalBody}>
-                Choose where you want to source host-club home tickets. Official takes you directly to the club.
-                Sportsevents365 uses your affiliate link.
+                Choose where you want to source host-club home tickets. Official takes you directly to the club. Sportsevents365 uses your affiliate link.
               </Text>
 
               <View style={styles.modalBtnCol}>
@@ -1317,8 +1281,7 @@ export default function MatchDetailScreen() {
               </View>
 
               <Text style={styles.modalFootnote}>
-                Note: exact Sportsevents365 deep-links require their event ID. Until IDs are supplied, we open SE365 search and
-                show the exact query to paste.
+                Note: exact Sportsevents365 deep-links require their event ID. Until IDs are supplied, we open SE365 search and show the exact query to paste.
               </Text>
             </Pressable>
           </Pressable>
