@@ -29,6 +29,9 @@ import tripsStore from "@/src/state/trips";
 import useFollowStore from "@/src/state/followStore";
 import { computeLikelyPlaceholderTbcIds, isKickoffTbc, kickoffIsoOrNull } from "@/src/utils/kickoffTbc";
 
+import { getTicketDifficultyBadge } from "@/src/data/ticketGuides";
+import type { TicketDifficulty } from "@/src/data/ticketGuides/types";
+
 /* -------------------------------------------------------------------------- */
 /* Constants */
 /* -------------------------------------------------------------------------- */
@@ -88,6 +91,23 @@ function normalizeRange(fromIso: string, toIso: string) {
   if (!a) return { from: b, to: b };
   if (!b) return { from: a, to: a };
   return a <= b ? { from: a, to: b } : { from: b, to: a };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Ticket badge helpers
+ * -------------------------------------------------------------------------- */
+
+function ticketDifficultyLabel(d: TicketDifficulty) {
+  switch (d) {
+    case "easy":
+      return "Easy";
+    case "medium":
+      return "Medium";
+    case "hard":
+      return "Hard";
+    case "very_hard":
+      return "Very hard";
+  }
 }
 
 /* -------------------------------------------------------------------------- */
@@ -209,7 +229,10 @@ export default function FixturesScreen() {
   const routeTo = useMemo(() => coerceString((params as any)?.to), [params]);
 
   const initialFrom = useMemo(() => clampIsoToWindow(routeFrom ?? minIso, minIso, maxIso), [routeFrom, minIso, maxIso]);
-  const initialTo = useMemo(() => clampIsoToWindow(routeTo ?? initialFrom, minIso, maxIso), [routeTo, initialFrom, minIso, maxIso]);
+  const initialTo = useMemo(
+    () => clampIsoToWindow(routeTo ?? initialFrom, minIso, maxIso),
+    [routeTo, initialFrom, minIso, maxIso]
+  );
 
   const dateStrip = useMemo(() => {
     return Array.from({ length: DAYS_AHEAD }).map((_, i) => {
@@ -484,6 +507,8 @@ export default function FixturesScreen() {
     const ctxLeagueId = r?.league?.id != null ? Number(r.league.id) : null;
     const ctxSeason = (r as any)?.league?.season != null ? Number((r as any).league.season) : null;
 
+    const ticketDifficulty = home ? getTicketDifficultyBadge(home) : null;
+
     return (
       <View key={rowKey} style={styles.rowWrap}>
         <GlassCard noPadding style={styles.rowCard} strength="subtle">
@@ -527,6 +552,12 @@ export default function FixturesScreen() {
                         </View>
                       )}
 
+                      {ticketDifficulty ? (
+                        <View style={styles.badge}>
+                          <Text style={styles.badgeText}>Tickets: {ticketDifficultyLabel(ticketDifficulty)}</Text>
+                        </View>
+                      ) : null}
+
                       <Text style={styles.tapHint}>Tap for actions</Text>
                     </View>
                   </View>
@@ -554,7 +585,10 @@ export default function FixturesScreen() {
 
           {expanded ? (
             <View style={styles.expandArea}>
-              <Pressable onPress={() => goMatch(fixtureId, { leagueId: ctxLeagueId, season: ctxSeason })} style={styles.expandGhost}>
+              <Pressable
+                onPress={() => goMatch(fixtureId, { leagueId: ctxLeagueId, season: ctxSeason })}
+                style={styles.expandGhost}
+              >
                 <Text style={styles.expandGhostText}>Match</Text>
               </Pressable>
 
@@ -771,7 +805,7 @@ const styles = StyleSheet.create({
   meta: { color: theme.colors.textSecondary, fontSize: 12, textAlign: "center" },
   metaSecondary: { color: theme.colors.textTertiary, fontSize: 11, textAlign: "center", fontWeight: "800" },
 
-  badgeRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  badgeRow: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "center" },
   badge: {
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
