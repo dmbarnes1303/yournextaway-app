@@ -1,14 +1,14 @@
 // src/services/affiliateLinks.ts
 import Constants from "expo-constants";
 
-import preferencesStore from "@/src/state/preferences";
 import { devWarnIfUnknownCity, getIataCityCodeForCity } from "@/src/constants/iataCities";
 
 /**
  * Centralised affiliate URL builder.
  *
  * RULES (Phase-1 spine):
- * - This file ONLY builds URLs.
+ * - This file ONLY builds URLs (pure + deterministic).
+ * - NO stores, NO async, NO side effects (except dev warnings).
  * - Partner IDs live in src/core/partners.ts
  * - Keep output keys stable to avoid screen refactors.
  *
@@ -91,25 +91,16 @@ function formatDdMm(dateIso?: string): string | null {
 }
 
 /**
- * Sync best-effort origin chooser:
+ * Deterministic origin chooser:
  * - args.originIata (if valid)
- * - preferencesStore (if available/valid)
  * - EXPO_PUBLIC_DEFAULT_ORIGIN_IATA (if valid)
  * - "LON"
+ *
+ * NOTE: caller is responsible for reading preferences stores (if any) and passing originIata in.
  */
 function resolveOriginIata(argsOrigin?: string, envOrigin?: string): string {
   const fromArgs = String(argsOrigin ?? "").trim().toUpperCase();
   if (isIata3(fromArgs)) return fromArgs;
-
-  // preferencesStore is safe to read synchronously.
-  // If it hasn't loaded yet, it'll still return the default ("LON").
-  try {
-    const pref = preferencesStore.getPreferredOriginIata?.();
-    const fromPrefs = String(pref ?? "").trim().toUpperCase();
-    if (isIata3(fromPrefs)) return fromPrefs;
-  } catch {
-    // ignore
-  }
 
   const fromEnv = String(envOrigin ?? "").trim().toUpperCase();
   if (isIata3(fromEnv)) return fromEnv;
@@ -149,7 +140,7 @@ export function buildAffiliateLinks(args: {
 
   /**
    * Optional override for flight origin (CITY code preferred).
-   * If not provided, we fall back to preferencesStore → env → "LON".
+   * If not provided, we fall back to env → "LON".
    */
   originIata?: string;
 }): AffiliateLinks {
@@ -190,10 +181,13 @@ export function buildAffiliateLinks(args: {
         `https://www.aviasales.com/search/${originIata}${dd}${destIata}${rd}1` +
         (AFFILIATE.aviasalesMarker ? `?marker=${enc(AFFILIATE.aviasalesMarker)}` : "");
     } else {
-      flightsUrl = `https://www.aviasales.com/` + (AFFILIATE.aviasalesMarker ? `?marker=${enc(AFFILIATE.aviasalesMarker)}` : "");
+      flightsUrl =
+        `https://www.aviasales.com/` +
+        (AFFILIATE.aviasalesMarker ? `?marker=${enc(AFFILIATE.aviasalesMarker)}` : "");
     }
   } else {
-    flightsUrl = `https://www.aviasales.com/` + (AFFILIATE.aviasalesMarker ? `?marker=${enc(AFFILIATE.aviasalesMarker)}` : "");
+    flightsUrl =
+      `https://www.aviasales.com/` + (AFFILIATE.aviasalesMarker ? `?marker=${enc(AFFILIATE.aviasalesMarker)}` : "");
   }
 
   /* -------------------- */
