@@ -1,5 +1,6 @@
 // src/services/apiFootball.ts
 import { API_FOOTBALL_BASE_URL, assertApiFootballKey } from "@/src/config/apiFootball";
+import { normalizeCityName } from "@/src/constants/iataCities";
 
 type ApiSportsEnvelope<T> = {
   errors?: Record<string, unknown> | unknown[] | string | null;
@@ -95,9 +96,36 @@ export type FixtureListRow = {
   };
 };
 
-// --------------------
-// In-memory caching
-// --------------------
+/* -------------------------------------------------------------------------- */
+/* Normalization */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Ensure we don’t leak inconsistent city strings across the app.
+ * This directly improves:
+ * - Trip cityName fallback
+ * - Affiliate link generation (IATA mapping)
+ * - Any future city guide routing
+ */
+function normalizeFixtureCityInPlace(row: FixtureListRow | null | undefined) {
+  if (!row?.fixture?.venue?.city) return row;
+  const raw = row.fixture.venue.city;
+  const canon = normalizeCityName(raw);
+  if (canon && canon !== raw) {
+    row.fixture.venue.city = canon;
+  }
+  return row;
+}
+
+function normalizeRows(rows: FixtureListRow[]): FixtureListRow[] {
+  if (!Array.isArray(rows) || rows.length === 0) return [];
+  for (const r of rows) normalizeFixtureCityInPlace(r);
+  return rows;
+}
+
+/* -------------------------------------------------------------------------- */
+/* In-memory caching */
+/* -------------------------------------------------------------------------- */
 
 const FIXTURES_TTL_MS = 10 * 60 * 1000; // 10 minutes
 const FIXTURE_BY_ID_TTL_MS = 30 * 60 * 1000; // 30 minutes
@@ -133,6 +161,10 @@ function fixturesByRoundKey(params: { league: number; season: number; round: str
   return `fixturesRound:${params.league}:${params.season}:${params.round}`;
 }
 
+/* -------------------------------------------------------------------------- */
+/* Public API */
+/* -------------------------------------------------------------------------- */
+
 export async function getFixtures(params: {
   league: number;
   season: number;
@@ -159,6 +191,7 @@ export async function getFixtures(params: {
 
   const inflight = apiGet<FixtureListRow[]>(`/fixtures${qs}`)
     .then((rows) => (Array.isArray(rows) ? rows : []))
+    .then((rows) => normalizeRows(rows))
     .then((rows) => {
       fixturesCache.set(key, { ts: now(), value: rows });
       return rows;
@@ -187,6 +220,7 @@ export async function getFixtureById(fixtureId: string | number): Promise<Fixtur
   const inflight = apiGet<FixtureListRow[]>(`/fixtures${qs}`)
     .then((rows) => (Array.isArray(rows) ? rows : []))
     .then((rows) => (rows?.[0] ?? null))
+    .then((row) => normalizeFixtureCityInPlace(row) ?? row)
     .then((row) => {
       fixtureByIdCache.set(key, { ts: now(), value: row });
       return row;
@@ -229,6 +263,7 @@ export async function getFixturesByRound(params: {
 
   const inflight = apiGet<FixtureListRow[]>(`/fixtures${qs}`)
     .then((rows) => (Array.isArray(rows) ? rows : []))
+    .then((rows) => normalizeRows(rows))
     .then((rows) => {
       fixturesByRoundCache.set(key, { ts: now(), value: rows });
       return rows;
