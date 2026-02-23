@@ -1,5 +1,5 @@
 // app/trip/[id].tsx
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -10,6 +10,8 @@ import {
   Alert,
   TextInput,
   Keyboard,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
@@ -152,6 +154,10 @@ export default function TripDetailScreen() {
   const [noteText, setNoteText] = useState("");
   const [noteSaving, setNoteSaving] = useState(false);
 
+  // Scroll helpers (so “Booked” can jump user to Wallet if needed)
+  const scrollRef = useRef<ScrollView | null>(null);
+  const walletYRef = useRef<number>(0);
+
   /* ---------------- load trip ---------------- */
 
   useEffect(() => {
@@ -199,7 +205,6 @@ export default function TripDetailScreen() {
       const idsRaw = Array.isArray(trip?.matchIds) ? trip!.matchIds : [];
       const ids = idsRaw.map((x) => String(x).trim()).filter(Boolean);
 
-      // ✅ skip fetch entirely for mock ids (non-numeric)
       const numericIds = ids.filter(isNumericId);
 
       if (numericIds.length === 0) {
@@ -264,6 +269,18 @@ export default function TripDetailScreen() {
   function onEditTrip() {
     if (!trip) return;
     router.push({ pathname: "/trip/build", params: { tripId: trip.id } } as any);
+  }
+
+  function scrollToWallet() {
+    const y = Number(walletYRef.current ?? 0);
+    if (!scrollRef.current) return;
+    if (!Number.isFinite(y) || y <= 0) return;
+
+    try {
+      scrollRef.current.scrollTo({ y: Math.max(0, y - 14), animated: true });
+    } catch {
+      // ignore
+    }
   }
 
   /* -------------------------------------------------------------------------- */
@@ -346,9 +363,13 @@ export default function TripDetailScreen() {
       await savedItemsStore.transitionStatus(item.id, "booked");
 
       // Keep UX consistent with partner return:
-      // show confirmation + offer proof upload if none exists.
       defer(() => {
         confirmBookedAndOfferProof(item.id).catch(() => null);
+      });
+
+      // Make it obvious where it went.
+      defer(() => {
+        scrollToWallet();
       });
     } catch {
       Alert.alert("Couldn’t mark booked", "That item can’t be marked booked right now.");
@@ -446,6 +467,7 @@ export default function TripDetailScreen() {
 
       <SafeAreaView style={styles.safe} edges={["bottom"]}>
         <ScrollView
+          ref={(r) => (scrollRef.current = r)}
           style={styles.scroll}
           contentContainerStyle={[
             styles.content,
@@ -475,11 +497,20 @@ export default function TripDetailScreen() {
                 <Text style={styles.cityTitle}>{cityName}</Text>
                 <Text style={styles.heroMeta}>{summaryLine(trip)}</Text>
 
-                <View style={styles.statusPill}>
-                  <Text style={styles.statusText}>{status}</Text>
+                <View style={styles.statusRow}>
+                  <View style={styles.statusPill}>
+                    <Text style={styles.statusText}>{status}</Text>
+                  </View>
+
+                  {booked.length > 0 && (
+                    <Pressable onPress={scrollToWallet} style={styles.walletJump}>
+                      <Text style={styles.walletJumpText}>View wallet</Text>
+                      <Text style={styles.walletJumpChev}>›</Text>
+                    </Pressable>
+                  )}
                 </View>
 
-                {(pending.length > 0 || saved.length > 0) && (
+                {(pending.length > 0 || saved.length > 0 || booked.length > 0) && (
                   <View style={styles.bannersRow}>
                     {pending.length > 0 && (
                       <View style={styles.pendingBanner}>
@@ -488,10 +519,19 @@ export default function TripDetailScreen() {
                         </Text>
                       </View>
                     )}
+
                     {saved.length > 0 && (
                       <View style={styles.savedBanner}>
                         <Text style={styles.savedText}>
                           {saved.length} saved item{saved.length === 1 ? "" : "s"}
+                        </Text>
+                      </View>
+                    )}
+
+                    {booked.length > 0 && (
+                      <View style={styles.bookedBanner}>
+                        <Text style={styles.bookedText}>
+                          {booked.length} booked item{booked.length === 1 ? "" : "s"} in Wallet
                         </Text>
                       </View>
                     )}
@@ -533,9 +573,10 @@ export default function TripDetailScreen() {
                         </Pressable>
 
                         <View style={styles.itemActions}>
-                          <Pressable onPress={() => confirmMarkBooked(it)} style={styles.smallBtn}>
+                          <Pressable onPress={() => confirmMarkBooked(it)} style={styles.smallBtnPrimary}>
                             <Text style={styles.smallBtnText}>Booked</Text>
                           </Pressable>
+
                           <Pressable
                             onPress={() => confirmArchive(it)}
                             style={[styles.smallBtn, styles.smallBtnDanger]}
@@ -546,6 +587,38 @@ export default function TripDetailScreen() {
                       </View>
                     ))}
                   </View>
+                )}
+              </GlassCard>
+
+              {/* BOOKED (WALLET) — make it obvious */}
+              <GlassCard style={styles.card}>
+                <Text style={styles.sectionTitle}>Booked (Wallet)</Text>
+
+                {booked.length === 0 ? (
+                  <EmptyState title="Nothing booked yet" message="When you confirm “Yes”, it shows here." />
+                ) : (
+                  <>
+                    <View style={{ gap: 10 }}>
+                      {booked.map((it) => (
+                        <Pressable key={it.id} onPress={() => openSavedItem(it)} style={styles.noteRow}>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.itemTitle} numberOfLines={1}>
+                              {it.title}
+                            </Text>
+                            <Text style={styles.itemMeta} numberOfLines={1}>
+                              {buildMetaLine(it)}
+                            </Text>
+                          </View>
+                          <Text style={styles.chev}>›</Text>
+                        </Pressable>
+                      ))}
+                    </View>
+
+                    <Pressable onPress={scrollToWallet} style={styles.inlineCta}>
+                      <Text style={styles.inlineCtaText}>Manage booking proof in Wallet</Text>
+                      <Text style={styles.inlineCtaChev}>›</Text>
+                    </Pressable>
+                  </>
                 )}
               </GlassCard>
 
@@ -577,12 +650,14 @@ export default function TripDetailScreen() {
                         </Pressable>
 
                         <View style={styles.itemActions}>
-                          <Pressable onPress={() => confirmMarkBooked(it)} style={styles.smallBtn}>
+                          <Pressable onPress={() => confirmMarkBooked(it)} style={styles.smallBtnPrimary}>
                             <Text style={styles.smallBtnText}>Booked</Text>
                           </Pressable>
+
                           <Pressable onPress={() => confirmMoveToPending(it)} style={styles.smallBtn}>
                             <Text style={styles.smallBtnText}>Pending</Text>
                           </Pressable>
+
                           <Pressable
                             onPress={() => confirmArchive(it)}
                             style={[styles.smallBtn, styles.smallBtnDanger]}
@@ -615,9 +690,7 @@ export default function TripDetailScreen() {
                     disabled={noteSaving}
                     style={[styles.noteSaveBtn, noteSaving && { opacity: 0.7 }]}
                   >
-                    <Text style={styles.noteSaveText}>
-                      {noteSaving ? "Saving…" : "Save note"}
-                    </Text>
+                    <Text style={styles.noteSaveText}>{noteSaving ? "Saving…" : "Save note"}</Text>
                   </Pressable>
                 </View>
 
@@ -813,30 +886,36 @@ export default function TripDetailScreen() {
                 </GlassCard>
               )}
 
-              {/* WALLET PREVIEW */}
-              <GlassCard style={styles.card}>
-                <Text style={styles.sectionTitle}>Wallet</Text>
+              {/* WALLET (anchor for scroll + future expansion) */}
+              <View
+                onLayout={(e) => {
+                  walletYRef.current = e.nativeEvent.layout.y;
+                }}
+              >
+                <GlassCard style={styles.card}>
+                  <Text style={styles.sectionTitle}>Wallet</Text>
 
-                {booked.length === 0 ? (
-                  <EmptyState title="Nothing booked yet" message="Booked items appear here." />
-                ) : (
-                  <View style={{ gap: 10 }}>
-                    {booked.map((it) => (
-                      <Pressable key={it.id} onPress={() => openSavedItem(it)} style={styles.noteRow}>
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.itemTitle} numberOfLines={1}>
-                            {it.title}
-                          </Text>
-                          <Text style={styles.itemMeta} numberOfLines={1}>
-                            {buildMetaLine(it)}
-                          </Text>
-                        </View>
-                        <Text style={styles.chev}>›</Text>
-                      </Pressable>
-                    ))}
-                  </View>
-                )}
-              </GlassCard>
+                  {booked.length === 0 ? (
+                    <EmptyState title="Nothing booked yet" message="Booked items appear here." />
+                  ) : (
+                    <View style={{ gap: 10 }}>
+                      {booked.map((it) => (
+                        <Pressable key={it.id} onPress={() => openSavedItem(it)} style={styles.noteRow}>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.itemTitle} numberOfLines={1}>
+                              {it.title}
+                            </Text>
+                            <Text style={styles.itemMeta} numberOfLines={1}>
+                              {buildMetaLine(it)}
+                            </Text>
+                          </View>
+                          <Text style={styles.chev}>›</Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  )}
+                </GlassCard>
+              </View>
             </>
           )}
         </ScrollView>
@@ -885,8 +964,15 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
   },
 
-  statusPill: {
+  statusRow: {
     marginTop: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+
+  statusPill: {
     borderWidth: 1,
     borderColor: "rgba(0,255,136,0.4)",
     borderRadius: 999,
@@ -896,6 +982,21 @@ const styles = StyleSheet.create({
   },
 
   statusText: { color: theme.colors.text },
+
+  walletJump: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+    backgroundColor: "rgba(0,0,0,0.10)",
+  },
+
+  walletJumpText: { color: theme.colors.text, fontWeight: "900", fontSize: 12 },
+  walletJumpChev: { color: theme.colors.textSecondary, fontSize: 18, marginTop: -1 },
 
   bannersRow: { marginTop: 10, gap: 10 },
 
@@ -918,6 +1019,17 @@ const styles = StyleSheet.create({
 
   savedText: {
     color: "rgba(0,255,136,1)",
+    fontWeight: "900",
+  },
+
+  bookedBanner: {
+    padding: 10,
+    borderRadius: 12,
+    backgroundColor: "rgba(80,160,255,0.12)",
+  },
+
+  bookedText: {
+    color: "rgba(160,205,255,1)",
     fontWeight: "900",
   },
 
@@ -990,6 +1102,15 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.15)",
   },
 
+  smallBtnPrimary: {
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "rgba(0,255,136,0.45)",
+    backgroundColor: "rgba(0,255,136,0.08)",
+  },
+
   smallBtnDanger: {
     borderColor: "rgba(255,80,80,0.35)",
   },
@@ -1036,6 +1157,22 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.10)",
     backgroundColor: "rgba(0,0,0,0.18)",
   },
+
+  inlineCta: {
+    marginTop: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.12)",
+  },
+
+  inlineCtaText: { color: theme.colors.textSecondary, fontWeight: "900" },
+  inlineCtaChev: { color: theme.colors.textSecondary, fontSize: 18, marginTop: -1 },
 
   bookGrid: {
     flexDirection: "row",
