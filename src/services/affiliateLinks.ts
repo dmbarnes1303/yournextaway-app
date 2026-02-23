@@ -77,20 +77,47 @@ function isIsoDateOnly(s?: string) {
 }
 
 /* -------------------------------------------------------------------------- */
+/* Aviasales prefill helpers (Phase 1) */
+/* -------------------------------------------------------------------------- */
+
+function cityToIata(city: string): string | null {
+  const map: Record<string, string> = {
+    Barcelona: "BCN",
+    Madrid: "MAD",
+    Rome: "FCO",
+    Milan: "MXP",
+    Paris: "CDG",
+    Lisbon: "LIS",
+    Porto: "OPO",
+    Amsterdam: "AMS",
+    Berlin: "BER",
+    Munich: "MUC",
+    Vienna: "VIE",
+    Prague: "PRG",
+    Budapest: "BUD",
+  };
+
+  const needle = String(city ?? "").trim().toLowerCase();
+  if (!needle) return null;
+
+  for (const [k, v] of Object.entries(map)) {
+    if (k.toLowerCase() === needle) return v;
+  }
+
+  return null;
+}
+
+function isoToDdMm(dateIso?: string): string | null {
+  if (!dateIso || !/^\d{4}-\d{2}-\d{2}$/.test(String(dateIso))) return null;
+  const [, m, d] = String(dateIso).split("-");
+  if (!m || !d) return null;
+  return `${d}${m}`;
+}
+
+/* -------------------------------------------------------------------------- */
 /* affiliate config */
 /* -------------------------------------------------------------------------- */
 
-/**
- * Put IDs in app.json -> expo.extra and/or .env as EXPO_PUBLIC_*.
- *
- * You currently have approved:
- * - Expedia (program-specific linking varies; we use a stable public entry)
- * - Aviasales (marker-based in many setups)
- * - GetYourGuide (partner_id)
- * - KiwiTaxi / AirHelp via TPM tracking links
- * - SafetyWing direct tracking link
- * - SportsEvents365 a_aid param
- */
 const AFFILIATE = {
   // Optional IDs (safe if missing)
   aviasalesMarker: env("EXPO_PUBLIC_AVIASALES_MARKER"),
@@ -126,8 +153,6 @@ export function buildAffiliateLinks(args: {
   /* -------------------- */
   /* Hotels: Expedia (approved) */
   /* -------------------- */
-  // Stable public entry point. Some affiliate programs require different deep-link formats;
-  // we keep this resilient and optionally add a generic affcid.
   const expediaParams: string[] = [`destination=${enc(query)}`];
   if (startDate) expediaParams.push(`startDate=${enc(startDate)}`);
   if (endDate) expediaParams.push(`endDate=${enc(endDate)}`);
@@ -135,66 +160,35 @@ export function buildAffiliateLinks(args: {
   const hotelsUrl = `https://www.expedia.co.uk/Hotel-Search?${expediaParams.join("&")}`;
 
   /* -------------------- */
-/* Flights: Aviasales (prefilled) */
-/* -------------------- */
+  /* Flights: Aviasales (prefilled when possible) */
+  /* -------------------- */
+  // Phase-1 default origin. Later: make this user-selectable.
+  const originIata = "MAN";
 
-function cityToIata(city: string): string | null {
-  const map: Record<string, string> = {
-    Barcelona: "BCN",
-    Madrid: "MAD",
-    Rome: "FCO",
-    Milan: "MXP",
-    Paris: "CDG",
-    Lisbon: "LIS",
-    Porto: "OPO",
-    Amsterdam: "AMS",
-    Berlin: "BER",
-    Munich: "MUC",
-    Vienna: "VIE",
-    Prague: "PRG",
-    Budapest: "BUD",
-  };
+  const destIata = cityToIata(city);
+  const dd = isoToDdMm(startDate);
+  const rd = isoToDdMm(endDate);
 
-  const key = Object.keys(map).find(
-    k => k.toLowerCase() === city.trim().toLowerCase()
-  );
+  let flightsUrl: string;
 
-  return key ? map[key] : null;
-}
-
-function formatDdMm(dateIso?: string): string | null {
-  if (!dateIso || !/^\d{4}-\d{2}-\d{2}$/.test(dateIso)) return null;
-  const [y, m, d] = dateIso.split("-");
-  return `${d}${m}`;
-}
-
-const destIata = cityToIata(city);
-const originIata = "MAN"; // Phase-1 default (later user profile)
-
-let flightsUrl: string;
-
-if (destIata && startDate && endDate) {
-  const dd = formatDdMm(startDate);
-  const rd = formatDdMm(endDate);
-
-  flightsUrl = `https://www.aviasales.com/search/${originIata}${dd}${destIata}${rd}` +
-    (AFFILIATE.aviasalesMarker ? `?marker=${enc(AFFILIATE.aviasalesMarker)}` : "");
-} else {
-  flightsUrl = `https://www.aviasales.com/` +
-    (AFFILIATE.aviasalesMarker ? `?marker=${enc(AFFILIATE.aviasalesMarker)}` : "");
-}
+  if (destIata && dd && rd) {
+    // /search/<ORIGIN><DDMM><DEST><DDMM>
+    const base = `https://www.aviasales.com/search/${originIata}${dd}${destIata}${rd}`;
+    flightsUrl = AFFILIATE.aviasalesMarker ? `${base}?marker=${enc(AFFILIATE.aviasalesMarker)}` : base;
+  } else {
+    flightsUrl = AFFILIATE.aviasalesMarker
+      ? `https://www.aviasales.com/?marker=${enc(AFFILIATE.aviasalesMarker)}`
+      : `https://www.aviasales.com/`;
+  }
 
   /* -------------------- */
   /* Trains/Buses: fallback (UNTRACKED until affiliate) */
   /* -------------------- */
-  const trainsUrl = `https://www.google.com/maps/search/?api=1&query=${enc(
-    `${query} train station`
-  )}`;
+  const trainsUrl = `https://www.google.com/maps/search/?api=1&query=${enc(`${query} train station`)}`;
 
   /* -------------------- */
   /* Experiences: GetYourGuide (approved) */
   /* -------------------- */
-  // Correct search format: /s/?q=<query>&partner_id=<id>
   const gygParams: string[] = [`q=${enc(query)}`];
   if (AFFILIATE.gygPartnerId) gygParams.push(`partner_id=${enc(AFFILIATE.gygPartnerId)}`);
   const experiencesUrl = `https://www.getyourguide.com/s/?${gygParams.join("&")}`;
@@ -202,7 +196,6 @@ if (destIata && startDate && endDate) {
   /* -------------------- */
   /* Transfers / Insurance / Claims / Tickets: TRACKED BASE LINKS (EXACT) */
   /* -------------------- */
-  // Do not append extra params to tracking URLs. Keep attribution clean.
   const transfersUrl = AFFILIATE.kiwitaxiTracked;
   const insuranceUrl = AFFILIATE.safetywingTracked;
   const claimsUrl = AFFILIATE.airhelpTracked;
@@ -232,4 +225,4 @@ if (destIata && startDate && endDate) {
 
 export function normalizeUrlForCompare(url: string): string {
   return String(url ?? "").trim().toLowerCase();
-}
+    }
