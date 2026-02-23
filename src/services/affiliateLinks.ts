@@ -1,5 +1,7 @@
 // src/services/affiliateLinks.ts
 import Constants from "expo-constants";
+
+import preferencesStore from "@/src/state/preferences";
 import { devWarnIfUnknownCity, getIataCityCodeForCity } from "@/src/constants/iataCities";
 
 /**
@@ -41,10 +43,7 @@ export type AffiliateLinks = {
 /* -------------------------------------------------------------------------- */
 
 function env(name: string): string | undefined {
-  const extra =
-    (Constants?.expoConfig as any)?.extra ??
-    (Constants as any)?.manifest?.extra ??
-    {};
+  const extra = (Constants?.expoConfig as any)?.extra ?? (Constants as any)?.manifest?.extra ?? {};
 
   const v =
     (extra && typeof extra[name] === "string" ? String(extra[name]) : undefined) ??
@@ -91,6 +90,33 @@ function formatDdMm(dateIso?: string): string | null {
   return `${d}${m}`;
 }
 
+/**
+ * Sync best-effort origin chooser:
+ * - args.originIata (if valid)
+ * - preferencesStore (if available/valid)
+ * - EXPO_PUBLIC_DEFAULT_ORIGIN_IATA (if valid)
+ * - "LON"
+ */
+function resolveOriginIata(argsOrigin?: string, envOrigin?: string): string {
+  const fromArgs = String(argsOrigin ?? "").trim().toUpperCase();
+  if (isIata3(fromArgs)) return fromArgs;
+
+  // preferencesStore is safe to read synchronously.
+  // If it hasn't loaded yet, it'll still return the default ("LON").
+  try {
+    const pref = preferencesStore.getPreferredOriginIata?.();
+    const fromPrefs = String(pref ?? "").trim().toUpperCase();
+    if (isIata3(fromPrefs)) return fromPrefs;
+  } catch {
+    // ignore
+  }
+
+  const fromEnv = String(envOrigin ?? "").trim().toUpperCase();
+  if (isIata3(fromEnv)) return fromEnv;
+
+  return "LON";
+}
+
 /* -------------------------------------------------------------------------- */
 /* affiliate config */
 /* -------------------------------------------------------------------------- */
@@ -107,8 +133,7 @@ const AFFILIATE = {
   // ✅ EXACT tracking links provided by you (DO NOT MODIFY)
   kiwitaxiTracked: "https://kiwitaxi.tpm.lv/ZnnAV8eH",
   airhelpTracked: "https://airhelp.tpm.lv/6tipSUue",
-  safetywingTracked:
-    "https://safetywing.com/?referenceID=26471369&utm_source=26471369&utm_medium=Ambassador",
+  safetywingTracked: "https://safetywing.com/?referenceID=26471369&utm_source=26471369&utm_medium=Ambassador",
   sportsevents365Tracked: "https://www.sportsevents365.com/?a_aid=69834e80ec9d3",
 };
 
@@ -121,9 +146,10 @@ export function buildAffiliateLinks(args: {
   country?: string;
   startDate?: string;
   endDate?: string;
+
   /**
    * Optional override for flight origin (CITY code preferred).
-   * If not provided, we fall back to EXPO_PUBLIC_DEFAULT_ORIGIN_IATA then "LON".
+   * If not provided, we fall back to preferencesStore → env → "LON".
    */
   originIata?: string;
 }): AffiliateLinks {
@@ -150,18 +176,11 @@ export function buildAffiliateLinks(args: {
   const destIata = getIataCityCodeForCity(city);
   if (!destIata) devWarnIfUnknownCity(city, "affiliateLinks.dest");
 
-  const originFromArgs = String(args.originIata ?? "").trim().toUpperCase();
-  const originFromEnv = String(AFFILIATE.defaultOriginIata ?? "").trim().toUpperCase();
-  const originIata = isIata3(originFromArgs)
-    ? originFromArgs
-    : isIata3(originFromEnv)
-    ? originFromEnv
-    : "LON";
+  const originIata = resolveOriginIata(args.originIata, AFFILIATE.defaultOriginIata);
 
   let flightsUrl: string;
 
-  // When we have full data, use the /search deep link so the form is prefilled.
-  // Pattern you’re already using (and your example link shows).
+  // If we have enough data, use the /search deep link so the form is prefilled.
   if (destIata && startDate && endDate) {
     const dd = formatDdMm(startDate);
     const rd = formatDdMm(endDate);
@@ -171,22 +190,16 @@ export function buildAffiliateLinks(args: {
         `https://www.aviasales.com/search/${originIata}${dd}${destIata}${rd}1` +
         (AFFILIATE.aviasalesMarker ? `?marker=${enc(AFFILIATE.aviasalesMarker)}` : "");
     } else {
-      flightsUrl =
-        `https://www.aviasales.com/` +
-        (AFFILIATE.aviasalesMarker ? `?marker=${enc(AFFILIATE.aviasalesMarker)}` : "");
+      flightsUrl = `https://www.aviasales.com/` + (AFFILIATE.aviasalesMarker ? `?marker=${enc(AFFILIATE.aviasalesMarker)}` : "");
     }
   } else {
-    flightsUrl =
-      `https://www.aviasales.com/` +
-      (AFFILIATE.aviasalesMarker ? `?marker=${enc(AFFILIATE.aviasalesMarker)}` : "");
+    flightsUrl = `https://www.aviasales.com/` + (AFFILIATE.aviasalesMarker ? `?marker=${enc(AFFILIATE.aviasalesMarker)}` : "");
   }
 
   /* -------------------- */
   /* Trains/Buses: fallback (UNTRACKED) */
   /* -------------------- */
-  const trainsUrl = `https://www.google.com/maps/search/?api=1&query=${enc(
-    `${query} train station`
-  )}`;
+  const trainsUrl = `https://www.google.com/maps/search/?api=1&query=${enc(`${query} train station`)}`;
 
   /* -------------------- */
   /* Experiences: GetYourGuide */
