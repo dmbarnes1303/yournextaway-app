@@ -1,6 +1,6 @@
 // src/services/affiliateLinks.ts
 import Constants from "expo-constants";
-import { toIataCityCode, normalizeCityName } from "@/src/constants/iataCities";
+import { resolveIataCityCode } from "@/src/constants/iataCities";
 
 /**
  * Centralised affiliate URL builder.
@@ -41,7 +41,10 @@ export type AffiliateLinks = {
 /* -------------------------------------------------------------------------- */
 
 function env(name: string): string | undefined {
-  const extra = (Constants?.expoConfig as any)?.extra ?? (Constants as any)?.manifest?.extra ?? {};
+  const extra =
+    (Constants?.expoConfig as any)?.extra ??
+    (Constants as any)?.manifest?.extra ??
+    {};
 
   const v =
     (extra && typeof extra[name] === "string" ? String(extra[name]) : undefined) ??
@@ -60,9 +63,7 @@ function enc(v: string) {
 }
 
 function cleanCity(input: string) {
-  const s = String(input ?? "").trim();
-  // normalize to canonical city if we can (helps all partner URLs)
-  return normalizeCityName(s) ?? s;
+  return String(input ?? "").trim();
 }
 
 function cleanCountry(input?: string) {
@@ -80,14 +81,8 @@ function isIsoDateOnly(s?: string) {
   return !!s && /^\d{4}-\d{2}-\d{2}$/.test(String(s).trim());
 }
 
-function isIata(s?: string) {
+function isIata3(s?: string) {
   return !!s && /^[A-Z]{3}$/.test(String(s).trim().toUpperCase());
-}
-
-function formatDdMm(dateIso?: string): string | null {
-  if (!dateIso || !/^\d{4}-\d{2}-\d{2}$/.test(dateIso)) return null;
-  const [, m, d] = dateIso.split("-");
-  return `${d}${m}`;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -106,15 +101,15 @@ function formatDdMm(dateIso?: string): string | null {
  * - SportsEvents365 a_aid param
  */
 const AFFILIATE = {
-  // Optional IDs (safe if missing)
   aviasalesMarker: env("EXPO_PUBLIC_AVIASALES_MARKER"),
   gygPartnerId: env("EXPO_PUBLIC_GYG_PARTNER_ID"),
   expediaAffilId: env("EXPO_PUBLIC_EXPEDIA_AFFIL_ID"),
 
   /**
-   * Optional default origin *CITY* code (recommended) or airport IATA.
-   * - Using a city code is broader and avoids user having to pick a specific airport.
-   * - Example: LON, MAN, PAR
+   * Default origin should be a CITY IATA code (metropolitan).
+   * Examples:
+   * - LON (London metro)
+   * - MAN (Manchester)
    */
   defaultOriginIata: env("EXPO_PUBLIC_DEFAULT_ORIGIN_IATA"),
 
@@ -154,38 +149,46 @@ export function buildAffiliateLinks(args: {
   const hotelsUrl = `https://www.expedia.co.uk/Hotel-Search?${expediaParams.join("&")}`;
 
   /* -------------------- */
-  /* Flights: Aviasales (prefilled via search URL when possible) */
+  /* Flights: Aviasales (prefilled search form) */
   /* -------------------- */
-  const destIata = toIataCityCode(city);
-
   /**
-   * Origin:
-   * - Prefer env-defined IATA (city code recommended)
-   * - Fall back to MAN (pragmatic Phase-1 default for you)
+   * Travelpayouts recommends:
+   * - use https://search.aviasales.com/flights/
+   * - pass origin_iata / destination_iata (city IATA codes)
+   * - pass depart_date / return_date (YYYY-MM-DD)
+   * - pass marker (partner id)
+   *
+   * This is more robust than relying on /search/ path formats.
    */
-  const originIata = isIata(AFFILIATE.defaultOriginIata)
+  const originIata = isIata3(AFFILIATE.defaultOriginIata)
     ? String(AFFILIATE.defaultOriginIata).trim().toUpperCase()
-    : "MAN";
+    : "LON"; // safer default than MAN for most UK users; override via env
 
+  const destIata = resolveIataCityCode(city);
+
+  // If we can fully prefill, do it. Otherwise still send marker to home.
   let flightsUrl: string;
 
-  if (destIata && startDate && endDate) {
-    const dd = formatDdMm(startDate);
-    const rd = formatDdMm(endDate);
+  if (destIata && startDate) {
+    const params: string[] = [
+      `origin_iata=${enc(originIata)}`,
+      `destination_iata=${enc(destIata)}`,
+      `depart_date=${enc(startDate)}`,
+      // Aviasales doc uses return_date; omit if unknown for one-way-ish behavior
+      ...(endDate ? [`return_date=${enc(endDate)}`] : []),
+      `adults=1`,
+      `children=0`,
+      `infants=0`,
+      `trip_class=0`,
+      `locale=en`,
+      `one_way=${endDate ? "false" : "true"}`,
+    ];
 
-    if (dd && rd) {
-      // Aviasales deep-search pattern: ORIGIN + ddmm + DEST + ddmm
-      // Using IATA CITY codes massively improves UX and reliability.
-      flightsUrl =
-        `https://www.aviasales.com/search/${originIata}${dd}${destIata}${rd}` +
-        (AFFILIATE.aviasalesMarker ? `?marker=${enc(AFFILIATE.aviasalesMarker)}` : "");
-    } else {
-      flightsUrl =
-        `https://www.aviasales.com/` +
-        (AFFILIATE.aviasalesMarker ? `?marker=${enc(AFFILIATE.aviasalesMarker)}` : "");
-    }
+    if (AFFILIATE.aviasalesMarker) params.push(`marker=${enc(AFFILIATE.aviasalesMarker)}`);
+
+    flightsUrl = `https://search.aviasales.com/flights/?${params.join("&")}`;
   } else {
-    // If we can't prefill (unknown city mapping or missing dates), send them to the homepage.
+    // Fallback: still include marker if available (attribution), but no prefill.
     flightsUrl =
       `https://www.aviasales.com/` +
       (AFFILIATE.aviasalesMarker ? `?marker=${enc(AFFILIATE.aviasalesMarker)}` : "");
@@ -194,7 +197,9 @@ export function buildAffiliateLinks(args: {
   /* -------------------- */
   /* Trains/Buses: fallback (UNTRACKED until affiliate) */
   /* -------------------- */
-  const trainsUrl = `https://www.google.com/maps/search/?api=1&query=${enc(`${query} train station`)}`;
+  const trainsUrl = `https://www.google.com/maps/search/?api=1&query=${enc(
+    `${query} train station`
+  )}`;
 
   /* -------------------- */
   /* Experiences: GetYourGuide (approved) */
