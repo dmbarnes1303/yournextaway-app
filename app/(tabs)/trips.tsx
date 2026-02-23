@@ -1,6 +1,14 @@
 // app/(tabs)/trips.tsx
 import React, { useEffect, useMemo, useState, useCallback } from "react";
-import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  Pressable,
+  ActivityIndicator,
+  Alert,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 
@@ -46,6 +54,10 @@ function groupItemsByTrip(items: SavedItem[]) {
   return map;
 }
 
+function cityLabel(t: Trip) {
+  return String(t.cityId ?? "").trim() || "Trip";
+}
+
 /* -------------------------------- Screen -------------------------------- */
 
 export default function TripsScreen() {
@@ -56,6 +68,8 @@ export default function TripsScreen() {
 
   const [loadedItems, setLoadedItems] = useState(savedItemsStore.getState().loaded);
   const [items, setItems] = useState<SavedItem[]>(savedItemsStore.getState().items);
+
+  const [deletingTripId, setDeletingTripId] = useState<string | null>(null);
 
   /* --------------------------- subscriptions --------------------------- */
 
@@ -92,14 +106,17 @@ export default function TripsScreen() {
   const upcoming = useMemo(() => trips.filter(isUpcoming), [trips]);
   const past = useMemo(() => trips.filter((t) => !isUpcoming(t)), [trips]);
 
-  function counts(tripId: string) {
-    const arr = itemsByTrip[tripId] ?? [];
-    return {
-      total: arr.length,
-      pending: arr.filter((x) => x.status === "pending").length,
-      booked: arr.filter((x) => x.status === "booked").length,
-    };
-  }
+  const counts = useCallback(
+    (tripId: string) => {
+      const arr = itemsByTrip[tripId] ?? [];
+      return {
+        total: arr.length,
+        pending: arr.filter((x) => x.status === "pending").length,
+        booked: arr.filter((x) => x.status === "booked").length,
+      };
+    },
+    [itemsByTrip]
+  );
 
   /* ------------------------------ actions ------------------------------ */
 
@@ -113,28 +130,61 @@ export default function TripsScreen() {
     [router]
   );
 
-  const deleteTrip = useCallback((t: Trip) => {
-    const c = counts(t.id);
+  const actuallyDeleteTrip = useCallback(
+    async (t: Trip) => {
+      // Hard guard against double taps / repeated confirms.
+      if (deletingTripId) return;
 
-    Alert.alert(
-      "Delete trip?",
-      `This will remove the trip and its Wallet items from this device.\n\nItems: ${c.total} • Pending: ${c.pending} • Booked: ${c.booked}\n\nThis cannot be undone.`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await tripsStore.deleteTripCascade(t.id);
-            } catch {
-              Alert.alert("Couldn’t delete", "Try again.");
-            }
+      setDeletingTripId(t.id);
+      try {
+        await tripsStore.deleteTripCascade(t.id);
+      } catch {
+        Alert.alert("Couldn’t delete", "Try again.");
+      } finally {
+        setDeletingTripId(null);
+      }
+    },
+    [deletingTripId]
+  );
+
+  // Two-step confirmation, because deleting a trip nukes its whole workspace.
+  const deleteTrip = useCallback(
+    (t: Trip) => {
+      const c = counts(t.id);
+      const name = cityLabel(t);
+
+      Alert.alert(
+        "Delete trip?",
+        `"${name}" will be removed from this device.\n\nItems: ${c.total} • Pending: ${c.pending} • Booked: ${c.booked}`,
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Continue",
+            style: "destructive",
+            onPress: () => {
+              // Second prompt: explicit irreversible warning.
+              const msg =
+                `This cannot be undone.\n\n` +
+                `Deleting this trip will also remove ALL saved links, pending items, booked items, and any Wallet attachments for this trip from this device.\n\n` +
+                `If you want to keep the workspace, archive items instead.`;
+
+              Alert.alert("Confirm delete", msg, [
+                { text: "Cancel", style: "cancel" },
+                {
+                  text: "Delete trip",
+                  style: "destructive",
+                  onPress: () => {
+                    actuallyDeleteTrip(t).catch(() => null);
+                  },
+                },
+              ]);
+            },
           },
-        },
-      ]
-    );
-  }, [itemsByTrip]);
+        ]
+      );
+    },
+    [counts, actuallyDeleteTrip]
+  );
 
   const goBuild = () => router.push("/trip/build");
   const goFixtures = () => router.push("/(tabs)/fixtures");
@@ -144,9 +194,13 @@ export default function TripsScreen() {
   /* -------------------------------- render -------------------------------- */
 
   return (
-    <Background imageUrl={getBackground("trips")} overlayOpacity={0.50}>
+    <Background imageUrl={getBackground("trips")} overlayOpacity={0.5}>
       <SafeAreaView style={styles.safe} edges={["top"]}>
-        <ScrollView style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+        >
           <View style={styles.header}>
             <Text style={styles.title}>Trips</Text>
             <Text style={styles.subtitle}>Your travel workspaces</Text>
@@ -181,11 +235,12 @@ export default function TripsScreen() {
               <View style={styles.list}>
                 {upcoming.map((t) => {
                   const c = counts(t.id);
+                  const isDeleting = deletingTripId === t.id;
 
                   return (
                     <GlassCard key={t.id} style={styles.tripCard}>
-                      <Pressable onPress={() => openTrip(t)}>
-                        <Text style={styles.tripTitle}>{t.cityId || "Trip"}</Text>
+                      <Pressable onPress={() => openTrip(t)} disabled={isDeleting}>
+                        <Text style={styles.tripTitle}>{cityLabel(t)}</Text>
                         <Text style={styles.tripMeta}>{tripSummaryLine(t)}</Text>
 
                         <View style={styles.countRow}>
@@ -196,12 +251,28 @@ export default function TripsScreen() {
                       </Pressable>
 
                       <View style={styles.actions}>
-                        <Pressable onPress={() => editTrip(t)} style={[styles.actionBtn, styles.btnSecondary]}>
+                        <Pressable
+                          onPress={() => editTrip(t)}
+                          disabled={isDeleting}
+                          style={[
+                            styles.actionBtn,
+                            styles.btnSecondary,
+                            isDeleting && { opacity: 0.5 },
+                          ]}
+                        >
                           <Text style={styles.btnSecondaryText}>Edit</Text>
                         </Pressable>
 
-                        <Pressable onPress={() => deleteTrip(t)} style={[styles.actionBtn, styles.btnDanger]}>
-                          <Text style={styles.btnDangerText}>Delete</Text>
+                        <Pressable
+                          onPress={() => deleteTrip(t)}
+                          disabled={isDeleting}
+                          style={[
+                            styles.actionBtn,
+                            styles.btnDanger,
+                            isDeleting && { opacity: 0.5 },
+                          ]}
+                        >
+                          <Text style={styles.btnDangerText}>{isDeleting ? "Deleting…" : "Delete"}</Text>
                         </Pressable>
                       </View>
                     </GlassCard>
@@ -217,11 +288,12 @@ export default function TripsScreen() {
               <View style={styles.list}>
                 {past.map((t) => {
                   const c = counts(t.id);
+                  const isDeleting = deletingTripId === t.id;
 
                   return (
                     <GlassCard key={t.id} style={styles.tripCard}>
-                      <Pressable onPress={() => openTrip(t)}>
-                        <Text style={styles.tripTitle}>{t.cityId || "Trip"}</Text>
+                      <Pressable onPress={() => openTrip(t)} disabled={isDeleting}>
+                        <Text style={styles.tripTitle}>{cityLabel(t)}</Text>
                         <Text style={styles.tripMeta}>{tripSummaryLine(t)}</Text>
 
                         <View style={styles.countRow}>
@@ -232,12 +304,28 @@ export default function TripsScreen() {
                       </Pressable>
 
                       <View style={styles.actions}>
-                        <Pressable onPress={() => editTrip(t)} style={[styles.actionBtn, styles.btnSecondary]}>
+                        <Pressable
+                          onPress={() => editTrip(t)}
+                          disabled={isDeleting}
+                          style={[
+                            styles.actionBtn,
+                            styles.btnSecondary,
+                            isDeleting && { opacity: 0.5 },
+                          ]}
+                        >
                           <Text style={styles.btnSecondaryText}>Edit</Text>
                         </Pressable>
 
-                        <Pressable onPress={() => deleteTrip(t)} style={[styles.actionBtn, styles.btnDanger]}>
-                          <Text style={styles.btnDangerText}>Delete</Text>
+                        <Pressable
+                          onPress={() => deleteTrip(t)}
+                          disabled={isDeleting}
+                          style={[
+                            styles.actionBtn,
+                            styles.btnDanger,
+                            isDeleting && { opacity: 0.5 },
+                          ]}
+                        >
+                          <Text style={styles.btnDangerText}>{isDeleting ? "Deleting…" : "Delete"}</Text>
                         </Pressable>
                       </View>
                     </GlassCard>
@@ -294,6 +382,9 @@ const styles = StyleSheet.create({
 
   btnDanger: { borderColor: "rgba(255,80,80,0.35)", backgroundColor: "rgba(0,0,0,0.18)" },
   btnDangerText: { color: "rgba(255,120,120,0.95)", fontWeight: "900", fontSize: theme.fontSize.sm },
+
+  // used for empty-state buttons
+  btn: { paddingVertical: 12, borderRadius: 12, alignItems: "center", borderWidth: 1 },
 
   center: { paddingVertical: 12, alignItems: "center", gap: 10 },
   muted: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, fontWeight: "700" },
