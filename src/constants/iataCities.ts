@@ -1,156 +1,115 @@
 // src/constants/iataCities.ts
-
 /**
- * City → IATA "city code" registry (Phase 1).
+ * Single place for:
+ * - city name normalization (canonical string used across app)
+ * - IATA city lookup (best-effort)
+ * - dev warnings (non-fatal)
  *
- * Goal:
- * - Use IATA CITY codes where they exist (LON, PAR, MIL, ROM, NYC, etc)
- * - Where no city code exists, use the most pragmatic airport code (e.g. LPL).
- *
- * Scalable approach:
- * - Only map cities you actually surface (fixture venue cities).
- * - Expand opportunistically as new cities appear.
- * - Later swap to a dataset/API.
- */
-
-export type IataCode = string; // typically 3 letters
-
-function norm(input: string) {
-  return String(input ?? "")
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, " ")
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, ""); // strip diacritics
-}
-
-/**
  * IMPORTANT:
- * Keys MUST be normalized (use `norm()`).
- * Values MUST be 3-letter IATA codes (prefer CITY code; otherwise airport code).
+ * Keep this module "light" to avoid circular deps and runtime undefined exports.
  */
-const CITY_TO_IATA: Record<string, IataCode> = {
-  /* ------------------------------ ENGLAND (EPL) ------------------------------ */
-  [norm("London")]: "LON",
-  [norm("Manchester")]: "MAN",
-  [norm("Liverpool")]: "LPL",
-  [norm("Birmingham")]: "BHX",
-  [norm("Newcastle")]: "NCL",
-  [norm("Leeds")]: "LBA",
-  [norm("Leicester")]: "EMA", // pragmatic (closest major)
-  [norm("Nottingham")]: "EMA", // pragmatic
-  [norm("Sheffield")]: "DSA", // Doncaster Sheffield (note: service varies) – pragmatic
-  [norm("Southampton")]: "SOU",
-  [norm("Brighton")]: "LGW", // pragmatic
-  [norm("Bournemouth")]: "BOH",
-  [norm("Brentford")]: "LON",
-  [norm("Fulham")]: "LON",
-  [norm("Wolverhampton")]: "BHX",
 
-  /* ------------------------------ SPAIN (LaLiga) ----------------------------- */
-  [norm("Madrid")]: "MAD",
-  [norm("Barcelona")]: "BCN",
-  [norm("Seville")]: "SVQ",
-  [norm("Sevilla")]: "SVQ",
-  [norm("Valencia")]: "VLC",
-  [norm("Bilbao")]: "BIO",
-  [norm("San Sebastian")]: "EAS",
-  [norm("San Sebastián")]: "EAS",
-  [norm("Vigo")]: "VGO",
-  [norm("Malaga")]: "AGP",
-  [norm("Málaga")]: "AGP",
-  [norm("Palma")]: "PMI",
-  [norm("Palma de Mallorca")]: "PMI",
-  [norm("Las Palmas")]: "LPA",
-  [norm("Gran Canaria")]: "LPA",
+import { Platform } from "react-native";
 
-  /* ------------------------------ ITALY (Serie A) ---------------------------- */
-  [norm("Rome")]: "ROM", // IATA city code
-  [norm("Roma")]: "ROM",
-  [norm("Milan")]: "MIL", // IATA city code
-  [norm("Milano")]: "MIL",
-  [norm("Naples")]: "NAP",
-  [norm("Napoli")]: "NAP",
-  [norm("Turin")]: "TRN",
-  [norm("Torino")]: "TRN",
-  [norm("Florence")]: "FLR",
-  [norm("Firenze")]: "FLR",
-  [norm("Bologna")]: "BLQ",
-  [norm("Genoa")]: "GOA",
-  [norm("Genova")]: "GOA",
-  [norm("Verona")]: "VRN",
-  [norm("Bergamo")]: "BGY",
-  [norm("Udine")]: "TRS", // pragmatic (Trieste/Ronchi dei Legionari)
-  [norm("Cagliari")]: "CAG",
-  [norm("Lecce")]: "BDS",
+// Reuse your existing mapping module (you already import these elsewhere)
+import { getIataCityCodeForCity as _getIataFromData, debugCityKey } from "@/src/data/iataCityCodes";
 
-  /* ---------------------------- GERMANY (Bundesliga) ------------------------- */
-  [norm("Berlin")]: "BER",
-  [norm("Munich")]: "MUC",
-  [norm("München")]: "MUC",
-  [norm("Hamburg")]: "HAM",
-  [norm("Frankfurt")]: "FRA",
-  [norm("Cologne")]: "CGN",
-  [norm("Köln")]: "CGN",
-  [norm("Dortmund")]: "DTM",
-  [norm("Leipzig")]: "LEJ",
-  [norm("Stuttgart")]: "STR",
-  [norm("Bremen")]: "BRE",
-  [norm("Dusseldorf")]: "DUS",
-  [norm("Düsseldorf")]: "DUS",
-  [norm("Mainz")]: "FRA", // pragmatic
-  [norm("Augsburg")]: "MUC", // pragmatic
+/* -------------------------------------------------------------------------- */
+/* Normalization */
+/* -------------------------------------------------------------------------- */
 
-  /* ------------------------------ FRANCE (Ligue 1) --------------------------- */
-  [norm("Paris")]: "PAR", // IATA city code
-  [norm("Marseille")]: "MRS",
-  [norm("Lyon")]: "LYS",
-  [norm("Lille")]: "LIL",
-  [norm("Nice")]: "NCE",
-  [norm("Toulouse")]: "TLS",
-  [norm("Bordeaux")]: "BOD",
-  [norm("Nantes")]: "NTE",
-  [norm("Rennes")]: "RNS",
-  [norm("Strasbourg")]: "SXB",
-  [norm("Monaco")]: "NCE", // pragmatic
-};
+/**
+ * Converts "raw" city strings from APIs into a stable canonical form.
+ * Goal: keep the same city string everywhere (Trips, Affiliate links, City guides).
+ */
+export function normalizeCityName(input: string): string {
+  const raw = String(input ?? "").trim();
+  if (!raw) return "";
 
-/** Returns 3-letter IATA code (prefer city code), or null if unknown. */
+  // Collapse whitespace
+  let s = raw.replace(/\s+/g, " ");
+
+  // Remove trailing weird punctuation
+  s = s.replace(/[,\s]+$/g, "");
+
+  // Normalize common separators
+  s = s.replace(/\s*\/\s*/g, " / ");
+  s = s.replace(/\s*-\s*/g, " - ");
+
+  // If API gives "City, Region" keep only city (most IATA mapping keys expect city)
+  // But don't break places like "San Sebastián" (no comma anyway).
+  if (s.includes(",")) {
+    const first = s.split(",")[0]?.trim();
+    if (first) s = first;
+  }
+
+  // Title-case-ish (keeps existing casing for acronyms)
+  s = s
+    .split(" ")
+    .map((w) => {
+      const t = w.trim();
+      if (!t) return t;
+      if (/^[A-Z]{2,}$/.test(t)) return t; // keep acronyms
+      return t[0].toUpperCase() + t.slice(1).toLowerCase();
+    })
+    .join(" ");
+
+  return s;
+}
+
+/* -------------------------------------------------------------------------- */
+/* IATA lookup */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Best-effort lookup:
+ * - normalize input
+ * - use your mapping table via src/data/iataCityCodes
+ */
 export function getIataCityCodeForCity(city: string): string | null {
-  const key = norm(city);
-  if (!key) return null;
+  const canon = normalizeCityName(city);
+  if (!canon) return null;
 
-  const code = CITY_TO_IATA[key];
-  if (!code) return null;
-
-  const up = String(code).trim().toUpperCase();
-  if (!/^[A-Z]{3}$/.test(up)) return null;
-  return up;
+  try {
+    const code = _getIataFromData(canon);
+    return code ? String(code).trim().toUpperCase() : null;
+  } catch {
+    return null;
+  }
 }
 
 /**
- * Use this for “expand opportunistically”:
- * Call this in dev when you detect an unmapped city.
+ * Dev-only warning helper (does not throw, does not block UI).
+ * Keeps services from importing Alert and crashing in non-UI contexts.
  */
-export function devWarnIfUnknownCity(city: string, context?: string) {
+export function devWarnIfUnknownCity(city: string, source: string) {
   // @ts-ignore
   const isDev = typeof __DEV__ !== "undefined" && __DEV__;
   if (!isDev) return;
 
-  const c = String(city ?? "").trim();
-  if (!c) return;
+  const canon = normalizeCityName(city);
+  if (!canon) return;
 
-  const code = getIataCityCodeForCity(c);
+  const code = getIataCityCodeForCity(canon);
   if (code) return;
 
-  const tag = context ? ` (${context})` : "";
-  // eslint-disable-next-line no-console
-  console.warn(`[IATA] Missing city mapping${tag}: "${c}"`);
-}
+  // Use your existing debug key helper so you can paste directly into mappings.
+  let key = "";
+  try {
+    key = debugCityKey(canon) || "";
+  } catch {
+    key = "";
+  }
 
-/** Helper for UI labels */
-export function formatIataLabel(cityLabel: string, code: string) {
-  const c = String(cityLabel ?? "").trim() || "City";
-  const up = String(code ?? "").trim().toUpperCase();
-  return `${c} (${up})`;
+  // Console-only: services shouldn't pop Alerts.
+  // This shows clearly in Metro logs + device logs.
+  const msg =
+    `[IATA] Missing mapping` +
+    ` | source=${source}` +
+    ` | city="${canon}"` +
+    (key ? ` | key="${key}"` : "") +
+    ` | platform=${Platform.OS}`;
+
+  // eslint-disable-next-line no-console
+  console.warn(msg);
 }
