@@ -4,6 +4,9 @@ import { Alert, Platform } from "react-native";
 import savedItemsStore from "@/src/state/savedItems";
 import type { SavedItem } from "@/src/core/savedItemTypes";
 import { pickAndStoreAttachmentForItem } from "@/src/services/walletAttachments";
+import { writeJson } from "@/src/state/persist";
+
+const LAST_BOOKED_KEY = "yna_last_booked_v1";
 
 /**
  * Small delay avoids nested Alert timing quirks (esp Android)
@@ -23,6 +26,20 @@ async function ensureSavedItemsLoaded() {
 
 function getAttachments(item: SavedItem | null) {
   return Array.isArray(item?.attachments) ? item!.attachments! : [];
+}
+
+async function persistLastBookedPointer(item: SavedItem | null) {
+  if (!item) return;
+
+  const itemId = String(item.id ?? "").trim();
+  const tripId = String(item.tripId ?? "").trim();
+  if (!itemId || !tripId) return;
+
+  try {
+    await writeJson(LAST_BOOKED_KEY, { itemId, tripId, at: Date.now() });
+  } catch {
+    // best-effort
+  }
 }
 
 async function promptAddProof(itemId: string) {
@@ -49,6 +66,7 @@ async function promptAddProof(itemId: string) {
 
 /**
  * Call after an item is marked "booked".
+ * - Sets "last booked" pointer (for Wallet highlight + back-to-trip)
  * - Always confirms it was added to Wallet
  * - If no attachments exist, offers proof upload (PDF/screenshot) for offline access
  *
@@ -61,6 +79,9 @@ export async function confirmBookedAndOfferProof(itemId: string) {
 
   await ensureSavedItemsLoaded();
   const item = savedItemsStore.getState().items.find((x) => x.id === id) ?? null;
+
+  // ✅ Centralised: keep Wallet highlight + "Back to trip" accurate everywhere
+  await persistLastBookedPointer(item);
 
   const title = String(item?.title ?? "").trim() || "Booking";
   const atts = getAttachments(item);
