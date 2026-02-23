@@ -24,7 +24,7 @@ import savedItemsStore from "@/src/state/savedItems";
 
 import type { SavedItem, WalletAttachment } from "@/src/core/savedItemTypes";
 import { getSavedItemTypeLabel } from "@/src/core/savedItemTypes";
-import { getPartner, isPartnerId } from "@/src/core/partners";
+import { getPartner } from "@/src/core/partners";
 
 import { beginPartnerClick, openUntrackedUrl } from "@/src/services/partnerClicks";
 import {
@@ -107,6 +107,20 @@ function defer(fn: () => void) {
   setTimeout(fn, 60);
 }
 
+function statusLabel(s: SavedItem["status"]) {
+  if (s === "pending") return "Pending";
+  if (s === "saved") return "Saved";
+  if (s === "booked") return "Booked";
+  return "Archived";
+}
+
+function statusPillStyle(s: SavedItem["status"]) {
+  if (s === "pending") return styles.pillPending;
+  if (s === "saved") return styles.pillSaved;
+  if (s === "booked") return styles.pillBooked;
+  return styles.pillArchived;
+}
+
 /* -------------------------------------------------------------------------- */
 /* Screen */
 /* -------------------------------------------------------------------------- */
@@ -162,7 +176,7 @@ export default function WalletScreen() {
       mode === "archived"
         ? items.filter((i) => i.status === "archived")
         : mode === "saved"
-        ? items.filter((i) => i.status === "saved")
+        ? items.filter((i) => i.status === "saved" || i.status === "pending")
         : items.filter((i) => i.status === "booked");
 
     // Hide ghost items if cascade deletion ever failed.
@@ -175,12 +189,14 @@ export default function WalletScreen() {
     let booked = 0;
     let saved = 0;
     let archived = 0;
+
     for (const it of items) {
       if (!validTripIds.has(String(it.tripId))) continue;
       if (it.status === "booked") booked++;
-      if (it.status === "saved") saved++;
+      if (it.status === "saved" || it.status === "pending") saved++;
       if (it.status === "archived") archived++;
     }
+
     return { booked, saved, archived };
   }, [items, validTripIds]);
 
@@ -205,43 +221,51 @@ export default function WalletScreen() {
     }
   }, []);
 
-  /**
-   * IMPORTANT UX FIX:
-   * - If item is saved/pending and has a valid partnerId+url, opening it should be TRACKED
-   *   so we can re-prompt on return (user may now have booked).
-   * - If item is booked/archived, open UNTRACKED (no prompt needed).
-   */
   const openItemLink = useCallback(async (item: SavedItem) => {
     if (!item.partnerUrl) {
       Alert.alert(item.title || "Item", getItemDetailsText(item));
       return;
     }
 
-    const canPrompt =
-      (item.status === "saved" || item.status === "pending") &&
-      typeof item.partnerId === "string" &&
-      isPartnerId(item.partnerId);
+    const partnerId = String(item.partnerId ?? "").trim();
 
-    if (canPrompt) {
+    // Booked/Archived: open untracked (no prompt)
+    if (item.status === "booked" || item.status === "archived") {
       try {
-        await beginPartnerClick({
-          tripId: String(item.tripId),
-          partnerId: item.partnerId as any,
-          url: item.partnerUrl,
-          savedItemType: item.type,
-          title: item.title,
-          metadata: item.metadata,
-        });
-        return;
+        await openUntrackedUrl(item.partnerUrl);
       } catch {
-        // fall through to untracked open
+        Alert.alert("Couldn’t open link", "Your device could not open that link.");
       }
+      return;
+    }
+
+    // Saved/Pending: open TRACKED so return prompt can happen
+    // (Reuses the same item; promotes saved -> pending; no duplicates)
+    if (!partnerId || partnerId === "googlemaps") {
+      try {
+        await openUntrackedUrl(item.partnerUrl);
+      } catch {
+        Alert.alert("Couldn’t open link", "Your device could not open that link.");
+      }
+      return;
     }
 
     try {
-      await openUntrackedUrl(item.partnerUrl);
+      await beginPartnerClick({
+        tripId: String(item.tripId),
+        partnerId: partnerId as any,
+        url: item.partnerUrl,
+        savedItemType: item.type,
+        title: item.title,
+        metadata: item.metadata,
+      });
     } catch {
-      Alert.alert("Couldn’t open link", "Your device could not open that link.");
+      // Fallback: still open, but you won't get a prompt
+      try {
+        await openUntrackedUrl(item.partnerUrl);
+      } catch {
+        Alert.alert("Couldn’t open link", "Your device could not open that link.");
+      }
     }
   }, []);
 
@@ -296,11 +320,11 @@ export default function WalletScreen() {
       });
 
       // Only show "Mark booked" if not archived
-      if (mode !== "archived") {
+      if (item.status !== "archived") {
         actions.push({ text: "Mark booked", onPress: () => markBookedFromWallet(item) });
       }
 
-      if (mode === "archived") {
+      if (item.status === "archived") {
         actions.push({ text: "Restore", onPress: () => restoreItem(item) });
       } else {
         actions.push({ text: "Archive", style: "destructive", onPress: () => archiveItem(item) });
@@ -313,7 +337,7 @@ export default function WalletScreen() {
         cancelable: true,
       });
     },
-    [mode, openItemLink, addAttachment, archiveItem, restoreItem, markBookedFromWallet]
+    [openItemLink, addAttachment, markBookedFromWallet, restoreItem, archiveItem]
   );
 
   const openAttachmentRow = useCallback(async (att: WalletAttachment) => {
@@ -467,7 +491,7 @@ export default function WalletScreen() {
                   mode === "archived"
                     ? "When you archive items, they’ll show up here."
                     : mode === "saved"
-                    ? "Saved items are links you kept without confirming a booking yet."
+                    ? "Saved and pending items live here. Tap one to reopen and we’ll ask again on return."
                     : "When you confirm bookings in a trip, they appear here. Add a PDF or screenshot to store proof offline."
                 }
               />
@@ -490,15 +514,16 @@ export default function WalletScreen() {
                           const attCount = getAttachments(it).length;
 
                           return (
-                            <Pressable
-                              key={it.id}
-                              onPress={() => openCoreActions(it)}
-                              style={styles.itemRow}
-                            >
+                            <Pressable key={it.id} onPress={() => openCoreActions(it)} style={styles.itemRow}>
                               <View style={{ flex: 1 }}>
-                                <Text style={styles.itemTitle} numberOfLines={1}>
-                                  {it.title}
-                                </Text>
+                                <View style={styles.titleRow}>
+                                  <Text style={styles.itemTitle} numberOfLines={1}>
+                                    {it.title}
+                                  </Text>
+                                  <View style={[styles.statusPill, statusPillStyle(it.status)]}>
+                                    <Text style={styles.statusPillText}>{statusLabel(it.status)}</Text>
+                                  </View>
+                                </View>
 
                                 <Text style={styles.itemMeta} numberOfLines={1}>
                                   {buildMeta(it)}
@@ -671,11 +696,27 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.18)",
   },
 
+  titleRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+
   itemTitle: {
+    flex: 1,
     color: theme.colors.text,
     fontWeight: theme.fontWeight.black,
     fontSize: theme.fontSize.md,
   },
+
+  statusPill: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  statusPillText: { color: theme.colors.text, fontWeight: "900", fontSize: 11 },
+
+  pillPending: { borderColor: "rgba(255,200,80,0.40)", backgroundColor: "rgba(255,200,80,0.10)" },
+  pillSaved: { borderColor: "rgba(0,255,136,0.35)", backgroundColor: "rgba(0,255,136,0.08)" },
+  pillBooked: { borderColor: "rgba(120,170,255,0.45)", backgroundColor: "rgba(120,170,255,0.10)" },
+  pillArchived: { borderColor: "rgba(255,255,255,0.18)", backgroundColor: "rgba(255,255,255,0.06)" },
 
   itemMeta: {
     marginTop: 4,
