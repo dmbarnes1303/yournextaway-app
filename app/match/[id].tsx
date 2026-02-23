@@ -45,6 +45,7 @@ import {
 } from "@/src/utils/kickoffTbc";
 
 import { getTicketGuide } from "@/src/data/ticketGuides";
+import type { TicketDifficulty } from "@/src/data/ticketGuides/types";
 
 /* -------------------------------------------------------------------------- */
 /* helpers */
@@ -163,32 +164,29 @@ function buildGoogleTicketsUrl(matchQuery: string) {
   return `https://www.google.com/search?q=${enc(matchQuery + " tickets")}`;
 }
 
-// A small mapping for common clubs. Extend over time.
+// Official links: best-effort shortcuts (still fine to fall back to Google).
 const OFFICIAL_TICKETS_BY_TEAM: Record<string, string> = {
   "arsenal": "https://www.arsenal.com/tickets",
-  "tottenham": "https://www.tottenhamhotspur.com/tickets/",
-  "tottenham hotspur": "https://www.tottenhamhotspur.com/tickets/",
-  "spurs": "https://www.tottenhamhotspur.com/tickets/",
+  "aston villa": "https://www.avfc.co.uk/tickets",
+  "bournemouth": "https://www.afcb.co.uk/tickets",
+  "brentford": "https://www.brentfordfc.com/en/tickets",
+  "brighton": "https://www.brightonandhovealbion.com/tickets",
   "chelsea": "https://www.chelseafc.com/en/tickets",
+  "crystal palace": "https://www.cpfc.co.uk/tickets",
+  "everton": "https://www.evertonfc.com/tickets",
+  "fulham": "https://www.fulhamfc.com/tickets",
+  "ipswich town": "https://www.itfc.co.uk/tickets",
+  "leicester city": "https://www.lcfc.com/tickets",
   "liverpool": "https://www.liverpoolfc.com/tickets",
-  "manchester united": "https://tickets.manutd.com/",
   "manchester city": "https://www.mancity.com/tickets",
-  "newcastle": "https://book.nufc.co.uk/",
+  "manchester united": "https://tickets.manutd.com/",
   "newcastle united": "https://book.nufc.co.uk/",
-  "west ham": "https://www.whufc.com/tickets",
+  "nottingham forest": "https://tickets.nottinghamforest.co.uk/",
+  "southampton": "https://www.southamptonfc.com/tickets",
+  "tottenham hotspur": "https://www.tottenhamhotspur.com/tickets/",
   "west ham united": "https://www.whufc.com/tickets",
-  "barcelona": "https://www.fcbarcelona.com/en/tickets/football",
-  "real madrid": "https://www.realmadrid.com/en/tickets",
-  "atletico madrid": "https://en.atleticodemadrid.com/tickets",
-  "paris saint-germain": "https://billetterie.psg.fr/en/",
-  "psg": "https://billetterie.psg.fr/en/",
-  "roma": "https://www.asroma.com/en/tickets",
-  "lazio": "https://www.sslazio.it/en/tickets",
-  "juventus": "https://tickets.juventus.com/",
-  "inter": "https://www.inter.it/en/tickets",
-  "ac milan": "https://www.acmilan.com/en/tickets",
-  "bayern munich": "https://tickets.fcbayern.com/",
-  "borussia dortmund": "https://www.bvb.de/eng/Tickets",
+  "wolverhampton wanderers": "https://ticketswolves.co.uk/",
+  "wolves": "https://ticketswolves.co.uk/",
 };
 
 function normalizeTeamKey(name?: string) {
@@ -213,7 +211,7 @@ function buildOfficialTicketsUrl(homeTeamName?: string) {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Logistics links (what FB commenters asked for) */
+/* Logistics links (FB feedback: food/drink, transport, parking, disruption) */
 /* -------------------------------------------------------------------------- */
 
 function buildMapsVenueUrl(venue?: string, city?: string) {
@@ -247,18 +245,11 @@ function buildDisruptionUrl(city?: string) {
   return `https://www.google.com/search?q=${enc(q)}`;
 }
 
-function buildPassportVisaUrl(city?: string, countryHint?: string) {
-  const q = ["passport visa requirements", city, countryHint].filter(Boolean).join(" ").trim();
-  return `https://www.google.com/search?q=${enc(q)}`;
-}
-
 /* -------------------------------------------------------------------------- */
-/* Ticket guide UI helpers */
+/* Ticket guide helpers (strict to your schema) */
 /* -------------------------------------------------------------------------- */
 
-type TicketModalState = { open: boolean };
-
-function difficultyLabel(d?: string | null) {
+function difficultyLabel(d: TicketDifficulty) {
   switch (d) {
     case "very_hard":
       return "Very hard";
@@ -268,13 +259,11 @@ function difficultyLabel(d?: string | null) {
       return "Medium";
     case "easy":
       return "Easy";
-    default:
-      return "Unknown";
   }
 }
 
-function difficultyTone(d?: string | null) {
-  // purely UI tones (no hard dependency)
+function difficultyTone(d: TicketDifficulty) {
+  // UI only
   switch (d) {
     case "very_hard":
       return "bad";
@@ -284,14 +273,13 @@ function difficultyTone(d?: string | null) {
       return "ok";
     case "easy":
       return "good";
-    default:
-      return "neutral";
   }
 }
 
-function formatReleaseWindow(days?: { min?: number; max?: number } | null) {
-  const min = typeof days?.min === "number" ? days!.min : null;
-  const max = typeof days?.max === "number" ? days!.max : null;
+function formatReleaseWindow(days?: { min: number; max: number }) {
+  if (!days) return "Release timing varies";
+  const min = typeof days.min === "number" ? days.min : null;
+  const max = typeof days.max === "number" ? days.max : null;
   if (!min && !max) return "Release timing varies";
   if (min && max) return `Typically ${min}–${max} days before`;
   if (min) return `Typically ${min}+ days before`;
@@ -299,21 +287,13 @@ function formatReleaseWindow(days?: { min?: number; max?: number } | null) {
   return "Release timing varies";
 }
 
-function bulletLine(label: string, value: string) {
-  return `${label}: ${value}`;
-}
-
-/* -------------------------------------------------------------------------- */
-/* Screen */
-/* -------------------------------------------------------------------------- */
-
 type ToastState = { visible: false } | { visible: true; title: string; message?: string };
+type TicketModalState = { open: boolean };
 
 export default function MatchDetailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
 
-  // auth (optional for future sync + email/push)
   const booted = authStore((s) => s.booted);
   const user = authStore((s) => s.user);
   const initAuth = authStore((s) => s.init);
@@ -326,10 +306,8 @@ export default function MatchDetailScreen() {
 
   const id = useMemo(() => coerceString((params as any)?.id), [params]);
 
-  // Optional route-provided SE365 event id (future: pass from fixtures list once you have IDs)
   const routeSe365EventId = useMemo(() => coerceNumber((params as any)?.se365EventId), [params]);
 
-  // Routing context
   const rolling = useMemo(() => getRollingWindowIso(), []);
 
   const window = useMemo(() => {
@@ -352,15 +330,12 @@ export default function MatchDetailScreen() {
   const [error, setError] = useState<string | null>(null);
   const [row, setRow] = useState<FixtureListRow | null>(null);
 
-  // Round clustering (for “likely placeholder”)
   const [placeholderIds, setPlaceholderIds] = useState<Set<string> | null>(null);
   const [clusterLoading, setClusterLoading] = useState(false);
 
-  // follow store actions
   const toggleFollow = useFollowStore((s) => s.toggle);
   const upsertLatestSnapshot = useFollowStore((s) => s.upsertLatestSnapshot);
 
-  // IMPORTANT: subscribe to the boolean, not the isFollowing function
   const fixtureIdFromRow = row?.fixture?.id != null ? String(row.fixture.id) : "";
   const fixtureId = useMemo(() => fixtureIdFromRow || (id ?? ""), [fixtureIdFromRow, id]);
 
@@ -375,10 +350,8 @@ export default function MatchDetailScreen() {
     )
   );
 
-  // sign-in UI
   const [email, setEmail] = useState("");
 
-  // non-blocking toast
   const [toast, setToast] = useState<ToastState>({ visible: false });
   const toastTimer = useRef<any>(null);
 
@@ -394,12 +367,10 @@ export default function MatchDetailScreen() {
     };
   }, []);
 
-  // Tickets modal
   const [ticketModal, setTicketModal] = useState<TicketModalState>({ open: false });
   const closeTicketModal = useCallback(() => setTicketModal({ open: false }), []);
   const openTicketModal = useCallback(() => setTicketModal({ open: true }), []);
 
-  // Load match
   useEffect(() => {
     let cancelled = false;
 
@@ -438,7 +409,6 @@ export default function MatchDetailScreen() {
     };
   }, [id]);
 
-  // Load round fixtures for clustering (only when it matters)
   useEffect(() => {
     let cancelled = false;
 
@@ -452,13 +422,11 @@ export default function MatchDetailScreen() {
       const iso = kickoffIsoOrNull(row);
       const daysAway = iso ? daysUntilIso(iso) : Number.POSITIVE_INFINITY;
 
-      // If within confirmed window, don’t waste requests
       if (iso && daysAway <= CONFIRMED_WITHIN_DAYS) {
         setPlaceholderIds(new Set());
         return;
       }
 
-      // Need league/season/round to do cluster evidence
       if (!leagueId || !season || !round) {
         setPlaceholderIds(new Set());
         return;
@@ -471,7 +439,6 @@ export default function MatchDetailScreen() {
         setPlaceholderIds(computeLikelyPlaceholderTbcIds(roundRows));
       } catch {
         if (cancelled) return;
-        // fail open
         setPlaceholderIds(new Set());
       } finally {
         if (!cancelled) setClusterLoading(false);
@@ -523,10 +490,6 @@ export default function MatchDetailScreen() {
     [home, away, kickoffDateOnly, leagueName]
   );
 
-  // Determine SE365 event id using (priority):
-  // 1) route param
-  // 2) row-provided property (future)
-  // 3) manual override map
   const se365EventId = useMemo(() => {
     const fromRoute = typeof routeSe365EventId === "number" && routeSe365EventId > 0 ? routeSe365EventId : null;
     const fromRow = (() => {
@@ -554,25 +517,28 @@ export default function MatchDetailScreen() {
   const officialTicketsUrl = useMemo(() => buildOfficialTicketsUrl(home), [home]);
   const googleTicketsUrl = useMemo(() => buildGoogleTicketsUrl(matchQuery), [matchQuery]);
 
-  // logistics links
   const mapsUrl = useMemo(() => buildMapsVenueUrl(venue, city), [venue, city]);
   const stadiumInfoUrl = useMemo(() => buildStadiumInfoUrl(venue, home, city), [venue, home, city]);
   const foodDrinkUrl = useMemo(() => buildFoodDrinkUrl(venue, city), [venue, city]);
   const transportUrl = useMemo(() => buildTransportUrl(venue, city), [venue, city]);
   const parkingUrl = useMemo(() => buildParkingUrl(venue, city), [venue, city]);
   const disruptionUrl = useMemo(() => buildDisruptionUrl(city), [city]);
-  const passportVisaUrl = useMemo(() => buildPassportVisaUrl(city), [city]);
 
-  // Ticket guide (based on HOME club)
   const ticketGuide = useMemo(() => getTicketGuide(home), [home]);
+  const ticketTone = useMemo(() => (ticketGuide ? difficultyTone(ticketGuide.difficulty) : "neutral"), [ticketGuide]);
 
   const ticketsSub = useMemo(() => {
     const when = kickoffDateOnly ? ` • ${kickoffDateOnly}` : "";
     const base = `${home} vs ${away}${when}`;
 
-    const difficulty = ticketGuide?.difficulty ? ` • ${difficultyLabel(ticketGuide.difficulty)}` : "";
-    const membership = ticketGuide?.membershipRequired ? " • Membership often needed" : "";
+    if (!ticketGuide) {
+      return se365EventId
+        ? `${base} • Opens the exact match page`
+        : `${base} • Opens SE365 search (affiliate) + paste query if needed`;
+    }
 
+    const difficulty = ` • ${difficultyLabel(ticketGuide.difficulty)}`;
+    const membership = ticketGuide.membershipRequired ? " • Membership often needed" : "";
     if (se365EventId) return `${base}${difficulty}${membership} • Opens the exact match page`;
     return `${base}${difficulty}${membership} • Opens SE365 search (affiliate) + paste query if needed`;
   }, [home, away, kickoffDateOnly, se365EventId, ticketGuide]);
@@ -620,13 +586,13 @@ export default function MatchDetailScreen() {
     const where = place ? `Venue: ${place}` : "Venue: —";
     const meta = `League: ${leagueName} • Season: ${String(effectiveSeason)}`;
 
+    const guideLine = ticketGuide
+      ? `Ticket difficulty (home club): ${difficultyLabel(ticketGuide.difficulty)}\n`
+      : "";
+
     const seLine = se365EventId
       ? `Tickets (Sportsevents365 match page): ${se365PrimaryUrl}\n`
       : `Tickets (Sportsevents365 search): ${se365PrimaryUrl}\nPaste in search: ${matchQuery}\n`;
-
-    const guideLine = ticketGuide?.difficulty
-      ? `Ticket difficulty (home club): ${difficultyLabel(ticketGuide.difficulty)}\n`
-      : "";
 
     const message =
       `${title}\n${when}\n${where}\n${meta}\n\n` +
@@ -683,7 +649,6 @@ export default function MatchDetailScreen() {
       venue: row?.fixture?.venue?.name ? String(row.fixture.venue.name) : null,
       city: row?.fixture?.venue?.city ? String(row.fixture.venue.city) : null,
 
-      // Persist SE365 event id if we have it
       sportsevents365EventId: se365EventId ?? null,
     });
 
@@ -794,42 +759,54 @@ export default function MatchDetailScreen() {
     }
 
     const lines: string[] = [];
-
-    lines.push(`${ticketGuide.clubName} — ${ticketGuide.league ?? "Tickets"}`);
+    lines.push(`${ticketGuide.clubName} — ${ticketGuide.league}`);
     lines.push("");
-    if (ticketGuide.summary) lines.push(ticketGuide.summary);
-    lines.push("");
+    lines.push(ticketGuide.summary);
 
-    if (ticketGuide.difficulty) lines.push(bulletLine("Difficulty", difficultyLabel(ticketGuide.difficulty)));
-    if (typeof ticketGuide.membershipRequired === "boolean")
-      lines.push(bulletLine("Membership", ticketGuide.membershipRequired ? "Often needed" : "Not always needed"));
-    if (ticketGuide.typicalReleaseDaysBefore)
-      lines.push(bulletLine("Typical release", formatReleaseWindow(ticketGuide.typicalReleaseDaysBefore)));
-    if (typeof ticketGuide.ukCardUsuallyWorks === "boolean")
-      lines.push(bulletLine("UK bank card", ticketGuide.ukCardUsuallyWorks ? "Usually works" : "May be restricted"));
-    if (typeof ticketGuide.touristFriendly === "boolean")
-      lines.push(bulletLine("Tourist-friendly", ticketGuide.touristFriendly ? "Usually OK" : "May have restrictions"));
-
-    if (Array.isArray(ticketGuide.safetyNotes) && ticketGuide.safetyNotes.length) {
+    if (typeof ticketGuide.membershipRequired === "boolean") {
       lines.push("");
-      lines.push("Safety:");
-      for (const s of ticketGuide.safetyNotes.slice(0, 3)) lines.push(`• ${s}`);
+      lines.push(`Membership: ${ticketGuide.membershipRequired ? "Often required" : "Not always required"}`);
     }
 
-    if (Array.isArray(ticketGuide.notes) && ticketGuide.notes.length) {
+    if (ticketGuide.typicalReleaseDaysBefore) {
+      lines.push(`Typical release: ${formatReleaseWindow(ticketGuide.typicalReleaseDaysBefore)}`);
+    }
+
+    if (typeof ticketGuide.ukCardUsuallyWorks === "boolean") {
+      lines.push(`UK bank card: ${ticketGuide.ukCardUsuallyWorks ? "Usually works" : "May be restricted"}`);
+    }
+
+    if (typeof ticketGuide.touristFriendly === "boolean") {
+      lines.push(`Tourist-friendly: ${ticketGuide.touristFriendly ? "Usually OK" : "Restrictions possible"}`);
+    }
+
+    if (ticketGuide.safetyNotes?.length) {
+      lines.push("");
+      lines.push("Safety:");
+      for (const s of ticketGuide.safetyNotes.slice(0, 4)) lines.push(`• ${s}`);
+    }
+
+    if (ticketGuide.notes?.length) {
       lines.push("");
       lines.push("Notes:");
-      for (const n of ticketGuide.notes.slice(0, 3)) lines.push(`• ${n}`);
+      for (const n of ticketGuide.notes.slice(0, 4)) lines.push(`• ${n}`);
     }
 
     Alert.alert("Ticket guide", lines.join("\n"));
   }, [ticketGuide]);
 
-  const ticketTone = useMemo(() => difficultyTone(ticketGuide?.difficulty ?? null), [ticketGuide]);
   const ticketChipLabel = useMemo(() => {
-    const base = ticketGuide?.difficulty ? difficultyLabel(ticketGuide.difficulty) : "Guide pending";
-    return `Tickets: ${base}`;
+    if (!ticketGuide) return "Tickets: Guide pending";
+    return `Tickets: ${difficultyLabel(ticketGuide.difficulty)}`;
   }, [ticketGuide]);
+
+  const chipToneStyle = useMemo(() => {
+    if (!ticketGuide) return null;
+    if (ticketTone === "bad") return styles.chipBad;
+    if (ticketTone === "warn") return styles.chipWarn;
+    if (ticketTone === "good") return styles.chipGood;
+    return styles.chipOk;
+  }, [ticketGuide, ticketTone]);
 
   return (
     <Background imageUrl={getBackground("fixtures")}>
@@ -893,20 +870,7 @@ export default function MatchDetailScreen() {
                     </View>
                   )}
 
-                  <View
-                    style={[
-                      styles.chip,
-                      ticketTone === "bad"
-                        ? styles.chipBad
-                        : ticketTone === "warn"
-                        ? styles.chipWarn
-                        : ticketTone === "good"
-                        ? styles.chipGood
-                        : ticketTone === "ok"
-                        ? styles.chipOk
-                        : null,
-                    ]}
-                  >
+                  <View style={[styles.chip, chipToneStyle]}>
                     <Text style={styles.chipText}>{ticketChipLabel}</Text>
                   </View>
                 </View>
@@ -934,31 +898,46 @@ export default function MatchDetailScreen() {
                   </Text>
                 </View>
 
-                {/* Ticket guide block (what users asked for) */}
+                {/* Ticket guide block */}
                 <View style={styles.ticketGuideBox}>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.ticketGuideTitle}>Ticket guide (home club)</Text>
-                    <Text style={styles.ticketGuideSub}>
-                      {ticketGuide?.summary
-                        ? ticketGuide.summary
-                        : "We’ll add club-specific rules soon. Until then: Official first, then trusted marketplaces only."}
-                    </Text>
 
-                    <View style={styles.ticketGuideBullets}>
-                      <Text style={styles.ticketGuideBullet}>
-                        • {ticketGuide?.membershipRequired ? "Membership often required" : "Membership not always required"}
+                    {ticketGuide ? (
+                      <>
+                        <Text style={styles.ticketGuideSub}>{ticketGuide.summary}</Text>
+
+                        <View style={styles.ticketGuideBullets}>
+                          <Text style={styles.ticketGuideBullet}>
+                            • Difficulty: {difficultyLabel(ticketGuide.difficulty)}
+                          </Text>
+
+                          <Text style={styles.ticketGuideBullet}>
+                            • {ticketGuide.membershipRequired ? "Membership often required" : "Membership not always required"}
+                          </Text>
+
+                          <Text style={styles.ticketGuideBullet}>
+                            • {formatReleaseWindow(ticketGuide.typicalReleaseDaysBefore)}
+                          </Text>
+
+                          {typeof ticketGuide.ukCardUsuallyWorks === "boolean" ? (
+                            <Text style={styles.ticketGuideBullet}>
+                              • UK bank cards: {ticketGuide.ukCardUsuallyWorks ? "usually work" : "may be restricted"}
+                            </Text>
+                          ) : null}
+
+                          {typeof ticketGuide.touristFriendly === "boolean" ? (
+                            <Text style={styles.ticketGuideBullet}>
+                              • Tourist-friendly: {ticketGuide.touristFriendly ? "usually OK" : "restrictions possible"}
+                            </Text>
+                          ) : null}
+                        </View>
+                      </>
+                    ) : (
+                      <Text style={styles.ticketGuideSub}>
+                        Guide pending for this club. Use Official tickets first; otherwise use trusted sources only.
                       </Text>
-                      <Text style={styles.ticketGuideBullet}>
-                        • {formatReleaseWindow(ticketGuide?.typicalReleaseDaysBefore ?? null)}
-                      </Text>
-                      <Text style={styles.ticketGuideBullet}>
-                        • {typeof ticketGuide?.ukCardUsuallyWorks === "boolean"
-                          ? ticketGuide.ukCardUsuallyWorks
-                            ? "UK bank cards usually work"
-                            : "Payment may be restricted"
-                          : "Payment rules vary"}
-                      </Text>
-                    </View>
+                    )}
                   </View>
 
                   <Pressable onPress={openTicketGuideInfo} style={styles.ticketGuideInfoBtn}>
@@ -1063,89 +1042,112 @@ export default function MatchDetailScreen() {
           </GlassCard>
 
           {!loading && !error && row ? (
-            <GlassCard style={styles.card} intensity={22}>
-              <Text style={styles.h2}>Matchday essentials</Text>
-              <Text style={styles.muted}>
-                Built from what travellers actually complain about: tickets, transport, food, and last-minute surprises.
-              </Text>
+            <>
+              {/* Matchday essentials */}
+              <GlassCard style={styles.card} intensity={22}>
+                <Text style={styles.h2}>Matchday essentials</Text>
+                <Text style={styles.muted}>
+                  Neutral traveller view: arrive smoothly, enjoy the city, keep it simple.
+                </Text>
 
-              <View style={styles.opsList}>
-                <View style={styles.opsItem}>
-                  <Text style={styles.opsTitle}>Tickets: don’t gamble</Text>
-                  <Text style={styles.opsBody}>
-                    The biggest trip-killer is arriving without a valid ticket. Official first. If you can’t, use trusted routes only.
-                  </Text>
-                  <Pressable onPress={openTicketModal} style={styles.inlineBtn}>
-                    <Text style={styles.inlineBtnText}>Open ticket options</Text>
-                  </Pressable>
-                </View>
+                <View style={styles.opsList}>
+                  <View style={styles.opsItem}>
+                    <Text style={styles.opsTitle}>Arrive early</Text>
+                    <Text style={styles.opsBody}>
+                      Aim for 60–90 minutes before kickoff if you’re collecting tickets or navigating security.
+                    </Text>
+                  </View>
 
-                <View style={styles.opsItem}>
-                  <Text style={styles.opsTitle}>Kickoff changes late</Text>
-                  <Text style={styles.opsBody}>
-                    Many leagues confirm TV schedules late. Follow this match to get notified if kickoff changes.
-                  </Text>
-                  <Pressable onPress={onToggleFollow} style={styles.inlineBtn}>
-                    <Text style={styles.inlineBtnText}>{followed ? "Following (tap to toggle)" : "Follow for kickoff alerts"}</Text>
-                  </Pressable>
-                </View>
-
-                <View style={styles.opsItem}>
-                  <Text style={styles.opsTitle}>Transport plan (and disruption check)</Text>
-                  <Text style={styles.opsBody}>
-                    Your smoothest trip is usually public transport. Also check strikes/disruption on the day (it happens).
-                  </Text>
-                  <View style={styles.inlineRow}>
-                    <Pressable onPress={() => safeOpenUrl(transportUrl)} style={styles.inlineBtn}>
-                      <Text style={styles.inlineBtnText}>How to get there</Text>
+                  <View style={styles.opsItem}>
+                    <Text style={styles.opsTitle}>Bag policy and entry</Text>
+                    <Text style={styles.opsBody}>
+                      Policies vary. If you’re carrying a bag, double-check restrictions before you travel.
+                    </Text>
+                    <Pressable onPress={() => safeOpenUrl(stadiumInfoUrl)} style={styles.inlineBtn}>
+                      <Text style={styles.inlineBtnText}>Search stadium entry rules</Text>
                     </Pressable>
+                  </View>
+
+                  <View style={styles.opsItem}>
+                    <Text style={styles.opsTitle}>Transport plan</Text>
+                    <Text style={styles.opsBody}>
+                      Public transport is usually easiest; event traffic and parking are unpredictable near kickoff.
+                    </Text>
+                    <View style={styles.inlineRow}>
+                      <Pressable onPress={() => safeOpenUrl(transportUrl)} style={styles.inlineBtn}>
+                        <Text style={styles.inlineBtnText}>Transport options</Text>
+                      </Pressable>
+                      <Pressable onPress={() => safeOpenUrl(parkingUrl)} style={styles.inlineBtn}>
+                        <Text style={styles.inlineBtnText}>Parking</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+
+                  <View style={styles.opsItem}>
+                    <Text style={styles.opsTitle}>Food & drinks</Text>
+                    <Text style={styles.opsBody}>
+                      Pick something walkable so you’re not rushing. If the stadium area is dead, eat/drink in the city
+                      and travel in.
+                    </Text>
+                    <Pressable onPress={() => safeOpenUrl(foodDrinkUrl)} style={styles.inlineBtn}>
+                      <Text style={styles.inlineBtnText}>Search nearby spots</Text>
+                    </Pressable>
+                  </View>
+
+                  <View style={styles.opsItem}>
+                    <Text style={styles.opsTitle}>Disruption check</Text>
+                    <Text style={styles.opsBody}>
+                      Strikes and shutdowns can wreck the last mile (buses/trams/metros). Quick check before you commit.
+                    </Text>
                     <Pressable onPress={() => safeOpenUrl(disruptionUrl)} style={styles.inlineBtn}>
-                      <Text style={styles.inlineBtnText}>Disruption / strikes</Text>
+                      <Text style={styles.inlineBtnText}>Check disruption</Text>
                     </Pressable>
                   </View>
                 </View>
+              </GlassCard>
 
-                <View style={styles.opsItem}>
-                  <Text style={styles.opsTitle}>Food & drink (near stadium + city)</Text>
-                  <Text style={styles.opsBody}>
-                    Travellers want the good spots without hours of research. Find walkable places to avoid rushing.
-                  </Text>
-                  <Pressable onPress={() => safeOpenUrl(foodDrinkUrl)} style={styles.inlineBtn}>
-                    <Text style={styles.inlineBtnText}>Search nearby spots</Text>
-                  </Pressable>
-                </View>
+              {/* Ticket guide safety box */}
+              <GlassCard style={styles.card} intensity={22}>
+                <Text style={styles.h2}>Ticket safety</Text>
+                <Text style={styles.muted}>
+                  Your users are saying this is the biggest pain point. Keep it strict: official first, then trusted sources.
+                </Text>
 
-                <View style={styles.opsItem}>
-                  <Text style={styles.opsTitle}>Parking (if you’re driving)</Text>
-                  <Text style={styles.opsBody}>
-                    Parking near kickoff is unpredictable. If you must drive, plan an official car park or a sensible walk-in option.
+                <View style={styles.safetyBox}>
+                  <Text style={styles.safetyTitle}>Rule of thumb</Text>
+                  <Text style={styles.safetyBody}>
+                    If you can’t buy from the home club, only use established marketplaces. Avoid random DMs, “spare tickets”
+                    comments, or bank-transfer-only sellers.
                   </Text>
-                  <Pressable onPress={() => safeOpenUrl(parkingUrl)} style={styles.inlineBtn}>
-                    <Text style={styles.inlineBtnText}>Search parking options</Text>
-                  </Pressable>
-                </View>
 
-                <View style={styles.opsItem}>
-                  <Text style={styles.opsTitle}>Passport / visa check</Text>
-                  <Text style={styles.opsBody}>
-                    Don’t get caught out by entry requirements. Check passport validity and visa rules for your nationality early.
-                  </Text>
-                  <Pressable onPress={() => safeOpenUrl(passportVisaUrl)} style={styles.inlineBtn}>
-                    <Text style={styles.inlineBtnText}>Search entry requirements</Text>
-                  </Pressable>
-                </View>
+                  {ticketGuide?.safetyNotes?.length ? (
+                    <View style={{ marginTop: 10, gap: 6 }}>
+                      {ticketGuide.safetyNotes.slice(0, 5).map((n, idx) => (
+                        <Text key={`${idx}`} style={styles.safetyBullet}>
+                          • {n}
+                        </Text>
+                      ))}
+                    </View>
+                  ) : (
+                    <View style={{ marginTop: 10, gap: 6 }}>
+                      <Text style={styles.safetyBullet}>• Use the club’s official ticket site/app whenever possible.</Text>
+                      <Text style={styles.safetyBullet}>• If membership gates sales, plan early and expect limited general sale.</Text>
+                      <Text style={styles.safetyBullet}>• If you must use resale, prefer platforms with buyer protection.</Text>
+                      <Text style={styles.safetyBullet}>• Be wary of “PDF ticket sent by email” scams.</Text>
+                    </View>
+                  )}
 
-                <View style={styles.opsItem}>
-                  <Text style={styles.opsTitle}>Bag policy and entry rules</Text>
-                  <Text style={styles.opsBody}>
-                    Policies vary. If you’re carrying a bag, check restrictions before you travel.
-                  </Text>
-                  <Pressable onPress={() => safeOpenUrl(stadiumInfoUrl)} style={styles.inlineBtn}>
-                    <Text style={styles.inlineBtnText}>Search stadium entry rules</Text>
-                  </Pressable>
+                  <View style={styles.inlineRow}>
+                    <Pressable onPress={openTicketModal} style={styles.inlineBtn}>
+                      <Text style={styles.inlineBtnText}>Open ticket sources</Text>
+                    </Pressable>
+                    <Pressable onPress={openTicketGuideInfo} style={styles.inlineBtn}>
+                      <Text style={styles.inlineBtnText}>View guide details</Text>
+                    </Pressable>
+                  </View>
                 </View>
-              </View>
-            </GlassCard>
+              </GlassCard>
+            </>
           ) : null}
         </ScrollView>
 
@@ -1164,7 +1166,8 @@ export default function MatchDetailScreen() {
             <Pressable style={styles.modalCard} onPress={() => null}>
               <Text style={styles.modalTitle}>Tickets</Text>
               <Text style={styles.modalBody}>
-                Choose where you want to source tickets. Sportsevents365 uses your affiliate link. Official tickets take you to the home club.
+                Choose where you want to source tickets. Sportsevents365 uses your affiliate link. Official tickets take you
+                to the home club.
               </Text>
 
               <View style={styles.modalBtnCol}>
@@ -1197,7 +1200,8 @@ export default function MatchDetailScreen() {
               </View>
 
               <Text style={styles.modalFootnote}>
-                Note: exact Sportsevents365 deep-links require their event ID. Until IDs are supplied, we open SE365 search and show the exact query to paste.
+                Note: exact Sportsevents365 deep-links require their event ID. Until IDs are supplied, we open SE365 search
+                and show the exact query to paste.
               </Text>
             </Pressable>
           </Pressable>
@@ -1208,7 +1212,7 @@ export default function MatchDetailScreen() {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Styles */
+/* Styles (ADD THESE NEW STYLES BELOW your existing ones) */
 /* -------------------------------------------------------------------------- */
 
 const styles = StyleSheet.create({
@@ -1219,7 +1223,13 @@ const styles = StyleSheet.create({
   card: { padding: theme.spacing.lg },
 
   center: { paddingVertical: theme.spacing.xl, alignItems: "center", gap: 10 },
-  muted: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18, fontWeight: "700" },
+  muted: {
+    marginTop: 6,
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSize.sm,
+    lineHeight: 18,
+    fontWeight: "700",
+  },
 
   topRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 10 },
 
@@ -1258,16 +1268,18 @@ const styles = StyleSheet.create({
   chipConfirmed: { borderColor: "rgba(0,255,136,0.28)", backgroundColor: "rgba(0,255,136,0.08)" },
   chipTextConfirmed: { color: "rgba(79,224,138,0.92)" },
 
-  chipBad: { borderColor: "rgba(255,90,90,0.22)", backgroundColor: "rgba(255,90,90,0.08)" },
+  // NEW: ticket difficulty chip tones (subtle)
+  chipGood: { borderColor: "rgba(79,224,138,0.30)", backgroundColor: "rgba(79,224,138,0.08)" },
+  chipOk: { borderColor: "rgba(255,255,255,0.12)", backgroundColor: "rgba(0,0,0,0.18)" },
   chipWarn: { borderColor: "rgba(255,200,0,0.22)", backgroundColor: "rgba(255,200,0,0.06)" },
-  chipOk: { borderColor: "rgba(255,255,255,0.10)", backgroundColor: "rgba(0,0,0,0.18)" },
-  chipGood: { borderColor: "rgba(79,224,138,0.22)", backgroundColor: "rgba(79,224,138,0.08)" },
+  chipBad: { borderColor: "rgba(255,90,90,0.22)", backgroundColor: "rgba(255,90,90,0.06)" },
 
   metaBlock: { marginTop: 12, gap: 6 },
   metaLine: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18, fontWeight: "700" },
   metaLabel: { color: theme.colors.text, fontWeight: "900" },
   metaSecondary: { color: theme.colors.textTertiary, fontSize: 12, fontWeight: "800" },
 
+  // NEW: ticket guide block
   ticketGuideBox: {
     marginTop: 14,
     borderRadius: 14,
@@ -1284,12 +1296,12 @@ const styles = StyleSheet.create({
   ticketGuideBullets: { marginTop: 10, gap: 6 },
   ticketGuideBullet: { color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12, lineHeight: 16 },
   ticketGuideInfoBtn: {
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "rgba(0,255,136,0.28)",
-    backgroundColor: "rgba(0,0,0,0.22)",
     paddingVertical: 8,
     paddingHorizontal: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(0,255,136,0.35)",
+    backgroundColor: "rgba(0,0,0,0.18)",
   },
   ticketGuideInfoText: { color: theme.colors.text, fontWeight: "900", fontSize: 12 },
 
@@ -1383,7 +1395,7 @@ const styles = StyleSheet.create({
   opsTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
   opsBody: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18, fontWeight: "700" },
 
-  inlineRow: { marginTop: 10, flexDirection: "row", gap: 10, flexWrap: "wrap" },
+  inlineRow: { marginTop: 10, flexDirection: "row", flexWrap: "wrap", gap: 10 },
   inlineBtn: {
     marginTop: 10,
     alignSelf: "flex-start",
@@ -1395,6 +1407,19 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.18)",
   },
   inlineBtnText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.xs },
+
+  // NEW: safety box
+  safetyBox: {
+    marginTop: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+    padding: 12,
+  },
+  safetyTitle: { color: theme.colors.text, fontWeight: "900", fontSize: 13 },
+  safetyBody: { marginTop: 6, color: theme.colors.textSecondary, fontWeight: "700", fontSize: 12, lineHeight: 16 },
+  safetyBullet: { color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12, lineHeight: 16 },
 
   toastWrap: {
     position: "absolute",
@@ -1413,7 +1438,6 @@ const styles = StyleSheet.create({
   toastTitle: { color: theme.colors.text, fontWeight: "900", fontSize: 13 },
   toastMsg: { marginTop: 4, color: theme.colors.textSecondary, fontWeight: "700", fontSize: 12, lineHeight: 16 },
 
-  // Modal
   modalBackdrop: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.62)",
@@ -1443,5 +1467,14 @@ const styles = StyleSheet.create({
   modalBtnSub: { marginTop: 6, color: theme.colors.textSecondary, fontWeight: "700", fontSize: 12, lineHeight: 16 },
   modalBtnGhost: { borderColor: "rgba(255,255,255,0.10)", backgroundColor: "transparent" },
   modalBtnGhostText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: 12, textAlign: "center" },
-  modalFootnote: { marginTop: 10, color: theme.colors.textTertiary, fontWeight: "800", fontSize: 11, lineHeight: 14 },
+  modalFootnote: {
+    marginTop: 10,
+    color: theme.colors.textTertiary,
+    fontWeight: "800",
+    fontSize: 11,
+    lineHeight: 14,
+  },
 });
+
+
+              
