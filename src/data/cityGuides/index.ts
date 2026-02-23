@@ -15,8 +15,8 @@ export type TripTopThingsBundle = {
 
   /**
    * Monetised link: GetYourGuide affiliate city/search landing page.
-   * If a guide has no link yet, callers should fall back to buildAffiliateLinks().experiencesUrl
-   * rather than showing TripAdvisor.
+   * If a guide has no link yet, callers should fall back to
+   * buildAffiliateLinks({ city }).experiencesUrl rather than showing TripAdvisor.
    */
   thingsToDoUrl?: string;
 
@@ -24,9 +24,10 @@ export type TripTopThingsBundle = {
   quickTips: string[];
 };
 
-/**
- * Unified registry (single source of truth for city guide lookups)
- */
+/* -------------------------------------------------------------------------- */
+/* Unified registry (single source of truth for city guide lookups) */
+/* -------------------------------------------------------------------------- */
+
 export const cityGuides: Record<string, CityGuide> = {
   ...premierLeagueCityGuides,
   ...laLigaCityGuides,
@@ -35,8 +36,12 @@ export const cityGuides: Record<string, CityGuide> = {
   ...ligue1CityGuides,
 };
 
+/* -------------------------------------------------------------------------- */
+/* Public API */
+/* -------------------------------------------------------------------------- */
+
 /**
- * Find a city guide by any user input
+ * Find a city guide by any user input.
  */
 export function getCityGuide(cityInput: string): CityGuide | null {
   const key = normalizeCityKey(cityInput);
@@ -44,7 +49,7 @@ export function getCityGuide(cityInput: string): CityGuide | null {
 }
 
 /**
- * Used in Trip Build + Trip Hub
+ * Used in Trip Build + Trip Hub.
  *
  * Policy:
  * - We never return TripAdvisor URLs anymore.
