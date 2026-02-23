@@ -10,8 +10,7 @@ import ligue1TicketGuides from "./ligue1";
 
 /**
  * Registry (single lookup point)
- * NOTE: Best practice is ONE canonical key per club in each league file.
- * Aliases should live in normalizeClubKey() only.
+ * IMPORTANT: canonical-only files rely on normalizeClubKey to map API variants to these keys.
  */
 export const ticketGuides: Record<string, TicketGuide> = {
   ...premierLeagueTicketGuides,
@@ -24,138 +23,169 @@ export const ticketGuides: Record<string, TicketGuide> = {
 /**
  * Normalize user/team/club strings to a stable key.
  * - lowercases
- * - strips punctuation/diacritics
- * - collapses whitespace
- * - converts to hyphenated slug
+ * - strips diacritics
+ * - converts "&" to "and"
+ * - strips punctuation
+ * - collapses to hyphens
  *
- * IMPORTANT:
- * - Keep aliases here, not scattered across league files.
- * - This is what match/[id] should rely on via getTicketGuide(homeName).
+ * Then applies pragmatic aliases for real-world API variance.
  */
 export function normalizeClubKey(input: string): string {
   const raw = String(input ?? "").trim().toLowerCase();
   if (!raw) return "";
 
-  // Pragmatic aliases (real-world inputs + API name variance)
+  // Pragmatic aliases (fixes real-world inputs + API name variance)
+  // NOTE: keep values as your CANONICAL keys used inside your league files.
   const alias: Record<string, string> = {
-    /* ---------------------------- Premier League --------------------------- */
+    /* ------------------------------ Premier League ------------------------------ */
+    // Man Utd
     "man utd": "manchester-united",
     "man united": "manchester-united",
     "manchester utd": "manchester-united",
+    "manchester utd.": "manchester-united",
     "manutd": "manchester-united",
+    "man-utd": "manchester-united",
 
+    // Spurs
     "spurs": "tottenham-hotspur",
     "tottenham": "tottenham-hotspur",
     "tottenham hotspur": "tottenham-hotspur",
 
+    // Wolves
     "wolves": "wolverhampton-wanderers",
     "wolverhampton": "wolverhampton-wanderers",
     "wolverhampton wanderers": "wolverhampton-wanderers",
 
+    // West Ham
     "west ham": "west-ham-united",
     "west ham united": "west-ham-united",
 
+    // Newcastle
     "newcastle": "newcastle-united",
     "newcastle united": "newcastle-united",
 
+    // Forest
     "nottingham forest": "nottingham-forest",
     "nottm forest": "nottingham-forest",
     "nffc": "nottingham-forest",
 
-    "bournemouth": "afc-bournemouth",
-    "afc bournemouth": "afc-bournemouth",
+    // Bournemouth
+    "bournemouth": "bournemouth", // canonical in your latest premierLeague.ts
+    "afc bournemouth": "bournemouth",
+    "afc-bournemouth": "bournemouth",
 
+    // Brighton
+    "brighton": "brighton",
     "brighton and hove albion": "brighton",
     "brighton & hove albion": "brighton",
 
+    // Leeds
     "leeds": "leeds-united",
     "leeds utd": "leeds-united",
     "leeds united": "leeds-united",
 
+    // City shorthand
     "man city": "manchester-city",
-    "mancity": "manchester-city",
     "manchester city": "manchester-city",
+    "mancity": "manchester-city",
+    "man-city": "manchester-city",
 
-    "villa": "aston-villa",
+    /* --------------------------------- La Liga --------------------------------- */
+    "athletic": "athletic-club",
+    "athletic bilbao": "athletic-club",
+    "athletic club bilbao": "athletic-club",
 
-    "palace": "crystal-palace",
+    "atletico": "atletico-madrid",
+    "atletico madrid": "atletico-madrid",
+    "atlético madrid": "atletico-madrid",
+    "atl madrid": "atletico-madrid",
+    "atl. madrid": "atletico-madrid",
 
-    /* -------------------------------- La Liga ----------------------------- */
+    "real": "real-madrid", // risky but commonly used; keep if you want this behavior
     "real madrid": "real-madrid",
-    "realmadrid": "real-madrid",
+    "real-madrid cf": "real-madrid",
+    "real madrid cf": "real-madrid",
 
     "barca": "barcelona",
     "fc barcelona": "barcelona",
+    "barcelona fc": "barcelona",
 
-    "atleti": "atletico-madrid",
-    "atletico": "atletico-madrid",
-    "atlético madrid": "atletico-madrid",
-    "atlético": "atletico-madrid",
-    "atl madrid": "atletico-madrid",
-
-    "athletic bilbao": "athletic-club",
-    "athletic club bilbao": "athletic-club",
-    "athletic club": "athletic-club",
+    "betis": "real-betis",
+    "real betis balompie": "real-betis",
+    "real betis balompié": "real-betis",
+    "real betis": "real-betis",
 
     "real sociedad": "real-sociedad",
-    "sociedad": "real-sociedad",
+    "r. sociedad": "real-sociedad",
 
-    "real betis": "real-betis",
-    "betis": "real-betis",
-
-    "celta": "celta-vigo",
-    "celta de vigo": "celta-vigo",
     "rc celta": "celta-vigo",
+    "celta": "celta-vigo",
+    "celta vigo": "celta-vigo",
+    "celta de vigo": "celta-vigo",
 
     "rayo": "rayo-vallecano",
     "rayo vallecano": "rayo-vallecano",
+    "rayo vallecano de madrid": "rayo-vallecano",
 
+    "deportivo alaves": "alaves",
+    "deportivo alavés": "alaves",
     "alavés": "alaves",
 
-    /* -------------------------------- Serie A ----------------------------- */
-    "ac milan": "milan",
-    "a.c. milan": "milan",
-    "milan": "milan",
+    /* -------------------------------- Serie A ---------------------------------- */
+    "juve": "juventus",
+    "juventus fc": "juventus",
 
     "inter milan": "inter",
+    "inter milano": "inter",
     "internazionale": "inter",
-    "fc inter": "inter",
+    "fc internazionale": "inter",
+    "internazionale milano": "inter",
+
+    "ac milan": "milan",
+    "a.c. milan": "milan",
+    "milan ac": "milan",
 
     "as roma": "roma",
-    "roma": "roma",
+    "a.s. roma": "roma",
+    "roma fc": "roma",
 
     "ss lazio": "lazio",
-    "lazio": "lazio",
+    "s.s. lazio": "lazio",
 
-    "hellas verona": "verona",
-    "verona": "verona",
-
-    /* ------------------------------ Bundesliga ----------------------------- */
-    "bayern": "bayern-munich",
+    /* ------------------------------- Bundesliga -------------------------------- */
     "bayern munchen": "bayern-munich",
     "bayern münchen": "bayern-munich",
+    "fc bayern": "bayern-munich",
+    "fc bayern munchen": "bayern-munich",
 
-    "dortmund": "borussia-dortmund",
-    "bvb": "borussia-dortmund",
     "borussia dortmund": "borussia-dortmund",
+    "bvb": "borussia-dortmund",
+    "bvb 09": "borussia-dortmund",
 
-    "leverkusen": "bayer-leverkusen",
+    "rb leipzig": "rb-leipzig",
+    "rasenballsport leipzig": "rb-leipzig",
+
+    "bayer 04 leverkusen": "bayer-leverkusen",
     "bayer leverkusen": "bayer-leverkusen",
+    "leverkusen": "bayer-leverkusen",
 
-    "frankfurt": "eintracht-frankfurt",
     "eintracht": "eintracht-frankfurt",
+    "eintracht frankfurt": "eintracht-frankfurt",
 
-    "stuttgart": "vfb-stuttgart",
     "vfb stuttgart": "vfb-stuttgart",
+    "vfb stuttgart 1893": "vfb-stuttgart",
 
-    "gladbach": "borussia-monchengladbach",
+    "borussia monchengladbach": "borussia-monchengladbach",
+    "borussia mönchengladbach": "borussia-monchengladbach",
+    "mgladbach": "borussia-monchengladbach",
     "mönchengladbach": "borussia-monchengladbach",
-    "monchengladbach": "borussia-monchengladbach",
+    "borussia m'gladbach": "borussia-monchengladbach",
 
-    "freiburg": "sc-freiburg",
     "sc freiburg": "sc-freiburg",
+    "freiburg": "sc-freiburg",
 
-    "union": "union-berlin",
+    "1. fc union berlin": "union-berlin",
+    "1 fc union berlin": "union-berlin",
     "union berlin": "union-berlin",
 
     "werder": "werder-bremen",
@@ -163,55 +193,66 @@ export function normalizeClubKey(input: string): string {
 
     "mainz": "mainz-05",
     "mainz 05": "mainz-05",
+    "1. fsv mainz 05": "mainz-05",
+    "1 fsv mainz 05": "mainz-05",
 
     "vfl wolfsburg": "wolfsburg",
     "wolfsburg": "wolfsburg",
 
     "hoffenheim": "tsg-hoffenheim",
+    "tsg 1899 hoffenheim": "tsg-hoffenheim",
     "tsg hoffenheim": "tsg-hoffenheim",
 
-    "köln": "fc-koln",
-    "koln": "fc-koln",
-    "1. fc köln": "fc-koln",
     "1. fc koln": "fc-koln",
+    "1 fc koln": "fc-koln",
+    "1. fc köln": "fc-koln",
+    "fc koln": "fc-koln",
+    "fc köln": "fc-koln",
+    "koln": "fc-koln",
+    "köln": "fc-koln",
 
     "hamburg": "hamburger-sv",
     "hamburger sv": "hamburger-sv",
     "hsv": "hamburger-sv",
 
+    "1. fc heidenheim": "fc-heidenheim",
+    "1 fc heidenheim": "fc-heidenheim",
     "heidenheim": "fc-heidenheim",
 
     "st. pauli": "st-pauli",
     "st pauli": "st-pauli",
+    "fc st pauli": "st-pauli",
 
-    /* -------------------------------- Ligue 1 ----------------------------- */
+    /* -------------------------------- Ligue 1 --------------------------------- */
     "psg": "paris-saint-germain",
     "paris sg": "paris-saint-germain",
     "paris saint germain": "paris-saint-germain",
+    "paris-saint germain": "paris-saint-germain",
+    "paris-saint-germain fc": "paris-saint-germain",
 
     "om": "marseille",
     "olympique de marseille": "marseille",
+    "marseille": "marseille",
 
     "ol": "lyon",
     "olympique lyonnais": "lyon",
+    "lyon": "lyon",
 
     "as monaco": "monaco",
+    "monaco": "monaco",
 
-    "losc": "lille",
     "ogc nice": "nice",
-    "stade rennais": "rennes",
+    "nice": "nice",
 
     "rc lens": "lens",
+    "lens": "lens",
 
     "rc strasbourg": "strasbourg",
-    "racing strasbourg": "strasbourg",
-
-    "fc nantes": "nantes",
-
-    "le havre ac": "le-havre",
-    "le havre": "le-havre",
+    "rc strasbourg alsace": "strasbourg",
+    "strasbourg": "strasbourg",
 
     "paris fc": "paris-fc",
+    "paris-fc": "paris-fc",
   };
 
   const directAlias = alias[raw];
