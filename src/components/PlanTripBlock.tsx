@@ -1,11 +1,13 @@
 // src/components/PlanTripBlock.tsx
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { View, Text, StyleSheet, Pressable, Alert } from "react-native";
 
 import GlassCard from "@/src/components/GlassCard";
 import { theme } from "@/src/constants/theme";
 import { openPartnerUrl } from "@/src/services/partnerClicks";
 import { buildAffiliateLinks } from "@/src/services/affiliateLinks";
+
+import preferencesStore from "@/src/state/preferences";
 
 type Props = {
   city: string;
@@ -14,9 +16,14 @@ type Props = {
   title?: string;
 };
 
-function safeCity(v: any) {
+function safeCity(v: unknown) {
   const s = String(v ?? "").trim();
   return s || "";
+}
+
+function cleanUpper3(v: unknown, fallback: string) {
+  const s = String(v ?? "").trim().toUpperCase();
+  return /^[A-Z]{3}$/.test(s) ? s : fallback;
 }
 
 async function openUrl(url?: string) {
@@ -34,14 +41,48 @@ async function openUrl(url?: string) {
 export default function PlanTripBlock({ city, startDate, endDate, title }: Props) {
   const cityName = useMemo(() => safeCity(city), [city]);
 
+  // Preferred origin IATA (CITY code ideally; fallback LON)
+  const [originIata, setOriginIata] = useState<string>(() => {
+    const s = preferencesStore.getState();
+    return cleanUpper3((s as any)?.preferredOriginIata, "LON");
+  });
+
+  useEffect(() => {
+    let mounted = true;
+
+    const sync = () => {
+      if (!mounted) return;
+      const s = preferencesStore.getState();
+      setOriginIata(cleanUpper3((s as any)?.preferredOriginIata, "LON"));
+    };
+
+    const unsub = preferencesStore.subscribe(sync);
+    sync();
+
+    if (!preferencesStore.getState().loaded) {
+      preferencesStore.load().finally(sync);
+    }
+
+    return () => {
+      mounted = false;
+      try {
+        unsub();
+      } catch {
+        // ignore
+      }
+    };
+  }, []);
+
   const links = useMemo(() => {
     if (!cityName) return null;
+
     return buildAffiliateLinks({
       city: cityName,
       startDate,
       endDate,
+      originIata, // ✅ prefill Aviasales origin
     });
-  }, [cityName, startDate, endDate]);
+  }, [cityName, startDate, endDate, originIata]);
 
   if (!links) return null;
 
@@ -54,7 +95,7 @@ export default function PlanTripBlock({ city, startDate, endDate, title }: Props
 
       <View style={styles.grid}>
         <Pressable style={styles.btn} onPress={() => openUrl(links.hotelsUrl)}>
-          <Text>HOTELS (NEW TEST)</Text>
+          <Text style={styles.btnText}>Hotels</Text>
         </Pressable>
 
         <Pressable style={styles.btn} onPress={() => openUrl(links.flightsUrl)}>
