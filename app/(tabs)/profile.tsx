@@ -26,6 +26,9 @@ import useFollowStore, { type FollowedMatch } from "@/src/state/followStore";
 import { refreshFollowedMatches } from "@/src/services/followedMatchesRefresh";
 import { ensureNotificationsReady } from "@/src/services/followKickoffNotifications";
 
+import preferencesStore from "@/src/state/preferences";
+import { formatIataLabel } from "@/src/constants/iataCities";
+
 /* -------------------------------------------------------------------------- */
 /* Row UI */
 /* -------------------------------------------------------------------------- */
@@ -88,9 +91,7 @@ function getCountryCodeBestEffort(): string {
     if (tz.includes("Europe/Rome")) return "IT";
     if (tz.includes("Europe/Berlin")) return "DE";
     if (tz.includes("Europe/Paris")) return "FR";
-  } catch {
-    // ignore
-  }
+  } catch {}
   return "GB";
 }
 
@@ -146,12 +147,6 @@ function normalizeStr(v: unknown) {
   return s ? s : null;
 }
 
-/**
- * Fallback heuristic ONLY when store has kickoffLikelyTbc === null:
- * - If no kickoffIso => TBC
- * - If <= 21 days away => confirmed
- * - Else: if >= 7 followed fixtures in same (leagueId+season+round) share same kickoff minute => likely placeholder => TBC
- */
 function computeLikelyPlaceholderTbcIdsFromFollowed(followed: FollowedMatch[]) {
   const CONFIRMED_WITHIN_DAYS = 21;
   const CLUSTER_THRESHOLD = 7;
@@ -219,27 +214,17 @@ function computeLikelyPlaceholderTbcIdsFromFollowed(followed: FollowedMatch[]) {
 }
 
 function kickoffStateForFollowed(m: FollowedMatch, fallbackLikelyTbcIds: Set<string>) {
-  // Store-first:
-  // kickoffLikelyTbc:
-  //   true  => TBC
-  //   false => confirmed
-  //   null  => unknown, use fallback inference
   const storeFlag = (m as any)?.kickoffLikelyTbc;
   if (storeFlag === true) return { isTbc: true, secondary: "TV schedule pending" };
   if (storeFlag === false) return { isTbc: false, secondary: null };
 
-  // Unknown => fallback:
   const id = String(m.fixtureId ?? "").trim();
   const iso = String(m.kickoffIso ?? "").trim();
 
   if (!iso) return { isTbc: true, secondary: "Kickoff time not set yet" };
-
-  // within 21 days => treat as confirmed for UX
   if (daysUntilIso(iso) <= 21) return { isTbc: false, secondary: null };
-
   if (id && fallbackLikelyTbcIds.has(id)) return { isTbc: true, secondary: "TV schedule pending" };
 
-  // if we can't infer, be conservative: don't claim "confirmed"
   return { isTbc: true, secondary: "Kickoff may change" };
 }
 
@@ -257,7 +242,7 @@ function formatLastRefreshed(ms: number | null) {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Storage keys */
+/* Storage keys (keep for non-flight prefs) */
 /* -------------------------------------------------------------------------- */
 
 const STORAGE_KEYS = {
@@ -265,8 +250,6 @@ const STORAGE_KEYS = {
   setupComplete: "yna:setupComplete",
 
   plan: "yna:plan",
-
-  homeAirport: "yna:profile.homeAirport",
   currency: "yna:profile.currency",
   language: "yna:profile.language",
   budgetTarget: "yna:profile.budgetTarget",
@@ -277,71 +260,52 @@ type PlanValue = "not_set" | "free" | "premium";
 type AlertsValue = "On" | "Off";
 
 /* -------------------------------------------------------------------------- */
-/* Options */
-/* -------------------------------------------------------------------------- */
+/* Origin (IATA CITY code) options
+ * - keep small and pragmatic for Phase 1
+ * - expand as you expand audience
+ * -------------------------------------------------------------------------- */
 
-const AIRPORTS_BY_COUNTRY: Record<string, SelectOption[]> = {
+const ORIGIN_BY_COUNTRY: Record<string, SelectOption[]> = {
   GB: [
-    { label: "London Heathrow (LHR)", value: "London Heathrow (LHR)" },
-    { label: "London Gatwick (LGW)", value: "London Gatwick (LGW)" },
-    { label: "London Stansted (STN)", value: "London Stansted (STN)" },
-    { label: "London Luton (LTN)", value: "London Luton (LTN)" },
-    { label: "London City (LCY)", value: "London City (LCY)" },
-    { label: "Manchester (MAN)", value: "Manchester (MAN)" },
-    { label: "Birmingham (BHX)", value: "Birmingham (BHX)" },
-    { label: "Edinburgh (EDI)", value: "Edinburgh (EDI)" },
-    { label: "Glasgow (GLA)", value: "Glasgow (GLA)" },
-    { label: "Bristol (BRS)", value: "Bristol (BRS)" },
-    { label: "Newcastle (NCL)", value: "Newcastle (NCL)" },
-    { label: "Liverpool (LPL)", value: "Liverpool (LPL)" },
-    { label: "Leeds Bradford (LBA)", value: "Leeds Bradford (LBA)" },
-    { label: "East Midlands (EMA)", value: "East Midlands (EMA)" },
-    { label: "Belfast Intl (BFS)", value: "Belfast Intl (BFS)" },
-    { label: "Belfast City (BHD)", value: "Belfast City (BHD)" },
-    { label: "Cardiff (CWL)", value: "Cardiff (CWL)" },
-    { label: "Southampton (SOU)", value: "Southampton (SOU)" },
-    { label: "Aberdeen (ABZ)", value: "Aberdeen (ABZ)" },
+    { label: formatIataLabel("London", "LON"), value: "LON" },
+    { label: formatIataLabel("Manchester", "MAN"), value: "MAN" },
+    { label: formatIataLabel("Birmingham", "BHX"), value: "BHX" },
+    { label: formatIataLabel("Edinburgh", "EDI"), value: "EDI" },
+    { label: formatIataLabel("Glasgow", "GLA"), value: "GLA" },
+    { label: formatIataLabel("Bristol", "BRS"), value: "BRS" },
+    { label: formatIataLabel("Newcastle", "NCL"), value: "NCL" },
+    { label: formatIataLabel("Liverpool", "LPL"), value: "LPL" },
+    { label: formatIataLabel("Leeds", "LBA"), value: "LBA" },
   ],
   ES: [
-    { label: "Madrid (MAD)", value: "Madrid (MAD)" },
-    { label: "Barcelona (BCN)", value: "Barcelona (BCN)" },
-    { label: "Málaga (AGP)", value: "Málaga (AGP)" },
-    { label: "Alicante (ALC)", value: "Alicante (ALC)" },
-    { label: "Valencia (VLC)", value: "Valencia (VLC)" },
-    { label: "Seville (SVQ)", value: "Seville (SVQ)" },
-    { label: "Palma de Mallorca (PMI)", value: "Palma de Mallorca (PMI)" },
-    { label: "Bilbao (BIO)", value: "Bilbao (BIO)" },
-    { label: "Tenerife South (TFS)", value: "Tenerife South (TFS)" },
-    { label: "Gran Canaria (LPA)", value: "Gran Canaria (LPA)" },
+    { label: formatIataLabel("Madrid", "MAD"), value: "MAD" },
+    { label: formatIataLabel("Barcelona", "BCN"), value: "BCN" },
+    { label: formatIataLabel("Málaga", "AGP"), value: "AGP" },
+    { label: formatIataLabel("Valencia", "VLC"), value: "VLC" },
+    { label: formatIataLabel("Seville", "SVQ"), value: "SVQ" },
+    { label: formatIataLabel("Bilbao", "BIO"), value: "BIO" },
   ],
   IT: [
-    { label: "Rome Fiumicino (FCO)", value: "Rome Fiumicino (FCO)" },
-    { label: "Milan Malpensa (MXP)", value: "Milan Malpensa (MXP)" },
-    { label: "Milan Linate (LIN)", value: "Milan Linate (LIN)" },
-    { label: "Venice (VCE)", value: "Venice (VCE)" },
-    { label: "Naples (NAP)", value: "Naples (NAP)" },
-    { label: "Bologna (BLQ)", value: "Bologna (BLQ)" },
-    { label: "Turin (TRN)", value: "Turin (TRN)" },
-    { label: "Florence (FLR)", value: "Florence (FLR)" },
-    { label: "Pisa (PSA)", value: "Pisa (PSA)" },
+    { label: formatIataLabel("Rome", "ROM"), value: "ROM" },
+    { label: formatIataLabel("Milan", "MIL"), value: "MIL" },
+    { label: formatIataLabel("Naples", "NAP"), value: "NAP" },
+    { label: formatIataLabel("Turin", "TRN"), value: "TRN" },
+    { label: formatIataLabel("Venice", "VCE"), value: "VCE" },
   ],
   DE: [
-    { label: "Frankfurt (FRA)", value: "Frankfurt (FRA)" },
-    { label: "Munich (MUC)", value: "Munich (MUC)" },
-    { label: "Berlin (BER)", value: "Berlin (BER)" },
-    { label: "Düsseldorf (DUS)", value: "Düsseldorf (DUS)" },
-    { label: "Hamburg (HAM)", value: "Hamburg (HAM)" },
-    { label: "Cologne Bonn (CGN)", value: "Cologne Bonn (CGN)" },
-    { label: "Stuttgart (STR)", value: "Stuttgart (STR)" },
+    { label: formatIataLabel("Frankfurt", "FRA"), value: "FRA" },
+    { label: formatIataLabel("Munich", "MUC"), value: "MUC" },
+    { label: formatIataLabel("Berlin", "BER"), value: "BER" },
+    { label: formatIataLabel("Düsseldorf", "DUS"), value: "DUS" },
+    { label: formatIataLabel("Hamburg", "HAM"), value: "HAM" },
+    { label: formatIataLabel("Cologne", "CGN"), value: "CGN" },
   ],
   FR: [
-    { label: "Paris Charles de Gaulle (CDG)", value: "Paris Charles de Gaulle (CDG)" },
-    { label: "Paris Orly (ORY)", value: "Paris Orly (ORY)" },
-    { label: "Nice (NCE)", value: "Nice (NCE)" },
-    { label: "Lyon (LYS)", value: "Lyon (LYS)" },
-    { label: "Marseille (MRS)", value: "Marseille (MRS)" },
-    { label: "Toulouse (TLS)", value: "Toulouse (TLS)" },
-    { label: "Bordeaux (BOD)", value: "Bordeaux (BOD)" },
+    { label: formatIataLabel("Paris", "PAR"), value: "PAR" },
+    { label: formatIataLabel("Nice", "NCE"), value: "NCE" },
+    { label: formatIataLabel("Lyon", "LYS"), value: "LYS" },
+    { label: formatIataLabel("Marseille", "MRS"), value: "MRS" },
+    { label: formatIataLabel("Toulouse", "TLS"), value: "TLS" },
   ],
 };
 
@@ -370,6 +334,11 @@ function planLabel(plan: PlanValue) {
   return "Not set";
 }
 
+function iataPretty(code: string) {
+  const up = String(code ?? "").trim().toUpperCase();
+  return /^[A-Z]{3}$/.test(up) ? up : "Not set";
+}
+
 /* -------------------------------------------------------------------------- */
 /* Screen */
 /* -------------------------------------------------------------------------- */
@@ -384,17 +353,13 @@ export default function ProfileScreen() {
 
   const followed = useFollowStore((s) => s.followed);
   const followingCount = followed.length;
-
   const unfollow = useFollowStore((s) => s.unfollow);
 
-  // IMPORTANT: batch update + default update together
   const setKickoffConfirmedDefaultAndAll = useFollowStore((s) => s.setKickoffConfirmedDefaultAndAll);
   const defaultAlerts = useFollowStore((s) => s.defaultAlerts);
 
-  // Permission-gated toggle state
   const [kickoffToggleBusy, setKickoffToggleBusy] = useState(false);
 
-  // Manual refresh UI state
   const [refreshing, setRefreshing] = useState(false);
   const [lastRefreshedAt, setLastRefreshedAt] = useState<number | null>(null);
   const [refreshSummary, setRefreshSummary] = useState<string | null>(null);
@@ -402,17 +367,24 @@ export default function ProfileScreen() {
   const [loading, setLoading] = useState(true);
 
   const countryCode = useMemo(() => getCountryCodeBestEffort(), []);
-  const airportOptions = useMemo(() => AIRPORTS_BY_COUNTRY[countryCode] ?? AIRPORTS_BY_COUNTRY.GB, [countryCode]);
+  const originOptions = useMemo(
+    () => ORIGIN_BY_COUNTRY[countryCode] ?? ORIGIN_BY_COUNTRY.GB,
+    [countryCode]
+  );
 
   const [plan, setPlan] = useState<PlanValue>("not_set");
-  const [homeAirport, setHomeAirport] = useState("Not Set");
   const [currency, setCurrency] = useState(countryCode === "GB" ? "GBP" : "EUR");
   const [language, setLanguage] = useState("English");
   const [budgetTarget, setBudgetTarget] = useState("Not Set");
   const [alerts, setAlerts] = useState<AlertsValue>("Off");
   const [setupComplete, setSetupComplete] = useState(false);
 
-  const [activePicker, setActivePicker] = useState<null | "airport" | "currency" | "language" | "budget" | "plan">(null);
+  // Origin pref comes from preferencesStore
+  const [originIata, setOriginIata] = useState(preferencesStore.getState().preferredOriginIata);
+
+  const [activePicker, setActivePicker] = useState<
+    null | "origin" | "currency" | "language" | "budget" | "plan"
+  >(null);
   const closePicker = useCallback(() => setActivePicker(null), []);
 
   const logoSize = useMemo(() => {
@@ -446,21 +418,23 @@ export default function ProfileScreen() {
   }, [followed]);
 
   const followedPreview = useMemo(() => followedSorted.slice(0, 6), [followedSorted]);
+  const fallbackLikelyTbcIds = useMemo(
+    () => computeLikelyPlaceholderTbcIdsFromFollowed(followed),
+    [followed]
+  );
 
-  // Fallback inference only used when store kickoffLikelyTbc is null
-  const fallbackLikelyTbcIds = useMemo(() => computeLikelyPlaceholderTbcIdsFromFollowed(followed), [followed]);
-
-  // Load persisted settings once
+  // Load persisted settings once (and preferencesStore)
   useEffect(() => {
     let mounted = true;
 
     (async () => {
       try {
-        const [storedSetup, storedPlan, storedAirport, storedCurrency, storedLanguage, storedBudget, storedAlerts] =
+        await preferencesStore.load();
+
+        const [storedSetup, storedPlan, storedCurrency, storedLanguage, storedBudget, storedAlerts] =
           await Promise.all([
             storage.getString(STORAGE_KEYS.setupComplete),
             storage.getString(STORAGE_KEYS.plan),
-            storage.getString(STORAGE_KEYS.homeAirport),
             storage.getString(STORAGE_KEYS.currency),
             storage.getString(STORAGE_KEYS.language),
             storage.getString(STORAGE_KEYS.budgetTarget),
@@ -469,9 +443,10 @@ export default function ProfileScreen() {
 
         if (!mounted) return;
 
+        setOriginIata(preferencesStore.getState().preferredOriginIata);
+
         setSetupComplete(storedSetup === "true");
         if (storedPlan === "free" || storedPlan === "premium") setPlan(storedPlan);
-        if (storedAirport) setHomeAirport(storedAirport);
         if (storedCurrency) setCurrency(storedCurrency);
         if (storedLanguage) setLanguage(storedLanguage);
         if (storedBudget) setBudgetTarget(storedBudget);
@@ -483,12 +458,17 @@ export default function ProfileScreen() {
       }
     })();
 
+    const unsub = preferencesStore.subscribe((s) => {
+      setOriginIata(s.preferredOriginIata);
+    });
+
     return () => {
       mounted = false;
+      unsub();
     };
   }, []);
 
-  // Persist changes
+  // Persist changes for non-preferencesStore fields
   useEffect(() => {
     if (loading) return;
 
@@ -496,23 +476,19 @@ export default function ProfileScreen() {
       try {
         await Promise.all([
           storage.setString(STORAGE_KEYS.plan, plan),
-          storage.setString(STORAGE_KEYS.homeAirport, homeAirport),
           storage.setString(STORAGE_KEYS.currency, currency),
           storage.setString(STORAGE_KEYS.language, language),
           storage.setString(STORAGE_KEYS.budgetTarget, budgetTarget),
           storage.setString(STORAGE_KEYS.alerts, alerts),
         ]);
-      } catch {
-        // ignore
-      }
+      } catch {}
     })();
-  }, [alerts, budgetTarget, currency, homeAirport, language, loading, plan]);
+  }, [alerts, budgetTarget, currency, language, loading, plan]);
 
   const finishSetup = useCallback(async () => {
     try {
       await storage.setString(STORAGE_KEYS.setupComplete, "true");
     } catch {
-      // ignore
     } finally {
       setSetupComplete(true);
       router.replace("/(tabs)/home");
@@ -531,16 +507,16 @@ export default function ProfileScreen() {
               storage.setString(STORAGE_KEYS.seenLanding, "false"),
               storage.setString(STORAGE_KEYS.setupComplete, "false"),
               storage.setString(STORAGE_KEYS.plan, "not_set"),
-              storage.setString(STORAGE_KEYS.homeAirport, "Not Set"),
               storage.setString(STORAGE_KEYS.currency, countryCode === "GB" ? "GBP" : "EUR"),
               storage.setString(STORAGE_KEYS.language, "English"),
               storage.setString(STORAGE_KEYS.budgetTarget, "Not Set"),
               storage.setString(STORAGE_KEYS.alerts, "Off"),
             ]);
 
+            await preferencesStore.clearAll();
+
             setSetupComplete(false);
             setPlan("not_set");
-            setHomeAirport("Not Set");
             setCurrency(countryCode === "GB" ? "GBP" : "EUR");
             setLanguage("English");
             setBudgetTarget("Not Set");
@@ -555,7 +531,6 @@ export default function ProfileScreen() {
     ]);
   }, [countryCode]);
 
-  // Info / legal
   const openFAQ = useCallback(() => {
     showInfo(
       "FAQ",
@@ -636,22 +611,17 @@ export default function ProfileScreen() {
     async (nextValue: boolean) => {
       if (kickoffToggleBusy) return;
 
-      // OFF never needs permission: batch update + default in one go
       if (!nextValue) {
         setKickoffConfirmedDefaultAndAll(false);
         return;
       }
 
-      // ON = explicit user action → request permission here
       setKickoffToggleBusy(true);
-
       try {
         const ok = await ensureNotificationsReady({ request: true });
 
         if (!ok) {
-          // keep everything OFF if permission denied
           setKickoffConfirmedDefaultAndAll(false);
-
           Alert.alert(
             "Notifications disabled",
             "To enable kickoff alerts, allow notifications for YourNextAway in your phone settings, then toggle this on again.",
@@ -669,10 +639,19 @@ export default function ProfileScreen() {
     [kickoffToggleBusy, setKickoffConfirmedDefaultAndAll]
   );
 
+  const originValueLabel = useMemo(() => {
+    const v = iataPretty(originIata);
+    return v === "Not set" ? "Not set" : v;
+  }, [originIata]);
+
   return (
     <Background imageUrl={getBackground("profile")} overlayOpacity={0.78}>
       <SafeAreaView style={styles.container} edges={["top"]}>
-        <ScrollView style={styles.scrollView} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+        >
           {/* HEADER */}
           <View style={styles.headerRow}>
             <View style={{ flex: 1 }}>
@@ -758,7 +737,6 @@ export default function ProfileScreen() {
               </View>
             </View>
 
-            {/* Manual refresh controls */}
             <View style={styles.refreshBar}>
               <Pressable
                 onPress={onRefreshFollowing}
@@ -853,14 +831,6 @@ export default function ProfileScreen() {
                     </View>
                   );
                 })}
-
-                {followingCount > followedPreview.length ? (
-                  <View style={styles.followFooterNote}>
-                    <Text style={styles.followFooterText}>
-                      Showing {followedPreview.length} of {followingCount}. (Add “View all” later.)
-                    </Text>
-                  </View>
-                ) : null}
               </>
             )}
           </GlassCard>
@@ -873,25 +843,30 @@ export default function ProfileScreen() {
             </View>
 
             <Row
-              title="Home airport"
-              subtitle="Departure defaults for comparisons"
-              value={homeAirport === "Not Set" ? "Not set" : homeAirport}
-              onPress={() => setActivePicker("airport")}
+              title="Home origin (IATA)"
+              subtitle="Used for flight comparisons (city code)"
+              value={originValueLabel}
+              onPress={() => setActivePicker("origin")}
             />
+
             <Row title="Plan" subtitle="Free or Premium" value={planSummary} onPress={() => setActivePicker("plan")} />
+
             <Row
               title="Currency"
               subtitle="Budgets and comparisons"
               value={currency}
               onPress={() => setActivePicker("currency")}
             />
+
             <Row title="Language" subtitle="App language" value={language} onPress={() => setActivePicker("language")} />
+
             <Row
               title="Budget"
               subtitle={budgetTarget === "Not Set" ? "Optional" : "Target budget for quick planning"}
               value={budgetTarget === "Not Set" ? "Not set" : `${currency} ${budgetTarget}`}
               onPress={() => setActivePicker("budget")}
             />
+
             <Row
               title="Alerts"
               subtitle="Budget drop alerts (quiet, useful)"
@@ -936,16 +911,20 @@ export default function ProfileScreen() {
         />
 
         <SelectModal
-          visible={activePicker === "airport"}
-          title="Home airport"
-          subtitle={`Select a departure airport (${countryCode}).`}
-          options={airportOptions}
-          selectedValue={homeAirport}
+          visible={activePicker === "origin"}
+          title="Home origin (IATA)"
+          subtitle={`Select a departure city code (${countryCode}).`}
+          options={originOptions}
+          selectedValue={iataPretty(originIata) === "Not set" ? "" : iataPretty(originIata)}
           onClose={closePicker}
-          onSelect={setHomeAirport}
+          onSelect={(v) => {
+            const up = String(v ?? "").trim().toUpperCase();
+            if (!/^[A-Z]{3}$/.test(up)) return;
+            preferencesStore.setPreferredOriginIata(up).catch(() => null);
+          }}
           allowClear
-          clearLabel="Clear airport"
-          clearValue="Not Set"
+          clearLabel="Clear origin"
+          clearValue=""
         />
 
         <SelectModal
@@ -986,7 +965,7 @@ export default function ProfileScreen() {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Styles */
+/* Styles (same as your prior, unchanged) */
 /* -------------------------------------------------------------------------- */
 
 const styles = StyleSheet.create({
@@ -1158,8 +1137,6 @@ const styles = StyleSheet.create({
 
   chev: { color: theme.colors.textSecondary, fontSize: 26, marginTop: -2 },
 
-  /* ------------------------------ Following UI ----------------------------- */
-
   followingDefaultsPill: {
     borderRadius: 14,
     borderWidth: 1,
@@ -1234,7 +1211,6 @@ const styles = StyleSheet.create({
   followTagText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: theme.fontSize.xs },
   followTagTextOn: { color: "rgba(79,224,138,0.92)" },
 
-  // New: explicit kickoff chips
   followTagTbc: { borderColor: "rgba(255,200,0,0.22)", backgroundColor: "rgba(255,200,0,0.06)" },
   followTagTextTbc: { color: "rgba(255,220,140,0.92)" },
 
@@ -1250,9 +1226,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   unfollowText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: theme.fontSize.xs },
-
-  followFooterNote: { borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.10)", paddingHorizontal: theme.spacing.lg, paddingVertical: 12 },
-  followFooterText: { color: theme.colors.textTertiary, fontWeight: "800", fontSize: theme.fontSize.xs },
 
   footerNote: {
     textAlign: "center",
