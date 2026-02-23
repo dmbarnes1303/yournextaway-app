@@ -1,6 +1,6 @@
 // src/services/affiliateLinks.ts
 import Constants from "expo-constants";
-import { toIataCityCode } from "@/src/constants/iataCityCodes";
+import { toIataCityCode, normalizeCityName } from "@/src/constants/iataCities";
 
 /**
  * Centralised affiliate URL builder.
@@ -41,10 +41,7 @@ export type AffiliateLinks = {
 /* -------------------------------------------------------------------------- */
 
 function env(name: string): string | undefined {
-  const extra =
-    (Constants?.expoConfig as any)?.extra ??
-    (Constants as any)?.manifest?.extra ??
-    {};
+  const extra = (Constants?.expoConfig as any)?.extra ?? (Constants as any)?.manifest?.extra ?? {};
 
   const v =
     (extra && typeof extra[name] === "string" ? String(extra[name]) : undefined) ??
@@ -63,7 +60,9 @@ function enc(v: string) {
 }
 
 function cleanCity(input: string) {
-  return String(input ?? "").trim();
+  const s = String(input ?? "").trim();
+  // normalize to canonical city if we can (helps all partner URLs)
+  return normalizeCityName(s) ?? s;
 }
 
 function cleanCountry(input?: string) {
@@ -113,8 +112,9 @@ const AFFILIATE = {
   expediaAffilId: env("EXPO_PUBLIC_EXPEDIA_AFFIL_ID"),
 
   /**
-   * Optional default ORIGIN IATA CITY/AIRPORT code (Phase-1 config).
-   * Recommended: "LON" (London Any) as a sane UK default.
+   * Optional default origin *CITY* code (recommended) or airport IATA.
+   * - Using a city code is broader and avoids user having to pick a specific airport.
+   * - Example: LON, MAN, PAR
    */
   defaultOriginIata: env("EXPO_PUBLIC_DEFAULT_ORIGIN_IATA"),
 
@@ -154,24 +154,30 @@ export function buildAffiliateLinks(args: {
   const hotelsUrl = `https://www.expedia.co.uk/Hotel-Search?${expediaParams.join("&")}`;
 
   /* -------------------- */
-  /* Flights: Aviasales (prefill via search URL when possible) */
+  /* Flights: Aviasales (prefilled via search URL when possible) */
   /* -------------------- */
-  const destIataCity = toIataCityCode(city);
+  const destIata = toIataCityCode(city);
 
-  // Prefer configured default origin, otherwise LON (UK sane default)
+  /**
+   * Origin:
+   * - Prefer env-defined IATA (city code recommended)
+   * - Fall back to MAN (pragmatic Phase-1 default for you)
+   */
   const originIata = isIata(AFFILIATE.defaultOriginIata)
     ? String(AFFILIATE.defaultOriginIata).trim().toUpperCase()
-    : "LON";
+    : "MAN";
 
   let flightsUrl: string;
 
-  if (destIataCity && startDate && endDate) {
+  if (destIata && startDate && endDate) {
     const dd = formatDdMm(startDate);
     const rd = formatDdMm(endDate);
 
     if (dd && rd) {
+      // Aviasales deep-search pattern: ORIGIN + ddmm + DEST + ddmm
+      // Using IATA CITY codes massively improves UX and reliability.
       flightsUrl =
-        `https://www.aviasales.com/search/${originIata}${dd}${destIataCity}${rd}` +
+        `https://www.aviasales.com/search/${originIata}${dd}${destIata}${rd}` +
         (AFFILIATE.aviasalesMarker ? `?marker=${enc(AFFILIATE.aviasalesMarker)}` : "");
     } else {
       flightsUrl =
@@ -179,7 +185,7 @@ export function buildAffiliateLinks(args: {
         (AFFILIATE.aviasalesMarker ? `?marker=${enc(AFFILIATE.aviasalesMarker)}` : "");
     }
   } else {
-    // Fallback home page (still tracked via marker if present)
+    // If we can't prefill (unknown city mapping or missing dates), send them to the homepage.
     flightsUrl =
       `https://www.aviasales.com/` +
       (AFFILIATE.aviasalesMarker ? `?marker=${enc(AFFILIATE.aviasalesMarker)}` : "");
