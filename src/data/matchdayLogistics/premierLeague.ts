@@ -2,18 +2,21 @@
 import type { MatchdayLogistics } from "./types";
 
 /**
- * EPL Matchday Logistics (your current 20-team set)
+ * EPL Matchday Logistics (20 teams)
  *
  * Rules:
- * - Useful + conservative. No fake pub names.
- * - Written for neutral travellers.
- * - Prefer stable transport guidance.
- * - Keys are simple slugs you can map to from team names.
+ * - Useful + conservative (no fake pub/restaurant names).
+ * - Prefer stable transport guidance (key stations/lines/hubs).
+ * - Keep it “neutral traveller” oriented.
+ *
+ * IMPORTANT:
+ * Keys must match normalizeClubKey(homeTeamName) from src/data/ticketGuides.
+ * We use hyphenated slugs for multi-word clubs (e.g. "manchester-united").
  */
 
 const premierLeagueLogistics: Record<string, MatchdayLogistics> = {
   /* -------------------------------------------------------------------------- */
-  /* London                                                                      */
+  /* London                                                                       */
   /* -------------------------------------------------------------------------- */
 
   "arsenal": {
@@ -22,32 +25,35 @@ const premierLeagueLogistics: Record<string, MatchdayLogistics> = {
     country: "England",
     transport: {
       primaryStops: [
-        { name: "Arsenal (Tube)", type: "metro", notes: "Piccadilly line. Closest stop but can bottleneck post-match." },
+        { name: "Arsenal (Tube)", type: "metro", notes: "Piccadilly line. Closest stop but can bottleneck after full-time." },
         { name: "Finsbury Park", type: "train", notes: "Best all-round hub (Victoria + Piccadilly + National Rail)." },
-        { name: "Highbury & Islington", type: "train", notes: "Good alternative; short walk with better flow." },
+        { name: "Highbury & Islington", type: "train", notes: "Good alternative; usually smoother flow than Arsenal station." },
       ],
       tips: [
-        "If you're staying central, Finsbury Park is usually the smoothest in/out.",
-        "Post-match: walk 10–15 minutes away from the stadium before entering the Tube to reduce queues.",
+        "If you’re staying central, Finsbury Park is usually the most reliable in/out.",
+        "Post-match: walking 10–15 minutes away from the stadium before entering the Tube often saves time.",
       ],
     },
     parking: {
       availability: "hard",
-      summary: "Driving is usually a bad idea. Street restrictions + event controls make it slow and stressful.",
-      officialLots: ["Prefer rail/Tube. If you must drive, park further out near a rail hub and finish by train."],
+      summary: "Driving is usually a mistake. Controlled parking zones + residents + event restrictions.",
+      officialLots: ["Prefer public transport or park further out and use Tube/National Rail in."],
     },
     foodDrink: [
-      { name: "Finsbury Park area pubs/bars", type: "pub", notes: "Practical pre/post stop with fast onward travel." },
-      { name: "Islington (Upper Street) food options", type: "food", notes: "Better sit-down choices; easy after-match route." },
+      { name: "Finsbury Park area (practical pre/post)", type: "mixed", notes: "Convenient if you want something before heading in." },
+      { name: "Upper Street / Islington", type: "food", notes: "Better food density; good option after the match." },
     ],
     stay: {
       bestAreas: [
-        { area: "King’s Cross / St Pancras", notes: "Great base + easy access to Finsbury Park." },
-        { area: "Islington", notes: "Food-heavy area and quick rail links." },
+        { area: "King’s Cross / St Pancras", notes: "Easy access to Finsbury Park; strong weekend base." },
+        { area: "Islington", notes: "Great food + vibe; quick to Highbury & Islington." },
       ],
       budgetAreas: [{ area: "Finsbury Park", budgetFriendly: true, notes: "Often cheaper than Zone 1; very connected." }],
     },
-    arrivalTips: ["Arrive 60–90 mins pre-kickoff if you want a calm entry.", "Have a post-match station plan before full-time."],
+    arrivalTips: [
+      "Aim to arrive 60–90 mins pre-kickoff for a stress-free entry.",
+      "Have a return plan: queues are normal immediately after full-time.",
+    ],
   },
 
   "chelsea": {
@@ -56,32 +62,35 @@ const premierLeagueLogistics: Record<string, MatchdayLogistics> = {
     country: "England",
     transport: {
       primaryStops: [
-        { name: "Fulham Broadway (Tube)", type: "metro", notes: "District line. Standard stop but queues are normal." },
-        { name: "West Brompton", type: "train", notes: "Often less chaotic; smart post-match fallback." },
-        { name: "Earl’s Court", type: "metro", notes: "Useful interchange for cross-London travel." },
+        { name: "Fulham Broadway (Tube)", type: "metro", notes: "District line. Closest; queues are normal after the match." },
+        { name: "West Brompton", type: "train", notes: "Often less chaotic; a smart alternative for dispersal." },
+        { name: "Earl’s Court", type: "metro", notes: "Useful interchange if you’re moving across London." },
       ],
       tips: [
-        "Expect Fulham Broadway to be busy post-match; walking to West Brompton can be quicker overall.",
-        "Build buffer time — District line platforms can be managed/queued on busy fixtures.",
+        "Post-match: consider walking to West Brompton rather than fighting Fulham Broadway queues.",
+        "District line disruptions happen — leave buffer time.",
       ],
     },
     parking: {
       availability: "hard",
-      summary: "West London matchdays are brutal for parking and traffic. Driving rarely wins.",
-      officialLots: ["If you must use a taxi, get picked up a few streets away to avoid gridlock."],
+      summary: "West London parking is painful on event days. Don’t rely on street parking.",
+      officialLots: ["Use public transport or get dropped off away from the tight stadium streets."],
     },
     foodDrink: [
-      { name: "Fulham Broadway matchday pubs", type: "pub", notes: "Convenient but busy." },
-      { name: "Fulham / Parsons Green food options", type: "food", notes: "Better choice density; short hop away." },
+      { name: "Fulham Broadway area", type: "mixed", notes: "Convenient, busy, matchday-focused." },
+      { name: "Fulham / Parsons Green", type: "food", notes: "Better sit-down options; short hop away." },
     ],
     stay: {
       bestAreas: [
-        { area: "South Kensington", notes: "Tourist-friendly base; simple District line routes." },
-        { area: "Paddington", notes: "Strong transport hub + lots of hotels." },
+        { area: "South Kensington", notes: "Good base; straightforward District line access." },
+        { area: "Paddington", notes: "Transport hub + lots of hotels." },
       ],
-      budgetAreas: [{ area: "Hammersmith", budgetFriendly: true, notes: "Often better value while still very connected." }],
+      budgetAreas: [{ area: "Hammersmith", budgetFriendly: true, notes: "Often better value; still very connected." }],
     },
-    arrivalTips: ["Allow for delays and crowding on the District line.", "After full-time, consider a 10–15 minute walk before calling a taxi."],
+    arrivalTips: [
+      "If you’re doing dinner after, plan to walk a bit before calling a taxi to avoid gridlock.",
+      "Allow extra time for security and turnstiles on big fixtures.",
+    ],
   },
 
   "crystal-palace": {
@@ -90,32 +99,35 @@ const premierLeagueLogistics: Record<string, MatchdayLogistics> = {
     country: "England",
     transport: {
       primaryStops: [
-        { name: "London Bridge / Victoria", type: "train", notes: "Common arrival routes into South London rail." },
-        { name: "Selhurst (Rail)", type: "train", notes: "Typical matchday station; follow the crowd flow." },
-        { name: "Thornton Heath (Rail)", type: "train", notes: "Common alternative; can disperse crowds better." },
+        { name: "Norwood Junction", type: "train", notes: "Common hub for visitors; steady flow on matchdays." },
+        { name: "Selhurst", type: "train", notes: "Close option; can be busy post-match." },
+        { name: "Thornton Heath", type: "train", notes: "Another nearby station; choose based on route." },
       ],
       tips: [
-        "This is a National Rail-style matchday rather than Tube-first.",
-        "Post-match: walking a few minutes and choosing the quieter station often saves time.",
+        "Rail is the move. Choose the station that aligns with your onward route to avoid unnecessary transfers.",
+        "Post-match: wait 10–15 minutes or walk to a different station to reduce queuing.",
       ],
     },
     parking: {
       availability: "hard",
-      summary: "Residential restrictions + congestion make driving poor value.",
-      officialLots: ["If driving, park further out near a rail hub and finish by train."],
+      summary: "Residential restrictions + limited space make driving awkward.",
+      officialLots: ["If driving, park further out near a suitable rail line and come in by train."],
     },
     foodDrink: [
-      { name: "Central London pre-game then rail down", type: "mixed", notes: "More choice if you're making a day of it." },
-      { name: "Station high-street options", type: "mixed", notes: "Practical quick bite before walking to the ground." },
+      { name: "Around the nearby stations", type: "mixed", notes: "Practical pre/post options; expect crowds." },
+      { name: "Central London (pre-game base)", type: "mixed", notes: "Often better variety; then take rail down." },
     ],
     stay: {
       bestAreas: [
-        { area: "London Bridge / South Bank", notes: "Tourist base with easy rail routes south." },
-        { area: "Victoria / Pimlico", notes: "Good hotel supply and simple connections." },
+        { area: "London Bridge / South Bank", notes: "Good rail access and a solid tourist base." },
+        { area: "Shoreditch / Liverpool Street", notes: "Good weekend vibe; rail options to South London." },
       ],
-      budgetAreas: [{ area: "Croydon", budgetFriendly: true, notes: "Often cheaper; strong rail connectivity." }],
+      budgetAreas: [{ area: "Croydon", budgetFriendly: true, notes: "Often cheaper; easy rail access to Selhurst/Norwood Junction." }],
     },
-    arrivalTips: ["Aim to arrive early—local streets get busy close to kickoff.", "Don’t book a tight post-match train if you want a relaxed exit."],
+    arrivalTips: [
+      "If you’re unfamiliar with South London rail, screenshot your route in case signal is busy post-match.",
+      "Arrive early if you want to find your bearings—streets can feel tight near kickoff.",
+    ],
   },
 
   "fulham": {
@@ -124,32 +136,35 @@ const premierLeagueLogistics: Record<string, MatchdayLogistics> = {
     country: "England",
     transport: {
       primaryStops: [
-        { name: "Putney Bridge (Tube)", type: "metro", notes: "District line. Common approach with a walk-in." },
-        { name: "Hammersmith", type: "metro", notes: "Major interchange; reliable fallback." },
-        { name: "Putney (Rail)", type: "train", notes: "Useful if arriving via National Rail." },
+        { name: "Putney Bridge (Tube)", type: "metro", notes: "District line. Popular route; short walk." },
+        { name: "Hammersmith (Tube)", type: "metro", notes: "Major interchange; useful fallback if Putney Bridge is packed." },
+        { name: "Putney (Rail)", type: "train", notes: "Good option depending on where you’re staying." },
       ],
       tips: [
-        "Expect a walk from Tube/rail — don’t bank on taxis being fast near kickoff.",
-        "Post-match: walk away from the immediate river-side pinch points before calling transport.",
+        "Allow time for the walk from the Tube/rail — it’s part of the Craven Cottage routine.",
+        "Post-match: Putney Bridge can bottleneck; consider walking a bit further before entering.",
       ],
     },
     parking: {
       availability: "hard",
-      summary: "West London residential controls + traffic. Driving is rarely worth it.",
-      officialLots: ["If you must drive, park away from the stadium and finish by Tube/rail."],
+      summary: "Riverside residential streets + event controls make parking unreliable.",
+      officialLots: ["Prefer public transport; if driving, park at a Tube/rail hub further out and ride in."],
     },
     foodDrink: [
-      { name: "Putney / Fulham food corridors", type: "food", notes: "Better choice density than right at the stadium." },
-      { name: "Hammersmith pre/post options", type: "mixed", notes: "Practical if you want smoother transport links." },
+      { name: "Putney Bridge / Fulham Palace Road area", type: "mixed", notes: "Convenient and busy on matchdays." },
+      { name: "Hammersmith", type: "mixed", notes: "More options; strong transport links." },
     ],
     stay: {
       bestAreas: [
-        { area: "Hammersmith", notes: "Practical base; strong transport." },
-        { area: "South Kensington", notes: "Tourist-friendly with District line access." },
+        { area: "Hammersmith", notes: "Great connectivity + practical base." },
+        { area: "South Kensington", notes: "Tourist base with easy District line access." },
       ],
-      budgetAreas: [{ area: "Earl’s Court", budgetFriendly: true, notes: "Often better value, still connected." }],
+      budgetAreas: [{ area: "Earls Court", budgetFriendly: true, notes: "Often better value for West London; good Tube access." }],
     },
-    arrivalTips: ["Leave extra time for the walk-in and queues.", "If weather is bad, assume slower entry and slower exits."],
+    arrivalTips: [
+      "If you’re doing the river walk, factor it into your arrival time.",
+      "Traffic is slow near kickoff—avoid taxis for the final stretch where possible.",
+    ],
   },
 
   "tottenham-hotspur": {
@@ -159,31 +174,34 @@ const premierLeagueLogistics: Record<string, MatchdayLogistics> = {
     transport: {
       primaryStops: [
         { name: "White Hart Lane", type: "train", notes: "Closest rail stop; controlled flow post-match." },
-        { name: "Northumberland Park", type: "train", notes: "Often recommended for dispersal." },
-        { name: "Tottenham Hale", type: "metro", notes: "Victoria line hub; best link back into central London." },
+        { name: "Northumberland Park", type: "train", notes: "Good alternative for dispersal; often recommended." },
+        { name: "Tottenham Hale", type: "metro", notes: "Victoria line hub; strong route back into central London." },
       ],
       tips: [
-        "Pick your station based on where you're heading: Tottenham Hale for central London is usually best.",
-        "Post-match: queues are normal; follow routing and don’t panic.",
+        "Tottenham Hale is usually the cleanest route for tourists heading back to central London.",
+        "Post-match queues are normal; pick the station based on where you’re going next.",
       ],
     },
     parking: {
       availability: "hard",
-      summary: "North London matchday driving is slow and frustrating. Avoid unless pre-booked.",
-      officialLots: ["If driving: park further out on a Victoria line/Overground route and rail in."],
+      summary: "North London matchday driving is rough. Avoid unless you have pre-booked parking.",
+      officialLots: ["If driving: park further out on a Victoria line/Overground-friendly area and rail in."],
     },
     foodDrink: [
-      { name: "Tottenham Hale practical food options", type: "food", notes: "Good if arriving via Victoria line." },
-      { name: "Local pubs near stadium", type: "pub", notes: "Atmosphere strong; very busy." },
+      { name: "Tottenham Hale (practical pre/post)", type: "food", notes: "Good stop if arriving via Victoria line." },
+      { name: "Around the stadium approach routes", type: "mixed", notes: "Atmosphere is strong; queues expected." },
     ],
     stay: {
       bestAreas: [
-        { area: "King’s Cross / St Pancras", notes: "Strong base + simple routes north." },
-        { area: "Liverpool Street / Shoreditch", notes: "Great weekend base; easy to Tottenham area." },
+        { area: "King’s Cross / St Pancras", notes: "Strong base + easy routes to North London." },
+        { area: "Liverpool Street / Shoreditch", notes: "Great weekend vibe; workable routes to Tottenham area." },
       ],
       budgetAreas: [{ area: "Tottenham Hale", budgetFriendly: true, notes: "Often cheaper than Zone 1 and very connected." }],
     },
-    arrivalTips: ["Have a station plan in advance.", "Allow time if you want food/drink without rushing."],
+    arrivalTips: [
+      "Have a station plan in advance: White Hart Lane vs Northumberland Park vs Tottenham Hale.",
+      "Arrive early if you want time for food/drink and a relaxed entry.",
+    ],
   },
 
   "west-ham-united": {
@@ -192,105 +210,40 @@ const premierLeagueLogistics: Record<string, MatchdayLogistics> = {
     country: "England",
     transport: {
       primaryStops: [
-        { name: "Stratford", type: "train", notes: "Major hub (Tube + Elizabeth line + National Rail). Best for tourists." },
-        { name: "Stratford International", type: "train", notes: "Useful depending on route; close to the park." },
-        { name: "Pudding Mill Lane (DLR)", type: "tram", notes: "Smart fallback if Stratford is chaos." },
+        { name: "Stratford", type: "train", notes: "Major hub (Tube + Elizabeth line + National Rail). Best for visitors." },
+        { name: "Stratford International", type: "train", notes: "Useful depending on your route; near the park." },
+        { name: "Pudding Mill Lane (DLR)", type: "tram", notes: "Smart fallback if Stratford is chaotic." },
       ],
       tips: [
-        "Stratford can bottleneck. Pudding Mill Lane is often the smoother exit.",
-        "If you’re staying central, Elizabeth line → Stratford is usually the cleanest route.",
+        "Stratford is the obvious choice but can bottleneck. Pudding Mill Lane is the underrated exit.",
+        "If you’re central: Elizabeth line to Stratford is typically the quickest route.",
       ],
     },
     parking: {
       availability: "hard",
       summary: "Do not plan to park near the stadium. Use rail.",
-      officialLots: ["If driving: park further out on a rail line and come in via Stratford."],
+      officialLots: ["If you must drive: park further out on a rail line and come in via Stratford."],
     },
     foodDrink: [
-      { name: "Westfield Stratford food options", type: "food", notes: "Reliable pre-game option." },
-      { name: "Hackney Wick bars/food", type: "bar", notes: "Good vibe; short walk along canals." },
+      { name: "Stratford / Westfield", type: "food", notes: "Reliable, practical pre-game option." },
+      { name: "Hackney Wick (canalside)", type: "bar", notes: "Good vibe; short walk along canals." },
     ],
     stay: {
       bestAreas: [
-        { area: "Liverpool Street / Shoreditch", notes: "Fast to Stratford + good weekend base." },
+        { area: "Liverpool Street / Shoreditch", notes: "Fast to Stratford; solid weekend base." },
         { area: "Canary Wharf", notes: "Modern base; easy DLR links." },
       ],
-      budgetAreas: [{ area: "Stratford", budgetFriendly: true, notes: "Lots of hotel stock; often good value." }],
+      budgetAreas: [{ area: "Stratford", budgetFriendly: true, notes: "Often best value due to hotel stock." }],
     },
-    arrivalTips: ["Plan your post-match exit (wait 10–15 mins or walk to a quieter stop).", "This is one of the easiest London stadiums logistically."],
+    arrivalTips: [
+      "Plan your post-match exit: wait 10–15 minutes or walk to a less-busy station/DLR stop.",
+      "This is one of the easiest London matchdays for tourists because of Stratford connectivity.",
+    ],
   },
 
   /* -------------------------------------------------------------------------- */
-  /* Manchester & Liverpool                                                      */
+  /* North West                                                                  */
   /* -------------------------------------------------------------------------- */
-
-  "manchester-city": {
-    stadium: "Etihad Stadium",
-    city: "Manchester",
-    country: "England",
-    transport: {
-      primaryStops: [
-        { name: "Manchester Piccadilly", type: "train", notes: "Main arrival hub for most visitors." },
-        { name: "Etihad Campus (Metrolink)", type: "tram", notes: "Direct matchday option; busy post-match." },
-        { name: "Piccadilly Gardens (Tram hub)", type: "tram", notes: "Useful city-centre interchange." },
-      ],
-      tips: [
-        "Metrolink is the cleanest route; expect crowding after full-time.",
-        "Walking back toward the centre can beat tram queues if you’re able.",
-      ],
-    },
-    parking: {
-      availability: "medium",
-      summary: "More feasible than London, but still fills early on big games.",
-      officialLots: ["Use official event parking / pre-book where possible."],
-    },
-    foodDrink: [
-      { name: "Northern Quarter food & pubs", type: "mixed", notes: "Great visitor base; then tram out." },
-      { name: "City centre near Piccadilly", type: "mixed", notes: "Convenient if arriving by train." },
-    ],
-    stay: {
-      bestAreas: [
-        { area: "Manchester city centre", notes: "Best base for a weekend." },
-        { area: "Northern Quarter", notes: "Food/nightlife heavy; walkable." },
-      ],
-      budgetAreas: [{ area: "Near Victoria / Salford edge", budgetFriendly: true, notes: "Sometimes better value; still close." }],
-    },
-    arrivalTips: ["Leave buffer time if you’re catching a long-distance train after the match.", "Tram platforms can be managed/queued — normal on matchdays."],
-  },
-
-  "manchester-united": {
-    stadium: "Old Trafford",
-    city: "Manchester",
-    country: "England",
-    transport: {
-      primaryStops: [
-        { name: "Manchester Piccadilly", type: "train", notes: "Main arrival hub for visitors." },
-        { name: "Deansgate / Castlefield", type: "train", notes: "Useful connector area to Metrolink." },
-        { name: "Metrolink (Old Trafford area)", type: "tram", notes: "Standard route; follow matchday flow." },
-      ],
-      tips: [
-        "Expect crowd management post-match — it’s normal here.",
-        "For a smoother exit, wait 15–20 minutes or walk partway back toward the centre.",
-      ],
-    },
-    parking: {
-      availability: "medium",
-      summary: "Driving is possible but roads choke up. Pre-booked is best.",
-      officialLots: ["Use official parking if available; otherwise park out and tram in."],
-    },
-    foodDrink: [
-      { name: "Spinningfields / Deansgate pre-game", type: "mixed", notes: "Better choice than right by the stadium." },
-      { name: "Stadium-adjacent pubs", type: "pub", notes: "Atmosphere strong; queues expected." },
-    ],
-    stay: {
-      bestAreas: [
-        { area: "Manchester city centre", notes: "Best weekend base." },
-        { area: "Deansgate", notes: "Convenient for transport + nightlife." },
-      ],
-      budgetAreas: [{ area: "Near Piccadilly", budgetFriendly: true, notes: "Often cheaper than premium central spots." }],
-    },
-    arrivalTips: ["Build in time for slow dispersal if you’re doing a same-day return.", "Screenshot your ticket/booking in case signal is overloaded."],
-  },
 
   "liverpool": {
     stadium: "Anfield",
@@ -300,136 +253,144 @@ const premierLeagueLogistics: Record<string, MatchdayLogistics> = {
       primaryStops: [
         { name: "Liverpool Lime Street", type: "train", notes: "Main arrival station for most visitors." },
         { name: "Moorfields", type: "train", notes: "Useful city-centre stop; good for dispersal." },
-        { name: "Matchday buses from city centre", type: "bus", notes: "Often easiest; check signage/routing on the day." },
+        { name: "Matchday buses from city centre", type: "bus", notes: "Typically easiest option; follow signage/queues on the day." },
       ],
       tips: [
         "Anfield isn’t next to a major rail stop — most visitors use buses/taxis from the centre.",
-        "Post-match: walking part way back toward the centre can beat the taxi queue.",
+        "Post-match: walking partway back toward the centre can beat the taxi queue.",
       ],
     },
     parking: {
       availability: "medium",
-      summary: "Possible, but streets fill early on big games. Pre-book if you must drive.",
-      officialLots: ["Pre-booked/official parking is the only sane approach if driving."],
+      summary: "Possible but streets fill early on bigger games. You need a plan.",
+      officialLots: ["Pre-booked parking is the only sane approach if you must drive."],
     },
     foodDrink: [
-      { name: "Liverpool city centre (pre-game)", type: "mixed", notes: "Best variety; then travel out." },
-      { name: "Pubs near Anfield", type: "pub", notes: "Big matchday atmosphere; busy." },
+      { name: "Liverpool city centre (pre-game)", type: "mixed", notes: "Best variety; then bus/taxi out." },
+      { name: "Around Anfield approaches", type: "pub", notes: "Strong atmosphere; queues expected." },
     ],
     stay: {
       bestAreas: [
-        { area: "Liverpool city centre", notes: "Best for visitors; walkable + nightlife." },
-        { area: "Baltic Triangle", notes: "Trendy base; strong food/bars." },
+        { area: "Liverpool city centre", notes: "Best for a weekend: walkable + nightlife." },
+        { area: "Baltic Triangle", notes: "Trendy base; strong food/bar options." },
       ],
-      budgetAreas: [{ area: "Edge Hill", budgetFriendly: true, notes: "Can be cheaper; check exact property area + transport." }],
+      budgetAreas: [{ area: "Edge Hill", budgetFriendly: true, notes: "Can be cheaper; check exact location and rail links." }],
     },
-    arrivalTips: ["If you’re coming from Manchester by train, keep return flexible.", "Arrive earlier if you want a calm entry and pre-match food."],
+    arrivalTips: [
+      "If you’re arriving from Manchester by train, keep return times flexible — dispersal can be slow.",
+      "Arrive early if you want a no-stress entry and time to soak up atmosphere.",
+    ],
+  },
+
+  "manchester-city": {
+    stadium: "Etihad Stadium",
+    city: "Manchester",
+    country: "England",
+    transport: {
+      primaryStops: [
+        { name: "Manchester Piccadilly", type: "train", notes: "Main arrival hub for visitors." },
+        { name: "Etihad Campus (Metrolink)", type: "tram", notes: "Direct matchday option; can be crowded post-match." },
+        { name: "Piccadilly Gardens (Metrolink hub)", type: "tram", notes: "Useful city-centre interchange." },
+      ],
+      tips: [
+        "Tram is the cleanest route, but platforms can be controlled/queued after full-time.",
+        "If you’re able, walking part-way back toward the centre can be quicker than queueing immediately.",
+      ],
+    },
+    parking: {
+      availability: "medium",
+      summary: "More feasible than London, but still fills early on big fixtures.",
+      officialLots: ["Use official event parking where possible; otherwise park out and tram in."],
+    },
+    foodDrink: [
+      { name: "Northern Quarter", type: "mixed", notes: "Best visitor area for food/drink pre-game; then tram out." },
+      { name: "City centre near Piccadilly", type: "mixed", notes: "Convenient if arriving by train." },
+    ],
+    stay: {
+      bestAreas: [
+        { area: "Manchester city centre", notes: "Best base for weekend trips." },
+        { area: "Northern Quarter", notes: "Food/nightlife heavy; walkable." },
+      ],
+      budgetAreas: [{ area: "Salford / near Victoria", budgetFriendly: true, notes: "Sometimes better value; still close." }],
+    },
+    arrivalTips: [
+      "If connecting back to London by train, leave buffer time after full-time.",
+      "If kickoff is TBC, avoid tight same-day travel connections.",
+    ],
+  },
+
+  "manchester-united": {
+    stadium: "Old Trafford",
+    city: "Manchester",
+    country: "England",
+    transport: {
+      primaryStops: [
+        { name: "Manchester Piccadilly", type: "train", notes: "Main arrival hub for tourists." },
+        { name: "Deansgate / Castlefield", type: "train", notes: "Useful connector area for tram/Metrolink routes." },
+        { name: "Metrolink (Old Trafford area)", type: "tram", notes: "Standard route; follow matchday flow." },
+      ],
+      tips: [
+        "Expect crowd management post-match — normal around Old Trafford.",
+        "For a smoother exit: hang back 15–20 minutes or walk partway toward Deansgate before boarding.",
+      ],
+    },
+    parking: {
+      availability: "medium",
+      summary: "Driving is possible but roads choke. Pre-booked parking helps a lot.",
+      officialLots: ["Use official parking where available; otherwise park out and tram in."],
+    },
+    foodDrink: [
+      { name: "Spinningfields / Deansgate (pre-game)", type: "mixed", notes: "Better variety than right next to the stadium." },
+      { name: "Trafford area (post-match practical)", type: "mixed", notes: "Expect crowds; plan a little extra time." },
+    ],
+    stay: {
+      bestAreas: [
+        { area: "Manchester city centre", notes: "Best weekend base." },
+        { area: "Deansgate", notes: "Convenient for transport + nightlife." },
+      ],
+      budgetAreas: [{ area: "Near Piccadilly", budgetFriendly: true, notes: "Often better value than premium central spots." }],
+    },
+    arrivalTips: [
+      "If you’re doing a same-day return, plan for slower dispersal than you expect.",
+      "Screenshot tickets/booking confirmations in case mobile signal is overloaded.",
+    ],
   },
 
   "everton": {
-    stadium: "Goodison Park",
+    stadium: "Hill Dickinson Stadium (Bramley-Moore Dock)",
     city: "Liverpool",
     country: "England",
     transport: {
       primaryStops: [
-        { name: "Liverpool Lime Street", type: "train", notes: "Main arrival hub; connect onward via local routes." },
-        { name: "City centre bus corridors", type: "bus", notes: "Common approach; allow time for matchday traffic." },
-        { name: "Taxi drop-off (short walk remaining)", type: "taxi", notes: "Useful if time-tight; avoid being dropped right at the gates." },
+        { name: "Liverpool Lime Street", type: "train", notes: "Main arrival hub for most visitors." },
+        { name: "City centre connections", type: "bus", notes: "Matchday routing can vary; follow official/event signage on the day." },
+        { name: "Moorfields", type: "train", notes: "Useful for city-centre dispersal and onward planning." },
       ],
       tips: [
-        "Most visitors base in the city centre and travel out by bus/taxi.",
-        "Post-match taxi queues surge—walk 10 minutes away before ordering.",
+        "As a visitor, treat Liverpool city centre as your base and connect from there.",
+        "Post-match: allow extra time for crowd dispersal around the dock area.",
       ],
     },
     parking: {
       availability: "medium",
-      summary: "Possible but roads and residential areas get congested close to kickoff.",
-      officialLots: ["If driving, arrive early and don’t rely on last-minute street parking."],
+      summary: "Possible with planning, but expect event traffic. Pre-book where you can.",
+      officialLots: ["Prefer official/pre-booked event parking or city-centre car parks + onward travel."],
     },
     foodDrink: [
-      { name: "Liverpool city centre (pre/post)", type: "mixed", notes: "Best choice density for visitors." },
-      { name: "Near-stadium pubs", type: "pub", notes: "Atmosphere strong; busy and queue-heavy." },
+      { name: "Liverpool city centre (pre/post)", type: "mixed", notes: "Best variety and easiest for tourists." },
+      { name: "Dock/Waterfront area (if staying nearby)", type: "mixed", notes: "Practical option; crowds expected on matchdays." },
     ],
     stay: {
       bestAreas: [
-        { area: "Liverpool city centre", notes: "Best weekend base." },
-        { area: "Waterfront / docks", notes: "Good city-break vibe + restaurants." },
+        { area: "Liverpool city centre", notes: "Safest bet for logistics + nightlife." },
+        { area: "Waterfront / docks", notes: "Good weekend feel; check exact walking/transit practicality." },
       ],
-      budgetAreas: [{ area: "Edge-of-centre", budgetFriendly: true, notes: "Often better value; check transport links." }],
+      budgetAreas: [{ area: "Edge Hill area", budgetFriendly: true, notes: "Often cheaper; ensure transport links fit your plan." }],
     },
-    arrivalTips: ["Don’t leave stadium travel to the last hour if arriving by train.", "Keep return bookings flexible if you want a calmer exit."],
-  },
-
-  /* -------------------------------------------------------------------------- */
-  /* Midlands                                                                    */
-  /* -------------------------------------------------------------------------- */
-
-  "aston-villa": {
-    stadium: "Villa Park",
-    city: "Birmingham",
-    country: "England",
-    transport: {
-      primaryStops: [
-        { name: "Birmingham New Street", type: "train", notes: "Main arrival hub; connect onward by local rail." },
-        { name: "Witton (Train)", type: "train", notes: "Common matchday station for Villa Park." },
-        { name: "Aston (Train)", type: "train", notes: "Alternative nearby station; check matchday routes." },
-      ],
-      tips: [
-        "Birmingham is easy for visitors: strong rail links + lots of hotels.",
-        "If you’re coming from London/Manchester, New Street makes it simple.",
-      ],
-    },
-    parking: {
-      availability: "medium",
-      summary: "More doable than London, but plan ahead on big games.",
-      officialLots: ["Use official/pre-booked parking if possible; otherwise park near a rail stop and go in."],
-    },
-    foodDrink: [
-      { name: "Birmingham city centre food/bar districts", type: "mixed", notes: "Most choice before heading out." },
-      { name: "Jewellery Quarter", type: "mixed", notes: "Great pre/post spot if you want nicer options." },
+    arrivalTips: [
+      "If kickoff timing is uncertain, book flexible transport and avoid tight return connections.",
+      "Arrive early if you want to explore the waterfront area without rushing.",
     ],
-    stay: {
-      bestAreas: [
-        { area: "City centre / near New Street", notes: "Best base; easiest logistics." },
-        { area: "Jewellery Quarter", notes: "Good vibe + food; short hop to centre." },
-      ],
-      budgetAreas: [{ area: "Digbeth edge", budgetFriendly: true, notes: "Often better value; check exact area." }],
-    },
-    arrivalTips: ["Use rail where possible to avoid traffic.", "If you’re doing a weekend, Birmingham is strong for hotel value."],
-  },
-
-  "nottingham-forest": {
-    stadium: "The City Ground",
-    city: "Nottingham",
-    country: "England",
-    transport: {
-      primaryStops: [
-        { name: "Nottingham Station", type: "train", notes: "Main arrival hub; connect onward via tram/bus/taxi." },
-        { name: "Tram network", type: "tram", notes: "Useful depending on hotel location; check matchday frequency." },
-        { name: "City centre bus/taxi", type: "bus", notes: "Practical last-mile option; allow time for traffic." },
-      ],
-      tips: [
-        "Base yourself central and travel out with margin — matchday routes can bottleneck.",
-        "Post-match: walking away from the immediate stadium area makes taxis much easier.",
-      ],
-    },
-    parking: {
-      availability: "medium",
-      summary: "Possible, but matchday congestion is real. Park away and finish by public transport if you can.",
-      officialLots: ["Prefer pre-booked/official options where available; avoid last-minute street parking."],
-    },
-    foodDrink: [
-      { name: "City centre (Lace Market / Hockley style areas)", type: "mixed", notes: "Best pre-game density for visitors." },
-      { name: "Old Market Square area", type: "mixed", notes: "Practical and central." },
-    ],
-    stay: {
-      bestAreas: [
-        { area: "City centre", notes: "Best base; walkable + nightlife." },
-        { area: "Lace Market", notes: "Good weekend vibe + food." },
-      ],
-      budgetAreas: [{ area: "Near station / edge-of-centre", budgetFriendly: true, notes: "Often better value; easy access." }],
-    },
-    arrivalTips: ["Arrive early if you want relaxed entry.", "Keep return travel flexible if you’re catching a train."],
   },
 
   /* -------------------------------------------------------------------------- */
@@ -442,32 +403,35 @@ const premierLeagueLogistics: Record<string, MatchdayLogistics> = {
     country: "England",
     transport: {
       primaryStops: [
-        { name: "Newcastle Central Station", type: "train", notes: "Main arrival hub; walkable to stadium." },
+        { name: "Newcastle Central Station", type: "train", notes: "Main arrival hub; walkable to the stadium." },
         { name: "St James (Metro)", type: "metro", notes: "Closest Metro stop; very convenient." },
-        { name: "Monument (Metro)", type: "metro", notes: "Central stop; great for food/bars + short walk." },
+        { name: "Monument (Metro)", type: "metro", notes: "Central stop; great for food/drink + short walk." },
       ],
       tips: [
-        "Newcastle is elite for visitors: compact city + walkable stadium.",
-        "Base central and you can do matchday without taxis.",
+        "Newcastle is ideal for visitors: compact city + walkable stadium.",
+        "Base yourself central and you can do matchday without taxis at all.",
       ],
     },
     parking: {
       availability: "medium",
-      summary: "Possible via city-centre car parks, but matchday traffic can slow you down.",
-      officialLots: ["Use city-centre car parks and walk/Metro. Don’t aim to park right by the ground."],
+      summary: "Possible using city-centre car parks, but matchday traffic can slow you down.",
+      officialLots: ["Use city-centre car parks and walk/Metro. Don’t aim to park right next to the ground."],
     },
     foodDrink: [
-      { name: "City centre bar streets", type: "bar", notes: "Loads of choice; can be lively." },
-      { name: "Grey Street / Quayside food areas", type: "food", notes: "Better sit-down options; strong pre-game plan." },
+      { name: "City centre (near Monument)", type: "mixed", notes: "Easiest pre-game hub with lots of choice." },
+      { name: "Quayside (post-match)", type: "food", notes: "Better sit-down options; great for a weekend vibe." },
     ],
     stay: {
       bestAreas: [
         { area: "City centre", notes: "Perfect base: walkable + nightlife." },
-        { area: "Quayside", notes: "Great weekend vibe + restaurants." },
+        { area: "Quayside", notes: "Good weekend feel + restaurants." },
       ],
       budgetAreas: [{ area: "Near Central Station", budgetFriendly: true, notes: "Often best value for visitors." }],
     },
-    arrivalTips: ["If you’re doing a weekend: Newcastle is top-tier for football + city break.", "Book return trains with buffer if you want post-match drinks/food."],
+    arrivalTips: [
+      "If you want a drink after full-time, book return trains with buffer.",
+      "This is one of the easiest ‘football + city break’ combinations in England.",
+    ],
   },
 
   "sunderland": {
@@ -476,71 +440,118 @@ const premierLeagueLogistics: Record<string, MatchdayLogistics> = {
     country: "England",
     transport: {
       primaryStops: [
-        { name: "Sunderland Station", type: "train", notes: "Main arrival hub; connect onward by local routes." },
-        { name: "Tyne and Wear Metro", type: "metro", notes: "Often the most reliable in/out option on matchday." },
-        { name: "Newcastle Central (visitor base)", type: "train", notes: "Common approach: stay Newcastle, travel to Sunderland." },
+        { name: "Sunderland (Rail/Metro)", type: "train", notes: "Key arrival point; connect onward locally." },
+        { name: "Stadium of Light (Metro)", type: "metro", notes: "Very convenient stop on matchdays." },
+        { name: "Newcastle Central Station", type: "train", notes: "Common tourist base; connect via Metro/rail." },
       ],
       tips: [
-        "Many visitors base in Newcastle and use rail/Metro into Sunderland for matchday.",
-        "Post-match: don’t plan an ultra-tight connection — crowding is normal.",
+        "If you’re visiting, consider staying in Newcastle and day-tripping to the match.",
+        "Metro is usually the simplest way to handle matchday crowds.",
       ],
     },
     parking: {
       availability: "medium",
-      summary: "More feasible than major cities, but roads still thicken around kickoff/full-time.",
-      officialLots: ["If driving, arrive early and aim for pre-booked/event parking if available."],
+      summary: "More feasible than major cities, but traffic still builds near kickoff.",
+      officialLots: ["If driving, plan arrival early and use signed event parking where available."],
     },
     foodDrink: [
-      { name: "Newcastle pre-game then travel", type: "mixed", notes: "Best variety if you’re doing a weekend." },
-      { name: "Sunderland city centre options", type: "mixed", notes: "Practical, but busy close to kickoff." },
+      { name: "Newcastle city centre (pre/post base)", type: "mixed", notes: "Best variety for visitors if you’re staying up the road." },
+      { name: "Sunderland city centre", type: "mixed", notes: "Practical option; keep timings flexible." },
     ],
     stay: {
       bestAreas: [
-        { area: "Newcastle city centre", notes: "Best tourist base; easy travel to Sunderland." },
-        { area: "Sunderland city centre", notes: "Simplest matchday logistics; quieter base." },
+        { area: "Newcastle city centre", notes: "Best tourist base; easy connection to Sunderland." },
+        { area: "Sunderland centre", notes: "Works if you want a quieter base; check exact location." },
       ],
-      budgetAreas: [{ area: "Near Sunderland station", budgetFriendly: true, notes: "Often best value if staying local." }],
+      budgetAreas: [{ area: "Near Sunderland station", budgetFriendly: true, notes: "Often better value; good connectivity." }],
     },
-    arrivalTips: ["Allow extra time if using Metro after full-time.", "Keep your phone charged for tickets + route checks."],
+    arrivalTips: [
+      "Have a clear plan for the return Metro/rail — queues can be heavy but move steadily.",
+      "Arrive early if you want to explore the riverside area without rushing.",
+    ],
   },
 
   /* -------------------------------------------------------------------------- */
-  /* Other: compact / smaller-capacity clubs                                    */
+  /* Midlands / Yorkshire                                                       */
   /* -------------------------------------------------------------------------- */
 
-  "brentford": {
-    stadium: "Gtech Community Stadium",
-    city: "London",
+  "aston-villa": {
+    stadium: "Villa Park",
+    city: "Birmingham",
     country: "England",
     transport: {
       primaryStops: [
-        { name: "Kew Bridge (Rail)", type: "train", notes: "Common closest station; short walk." },
-        { name: "Gunnersbury (Tube/Overground)", type: "train", notes: "District + Overground; strong alternative." },
-        { name: "Hammersmith (interchange)", type: "metro", notes: "Useful hub for many routes." },
+        { name: "Birmingham New Street", type: "train", notes: "Main arrival hub; connect onward by local rail." },
+        { name: "Witton (Train)", type: "train", notes: "Common matchday station for Villa Park." },
+        { name: "Aston (Train)", type: "train", notes: "Alternative nearby station; routes vary by day." },
       ],
       tips: [
-        "This is rail + walk. Don’t bank on taxis near kickoff.",
-        "If you want a smoother exit, wait 10–15 minutes after full-time.",
+        "Use rail for the final stretch where possible — driving near kickoff is slower than it looks.",
+        "If you’re coming from London/Manchester, New Street makes logistics easy.",
       ],
     },
     parking: {
-      availability: "hard",
-      summary: "Parking is tight and controlled; driving is rarely worth the hassle.",
-      officialLots: ["Use public transport; if driving, park further out and finish by rail."],
+      availability: "medium",
+      summary: "More doable than London, but plan ahead on big fixtures.",
+      officialLots: ["Use official/pre-booked parking if possible; otherwise park near a rail stop and go in."],
     },
     foodDrink: [
-      { name: "Chiswick / Kew food areas", type: "food", notes: "Better density than immediate stadium perimeter." },
-      { name: "Central London pre-game then rail out", type: "mixed", notes: "Best variety if you’re making a day of it." },
+      { name: "Birmingham city centre", type: "mixed", notes: "Best visitor base for food/drink pre-game." },
+      { name: "Jewellery Quarter", type: "mixed", notes: "Good for nicer pre/post match options." },
     ],
     stay: {
       bestAreas: [
-        { area: "Hammersmith", notes: "Great transport and hotel options." },
-        { area: "Paddington", notes: "Hub base if doing London tourism too." },
+        { area: "City centre / near New Street", notes: "Best tourist base; easiest logistics." },
+        { area: "Jewellery Quarter", notes: "Great vibe + food; short hop to centre." },
       ],
-      budgetAreas: [{ area: "Ealing", budgetFriendly: true, notes: "Often better value; still connected." }],
+      budgetAreas: [{ area: "Digbeth edge", budgetFriendly: true, notes: "Often better value; check property surroundings carefully." }],
     },
-    arrivalTips: ["Arrive early if you want food/drink nearby—places get busy fast.", "Use rail/Tube; driving will feel slow."],
+    arrivalTips: [
+      "If you’re doing a weekend: Birmingham often has strong value hotels and easy rail links.",
+      "Allow extra time if you’re unfamiliar with local rail stations around the ground.",
+    ],
   },
+
+  "leeds-united": {
+    stadium: "Elland Road",
+    city: "Leeds",
+    country: "England",
+    transport: {
+      primaryStops: [
+        { name: "Leeds Station", type: "train", notes: "Main arrival hub for visitors." },
+        { name: "City centre matchday buses", type: "bus", notes: "Common way to reach Elland Road; follow signage/queues." },
+        { name: "Taxi/rideshare from centre", type: "other", notes: "Works if timed early; heavy traffic near kickoff." },
+      ],
+      tips: [
+        "If you’re visiting, base yourself in the city centre and travel to the ground from there.",
+        "Post-match: buses and taxis queue hard — consider waiting 15 minutes or walking away from the stadium district first.",
+      ],
+    },
+    parking: {
+      availability: "medium",
+      summary: "Driving is possible but congestion is real. Plan early arrival if you must drive.",
+      officialLots: ["Use official/pre-booked parking where available; avoid last-minute street searching."],
+    },
+    foodDrink: [
+      { name: "Leeds city centre", type: "mixed", notes: "Best variety and easiest for tourists." },
+      { name: "Areas near the ground (practical)", type: "mixed", notes: "Expect crowds; keep timing flexible." },
+    ],
+    stay: {
+      bestAreas: [
+        { area: "Leeds city centre", notes: "Best base for visitors; walkable + nightlife." },
+        { area: "Near the station", notes: "Most convenient for day trips and returns." },
+      ],
+      budgetAreas: [{ area: "South/West Leeds edge", budgetFriendly: true, notes: "Can be cheaper; check transit practicality and area." }],
+    },
+    arrivalTips: [
+      "If you’re returning by train same day, don’t cut it tight — dispersal can be slow.",
+      "Have a plan for transport back into the centre; it’s often the hardest part.",
+    ],
+  },
+
+  /* -------------------------------------------------------------------------- */
+  /* South Coast                                                                 */
+  /* -------------------------------------------------------------------------- */
 
   "afc-bournemouth": {
     stadium: "Vitality Stadium",
@@ -548,32 +559,34 @@ const premierLeagueLogistics: Record<string, MatchdayLogistics> = {
     country: "England",
     transport: {
       primaryStops: [
-        { name: "Bournemouth Station", type: "train", notes: "Main arrival hub; onward by bus/taxi." },
-        { name: "Town centre buses", type: "bus", notes: "Often simplest; check matchday routing/signage." },
-        { name: "Taxi drop-off (short walk remaining)", type: "taxi", notes: "Useful if time-tight; expect traffic near kickoff." },
+        { name: "Bournemouth Station", type: "train", notes: "Main arrival point for most visitors." },
+        { name: "Town centre connections", type: "bus", notes: "Local buses/taxis typically used for the last leg." },
+        { name: "Coach / intercity bus arrivals", type: "bus", notes: "If you’re coming from London, coaches can be cost-effective." },
       ],
       tips: [
-        "Treat Bournemouth as a weekend trip: base in town, then travel out early.",
-        "If arriving close to kickoff, taxis can crawl — build margin.",
+        "Base yourself around the town centre for the easiest logistics.",
+        "Post-match: taxis can be slow—walking a bit away from the ground helps pickup.",
       ],
     },
     parking: {
-      availability: "hard",
-      summary: "Local roads and a small-stadium area make parking awkward on matchday.",
-      officialLots: ["Only rely on pre-booked/official parking or park further out and taxi/bus in."],
+      availability: "medium",
+      summary: "Possible, but space is limited and traffic builds close to kickoff.",
+      officialLots: ["If driving, arrive early and use official/pre-booked options where available."],
     },
     foodDrink: [
-      { name: "Bournemouth town centre (pre-game)", type: "mixed", notes: "Best variety before heading to stadium area." },
-      { name: "Station-area quick food", type: "food", notes: "Practical if arriving close to kickoff." },
+      { name: "Bournemouth town centre", type: "mixed", notes: "Best variety; easy before/after." },
+      { name: "Near the stadium (practical)", type: "mixed", notes: "Limited choice; expect crowds." },
     ],
     stay: {
       bestAreas: [
-        { area: "Town centre / seafront", notes: "Best weekend vibe." },
-        { area: "Near the station", notes: "Practical for rail travellers." },
+        { area: "Town centre / seafront", notes: "Best for a weekend; walkable and tourist-friendly." },
       ],
-      budgetAreas: [{ area: "Edge-of-centre", budgetFriendly: true, notes: "Often better value; confirm transport options." }],
+      budgetAreas: [{ area: "Near the station", budgetFriendly: true, notes: "Often better value; practical for arrivals/returns." }],
     },
-    arrivalTips: ["Arrive earlier than you think if you’re driving.", "Keep return travel flexible if day-tripping."],
+    arrivalTips: [
+      "If you’re day-tripping, keep return travel flexible — queues can add time.",
+      "Arrive early if you want a relaxed pre-game in town.",
+    ],
   },
 
   "brighton": {
@@ -584,136 +597,37 @@ const premierLeagueLogistics: Record<string, MatchdayLogistics> = {
       primaryStops: [
         { name: "Brighton Station", type: "train", notes: "Most visitors arrive here." },
         { name: "Falmer (Train)", type: "train", notes: "Key matchday stop for the stadium; follow signage." },
-        { name: "London Victoria / London Bridge routes", type: "train", notes: "Common route for day-trippers." },
+        { name: "London Victoria / London Bridge routes", type: "train", notes: "Common visitor route from London." },
       ],
       tips: [
-        "If you’re staying in Brighton, train to Falmer is the default move.",
-        "If you’re day-tripping from London, expect busy return trains post-match.",
+        "If you’re staying in Brighton, train to Falmer is the standard move.",
+        "If you’re day-tripping from London: expect busy return trains post-match.",
       ],
     },
     parking: {
       availability: "medium",
-      summary: "Driving can work but traffic and the last-mile are awkward. Train usually wins.",
+      summary: "Possible but often slower than rail. Train is usually smarter.",
       officialLots: ["If driving: use official/pre-book parking where offered; otherwise plan remote parking + rail."],
     },
     foodDrink: [
-      { name: "The Lanes (food)", type: "food", notes: "Strong density; easy before heading out." },
-      { name: "Seafront pubs/bars", type: "pub", notes: "Tourist-friendly; good pre-game base." },
+      { name: "The Lanes", type: "food", notes: "Strong food density; easy before heading out." },
+      { name: "Seafront area", type: "bar", notes: "Tourist-friendly pre/post vibe." },
     ],
     stay: {
       bestAreas: [
         { area: "Seafront", notes: "Best tourist base + vibe." },
-        { area: "The Lanes", notes: "Great for food + walking." },
+        { area: "The Lanes", notes: "Best for food + walking." },
       ],
       budgetAreas: [{ area: "Preston Park / Hove edge", budgetFriendly: true, notes: "Often better value; still accessible." }],
     },
-    arrivalTips: ["Brighton is ideal for a city-break weekend.", "Keep return travel flexible if you want a calm exit."],
-  },
-
-  "leeds-united": {
-    stadium: "Elland Road",
-    city: "Leeds",
-    country: "England",
-    transport: {
-      primaryStops: [
-        { name: "Leeds Station", type: "train", notes: "Main arrival hub for visitors." },
-        { name: "City centre buses/taxis", type: "bus", notes: "Typical matchday route to Elland Road; allow time." },
-        { name: "Walk/short taxi from central base", type: "other", notes: "Depends on weather and timing; build margin." },
-      ],
-      tips: [
-        "Most visitors base in the city centre and travel out by bus/taxi.",
-        "Post-match taxi queues can be heavy — walk away from the stadium area before ordering.",
-      ],
-    },
-    parking: {
-      availability: "medium",
-      summary: "Driving is possible but can be chaotic on big fixtures. Expect slow roads near kickoff.",
-      officialLots: ["If driving: only rely on pre-booked/official options or park out and taxi/bus in."],
-    },
-    foodDrink: [
-      { name: "Leeds city centre food/nightlife districts", type: "mixed", notes: "Best pre-game choice density." },
-      { name: "Station-area quick options", type: "food", notes: "Useful if arriving late." },
+    arrivalTips: [
+      "Brighton is a great weekend combo: match + beach/town.",
+      "If kickoff is early/late, plan your London return to avoid last-train panic.",
     ],
-    stay: {
-      bestAreas: [
-        { area: "Leeds city centre", notes: "Best weekend base." },
-        { area: "Near the station", notes: "Best for train travellers." },
-      ],
-      budgetAreas: [{ area: "Edge-of-centre", budgetFriendly: true, notes: "Often better value; check transport links." }],
-    },
-    arrivalTips: ["If you’re doing a same-day return, leave buffer time after full-time.", "Arrive early if you want a relaxed entry."],
-  },
-
-  "burnley": {
-    stadium: "Turf Moor",
-    city: "Burnley",
-    country: "England",
-    transport: {
-      primaryStops: [
-        { name: "Manchester (visitor base)", type: "train", notes: "Common base city; connect by regional rail." },
-        { name: "Burnley rail stations", type: "train", notes: "Local stations serve the town; allow time for last-mile." },
-        { name: "Town centre taxis/buses", type: "bus", notes: "Practical for last-mile; demand rises near kickoff." },
-      ],
-      tips: [
-        "Approach as a regional trip: base Manchester or stay locally.",
-        "If relying on rail, build margin — regional connections can be less frequent.",
-      ],
-    },
-    parking: {
-      availability: "medium",
-      summary: "More feasible than big cities, but local roads still thicken near kickoff.",
-      officialLots: ["If driving, arrive early and consider parking a bit further out and walking in."],
-    },
-    foodDrink: [
-      { name: "Town centre pubs/food", type: "mixed", notes: "Most practical for visitors." },
-      { name: "Manchester pre-game then travel", type: "mixed", notes: "More choice if you’re doing a weekend." },
-    ],
-    stay: {
-      bestAreas: [
-        { area: "Manchester", notes: "Best weekend base; day-trip to Burnley." },
-        { area: "Burnley town centre", notes: "Simplest matchday logistics if staying local." },
-      ],
-      budgetAreas: [{ area: "Local edge-of-town hotels", budgetFriendly: true, notes: "Often better value; check taxi availability." }],
-    },
-    arrivalTips: ["Arrive early if you’re driving.", "Keep return travel flexible if using regional rail."],
-  },
-
-  "wolves": {
-    stadium: "Molineux Stadium",
-    city: "Wolverhampton",
-    country: "England",
-    transport: {
-      primaryStops: [
-        { name: "Wolverhampton Station", type: "train", notes: "Main arrival hub; stadium is typically walkable from central areas." },
-        { name: "Birmingham New Street (visitor base)", type: "train", notes: "Common base; easy regional rail connection." },
-        { name: "City centre buses/taxis", type: "bus", notes: "Useful if weather is poor; allow matchday time." },
-      ],
-      tips: [
-        "Many visitors base in Birmingham and do Wolves as a day trip.",
-        "If walking from the station, build in extra time for matchday crowds.",
-      ],
-    },
-    parking: {
-      availability: "medium",
-      summary: "More feasible than London, but central roads still slow near kickoff/full-time.",
-      officialLots: ["Pre-book official/event parking where possible; otherwise park centrally and walk."],
-    },
-    foodDrink: [
-      { name: "Wolverhampton city centre", type: "mixed", notes: "Most practical base for visitors." },
-      { name: "Birmingham pre/post then rail over", type: "mixed", notes: "More variety if you’re doing a weekend." },
-    ],
-    stay: {
-      bestAreas: [
-        { area: "Birmingham city centre", notes: "Best weekend base; simple rail to Wolverhampton." },
-        { area: "Wolverhampton centre", notes: "Practical if staying local." },
-      ],
-      budgetAreas: [{ area: "Near station / rail corridor", budgetFriendly: true, notes: "Often better value; check exact location." }],
-    },
-    arrivalTips: ["If returning by train, leave buffer for crowd dispersal.", "If driving, arrive early to avoid last-minute traffic."],
   },
 
   /* -------------------------------------------------------------------------- */
-  /* Alias key safety (same object)                                             */
+  /* Midlands / West                                                             */
   /* -------------------------------------------------------------------------- */
 
   "wolverhampton-wanderers": {
@@ -722,32 +636,153 @@ const premierLeagueLogistics: Record<string, MatchdayLogistics> = {
     country: "England",
     transport: {
       primaryStops: [
-        { name: "Wolverhampton Station", type: "train", notes: "Main arrival hub; stadium is typically walkable from central areas." },
-        { name: "Birmingham New Street (visitor base)", type: "train", notes: "Common base; easy regional rail connection." },
-        { name: "City centre buses/taxis", type: "bus", notes: "Useful if weather is poor; allow matchday time." },
+        { name: "Wolverhampton Station", type: "train", notes: "Main arrival point; walkable to the stadium." },
+        { name: "Birmingham New Street", type: "train", notes: "Major hub for visitors; quick onward rail." },
+        { name: "City centre walk routes", type: "walk", notes: "If you’re near the centre, walking is often easiest." },
       ],
       tips: [
-        "Many visitors base in Birmingham and do Wolves as a day trip.",
-        "If walking from the station, build in extra time for matchday crowds.",
+        "Wolves is visitor-friendly: station-to-stadium is manageable on foot.",
+        "If you’re day-tripping, keep a little buffer for post-match station crowds.",
       ],
     },
     parking: {
       availability: "medium",
-      summary: "More feasible than London, but central roads still slow near kickoff/full-time.",
-      officialLots: ["Pre-book official/event parking where possible; otherwise park centrally and walk."],
+      summary: "Driving is possible; still expect event congestion near kickoff.",
+      officialLots: ["Use official/pre-booked parking where available; otherwise use city-centre car parks and walk."],
     },
     foodDrink: [
-      { name: "Wolverhampton city centre", type: "mixed", notes: "Most practical base for visitors." },
-      { name: "Birmingham pre/post then rail over", type: "mixed", notes: "More variety if you’re doing a weekend." },
+      { name: "Wolverhampton city centre", type: "mixed", notes: "Practical pre/post option; easy logistics." },
+      { name: "Birmingham (weekend base)", type: "mixed", notes: "If you’re staying in Birmingham, do the match as a day trip." },
     ],
     stay: {
       bestAreas: [
-        { area: "Birmingham city centre", notes: "Best weekend base; simple rail to Wolverhampton." },
-        { area: "Wolverhampton centre", notes: "Practical if staying local." },
+        { area: "Wolverhampton city centre", notes: "Practical base; easy walk/rail." },
+        { area: "Birmingham city centre", notes: "Bigger weekend base; easy rail connection." },
       ],
-      budgetAreas: [{ area: "Near station / rail corridor", budgetFriendly: true, notes: "Often better value; check exact location." }],
+      budgetAreas: [{ area: "Near Wolverhampton Station", budgetFriendly: true, notes: "Often good value; most practical for visitors." }],
     },
-    arrivalTips: ["If returning by train, leave buffer for crowd dispersal.", "If driving, arrive early to avoid last-minute traffic."],
+    arrivalTips: [
+      "Walking from the station can be the fastest option versus waiting for taxis.",
+      "Arrive early if you want a relaxed pre-game meal in the centre.",
+    ],
+  },
+
+  "brentford": {
+    stadium: "Gtech Community Stadium",
+    city: "London",
+    country: "England",
+    transport: {
+      primaryStops: [
+        { name: "Kew Bridge (Rail)", type: "train", notes: "Closest rail stop; can be very busy post-match." },
+        { name: "Gunnersbury (Tube/Overground)", type: "metro", notes: "District line + Overground; strong alternative route." },
+        { name: "Chiswick / Brentford area buses", type: "bus", notes: "Useful for local movement; allow extra time." },
+      ],
+      tips: [
+        "If Kew Bridge is jammed, Gunnersbury can be a smarter exit route.",
+        "West London traffic is slow near kickoff—public transport is safer.",
+      ],
+    },
+    parking: {
+      availability: "hard",
+      summary: "Tight urban parking. Driving is risky without a pre-booked plan.",
+      officialLots: ["Prefer rail/Tube; if driving, park further out and use public transport in."],
+    },
+    foodDrink: [
+      { name: "Chiswick High Road", type: "mixed", notes: "Good density of options; short hop away." },
+      { name: "Around Gunnersbury / Kew Bridge", type: "mixed", notes: "Practical but busy on matchday." },
+    ],
+    stay: {
+      bestAreas: [
+        { area: "Hammersmith", notes: "Connected and practical for West London matches." },
+        { area: "Paddington", notes: "Good hotel supply + easy transport." },
+      ],
+      budgetAreas: [{ area: "Ealing", budgetFriendly: true, notes: "Often better value; good transport links into West London." }],
+    },
+    arrivalTips: [
+      "Arrive early if you want to avoid crowding on the footbridges and station approaches.",
+      "Have a fallback station in mind for the return.",
+    ],
+  },
+
+  /* -------------------------------------------------------------------------- */
+  /* Nottingham / Midlands                                                       */
+  /* -------------------------------------------------------------------------- */
+
+  "nottingham-forest": {
+    stadium: "The City Ground",
+    city: "Nottingham",
+    country: "England",
+    transport: {
+      primaryStops: [
+        { name: "Nottingham Station", type: "train", notes: "Main arrival hub for visitors." },
+        { name: "City centre tram network", type: "tram", notes: "Useful for moving around Nottingham; route planning depends on where you stay." },
+        { name: "Riverside walk routes", type: "walk", notes: "Depending on your base, walking can be a practical option." },
+      ],
+      tips: [
+        "Base yourself in the city centre and travel from there — it keeps everything simple.",
+        "Post-match: expect pinch points; walking away from the immediate stadium area helps.",
+      ],
+    },
+    parking: {
+      availability: "medium",
+      summary: "Possible, but matchday traffic builds. City-centre parking + onward movement is often easier.",
+      officialLots: ["Use city-centre car parks and continue by tram/walk where practical."],
+    },
+    foodDrink: [
+      { name: "Nottingham city centre", type: "mixed", notes: "Best visitor choice for variety and ease." },
+      { name: "West Bridgford area", type: "mixed", notes: "Popular local area; can be busy on matchday." },
+    ],
+    stay: {
+      bestAreas: [
+        { area: "Nottingham city centre", notes: "Best base for tourists; easy rail access." },
+      ],
+      budgetAreas: [{ area: "Near Nottingham Station", budgetFriendly: true, notes: "Often decent value and practical for returns." }],
+    },
+    arrivalTips: [
+      "If you’re day-tripping, plan a little buffer to get back to the station after full-time.",
+      "If you’re new to the city, keep your route simple: station → centre → match.",
+    ],
+  },
+
+  /* -------------------------------------------------------------------------- */
+  /* Lancashire / North West                                                     */
+  /* -------------------------------------------------------------------------- */
+
+  "burnley": {
+    stadium: "Turf Moor",
+    city: "Burnley",
+    country: "England",
+    transport: {
+      primaryStops: [
+        { name: "Burnley Manchester Road", type: "train", notes: "Useful rail stop depending on your route; check schedules." },
+        { name: "Burnley Central", type: "train", notes: "Another option; choose based on your arrival direction." },
+        { name: "Manchester (rail hub)", type: "train", notes: "Common base city for visitors; connect onward by train." },
+      ],
+      tips: [
+        "Many visitors base in Manchester and do the match as a rail day trip.",
+        "Check return train timings before kickoff so you’re not trapped after full-time.",
+      ],
+    },
+    parking: {
+      availability: "medium",
+      summary: "More feasible than big cities, but local congestion builds near kickoff.",
+      officialLots: ["Arrive early if driving; consider town parking and walking the last part."],
+    },
+    foodDrink: [
+      { name: "Manchester (pre/post base)", type: "mixed", notes: "Best variety if you’re using it as a weekend base." },
+      { name: "Burnley town centre", type: "mixed", notes: "Practical option; timing can be tight on day trips." },
+    ],
+    stay: {
+      bestAreas: [
+        { area: "Manchester city centre", notes: "Best weekend base; easy onward rail." },
+        { area: "Burnley town area", notes: "Works if you want a quieter overnight; check exact property location." },
+      ],
+      budgetAreas: [{ area: "Near Burnley rail stops", budgetFriendly: true, notes: "Often cheaper; useful for day trips." }],
+    },
+    arrivalTips: [
+      "If travelling by train, keep your return flexible and expect busy services post-match.",
+      "Arrive early if you want to orient yourself; smaller towns can have fewer last-minute options.",
+    ],
   },
 };
 
