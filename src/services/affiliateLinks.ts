@@ -135,13 +135,54 @@ export function buildAffiliateLinks(args: {
   const hotelsUrl = `https://www.expedia.co.uk/Hotel-Search?${expediaParams.join("&")}`;
 
   /* -------------------- */
-  /* Flights: Aviasales (approved) */
-  /* -------------------- */
-  const aviaParams: string[] = [];
-  if (AFFILIATE.aviasalesMarker) aviaParams.push(`marker=${enc(AFFILIATE.aviasalesMarker)}`);
-  // Keep destination hint; harmless if ignored.
-  aviaParams.push(`destination=${enc(query)}`);
-  const flightsUrl = `https://www.aviasales.com/?${aviaParams.join("&")}`;
+/* Flights: Aviasales (prefilled) */
+/* -------------------- */
+
+function cityToIata(city: string): string | null {
+  const map: Record<string, string> = {
+    Barcelona: "BCN",
+    Madrid: "MAD",
+    Rome: "FCO",
+    Milan: "MXP",
+    Paris: "CDG",
+    Lisbon: "LIS",
+    Porto: "OPO",
+    Amsterdam: "AMS",
+    Berlin: "BER",
+    Munich: "MUC",
+    Vienna: "VIE",
+    Prague: "PRG",
+    Budapest: "BUD",
+  };
+
+  const key = Object.keys(map).find(
+    k => k.toLowerCase() === city.trim().toLowerCase()
+  );
+
+  return key ? map[key] : null;
+}
+
+function formatDdMm(dateIso?: string): string | null {
+  if (!dateIso || !/^\d{4}-\d{2}-\d{2}$/.test(dateIso)) return null;
+  const [y, m, d] = dateIso.split("-");
+  return `${d}${m}`;
+}
+
+const destIata = cityToIata(city);
+const originIata = "MAN"; // Phase-1 default (later user profile)
+
+let flightsUrl: string;
+
+if (destIata && startDate && endDate) {
+  const dd = formatDdMm(startDate);
+  const rd = formatDdMm(endDate);
+
+  flightsUrl = `https://www.aviasales.com/search/${originIata}${dd}${destIata}${rd}` +
+    (AFFILIATE.aviasalesMarker ? `?marker=${enc(AFFILIATE.aviasalesMarker)}` : "");
+} else {
+  flightsUrl = `https://www.aviasales.com/` +
+    (AFFILIATE.aviasalesMarker ? `?marker=${enc(AFFILIATE.aviasalesMarker)}` : "");
+}
 
   /* -------------------- */
   /* Trains/Buses: fallback (UNTRACKED until affiliate) */
