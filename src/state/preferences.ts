@@ -9,20 +9,39 @@ export type PreferencesState = {
 
   /**
    * Preferred origin for flight searches.
-   * Use IATA CITY codes where possible (LON, NYC) not a single airport.
+   * Use IATA CITY codes where possible (LON, PAR, MIL) not a single airport.
    */
   preferredOriginIata: string; // e.g. "LON", "MAN"
 
   load: () => Promise<void>;
-  setPreferredOriginIata: (code: string) => Promise<void>;
+  setPreferredOriginIata: (codeOrLabel: string) => Promise<void>;
   clearAll: () => Promise<void>;
 };
 
 let inflightLoad: Promise<void> | null = null;
 
-function cleanUpper3(v: unknown, fallback: string) {
-  const s = String(v ?? "").trim().toUpperCase();
-  if (/^[A-Z]{3}$/.test(s)) return s;
+function extractIataFromAny(input: unknown): string | null {
+  const raw = String(input ?? "").trim();
+  if (!raw) return null;
+
+  // If it's already "ABC"
+  const direct = raw.toUpperCase();
+  if (/^[A-Z]{3}$/.test(direct)) return direct;
+
+  // If it contains "(ABC)"
+  const m = raw.match(/\(([A-Z]{3})\)/i);
+  if (m?.[1]) return String(m[1]).toUpperCase();
+
+  // If it contains " ABC " (rare)
+  const m2 = raw.match(/\b([A-Z]{3})\b/i);
+  if (m2?.[1]) return String(m2[1]).toUpperCase();
+
+  return null;
+}
+
+function cleanUpper3(input: unknown, fallback: string) {
+  const extracted = extractIataFromAny(input);
+  if (extracted && /^[A-Z]{3}$/.test(extracted)) return extracted;
   return fallback;
 }
 
@@ -44,7 +63,7 @@ export const usePreferencesStore = create<PreferencesState>((set, get) => ({
         const preferredOriginIata = cleanUpper3(raw?.preferredOriginIata, get().preferredOriginIata);
         set({ preferredOriginIata, loaded: true });
       } catch {
-        // Fail open
+        // fail open
         set({ loaded: true });
       }
     })().finally(() => {
@@ -54,8 +73,8 @@ export const usePreferencesStore = create<PreferencesState>((set, get) => ({
     return inflightLoad;
   },
 
-  setPreferredOriginIata: async (code) => {
-    const next = cleanUpper3(code, get().preferredOriginIata);
+  setPreferredOriginIata: async (codeOrLabel) => {
+    const next = cleanUpper3(codeOrLabel, get().preferredOriginIata);
 
     // optimistic
     set({ preferredOriginIata: next, loaded: true });
@@ -95,8 +114,8 @@ const preferencesStore = {
     return String(s.preferredOriginIata || "LON").trim().toUpperCase();
   },
 
-  setPreferredOriginIata: async (code: string) => {
-    await usePreferencesStore.getState().setPreferredOriginIata(code);
+  setPreferredOriginIata: async (codeOrLabel: string) => {
+    await usePreferencesStore.getState().setPreferredOriginIata(codeOrLabel);
   },
 
   clearAll: async () => {
