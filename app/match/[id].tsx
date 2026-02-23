@@ -113,7 +113,7 @@ function daysUntilIso(iso: string) {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Ticket routing (Sportsevents365 + Official) */
+/* Home-ticket routing (Sportsevents365 + Official) */
 /* -------------------------------------------------------------------------- */
 
 const SE365_AID = "69834e80ec9d3";
@@ -149,8 +149,12 @@ function buildSE365SearchUrl(matchQuery: string) {
   return `${SE365_SEARCH_BASE}?a_aid=${SE365_AID}&q=${enc(matchQuery)}`;
 }
 
-function buildGoogleTicketsUrl(matchQuery: string) {
-  return `https://www.google.com/search?q=${enc(matchQuery + " tickets")}`;
+/**
+ * We keep this as "home tickets" so users don’t infer anything else.
+ * It’s a fallback web search; we don’t present it as “official”.
+ */
+function buildGoogleHomeTicketsUrl(matchQuery: string) {
+  return `https://www.google.com/search?q=${enc(matchQuery + " home tickets")}`;
 }
 
 const OFFICIAL_TICKETS_BY_TEAM: Record<string, string> = {
@@ -184,7 +188,7 @@ function normalizeTeamKey(name?: string) {
     .trim();
 }
 
-function buildOfficialTicketsUrl(homeTeamName?: string) {
+function buildOfficialHomeTicketsUrl(homeTeamName?: string) {
   const key = normalizeTeamKey(homeTeamName);
   if (!key) return null;
 
@@ -232,7 +236,7 @@ function buildDisruptionUrl(city?: string) {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Ticket guide helpers */
+/* Ticket guide helpers (HOME CLUB ONLY) */
 /* -------------------------------------------------------------------------- */
 
 function difficultyLabel(d: TicketDifficulty) {
@@ -371,7 +375,7 @@ export default function MatchDetailScreen() {
     };
   }, []);
 
-  // Tickets modal
+  // Home tickets modal
   const [ticketModal, setTicketModal] = useState<TicketModalState>({ open: false });
   const closeTicketModal = useCallback(() => setTicketModal({ open: false }), []);
   const openTicketModal = useCallback(() => setTicketModal({ open: true }), []);
@@ -529,8 +533,8 @@ export default function MatchDetailScreen() {
     return buildSE365SearchUrl(matchQuery);
   }, [se365EventId, matchQuery]);
 
-  const officialTicketsUrl = useMemo(() => buildOfficialTicketsUrl(home), [home]);
-  const googleTicketsUrl = useMemo(() => buildGoogleTicketsUrl(matchQuery), [matchQuery]);
+  const officialHomeTicketsUrl = useMemo(() => buildOfficialHomeTicketsUrl(home), [home]);
+  const googleHomeTicketsUrl = useMemo(() => buildGoogleHomeTicketsUrl(matchQuery), [matchQuery]);
 
   const mapsUrl = useMemo(() => buildMapsVenueUrl(venue, city), [venue, city]);
   const stadiumInfoUrl = useMemo(() => buildStadiumInfoUrl(venue, home, city), [venue, home, city]);
@@ -540,7 +544,7 @@ export default function MatchDetailScreen() {
   const parkingUrl = useMemo(() => buildParkingUrl(venue, city), [venue, city]);
   const disruptionUrl = useMemo(() => buildDisruptionUrl(city), [city]);
 
-  // Ticket guide (home club)
+  // Ticket guide (HOME CLUB ONLY)
   const ticketGuide = useMemo(() => getTicketGuide(home), [home]);
 
   // Trip stability chip (kickoff + ticket difficulty)
@@ -555,7 +559,7 @@ export default function MatchDetailScreen() {
     return styles.chipUncertain;
   }, [tripStability]);
 
-  const ticketsSub = useMemo(() => {
+  const homeTicketsSub = useMemo(() => {
     const when = kickoffDateOnly ? ` • ${kickoffDateOnly}` : "";
     const base = `${home} vs ${away}${when}`;
 
@@ -611,18 +615,18 @@ export default function MatchDetailScreen() {
 
     const stabilityLine = `Trip stability: ${tripStability.toUpperCase()}\n`;
 
-    const guideLine = ticketGuide ? `Ticket difficulty (home club): ${difficultyLabel(ticketGuide.difficulty)}\n` : "";
+    const guideLine = ticketGuide ? `Home ticket difficulty: ${difficultyLabel(ticketGuide.difficulty)}\n` : "";
 
     const seLine = se365EventId
-      ? `Tickets (Sportsevents365 match page): ${se365PrimaryUrl}\n`
-      : `Tickets (Sportsevents365 search): ${se365PrimaryUrl}\nPaste in search: ${matchQuery}\n`;
+      ? `Home tickets (Sportsevents365 match page): ${se365PrimaryUrl}\n`
+      : `Home tickets (Sportsevents365 search): ${se365PrimaryUrl}\nPaste in search: ${matchQuery}\n`;
 
     const message =
       `${title}\n${when}\n${where}\n${meta}\n\n` +
       stabilityLine +
       guideLine +
       seLine +
-      (officialTicketsUrl ? `Official tickets: ${officialTicketsUrl}\n` : "") +
+      (officialHomeTicketsUrl ? `Official home tickets: ${officialHomeTicketsUrl}\n` : "") +
       `Maps: ${mapsUrl}`;
 
     try {
@@ -641,7 +645,7 @@ export default function MatchDetailScreen() {
     se365EventId,
     se365PrimaryUrl,
     matchQuery,
-    officialTicketsUrl,
+    officialHomeTicketsUrl,
     mapsUrl,
     ticketGuide,
     tripStability,
@@ -750,32 +754,32 @@ export default function MatchDetailScreen() {
     if (!se365EventId) {
       Alert.alert(
         "Sportsevents365 search",
-        `If it doesn’t land on the exact match, use search and paste:\n\n${matchQuery}`
+        `If it doesn’t land on the exact match, use search and paste:\n\n${matchQuery}\n\nTip: stick to “home / neutral” seating where applicable.`
       );
     }
 
     await safeOpenUrl(se365PrimaryUrl);
   }, [closeTicketModal, se365EventId, matchQuery, se365PrimaryUrl]);
 
-  const openOfficialTickets = useCallback(async () => {
+  const openOfficialHomeTickets = useCallback(async () => {
     closeTicketModal();
-    if (!officialTicketsUrl) {
-      Alert.alert("Official tickets unavailable", "We don’t have an official ticket link for this club yet.");
+    if (!officialHomeTicketsUrl) {
+      Alert.alert("Official home tickets unavailable", "We don’t have an official ticket link for this club yet.");
       return;
     }
-    await safeOpenUrl(officialTicketsUrl);
-  }, [closeTicketModal, officialTicketsUrl]);
+    await safeOpenUrl(officialHomeTicketsUrl);
+  }, [closeTicketModal, officialHomeTicketsUrl]);
 
   const openGoogleFallback = useCallback(async () => {
     closeTicketModal();
-    await safeOpenUrl(googleTicketsUrl);
-  }, [closeTicketModal, googleTicketsUrl]);
+    await safeOpenUrl(googleHomeTicketsUrl);
+  }, [closeTicketModal, googleHomeTicketsUrl]);
 
   const openTicketGuideInfo = useCallback(() => {
     if (!ticketGuide) {
       Alert.alert(
-        "Ticket guide not available yet",
-        "We don’t have a specific guide for this club yet. Use Official tickets or Sportsevents365 and plan early."
+        "Home ticket guide not available yet",
+        "We don’t have a specific guide for this home club yet. Use Official home tickets or Sportsevents365 and plan early."
       );
       return;
     }
@@ -814,12 +818,10 @@ export default function MatchDetailScreen() {
       for (const n of ticketGuide.notes.slice(0, 6)) lines.push(`• ${n}`);
     }
 
-    Alert.alert("Ticket guide", lines.join("\n"));
+    Alert.alert("Home ticket guide", lines.join("\n"));
   }, [ticketGuide]);
 
   const weekendPlanningBody = useMemo(() => {
-    // League heuristics (light-touch, not a promise).
-    // EPL: broadcast selections can move fixtures; elsewhere varies.
     const isEpl = String(leagueName ?? "").toLowerCase().includes("premier league");
     const hint = isEpl
       ? "In this league, kickoff timing can move due to TV scheduling."
@@ -896,7 +898,9 @@ export default function MatchDetailScreen() {
 
                   <View style={styles.chip}>
                     <Text style={styles.chipText}>
-                      {ticketGuide ? `Tickets: ${difficultyLabel(ticketGuide.difficulty)}` : "Tickets: Guide pending"}
+                      {ticketGuide
+                        ? `Home tickets: ${difficultyLabel(ticketGuide.difficulty)}`
+                        : "Home tickets: Guide pending"}
                     </Text>
                   </View>
                 </View>
@@ -942,10 +946,10 @@ export default function MatchDetailScreen() {
                   </View>
                 ) : null}
 
-                {/* Ticket guide block */}
+                {/* Home ticket guide block */}
                 <View style={styles.ticketGuideBox}>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.ticketGuideTitle}>Ticket guide (home club)</Text>
+                    <Text style={styles.ticketGuideTitle}>Home ticket guide</Text>
 
                     {ticketGuide ? (
                       <>
@@ -972,9 +976,7 @@ export default function MatchDetailScreen() {
                         </View>
                       </>
                     ) : (
-                      <Text style={styles.ticketGuideSub}>
-                        Guide pending for this club. Use trusted sources and plan early.
-                      </Text>
+                      <Text style={styles.ticketGuideSub}>Guide pending for this home club. Use trusted sources and plan early.</Text>
                     )}
                   </View>
 
@@ -1028,9 +1030,9 @@ export default function MatchDetailScreen() {
 
                 <View style={styles.ctaGrid}>
                   <Pressable onPress={openTicketModal} style={[styles.bigBtn, styles.bigBtnPrimary]}>
-                    <Text style={styles.bigKicker}>Tickets</Text>
-                    <Text style={styles.bigTitle}>Find tickets</Text>
-                    <Text style={styles.bigSub}>{ticketsSub}</Text>
+                    <Text style={styles.bigKicker}>Home tickets</Text>
+                    <Text style={styles.bigTitle}>Find home tickets</Text>
+                    <Text style={styles.bigSub}>{homeTicketsSub}</Text>
                   </Pressable>
 
                   <Pressable
@@ -1111,7 +1113,7 @@ export default function MatchDetailScreen() {
                 <View style={styles.opsItem}>
                   <Text style={styles.opsTitle}>Arrive early</Text>
                   <Text style={styles.opsBody}>
-                    Aim for 60–90 minutes before kickoff if you’re collecting tickets or navigating security.
+                    Aim for 60–90 minutes before kickoff if you’re picking up home tickets or navigating security.
                   </Text>
                 </View>
 
@@ -1166,13 +1168,14 @@ export default function MatchDetailScreen() {
           </View>
         ) : null}
 
-        {/* Ticket Source Modal (Sportsevents365 + Official are equal) */}
+        {/* Home Ticket Source Modal (Sportsevents365 + Official are equal) */}
         <Modal visible={ticketModal.open} transparent animationType="fade" onRequestClose={closeTicketModal}>
           <Pressable style={styles.modalBackdrop} onPress={closeTicketModal}>
             <Pressable style={styles.modalCard} onPress={() => null}>
-              <Text style={styles.modalTitle}>Tickets</Text>
+              <Text style={styles.modalTitle}>Home tickets</Text>
               <Text style={styles.modalBody}>
-                Choose where you want to source tickets. Sportsevents365 uses your affiliate link. Official tickets take you to the home club.
+                Choose where you want to source home tickets for the host club. Official takes you directly to the club.
+                Sportsevents365 uses your affiliate link.
               </Text>
 
               <View style={styles.modalBtnCol}>
@@ -1184,12 +1187,12 @@ export default function MatchDetailScreen() {
                 </Pressable>
 
                 <Pressable
-                  onPress={openOfficialTickets}
-                  style={[styles.modalBtn, styles.modalBtnPrimary, !officialTicketsUrl && styles.modalBtnDisabled]}
-                  disabled={!officialTicketsUrl}
+                  onPress={openOfficialHomeTickets}
+                  style={[styles.modalBtn, styles.modalBtnPrimary, !officialHomeTicketsUrl && styles.modalBtnDisabled]}
+                  disabled={!officialHomeTicketsUrl}
                 >
-                  <Text style={styles.modalBtnTitle}>Official tickets (home club)</Text>
-                  <Text style={styles.modalBtnSub}>{officialTicketsUrl ? home : "No official link mapped yet"}</Text>
+                  <Text style={styles.modalBtnTitle}>Official home tickets (club)</Text>
+                  <Text style={styles.modalBtnSub}>{officialHomeTicketsUrl ? home : "No official link mapped yet"}</Text>
                 </Pressable>
 
                 <Pressable onPress={openGoogleFallback} style={[styles.modalBtn, styles.modalBtnSecondary]}>
