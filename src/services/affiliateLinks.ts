@@ -1,6 +1,7 @@
 // src/services/affiliateLinks.ts
 import Constants from "expo-constants";
-import { resolveIataCityCode } from "@/src/constants/iataCities";
+import preferencesStore from "@/src/state/preferences";
+import { getIataCityCodeForCity, isIataCityCode } from "@/src/data/iataCityCodes";
 
 /**
  * Centralised affiliate URL builder.
@@ -22,14 +23,12 @@ export type AffiliateLinks = {
   startDate?: string; // YYYY-MM-DD
   endDate?: string; // YYYY-MM-DD
 
-  // Legacy (already used by screens)
   hotelsUrl: string; // Expedia
   flightsUrl: string; // Aviasales
   trainsUrl: string; // fallback (untracked)
   experiencesUrl: string; // GetYourGuide
   mapsUrl: string; // Google Maps (untracked)
 
-  // Approved additions (Phase 1)
   transfersUrl: string; // KiwiTaxi (tracked)
   insuranceUrl: string; // SafetyWing (tracked)
   claimsUrl: string; // AirHelp (tracked)
@@ -81,37 +80,34 @@ function isIsoDateOnly(s?: string) {
   return !!s && /^\d{4}-\d{2}-\d{2}$/.test(String(s).trim());
 }
 
-function isIata3(s?: string) {
-  return !!s && /^[A-Z]{3}$/.test(String(s).trim().toUpperCase());
+function formatDdMm(dateIso?: string): string | null {
+  if (!dateIso || !/^\d{4}-\d{2}-\d{2}$/.test(dateIso)) return null;
+  const [, m, d] = dateIso.split("-");
+  return `${d}${m}`; // DDMM
+}
+
+function safeOriginIata(): string {
+  // Ensure prefs are loaded opportunistically; don't block.
+  try {
+    if (!preferencesStore.getState().loaded) {
+      void preferencesStore.load();
+    }
+  } catch {
+    // ignore
+  }
+
+  const pref = String(preferencesStore.getPreferredOriginIata?.() ?? "").trim().toUpperCase();
+  return isIataCityCode(pref) ? pref : "LON";
 }
 
 /* -------------------------------------------------------------------------- */
 /* affiliate config */
 /* -------------------------------------------------------------------------- */
 
-/**
- * Put IDs in app.json -> expo.extra and/or .env as EXPO_PUBLIC_*.
- *
- * You currently have approved:
- * - Expedia (program-specific linking varies; we use a stable public entry)
- * - Aviasales (marker-based in many setups)
- * - GetYourGuide (partner_id)
- * - KiwiTaxi / AirHelp via TPM tracking links
- * - SafetyWing direct tracking link
- * - SportsEvents365 a_aid param
- */
 const AFFILIATE = {
   aviasalesMarker: env("EXPO_PUBLIC_AVIASALES_MARKER"),
   gygPartnerId: env("EXPO_PUBLIC_GYG_PARTNER_ID"),
   expediaAffilId: env("EXPO_PUBLIC_EXPEDIA_AFFIL_ID"),
-
-  /**
-   * Default origin should be a CITY IATA code (metropolitan).
-   * Examples:
-   * - LON (London metro)
-   * - MAN (Manchester)
-   */
-  defaultOriginIata: env("EXPO_PUBLIC_DEFAULT_ORIGIN_IATA"),
 
   // ✅ EXACT tracking links provided by you (DO NOT MODIFY)
   kiwitaxiTracked: "https://kiwitaxi.tpm.lv/ZnnAV8eH",
@@ -140,7 +136,7 @@ export function buildAffiliateLinks(args: {
   const query = safeQueryCity(city, country);
 
   /* -------------------- */
-  /* Hotels: Expedia (approved) */
+  /* Hotels: Expedia */
   /* -------------------- */
   const expediaParams: string[] = [`destination=${enc(query)}`];
   if (startDate) expediaParams.push(`startDate=${enc(startDate)}`);
@@ -149,46 +145,32 @@ export function buildAffiliateLinks(args: {
   const hotelsUrl = `https://www.expedia.co.uk/Hotel-Search?${expediaParams.join("&")}`;
 
   /* -------------------- */
-  /* Flights: Aviasales (prefilled search form) */
+  /* Flights: Aviasales */
   /* -------------------- */
-  /**
-   * Travelpayouts recommends:
-   * - use https://search.aviasales.com/flights/
-   * - pass origin_iata / destination_iata (city IATA codes)
-   * - pass depart_date / return_date (YYYY-MM-DD)
-   * - pass marker (partner id)
-   *
-   * This is more robust than relying on /search/ path formats.
-   */
-  const originIata = isIata3(AFFILIATE.defaultOriginIata)
-    ? String(AFFILIATE.defaultOriginIata).trim().toUpperCase()
-    : "LON"; // safer default than MAN for most UK users; override via env
+  const originIata = safeOriginIata();
+  const destIata = getIataCityCodeForCity(city); // city code, not “closest airport”
 
-  const destIata = resolveIataCityCode(city);
-
-  // If we can fully prefill, do it. Otherwise still send marker to home.
   let flightsUrl: string;
 
-  if (destIata && startDate) {
-    const params: string[] = [
-      `origin_iata=${enc(originIata)}`,
-      `destination_iata=${enc(destIata)}`,
-      `depart_date=${enc(startDate)}`,
-      // Aviasales doc uses return_date; omit if unknown for one-way-ish behavior
-      ...(endDate ? [`return_date=${enc(endDate)}`] : []),
-      `adults=1`,
-      `children=0`,
-      `infants=0`,
-      `trip_class=0`,
-      `locale=en`,
-      `one_way=${endDate ? "false" : "true"}`,
-    ];
+  if (destIata && startDate && endDate) {
+    const dd = formatDdMm(startDate);
+    const rd = formatDdMm(endDate);
 
-    if (AFFILIATE.aviasalesMarker) params.push(`marker=${enc(AFFILIATE.aviasalesMarker)}`);
-
-    flightsUrl = `https://search.aviasales.com/flights/?${params.join("&")}`;
+    if (dd && rd) {
+      // Aviasales search path format:
+      // /search/{ORIGIN}{DDMM}{DEST}{DDMM}
+      // Example you provided:
+      // https://www.aviasales.com/search/MAN2802CGN02031
+      flightsUrl =
+        `https://www.aviasales.com/search/${originIata}${dd}${destIata}${rd}` +
+        (AFFILIATE.aviasalesMarker ? `?marker=${enc(AFFILIATE.aviasalesMarker)}` : "");
+    } else {
+      flightsUrl =
+        `https://www.aviasales.com/` +
+        (AFFILIATE.aviasalesMarker ? `?marker=${enc(AFFILIATE.aviasalesMarker)}` : "");
+    }
   } else {
-    // Fallback: still include marker if available (attribution), but no prefill.
+    // graceful fallback
     flightsUrl =
       `https://www.aviasales.com/` +
       (AFFILIATE.aviasalesMarker ? `?marker=${enc(AFFILIATE.aviasalesMarker)}` : "");
@@ -202,14 +184,14 @@ export function buildAffiliateLinks(args: {
   )}`;
 
   /* -------------------- */
-  /* Experiences: GetYourGuide (approved) */
+  /* Experiences: GetYourGuide */
   /* -------------------- */
   const gygParams: string[] = [`q=${enc(query)}`];
   if (AFFILIATE.gygPartnerId) gygParams.push(`partner_id=${enc(AFFILIATE.gygPartnerId)}`);
   const experiencesUrl = `https://www.getyourguide.com/s/?${gygParams.join("&")}`;
 
   /* -------------------- */
-  /* Transfers / Insurance / Claims / Tickets: TRACKED BASE LINKS (EXACT) */
+  /* Tracked base links (EXACT) */
   /* -------------------- */
   const transfersUrl = AFFILIATE.kiwitaxiTracked;
   const insuranceUrl = AFFILIATE.safetywingTracked;
@@ -238,6 +220,9 @@ export function buildAffiliateLinks(args: {
   };
 }
 
+/**
+ * Used by click tracking de-dupe (normalize for comparisons).
+ */
 export function normalizeUrlForCompare(url: string): string {
   return String(url ?? "").trim().toLowerCase();
 }
