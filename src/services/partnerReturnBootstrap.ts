@@ -6,6 +6,7 @@ import {
   getLastClick,
   markBooked,
   markNotBooked,
+  dismissReturnPrompt,
   type LastPartnerClick,
 } from "@/src/services/partnerClicks";
 
@@ -14,16 +15,6 @@ import { confirmBookedAndOfferProof } from "@/src/services/bookingProof";
 
 let bootstrapped = false;
 let prompting = false;
-
-function safeTitleFromClick(click: LastPartnerClick): string {
-  try {
-    const it = savedItemsStore.getState().items.find((x) => x.id === click.itemId);
-    const t = String(it?.title ?? "").trim();
-    return t || "Your booking";
-  } catch {
-    return "Your booking";
-  }
-}
 
 async function ensureSavedLoaded() {
   if (savedItemsStore.getState().loaded) return;
@@ -34,21 +25,42 @@ async function ensureSavedLoaded() {
   }
 }
 
+function safeItemForClick(click: LastPartnerClick) {
+  try {
+    return savedItemsStore.getState().items.find((x) => x.id === click.itemId) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function safeTitleFromClick(click: LastPartnerClick): string {
+  const it = safeItemForClick(click);
+  const t = String(it?.title ?? "").trim();
+  return t || "Your booking";
+}
+
 async function handleReturn(click: LastPartnerClick) {
   if (prompting) return;
 
   await ensureSavedLoaded();
 
-  const itemExists = savedItemsStore.getState().items.some((x) => x.id === click.itemId);
-  if (!itemExists) return;
+  const item = safeItemForClick(click);
+
+  // If item is missing, or no longer pending, never prompt.
+  // This prevents incorrect prompts after manual actions or other transitions.
+  if (!item) {
+    await dismissReturnPrompt(click.itemId);
+    return;
+  }
+
+  if (item.status !== "pending") {
+    await dismissReturnPrompt(click.itemId);
+    return;
+  }
 
   prompting = true;
 
   const title = safeTitleFromClick(click);
-
-  const unlock = () => {
-    prompting = false;
-  };
 
   Alert.alert(
     "Did you complete the booking?",
@@ -57,13 +69,19 @@ async function handleReturn(click: LastPartnerClick) {
       {
         text: "Not now",
         style: "cancel",
-        onPress: unlock, // keep pending, ask again next time a partner is opened
+        onPress: () => {
+          Promise.resolve(dismissReturnPrompt(click.itemId)).finally(() => {
+            prompting = false;
+          });
+        },
       },
       {
         text: "No",
         style: "default",
         onPress: () => {
-          Promise.resolve(markNotBooked(click.itemId)).finally(unlock);
+          Promise.resolve(markNotBooked(click.itemId)).finally(() => {
+            prompting = false;
+          });
         },
       },
       {
@@ -77,14 +95,13 @@ async function handleReturn(click: LastPartnerClick) {
             } catch {
               // ignore
             }
-          })().finally(unlock);
+          })().finally(() => {
+            prompting = false;
+          });
         },
       },
     ],
-    {
-      cancelable: true,
-      onDismiss: unlock, // ✅ critical: Android back/outside tap
-    }
+    { cancelable: true }
   );
 }
 
@@ -92,6 +109,7 @@ export function bootstrapPartnerReturnPrompt() {
   if (bootstrapped) return;
   bootstrapped = true;
 
+  // Crash-proof guard (prevents the exact error you hit)
   if (typeof ensurePartnerReturnWatcher !== "function") {
     console.warn(
       "[partnerReturnBootstrap] ensurePartnerReturnWatcher is not a function. Metro cache / duplicate module likely."
@@ -101,7 +119,7 @@ export function bootstrapPartnerReturnPrompt() {
 
   ensurePartnerReturnWatcher((click) => handleReturn(click));
 
-  // Catch any persisted click that happened before watcher was ready
+  // If there was a persisted click before boot, handle it.
   setTimeout(() => {
     const click = getLastClick();
     if (click) handleReturn(click).catch(() => null);
