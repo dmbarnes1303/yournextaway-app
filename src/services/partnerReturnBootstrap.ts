@@ -6,7 +6,6 @@ import {
   getLastClick,
   markBooked,
   markNotBooked,
-  dismissReturnPrompt,
   type LastPartnerClick,
 } from "@/src/services/partnerClicks";
 
@@ -39,15 +38,17 @@ async function handleReturn(click: LastPartnerClick) {
   if (prompting) return;
 
   await ensureSavedLoaded();
+
   const itemExists = savedItemsStore.getState().items.some((x) => x.id === click.itemId);
-  if (!itemExists) {
-    await dismissReturnPrompt(click.itemId);
-    return;
-  }
+  if (!itemExists) return;
 
   prompting = true;
 
   const title = safeTitleFromClick(click);
+
+  const unlock = () => {
+    prompting = false;
+  };
 
   Alert.alert(
     "Did you complete the booking?",
@@ -56,19 +57,13 @@ async function handleReturn(click: LastPartnerClick) {
       {
         text: "Not now",
         style: "cancel",
-        onPress: () => {
-          Promise.resolve(dismissReturnPrompt(click.itemId)).finally(() => {
-            prompting = false;
-          });
-        },
+        onPress: unlock, // keep pending, ask again next time a partner is opened
       },
       {
         text: "No",
         style: "default",
         onPress: () => {
-          Promise.resolve(markNotBooked(click.itemId)).finally(() => {
-            prompting = false;
-          });
+          Promise.resolve(markNotBooked(click.itemId)).finally(unlock);
         },
       },
       {
@@ -82,13 +77,14 @@ async function handleReturn(click: LastPartnerClick) {
             } catch {
               // ignore
             }
-          })().finally(() => {
-            prompting = false;
-          });
+          })().finally(unlock);
         },
       },
     ],
-    { cancelable: true }
+    {
+      cancelable: true,
+      onDismiss: unlock, // ✅ critical: Android back/outside tap
+    }
   );
 }
 
@@ -96,7 +92,6 @@ export function bootstrapPartnerReturnPrompt() {
   if (bootstrapped) return;
   bootstrapped = true;
 
-  // ✅ Crash-proof guard (prevents the exact error you hit)
   if (typeof ensurePartnerReturnWatcher !== "function") {
     console.warn(
       "[partnerReturnBootstrap] ensurePartnerReturnWatcher is not a function. Metro cache / duplicate module likely."
@@ -106,6 +101,7 @@ export function bootstrapPartnerReturnPrompt() {
 
   ensurePartnerReturnWatcher((click) => handleReturn(click));
 
+  // Catch any persisted click that happened before watcher was ready
   setTimeout(() => {
     const click = getLastClick();
     if (click) handleReturn(click).catch(() => null);
