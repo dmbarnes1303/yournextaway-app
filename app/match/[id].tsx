@@ -96,6 +96,7 @@ async function openMapsPreferNative(query: string) {
   const geo = `geo:0,0?q=${enc(q)}`;
   const web = `https://www.google.com/maps/search/?api=1&query=${enc(q)}`;
 
+  // iOS geo: is inconsistent; web is reliable.
   if (Platform.OS === "ios") return safeOpenUrl(web);
 
   try {
@@ -194,11 +195,13 @@ function buildOfficialHomeTicketsUrl(homeTeamName?: string) {
 
   if (OFFICIAL_TICKETS_BY_TEAM[key]) return OFFICIAL_TICKETS_BY_TEAM[key];
 
-  const foundKey = Object.keys(OFFICIAL_TICKETS_BY_TEAM).find((k) => key === k || key.includes(k) || k.includes(key));
+  const foundKey = Object.keys(OFFICIAL_TICKETS_BY_TEAM).find(
+    (k) => key === k || key.includes(k) || k.includes(key)
+  );
   if (foundKey) return OFFICIAL_TICKETS_BY_TEAM[foundKey];
 
   // Fallback: make the intent explicit (official + home tickets)
-  return `https://www.google.com/search?q=${enc(homeTeamName + " official home tickets")}`;
+  return `https://www.google.com/search?q=${enc(String(homeTeamName ?? "") + " official home tickets")}`;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -217,17 +220,29 @@ function buildStadiumInfoUrl(venue?: string, homeTeam?: string, city?: string) {
 }
 
 function buildFoodDrinkUrl(venue?: string, city?: string) {
+  // Split to bias towards actual options, not generic pages
   const q = [venue || "", city || "", "best pubs bars restaurants near"].join(" ").trim();
   return `https://www.google.com/search?q=${enc(q)}`;
 }
 
 function buildTransportUrl(venue?: string, city?: string) {
-  const q = [venue || "stadium", city || "", "how to get there public transport"].join(" ").trim();
+  const q = [venue || "stadium", city || "", "how to get there public transport train tram metro"].join(" ").trim();
   return `https://www.google.com/search?q=${enc(q)}`;
 }
 
 function buildParkingUrl(venue?: string, city?: string) {
-  const q = [venue || "stadium", city || "", "parking"].join(" ").trim();
+  const q = [venue || "stadium", city || "", "parking park and ride"].join(" ").trim();
+  return `https://www.google.com/search?q=${enc(q)}`;
+}
+
+function buildCheapHotelsUrl(venue?: string, city?: string) {
+  // This is deliberately “search-y” (works worldwide, no partner dependency).
+  const q = [venue || "", city || "", "cheap hotels near"].join(" ").trim();
+  return `https://www.google.com/search?q=${enc(q)}`;
+}
+
+function buildTaxiRideshareUrl(venue?: string, city?: string) {
+  const q = [venue || "stadium", city || "", "uber bolt taxi rank pickup"].join(" ").trim();
   return `https://www.google.com/search?q=${enc(q)}`;
 }
 
@@ -277,8 +292,7 @@ function computeTripStability(args: { kickoffTbc: boolean; difficulty?: TicketDi
   if (!difficulty) return kickoffTbc ? "flexible" : "stable";
 
   if (!kickoffTbc && (difficulty === "easy" || difficulty === "medium")) return "stable";
-  if (kickoffTbc && difficulty === "very_hard") return "uncertain";
-  if (kickoffTbc && difficulty === "hard") return "uncertain";
+  if (kickoffTbc && (difficulty === "very_hard" || difficulty === "hard")) return "uncertain";
 
   // everything else: workable if you plan around it
   return "flexible";
@@ -511,6 +525,7 @@ export default function MatchDetailScreen() {
   // 3) manual override map
   const se365EventId = useMemo(() => {
     const fromRoute = typeof routeSe365EventId === "number" && routeSe365EventId > 0 ? routeSe365EventId : null;
+
     const fromRow = (() => {
       const anyRow = row as any;
       const v =
@@ -537,12 +552,14 @@ export default function MatchDetailScreen() {
   const officialHomeTicketsUrl = useMemo(() => buildOfficialHomeTicketsUrl(home), [home]);
   const googleHomeTicketsUrl = useMemo(() => buildGoogleHomeTicketsUrl(matchQuery), [matchQuery]);
 
+  // Logistics URLs
   const mapsUrl = useMemo(() => buildMapsVenueUrl(venue, city), [venue, city]);
   const stadiumInfoUrl = useMemo(() => buildStadiumInfoUrl(venue, home, city), [venue, home, city]);
-
   const foodDrinkUrl = useMemo(() => buildFoodDrinkUrl(venue, city), [venue, city]);
   const transportUrl = useMemo(() => buildTransportUrl(venue, city), [venue, city]);
   const parkingUrl = useMemo(() => buildParkingUrl(venue, city), [venue, city]);
+  const cheapHotelsUrl = useMemo(() => buildCheapHotelsUrl(venue, city), [venue, city]);
+  const taxiUrl = useMemo(() => buildTaxiRideshareUrl(venue, city), [venue, city]);
   const disruptionUrl = useMemo(() => buildDisruptionUrl(city), [city]);
 
   // Ticket guide (HOME CLUB ONLY)
@@ -615,7 +632,6 @@ export default function MatchDetailScreen() {
     const meta = `League: ${leagueName} • Season: ${String(effectiveSeason)}`;
 
     const stabilityLine = `Trip stability: ${tripStability.toUpperCase()}\n`;
-
     const guideLine = ticketGuide ? `Home ticket difficulty: ${difficultyLabel(ticketGuide.difficulty)}\n` : "";
 
     const seLine = se365EventId
@@ -711,7 +727,9 @@ export default function MatchDetailScreen() {
     }
 
     const line1 = tbc ? "We’ll alert you when kickoff is confirmed or changes." : "We’ll alert you if kickoff changes.";
-    const line2 = user ? "Sync + notifications can be added next." : "Sign in later to sync across devices and enable email/push alerts.";
+    const line2 = user
+      ? "Sync + notifications can be added next."
+      : "Sign in later to sync across devices and enable email/push alerts.";
     showToast("Following", `${line1} ${line2}`);
   }, [
     fixtureId,
@@ -832,7 +850,7 @@ export default function MatchDetailScreen() {
   }, [leagueName]);
 
   return (
-    <Background imageUrl={getBackground("fixtures")}>
+    <Background imageSource={getBackground("fixtures")} overlayOpacity={0.86}>
       <Stack.Screen
         options={{
           headerShown: true,
@@ -899,9 +917,7 @@ export default function MatchDetailScreen() {
 
                   <View style={styles.chip}>
                     <Text style={styles.chipText}>
-                      {ticketGuide
-                        ? `Home tickets: ${difficultyLabel(ticketGuide.difficulty)}`
-                        : "Home tickets: Guide pending"}
+                      {ticketGuide ? `Home tickets: ${difficultyLabel(ticketGuide.difficulty)}` : "Home tickets: Guide pending"}
                     </Text>
                   </View>
                 </View>
@@ -1072,21 +1088,31 @@ export default function MatchDetailScreen() {
                   </Pressable>
                 </View>
 
-                {/* Logistics quick actions */}
+                {/* Logistics quick actions (FB feedback) */}
                 <View style={styles.quickGrid}>
                   <Pressable onPress={() => safeOpenUrl(foodDrinkUrl)} style={styles.quickBtn}>
                     <Text style={styles.quickTitle}>Food & drink</Text>
-                    <Text style={styles.quickSub}>Near stadium / in town</Text>
+                    <Text style={styles.quickSub}>Pubs, bars, restaurants</Text>
                   </Pressable>
 
                   <Pressable onPress={() => safeOpenUrl(transportUrl)} style={styles.quickBtn}>
                     <Text style={styles.quickTitle}>Transport</Text>
-                    <Text style={styles.quickSub}>Best routes & options</Text>
+                    <Text style={styles.quickSub}>Train / tram / metro routes</Text>
                   </Pressable>
 
                   <Pressable onPress={() => safeOpenUrl(parkingUrl)} style={styles.quickBtn}>
                     <Text style={styles.quickTitle}>Parking</Text>
-                    <Text style={styles.quickSub}>If driving is needed</Text>
+                    <Text style={styles.quickSub}>Parking + park & ride</Text>
+                  </Pressable>
+
+                  <Pressable onPress={() => safeOpenUrl(cheapHotelsUrl)} style={styles.quickBtn}>
+                    <Text style={styles.quickTitle}>Cheap hotels</Text>
+                    <Text style={styles.quickSub}>Near stadium / city area</Text>
+                  </Pressable>
+
+                  <Pressable onPress={() => safeOpenUrl(taxiUrl)} style={styles.quickBtn}>
+                    <Text style={styles.quickTitle}>Taxi / rideshare</Text>
+                    <Text style={styles.quickSub}>Pickup points + options</Text>
                   </Pressable>
 
                   <Pressable onPress={() => safeOpenUrl(disruptionUrl)} style={styles.quickBtn}>
@@ -1147,9 +1173,19 @@ export default function MatchDetailScreen() {
                 </View>
 
                 <View style={styles.opsItem}>
+                  <Text style={styles.opsTitle}>Cheap hotel shortcut</Text>
+                  <Text style={styles.opsBody}>
+                    If you’re staying near the stadium, check cancellation and late check-in rules so match timing doesn’t trap you.
+                  </Text>
+                  <Pressable onPress={() => safeOpenUrl(cheapHotelsUrl)} style={styles.inlineBtn}>
+                    <Text style={styles.inlineBtnText}>Search cheap hotels</Text>
+                  </Pressable>
+                </View>
+
+                <View style={styles.opsItem}>
                   <Text style={styles.opsTitle}>Disruption check</Text>
                   <Text style={styles.opsBody}>
-                    Strikes and closures can ruin “easy” transfers. Quick check before you set off saves money and stress.
+                    Strikes and closures can ruin “easy” transfers. A quick check before you set off saves money and stress.
                   </Text>
                   <Pressable onPress={() => safeOpenUrl(disruptionUrl)} style={styles.inlineBtn}>
                     <Text style={styles.inlineBtnText}>Check disruption</Text>
@@ -1184,7 +1220,9 @@ export default function MatchDetailScreen() {
                   <Text style={styles.modalBtnTitle}>
                     {se365EventId ? "Sportsevents365 (match page • affiliate)" : "Sportsevents365 (search • affiliate)"}
                   </Text>
-                  <Text style={styles.modalBtnSub}>{se365EventId ? `Event #${String(se365EventId)}` : `Paste: ${matchQuery}`}</Text>
+                  <Text style={styles.modalBtnSub}>
+                    {se365EventId ? `Event #${String(se365EventId)}` : `Paste: ${matchQuery}`}
+                  </Text>
                 </Pressable>
 
                 <Pressable
@@ -1207,7 +1245,8 @@ export default function MatchDetailScreen() {
               </View>
 
               <Text style={styles.modalFootnote}>
-                Note: exact Sportsevents365 deep-links require their event ID. Until IDs are supplied, we open SE365 search and show the exact query to paste.
+                Note: exact Sportsevents365 deep-links require their event ID. Until IDs are supplied, we open SE365 search and
+                show the exact query to paste.
               </Text>
             </Pressable>
           </Pressable>
@@ -1224,12 +1263,22 @@ export default function MatchDetailScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, paddingTop: 100 },
   scrollView: { flex: 1 },
-  content: { paddingHorizontal: theme.spacing.lg, paddingBottom: theme.spacing.xxl, gap: theme.spacing.lg },
+  content: {
+    paddingHorizontal: theme.spacing.lg,
+    paddingBottom: theme.spacing.xxl,
+    gap: theme.spacing.lg,
+  },
 
   card: { padding: theme.spacing.lg },
 
   center: { paddingVertical: theme.spacing.xl, alignItems: "center", gap: 10 },
-  muted: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18, fontWeight: "700" },
+  muted: {
+    marginTop: 6,
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSize.sm,
+    lineHeight: 18,
+    fontWeight: "700",
+  },
 
   topRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 10 },
 
