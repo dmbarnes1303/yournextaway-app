@@ -41,124 +41,11 @@ import { confirmBookedAndOfferProof } from "@/src/services/bookingProof";
 // ✅ Opportunistic IATA detection (dev-only)
 import { getIataCityCodeForCity, debugCityKey } from "@/src/data/iataCityCodes";
 
-/* -------------------------------------------------------------------------- */
-/* Ticket guide integration (SAFE)                                            */
-/* -------------------------------------------------------------------------- */
-/**
- * We want Trip → Matches list to surface a ticket “difficulty” badge.
- * BUT we cannot allow this screen to hard-crash if ticketGuides exports change.
- *
- * So we use a best-effort dynamic require + “try multiple access patterns”.
- * If it can’t resolve, we simply show no badge.
- */
-type TicketDifficultyTone = "easy" | "medium" | "hard" | "veryhard" | "unknown";
-
-type TicketDifficulty = {
-  label: string; // e.g. "Easy", "Medium", "Hard", "Very hard"
-  tone: TicketDifficultyTone;
-};
-
-function safeRequireTicketGuides(): any | null {
-  try {
-    // from app/trip/[id].tsx → ../../src/data/ticketGuides
-    // (string literal keeps Metro happy)
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    return require("../../src/data/ticketGuides");
-  } catch {
-    return null;
-  }
-}
-
-function normalizeTeamName(input: unknown): string {
-  const s = String(input ?? "").trim();
-  return s;
-}
-
-function extractDifficultyFromGuide(guide: any): TicketDifficulty | null {
-  if (!guide) return null;
-
-  // Common patterns across guide objects:
-  // - guide.difficulty
-  // - guide.meta.difficulty
-  // - guide.summary.difficulty
-  const raw =
-    guide?.difficulty ??
-    guide?.meta?.difficulty ??
-    guide?.summary?.difficulty ??
-    guide?.ticketDifficulty ??
-    guide?.tickets?.difficulty;
-
-  const s = String(raw ?? "").trim().toLowerCase();
-  if (!s) return null;
-
-  if (s.includes("very") && s.includes("hard")) return { label: "Very hard", tone: "veryhard" };
-  if (s.includes("hard")) return { label: "Hard", tone: "hard" };
-  if (s.includes("medium") || s.includes("moderate")) return { label: "Medium", tone: "medium" };
-  if (s.includes("easy") || s.includes("low")) return { label: "Easy", tone: "easy" };
-
-  // If guide stores a fixed enum like "EASY" / "MEDIUM" / etc
-  const upper = String(raw ?? "").trim().toUpperCase();
-  if (upper === "VERY_HARD" || upper === "VERYHARD") return { label: "Very hard", tone: "veryhard" };
-  if (upper === "HARD") return { label: "Hard", tone: "hard" };
-  if (upper === "MEDIUM") return { label: "Medium", tone: "medium" };
-  if (upper === "EASY") return { label: "Easy", tone: "easy" };
-
-  return { label: "Tickets", tone: "unknown" };
-}
-
-function getTicketDifficultyForMatch(row?: FixtureListRow | null): TicketDifficulty | null {
-  const mod = safeRequireTicketGuides();
-  if (!mod) return null;
-
-  const home = normalizeTeamName(row?.teams?.home?.name);
-  const away = normalizeTeamName(row?.teams?.away?.name);
-
-  // Try “single lookup point” registry styles (guessing defensively)
-  // 1) mod.getGuide(teamName)
-  // 2) mod.getTicketGuide(teamName)
-  // 3) mod.getTeamTicketGuide(teamName)
-  // 4) mod.default.getGuide(...)
-  const candidates: Array<((name: string) => any) | null> = [
-    typeof mod.getGuide === "function" ? mod.getGuide : null,
-    typeof mod.getTicketGuide === "function" ? mod.getTicketGuide : null,
-    typeof mod.getTeamTicketGuide === "function" ? mod.getTeamTicketGuide : null,
-    typeof mod.default?.getGuide === "function" ? mod.default.getGuide : null,
-    typeof mod.default?.getTicketGuide === "function" ? mod.default.getTicketGuide : null,
-  ];
-
-  for (const fn of candidates) {
-    if (!fn) continue;
-    try {
-      // Home team is what matters for “home tickets”
-      const g = fn(home);
-      const d = extractDifficultyFromGuide(g);
-      if (d) return d;
-    } catch {
-      // ignore
-    }
-  }
-
-  // Some registries may be object maps:
-  // mod.guides[teamName] / mod.TEAMS[teamName] / mod.registry
-  const mapCandidates = [mod.guides, mod.TEAMS, mod.registry, mod.ticketGuides, mod.default?.guides].filter(Boolean);
-  for (const m of mapCandidates) {
-    try {
-      const g = m?.[home] ?? m?.[home.toLowerCase()] ?? null;
-      const d = extractDifficultyFromGuide(g);
-      if (d) return d;
-    } catch {
-      // ignore
-    }
-  }
-
-  // If nothing, no badge.
-  // (Do not guess difficulty heuristically — that’s BS and will undermine trust.)
-  void away; // keep lint calm if unused in some configs
-  return null;
-}
+// ✅ NEW: Matchday logistics
+import { getMatchdayLogistics, buildLogisticsSnippet } from "@/src/data/matchdayLogistics";
 
 /* -------------------------------------------------------------------------- */
-/* helpers                                                                     */
+/* helpers */
 /* -------------------------------------------------------------------------- */
 
 function coerceId(v: unknown): string | null {
@@ -317,16 +204,14 @@ function formatKickoffMeta(row?: FixtureListRow | null): { line: string; tbc: bo
   const midnight = d.getHours() === 0 && d.getMinutes() === 0;
   const tbc = looksTbc || midnight;
 
-  if (tbc) {
-    return { line: `Kickoff: ${datePart} • TBC`, tbc: true };
-  }
+  if (tbc) return { line: `Kickoff: ${datePart} • TBC`, tbc: true };
 
   const statusHint = long ? ` • ${long}` : "";
   return { line: `Kickoff: ${datePart} • ${timePart}${statusHint}`, tbc: false };
 }
 
 /* -------------------------------------------------------------------------- */
-/* screen                                                                      */
+/* screen */
 /* -------------------------------------------------------------------------- */
 
 export default function TripDetailScreen() {
@@ -348,8 +233,10 @@ export default function TripDetailScreen() {
   const [noteText, setNoteText] = useState("");
   const [noteSaving, setNoteSaving] = useState(false);
 
+  // ✅ dev-only: avoid spamming the same unknown city alert repeatedly
   const [devWarnedCityKey, setDevWarnedCityKey] = useState<string | null>(null);
 
+  // ✅ preferred origin IATA (for flight deep links)
   const [originLoaded, setOriginLoaded] = useState<boolean>(preferencesStore.getState().loaded);
   const [originIata, setOriginIata] = useState<string>(preferencesStore.getPreferredOriginIata());
 
@@ -498,7 +385,7 @@ export default function TripDetailScreen() {
   const numericMatchIds = useMemo(() => matchIds.filter(isNumericId), [matchIds]);
 
   /* -------------------------------------------------------------------------- */
-  /* DEV-ONLY: opportunistic city→IATA detector                                  */
+  /* DEV-ONLY: opportunistic city→IATA detector */
   /* -------------------------------------------------------------------------- */
 
   useEffect(() => {
@@ -560,7 +447,7 @@ export default function TripDetailScreen() {
   }
 
   /* -------------------------------------------------------------------------- */
-  /* OPEN FLOW                                                                   */
+  /* OPEN FLOW */
   /* -------------------------------------------------------------------------- */
 
   async function openUntracked(url?: string) {
@@ -604,7 +491,7 @@ export default function TripDetailScreen() {
   }
 
   /* -------------------------------------------------------------------------- */
-  /* workspace actions                                                           */
+  /* workspace actions */
   /* -------------------------------------------------------------------------- */
 
   async function openSavedItem(item: SavedItem) {
@@ -783,25 +670,6 @@ export default function TripDetailScreen() {
     );
   }
 
-  function DifficultyBadge({ d }: { d: TicketDifficulty }) {
-    const style =
-      d.tone === "easy"
-        ? styles.diffEasy
-        : d.tone === "medium"
-        ? styles.diffMedium
-        : d.tone === "hard"
-        ? styles.diffHard
-        : d.tone === "veryhard"
-        ? styles.diffVeryHard
-        : styles.diffUnknown;
-
-    return (
-      <View style={[styles.diffPill, style]}>
-        <Text style={styles.diffText}>{d.label}</Text>
-      </View>
-    );
-  }
-
   /* -------------------------------------------------------------------------- */
 
   const loading = Boolean(tripId && (!tripsLoaded || !savedLoaded));
@@ -919,7 +787,9 @@ export default function TripDetailScreen() {
                       const homeName = String(r?.teams?.home?.name ?? "Home");
                       const awayName = String(r?.teams?.away?.name ?? "Away");
 
-                      const difficulty = getTicketDifficultyForMatch(r);
+                      // ✅ NEW: logistics derived from HOME team (home stadium context)
+                      const logistics = getMatchdayLogistics(homeName);
+                      const logisticsLine = logistics ? buildLogisticsSnippet(logistics) : "";
 
                       return (
                         <Pressable key={mid} onPress={() => openMatch(mid)} style={styles.matchRow}>
@@ -930,16 +800,11 @@ export default function TripDetailScreen() {
                               <Text style={styles.matchTitle} numberOfLines={1}>
                                 {title}
                               </Text>
-
-                              <View style={styles.matchBadgesRight}>
-                                {difficulty ? <DifficultyBadge d={difficulty} /> : null}
-
-                                {kickoff.tbc ? (
-                                  <View style={styles.tbcPill}>
-                                    <Text style={styles.tbcText}>TBC</Text>
-                                  </View>
-                                ) : null}
-                              </View>
+                              {kickoff.tbc ? (
+                                <View style={styles.tbcPill}>
+                                  <Text style={styles.tbcText}>TBC</Text>
+                                </View>
+                              ) : null}
                             </View>
 
                             <Text style={styles.matchMeta} numberOfLines={1}>
@@ -955,6 +820,12 @@ export default function TripDetailScreen() {
                             {meta2 ? (
                               <Text style={styles.matchMeta} numberOfLines={1}>
                                 {meta2}
+                              </Text>
+                            ) : null}
+
+                            {logisticsLine ? (
+                              <Text style={styles.logisticsMeta} numberOfLines={1}>
+                                {logisticsLine}
                               </Text>
                             ) : null}
 
@@ -1334,7 +1205,7 @@ export default function TripDetailScreen() {
 }
 
 /* -------------------------------------------------------------------------- */
-/* styles                                                                      */
+/* styles */
 /* -------------------------------------------------------------------------- */
 
 const styles = StyleSheet.create({
@@ -1483,17 +1354,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    justifyContent: "space-between",
   },
 
-  matchBadgesRight: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    flexShrink: 0,
-  },
-
-  matchTitle: { color: theme.colors.text, fontWeight: "900", flexShrink: 1, paddingRight: 8 },
+  matchTitle: { color: theme.colors.text, fontWeight: "900", flexShrink: 1 },
 
   tbcPill: {
     borderWidth: 1,
@@ -1514,6 +1377,15 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
 
+  // ✅ NEW: logistics line (slightly different emphasis)
+  logisticsMeta: {
+    marginTop: 6,
+    color: theme.colors.textTertiary,
+    fontWeight: "900",
+    fontSize: 12,
+    lineHeight: 16,
+  },
+
   matchHint: { marginTop: 6, color: theme.colors.textTertiary, fontWeight: "900", fontSize: 11 },
 
   crestWrap: {
@@ -1528,41 +1400,6 @@ const styles = StyleSheet.create({
   crestImg: { width: 26, height: 26 },
 
   crestFallback: { color: theme.colors.textSecondary, fontWeight: "900" },
-
-  /* Ticket difficulty badge */
-  diffPill: {
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-
-  diffText: { color: theme.colors.text, fontWeight: "900", fontSize: 11 },
-
-  diffEasy: {
-    borderColor: "rgba(0,255,136,0.40)",
-    backgroundColor: "rgba(0,255,136,0.10)",
-  },
-
-  diffMedium: {
-    borderColor: "rgba(120,170,255,0.45)",
-    backgroundColor: "rgba(120,170,255,0.10)",
-  },
-
-  diffHard: {
-    borderColor: "rgba(255,200,80,0.40)",
-    backgroundColor: "rgba(255,200,80,0.10)",
-  },
-
-  diffVeryHard: {
-    borderColor: "rgba(255,80,80,0.45)",
-    backgroundColor: "rgba(255,80,80,0.10)",
-  },
-
-  diffUnknown: {
-    borderColor: "rgba(255,255,255,0.18)",
-    backgroundColor: "rgba(255,255,255,0.06)",
-  },
 
   itemRow: {
     flexDirection: "row",
