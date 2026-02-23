@@ -1,58 +1,94 @@
 // src/state/trips.ts
 import { create } from "zustand";
+
 import { readJson, writeJson } from "@/src/state/persist";
 import { makeTripId } from "@/src/core/id";
 import type { Trip } from "@/src/core/tripTypes";
-import savedItemsStore from "@/src/state/savedItems";
 
+import savedItemsStore from "@/src/state/savedItems";
 import { MOCK_TRIP_SEEDS } from "@/src/data/mockTrips";
 import { buildMockSavedItemsForSeed } from "@/src/data/mockTripItems";
 
 const STORAGE_KEY = "yna_trips_v1";
 
+/* -------------------------------------------------------------------------- */
+/* utils */
+/* -------------------------------------------------------------------------- */
+
 function now() {
   return Date.now();
 }
 
+function isIsoDateOnly(s: unknown) {
+  return typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s.trim());
+}
+
+function cleanString(v: unknown) {
+  return typeof v === "string" ? v.trim() : String(v ?? "").trim();
+}
+
+function cleanMatchIds(v: unknown): string[] {
+  if (!Array.isArray(v)) return [];
+  return v
+    .map((m) => cleanString(m))
+    .filter(Boolean)
+    .filter((x, i, arr) => arr.indexOf(x) === i);
+}
+
 function sortTrips(trips: Trip[]) {
   const copy = [...trips];
-  copy.sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
+  copy.sort((a, b) => (Number(b.updatedAt ?? 0) || 0) - (Number(a.updatedAt ?? 0) || 0));
   return copy;
 }
 
-async function persist(trips: Trip[]) {
-  await writeJson(STORAGE_KEY, trips);
-}
+/**
+ * Conservative cleaner:
+ * - requires id, cityId, startDate, endDate
+ * - start/end must be YYYY-MM-DD
+ * - matchIds coerced to string[]
+ * - createdAt/updatedAt defaulted sanely
+ *
+ * If something is unusable -> null (dropped).
+ */
+function cleanLoadedTrip(raw: any): Trip | null {
+  if (!raw || typeof raw !== "object") return null;
 
-function cleanLoadedTrip(x: any): Trip | null {
-  if (!x || typeof x !== "object") return null;
+  const id = cleanString(raw.id);
+  const cityId = cleanString(raw.cityId);
+  const startDate = cleanString(raw.startDate);
+  const endDate = cleanString(raw.endDate);
 
-  const id = String(x.id ?? "").trim();
-  const cityId = String(x.cityId ?? "").trim();
-  const startDate = String(x.startDate ?? "").trim();
-  const endDate = String(x.endDate ?? "").trim();
+  if (!id || !cityId) return null;
+  if (!isIsoDateOnly(startDate) || !isIsoDateOnly(endDate)) return null;
 
-  if (!id || !cityId || !startDate || !endDate) return null;
+  const createdAt =
+    Number.isFinite(Number(raw.createdAt)) && Number(raw.createdAt) > 0 ? Number(raw.createdAt) : now();
 
-  const matchIds = Array.isArray(x.matchIds)
-    ? x.matchIds.map((m: any) => String(m).trim()).filter(Boolean)
-    : [];
+  const updatedAt =
+    Number.isFinite(Number(raw.updatedAt)) && Number(raw.updatedAt) > 0 ? Number(raw.updatedAt) : createdAt;
 
-  const createdAt = Number.isFinite(Number(x.createdAt)) ? Number(x.createdAt) : now();
-  const updatedAt = Number.isFinite(Number(x.updatedAt)) ? Number(x.updatedAt) : createdAt;
-
-  return {
+  const trip: Trip = {
     id,
     cityId,
-    citySlug: typeof x.citySlug === "string" ? x.citySlug : undefined,
+    citySlug: typeof raw.citySlug === "string" ? raw.citySlug : undefined,
     startDate,
     endDate,
-    matchIds,
-    notes: typeof x.notes === "string" ? x.notes : undefined,
+    matchIds: cleanMatchIds(raw.matchIds),
+    notes: typeof raw.notes === "string" ? raw.notes : undefined,
     createdAt,
     updatedAt,
   };
+
+  return trip;
 }
+
+async function persistTrips(trips: Trip[]) {
+  await writeJson(STORAGE_KEY, trips);
+}
+
+/* -------------------------------------------------------------------------- */
+/* state */
+/* -------------------------------------------------------------------------- */
 
 type TripsState = {
   loaded: boolean;
@@ -82,55 +118,78 @@ type TripsState = {
   seedMockTrips: () => Promise<void>;
 };
 
+let inflightLoad: Promise<void> | null = null;
+
 const useTripsStore = create<TripsState>((set, get) => ({
   loaded: false,
   trips: [],
 
   loadTrips: async () => {
     if (get().loaded) return;
+    if (inflightLoad) return inflightLoad;
 
-    const raw = await readJson<any>(STORAGE_KEY, []);
-    const arr = Array.isArray(raw) ? raw : [];
-    const cleaned = arr.map(cleanLoadedTrip).filter(Boolean) as Trip[];
+    inflightLoad = (async () => {
+      const raw = await readJson<any>(STORAGE_KEY, []);
+      const arr = Array.isArray(raw) ? raw : [];
+      const cleaned = arr.map(cleanLoadedTrip).filter(Boolean) as Trip[];
+      const sorted = sortTrips(cleaned);
 
-    const sorted = sortTrips(cleaned);
-    set({ trips: sorted, loaded: true });
+      set({ trips: sorted, loaded: true });
 
-    // Dev-only: if you have zero trips, seed a couple so UI isn't dead.
-    // @ts-ignore
-    if (typeof __DEV__ !== "undefined" && __DEV__ && sorted.length === 0) {
-      await get().seedMockTrips();
-    }
+      // Dev-only seed: keep UI alive during development.
+      // IMPORTANT: only seed when truly empty.
+      // @ts-ignore
+      if (typeof __DEV__ !== "undefined" && __DEV__ && sorted.length === 0) {
+        try {
+          await get().seedMockTrips();
+        } catch {
+          // dev-only, ignore
+        }
+      }
+    })()
+      .catch(() => {
+        // If load fails, don't brick the app: mark loaded but empty so UI can still run.
+        set({ trips: [], loaded: true });
+      })
+      .finally(() => {
+        inflightLoad = null;
+      });
+
+    return inflightLoad;
   },
 
   addTrip: async (input) => {
     if (!get().loaded) await get().loadTrips();
 
-    const cityId = String(input.cityId ?? "").trim();
-    const startDate = String(input.startDate ?? "").trim();
-    const endDate = String(input.endDate ?? "").trim();
+    const cityId = cleanString(input.cityId);
+    const startDate = cleanString(input.startDate);
+    const endDate = cleanString(input.endDate);
 
     if (!cityId) throw new Error("cityId required");
-    if (!startDate) throw new Error("startDate required");
-    if (!endDate) throw new Error("endDate required");
+    if (!isIsoDateOnly(startDate)) throw new Error("startDate must be YYYY-MM-DD");
+    if (!isIsoDateOnly(endDate)) throw new Error("endDate must be YYYY-MM-DD");
 
     const trip: Trip = {
       id: makeTripId(),
       cityId,
-      citySlug: input.citySlug ? String(input.citySlug).trim() : undefined,
+      citySlug: input.citySlug ? cleanString(input.citySlug) : undefined,
       startDate,
       endDate,
-      matchIds: Array.isArray(input.matchIds)
-        ? input.matchIds.map((m) => String(m).trim()).filter(Boolean)
-        : [],
-      notes: input.notes ? String(input.notes) : undefined,
+      matchIds: Array.isArray(input.matchIds) ? cleanMatchIds(input.matchIds) : [],
+      notes: typeof input.notes === "string" ? input.notes : undefined,
       createdAt: now(),
       updatedAt: now(),
     };
 
     const next = sortTrips([trip, ...get().trips]);
     set({ trips: next, loaded: true });
-    await persist(next);
+
+    try {
+      await persistTrips(next);
+    } catch {
+      // If persist fails, still keep in-memory state (offline-first UX).
+      // You can add error reporting later if desired.
+    }
 
     return trip;
   },
@@ -138,41 +197,63 @@ const useTripsStore = create<TripsState>((set, get) => ({
   updateTrip: async (tripId, patch) => {
     if (!get().loaded) await get().loadTrips();
 
-    const id = String(tripId ?? "").trim();
+    const id = cleanString(tripId);
     if (!id) return;
 
     const next = get().trips.map((t) => {
       if (t.id !== id) return t;
-      return { ...t, ...patch, updatedAt: now() };
+
+      // Guard: never allow an invalid date shape to enter storage.
+      const p: any = { ...(patch as any) };
+
+      if ("startDate" in p && !isIsoDateOnly(p.startDate)) delete p.startDate;
+      if ("endDate" in p && !isIsoDateOnly(p.endDate)) delete p.endDate;
+
+      if ("cityId" in p) p.cityId = cleanString(p.cityId);
+      if ("citySlug" in p && typeof p.citySlug === "string") p.citySlug = p.citySlug.trim();
+      if ("matchIds" in p) p.matchIds = cleanMatchIds(p.matchIds);
+
+      return { ...t, ...p, updatedAt: now() };
     });
 
     const sorted = sortTrips(next);
     set({ trips: sorted, loaded: true });
-    await persist(sorted);
+
+    try {
+      await persistTrips(sorted);
+    } catch {
+      // best-effort
+    }
   },
 
   deleteTripCascade: async (tripId) => {
     if (!get().loaded) await get().loadTrips();
 
-    const id = String(tripId ?? "").trim();
+    const id = cleanString(tripId);
     if (!id) return;
 
-    // 1) Remove trip
-    const nextTrips = get().trips.filter((t) => t.id !== id);
-    set({ trips: nextTrips, loaded: true });
-    await persist(nextTrips);
-
-    // 2) Remove all SavedItems + their attachment files
+    // 1) Best-effort delete saved items + attachment files FIRST.
+    //    Reason: if the app crashes after removing the trip, you’d otherwise keep orphan Wallet items.
     try {
       await savedItemsStore.clearTrip(id, { deleteAttachmentFiles: true });
     } catch {
       // best-effort
     }
 
-    // 3) Optional hardening: clear any lingering orphans
+    // 2) Remove the trip from Trips store.
+    const nextTrips = get().trips.filter((t) => t.id !== id);
+    set({ trips: nextTrips, loaded: true });
+
     try {
-      const valid = nextTrips.map((t) => String(t.id));
-      await savedItemsStore.clearOrphans(valid, { deleteAttachmentFiles: true });
+      await persistTrips(nextTrips);
+    } catch {
+      // best-effort
+    }
+
+    // 3) Hardening: clear any lingering orphan items not tied to existing trips.
+    try {
+      const validTripIds = nextTrips.map((t) => String(t.id));
+      await savedItemsStore.clearOrphans(validTripIds, { deleteAttachmentFiles: true });
     } catch {
       // best-effort
     }
@@ -180,12 +261,17 @@ const useTripsStore = create<TripsState>((set, get) => ({
 
   clearAll: async () => {
     set({ trips: [], loaded: true });
-    await persist([]);
+
+    try {
+      await persistTrips([]);
+    } catch {
+      // best-effort
+    }
 
     try {
       await savedItemsStore.clearAll({ deleteAttachmentFiles: true });
     } catch {
-      // ignore
+      // best-effort
     }
   },
 
@@ -210,11 +296,8 @@ const useTripsStore = create<TripsState>((set, get) => ({
         notes: seed.notes,
       });
 
-      // Build realistic saved items for the trip workspace
       const matchTitle =
-        seed.matchIds && seed.matchIds.length
-          ? seed.matchIds[0].replace(/-/g, " ")
-          : undefined;
+        seed.matchIds && seed.matchIds.length ? String(seed.matchIds[0]).replace(/-/g, " ") : undefined;
 
       const built = buildMockSavedItemsForSeed({
         tripId: trip.id,
@@ -287,7 +370,7 @@ const tripsStore = {
    * Lookup helpers for Follow → Trip conversion.
    */
   getTripByMatchId: (fixtureId: string) => {
-    const id = String(fixtureId ?? "").trim();
+    const id = cleanString(fixtureId);
     if (!id) return null;
     const s = useTripsStore.getState();
     return s.trips.find((t) => Array.isArray(t.matchIds) && t.matchIds.includes(id)) ?? null;
