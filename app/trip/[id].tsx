@@ -36,6 +36,9 @@ import { buildAffiliateLinks } from "@/src/services/affiliateLinks";
 
 import { confirmBookedAndOfferProof } from "@/src/services/bookingProof";
 
+// ✅ Opportunistic IATA detection (dev-only)
+import { getIataCityCodeForCity, debugCityKey } from "@/src/data/iataCityCodes";
+
 /* -------------------------------------------------------------------------- */
 /* helpers */
 /* -------------------------------------------------------------------------- */
@@ -137,164 +140,6 @@ function statusLabel(s: SavedItem["status"]) {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Aviasales URL patching (autocomplete reliability) */
-/* -------------------------------------------------------------------------- */
-
-function normalizeCityKey(input: string) {
-  // Keep it simple and robust: lowercase, trim, strip common punctuation/spaces.
-  return String(input ?? "")
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, " ")
-    .replace(/[^\p{L}\p{N}\s-]/gu, "")
-    .replace(/\s/g, "");
-}
-
-// Phase-1 pragmatic mapping.
-// Aviasales accepts IATA city codes; in practice, major airport codes work fine too.
-const CITY_TO_IATA: Record<string, string> = {
-  // UK / Ireland
-  [normalizeCityKey("London")]: "LON",
-  [normalizeCityKey("Manchester")]: "MAN",
-  [normalizeCityKey("Liverpool")]: "LPL",
-  [normalizeCityKey("Birmingham")]: "BHX",
-  [normalizeCityKey("Bristol")]: "BRS",
-  [normalizeCityKey("Edinburgh")]: "EDI",
-  [normalizeCityKey("Glasgow")]: "GLA",
-  [normalizeCityKey("Dublin")]: "DUB",
-
-  // Spain / Portugal
-  [normalizeCityKey("Madrid")]: "MAD",
-  [normalizeCityKey("Barcelona")]: "BCN",
-  [normalizeCityKey("Valencia")]: "VLC",
-  [normalizeCityKey("Seville")]: "SVQ",
-  [normalizeCityKey("Sevilla")]: "SVQ",
-  [normalizeCityKey("Bilbao")]: "BIO",
-  [normalizeCityKey("Malaga")]: "AGP",
-  [normalizeCityKey("Palma")]: "PMI",
-  [normalizeCityKey("Lisbon")]: "LIS",
-  [normalizeCityKey("Porto")]: "OPO",
-
-  // France
-  [normalizeCityKey("Paris")]: "PAR",
-  [normalizeCityKey("Nice")]: "NCE",
-  [normalizeCityKey("Marseille")]: "MRS",
-  [normalizeCityKey("Lyon")]: "LYS",
-  [normalizeCityKey("Toulouse")]: "TLS",
-  [normalizeCityKey("Bordeaux")]: "BOD",
-
-  // Italy
-  [normalizeCityKey("Rome")]: "ROM",
-  [normalizeCityKey("Milan")]: "MIL",
-  [normalizeCityKey("Naples")]: "NAP",
-  [normalizeCityKey("Florence")]: "FLR",
-  [normalizeCityKey("Venice")]: "VCE",
-  [normalizeCityKey("Bologna")]: "BLQ",
-  [normalizeCityKey("Turin")]: "TRN",
-
-  // Germany / Austria / Switzerland
-  [normalizeCityKey("Berlin")]: "BER",
-  [normalizeCityKey("Munich")]: "MUC",
-  [normalizeCityKey("Hamburg")]: "HAM",
-  [normalizeCityKey("Frankfurt")]: "FRA",
-  [normalizeCityKey("Cologne")]: "CGN",
-  [normalizeCityKey("Dusseldorf")]: "DUS",
-  [normalizeCityKey("Düsseldorf")]: "DUS",
-  [normalizeCityKey("Stuttgart")]: "STR",
-  [normalizeCityKey("Vienna")]: "VIE",
-  [normalizeCityKey("Zurich")]: "ZRH",
-  [normalizeCityKey("Zürich")]: "ZRH",
-  [normalizeCityKey("Geneva")]: "GVA",
-
-  // Netherlands / Belgium
-  [normalizeCityKey("Amsterdam")]: "AMS",
-  [normalizeCityKey("Rotterdam")]: "RTM",
-  [normalizeCityKey("Brussels")]: "BRU",
-
-  // Nordics
-  [normalizeCityKey("Copenhagen")]: "CPH",
-  [normalizeCityKey("Stockholm")]: "STO",
-  [normalizeCityKey("Oslo")]: "OSL",
-  [normalizeCityKey("Helsinki")]: "HEL",
-
-  // Central/Eastern Europe
-  [normalizeCityKey("Prague")]: "PRG",
-  [normalizeCityKey("Budapest")]: "BUD",
-  [normalizeCityKey("Warsaw")]: "WAW",
-  [normalizeCityKey("Krakow")]: "KRK",
-  [normalizeCityKey("Kraków")]: "KRK",
-  [normalizeCityKey("Gdansk")]: "GDN",
-  [normalizeCityKey("Gdańsk")]: "GDN",
-  [normalizeCityKey("Wroclaw")]: "WRO",
-  [normalizeCityKey("Wrocław")]: "WRO",
-  [normalizeCityKey("Bucharest")]: "OTP",
-  [normalizeCityKey("Sofia")]: "SOF",
-
-  // Balkans / Greece / Turkey
-  [normalizeCityKey("Athens")]: "ATH",
-  [normalizeCityKey("Thessaloniki")]: "SKG",
-  [normalizeCityKey("Istanbul")]: "IST",
-  [normalizeCityKey("Ankara")]: "ESB",
-  [normalizeCityKey("Izmir")]: "ADB",
-  [normalizeCityKey("Antalya")]: "AYT",
-  [normalizeCityKey("Split")]: "SPU",
-  [normalizeCityKey("Dubrovnik")]: "DBV",
-  [normalizeCityKey("Zagreb")]: "ZAG",
-  [normalizeCityKey("Belgrade")]: "BEG",
-  [normalizeCityKey("Sarajevo")]: "SJJ",
-  [normalizeCityKey("Ljubljana")]: "LJU",
-};
-
-function looksLikeIata(s: string) {
-  const t = String(s ?? "").trim().toUpperCase();
-  return /^[A-Z]{3}$/.test(t);
-}
-
-function cityToIata(cityName: string): string | null {
-  const raw = String(cityName ?? "").trim();
-  if (!raw) return null;
-
-  // If someone already passes an IATA-like code, trust it.
-  if (looksLikeIata(raw)) return raw.toUpperCase();
-
-  const key = normalizeCityKey(raw);
-  return CITY_TO_IATA[key] ?? null;
-}
-
-function patchAviasalesUrl(
-  originalUrl: string,
-  args: { destinationIata?: string; departDate?: string | null; returnDate?: string | null }
-) {
-  const urlStr = String(originalUrl ?? "").trim();
-  if (!urlStr) return urlStr;
-
-  // Only patch Aviasales links.
-  const lower = urlStr.toLowerCase();
-  if (!lower.includes("aviasales")) return urlStr;
-
-  try {
-    const u = new URL(urlStr);
-
-    // Ensure we're setting the parameters Aviasales uses for prefilling.
-    // (We do NOT remove any existing affiliate/marker params.)
-    if (args.destinationIata) {
-      u.searchParams.set("destination_iata", args.destinationIata);
-    }
-
-    if (args.departDate) {
-      u.searchParams.set("depart_date", args.departDate);
-    }
-    if (args.returnDate) {
-      u.searchParams.set("return_date", args.returnDate);
-    }
-
-    return u.toString();
-  } catch {
-    return urlStr;
-  }
-}
-
-/* -------------------------------------------------------------------------- */
 /* screen */
 /* -------------------------------------------------------------------------- */
 
@@ -316,6 +161,9 @@ export default function TripDetailScreen() {
 
   const [noteText, setNoteText] = useState("");
   const [noteSaving, setNoteSaving] = useState(false);
+
+  // ✅ dev-only: avoid spamming the same unknown city alert repeatedly
+  const [devWarnedCityKey, setDevWarnedCityKey] = useState<string | null>(null);
 
   /* ---------------- load trip ---------------- */
 
@@ -405,29 +253,11 @@ export default function TripDetailScreen() {
 
   const bookingLinks = useMemo(() => {
     if (!trip || !cityName || cityName === "Trip") return null;
-
-    const links: any = buildAffiliateLinks({
+    return buildAffiliateLinks({
       city: cityName,
       startDate: trip.startDate,
       endDate: trip.endDate,
     });
-
-    // PATCH: make Aviasales autocomplete reliable by forcing destination_iata (+ dates).
-    // We keep the original link so marker/affiliate params remain intact.
-    try {
-      const destIata = cityToIata(cityName);
-      if (links?.flightsUrl && destIata) {
-        links.flightsUrl = patchAviasalesUrl(links.flightsUrl, {
-          destinationIata: destIata,
-          departDate: trip.startDate ?? null,
-          returnDate: trip.endDate ?? null,
-        });
-      }
-    } catch {
-      // never crash Trip screen due to link patching
-    }
-
-    return links;
   }, [trip, cityName]);
 
   const pending = useMemo(() => savedItems.filter((x) => x.status === "pending"), [savedItems]);
@@ -442,6 +272,36 @@ export default function TripDetailScreen() {
     [savedItems]
   );
 
+  /* -------------------------------------------------------------------------- */
+  /* DEV-ONLY: opportunistic city→IATA detector */
+  /* -------------------------------------------------------------------------- */
+
+  useEffect(() => {
+    // @ts-ignore
+    const isDev = typeof __DEV__ !== "undefined" && __DEV__;
+    if (!isDev) return;
+
+    const city = String(cityName ?? "").trim();
+    if (!city || city === "Trip") return;
+
+    const code = getIataCityCodeForCity(city);
+    if (code) return;
+
+    const key = debugCityKey(city);
+    if (!key) return;
+
+    if (devWarnedCityKey === key) return;
+    setDevWarnedCityKey(key);
+
+    // This is intentionally loud in dev so you can't miss it.
+    Alert.alert(
+      "Missing IATA mapping (dev)",
+      `City: ${city}\n\nNormalized key:\n${key}\n\nAdd it to src/data/iataCityCodes.ts`,
+      [{ text: "OK" }],
+      { cancelable: true }
+    );
+  }, [cityName, devWarnedCityKey]);
+
   /* ---------------- navigation ---------------- */
 
   function onEditTrip() {
@@ -450,7 +310,6 @@ export default function TripDetailScreen() {
   }
 
   function onViewWallet() {
-    // tabs route -> app/(tabs)/wallet.tsx => "/wallet"
     router.push("/wallet" as any);
   }
 
@@ -525,7 +384,6 @@ export default function TripDetailScreen() {
     }
 
     if (!tripId) {
-      // Shouldn't happen for trip-scoped items, but guard anyway.
       await openUntracked(item.partnerUrl);
       return;
     }
@@ -572,8 +430,6 @@ export default function TripDetailScreen() {
     try {
       await savedItemsStore.transitionStatus(item.id, "booked");
 
-      // Keep UX consistent with partner return:
-      // show confirmation + offer proof upload if none exists.
       defer(() => {
         confirmBookedAndOfferProof(item.id).catch(() => null);
       });
@@ -688,7 +544,6 @@ export default function TripDetailScreen() {
   /* -------------------------------------------------------------------------- */
 
   const loading = Boolean(tripId && (!tripsLoaded || !savedLoaded));
-
   const showHeroBanners = pending.length > 0 || saved.length > 0 || booked.length > 0;
 
   return (
@@ -1149,7 +1004,7 @@ export default function TripDetailScreen() {
                 </GlassCard>
               )}
 
-              {/* WALLET PREVIEW (kept) */}
+              {/* WALLET PREVIEW */}
               <GlassCard style={styles.card}>
                 <View style={styles.walletHeaderRow}>
                   <Text style={styles.sectionTitle}>Wallet</Text>
