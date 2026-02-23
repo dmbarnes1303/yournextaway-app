@@ -1,43 +1,32 @@
 // src/data/matchdayLogistics/index.ts
-
 import type { MatchdayLogistics } from "./types";
 
 import premierLeagueLogistics from "./premierLeague";
-import laLigaLogistics from "./laLiga";
-import serieALogistics from "./serieA";
-import bundesligaLogistics from "./bundesliga";
-import ligue1Logistics from "./ligue1";
-
-import { normalizeClubKey } from "@/src/data/clubKey";
-
-export const matchdayLogistics: Record<string, MatchdayLogistics> = {
-  ...premierLeagueLogistics,
-  ...laLigaLogistics,
-  ...serieALogistics,
-  ...bundesligaLogistics,
-  ...ligue1Logistics,
-};
-
-export function getMatchdayLogistics(clubInput: string): MatchdayLogistics | null {
-  const key = normalizeClubKey(clubInput);
-  if (!key) return null;
-  return matchdayLogistics[key] ?? null;
-}
+import { normalizeClubKey } from "@/src/data/ticketGuides";
 
 /**
- * Tiny UI helper: produce a compact one-line summary for cards.
- * This avoids every screen inventing its own formatting.
+ * Matchday Logistics registry.
+ * Phase 1: seeded EPL set.
+ * Later: add La Liga / Serie A / Bundesliga / Ligue 1 modules here.
  */
-export function buildLogisticsSnippet(l: MatchdayLogistics): string {
-  const stops = Array.isArray(l.transport?.primaryStops) ? l.transport.primaryStops : [];
-  const stopNames = stops.slice(0, 2).map((s) => s.name).filter(Boolean);
 
-  const parking = l.parking?.availability;
+function isPremierLeague(leagueName?: string | null) {
+  const s = String(leagueName ?? "").toLowerCase();
+  return s.includes("premier league");
+}
 
-  const bits: string[] = [];
+export function getMatchdayLogistics(args: {
+  homeTeamName?: string | null;
+  leagueName?: string | null;
+}): MatchdayLogistics | null {
+  const home = String(args.homeTeamName ?? "").trim();
+  if (!home) return null;
 
-  if (stopNames.length) bits.push(`Nearest: ${stopNames.join(" / ")}`);
-  if (parking) bits.push(`Parking: ${parking}`);
+  // Only EPL seeded right now
+  if (!isPremierLeague(args.leagueName)) return null;
 
-  return bits.join(" • ");
+  const key = normalizeClubKey(home);
+  if (!key) return null;
+
+  return premierLeagueLogistics[key] ?? null;
 }
