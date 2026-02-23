@@ -1,5 +1,5 @@
 // app/(tabs)/wallet.tsx
-import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
+import React, { useEffect, useMemo, useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -11,7 +11,6 @@ import {
   Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
 
 import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
@@ -25,30 +24,21 @@ import savedItemsStore from "@/src/state/savedItems";
 
 import type { SavedItem, WalletAttachment } from "@/src/core/savedItemTypes";
 import { getSavedItemTypeLabel } from "@/src/core/savedItemTypes";
-import { getPartner } from "@/src/core/partners";
+import { getPartner, isPartnerId } from "@/src/core/partners";
 
-import { openUntrackedUrl } from "@/src/services/partnerClicks";
+import { beginPartnerClick, openUntrackedUrl } from "@/src/services/partnerClicks";
 import {
   pickAndStoreAttachmentForItem,
   openAttachment,
   deleteAttachmentFile,
 } from "@/src/services/walletAttachments";
 import { confirmBookedAndOfferProof } from "@/src/services/bookingProof";
-import { readJson, writeJson } from "@/src/state/persist";
 
 /* -------------------------------------------------------------------------- */
 /* Helpers */
 /* -------------------------------------------------------------------------- */
 
 type WalletMode = "booked" | "saved" | "archived";
-
-type LastBookedPointer = {
-  itemId: string;
-  tripId: string;
-  at: number;
-};
-
-const LAST_BOOKED_KEY = "yna_last_booked_v1";
 
 function groupByTrip(items: SavedItem[]) {
   const map = new Map<string, SavedItem[]>();
@@ -117,42 +107,11 @@ function defer(fn: () => void) {
   setTimeout(fn, 60);
 }
 
-function isValidPointer(x: any): x is LastBookedPointer {
-  if (!x || typeof x !== "object") return false;
-  const itemId = String(x.itemId ?? "").trim();
-  const tripId = String(x.tripId ?? "").trim();
-  const at = Number(x.at);
-  return !!itemId && !!tripId && Number.isFinite(at);
-}
-
-async function loadLastBooked(): Promise<LastBookedPointer | null> {
-  try {
-    const raw = await readJson<any>(LAST_BOOKED_KEY, null);
-    if (!isValidPointer(raw)) return null;
-    // Keep it short-lived so it doesn’t highlight forever
-    const ageMs = Date.now() - raw.at;
-    if (ageMs > 1000 * 60 * 60 * 12) return null; // 12 hours
-    return raw;
-  } catch {
-    return null;
-  }
-}
-
-async function persistLastBooked(ptr: LastBookedPointer | null) {
-  try {
-    await writeJson(LAST_BOOKED_KEY, ptr);
-  } catch {
-    // best-effort
-  }
-}
-
 /* -------------------------------------------------------------------------- */
 /* Screen */
 /* -------------------------------------------------------------------------- */
 
 export default function WalletScreen() {
-  const router = useRouter();
-
   const [mode, setMode] = useState<WalletMode>("booked");
 
   const [tripsLoaded, setTripsLoaded] = useState(tripsStore.getState().loaded);
@@ -163,11 +122,6 @@ export default function WalletScreen() {
 
   // Attachment manager UI state (single item at a time)
   const [manageItemId, setManageItemId] = useState<string | null>(null);
-
-  // Highlight pointer
-  const [lastBooked, setLastBooked] = useState<LastBookedPointer | null>(null);
-
-  const scrollRef = useRef<ScrollView | null>(null);
 
   useEffect(() => {
     const unsubTrips = tripsStore.subscribe((s) => {
@@ -182,8 +136,6 @@ export default function WalletScreen() {
 
     if (!tripsStore.getState().loaded) tripsStore.loadTrips();
     if (!savedItemsStore.getState().loaded) savedItemsStore.load();
-
-    loadLastBooked().then(setLastBooked).catch(() => null);
 
     return () => {
       unsubTrips();
@@ -241,15 +193,6 @@ export default function WalletScreen() {
     return managingItem ? getAttachments(managingItem) : [];
   }, [managingItem]);
 
-  const goToTrip = useCallback(
-    (tripId: string) => {
-      const id = String(tripId ?? "").trim();
-      if (!id) return;
-      router.push({ pathname: "/trip/[id]", params: { id } } as any);
-    },
-    [router]
-  );
-
   const addAttachment = useCallback(async (item: SavedItem) => {
     try {
       const att = await pickAndStoreAttachmentForItem(item.id);
@@ -262,14 +205,40 @@ export default function WalletScreen() {
     }
   }, []);
 
+  /**
+   * IMPORTANT UX FIX:
+   * - If item is saved/pending and has a valid partnerId+url, opening it should be TRACKED
+   *   so we can re-prompt on return (user may now have booked).
+   * - If item is booked/archived, open UNTRACKED (no prompt needed).
+   */
   const openItemLink = useCallback(async (item: SavedItem) => {
     if (!item.partnerUrl) {
       Alert.alert(item.title || "Item", getItemDetailsText(item));
       return;
     }
 
+    const canPrompt =
+      (item.status === "saved" || item.status === "pending") &&
+      typeof item.partnerId === "string" &&
+      isPartnerId(item.partnerId);
+
+    if (canPrompt) {
+      try {
+        await beginPartnerClick({
+          tripId: String(item.tripId),
+          partnerId: item.partnerId as any,
+          url: item.partnerUrl,
+          savedItemType: item.type,
+          title: item.title,
+          metadata: item.metadata,
+        });
+        return;
+      } catch {
+        // fall through to untracked open
+      }
+    }
+
     try {
-      // Opening an existing Wallet item must be UNTRACKED
       await openUntrackedUrl(item.partnerUrl);
     } catch {
       Alert.alert("Couldn’t open link", "Your device could not open that link.");
@@ -296,10 +265,6 @@ export default function WalletScreen() {
     try {
       await savedItemsStore.transitionStatus(item.id, "booked");
 
-      const ptr: LastBookedPointer = { itemId: item.id, tripId: item.tripId, at: Date.now() };
-      setLastBooked(ptr);
-      persistLastBooked(ptr).catch(() => null);
-
       // Keep UX consistent everywhere: confirm + offer proof upload
       defer(() => {
         confirmBookedAndOfferProof(item.id).catch(() => null);
@@ -317,8 +282,6 @@ export default function WalletScreen() {
 
       const actions: any[] = [];
       actions.push({ text: "Close", style: "cancel" });
-
-      actions.push({ text: "Back to trip", onPress: () => goToTrip(item.tripId) });
 
       if (item.partnerUrl) {
         actions.push({ text: "Open link", onPress: () => openItemLink(item) });
@@ -344,13 +307,13 @@ export default function WalletScreen() {
       }
 
       // Android reliability: keep <= 3 buttons
-      const maxButtons = Platform.OS === "android" ? 3 : 6;
+      const maxButtons = Platform.OS === "android" ? 3 : 5;
 
       Alert.alert(item.title || "Wallet item", details + attLine, actions.slice(0, maxButtons), {
         cancelable: true,
       });
     },
-    [mode, openItemLink, addAttachment, archiveItem, restoreItem, markBookedFromWallet, goToTrip]
+    [mode, openItemLink, addAttachment, archiveItem, restoreItem, markBookedFromWallet]
   );
 
   const openAttachmentRow = useCallback(async (att: WalletAttachment) => {
@@ -379,17 +342,10 @@ export default function WalletScreen() {
     ]);
   }, []);
 
-  // Auto-highlight behaviour: if we have a lastBooked pointer, force Booked tab.
-  useEffect(() => {
-    if (!lastBooked) return;
-    if (mode !== "booked") setMode("booked");
-  }, [lastBooked]);
-
   return (
     <Background imageSource={getBackground("wallet")} overlayOpacity={0.86}>
       <SafeAreaView style={styles.container} edges={["top"]}>
         <ScrollView
-          ref={(r) => (scrollRef.current = r)}
           style={styles.scroll}
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
@@ -397,15 +353,9 @@ export default function WalletScreen() {
           <View style={styles.header}>
             <Text style={styles.title}>Wallet</Text>
             <Text style={styles.subtitle}>Your bookings, saved links, and stored proof</Text>
-
-            {lastBooked?.tripId ? (
-              <Pressable onPress={() => goToTrip(lastBooked.tripId)} style={styles.backToTripPill}>
-                <Text style={styles.backToTripText}>Back to trip ›</Text>
-              </Pressable>
-            ) : null}
           </View>
 
-          {/* Attachment manager */}
+          {/* Attachment manager (reliable; avoids nested alerts) */}
           {managingItem && (
             <GlassCard style={styles.managerCard} strength="subtle">
               <View style={styles.managerHeader}>
@@ -419,15 +369,9 @@ export default function WalletScreen() {
                   </Text>
                 </View>
 
-                <View style={{ flexDirection: "row", gap: 10 }}>
-                  <Pressable onPress={() => goToTrip(managingItem.tripId)} style={styles.managerMiniBtn}>
-                    <Text style={styles.managerMiniText}>Trip</Text>
-                  </Pressable>
-
-                  <Pressable onPress={() => setManageItemId(null)} style={styles.managerClose}>
-                    <Text style={styles.managerCloseText}>Close</Text>
-                  </Pressable>
-                </View>
+                <Pressable onPress={() => setManageItemId(null)} style={styles.managerClose}>
+                  <Text style={styles.managerCloseText}>Close</Text>
+                </Pressable>
               </View>
 
               <View style={{ gap: 10 }}>
@@ -523,7 +467,7 @@ export default function WalletScreen() {
                   mode === "archived"
                     ? "When you archive items, they’ll show up here."
                     : mode === "saved"
-                    ? "When you choose “No” after returning from a partner, we keep the link here as Saved."
+                    ? "Saved items are links you kept without confirming a booking yet."
                     : "When you confirm bookings in a trip, they appear here. Add a PDF or screenshot to store proof offline."
                 }
               />
@@ -535,26 +479,21 @@ export default function WalletScreen() {
               {[...grouped.entries()].map(([tripId, tripItems]) => {
                 const trip = tripById.get(tripId);
                 const title = (trip?.cityId || "").trim() || "Trip";
-                const isLastTrip = lastBooked?.tripId && String(lastBooked.tripId) === String(tripId);
 
                 return (
                   <View key={tripId} style={styles.section}>
-                    <Pressable onPress={() => goToTrip(tripId)} style={styles.sectionTitleRow}>
-                      <Text style={styles.sectionTitle}>{title}</Text>
-                      <Text style={styles.sectionCta}>Open trip ›</Text>
-                    </Pressable>
+                    <Text style={styles.sectionTitle}>{title}</Text>
 
                     <GlassCard style={styles.card} strength="subtle">
                       <View style={{ gap: 10 }}>
                         {tripItems.map((it) => {
                           const attCount = getAttachments(it).length;
-                          const isHighlighted = !!lastBooked && lastBooked.itemId === it.id && isLastTrip;
 
                           return (
                             <Pressable
                               key={it.id}
                               onPress={() => openCoreActions(it)}
-                              style={[styles.itemRow, isHighlighted && styles.itemRowHighlighted]}
+                              style={styles.itemRow}
                             >
                               <View style={{ flex: 1 }}>
                                 <Text style={styles.itemTitle} numberOfLines={1}>
@@ -630,33 +569,10 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeight.bold,
   },
 
-  backToTripPill: {
-    marginTop: 10,
-    alignSelf: "flex-start",
-    borderWidth: 1,
-    borderColor: "rgba(0,255,136,0.35)",
-    backgroundColor: "rgba(0,255,136,0.08)",
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-
-  backToTripText: { color: theme.colors.text, fontWeight: "900", fontSize: 12 },
-
   managerCard: { padding: theme.spacing.lg },
   managerHeader: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 12 },
   managerTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.md },
   managerSub: { marginTop: 4, color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12 },
-
-  managerMiniBtn: {
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "rgba(0,255,136,0.35)",
-    backgroundColor: "rgba(0,255,136,0.08)",
-  },
-  managerMiniText: { color: theme.colors.text, fontWeight: "900", fontSize: 12 },
 
   managerClose: {
     paddingVertical: 10,
@@ -731,23 +647,11 @@ const styles = StyleSheet.create({
 
   section: { marginTop: 2 },
 
-  sectionTitleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 8,
-  },
-
   sectionTitle: {
+    marginBottom: 8,
     color: theme.colors.text,
     fontSize: theme.fontSize.md,
     fontWeight: theme.fontWeight.black,
-  },
-
-  sectionCta: {
-    color: theme.colors.textSecondary,
-    fontWeight: "900",
-    fontSize: 12,
   },
 
   card: { padding: theme.spacing.lg },
@@ -765,11 +669,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
     backgroundColor: "rgba(0,0,0,0.18)",
-  },
-
-  itemRowHighlighted: {
-    borderColor: "rgba(0,255,136,0.35)",
-    backgroundColor: "rgba(0,255,136,0.07)",
   },
 
   itemTitle: {
