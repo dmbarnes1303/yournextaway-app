@@ -1,7 +1,6 @@
 // src/services/affiliateLinks.ts
 import Constants from "expo-constants";
-import preferencesStore from "@/src/state/preferences";
-import { getIataCityCodeForCity, isIataCityCode } from "@/src/data/iataCityCodes";
+import { devWarnIfUnknownCity, getIataCityCodeForCity } from "@/src/constants/iataCities";
 
 /**
  * Centralised affiliate URL builder.
@@ -23,12 +22,14 @@ export type AffiliateLinks = {
   startDate?: string; // YYYY-MM-DD
   endDate?: string; // YYYY-MM-DD
 
+  // Legacy (already used by screens)
   hotelsUrl: string; // Expedia
   flightsUrl: string; // Aviasales
   trainsUrl: string; // fallback (untracked)
   experiencesUrl: string; // GetYourGuide
   mapsUrl: string; // Google Maps (untracked)
 
+  // Approved additions (Phase 1)
   transfersUrl: string; // KiwiTaxi (tracked)
   insuranceUrl: string; // SafetyWing (tracked)
   claimsUrl: string; // AirHelp (tracked)
@@ -80,24 +81,14 @@ function isIsoDateOnly(s?: string) {
   return !!s && /^\d{4}-\d{2}-\d{2}$/.test(String(s).trim());
 }
 
+function isIata3(s?: string) {
+  return !!s && /^[A-Z]{3}$/.test(String(s).trim().toUpperCase());
+}
+
 function formatDdMm(dateIso?: string): string | null {
   if (!dateIso || !/^\d{4}-\d{2}-\d{2}$/.test(dateIso)) return null;
   const [, m, d] = dateIso.split("-");
-  return `${d}${m}`; // DDMM
-}
-
-function safeOriginIata(): string {
-  // Ensure prefs are loaded opportunistically; don't block.
-  try {
-    if (!preferencesStore.getState().loaded) {
-      void preferencesStore.load();
-    }
-  } catch {
-    // ignore
-  }
-
-  const pref = String(preferencesStore.getPreferredOriginIata?.() ?? "").trim().toUpperCase();
-  return isIataCityCode(pref) ? pref : "LON";
+  return `${d}${m}`;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -105,9 +96,13 @@ function safeOriginIata(): string {
 /* -------------------------------------------------------------------------- */
 
 const AFFILIATE = {
+  // Optional IDs (safe if missing)
   aviasalesMarker: env("EXPO_PUBLIC_AVIASALES_MARKER"),
   gygPartnerId: env("EXPO_PUBLIC_GYG_PARTNER_ID"),
   expediaAffilId: env("EXPO_PUBLIC_EXPEDIA_AFFIL_ID"),
+
+  // Optional default origin IATA (prefer CITY codes, e.g. LON)
+  defaultOriginIata: env("EXPO_PUBLIC_DEFAULT_ORIGIN_IATA"),
 
   // ✅ EXACT tracking links provided by you (DO NOT MODIFY)
   kiwitaxiTracked: "https://kiwitaxi.tpm.lv/ZnnAV8eH",
@@ -126,6 +121,11 @@ export function buildAffiliateLinks(args: {
   country?: string;
   startDate?: string;
   endDate?: string;
+  /**
+   * Optional override for flight origin (CITY code preferred).
+   * If not provided, we fall back to EXPO_PUBLIC_DEFAULT_ORIGIN_IATA then "LON".
+   */
+  originIata?: string;
 }): AffiliateLinks {
   const city = cleanCity(args.city);
   const country = cleanCountry(args.country);
@@ -147,22 +147,28 @@ export function buildAffiliateLinks(args: {
   /* -------------------- */
   /* Flights: Aviasales */
   /* -------------------- */
-  const originIata = safeOriginIata();
-  const destIata = getIataCityCodeForCity(city); // city code, not “closest airport”
+  const destIata = getIataCityCodeForCity(city);
+  if (!destIata) devWarnIfUnknownCity(city, "affiliateLinks.dest");
+
+  const originFromArgs = String(args.originIata ?? "").trim().toUpperCase();
+  const originFromEnv = String(AFFILIATE.defaultOriginIata ?? "").trim().toUpperCase();
+  const originIata = isIata3(originFromArgs)
+    ? originFromArgs
+    : isIata3(originFromEnv)
+    ? originFromEnv
+    : "LON";
 
   let flightsUrl: string;
 
+  // When we have full data, use the /search deep link so the form is prefilled.
+  // Pattern you’re already using (and your example link shows).
   if (destIata && startDate && endDate) {
     const dd = formatDdMm(startDate);
     const rd = formatDdMm(endDate);
 
     if (dd && rd) {
-      // Aviasales search path format:
-      // /search/{ORIGIN}{DDMM}{DEST}{DDMM}
-      // Example you provided:
-      // https://www.aviasales.com/search/MAN2802CGN02031
       flightsUrl =
-        `https://www.aviasales.com/search/${originIata}${dd}${destIata}${rd}` +
+        `https://www.aviasales.com/search/${originIata}${dd}${destIata}${rd}1` +
         (AFFILIATE.aviasalesMarker ? `?marker=${enc(AFFILIATE.aviasalesMarker)}` : "");
     } else {
       flightsUrl =
@@ -170,14 +176,13 @@ export function buildAffiliateLinks(args: {
         (AFFILIATE.aviasalesMarker ? `?marker=${enc(AFFILIATE.aviasalesMarker)}` : "");
     }
   } else {
-    // graceful fallback
     flightsUrl =
       `https://www.aviasales.com/` +
       (AFFILIATE.aviasalesMarker ? `?marker=${enc(AFFILIATE.aviasalesMarker)}` : "");
   }
 
   /* -------------------- */
-  /* Trains/Buses: fallback (UNTRACKED until affiliate) */
+  /* Trains/Buses: fallback (UNTRACKED) */
   /* -------------------- */
   const trainsUrl = `https://www.google.com/maps/search/?api=1&query=${enc(
     `${query} train station`
@@ -191,7 +196,7 @@ export function buildAffiliateLinks(args: {
   const experiencesUrl = `https://www.getyourguide.com/s/?${gygParams.join("&")}`;
 
   /* -------------------- */
-  /* Tracked base links (EXACT) */
+  /* Transfers / Insurance / Claims / Tickets: TRACKED BASE LINKS (EXACT) */
   /* -------------------- */
   const transfersUrl = AFFILIATE.kiwitaxiTracked;
   const insuranceUrl = AFFILIATE.safetywingTracked;
@@ -220,9 +225,6 @@ export function buildAffiliateLinks(args: {
   };
 }
 
-/**
- * Used by click tracking de-dupe (normalize for comparisons).
- */
 export function normalizeUrlForCompare(url: string): string {
   return String(url ?? "").trim().toLowerCase();
 }
