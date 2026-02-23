@@ -40,7 +40,11 @@ export type AffiliateLinks = {
 /* -------------------------------------------------------------------------- */
 
 function env(name: string): string | undefined {
-  const extra = (Constants?.expoConfig as any)?.extra ?? (Constants as any)?.manifest?.extra ?? {};
+  const extra =
+    (Constants?.expoConfig as any)?.extra ??
+    (Constants as any)?.manifest?.extra ??
+    {};
+
   const v =
     (extra && typeof extra[name] === "string" ? String(extra[name]) : undefined) ??
     (typeof process !== "undefined" &&
@@ -76,11 +80,18 @@ function isIsoDateOnly(s?: string) {
   return !!s && /^\d{4}-\d{2}-\d{2}$/.test(String(s).trim());
 }
 
-/* -------------------------------------------------------------------------- */
-/* Aviasales prefill helpers (Phase 1) */
-/* -------------------------------------------------------------------------- */
+function isIata(s?: string) {
+  return !!s && /^[A-Z]{3}$/.test(String(s).trim().toUpperCase());
+}
+
+function formatDdMm(dateIso?: string): string | null {
+  if (!dateIso || !/^\d{4}-\d{2}-\d{2}$/.test(dateIso)) return null;
+  const [, m, d] = dateIso.split("-");
+  return `${d}${m}`;
+}
 
 function cityToIata(city: string): string | null {
+  // Phase-1 pragmatic map. Expand later (or replace with API / dataset).
   const map: Record<string, string> = {
     Barcelona: "BCN",
     Madrid: "MAD",
@@ -95,34 +106,38 @@ function cityToIata(city: string): string | null {
     Vienna: "VIE",
     Prague: "PRG",
     Budapest: "BUD",
+    // UK (handy)
+    London: "LON",
+    Manchester: "MAN",
   };
 
-  const needle = String(city ?? "").trim().toLowerCase();
-  if (!needle) return null;
-
-  for (const [k, v] of Object.entries(map)) {
-    if (k.toLowerCase() === needle) return v;
-  }
-
-  return null;
-}
-
-function isoToDdMm(dateIso?: string): string | null {
-  if (!dateIso || !/^\d{4}-\d{2}-\d{2}$/.test(String(dateIso))) return null;
-  const [, m, d] = String(dateIso).split("-");
-  if (!m || !d) return null;
-  return `${d}${m}`;
+  const key = Object.keys(map).find((k) => k.toLowerCase() === city.trim().toLowerCase());
+  return key ? map[key] : null;
 }
 
 /* -------------------------------------------------------------------------- */
 /* affiliate config */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * Put IDs in app.json -> expo.extra and/or .env as EXPO_PUBLIC_*.
+ *
+ * You currently have approved:
+ * - Expedia (program-specific linking varies; we use a stable public entry)
+ * - Aviasales (marker-based in many setups)
+ * - GetYourGuide (partner_id)
+ * - KiwiTaxi / AirHelp via TPM tracking links
+ * - SafetyWing direct tracking link
+ * - SportsEvents365 a_aid param
+ */
 const AFFILIATE = {
   // Optional IDs (safe if missing)
   aviasalesMarker: env("EXPO_PUBLIC_AVIASALES_MARKER"),
   gygPartnerId: env("EXPO_PUBLIC_GYG_PARTNER_ID"),
   expediaAffilId: env("EXPO_PUBLIC_EXPEDIA_AFFIL_ID"),
+
+  // Optional default origin airport for flights (Phase-1: configurable without code change)
+  defaultOriginIata: env("EXPO_PUBLIC_DEFAULT_ORIGIN_IATA"),
 
   // ✅ EXACT tracking links provided by you (DO NOT MODIFY)
   kiwitaxiTracked: "https://kiwitaxi.tpm.lv/ZnnAV8eH",
@@ -160,31 +175,41 @@ export function buildAffiliateLinks(args: {
   const hotelsUrl = `https://www.expedia.co.uk/Hotel-Search?${expediaParams.join("&")}`;
 
   /* -------------------- */
-  /* Flights: Aviasales (prefilled when possible) */
+  /* Flights: Aviasales (prefilled via search URL when possible) */
   /* -------------------- */
-  // Phase-1 default origin. Later: make this user-selectable.
-  const originIata = "MAN";
-
   const destIata = cityToIata(city);
-  const dd = isoToDdMm(startDate);
-  const rd = isoToDdMm(endDate);
+
+  const originIata = isIata(AFFILIATE.defaultOriginIata)
+    ? String(AFFILIATE.defaultOriginIata).trim().toUpperCase()
+    : "MAN"; // Phase-1 default
 
   let flightsUrl: string;
 
-  if (destIata && dd && rd) {
-    // /search/<ORIGIN><DDMM><DEST><DDMM>
-    const base = `https://www.aviasales.com/search/${originIata}${dd}${destIata}${rd}`;
-    flightsUrl = AFFILIATE.aviasalesMarker ? `${base}?marker=${enc(AFFILIATE.aviasalesMarker)}` : base;
+  if (destIata && startDate && endDate) {
+    const dd = formatDdMm(startDate);
+    const rd = formatDdMm(endDate);
+
+    if (dd && rd) {
+      flightsUrl =
+        `https://www.aviasales.com/search/${originIata}${dd}${destIata}${rd}` +
+        (AFFILIATE.aviasalesMarker ? `?marker=${enc(AFFILIATE.aviasalesMarker)}` : "");
+    } else {
+      flightsUrl =
+        `https://www.aviasales.com/` +
+        (AFFILIATE.aviasalesMarker ? `?marker=${enc(AFFILIATE.aviasalesMarker)}` : "");
+    }
   } else {
-    flightsUrl = AFFILIATE.aviasalesMarker
-      ? `https://www.aviasales.com/?marker=${enc(AFFILIATE.aviasalesMarker)}`
-      : `https://www.aviasales.com/`;
+    flightsUrl =
+      `https://www.aviasales.com/` +
+      (AFFILIATE.aviasalesMarker ? `?marker=${enc(AFFILIATE.aviasalesMarker)}` : "");
   }
 
   /* -------------------- */
   /* Trains/Buses: fallback (UNTRACKED until affiliate) */
   /* -------------------- */
-  const trainsUrl = `https://www.google.com/maps/search/?api=1&query=${enc(`${query} train station`)}`;
+  const trainsUrl = `https://www.google.com/maps/search/?api=1&query=${enc(
+    `${query} train station`
+  )}`;
 
   /* -------------------- */
   /* Experiences: GetYourGuide (approved) */
