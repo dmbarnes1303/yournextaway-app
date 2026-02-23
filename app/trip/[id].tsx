@@ -834,7 +834,7 @@ export default function TripDetailScreen() {
                   <TextInput
                     value={noteText}
                     onChangeText={setNoteText}
-                    placeholder="Add a note (tickets, hotel shortlist, reminders, anything)…"
+                    placeholder="Add a note (home tickets, hotel shortlist, reminders, anything)…"
                     placeholderTextColor={theme.colors.textSecondary}
                     style={styles.noteInput}
                     multiline
@@ -959,10 +959,10 @@ export default function TripDetailScreen() {
                 </GlassCard>
               )}
 
-              {/* MATCH TICKETS */}
+              {/* HOME TICKETS (HOST CLUB) */}
               {bookingLinks && (
                 <GlassCard style={styles.card}>
-                  <Text style={styles.sectionTitle}>Match tickets</Text>
+                  <Text style={styles.sectionTitle}>Home tickets (host club)</Text>
 
                   <Pressable
                     style={styles.wideBtn}
@@ -971,14 +971,14 @@ export default function TripDetailScreen() {
                         partnerId: "sportsevents365",
                         url: bookingLinks.ticketsUrl,
                         savedItemType: "tickets",
-                        title: `Match tickets`,
+                        title: `Home tickets (host club)`,
                         metadata: { city: cityName },
                       })
                     }
                   >
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.wideBtnTitle}>Find tickets</Text>
-                      <Text style={styles.wideBtnSub}>SportsEvents365</Text>
+                      <Text style={styles.wideBtnTitle}>Find home tickets</Text>
+                      <Text style={styles.wideBtnSub}>Sportsevents365</Text>
                     </View>
                     <Text style={styles.chev}>›</Text>
                   </Pressable>
