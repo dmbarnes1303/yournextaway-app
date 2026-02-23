@@ -20,17 +20,51 @@ export function normalizeClubKey(input: string): string {
   const raw = String(input ?? "").trim().toLowerCase();
   if (!raw) return "";
 
-  // Common aliases (Phase 1 pragmatic)
+  // Pragmatic aliases (fixes real-world inputs + API name variance)
   const alias: Record<string, string> = {
+    // Man Utd
     "man utd": "manchester-united",
     "man united": "manchester-united",
     "manchester utd": "manchester-united",
+
+    // Spurs
     "spurs": "tottenham-hotspur",
     "tottenham": "tottenham-hotspur",
+    "tottenham hotspur": "tottenham-hotspur",
+
+    // Wolves
     "wolves": "wolverhampton-wanderers",
+    "wolverhampton": "wolverhampton-wanderers",
+    "wolverhampton wanderers": "wolverhampton-wanderers",
+
+    // West Ham
     "west ham": "west-ham-united",
-    "brighton": "brighton",
+    "west ham united": "west-ham-united",
+
+    // Newcastle
     "newcastle": "newcastle-united",
+    "newcastle united": "newcastle-united",
+
+    // Forest
+    "nottingham forest": "nottingham-forest",
+    "nottm forest": "nottingham-forest",
+    "nffc": "nottingham-forest",
+
+    // Bournemouth
+    "bournemouth": "afc-bournemouth",
+    "afc bournemouth": "afc-bournemouth",
+
+    // Brighton
+    "brighton": "brighton",
+    "brighton and hove albion": "brighton",
+
+    // Leeds
+    "leeds": "leeds-united",
+    "leeds utd": "leeds-united",
+
+    // City shorthand
+    "man city": "manchester-city",
+    "manchester city": "manchester-city",
   };
 
   const directAlias = alias[raw];
@@ -44,7 +78,7 @@ export function normalizeClubKey(input: string): string {
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "");
 
-  return cleaned;
+  return alias[cleaned] ?? cleaned;
 }
 
 /**
