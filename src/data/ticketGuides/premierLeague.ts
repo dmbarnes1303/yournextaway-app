@@ -1,374 +1,394 @@
 // src/data/ticketGuides/premierLeague.ts
+// Premier League (20 teams) — HOME TICKETS ONLY guidance for neutral travellers.
+// NOTE: Some clubs route ticketing via a separate ticketing subdomain/portal that can change.
+// The URLs below are the usual official “tickets hub” entry points.
 
-import type { TicketGuide } from "./types";
+import type { TicketGuide, TicketDifficulty } from "./types";
 
-/**
- * Premier League (2025/26) — 20 teams
- *
- * This file is an expectation-setter for neutral travellers.
- * It is NOT a promise and should stay conservative + user-first.
- *
- * Notes:
- * - No “away end” framing.
- * - Push users toward official channels first.
- * - “marketplace_risk” exists only to warn hard (don’t recommend it).
- */
-function makeGuide(g: TicketGuide): TicketGuide {
-  return g;
+type DaysRange = { min: number; max: number };
+
+const EPL = "Premier League";
+
+function n(s?: string) {
+  return String(s ?? "")
+    .toLowerCase()
+    .replace(/&/g, "and")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
-/** Helper: share one guide across multiple lookup keys (aliases). */
-function alias(g: TicketGuide, keys: string[]) {
-  const out: Record<string, TicketGuide> = {};
-  for (const k of keys) out[k] = g;
-  return out;
+function guide(args: {
+  clubName: string;
+  officialTicketsUrl: string;
+  difficulty: TicketDifficulty;
+  membershipRequired: boolean;
+  typicalReleaseDaysBefore?: DaysRange;
+  ukCardUsuallyWorks?: boolean;
+  touristFriendly?: boolean;
+  summary: string;
+  safetyNotes?: string[];
+  notes?: string[];
+  aliases?: string[];
+}): TicketGuide & { aliases?: string[]; officialTicketsUrl?: string } {
+  // We keep officialTicketsUrl on the object even if your shared TicketGuide type doesn’t include it yet.
+  // It’s optional extra metadata that you can use later (or ignore safely).
+  return {
+    clubName: args.clubName,
+    league: EPL,
+    summary: args.summary,
+    difficulty: args.difficulty,
+    membershipRequired: args.membershipRequired,
+    typicalReleaseDaysBefore: args.typicalReleaseDaysBefore,
+    ukCardUsuallyWorks: args.ukCardUsuallyWorks ?? true,
+    touristFriendly: args.touristFriendly ?? true,
+    safetyNotes: args.safetyNotes ?? [
+      "Only buy from official club channels or a trusted, regulated marketplace.",
+      "Avoid ticket resellers that don’t show seat/section details and refund terms.",
+      "Arrive early for security queues and entry checks.",
+    ],
+    notes: args.notes ?? [],
+    // @ts-expect-error - optional metadata for your app (safe to keep; you can add to types later).
+    officialTicketsUrl: args.officialTicketsUrl,
+    // @ts-expect-error - optional metadata for matching aliases.
+    aliases: args.aliases ?? [],
+  };
 }
 
-const arsenal = makeGuide({
-  clubKey: "arsenal",
-  clubName: "Arsenal",
-  league: "Premier League",
-  difficulty: "very_hard",
-  summary: "Very high demand. Membership is usually needed; general sale for big fixtures is rare.",
-  membershipRequired: true,
-  typicalReleaseDaysBefore: { min: 21, max: 70 },
-  ukCardUsuallyWorks: true,
-  touristFriendly: true,
-  methods: ["membership_portal", "official_site", "official_app", "hospitality"],
-  safetyNotes: ["Avoid random resale/marketplaces. If you miss official/member windows, hospitality is the safest fallback."],
-  notes: ["Expect account-based digital ticketing.", "Big fixtures often sell out in priority windows."],
-});
+export const PREMIER_LEAGUE_TICKET_GUIDES: Array<
+  TicketGuide & { aliases?: string[]; officialTicketsUrl?: string }
+> = [
+  guide({
+    clubName: "AFC Bournemouth",
+    officialTicketsUrl: "https://www.afcb.co.uk/tickets",
+    difficulty: "medium",
+    membershipRequired: false,
+    typicalReleaseDaysBefore: { min: 7, max: 28 },
+    summary:
+      "Home tickets are often obtainable for most fixtures. High-demand matches can sell quickly, but general sale is common.",
+    notes: [
+      "Create an account early so checkout is smoother on release day.",
+      "For peak fixtures, expect limits per account and tighter sale windows.",
+    ],
+    aliases: ["bournemouth", "afc bournemouth"],
+  }),
 
-const manCity = makeGuide({
-  clubKey: "manchester-city",
-  clubName: "Manchester City",
-  league: "Premier League",
-  difficulty: "hard",
-  summary: "Many fixtures can be achievable with planning. Marquee games sell fast—buy at release.",
-  membershipRequired: false,
-  typicalReleaseDaysBefore: { min: 14, max: 60 },
-  ukCardUsuallyWorks: true,
-  touristFriendly: true,
-  methods: ["official_site", "official_app", "hospitality"],
-  safetyNotes: ["Stick to official channels; use hospitality if sold out."],
-  notes: ["Availability varies a lot by opponent and calendar spot."],
-});
+  guide({
+    clubName: "Arsenal FC",
+    officialTicketsUrl: "https://www.arsenal.com/tickets",
+    difficulty: "very_hard",
+    membershipRequired: true,
+    typicalReleaseDaysBefore: { min: 14, max: 45 },
+    touristFriendly: false,
+    summary:
+      "One of the toughest tickets in the league. Most fixtures require membership access and still sell out fast.",
+    notes: [
+      "Assume membership is required for realistic access.",
+      "If you’re travelling, plan the weekend first and treat the match as ‘bonus’ until secured.",
+    ],
+    aliases: ["arsenal"],
+  }),
 
-const astonVilla = makeGuide({
-  clubKey: "aston-villa",
-  clubName: "Aston Villa",
-  league: "Premier League",
-  difficulty: "hard",
-  summary: "Often doable with planning. Priority access can matter for the bigger games.",
-  membershipRequired: false,
-  typicalReleaseDaysBefore: { min: 14, max: 55 },
-  ukCardUsuallyWorks: true,
-  touristFriendly: true,
-  methods: ["official_site", "official_app", "membership_portal", "hospitality"],
-  safetyNotes: ["Avoid random resale. If you miss the on-sale window, hospitality is the safest fallback."],
-  notes: ["Expect tighter availability for top opponents and peak dates."],
-});
+  guide({
+    clubName: "Aston Villa",
+    officialTicketsUrl: "https://www.avfc.co.uk/tickets",
+    difficulty: "hard",
+    membershipRequired: true,
+    typicalReleaseDaysBefore: { min: 10, max: 35 },
+    summary:
+      "Demand is strong. Many fixtures start with priority windows and may need membership for early access.",
+    notes: [
+      "Track on-sale dates and be ready at release time.",
+      "Big six visits and derby-style fixtures are significantly harder.",
+    ],
+    aliases: ["aston villa", "villa"],
+  }),
 
-const chelsea = makeGuide({
-  clubKey: "chelsea",
-  clubName: "Chelsea",
-  league: "Premier League",
-  difficulty: "very_hard",
-  summary: "High demand. Membership is strongly recommended; general sale is uncommon.",
-  membershipRequired: true,
-  typicalReleaseDaysBefore: { min: 21, max: 70 },
-  ukCardUsuallyWorks: true,
-  touristFriendly: true,
-  methods: ["membership_portal", "official_site", "official_app", "hospitality"],
-  safetyNotes: ["If you can’t buy officially, don’t gamble—use hospitality or verified authorized routes only."],
-  notes: ["Digital ticketing/account rules can be strict for high-demand matches."],
-});
+  guide({
+    clubName: "Brentford FC",
+    officialTicketsUrl: "https://www.brentfordfc.com/en/tickets",
+    difficulty: "hard",
+    membershipRequired: true,
+    typicalReleaseDaysBefore: { min: 10, max: 35 },
+    summary:
+      "Smaller capacity means demand spikes. Membership/priority access is common for desirable fixtures.",
+    notes: [
+      "For popular games, expect limited general sale or none at all.",
+      "Have account/payment details saved to avoid checkout delays.",
+    ],
+    aliases: ["brentford"],
+  }),
 
-const manUnited = makeGuide({
-  clubKey: "manchester-united",
-  clubName: "Manchester United",
-  league: "Premier League",
-  difficulty: "very_hard",
-  summary: "Very high demand. Membership/priority access is usually required for decent availability.",
-  membershipRequired: true,
-  typicalReleaseDaysBefore: { min: 28, max: 90 },
-  ukCardUsuallyWorks: true,
-  touristFriendly: true,
-  methods: ["membership_portal", "official_site", "official_app", "hospitality"],
-  safetyNotes: ["Avoid sketchy marketplaces. If you miss official windows, hospitality is the safer route."],
-  notes: ["Big fixtures can disappear quickly once sales open."],
-});
+  guide({
+    clubName: "Brighton & Hove Albion",
+    officialTicketsUrl: "https://www.brightonandhovealbion.com/tickets",
+    difficulty: "medium",
+    membershipRequired: false,
+    typicalReleaseDaysBefore: { min: 7, max: 28 },
+    summary:
+      "Generally achievable for many fixtures. High-demand matches may require earlier purchase and limited availability.",
+    notes: [
+      "Watch for staggered sale phases (priority → members → general).",
+      "If you’re staying overnight, pick refundable hotel options until tickets are confirmed.",
+    ],
+    aliases: ["brighton", "brighton and hove albion", "brighton & hove albion"],
+  }),
 
-const liverpool = makeGuide({
-  clubKey: "liverpool",
-  clubName: "Liverpool",
-  league: "Premier League",
-  difficulty: "very_hard",
-  summary: "Extremely competitive. Priority access is usually needed; general sale opportunities are limited.",
-  membershipRequired: true,
-  typicalReleaseDaysBefore: { min: 30, max: 90 },
-  ukCardUsuallyWorks: true,
-  touristFriendly: true,
-  methods: ["membership_portal", "official_site", "official_app", "hospitality"],
-  safetyNotes: ["If you can’t buy via official/member routes, hospitality is the safe fallback."],
-  notes: ["Plan early and expect strict account rules for ticketing."],
-});
+  guide({
+    clubName: "Burnley FC",
+    officialTicketsUrl: "https://www.burnleyfootballclub.com/tickets",
+    difficulty: "medium",
+    membershipRequired: false,
+    typicalReleaseDaysBefore: { min: 7, max: 28 },
+    summary:
+      "Often workable for neutral travellers, with easier access than the biggest clubs except for marquee fixtures.",
+    notes: [
+      "Create an online account and monitor on-sale dates.",
+      "Capacity constraints can make top fixtures tighter.",
+    ],
+    aliases: ["burnley"],
+  }),
 
-const brentford = makeGuide({
-  clubKey: "brentford",
-  clubName: "Brentford",
-  league: "Premier League",
-  difficulty: "hard",
-  summary: "Smaller stadium means demand can be tight. Many fixtures require quick action at release.",
-  membershipRequired: false,
-  typicalReleaseDaysBefore: { min: 14, max: 50 },
-  ukCardUsuallyWorks: true,
-  touristFriendly: true,
-  methods: ["official_site", "official_app", "membership_portal", "hospitality"],
-  safetyNotes: ["Avoid marketplaces; scarcity is real for top opponents."],
-  notes: ["Availability can swing sharply depending on opponent."],
-});
+  guide({
+    clubName: "Chelsea FC",
+    officialTicketsUrl: "https://www.chelseafc.com/en/tickets",
+    difficulty: "very_hard",
+    membershipRequired: true,
+    typicalReleaseDaysBefore: { min: 14, max: 45 },
+    touristFriendly: false,
+    summary:
+      "Extremely high demand. Membership and loyalty-style access are common, with limited general sale.",
+    notes: [
+      "Avoid unofficial sellers; counterfeit/touting is a known issue around big clubs.",
+      "Expect strict limits and rapid sell-outs on release.",
+    ],
+    aliases: ["chelsea"],
+  }),
 
-const bournemouth = makeGuide({
-  clubKey: "bournemouth",
-  clubName: "Bournemouth",
-  league: "Premier League",
-  difficulty: "medium",
-  summary: "Often achievable for many fixtures. Buy early for top opponents and peak weekends.",
-  membershipRequired: false,
-  typicalReleaseDaysBefore: { min: 10, max: 45 },
-  ukCardUsuallyWorks: true,
-  touristFriendly: true,
-  methods: ["official_site", "official_app", "hospitality"],
-  safetyNotes: ["Stick to official channels."],
-  notes: ["If you want specific seats, buy right when sales open."],
-});
+  guide({
+    clubName: "Crystal Palace",
+    officialTicketsUrl: "https://www.cpfc.co.uk/tickets",
+    difficulty: "medium",
+    membershipRequired: false,
+    typicalReleaseDaysBefore: { min: 7, max: 28 },
+    summary:
+      "Many fixtures are obtainable. Some high-profile matches may be restricted or sell faster.",
+    notes: [
+      "Check sale phases; some games may prioritise members before general sale.",
+      "Arrive early if travelling across London — transport delays are common.",
+    ],
+    aliases: ["crystal palace", "palace"],
+  }),
 
-const everton = makeGuide({
-  clubKey: "everton",
-  clubName: "Everton",
-  league: "Premier League",
-  difficulty: "medium",
-  summary: "Many fixtures are doable if you buy when sales open. Bigger matches are harder.",
-  membershipRequired: false,
-  typicalReleaseDaysBefore: { min: 14, max: 50 },
-  ukCardUsuallyWorks: true,
-  touristFriendly: true,
-  methods: ["official_site", "official_app", "membership_portal", "hospitality"],
-  safetyNotes: ["Official channels first; hospitality is the safe fallback if sold out."],
-  notes: ["Expect quicker sell-outs for top opponents and holiday periods."],
-});
+  guide({
+    clubName: "Everton FC",
+    officialTicketsUrl: "https://www.evertonfc.com/tickets",
+    difficulty: "medium",
+    membershipRequired: false,
+    typicalReleaseDaysBefore: { min: 7, max: 28 },
+    summary:
+      "Often accessible for a wide range of fixtures, though demand increases for big opponents and late-season matches.",
+    notes: [
+      "Watch for ID/account limits on high-demand fixtures.",
+      "If you’re visiting Liverpool for a weekend, book flexible transport in case kickoff time shifts.",
+    ],
+    aliases: ["everton"],
+  }),
 
-const fulham = makeGuide({
-  clubKey: "fulham",
-  clubName: "Fulham",
-  league: "Premier League",
-  difficulty: "medium",
-  summary: "Often doable for many fixtures. Demand increases for top opponents and London fixtures.",
-  membershipRequired: false,
-  typicalReleaseDaysBefore: { min: 10, max: 45 },
-  ukCardUsuallyWorks: true,
-  touristFriendly: true,
-  methods: ["official_site", "official_app", "hospitality"],
-  safetyNotes: ["Use official channels; avoid marketplaces for high-demand games."],
-  notes: ["Buy early if travelling on a fixed weekend."],
-});
+  guide({
+    clubName: "Fulham FC",
+    officialTicketsUrl: "https://www.fulhamfc.com/tickets",
+    difficulty: "hard",
+    membershipRequired: true,
+    typicalReleaseDaysBefore: { min: 10, max: 35 },
+    summary:
+      "Craven Cottage demand can be strong due to smaller capacity. Membership access is often useful for good fixtures.",
+    notes: [
+      "Expect higher difficulty for big clubs and London matchups.",
+      "If general sale appears, it can still move quickly.",
+    ],
+    aliases: ["fulham"],
+  }),
 
-const newcastle = makeGuide({
-  clubKey: "newcastle-united",
-  clubName: "Newcastle United",
-  league: "Premier League",
-  difficulty: "hard",
-  summary: "Demand can be strong. Many fixtures are tough unless you act quickly at release.",
-  membershipRequired: false,
-  typicalReleaseDaysBefore: { min: 14, max: 60 },
-  ukCardUsuallyWorks: true,
-  touristFriendly: true,
-  methods: ["official_site", "official_app", "membership_portal", "hospitality"],
-  safetyNotes: ["Avoid marketplaces; if you miss on-sale, hospitality is the safer fallback."],
-  notes: ["High-profile opponents and key dates can go very quickly."],
-});
+  guide({
+    clubName: "Leeds United",
+    officialTicketsUrl: "https://www.leedsunited.com/tickets",
+    difficulty: "very_hard",
+    membershipRequired: true,
+    typicalReleaseDaysBefore: { min: 14, max: 45 },
+    touristFriendly: false,
+    summary:
+      "Very high demand relative to capacity. Membership/priority access is typically needed for a realistic chance.",
+    notes: [
+      "Assume limited/no general sale for popular fixtures.",
+      "Plan travel flexibility; secure tickets before locking non-refundable bookings.",
+    ],
+    aliases: ["leeds", "leeds united"],
+  }),
 
-const sunderland = makeGuide({
-  clubKey: "sunderland",
-  clubName: "Sunderland",
-  league: "Premier League",
-  difficulty: "medium",
-  summary: "Often achievable, especially outside marquee fixtures. Plan early for local rivalry/high-profile games.",
-  membershipRequired: false,
-  typicalReleaseDaysBefore: { min: 10, max: 45 },
-  ukCardUsuallyWorks: true,
-  touristFriendly: true,
-  methods: ["official_site", "official_app", "box_office", "hospitality"],
-  safetyNotes: ["Stick to official channels; only use authorized routes if sold out."],
-  notes: ["Expect higher demand for big-name visitors and local rivalries."],
-});
+  guide({
+    clubName: "Liverpool FC",
+    officialTicketsUrl: "https://www.liverpoolfc.com/tickets",
+    difficulty: "very_hard",
+    membershipRequired: true,
+    typicalReleaseDaysBefore: { min: 14, max: 60 },
+    touristFriendly: false,
+    summary:
+      "One of the hardest tickets in England. Expect membership-based access and very limited general sale.",
+    notes: [
+      "Ticket drops can be unpredictable; set reminders for sale phases.",
+      "Use only official channels; scams are common around major clubs.",
+    ],
+    aliases: ["lิเวอร์พูล", "liverpool"],
+  }),
 
-const crystalPalace = makeGuide({
-  clubKey: "crystal-palace",
-  clubName: "Crystal Palace",
-  league: "Premier League",
-  difficulty: "medium",
-  summary: "Many fixtures are manageable. Bigger matches can tighten quickly.",
-  membershipRequired: false,
-  typicalReleaseDaysBefore: { min: 10, max: 45 },
-  ukCardUsuallyWorks: true,
-  touristFriendly: true,
-  methods: ["official_site", "official_app", "membership_portal", "hospitality"],
-  safetyNotes: ["Use official channels first; avoid marketplaces."],
-  notes: ["Buy early for London fixtures and top opponents."],
-});
+  guide({
+    clubName: "Manchester City",
+    officialTicketsUrl: "https://www.mancity.com/tickets",
+    difficulty: "hard",
+    membershipRequired: false,
+    typicalReleaseDaysBefore: { min: 10, max: 35 },
+    summary:
+      "Often achievable for many fixtures, but top opponents and late-season games become much harder.",
+    notes: [
+      "Check whether a fixture is in general sale or requires membership for earlier access.",
+      "If kickoff is TBC, avoid tight same-day travel plans.",
+    ],
+    aliases: ["manchester city", "man city", "mancity"],
+  }),
 
-const brighton = makeGuide({
-  clubKey: "brighton",
-  clubName: "Brighton & Hove Albion",
-  league: "Premier League",
-  difficulty: "medium",
-  summary: "Often achievable with planning; tougher for top opponents and prime dates.",
-  membershipRequired: false,
-  typicalReleaseDaysBefore: { min: 10, max: 45 },
-  ukCardUsuallyWorks: true,
-  touristFriendly: true,
-  methods: ["official_site", "official_app", "membership_portal", "hospitality"],
-  safetyNotes: ["Stick to official routes."],
-  notes: ["If your trip is fixed, buy right at release."],
-});
+  guide({
+    clubName: "Manchester United",
+    officialTicketsUrl: "https://tickets.manutd.com/",
+    difficulty: "very_hard",
+    membershipRequired: true,
+    typicalReleaseDaysBefore: { min: 14, max: 60 },
+    touristFriendly: false,
+    summary:
+      "Huge global demand. Membership access and limited availability are the norm for most fixtures.",
+    notes: [
+      "Treat ‘general sale’ as rare for bigger matches.",
+      "Avoid unofficial sellers that can’t guarantee entry/refunds.",
+    ],
+    aliases: ["manchester united", "man united", "man utd", "muFC"],
+  }),
 
-const leeds = makeGuide({
-  clubKey: "leeds-united",
-  clubName: "Leeds United",
-  league: "Premier League",
-  difficulty: "hard",
-  summary: "Demand can be high. Act quickly at release; priority access can help for big games.",
-  membershipRequired: false,
-  typicalReleaseDaysBefore: { min: 14, max: 55 },
-  ukCardUsuallyWorks: true,
-  touristFriendly: true,
-  methods: ["official_site", "official_app", "membership_portal", "hospitality"],
-  safetyNotes: ["Avoid marketplaces; use hospitality/authorized routes if you miss official sales."],
-  notes: ["Expect tighter availability for marquee fixtures."],
-});
+  guide({
+    clubName: "Newcastle United",
+    officialTicketsUrl: "https://book.nufc.co.uk/",
+    difficulty: "very_hard",
+    membershipRequired: true,
+    typicalReleaseDaysBefore: { min: 14, max: 45 },
+    touristFriendly: false,
+    summary:
+      "Demand is extremely high. Membership/priority access is often essential, with rapid sell-outs for big fixtures.",
+    notes: [
+      "Expect very limited general sale availability.",
+      "If travelling far, keep hotel/transport flexible until tickets are secured.",
+    ],
+    aliases: ["newcastle", "newcastle united", "nufc"],
+  }),
 
-const spurs = makeGuide({
-  clubKey: "tottenham-hotspur",
-  clubName: "Tottenham Hotspur",
-  league: "Premier League",
-  difficulty: "very_hard",
-  summary: "High demand. Membership strongly recommended; general sale for big games is limited.",
-  membershipRequired: true,
-  typicalReleaseDaysBefore: { min: 21, max: 70 },
-  ukCardUsuallyWorks: true,
-  touristFriendly: true,
-  methods: ["membership_portal", "official_site", "official_app", "hospitality"],
-  safetyNotes: ["If you miss official/member access, use hospitality or verified authorized routes only."],
-  notes: ["Expect strict account-based digital tickets for many fixtures."],
-});
+  guide({
+    clubName: "Nottingham Forest",
+    officialTicketsUrl: "https://tickets.nottinghamforest.co.uk/",
+    difficulty: "hard",
+    membershipRequired: true,
+    typicalReleaseDaysBefore: { min: 10, max: 35 },
+    summary:
+      "Smaller capacity and strong demand make many fixtures competitive. Membership is often useful.",
+    notes: [
+      "Check sale phases; big fixtures may not reach general sale.",
+      "Have your account ready before release times.",
+    ],
+    aliases: ["nottingham forest", "forest"],
+  }),
 
-const forest = makeGuide({
-  clubKey: "nottingham-forest",
-  clubName: "Nottingham Forest",
-  league: "Premier League",
-  difficulty: "medium",
-  summary: "Often doable with planning. Availability tightens for bigger matches.",
-  membershipRequired: false,
-  typicalReleaseDaysBefore: { min: 10, max: 45 },
-  ukCardUsuallyWorks: true,
-  touristFriendly: true,
-  methods: ["official_site", "official_app", "membership_portal", "hospitality"],
-  safetyNotes: ["Official channels first; avoid marketplaces."],
-  notes: ["Buy early if travelling on a fixed weekend."],
-});
+  guide({
+    clubName: "Sunderland AFC",
+    officialTicketsUrl: "https://safc.com/tickets",
+    difficulty: "hard",
+    membershipRequired: false,
+    typicalReleaseDaysBefore: { min: 10, max: 35 },
+    summary:
+      "Strong fanbase and demand can be high. Many fixtures are doable, but big games can tighten quickly.",
+    notes: [
+      "If you see a ticketing portal redirect, that’s normal — still official.",
+      "For marquee fixtures, buy as early as possible.",
+    ],
+    aliases: ["sunderland", "sunderland afc"],
+  }),
 
-const westHam = makeGuide({
-  clubKey: "west-ham-united",
-  clubName: "West Ham United",
-  league: "Premier League",
-  difficulty: "hard",
-  summary: "Often possible with planning; high-profile matches can require quick action or priority access.",
-  membershipRequired: false,
-  typicalReleaseDaysBefore: { min: 14, max: 55 },
-  ukCardUsuallyWorks: true,
-  touristFriendly: true,
-  methods: ["official_site", "official_app", "membership_portal", "hospitality"],
-  safetyNotes: ["Avoid marketplaces; use hospitality/authorized routes if sold out."],
-  notes: ["London fixtures and top opponents can be significantly harder."],
-});
+  guide({
+    clubName: "Tottenham Hotspur",
+    officialTicketsUrl: "https://www.tottenhamhotspur.com/tickets/",
+    difficulty: "very_hard",
+    membershipRequired: true,
+    typicalReleaseDaysBefore: { min: 14, max: 45 },
+    touristFriendly: false,
+    summary:
+      "High demand, especially for derbies and big opponents. Membership access is commonly needed.",
+    notes: [
+      "Expect strict purchase limits and fast sell-outs on on-sale times.",
+      "If kickoff is TBC, plan your day around flexibility (late/early kickoff shifts).",
+    ],
+    aliases: ["tottenham", "tottenham hotspur", "spurs"],
+  }),
 
-const burnley = makeGuide({
-  clubKey: "burnley",
-  clubName: "Burnley",
-  league: "Premier League",
-  difficulty: "medium",
-  summary: "Many fixtures are achievable. Bigger opponents and key dates sell quicker.",
-  membershipRequired: false,
-  typicalReleaseDaysBefore: { min: 10, max: 45 },
-  ukCardUsuallyWorks: true,
-  touristFriendly: true,
-  methods: ["official_site", "official_app", "box_office", "hospitality"],
-  safetyNotes: ["Stick to official channels; avoid marketplaces."],
-  notes: ["If you want a specific stand/area, buy at release."],
-});
+  guide({
+    clubName: "West Ham United",
+    officialTicketsUrl: "https://www.whufc.com/tickets",
+    difficulty: "hard",
+    membershipRequired: true,
+    typicalReleaseDaysBefore: { min: 10, max: 35 },
+    summary:
+      "Demand can be high, especially for London matchups and big clubs. Membership often improves access.",
+    notes: [
+      "Some fixtures have priority phases; don’t assume general sale.",
+      "London travel times can be deceptive — leave margin for delays.",
+    ],
+    aliases: ["west ham", "west ham united", "whuFC"],
+  }),
 
-const wolves = makeGuide({
-  clubKey: "wolverhampton-wanderers",
-  clubName: "Wolves",
-  league: "Premier League",
-  difficulty: "medium",
-  summary: "Often achievable for many fixtures; buy early for top opponents and peak dates.",
-  membershipRequired: false,
-  typicalReleaseDaysBefore: { min: 10, max: 45 },
-  ukCardUsuallyWorks: true,
-  touristFriendly: true,
-  methods: ["official_site", "official_app", "membership_portal", "hospitality"],
-  safetyNotes: ["Use official channels first; avoid marketplaces."],
-  notes: ["Availability varies by opponent; don’t assume late tickets exist."],
-});
+  guide({
+    clubName: "Wolverhampton Wanderers",
+    officialTicketsUrl: "https://ticketswolves.co.uk/",
+    difficulty: "medium",
+    membershipRequired: false,
+    typicalReleaseDaysBefore: { min: 7, max: 28 },
+    summary:
+      "Generally obtainable for many fixtures, with increased demand for big opponents and late-season games.",
+    notes: [
+      "If you’re driving, check parking/road closures near kickoff.",
+      "Buy earlier for big matches to avoid limited seating choice.",
+    ],
+    aliases: ["wolves", "wolverhampton", "wolverhampton wanderers"],
+  }),
+];
+
+const GUIDE_BY_KEY = new Map<string, TicketGuide & { aliases?: string[]; officialTicketsUrl?: string }>();
+
+for (const g of PREMIER_LEAGUE_TICKET_GUIDES) {
+  const keys = new Set<string>();
+  keys.add(n(g.clubName));
+  for (const a of (g as any).aliases ?? []) keys.add(n(a));
+  for (const k of keys) GUIDE_BY_KEY.set(k, g);
+}
 
 /**
- * Export registry.
- * Include common key variants so getTicketGuide(homeName) succeeds even if
- * the upstream normalizer outputs spaces or hyphens.
+ * Premier League home-ticket guide lookup.
+ * Match screen calls getTicketGuide(homeTeamName).
  */
-const premierLeagueTicketGuides: Record<string, TicketGuide> = {
-  ...alias(arsenal, ["arsenal"]),
+export function getPremierLeagueTicketGuide(teamName?: string) {
+  const key = n(teamName);
+  if (!key) return null;
 
-  ...alias(manCity, ["manchester-city", "manchester city", "man-city", "mancity"]),
+  if (GUIDE_BY_KEY.has(key)) return GUIDE_BY_KEY.get(key)!;
 
-  ...alias(astonVilla, ["aston-villa", "aston villa", "villa"]),
+  // Loose contains matching (handles “Brighton & Hove Albion” vs “Brighton and Hove Albion” etc.)
+  for (const [k, g] of GUIDE_BY_KEY.entries()) {
+    if (key === k) return g;
+    if (key.includes(k) || k.includes(key)) return g;
+  }
 
-  ...alias(chelsea, ["chelsea"]),
-
-  ...alias(manUnited, ["manchester-united", "manchester united", "man-utd", "man utd", "manutd"]),
-
-  ...alias(liverpool, ["liverpool"]),
-
-  ...alias(brentford, ["brentford"]),
-
-  ...alias(bournemouth, ["bournemouth", "afc-bournemouth", "afc bournemouth"]),
-
-  ...alias(everton, ["everton"]),
-
-  ...alias(fulham, ["fulham"]),
-
-  ...alias(newcastle, ["newcastle-united", "newcastle united", "newcastle"]),
-
-  ...alias(sunderland, ["sunderland"]),
-
-  ...alias(crystalPalace, ["crystal-palace", "crystal palace", "palace"]),
-
-  ...alias(brighton, ["brighton", "brighton-&-hove-albion", "brighton & hove albion", "brighton and hove albion"]),
-
-  ...alias(leeds, ["leeds-united", "leeds united", "leeds"]),
-
-  ...alias(spurs, ["tottenham-hotspur", "tottenham hotspur", "tottenham", "spurs"]),
-
-  ...alias(forest, ["nottingham-forest", "nottingham forest", "forest"]),
-
-  ...alias(westHam, ["west-ham-united", "west ham united", "west ham"]),
-
-  ...alias(burnley, ["burnley"]),
-
-  ...alias(wolves, ["wolverhampton-wanderers", "wolverhampton wanderers", "wolves"]),
-};
-
-export default premierLeagueTicketGuides;
+  return null;
+    }
