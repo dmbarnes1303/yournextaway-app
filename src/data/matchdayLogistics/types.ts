@@ -1,31 +1,26 @@
 // src/data/matchdayLogistics/types.ts
 
-export type TransportStop = {
+export type LogisticsStopType = "train" | "metro" | "tram" | "bus" | "ferry" | "walk" | "other";
+
+export type LogisticsStop = {
   name: string;
-  type: "metro" | "train" | "tram" | "bus";
-  distanceMeters?: number;
+  type: LogisticsStopType;
   notes?: string;
 };
 
-export type FoodDrinkPlace = {
-  name: string;
-  type: "pub" | "bar" | "food" | "mixed";
-  distanceMeters?: number;
-  notes?: string;
-};
-
-export type ParkingInfo = {
-  availability: "easy" | "medium" | "hard" | "avoid";
-  summary: string;
-  officialLots?: string[];
-};
-
-export type StayArea = {
+export type AreaRec = {
   area: string;
-  travelTimeMinutes?: number;
   notes?: string;
   budgetFriendly?: boolean;
 };
+
+export type FoodDrinkRec = {
+  name: string;
+  type: "pub" | "bar" | "food" | "mixed";
+  notes?: string;
+};
+
+export type ParkingAvailability = "easy" | "medium" | "hard";
 
 export type MatchdayLogistics = {
   stadium: string;
@@ -33,17 +28,21 @@ export type MatchdayLogistics = {
   country: string;
 
   transport: {
-    primaryStops: TransportStop[];
+    primaryStops: LogisticsStop[];
     tips?: string[];
   };
 
-  parking?: ParkingInfo;
+  parking: {
+    availability: ParkingAvailability;
+    summary: string;
+    officialLots?: string[];
+  };
 
-  foodDrink?: FoodDrinkPlace[];
+  foodDrink?: FoodDrinkRec[];
 
   stay?: {
-    bestAreas?: StayArea[];
-    budgetAreas?: StayArea[];
+    bestAreas?: AreaRec[];
+    budgetAreas?: AreaRec[];
   };
 
   arrivalTips?: string[];
