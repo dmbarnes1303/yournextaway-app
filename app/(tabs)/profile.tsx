@@ -283,10 +283,8 @@ type AlertsValue = "On" | "Off";
 /* -------------------------------------------------------------------------- */
 
 const UK_ORIGIN_OPTIONS: SelectOption[] = [
-  // Metro city codes (best UX)
   { label: "London (All airports) — LON", value: "LON" },
 
-  // Big national
   { label: "Manchester — MAN", value: "MAN" },
   { label: "Birmingham — BHX", value: "BHX" },
   { label: "Newcastle — NCL", value: "NCL" },
@@ -301,7 +299,6 @@ const UK_ORIGIN_OPTIONS: SelectOption[] = [
   { label: "Southampton (South Coast) — SOU", value: "SOU" },
   { label: "Cardiff (Wales) — CWL", value: "CWL" },
 
-  // Common alternates
   { label: "Liverpool — LPL", value: "LPL" },
   { label: "Leeds Bradford — LBA", value: "LBA" },
   { label: "East Midlands — EMA", value: "EMA" },
@@ -312,7 +309,7 @@ const EURO_ORIGIN_OPTIONS: SelectOption[] = [
   { label: "London (All airports) — LON", value: "LON" },
   { label: "Paris (All airports) — PAR", value: "PAR" },
   { label: "Milan (All airports) — MIL", value: "MIL" },
-  { label: "Rome — ROM", value: "ROM" },
+  { label: "Rome (All airports) — ROM", value: "ROM" },
   { label: "Barcelona — BCN", value: "BCN" },
   { label: "Madrid — MAD", value: "MAD" },
   { label: "Amsterdam — AMS", value: "AMS" },
@@ -364,7 +361,6 @@ export default function ProfileScreen() {
   const followingCount = followed.length;
 
   const unfollow = useFollowStore((s) => s.unfollow);
-
   const setKickoffConfirmedDefaultAndAll = useFollowStore((s) => s.setKickoffConfirmedDefaultAndAll);
   const defaultAlerts = useFollowStore((s) => s.defaultAlerts);
 
@@ -377,10 +373,13 @@ export default function ProfileScreen() {
   const [loading, setLoading] = useState(true);
 
   const countryCode = useMemo(() => getCountryCodeBestEffort(), []);
-  const originOptions = useMemo(() => (countryCode === "GB" ? UK_ORIGIN_OPTIONS : EURO_ORIGIN_OPTIONS), [countryCode]);
+  const originOptions = useMemo(
+    () => (countryCode === "GB" ? UK_ORIGIN_OPTIONS : EURO_ORIGIN_OPTIONS),
+    [countryCode]
+  );
 
-  // Preferences store (preferred origin IATA city code)
-  const [originIata, setOriginIata] = useState<string>(preferencesStore.getState().getPreferredOriginIata?.() ?? "LON");
+  // ✅ Preferences store (preferred origin IATA)
+  const [originIata, setOriginIata] = useState<string>(preferencesStore.getPreferredOriginIata());
   const [originLoaded, setOriginLoaded] = useState<boolean>(preferencesStore.getState().loaded);
 
   const [plan, setPlan] = useState<PlanValue>("not_set");
@@ -390,9 +389,7 @@ export default function ProfileScreen() {
   const [alerts, setAlerts] = useState<AlertsValue>("Off");
   const [setupComplete, setSetupComplete] = useState(false);
 
-  const [activePicker, setActivePicker] = useState<
-    null | "origin" | "currency" | "language" | "budget" | "plan"
-  >(null);
+  const [activePicker, setActivePicker] = useState<null | "origin" | "currency" | "language" | "budget" | "plan">(null);
   const closePicker = useCallback(() => setActivePicker(null), []);
 
   const logoSize = useMemo(() => {
@@ -426,10 +423,10 @@ export default function ProfileScreen() {
   }, [followed]);
 
   const followedPreview = useMemo(() => followedSorted.slice(0, 6), [followedSorted]);
-
   const fallbackLikelyTbcIds = useMemo(() => computeLikelyPlaceholderTbcIdsFromFollowed(followed), [followed]);
 
-  // Load preferences store + subscribe
+  /* --------------------------- preferences load --------------------------- */
+
   useEffect(() => {
     let mounted = true;
 
@@ -437,8 +434,7 @@ export default function ProfileScreen() {
       const s = preferencesStore.getState();
       if (!mounted) return;
       setOriginLoaded(!!s.loaded);
-      const cur = cleanUpper3(s.preferredOriginIata, "LON");
-      setOriginIata(cur);
+      setOriginIata(cleanUpper3(s.preferredOriginIata, "LON"));
     };
 
     const unsub = preferencesStore.subscribe(sync);
@@ -458,7 +454,8 @@ export default function ProfileScreen() {
     };
   }, []);
 
-  // Load persisted (non-origin) settings once
+  /* ------------------------ load local profile prefs ---------------------- */
+
   useEffect(() => {
     let mounted = true;
 
@@ -560,7 +557,8 @@ export default function ProfileScreen() {
     ]);
   }, [countryCode]);
 
-  // Info / legal
+  /* ------------------------------- info/legal ------------------------------ */
+
   const openFAQ = useCallback(() => {
     showInfo(
       "FAQ",
@@ -676,18 +674,16 @@ export default function ProfileScreen() {
     [kickoffToggleBusy, setKickoffConfirmedDefaultAndAll]
   );
 
-  const onSelectOrigin = useCallback(
-    async (v: string) => {
-      const code = cleanUpper3(v, "LON");
-      setOriginIata(code); // optimistic
-      try {
-        await preferencesStore.setPreferredOriginIata(code);
-      } catch {
-        // best-effort
-      }
-    },
-    []
-  );
+  const onSelectOrigin = useCallback(async (v: string) => {
+    const code = cleanUpper3(v, "LON");
+    setOriginIata(code); // optimistic
+
+    try {
+      await preferencesStore.setPreferredOriginIata(code);
+    } catch {
+      // best-effort
+    }
+  }, []);
 
   return (
     <Background imageUrl={getBackground("profile")} overlayOpacity={0.78}>
@@ -898,18 +894,19 @@ export default function ProfileScreen() {
             />
 
             <Row title="Plan" subtitle="Free or Premium" value={planSummary} onPress={() => setActivePicker("plan")} />
-
-            <Row title="Currency" subtitle="Budgets and comparisons" value={currency} onPress={() => setActivePicker("currency")} />
-
+            <Row
+              title="Currency"
+              subtitle="Budgets and comparisons"
+              value={currency}
+              onPress={() => setActivePicker("currency")}
+            />
             <Row title="Language" subtitle="App language" value={language} onPress={() => setActivePicker("language")} />
-
             <Row
               title="Budget"
               subtitle={budgetTarget === "Not Set" ? "Optional" : "Target budget for quick planning"}
               value={budgetTarget === "Not Set" ? "Not set" : `${currency} ${budgetTarget}`}
               onPress={() => setActivePicker("budget")}
             />
-
             <Row
               title="Alerts"
               subtitle="Budget drop alerts (quiet, useful)"
@@ -1050,7 +1047,12 @@ const styles = StyleSheet.create({
   identityTop: { flexDirection: "row", alignItems: "center", gap: 12 },
 
   name: { color: theme.colors.text, fontSize: theme.fontSize.lg, fontWeight: theme.fontWeight.black },
-  meta: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, fontWeight: theme.fontWeight.bold },
+  meta: {
+    marginTop: 6,
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSize.sm,
+    fontWeight: theme.fontWeight.bold,
+  },
 
   followingPill: {
     marginTop: 10,
@@ -1268,7 +1270,12 @@ const styles = StyleSheet.create({
   },
   unfollowText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: theme.fontSize.xs },
 
-  followFooterNote: { borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.10)", paddingHorizontal: theme.spacing.lg, paddingVertical: 12 },
+  followFooterNote: {
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255,255,255,0.10)",
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: 12,
+  },
   followFooterText: { color: theme.colors.textTertiary, fontWeight: "800", fontSize: theme.fontSize.xs },
 
   footerNote: {
