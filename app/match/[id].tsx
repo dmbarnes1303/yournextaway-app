@@ -197,7 +197,8 @@ function buildOfficialHomeTicketsUrl(homeTeamName?: string) {
   const foundKey = Object.keys(OFFICIAL_TICKETS_BY_TEAM).find((k) => key === k || key.includes(k) || k.includes(key));
   if (foundKey) return OFFICIAL_TICKETS_BY_TEAM[foundKey];
 
-  return `https://www.google.com/search?q=${enc(homeTeamName + " official tickets")}`;
+  // Fallback: make the intent explicit (official + home tickets)
+  return `https://www.google.com/search?q=${enc(homeTeamName + " official home tickets")}`;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -754,7 +755,7 @@ export default function MatchDetailScreen() {
     if (!se365EventId) {
       Alert.alert(
         "Sportsevents365 search",
-        `If it doesn’t land on the exact match, use search and paste:\n\n${matchQuery}\n\nTip: stick to “home / neutral” seating where applicable.`
+        `If it doesn’t land on the exact match, use search and paste:\n\n${matchQuery}\n\nTip: buy host-club tickets / home sections where applicable.`
       );
     }
 
@@ -1174,7 +1175,7 @@ export default function MatchDetailScreen() {
             <Pressable style={styles.modalCard} onPress={() => null}>
               <Text style={styles.modalTitle}>Home tickets</Text>
               <Text style={styles.modalBody}>
-                Choose where you want to source home tickets for the host club. Official takes you directly to the club.
+                Choose where you want to source host-club home tickets. Official takes you directly to the club.
                 Sportsevents365 uses your affiliate link.
               </Text>
 
