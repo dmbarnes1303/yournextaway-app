@@ -42,7 +42,8 @@ import { confirmBookedAndOfferProof } from "@/src/services/bookingProof";
 import { getIataCityCodeForCity, debugCityKey } from "@/src/data/iataCityCodes";
 
 // matchday logistics
-import { getMatchdayLogistics, buildLogisticsSnippet } from "@/src/data/matchdayLogistics";
+import { getMatchdayLogistics } from "@/src/data/matchdayLogistics";
+import type { MatchdayLogistics, LogisticsStop, AreaRec } from "@/src/data/matchdayLogistics/types";
 
 /* -------------------------------------------------------------------------- */
 /* helpers */
@@ -215,7 +216,6 @@ function formatKickoffMeta(row?: FixtureListRow | null, trip?: Trip | null): { l
 function titleCaseCity(s: string) {
   const v = String(s ?? "").trim();
   if (!v) return "Trip";
-  // If it's a slug, make it readable
   const looksSlug = v.includes("-") && v === v.toLowerCase();
   const base = looksSlug ? v.replace(/-/g, " ") : v;
   return base
@@ -226,78 +226,87 @@ function titleCaseCity(s: string) {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Stadium proximity helpers (defensive: supports multiple data shapes) */
+/* Matchday logistics summary (REAL schema-based, no made-up proximity) */
 /* -------------------------------------------------------------------------- */
 
-function areaLabel(areaType?: unknown): string {
-  const a = String(areaType ?? "").trim().toLowerCase();
-  if (!a) return "Area";
-  if (a.includes("stadium")) return "Stadium district";
-  if (a.includes("centre") || a.includes("center") || a.includes("downtown")) return "City centre";
-  if (a.includes("residential")) return "Residential";
-  if (a.includes("business") || a.includes("financial")) return "Business district";
-  if (a.includes("airport")) return "Airport area";
-  if (a.includes("suburb")) return "Suburbs";
-  return a.replace(/(^|\s)\S/g, (m) => m.toUpperCase());
+function stopTypeLabel(t: LogisticsStop["type"]) {
+  switch (t) {
+    case "train":
+      return "Train";
+    case "metro":
+      return "Metro";
+    case "tram":
+      return "Tram";
+    case "bus":
+      return "Bus";
+    case "ferry":
+      return "Ferry";
+    case "walk":
+      return "Walk";
+    default:
+      return "Other";
+  }
 }
 
-function minutesLabel(v?: unknown): string | null {
-  const n = typeof v === "number" ? v : Number(String(v ?? "").trim());
-  if (!Number.isFinite(n) || n <= 0) return null;
-  return `${Math.round(n)} min`;
+function parkingLabel(a: MatchdayLogistics["parking"]["availability"]) {
+  if (a === "easy") return "Parking: Easy";
+  if (a === "medium") return "Parking: Medium";
+  return "Parking: Hard";
 }
 
-function distanceKmLabel(v?: unknown): string | null {
-  const n = typeof v === "number" ? v : Number(String(v ?? "").trim());
-  if (!Number.isFinite(n) || n <= 0) return null;
-  const rounded = Math.round(n * 10) / 10;
-  return `${rounded} km`;
+function pickAreaNames(list?: AreaRec[], max = 2): string[] {
+  if (!list?.length) return [];
+  const out: string[] = [];
+  for (const a of list) {
+    const name = String(a.area ?? "").trim();
+    if (name) out.push(name);
+    if (out.length >= max) break;
+  }
+  return out;
 }
 
-function modeLabel(v?: unknown): string | null {
-  const s = String(v ?? "").trim().toLowerCase();
-  if (!s) return null;
-  if (s === "metro" || s === "subway") return "metro";
-  if (s === "train") return "train";
-  if (s === "tram") return "tram";
-  if (s === "bus") return "bus";
-  if (s === "walk" || s === "walking") return "walk";
-  if (s === "taxi") return "taxi";
-  if (s === "uber") return "taxi";
-  if (s === "drive" || s === "car") return "car";
-  return s;
-}
-
-function computeProximityFromLogistics(logistics: any): { line: string; risk?: "risky" | "ok" | "unknown" } | null {
+function buildLogisticsSummary(logistics?: MatchdayLogistics | null) {
   if (!logistics) return null;
 
-  // Support multiple potential field names
-  const distanceKm = distanceKmLabel(logistics.distanceKm ?? logistics.distance_km ?? logistics.distance ?? null);
-  const minutes = minutesLabel(logistics.travelMinutes ?? logistics.travel_mins ?? logistics.minutes ?? null);
-  const mode = modeLabel(logistics.travelMode ?? logistics.mode ?? logistics.primaryMode ?? null);
-  const area = areaLabel(logistics.areaType ?? logistics.area_type ?? logistics.area ?? null);
+  const stadiumLine = `${logistics.stadium} • ${logistics.city}${logistics.country ? `, ${logistics.country}` : ""}`;
 
-  const parts: string[] = [];
-  if (distanceKm) parts.push(distanceKm);
+  const primary = Array.isArray(logistics.transport?.primaryStops) ? logistics.transport.primaryStops : [];
+  const primaryStops = primary
+    .slice(0, 2)
+    .map((s) => {
+      const name = String(s.name ?? "").trim();
+      const type = stopTypeLabel(s.type);
+      return name ? `${name} (${type})` : type;
+    })
+    .filter(Boolean);
 
-  // Render: "12 min metro" if mode present, otherwise just "12 min"
-  if (minutes) parts.push(mode ? `${minutes} ${mode}` : minutes);
+  const transportLine =
+    primaryStops.length > 0
+      ? `Main stops: ${primaryStops.join(" • ")}`
+      : logistics.transport?.tips?.length
+      ? "Transport tips available"
+      : null;
 
-  // Always show area if we have *any* proximity signal
-  const hasSignal = parts.length > 0 || Boolean(String(logistics.areaType ?? logistics.area ?? "").trim());
-  if (!hasSignal) return null;
+  const parkLine = logistics.parking?.availability ? parkingLabel(logistics.parking.availability) : null;
 
-  parts.push(area);
+  const bestAreas = pickAreaNames(logistics.stay?.bestAreas, 2);
+  const budgetAreas = pickAreaNames(logistics.stay?.budgetAreas, 2);
 
-  const riskRaw = String(logistics.lateReturnRisk ?? logistics.late_return_risk ?? "").trim().toLowerCase();
-  const risk =
-    riskRaw === "risky" || riskRaw === "high"
-      ? ("risky" as const)
-      : riskRaw === "ok" || riskRaw === "low"
-      ? ("ok" as const)
-      : ("unknown" as const);
+  const stayBits: string[] = [];
+  if (bestAreas.length) stayBits.push(`Best areas: ${bestAreas.join(" • ")}`);
+  if (budgetAreas.length) stayBits.push(`Budget: ${budgetAreas.join(" • ")}`);
+  const stayLine = stayBits.length ? stayBits.join("  |  ") : null;
 
-  return { line: parts.join(" • "), risk };
+  const hasArrivalTips = Boolean(logistics.arrivalTips?.length);
+  const arrivalLine = hasArrivalTips ? "Arrival tips available" : null;
+
+  return {
+    stadiumLine,
+    transportLine,
+    parkLine,
+    stayLine,
+    arrivalLine,
+  };
 }
 
 /* -------------------------------------------------------------------------- */
@@ -418,7 +427,7 @@ export default function TripDetailScreen() {
             const r = await getFixtureById(String(id));
             if (r) map[String(id)] = r;
           } catch {
-            // best-effort: don’t break the trip screen for one fixture
+            // best-effort
           }
         }
         if (!cancelled) setFixturesById(map);
@@ -466,7 +475,6 @@ export default function TripDetailScreen() {
   const pending = useMemo(() => savedItems.filter((x) => x.status === "pending"), [savedItems]);
   const saved = useMemo(() => savedItems.filter((x) => x.status === "saved" && x.type !== "note"), [savedItems]);
   const booked = useMemo(() => savedItems.filter((x) => x.status === "booked"), [savedItems]);
-
   const notes = useMemo(() => savedItems.filter((x) => x.type === "note" && x.status !== "archived"), [savedItems]);
 
   const matchIds = useMemo(() => {
@@ -511,7 +519,6 @@ export default function TripDetailScreen() {
   }
 
   function onViewWallet() {
-    // IMPORTANT: wallet is a tab route
     router.push("/(tabs)/wallet" as any);
   }
 
@@ -861,12 +868,8 @@ export default function TripDetailScreen() {
                       const homeName = String(r?.teams?.home?.name ?? (trip as any)?.homeName ?? "Home");
                       const awayName = String(r?.teams?.away?.name ?? (trip as any)?.awayName ?? "Away");
 
-                      // Existing logistics snippet (your old line)
                       const logistics = getMatchdayLogistics(homeName);
-                      const logisticsLine = logistics ? buildLogisticsSnippet(logistics) : "";
-
-                      // NEW: Proximity line (distance • minutes mode • area type)
-                      const proximity = computeProximityFromLogistics(logistics);
+                      const summary = buildLogisticsSummary(logistics);
 
                       return (
                         <Pressable key={mid} onPress={() => openMatch(mid)} style={styles.matchRow}>
@@ -893,31 +896,40 @@ export default function TripDetailScreen() {
                                 {meta1}
                               </Text>
                             ) : null}
+
                             {meta2 ? (
                               <Text style={styles.matchMeta} numberOfLines={1}>
                                 {meta2}
                               </Text>
                             ) : null}
 
-                            {/* NEW: Proximity line */}
-                            {proximity ? (
-                              <Text style={styles.proximityMeta} numberOfLines={1}>
-                                {proximity.line}
-                              </Text>
-                            ) : null}
-
-                            {/* Optional risk hint */}
-                            {proximity?.risk === "risky" ? (
-                              <Text style={styles.riskMeta} numberOfLines={1}>
-                                Check late transport
-                              </Text>
-                            ) : null}
-
-                            {/* Existing logistics snippet line (kept) */}
-                            {logisticsLine ? (
-                              <Text style={styles.logisticsMeta} numberOfLines={1}>
-                                {logisticsLine}
-                              </Text>
+                            {/* NEW: logistics summary based on your real schema */}
+                            {summary ? (
+                              <View style={{ marginTop: 6, gap: 4 }}>
+                                <Text style={styles.logiLine} numberOfLines={1}>
+                                  {summary.stadiumLine}
+                                </Text>
+                                {summary.transportLine ? (
+                                  <Text style={styles.logiLineMuted} numberOfLines={1}>
+                                    {summary.transportLine}
+                                  </Text>
+                                ) : null}
+                                {summary.parkLine ? (
+                                  <Text style={styles.logiLineMuted} numberOfLines={1}>
+                                    {summary.parkLine}
+                                  </Text>
+                                ) : null}
+                                {summary.stayLine ? (
+                                  <Text style={styles.logiLineMuted} numberOfLines={1}>
+                                    {summary.stayLine}
+                                  </Text>
+                                ) : null}
+                                {summary.arrivalLine ? (
+                                  <Text style={styles.logiLineMuted} numberOfLines={1}>
+                                    {summary.arrivalLine}
+                                  </Text>
+                                ) : null}
+                              </View>
                             ) : null}
 
                             <Text style={styles.matchHint} numberOfLines={1}>
@@ -1378,30 +1390,18 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
 
-  // NEW: Proximity line style
-  proximityMeta: {
-    marginTop: 4,
+  // NEW: schema-based logistics lines
+  logiLine: {
     color: theme.colors.textSecondary,
-    fontWeight: "800",
-    fontSize: 12,
-    lineHeight: 16,
-  },
-
-  // Optional: Risk hint
-  riskMeta: {
-    marginTop: 4,
-    color: "rgba(255,200,80,1)",
     fontWeight: "900",
     fontSize: 12,
     lineHeight: 16,
   },
-
-  logisticsMeta: {
-    marginTop: 6,
+  logiLineMuted: {
     color: theme.colors.textTertiary,
     fontWeight: "900",
-    fontSize: 12,
-    lineHeight: 16,
+    fontSize: 11,
+    lineHeight: 14,
   },
 
   matchHint: { marginTop: 6, color: theme.colors.textTertiary, fontWeight: "900", fontSize: 11 },
