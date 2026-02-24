@@ -1,49 +1,28 @@
 // src/data/matchdayLogistics/types.ts
 
-export type LogisticsStopType = "train" | "metro" | "tram" | "bus" | "ferry" | "walk" | "other";
-
-export type LogisticsStop = {
-  name: string;
-  type: LogisticsStopType;
-  notes?: string;
-};
-
-export type AreaRec = {
-  area: string;
-  notes?: string;
-  budgetFriendly?: boolean;
-};
-
-export type FoodDrinkRec = {
-  name: string;
-  type: "pub" | "bar" | "food" | "mixed";
-  notes?: string;
-};
-
-export type ParkingAvailability = "easy" | "medium" | "hard";
+export type StayArea = { area: string; notes?: string };
+export type LogisticsStop = { name: string; notes?: string };
 
 export type MatchdayLogistics = {
-  stadium: string;
-  city: string;
-  country: string;
+  // identity
+  homeTeamName?: string; // optional - helps matching
+  clubName?: string; // optional - helps matching
+  league?: string;
 
-  transport: {
-    primaryStops: LogisticsStop[];
+  // stadium context
+  stadium?: string;
+  city?: string;
+
+  // stay guidance
+  stay?: {
+    bestAreas?: StayArea[];
+    budgetAreas?: StayArea[];
+    notes?: string[];
+  };
+
+  // transport guidance
+  transport?: {
+    primaryStops?: LogisticsStop[];
     tips?: string[];
   };
-
-  parking: {
-    availability: ParkingAvailability;
-    summary: string;
-    officialLots?: string[];
-  };
-
-  foodDrink?: FoodDrinkRec[];
-
-  stay?: {
-    bestAreas?: AreaRec[];
-    budgetAreas?: AreaRec[];
-  };
-
-  arrivalTips?: string[];
 };
