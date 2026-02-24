@@ -3,42 +3,13 @@ import { create } from "zustand";
 
 import { readJson, writeJson } from "@/src/state/persist";
 import { makeTripId } from "@/src/core/id";
-import type { Trip as CoreTrip } from "@/src/core/tripTypes";
+import type { Trip } from "@/src/core/tripTypes";
 
 import savedItemsStore from "@/src/state/savedItems";
 import { MOCK_TRIP_SEEDS } from "@/src/data/mockTrips";
 import { buildMockSavedItemsForSeed } from "@/src/data/mockTripItems";
 
 const STORAGE_KEY = "yna_trips_v1";
-
-/* -------------------------------------------------------------------------- */
-/* Trip snapshot extension (backwards compatible) */
-/* -------------------------------------------------------------------------- */
-
-/**
- * CoreTrip is your canonical Trip model (src/core/tripTypes).
- * We extend it here (locally) with optional “snapshot” fields so:
- * - Trip Workspace can render stable human-readable details even if fixture APIs drift.
- * - Old stored trips still load fine (these fields are optional).
- *
- * IMPORTANT: This does NOT require changing src/core/tripTypes immediately.
- */
-export type Trip = CoreTrip & {
-  /** Human display city (“London”) derived at time of save; not a slug */
-  displayCity?: string;
-
-  /** Match snapshot captured at time of save (first match in matchIds) */
-  homeName?: string;
-  awayName?: string;
-  leagueName?: string;
-  venueName?: string;
-
-  /** Kickoff snapshot (ISO datetime) captured at save time when known */
-  kickoffIso?: string;
-
-  /** Optional: store whether kickoff was TBC when saved */
-  kickoffTbc?: boolean;
-};
 
 /* -------------------------------------------------------------------------- */
 /* utils */
@@ -52,28 +23,8 @@ function isIsoDateOnly(s: unknown) {
   return typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s.trim());
 }
 
-function isIsoDateTime(s: unknown) {
-  if (typeof s !== "string") return false;
-  const v = s.trim();
-  if (!v) return false;
-  const d = new Date(v);
-  return Number.isFinite(d.getTime());
-}
-
 function cleanString(v: unknown) {
   return typeof v === "string" ? v.trim() : String(v ?? "").trim();
-}
-
-function cleanOptionalString(v: unknown) {
-  const s = cleanString(v);
-  return s ? s : undefined;
-}
-
-function cleanBool(v: unknown) {
-  if (typeof v === "boolean") return v;
-  if (v === "true") return true;
-  if (v === "false") return false;
-  return undefined;
 }
 
 function cleanMatchIds(v: unknown): string[] {
@@ -90,13 +41,23 @@ function sortTrips(trips: Trip[]) {
   return copy;
 }
 
+function cleanOptString(v: unknown): string | undefined {
+  const s = cleanString(v);
+  return s ? s : undefined;
+}
+
+function cleanOptBool(v: unknown): boolean | undefined {
+  if (typeof v === "boolean") return v;
+  return undefined;
+}
+
 /**
  * Conservative cleaner:
  * - requires id, cityId, startDate, endDate
  * - start/end must be YYYY-MM-DD
  * - matchIds coerced to string[]
  * - createdAt/updatedAt defaulted sanely
- * - snapshot fields are optional and sanitized
+ * - ✅ preserves optional “snapshot” fields used for durability
  *
  * If something is unusable -> null (dropped).
  */
@@ -120,26 +81,24 @@ function cleanLoadedTrip(raw: any): Trip | null {
   const trip: Trip = {
     id,
     cityId,
-
-    // legacy field kept for backwards compatibility
-    citySlug: typeof raw.citySlug === "string" ? raw.citySlug.trim() : undefined,
-
+    citySlug: typeof raw.citySlug === "string" ? raw.citySlug : undefined,
     startDate,
     endDate,
     matchIds: cleanMatchIds(raw.matchIds),
     notes: typeof raw.notes === "string" ? raw.notes : undefined,
     createdAt,
     updatedAt,
-
-    // snapshot fields (optional)
-    displayCity: cleanOptionalString(raw.displayCity),
-    homeName: cleanOptionalString(raw.homeName),
-    awayName: cleanOptionalString(raw.awayName),
-    leagueName: cleanOptionalString(raw.leagueName),
-    venueName: cleanOptionalString(raw.venueName),
-    kickoffIso: isIsoDateTime(raw.kickoffIso) ? String(raw.kickoffIso).trim() : undefined,
-    kickoffTbc: cleanBool(raw.kickoffTbc),
   };
+
+  // ✅ Snapshot fields (safe to keep even if Trip type hasn’t been extended yet)
+  const anyTrip = trip as any;
+  anyTrip.displayCity = cleanOptString(raw.displayCity);
+  anyTrip.homeName = cleanOptString(raw.homeName);
+  anyTrip.awayName = cleanOptString(raw.awayName);
+  anyTrip.leagueName = cleanOptString(raw.leagueName);
+  anyTrip.venueName = cleanOptString(raw.venueName);
+  anyTrip.kickoffIso = cleanOptString(raw.kickoffIso);
+  anyTrip.kickoffTbc = cleanOptBool(raw.kickoffTbc);
 
   return trip;
 }
@@ -159,24 +118,24 @@ type TripsState = {
   loadTrips: () => Promise<void>;
 
   addTrip: (input: {
-    cityId: string; // you currently store a slug here (fine)
-    citySlug?: string; // legacy
+    cityId: string;
+    citySlug?: string;
     startDate: string;
     endDate: string;
     matchIds?: string[];
     notes?: string;
 
-    // optional snapshot input
+    // ✅ optional snapshot fields
     displayCity?: string;
-    homeName?: string;
-    awayName?: string;
-    leagueName?: string;
-    venueName?: string;
-    kickoffIso?: string;
+    homeName?: string | null;
+    awayName?: string | null;
+    leagueName?: string | null;
+    venueName?: string | null;
+    kickoffIso?: string | null;
     kickoffTbc?: boolean;
   }) => Promise<Trip>;
 
-  updateTrip: (tripId: string, patch: Partial<Omit<Trip, "id" | "createdAt">>) => Promise<void>;
+  updateTrip: (tripId: string, patch: Partial<Omit<Trip, "id" | "createdAt">> & Record<string, any>) => Promise<void>;
 
   /**
    * Deletes the trip AND deletes all SavedItems (and attachment files) belonging to the trip.
@@ -250,16 +209,16 @@ const useTripsStore = create<TripsState>((set, get) => ({
       notes: typeof input.notes === "string" ? input.notes : undefined,
       createdAt: now(),
       updatedAt: now(),
-
-      // snapshots (all optional)
-      displayCity: cleanOptionalString(input.displayCity),
-      homeName: cleanOptionalString(input.homeName),
-      awayName: cleanOptionalString(input.awayName),
-      leagueName: cleanOptionalString(input.leagueName),
-      venueName: cleanOptionalString(input.venueName),
-      kickoffIso: isIsoDateTime(input.kickoffIso) ? String(input.kickoffIso).trim() : undefined,
-      kickoffTbc: typeof input.kickoffTbc === "boolean" ? input.kickoffTbc : undefined,
     };
+
+    const anyTrip = trip as any;
+    anyTrip.displayCity = cleanOptString(input.displayCity);
+    anyTrip.homeName = cleanOptString(input.homeName);
+    anyTrip.awayName = cleanOptString(input.awayName);
+    anyTrip.leagueName = cleanOptString(input.leagueName);
+    anyTrip.venueName = cleanOptString(input.venueName);
+    anyTrip.kickoffIso = cleanOptString(input.kickoffIso);
+    anyTrip.kickoffTbc = cleanOptBool(input.kickoffTbc);
 
     const next = sortTrips([trip, ...get().trips]);
     set({ trips: next, loaded: true });
@@ -267,7 +226,7 @@ const useTripsStore = create<TripsState>((set, get) => ({
     try {
       await persistTrips(next);
     } catch {
-      // best-effort offline-first
+      // keep in-memory state
     }
 
     return trip;
@@ -284,7 +243,7 @@ const useTripsStore = create<TripsState>((set, get) => ({
 
       const p: any = { ...(patch as any) };
 
-      // Guard: never allow invalid date shapes into storage
+      // Guard: never allow an invalid date shape to enter storage.
       if ("startDate" in p && !isIsoDateOnly(p.startDate)) delete p.startDate;
       if ("endDate" in p && !isIsoDateOnly(p.endDate)) delete p.endDate;
 
@@ -292,21 +251,17 @@ const useTripsStore = create<TripsState>((set, get) => ({
       if ("citySlug" in p && typeof p.citySlug === "string") p.citySlug = p.citySlug.trim();
       if ("matchIds" in p) p.matchIds = cleanMatchIds(p.matchIds);
 
-      // Snapshot field sanitation (optional)
-      if ("displayCity" in p) p.displayCity = cleanOptionalString(p.displayCity);
-      if ("homeName" in p) p.homeName = cleanOptionalString(p.homeName);
-      if ("awayName" in p) p.awayName = cleanOptionalString(p.awayName);
-      if ("leagueName" in p) p.leagueName = cleanOptionalString(p.leagueName);
-      if ("venueName" in p) p.venueName = cleanOptionalString(p.venueName);
+      // Snapshot field hygiene (best-effort)
+      if ("displayCity" in p) p.displayCity = cleanOptString(p.displayCity);
+      if ("homeName" in p) p.homeName = cleanOptString(p.homeName);
+      if ("awayName" in p) p.awayName = cleanOptString(p.awayName);
+      if ("leagueName" in p) p.leagueName = cleanOptString(p.leagueName);
+      if ("venueName" in p) p.venueName = cleanOptString(p.venueName);
+      if ("kickoffIso" in p) p.kickoffIso = cleanOptString(p.kickoffIso);
+      if ("kickoffTbc" in p) p.kickoffTbc = cleanOptBool(p.kickoffTbc);
 
-      if ("kickoffIso" in p) {
-        p.kickoffIso = isIsoDateTime(p.kickoffIso) ? String(p.kickoffIso).trim() : undefined;
-      }
-      if ("kickoffTbc" in p) {
-        p.kickoffTbc = typeof p.kickoffTbc === "boolean" ? p.kickoffTbc : undefined;
-      }
-
-      return { ...t, ...p, updatedAt: now() };
+      const merged = { ...t, ...p, updatedAt: now() } as any;
+      return merged as Trip;
     });
 
     const sorted = sortTrips(next);
@@ -325,15 +280,12 @@ const useTripsStore = create<TripsState>((set, get) => ({
     const id = cleanString(tripId);
     if (!id) return;
 
-    // 1) Best-effort delete saved items + attachment files FIRST.
-    //    If the app crashes after removing the trip, you'd keep orphan Wallet items.
     try {
       await savedItemsStore.clearTrip(id, { deleteAttachmentFiles: true });
     } catch {
       // best-effort
     }
 
-    // 2) Remove the trip
     const nextTrips = get().trips.filter((t) => t.id !== id);
     set({ trips: nextTrips, loaded: true });
 
@@ -343,7 +295,6 @@ const useTripsStore = create<TripsState>((set, get) => ({
       // best-effort
     }
 
-    // 3) Hardening: clear lingering orphan items not tied to existing trips.
     try {
       const validTripIds = nextTrips.map((t) => String(t.id));
       await savedItemsStore.clearOrphans(validTripIds, { deleteAttachmentFiles: true });
@@ -357,15 +308,11 @@ const useTripsStore = create<TripsState>((set, get) => ({
 
     try {
       await persistTrips([]);
-    } catch {
-      // best-effort
-    }
+    } catch {}
 
     try {
       await savedItemsStore.clearAll({ deleteAttachmentFiles: true });
-    } catch {
-      // best-effort
-    }
+    } catch {}
   },
 
   seedMockTrips: async () => {
@@ -374,9 +321,7 @@ const useTripsStore = create<TripsState>((set, get) => ({
 
     try {
       await savedItemsStore.load();
-    } catch {
-      // best-effort
-    }
+    } catch {}
 
     for (const seed of MOCK_TRIP_SEEDS) {
       const trip = await get().addTrip({
@@ -386,8 +331,6 @@ const useTripsStore = create<TripsState>((set, get) => ({
         endDate: seed.endDate,
         matchIds: seed.matchIds ?? [],
         notes: seed.notes,
-        // snapshot: keep UI readable even with slug-like cityId seeds
-        displayCity: cleanOptionalString(seed.cityName ?? seed.cityId),
       });
 
       const matchTitle =
@@ -395,7 +338,7 @@ const useTripsStore = create<TripsState>((set, get) => ({
 
       const built = buildMockSavedItemsForSeed({
         tripId: trip.id,
-        cityName: trip.displayCity ?? seed.cityId,
+        cityName: seed.cityId,
         startDate: seed.startDate,
         endDate: seed.endDate,
         matchTitle,
@@ -414,9 +357,7 @@ const useTripsStore = create<TripsState>((set, get) => ({
             currency: it.currency,
             metadata: it.metadata,
           });
-        } catch {
-          // best-effort
-        }
+        } catch {}
       }
     }
   },
@@ -460,9 +401,6 @@ const tripsStore = {
     await useTripsStore.getState().seedMockTrips();
   },
 
-  /**
-   * Lookup helpers for Follow → Trip conversion (and de-dupe).
-   */
   getTripByMatchId: (fixtureId: string) => {
     const id = cleanString(fixtureId);
     if (!id) return null;
@@ -478,3 +416,4 @@ const tripsStore = {
 
 export default tripsStore;
 export { useTripsStore };
+export type { Trip };
