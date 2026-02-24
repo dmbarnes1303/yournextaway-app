@@ -1,5 +1,5 @@
 // app/trip/build.tsx
-import React, { useEffect, useMemo, useState, useCallback } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -8,7 +8,6 @@ import {
   Pressable,
   TextInput,
   ActivityIndicator,
-  Alert,
   Platform,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
@@ -51,15 +50,63 @@ function fixtureDateOnly(r: FixtureListRow | null): string | null {
   return m?.[1] ?? null;
 }
 
+function cleanText(v: unknown): string {
+  return String(v ?? "").trim();
+}
+
 function slugifyCityId(cityRaw: string): string {
   const s = String(cityRaw ?? "").trim().toLowerCase();
   if (!s) return "trip";
-  return s
-    .replace(/&/g, "and")
-    .replace(/[^\p{L}\p{N}\s-]/gu, "") // keep letters/numbers/spaces/hyphens
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "") || "trip";
+  return (
+    s
+      .replace(/&/g, "and")
+      .replace(/[^\p{L}\p{N}\s-]/gu, "")
+      .replace(/\s+/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "") || "trip"
+  );
+}
+
+function safeCityDisplay(cityRaw: string): string {
+  const s = cleanText(cityRaw);
+  return s || "Trip";
+}
+
+function parseIsoToDate(iso?: string | null): Date | null {
+  const s = cleanText(iso);
+  if (!s) return null;
+  const d = new Date(s);
+  return Number.isFinite(d.getTime()) ? d : null;
+}
+
+/**
+ * Snapshot builder for trip readability + durability.
+ * Stores both cityId (slug) and displayCity (human).
+ */
+function buildTripSnapshot(selectedFixture: FixtureListRow, placeholderTbcIds: Set<string>) {
+  const displayCity = safeCityDisplay(selectedFixture?.fixture?.venue?.city);
+  const cityId = slugifyCityId(displayCity);
+
+  const homeName = cleanText(selectedFixture?.teams?.home?.name);
+  const awayName = cleanText(selectedFixture?.teams?.away?.name);
+  const leagueName = cleanText(selectedFixture?.league?.name);
+  const venueName = cleanText(selectedFixture?.fixture?.venue?.name);
+
+  const kickoffIsoRaw = selectedFixture?.fixture?.date ? String(selectedFixture.fixture.date) : "";
+  const kickoffIso = cleanText(kickoffIsoRaw) || undefined;
+
+  const kickoffTbc = isKickoffTbc(selectedFixture, placeholderTbcIds);
+
+  return {
+    cityId,
+    displayCity,
+    homeName: homeName || undefined,
+    awayName: awayName || undefined,
+    leagueName: leagueName || undefined,
+    venueName: venueName || undefined,
+    kickoffIso,
+    kickoffTbc,
+  };
 }
 
 /* -------------------------------------------------------------------------- */
@@ -97,10 +144,17 @@ export default function TripBuildScreen() {
   const [endIso, setEndIso] = useState(addDaysIso(startIso, 2));
   const [notes, setNotes] = useState("");
 
+  // keep end date reacting to start changes (but don’t clobber if user is editing with a custom range)
+  const [endTouched, setEndTouched] = useState(false);
+  useEffect(() => {
+    if (endTouched) return;
+    setEndIso(addDaysIso(startIso, 2));
+  }, [startIso, endTouched]);
+
   const setNotesIfEmpty = useCallback((text: string) => {
-    const t = String(text ?? "").trim();
+    const t = cleanText(text);
     if (!t) return;
-    setNotes((prev) => (String(prev ?? "").trim() ? prev : t));
+    setNotes((prev) => (cleanText(prev) ? prev : t));
   }, []);
 
   /* -------------------------------------------------------------------------- */
@@ -129,6 +183,7 @@ export default function TripBuildScreen() {
 
         setStartIso(t.startDate);
         setEndIso(t.endDate);
+        setEndTouched(true);
         setNotes(t.notes ?? "");
 
         const mid = t.matchIds?.[0];
@@ -173,10 +228,9 @@ export default function TripBuildScreen() {
         if (d0) {
           const start = clampFromIsoToTomorrow(d0);
           setStartIso(start);
-          setEndIso(addDaysIso(start, 2));
+          setEndTouched(false); // allow auto end = +2 for new trip
         }
 
-        // If we arrived via Matchday Logistics -> "Stay area" tap
         if (routeCityArea) {
           setNotesIfEmpty(`Stay area: ${routeCityArea}`);
         }
@@ -209,7 +263,6 @@ export default function TripBuildScreen() {
   );
 
   const leagueOptions = useMemo(() => [ALL_LEAGUES, ...LEAGUES], [ALL_LEAGUES]);
-
   const [selectedLeague, setSelectedLeague] = useState<LeagueOption>(ALL_LEAGUES);
 
   useEffect(() => {
@@ -235,7 +288,8 @@ export default function TripBuildScreen() {
           );
           res = batches.flat();
         } else {
-          res = (await getFixtures({ league: selectedLeague.leagueId, season: selectedLeague.season, from, to })) || [];
+          res =
+            (await getFixtures({ league: selectedLeague.leagueId, season: selectedLeague.season, from, to })) || [];
         }
 
         if (!cancelled) {
@@ -276,9 +330,23 @@ export default function TripBuildScreen() {
   /* Save trip */
   /* -------------------------------------------------------------------------- */
 
-  async function onSave() {
+  const validateDateOrder = useCallback((): string | null => {
+    const a = parseIsoToDate(startIso);
+    const b = parseIsoToDate(endIso);
+    if (!a || !b) return "Invalid trip dates.";
+    if (b.getTime() < a.getTime()) return "End date must be on/after start date.";
+    return null;
+  }, [startIso, endIso]);
+
+  const onSave = useCallback(async () => {
     if (!selectedFixture?.fixture?.id) {
       setError("Select a fixture first.");
+      return;
+    }
+
+    const dateError = validateDateOrder();
+    if (dateError) {
+      setError(dateError);
       return;
     }
 
@@ -287,33 +355,28 @@ export default function TripBuildScreen() {
 
     const fixtureId = String(selectedFixture.fixture.id);
 
-    const cityRaw = String(selectedFixture?.fixture?.venue?.city ?? "").trim() || "trip";
-    const cityId = slugifyCityId(cityRaw);
+    const snap = buildTripSnapshot(selectedFixture, placeholderTbcIds);
 
-    // Snapshot for durability (fixture APIs drift; trips must remain readable).
-    const homeName = String(selectedFixture?.teams?.home?.name ?? "").trim();
-    const awayName = String(selectedFixture?.teams?.away?.name ?? "").trim();
-    const leagueName = String(selectedFixture?.league?.name ?? "").trim();
-    const venueName = String(selectedFixture?.fixture?.venue?.name ?? "").trim();
-    const kickoffIso = selectedFixture?.fixture?.date ? String(selectedFixture.fixture.date) : null;
-
+    // NOTE: Trip type may or may not include these snapshot fields at compile-time.
+    // We write them anyway; tripsStore cleaner will keep optional snapshot fields.
     const patch: Partial<Omit<Trip, "id">> = {
-      cityId,
-      matchIds: [fixtureId],
+      cityId: snap.cityId,
       startDate: startIso,
       endDate: endIso,
-      notes: notes.trim(),
+      matchIds: [fixtureId],
+      notes: cleanText(notes),
     };
 
-    // Attach snapshot fields in a TS-safe way (won’t break if Trip type hasn’t been extended yet).
-    (patch as any).homeName = homeName || null;
-    (patch as any).awayName = awayName || null;
-    (patch as any).leagueName = leagueName || null;
-    (patch as any).venueName = venueName || null;
-    (patch as any).kickoffIso = kickoffIso;
+    (patch as any).displayCity = snap.displayCity;
+    (patch as any).homeName = snap.homeName;
+    (patch as any).awayName = snap.awayName;
+    (patch as any).leagueName = snap.leagueName;
+    (patch as any).venueName = snap.venueName;
+    (patch as any).kickoffIso = snap.kickoffIso;
+    (patch as any).kickoffTbc = snap.kickoffTbc;
 
-    // If logistics passed a stay area and user hasn't typed notes, preserve it.
-    if (routeCityArea && !patch.notes) {
+    // Preserve “Stay area” hint if it was passed and user hasn't typed notes
+    if (routeCityArea && !cleanText(patch.notes)) {
       (patch as any).notes = `Stay area: ${routeCityArea}`;
     }
 
@@ -332,15 +395,26 @@ export default function TripBuildScreen() {
     } finally {
       setSaving(false);
     }
-  }
+  }, [
+    selectedFixture,
+    validateDateOrder,
+    placeholderTbcIds,
+    startIso,
+    endIso,
+    notes,
+    routeCityArea,
+    isEditing,
+    routeTripId,
+    router,
+  ]);
 
   /* -------------------------------------------------------------------------- */
   /* UI */
   /* -------------------------------------------------------------------------- */
 
   const selectedTitle = useMemo(() => {
-    const h = String(selectedFixture?.teams?.home?.name ?? "Home");
-    const a = String(selectedFixture?.teams?.away?.name ?? "Away");
+    const h = cleanText(selectedFixture?.teams?.home?.name) || "Home";
+    const a = cleanText(selectedFixture?.teams?.away?.name) || "Away";
     return `${h} vs ${a}`;
   }, [selectedFixture]);
 
@@ -353,14 +427,13 @@ export default function TripBuildScreen() {
 
   const selectedVenueLine = useMemo(() => {
     if (!selectedFixture) return "Venue TBC";
-    const v = String(selectedFixture?.fixture?.venue?.name ?? "").trim();
-    const c = String(selectedFixture?.fixture?.venue?.city ?? "").trim();
+    const v = cleanText(selectedFixture?.fixture?.venue?.name);
+    const c = cleanText(selectedFixture?.fixture?.venue?.city);
     if (!v && !c) return "Venue TBC";
     return [v, c].filter(Boolean).join(" • ");
   }, [selectedFixture]);
 
   return (
-    // Keep imageSource usage to avoid breaking Background typings until we confirm its prop contract.
     <Background imageSource={getBackground("trips")} overlayOpacity={0.86}>
       <Stack.Screen
         options={{
@@ -438,7 +511,10 @@ export default function TripBuildScreen() {
                   return (
                     <Pressable
                       key={(l as any).key ?? String(l.leagueId)}
-                      onPress={() => setSelectedLeague(l)}
+                      onPress={() => {
+                        setSelectedLeague(l);
+                        setVisibleCount(12);
+                      }}
                       style={[styles.leaguePill, active && styles.leaguePillActive]}
                     >
                       <Text style={[styles.leaguePillText, active && styles.leaguePillTextActive]}>{l.label}</Text>
@@ -471,8 +547,8 @@ export default function TripBuildScreen() {
                 const tbc = isKickoffTbc(r, placeholderTbcIds);
                 const kick = tbc ? "TBC" : formatUkDateTimeMaybe(r?.fixture?.date) || "TBC";
 
-                const v = String(r?.fixture?.venue?.name ?? "").trim();
-                const c = String(r?.fixture?.venue?.city ?? "").trim();
+                const v = cleanText(r?.fixture?.venue?.name);
+                const c = cleanText(r?.fixture?.venue?.city);
                 const vc = [v, c].filter(Boolean).join(" • ");
 
                 return (
