@@ -25,3 +25,9 @@ export function getStadiumCoordByClubName(clubName?: string | null): ClubStadium
     lng: hit.lng,
   };
 }
+
+export function hasStadiumCoordsForClub(clubName?: string | null): boolean {
+  const key = normalizeClubKey(String(clubName ?? ""));
+  if (!key) return false;
+  return Boolean((STADIUM_COORDS as Record<string, StadiumCoordEntry>)[key]);
+}
