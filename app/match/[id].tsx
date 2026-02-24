@@ -15,7 +15,7 @@ import {
   Keyboard,
   Modal,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 
 import Background from "@/src/components/Background";
@@ -101,7 +101,6 @@ async function openMapsPreferNative(query: string) {
   const geo = `geo:0,0?q=${enc(q)}`;
   const web = `https://www.google.com/maps/search/?api=1&query=${enc(q)}`;
 
-  // iOS geo: is inconsistent; web is reliable.
   if (Platform.OS === "ios") return safeOpenUrl(web);
 
   try {
@@ -126,7 +125,6 @@ const SE365_AID = "69834e80ec9d3";
 const SE365_EVENT_BASE = "https://www.sportsevents365.com/event";
 const SE365_SEARCH_BASE = "https://www.sportsevents365.com/search";
 
-// Manual overrides: force exact deep-links for high-intent fixtures.
 // Key format: `${home} vs ${away}|${YYYY-MM-DD}`
 const SE365_EVENT_OVERRIDES: Record<string, number> = {
   "Tottenham Hotspur vs Arsenal|2026-02-22": 369672,
@@ -155,18 +153,10 @@ function buildSE365SearchUrl(matchQuery: string) {
   return `${SE365_SEARCH_BASE}?a_aid=${SE365_AID}&q=${enc(matchQuery)}`;
 }
 
-/**
- * We keep this as "home tickets" so users don’t infer anything else.
- * It’s a fallback web search; we don’t present it as “official”.
- */
 function buildGoogleHomeTicketsUrl(matchQuery: string) {
   return `https://www.google.com/search?q=${enc(matchQuery + " home tickets")}`;
 }
 
-/**
- * Official home tickets mapping.
- * NOTE: keep keys simple + lowercase; normalizeTeamKey() and fuzzy match handle minor variations.
- */
 const OFFICIAL_TICKETS_BY_TEAM: Record<string, string> = {
   "arsenal": "https://www.arsenal.com/tickets",
   "aston villa": "https://www.avfc.co.uk/tickets",
@@ -206,12 +196,9 @@ function buildOfficialHomeTicketsUrl(homeTeamName?: string) {
 
   if (OFFICIAL_TICKETS_BY_TEAM[key]) return OFFICIAL_TICKETS_BY_TEAM[key];
 
-  const foundKey = Object.keys(OFFICIAL_TICKETS_BY_TEAM).find(
-    (k) => key === k || key.includes(k) || k.includes(key)
-  );
+  const foundKey = Object.keys(OFFICIAL_TICKETS_BY_TEAM).find((k) => key === k || key.includes(k) || k.includes(key));
   if (foundKey) return OFFICIAL_TICKETS_BY_TEAM[foundKey];
 
-  // Fallback: make the intent explicit (official + home tickets)
   return `https://www.google.com/search?q=${enc(String(homeTeamName ?? "") + " official home tickets")}`;
 }
 
@@ -267,7 +254,6 @@ type TripStability = "stable" | "flexible" | "uncertain";
 function computeTripStability(args: { kickoffTbc: boolean; difficulty?: TicketDifficulty | null }): TripStability {
   const { kickoffTbc, difficulty } = args;
 
-  // If we don't know ticket difficulty, stability is mostly kickoff-driven.
   if (!difficulty) return kickoffTbc ? "flexible" : "stable";
 
   if (!kickoffTbc && (difficulty === "easy" || difficulty === "medium")) return "stable";
@@ -288,6 +274,7 @@ type TicketModalState = { open: boolean };
 export default function MatchDetailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
+  const insets = useSafeAreaInsets();
 
   // auth (optional for future sync + email/push)
   const booted = authStore((s) => s.booted);
@@ -305,7 +292,6 @@ export default function MatchDetailScreen() {
 
   // Routing context (for Plan Trip and back to Fixtures)
   const rolling = useMemo(() => getRollingWindowIso(), []);
-
   const window = useMemo(() => {
     const routeFrom = coerceString((params as any)?.from);
     const routeTo = coerceString((params as any)?.to);
@@ -334,19 +320,21 @@ export default function MatchDetailScreen() {
   const toggleFollow = useFollowStore((s) => s.toggle);
   const upsertLatestSnapshot = useFollowStore((s) => s.upsertLatestSnapshot);
 
-  // IMPORTANT: subscribe to the boolean (derived), not a function
-  const fixtureIdFromRow = row?.fixture?.id != null ? String(row.fixture.id) : "";
-  const fixtureId = useMemo(() => fixtureIdFromRow || (id ?? ""), [fixtureIdFromRow, id]);
+  const fixtureId = useMemo(() => {
+    const fromRow = row?.fixture?.id != null ? String(row.fixture.id) : "";
+    const fallback = id ? String(id) : "";
+    return (fromRow || fallback).trim();
+  }, [row?.fixture?.id, id]);
 
+  // Subscribe to followed status using fixtureId as dependency (stable + correct)
   const followed = useFollowStore(
-    useCallback(
-      (s) => {
+    useMemo(() => {
+      return (s: any) => {
         const fid = String(fixtureId ?? "").trim();
         if (!fid) return false;
-        return s.followed.some((x) => x.fixtureId === fid);
-      },
-      [fixtureId]
-    )
+        return s.followed.some((x: any) => x.fixtureId === fid);
+      };
+    }, [fixtureId])
   );
 
   // sign-in UI
@@ -426,13 +414,11 @@ export default function MatchDetailScreen() {
       const iso = kickoffIsoOrNull(row);
       const daysAway = iso ? daysUntilIso(iso) : Number.POSITIVE_INFINITY;
 
-      // If within confirmed window, don’t waste requests
       if (iso && daysAway <= CONFIRMED_WITHIN_DAYS) {
         setPlaceholderIds(new Set());
         return;
       }
 
-      // Need league/season/round to do cluster evidence
       if (!leagueId || !season || !round) {
         setPlaceholderIds(new Set());
         return;
@@ -445,7 +431,6 @@ export default function MatchDetailScreen() {
         setPlaceholderIds(computeLikelyPlaceholderTbcIds(roundRows));
       } catch {
         if (cancelled) return;
-        // Fail open
         setPlaceholderIds(new Set());
       } finally {
         if (!cancelled) setClusterLoading(false);
@@ -497,10 +482,6 @@ export default function MatchDetailScreen() {
     [home, away, kickoffDateOnly, leagueName]
   );
 
-  // Determine SE365 event id using (priority):
-  // 1) route param
-  // 2) row-provided property (future)
-  // 3) manual override map
   const se365EventId = useMemo(() => {
     const fromRoute = typeof routeSe365EventId === "number" && routeSe365EventId > 0 ? routeSe365EventId : null;
 
@@ -530,11 +511,9 @@ export default function MatchDetailScreen() {
   const officialHomeTicketsUrl = useMemo(() => buildOfficialHomeTicketsUrl(home), [home]);
   const googleHomeTicketsUrl = useMemo(() => buildGoogleHomeTicketsUrl(matchQuery), [matchQuery]);
 
-  // Venue URLs
   const mapsUrl = useMemo(() => buildMapsVenueUrl(venue, city), [venue, city]);
   const stadiumInfoUrl = useMemo(() => buildStadiumInfoUrl(venue, home, city), [venue, home, city]);
 
-  // Matchday logistics (memoized lookup)
   const logistics = useMemo(() => {
     return getMatchdayLogistics({ homeTeamName: home, leagueName });
   }, [home, leagueName]);
@@ -544,10 +523,8 @@ export default function MatchDetailScreen() {
     return q || "";
   }, [venue, city, logistics?.stadium, logistics?.city]);
 
-  // Ticket guide (HOME CLUB ONLY)
   const ticketGuide = useMemo(() => getTicketGuide(home), [home]);
 
-  // Trip stability chip (kickoff + ticket difficulty)
   const tripStability = useMemo(
     () => computeTripStability({ kickoffTbc: tbc, difficulty: ticketGuide?.difficulty ?? null }),
     [tbc, ticketGuide]
@@ -828,15 +805,10 @@ export default function MatchDetailScreen() {
     return `${hint} If you’re booking the weekend anyway, stay flexible and treat the kickoff slot as a bonus once confirmed.`;
   }, [leagueName]);
 
-  // Card wiring: stop → maps deep link
-  const onOpenStop = useCallback(
-    async (query: string, _stop?: LogisticsStop) => {
-      await openMapsPreferNative(query);
-    },
-    []
-  );
+  const onOpenStop = useCallback(async (query: string, _stop?: LogisticsStop) => {
+    await openMapsPreferNative(query);
+  }, []);
 
-  // Card wiring: stay area → trip prefill hook
   const onSelectStayArea = useCallback(
     (area: string) => {
       const a = String(area ?? "").trim();
@@ -869,7 +841,14 @@ export default function MatchDetailScreen() {
       />
 
       <SafeAreaView style={styles.container} edges={["bottom"]}>
-        <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={[
+            styles.content,
+            { paddingBottom: theme.spacing.xxl + insets.bottom, paddingTop: 100 },
+          ]}
+          keyboardShouldPersistTaps="handled"
+        >
           <GlassCard style={styles.card} intensity={26}>
             {loading ? (
               <View style={styles.center}>
@@ -1008,7 +987,6 @@ export default function MatchDetailScreen() {
                   </Pressable>
                 </View>
 
-                {/* NEW: Dedicated Matchday Logistics card inserted directly under Ticket Guide */}
                 <MatchdayLogisticsCard
                   logistics={logistics}
                   city={city || logistics?.city || null}
@@ -1114,7 +1092,7 @@ export default function MatchDetailScreen() {
         </ScrollView>
 
         {toast.visible ? (
-          <View pointerEvents="none" style={styles.toastWrap}>
+          <View pointerEvents="none" style={[styles.toastWrap, { bottom: theme.spacing.lg + insets.bottom }]}>
             <View style={styles.toast}>
               <Text style={styles.toastTitle}>{toast.title}</Text>
               {toast.message ? <Text style={styles.toastMsg}>{toast.message}</Text> : null}
@@ -1124,7 +1102,7 @@ export default function MatchDetailScreen() {
 
         <Modal visible={ticketModal.open} transparent animationType="fade" onRequestClose={closeTicketModal}>
           <Pressable style={styles.modalBackdrop} onPress={closeTicketModal}>
-            <Pressable style={styles.modalCard} onPress={() => null}>
+            <View style={styles.modalCard}>
               <Text style={styles.modalTitle}>Home tickets</Text>
               <Text style={styles.modalBody}>
                 Choose where you want to source host-club home tickets. Official takes you directly to the club. Sportsevents365 uses your affiliate link.
@@ -1160,7 +1138,7 @@ export default function MatchDetailScreen() {
               <Text style={styles.modalFootnote}>
                 Note: exact Sportsevents365 deep-links require their event ID. Until IDs are supplied, we open SE365 search and show the exact query to paste.
               </Text>
-            </Pressable>
+            </View>
           </Pressable>
         </Modal>
       </SafeAreaView>
@@ -1173,11 +1151,10 @@ export default function MatchDetailScreen() {
 /* -------------------------------------------------------------------------- */
 
 const styles = StyleSheet.create({
-  container: { flex: 1, paddingTop: 100 },
+  container: { flex: 1 },
   scrollView: { flex: 1 },
   content: {
     paddingHorizontal: theme.spacing.lg,
-    paddingBottom: theme.spacing.xxl,
     gap: theme.spacing.lg,
   },
 
@@ -1368,7 +1345,6 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: theme.spacing.lg,
     right: theme.spacing.lg,
-    bottom: theme.spacing.lg,
   },
   toast: {
     borderRadius: 14,
@@ -1381,7 +1357,6 @@ const styles = StyleSheet.create({
   toastTitle: { color: theme.colors.text, fontWeight: "900", fontSize: 13 },
   toastMsg: { marginTop: 4, color: theme.colors.textSecondary, fontWeight: "700", fontSize: 12, lineHeight: 16 },
 
-  // Modal
   modalBackdrop: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.62)",
@@ -1413,4 +1388,3 @@ const styles = StyleSheet.create({
   modalBtnGhostText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: 12, textAlign: "center" },
   modalFootnote: { marginTop: 10, color: theme.colors.textTertiary, fontWeight: "800", fontSize: 11, lineHeight: 14 },
 });
-
