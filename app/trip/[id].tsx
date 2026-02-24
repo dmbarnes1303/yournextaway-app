@@ -19,6 +19,7 @@ import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
 import EmptyState from "@/src/components/EmptyState";
+import FixtureCertaintyBadge from "@/src/components/FixtureCertaintyBadge";
 
 import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
@@ -27,7 +28,6 @@ import { parseIsoDateOnly, toIsoDate } from "@/src/constants/football";
 import tripsStore, { type Trip } from "@/src/state/trips";
 import savedItemsStore from "@/src/state/savedItems";
 import preferencesStore from "@/src/state/preferences";
-import useFollowStore from "@/src/state/followStore";
 
 import type { SavedItem, SavedItemType } from "@/src/core/savedItemTypes";
 import { getSavedItemTypeLabel } from "@/src/core/savedItemTypes";
@@ -35,9 +35,11 @@ import { getPartner, type PartnerId } from "@/src/core/partners";
 
 import { beginPartnerClick, openUntrackedUrl } from "@/src/services/partnerClicks";
 import { getFixtureById, type FixtureListRow } from "@/src/services/apiFootball";
-import { formatUkDateOnly, formatUkDateTimeMaybe } from "@/src/utils/formatters";
+import { formatUkDateOnly } from "@/src/utils/formatters";
 import { buildAffiliateLinks } from "@/src/services/affiliateLinks";
 import { confirmBookedAndOfferProof } from "@/src/services/bookingProof";
+
+import { getFixtureCertainty } from "@/src/utils/fixtureCertainty";
 
 // dev-only IATA detection
 import { getIataCityCodeForCity, debugCityKey } from "@/src/data/iataCityCodes";
@@ -161,7 +163,11 @@ function initials(name: string) {
 function TeamCrest({ name, logo }: { name: string; logo?: string | null }) {
   return (
     <View style={styles.crestWrap}>
-      {logo ? <Image source={{ uri: logo }} style={styles.crestImg} resizeMode="contain" /> : <Text style={styles.crestFallback}>{initials(name)}</Text>}
+      {logo ? (
+        <Image source={{ uri: logo }} style={styles.crestImg} resizeMode="contain" />
+      ) : (
+        <Text style={styles.crestFallback}>{initials(name)}</Text>
+      )}
     </View>
   );
 }
@@ -221,29 +227,6 @@ function titleCaseCity(s: string) {
     .join(" ");
 }
 
-function safeIso(iso: unknown) {
-  const s = String(iso ?? "").trim();
-  return s ? s : null;
-}
-
-function extractPrevKickoffIso(followedItem: any): string | null {
-  if (!followedItem) return null;
-
-  const direct = safeIso(followedItem?.kickoffIso);
-  if (direct) return direct;
-
-  const latestA = safeIso(followedItem?.latestSnapshot?.kickoffIso);
-  if (latestA) return latestA;
-
-  const latestB = safeIso(followedItem?.latest?.kickoffIso);
-  if (latestB) return latestB;
-
-  const latestC = safeIso(followedItem?.snapshot?.kickoffIso);
-  if (latestC) return latestC;
-
-  return null;
-}
-
 /* -------------------------------------------------------------------------- */
 /* screen */
 /* -------------------------------------------------------------------------- */
@@ -271,8 +254,6 @@ export default function TripDetailScreen() {
 
   const [originLoaded, setOriginLoaded] = useState<boolean>(preferencesStore.getState().loaded);
   const [originIata, setOriginIata] = useState<string>(preferencesStore.getPreferredOriginIata());
-
-  const followedList = useFollowStore((s: any) => s.followed ?? []);
 
   /* ---------------- load trip ---------------- */
 
@@ -421,66 +402,6 @@ export default function TripDetailScreen() {
   }, [trip?.matchIds]);
 
   const numericMatchIds = useMemo(() => matchIds.filter(isNumericId), [matchIds]);
-
-  /* ---------------- matchday logistics (primary match → stay guidance) ---------------- */
-
-  const primaryMatchId = useMemo(() => numericMatchIds[0] ?? null, [numericMatchIds]);
-
-  const primaryFixture = useMemo(() => {
-    if (!primaryMatchId) return null;
-    return fixturesById[String(primaryMatchId)] ?? null;
-  }, [primaryMatchId, fixturesById]);
-
-  const primaryHomeName = useMemo(() => {
-    const fromFixture = String(primaryFixture?.teams?.home?.name ?? "").trim();
-    if (fromFixture) return fromFixture;
-
-    const snap = String((trip as any)?.homeName ?? "").trim();
-    return snap;
-  }, [primaryFixture, trip]);
-
-  const primaryLeagueName = useMemo(() => {
-    const fromFixture = String(primaryFixture?.league?.name ?? "").trim();
-    if (fromFixture) return fromFixture;
-
-    const snap = String((trip as any)?.leagueName ?? "").trim();
-    return snap;
-  }, [primaryFixture, trip]);
-
-  const primaryLogistics = useMemo(() => {
-    if (!primaryHomeName) return null;
-    return getMatchdayLogistics({ homeTeamName: primaryHomeName, leagueName: primaryLeagueName });
-  }, [primaryHomeName, primaryLeagueName]);
-
-  const primaryLogisticsSnippet = useMemo(() => {
-    return primaryLogistics ? buildLogisticsSnippet(primaryLogistics) : "";
-  }, [primaryLogistics]);
-
-  const stayBestAreas = useMemo(() => {
-    const arr = Array.isArray(primaryLogistics?.stay?.bestAreas) ? primaryLogistics!.stay!.bestAreas : [];
-    return arr.map((x) => `${x.area}${x.notes ? ` — ${x.notes}` : ""}`).filter(Boolean);
-  }, [primaryLogistics]);
-
-  const stayBudgetAreas = useMemo(() => {
-    const arr = Array.isArray(primaryLogistics?.stay?.budgetAreas) ? primaryLogistics!.stay!.budgetAreas : [];
-    return arr.map((x) => `${x.area}${x.notes ? ` — ${x.notes}` : ""}`).filter(Boolean);
-  }, [primaryLogistics]);
-
-  const transportStops = useMemo(() => {
-    const stops = Array.isArray(primaryLogistics?.transport?.primaryStops) ? primaryLogistics!.transport!.primaryStops : [];
-    return stops
-      .slice(0, 3)
-      .map((s) => `${s.name}${s.notes ? ` — ${s.notes}` : ""}`)
-      .filter(Boolean);
-  }, [primaryLogistics]);
-
-  const transportTips = useMemo(() => {
-    const tips = Array.isArray(primaryLogistics?.transport?.tips) ? primaryLogistics!.transport!.tips : [];
-    return tips
-      .slice(0, 2)
-      .map((t) => String(t).trim())
-      .filter(Boolean);
-  }, [primaryLogistics]);
 
   /* ---------------- dev-only IATA missing mapping warn ---------------- */
 
@@ -731,7 +652,13 @@ export default function TripDetailScreen() {
   function StatusBadge({ s }: { s: SavedItem["status"] }) {
     const label = statusLabel(s);
     const style =
-      s === "pending" ? styles.badgePending : s === "saved" ? styles.badgeSaved : s === "booked" ? styles.badgeBooked : styles.badgeArchived;
+      s === "pending"
+        ? styles.badgePending
+        : s === "saved"
+        ? styles.badgeSaved
+        : s === "booked"
+        ? styles.badgeBooked
+        : styles.badgeArchived;
 
     return (
       <View style={[styles.badge, style]}>
@@ -867,12 +794,10 @@ export default function TripDetailScreen() {
                       const logistics = getMatchdayLogistics({ homeTeamName: homeName, leagueName });
                       const logisticsLine = logistics ? buildLogisticsSnippet(logistics) : "";
 
-                      const followedItem =
-                        followedList.find((x: any) => String(x?.fixtureId ?? "").trim() === String(mid).trim()) ?? null;
-
-                      const prevIso = extractPrevKickoffIso(followedItem);
-                      const curIso = safeIso(r?.fixture?.date);
-                      const changed = !!prevIso && !!curIso && prevIso.trim() !== curIso.trim() && !kickoff.tbc;
+                      // ✅ CERTAINTY BADGE (per fixture row)
+                      const certainty = getFixtureCertainty(r, {
+                        previousKickoffIso: (trip as any)?.kickoffIso ?? null,
+                      });
 
                       return (
                         <Pressable key={mid} onPress={() => openMatch(mid)} style={styles.matchRow}>
@@ -883,16 +808,9 @@ export default function TripDetailScreen() {
                               <Text style={styles.matchTitle} numberOfLines={1}>
                                 {title}
                               </Text>
-
                               {kickoff.tbc ? (
                                 <View style={styles.tbcPill}>
                                   <Text style={styles.tbcText}>TBC</Text>
-                                </View>
-                              ) : null}
-
-                              {changed ? (
-                                <View style={styles.changedPill}>
-                                  <Text style={styles.changedText}>Changed</Text>
                                 </View>
                               ) : null}
                             </View>
@@ -901,11 +819,9 @@ export default function TripDetailScreen() {
                               {kickoff.line}
                             </Text>
 
-                            {changed && prevIso ? (
-                              <Text style={styles.changeInline} numberOfLines={1}>
-                                Was: {formatUkDateTimeMaybe(prevIso) ?? prevIso}
-                              </Text>
-                            ) : null}
+                            <View style={{ marginTop: 6 }}>
+                              <FixtureCertaintyBadge state={certainty} />
+                            </View>
 
                             {meta1 ? (
                               <Text style={styles.matchMeta} numberOfLines={1}>
@@ -940,78 +856,6 @@ export default function TripDetailScreen() {
                 {fxLoading ? <Text style={styles.mutedInline}>Loading match details…</Text> : null}
               </GlassCard>
 
-              {/* STAY */}
-              <GlassCard style={styles.card}>
-                <Text style={styles.sectionTitle}>Stay (near the stadium)</Text>
-
-                {!primaryLogistics ? (
-                  <EmptyState
-                    title="Stay tips not available"
-                    message="Add a match (or load match details) to unlock stadium-area stay suggestions."
-                  />
-                ) : (
-                  <View style={{ gap: 10 }}>
-                    <View style={styles.stayPill}>
-                      <Text style={styles.stayPillText} numberOfLines={2}>
-                        {primaryLogisticsSnippet || "Stadium-area stay guidance available"}
-                      </Text>
-                    </View>
-
-                    <Text style={styles.stayMeta}>
-                      Stadium:{" "}
-                      <Text style={styles.stayMetaStrong}>
-                        {String(primaryLogistics.stadium ?? "").trim() || "—"}
-                      </Text>
-                      {primaryLogistics.city ? <Text style={styles.stayMeta}> • {String(primaryLogistics.city).trim()}</Text> : null}
-                    </Text>
-
-                    {stayBestAreas.length > 0 ? (
-                      <View style={{ gap: 6 }}>
-                        <Text style={styles.stayLabel}>Best areas</Text>
-                        {stayBestAreas.slice(0, 3).map((line, idx) => (
-                          <Text key={`best-${idx}`} style={styles.stayBullet}>
-                            • {line}
-                          </Text>
-                        ))}
-                      </View>
-                    ) : null}
-
-                    {stayBudgetAreas.length > 0 ? (
-                      <View style={{ gap: 6 }}>
-                        <Text style={styles.stayLabel}>Budget-friendly</Text>
-                        {stayBudgetAreas.slice(0, 2).map((line, idx) => (
-                          <Text key={`budget-${idx}`} style={styles.stayBullet}>
-                            • {line}
-                          </Text>
-                        ))}
-                      </View>
-                    ) : null}
-
-                    {transportStops.length > 0 ? (
-                      <View style={{ gap: 6 }}>
-                        <Text style={styles.stayLabel}>Best transport stops</Text>
-                        {transportStops.map((line, idx) => (
-                          <Text key={`stop-${idx}`} style={styles.stayBullet}>
-                            • {line}
-                          </Text>
-                        ))}
-                      </View>
-                    ) : null}
-
-                    {transportTips.length > 0 ? (
-                      <View style={{ gap: 6 }}>
-                        <Text style={styles.stayLabel}>Matchday tips</Text>
-                        {transportTips.map((line, idx) => (
-                          <Text key={`tip-${idx}`} style={styles.stayBullet}>
-                            • {line}
-                          </Text>
-                        ))}
-                      </View>
-                    ) : null}
-                  </View>
-                )}
-              </GlassCard>
-
               {/* PENDING */}
               <GlassCard style={styles.card}>
                 <Text style={styles.sectionTitle}>Pending</Text>
@@ -1037,7 +881,11 @@ export default function TripDetailScreen() {
                             {buildMetaLine(it)}
                           </Text>
 
-                          {it.priceText ? <Text style={styles.priceLine} numberOfLines={1}>{it.priceText}</Text> : null}
+                          {it.priceText ? (
+                            <Text style={styles.priceLine} numberOfLines={1}>
+                              {it.priceText}
+                            </Text>
+                          ) : null}
                         </Pressable>
 
                         <View style={styles.itemActions}>
@@ -1076,7 +924,11 @@ export default function TripDetailScreen() {
                             {buildMetaLine(it)}
                           </Text>
 
-                          {it.priceText ? <Text style={styles.priceLine} numberOfLines={1}>{it.priceText}</Text> : null}
+                          {it.priceText ? (
+                            <Text style={styles.priceLine} numberOfLines={1}>
+                              {it.priceText}
+                            </Text>
+                          ) : null}
                         </Pressable>
 
                         <View style={styles.itemActions}>
@@ -1116,7 +968,11 @@ export default function TripDetailScreen() {
                             {buildMetaLine(it)}
                           </Text>
 
-                          {it.priceText ? <Text style={styles.priceLine} numberOfLines={1}>{it.priceText}</Text> : null}
+                          {it.priceText ? (
+                            <Text style={styles.priceLine} numberOfLines={1}>
+                              {it.priceText}
+                            </Text>
+                          ) : null}
                         </Pressable>
 
                         <View style={styles.itemActions}>
@@ -1431,28 +1287,10 @@ const styles = StyleSheet.create({
 
   tbcText: { color: "rgba(255,200,80,1)", fontWeight: "900", fontSize: 11 },
 
-  changedPill: {
-    borderWidth: 1,
-    borderColor: "rgba(120,170,255,0.38)",
-    backgroundColor: "rgba(120,170,255,0.10)",
-    borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  changedText: { color: "rgba(160,195,255,1)", fontWeight: "900", fontSize: 11 },
-
   matchMeta: {
     marginTop: 4,
     color: theme.colors.textSecondary,
     fontWeight: "800",
-    fontSize: 12,
-    lineHeight: 16,
-  },
-
-  changeInline: {
-    marginTop: 6,
-    color: theme.colors.textTertiary,
-    fontWeight: "900",
     fontSize: 12,
     lineHeight: 16,
   },
@@ -1479,47 +1317,6 @@ const styles = StyleSheet.create({
   crestImg: { width: 26, height: 26 },
 
   crestFallback: { color: theme.colors.textSecondary, fontWeight: "900" },
-
-  /* Stay section */
-  stayPill: {
-    padding: 10,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.16)",
-  },
-
-  stayPillText: {
-    color: theme.colors.text,
-    fontWeight: "900",
-    fontSize: 12,
-    lineHeight: 16,
-  },
-
-  stayMeta: {
-    color: theme.colors.textSecondary,
-    fontWeight: "800",
-    fontSize: 12,
-    lineHeight: 16,
-  },
-
-  stayMetaStrong: {
-    color: theme.colors.text,
-    fontWeight: "900",
-  },
-
-  stayLabel: {
-    color: theme.colors.text,
-    fontWeight: "900",
-    fontSize: 12,
-  },
-
-  stayBullet: {
-    color: theme.colors.textSecondary,
-    fontWeight: "800",
-    fontSize: 12,
-    lineHeight: 16,
-  },
 
   itemRow: {
     flexDirection: "row",
