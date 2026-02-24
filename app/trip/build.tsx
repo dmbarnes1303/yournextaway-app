@@ -20,16 +20,32 @@ import EmptyState from "@/src/components/EmptyState";
 import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
 
-import { getFixtures, getFixtureById, type FixtureListRow } from "@/src/services/apiFootball";
+import {
+  getFixtures,
+  getFixtureById,
+  getFixturesByRound,
+  type FixtureListRow,
+} from "@/src/services/apiFootball";
 import tripsStore, { type Trip } from "@/src/state/trips";
 
-import { LEAGUES, addDaysIso, clampFromIsoToTomorrow, type LeagueOption } from "@/src/constants/football";
+import {
+  LEAGUES,
+  addDaysIso,
+  clampFromIsoToTomorrow,
+  type LeagueOption,
+} from "@/src/constants/football";
 import { formatUkDateTimeMaybe } from "@/src/utils/formatters";
 import { computeLikelyPlaceholderTbcIds, isKickoffTbc } from "@/src/utils/kickoffTbc";
 
 /* -------------------------------------------------------------------------- */
 /* helpers */
 /* -------------------------------------------------------------------------- */
+
+function currentFootballSeasonStartYear(now = new Date()): number {
+  const y = now.getFullYear();
+  const m = now.getMonth(); // 0=Jan
+  return m >= 6 ? y : y - 1;
+}
 
 function paramString(v: unknown): string | null {
   if (typeof v === "string") return v.trim() || null;
@@ -107,6 +123,24 @@ function buildTripSnapshot(selectedFixture: FixtureListRow, placeholderTbcIds: S
     kickoffIso,
     kickoffTbc,
   };
+}
+
+async function computePlaceholderIdsForFixture(fx: FixtureListRow | null): Promise<Set<string>> {
+  if (!fx) return new Set();
+
+  const leagueId = fx?.league?.id ?? null;
+  const season = (fx as any)?.league?.season ?? currentFootballSeasonStartYear();
+  const round = cleanText(fx?.league?.round);
+
+  // If we can’t cluster, fall back to empty set (isKickoffTbc still uses fixture state)
+  if (!leagueId || !season || !round) return new Set();
+
+  try {
+    const roundRows = await getFixturesByRound({ league: leagueId, season, round });
+    return computeLikelyPlaceholderTbcIds(roundRows || []);
+  } catch {
+    return new Set();
+  }
 }
 
 /* -------------------------------------------------------------------------- */
@@ -189,7 +223,15 @@ export default function TripBuildScreen() {
         const mid = t.matchIds?.[0];
         if (mid) {
           const fx = await getFixtureById(String(mid));
-          if (!cancelled) setSelectedFixture(fx);
+          if (cancelled) return;
+
+          setSelectedFixture(fx);
+
+          // ✅ Critical: compute placeholder ids for THIS fixture’s round (same as Match screen logic)
+          const ids = await computePlaceholderIdsForFixture(fx);
+          if (!cancelled) setPlaceholderTbcIds(ids);
+        } else {
+          setPlaceholderTbcIds(new Set());
         }
       } catch (e: any) {
         if (!cancelled) setError(e?.message ?? "Failed to load trip.");
@@ -223,6 +265,10 @@ export default function TripBuildScreen() {
         if (cancelled) return;
 
         setSelectedFixture(r);
+
+        // ✅ Critical: compute placeholder ids for THIS fixture’s round
+        const ids = await computePlaceholderIdsForFixture(r);
+        if (!cancelled) setPlaceholderTbcIds(ids);
 
         const d0 = fixtureDateOnly(r);
         if (d0) {
@@ -554,7 +600,14 @@ export default function TripBuildScreen() {
                 return (
                   <Pressable
                     key={id || String(i)}
-                    onPress={() => setSelectedFixture(r)}
+                    onPress={async () => {
+                      setSelectedFixture(r);
+
+                      // ✅ In picker mode, refresh placeholder ids based on the selected fixture’s round.
+                      // This prevents a “global list” cluster from misleading TBC status for a specific match.
+                      const ids = await computePlaceholderIdsForFixture(r);
+                      setPlaceholderTbcIds(ids);
+                    }}
                     style={[styles.pickRow, selected && styles.pickRowSelected]}
                   >
                     <Text style={styles.rowTitle}>
