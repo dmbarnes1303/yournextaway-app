@@ -1,5 +1,5 @@
 // app/trip/[id].tsx
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -15,7 +15,6 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import * as Notifications from "expo-notifications";
 
 import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
@@ -178,13 +177,18 @@ function safeFixtureTitle(r: FixtureListRow | null | undefined, fallbackId: stri
   return `Match ${fallbackId}`;
 }
 
-function parseIsoToDate(iso?: string): Date | null {
+function parseIsoToDate(iso?: string | null): Date | null {
   const s = String(iso ?? "").trim();
   if (!s) return null;
   const d = new Date(s);
   return Number.isFinite(d.getTime()) ? d : null;
 }
 
+/**
+ * Trip kickoff display must match Match screen semantics:
+ * - use isKickoffTbc(row, placeholderIds) when we have row
+ * - fall back to snapshot fields when we don't
+ */
 function formatKickoffLine(args: {
   row?: FixtureListRow | null;
   trip?: Trip | null;
@@ -192,10 +196,9 @@ function formatKickoffLine(args: {
 }): { line: string; tbc: boolean } {
   const { row, trip, placeholderIds } = args;
 
-  // Use match-aligned TBC logic when we have a row
   if (row) {
     const tbc = isKickoffTbc(row, placeholderIds ?? undefined);
-    const iso = kickoffIsoOrNull(row) ?? (trip as any)?.kickoffIso;
+    const iso = kickoffIsoOrNull(row) ?? ((trip as any)?.kickoffIso as string | undefined);
     const d = parseIsoToDate(iso);
 
     if (!d) return { line: "Kickoff: TBC", tbc: true };
@@ -210,8 +213,8 @@ function formatKickoffLine(args: {
     return { line: `Kickoff: ${datePart} • ${timePart}${statusHint}`, tbc: false };
   }
 
-  // Fallback: snapshot-only
-  const iso = (trip as any)?.kickoffIso;
+  // snapshot-only fallback
+  const iso = ((trip as any)?.kickoffIso as string | undefined) ?? null;
   const snapTbc = Boolean((trip as any)?.kickoffTbc);
   const d = parseIsoToDate(iso);
 
@@ -221,7 +224,6 @@ function formatKickoffLine(args: {
   const timePart = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 
   if (snapTbc) return { line: `Kickoff: ${datePart} • TBC`, tbc: true };
-
   return { line: `Kickoff: ${datePart} • ${timePart}`, tbc: false };
 }
 
@@ -441,7 +443,7 @@ export default function TripDetailScreen() {
       }
 
       const leagueId = primaryFixture?.league?.id ?? null;
-      const season = (primaryFixture as any)?.league?.season ?? currentFootballSeasonStartYear();
+      const season = typeof primaryFixture?.league?.season === "number" ? primaryFixture.league!.season! : currentFootballSeasonStartYear();
       const round = String(primaryFixture?.league?.round ?? "").trim();
 
       if (!leagueId || !season || !round) {
@@ -474,16 +476,14 @@ export default function TripDetailScreen() {
     const fromFixture = String(primaryFixture?.teams?.home?.name ?? "").trim();
     if (fromFixture) return fromFixture;
 
-    const snap = String((trip as any)?.homeName ?? "").trim();
-    return snap;
+    return String((trip as any)?.homeName ?? "").trim();
   }, [primaryFixture, trip]);
 
   const primaryLeagueName = useMemo(() => {
     const fromFixture = String(primaryFixture?.league?.name ?? "").trim();
     if (fromFixture) return fromFixture;
 
-    const snap = String((trip as any)?.leagueName ?? "").trim();
-    return snap;
+    return String((trip as any)?.leagueName ?? "").trim();
   }, [primaryFixture, trip]);
 
   const primaryLogistics = useMemo(() => {
@@ -491,9 +491,7 @@ export default function TripDetailScreen() {
     return getMatchdayLogistics({ homeTeamName: primaryHomeName, leagueName: primaryLeagueName });
   }, [primaryHomeName, primaryLeagueName]);
 
-  const primaryLogisticsSnippet = useMemo(() => {
-    return primaryLogistics ? buildLogisticsSnippet(primaryLogistics) : "";
-  }, [primaryLogistics]);
+  const primaryLogisticsSnippet = useMemo(() => (primaryLogistics ? buildLogisticsSnippet(primaryLogistics) : ""), [primaryLogistics]);
 
   const stayBestAreas = useMemo(() => {
     const arr = Array.isArray(primaryLogistics?.stay?.bestAreas) ? primaryLogistics!.stay!.bestAreas : [];
@@ -564,7 +562,7 @@ export default function TripDetailScreen() {
 
     const r = fixturesById[String(matchId)];
     const leagueId = r?.league?.id != null ? String(r.league.id) : undefined;
-    const season = (r as any)?.league?.season != null ? String((r as any).league.season) : undefined;
+    const season = r?.league?.season != null ? String(r.league.season) : undefined;
 
     const from = trip?.startDate ? String(trip.startDate) : undefined;
     const to = trip?.endDate ? String(trip.endDate) : undefined;
@@ -1322,9 +1320,7 @@ const styles = StyleSheet.create({
   heroActions: { marginTop: 12 },
 
   btn: { paddingVertical: 12, borderRadius: 12, alignItems: "center", borderWidth: 1 },
-
   btnPrimary: { borderColor: "rgba(0,255,136,0.6)", backgroundColor: "rgba(0,0,0,0.22)" },
-
   btnPrimaryText: { color: theme.colors.text, fontWeight: "900" },
 
   sectionTitle: { color: theme.colors.text, fontWeight: "900", marginBottom: 8 },
@@ -1342,7 +1338,6 @@ const styles = StyleSheet.create({
   },
 
   matchTitleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-
   matchTitle: { color: theme.colors.text, fontWeight: "900", flexShrink: 1 },
 
   tbcPill: {
@@ -1374,7 +1369,7 @@ const styles = StyleSheet.create({
   crestImg: { width: 26, height: 26 },
   crestFallback: { color: theme.colors.textSecondary, fontWeight: "900" },
 
-  /* Stay section */
+  /* Stay */
   stayPill: {
     padding: 10,
     borderRadius: 12,
@@ -1386,11 +1381,9 @@ const styles = StyleSheet.create({
   stayPillText: { color: theme.colors.text, fontWeight: "900", fontSize: 12, lineHeight: 16 },
 
   stayMeta: { color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12, lineHeight: 16 },
-
   stayMetaStrong: { color: theme.colors.text, fontWeight: "900" },
 
   stayLabel: { color: theme.colors.text, fontWeight: "900", fontSize: 12 },
-
   stayBullet: { color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12, lineHeight: 16 },
 
   itemRow: {
@@ -1429,15 +1422,11 @@ const styles = StyleSheet.create({
   smallBtnText: { color: theme.colors.text, fontWeight: "900", fontSize: 12 },
 
   badge: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
-
   badgeText: { color: theme.colors.text, fontWeight: "900", fontSize: 11 },
 
   badgePending: { borderColor: "rgba(255,200,80,0.40)", backgroundColor: "rgba(255,200,80,0.10)" },
-
   badgeSaved: { borderColor: "rgba(0,255,136,0.35)", backgroundColor: "rgba(0,255,136,0.08)" },
-
   badgeBooked: { borderColor: "rgba(120,170,255,0.45)", backgroundColor: "rgba(120,170,255,0.10)" },
-
   badgeArchived: { borderColor: "rgba(255,255,255,0.18)", backgroundColor: "rgba(255,255,255,0.06)" },
 
   noteBox: {
