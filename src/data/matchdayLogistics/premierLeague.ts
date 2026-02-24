@@ -11,19 +11,18 @@ import type { MatchdayLogistics } from "./types";
  *
  * IMPORTANT:
  * Keys must match normalizeClubKey(homeTeamName) from src/data/ticketGuides.
+ * We use hyphenated slugs for multi-word clubs (e.g. "manchester-united").
  */
 
 const premierLeagueLogistics: Record<string, MatchdayLogistics> = {
   /* -------------------------------------------------------------------------- */
-  /* London                                                                      */
+  /* London                                                                       */
   /* -------------------------------------------------------------------------- */
 
   "arsenal": {
     stadium: "Emirates Stadium",
     city: "London",
     country: "England",
-    stadiumLat: 51.5549,
-    stadiumLng: -0.1084,
     transport: {
       primaryStops: [
         { name: "Arsenal (Tube)", type: "metro", notes: "Piccadilly line. Closest stop but can bottleneck after full-time." },
@@ -46,12 +45,10 @@ const premierLeagueLogistics: Record<string, MatchdayLogistics> = {
     ],
     stay: {
       bestAreas: [
-        { area: "King’s Cross / St Pancras", notes: "Easy access to Finsbury Park; strong weekend base.", lat: 51.5308, lng: -0.1238 },
-        { area: "Islington", notes: "Great food + vibe; quick to Highbury & Islington.", lat: 51.5380, lng: -0.1020 },
+        { area: "King’s Cross / St Pancras", notes: "Easy access to Finsbury Park; strong weekend base." },
+        { area: "Islington", notes: "Great food + vibe; quick to Highbury & Islington." },
       ],
-      budgetAreas: [
-        { area: "Finsbury Park", budgetFriendly: true, notes: "Often cheaper than Zone 1; very connected.", lat: 51.5646, lng: -0.1059 },
-      ],
+      budgetAreas: [{ area: "Finsbury Park", budgetFriendly: true, notes: "Often cheaper than Zone 1; very connected." }],
     },
     arrivalTips: [
       "Aim to arrive 60–90 mins pre-kickoff for a stress-free entry.",
@@ -63,8 +60,6 @@ const premierLeagueLogistics: Record<string, MatchdayLogistics> = {
     stadium: "Stamford Bridge",
     city: "London",
     country: "England",
-    stadiumLat: 51.4817,
-    stadiumLng: -0.1910,
     transport: {
       primaryStops: [
         { name: "Fulham Broadway (Tube)", type: "metro", notes: "District line. Closest; queues are normal after the match." },
@@ -87,12 +82,10 @@ const premierLeagueLogistics: Record<string, MatchdayLogistics> = {
     ],
     stay: {
       bestAreas: [
-        { area: "South Kensington", notes: "Good base; straightforward District line access.", lat: 51.4941, lng: -0.1749 },
-        { area: "Paddington", notes: "Transport hub + lots of hotels.", lat: 51.5154, lng: -0.1756 },
+        { area: "South Kensington", notes: "Good base; straightforward District line access." },
+        { area: "Paddington", notes: "Transport hub + lots of hotels." },
       ],
-      budgetAreas: [
-        { area: "Hammersmith", budgetFriendly: true, notes: "Often better value; still very connected.", lat: 51.4927, lng: -0.2244 },
-      ],
+      budgetAreas: [{ area: "Hammersmith", budgetFriendly: true, notes: "Often better value; still very connected." }],
     },
     arrivalTips: [
       "If you’re doing dinner after, plan to walk a bit before calling a taxi to avoid gridlock.",
@@ -104,8 +97,6 @@ const premierLeagueLogistics: Record<string, MatchdayLogistics> = {
     stadium: "Selhurst Park",
     city: "London",
     country: "England",
-    stadiumLat: 51.3983,
-    stadiumLng: -0.0856,
     transport: {
       primaryStops: [
         { name: "Norwood Junction", type: "train", notes: "Common hub for visitors; steady flow on matchdays." },
@@ -128,12 +119,10 @@ const premierLeagueLogistics: Record<string, MatchdayLogistics> = {
     ],
     stay: {
       bestAreas: [
-        { area: "London Bridge / South Bank", notes: "Good rail access and a solid tourist base.", lat: 51.5055, lng: -0.0865 },
-        { area: "Shoreditch / Liverpool Street", notes: "Good weekend vibe; rail options to South London.", lat: 51.5246, lng: -0.0786 },
+        { area: "London Bridge / South Bank", notes: "Good rail access and a solid tourist base." },
+        { area: "Shoreditch / Liverpool Street", notes: "Good weekend vibe; rail options to South London." },
       ],
-      budgetAreas: [
-        { area: "Croydon", budgetFriendly: true, notes: "Often cheaper; easy rail access to Selhurst/Norwood Junction.", lat: 51.3721, lng: -0.0962 },
-      ],
+      budgetAreas: [{ area: "Croydon", budgetFriendly: true, notes: "Often cheaper; easy rail access to Selhurst/Norwood Junction." }],
     },
     arrivalTips: [
       "If you’re unfamiliar with South London rail, screenshot your route in case signal is busy post-match.",
@@ -145,8 +134,6 @@ const premierLeagueLogistics: Record<string, MatchdayLogistics> = {
     stadium: "Craven Cottage",
     city: "London",
     country: "England",
-    stadiumLat: 51.4749,
-    stadiumLng: -0.2216,
     transport: {
       primaryStops: [
         { name: "Putney Bridge (Tube)", type: "metro", notes: "District line. Popular route; short walk." },
@@ -169,12 +156,10 @@ const premierLeagueLogistics: Record<string, MatchdayLogistics> = {
     ],
     stay: {
       bestAreas: [
-        { area: "Hammersmith", notes: "Great connectivity + practical base.", lat: 51.4927, lng: -0.2244 },
-        { area: "South Kensington", notes: "Tourist base with easy District line access.", lat: 51.4941, lng: -0.1749 },
+        { area: "Hammersmith", notes: "Great connectivity + practical base." },
+        { area: "South Kensington", notes: "Tourist base with easy District line access." },
       ],
-      budgetAreas: [
-        { area: "Earl’s Court", budgetFriendly: true, notes: "Often better value for West London; good Tube access.", lat: 51.4915, lng: -0.1930 },
-      ],
+      budgetAreas: [{ area: "Earls Court", budgetFriendly: true, notes: "Often better value for West London; good Tube access." }],
     },
     arrivalTips: [
       "If you’re doing the river walk, factor it into your arrival time.",
@@ -186,8 +171,6 @@ const premierLeagueLogistics: Record<string, MatchdayLogistics> = {
     stadium: "Tottenham Hotspur Stadium",
     city: "London",
     country: "England",
-    stadiumLat: 51.6043,
-    stadiumLng: -0.0665,
     transport: {
       primaryStops: [
         { name: "White Hart Lane", type: "train", notes: "Closest rail stop; controlled flow post-match." },
@@ -210,12 +193,10 @@ const premierLeagueLogistics: Record<string, MatchdayLogistics> = {
     ],
     stay: {
       bestAreas: [
-        { area: "King’s Cross / St Pancras", notes: "Strong base + easy routes to North London.", lat: 51.5308, lng: -0.1238 },
-        { area: "Liverpool Street / Shoreditch", notes: "Great weekend vibe; workable routes to Tottenham area.", lat: 51.5176, lng: -0.0820 },
+        { area: "King’s Cross / St Pancras", notes: "Strong base + easy routes to North London." },
+        { area: "Liverpool Street / Shoreditch", notes: "Great weekend vibe; workable routes to Tottenham area." },
       ],
-      budgetAreas: [
-        { area: "Tottenham Hale", budgetFriendly: true, notes: "Often cheaper than Zone 1 and very connected.", lat: 51.5886, lng: -0.0595 },
-      ],
+      budgetAreas: [{ area: "Tottenham Hale", budgetFriendly: true, notes: "Often cheaper than Zone 1 and very connected." }],
     },
     arrivalTips: [
       "Have a station plan in advance: White Hart Lane vs Northumberland Park vs Tottenham Hale.",
@@ -227,8 +208,6 @@ const premierLeagueLogistics: Record<string, MatchdayLogistics> = {
     stadium: "London Stadium",
     city: "London",
     country: "England",
-    stadiumLat: 51.5386,
-    stadiumLng: -0.0165,
     transport: {
       primaryStops: [
         { name: "Stratford", type: "train", notes: "Major hub (Tube + Elizabeth line + National Rail). Best for visitors." },
@@ -251,57 +230,14 @@ const premierLeagueLogistics: Record<string, MatchdayLogistics> = {
     ],
     stay: {
       bestAreas: [
-        { area: "Liverpool Street / Shoreditch", notes: "Fast to Stratford; solid weekend base.", lat: 51.5176, lng: -0.0820 },
-        { area: "Canary Wharf", notes: "Modern base; easy DLR links.", lat: 51.5054, lng: -0.0235 },
+        { area: "Liverpool Street / Shoreditch", notes: "Fast to Stratford; solid weekend base." },
+        { area: "Canary Wharf", notes: "Modern base; easy DLR links." },
       ],
-      budgetAreas: [
-        { area: "Stratford", budgetFriendly: true, notes: "Often best value due to hotel stock.", lat: 51.5413, lng: -0.0036 },
-      ],
+      budgetAreas: [{ area: "Stratford", budgetFriendly: true, notes: "Often best value due to hotel stock." }],
     },
     arrivalTips: [
       "Plan your post-match exit: wait 10–15 minutes or walk to a less-busy station/DLR stop.",
       "This is one of the easiest London matchdays for tourists because of Stratford connectivity.",
-    ],
-  },
-
-  "brentford": {
-    stadium: "Gtech Community Stadium",
-    city: "London",
-    country: "England",
-    stadiumLat: 51.4907,
-    stadiumLng: -0.2887,
-    transport: {
-      primaryStops: [
-        { name: "Kew Bridge (Rail)", type: "train", notes: "Closest rail stop; can be very busy post-match." },
-        { name: "Gunnersbury (Tube/Overground)", type: "metro", notes: "District line + Overground; strong alternative route." },
-        { name: "Chiswick / Brentford area buses", type: "bus", notes: "Useful for local movement; allow extra time." },
-      ],
-      tips: [
-        "If Kew Bridge is jammed, Gunnersbury can be a smarter exit route.",
-        "West London traffic is slow near kickoff—public transport is safer.",
-      ],
-    },
-    parking: {
-      availability: "hard",
-      summary: "Tight urban parking. Driving is risky without a pre-booked plan.",
-      officialLots: ["Prefer rail/Tube; if driving, park further out and use public transport in."],
-    },
-    foodDrink: [
-      { name: "Chiswick High Road", type: "mixed", notes: "Good density of options; short hop away." },
-      { name: "Around Gunnersbury / Kew Bridge", type: "mixed", notes: "Practical but busy on matchday." },
-    ],
-    stay: {
-      bestAreas: [
-        { area: "Hammersmith", notes: "Connected and practical for West London matches.", lat: 51.4927, lng: -0.2244 },
-        { area: "Paddington", notes: "Good hotel supply + easy transport.", lat: 51.5154, lng: -0.1756 },
-      ],
-      budgetAreas: [
-        { area: "Ealing", budgetFriendly: true, notes: "Often better value; good transport links into West London.", lat: 51.5136, lng: -0.3040 },
-      ],
-    },
-    arrivalTips: [
-      "Arrive early if you want to avoid crowding on the footbridges and station approaches.",
-      "Have a fallback station in mind for the return.",
     ],
   },
 
@@ -313,8 +249,6 @@ const premierLeagueLogistics: Record<string, MatchdayLogistics> = {
     stadium: "Anfield",
     city: "Liverpool",
     country: "England",
-    stadiumLat: 53.4308,
-    stadiumLng: -2.9608,
     transport: {
       primaryStops: [
         { name: "Liverpool Lime Street", type: "train", notes: "Main arrival station for most visitors." },
@@ -337,10 +271,10 @@ const premierLeagueLogistics: Record<string, MatchdayLogistics> = {
     ],
     stay: {
       bestAreas: [
-        { area: "Liverpool city centre", notes: "Best for a weekend: walkable + nightlife.", lat: 53.4084, lng: -2.9916 },
-        { area: "Baltic Triangle", notes: "Trendy base; strong food/bar options.", lat: 53.3958, lng: -2.9785 },
+        { area: "Liverpool city centre", notes: "Best for a weekend: walkable + nightlife." },
+        { area: "Baltic Triangle", notes: "Trendy base; strong food/bar options." },
       ],
-      budgetAreas: [{ area: "Edge Hill", budgetFriendly: true, notes: "Can be cheaper; check exact location and rail links.", lat: 53.4090, lng: -2.9370 }],
+      budgetAreas: [{ area: "Edge Hill", budgetFriendly: true, notes: "Can be cheaper; check exact location and rail links." }],
     },
     arrivalTips: [
       "If you’re arriving from Manchester by train, keep return times flexible — dispersal can be slow.",
@@ -352,8 +286,6 @@ const premierLeagueLogistics: Record<string, MatchdayLogistics> = {
     stadium: "Etihad Stadium",
     city: "Manchester",
     country: "England",
-    stadiumLat: 53.4831,
-    stadiumLng: -2.2004,
     transport: {
       primaryStops: [
         { name: "Manchester Piccadilly", type: "train", notes: "Main arrival hub for visitors." },
@@ -376,10 +308,10 @@ const premierLeagueLogistics: Record<string, MatchdayLogistics> = {
     ],
     stay: {
       bestAreas: [
-        { area: "Manchester city centre", notes: "Best base for weekend trips.", lat: 53.4808, lng: -2.2426 },
-        { area: "Northern Quarter", notes: "Food/nightlife heavy; walkable.", lat: 53.4840, lng: -2.2350 },
+        { area: "Manchester city centre", notes: "Best base for weekend trips." },
+        { area: "Northern Quarter", notes: "Food/nightlife heavy; walkable." },
       ],
-      budgetAreas: [{ area: "Salford / near Victoria", budgetFriendly: true, notes: "Sometimes better value; still close.", lat: 53.4862, lng: -2.2496 }],
+      budgetAreas: [{ area: "Salford / near Victoria", budgetFriendly: true, notes: "Sometimes better value; still close." }],
     },
     arrivalTips: [
       "If connecting back to London by train, leave buffer time after full-time.",
@@ -391,8 +323,6 @@ const premierLeagueLogistics: Record<string, MatchdayLogistics> = {
     stadium: "Old Trafford",
     city: "Manchester",
     country: "England",
-    stadiumLat: 53.4631,
-    stadiumLng: -2.2913,
     transport: {
       primaryStops: [
         { name: "Manchester Piccadilly", type: "train", notes: "Main arrival hub for tourists." },
@@ -415,10 +345,10 @@ const premierLeagueLogistics: Record<string, MatchdayLogistics> = {
     ],
     stay: {
       bestAreas: [
-        { area: "Manchester city centre", notes: "Best weekend base.", lat: 53.4808, lng: -2.2426 },
-        { area: "Deansgate", notes: "Convenient for transport + nightlife.", lat: 53.4766, lng: -2.2514 },
+        { area: "Manchester city centre", notes: "Best weekend base." },
+        { area: "Deansgate", notes: "Convenient for transport + nightlife." },
       ],
-      budgetAreas: [{ area: "Near Piccadilly", budgetFriendly: true, notes: "Often better value than premium central spots.", lat: 53.4774, lng: -2.2313 }],
+      budgetAreas: [{ area: "Near Piccadilly", budgetFriendly: true, notes: "Often better value than premium central spots." }],
     },
     arrivalTips: [
       "If you’re doing a same-day return, plan for slower dispersal than you expect.",
@@ -430,8 +360,6 @@ const premierLeagueLogistics: Record<string, MatchdayLogistics> = {
     stadium: "Hill Dickinson Stadium (Bramley-Moore Dock)",
     city: "Liverpool",
     country: "England",
-    stadiumLat: 53.4099,
-    stadiumLng: -2.9977,
     transport: {
       primaryStops: [
         { name: "Liverpool Lime Street", type: "train", notes: "Main arrival hub for most visitors." },
@@ -454,10 +382,10 @@ const premierLeagueLogistics: Record<string, MatchdayLogistics> = {
     ],
     stay: {
       bestAreas: [
-        { area: "Liverpool city centre", notes: "Safest bet for logistics + nightlife.", lat: 53.4084, lng: -2.9916 },
-        { area: "Waterfront / docks", notes: "Good weekend feel; check walking/transit practicality.", lat: 53.4046, lng: -2.9950 },
+        { area: "Liverpool city centre", notes: "Safest bet for logistics + nightlife." },
+        { area: "Waterfront / docks", notes: "Good weekend feel; check exact walking/transit practicality." },
       ],
-      budgetAreas: [{ area: "Edge Hill area", budgetFriendly: true, notes: "Often cheaper; ensure transport links fit your plan.", lat: 53.4090, lng: -2.9370 }],
+      budgetAreas: [{ area: "Edge Hill area", budgetFriendly: true, notes: "Often cheaper; ensure transport links fit your plan." }],
     },
     arrivalTips: [
       "If kickoff timing is uncertain, book flexible transport and avoid tight return connections.",
@@ -473,8 +401,6 @@ const premierLeagueLogistics: Record<string, MatchdayLogistics> = {
     stadium: "St James’ Park",
     city: "Newcastle",
     country: "England",
-    stadiumLat: 54.9756,
-    stadiumLng: -1.6217,
     transport: {
       primaryStops: [
         { name: "Newcastle Central Station", type: "train", notes: "Main arrival hub; walkable to the stadium." },
@@ -497,10 +423,10 @@ const premierLeagueLogistics: Record<string, MatchdayLogistics> = {
     ],
     stay: {
       bestAreas: [
-        { area: "City centre", notes: "Perfect base: walkable + nightlife.", lat: 54.9783, lng: -1.6178 },
-        { area: "Quayside", notes: "Good weekend feel + restaurants.", lat: 54.9706, lng: -1.6037 },
+        { area: "City centre", notes: "Perfect base: walkable + nightlife." },
+        { area: "Quayside", notes: "Good weekend feel + restaurants." },
       ],
-      budgetAreas: [{ area: "Near Central Station", budgetFriendly: true, notes: "Often best value for visitors.", lat: 54.9680, lng: -1.6175 }],
+      budgetAreas: [{ area: "Near Central Station", budgetFriendly: true, notes: "Often best value for visitors." }],
     },
     arrivalTips: [
       "If you want a drink after full-time, book return trains with buffer.",
@@ -512,8 +438,6 @@ const premierLeagueLogistics: Record<string, MatchdayLogistics> = {
     stadium: "Stadium of Light",
     city: "Sunderland",
     country: "England",
-    stadiumLat: 54.9144,
-    stadiumLng: -1.3883,
     transport: {
       primaryStops: [
         { name: "Sunderland (Rail/Metro)", type: "train", notes: "Key arrival point; connect onward locally." },
@@ -536,10 +460,10 @@ const premierLeagueLogistics: Record<string, MatchdayLogistics> = {
     ],
     stay: {
       bestAreas: [
-        { area: "Newcastle city centre", notes: "Best tourist base; easy connection to Sunderland.", lat: 54.9783, lng: -1.6178 },
-        { area: "Sunderland centre", notes: "Works if you want a quieter base; check exact location.", lat: 54.9069, lng: -1.3838 },
+        { area: "Newcastle city centre", notes: "Best tourist base; easy connection to Sunderland." },
+        { area: "Sunderland centre", notes: "Works if you want a quieter base; check exact location." },
       ],
-      budgetAreas: [{ area: "Near Sunderland station", budgetFriendly: true, notes: "Often better value; good connectivity.", lat: 54.9060, lng: -1.3822 }],
+      budgetAreas: [{ area: "Near Sunderland station", budgetFriendly: true, notes: "Often better value; good connectivity." }],
     },
     arrivalTips: [
       "Have a clear plan for the return Metro/rail — queues can be heavy but move steadily.",
@@ -555,8 +479,6 @@ const premierLeagueLogistics: Record<string, MatchdayLogistics> = {
     stadium: "Villa Park",
     city: "Birmingham",
     country: "England",
-    stadiumLat: 52.5090,
-    stadiumLng: -1.8853,
     transport: {
       primaryStops: [
         { name: "Birmingham New Street", type: "train", notes: "Main arrival hub; connect onward by local rail." },
@@ -579,10 +501,10 @@ const premierLeagueLogistics: Record<string, MatchdayLogistics> = {
     ],
     stay: {
       bestAreas: [
-        { area: "City centre / near New Street", notes: "Best tourist base; easiest logistics.", lat: 52.4777, lng: -1.8986 },
-        { area: "Jewellery Quarter", notes: "Great vibe + food; short hop to centre.", lat: 52.4896, lng: -1.9127 },
+        { area: "City centre / near New Street", notes: "Best tourist base; easiest logistics." },
+        { area: "Jewellery Quarter", notes: "Great vibe + food; short hop to centre." },
       ],
-      budgetAreas: [{ area: "Digbeth edge", budgetFriendly: true, notes: "Often better value; check property surroundings carefully.", lat: 52.4721, lng: -1.8852 }],
+      budgetAreas: [{ area: "Digbeth edge", budgetFriendly: true, notes: "Often better value; check property surroundings carefully." }],
     },
     arrivalTips: [
       "If you’re doing a weekend: Birmingham often has strong value hotels and easy rail links.",
@@ -594,8 +516,6 @@ const premierLeagueLogistics: Record<string, MatchdayLogistics> = {
     stadium: "Elland Road",
     city: "Leeds",
     country: "England",
-    stadiumLat: 53.7778,
-    stadiumLng: -1.5721,
     transport: {
       primaryStops: [
         { name: "Leeds Station", type: "train", notes: "Main arrival hub for visitors." },
@@ -618,10 +538,10 @@ const premierLeagueLogistics: Record<string, MatchdayLogistics> = {
     ],
     stay: {
       bestAreas: [
-        { area: "Leeds city centre", notes: "Best base for visitors; walkable + nightlife.", lat: 53.8008, lng: -1.5491 },
-        { area: "Near the station", notes: "Most convenient for day trips and returns.", lat: 53.7940, lng: -1.5471 },
+        { area: "Leeds city centre", notes: "Best base for visitors; walkable + nightlife." },
+        { area: "Near the station", notes: "Most convenient for day trips and returns." },
       ],
-      budgetAreas: [{ area: "South/West Leeds edge", budgetFriendly: true, notes: "Can be cheaper; check transit practicality and area.", lat: 53.7760, lng: -1.5850 }],
+      budgetAreas: [{ area: "South/West Leeds edge", budgetFriendly: true, notes: "Can be cheaper; check transit practicality and area." }],
     },
     arrivalTips: [
       "If you’re returning by train same day, don’t cut it tight — dispersal can be slow.",
@@ -637,8 +557,6 @@ const premierLeagueLogistics: Record<string, MatchdayLogistics> = {
     stadium: "Vitality Stadium",
     city: "Bournemouth",
     country: "England",
-    stadiumLat: 50.7353,
-    stadiumLng: -1.8383,
     transport: {
       primaryStops: [
         { name: "Bournemouth Station", type: "train", notes: "Main arrival point for most visitors." },
@@ -660,10 +578,8 @@ const premierLeagueLogistics: Record<string, MatchdayLogistics> = {
       { name: "Near the stadium (practical)", type: "mixed", notes: "Limited choice; expect crowds." },
     ],
     stay: {
-      bestAreas: [
-        { area: "Town centre / seafront", notes: "Best for a weekend; walkable and tourist-friendly.", lat: 50.7192, lng: -1.8808 },
-      ],
-      budgetAreas: [{ area: "Near the station", budgetFriendly: true, notes: "Often better value; practical for arrivals/returns.", lat: 50.7277, lng: -1.8642 }],
+      bestAreas: [{ area: "Town centre / seafront", notes: "Best for a weekend; walkable and tourist-friendly." }],
+      budgetAreas: [{ area: "Near the station", budgetFriendly: true, notes: "Often better value; practical for arrivals/returns." }],
     },
     arrivalTips: [
       "If you’re day-tripping, keep return travel flexible — queues can add time.",
@@ -675,8 +591,6 @@ const premierLeagueLogistics: Record<string, MatchdayLogistics> = {
     stadium: "American Express Stadium",
     city: "Brighton",
     country: "England",
-    stadiumLat: 50.8619,
-    stadiumLng: -0.0837,
     transport: {
       primaryStops: [
         { name: "Brighton Station", type: "train", notes: "Most visitors arrive here." },
@@ -699,10 +613,10 @@ const premierLeagueLogistics: Record<string, MatchdayLogistics> = {
     ],
     stay: {
       bestAreas: [
-        { area: "Seafront", notes: "Best tourist base + vibe.", lat: 50.8198, lng: -0.1367 },
-        { area: "The Lanes", notes: "Best for food + walking.", lat: 50.8218, lng: -0.1412 },
+        { area: "Seafront", notes: "Best tourist base + vibe." },
+        { area: "The Lanes", notes: "Best for food + walking." },
       ],
-      budgetAreas: [{ area: "Preston Park / Hove edge", budgetFriendly: true, notes: "Often better value; still accessible.", lat: 50.8367, lng: -0.1495 }],
+      budgetAreas: [{ area: "Preston Park / Hove edge", budgetFriendly: true, notes: "Often better value; still accessible." }],
     },
     arrivalTips: [
       "Brighton is a great weekend combo: match + beach/town.",
@@ -718,8 +632,6 @@ const premierLeagueLogistics: Record<string, MatchdayLogistics> = {
     stadium: "Molineux Stadium",
     city: "Wolverhampton",
     country: "England",
-    stadiumLat: 52.5903,
-    stadiumLng: -2.1304,
     transport: {
       primaryStops: [
         { name: "Wolverhampton Station", type: "train", notes: "Main arrival point; walkable to the stadium." },
@@ -742,14 +654,51 @@ const premierLeagueLogistics: Record<string, MatchdayLogistics> = {
     ],
     stay: {
       bestAreas: [
-        { area: "Wolverhampton city centre", notes: "Practical base; easy walk/rail.", lat: 52.5862, lng: -2.1287 },
-        { area: "Birmingham city centre", notes: "Bigger weekend base; easy rail connection.", lat: 52.4777, lng: -1.8986 },
+        { area: "Wolverhampton city centre", notes: "Practical base; easy walk/rail." },
+        { area: "Birmingham city centre", notes: "Bigger weekend base; easy rail connection." },
       ],
-      budgetAreas: [{ area: "Near Wolverhampton Station", budgetFriendly: true, notes: "Often good value; most practical for visitors.", lat: 52.5872, lng: -2.1192 }],
+      budgetAreas: [{ area: "Near Wolverhampton Station", budgetFriendly: true, notes: "Often good value; most practical for visitors." }],
     },
     arrivalTips: [
       "Walking from the station can be the fastest option versus waiting for taxis.",
       "Arrive early if you want a relaxed pre-game meal in the centre.",
+    ],
+  },
+
+  "brentford": {
+    stadium: "Gtech Community Stadium",
+    city: "London",
+    country: "England",
+    transport: {
+      primaryStops: [
+        { name: "Kew Bridge (Rail)", type: "train", notes: "Closest rail stop; can be very busy post-match." },
+        { name: "Gunnersbury (Tube/Overground)", type: "metro", notes: "District line + Overground; strong alternative route." },
+        { name: "Chiswick / Brentford area buses", type: "bus", notes: "Useful for local movement; allow extra time." },
+      ],
+      tips: [
+        "If Kew Bridge is jammed, Gunnersbury can be a smarter exit route.",
+        "West London traffic is slow near kickoff—public transport is safer.",
+      ],
+    },
+    parking: {
+      availability: "hard",
+      summary: "Tight urban parking. Driving is risky without a pre-booked plan.",
+      officialLots: ["Prefer rail/Tube; if driving, park further out and use public transport in."],
+    },
+    foodDrink: [
+      { name: "Chiswick High Road", type: "mixed", notes: "Good density of options; short hop away." },
+      { name: "Around Gunnersbury / Kew Bridge", type: "mixed", notes: "Practical but busy on matchday." },
+    ],
+    stay: {
+      bestAreas: [
+        { area: "Hammersmith", notes: "Connected and practical for West London matches." },
+        { area: "Paddington", notes: "Good hotel supply + easy transport." },
+      ],
+      budgetAreas: [{ area: "Ealing", budgetFriendly: true, notes: "Often better value; good transport links into West London." }],
+    },
+    arrivalTips: [
+      "Arrive early if you want to avoid crowding on the footbridges and station approaches.",
+      "Have a fallback station in mind for the return.",
     ],
   },
 
@@ -761,8 +710,6 @@ const premierLeagueLogistics: Record<string, MatchdayLogistics> = {
     stadium: "The City Ground",
     city: "Nottingham",
     country: "England",
-    stadiumLat: 52.9399,
-    stadiumLng: -1.1322,
     transport: {
       primaryStops: [
         { name: "Nottingham Station", type: "train", notes: "Main arrival hub for visitors." },
@@ -784,10 +731,8 @@ const premierLeagueLogistics: Record<string, MatchdayLogistics> = {
       { name: "West Bridgford area", type: "mixed", notes: "Popular local area; can be busy on matchday." },
     ],
     stay: {
-      bestAreas: [
-        { area: "Nottingham city centre", notes: "Best base for tourists; easy rail access.", lat: 52.9548, lng: -1.1581 },
-      ],
-      budgetAreas: [{ area: "Near Nottingham Station", budgetFriendly: true, notes: "Often decent value and practical for returns.", lat: 52.9470, lng: -1.1467 }],
+      bestAreas: [{ area: "Nottingham city centre", notes: "Best base for tourists; easy rail access." }],
+      budgetAreas: [{ area: "Near Nottingham Station", budgetFriendly: true, notes: "Often decent value and practical for returns." }],
     },
     arrivalTips: [
       "If you’re day-tripping, plan a little buffer to get back to the station after full-time.",
@@ -803,8 +748,6 @@ const premierLeagueLogistics: Record<string, MatchdayLogistics> = {
     stadium: "Turf Moor",
     city: "Burnley",
     country: "England",
-    stadiumLat: 53.7890,
-    stadiumLng: -2.2302,
     transport: {
       primaryStops: [
         { name: "Burnley Manchester Road", type: "train", notes: "Useful rail stop depending on your route; check schedules." },
@@ -827,10 +770,10 @@ const premierLeagueLogistics: Record<string, MatchdayLogistics> = {
     ],
     stay: {
       bestAreas: [
-        { area: "Manchester city centre", notes: "Best weekend base; easy onward rail.", lat: 53.4808, lng: -2.2426 },
-        { area: "Burnley town area", notes: "Works if you want a quieter overnight; check exact property location.", lat: 53.7896, lng: -2.2446 },
+        { area: "Manchester city centre", notes: "Best weekend base; easy onward rail." },
+        { area: "Burnley town area", notes: "Works if you want a quieter overnight; check exact property location." },
       ],
-      budgetAreas: [{ area: "Near Burnley rail stops", budgetFriendly: true, notes: "Often cheaper; useful for day trips.", lat: 53.7920, lng: -2.2480 }],
+      budgetAreas: [{ area: "Near Burnley rail stops", budgetFriendly: true, notes: "Often cheaper; useful for day trips." }],
     },
     arrivalTips: [
       "If travelling by train, keep your return flexible and expect busy services post-match.",
