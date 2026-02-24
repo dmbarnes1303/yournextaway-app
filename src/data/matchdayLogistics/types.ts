@@ -21,7 +21,7 @@ export type AreaRec = {
   budgetFriendly?: boolean;
 
   /**
-   * Optional centroid for distance sorting
+   * Optional centroid for distance sorting / badges
    * (lat/lng of neighbourhood centre)
    */
   lat?: number;
@@ -42,7 +42,7 @@ export type MatchdayLogistics = {
   country: string;
 
   /**
-   * Stadium coordinates (required for distance logic)
+   * Stadium coordinates (required for stadium distance logic)
    */
   stadiumLat: number;
   stadiumLng: number;
