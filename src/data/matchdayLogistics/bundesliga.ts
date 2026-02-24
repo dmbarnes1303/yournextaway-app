@@ -2,18 +2,20 @@
 import type { MatchdayLogistics } from "./types";
 
 /**
- * Bundesliga Matchday Logistics (18 teams — your list)
+ * Bundesliga Matchday Logistics (18 teams)
  *
  * Rules:
  * - Useful + conservative (no fake venue names / no specific pub names).
  * - Stable transport anchors: main rail hubs + major U/S-Bahn/tram stops.
  * - Neutral traveller framing.
  *
- * Keys should match normalizeClubKey(homeTeamName).
+ * IMPORTANT:
+ * Keys MUST match normalizeClubKey(homeTeamName) from src/data/clubKey.ts
+ * (e.g. "bayern-munich", "borussia-dortmund", "tsg-hoffenheim", etc).
  */
 
 const bundesligaLogistics: Record<string, MatchdayLogistics> = {
-  "bayern munich": {
+  "bayern-munich": {
     stadium: "Allianz Arena",
     city: "Munich",
     country: "Germany",
@@ -24,7 +26,7 @@ const bundesligaLogistics: Record<string, MatchdayLogistics> = {
         { name: "Marienplatz", type: "metro", notes: "Central interchange (S/U-Bahn); good base point for routing." },
       ],
       tips: [
-        "The U-Bahn to Fröttmaning is the standard route; expect crowd management post-match.",
+        "U-Bahn to Fröttmaning is the standard route; expect crowd management post-match.",
         "Leaving 10–15 minutes after full-time often means a smoother station experience.",
       ],
     },
@@ -50,7 +52,7 @@ const bundesligaLogistics: Record<string, MatchdayLogistics> = {
     ],
   },
 
-  "borussia dortmund": {
+  "borussia-dortmund": {
     stadium: "Signal Iduna Park",
     city: "Dortmund",
     country: "Germany",
@@ -61,17 +63,17 @@ const bundesligaLogistics: Record<string, MatchdayLogistics> = {
         { name: "Westfalenhallen (U-Bahn)", type: "metro", notes: "Useful alternative depending on routing." },
       ],
       tips: [
-        "For most visitors: base near Hbf and follow the matchday rail flow to the stadium stops.",
-        "Post-match: queues are normal—waiting briefly or walking part way can help.",
+        "For most visitors: base near Hbf and follow the matchday rail flow to stadium-area stops.",
+        "Post-match queues are normal—waiting briefly or walking part-way can help.",
       ],
     },
     parking: {
       availability: "medium",
-      summary: "Driving is possible but matchday traffic/closures can slow you down near the stadium zone.",
+      summary: "Driving is possible but matchday traffic/closures can slow you near the stadium zone.",
       officialLots: ["Use official event parking if you drive; arrive early."],
     },
     foodDrink: [
-      { name: "City centre near Hbf", type: "mixed", notes: "Practical for pre-game; then rail out." },
+      { name: "City centre near Hbf", type: "mixed", notes: "Practical pre-game base; then rail out." },
       { name: "Stadium district (practical)", type: "mixed", notes: "Convenient but crowded near kickoff." },
     ],
     stay: {
@@ -84,7 +86,7 @@ const bundesligaLogistics: Record<string, MatchdayLogistics> = {
     ],
   },
 
-  "hoffenheim": {
+  "tsg-hoffenheim": {
     stadium: "PreZero Arena",
     city: "Sinsheim",
     country: "Germany",
@@ -95,8 +97,8 @@ const bundesligaLogistics: Record<string, MatchdayLogistics> = {
         { name: "Mannheim Hbf (base option)", type: "train", notes: "Major hub; easy regional access." },
       ],
       tips: [
-        "This is a ‘regional’ matchday: plan trains before kickoff, including the return.",
-        "If you’re staying in Heidelberg/Mannheim, it’s a straightforward day trip with planning.",
+        "This is a regional matchday: plan trains before kickoff, including the return.",
+        "If staying in Heidelberg/Mannheim, it’s a straightforward day trip with planning.",
       ],
     },
     parking: {
@@ -116,12 +118,12 @@ const bundesligaLogistics: Record<string, MatchdayLogistics> = {
       budgetAreas: [{ area: "Near Mannheim Hbf", budgetFriendly: true, notes: "Practical for arrivals and onward travel." }],
     },
     arrivalTips: [
-      "Double-check your return connections before you leave your hotel.",
-      "Arrive early—smaller towns mean less ‘forgiving’ transport frequency.",
+      "Double-check your return connections before you leave your accommodation.",
+      "Arrive early—smaller towns mean less forgiving transport frequency.",
     ],
   },
 
-  "vfb stuttgart": {
+  "vfb-stuttgart": {
     stadium: "MHPArena (Stuttgart)",
     city: "Stuttgart",
     country: "Germany",
@@ -155,14 +157,14 @@ const bundesligaLogistics: Record<string, MatchdayLogistics> = {
     ],
   },
 
-  "rb leipzig": {
+  "rb-leipzig": {
     stadium: "Red Bull Arena",
     city: "Leipzig",
     country: "Germany",
     transport: {
       primaryStops: [
         { name: "Leipzig Hbf", type: "train", notes: "Main arrival hub; easy city-wide connections." },
-        { name: "Leipzig Markt / city centre", type: "tram", notes: "Good base point; trams/walk routes are common." },
+        { name: "City centre (Markt / Augustusplatz area)", type: "tram", notes: "Good base point; trams/walk routes are common." },
         { name: "Arena district (walk/tram)", type: "walk", notes: "Stadium area is reachable by tram and walking routes from centre." },
       ],
       tips: [
@@ -172,12 +174,12 @@ const bundesligaLogistics: Record<string, MatchdayLogistics> = {
     },
     parking: {
       availability: "medium",
-      summary: "Driving is possible but city event traffic can be slow; public transport is usually easier.",
+      summary: "Driving is possible but event traffic can be slow; public transport is usually easier.",
       officialLots: ["If driving, use official/signed event parking where available."],
     },
     foodDrink: [
       { name: "City centre", type: "mixed", notes: "Best variety; then tram/walk to the stadium." },
-      { name: "Südvorstadt (bars/food)", type: "bar", notes: "Good nightlife district; easy to reach from centre." },
+      { name: "Südvorstadt", type: "bar", notes: "Good nightlife district; easy to reach from centre." },
     ],
     stay: {
       bestAreas: [
@@ -188,11 +190,11 @@ const bundesligaLogistics: Record<string, MatchdayLogistics> = {
     },
     arrivalTips: [
       "Arrive early if you want a relaxed walk-in and time to find your entrance.",
-      "If you’re doing Dresden/Leipzig day trip, check late returns before kickoff.",
+      "If you’re day-tripping, check late returns before kickoff.",
     ],
   },
 
-  "bayer leverkusen": {
+  "bayer-leverkusen": {
     stadium: "BayArena",
     city: "Leverkusen",
     country: "Germany",
@@ -224,12 +226,12 @@ const bundesligaLogistics: Record<string, MatchdayLogistics> = {
       budgetAreas: [{ area: "Near Köln Hbf", budgetFriendly: true, notes: "Practical for quick trips; check exact street." }],
     },
     arrivalTips: [
-      "If you’re doing multiple Ruhr/Rhine matches, keep bases near major Hbf stations.",
+      "If you’re doing multiple Rhine/Ruhr matches, keep bases near major Hbf stations.",
       "Arrive early to avoid last-minute congestion on local connections.",
     ],
   },
 
-  "freiburg": {
+  "sc-freiburg": {
     stadium: "Europa-Park Stadion",
     city: "Freiburg",
     country: "Germany",
@@ -237,7 +239,7 @@ const bundesligaLogistics: Record<string, MatchdayLogistics> = {
       primaryStops: [
         { name: "Freiburg (Breisgau) Hbf", type: "train", notes: "Main arrival hub; connect onward by tram/bus." },
         { name: "Tram/bus to stadium district", type: "tram", notes: "Standard last leg; allow time near kickoff." },
-        { name: "City centre", type: "walk", notes: "Great base; compact and walkable." },
+        { name: "Old town / city centre", type: "walk", notes: "Great base; compact and walkable." },
       ],
       tips: [
         "Freiburg is compact and easy—stay central and use tram/bus for the last leg.",
@@ -247,7 +249,7 @@ const bundesligaLogistics: Record<string, MatchdayLogistics> = {
     parking: {
       availability: "medium",
       summary: "Driving is possible but public transport is usually smoother on matchday.",
-      officialLots: ["Use official/signed parking if driving; otherwise park-and-ride style approach works best."],
+      officialLots: ["Use official/signed parking if driving; otherwise park-and-ride works well."],
     },
     foodDrink: [
       { name: "Altstadt (old town)", type: "mixed", notes: "Best for tourists; strong pre/post." },
@@ -263,7 +265,7 @@ const bundesligaLogistics: Record<string, MatchdayLogistics> = {
     ],
   },
 
-  "eintracht frankfurt": {
+  "eintracht-frankfurt": {
     stadium: "Deutsche Bank Park",
     city: "Frankfurt",
     country: "Germany",
@@ -300,7 +302,7 @@ const bundesligaLogistics: Record<string, MatchdayLogistics> = {
     ],
   },
 
-  "union berlin": {
+  "union-berlin": {
     stadium: "Stadion An der Alten Försterei",
     city: "Berlin",
     country: "Germany",
@@ -311,7 +313,7 @@ const bundesligaLogistics: Record<string, MatchdayLogistics> = {
         { name: "Köpenick area (S-Bahn)", type: "train", notes: "Typical approach for the stadium district; expect walking last leg." },
       ],
       tips: [
-        "Berlin is huge—pick a base near strong interchanges (Alexanderplatz/Ostkreuz style) to simplify routing.",
+        "Berlin is huge—pick a base near strong interchanges to simplify routing.",
         "Expect a walk and local crowd flow near the ground—normal for this venue.",
       ],
     },
@@ -321,8 +323,8 @@ const bundesligaLogistics: Record<string, MatchdayLogistics> = {
       officialLots: ["If driving, park outside and use S-Bahn for the last leg."],
     },
     foodDrink: [
+      { name: "Mitte (base)", type: "mixed", notes: "Practical for tourists and transit." },
       { name: "Friedrichshain / Kreuzberg (base)", type: "mixed", notes: "Great weekend areas; good connections." },
-      { name: "Mitte / Alexanderplatz (base)", type: "mixed", notes: "Practical for tourists and transit." },
     ],
     stay: {
       bestAreas: [
@@ -348,7 +350,7 @@ const bundesligaLogistics: Record<string, MatchdayLogistics> = {
         { name: "Tram/bus to stadium district", type: "tram", notes: "Last leg typically tram/bus; allow time near kickoff." },
       ],
       tips: [
-        "Treat as a Munich base trip if you want simplicity: Munich → Augsburg rail, then local transit.",
+        "Treat as a Munich-base day trip if you want simplicity: Munich → Augsburg rail, then local transit.",
         "Confirm return trains before kickoff if you’re not staying overnight.",
       ],
     },
@@ -371,7 +373,7 @@ const bundesligaLogistics: Record<string, MatchdayLogistics> = {
     ],
   },
 
-  "hamburger sv": {
+  "hamburger-sv": {
     stadium: "Volksparkstadion",
     city: "Hamburg",
     country: "Germany",
@@ -382,7 +384,7 @@ const bundesligaLogistics: Record<string, MatchdayLogistics> = {
         { name: "Stellingen (S-Bahn)", type: "train", notes: "Common matchday stop for the stadium district; walk last leg." },
       ],
       tips: [
-        "Hamburg is spread out—base central (Hbf/Altona) and use S-Bahn for the last leg.",
+        "Base central (Hbf/Altona) and use S-Bahn for the last leg.",
         "Post-match: walking to a less-crowded station entrance can save time.",
       ],
     },
@@ -392,8 +394,8 @@ const bundesligaLogistics: Record<string, MatchdayLogistics> = {
       officialLots: ["Use official/signed parking if driving; arrive early."],
     },
     foodDrink: [
-      { name: "St Pauli / Reeperbahn (base)", type: "bar", notes: "Nightlife heavy; good post-match, not always calm." },
       { name: "Altstadt / city centre", type: "mixed", notes: "Best all-round visitor base." },
+      { name: "St Pauli / Reeperbahn (base)", type: "bar", notes: "Nightlife heavy; good post-match, not always calm." },
     ],
     stay: {
       bestAreas: [
@@ -408,14 +410,14 @@ const bundesligaLogistics: Record<string, MatchdayLogistics> = {
     ],
   },
 
-  "fc cologne": {
+  "fc-koln": {
     stadium: "RheinEnergieSTADION",
     city: "Cologne",
     country: "Germany",
     transport: {
       primaryStops: [
         { name: "Köln Hbf", type: "train", notes: "Main visitor hub; excellent connections." },
-        { name: "Deutz (rail)", type: "train", notes: "Useful alternative station; good dispersal option." },
+        { name: "Köln Messe/Deutz", type: "train", notes: "Useful alternative station; good dispersal option." },
         { name: "Tram to stadium district", type: "tram", notes: "Standard last leg; allow time near kickoff." },
       ],
       tips: [
@@ -430,7 +432,7 @@ const bundesligaLogistics: Record<string, MatchdayLogistics> = {
     },
     foodDrink: [
       { name: "Old town / riverside", type: "mixed", notes: "Best pre/post vibe; lots of options." },
-      { name: "Belgian Quarter", type: "bar", notes: "Great bars/food; good weekend base." },
+      { name: "Belgian Quarter", type: "bar", notes: "Great bars/food; strong weekend base." },
     ],
     stay: {
       bestAreas: [
@@ -445,7 +447,7 @@ const bundesligaLogistics: Record<string, MatchdayLogistics> = {
     ],
   },
 
-  "mainz 05": {
+  "mainz-05": {
     stadium: "MEWA ARENA",
     city: "Mainz",
     country: "Germany",
@@ -456,7 +458,7 @@ const bundesligaLogistics: Record<string, MatchdayLogistics> = {
         { name: "Wiesbaden (base option)", type: "train", notes: "Nearby base; easy regional access." },
       ],
       tips: [
-        "Mainz works well as a Frankfurt day trip—just confirm return schedules.",
+        "Mainz works well as a Frankfurt day trip—confirm return schedules.",
         "Keep it simple: rail in, walk/tram last leg, rail out.",
       ],
     },
@@ -479,18 +481,18 @@ const bundesligaLogistics: Record<string, MatchdayLogistics> = {
     ],
   },
 
-  "borussia m'gladbach": {
+  "borussia-monchengladbach": {
     stadium: "BORUSSIA-PARK",
     city: "Mönchengladbach",
     country: "Germany",
     transport: {
       primaryStops: [
-        { name: "Mönchengladbach Hbf", type: "train", notes: "Local rail hub; last leg often shuttle/bus/taxi." },
-        { name: "Düsseldorf Hbf (base option)", type: "train", notes: "Strong base; regional trains are frequent." },
-        { name: "Cologne Hbf (base option)", type: "train", notes: "Another strong base; easy regional access." },
+        { name: "Mönchengladbach Hbf", type: "train", notes: "Local hub; last leg often bus/shuttle/taxi." },
+        { name: "Düsseldorf Hbf (base option)", type: "train", notes: "Strong base; frequent regional trains." },
+        { name: "Köln Hbf (base option)", type: "train", notes: "Another strong base; easy regional access." },
       ],
       tips: [
-        "This is a ‘regional stadium’ pattern: rail to town, then bus/shuttle-style last leg.",
+        "Regional-stadium pattern: rail to town, then bus/shuttle last leg.",
         "Confirm return options before kickoff if you’re day-tripping.",
       ],
     },
@@ -500,7 +502,7 @@ const bundesligaLogistics: Record<string, MatchdayLogistics> = {
       officialLots: ["Use official/signed event parking; arrive early."],
     },
     foodDrink: [
-      { name: "Düsseldorf (base)", type: "mixed", notes: "Great for weekend nightlife + food." },
+      { name: "Düsseldorf (base)", type: "mixed", notes: "Great weekend nightlife + food." },
       { name: "Cologne (base)", type: "mixed", notes: "Great alternative base; lots of options." },
     ],
     stay: {
@@ -524,16 +526,16 @@ const bundesligaLogistics: Record<string, MatchdayLogistics> = {
       primaryStops: [
         { name: "Wolfsburg Hbf", type: "train", notes: "Main arrival hub; stadium is relatively close by city standards." },
         { name: "Berlin Hbf (base option)", type: "train", notes: "Possible base; day trip requires planning." },
-        { name: "Hannover Hbf (base option)", type: "train", notes: "Another strong base option; regional access." },
+        { name: "Hannover Hbf (base option)", type: "train", notes: "Another strong base option; easy access." },
       ],
       tips: [
-        "Wolfsburg is a classic day-trip match from Berlin/Hannover—confirm return trains early.",
+        "This works well as a Berlin/Hannover day trip if you plan return trains in advance.",
         "Expect a walkable last leg from the station area depending on routing.",
       ],
     },
     parking: {
       availability: "medium",
-      summary: "Driving is feasible; still arrive early to avoid congestion near kickoff.",
+      summary: "Driving is feasible; arrive early to avoid congestion near kickoff.",
       officialLots: ["Use official/signed parking if offered."],
     },
     foodDrink: [
@@ -545,12 +547,12 @@ const bundesligaLogistics: Record<string, MatchdayLogistics> = {
       budgetAreas: [{ area: "Near Wolfsburg Hbf", budgetFriendly: true, notes: "Practical if staying locally." }],
     },
     arrivalTips: [
-      "If you’re day-tripping, don’t rely on ‘tight’ return timings after full-time.",
+      "If you’re day-tripping, don’t rely on tight return timings after full-time.",
       "Arrive early to keep last-leg logistics calm.",
     ],
   },
 
-  "st. pauli": {
+  "st-pauli": {
     stadium: "Millerntor-Stadion",
     city: "Hamburg",
     country: "Germany",
@@ -561,8 +563,8 @@ const bundesligaLogistics: Record<string, MatchdayLogistics> = {
         { name: "Reeperbahn (S-Bahn)", type: "train", notes: "Useful alternative stop; good for dispersal." },
       ],
       tips: [
-        "This is one of the easiest stadiums in Germany for tourists: central and transit-heavy.",
-        "Post-match: if St. Pauli station is packed, walking to an alternative stop can be quicker.",
+        "One of the easiest stadiums in Germany for tourists: central and transit-heavy.",
+        "If St. Pauli station is packed, walk to an alternative stop for a faster exit.",
       ],
     },
     parking: {
@@ -576,7 +578,7 @@ const bundesligaLogistics: Record<string, MatchdayLogistics> = {
     ],
     stay: {
       bestAreas: [
-        { area: "St Pauli", notes: "Best for nightlife and instant matchday access." },
+        { area: "St Pauli", notes: "Best for nightlife and instant access." },
         { area: "Altstadt / central", notes: "More balanced base; still easy routing." },
       ],
       budgetAreas: [{ area: "Near Hamburg Hbf", budgetFriendly: true, notes: "Practical and often better value." }],
@@ -587,7 +589,7 @@ const bundesligaLogistics: Record<string, MatchdayLogistics> = {
     ],
   },
 
-  "werder bremen": {
+  "werder-bremen": {
     stadium: "Weserstadion",
     city: "Bremen",
     country: "Germany",
@@ -599,7 +601,7 @@ const bundesligaLogistics: Record<string, MatchdayLogistics> = {
       ],
       tips: [
         "Bremen is compact—stay central and use tram/walk to the stadium area.",
-        "Post-match: walking away from the stadium toward the centre can be efficient.",
+        "Walking away from the stadium toward the centre can be efficient post-match.",
       ],
     },
     parking: {
@@ -621,7 +623,7 @@ const bundesligaLogistics: Record<string, MatchdayLogistics> = {
     ],
   },
 
-  "fc heidenheim": {
+  "fc-heidenheim": {
     stadium: "Voith-Arena",
     city: "Heidenheim an der Brenz",
     country: "Germany",
@@ -632,8 +634,8 @@ const bundesligaLogistics: Record<string, MatchdayLogistics> = {
         { name: "Stuttgart Hbf (base option)", type: "train", notes: "Bigger base; day trip possible with planning." },
       ],
       tips: [
-        "Small-city matchday: the key is planning your trains and last-leg options before kickoff.",
-        "Do not assume frequent late returns—check schedules early.",
+        "Small-city matchday: plan trains and last-leg options before kickoff.",
+        "Don’t assume frequent late returns—check schedules early.",
       ],
     },
     parking: {
