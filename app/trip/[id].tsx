@@ -42,7 +42,7 @@ import { confirmBookedAndOfferProof } from "@/src/services/bookingProof";
 import { getIataCityCodeForCity, debugCityKey } from "@/src/data/iataCityCodes";
 
 // matchday logistics
-import { getMatchdayLogistics, buildLogisticsSnippet, sortAreasByStadiumDistance } from "@/src/data/matchdayLogistics";
+import { getMatchdayLogistics, buildLogisticsSnippet } from "@/src/data/matchdayLogistics";
 
 /* -------------------------------------------------------------------------- */
 /* helpers */
@@ -337,7 +337,9 @@ export default function TripDetailScreen() {
           try {
             const r = await getFixtureById(String(id));
             if (r) map[String(id)] = r;
-          } catch {}
+          } catch {
+            // best-effort
+          }
         }
         if (!cancelled) setFixturesById(map);
       } finally {
@@ -578,10 +580,14 @@ export default function TripDetailScreen() {
   }
 
   function confirmMarkBooked(item: SavedItem) {
-    Alert.alert("Mark as booked?", "Only do this if you completed the booking and want it in Wallet.", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Mark booked", style: "default", onPress: () => markBookedSmart(item) },
-    ]);
+    Alert.alert(
+      "Mark as booked?",
+      "Only do this if you completed the booking and want it in Wallet.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Mark booked", style: "default", onPress: () => markBookedSmart(item) },
+      ]
+    );
   }
 
   function confirmMoveToPending(item: SavedItem) {
@@ -625,22 +631,21 @@ export default function TripDetailScreen() {
 
   function openNoteActions(item: SavedItem) {
     const text = String(item.metadata?.text ?? "").trim();
-    Alert.alert(item.title || "Notes", text || "No details saved.", [
-      { text: "Close", style: "cancel" },
-      { text: "Archive", style: "destructive", onPress: () => archiveItem(item) },
-    ]);
+    Alert.alert(
+      item.title || "Notes",
+      text || "No details saved.",
+      [
+        { text: "Close", style: "cancel" },
+        { text: "Archive", style: "destructive", onPress: () => archiveItem(item) },
+      ],
+      { cancelable: true }
+    );
   }
 
   function StatusBadge({ s }: { s: SavedItem["status"] }) {
     const label = statusLabel(s);
     const style =
-      s === "pending"
-        ? styles.badgePending
-        : s === "saved"
-        ? styles.badgeSaved
-        : s === "booked"
-        ? styles.badgeBooked
-        : styles.badgeArchived;
+      s === "pending" ? styles.badgePending : s === "saved" ? styles.badgeSaved : s === "booked" ? styles.badgeBooked : styles.badgeArchived;
 
     return (
       <View style={[styles.badge, style]}>
@@ -776,18 +781,8 @@ export default function TripDetailScreen() {
                       const logistics = getMatchdayLogistics({ homeTeamName: homeName, leagueName });
                       const logisticsLine = logistics ? buildLogisticsSnippet(logistics) : "";
 
-                      // If we have area coords, show closest stay hint (tiny “smart” perk)
-                      const bestStay = (() => {
-                        if (!logistics?.stay?.bestAreas?.length) return null;
-                        const sorted = sortAreasByStadiumDistance(logistics, logistics.stay.bestAreas);
-                        const top = sorted[0];
-                        if (!top) return null;
-                        if (top.distanceLabel) return `${top.area} • ${top.distanceLabel} from stadium`;
-                        return top.area;
-                      })();
-
                       return (
-                        <Pressable key={mid} onPress={() => router.push({ pathname: "/match/[id]", params: { id: String(mid) } } as any)} style={styles.matchRow}>
+                        <Pressable key={mid} onPress={() => openMatch(mid)} style={styles.matchRow}>
                           <TeamCrest name={homeName} logo={r?.teams?.home?.logo} />
 
                           <View style={{ flex: 1 }}>
@@ -806,11 +801,22 @@ export default function TripDetailScreen() {
                               {kickoff.line}
                             </Text>
 
-                            {meta1 ? <Text style={styles.matchMeta} numberOfLines={1}>{meta1}</Text> : null}
-                            {meta2 ? <Text style={styles.matchMeta} numberOfLines={1}>{meta2}</Text> : null}
+                            {meta1 ? (
+                              <Text style={styles.matchMeta} numberOfLines={1}>
+                                {meta1}
+                              </Text>
+                            ) : null}
+                            {meta2 ? (
+                              <Text style={styles.matchMeta} numberOfLines={1}>
+                                {meta2}
+                              </Text>
+                            ) : null}
 
-                            {logisticsLine ? <Text style={styles.logisticsMeta} numberOfLines={1}>{logisticsLine}</Text> : null}
-                            {bestStay ? <Text style={styles.distanceMeta} numberOfLines={1}>Stay: {bestStay}</Text> : null}
+                            {logisticsLine ? (
+                              <Text style={styles.logisticsMeta} numberOfLines={1}>
+                                {logisticsLine}
+                              </Text>
+                            ) : null}
 
                             <Text style={styles.matchHint} numberOfLines={1}>
                               Open match → Home tickets, directions, follow alerts
@@ -840,12 +846,21 @@ export default function TripDetailScreen() {
                       <View key={it.id} style={styles.itemRow}>
                         <Pressable style={{ flex: 1 }} onPress={() => openSavedItem(it)}>
                           <View style={styles.itemTitleRow}>
-                            <Text style={styles.itemTitle} numberOfLines={1}>{it.title}</Text>
+                            <Text style={styles.itemTitle} numberOfLines={1}>
+                              {it.title}
+                            </Text>
                             <StatusBadge s={it.status} />
                           </View>
 
-                          <Text style={styles.itemMeta} numberOfLines={1}>{buildMetaLine(it)}</Text>
-                          {it.priceText ? <Text style={styles.priceLine} numberOfLines={1}>{it.priceText}</Text> : null}
+                          <Text style={styles.itemMeta} numberOfLines={1}>
+                            {buildMetaLine(it)}
+                          </Text>
+
+                          {it.priceText ? (
+                            <Text style={styles.priceLine} numberOfLines={1}>
+                              {it.priceText}
+                            </Text>
+                          ) : null}
                         </Pressable>
 
                         <View style={styles.itemActions}>
@@ -874,12 +889,21 @@ export default function TripDetailScreen() {
                       <View key={it.id} style={styles.itemRow}>
                         <Pressable style={{ flex: 1 }} onPress={() => openSavedItem(it)}>
                           <View style={styles.itemTitleRow}>
-                            <Text style={styles.itemTitle} numberOfLines={1}>{it.title}</Text>
+                            <Text style={styles.itemTitle} numberOfLines={1}>
+                              {it.title}
+                            </Text>
                             <StatusBadge s={it.status} />
                           </View>
 
-                          <Text style={styles.itemMeta} numberOfLines={1}>{buildMetaLine(it)}</Text>
-                          {it.priceText ? <Text style={styles.priceLine} numberOfLines={1}>{it.priceText}</Text> : null}
+                          <Text style={styles.itemMeta} numberOfLines={1}>
+                            {buildMetaLine(it)}
+                          </Text>
+
+                          {it.priceText ? (
+                            <Text style={styles.priceLine} numberOfLines={1}>
+                              {it.priceText}
+                            </Text>
+                          ) : null}
                         </Pressable>
 
                         <View style={styles.itemActions}>
@@ -909,12 +933,21 @@ export default function TripDetailScreen() {
                       <View key={it.id} style={styles.itemRow}>
                         <Pressable style={{ flex: 1 }} onPress={() => openSavedItem(it)}>
                           <View style={styles.itemTitleRow}>
-                            <Text style={styles.itemTitle} numberOfLines={1}>{it.title}</Text>
+                            <Text style={styles.itemTitle} numberOfLines={1}>
+                              {it.title}
+                            </Text>
                             <StatusBadge s={it.status} />
                           </View>
 
-                          <Text style={styles.itemMeta} numberOfLines={1}>{buildMetaLine(it)}</Text>
-                          {it.priceText ? <Text style={styles.priceLine} numberOfLines={1}>{it.priceText}</Text> : null}
+                          <Text style={styles.itemMeta} numberOfLines={1}>
+                            {buildMetaLine(it)}
+                          </Text>
+
+                          {it.priceText ? (
+                            <Text style={styles.priceLine} numberOfLines={1}>
+                              {it.priceText}
+                            </Text>
+                          ) : null}
                         </Pressable>
 
                         <View style={styles.itemActions}>
@@ -964,8 +997,12 @@ export default function TripDetailScreen() {
                     {notes.map((it) => (
                       <Pressable key={it.id} onPress={() => openNoteActions(it)} style={styles.noteRow}>
                         <View style={{ flex: 1 }}>
-                          <Text style={styles.itemTitle} numberOfLines={1}>{it.title}</Text>
-                          <Text style={styles.itemMeta} numberOfLines={1}>Notes</Text>
+                          <Text style={styles.itemTitle} numberOfLines={1}>
+                            {it.title}
+                          </Text>
+                          <Text style={styles.itemMeta} numberOfLines={1}>
+                            Notes
+                          </Text>
                         </View>
                         <Text style={styles.chev}>›</Text>
                       </Pressable>
@@ -1136,22 +1173,63 @@ const styles = StyleSheet.create({
 
   bannersRow: { marginTop: 12, gap: 10 },
 
-  pendingBanner: { padding: 10, borderRadius: 12, backgroundColor: "rgba(255,200,80,0.15)" },
-  pendingText: { color: "rgba(255,200,80,1)", fontWeight: "900" },
+  pendingBanner: {
+    padding: 10,
+    borderRadius: 12,
+    backgroundColor: "rgba(255,200,80,0.15)",
+  },
 
-  savedBanner: { padding: 10, borderRadius: 12, backgroundColor: "rgba(0,255,136,0.10)" },
-  savedText: { color: "rgba(0,255,136,1)", fontWeight: "900" },
+  pendingText: {
+    color: "rgba(255,200,80,1)",
+    fontWeight: "900",
+  },
 
-  bookedBanner: { padding: 10, borderRadius: 12, backgroundColor: "rgba(120,170,255,0.14)" },
-  bookedText: { color: "rgba(160,195,255,1)", fontWeight: "900" },
+  savedBanner: {
+    padding: 10,
+    borderRadius: 12,
+    backgroundColor: "rgba(0,255,136,0.10)",
+  },
+
+  savedText: {
+    color: "rgba(0,255,136,1)",
+    fontWeight: "900",
+  },
+
+  bookedBanner: {
+    padding: 10,
+    borderRadius: 12,
+    backgroundColor: "rgba(120,170,255,0.14)",
+  },
+
+  bookedText: {
+    color: "rgba(160,195,255,1)",
+    fontWeight: "900",
+  },
 
   heroActions: { marginTop: 12 },
 
-  btn: { paddingVertical: 12, borderRadius: 12, alignItems: "center", borderWidth: 1 },
-  btnPrimary: { borderColor: "rgba(0,255,136,0.6)", backgroundColor: "rgba(0,0,0,0.22)" },
-  btnPrimaryText: { color: theme.colors.text, fontWeight: "900" },
+  btn: {
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: "center",
+    borderWidth: 1,
+  },
 
-  sectionTitle: { color: theme.colors.text, fontWeight: "900", marginBottom: 8 },
+  btnPrimary: {
+    borderColor: "rgba(0,255,136,0.6)",
+    backgroundColor: "rgba(0,0,0,0.22)",
+  },
+
+  btnPrimaryText: {
+    color: theme.colors.text,
+    fontWeight: "900",
+  },
+
+  sectionTitle: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    marginBottom: 8,
+  },
 
   matchRow: {
     flexDirection: "row",
@@ -1165,7 +1243,11 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.18)",
   },
 
-  matchTitleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  matchTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
 
   matchTitle: { color: theme.colors.text, fontWeight: "900", flexShrink: 1 },
 
@@ -1180,9 +1262,21 @@ const styles = StyleSheet.create({
 
   tbcText: { color: "rgba(255,200,80,1)", fontWeight: "900", fontSize: 11 },
 
-  matchMeta: { marginTop: 4, color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12, lineHeight: 16 },
-  logisticsMeta: { marginTop: 6, color: theme.colors.textTertiary, fontWeight: "900", fontSize: 12, lineHeight: 16 },
-  distanceMeta: { marginTop: 6, color: "rgba(242,244,246,0.86)", fontWeight: "900", fontSize: 12, lineHeight: 16 },
+  matchMeta: {
+    marginTop: 4,
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
+    fontSize: 12,
+    lineHeight: 16,
+  },
+
+  logisticsMeta: {
+    marginTop: 6,
+    color: theme.colors.textTertiary,
+    fontWeight: "900",
+    fontSize: 12,
+    lineHeight: 16,
+  },
 
   matchHint: { marginTop: 6, color: theme.colors.textTertiary, fontWeight: "900", fontSize: 11 },
 
@@ -1196,6 +1290,7 @@ const styles = StyleSheet.create({
   },
 
   crestImg: { width: 26, height: 26 },
+
   crestFallback: { color: theme.colors.textSecondary, fontWeight: "900" },
 
   itemRow: {
@@ -1210,15 +1305,38 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
 
-  itemTitleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
+  itemTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
 
-  itemTitle: { color: theme.colors.text, fontWeight: "900", flexShrink: 1, paddingRight: 6 },
+  itemTitle: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    flexShrink: 1,
+    paddingRight: 6,
+  },
 
-  itemMeta: { marginTop: 4, color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12 },
+  itemMeta: {
+    marginTop: 4,
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
+    fontSize: 12,
+  },
 
-  priceLine: { marginTop: 6, color: "rgba(242,244,246,0.92)", fontSize: 12, fontWeight: "900" },
+  priceLine: {
+    marginTop: 6,
+    color: "rgba(242,244,246,0.92)",
+    fontSize: 12,
+    fontWeight: "900",
+  },
 
-  itemActions: { gap: 8, alignItems: "flex-end" },
+  itemActions: {
+    gap: 8,
+    alignItems: "flex-end",
+  },
 
   smallBtn: {
     paddingVertical: 8,
@@ -1229,19 +1347,56 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.15)",
   },
 
-  smallBtnDanger: { borderColor: "rgba(255,80,80,0.35)" },
+  smallBtnDanger: {
+    borderColor: "rgba(255,80,80,0.35)",
+  },
 
-  smallBtnText: { color: theme.colors.text, fontWeight: "900", fontSize: 12 },
+  smallBtnText: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 12,
+  },
 
-  badge: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
-  badgeText: { color: theme.colors.text, fontWeight: "900", fontSize: 11 },
+  badge: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
 
-  badgePending: { borderColor: "rgba(255,200,80,0.40)", backgroundColor: "rgba(255,200,80,0.10)" },
-  badgeSaved: { borderColor: "rgba(0,255,136,0.35)", backgroundColor: "rgba(0,255,136,0.08)" },
-  badgeBooked: { borderColor: "rgba(120,170,255,0.45)", backgroundColor: "rgba(120,170,255,0.10)" },
-  badgeArchived: { borderColor: "rgba(255,255,255,0.18)", backgroundColor: "rgba(255,255,255,0.06)" },
+  badgeText: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 11,
+  },
 
-  noteBox: { borderWidth: 1, borderColor: "rgba(255,255,255,0.10)", borderRadius: 14, backgroundColor: "rgba(0,0,0,0.18)", padding: 12 },
+  badgePending: {
+    borderColor: "rgba(255,200,80,0.40)",
+    backgroundColor: "rgba(255,200,80,0.10)",
+  },
+
+  badgeSaved: {
+    borderColor: "rgba(0,255,136,0.35)",
+    backgroundColor: "rgba(0,255,136,0.08)",
+  },
+
+  badgeBooked: {
+    borderColor: "rgba(120,170,255,0.45)",
+    backgroundColor: "rgba(120,170,255,0.10)",
+  },
+
+  badgeArchived: {
+    borderColor: "rgba(255,255,255,0.18)",
+    backgroundColor: "rgba(255,255,255,0.06)",
+  },
+
+  noteBox: {
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    borderRadius: 14,
+    backgroundColor: "rgba(0,0,0,0.18)",
+    padding: 12,
+  },
 
   noteInput: {
     minHeight: 80,
@@ -1275,7 +1430,11 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.18)",
   },
 
-  bookGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  bookGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
 
   bookBtn: {
     width: "48%",
@@ -1290,9 +1449,19 @@ const styles = StyleSheet.create({
 
   bookBtnText: { color: theme.colors.text, fontWeight: "900" },
 
-  bookBtnSub: { marginTop: 4, color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12 },
+  bookBtnSub: {
+    marginTop: 4,
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
+    fontSize: 12,
+  },
 
-  mapsInline: { marginTop: 10, color: theme.colors.textSecondary, textAlign: "center", fontWeight: "900" },
+  mapsInline: {
+    marginTop: 10,
+    color: theme.colors.textSecondary,
+    textAlign: "center",
+    fontWeight: "900",
+  },
 
   chev: { color: theme.colors.textSecondary, fontSize: 24, marginTop: -2 },
 });
