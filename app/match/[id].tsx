@@ -21,6 +21,7 @@ import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
 import EmptyState from "@/src/components/EmptyState";
+import MatchdayLogisticsCard from "@/src/components/match/MatchdayLogisticsCard";
 
 import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
@@ -49,7 +50,7 @@ import { getTicketGuide } from "@/src/data/ticketGuides";
 import type { TicketDifficulty } from "@/src/data/ticketGuides/types";
 
 import { getMatchdayLogistics } from "@/src/data/matchdayLogistics";
-import type { MatchdayLogistics, LogisticsStop } from "@/src/data/matchdayLogistics/types";
+import type { LogisticsStop } from "@/src/data/matchdayLogistics/types";
 
 import { getStadiumByHomeTeam } from "@/src/data/stadiums";
 
@@ -116,6 +117,60 @@ function daysUntilIso(iso: string) {
   const t = new Date(iso).getTime();
   if (!Number.isFinite(t)) return Number.POSITIVE_INFINITY;
   return (t - Date.now()) / (1000 * 60 * 60 * 24);
+}
+
+function safeIso(iso: unknown) {
+  const s = String(iso ?? "").trim();
+  return s ? s : null;
+}
+
+function extractPrevKickoffIso(followedItem: any): string | null {
+  if (!followedItem) return null;
+
+  const direct = safeIso(followedItem?.kickoffIso);
+  if (direct) return direct;
+
+  const latestA = safeIso(followedItem?.latestSnapshot?.kickoffIso);
+  if (latestA) return latestA;
+
+  const latestB = safeIso(followedItem?.latest?.kickoffIso);
+  if (latestB) return latestB;
+
+  const latestC = safeIso(followedItem?.snapshot?.kickoffIso);
+  if (latestC) return latestC;
+
+  return null;
+}
+
+function certaintyLevel(args: { tbc: boolean; kickoffIso: string | null }) {
+  const { tbc, kickoffIso } = args;
+
+  if (!kickoffIso) return { level: "Low" as const, label: "Not set yet", detail: "Kickoff time not available." };
+  if (tbc) {
+    const daysAway = daysUntilIso(kickoffIso);
+    const extra = Number.isFinite(daysAway)
+      ? `Kickoff can move while TV scheduling is pending (${Math.max(0, Math.round(daysAway))} days away).`
+      : "Kickoff can move while TV scheduling is pending.";
+    return { level: "Low" as const, label: "Kickoff TBC", detail: extra };
+  }
+
+  const daysAway = daysUntilIso(kickoffIso);
+
+  // High certainty only inside the late window.
+  if (daysAway <= CONFIRMED_WITHIN_DAYS) {
+    return {
+      level: "High" as const,
+      label: "Safe to book",
+      detail: `Kickoff is treated as confirmed within ${CONFIRMED_WITHIN_DAYS} days.`,
+    };
+  }
+
+  // Outside the late window, still warn to be flexible even if it looks confirmed.
+  return {
+    level: "Medium" as const,
+    label: "Be flexible",
+    detail: "Kickoff looks set, but timings can still change due to TV scheduling. Prefer refundable options.",
+  };
 }
 
 /* -------------------------------------------------------------------------- */
@@ -272,218 +327,6 @@ function stabilityLabel(s: TripStability) {
 type ToastState = { visible: false } | { visible: true; title: string; message?: string };
 type TicketModalState = { open: boolean };
 
-/* -------------------------------------------------------------------------- */
-/* Matchday Logistics Card (LOCAL, NO EXTRA FILES) */
-/* -------------------------------------------------------------------------- */
-
-function capStops(stops: LogisticsStop[] | undefined | null, n = 3): LogisticsStop[] {
-  if (!Array.isArray(stops)) return [];
-  return stops.slice(0, Math.max(0, n));
-}
-
-function parkingLabel(v?: MatchdayLogistics["parking"] | null) {
-  const a = String(v?.availability ?? "").trim();
-  if (a === "easy") return "Parking: Easy";
-  if (a === "medium") return "Parking: Medium";
-  if (a === "hard") return "Parking: Hard";
-  return "Parking: Varies";
-}
-
-function safeCityLine(args: { stadium?: string | null; city?: string | null }) {
-  const s = String(args.stadium ?? "").trim();
-  const c = String(args.city ?? "").trim();
-  return [s || null, c || null].filter(Boolean).join(" • ");
-}
-
-function MatchdayLogisticsCardLocal(props: {
-  logistics: MatchdayLogistics | null;
-  fallbackCity?: string | null;
-  fallbackStadium?: string | null;
-  onOpenStop: (query: string, stop?: LogisticsStop) => void;
-  onOpenVenue: (query: string) => void;
-  onSelectStayArea?: (area: string) => void;
-}) {
-  const { logistics, fallbackCity, fallbackStadium, onOpenStop, onOpenVenue, onSelectStayArea } = props;
-
-  if (!logistics) {
-    return (
-      <View style={[styles.block, { marginTop: 12 }]}>
-        <Text style={styles.blockTitle}>Matchday logistics</Text>
-        <Text style={styles.blockSub}>Logistics not available for this home club yet.</Text>
-
-        <Pressable
-          onPress={() => {
-            const q = [fallbackStadium, fallbackCity].filter(Boolean).join(" ").trim() || "stadium";
-            onOpenVenue(q);
-          }}
-          style={[styles.blockBtn, styles.blockBtnSecondary]}
-        >
-          <Text style={styles.blockBtnTitle}>Open maps</Text>
-          <Text style={styles.blockBtnSub}>Search the stadium area</Text>
-        </Pressable>
-      </View>
-    );
-  }
-
-  const stadium = String(logistics.stadium ?? fallbackStadium ?? "").trim();
-  const city = String(logistics.city ?? fallbackCity ?? "").trim();
-
-  const primaryStops = capStops(logistics.transport?.primaryStops, 3);
-  const tips = Array.isArray(logistics.transport?.tips) ? logistics.transport!.tips!.slice(0, 4) : [];
-  const stayAreas = Array.isArray(logistics.stay?.bestAreas) ? logistics.stay!.bestAreas!.slice(0, 3) : [];
-  const budgetAreas = Array.isArray(logistics.stay?.budgetAreas) ? logistics.stay!.budgetAreas!.slice(0, 2) : [];
-
-  const venueLine = safeCityLine({ stadium: stadium || null, city: city || null }) || "Stadium • City";
-
-  return (
-    <View style={[styles.block, { marginTop: 12 }]}>
-      <Text style={styles.blockTitle}>Matchday logistics</Text>
-      <Text style={styles.blockSub}>{venueLine}</Text>
-
-      <View style={{ gap: 10, marginTop: 12 }}>
-        <Pressable
-          onPress={() => {
-            const q = [stadium || null, city || null].filter(Boolean).join(" ").trim() || "stadium";
-            onOpenVenue(q);
-          }}
-          style={[styles.blockBtn, styles.blockBtnPrimary]}
-        >
-          <Text style={styles.blockBtnTitle}>Directions</Text>
-          <Text style={styles.blockBtnSub}>Open stadium in maps</Text>
-        </Pressable>
-
-        {primaryStops.length ? (
-          <View style={styles.subSection}>
-            <Text style={styles.subTitle}>Best transport stops</Text>
-
-            <View style={{ gap: 10, marginTop: 8 }}>
-              {primaryStops.map((s, idx) => {
-                const name = String(s?.name ?? "").trim();
-                if (!name) return null;
-
-                const type = String(s?.type ?? "").trim();
-                const notes = String(s?.notes ?? "").trim();
-
-                const query = [name, city].filter(Boolean).join(" ").trim();
-
-                return (
-                  <Pressable key={`${name}-${idx}`} onPress={() => onOpenStop(query, s)} style={styles.stopRow}>
-                    <View style={{ flex: 1 }}>
-                      <View style={styles.stopTopRow}>
-                        <Text style={styles.stopName} numberOfLines={1}>
-                          {name}
-                        </Text>
-                        {type ? (
-                          <View style={styles.stopTypePill}>
-                            <Text style={styles.stopTypeText}>{type.toUpperCase()}</Text>
-                          </View>
-                        ) : null}
-                      </View>
-
-                      {notes ? (
-                        <Text style={styles.stopNotes} numberOfLines={2}>
-                          {notes}
-                        </Text>
-                      ) : null}
-                    </View>
-
-                    <Text style={styles.chev}>›</Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </View>
-        ) : null}
-
-        {tips.length ? (
-          <View style={styles.subSection}>
-            <Text style={styles.subTitle}>Tips</Text>
-            <View style={{ gap: 6, marginTop: 8 }}>
-              {tips.map((t, i) => (
-                <Text key={`${t}-${i}`} style={styles.bullet}>
-                  • {t}
-                </Text>
-              ))}
-            </View>
-          </View>
-        ) : null}
-
-        <View style={styles.subSection}>
-          <Text style={styles.subTitle}>{parkingLabel(logistics.parking ?? null)}</Text>
-          {String(logistics.parking?.summary ?? "").trim() ? (
-            <Text style={styles.blockSub}>{String(logistics.parking!.summary!).trim()}</Text>
-          ) : (
-            <Text style={styles.blockSub}>Parking constraints vary. Public transport is usually the safe bet.</Text>
-          )}
-        </View>
-
-        {onSelectStayArea && (stayAreas.length || budgetAreas.length) ? (
-          <View style={styles.subSection}>
-            <Text style={styles.subTitle}>Where to stay</Text>
-
-            <View style={{ gap: 10, marginTop: 8 }}>
-              {stayAreas.map((a, i) => {
-                const area = String(a?.area ?? "").trim();
-                const notes = String(a?.notes ?? "").trim();
-                if (!area) return null;
-
-                return (
-                  <Pressable key={`${area}-${i}`} onPress={() => onSelectStayArea(area)} style={styles.areaRow}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.areaName} numberOfLines={1}>
-                        {area}
-                      </Text>
-                      {notes ? (
-                        <Text style={styles.areaNotes} numberOfLines={2}>
-                          {notes}
-                        </Text>
-                      ) : null}
-                    </View>
-                    <Text style={styles.chev}>›</Text>
-                  </Pressable>
-                );
-              })}
-
-              {budgetAreas.map((a, i) => {
-                const area = String(a?.area ?? "").trim();
-                const notes = String(a?.notes ?? "").trim();
-                if (!area) return null;
-
-                return (
-                  <Pressable key={`${area}-budget-${i}`} onPress={() => onSelectStayArea(area)} style={styles.areaRow}>
-                    <View style={{ flex: 1 }}>
-                      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                        <Text style={styles.areaName} numberOfLines={1}>
-                          {area}
-                        </Text>
-                        <View style={styles.budgetPill}>
-                          <Text style={styles.budgetPillText}>BUDGET</Text>
-                        </View>
-                      </View>
-                      {notes ? (
-                        <Text style={styles.areaNotes} numberOfLines={2}>
-                          {notes}
-                        </Text>
-                      ) : null}
-                    </View>
-                    <Text style={styles.chev}>›</Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-
-            <Text style={styles.miniHint}>Tap an area to prefill your Trip build screen.</Text>
-          </View>
-        ) : null}
-      </View>
-    </View>
-  );
-}
-
-/* -------------------------------------------------------------------------- */
-/* screen */
-/* -------------------------------------------------------------------------- */
-
 export default function MatchDetailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
@@ -539,16 +382,18 @@ export default function MatchDetailScreen() {
     return (fromRow || fallback).trim();
   }, [row?.fixture?.id, id]);
 
-  // Subscribe to followed status using fixtureId as dependency (stable + correct)
-  const followed = useFollowStore(
+  // Subscribe to followed item (for certainty + change banner)
+  const followedItem = useFollowStore(
     useMemo(() => {
       return (s: any) => {
         const fid = String(fixtureId ?? "").trim();
-        if (!fid) return false;
-        return s.followed.some((x: any) => x.fixtureId === fid);
+        if (!fid) return null;
+        return s.followed?.find?.((x: any) => String(x?.fixtureId ?? "").trim() === fid) ?? null;
       };
     }, [fixtureId])
   );
+
+  const followed = useMemo(() => !!followedItem, [followedItem]);
 
   // sign-in UI
   const [email, setEmail] = useState("");
@@ -681,12 +526,43 @@ export default function MatchDetailScreen() {
     return isKickoffTbc(row, placeholderIds ?? undefined);
   }, [row, placeholderIds]);
 
+  const kickoffIso = useMemo(() => (row ? kickoffIsoOrNull(row) : null), [row]);
+
+  const certainty = useMemo(() => certaintyLevel({ tbc, kickoffIso }), [tbc, kickoffIso]);
+
+  // Kickoff changed banner (only if user is following, so we have a prior snapshot)
+  const kickoffChanged = useMemo(() => {
+    if (!row || !followedItem) return { changed: false as const, prev: null as string | null };
+
+    const prev = extractPrevKickoffIso(followedItem);
+    const cur = kickoffIsoOrNull(row);
+
+    if (!prev || !cur) return { changed: false as const, prev: prev ?? null };
+    if (prev.trim() === cur.trim()) return { changed: false as const, prev };
+
+    return { changed: true as const, prev };
+  }, [row, followedItem]);
+
+  const kickoffChangedText = useMemo(() => {
+    if (!kickoffChanged.changed) return null;
+    const prev = kickoffChanged.prev;
+    const cur = kickoffIsoOrNull(row);
+
+    const prevNice = prev ? formatUkDateTimeMaybe(prev) ?? prev : "—";
+    const curNice = cur ? formatUkDateTimeMaybe(cur) ?? cur : "—";
+
+    return { prevNice, curNice };
+  }, [kickoffChanged, row]);
+
   const kickoffSecondary = useMemo(() => {
     if (!row) return null;
+
     const iso = kickoffIsoOrNull(row);
     if (!iso) return "Kickoff time not set yet";
+
     const daysAway = daysUntilIso(iso);
     if (daysAway <= CONFIRMED_WITHIN_DAYS) return null;
+
     return tbc ? "TV schedule pending" : null;
   }, [row, tbc]);
 
@@ -727,7 +603,6 @@ export default function MatchDetailScreen() {
   const stadiumMeta = useMemo(() => getStadiumByHomeTeam(home), [home]);
   const stadiumName = stadiumMeta?.name ?? venue ?? "";
   const stadiumCity = stadiumMeta?.city ?? city ?? "";
-
   const mapsUrl = useMemo(() => buildMapsVenueUrl(stadiumName, stadiumCity), [stadiumName, stadiumCity]);
   const stadiumInfoUrl = useMemo(
     () => buildStadiumInfoUrl(stadiumName, home, stadiumCity),
@@ -755,6 +630,12 @@ export default function MatchDetailScreen() {
     if (tripStability === "flexible") return styles.chipFlexible;
     return styles.chipUncertain;
   }, [tripStability]);
+
+  const certaintyChipStyle = useMemo(() => {
+    if (certainty.level === "High") return styles.chipCertHigh;
+    if (certainty.level === "Medium") return styles.chipCertMed;
+    return styles.chipCertLow;
+  }, [certainty.level]);
 
   const homeTicketsSub = useMemo(() => {
     const when = kickoffDateOnly ? ` • ${kickoffDateOnly}` : "";
@@ -810,6 +691,7 @@ export default function MatchDetailScreen() {
     const where = place ? `Venue: ${place}` : "Venue: —";
     const meta = `League: ${leagueName} • Season: ${String(effectiveSeason)}`;
 
+    const certLine = `Certainty: ${certainty.level.toUpperCase()} • ${certainty.label}\n`;
     const stabilityLine = `Trip stability: ${tripStability.toUpperCase()}\n`;
     const guideLine = ticketGuide ? `Home ticket difficulty: ${difficultyLabel(ticketGuide.difficulty)}\n` : "";
 
@@ -819,6 +701,7 @@ export default function MatchDetailScreen() {
 
     const message =
       `${title}\n${when}\n${where}\n${meta}\n\n` +
+      certLine +
       stabilityLine +
       guideLine +
       seLine +
@@ -845,6 +728,7 @@ export default function MatchDetailScreen() {
     mapsUrl,
     ticketGuide,
     tripStability,
+    certainty,
   ]);
 
   const onToggleFollow = useCallback(() => {
@@ -1027,7 +911,7 @@ export default function MatchDetailScreen() {
     return `${hint} If you’re booking the weekend anyway, stay flexible and treat the kickoff slot as a bonus once confirmed.`;
   }, [leagueName]);
 
-  const onOpenStop = useCallback(async (query: string) => {
+  const onOpenStop = useCallback(async (query: string, _stop?: LogisticsStop) => {
     await openMapsPreferNative(query);
   }, []);
 
@@ -1120,6 +1004,16 @@ export default function MatchDetailScreen() {
                     </View>
                   )}
 
+                  <View style={[styles.chip, certaintyChipStyle]}>
+                    <Text style={styles.chipText}>
+                      {certainty.level === "High"
+                        ? "Safe to book"
+                        : certainty.level === "Medium"
+                        ? "Be flexible"
+                        : "Hold off booking"}
+                    </Text>
+                  </View>
+
                   <View style={[styles.chip, stabilityChipStyle]}>
                     <Text style={styles.chipText}>{stabilityLabel(tripStability)}</Text>
                   </View>
@@ -1129,7 +1023,28 @@ export default function MatchDetailScreen() {
                       {ticketGuide ? `Home tickets: ${difficultyLabel(ticketGuide.difficulty)}` : "Home tickets: Guide pending"}
                     </Text>
                   </View>
+
+                  {kickoffChanged.changed ? (
+                    <View style={[styles.chip, styles.chipChanged]}>
+                      <Text style={[styles.chipText, styles.chipTextChanged]}>Kickoff changed</Text>
+                    </View>
+                  ) : null}
                 </View>
+
+                {kickoffChanged.changed && kickoffChangedText ? (
+                  <View style={styles.changeBox}>
+                    <Text style={styles.changeTitle}>Kickoff updated</Text>
+                    <Text style={styles.changeBody}>
+                      Old: <Text style={styles.changeStrong}>{kickoffChangedText.prevNice}</Text>
+                    </Text>
+                    <Text style={styles.changeBody}>
+                      New: <Text style={styles.changeStrong}>{kickoffChangedText.curNice}</Text>
+                    </Text>
+                    <Text style={styles.changeFoot}>
+                      If you booked travel already, double-check arrival/departure windows.
+                    </Text>
+                  </View>
+                ) : null}
 
                 <View style={styles.metaBlock}>
                   <Text style={styles.metaLine}>
@@ -1152,6 +1067,28 @@ export default function MatchDetailScreen() {
                     <Text style={styles.metaLabel}>Season: </Text>
                     {String(effectiveSeason)}
                   </Text>
+
+                  <View style={styles.certBox}>
+                    <Text style={styles.certTitle}>Certainty</Text>
+                    <Text style={styles.certBody}>
+                      <Text style={styles.certStrong}>
+                        {certainty.level.toUpperCase()} • {certainty.label}
+                      </Text>
+                      {"\n"}
+                      {certainty.detail}
+                    </Text>
+
+                    {tbc ? (
+                      <View style={styles.certBtnRow}>
+                        <Pressable onPress={onToggleFollow} style={[styles.miniBtn, styles.miniBtnPrimary]}>
+                          <Text style={styles.miniBtnText}>Follow for alerts</Text>
+                        </Pressable>
+                        <Pressable onPress={onPlanTrip} style={[styles.miniBtn, styles.miniBtnSecondary]}>
+                          <Text style={styles.miniBtnText}>Plan weekend</Text>
+                        </Pressable>
+                      </View>
+                    ) : null}
+                  </View>
                 </View>
 
                 {tbc ? (
@@ -1209,12 +1146,10 @@ export default function MatchDetailScreen() {
                   </Pressable>
                 </View>
 
-                <MatchdayLogisticsCardLocal
+                <MatchdayLogisticsCard
                   logistics={logistics}
-                  fallbackCity={stadiumCity || city || null}
-                  fallbackStadium={stadiumName || venue || null}
-                  onOpenStop={(q) => onOpenStop(q)}
-                  onOpenVenue={(q) => openMapsPreferNative(q)}
+                  city={stadiumCity || logistics?.city || null}
+                  onOpenStop={onOpenStop}
                   onSelectStayArea={onSelectStayArea}
                 />
 
@@ -1434,10 +1369,43 @@ const styles = StyleSheet.create({
   chipFlexible: { borderColor: "rgba(255,200,0,0.22)", backgroundColor: "rgba(255,200,0,0.06)" },
   chipUncertain: { borderColor: "rgba(255,120,120,0.22)", backgroundColor: "rgba(255,120,120,0.06)" },
 
+  chipCertHigh: { borderColor: "rgba(0,255,136,0.28)", backgroundColor: "rgba(0,255,136,0.08)" },
+  chipCertMed: { borderColor: "rgba(255,200,0,0.22)", backgroundColor: "rgba(255,200,0,0.06)" },
+  chipCertLow: { borderColor: "rgba(255,120,120,0.22)", backgroundColor: "rgba(255,120,120,0.06)" },
+
+  chipChanged: { borderColor: "rgba(120,170,255,0.34)", backgroundColor: "rgba(120,170,255,0.10)" },
+  chipTextChanged: { color: "rgba(160,195,255,1)" },
+
+  changeBox: {
+    marginTop: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(120,170,255,0.20)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+    padding: 12,
+  },
+  changeTitle: { color: theme.colors.text, fontWeight: "900", fontSize: 13 },
+  changeBody: { marginTop: 6, color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12, lineHeight: 16 },
+  changeStrong: { color: theme.colors.text, fontWeight: "900" },
+  changeFoot: { marginTop: 8, color: theme.colors.textTertiary, fontWeight: "800", fontSize: 11, lineHeight: 14 },
+
   metaBlock: { marginTop: 12, gap: 6 },
   metaLine: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18, fontWeight: "700" },
   metaLabel: { color: theme.colors.text, fontWeight: "900" },
   metaSecondary: { color: theme.colors.textTertiary, fontSize: 12, fontWeight: "800" },
+
+  certBox: {
+    marginTop: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+    padding: 12,
+  },
+  certTitle: { color: theme.colors.text, fontWeight: "900", fontSize: 13 },
+  certBody: { marginTop: 6, color: theme.colors.textSecondary, fontWeight: "700", fontSize: 12, lineHeight: 16 },
+  certStrong: { color: theme.colors.text, fontWeight: "900" },
+  certBtnRow: { marginTop: 10, flexDirection: "row", gap: 10 },
 
   planningBox: {
     marginTop: 12,
@@ -1611,91 +1579,4 @@ const styles = StyleSheet.create({
   modalBtnGhost: { borderColor: "rgba(255,255,255,0.10)", backgroundColor: "transparent" },
   modalBtnGhostText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: 12, textAlign: "center" },
   modalFootnote: { marginTop: 10, color: theme.colors.textTertiary, fontWeight: "800", fontSize: 11, lineHeight: 14 },
-
-  /* Logistics (local card) */
-  block: {
-    marginTop: 12,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.18)",
-    padding: 12,
-  },
-  blockTitle: { color: theme.colors.text, fontWeight: "900", fontSize: 13 },
-  blockSub: { marginTop: 6, color: theme.colors.textSecondary, fontWeight: "700", fontSize: 12, lineHeight: 16 },
-
-  blockBtn: {
-    borderRadius: 14,
-    borderWidth: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-  },
-  blockBtnPrimary: { borderColor: "rgba(0,255,136,0.55)", backgroundColor: "rgba(0,0,0,0.34)" },
-  blockBtnSecondary: { borderColor: "rgba(255,255,255,0.10)", backgroundColor: "rgba(0,0,0,0.22)" },
-  blockBtnTitle: { color: theme.colors.text, fontWeight: "900", fontSize: 13 },
-  blockBtnSub: { marginTop: 6, color: theme.colors.textSecondary, fontWeight: "700", fontSize: 12, lineHeight: 16 },
-
-  subSection: {
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-    backgroundColor: "rgba(0,0,0,0.14)",
-    padding: 12,
-  },
-  subTitle: { color: theme.colors.text, fontWeight: "900", fontSize: 13 },
-
-  stopRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 10,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-    backgroundColor: "rgba(0,0,0,0.16)",
-  },
-  stopTopRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  stopName: { color: theme.colors.text, fontWeight: "900", flexShrink: 1 },
-  stopNotes: { marginTop: 6, color: theme.colors.textSecondary, fontWeight: "700", fontSize: 12, lineHeight: 16 },
-
-  stopTypePill: {
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    backgroundColor: "rgba(0,0,0,0.18)",
-    borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  stopTypeText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: 10 },
-
-  bullet: { color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12, lineHeight: 16 },
-
-  areaRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 10,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-    backgroundColor: "rgba(0,0,0,0.16)",
-  },
-  areaName: { color: theme.colors.text, fontWeight: "900", flexShrink: 1 },
-  areaNotes: { marginTop: 6, color: theme.colors.textSecondary, fontWeight: "700", fontSize: 12, lineHeight: 16 },
-
-  budgetPill: {
-    borderWidth: 1,
-    borderColor: "rgba(255,200,0,0.22)",
-    backgroundColor: "rgba(255,200,0,0.06)",
-    borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  budgetPillText: { color: "rgba(255,220,140,0.92)", fontWeight: "900", fontSize: 10 },
-
-  miniHint: { marginTop: 10, color: theme.colors.textTertiary, fontWeight: "800", fontSize: 11, lineHeight: 14 },
-
-  chev: { color: theme.colors.textSecondary, fontSize: 24, marginTop: -2 },
 });
