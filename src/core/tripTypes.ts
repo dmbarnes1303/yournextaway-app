@@ -3,6 +3,15 @@
 export type Id = string;
 export type TripId = string;
 
+/**
+ * Trip
+ * Phase 1: "trip workspace" anchored around 1+ fixtures, with pragmatic cityId.
+ *
+ * IMPORTANT:
+ * - We store snapshot fields to keep the UI readable offline and resilient
+ *   if API responses change or fixture lookups fail.
+ * - All snapshot fields are optional and may be stale; live API data can override.
+ */
 export type Trip = {
   id: TripId;
 
@@ -25,6 +34,53 @@ export type Trip = {
   matchIds: string[];
 
   notes?: string;
+
+  /* ---------------------------------------------------------------------- */
+  /* Snapshot fields (Phase 1 resilience)                                    */
+  /* ---------------------------------------------------------------------- */
+
+  /**
+   * Human display city captured at trip creation time.
+   * Useful when cityId is a slug or when fixture enrichment fails.
+   */
+  displayCity?: string;
+
+  /**
+   * Primary fixture snapshot (first/selected match).
+   * These let Trip screens show real names even when offline.
+   */
+  fixtureIdPrimary?: string; // convenience (often matchIds[0])
+
+  homeTeamId?: number;
+  awayTeamId?: number;
+
+  homeName?: string;
+  awayName?: string;
+
+  leagueId?: number;
+  leagueName?: string;
+  round?: string;
+
+  /**
+   * ISO string e.g. 2026-02-22T15:00:00+00:00
+   * This is a snapshot; live fixture can override.
+   */
+  kickoffIso?: string;
+
+  /**
+   * Snapshot inference at time of save (or last refresh).
+   * True means kickoff time not reliable / likely placeholder.
+   */
+  kickoffTbc?: boolean;
+
+  venueName?: string;
+  venueCity?: string;
+
+  /**
+   * Ticketing affiliate deep-link enrichment if known.
+   * If missing, match screen falls back to SE365 search.
+   */
+  sportsevents365EventId?: number;
 
   createdAt: number;
   updatedAt: number;
