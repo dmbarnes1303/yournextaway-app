@@ -1,87 +1,130 @@
-// src/data/matchdayLogistics/types.ts
+// src/data/matchdayLogistics/index.ts
+import type { AreaRec, MatchdayLogistics } from "./types";
 
-export type LogisticsStopType =
-  | "train"
-  | "metro"
-  | "tram"
-  | "bus"
-  | "ferry"
-  | "walk"
-  | "other";
+import premierLeagueLogistics from "./premierLeague";
+import laLigaLogistics from "./laLiga";
+import serieALogistics from "./serieA";
+import bundesligaLogistics from "./bundesliga";
+import ligue1Logistics from "./ligue1";
 
-export type LogisticsStop = {
-  name: string;
-  type: LogisticsStopType;
-  notes?: string;
+import { normalizeClubKey } from "@/src/data/ticketGuides";
+import { haversineKm, formatKm } from "@/src/utils/geo";
+
+/**
+ * Matchday Logistics registry
+ * Supports:
+ * - Premier League
+ * - La Liga
+ * - Serie A
+ * - Bundesliga
+ * - Ligue 1
+ */
+
+type LeagueKey = "premier_league" | "la_liga" | "serie_a" | "bundesliga" | "ligue_1";
+
+function nLeague(s?: string | null) {
+  return String(s ?? "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function detectLeagueKey(leagueName?: string | null): LeagueKey | null {
+  const s = nLeague(leagueName);
+  if (!s) return null;
+
+  if (s.includes("premier league") || s === "epl") return "premier_league";
+  if (s.includes("la liga") || s.includes("laliga") || s.includes("primera")) return "la_liga";
+  if (s.includes("serie a") || s.includes("seriea")) return "serie_a";
+  if (s.includes("bundesliga")) return "bundesliga";
+  if (s.includes("ligue 1") || s.includes("ligue1")) return "ligue_1";
+
+  return null;
+}
+
+function findInMap(map: Record<string, MatchdayLogistics>, teamNameRaw: string): MatchdayLogistics | null {
+  const key = normalizeClubKey(teamNameRaw);
+  if (!key) return null;
+
+  // exact
+  if (map[key]) return map[key];
+
+  // loose contains fallback
+  for (const k of Object.keys(map)) {
+    if (key === k) return map[k];
+    if (key.includes(k) || k.includes(key)) return map[k];
+  }
+
+  return null;
+}
+
+const LEAGUE_MAPS: Record<LeagueKey, Record<string, MatchdayLogistics>> = {
+  premier_league: premierLeagueLogistics,
+  la_liga: laLigaLogistics,
+  serie_a: serieALogistics,
+  bundesliga: bundesligaLogistics,
+  ligue_1: ligue1Logistics,
 };
 
-export type ProximityMode = "walk" | "metro" | "tram" | "bus" | "train" | "taxi" | "rideshare" | "other";
+export function getMatchdayLogistics(args: {
+  homeTeamName?: string | null;
+  leagueName?: string | null;
+}): MatchdayLogistics | null {
+  const home = String(args.homeTeamName ?? "").trim();
+  if (!home) return null;
 
-export type AreaProximity = {
-  /**
-   * Estimated time from the area to the stadium on a typical matchday.
-   * Keep it simple: don’t pretend it’s precise.
-   */
-  minutes?: number;
+  const leagueKey = detectLeagueKey(args.leagueName);
 
-  /**
-   * Optional rough distance. Useful for “near-ish” vs “far”.
-   */
-  distanceKm?: number;
+  // If league known → search only that league
+  if (leagueKey) {
+    return findInMap(LEAGUE_MAPS[leagueKey], home);
+  }
 
-  /**
-   * Dominant mode to reach the stadium from this area.
-   */
-  mode?: ProximityMode;
+  // Fallback: search all leagues (safe order)
+  const order: LeagueKey[] = ["premier_league", "la_liga", "serie_a", "bundesliga", "ligue_1"];
 
-  /**
-   * Optional short qualifier, e.g. “allow extra time after full-time”
-   */
-  notes?: string;
-};
+  for (const lk of order) {
+    const found = findInMap(LEAGUE_MAPS[lk], home);
+    if (found) return found;
+  }
 
-export type AreaRec = {
-  area: string;
-  notes?: string;
-  budgetFriendly?: boolean;
+  return null;
+}
 
-  /**
-   * Optional: used for “stadium proximity” badges.
-   * If absent, the UI should not display a proximity badge.
-   */
-  proximity?: AreaProximity;
-};
+/**
+ * One-line snippet for compact UIs (Trip cards, etc.)
+ */
+export function buildLogisticsSnippet(l: MatchdayLogistics) {
+  const primary = l.transport?.primaryStops?.[0]?.name ? `Primary: ${l.transport.primaryStops[0].name}` : "";
+  const parking = l.parking?.availability ? `Parking: ${l.parking.availability}` : "";
+  const bits = [primary, parking].filter(Boolean);
+  return bits.join(" • ");
+}
 
-export type FoodDrinkRec = {
-  name: string;
-  type: "pub" | "bar" | "food" | "mixed";
-  notes?: string;
-};
+/**
+ * If area centroids exist, sort by distance to the stadium.
+ * Returns a new array and includes distanceKm where possible.
+ */
+export function sortAreasByStadiumDistance(
+  logistics: MatchdayLogistics,
+  areas: AreaRec[]
+): Array<AreaRec & { distanceKm?: number; distanceLabel?: string }> {
+  const lat = logistics?.stadiumLat;
+  const lng = logistics?.stadiumLng;
 
-export type ParkingAvailability = "easy" | "medium" | "hard";
+  const enriched = areas.map((a) => {
+    if (typeof a.lat !== "number" || typeof a.lng !== "number") return { ...a };
+    const km = haversineKm(lat, lng, a.lat, a.lng);
+    return { ...a, distanceKm: km, distanceLabel: formatKm(km) };
+  });
 
-export type MatchdayLogistics = {
-  stadium: string;
-  city: string;
-  country: string;
+  // If no distances exist, keep original order
+  const any = enriched.some((x) => typeof x.distanceKm === "number");
+  if (!any) return enriched;
 
-  transport: {
-    primaryStops: LogisticsStop[];
-    tips?: string[];
-  };
-
-  parking: {
-    availability: ParkingAvailability;
-    summary: string;
-    officialLots?: string[];
-  };
-
-  foodDrink?: FoodDrinkRec[];
-
-  stay?: {
-    bestAreas?: AreaRec[];
-    budgetAreas?: AreaRec[];
-  };
-
-  arrivalTips?: string[];
-};
+  return enriched.sort((a, b) => {
+    const da = typeof a.distanceKm === "number" ? a.distanceKm : Number.POSITIVE_INFINITY;
+    const db = typeof b.distanceKm === "number" ? b.distanceKm : Number.POSITIVE_INFINITY;
+    return da - db;
+  });
+}
