@@ -1,18 +1,19 @@
 // src/data/matchdayLogistics/index.ts
 
 /**
- * ⚠️ SEASONAL MAINTENANCE REQUIRED
+ * Matchday logistics registry + lookup.
  *
- * This registry reflects CURRENT TOP-FLIGHT CLUBS ONLY.
- * At the end of each season you MUST:
+ * Important reality:
+ * - Your detailed “stay areas / stops / tips” will always be incomplete unless you maintain it.
+ * - That’s fine. The app should degrade gracefully.
  *
- * 1. Remove relegated clubs from league files
- * 2. Add promoted clubs with logistics
- * 3. Update alias maps in clubKey.ts
- * 4. Ensure normalizeClubKey(homeTeamName) matches keys
+ * This module guarantees:
+ * - If we find a club entry → return it (with identity fields injected)
+ * - If we don’t → return a minimal object (still useful for UI + proximity via stadium coords)
  *
- * Failure = wrong logistics shown in UI.
+ * That means: no more “null logistics = dead UI”.
  */
+
 import type { MatchdayLogistics, LogisticsStop } from "./types";
 
 import premierLeagueLogistics from "./premierLeague";
@@ -21,17 +22,11 @@ import serieALogistics from "./serieA";
 import bundesligaLogistics from "./bundesliga";
 import ligue1Logistics from "./ligue1";
 
-import { normalizeClubKey } from "@/src/data/ticketGuides";
+import { normalizeClubKey } from "@/src/data/clubKey";
 
-/**
- * Matchday Logistics registry
- * Supports:
- * - Premier League
- * - La Liga
- * - Serie A
- * - Bundesliga
- * - Ligue 1
- */
+/* -------------------------------------------------------------------------- */
+/* league detection */
+/* -------------------------------------------------------------------------- */
 
 type LeagueKey = "premier_league" | "la_liga" | "serie_a" | "bundesliga" | "ligue_1";
 
@@ -55,21 +50,9 @@ function detectLeagueKey(leagueName?: string | null): LeagueKey | null {
   return null;
 }
 
-function findInMap(map: Record<string, MatchdayLogistics>, teamNameRaw: string): MatchdayLogistics | null {
-  const key = normalizeClubKey(teamNameRaw);
-  if (!key) return null;
-
-  // exact
-  if (map[key]) return map[key];
-
-  // loose contains fallback
-  for (const k of Object.keys(map)) {
-    if (key === k) return map[k];
-    if (key.includes(k) || k.includes(key)) return map[k];
-  }
-
-  return null;
-}
+/* -------------------------------------------------------------------------- */
+/* maps */
+/* -------------------------------------------------------------------------- */
 
 const LEAGUE_MAPS: Record<LeagueKey, Record<string, MatchdayLogistics>> = {
   premier_league: premierLeagueLogistics,
@@ -79,6 +62,69 @@ const LEAGUE_MAPS: Record<LeagueKey, Record<string, MatchdayLogistics>> = {
   ligue_1: ligue1Logistics,
 };
 
+/* -------------------------------------------------------------------------- */
+/* lookup helpers */
+/* -------------------------------------------------------------------------- */
+
+function findInMap(map: Record<string, MatchdayLogistics>, teamNameRaw: string): MatchdayLogistics | null {
+  const key = normalizeClubKey(teamNameRaw);
+  if (!key) return null;
+
+  // exact
+  if (map[key]) return map[key];
+
+  // loose fallback (dangerous but practical for alias drift)
+  const keys = Object.keys(map);
+  for (const k of keys) {
+    if (key === k) return map[k];
+    if (key.includes(k) || k.includes(key)) return map[k];
+  }
+
+  return null;
+}
+
+function withIdentity(
+  found: MatchdayLogistics,
+  args: { homeTeamName: string; leagueName?: string | null }
+): MatchdayLogistics {
+  // Never mutate source maps
+  const home = String(args.homeTeamName ?? "").trim();
+  const league = String(args.leagueName ?? "").trim();
+
+  return {
+    ...found,
+    homeTeamName: found.homeTeamName || home,
+    clubName: found.clubName || home,
+    league: found.league || league || undefined,
+  };
+}
+
+function minimalLogistics(args: { homeTeamName: string; leagueName?: string | null }): MatchdayLogistics {
+  const home = String(args.homeTeamName ?? "").trim();
+  const league = String(args.leagueName ?? "").trim();
+
+  return {
+    homeTeamName: home || undefined,
+    clubName: home || undefined,
+    league: league || undefined,
+    // Stadium/city unknown at this layer; UI can still use clubName for coords matching.
+    stadium: undefined,
+    city: undefined,
+    stay: undefined,
+    transport: undefined,
+  };
+}
+
+/* -------------------------------------------------------------------------- */
+/* public API */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Get logistics guidance for a home club.
+ *
+ * Never returns null unless the caller gave no homeTeamName.
+ * If we can’t find the club in any registry, we return a minimal object.
+ */
 export function getMatchdayLogistics(args: {
   homeTeamName?: string | null;
   leagueName?: string | null;
@@ -88,20 +134,22 @@ export function getMatchdayLogistics(args: {
 
   const leagueKey = detectLeagueKey(args.leagueName);
 
-  // If league known → search only that league
+  // 1) If league known → search only that league first
   if (leagueKey) {
-    return findInMap(LEAGUE_MAPS[leagueKey], home);
+    const hit = findInMap(LEAGUE_MAPS[leagueKey], home);
+    if (hit) return withIdentity(hit, { homeTeamName: home, leagueName: args.leagueName });
+    // fall through to all-league scan if league mis-detected or map incomplete
   }
 
-  // Fallback: search all leagues (safe order)
+  // 2) Fallback: scan all leagues (stable order)
   const order: LeagueKey[] = ["premier_league", "la_liga", "serie_a", "bundesliga", "ligue_1"];
-
   for (const lk of order) {
-    const found = findInMap(LEAGUE_MAPS[lk], home);
-    if (found) return found;
+    const hit = findInMap(LEAGUE_MAPS[lk], home);
+    if (hit) return withIdentity(hit, { homeTeamName: home, leagueName: args.leagueName });
   }
 
-  return null;
+  // 3) Nothing found: return minimal object so UI still works (coords/tips can still show “unknown” safely)
+  return minimalLogistics({ homeTeamName: home, leagueName: args.leagueName });
 }
 
 /**
@@ -109,8 +157,11 @@ export function getMatchdayLogistics(args: {
  * Conservative + stable: no fake venue names, no “best pub” claims.
  */
 export function buildLogisticsSnippet(logistics: MatchdayLogistics): string {
-  const stops = Array.isArray(logistics.transport?.primaryStops) ? logistics.transport.primaryStops : [];
-  const pick = stops.slice(0, 2).map((s) => s.name).filter(Boolean);
+  const stops = Array.isArray(logistics.transport?.primaryStops) ? logistics.transport!.primaryStops! : [];
+  const pick = stops
+    .slice(0, 2)
+    .map((s) => String(s?.name ?? "").trim())
+    .filter(Boolean);
 
   const city = String(logistics.city ?? "").trim();
   const stadium = String(logistics.stadium ?? "").trim();
@@ -123,8 +174,11 @@ export function buildLogisticsSnippet(logistics: MatchdayLogistics): string {
   return line || "Matchday logistics available";
 }
 
-// Optional: if you want a stop list helper later
+/**
+ * Optional helper: return first N primary stops.
+ */
 export function firstStops(logistics: MatchdayLogistics, n = 3): LogisticsStop[] {
-  const stops = Array.isArray(logistics.transport?.primaryStops) ? logistics.transport.primaryStops : [];
-  return stops.slice(0, Math.max(0, n));
+  const stops = Array.isArray(logistics.transport?.primaryStops) ? logistics.transport!.primaryStops! : [];
+  const count = Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0;
+  return stops.slice(0, count);
 }
