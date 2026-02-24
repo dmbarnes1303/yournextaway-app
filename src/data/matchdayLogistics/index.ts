@@ -1,5 +1,5 @@
 // src/data/matchdayLogistics/index.ts
-import type { AreaRec, MatchdayLogistics } from "./types";
+import type { MatchdayLogistics, LogisticsStop } from "./types";
 
 import premierLeagueLogistics from "./premierLeague";
 import laLigaLogistics from "./laLiga";
@@ -8,7 +8,6 @@ import bundesligaLogistics from "./bundesliga";
 import ligue1Logistics from "./ligue1";
 
 import { normalizeClubKey } from "@/src/data/ticketGuides";
-import { haversineKm, formatKm } from "@/src/utils/geo";
 
 /**
  * Matchday Logistics registry
@@ -92,39 +91,26 @@ export function getMatchdayLogistics(args: {
 }
 
 /**
- * One-line snippet for compact UIs (Trip cards, etc.)
+ * Small, UI-friendly snippet for list rows (Trip screen).
+ * Conservative + stable: no fake venue names, no “best pub” claims.
  */
-export function buildLogisticsSnippet(l: MatchdayLogistics) {
-  const primary = l.transport?.primaryStops?.[0]?.name ? `Primary: ${l.transport.primaryStops[0].name}` : "";
-  const parking = l.parking?.availability ? `Parking: ${l.parking.availability}` : "";
-  const bits = [primary, parking].filter(Boolean);
-  return bits.join(" • ");
+export function buildLogisticsSnippet(logistics: MatchdayLogistics): string {
+  const stops = Array.isArray(logistics.transport?.primaryStops) ? logistics.transport.primaryStops : [];
+  const pick = stops.slice(0, 2).map((s) => s.name).filter(Boolean);
+
+  const city = String(logistics.city ?? "").trim();
+  const stadium = String(logistics.stadium ?? "").trim();
+
+  const a = pick[0] ? `Best stops: ${pick[0]}` : "";
+  const b = pick[1] ? `, ${pick[1]}` : "";
+  const c = stadium ? ` • ${stadium}` : city ? ` • ${city}` : "";
+
+  const line = `${a}${b}${c}`.trim();
+  return line || "Matchday logistics available";
 }
 
-/**
- * If area centroids exist, sort by distance to the stadium.
- * Returns a new array and includes distanceKm where possible.
- */
-export function sortAreasByStadiumDistance(
-  logistics: MatchdayLogistics,
-  areas: AreaRec[]
-): Array<AreaRec & { distanceKm?: number; distanceLabel?: string }> {
-  const lat = logistics?.stadiumLat;
-  const lng = logistics?.stadiumLng;
-
-  const enriched = areas.map((a) => {
-    if (typeof a.lat !== "number" || typeof a.lng !== "number") return { ...a };
-    const km = haversineKm(lat, lng, a.lat, a.lng);
-    return { ...a, distanceKm: km, distanceLabel: formatKm(km) };
-  });
-
-  // If no distances exist, keep original order
-  const any = enriched.some((x) => typeof x.distanceKm === "number");
-  if (!any) return enriched;
-
-  return enriched.sort((a, b) => {
-    const da = typeof a.distanceKm === "number" ? a.distanceKm : Number.POSITIVE_INFINITY;
-    const db = typeof b.distanceKm === "number" ? b.distanceKm : Number.POSITIVE_INFINITY;
-    return da - db;
-  });
+// Optional: if you want a stop list helper later
+export function firstStops(logistics: MatchdayLogistics, n = 3): LogisticsStop[] {
+  const stops = Array.isArray(logistics.transport?.primaryStops) ? logistics.transport.primaryStops : [];
+  return stops.slice(0, Math.max(0, n));
 }
