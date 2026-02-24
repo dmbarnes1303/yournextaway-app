@@ -2,413 +2,176 @@
 import type { MatchdayLogistics } from "./types";
 
 /**
- * LaLiga Matchday Logistics (20 teams)
+ * La Liga Matchday Logistics (20 teams)
  *
  * Rules:
- * - Useful + conservative (no fake venue names / no specific pub names).
- * - Prefer stable transport guidance: main rail hubs + metro/tram stops.
- * - Neutral traveller framing (you’re visiting the city, not “away end” content).
+ * - Useful + conservative (no fake pub/restaurant names).
+ * - Prefer stable transport guidance (key stations/lines/hubs).
+ * - Keep it “neutral traveller” oriented.
  *
  * IMPORTANT:
- * Keys should match normalizeClubKey(homeTeamName).
- * Use simple lowercase keys; include common variants where useful.
+ * Keys must match normalizeClubKey(homeTeamName) from src/data/ticketGuides.
+ * We use hyphenated slugs for multi-word clubs (e.g. "real-madrid").
  */
 
 const laLigaLogistics: Record<string, MatchdayLogistics> = {
+  /* -------------------------------------------------------------------------- */
+  /* Barcelona                                                                   */
+  /* -------------------------------------------------------------------------- */
+
   "barcelona": {
-    stadium: "Spotify Camp Nou",
+    stadium: "Estadi Olímpic Lluís Companys (Montjuïc)",
     city: "Barcelona",
     country: "Spain",
     transport: {
       primaryStops: [
-        { name: "Sants Estació", type: "train", notes: "Main rail hub for visitors; easy metro connections." },
-        { name: "Collblanc (Metro)", type: "metro", notes: "Common approach stop; expect crowds close to kickoff." },
-        { name: "Les Corts (Metro)", type: "metro", notes: "Useful alternative stop depending on your route." },
+        { name: "Plaça d’Espanya", type: "metro", notes: "Major hub; common approach to Montjuïc area (expect uphill walking/queues)." },
+        { name: "Sants Estació", type: "train", notes: "Main rail hub; easy to reach Plaça d’Espanya / central connections." },
+        { name: "Catalunya / Passeig de Gràcia area", type: "metro", notes: "Central hubs; good for pre/post base and dispersal." },
       ],
       tips: [
-        "Barcelona is visitor-friendly: base centrally and use Metro for the last leg.",
-        "Post-match: walk 10–15 minutes before entering the Metro to avoid the worst queues.",
+        "Montjuïc access is more walking than most stadiums — arrive earlier than you think.",
+        "After full-time, walk 10–15 minutes away from the immediate exit points before trying taxis/rideshare.",
+        "If you’re doing a city break, base centrally and treat match travel as a metro + walk day.",
       ],
     },
     parking: {
       availability: "hard",
-      summary: "Driving near the stadium is rarely worth it. Use Metro and walk.",
-      officialLots: ["If you must drive: park outside the stadium district and continue by Metro."],
+      summary: "Central Barcelona driving is slow and parking is limited. Treat public transport + walking as the default.",
+      officialLots: ["If you must drive: park outside the centre and use metro/rail in to avoid city congestion."],
     },
     foodDrink: [
-      { name: "Eixample (pre/post base)", type: "mixed", notes: "Reliable area for food/drink and easy Metro access." },
-      { name: "Les Corts area", type: "mixed", notes: "Practical matchday zone; busy near kickoff." },
+      { name: "Eixample", type: "food", notes: "High density of reliable options; good pre/post base." },
+      { name: "Poble-sec", type: "mixed", notes: "Practical if approaching from Montjuïc side; timing-dependent." },
     ],
     stay: {
       bestAreas: [
-        { area: "Eixample", notes: "Best all-round base: central + easy Metro connections." },
-        { area: "Gothic Quarter / El Born", notes: "Tourist-heavy, walkable, great for a weekend." },
+        { area: "Eixample", notes: "Best all-round city base; easy metro connections." },
+        { area: "Passeig de Gràcia / Catalunya area", notes: "Central, walkable, great for weekend trips." },
       ],
-      budgetAreas: [{ area: "Sants", budgetFriendly: true, notes: "Good value and extremely convenient for transport." }],
+      budgetAreas: [{ area: "Sants", budgetFriendly: true, notes: "Good value + strong rail/metro links." }],
     },
     arrivalTips: [
-      "Arrive 60–90 minutes early if you want time for food and a relaxed entry.",
-      "If kickoff is late, plan your return Metro route so you’re not improvising at night.",
+      "Aim for 75–90 minutes pre-kickoff due to walking + crowd control.",
+      "Keep return plans flexible if kickoff is TBC; late finishes can bottleneck transport.",
     ],
   },
 
-  "real madrid": {
+  "espanyol": {
+    stadium: "RCDE Stadium",
+    city: "Cornellà de Llobregat (Barcelona area)",
+    country: "Spain",
+    transport: {
+      primaryStops: [
+        { name: "Barcelona Sants", type: "train", notes: "Main hub; connect outward toward Cornellà/El Prat side." },
+        { name: "Cornellà Centre", type: "train", notes: "Common local connection point; last-mile depends on route." },
+        { name: "Zona Universitària (Metro area)", type: "metro", notes: "Useful interchange point depending on where you’re staying." },
+      ],
+      tips: [
+        "This is an ‘outer-city’ stadium: plan the last-mile connection in advance.",
+        "Base yourself central (Eixample/Catalunya) and travel out; it’s usually simpler than staying near the ground.",
+        "After full-time, give it 10–15 minutes before moving if platforms/roads are controlled.",
+      ],
+    },
+    parking: {
+      availability: "medium",
+      summary: "More feasible than central Barcelona, but traffic still builds around kickoff.",
+      officialLots: ["If driving: arrive early and use official/signed parking where available."],
+    },
+    foodDrink: [
+      { name: "Eixample (pre/post base)", type: "mixed", notes: "Best variety; then travel out." },
+      { name: "Cornellà area", type: "mixed", notes: "Practical, local options; keep timing flexible." },
+    ],
+    stay: {
+      bestAreas: [
+        { area: "Eixample", notes: "Best weekend base for Barcelona trips." },
+        { area: "Sants", notes: "Practical for transport; often good hotel value." },
+      ],
+      budgetAreas: [{ area: "El Prat / L’Hospitalet edge", budgetFriendly: true, notes: "Often cheaper; check exact connectivity." }],
+    },
+    arrivalTips: [
+      "Confirm your outbound route before leaving the centre; last-mile can vary.",
+      "Arrive early if you want a relaxed entry — outer-city routing can surprise you.",
+    ],
+  },
+
+  /* -------------------------------------------------------------------------- */
+  /* Madrid                                                                       */
+  /* -------------------------------------------------------------------------- */
+
+  "real-madrid": {
     stadium: "Santiago Bernabéu",
     city: "Madrid",
     country: "Spain",
     transport: {
       primaryStops: [
-        { name: "Nuevos Ministerios", type: "train", notes: "Major hub (metro + Cercanías). Strong for arrivals/returns." },
-        { name: "Santiago Bernabéu (Metro)", type: "metro", notes: "Closest stop; will be crowded on matchdays." },
-        { name: "Chamartín", type: "train", notes: "Big rail station; good if you’re arriving by train." },
+        { name: "Santiago Bernabéu (Metro)", type: "metro", notes: "Closest stop; expect crowd management after the match." },
+        { name: "Nuevos Ministerios", type: "metro", notes: "Major interchange; often the best ‘disperse’ option." },
+        { name: "Chamartín", type: "train", notes: "Big rail hub; useful depending on your arrival/return." },
       ],
       tips: [
-        "Use Metro for the final leg; the stadium is embedded in the city grid so it’s straightforward.",
-        "Post-match: walk to Nuevos Ministerios or another major hub for faster dispersal.",
+        "Nuevos Ministerios is the practical hub for visitors: loads of connections and easier dispersal.",
+        "Post-match: walking 10–15 minutes away from the immediate metro entrance usually saves time.",
+        "Madrid’s metro is efficient — default to metro over taxis near kickoff.",
       ],
     },
     parking: {
       availability: "hard",
-      summary: "Central Madrid driving is slow and parking is tight. Public transport is the move.",
-      officialLots: ["If driving: use park-and-ride outside the centre and Metro in."],
+      summary: "Driving in central Madrid near Bernabéu is slow and parking is tight on matchdays.",
+      officialLots: ["Use metro. If you must drive: park outside the centre and ride in."],
     },
     foodDrink: [
-      { name: "AZCA / Nuevos Ministerios area", type: "mixed", notes: "High-density and practical for matchday." },
-      { name: "Chamberí", type: "food", notes: "Great for a nicer pre/post meal; short Metro ride." },
+      { name: "Azca / Nuevos Ministerios area", type: "mixed", notes: "Business district; practical options pre/post." },
+      { name: "Malasaña / Chueca", type: "food", notes: "Better nightlife/food; metro back is easy." },
     ],
     stay: {
       bestAreas: [
-        { area: "Centro / Sol area", notes: "Tourist base; easy Metro everywhere." },
-        { area: "Chamberí", notes: "Good vibe + food; still central." },
+        { area: "Centro (Sol / Gran Vía)", notes: "Best tourist base; easy metro to the stadium." },
+        { area: "Chamberí", notes: "Great local vibe; strong metro connectivity." },
       ],
-      budgetAreas: [{ area: "Tetuán edge", budgetFriendly: true, notes: "Often cheaper while still close to the stadium zone." }],
+      budgetAreas: [{ area: "Argüelles / Moncloa edge", budgetFriendly: true, notes: "Often better value; good metro links." }],
     },
     arrivalTips: [
-      "If you’re doing a day trip, keep return travel flexible — dispersal can be slow.",
-      "Screenshot tickets/QR codes before you leave your hotel (busy networks happen).",
+      "Arrive 60–75 minutes pre-kickoff for security + easier seating.",
+      "If kickoff is TBC, avoid tight same-day connections (Madrid traffic + crowd control adds time).",
     ],
   },
 
-  "villarreal": {
-    stadium: "Estadio de la Cerámica",
-    city: "Villarreal",
-    country: "Spain",
-    transport: {
-      primaryStops: [
-        { name: "Valencia (rail hub)", type: "train", notes: "Common base city for visitors; connect onward by train/bus." },
-        { name: "Castelló de la Plana", type: "train", notes: "Regional rail hub; useful connection point." },
-        { name: "Villarreal station / town access", type: "train", notes: "Final stop depends on routing; check schedules early." },
-      ],
-      tips: [
-        "Many visitors stay in Valencia or Castelló and do Villarreal as a day trip.",
-        "Check return times before kickoff — smaller towns have less frequent late services.",
-      ],
-    },
-    parking: {
-      availability: "medium",
-      summary: "Driving is feasible compared to big cities, but matchday congestion still builds close to kickoff.",
-      officialLots: ["Arrive early and use signed event parking or town parking + walk."],
-    },
-    foodDrink: [
-      { name: "Town centre (pre/post)", type: "mixed", notes: "Most practical option in smaller cities." },
-      { name: "Valencia (weekend base)", type: "mixed", notes: "Best variety if you’re turning it into a city break." },
-    ],
-    stay: {
-      bestAreas: [
-        { area: "Valencia city centre", notes: "Best weekend base; strong transport and plenty to do." },
-        { area: "Castelló centre", notes: "Closer and often cheaper; simpler logistics." },
-      ],
-      budgetAreas: [{ area: "Near regional rail stops", budgetFriendly: true, notes: "Good for night-before stays; check late check-in." }],
-    },
-    arrivalTips: [
-      "If you’re relying on trains, don’t leave return planning until after the match.",
-      "Arrive early to avoid last-minute transport improvisation.",
-    ],
-  },
-
-  "atletico madrid": {
+  "atletico-madrid": {
     stadium: "Cívitas Metropolitano",
     city: "Madrid",
     country: "Spain",
     transport: {
       primaryStops: [
-        { name: "Estadio Metropolitano (Metro)", type: "metro", notes: "Direct Metro stop; designed for matchday flow." },
-        { name: "Avenida de América", type: "metro", notes: "Major interchange hub; useful if you’re crossing the city." },
-        { name: "Nuevos Ministerios", type: "train", notes: "Big hub for Cercanías + Metro; good for visitors." },
+        { name: "Estadio Metropolitano (Metro)", type: "metro", notes: "Closest stop; purpose-built for matchday flow." },
+        { name: "Canillejas (Metro)", type: "metro", notes: "Useful alternative depending on crowd control routing." },
+        { name: "Avenida de América", type: "metro", notes: "Major interchange; good for visitors coming from central areas." },
       ],
       tips: [
-        "Metro is the default and usually the fastest; allow extra time right after full-time.",
-        "Base central and treat the stadium as a dedicated Metro trip rather than driving.",
+        "This stadium is ‘metro-first’ — treat the metro as the default in/out.",
+        "Post-match queues are normal; consider waiting 10 minutes before heading to the platform.",
+        "If you’re staying central, Avenida de América is a strong hub to route through.",
       ],
     },
     parking: {
       availability: "medium",
-      summary: "More feasible than central stadiums, but traffic still piles up near kickoff/full-time.",
-      officialLots: ["If driving: arrive early and use official/signed event parking where possible."],
+      summary: "More feasible than central stadiums, but event traffic can still slow you down.",
+      officialLots: ["If driving: arrive early and use signed/official parking where possible."],
     },
     foodDrink: [
-      { name: "Central Madrid (pre-game base)", type: "mixed", notes: "Best variety; then Metro out." },
-      { name: "Stadium district (practical)", type: "mixed", notes: "Convenient but crowded; queues expected." },
+      { name: "Salamanca (pre/post base)", type: "food", notes: "Good quality options; easy metro connections." },
+      { name: "Centro (Sol / Gran Vía)", type: "mixed", notes: "Tourist base; easy metro out to the ground." },
     ],
     stay: {
       bestAreas: [
-        { area: "Centro / Sol", notes: "Tourist base; easy Metro network." },
-        { area: "Chamberí", notes: "Great food + vibe; still central." },
+        { area: "Centro (Sol / Gran Vía)", notes: "Best tourist base; metro access is easy." },
+        { area: "Salamanca", notes: "Upscale base; still convenient." },
       ],
-      budgetAreas: [{ area: "Avenida de América area", budgetFriendly: true, notes: "Often better value; very connected." }],
+      budgetAreas: [{ area: "Prosperidad / Cartagena edge", budgetFriendly: true, notes: "Often better value with good metro links." }],
     },
     arrivalTips: [
-      "If you want a smoother exit, wait 10–15 minutes before entering the Metro.",
-      "Keep your route simple: central base → Metro → stadium.",
-    ],
-  },
-
-  "real betis": {
-    stadium: "Estadio Benito Villamarín",
-    city: "Seville",
-    country: "Spain",
-    transport: {
-      primaryStops: [
-        { name: "Sevilla-Santa Justa", type: "train", notes: "Main arrival station for visitors." },
-        { name: "City centre connections", type: "bus", notes: "Common last-leg option; routes vary so allow time." },
-        { name: "Walk/taxi from central districts", type: "other", notes: "Works if timed early; traffic builds near kickoff." },
-      ],
-      tips: [
-        "Seville is compact: stay central and treat matchday as a planned taxi/bus trip.",
-        "Post-match: walking away from the immediate stadium roads helps with taxi pickup.",
-      ],
-    },
-    parking: {
-      availability: "medium",
-      summary: "Possible with planning, but traffic and restrictions make it unpredictable near kickoff.",
-      officialLots: ["If driving: arrive early and use official/signed lots where possible."],
-    },
-    foodDrink: [
-      { name: "Triana", type: "mixed", notes: "Great for food/drink and a strong Seville vibe." },
-      { name: "Centro / historic core", type: "mixed", notes: "Tourist-friendly base; easy pre/post match." },
-    ],
-    stay: {
-      bestAreas: [
-        { area: "Centro (historic centre)", notes: "Best weekend base for sightseeing + food." },
-        { area: "Triana", notes: "Great vibe and restaurants; still very accessible." },
-      ],
-      budgetAreas: [{ area: "Near Santa Justa", budgetFriendly: true, notes: "Often better value and practical for arrivals." }],
-    },
-    arrivalTips: [
-      "If it’s a hot day, plan hydration and shade—Seville heat can be brutal.",
-      "Arrive early if you want to move calmly through security and find your seat.",
-    ],
-  },
-
-  "celta vigo": {
-    stadium: "Estadio Abanca-Balaídos",
-    city: "Vigo",
-    country: "Spain",
-    transport: {
-      primaryStops: [
-        { name: "Vigo-Guixar", type: "train", notes: "One of Vigo’s rail stations; check which one your train uses." },
-        { name: "Vigo-Urzáiz", type: "train", notes: "Another main station; useful for visitors." },
-        { name: "City buses / taxi", type: "bus", notes: "Typical last-leg option to the stadium district." },
-      ],
-      tips: [
-        "Base in central Vigo and use bus/taxi for the last leg.",
-        "Check return options if you’re day-tripping from another Galician city.",
-      ],
-    },
-    parking: {
-      availability: "medium",
-      summary: "Driving is feasible, but expect congestion near kickoff.",
-      officialLots: ["Arrive early; use city parking and finish by bus/walk where practical."],
-    },
-    foodDrink: [
-      { name: "Vigo centre", type: "mixed", notes: "Best variety and easiest logistics." },
-      { name: "Old town/port area", type: "food", notes: "Good for post-match meal; check timing." },
-    ],
-    stay: {
-      bestAreas: [{ area: "Vigo city centre", notes: "Best base for visitors; practical transport." }],
-      budgetAreas: [{ area: "Near rail stations", budgetFriendly: true, notes: "Often good value; convenient for arrivals." }],
-    },
-    arrivalTips: [
-      "If weather is wet/windy (common in Galicia), plan a simple route and buffer time.",
-      "Have your taxi/bus plan ready before you leave the centre.",
-    ],
-  },
-
-  "espanyol": {
-    stadium: "Stage Front Stadium (RCDE Stadium)",
-    city: "Barcelona area (Cornellà/El Prat)",
-    country: "Spain",
-    transport: {
-      primaryStops: [
-        { name: "Barcelona Sants", type: "train", notes: "Main hub for visitors; connect onward by rail/metro." },
-        { name: "Cornellà Centre (rail/metro)", type: "train", notes: "Common approach point; check local routing." },
-        { name: "Llobregat area connections", type: "metro", notes: "Use local lines; allow time for transfers." },
-      ],
-      tips: [
-        "Treat this as a ‘greater Barcelona’ trip: base central Barcelona and connect out.",
-        "Post-match: crowds can concentrate at local stations—waiting 10 minutes can help.",
-      ],
-    },
-    parking: {
-      availability: "medium",
-      summary: "More feasible than central Barcelona, but still expect matchday congestion.",
-      officialLots: ["Use official/signed stadium parking if offered; arrive early."],
-    },
-    foodDrink: [
-      { name: "Central Barcelona (pre/post base)", type: "mixed", notes: "Best variety; travel out for the match." },
-      { name: "Cornellà area (practical)", type: "mixed", notes: "Convenient but limited; matchday crowds." },
-    ],
-    stay: {
-      bestAreas: [{ area: "Eixample / central Barcelona", notes: "Best base and easiest for tourists." }],
-      budgetAreas: [{ area: "Sants", budgetFriendly: true, notes: "Good value + strong connections to the stadium area." }],
-    },
-    arrivalTips: [
-      "Check the exact local rail/metro route earlier in the day so you don’t improvise at night.",
-      "Keep your return plan simple: same line back to a major hub.",
-    ],
-  },
-
-  "athletic club": {
-    stadium: "San Mamés",
-    city: "Bilbao",
-    country: "Spain",
-    transport: {
-      primaryStops: [
-        { name: "Bilbao-Abando", type: "train", notes: "Main rail arrival for many visitors; central." },
-        { name: "San Mamés (Metro)", type: "metro", notes: "Key stop; extremely convenient and well signposted." },
-        { name: "Intermodal station area", type: "train", notes: "Good for buses/coach links; very practical." },
-      ],
-      tips: [
-        "Bilbao is very walkable; many visitors can do stadium access without taxis.",
-        "Post-match: Metro is efficient but busy—walking 10 minutes can smooth it out.",
-      ],
-    },
-    parking: {
-      availability: "hard",
-      summary: "Central event parking is tight; public transport is easier.",
-      officialLots: ["If driving, use city parking and walk/metro to the stadium area."],
-    },
-    foodDrink: [
-      { name: "Abando / city centre", type: "mixed", notes: "Best visitor base for food/drink." },
-      { name: "Old Town (Casco Viejo)", type: "food", notes: "Great for pintxos; ideal post-match." },
-    ],
-    stay: {
-      bestAreas: [
-        { area: "Abando", notes: "Best transport + hotel base." },
-        { area: "Casco Viejo", notes: "Best vibe for a weekend; still walkable." },
-      ],
-      budgetAreas: [{ area: "Near the intermodal station", budgetFriendly: true, notes: "Often practical and good value." }],
-    },
-    arrivalTips: [
-      "If you’re doing a weekend, Bilbao is excellent for food + match logistics.",
-      "Arrive early if you want to explore Casco Viejo before heading to the ground.",
-    ],
-  },
-
-  "osasuna": {
-    stadium: "Estadio El Sadar",
-    city: "Pamplona",
-    country: "Spain",
-    transport: {
-      primaryStops: [
-        { name: "Pamplona (bus/rail access)", type: "train", notes: "Connections vary; check your arrival mode and timing." },
-        { name: "City centre", type: "walk", notes: "Good base; many routes to the stadium start here." },
-        { name: "Local buses / taxi", type: "bus", notes: "Typical last-leg option; allow extra time near kickoff." },
-      ],
-      tips: [
-        "Pamplona is compact: stay central and keep matchday simple (walk/bus/taxi).",
-        "If you’re day-tripping, check late return options before kickoff.",
-      ],
-    },
-    parking: {
-      availability: "medium",
-      summary: "Driving is feasible but streets near the stadium tighten up close to kickoff.",
-      officialLots: ["Use city parking and walk the last part where practical."],
-    },
-    foodDrink: [
-      { name: "Old Town / centre", type: "mixed", notes: "Best density of options; easy before/after." },
-    ],
-    stay: {
-      bestAreas: [{ area: "City centre", notes: "Best base; easiest logistics." }],
-      budgetAreas: [{ area: "Near intercity bus areas", budgetFriendly: true, notes: "Often better value; check walkability." }],
-    },
-    arrivalTips: [
-      "If weather is cold/wet, plan a short route and arrive early to avoid rushing.",
-      "Keep cashless payments ready; small venues can get busy fast on matchday.",
-    ],
-  },
-
-  "real sociedad": {
-    stadium: "Reale Arena (Anoeta)",
-    city: "San Sebastián",
-    country: "Spain",
-    transport: {
-      primaryStops: [
-        { name: "San Sebastián-Donostia", type: "train", notes: "Main rail station for visitors." },
-        { name: "Local rail/bus to Anoeta area", type: "bus", notes: "Common last-leg option; check signage." },
-        { name: "City centre walk routes", type: "walk", notes: "Depending on your base, walking can be practical." },
-      ],
-      tips: [
-        "San Sebastián is small and walkable — great for a weekend match trip.",
-        "If you’re staying central, you can often avoid taxis entirely with planning.",
-      ],
-    },
-    parking: {
-      availability: "hard",
-      summary: "Parking is limited and expensive; public transport/walking is easier.",
-      officialLots: ["If driving, use city parking and continue by bus/walk."],
-    },
-    foodDrink: [
-      { name: "Old Town (Parte Vieja)", type: "food", notes: "Elite for pintxos; ideal pre/post match." },
-      { name: "Centro", type: "mixed", notes: "Tourist-friendly base; easy logistics." },
-    ],
-    stay: {
-      bestAreas: [
-        { area: "Centro", notes: "Best all-round base for transport + sightseeing." },
-        { area: "Old Town edge", notes: "Best vibe; can be pricier." },
-      ],
-      budgetAreas: [{ area: "Near the main station", budgetFriendly: true, notes: "Often more practical and better value." }],
-    },
-    arrivalTips: [
-      "If you’re doing a food-heavy weekend, book key restaurants early (it gets busy).",
-      "Arrive early if you want a calm entry and time to find your section.",
-    ],
-  },
-
-  "sevilla": {
-    stadium: "Estadio Ramón Sánchez-Pizjuán",
-    city: "Seville",
-    country: "Spain",
-    transport: {
-      primaryStops: [
-        { name: "Sevilla-Santa Justa", type: "train", notes: "Main arrival station; relatively close to the stadium district." },
-        { name: "Nervión district", type: "walk", notes: "Stadium is in a built-up area with lots of services." },
-        { name: "City centre connections", type: "metro", notes: "Use metro/bus/taxi depending on where you stay." },
-      ],
-      tips: [
-        "This is one of the easier LaLiga matchdays: central base + short transfers.",
-        "Post-match: traffic can choke — walking to a calmer pickup point helps.",
-      ],
-    },
-    parking: {
-      availability: "hard",
-      summary: "Urban stadium district makes parking unpredictable. Prefer walking/public transport.",
-      officialLots: ["If driving, use city car parks and walk the last part."],
-    },
-    foodDrink: [
-      { name: "Nervión area", type: "mixed", notes: "Practical matchday zone with plenty around." },
-      { name: "Centro / Triana", type: "mixed", notes: "Better tourist vibe for a full weekend." },
-    ],
-    stay: {
-      bestAreas: [
-        { area: "Centro", notes: "Best weekend base for sightseeing and food." },
-        { area: "Nervión", notes: "Most practical for match logistics; shorter transfers." },
-      ],
-      budgetAreas: [{ area: "Near Santa Justa", budgetFriendly: true, notes: "Often best value for visitors." }],
-    },
-    arrivalTips: [
-      "In hot months, plan shade/water and avoid long walks at peak heat.",
-      "Arrive early if you want to take it slow — entries can tighten near kickoff.",
+      "Allow extra time for the last metro hop and stadium entry flow.",
+      "Have your return plan ready — crowd control can redirect exits.",
     ],
   },
 
@@ -418,138 +181,234 @@ const laLigaLogistics: Record<string, MatchdayLogistics> = {
     country: "Spain",
     transport: {
       primaryStops: [
-        { name: "Atocha (Madrid rail hub)", type: "train", notes: "Common base point for visitors; Cercanías connections." },
-        { name: "Getafe Centro (Cercanías)", type: "train", notes: "Typical rail approach into Getafe." },
-        { name: "Madrid Metro/Cercanías to Getafe", type: "metro", notes: "Use whichever is simplest from your base." },
+        { name: "Madrid Atocha", type: "train", notes: "Main hub; connect toward Getafe via local services." },
+        { name: "Madrid Sol / Centro", type: "metro", notes: "Tourist base; connect outward via rail/metro." },
+        { name: "Getafe Central", type: "train", notes: "Common local hub; last-mile depends on your route." },
       ],
       tips: [
-        "Treat this as a Madrid trip: stay in Madrid, travel out for the match.",
-        "Post-match: return is usually straightforward, but services can be busy.",
+        "Treat this as a ‘Madrid base + travel out’ matchday.",
+        "Confirm the final local connection before leaving central Madrid; last-mile options vary by time.",
+        "Post-match: expect slower movement back through local lines—don’t cut it tight for trains/airport.",
       ],
     },
     parking: {
       availability: "medium",
-      summary: "More feasible than central Madrid, but still expect matchday congestion.",
-      officialLots: ["If driving, arrive early and use signed local parking."],
+      summary: "Outer-city driving is more feasible than central Madrid, but congestion still builds near kickoff.",
+      officialLots: ["If driving: arrive early; use signed/official options when available."],
     },
     foodDrink: [
-      { name: "Madrid centre (pre/post)", type: "mixed", notes: "Best variety; simplest if you’re spending the weekend in Madrid." },
-      { name: "Getafe town centre", type: "mixed", notes: "Practical if you’re arriving early." },
-    ],
-    stay: {
-      bestAreas: [{ area: "Madrid Centro / Sol", notes: "Best base; easiest for tourists." }],
-      budgetAreas: [{ area: "Atocha area", budgetFriendly: true, notes: "Often good value and extremely connected for day trips." }],
-    },
-    arrivalTips: [
-      "Check your return route before you head out — don’t rely on last-minute planning.",
-      "If kickoff is late, plan your Madrid night return logistics in advance.",
-    ],
-  },
-
-  "girona": {
-    stadium: "Estadi Montilivi",
-    city: "Girona",
-    country: "Spain",
-    transport: {
-      primaryStops: [
-        { name: "Girona Station", type: "train", notes: "Main arrival hub; strong links from Barcelona." },
-        { name: "Barcelona Sants", type: "train", notes: "Common tourist base; fast trains to Girona." },
-        { name: "City buses / taxi (last leg)", type: "bus", notes: "Montilivi is not directly at the station; plan last leg." },
-      ],
-      tips: [
-        "Girona is excellent as a day trip from Barcelona if you plan trains properly.",
-        "Post-match: allow time to get back to the station if you’re catching a late train.",
-      ],
-    },
-    parking: {
-      availability: "medium",
-      summary: "Driving is feasible, but local congestion can build near kickoff.",
-      officialLots: ["Use city parking and bus/taxi/walk the last part where practical."],
-    },
-    foodDrink: [
-      { name: "Girona old town", type: "food", notes: "Best vibe for a pre/post meal; allow walking time." },
-      { name: "Barcelona (if basing there)", type: "mixed", notes: "Best variety for a full weekend." },
+      { name: "Madrid Centro (pre/post base)", type: "mixed", notes: "Best variety; then travel out." },
+      { name: "Getafe town area", type: "mixed", notes: "Practical local options; keep timing flexible." },
     ],
     stay: {
       bestAreas: [
-        { area: "Girona old town", notes: "Best for a romantic/food-focused weekend." },
-        { area: "Barcelona (base)", notes: "If you want maximum activities, do Girona as a day trip." },
+        { area: "Centro (Sol / Gran Vía)", notes: "Best for weekend trips; easy to day-trip outward." },
+        { area: "Atocha / Retiro edge", notes: "Good for rail connections + parks/museums." },
       ],
-      budgetAreas: [{ area: "Near Girona station", budgetFriendly: true, notes: "Most practical for late arrivals/early departures." }],
+      budgetAreas: [{ area: "Getafe / South Madrid edge", budgetFriendly: true, notes: "Often cheaper; check connectivity and return times." }],
     },
     arrivalTips: [
-      "Train planning matters here: check the return schedule before kickoff.",
-      "If you’re walking to/from the stadium, allow extra time (it can be hilly depending on route).",
+      "Plan for a bit of slack after full-time—local returns can be slower than expected.",
+      "If kickoff is TBC, avoid non-refundable tight travel plans.",
     ],
   },
 
-  "rayo vallecano": {
+  "rayo-vallecano": {
     stadium: "Estadio de Vallecas",
     city: "Madrid",
     country: "Spain",
     transport: {
       primaryStops: [
-        { name: "Atocha", type: "train", notes: "Key Madrid hub; good for tourists." },
-        { name: "Vallecas area (Metro)", type: "metro", notes: "Use Metro to reach the neighbourhood; stops depend on routing." },
-        { name: "Sol / Gran Vía (Metro hubs)", type: "metro", notes: "Easy starting points from central Madrid." },
+        { name: "Puente de Vallecas (Metro)", type: "metro", notes: "Closest metro area; expect crowding around entrances." },
+        { name: "Atocha", type: "train", notes: "Major hub; easy connection to Vallecas side." },
+        { name: "Sol / Centro", type: "metro", notes: "Tourist base; direct metro routing is common." },
       ],
       tips: [
-        "This is a classic ‘city stadium’ match: stay central and use Metro.",
-        "Post-match: the neighbourhood is busy — walk a few minutes before calling a taxi.",
+        "Vallecas is straightforward by metro, but streets are tight near kickoff — arrive earlier.",
+        "Post-match: walk a few blocks away before trying taxis.",
+        "If you’re staying central, metro beats road travel almost every time.",
       ],
     },
     parking: {
       availability: "hard",
-      summary: "City streets + restrictions make driving a hassle. Metro is best.",
-      officialLots: ["Avoid driving; use Metro from a central base."],
+      summary: "Dense neighbourhood + limited space. Driving close to the stadium is rarely worth it.",
+      officialLots: ["Use metro; if driving, park outside and ride in."],
     },
     foodDrink: [
-      { name: "Central Madrid (pre/post)", type: "mixed", notes: "Best choice for visitors." },
-      { name: "Local Vallecas spots (practical)", type: "mixed", notes: "Neighbourhood feel; limited space on matchdays." },
+      { name: "Centro (pre/post)", type: "mixed", notes: "Best variety; easy metro back." },
+      { name: "Retiro / Atocha area", type: "food", notes: "Good for museums + meals if you’re doing a full day." },
     ],
     stay: {
-      bestAreas: [{ area: "Madrid Centro", notes: "Best tourist base + simplest Metro routes." }],
-      budgetAreas: [{ area: "Atocha / Retiro edge", budgetFriendly: true, notes: "Often better value; great transport." }],
+      bestAreas: [
+        { area: "Centro (Sol / Gran Vía)", notes: "Best tourist base; simple metro access." },
+        { area: "Retiro / Atocha", notes: "Great for daytime sightseeing + transport links." },
+      ],
+      budgetAreas: [{ area: "Lavapiés edge", budgetFriendly: true, notes: "Often better value; check exact street feel." }],
     },
     arrivalTips: [
-      "Arrive early to avoid tight street approaches right before kickoff.",
-      "Keep valuables secure like any big-city crowd environment.",
+      "Aim for 60–75 minutes pre-kickoff due to tight approach streets.",
+      "Keep return plans flexible on busy matchdays.",
     ],
   },
 
-  "deportivo alaves": {
-    stadium: "Estadio de Mendizorroza",
-    city: "Vitoria-Gasteiz",
+  /* -------------------------------------------------------------------------- */
+  /* Basque / North                                                              */
+  /* -------------------------------------------------------------------------- */
+
+  "athletic-club": {
+    stadium: "San Mamés",
+    city: "Bilbao",
     country: "Spain",
     transport: {
       primaryStops: [
-        { name: "Vitoria-Gasteiz (rail/bus access)", type: "train", notes: "Connections vary; check your arrival plan early." },
-        { name: "Bilbao (base option)", type: "train", notes: "Common tourist base; day trip possible with planning." },
-        { name: "City centre walk routes", type: "walk", notes: "Smaller city; walking can be practical from central stays." },
+        { name: "Bilbao Abando", type: "train", notes: "Central rail hub; good for visitors." },
+        { name: "San Mamés (Interchange)", type: "train", notes: "Major transport interchange; very convenient." },
+        { name: "Moyua / Indautxu area", type: "metro", notes: "Central areas with easy access and good base options." },
       ],
       tips: [
-        "This is a smaller-city matchday: plan your arrival/return times in advance.",
-        "If you’re basing in Bilbao, check late return options before kickoff.",
+        "Bilbao is compact and visitor-friendly — walking + metro usually solves matchday.",
+        "San Mamés interchange makes this one of the easiest logistics in Spain.",
+        "Post-match dispersal is steady; if you’re dining after, base central and walk/metro back.",
       ],
     },
     parking: {
       availability: "medium",
-      summary: "More feasible than major cities, but expect local congestion near kickoff.",
-      officialLots: ["Use city parking and walk the last part where practical."],
+      summary: "Possible using city parking, but matchday congestion exists. Public transport is usually simpler.",
+      officialLots: ["Use central car parks and walk/metro rather than trying to park right by the stadium."],
     },
     foodDrink: [
-      { name: "Vitoria city centre", type: "mixed", notes: "Best practical base for pre/post." },
-      { name: "Bilbao (weekend base)", type: "mixed", notes: "Better variety if you’re making a weekend of it." },
+      { name: "Indautxu / Moyua area", type: "mixed", notes: "Best central base for food/drink." },
+      { name: "Casco Viejo (Old Town)", type: "food", notes: "Great for a city break; allow extra travel time to/from." },
     ],
     stay: {
-      bestAreas: [{ area: "Vitoria city centre", notes: "Simple, walkable, practical." }],
-      budgetAreas: [{ area: "Near the station/bus access", budgetFriendly: true, notes: "Often good value; convenient for day trips." }],
+      bestAreas: [
+        { area: "Indautxu", notes: "Best all-round base: central + practical." },
+        { area: "Casco Viejo", notes: "Best vibe; easy access with a short metro hop." },
+      ],
+      budgetAreas: [{ area: "Near Abando / station edge", budgetFriendly: true, notes: "Often good value + practical for arrivals/returns." }],
     },
     arrivalTips: [
-      "Confirm your return transport before kickoff if you’re not staying overnight.",
-      "Arrive early to keep everything calm and simple.",
+      "Arrive early if you want time to explore the riverfront/Old Town before the match.",
+      "If you’re day-tripping, don’t cut return trains too tight.",
     ],
   },
+
+  "real-sociedad": {
+    stadium: "Reale Arena",
+    city: "San Sebastián (Donostia)",
+    country: "Spain",
+    transport: {
+      primaryStops: [
+        { name: "San Sebastián-Donostia Station", type: "train", notes: "Main arrival hub for visitors." },
+        { name: "City centre (Old Town / Centro)", type: "walk", notes: "Common base; last-mile is typically bus/walk depending on route." },
+        { name: "Local bus corridors", type: "bus", notes: "Most visitors use buses/taxis for the final stretch; route varies by day/time." },
+      ],
+      tips: [
+        "San Sebastián is compact but the stadium isn’t always a pure walk for everyone — plan the last-mile.",
+        "If you’re doing a weekend, base central and keep match travel simple (bus/walk).",
+        "Post-match: taxis can bottleneck; walking away from the immediate stadium zone helps.",
+      ],
+    },
+    parking: {
+      availability: "hard",
+      summary: "Parking in a tourist city is limited; matchday adds pressure. Public transport is safer.",
+      officialLots: ["Use public transport; if driving, park outside the core and come in."],
+    },
+    foodDrink: [
+      { name: "Parte Vieja (Old Town)", type: "food", notes: "Best food density; ideal pre/post base." },
+      { name: "Gros", type: "mixed", notes: "Great vibe; often good value vs Old Town core." },
+    ],
+    stay: {
+      bestAreas: [
+        { area: "Centro", notes: "Best all-round base; walkable sightseeing." },
+        { area: "Gros", notes: "Good vibe + value; easy access." },
+      ],
+      budgetAreas: [{ area: "Station edge / Amara area", budgetFriendly: true, notes: "Often cheaper; check exact walk/bus route." }],
+    },
+    arrivalTips: [
+      "If you want a stress-free entry, arrive early and avoid last-minute taxis.",
+      "If kickoff is TBC, keep dinner/return plans flexible.",
+    ],
+  },
+
+  "osasuna": {
+    stadium: "Estadio El Sadar",
+    city: "Pamplona",
+    country: "Spain",
+    transport: {
+      primaryStops: [
+        { name: "Pamplona city centre", type: "walk", notes: "Most visitors base centrally; stadium access often via walk/bus." },
+        { name: "Pamplona bus corridors", type: "bus", notes: "Local buses are commonly used; routes vary by day." },
+        { name: "Regional rail/coach arrivals", type: "bus", notes: "Many visitors arrive by coach; plan last-mile from arrival point." },
+      ],
+      tips: [
+        "Pamplona is manageable as a compact city break — keep your base central.",
+        "If arriving same-day, confirm return options before kickoff (services can be limited late).",
+        "Walking can be the simplest option depending on your accommodation.",
+      ],
+    },
+    parking: {
+      availability: "medium",
+      summary: "More feasible than big cities, but congestion still builds near kickoff.",
+      officialLots: ["Use city parking and walk/bus in rather than searching near the stadium."],
+    },
+    foodDrink: [
+      { name: "Old Town / Centro", type: "food", notes: "Best variety; easy for visitors." },
+      { name: "Ensanche", type: "mixed", notes: "Practical for pre/post without tight Old Town crowds." },
+    ],
+    stay: {
+      bestAreas: [
+        { area: "Centro / Old Town edge", notes: "Best visitor base; walkable." },
+        { area: "Ensanche", notes: "More space + practical hotels." },
+      ],
+      budgetAreas: [{ area: "Station/coach arrival edge", budgetFriendly: true, notes: "Often cheaper; check late-night return practicality." }],
+    },
+    arrivalTips: [
+      "Plan returns in advance if you’re not staying overnight.",
+      "Arrive early if you want a relaxed meal in the centre first.",
+    ],
+  },
+
+  "deportivo-alaves": {
+    stadium: "Mendizorrotza",
+    city: "Vitoria-Gasteiz",
+    country: "Spain",
+    transport: {
+      primaryStops: [
+        { name: "Vitoria-Gasteiz Station", type: "train", notes: "Main arrival hub; connect onward locally." },
+        { name: "City centre", type: "walk", notes: "Common base; stadium access often by walk/bus depending on route." },
+        { name: "Regional bus/coach arrivals", type: "bus", notes: "Many arrivals are coach-based; last-mile varies." },
+      ],
+      tips: [
+        "Vitoria is compact — walking from central areas is often practical.",
+        "If you’re day-tripping from Bilbao, check return timing and build in buffer post-match.",
+        "Keep last-mile simple: centre → stadium → centre.",
+      ],
+    },
+    parking: {
+      availability: "medium",
+      summary: "More drivable than major cities, but matchday still creates pinch points.",
+      officialLots: ["Use city parking and walk rather than trying to park on the stadium streets."],
+    },
+    foodDrink: [
+      { name: "City centre", type: "mixed", notes: "Best variety; easiest visitor base." },
+      { name: "Near the main shopping streets", type: "food", notes: "Practical for a pre/post meal." },
+    ],
+    stay: {
+      bestAreas: [
+        { area: "City centre", notes: "Best base for visitors; walkable." },
+      ],
+      budgetAreas: [{ area: "Station edge", budgetFriendly: true, notes: "Often cheaper and practical for arrivals/returns." }],
+    },
+    arrivalTips: [
+      "If connecting onward by train/coach, leave buffer after full-time.",
+      "Arrive early if you want to orient yourself; smaller cities have fewer last-minute options.",
+    ],
+  },
+
+  /* -------------------------------------------------------------------------- */
+  /* Valencia / East                                                             */
+  /* -------------------------------------------------------------------------- */
 
   "valencia": {
     stadium: "Mestalla",
@@ -557,105 +416,73 @@ const laLigaLogistics: Record<string, MatchdayLogistics> = {
     country: "Spain",
     transport: {
       primaryStops: [
-        { name: "València Nord / Joaquín Sorolla", type: "train", notes: "Main rail arrivals; connect by metro/bus/taxi." },
-        { name: "Xàtiva / Colón (Metro)", type: "metro", notes: "Central metro stops; useful for moving around the city." },
-        { name: "City centre walking routes", type: "walk", notes: "If you’re staying central, walking can be practical." },
+        { name: "Xàtiva / Estació del Nord", type: "train", notes: "Central hub for visitors; easy onward movement." },
+        { name: "Colón area (Metro)", type: "metro", notes: "Central node; good for staying/dining and dispersal." },
+        { name: "Aragón area (Metro)", type: "metro", notes: "Common approach corridor depending on your route." },
       ],
       tips: [
-        "Valencia is excellent for visitors: base central and walk/metro to the stadium.",
-        "Post-match: the city grid disperses crowds well—walking 10 minutes helps.",
+        "Mestalla is fairly central — walking from central areas is often workable.",
+        "Post-match: avoid taxis right at the stadium; walk 10 minutes outward first.",
+        "If you’re doing a beach + match weekend, keep your base connected to the centre/metro lines.",
       ],
     },
     parking: {
       availability: "hard",
-      summary: "Urban stadium district makes parking unreliable. Prefer public transport or walking.",
-      officialLots: ["If driving, use city car parks and walk the last part."],
+      summary: "Central event-day driving is slow and parking is limited.",
+      officialLots: ["Use metro/walk; if driving, park outside the core and ride in."],
     },
     foodDrink: [
-      { name: "City centre", type: "mixed", notes: "Best density of options and easiest logistics." },
-      { name: "Ruzafa", type: "food", notes: "Great for restaurants and bars; strong weekend base." },
+      { name: "Ruzafa", type: "food", notes: "Strong food/nightlife; easy to route via the centre." },
+      { name: "Ciutat Vella / Centro", type: "mixed", notes: "Tourist base; good for pre/post." },
     ],
     stay: {
       bestAreas: [
-        { area: "City centre", notes: "Best for tourists; easy access everywhere." },
-        { area: "Ruzafa", notes: "Great vibe for a weekend; very walkable." },
+        { area: "Ruzafa", notes: "Best vibe for a weekend; great food/nightlife." },
+        { area: "Centro / Ciutat Vella edge", notes: "Tourist-friendly base; walkable." },
       ],
-      budgetAreas: [{ area: "Near Nord/Joaquín Sorolla", budgetFriendly: true, notes: "Often practical and good value." }],
+      budgetAreas: [{ area: "Near Estació del Nord / Arrivals edge", budgetFriendly: true, notes: "Often better value; very practical." }],
     },
     arrivalTips: [
-      "If you’re planning beaches too, keep matchday separate and simple (metro/walk).",
-      "Arrive early if you want to avoid last-minute queues at entry points.",
+      "Arrive 60–75 minutes pre-kickoff to avoid tight streets near entry.",
+      "If kickoff is TBC, avoid rigid dinner/transport bookings.",
     ],
   },
 
-  "elche": {
-    stadium: "Estadio Manuel Martínez Valero",
-    city: "Elche",
+  "villarreal": {
+    stadium: "Estadio de la Cerámica",
+    city: "Villarreal",
     country: "Spain",
     transport: {
       primaryStops: [
-        { name: "Alicante (base option)", type: "train", notes: "Common tourist base; connect onward by rail/bus." },
-        { name: "Elche city access", type: "train", notes: "Arrival depends on routing; check schedules." },
-        { name: "Taxi/bus (last leg)", type: "bus", notes: "Stadium is outside the tight centre; plan the last leg." },
+        { name: "Valencia (rail hub)", type: "train", notes: "Common base city for visitors; connect onward by regional rail." },
+        { name: "Castellón de la Plana", type: "train", notes: "Key nearby hub; onward link to Villarreal." },
+        { name: "Villarreal station / town centre", type: "train", notes: "Local arrival point; stadium is typically manageable from town." },
       ],
       tips: [
-        "Most visitors will base in Alicante and do Elche as a day trip.",
-        "Check return options before kickoff — late services can be less frequent.",
+        "Most visitors treat this as a day trip from Valencia or Castellón — check return times before kickoff.",
+        "Smaller-town matchdays mean fewer late options; plan food and transport in advance.",
+        "Walking from the town area is often simplest once you arrive.",
       ],
     },
     parking: {
       availability: "medium",
-      summary: "Driving is feasible, but allow for matchday traffic near the stadium.",
-      officialLots: ["Arrive early; use signed stadium parking where available."],
+      summary: "More feasible than big cities, but traffic still builds near kickoff.",
+      officialLots: ["If driving: arrive early and use town parking + walk."],
     },
     foodDrink: [
-      { name: "Alicante centre (weekend base)", type: "mixed", notes: "Best variety if you’re doing a coastal weekend." },
-      { name: "Elche centre", type: "mixed", notes: "Practical if you arrive early; keep timings flexible." },
-    ],
-    stay: {
-      bestAreas: [{ area: "Alicante city centre", notes: "Best tourist base and easiest logistics." }],
-      budgetAreas: [{ area: "Near Elche rail access", budgetFriendly: true, notes: "Often cheaper; check last-leg transport to stadium." }],
-    },
-    arrivalTips: [
-      "Don’t assume walkability from station to stadium—plan last leg (bus/taxi).",
-      "Confirm the return plan before you leave your base city.",
-    ],
-  },
-
-  "mallorca": {
-    stadium: "Estadi Mallorca Son Moix",
-    city: "Palma",
-    country: "Spain",
-    transport: {
-      primaryStops: [
-        { name: "Palma city centre", type: "bus", notes: "Most visitors base here; buses/taxis for the last leg." },
-        { name: "Airport connections", type: "bus", notes: "If arriving same day, leave big buffer for airport delays." },
-        { name: "Taxi/rideshare", type: "other", notes: "Practical on an island; traffic builds close to kickoff." },
-      ],
-      tips: [
-        "If you’re on a short break, stay central Palma and keep matchday transport simple.",
-        "Post-match: taxis can queue — walking a bit away from the immediate area helps pickup.",
-      ],
-    },
-    parking: {
-      availability: "medium",
-      summary: "Driving is feasible, but event congestion can slow you down.",
-      officialLots: ["Use official/signed parking if available; arrive early."],
-    },
-    foodDrink: [
-      { name: "Palma old town", type: "mixed", notes: "Best weekend vibe and food density." },
-      { name: "Seafront area", type: "bar", notes: "Good for pre/post drinks; tourist-friendly." },
+      { name: "Valencia (base)", type: "mixed", notes: "Best variety if you’re making a weekend of it." },
+      { name: "Villarreal town centre", type: "mixed", notes: "Practical local options; limited late-night flexibility." },
     ],
     stay: {
       bestAreas: [
-        { area: "Palma old town", notes: "Best vibe for a weekend." },
-        { area: "Seafront", notes: "Tourist-friendly and easy to move around." },
+        { area: "Valencia (Ruzafa/Centro)", notes: "Best weekend base; day-trip to the match." },
+        { area: "Castellón (central)", notes: "Closer base; practical if prioritising the match." },
       ],
-      budgetAreas: [{ area: "Near transport corridors", budgetFriendly: true, notes: "Often cheaper; verify late-night return practicality." }],
+      budgetAreas: [{ area: "Villarreal town", budgetFriendly: true, notes: "Often cheaper; just confirm return logistics if not staying." }],
     },
     arrivalTips: [
-      "If you’re doing airport → match same day, build big buffer time.",
-      "Plan your return route before you go — island transport can feel limited late.",
+      "Double-check regional rail schedules for your return — don’t assume frequent late trains.",
+      "Arrive early in town if you want a calm pre-match meal.",
     ],
   },
 
@@ -665,71 +492,316 @@ const laLigaLogistics: Record<string, MatchdayLogistics> = {
     country: "Spain",
     transport: {
       primaryStops: [
-        { name: "València Nord / Joaquín Sorolla", type: "train", notes: "Main arrivals; connect by metro/tram/bus." },
-        { name: "Central Valencia Metro", type: "metro", notes: "Use Metro for the last leg; stops depend on routing." },
-        { name: "City centre", type: "walk", notes: "Good base; easy transport options." },
+        { name: "Xàtiva / Estació del Nord", type: "train", notes: "Central hub for visitors." },
+        { name: "Colón area (Metro)", type: "metro", notes: "Useful central node for routing outward." },
+        { name: "Benimaclet area", type: "metro", notes: "Practical transit area depending on where you stay." },
       ],
       tips: [
-        "Treat this as a Valencia weekend: stay central and metro out for the match.",
-        "Post-match: avoid taxis immediately at full-time; walk a bit for easier pickup.",
+        "Valencia is an easy city for metro-based matchdays — avoid taxis near kickoff.",
+        "Base in central areas for the best weekend experience; travel out for the match.",
+        "Post-match: walk a few blocks away before requesting rideshare.",
+      ],
+    },
+    parking: {
+      availability: "medium",
+      summary: "More feasible than Mestalla area depending on timing, but still congested on matchday.",
+      officialLots: ["If driving: park a bit away and walk the last stretch."],
+    },
+    foodDrink: [
+      { name: "Ruzafa", type: "food", notes: "Best food/nightlife base; easy routing." },
+      { name: "Centro / Ciutat Vella", type: "mixed", notes: "Tourist base; reliable pre/post." },
+    ],
+    stay: {
+      bestAreas: [
+        { area: "Ruzafa", notes: "Top base for weekend trips." },
+        { area: "Centro / Ciutat Vella edge", notes: "Tourist-friendly and walkable." },
+      ],
+      budgetAreas: [{ area: "Near Estació del Nord edge", budgetFriendly: true, notes: "Often better value + practical." }],
+    },
+    arrivalTips: [
+      "Arrive early if you’re unfamiliar with the local metro routing.",
+      "If kickoff is TBC, keep return plans flexible.",
+    ],
+  },
+
+  "mallorca": {
+    stadium: "Estadi Mallorca Son Moix",
+    city: "Palma (Mallorca)",
+    country: "Spain",
+    transport: {
+      primaryStops: [
+        { name: "Palma city centre", type: "bus", notes: "Most visitors base here; last-mile often via bus/taxi depending on route." },
+        { name: "Palma Intermodal Station", type: "train", notes: "Key transport hub (rail/bus); good anchor point for routing." },
+        { name: "Airport arrivals (PMI)", type: "bus", notes: "If arriving same day, plan airport-to-centre first; then match routing." },
+      ],
+      tips: [
+        "Treat Palma centre as your base; the stadium trip is usually a short transfer from there.",
+        "Island transport can be time-sensitive — avoid cutting it tight if kickoff time shifts.",
+        "Post-match: taxis can bottleneck; walking away from the immediate zone helps.",
+      ],
+    },
+    parking: {
+      availability: "medium",
+      summary: "Driving is possible, but matchday congestion and parking demand rise sharply.",
+      officialLots: ["If driving: arrive early and use signed/official parking where available."],
+    },
+    foodDrink: [
+      { name: "Palma Old Town", type: "food", notes: "Best visitor area; strong food density." },
+      { name: "Santa Catalina", type: "mixed", notes: "Great vibe; good for a weekend base." },
+    ],
+    stay: {
+      bestAreas: [
+        { area: "Old Town (Casco Antiguo)", notes: "Best tourist base; walkable." },
+        { area: "Santa Catalina", notes: "Best vibe; easy access to centre." },
+      ],
+      budgetAreas: [{ area: "Near Intermodal Station edge", budgetFriendly: true, notes: "Often better value; practical for transport." }],
+    },
+    arrivalTips: [
+      "If you’re arriving same day via airport, build in slack for transfers.",
+      "Keep return plans flexible if kickoff is TBC — island logistics can be less forgiving.",
+    ],
+  },
+
+  "girona": {
+    stadium: "Estadi Montilivi",
+    city: "Girona",
+    country: "Spain",
+    transport: {
+      primaryStops: [
+        { name: "Girona Station (rail)", type: "train", notes: "Main arrival hub; many visitors come via Barcelona." },
+        { name: "Barcelona Sants (rail hub)", type: "train", notes: "Common base for visitors; connect to Girona by train." },
+        { name: "Girona city centre", type: "walk", notes: "Good base; last-mile to stadium often walk/bus depending on accommodation." },
+      ],
+      tips: [
+        "This is a great ‘Barcelona base + Girona day trip’ match if you’re doing a weekend.",
+        "Check return train times before kickoff—late services can be less frequent.",
+        "Walking can be practical depending on where you stay; plan your route in advance.",
+      ],
+    },
+    parking: {
+      availability: "medium",
+      summary: "Possible, but traffic and parking demand rise around kickoff.",
+      officialLots: ["Use city parking and walk/bus rather than hunting near the stadium."],
+    },
+    foodDrink: [
+      { name: "Girona Old Town", type: "food", notes: "Best visitor area; good for a full day trip." },
+      { name: "Barcelona (Eixample/Centro)", type: "mixed", notes: "Best variety if using Barcelona as the base." },
+    ],
+    stay: {
+      bestAreas: [
+        { area: "Girona Old Town / Centre", notes: "Best vibe if staying in Girona." },
+        { area: "Barcelona (Eixample)", notes: "Best base if you’re combining multiple activities." },
+      ],
+      budgetAreas: [{ area: "Near Girona Station edge", budgetFriendly: true, notes: "Often cheaper; practical for returns." }],
+    },
+    arrivalTips: [
+      "If day-tripping, don’t cut it tight for your last return train.",
+      "Arrive early to enjoy the Old Town before match travel.",
+    ],
+  },
+
+  /* -------------------------------------------------------------------------- */
+  /* Andalusia / South                                                           */
+  /* -------------------------------------------------------------------------- */
+
+  "sevilla": {
+    stadium: "Ramón Sánchez-Pizjuán",
+    city: "Seville",
+    country: "Spain",
+    transport: {
+      primaryStops: [
+        { name: "Sevilla Santa Justa", type: "train", notes: "Main arrival station; good anchor point." },
+        { name: "Nervión area", type: "metro", notes: "Stadium-adjacent district; very practical for matchday." },
+        { name: "City centre (Old Town)", type: "walk", notes: "Tourist base; connect by walk/metro/taxi depending on heat/time." },
+      ],
+      tips: [
+        "Seville is very walkable, but heat can change your plan — don’t overcommit to long walks in summer.",
+        "Nervión is the practical matchday base: easy access and good dispersal.",
+        "Post-match: walk a bit away from the stadium streets before trying taxis.",
       ],
     },
     parking: {
       availability: "hard",
-      summary: "Urban matchday parking is unreliable. Public transport is better.",
-      officialLots: ["If driving, use city parking and finish by metro/walk."],
+      summary: "Central Seville driving is slow; parking demand spikes on matchdays.",
+      officialLots: ["Use public transport/walk; if driving, park outside the core and ride in."],
     },
     foodDrink: [
-      { name: "Ruzafa", type: "mixed", notes: "Great for restaurants and bars." },
-      { name: "City centre", type: "mixed", notes: "Most practical for tourists." },
+      { name: "Nervión", type: "mixed", notes: "Practical pre/post hub." },
+      { name: "Old Town (Centro)", type: "food", notes: "Best tourist base; great dinner options." },
     ],
     stay: {
       bestAreas: [
-        { area: "City centre", notes: "Best base for visitors." },
-        { area: "Ruzafa", notes: "Best vibe for a weekend." },
+        { area: "Old Town / Centro", notes: "Best for a city break; sightseeing + food." },
+        { area: "Nervión", notes: "Best pure match logistics; very practical." },
       ],
-      budgetAreas: [{ area: "Near main stations", budgetFriendly: true, notes: "Often good value and very practical." }],
+      budgetAreas: [{ area: "Near Santa Justa edge", budgetFriendly: true, notes: "Often better value; practical for rail arrivals." }],
     },
     arrivalTips: [
-      "If you’re combining match + beach, keep matchday logistics simple (metro/walk).",
-      "Arrive early if you want to avoid last-minute congestion at entry points.",
+      "Arrive early if temperatures are high—moving slower is normal.",
+      "If kickoff is TBC, keep return plans flexible (especially late-night travel).",
     ],
   },
 
-  "real oviedo": {
+  "real-betis": {
+    stadium: "Benito Villamarín",
+    city: "Seville",
+    country: "Spain",
+    transport: {
+      primaryStops: [
+        { name: "Sevilla Santa Justa", type: "train", notes: "Main arrival station; connect onward locally." },
+        { name: "City centre (Old Town)", type: "walk", notes: "Tourist base; common staging point." },
+        { name: "Local bus corridors toward the stadium", type: "bus", notes: "Many visitors rely on buses/taxis for the final stretch; route varies by day." },
+      ],
+      tips: [
+        "Treat the city centre as your base, then bus/taxi out for the match.",
+        "If it’s hot, minimise walking time and plan the last-mile carefully.",
+        "Post-match: taxis are slow right outside — walk away from the immediate zone first.",
+      ],
+    },
+    parking: {
+      availability: "medium",
+      summary: "More feasible than very central venues, but matchday congestion is real.",
+      officialLots: ["If driving: arrive early; consider parking further out and using bus/taxi for the final leg."],
+    },
+    foodDrink: [
+      { name: "Old Town / Centro", type: "food", notes: "Best for visitors; then travel out." },
+      { name: "Triana", type: "mixed", notes: "Great vibe area; check your route/timing to the stadium." },
+    ],
+    stay: {
+      bestAreas: [
+        { area: "Old Town / Centro", notes: "Best tourist base; food + sights." },
+        { area: "Triana", notes: "Great vibe; still workable for match travel." },
+      ],
+      budgetAreas: [{ area: "Near Santa Justa edge", budgetFriendly: true, notes: "Often better value; practical for rail." }],
+    },
+    arrivalTips: [
+      "Have your last-mile plan ready (bus/taxi) — don’t improvise at the last minute.",
+      "Keep return plans flexible if kickoff is TBC.",
+    ],
+  },
+
+  /* -------------------------------------------------------------------------- */
+  /* Galicia                                                                      */
+  /* -------------------------------------------------------------------------- */
+
+  "celta-vigo": {
+    stadium: "Abanca-Balaídos",
+    city: "Vigo",
+    country: "Spain",
+    transport: {
+      primaryStops: [
+        { name: "Vigo-Guixar / Vigo-Urzáiz", type: "train", notes: "Key arrival points; confirm which station your train uses." },
+        { name: "City centre / waterfront", type: "bus", notes: "Common base; last-mile via bus/taxi depending on route." },
+        { name: "Regional coach arrivals", type: "bus", notes: "Many visitors arrive by coach; plan the final connection." },
+      ],
+      tips: [
+        "Vigo is a good weekend city break; base central and use buses/taxis for match travel.",
+        "Check return timing before kickoff if you’re not staying overnight.",
+        "Post-match: taxis can bottleneck; walking away from the immediate roads helps.",
+      ],
+    },
+    parking: {
+      availability: "medium",
+      summary: "Possible with planning, but matchday traffic builds around the stadium district.",
+      officialLots: ["Use city parking and connect by bus/taxi; avoid last-minute street hunting."],
+    },
+    foodDrink: [
+      { name: "Casco Vello / centre", type: "food", notes: "Best visitor area for food + atmosphere." },
+      { name: "Waterfront area", type: "mixed", notes: "Good for a weekend vibe; keep timings flexible." },
+    ],
+    stay: {
+      bestAreas: [
+        { area: "City centre / waterfront", notes: "Best base for visitors." },
+        { area: "Old Town edge", notes: "Great for vibe; check exact walking practicality." },
+      ],
+      budgetAreas: [{ area: "Near main stations edge", budgetFriendly: true, notes: "Often cheaper; practical for arrivals/returns." }],
+    },
+    arrivalTips: [
+      "Confirm which Vigo station you’re using before travel — it affects last-mile.",
+      "Build in slack for post-match return movement if you’re catching trains.",
+    ],
+  },
+
+  /* -------------------------------------------------------------------------- */
+  /* Alicante / Costa Blanca                                                     */
+  /* -------------------------------------------------------------------------- */
+
+  "elche": {
+    stadium: "Estadio Martínez Valero",
+    city: "Elche",
+    country: "Spain",
+    transport: {
+      primaryStops: [
+        { name: "Alicante (rail hub)", type: "train", notes: "Common base city for visitors; connect onward to Elche." },
+        { name: "Elche / Elx rail connections", type: "train", notes: "Local arrival; last-mile depends on station and timing." },
+        { name: "Alicante Airport (ALC)", type: "bus", notes: "If arriving same day, plan airport→base first; then match travel." },
+      ],
+      tips: [
+        "Treat this as an Alicante-base day trip unless you’re staying local.",
+        "Check regional transport schedules (especially late returns) before kickoff.",
+        "Plan the last-mile from Elche arrival point — it can be the friction point.",
+      ],
+    },
+    parking: {
+      availability: "medium",
+      summary: "More feasible than major cities, but still congested near kickoff.",
+      officialLots: ["If driving: arrive early and use signed/official parking where possible."],
+    },
+    foodDrink: [
+      { name: "Alicante centre", type: "mixed", notes: "Best variety for a weekend base." },
+      { name: "Elche town area", type: "mixed", notes: "Practical local options if staying nearby." },
+    ],
+    stay: {
+      bestAreas: [
+        { area: "Alicante centre", notes: "Best weekend base; easy beach + city break." },
+        { area: "Elche town", notes: "Works if you want to be close; confirm transport links." },
+      ],
+      budgetAreas: [{ area: "Near Alicante rail edge", budgetFriendly: true, notes: "Often cheaper; practical for day trips." }],
+    },
+    arrivalTips: [
+      "If you’re flying in, don’t stack tight connections—airport + regional travel can add time.",
+      "Confirm return options before kickoff if you’re not staying overnight.",
+    ],
+  },
+
+  /* -------------------------------------------------------------------------- */
+  /* Others                                                                       */
+  /* -------------------------------------------------------------------------- */
+
+  "real-oviedo": {
     stadium: "Estadio Carlos Tartiere",
     city: "Oviedo",
     country: "Spain",
     transport: {
       primaryStops: [
-        { name: "Oviedo (rail access)", type: "train", notes: "Main arrival point; check schedules if day-tripping." },
-        { name: "Gijón (base option)", type: "train", notes: "Nearby coastal base; day trip possible." },
-        { name: "Taxi/bus (last leg)", type: "bus", notes: "Plan the last leg depending on your accommodation." },
+        { name: "Oviedo (rail station)", type: "train", notes: "Main arrival for visitors; connect onward locally." },
+        { name: "City centre", type: "walk", notes: "Common base; last-mile often walk/bus depending on your accommodation." },
+        { name: "Regional coach arrivals", type: "bus", notes: "Many arrivals are coach-based; plan last-mile in advance." },
       ],
       tips: [
-        "Asturias is great for a weekend: consider basing on the coast and day-tripping in.",
-        "Check return schedules before kickoff — late services can be less frequent.",
+        "Oviedo works well as a compact city break — keep your base central.",
+        "If you’re day-tripping from a bigger city, check late return options before kickoff.",
+        "Walking can be practical; keep your route simple and plan your return early.",
       ],
     },
     parking: {
       availability: "medium",
-      summary: "Driving is feasible compared to big cities, but matchday congestion still builds.",
-      officialLots: ["Arrive early; use signed lots or city parking + walk/bus."],
+      summary: "More feasible than major cities, but matchday still adds congestion.",
+      officialLots: ["Use city parking and walk/bus; avoid last-minute searching near the stadium."],
     },
     foodDrink: [
-      { name: "Oviedo old town", type: "food", notes: "Strong for cider/food; ideal pre/post match." },
-      { name: "Gijón (coastal base)", type: "mixed", notes: "Good for a weekend vibe if you’re staying nearby." },
+      { name: "Old Town / Centro", type: "food", notes: "Best visitor area; strong local food options." },
+      { name: "Near main pedestrian streets", type: "mixed", notes: "Practical for pre/post without overthinking." },
     ],
     stay: {
       bestAreas: [
-        { area: "Oviedo city centre", notes: "Best for logistics and walking." },
-        { area: "Gijón centre", notes: "Coastal base; easy day trip connections." },
+        { area: "City centre", notes: "Best base for visitors." },
       ],
-      budgetAreas: [{ area: "Near Oviedo station", budgetFriendly: true, notes: "Often better value and practical for arrivals." }],
+      budgetAreas: [{ area: "Station edge", budgetFriendly: true, notes: "Often cheaper and practical for arrivals/returns." }],
     },
     arrivalTips: [
-      "If you’re day-tripping, lock in your return plan before kickoff.",
-      "Arrive early if you want to enjoy the old town without rushing.",
+      "If you’re relying on regional rail/coach, confirm your return before kickoff.",
+      "Arrive early if you want time for a proper meal before heading to the stadium.",
     ],
   },
 };
