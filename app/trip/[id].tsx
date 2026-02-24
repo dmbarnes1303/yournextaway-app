@@ -11,6 +11,7 @@ import {
   TextInput,
   Keyboard,
   Image,
+  Platform,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
@@ -185,8 +186,7 @@ function parseIsoToDate(iso?: string): Date | null {
 }
 
 function formatKickoffMeta(row?: FixtureListRow | null, trip?: Trip | null): { line: string; tbc: boolean } {
-  // Prefer live fixture, fallback to trip snapshot
-  const iso = row?.fixture?.date ?? (trip as any)?.kickoffIso;
+  const iso = (row?.fixture?.date as any) ?? (trip as any)?.kickoffIso;
   const d = parseIsoToDate(iso);
 
   const short = String(row?.fixture?.status?.short ?? "").trim().toUpperCase();
@@ -210,6 +210,19 @@ function formatKickoffMeta(row?: FixtureListRow | null, trip?: Trip | null): { l
 
   const statusHint = long ? ` • ${long}` : "";
   return { line: `Kickoff: ${datePart} • ${timePart}${statusHint}`, tbc: false };
+}
+
+function titleCaseCity(s: string) {
+  const v = String(s ?? "").trim();
+  if (!v) return "Trip";
+  // If it's a slug, make it readable
+  const looksSlug = v.includes("-") && v === v.toLowerCase();
+  const base = looksSlug ? v.replace(/-/g, " ") : v;
+  return base
+    .split(/\s+/g)
+    .filter(Boolean)
+    .map((w) => w[0]?.toUpperCase() + w.slice(1))
+    .join(" ");
 }
 
 /* -------------------------------------------------------------------------- */
@@ -326,8 +339,12 @@ export default function TripDetailScreen() {
       try {
         const map: Record<string, FixtureListRow> = {};
         for (const id of numericIds) {
-          const r = await getFixtureById(String(id));
-          if (r) map[String(id)] = r;
+          try {
+            const r = await getFixtureById(String(id));
+            if (r) map[String(id)] = r;
+          } catch {
+            // best-effort: don’t break the trip screen for one fixture
+          }
         }
         if (!cancelled) setFixturesById(map);
       } finally {
@@ -345,16 +362,20 @@ export default function TripDetailScreen() {
 
   const status = useMemo(() => (trip ? tripStatus(trip) : "Upcoming"), [trip]);
 
-  const cityName = useMemo(() => {
-    // ✅ prefer snapshot displayCity, then stored cityId, then fixture fallback
+  const cityNameRaw = useMemo(() => {
     const snapCity = String((trip as any)?.displayCity ?? "").trim();
     if (snapCity) return snapCity;
+
+    const snapVenueCity = String((trip as any)?.city ?? "").trim();
+    if (snapVenueCity) return snapVenueCity;
 
     if (trip?.cityId) return trip.cityId;
 
     const first = trip?.matchIds?.[0];
     return fixturesById[String(first ?? "")]?.fixture?.venue?.city || "Trip";
   }, [trip, fixturesById]);
+
+  const cityName = useMemo(() => titleCaseCity(cityNameRaw), [cityNameRaw]);
 
   const bookingLinks = useMemo(() => {
     if (!trip || !cityName || cityName === "Trip") return null;
@@ -418,7 +439,8 @@ export default function TripDetailScreen() {
   }
 
   function onViewWallet() {
-    router.push("/wallet" as any);
+    // IMPORTANT: wallet is a tab route
+    router.push("/(tabs)/wallet" as any);
   }
 
   function openMatch(matchId: string) {
@@ -426,7 +448,7 @@ export default function TripDetailScreen() {
 
     const r = fixturesById[String(matchId)];
     const leagueId = r?.league?.id != null ? String(r.league.id) : undefined;
-    const season = r?.league?.season != null ? String(r.league.season) : undefined;
+    const season = (r as any)?.league?.season != null ? String((r as any).league.season) : undefined;
 
     const from = trip?.startDate ? String(trip.startDate) : undefined;
     const to = trip?.endDate ? String(trip.endDate) : undefined;
@@ -544,18 +566,9 @@ export default function TripDetailScreen() {
     }
   }
 
-  async function moveToSaved(item: SavedItem) {
-    try {
-      await savedItemsStore.transitionStatus(item.id, "saved");
-    } catch {
-      Alert.alert("Couldn’t move", "That item can’t be moved right now.");
-    }
-  }
-
   async function markBookedSmart(item: SavedItem) {
     try {
       await savedItemsStore.transitionStatus(item.id, "booked");
-
       defer(() => {
         confirmBookedAndOfferProof(item.id).catch(() => null);
       });
@@ -593,17 +606,6 @@ export default function TripDetailScreen() {
       [
         { text: "Cancel", style: "cancel" },
         { text: "Move", style: "default", onPress: () => moveToPending(item) },
-      ]
-    );
-  }
-
-  function confirmMoveToSaved(item: SavedItem) {
-    Alert.alert(
-      "Move to Saved?",
-      "Saved items won’t prompt on return. Use this if you decided not to book (but want the link kept).",
-      [
-        { text: "Cancel", style: "cancel" },
-        { text: "Move", style: "default", onPress: () => moveToSaved(item) },
       ]
     );
   }
@@ -687,6 +689,7 @@ export default function TripDetailScreen() {
         <ScrollView
           style={styles.scroll}
           contentContainerStyle={[styles.content, { paddingBottom: theme.spacing.xxl + insets.bottom }]}
+          keyboardShouldPersistTaps="handled"
         >
           {!tripId && (
             <GlassCard style={styles.card}>
@@ -703,7 +706,13 @@ export default function TripDetailScreen() {
             </GlassCard>
           )}
 
-          {trip && (
+          {!loading && tripId && tripsLoaded && savedLoaded && !trip ? (
+            <GlassCard style={styles.card}>
+              <EmptyState title="Trip not found" message="This trip doesn’t exist on this device." />
+            </GlassCard>
+          ) : null}
+
+          {trip ? (
             <>
               {/* HERO */}
               <GlassCard style={styles.hero}>
@@ -717,37 +726,37 @@ export default function TripDetailScreen() {
                   </View>
 
                   <Pressable onPress={onViewWallet} style={styles.walletBtn}>
-                    <Text style={styles.walletBtnText}>View wallet ›</Text>
+                    <Text style={styles.walletBtnText}>Wallet ›</Text>
                   </Pressable>
                 </View>
 
-                {showHeroBanners && (
+                {showHeroBanners ? (
                   <View style={styles.bannersRow}>
-                    {pending.length > 0 && (
+                    {pending.length > 0 ? (
                       <View style={styles.pendingBanner}>
                         <Text style={styles.pendingText}>
                           {pending.length} pending booking{pending.length === 1 ? "" : "s"}
                         </Text>
                       </View>
-                    )}
+                    ) : null}
 
-                    {saved.length > 0 && (
+                    {saved.length > 0 ? (
                       <View style={styles.savedBanner}>
                         <Text style={styles.savedText}>
                           {saved.length} saved item{saved.length === 1 ? "" : "s"}
                         </Text>
                       </View>
-                    )}
+                    ) : null}
 
-                    {booked.length > 0 && (
+                    {booked.length > 0 ? (
                       <View style={styles.bookedBanner}>
                         <Text style={styles.bookedText}>
                           {booked.length} booked item{booked.length === 1 ? "" : "s"} in Wallet
                         </Text>
                       </View>
-                    )}
+                    ) : null}
                   </View>
-                )}
+                ) : null}
 
                 <View style={styles.heroActions}>
                   <Pressable onPress={onEditTrip} style={[styles.btn, styles.btnPrimary]}>
@@ -807,8 +816,16 @@ export default function TripDetailScreen() {
                               {kickoff.line}
                             </Text>
 
-                            {meta1 ? <Text style={styles.matchMeta} numberOfLines={1}>{meta1}</Text> : null}
-                            {meta2 ? <Text style={styles.matchMeta} numberOfLines={1}>{meta2}</Text> : null}
+                            {meta1 ? (
+                              <Text style={styles.matchMeta} numberOfLines={1}>
+                                {meta1}
+                              </Text>
+                            ) : null}
+                            {meta2 ? (
+                              <Text style={styles.matchMeta} numberOfLines={1}>
+                                {meta2}
+                              </Text>
+                            ) : null}
 
                             {logisticsLine ? (
                               <Text style={styles.logisticsMeta} numberOfLines={1}>
@@ -831,10 +848,6 @@ export default function TripDetailScreen() {
 
                 {fxLoading ? <Text style={styles.mutedInline}>Loading match details…</Text> : null}
               </GlassCard>
-
-              {/* ...rest of your sections unchanged ... */}
-              {/* I left your Pending/Saved/Booked/Notes/Booking/Insurance/Claims/Wallet blocks intact structurally */}
-              {/* because your question was “have we done it?” — the missing piece was persistence + snapshot usage. */}
 
               {/* PENDING */}
               <GlassCard style={styles.card}>
@@ -861,7 +874,11 @@ export default function TripDetailScreen() {
                             {buildMetaLine(it)}
                           </Text>
 
-                          {it.priceText ? <Text style={styles.priceLine} numberOfLines={1}>{it.priceText}</Text> : null}
+                          {it.priceText ? (
+                            <Text style={styles.priceLine} numberOfLines={1}>
+                              {it.priceText}
+                            </Text>
+                          ) : null}
                         </Pressable>
 
                         <View style={styles.itemActions}>
@@ -900,7 +917,11 @@ export default function TripDetailScreen() {
                             {buildMetaLine(it)}
                           </Text>
 
-                          {it.priceText ? <Text style={styles.priceLine} numberOfLines={1}>{it.priceText}</Text> : null}
+                          {it.priceText ? (
+                            <Text style={styles.priceLine} numberOfLines={1}>
+                              {it.priceText}
+                            </Text>
+                          ) : null}
                         </Pressable>
 
                         <View style={styles.itemActions}>
@@ -923,7 +944,10 @@ export default function TripDetailScreen() {
                 <Text style={styles.sectionTitle}>Saved</Text>
 
                 {saved.length === 0 ? (
-                  <EmptyState title="No saved items" message="If you answer “No” after returning from a partner, we keep the link here as Saved." />
+                  <EmptyState
+                    title="No saved items"
+                    message="If you answer “No” after returning from a partner, we keep the link here as Saved."
+                  />
                 ) : (
                   <View style={{ gap: 10 }}>
                     {saved.map((it) => (
@@ -940,7 +964,11 @@ export default function TripDetailScreen() {
                             {buildMetaLine(it)}
                           </Text>
 
-                          {it.priceText ? <Text style={styles.priceLine} numberOfLines={1}>{it.priceText}</Text> : null}
+                          {it.priceText ? (
+                            <Text style={styles.priceLine} numberOfLines={1}>
+                              {it.priceText}
+                            </Text>
+                          ) : null}
                         </Pressable>
 
                         <View style={styles.itemActions}>
@@ -976,11 +1004,7 @@ export default function TripDetailScreen() {
                     multiline
                   />
 
-                  <Pressable
-                    onPress={addNote}
-                    disabled={noteSaving}
-                    style={[styles.noteSaveBtn, noteSaving && { opacity: 0.7 }]}
-                  >
+                  <Pressable onPress={addNote} disabled={noteSaving} style={[styles.noteSaveBtn, noteSaving && { opacity: 0.7 }]}>
                     <Text style={styles.noteSaveText}>{noteSaving ? "Saving…" : "Save note"}</Text>
                   </Pressable>
                 </View>
@@ -1009,7 +1033,7 @@ export default function TripDetailScreen() {
               </GlassCard>
 
               {/* BOOK YOUR TRIP */}
-              {bookingLinks && (
+              {bookingLinks ? (
                 <GlassCard style={styles.card}>
                   <Text style={styles.sectionTitle}>Book your trip</Text>
 
@@ -1083,9 +1107,9 @@ export default function TripDetailScreen() {
                     <Text style={styles.mapsInline}>Open maps search</Text>
                   </Pressable>
                 </GlassCard>
-              )}
+              ) : null}
             </>
-          )}
+          ) : null}
         </ScrollView>
       </SafeAreaView>
     </Background>
@@ -1109,8 +1133,8 @@ const styles = StyleSheet.create({
   card: { padding: theme.spacing.lg },
 
   center: { alignItems: "center", gap: 10 },
-  muted: { color: theme.colors.textSecondary },
-  mutedInline: { marginTop: 10, color: theme.colors.textSecondary, textAlign: "center" },
+  muted: { color: theme.colors.textSecondary, fontWeight: "800" },
+  mutedInline: { marginTop: 10, color: theme.colors.textSecondary, textAlign: "center", fontWeight: "800" },
 
   hero: { padding: theme.spacing.lg },
 
@@ -1130,6 +1154,7 @@ const styles = StyleSheet.create({
   heroMeta: {
     marginTop: 6,
     color: theme.colors.textSecondary,
+    fontWeight: "800",
   },
 
   heroTopRow: {
@@ -1147,9 +1172,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
     alignSelf: "flex-start",
+    backgroundColor: "rgba(0,0,0,0.18)",
   },
 
-  statusText: { color: theme.colors.text },
+  statusText: { color: theme.colors.text, fontWeight: "900" },
 
   walletBtn: {
     borderWidth: 1,
@@ -1212,6 +1238,7 @@ const styles = StyleSheet.create({
 
   btnPrimary: {
     borderColor: "rgba(0,255,136,0.6)",
+    backgroundColor: "rgba(0,0,0,0.22)",
   },
 
   btnPrimaryText: {
@@ -1396,6 +1423,8 @@ const styles = StyleSheet.create({
     minHeight: 80,
     color: theme.colors.text,
     textAlignVertical: "top",
+    fontWeight: "800",
+    ...(Platform.OS === "ios" ? { paddingTop: 10 } : null),
   },
 
   noteSaveBtn: {
@@ -1405,6 +1434,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(0,255,136,0.55)",
     alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.18)",
   },
 
   noteSaveText: { color: theme.colors.text, fontWeight: "900" },
@@ -1435,6 +1465,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     alignItems: "center",
     paddingHorizontal: 10,
+    backgroundColor: "rgba(0,0,0,0.16)",
   },
 
   bookBtnText: { color: theme.colors.text, fontWeight: "900" },
@@ -1450,6 +1481,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
     color: theme.colors.textSecondary,
     textAlign: "center",
+    fontWeight: "900",
   },
 
   chev: { color: theme.colors.textSecondary, fontSize: 24, marginTop: -2 },
