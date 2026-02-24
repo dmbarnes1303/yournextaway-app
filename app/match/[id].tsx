@@ -52,6 +52,8 @@ import type { TicketDifficulty } from "@/src/data/ticketGuides/types";
 import { getMatchdayLogistics } from "@/src/data/matchdayLogistics";
 import type { LogisticsStop } from "@/src/data/matchdayLogistics/types";
 
+import { getStadiumByHomeTeam } from "@/src/data/stadiums";
+
 /* -------------------------------------------------------------------------- */
 /* helpers */
 /* -------------------------------------------------------------------------- */
@@ -553,6 +555,22 @@ export default function MatchDetailScreen() {
     return [v, c].filter(Boolean).join(" • ");
   }, [venue, city, logistics?.stadium, logistics?.city]);
 
+  // Stadium registry lookup (single source of truth)
+  const stadium = useMemo(() => getStadiumByHomeTeam(home), [home]);
+
+  const stadiumHeader = useMemo(() => {
+    const name = stadium?.stadiumName || venue || "Stadium";
+    const c = stadium?.city || city || "";
+    return [name, c].filter(Boolean).join(" • ");
+  }, [stadium, venue, city]);
+
+  const stadiumMapsQuery = useMemo(() => {
+    const name = stadium?.stadiumName || venue;
+    const c = stadium?.city || city;
+    const a = stadium?.address;
+    return [name, a, c].filter(Boolean).join(" ").trim() || venueQuery || "";
+  }, [stadium, venue, city, venueQuery]);
+
   const onPlanTrip = useCallback(() => {
     if (!fixtureId) return;
 
@@ -587,7 +605,7 @@ export default function MatchDetailScreen() {
       : kickoffDisplay
       ? `Kickoff: ${kickoffDisplay}`
       : "Kickoff: —";
-    const where = place ? `Venue: ${place}` : "Venue: —";
+    const where = place ? `Venue: ${place}` : stadium?.stadiumName ? `Venue: ${stadium.stadiumName}` : "Venue: —";
     const meta = `League: ${leagueName} • Season: ${String(effectiveSeason)}`;
 
     const stabilityLine = `Trip stability: ${tripStability.toUpperCase()}\n`;
@@ -597,10 +615,13 @@ export default function MatchDetailScreen() {
       ? `Home tickets (Sportsevents365 match page): ${se365PrimaryUrl}\n`
       : `Home tickets (Sportsevents365 search): ${se365PrimaryUrl}\nPaste in search: ${matchQuery}\n`;
 
+    const stadiumLine = stadium?.officialInfoUrl ? `Stadium info: ${stadium.officialInfoUrl}\n` : "";
+
     const message =
       `${title}\n${when}\n${where}\n${meta}\n\n` +
       stabilityLine +
       guideLine +
+      stadiumLine +
       seLine +
       (officialHomeTicketsUrl ? `Official home tickets: ${officialHomeTicketsUrl}\n` : "") +
       `Maps: ${mapsUrl}`;
@@ -625,6 +646,7 @@ export default function MatchDetailScreen() {
     mapsUrl,
     ticketGuide,
     tripStability,
+    stadium,
   ]);
 
   const onToggleFollow = useCallback(() => {
@@ -730,7 +752,7 @@ export default function MatchDetailScreen() {
     if (!se365EventId) {
       Alert.alert(
         "Sportsevents365 search",
-        `If it doesn’t land on the exact match, use search and paste:\n\n${matchQuery}\n\nTip: buy host-club tickets / home sections where applicable.`
+        `If it doesn’t land on the exact match, use search and paste:\n\n${matchQuery}\n`
       );
     }
 
@@ -828,6 +850,20 @@ export default function MatchDetailScreen() {
     },
     [router, fixtureId, effectiveLeagueId, effectiveSeason, fromIso, toIso]
   );
+
+  const onOpenStadiumMaps = useCallback(async () => {
+    const q = stadiumMapsQuery || [venue, city].filter(Boolean).join(" ").trim();
+    if (!q) return safeOpenUrl(mapsUrl);
+    await openMapsPreferNative(q);
+  }, [stadiumMapsQuery, venue, city, mapsUrl]);
+
+  const onOpenOfficialStadiumInfo = useCallback(async () => {
+    if (stadium?.officialInfoUrl) {
+      await safeOpenUrl(stadium.officialInfoUrl);
+      return;
+    }
+    await safeOpenUrl(stadiumInfoUrl);
+  }, [stadium?.officialInfoUrl, stadiumInfoUrl]);
 
   return (
     <Background imageSource={getBackground("fixtures")} overlayOpacity={0.86}>
@@ -930,6 +966,81 @@ export default function MatchDetailScreen() {
                     <Text style={styles.metaLabel}>Season: </Text>
                     {String(effectiveSeason)}
                   </Text>
+                </View>
+
+                {/* STADIUM DETAILS (real data, not a google punt) */}
+                <View style={styles.stadiumBox}>
+                  <View style={styles.stadiumHeaderRow}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.stadiumTitle}>Stadium details</Text>
+                      <Text style={styles.stadiumSub} numberOfLines={2}>
+                        {stadiumHeader}
+                      </Text>
+                    </View>
+
+                    <Pressable onPress={onOpenStadiumMaps} style={styles.stadiumPill}>
+                      <Text style={styles.stadiumPillText}>Maps</Text>
+                    </Pressable>
+                  </View>
+
+                  {stadium?.capacity ? (
+                    <Text style={styles.stadiumLine}>
+                      <Text style={styles.metaLabel}>Capacity: </Text>
+                      {stadium.capacity.toLocaleString("en-GB")}
+                    </Text>
+                  ) : null}
+
+                  {stadium?.address ? (
+                    <Text style={styles.stadiumLine} numberOfLines={2}>
+                      <Text style={styles.metaLabel}>Address: </Text>
+                      {stadium.address}
+                    </Text>
+                  ) : null}
+
+                  {stadium?.transit?.length ? (
+                    <View style={{ marginTop: 10, gap: 6 }}>
+                      <Text style={styles.stadiumMiniTitle}>Best transport anchors</Text>
+                      {stadium.transit.slice(0, 4).map((t, idx) => {
+                        const mins = typeof t.minutes === "number" ? ` • ~${t.minutes} min` : "";
+                        const note = t.note ? ` • ${t.note}` : "";
+                        return (
+                          <Text key={`${t.label}-${idx}`} style={styles.stadiumBullet}>
+                            • {t.label}{mins}{note}
+                          </Text>
+                        );
+                      })}
+                    </View>
+                  ) : null}
+
+                  {stadium?.stayAreas?.length ? (
+                    <View style={{ marginTop: 10, gap: 8 }}>
+                      <Text style={styles.stadiumMiniTitle}>Suggested stay areas</Text>
+                      <View style={styles.areaRow}>
+                        {stadium.stayAreas.slice(0, 4).map((a, idx) => (
+                          <Pressable key={`${a.area}-${idx}`} onPress={() => onSelectStayArea(a.area)} style={styles.areaPill}>
+                            <Text style={styles.areaPillText}>{a.area}</Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                      <Text style={styles.stadiumHint}>Tap an area to pre-fill Trip Build.</Text>
+                    </View>
+                  ) : null}
+
+                  {stadium?.tips?.length ? (
+                    <View style={{ marginTop: 10, gap: 6 }}>
+                      {stadium.tips.slice(0, 3).map((tip, idx) => (
+                        <Text key={`tip-${idx}`} style={styles.stadiumTip}>
+                          • {tip}
+                        </Text>
+                      ))}
+                    </View>
+                  ) : null}
+
+                  <View style={styles.stadiumBtnRow}>
+                    <Pressable onPress={onOpenOfficialStadiumInfo} style={[styles.smallBtn, styles.smallBtnWide]}>
+                      <Text style={styles.smallBtnText}>{stadium?.officialInfoUrl ? "Official stadium info" : "Stadium info"}</Text>
+                    </Pressable>
+                  </View>
                 </View>
 
                 {tbc ? (
@@ -1044,14 +1155,7 @@ export default function MatchDetailScreen() {
                     <Text style={styles.bigSub}>{homeTicketsSub}</Text>
                   </Pressable>
 
-                  <Pressable
-                    onPress={async () => {
-                      const q = venueQuery || [venue, city].filter(Boolean).join(" ").trim();
-                      if (!q) return safeOpenUrl(mapsUrl);
-                      await openMapsPreferNative(q);
-                    }}
-                    style={[styles.bigBtn, styles.bigBtnSecondary]}
-                  >
+                  <Pressable onPress={onOpenStadiumMaps} style={[styles.bigBtn, styles.bigBtnSecondary]}>
                     <Text style={styles.bigKicker}>Directions</Text>
                     <Text style={styles.bigTitle}>Open maps</Text>
                     <Text style={styles.bigSub}>{directionsSub}</Text>
@@ -1075,8 +1179,8 @@ export default function MatchDetailScreen() {
                     <Text style={styles.smallBtnText}>Open Fixtures</Text>
                   </Pressable>
 
-                  <Pressable onPress={() => safeOpenUrl(stadiumInfoUrl)} style={styles.smallBtn}>
-                    <Text style={styles.smallBtnText}>Stadium info</Text>
+                  <Pressable onPress={onOpenOfficialStadiumInfo} style={styles.smallBtn}>
+                    <Text style={styles.smallBtnText}>{stadium?.officialInfoUrl ? "Official stadium info" : "Stadium info"}</Text>
                   </Pressable>
                 </View>
 
@@ -1147,8 +1251,8 @@ export default function MatchDetailScreen() {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Styles */
-/* -------------------------------------------------------------------------- */
+/* Styles
+ * -------------------------------------------------------------------------- */
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
@@ -1214,6 +1318,47 @@ const styles = StyleSheet.create({
   metaLine: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18, fontWeight: "700" },
   metaLabel: { color: theme.colors.text, fontWeight: "900" },
   metaSecondary: { color: theme.colors.textTertiary, fontSize: 12, fontWeight: "800" },
+
+  /* Stadium box */
+  stadiumBox: {
+    marginTop: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+    padding: 12,
+  },
+  stadiumHeaderRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  stadiumTitle: { color: theme.colors.text, fontWeight: "900", fontSize: 13 },
+  stadiumSub: { marginTop: 6, color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12, lineHeight: 16 },
+  stadiumLine: { marginTop: 8, color: theme.colors.textSecondary, fontWeight: "700", fontSize: 12, lineHeight: 16 },
+  stadiumMiniTitle: { color: theme.colors.text, fontWeight: "900", fontSize: 12 },
+  stadiumBullet: { color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12, lineHeight: 16 },
+  stadiumTip: { color: theme.colors.textSecondary, fontWeight: "700", fontSize: 12, lineHeight: 16 },
+  stadiumHint: { marginTop: 6, color: theme.colors.textTertiary, fontWeight: "900", fontSize: 11 },
+
+  stadiumPill: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    backgroundColor: "rgba(0,0,0,0.16)",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  stadiumPillText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: 12 },
+
+  areaRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  areaPill: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(79,224,138,0.22)",
+    backgroundColor: "rgba(79,224,138,0.08)",
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+  },
+  areaPillText: { color: theme.colors.text, fontWeight: "900", fontSize: 12 },
+
+  stadiumBtnRow: { marginTop: 10, flexDirection: "row", gap: 10 },
 
   planningBox: {
     marginTop: 12,
@@ -1337,6 +1482,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.22)",
     alignItems: "center",
   },
+  smallBtnWide: { flex: 1 },
   smallBtnText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.xs },
 
   smallPrint: { marginTop: 8, color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: "700" },
