@@ -44,16 +44,11 @@ import { getFixtureCertainty } from "@/src/utils/fixtureCertainty";
 // dev-only IATA detection
 import { getIataCityCodeForCity, debugCityKey } from "@/src/data/iataCityCodes";
 
-// matchday logistics
+// matchday logistics (areas + stadium metadata)
 import { getMatchdayLogistics, buildLogisticsSnippet } from "@/src/data/matchdayLogistics";
 
-// stadium proximity (distance + time)
-// NOTE: these files exist in your repo (per your log). This screen uses them.
-// If your export name differs, adjust the export in that file (not here).
-import { getStadiumProximity } from "@/src/utils/stadiumProximity";
-
 /* -------------------------------------------------------------------------- */
-/* helpers */
+/* small helpers */
 /* -------------------------------------------------------------------------- */
 
 function coerceId(v: unknown): string | null {
@@ -67,6 +62,15 @@ function isNumericId(v: unknown): v is string {
   const s = v.trim();
   if (!s) return false;
   return /^[0-9]+$/.test(s);
+}
+
+function defer(fn: () => void) {
+  setTimeout(fn, 60);
+}
+
+function cleanUpper3(v: unknown, fallback: string) {
+  const s = String(v ?? "").trim().toUpperCase();
+  return /^[A-Z]{3}$/.test(s) ? s : fallback;
 }
 
 function summaryLine(t: Trip) {
@@ -97,6 +101,13 @@ function noteTitleFromText(text: string) {
   if (!t) return "Note";
   const firstLine = t.split("\n")[0]?.trim() || "";
   return firstLine.length > 42 ? firstLine.slice(0, 42).trim() + "…" : firstLine;
+}
+
+function statusLabel(s: SavedItem["status"]) {
+  if (s === "pending") return "Pending";
+  if (s === "saved") return "Saved";
+  if (s === "booked") return "Booked";
+  return "Archived";
 }
 
 function safePartnerName(item: SavedItem) {
@@ -139,22 +150,6 @@ function buildMetaLine(item: SavedItem) {
   }
 
   return bits.join(" • ");
-}
-
-function defer(fn: () => void) {
-  setTimeout(fn, 60);
-}
-
-function statusLabel(s: SavedItem["status"]) {
-  if (s === "pending") return "Pending";
-  if (s === "saved") return "Saved";
-  if (s === "booked") return "Booked";
-  return "Archived";
-}
-
-function cleanUpper3(v: unknown, fallback: string) {
-  const s = String(v ?? "").trim().toUpperCase();
-  return /^[A-Z]{3}$/.test(s) ? s : fallback;
 }
 
 function initials(name: string) {
@@ -237,9 +232,21 @@ function titleCaseCity(s: string) {
     .join(" ");
 }
 
+/** Google Maps links */
 function buildMapsSearchUrl(query: string) {
   const q = encodeURIComponent(String(query ?? "").trim());
   return `https://www.google.com/maps/search/?api=1&query=${q}`;
+}
+
+function buildMapsDirectionsUrl(
+  origin: string,
+  destination: string,
+  mode: "transit" | "walking" | "driving" = "transit"
+) {
+  const o = encodeURIComponent(String(origin ?? "").trim());
+  const d = encodeURIComponent(String(destination ?? "").trim());
+  const m = encodeURIComponent(mode);
+  return `https://www.google.com/maps/dir/?api=1&origin=${o}&destination=${d}&travelmode=${m}`;
 }
 
 function isLateKickoff(kickoffIso?: string | null): boolean {
@@ -250,21 +257,6 @@ function isLateKickoff(kickoffIso?: string | null): boolean {
   const h = d.getHours();
   const m = d.getMinutes();
   return h > 20 || (h === 20 && m >= 30);
-}
-
-function fmtKm(km?: number | null) {
-  if (km == null || !Number.isFinite(km)) return "—";
-  if (km < 1) return `${Math.round(km * 1000)} m`;
-  return `${km.toFixed(km < 10 ? 1 : 0)} km`;
-}
-
-function fmtMins(mins?: number | null) {
-  if (mins == null || !Number.isFinite(mins)) return "—";
-  const m = Math.max(0, Math.round(mins));
-  if (m < 60) return `${m} min`;
-  const h = Math.floor(m / 60);
-  const r = m % 60;
-  return r ? `${h}h ${r}m` : `${h}h`;
 }
 
 function Pill({ label, kind }: { label: string; kind: "best" | "budget" }) {
@@ -346,7 +338,7 @@ export default function TripDetailScreen() {
     return () => unsub();
   }, [tripId]);
 
-  /* ---------------- load preferences (origin IATA) ---------------- */
+  /* ---------------- load preferences ---------------- */
 
   useEffect(() => {
     let mounted = true;
@@ -373,7 +365,7 @@ export default function TripDetailScreen() {
     };
   }, []);
 
-  /* ---------------- load fixtures (enrichment only) ---------------- */
+  /* ---------------- fixtures enrichment ---------------- */
 
   useEffect(() => {
     let cancelled = false;
@@ -455,7 +447,7 @@ export default function TripDetailScreen() {
 
   const numericMatchIds = useMemo(() => matchIds.filter(isNumericId), [matchIds]);
 
-  /* ---------------- primary match / logistics / proximity ---------------- */
+  /* ---------------- primary match logistics ---------------- */
 
   const primaryMatchId = useMemo(() => numericMatchIds[0] ?? null, [numericMatchIds]);
 
@@ -490,7 +482,17 @@ export default function TripDetailScreen() {
     return primaryLogistics ? buildLogisticsSnippet(primaryLogistics) : "";
   }, [primaryLogistics]);
 
-  // Areas / stops / tips
+  const stadiumName = useMemo(() => String(primaryLogistics?.stadium ?? "").trim(), [primaryLogistics]);
+  const stadiumCity = useMemo(
+    () => String(primaryLogistics?.city ?? cityName ?? "").trim(),
+    [primaryLogistics, cityName]
+  );
+
+  const stadiumMapsUrl = useMemo(() => {
+    const q = [stadiumName || "stadium", stadiumCity].filter(Boolean).join(" ").trim();
+    return buildMapsSearchUrl(q);
+  }, [stadiumName, stadiumCity]);
+
   const stayBestAreas = useMemo(() => {
     const arr = Array.isArray(primaryLogistics?.stay?.bestAreas) ? primaryLogistics!.stay!.bestAreas : [];
     return arr
@@ -536,45 +538,7 @@ export default function TripDetailScreen() {
     return "";
   }, [primaryLogistics, primaryKickoffIso]);
 
-  // Stadium identity
-  const stadiumName = useMemo(() => String(primaryLogistics?.stadium ?? "").trim(), [primaryLogistics]);
-  const stadiumCity = useMemo(() => String(primaryLogistics?.city ?? cityName ?? "").trim(), [primaryLogistics, cityName]);
-
-  const stadiumMapsUrl = useMemo(() => {
-    const q = [stadiumName || "stadium", stadiumCity].filter(Boolean).join(" ").trim();
-    return buildMapsSearchUrl(q);
-  }, [stadiumName, stadiumCity]);
-
-  // Proximity (distance + travel time)
-  const stadiumProximity = useMemo(() => {
-    // getStadiumProximity should be tolerant (return null) if coords are missing.
-    // Expected (recommended) shape:
-    // { distanceKm?: number; walkMinutes?: number; transitMinutes?: number; source?: "stadium_coords"|"fallback" }
-    try {
-      return getStadiumProximity({
-        homeTeamName: primaryHomeName,
-        leagueName: primaryLeagueName,
-        cityName: stadiumCity || cityName,
-      }) as any;
-    } catch {
-      return null;
-    }
-  }, [primaryHomeName, primaryLeagueName, stadiumCity, cityName]);
-
-  const distanceLine = useMemo(() => {
-    const km = stadiumProximity?.distanceKm ?? stadiumProximity?.km ?? null;
-    const walk = stadiumProximity?.walkMinutes ?? stadiumProximity?.walkMins ?? null;
-    const transit = stadiumProximity?.transitMinutes ?? stadiumProximity?.transitMins ?? null;
-
-    const bits: string[] = [];
-    if (km != null) bits.push(`Distance: ${fmtKm(km)}`);
-    if (transit != null) bits.push(`Transit: ${fmtMins(transit)}`);
-    if (walk != null) bits.push(`Walk: ${fmtMins(walk)}`);
-
-    return bits.join(" • ");
-  }, [stadiumProximity]);
-
-  /* ---------------- dev-only IATA missing mapping warn ---------------- */
+  /* ---------------- dev-only IATA warning ---------------- */
 
   useEffect(() => {
     // @ts-ignore
@@ -601,7 +565,9 @@ export default function TripDetailScreen() {
     );
   }, [cityName, devWarnedCityKey]);
 
-  /* ---------------- navigation ---------------- */
+  /* -------------------------------------------------------------------------- */
+  /* navigation + link openers */
+/* -------------------------------------------------------------------------- */
 
   function onEditTrip() {
     if (!trip) return;
@@ -633,10 +599,6 @@ export default function TripDetailScreen() {
       },
     } as any);
   }
-
-  /* -------------------------------------------------------------------------- */
-  /* OPEN FLOW */
-  /* -------------------------------------------------------------------------- */
 
   async function openUntracked(url?: string) {
     if (!url) return;
@@ -679,8 +641,8 @@ export default function TripDetailScreen() {
   }
 
   /* -------------------------------------------------------------------------- */
-  /* workspace actions */
-  /* -------------------------------------------------------------------------- */
+  /* saved item actions */
+/* -------------------------------------------------------------------------- */
 
   async function openSavedItem(item: SavedItem) {
     if (!item.partnerUrl) {
@@ -839,6 +801,8 @@ export default function TripDetailScreen() {
   }
 
   /* -------------------------------------------------------------------------- */
+  /* render */
+/* -------------------------------------------------------------------------- */
 
   const loading = Boolean(tripId && (!tripsLoaded || !savedLoaded));
   const showHeroBanners = pending.length > 0 || saved.length > 0 || booked.length > 0;
@@ -993,6 +957,7 @@ export default function TripDetailScreen() {
                                 {meta1}
                               </Text>
                             ) : null}
+
                             {meta2 ? (
                               <Text style={styles.matchMeta} numberOfLines={1}>
                                 {meta2}
@@ -1021,9 +986,9 @@ export default function TripDetailScreen() {
                 {fxLoading ? <Text style={styles.mutedInline}>Loading match details…</Text> : null}
               </GlassCard>
 
-              {/* STAY (stadium proximity guidance) */}
+              {/* STAY (Option 1: honest, no fake proximity) */}
               <GlassCard style={styles.card}>
-                <Text style={styles.sectionTitle}>Stay (near the stadium)</Text>
+                <Text style={styles.sectionTitle}>Stay guidance (stadium + best areas)</Text>
 
                 {!primaryLogistics ? (
                   <EmptyState
@@ -1039,43 +1004,29 @@ export default function TripDetailScreen() {
                       </Text>
 
                       <Text style={styles.proxBody}>
-                        {primaryLogisticsSnippet || "Stadium-area stay guidance available."}
+                        {primaryLogisticsSnippet ||
+                          "Use the areas below as a shortlist. Tap Transit/Walk for real routes in Google Maps."}
                       </Text>
-
-                      {/* Distance + travel time */}
-                      <View style={styles.proxStatsRow}>
-                        <View style={styles.statChip}>
-                          <Text style={styles.statLabel}>Distance</Text>
-                          <Text style={styles.statValue}>
-                            {fmtKm(stadiumProximity?.distanceKm ?? stadiumProximity?.km ?? null)}
-                          </Text>
-                        </View>
-                        <View style={styles.statChip}>
-                          <Text style={styles.statLabel}>Transit</Text>
-                          <Text style={styles.statValue}>
-                            {fmtMins(stadiumProximity?.transitMinutes ?? stadiumProximity?.transitMins ?? null)}
-                          </Text>
-                        </View>
-                        <View style={styles.statChip}>
-                          <Text style={styles.statLabel}>Walk</Text>
-                          <Text style={styles.statValue}>
-                            {fmtMins(stadiumProximity?.walkMinutes ?? stadiumProximity?.walkMins ?? null)}
-                          </Text>
-                        </View>
-                      </View>
-
-                      {distanceLine ? <Text style={styles.proxMuted}>{distanceLine}</Text> : null}
 
                       <Pressable onPress={() => openUntracked(stadiumMapsUrl)} style={styles.proxBtn}>
                         <Text style={styles.proxBtnText}>Open stadium in maps</Text>
                       </Pressable>
+
+                      <Text style={styles.proxMuted}>
+                        Note: distance/time depends on your exact hotel. Use Transit/Walk for real routes.
+                      </Text>
                     </View>
 
                     {stayBestAreas.length > 0 ? (
                       <View style={{ gap: 6 }}>
                         <Text style={styles.stayLabel}>Best areas</Text>
+
                         {stayBestAreas.slice(0, 3).map((x, idx) => {
-                          const q = [x.area, stadiumCity].filter(Boolean).join(" ").trim();
+                          const stadiumQ = [stadiumName || "stadium", stadiumCity].filter(Boolean).join(" ").trim();
+                          const areaQ = [x.area, stadiumCity].filter(Boolean).join(" ").trim();
+                          const origin = areaQ || x.area;
+                          const dest = stadiumQ || stadiumName || "stadium";
+
                           return (
                             <View key={`best-${idx}`} style={styles.areaRow}>
                               <View style={{ flex: 1 }}>
@@ -1089,8 +1040,22 @@ export default function TripDetailScreen() {
                               </View>
 
                               <View style={styles.areaBtns}>
-                                <Pressable onPress={() => openUntracked(buildMapsSearchUrl(q || x.area))} style={styles.smallBtn}>
+                                <Pressable onPress={() => openUntracked(buildMapsSearchUrl(origin))} style={styles.smallBtn}>
                                   <Text style={styles.smallBtnText}>Maps</Text>
+                                </Pressable>
+
+                                <Pressable
+                                  onPress={() => openUntracked(buildMapsDirectionsUrl(origin, dest, "transit"))}
+                                  style={styles.smallBtn}
+                                >
+                                  <Text style={styles.smallBtnText}>Transit</Text>
+                                </Pressable>
+
+                                <Pressable
+                                  onPress={() => openUntracked(buildMapsDirectionsUrl(origin, dest, "walking"))}
+                                  style={styles.smallBtn}
+                                >
+                                  <Text style={styles.smallBtnText}>Walk</Text>
                                 </Pressable>
                               </View>
                             </View>
@@ -1102,8 +1067,13 @@ export default function TripDetailScreen() {
                     {stayBudgetAreas.length > 0 ? (
                       <View style={{ gap: 6, marginTop: 6 }}>
                         <Text style={styles.stayLabel}>Budget-friendly</Text>
+
                         {stayBudgetAreas.slice(0, 2).map((x, idx) => {
-                          const q = [x.area, stadiumCity].filter(Boolean).join(" ").trim();
+                          const stadiumQ = [stadiumName || "stadium", stadiumCity].filter(Boolean).join(" ").trim();
+                          const areaQ = [x.area, stadiumCity].filter(Boolean).join(" ").trim();
+                          const origin = areaQ || x.area;
+                          const dest = stadiumQ || stadiumName || "stadium";
+
                           return (
                             <View key={`budget-${idx}`} style={styles.areaRow}>
                               <View style={{ flex: 1 }}>
@@ -1117,8 +1087,22 @@ export default function TripDetailScreen() {
                               </View>
 
                               <View style={styles.areaBtns}>
-                                <Pressable onPress={() => openUntracked(buildMapsSearchUrl(q || x.area))} style={styles.smallBtn}>
+                                <Pressable onPress={() => openUntracked(buildMapsSearchUrl(origin))} style={styles.smallBtn}>
                                   <Text style={styles.smallBtnText}>Maps</Text>
+                                </Pressable>
+
+                                <Pressable
+                                  onPress={() => openUntracked(buildMapsDirectionsUrl(origin, dest, "transit"))}
+                                  style={styles.smallBtn}
+                                >
+                                  <Text style={styles.smallBtnText}>Transit</Text>
+                                </Pressable>
+
+                                <Pressable
+                                  onPress={() => openUntracked(buildMapsDirectionsUrl(origin, dest, "walking"))}
+                                  style={styles.smallBtn}
+                                >
+                                  <Text style={styles.smallBtnText}>Walk</Text>
                                 </Pressable>
                               </View>
                             </View>
@@ -1621,7 +1605,7 @@ const styles = StyleSheet.create({
 
   crestFallback: { color: theme.colors.textSecondary, fontWeight: "900" },
 
-  /* Stay proximity */
+  /* Stay guidance */
   proxBox: {
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
@@ -1633,21 +1617,6 @@ const styles = StyleSheet.create({
   proxCity: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: 12 },
   proxBody: { marginTop: 8, color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12, lineHeight: 16 },
   proxMuted: { marginTop: 8, color: theme.colors.textTertiary, fontWeight: "900", fontSize: 11, lineHeight: 14 },
-
-  proxStatsRow: { marginTop: 10, flexDirection: "row", gap: 10 },
-  statChip: {
-    flex: 1,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.16)",
-    paddingVertical: 10,
-    paddingHorizontal: 10,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  statLabel: { color: theme.colors.textTertiary, fontWeight: "900", fontSize: 11 },
-  statValue: { marginTop: 6, color: theme.colors.text, fontWeight: "900", fontSize: 12 },
 
   proxBtn: {
     marginTop: 10,
