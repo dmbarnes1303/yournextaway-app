@@ -44,6 +44,9 @@ import { getIataCityCodeForCity, debugCityKey } from "@/src/data/iataCityCodes";
 // matchday logistics
 import { getMatchdayLogistics, buildLogisticsSnippet } from "@/src/data/matchdayLogistics";
 
+// stadium registry
+import { getStadiumByHomeTeam } from "@/src/data/stadiums";
+
 /* -------------------------------------------------------------------------- */
 /* helpers */
 /* -------------------------------------------------------------------------- */
@@ -215,7 +218,6 @@ function formatKickoffMeta(row?: FixtureListRow | null, trip?: Trip | null): { l
 function titleCaseCity(s: string) {
   const v = String(s ?? "").trim();
   if (!v) return "Trip";
-  // If it's a slug, make it readable
   const looksSlug = v.includes("-") && v === v.toLowerCase();
   const base = looksSlug ? v.replace(/-/g, " ") : v;
   return base
@@ -223,6 +225,26 @@ function titleCaseCity(s: string) {
     .filter(Boolean)
     .map((w) => w[0]?.toUpperCase() + w.slice(1))
     .join(" ");
+}
+
+function buildStadiumSnippet(args: {
+  homeTeamName?: string;
+  fallbackVenue?: string;
+  fallbackCity?: string;
+}) {
+  const home = String(args.homeTeamName ?? "").trim();
+  const venue = String(args.fallbackVenue ?? "").trim();
+  const city = String(args.fallbackCity ?? "").trim();
+
+  const stadium = getStadiumByHomeTeam(home);
+  const name = String(stadium?.stadiumName ?? venue).trim();
+  const c = String(stadium?.city ?? city).trim();
+
+  if (name && c) return `Stadium: ${name} • ${c}`;
+  if (name) return `Stadium: ${name}`;
+  if (venue && city) return `Stadium: ${venue} • ${city}`;
+  if (venue) return `Stadium: ${venue}`;
+  return "";
 }
 
 /* -------------------------------------------------------------------------- */
@@ -439,7 +461,6 @@ export default function TripDetailScreen() {
   }
 
   function onViewWallet() {
-    // IMPORTANT: wallet is a tab route
     router.push("/(tabs)/wallet" as any);
   }
 
@@ -589,14 +610,10 @@ export default function TripDetailScreen() {
   }
 
   function confirmMarkBooked(item: SavedItem) {
-    Alert.alert(
-      "Mark as booked?",
-      "Only do this if you completed the booking and want it in Wallet.",
-      [
-        { text: "Cancel", style: "cancel" },
-        { text: "Mark booked", style: "default", onPress: () => markBookedSmart(item) },
-      ]
-    );
+    Alert.alert("Mark as booked?", "Only do this if you completed the booking and want it in Wallet.", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Mark booked", style: "default", onPress: () => markBookedSmart(item) },
+    ]);
   }
 
   function confirmMoveToPending(item: SavedItem) {
@@ -793,8 +810,14 @@ export default function TripDetailScreen() {
                       const homeName = String(r?.teams?.home?.name ?? (trip as any)?.homeName ?? "Home");
                       const awayName = String(r?.teams?.away?.name ?? (trip as any)?.awayName ?? "Away");
 
-                      const logistics = getMatchdayLogistics(homeName);
+                      const logistics = getMatchdayLogistics(homeName as any);
                       const logisticsLine = logistics ? buildLogisticsSnippet(logistics) : "";
+
+                      const stadiumLine = buildStadiumSnippet({
+                        homeTeamName: homeName,
+                        fallbackVenue: venue,
+                        fallbackCity: city,
+                      });
 
                       return (
                         <Pressable key={mid} onPress={() => openMatch(mid)} style={styles.matchRow}>
@@ -821,7 +844,12 @@ export default function TripDetailScreen() {
                                 {meta1}
                               </Text>
                             ) : null}
-                            {meta2 ? (
+
+                            {stadiumLine ? (
+                              <Text style={styles.stadiumMeta} numberOfLines={1}>
+                                {stadiumLine}
+                              </Text>
+                            ) : meta2 ? (
                               <Text style={styles.matchMeta} numberOfLines={1}>
                                 {meta2}
                               </Text>
@@ -1287,6 +1315,14 @@ const styles = StyleSheet.create({
     marginTop: 4,
     color: theme.colors.textSecondary,
     fontWeight: "800",
+    fontSize: 12,
+    lineHeight: 16,
+  },
+
+  stadiumMeta: {
+    marginTop: 6,
+    color: theme.colors.textSecondary,
+    fontWeight: "900",
     fontSize: 12,
     lineHeight: 16,
   },
