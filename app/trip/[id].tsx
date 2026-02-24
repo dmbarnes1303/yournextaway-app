@@ -44,9 +44,6 @@ import { getIataCityCodeForCity, debugCityKey } from "@/src/data/iataCityCodes";
 // matchday logistics
 import { getMatchdayLogistics, buildLogisticsSnippet } from "@/src/data/matchdayLogistics";
 
-// stadium registry
-import { getStadiumByHomeTeam } from "@/src/data/stadiums";
-
 /* -------------------------------------------------------------------------- */
 /* helpers */
 /* -------------------------------------------------------------------------- */
@@ -218,6 +215,7 @@ function formatKickoffMeta(row?: FixtureListRow | null, trip?: Trip | null): { l
 function titleCaseCity(s: string) {
   const v = String(s ?? "").trim();
   if (!v) return "Trip";
+  // If it's a slug, make it readable
   const looksSlug = v.includes("-") && v === v.toLowerCase();
   const base = looksSlug ? v.replace(/-/g, " ") : v;
   return base
@@ -227,24 +225,79 @@ function titleCaseCity(s: string) {
     .join(" ");
 }
 
-function buildStadiumSnippet(args: {
-  homeTeamName?: string;
-  fallbackVenue?: string;
-  fallbackCity?: string;
-}) {
-  const home = String(args.homeTeamName ?? "").trim();
-  const venue = String(args.fallbackVenue ?? "").trim();
-  const city = String(args.fallbackCity ?? "").trim();
+/* -------------------------------------------------------------------------- */
+/* Stadium proximity helpers (defensive: supports multiple data shapes) */
+/* -------------------------------------------------------------------------- */
 
-  const stadium = getStadiumByHomeTeam(home);
-  const name = String(stadium?.stadiumName ?? venue).trim();
-  const c = String(stadium?.city ?? city).trim();
+function areaLabel(areaType?: unknown): string {
+  const a = String(areaType ?? "").trim().toLowerCase();
+  if (!a) return "Area";
+  if (a.includes("stadium")) return "Stadium district";
+  if (a.includes("centre") || a.includes("center") || a.includes("downtown")) return "City centre";
+  if (a.includes("residential")) return "Residential";
+  if (a.includes("business") || a.includes("financial")) return "Business district";
+  if (a.includes("airport")) return "Airport area";
+  if (a.includes("suburb")) return "Suburbs";
+  return a.replace(/(^|\s)\S/g, (m) => m.toUpperCase());
+}
 
-  if (name && c) return `Stadium: ${name} • ${c}`;
-  if (name) return `Stadium: ${name}`;
-  if (venue && city) return `Stadium: ${venue} • ${city}`;
-  if (venue) return `Stadium: ${venue}`;
-  return "";
+function minutesLabel(v?: unknown): string | null {
+  const n = typeof v === "number" ? v : Number(String(v ?? "").trim());
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return `${Math.round(n)} min`;
+}
+
+function distanceKmLabel(v?: unknown): string | null {
+  const n = typeof v === "number" ? v : Number(String(v ?? "").trim());
+  if (!Number.isFinite(n) || n <= 0) return null;
+  const rounded = Math.round(n * 10) / 10;
+  return `${rounded} km`;
+}
+
+function modeLabel(v?: unknown): string | null {
+  const s = String(v ?? "").trim().toLowerCase();
+  if (!s) return null;
+  if (s === "metro" || s === "subway") return "metro";
+  if (s === "train") return "train";
+  if (s === "tram") return "tram";
+  if (s === "bus") return "bus";
+  if (s === "walk" || s === "walking") return "walk";
+  if (s === "taxi") return "taxi";
+  if (s === "uber") return "taxi";
+  if (s === "drive" || s === "car") return "car";
+  return s;
+}
+
+function computeProximityFromLogistics(logistics: any): { line: string; risk?: "risky" | "ok" | "unknown" } | null {
+  if (!logistics) return null;
+
+  // Support multiple potential field names
+  const distanceKm = distanceKmLabel(logistics.distanceKm ?? logistics.distance_km ?? logistics.distance ?? null);
+  const minutes = minutesLabel(logistics.travelMinutes ?? logistics.travel_mins ?? logistics.minutes ?? null);
+  const mode = modeLabel(logistics.travelMode ?? logistics.mode ?? logistics.primaryMode ?? null);
+  const area = areaLabel(logistics.areaType ?? logistics.area_type ?? logistics.area ?? null);
+
+  const parts: string[] = [];
+  if (distanceKm) parts.push(distanceKm);
+
+  // Render: "12 min metro" if mode present, otherwise just "12 min"
+  if (minutes) parts.push(mode ? `${minutes} ${mode}` : minutes);
+
+  // Always show area if we have *any* proximity signal
+  const hasSignal = parts.length > 0 || Boolean(String(logistics.areaType ?? logistics.area ?? "").trim());
+  if (!hasSignal) return null;
+
+  parts.push(area);
+
+  const riskRaw = String(logistics.lateReturnRisk ?? logistics.late_return_risk ?? "").trim().toLowerCase();
+  const risk =
+    riskRaw === "risky" || riskRaw === "high"
+      ? ("risky" as const)
+      : riskRaw === "ok" || riskRaw === "low"
+      ? ("ok" as const)
+      : ("unknown" as const);
+
+  return { line: parts.join(" • "), risk };
 }
 
 /* -------------------------------------------------------------------------- */
@@ -414,10 +467,7 @@ export default function TripDetailScreen() {
   const saved = useMemo(() => savedItems.filter((x) => x.status === "saved" && x.type !== "note"), [savedItems]);
   const booked = useMemo(() => savedItems.filter((x) => x.status === "booked"), [savedItems]);
 
-  const notes = useMemo(
-    () => savedItems.filter((x) => x.type === "note" && x.status !== "archived"),
-    [savedItems]
-  );
+  const notes = useMemo(() => savedItems.filter((x) => x.type === "note" && x.status !== "archived"), [savedItems]);
 
   const matchIds = useMemo(() => {
     const raw = Array.isArray(trip?.matchIds) ? trip!.matchIds : [];
@@ -461,6 +511,7 @@ export default function TripDetailScreen() {
   }
 
   function onViewWallet() {
+    // IMPORTANT: wallet is a tab route
     router.push("/(tabs)/wallet" as any);
   }
 
@@ -810,14 +861,12 @@ export default function TripDetailScreen() {
                       const homeName = String(r?.teams?.home?.name ?? (trip as any)?.homeName ?? "Home");
                       const awayName = String(r?.teams?.away?.name ?? (trip as any)?.awayName ?? "Away");
 
-                      const logistics = getMatchdayLogistics(homeName as any);
+                      // Existing logistics snippet (your old line)
+                      const logistics = getMatchdayLogistics(homeName);
                       const logisticsLine = logistics ? buildLogisticsSnippet(logistics) : "";
 
-                      const stadiumLine = buildStadiumSnippet({
-                        homeTeamName: homeName,
-                        fallbackVenue: venue,
-                        fallbackCity: city,
-                      });
+                      // NEW: Proximity line (distance • minutes mode • area type)
+                      const proximity = computeProximityFromLogistics(logistics);
 
                       return (
                         <Pressable key={mid} onPress={() => openMatch(mid)} style={styles.matchRow}>
@@ -844,17 +893,27 @@ export default function TripDetailScreen() {
                                 {meta1}
                               </Text>
                             ) : null}
-
-                            {stadiumLine ? (
-                              <Text style={styles.stadiumMeta} numberOfLines={1}>
-                                {stadiumLine}
-                              </Text>
-                            ) : meta2 ? (
+                            {meta2 ? (
                               <Text style={styles.matchMeta} numberOfLines={1}>
                                 {meta2}
                               </Text>
                             ) : null}
 
+                            {/* NEW: Proximity line */}
+                            {proximity ? (
+                              <Text style={styles.proximityMeta} numberOfLines={1}>
+                                {proximity.line}
+                              </Text>
+                            ) : null}
+
+                            {/* Optional risk hint */}
+                            {proximity?.risk === "risky" ? (
+                              <Text style={styles.riskMeta} numberOfLines={1}>
+                                Check late transport
+                              </Text>
+                            ) : null}
+
+                            {/* Existing logistics snippet line (kept) */}
                             {logisticsLine ? (
                               <Text style={styles.logisticsMeta} numberOfLines={1}>
                                 {logisticsLine}
@@ -1319,9 +1378,19 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
 
-  stadiumMeta: {
-    marginTop: 6,
+  // NEW: Proximity line style
+  proximityMeta: {
+    marginTop: 4,
     color: theme.colors.textSecondary,
+    fontWeight: "800",
+    fontSize: 12,
+    lineHeight: 16,
+  },
+
+  // Optional: Risk hint
+  riskMeta: {
+    marginTop: 4,
+    color: "rgba(255,200,80,1)",
     fontWeight: "900",
     fontSize: 12,
     lineHeight: 16,
