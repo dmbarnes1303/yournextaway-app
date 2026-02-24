@@ -1,277 +1,193 @@
 // src/components/match/MatchdayLogisticsCard.tsx
 import React, { useMemo } from "react";
 import { View, Text, StyleSheet, Pressable } from "react-native";
-import { theme } from "@/src/constants/theme";
 import GlassCard from "@/src/components/GlassCard";
 import EmptyState from "@/src/components/EmptyState";
-import { buildLogisticsSnippet } from "@/src/data/matchdayLogistics";
-import { coerceLatLng, haversineKm, estimateTravelMinutes, formatKm, formatMinutes } from "@/src/utils/geo";
+import { theme } from "@/src/constants/theme";
 
-type Props = {
-  logistics: any | null;
-  city: string | null;
-  onOpenStop?: (query: string, stop?: any) => void;
+import { getStadiumCoordByClubName } from "@/src/data/stadiumCoords";
+import { haversineKm, estimateTravelTimeMinutes, formatKm, formatMins } from "@/src/utils/geo";
+
+import type { MatchdayLogistics } from "@/src/data/matchdayLogistics/types";
+import type { LogisticsStop } from "@/src/data/matchdayLogistics/types";
+
+/**
+ * NOTE:
+ * We don’t have coordinates for each “stay area” (e.g., Borough / Eixample).
+ * So Phase-1 proximity uses:
+ * - stadium coords (accurate)
+ * - “city center” proxy = stadium city unknown -> no calc
+ *
+ * If you later add city-center coords per city, we can upgrade this to:
+ * distance(stay area centroid -> stadium)
+ */
+
+export default function MatchdayLogisticsCard(props: {
+  logistics: MatchdayLogistics | null | undefined;
+  city?: string | null;
+  onOpenStop?: (query: string, stop?: LogisticsStop) => void;
   onSelectStayArea?: (area: string) => void;
+}) {
+  const { logistics, city, onOpenStop, onSelectStayArea } = props;
 
-  // Optional: if you pass kickoffIso we’ll show late-transport hint automatically
-  kickoffIso?: string | null;
-};
+  const stadiumName = String(logistics?.stadium ?? "").trim();
+  const clubName = String(logistics?.clubName ?? "").trim(); // optional if you store it
+  const league = String(logistics?.league ?? "").trim();
 
-function cleanText(v: unknown) {
-  return String(v ?? "").trim();
-}
+  // Best-effort: stadium coords from club name first, else try stadium name
+  const stadiumCoord = useMemo(() => {
+    const byClub = getStadiumCoordByClubName(clubName || logistics?.homeTeamName || null);
+    if (byClub) return { lat: byClub.lat, lng: byClub.lng, stadiumName: byClub.stadiumName ?? stadiumName };
 
-function isLateKickoff(kickoffIso?: string | null): boolean {
-  const iso = cleanText(kickoffIso);
-  if (!iso) return false;
-  const d = new Date(iso);
-  if (!Number.isFinite(d.getTime())) return false;
-  const h = d.getHours();
-  const m = d.getMinutes();
-  // treat 20:30+ as “late” (pragmatic)
-  return h > 20 || (h === 20 && m >= 30);
-}
+    // fallback: try using stadium string as “club name” key (works sometimes)
+    const byStadiumAsKey = getStadiumCoordByClubName(stadiumName);
+    if (byStadiumAsKey) return { lat: byStadiumAsKey.lat, lng: byStadiumAsKey.lng, stadiumName };
 
-function pillCfg(kind: "best" | "budget") {
-  if (kind === "best") {
-    return { label: "Best area", border: "rgba(0,255,136,0.35)", bg: "rgba(0,255,136,0.08)" };
-  }
-  return { label: "Budget", border: "rgba(255,200,80,0.40)", bg: "rgba(255,200,80,0.10)" };
-}
+    return null;
+  }, [clubName, logistics?.homeTeamName, stadiumName]);
 
-function Pill({ kind }: { kind: "best" | "budget" }) {
-  const c = pillCfg(kind);
-  return (
-    <View style={[styles.pill, { borderColor: c.border, backgroundColor: c.bg }]}>
-      <Text style={styles.pillText}>{c.label}</Text>
-    </View>
-  );
-}
+  // We cannot compute “distance to stadium” without a second point.
+  // For Phase-1 we use a heuristic: assume “city centre” is ~3.5km from stadium unless known.
+  // This is intentionally conservative and labeled as estimate.
+  const proximity = useMemo(() => {
+    if (!stadiumCoord) return null;
 
-export default function MatchdayLogisticsCard(props: Props) {
-  const { logistics, city, onOpenStop, onSelectStayArea, kickoffIso } = props;
+    // If you later add CITY_CENTER_COORDS, replace this section.
+    const assumedCityCentre = null as any;
 
-  const stadiumName = cleanText(logistics?.stadium) || "Stadium";
-  const logisticsCity = cleanText(logistics?.city) || cleanText(city) || "";
-
-  const snippet = useMemo(() => {
-    return logistics ? buildLogisticsSnippet(logistics) : "";
-  }, [logistics]);
-
-  const stadiumCoord = useMemo(() => coerceLatLng(logistics?.stadiumCoord ?? logistics?.stadiumCoords), [logistics]);
-  const centerCoord = useMemo(() => coerceLatLng(logistics?.cityCenterCoord ?? logistics?.cityCenterCoords), [logistics]);
-
-  const proximityLine = useMemo(() => {
-    if (!stadiumCoord || !centerCoord) return null;
-    const km = haversineKm(centerCoord, stadiumCoord);
-    const t = estimateTravelMinutes(km);
-    return `${formatKm(km)} • ~${formatMinutes(t.minutes)} (${t.mode}) from city center`;
-  }, [stadiumCoord, centerCoord]);
-
-  const bestAreas: Array<{ area: string; notes?: string; coord?: any }> = useMemo(() => {
-    const arr = Array.isArray(logistics?.stay?.bestAreas) ? logistics.stay.bestAreas : [];
-    return arr
-      .map((x: any) => ({
-        area: cleanText(x?.area),
-        notes: cleanText(x?.notes) || undefined,
-        coord: x?.coord ?? x?.coords ?? null,
-      }))
-      .filter((x: any) => x.area);
-  }, [logistics]);
-
-  const budgetAreas: Array<{ area: string; notes?: string; coord?: any }> = useMemo(() => {
-    const arr = Array.isArray(logistics?.stay?.budgetAreas) ? logistics.stay.budgetAreas : [];
-    return arr
-      .map((x: any) => ({
-        area: cleanText(x?.area),
-        notes: cleanText(x?.notes) || undefined,
-        coord: x?.coord ?? x?.coords ?? null,
-      }))
-      .filter((x: any) => x.area);
-  }, [logistics]);
-
-  const stops: Array<{ name: string; notes?: string }> = useMemo(() => {
-    const arr = Array.isArray(logistics?.transport?.primaryStops) ? logistics.transport.primaryStops : [];
-    return arr
-      .map((s: any) => ({ name: cleanText(s?.name), notes: cleanText(s?.notes) || undefined }))
-      .filter((s: any) => s.name);
-  }, [logistics]);
-
-  const tips: string[] = useMemo(() => {
-    const arr = Array.isArray(logistics?.transport?.tips) ? logistics.transport.tips : [];
-    return arr.map((t: any) => cleanText(t)).filter(Boolean);
-  }, [logistics]);
-
-  const lateTransportNote = useMemo(() => {
-    const explicit = cleanText(logistics?.transport?.lateNightNote);
-    if (explicit) return explicit;
-    if (isLateKickoff(kickoffIso)) {
-      return "Late kickoff: check last trains/metros and pre-book a taxi/Uber fallback after the match.";
+    if (!assumedCityCentre) {
+      // fallback heuristic bucket only
+      return {
+        label: "Proximity estimate",
+        distanceKm: 3.5,
+        travel: estimateTravelTimeMinutes(3.5),
+        estimated: true,
+      };
     }
-    return "";
-  }, [logistics, kickoffIso]);
 
-  const stadiumQuery = useMemo(() => {
-    const bits = [stadiumName, logisticsCity].filter(Boolean).join(" ").trim();
-    return bits || stadiumName;
-  }, [stadiumName, logisticsCity]);
+    const km = haversineKm(assumedCityCentre, stadiumCoord);
+    return {
+      label: "City centre → stadium",
+      distanceKm: km,
+      travel: estimateTravelTimeMinutes(km),
+      estimated: false,
+    };
+  }, [stadiumCoord]);
 
-  function openStadium() {
-    if (!onOpenStop) return;
-    onOpenStop(stadiumQuery, { kind: "stadium" });
-  }
-
-  function openArea(area: string) {
-    if (!onOpenStop) return;
-    const q = [area, logisticsCity].filter(Boolean).join(" ").trim();
-    onOpenStop(q || area, { kind: "area", area });
-  }
+  const bestAreas = Array.isArray(logistics?.stay?.bestAreas) ? logistics!.stay!.bestAreas : [];
+  const budgetAreas = Array.isArray(logistics?.stay?.budgetAreas) ? logistics!.stay!.budgetAreas : [];
+  const stops = Array.isArray(logistics?.transport?.primaryStops) ? logistics!.transport!.primaryStops : [];
+  const tips = Array.isArray(logistics?.transport?.tips) ? logistics!.transport!.tips : [];
 
   if (!logistics) {
     return (
       <GlassCard style={styles.card}>
-        <Text style={styles.title}>Stadium proximity</Text>
-        <EmptyState
-          title="Not available"
-          message="We don’t have stadium-area logistics for this match yet."
-        />
+        <EmptyState title="Matchday logistics" message="No logistics guidance available for this match yet." />
       </GlassCard>
     );
   }
 
   return (
     <GlassCard style={styles.card}>
-      <Text style={styles.title}>Stadium proximity</Text>
+      <Text style={styles.h1}>Matchday logistics</Text>
 
-      <View style={styles.proxBox}>
-        <Text style={styles.proxHeadline} numberOfLines={2}>
-          {stadiumName}
-          {logisticsCity ? <Text style={styles.proxCity}> • {logisticsCity}</Text> : null}
-        </Text>
-
-        {snippet ? <Text style={styles.proxSnippet}>{snippet}</Text> : null}
-
-        {proximityLine ? (
-          <Text style={styles.proxLine}>{proximityLine}</Text>
-        ) : (
-          <Text style={styles.proxLineMuted}>
-            Open in maps to see live distance + travel time (we’ll show estimates once coords are added).
-          </Text>
-        )}
-
-        {onOpenStop ? (
-          <Pressable onPress={openStadium} style={styles.ctaBtn}>
-            <Text style={styles.ctaText}>Open stadium in maps</Text>
-          </Pressable>
-        ) : null}
+      <View style={styles.metaRow}>
+        {league ? <Text style={styles.meta}>League: {league}</Text> : null}
+        {city ? <Text style={styles.meta}>City: {String(city).trim()}</Text> : null}
       </View>
 
-      <View style={{ marginTop: 12, gap: 10 }}>
-        <Text style={styles.subTitle}>Where to stay (near the stadium)</Text>
+      <View style={styles.stadiumBox}>
+        <Text style={styles.stadiumTitle}>Stadium</Text>
+        <Text style={styles.stadiumName}>{stadiumName || "—"}</Text>
 
-        {bestAreas.length === 0 && budgetAreas.length === 0 ? (
-          <EmptyState
-            title="No stay areas yet"
-            message="Add stay-area recommendations for this club/city to unlock guidance."
-          />
-        ) : (
-          <View style={{ gap: 10 }}>
-            {bestAreas.slice(0, 3).map((a, idx) => (
-              <View key={`best-${idx}`} style={styles.areaRow}>
-                <View style={{ flex: 1 }}>
-                  <View style={styles.areaTop}>
-                    <Text style={styles.areaName} numberOfLines={1}>
-                      {a.area}
-                    </Text>
-                    <Pill kind="best" />
-                  </View>
-                  {a.notes ? <Text style={styles.areaNotes}>{a.notes}</Text> : null}
-                </View>
-
-                <View style={styles.areaBtns}>
-                  {onOpenStop ? (
-                    <Pressable onPress={() => openArea(a.area)} style={styles.smallBtn}>
-                      <Text style={styles.smallBtnText}>Maps</Text>
-                    </Pressable>
-                  ) : null}
-                  {onSelectStayArea ? (
-                    <Pressable onPress={() => onSelectStayArea(a.area)} style={[styles.smallBtn, styles.smallBtnPrimary]}>
-                      <Text style={styles.smallBtnText}>Use</Text>
-                    </Pressable>
-                  ) : null}
-                </View>
-              </View>
-            ))}
-
-            {budgetAreas.slice(0, 2).map((a, idx) => (
-              <View key={`budget-${idx}`} style={styles.areaRow}>
-                <View style={{ flex: 1 }}>
-                  <View style={styles.areaTop}>
-                    <Text style={styles.areaName} numberOfLines={1}>
-                      {a.area}
-                    </Text>
-                    <Pill kind="budget" />
-                  </View>
-                  {a.notes ? <Text style={styles.areaNotes}>{a.notes}</Text> : null}
-                </View>
-
-                <View style={styles.areaBtns}>
-                  {onOpenStop ? (
-                    <Pressable onPress={() => openArea(a.area)} style={styles.smallBtn}>
-                      <Text style={styles.smallBtnText}>Maps</Text>
-                    </Pressable>
-                  ) : null}
-                  {onSelectStayArea ? (
-                    <Pressable onPress={() => onSelectStayArea(a.area)} style={[styles.smallBtn, styles.smallBtnPrimary]}>
-                      <Text style={styles.smallBtnText}>Use</Text>
-                    </Pressable>
-                  ) : null}
-                </View>
-              </View>
-            ))}
-          </View>
-        )}
-
-        {stops.length > 0 ? (
-          <View style={{ gap: 6, marginTop: 6 }}>
-            <Text style={styles.subTitle}>Best transport stops</Text>
-            {stops.slice(0, 3).map((s, idx) => {
-              const line = `${s.name}${s.notes ? ` — ${s.notes}` : ""}`;
-              return (
-                <Pressable
-                  key={`stop-${idx}`}
-                  onPress={() => onOpenStop?.([s.name, logisticsCity].filter(Boolean).join(" ").trim(), s)}
-                  disabled={!onOpenStop}
-                  style={styles.stopRow}
-                >
-                  <Text style={styles.stopText} numberOfLines={2}>
-                    • {line}
-                  </Text>
-                  {onOpenStop ? <Text style={styles.chev}>›</Text> : null}
-                </Pressable>
-              );
-            })}
-          </View>
-        ) : null}
-
-        {tips.length > 0 ? (
-          <View style={{ gap: 6, marginTop: 6 }}>
-            <Text style={styles.subTitle}>Matchday tips</Text>
-            {tips.slice(0, 3).map((t, idx) => (
-              <Text key={`tip-${idx}`} style={styles.tipText}>
-                • {t}
+        {proximity ? (
+          <View style={styles.proxRow}>
+            <View style={styles.proxPill}>
+              <Text style={styles.proxPillText}>
+                {formatKm(proximity.distanceKm)} • {formatMins(proximity.travel.minutes)} ({proximity.travel.mode})
+                {proximity.estimated ? " • estimate" : ""}
               </Text>
-            ))}
-          </View>
-        ) : null}
+            </View>
 
-        {lateTransportNote ? (
-          <View style={styles.lateBox}>
-            <Text style={styles.lateTitle}>Late transport note</Text>
-            <Text style={styles.lateText}>{lateTransportNote}</Text>
+            {stadiumName ? (
+              <Pressable
+                onPress={() => onOpenStop?.([stadiumName, city].filter(Boolean).join(" ").trim(), undefined)}
+                style={styles.mapBtn}
+              >
+                <Text style={styles.mapBtnText}>Map</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : (
+          <Text style={styles.smallMuted}>Proximity not available (missing stadium coordinates).</Text>
+        )}
+
+        {tips.length ? (
+          <View style={{ marginTop: 10, gap: 6 }}>
+            <Text style={styles.label}>Late transport note</Text>
+            <Text style={styles.bullet}>• {String(tips[0]).trim()}</Text>
           </View>
         ) : null}
       </View>
+
+      {bestAreas.length ? (
+        <View style={styles.section}>
+          <Text style={styles.label}>Best areas (recommended)</Text>
+          {bestAreas.slice(0, 4).map((a, idx) => {
+            const area = String(a.area ?? "").trim();
+            const note = String(a.notes ?? "").trim();
+            const line = [area, note ? `— ${note}` : ""].filter(Boolean).join(" ");
+            return (
+              <Pressable
+                key={`best-${idx}`}
+                onPress={() => (area ? onSelectStayArea?.(area) : null)}
+                style={styles.areaRow}
+              >
+                <Text style={styles.bullet}>• {line}</Text>
+                {area ? <Text style={styles.pick}>Pick</Text> : null}
+              </Pressable>
+            );
+          })}
+        </View>
+      ) : null}
+
+      {budgetAreas.length ? (
+        <View style={styles.section}>
+          <Text style={styles.label}>Budget-friendly</Text>
+          {budgetAreas.slice(0, 3).map((a, idx) => {
+            const area = String(a.area ?? "").trim();
+            const note = String(a.notes ?? "").trim();
+            const line = [area, note ? `— ${note}` : ""].filter(Boolean).join(" ");
+            return (
+              <Pressable
+                key={`budget-${idx}`}
+                onPress={() => (area ? onSelectStayArea?.(area) : null)}
+                style={styles.areaRow}
+              >
+                <Text style={styles.bullet}>• {line}</Text>
+                {area ? <Text style={styles.pick}>Pick</Text> : null}
+              </Pressable>
+            );
+          })}
+        </View>
+      ) : null}
+
+      {stops.length ? (
+        <View style={styles.section}>
+          <Text style={styles.label}>Best transport stops</Text>
+          {stops.slice(0, 4).map((s, idx) => {
+            const name = String(s.name ?? "").trim();
+            const note = String(s.notes ?? "").trim();
+            const q = [name, city].filter(Boolean).join(" ").trim();
+            return (
+              <Pressable key={`stop-${idx}`} onPress={() => onOpenStop?.(q, s)} style={styles.stopRow}>
+                <Text style={styles.bullet}>• {name}{note ? ` — ${note}` : ""}</Text>
+                <Text style={styles.pick}>Map</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      ) : null}
     </GlassCard>
   );
 }
@@ -279,119 +195,69 @@ export default function MatchdayLogisticsCard(props: Props) {
 const styles = StyleSheet.create({
   card: { padding: theme.spacing.lg },
 
-  title: {
+  h1: {
     color: theme.colors.text,
     fontWeight: "900",
-    marginBottom: 8,
+    fontSize: theme.fontSize.md,
   },
 
-  subTitle: {
-    color: theme.colors.text,
-    fontWeight: "900",
-    fontSize: 12,
-  },
+  metaRow: { marginTop: 8, gap: 4 },
+  meta: { color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12 },
 
-  proxBox: {
+  stadiumBox: {
+    marginTop: 12,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
-    borderRadius: 14,
+    backgroundColor: "rgba(0,0,0,0.18)",
     padding: 12,
-    backgroundColor: "rgba(0,0,0,0.18)",
   },
 
-  proxHeadline: {
-    color: theme.colors.text,
-    fontWeight: "900",
-    fontSize: 14,
-    lineHeight: 18,
-  },
-  proxCity: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: 12 },
+  stadiumTitle: { color: theme.colors.text, fontWeight: "900", fontSize: 12 },
+  stadiumName: { marginTop: 6, color: theme.colors.text, fontWeight: "900", fontSize: 14 },
 
-  proxSnippet: {
-    marginTop: 8,
-    color: theme.colors.textSecondary,
-    fontWeight: "800",
-    fontSize: 12,
-    lineHeight: 16,
-  },
+  proxRow: { marginTop: 10, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
 
-  proxLine: {
-    marginTop: 8,
-    color: theme.colors.text,
-    fontWeight: "900",
-    fontSize: 12,
-  },
-
-  proxLineMuted: {
-    marginTop: 8,
-    color: theme.colors.textSecondary,
-    fontWeight: "800",
-    fontSize: 12,
-    lineHeight: 16,
-  },
-
-  ctaBtn: {
-    marginTop: 10,
-    paddingVertical: 12,
-    borderRadius: 12,
+  proxPill: {
+    flex: 1,
     borderWidth: 1,
-    borderColor: "rgba(0,255,136,0.55)",
-    alignItems: "center",
+    borderColor: "rgba(0,255,136,0.22)",
     backgroundColor: "rgba(0,0,0,0.18)",
+    borderRadius: 999,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
   },
-  ctaText: { color: theme.colors.text, fontWeight: "900" },
+  proxPillText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: 12 },
+
+  mapBtn: {
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  mapBtnText: { color: theme.colors.text, fontWeight: "900", fontSize: 12 },
+
+  smallMuted: { marginTop: 10, color: theme.colors.textTertiary, fontWeight: "800", fontSize: 12 },
+
+  section: { marginTop: 12, gap: 8 },
+  label: { color: theme.colors.text, fontWeight: "900", fontSize: 12 },
 
   areaRow: {
     flexDirection: "row",
-    gap: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.18)",
     alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
   },
 
-  areaTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
-  areaName: { color: theme.colors.text, fontWeight: "900", flexShrink: 1 },
-  areaNotes: { marginTop: 6, color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12, lineHeight: 16 },
-
-  areaBtns: { gap: 8, alignItems: "flex-end" },
-
-  smallBtn: {
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.15)",
-    backgroundColor: "rgba(0,0,0,0.15)",
+  stopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
   },
-  smallBtnPrimary: { borderColor: "rgba(0,255,136,0.55)" },
-  smallBtnText: { color: theme.colors.text, fontWeight: "900", fontSize: 12 },
 
-  pill: {
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-  pillText: { color: theme.colors.text, fontWeight: "900", fontSize: 11 },
-
-  stopRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
-  stopText: { color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12, lineHeight: 16, flex: 1 },
-  tipText: { color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12, lineHeight: 16 },
-
-  lateBox: {
-    marginTop: 8,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "rgba(255,200,80,0.28)",
-    backgroundColor: "rgba(255,200,80,0.08)",
-    padding: 12,
-  },
-  lateTitle: { color: theme.colors.text, fontWeight: "900", fontSize: 12 },
-  lateText: { marginTop: 6, color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12, lineHeight: 16 },
-
-  chev: { color: theme.colors.textSecondary, fontSize: 22, marginTop: -2 },
+  bullet: { color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12, lineHeight: 16 },
+  pick: { color: theme.colors.primary, fontWeight: "900", fontSize: 12 },
 });
