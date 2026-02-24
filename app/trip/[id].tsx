@@ -1,5 +1,5 @@
 // app/trip/[id].tsx
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
   TextInput,
   Keyboard,
   Image,
+  Platform,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
@@ -35,13 +36,12 @@ import { beginPartnerClick, openUntrackedUrl } from "@/src/services/partnerClick
 import { getFixtureById, type FixtureListRow } from "@/src/services/apiFootball";
 import { formatUkDateOnly } from "@/src/utils/formatters";
 import { buildAffiliateLinks } from "@/src/services/affiliateLinks";
-
 import { confirmBookedAndOfferProof } from "@/src/services/bookingProof";
 
 // ✅ Opportunistic IATA detection (dev-only)
 import { getIataCityCodeForCity, debugCityKey } from "@/src/data/iataCityCodes";
 
-// ✅ NEW: Matchday logistics
+// ✅ Matchday logistics (home-stadium context)
 import { getMatchdayLogistics, buildLogisticsSnippet } from "@/src/data/matchdayLogistics";
 
 /* -------------------------------------------------------------------------- */
@@ -57,8 +57,7 @@ function coerceId(v: unknown): string | null {
 function isNumericId(v: unknown): v is string {
   if (typeof v !== "string") return false;
   const s = v.trim();
-  if (!s) return false;
-  return /^[0-9]+$/.test(s);
+  return !!s && /^[0-9]+$/.test(s);
 }
 
 function summaryLine(t: Trip) {
@@ -185,6 +184,18 @@ function parseIsoToDate(iso?: string): Date | null {
   return Number.isFinite(d.getTime()) ? d : null;
 }
 
+function humanizeSlug(slug: string) {
+  const s = String(slug ?? "").trim();
+  if (!s) return "Trip";
+  // london -> London, san-sebastian -> San Sebastian
+  return s
+    .replace(/[-_]+/g, " ")
+    .split(" ")
+    .filter(Boolean)
+    .map((w) => w.slice(0, 1).toUpperCase() + w.slice(1).toLowerCase())
+    .join(" ");
+}
+
 function formatKickoffMeta(row?: FixtureListRow | null): { line: string; tbc: boolean } {
   const iso = row?.fixture?.date;
   const d = parseIsoToDate(iso);
@@ -192,7 +203,8 @@ function formatKickoffMeta(row?: FixtureListRow | null): { line: string; tbc: bo
   const short = String(row?.fixture?.status?.short ?? "").trim().toUpperCase();
   const long = String(row?.fixture?.status?.long ?? "").trim();
 
-  const looksTbc = short === "TBD" || short === "TBA" || short === "NS" || short === "PST";
+  // We treat these as unreliable / placeholder-ish.
+  const looksTbc = short === "TBD" || short === "TBA";
 
   if (!d) {
     return { line: looksTbc ? "Kickoff: TBC" : "Kickoff: —", tbc: true };
@@ -201,6 +213,7 @@ function formatKickoffMeta(row?: FixtureListRow | null): { line: string; tbc: bo
   const datePart = d.toLocaleDateString("en-GB", { weekday: "short", day: "2-digit", month: "short" });
   const timePart = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 
+  // Many APIs use midnight for “date known, time unknown”
   const midnight = d.getHours() === 0 && d.getMinutes() === 0;
   const tbc = looksTbc || midnight;
 
@@ -229,20 +242,23 @@ export default function TripDetailScreen() {
 
   const [fixturesById, setFixturesById] = useState<Record<string, FixtureListRow>>({});
   const [fxLoading, setFxLoading] = useState(false);
+  const [fxError, setFxError] = useState<string | null>(null);
 
   const [noteText, setNoteText] = useState("");
   const [noteSaving, setNoteSaving] = useState(false);
 
-  // ✅ dev-only: avoid spamming the same unknown city alert repeatedly
+  // dev-only: avoid spamming the same unknown city alert repeatedly
   const [devWarnedCityKey, setDevWarnedCityKey] = useState<string | null>(null);
 
-  // ✅ preferred origin IATA (for flight deep links)
+  // preferred origin IATA (for flight deep links)
   const [originLoaded, setOriginLoaded] = useState<boolean>(preferencesStore.getState().loaded);
   const [originIata, setOriginIata] = useState<string>(preferencesStore.getPreferredOriginIata());
 
   /* ---------------- load trip ---------------- */
 
   useEffect(() => {
+    if (!tripId) return;
+
     const sync = () => {
       const s = tripsStore.getState();
       setTripsLoaded(s.loaded);
@@ -262,6 +278,8 @@ export default function TripDetailScreen() {
   /* ---------------- load saved items ---------------- */
 
   useEffect(() => {
+    if (!tripId) return;
+
     const sync = () => {
       const s = savedItemsStore.getState();
       setSavedLoaded(s.loaded);
@@ -307,15 +325,16 @@ export default function TripDetailScreen() {
     };
   }, []);
 
-  /* ---------------- load fixtures (for match list + city fallback) ---------------- */
+  /* ---------------- load fixtures (match details) ---------------- */
 
   useEffect(() => {
     let cancelled = false;
 
     async function run() {
+      setFxError(null);
+
       const idsRaw = Array.isArray(trip?.matchIds) ? trip!.matchIds : [];
       const ids = idsRaw.map((x) => String(x).trim()).filter(Boolean);
-
       const numericIds = ids.filter(isNumericId);
 
       if (numericIds.length === 0) {
@@ -327,12 +346,29 @@ export default function TripDetailScreen() {
       setFxLoading(true);
 
       try {
+        const results = await Promise.all(
+          numericIds.map(async (id) => {
+            try {
+              const r = await getFixtureById(String(id));
+              return [String(id), r] as const;
+            } catch {
+              return [String(id), null] as const;
+            }
+          })
+        );
+
         const map: Record<string, FixtureListRow> = {};
-        for (const id of numericIds) {
-          const r = await getFixtureById(String(id));
-          if (r) map[String(id)] = r;
+        let failed = 0;
+
+        for (const [id, r] of results) {
+          if (r) map[id] = r;
+          else failed += 1;
         }
-        if (!cancelled) setFixturesById(map);
+
+        if (!cancelled) {
+          setFixturesById(map);
+          if (failed > 0) setFxError(`Some match details couldn’t be loaded (${failed}).`);
+        }
       } finally {
         if (!cancelled) setFxLoading(false);
       }
@@ -348,41 +384,48 @@ export default function TripDetailScreen() {
 
   const status = useMemo(() => (trip ? tripStatus(trip) : "Upcoming"), [trip]);
 
-  const cityName = useMemo(() => {
-    if (trip?.cityId) return trip.cityId;
-    const first = trip?.matchIds?.[0];
-    return fixturesById[String(first ?? "")]?.fixture?.venue?.city || "Trip";
-  }, [trip, fixturesById]);
-
-  const bookingLinks = useMemo(() => {
-    if (!trip || !cityName || cityName === "Trip") return null;
-
-    return buildAffiliateLinks({
-      city: cityName,
-      startDate: trip.startDate,
-      endDate: trip.endDate,
-      originIata: cleanUpper3(originIata, "LON"),
-    });
-  }, [trip, cityName, originIata]);
-
-  const pending = useMemo(() => savedItems.filter((x) => x.status === "pending"), [savedItems]);
-  const saved = useMemo(
-    () => savedItems.filter((x) => x.status === "saved" && x.type !== "note"),
-    [savedItems]
-  );
-  const booked = useMemo(() => savedItems.filter((x) => x.status === "booked"), [savedItems]);
-
-  const notes = useMemo(
-    () => savedItems.filter((x) => x.type === "note" && x.status !== "archived"),
-    [savedItems]
-  );
-
   const matchIds = useMemo(() => {
     const raw = Array.isArray(trip?.matchIds) ? trip!.matchIds : [];
     return raw.map((x) => String(x).trim()).filter(Boolean);
   }, [trip?.matchIds]);
 
   const numericMatchIds = useMemo(() => matchIds.filter(isNumericId), [matchIds]);
+
+  // Display city: prefer fixture venue city; fallback to humanised slug in trip.cityId.
+  const displayCity = useMemo(() => {
+    const firstId = String(trip?.matchIds?.[0] ?? "").trim();
+    const fromFixture = fixturesById[firstId]?.fixture?.venue?.city;
+    const fxCity = String(fromFixture ?? "").trim();
+    if (fxCity) return fxCity;
+
+    const raw = String(trip?.cityId ?? "").trim();
+    if (!raw) return "Trip";
+    // If it looks like a slug (contains - or is lowercase), humanise it.
+    if (raw.includes("-") || raw === raw.toLowerCase()) return humanizeSlug(raw);
+    return raw;
+  }, [trip?.cityId, trip?.matchIds, fixturesById]);
+
+  const bookingLinks = useMemo(() => {
+    if (!trip) return null;
+    if (!displayCity || displayCity === "Trip") return null;
+
+    return buildAffiliateLinks({
+      city: displayCity,
+      startDate: trip.startDate,
+      endDate: trip.endDate,
+      originIata: cleanUpper3(originIata, "LON"),
+    });
+  }, [trip, displayCity, originIata]);
+
+  const pending = useMemo(() => savedItems.filter((x) => x.status === "pending"), [savedItems]);
+  const saved = useMemo(() => savedItems.filter((x) => x.status === "saved" && x.type !== "note"), [savedItems]);
+  const booked = useMemo(() => savedItems.filter((x) => x.status === "booked"), [savedItems]);
+  const notes = useMemo(
+    () => savedItems.filter((x) => x.type === "note" && x.status !== "archived"),
+    [savedItems]
+  );
+
+  const walletPreview = useMemo(() => booked.slice(0, 3), [booked]);
 
   /* -------------------------------------------------------------------------- */
   /* DEV-ONLY: opportunistic city→IATA detector */
@@ -393,7 +436,7 @@ export default function TripDetailScreen() {
     const isDev = typeof __DEV__ !== "undefined" && __DEV__;
     if (!isDev) return;
 
-    const city = String(cityName ?? "").trim();
+    const city = String(displayCity ?? "").trim();
     if (!city || city === "Trip") return;
 
     const code = getIataCityCodeForCity(city);
@@ -411,40 +454,43 @@ export default function TripDetailScreen() {
       [{ text: "OK" }],
       { cancelable: true }
     );
-  }, [cityName, devWarnedCityKey]);
+  }, [displayCity, devWarnedCityKey]);
 
   /* ---------------- navigation ---------------- */
 
-  function onEditTrip() {
+  const onEditTrip = useCallback(() => {
     if (!trip) return;
     router.push({ pathname: "/trip/build", params: { tripId: trip.id } } as any);
-  }
+  }, [router, trip]);
 
-  function onViewWallet() {
+  const onViewWallet = useCallback(() => {
     router.push("/wallet" as any);
-  }
+  }, [router]);
 
-  function openMatch(matchId: string) {
-    if (!matchId) return;
+  const openMatch = useCallback(
+    (matchId: string) => {
+      if (!matchId) return;
 
-    const r = fixturesById[String(matchId)];
-    const leagueId = r?.league?.id != null ? String(r.league.id) : undefined;
-    const season = r?.league?.season != null ? String(r.league.season) : undefined;
+      const r = fixturesById[String(matchId)];
+      const leagueId = r?.league?.id != null ? String(r.league.id) : undefined;
+      const season = r?.league?.season != null ? String(r.league.season) : undefined;
 
-    const from = trip?.startDate ? String(trip.startDate) : undefined;
-    const to = trip?.endDate ? String(trip.endDate) : undefined;
+      const from = trip?.startDate ? String(trip.startDate) : undefined;
+      const to = trip?.endDate ? String(trip.endDate) : undefined;
 
-    router.push({
-      pathname: "/match/[id]",
-      params: {
-        id: String(matchId),
-        ...(from ? { from } : {}),
-        ...(to ? { to } : {}),
-        ...(leagueId ? { leagueId } : {}),
-        ...(season ? { season } : {}),
-      },
-    } as any);
-  }
+      router.push({
+        pathname: "/match/[id]",
+        params: {
+          id: String(matchId),
+          ...(from ? { from } : {}),
+          ...(to ? { to } : {}),
+          ...(leagueId ? { leagueId } : {}),
+          ...(season ? { season } : {}),
+        },
+      } as any);
+    },
+    [fixturesById, router, trip?.startDate, trip?.endDate]
+  );
 
   /* -------------------------------------------------------------------------- */
   /* OPEN FLOW */
@@ -547,18 +593,9 @@ export default function TripDetailScreen() {
     }
   }
 
-  async function moveToSaved(item: SavedItem) {
-    try {
-      await savedItemsStore.transitionStatus(item.id, "saved");
-    } catch {
-      Alert.alert("Couldn’t move", "That item can’t be moved right now.");
-    }
-  }
-
   async function markBookedSmart(item: SavedItem) {
     try {
       await savedItemsStore.transitionStatus(item.id, "booked");
-
       defer(() => {
         confirmBookedAndOfferProof(item.id).catch(() => null);
       });
@@ -596,17 +633,6 @@ export default function TripDetailScreen() {
       [
         { text: "Cancel", style: "cancel" },
         { text: "Move", style: "default", onPress: () => moveToPending(item) },
-      ]
-    );
-  }
-
-  function confirmMoveToSaved(item: SavedItem) {
-    Alert.alert(
-      "Move to Saved?",
-      "Saved items won’t prompt on return. Use this if you decided not to book (but want the link kept).",
-      [
-        { text: "Cancel", style: "cancel" },
-        { text: "Move", style: "default", onPress: () => moveToSaved(item) },
       ]
     );
   }
@@ -673,6 +699,7 @@ export default function TripDetailScreen() {
   /* -------------------------------------------------------------------------- */
 
   const loading = Boolean(tripId && (!tripsLoaded || !savedLoaded));
+
   const showHeroBanners = pending.length > 0 || saved.length > 0 || booked.length > 0;
 
   return (
@@ -690,6 +717,7 @@ export default function TripDetailScreen() {
         <ScrollView
           style={styles.scroll}
           contentContainerStyle={[styles.content, { paddingBottom: theme.spacing.xxl + insets.bottom }]}
+          keyboardShouldPersistTaps="handled"
         >
           {!tripId && (
             <GlassCard style={styles.card}>
@@ -706,12 +734,18 @@ export default function TripDetailScreen() {
             </GlassCard>
           )}
 
+          {tripId && tripsLoaded && !trip && (
+            <GlassCard style={styles.card}>
+              <EmptyState title="Trip not found" message="This trip doesn’t exist on this device." />
+            </GlassCard>
+          )}
+
           {trip && (
             <>
               {/* HERO */}
               <GlassCard style={styles.hero}>
                 <Text style={styles.kicker}>TRIP WORKSPACE</Text>
-                <Text style={styles.cityTitle}>{cityName}</Text>
+                <Text style={styles.cityTitle}>{displayCity}</Text>
                 <Text style={styles.heroMeta}>{summaryLine(trip)}</Text>
 
                 <View style={styles.heroTopRow}>
@@ -766,7 +800,10 @@ export default function TripDetailScreen() {
                 <Text style={styles.sectionTitle}>Matches</Text>
 
                 {numericMatchIds.length === 0 ? (
-                  <EmptyState title="No matches added" message="Add a match to unlock match-specific tickets and planning." />
+                  <EmptyState
+                    title="No matches added"
+                    message="Add a match to unlock match-specific tickets and planning."
+                  />
                 ) : (
                   <View style={{ gap: 10 }}>
                     {numericMatchIds.map((mid) => {
@@ -787,7 +824,7 @@ export default function TripDetailScreen() {
                       const homeName = String(r?.teams?.home?.name ?? "Home");
                       const awayName = String(r?.teams?.away?.name ?? "Away");
 
-                      // ✅ NEW: logistics derived from HOME team (home stadium context)
+                      // Logistics derived from HOME team (home-stadium context)
                       const logistics = getMatchdayLogistics(homeName);
                       const logisticsLine = logistics ? buildLogisticsSnippet(logistics) : "";
 
@@ -830,7 +867,7 @@ export default function TripDetailScreen() {
                             ) : null}
 
                             <Text style={styles.matchHint} numberOfLines={1}>
-                              Open match → Home tickets, directions, follow alerts
+                              Open match → tickets, directions, follow alerts
                             </Text>
                           </View>
 
@@ -844,6 +881,7 @@ export default function TripDetailScreen() {
                 )}
 
                 {fxLoading ? <Text style={styles.mutedInline}>Loading match details…</Text> : null}
+                {fxError ? <Text style={styles.errInline}>{fxError}</Text> : null}
               </GlassCard>
 
               {/* PENDING */}
@@ -892,12 +930,15 @@ export default function TripDetailScreen() {
                 )}
               </GlassCard>
 
-              {/* BOOKED (INLINE) */}
+              {/* BOOKED */}
               <GlassCard style={styles.card}>
                 <Text style={styles.sectionTitle}>Booked (in Wallet)</Text>
 
                 {booked.length === 0 ? (
-                  <EmptyState title="No booked items yet" message="When you confirm a booking, it will show here and in Wallet." />
+                  <EmptyState
+                    title="No booked items yet"
+                    message="When you confirm a booking, it will show here and in Wallet."
+                  />
                 ) : (
                   <View style={{ gap: 10 }}>
                     {booked.map((it) => (
@@ -941,7 +982,10 @@ export default function TripDetailScreen() {
                 <Text style={styles.sectionTitle}>Saved</Text>
 
                 {saved.length === 0 ? (
-                  <EmptyState title="No saved items" message="If you answer “No” after returning from a partner, we keep the link here as Saved." />
+                  <EmptyState
+                    title="No saved items"
+                    message="If you answer “No” after returning from a partner, we keep the link here as Saved."
+                  />
                 ) : (
                   <View style={{ gap: 10 }}>
                     {saved.map((it) => (
@@ -998,7 +1042,11 @@ export default function TripDetailScreen() {
                     multiline
                   />
 
-                  <Pressable onPress={addNote} disabled={noteSaving} style={[styles.noteSaveBtn, noteSaving && { opacity: 0.7 }]}>
+                  <Pressable
+                    onPress={addNote}
+                    disabled={noteSaving}
+                    style={[styles.noteSaveBtn, noteSaving && { opacity: 0.7 }]}
+                  >
                     <Text style={styles.noteSaveText}>{noteSaving ? "Saving…" : "Save note"}</Text>
                   </Pressable>
                 </View>
@@ -1039,12 +1087,8 @@ export default function TripDetailScreen() {
                           partnerId: "expedia_stays",
                           url: bookingLinks.hotelsUrl,
                           savedItemType: "hotel",
-                          title: `Hotels in ${cityName}`,
-                          metadata: {
-                            city: cityName,
-                            startDate: trip.startDate,
-                            endDate: trip.endDate,
-                          },
+                          title: `Hotels in ${displayCity}`,
+                          metadata: { city: displayCity, startDate: trip.startDate, endDate: trip.endDate },
                         })
                       }
                     >
@@ -1059,8 +1103,8 @@ export default function TripDetailScreen() {
                           partnerId: "aviasales",
                           url: bookingLinks.flightsUrl,
                           savedItemType: "flight",
-                          title: `Flights to ${cityName}`,
-                          metadata: { city: cityName, originIata: cleanUpper3(originIata, "LON") },
+                          title: `Flights to ${displayCity}`,
+                          metadata: { city: displayCity, originIata: cleanUpper3(originIata, "LON") },
                         })
                       }
                     >
@@ -1075,12 +1119,8 @@ export default function TripDetailScreen() {
                           partnerId: "kiwitaxi",
                           url: bookingLinks.transfersUrl,
                           savedItemType: "transfer",
-                          title: `Transfers in ${cityName}`,
-                          metadata: {
-                            city: cityName,
-                            startDate: trip.startDate,
-                            endDate: trip.endDate,
-                          },
+                          title: `Transfers in ${displayCity}`,
+                          metadata: { city: displayCity, startDate: trip.startDate, endDate: trip.endDate },
                         })
                       }
                     >
@@ -1095,8 +1135,8 @@ export default function TripDetailScreen() {
                           partnerId: "getyourguide",
                           url: bookingLinks.experiencesUrl,
                           savedItemType: "things",
-                          title: `Experiences in ${cityName}`,
-                          metadata: { city: cityName },
+                          title: `Experiences in ${displayCity}`,
+                          metadata: { city: displayCity },
                         })
                       }
                     >
@@ -1124,11 +1164,7 @@ export default function TripDetailScreen() {
                         url: bookingLinks.insuranceUrl,
                         savedItemType: "insurance",
                         title: `Travel insurance`,
-                        metadata: {
-                          city: cityName,
-                          startDate: trip.startDate,
-                          endDate: trip.endDate,
-                        },
+                        metadata: { city: displayCity, startDate: trip.startDate, endDate: trip.endDate },
                       })
                     }
                   >
@@ -1154,7 +1190,7 @@ export default function TripDetailScreen() {
                         url: bookingLinks.claimsUrl,
                         savedItemType: "claim",
                         title: `Check compensation`,
-                        metadata: { city: cityName },
+                        metadata: { city: displayCity },
                       })
                     }
                   >
@@ -1167,7 +1203,7 @@ export default function TripDetailScreen() {
                 </GlassCard>
               )}
 
-              {/* WALLET PREVIEW */}
+              {/* WALLET PREVIEW (no duplication) */}
               <GlassCard style={styles.card}>
                 <View style={styles.walletHeaderRow}>
                   <Text style={styles.sectionTitle}>Wallet</Text>
@@ -1180,7 +1216,7 @@ export default function TripDetailScreen() {
                   <EmptyState title="Nothing booked yet" message="Booked items appear here." />
                 ) : (
                   <View style={{ gap: 10 }}>
-                    {booked.map((it) => (
+                    {walletPreview.map((it) => (
                       <Pressable key={it.id} onPress={() => openSavedItem(it)} style={styles.noteRow}>
                         <View style={{ flex: 1 }}>
                           <Text style={styles.itemTitle} numberOfLines={1}>
@@ -1193,6 +1229,10 @@ export default function TripDetailScreen() {
                         <Text style={styles.chev}>›</Text>
                       </Pressable>
                     ))}
+
+                    {booked.length > walletPreview.length ? (
+                      <Text style={styles.mutedInline}>+{booked.length - walletPreview.length} more in Wallet</Text>
+                    ) : null}
                   </View>
                 )}
               </GlassCard>
@@ -1223,6 +1263,7 @@ const styles = StyleSheet.create({
   center: { alignItems: "center", gap: 10 },
   muted: { color: theme.colors.textSecondary },
   mutedInline: { marginTop: 10, color: theme.colors.textSecondary, textAlign: "center" },
+  errInline: { marginTop: 10, color: "rgba(255,80,80,0.95)", fontWeight: "900", textAlign: "center" },
 
   hero: { padding: theme.spacing.lg },
 
@@ -1377,7 +1418,6 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
 
-  // ✅ NEW: logistics line (slightly different emphasis)
   logisticsMeta: {
     marginTop: 6,
     color: theme.colors.textTertiary,
@@ -1510,6 +1550,7 @@ const styles = StyleSheet.create({
     minHeight: 80,
     color: theme.colors.text,
     textAlignVertical: "top",
+    ...(Platform.OS === "ios" ? { paddingTop: 8 } : null),
   },
 
   noteSaveBtn: {
