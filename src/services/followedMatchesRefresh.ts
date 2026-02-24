@@ -1,143 +1,145 @@
 // src/services/followedMatchesRefresh.ts
-import useFollowStore from "@/src/state/followStore";
+import * as Notifications from "expo-notifications";
 import { getFixtureById } from "@/src/services/apiFootball";
-import { notifyKickoffChanged } from "@/src/services/followKickoffNotifications";
+import { isKickoffTbc, computeLikelyPlaceholderTbcIds } from "@/src/utils/kickoffTbc";
 
-function cleanStr(v: unknown): string | null {
+type FollowedItem = {
+  fixtureId: string;
+  kickoffIso?: string | null;
+  leagueId?: number;
+  season?: number;
+  round?: string | null;
+  homeName?: string | null;
+  awayName?: string | null;
+};
+
+type FollowStoreShape = {
+  followed: FollowedItem[];
+  upsertLatestSnapshot?: (fixtureId: string, patch: Record<string, any>) => void;
+  // optional: if you store latestSnapshots map
+  latestSnapshots?: Record<string, any>;
+};
+
+// IMPORTANT: keep this import path exactly as in your app
+import useFollowStore from "@/src/state/followStore";
+
+function cleanIso(v: unknown): string | null {
   const s = String(v ?? "").trim();
   return s ? s : null;
 }
 
-function clampLimit(v: unknown, min: number, max: number, fallback: number) {
-  const n = Number(v);
-  if (!Number.isFinite(n)) return fallback;
-  return Math.max(min, Math.min(max, n));
+function titleFor(item: FollowedItem) {
+  const h = String(item.homeName ?? "").trim();
+  const a = String(item.awayName ?? "").trim();
+  if (h && a) return `${h} vs ${a}`;
+  return "Match update";
 }
 
-function pickFixtureSnapshot(fx: any) {
-  const kickoffIso = cleanStr(fx?.fixture?.date);
-  const venue = cleanStr(fx?.fixture?.venue?.name);
-  const city = cleanStr(fx?.fixture?.venue?.city);
-
-  const leagueId = fx?.league?.id != null ? Number(fx.league.id) : undefined;
-  const season = fx?.league?.season != null ? Number(fx.league.season) : undefined;
-  const leagueName = cleanStr(fx?.league?.name);
-  const round = cleanStr(fx?.league?.round);
-
-  const homeTeamId = fx?.teams?.home?.id != null ? Number(fx.teams.home.id) : undefined;
-  const awayTeamId = fx?.teams?.away?.id != null ? Number(fx.teams.away.id) : undefined;
-  const homeName = cleanStr(fx?.teams?.home?.name);
-  const awayName = cleanStr(fx?.teams?.away?.name);
-
-  return {
-    kickoffIso,
-    venue,
-    city,
-    leagueId,
-    season,
-    leagueName,
-    round,
-    homeTeamId,
-    awayTeamId,
-    homeName,
-    awayName,
-  };
-}
-
-async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
-  const results: R[] = new Array(items.length) as any;
-  let i = 0;
-
-  async function worker() {
-    while (i < items.length) {
-      const idx = i++;
-      results[idx] = await fn(items[idx]);
-    }
+async function canNotify(): Promise<boolean> {
+  try {
+    const perms = await Notifications.getPermissionsAsync();
+    return perms?.status === "granted";
+  } catch {
+    return false;
   }
-
-  const n = Math.max(1, Math.min(limit, items.length));
-  await Promise.all(Array.from({ length: n }).map(worker));
-  return results;
 }
 
-export type RefreshResultRow = {
-  fixtureId: string;
-  refreshed: boolean;
-  notified: boolean;
-  error?: string;
-};
+async function notifyKickoffChanged(args: { title: string; fixtureId: string }) {
+  if (!(await canNotify())) return;
 
+  try {
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: "Kickoff changed",
+        body: `${args.title} — check your trip`,
+        data: {
+          kind: "kickoff_update",
+          fixtureId: String(args.fixtureId),
+        },
+      },
+      trigger: null,
+    });
+  } catch {
+    // ignore – never crash refresh loop
+  }
+}
+
+/**
+ * Refresh followed matches.
+ * - Best-effort, never throws.
+ * - Updates followStore snapshots.
+ * - Fires "Kickoff changed" local notification when:
+ *   oldIso !== newIso AND new kickoff is not TBC (heuristic)
+ */
 export async function refreshFollowedMatches(opts?: { limit?: number; concurrency?: number }) {
-  const limit = clampLimit(opts?.limit, 1, 50, 25);
-  const concurrency = clampLimit(opts?.concurrency, 1, 6, 3);
+  const limit = typeof opts?.limit === "number" ? opts!.limit! : 25;
+  const concurrency = typeof opts?.concurrency === "number" ? opts!.concurrency! : 3;
 
-  const store = useFollowStore.getState();
-  const followed = Array.isArray(store.followed) ? store.followed.slice(0, limit) : [];
+  const store = (useFollowStore as any) as { getState: () => FollowStoreShape };
+  const state = store.getState?.();
+  const followedAll = Array.isArray(state?.followed) ? state.followed : [];
+  const followed = followedAll.slice(0, Math.max(0, limit));
 
-  if (followed.length === 0) return [] as RefreshResultRow[];
+  if (followed.length === 0) return;
 
-  const ids = followed
-    .map((f) => String((f as any)?.fixtureId ?? "").trim())
-    .filter(Boolean);
+  // lightweight worker pool
+  let idx = 0;
+  const workers = new Array(Math.max(1, concurrency)).fill(null).map(async () => {
+    while (idx < followed.length) {
+      const my = followed[idx++];
+      const fid = String(my?.fixtureId ?? "").trim();
+      if (!fid) continue;
 
-  const rows = await mapLimit(ids, concurrency, async (fixtureId): Promise<RefreshResultRow> => {
-    try {
-      const fx = await getFixtureById(fixtureId);
-      if (!fx) return { fixtureId, refreshed: false, notified: false, error: "no_fixture" };
+      let row: any = null;
+      try {
+        row = await getFixtureById(fid);
+      } catch {
+        continue;
+      }
+      if (!row) continue;
 
-      const snap = pickFixtureSnapshot(fx);
+      const newIso = cleanIso(row?.fixture?.date);
+      const oldIso = cleanIso(my?.kickoffIso);
 
-      const followState = useFollowStore.getState();
+      // We need placeholder inference to avoid firing false “changed” when API still placeholder.
+      // We don’t have a round list here (costly). So we use per-row heuristic only.
+      const newIsTbc = isKickoffTbc(row, undefined);
 
-      const r = followState.applyFixtureUpdate(fixtureId, {
-        kickoffIso: snap.kickoffIso,
-        venue: snap.venue,
-        city: snap.city,
-
-        leagueId: snap.leagueId,
-        season: snap.season,
-        leagueName: snap.leagueName,
-        round: snap.round,
-
-        homeTeamId: snap.homeTeamId,
-        awayTeamId: snap.awayTeamId,
-
-        homeName: snap.homeName,
-        awayName: snap.awayName,
-        // kickoffLikelyTbc intentionally omitted → store infers via heuristic
-      });
-
-      let notified = false;
-
-      if (r?.existed && r.shouldNotifyKickoff) {
-        // Prefer store names (follow-time labels), fallback to refreshed snapshot
-        const latest = useFollowStore.getState().followed.find((x) => x.fixtureId === fixtureId) ?? null;
-
-        await notifyKickoffChanged({
-          fixtureId,
-          homeName: latest?.homeName ?? snap.homeName,
-          awayName: latest?.awayName ?? snap.awayName,
-          leagueName: latest?.leagueName ?? snap.leagueName,
-          prevKickoffIso: r.prevKickoffIso,
-          nextKickoffIso: r.nextKickoffIso,
-        });
-
-        // CRITICAL: persist anti-spam key so we don’t re-notify for same kickoff across restarts.
-        useFollowStore.getState().markKickoffNotified(fixtureId, r.nextKickoffIso);
-
-        notified = true;
+      // Trigger only when:
+      // - both iso exist
+      // - they differ
+      // - new isn't TBC
+      if (oldIso && newIso && oldIso !== newIso && !newIsTbc) {
+        await notifyKickoffChanged({ title: titleFor(my), fixtureId: fid });
       }
 
-      return { fixtureId, refreshed: true, notified };
-    } catch (e: any) {
-      return {
-        fixtureId,
-        refreshed: false,
-        notified: false,
-        error: String(e?.message ?? "refresh_failed"),
-      };
+      // Update store snapshot (best-effort)
+      try {
+        const upsert = (store.getState() as any)?.upsertLatestSnapshot;
+        if (typeof upsert === "function") {
+          upsert(fid, {
+            kickoffIso: newIso,
+            venue: row?.fixture?.venue?.name ?? null,
+            city: row?.fixture?.venue?.city ?? null,
+            leagueId: row?.league?.id ?? null,
+            season: row?.league?.season ?? null,
+            round: row?.league?.round ?? null,
+            homeName: row?.teams?.home?.name ?? null,
+            awayName: row?.teams?.away?.name ?? null,
+          });
+        } else {
+          // If your store doesn’t expose upsertLatestSnapshot,
+          // you still get notifications, but snapshot persistence depends on your store.
+        }
+      } catch {
+        // never crash refresh
+      }
     }
   });
 
-  return rows;
+  try {
+    await Promise.all(workers);
+  } catch {
+    // ignore
+  }
 }
