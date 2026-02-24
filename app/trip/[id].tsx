@@ -27,19 +27,17 @@ import { parseIsoDateOnly, toIsoDate } from "@/src/constants/football";
 import tripsStore, { type Trip } from "@/src/state/trips";
 import savedItemsStore from "@/src/state/savedItems";
 import preferencesStore from "@/src/state/preferences";
+import useFollowStore from "@/src/state/followStore";
 
 import type { SavedItem, SavedItemType } from "@/src/core/savedItemTypes";
 import { getSavedItemTypeLabel } from "@/src/core/savedItemTypes";
 import { getPartner, type PartnerId } from "@/src/core/partners";
 
 import { beginPartnerClick, openUntrackedUrl } from "@/src/services/partnerClicks";
-import { getFixtureById, getFixturesByRound, type FixtureListRow } from "@/src/services/apiFootball";
-import { formatUkDateOnly } from "@/src/utils/formatters";
+import { getFixtureById, type FixtureListRow } from "@/src/services/apiFootball";
+import { formatUkDateOnly, formatUkDateTimeMaybe } from "@/src/utils/formatters";
 import { buildAffiliateLinks } from "@/src/services/affiliateLinks";
 import { confirmBookedAndOfferProof } from "@/src/services/bookingProof";
-
-// kickoff TBC logic (match-aligned)
-import { computeLikelyPlaceholderTbcIds, isKickoffTbc, kickoffIsoOrNull } from "@/src/utils/kickoffTbc";
 
 // dev-only IATA detection
 import { getIataCityCodeForCity, debugCityKey } from "@/src/data/iataCityCodes";
@@ -177,54 +175,38 @@ function safeFixtureTitle(r: FixtureListRow | null | undefined, fallbackId: stri
   return `Match ${fallbackId}`;
 }
 
-function parseIsoToDate(iso?: string | null): Date | null {
+function parseIsoToDate(iso?: string): Date | null {
   const s = String(iso ?? "").trim();
   if (!s) return null;
   const d = new Date(s);
   return Number.isFinite(d.getTime()) ? d : null;
 }
 
-/**
- * Trip kickoff display must match Match screen semantics:
- * - use isKickoffTbc(row, placeholderIds) when we have row
- * - fall back to snapshot fields when we don't
- */
-function formatKickoffLine(args: {
-  row?: FixtureListRow | null;
-  trip?: Trip | null;
-  placeholderIds?: Set<string> | null;
-}): { line: string; tbc: boolean } {
-  const { row, trip, placeholderIds } = args;
-
-  if (row) {
-    const tbc = isKickoffTbc(row, placeholderIds ?? undefined);
-    const iso = kickoffIsoOrNull(row) ?? ((trip as any)?.kickoffIso as string | undefined);
-    const d = parseIsoToDate(iso);
-
-    if (!d) return { line: "Kickoff: TBC", tbc: true };
-
-    const datePart = d.toLocaleDateString("en-GB", { weekday: "short", day: "2-digit", month: "short" });
-    const timePart = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
-
-    if (tbc) return { line: `Kickoff: ${datePart} • TBC`, tbc: true };
-
-    const long = String(row?.fixture?.status?.long ?? "").trim();
-    const statusHint = long ? ` • ${long}` : "";
-    return { line: `Kickoff: ${datePart} • ${timePart}${statusHint}`, tbc: false };
-  }
-
-  // snapshot-only fallback
-  const iso = ((trip as any)?.kickoffIso as string | undefined) ?? null;
-  const snapTbc = Boolean((trip as any)?.kickoffTbc);
+function formatKickoffMeta(row?: FixtureListRow | null, trip?: Trip | null): { line: string; tbc: boolean } {
+  const iso = (row?.fixture?.date as any) ?? (trip as any)?.kickoffIso;
   const d = parseIsoToDate(iso);
 
-  if (!d) return { line: snapTbc ? "Kickoff: TBC" : "Kickoff: —", tbc: true };
+  const short = String(row?.fixture?.status?.short ?? "").trim().toUpperCase();
+  const long = String(row?.fixture?.status?.long ?? "").trim();
+
+  const looksTbc = short === "TBD" || short === "TBA" || short === "NS" || short === "PST";
+  const snapTbc = Boolean((trip as any)?.kickoffTbc);
+
+  if (!d) {
+    const tbc = looksTbc || snapTbc;
+    return { line: tbc ? "Kickoff: TBC" : "Kickoff: —", tbc: true };
+  }
 
   const datePart = d.toLocaleDateString("en-GB", { weekday: "short", day: "2-digit", month: "short" });
   const timePart = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 
-  if (snapTbc) return { line: `Kickoff: ${datePart} • TBC`, tbc: true };
-  return { line: `Kickoff: ${datePart} • ${timePart}`, tbc: false };
+  const midnight = d.getHours() === 0 && d.getMinutes() === 0;
+  const tbc = looksTbc || snapTbc || midnight;
+
+  if (tbc) return { line: `Kickoff: ${datePart} • TBC`, tbc: true };
+
+  const statusHint = long ? ` • ${long}` : "";
+  return { line: `Kickoff: ${datePart} • ${timePart}${statusHint}`, tbc: false };
 }
 
 function titleCaseCity(s: string) {
@@ -239,10 +221,27 @@ function titleCaseCity(s: string) {
     .join(" ");
 }
 
-function currentFootballSeasonStartYear(now = new Date()): number {
-  const y = now.getFullYear();
-  const m = now.getMonth();
-  return m >= 6 ? y : y - 1;
+function safeIso(iso: unknown) {
+  const s = String(iso ?? "").trim();
+  return s ? s : null;
+}
+
+function extractPrevKickoffIso(followedItem: any): string | null {
+  if (!followedItem) return null;
+
+  const direct = safeIso(followedItem?.kickoffIso);
+  if (direct) return direct;
+
+  const latestA = safeIso(followedItem?.latestSnapshot?.kickoffIso);
+  if (latestA) return latestA;
+
+  const latestB = safeIso(followedItem?.latest?.kickoffIso);
+  if (latestB) return latestB;
+
+  const latestC = safeIso(followedItem?.snapshot?.kickoffIso);
+  if (latestC) return latestC;
+
+  return null;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -265,10 +264,6 @@ export default function TripDetailScreen() {
   const [fixturesById, setFixturesById] = useState<Record<string, FixtureListRow>>({});
   const [fxLoading, setFxLoading] = useState(false);
 
-  // round clustering placeholder ids (for primary match)
-  const [primaryPlaceholderIds, setPrimaryPlaceholderIds] = useState<Set<string> | null>(null);
-  const [clusterLoading, setClusterLoading] = useState(false);
-
   const [noteText, setNoteText] = useState("");
   const [noteSaving, setNoteSaving] = useState(false);
 
@@ -276,6 +271,8 @@ export default function TripDetailScreen() {
 
   const [originLoaded, setOriginLoaded] = useState<boolean>(preferencesStore.getState().loaded);
   const [originIata, setOriginIata] = useState<string>(preferencesStore.getPreferredOriginIata());
+
+  const followedList = useFollowStore((s: any) => s.followed ?? []);
 
   /* ---------------- load trip ---------------- */
 
@@ -415,6 +412,7 @@ export default function TripDetailScreen() {
   const pending = useMemo(() => savedItems.filter((x) => x.status === "pending"), [savedItems]);
   const saved = useMemo(() => savedItems.filter((x) => x.status === "saved" && x.type !== "note"), [savedItems]);
   const booked = useMemo(() => savedItems.filter((x) => x.status === "booked"), [savedItems]);
+
   const notes = useMemo(() => savedItems.filter((x) => x.type === "note" && x.status !== "archived"), [savedItems]);
 
   const matchIds = useMemo(() => {
@@ -424,7 +422,7 @@ export default function TripDetailScreen() {
 
   const numericMatchIds = useMemo(() => matchIds.filter(isNumericId), [matchIds]);
 
-  /* ---------------- primary match + clustering ---------------- */
+  /* ---------------- matchday logistics (primary match → stay guidance) ---------------- */
 
   const primaryMatchId = useMemo(() => numericMatchIds[0] ?? null, [numericMatchIds]);
 
@@ -433,57 +431,20 @@ export default function TripDetailScreen() {
     return fixturesById[String(primaryMatchId)] ?? null;
   }, [primaryMatchId, fixturesById]);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function run() {
-      if (!primaryFixture) {
-        setPrimaryPlaceholderIds(null);
-        return;
-      }
-
-      const leagueId = primaryFixture?.league?.id ?? null;
-      const season = typeof primaryFixture?.league?.season === "number" ? primaryFixture.league!.season! : currentFootballSeasonStartYear();
-      const round = String(primaryFixture?.league?.round ?? "").trim();
-
-      if (!leagueId || !season || !round) {
-        setPrimaryPlaceholderIds(new Set());
-        return;
-      }
-
-      setClusterLoading(true);
-      try {
-        const roundRows = await getFixturesByRound({ league: leagueId, season, round });
-        if (cancelled) return;
-        setPrimaryPlaceholderIds(computeLikelyPlaceholderTbcIds(roundRows));
-      } catch {
-        if (cancelled) return;
-        setPrimaryPlaceholderIds(new Set());
-      } finally {
-        if (!cancelled) setClusterLoading(false);
-      }
-    }
-
-    run();
-    return () => {
-      cancelled = true;
-    };
-  }, [primaryFixture]);
-
-  /* ---------------- matchday logistics (primary match → stay guidance) ---------------- */
-
   const primaryHomeName = useMemo(() => {
     const fromFixture = String(primaryFixture?.teams?.home?.name ?? "").trim();
     if (fromFixture) return fromFixture;
 
-    return String((trip as any)?.homeName ?? "").trim();
+    const snap = String((trip as any)?.homeName ?? "").trim();
+    return snap;
   }, [primaryFixture, trip]);
 
   const primaryLeagueName = useMemo(() => {
     const fromFixture = String(primaryFixture?.league?.name ?? "").trim();
     if (fromFixture) return fromFixture;
 
-    return String((trip as any)?.leagueName ?? "").trim();
+    const snap = String((trip as any)?.leagueName ?? "").trim();
+    return snap;
   }, [primaryFixture, trip]);
 
   const primaryLogistics = useMemo(() => {
@@ -491,7 +452,9 @@ export default function TripDetailScreen() {
     return getMatchdayLogistics({ homeTeamName: primaryHomeName, leagueName: primaryLeagueName });
   }, [primaryHomeName, primaryLeagueName]);
 
-  const primaryLogisticsSnippet = useMemo(() => (primaryLogistics ? buildLogisticsSnippet(primaryLogistics) : ""), [primaryLogistics]);
+  const primaryLogisticsSnippet = useMemo(() => {
+    return primaryLogistics ? buildLogisticsSnippet(primaryLogistics) : "";
+  }, [primaryLogistics]);
 
   const stayBestAreas = useMemo(() => {
     const arr = Array.isArray(primaryLogistics?.stay?.bestAreas) ? primaryLogistics!.stay!.bestAreas : [];
@@ -562,7 +525,7 @@ export default function TripDetailScreen() {
 
     const r = fixturesById[String(matchId)];
     const leagueId = r?.league?.id != null ? String(r.league.id) : undefined;
-    const season = r?.league?.season != null ? String(r.league.season) : undefined;
+    const season = (r as any)?.league?.season != null ? String((r as any).league.season) : undefined;
 
     const from = trip?.startDate ? String(trip.startDate) : undefined;
     const to = trip?.endDate ? String(trip.endDate) : undefined;
@@ -893,11 +856,7 @@ export default function TripDetailScreen() {
                       const venue = String(r?.fixture?.venue?.name ?? (trip as any)?.venueName ?? "").trim();
                       const city = String(r?.fixture?.venue?.city ?? (trip as any)?.displayCity ?? "").trim();
 
-                      const kickoff = formatKickoffLine({
-                        row: r ?? null,
-                        trip,
-                        placeholderIds: mid === primaryMatchId ? primaryPlaceholderIds : null,
-                      });
+                      const kickoff = formatKickoffMeta(r, trip);
 
                       const meta1 = [leagueName || null, round || null].filter(Boolean).join(" • ");
                       const meta2 = [venue || null, city || null].filter(Boolean).join(" • ");
@@ -908,6 +867,13 @@ export default function TripDetailScreen() {
                       const logistics = getMatchdayLogistics({ homeTeamName: homeName, leagueName });
                       const logisticsLine = logistics ? buildLogisticsSnippet(logistics) : "";
 
+                      const followedItem =
+                        followedList.find((x: any) => String(x?.fixtureId ?? "").trim() === String(mid).trim()) ?? null;
+
+                      const prevIso = extractPrevKickoffIso(followedItem);
+                      const curIso = safeIso(r?.fixture?.date);
+                      const changed = !!prevIso && !!curIso && prevIso.trim() !== curIso.trim() && !kickoff.tbc;
+
                       return (
                         <Pressable key={mid} onPress={() => openMatch(mid)} style={styles.matchRow}>
                           <TeamCrest name={homeName} logo={r?.teams?.home?.logo} />
@@ -917,9 +883,16 @@ export default function TripDetailScreen() {
                               <Text style={styles.matchTitle} numberOfLines={1}>
                                 {title}
                               </Text>
+
                               {kickoff.tbc ? (
                                 <View style={styles.tbcPill}>
                                   <Text style={styles.tbcText}>TBC</Text>
+                                </View>
+                              ) : null}
+
+                              {changed ? (
+                                <View style={styles.changedPill}>
+                                  <Text style={styles.changedText}>Changed</Text>
                                 </View>
                               ) : null}
                             </View>
@@ -928,14 +901,22 @@ export default function TripDetailScreen() {
                               {kickoff.line}
                             </Text>
 
-                            {mid === primaryMatchId && clusterLoading ? (
-                              <Text style={styles.matchMeta} numberOfLines={1}>
-                                Checking schedule…
+                            {changed && prevIso ? (
+                              <Text style={styles.changeInline} numberOfLines={1}>
+                                Was: {formatUkDateTimeMaybe(prevIso) ?? prevIso}
                               </Text>
                             ) : null}
 
-                            {meta1 ? <Text style={styles.matchMeta} numberOfLines={1}>{meta1}</Text> : null}
-                            {meta2 ? <Text style={styles.matchMeta} numberOfLines={1}>{meta2}</Text> : null}
+                            {meta1 ? (
+                              <Text style={styles.matchMeta} numberOfLines={1}>
+                                {meta1}
+                              </Text>
+                            ) : null}
+                            {meta2 ? (
+                              <Text style={styles.matchMeta} numberOfLines={1}>
+                                {meta2}
+                              </Text>
+                            ) : null}
 
                             {logisticsLine ? (
                               <Text style={styles.logisticsMeta} numberOfLines={1}>
@@ -977,7 +958,10 @@ export default function TripDetailScreen() {
                     </View>
 
                     <Text style={styles.stayMeta}>
-                      Stadium: <Text style={styles.stayMetaStrong}>{String(primaryLogistics.stadium ?? "").trim() || "—"}</Text>
+                      Stadium:{" "}
+                      <Text style={styles.stayMetaStrong}>
+                        {String(primaryLogistics.stadium ?? "").trim() || "—"}
+                      </Text>
                       {primaryLogistics.city ? <Text style={styles.stayMeta}> • {String(primaryLogistics.city).trim()}</Text> : null}
                     </Text>
 
@@ -985,7 +969,9 @@ export default function TripDetailScreen() {
                       <View style={{ gap: 6 }}>
                         <Text style={styles.stayLabel}>Best areas</Text>
                         {stayBestAreas.slice(0, 3).map((line, idx) => (
-                          <Text key={`best-${idx}`} style={styles.stayBullet}>• {line}</Text>
+                          <Text key={`best-${idx}`} style={styles.stayBullet}>
+                            • {line}
+                          </Text>
                         ))}
                       </View>
                     ) : null}
@@ -994,7 +980,9 @@ export default function TripDetailScreen() {
                       <View style={{ gap: 6 }}>
                         <Text style={styles.stayLabel}>Budget-friendly</Text>
                         {stayBudgetAreas.slice(0, 2).map((line, idx) => (
-                          <Text key={`budget-${idx}`} style={styles.stayBullet}>• {line}</Text>
+                          <Text key={`budget-${idx}`} style={styles.stayBullet}>
+                            • {line}
+                          </Text>
                         ))}
                       </View>
                     ) : null}
@@ -1003,7 +991,9 @@ export default function TripDetailScreen() {
                       <View style={{ gap: 6 }}>
                         <Text style={styles.stayLabel}>Best transport stops</Text>
                         {transportStops.map((line, idx) => (
-                          <Text key={`stop-${idx}`} style={styles.stayBullet}>• {line}</Text>
+                          <Text key={`stop-${idx}`} style={styles.stayBullet}>
+                            • {line}
+                          </Text>
                         ))}
                       </View>
                     ) : null}
@@ -1012,7 +1002,9 @@ export default function TripDetailScreen() {
                       <View style={{ gap: 6 }}>
                         <Text style={styles.stayLabel}>Matchday tips</Text>
                         {transportTips.map((line, idx) => (
-                          <Text key={`tip-${idx}`} style={styles.stayBullet}>• {line}</Text>
+                          <Text key={`tip-${idx}`} style={styles.stayBullet}>
+                            • {line}
+                          </Text>
                         ))}
                       </View>
                     ) : null}
@@ -1025,18 +1017,26 @@ export default function TripDetailScreen() {
                 <Text style={styles.sectionTitle}>Pending</Text>
 
                 {pending.length === 0 ? (
-                  <EmptyState title="No pending bookings" message="When you click a partner link, it appears here until you confirm it’s booked." />
+                  <EmptyState
+                    title="No pending bookings"
+                    message="When you click a partner link, it appears here until you confirm it’s booked."
+                  />
                 ) : (
                   <View style={{ gap: 10 }}>
                     {pending.map((it) => (
                       <View key={it.id} style={styles.itemRow}>
                         <Pressable style={{ flex: 1 }} onPress={() => openSavedItem(it)}>
                           <View style={styles.itemTitleRow}>
-                            <Text style={styles.itemTitle} numberOfLines={1}>{it.title}</Text>
+                            <Text style={styles.itemTitle} numberOfLines={1}>
+                              {it.title}
+                            </Text>
                             <StatusBadge s={it.status} />
                           </View>
 
-                          <Text style={styles.itemMeta} numberOfLines={1}>{buildMetaLine(it)}</Text>
+                          <Text style={styles.itemMeta} numberOfLines={1}>
+                            {buildMetaLine(it)}
+                          </Text>
+
                           {it.priceText ? <Text style={styles.priceLine} numberOfLines={1}>{it.priceText}</Text> : null}
                         </Pressable>
 
@@ -1066,11 +1066,16 @@ export default function TripDetailScreen() {
                       <View key={it.id} style={styles.itemRow}>
                         <Pressable style={{ flex: 1 }} onPress={() => openSavedItem(it)}>
                           <View style={styles.itemTitleRow}>
-                            <Text style={styles.itemTitle} numberOfLines={1}>{it.title}</Text>
+                            <Text style={styles.itemTitle} numberOfLines={1}>
+                              {it.title}
+                            </Text>
                             <StatusBadge s={it.status} />
                           </View>
 
-                          <Text style={styles.itemMeta} numberOfLines={1}>{buildMetaLine(it)}</Text>
+                          <Text style={styles.itemMeta} numberOfLines={1}>
+                            {buildMetaLine(it)}
+                          </Text>
+
                           {it.priceText ? <Text style={styles.priceLine} numberOfLines={1}>{it.priceText}</Text> : null}
                         </Pressable>
 
@@ -1078,6 +1083,7 @@ export default function TripDetailScreen() {
                           <Pressable onPress={onViewWallet} style={styles.smallBtn}>
                             <Text style={styles.smallBtnText}>Wallet</Text>
                           </Pressable>
+
                           <Pressable onPress={() => confirmArchive(it)} style={[styles.smallBtn, styles.smallBtnDanger]}>
                             <Text style={styles.smallBtnText}>Archive</Text>
                           </Pressable>
@@ -1100,11 +1106,16 @@ export default function TripDetailScreen() {
                       <View key={it.id} style={styles.itemRow}>
                         <Pressable style={{ flex: 1 }} onPress={() => openSavedItem(it)}>
                           <View style={styles.itemTitleRow}>
-                            <Text style={styles.itemTitle} numberOfLines={1}>{it.title}</Text>
+                            <Text style={styles.itemTitle} numberOfLines={1}>
+                              {it.title}
+                            </Text>
                             <StatusBadge s={it.status} />
                           </View>
 
-                          <Text style={styles.itemMeta} numberOfLines={1}>{buildMetaLine(it)}</Text>
+                          <Text style={styles.itemMeta} numberOfLines={1}>
+                            {buildMetaLine(it)}
+                          </Text>
+
                           {it.priceText ? <Text style={styles.priceLine} numberOfLines={1}>{it.priceText}</Text> : null}
                         </Pressable>
 
@@ -1112,9 +1123,11 @@ export default function TripDetailScreen() {
                           <Pressable onPress={() => confirmMarkBooked(it)} style={styles.smallBtn}>
                             <Text style={styles.smallBtnText}>Booked</Text>
                           </Pressable>
+
                           <Pressable onPress={() => confirmMoveToPending(it)} style={styles.smallBtn}>
                             <Text style={styles.smallBtnText}>Pending</Text>
                           </Pressable>
+
                           <Pressable onPress={() => confirmArchive(it)} style={[styles.smallBtn, styles.smallBtnDanger]}>
                             <Text style={styles.smallBtnText}>Archive</Text>
                           </Pressable>
@@ -1153,8 +1166,12 @@ export default function TripDetailScreen() {
                     {notes.map((it) => (
                       <Pressable key={it.id} onPress={() => openNoteActions(it)} style={styles.noteRow}>
                         <View style={{ flex: 1 }}>
-                          <Text style={styles.itemTitle} numberOfLines={1}>{it.title}</Text>
-                          <Text style={styles.itemMeta} numberOfLines={1}>Notes</Text>
+                          <Text style={styles.itemTitle} numberOfLines={1}>
+                            {it.title}
+                          </Text>
+                          <Text style={styles.itemMeta} numberOfLines={1}>
+                            Notes
+                          </Text>
                         </View>
                         <Text style={styles.chev}>›</Text>
                       </Pressable>
@@ -1269,11 +1286,24 @@ const styles = StyleSheet.create({
 
   hero: { padding: theme.spacing.lg },
 
-  kicker: { color: theme.colors.primary, fontWeight: "900", fontSize: theme.fontSize.xs },
+  kicker: {
+    color: theme.colors.primary,
+    fontWeight: "900",
+    fontSize: theme.fontSize.xs,
+  },
 
-  cityTitle: { marginTop: 6, color: theme.colors.text, fontSize: theme.fontSize.xl, fontWeight: "900" },
+  cityTitle: {
+    marginTop: 6,
+    color: theme.colors.text,
+    fontSize: theme.fontSize.xl,
+    fontWeight: "900",
+  },
 
-  heroMeta: { marginTop: 6, color: theme.colors.textSecondary, fontWeight: "800" },
+  heroMeta: {
+    marginTop: 6,
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
+  },
 
   heroTopRow: {
     marginTop: 10,
@@ -1304,26 +1334,71 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
 
-  walletBtnText: { color: theme.colors.text, fontWeight: "900", fontSize: 12 },
+  walletBtnText: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 12,
+  },
 
   bannersRow: { marginTop: 12, gap: 10 },
 
-  pendingBanner: { padding: 10, borderRadius: 12, backgroundColor: "rgba(255,200,80,0.15)" },
-  pendingText: { color: "rgba(255,200,80,1)", fontWeight: "900" },
+  pendingBanner: {
+    padding: 10,
+    borderRadius: 12,
+    backgroundColor: "rgba(255,200,80,0.15)",
+  },
 
-  savedBanner: { padding: 10, borderRadius: 12, backgroundColor: "rgba(0,255,136,0.10)" },
-  savedText: { color: "rgba(0,255,136,1)", fontWeight: "900" },
+  pendingText: {
+    color: "rgba(255,200,80,1)",
+    fontWeight: "900",
+  },
 
-  bookedBanner: { padding: 10, borderRadius: 12, backgroundColor: "rgba(120,170,255,0.14)" },
-  bookedText: { color: "rgba(160,195,255,1)", fontWeight: "900" },
+  savedBanner: {
+    padding: 10,
+    borderRadius: 12,
+    backgroundColor: "rgba(0,255,136,0.10)",
+  },
+
+  savedText: {
+    color: "rgba(0,255,136,1)",
+    fontWeight: "900",
+  },
+
+  bookedBanner: {
+    padding: 10,
+    borderRadius: 12,
+    backgroundColor: "rgba(120,170,255,0.14)",
+  },
+
+  bookedText: {
+    color: "rgba(160,195,255,1)",
+    fontWeight: "900",
+  },
 
   heroActions: { marginTop: 12 },
 
-  btn: { paddingVertical: 12, borderRadius: 12, alignItems: "center", borderWidth: 1 },
-  btnPrimary: { borderColor: "rgba(0,255,136,0.6)", backgroundColor: "rgba(0,0,0,0.22)" },
-  btnPrimaryText: { color: theme.colors.text, fontWeight: "900" },
+  btn: {
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: "center",
+    borderWidth: 1,
+  },
 
-  sectionTitle: { color: theme.colors.text, fontWeight: "900", marginBottom: 8 },
+  btnPrimary: {
+    borderColor: "rgba(0,255,136,0.6)",
+    backgroundColor: "rgba(0,0,0,0.22)",
+  },
+
+  btnPrimaryText: {
+    color: theme.colors.text,
+    fontWeight: "900",
+  },
+
+  sectionTitle: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    marginBottom: 8,
+  },
 
   matchRow: {
     flexDirection: "row",
@@ -1337,7 +1412,12 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.18)",
   },
 
-  matchTitleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  matchTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+
   matchTitle: { color: theme.colors.text, fontWeight: "900", flexShrink: 1 },
 
   tbcPill: {
@@ -1351,9 +1431,39 @@ const styles = StyleSheet.create({
 
   tbcText: { color: "rgba(255,200,80,1)", fontWeight: "900", fontSize: 11 },
 
-  matchMeta: { marginTop: 4, color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12, lineHeight: 16 },
+  changedPill: {
+    borderWidth: 1,
+    borderColor: "rgba(120,170,255,0.38)",
+    backgroundColor: "rgba(120,170,255,0.10)",
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  changedText: { color: "rgba(160,195,255,1)", fontWeight: "900", fontSize: 11 },
 
-  logisticsMeta: { marginTop: 6, color: theme.colors.textTertiary, fontWeight: "900", fontSize: 12, lineHeight: 16 },
+  matchMeta: {
+    marginTop: 4,
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
+    fontSize: 12,
+    lineHeight: 16,
+  },
+
+  changeInline: {
+    marginTop: 6,
+    color: theme.colors.textTertiary,
+    fontWeight: "900",
+    fontSize: 12,
+    lineHeight: 16,
+  },
+
+  logisticsMeta: {
+    marginTop: 6,
+    color: theme.colors.textTertiary,
+    fontWeight: "900",
+    fontSize: 12,
+    lineHeight: 16,
+  },
 
   matchHint: { marginTop: 6, color: theme.colors.textTertiary, fontWeight: "900", fontSize: 11 },
 
@@ -1367,9 +1477,10 @@ const styles = StyleSheet.create({
   },
 
   crestImg: { width: 26, height: 26 },
+
   crestFallback: { color: theme.colors.textSecondary, fontWeight: "900" },
 
-  /* Stay */
+  /* Stay section */
   stayPill: {
     padding: 10,
     borderRadius: 12,
@@ -1378,13 +1489,37 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.16)",
   },
 
-  stayPillText: { color: theme.colors.text, fontWeight: "900", fontSize: 12, lineHeight: 16 },
+  stayPillText: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 12,
+    lineHeight: 16,
+  },
 
-  stayMeta: { color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12, lineHeight: 16 },
-  stayMetaStrong: { color: theme.colors.text, fontWeight: "900" },
+  stayMeta: {
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
+    fontSize: 12,
+    lineHeight: 16,
+  },
 
-  stayLabel: { color: theme.colors.text, fontWeight: "900", fontSize: 12 },
-  stayBullet: { color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12, lineHeight: 16 },
+  stayMetaStrong: {
+    color: theme.colors.text,
+    fontWeight: "900",
+  },
+
+  stayLabel: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 12,
+  },
+
+  stayBullet: {
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
+    fontSize: 12,
+    lineHeight: 16,
+  },
 
   itemRow: {
     flexDirection: "row",
@@ -1398,15 +1533,38 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
 
-  itemTitleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
+  itemTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
 
-  itemTitle: { color: theme.colors.text, fontWeight: "900", flexShrink: 1, paddingRight: 6 },
+  itemTitle: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    flexShrink: 1,
+    paddingRight: 6,
+  },
 
-  itemMeta: { marginTop: 4, color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12 },
+  itemMeta: {
+    marginTop: 4,
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
+    fontSize: 12,
+  },
 
-  priceLine: { marginTop: 6, color: "rgba(242,244,246,0.92)", fontSize: 12, fontWeight: "900" },
+  priceLine: {
+    marginTop: 6,
+    color: "rgba(242,244,246,0.92)",
+    fontSize: 12,
+    fontWeight: "900",
+  },
 
-  itemActions: { gap: 8, alignItems: "flex-end" },
+  itemActions: {
+    gap: 8,
+    alignItems: "flex-end",
+  },
 
   smallBtn: {
     paddingVertical: 8,
@@ -1417,17 +1575,48 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.15)",
   },
 
-  smallBtnDanger: { borderColor: "rgba(255,80,80,0.35)" },
+  smallBtnDanger: {
+    borderColor: "rgba(255,80,80,0.35)",
+  },
 
-  smallBtnText: { color: theme.colors.text, fontWeight: "900", fontSize: 12 },
+  smallBtnText: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 12,
+  },
 
-  badge: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
-  badgeText: { color: theme.colors.text, fontWeight: "900", fontSize: 11 },
+  badge: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
 
-  badgePending: { borderColor: "rgba(255,200,80,0.40)", backgroundColor: "rgba(255,200,80,0.10)" },
-  badgeSaved: { borderColor: "rgba(0,255,136,0.35)", backgroundColor: "rgba(0,255,136,0.08)" },
-  badgeBooked: { borderColor: "rgba(120,170,255,0.45)", backgroundColor: "rgba(120,170,255,0.10)" },
-  badgeArchived: { borderColor: "rgba(255,255,255,0.18)", backgroundColor: "rgba(255,255,255,0.06)" },
+  badgeText: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 11,
+  },
+
+  badgePending: {
+    borderColor: "rgba(255,200,80,0.40)",
+    backgroundColor: "rgba(255,200,80,0.10)",
+  },
+
+  badgeSaved: {
+    borderColor: "rgba(0,255,136,0.35)",
+    backgroundColor: "rgba(0,255,136,0.08)",
+  },
+
+  badgeBooked: {
+    borderColor: "rgba(120,170,255,0.45)",
+    backgroundColor: "rgba(120,170,255,0.10)",
+  },
+
+  badgeArchived: {
+    borderColor: "rgba(255,255,255,0.18)",
+    backgroundColor: "rgba(255,255,255,0.06)",
+  },
 
   noteBox: {
     borderWidth: 1,
@@ -1469,7 +1658,11 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.18)",
   },
 
-  bookGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  bookGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
 
   bookBtn: {
     width: "48%",
@@ -1484,9 +1677,19 @@ const styles = StyleSheet.create({
 
   bookBtnText: { color: theme.colors.text, fontWeight: "900" },
 
-  bookBtnSub: { marginTop: 4, color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12 },
+  bookBtnSub: {
+    marginTop: 4,
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
+    fontSize: 12,
+  },
 
-  mapsInline: { marginTop: 10, color: theme.colors.textSecondary, textAlign: "center", fontWeight: "900" },
+  mapsInline: {
+    marginTop: 10,
+    color: theme.colors.textSecondary,
+    textAlign: "center",
+    fontWeight: "900",
+  },
 
   chev: { color: theme.colors.textSecondary, fontSize: 24, marginTop: -2 },
 });
