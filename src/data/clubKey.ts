@@ -74,8 +74,6 @@ export function normalizeClubKey(input: string): string {
     "atl madrid": "atletico-madrid",
     "atl. madrid": "atletico-madrid",
 
-    // ⚠️ risky shorthand, keep only if you really want it:
-    "real": "real-madrid",
 
     "real madrid": "real-madrid",
     "real-madrid cf": "real-madrid",
