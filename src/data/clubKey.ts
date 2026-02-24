@@ -46,9 +46,9 @@ export function normalizeClubKey(input: string): string {
     "nottm forest": "nottingham-forest",
     "nffc": "nottingham-forest",
 
-    "bournemouth": "bournemouth",
-    "afc bournemouth": "bournemouth",
-    "afc-bournemouth": "bournemouth",
+"bournemouth": "afc-bournemouth",
+"afc bournemouth": "afc-bournemouth",
+"afc-bournemouth": "afc-bournemouth",
 
     "brighton": "brighton",
     "brighton and hove albion": "brighton",
