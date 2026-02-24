@@ -22,6 +22,7 @@ import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
 import EmptyState from "@/src/components/EmptyState";
 import MatchdayLogisticsCard from "@/src/components/match/MatchdayLogisticsCard";
+import FixtureCertaintyBadge from "@/src/components/FixtureCertaintyBadge";
 
 import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
@@ -39,12 +40,15 @@ import { formatUkDateTimeMaybe } from "@/src/utils/formatters";
 
 import authStore from "@/src/state/auth";
 import useFollowStore from "@/src/state/followStore";
+
 import {
   computeLikelyPlaceholderTbcIds,
   isKickoffTbc,
   kickoffIsoOrNull,
   CONFIRMED_WITHIN_DAYS,
 } from "@/src/utils/kickoffTbc";
+
+import { getFixtureCertainty } from "@/src/utils/fixtureCertainty";
 
 import { getTicketGuide } from "@/src/data/ticketGuides";
 import type { TicketDifficulty } from "@/src/data/ticketGuides/types";
@@ -117,60 +121,6 @@ function daysUntilIso(iso: string) {
   const t = new Date(iso).getTime();
   if (!Number.isFinite(t)) return Number.POSITIVE_INFINITY;
   return (t - Date.now()) / (1000 * 60 * 60 * 24);
-}
-
-function safeIso(iso: unknown) {
-  const s = String(iso ?? "").trim();
-  return s ? s : null;
-}
-
-function extractPrevKickoffIso(followedItem: any): string | null {
-  if (!followedItem) return null;
-
-  const direct = safeIso(followedItem?.kickoffIso);
-  if (direct) return direct;
-
-  const latestA = safeIso(followedItem?.latestSnapshot?.kickoffIso);
-  if (latestA) return latestA;
-
-  const latestB = safeIso(followedItem?.latest?.kickoffIso);
-  if (latestB) return latestB;
-
-  const latestC = safeIso(followedItem?.snapshot?.kickoffIso);
-  if (latestC) return latestC;
-
-  return null;
-}
-
-function certaintyLevel(args: { tbc: boolean; kickoffIso: string | null }) {
-  const { tbc, kickoffIso } = args;
-
-  if (!kickoffIso) return { level: "Low" as const, label: "Not set yet", detail: "Kickoff time not available." };
-  if (tbc) {
-    const daysAway = daysUntilIso(kickoffIso);
-    const extra = Number.isFinite(daysAway)
-      ? `Kickoff can move while TV scheduling is pending (${Math.max(0, Math.round(daysAway))} days away).`
-      : "Kickoff can move while TV scheduling is pending.";
-    return { level: "Low" as const, label: "Kickoff TBC", detail: extra };
-  }
-
-  const daysAway = daysUntilIso(kickoffIso);
-
-  // High certainty only inside the late window.
-  if (daysAway <= CONFIRMED_WITHIN_DAYS) {
-    return {
-      level: "High" as const,
-      label: "Safe to book",
-      detail: `Kickoff is treated as confirmed within ${CONFIRMED_WITHIN_DAYS} days.`,
-    };
-  }
-
-  // Outside the late window, still warn to be flexible even if it looks confirmed.
-  return {
-    level: "Medium" as const,
-    label: "Be flexible",
-    detail: "Kickoff looks set, but timings can still change due to TV scheduling. Prefer refundable options.",
-  };
 }
 
 /* -------------------------------------------------------------------------- */
@@ -382,17 +332,19 @@ export default function MatchDetailScreen() {
     return (fromRow || fallback).trim();
   }, [row?.fixture?.id, id]);
 
-  // Subscribe to followed item (for certainty + change banner)
+  // Full followed object (for previous kickoff snapshot)
   const followedItem = useFollowStore(
     useMemo(() => {
       return (s: any) => {
         const fid = String(fixtureId ?? "").trim();
         if (!fid) return null;
-        return s.followed?.find?.((x: any) => String(x?.fixtureId ?? "").trim() === fid) ?? null;
+        const found = Array.isArray(s.followed) ? s.followed.find((x: any) => String(x?.fixtureId ?? "") === fid) : null;
+        return found ?? null;
       };
     }, [fixtureId])
   );
 
+  // Followed boolean
   const followed = useMemo(() => !!followedItem, [followedItem]);
 
   // sign-in UI
@@ -472,6 +424,7 @@ export default function MatchDetailScreen() {
       const iso = kickoffIsoOrNull(row);
       const daysAway = iso ? daysUntilIso(iso) : Number.POSITIVE_INFINITY;
 
+      // within confirmed window => no placeholder logic needed
       if (iso && daysAway <= CONFIRMED_WITHIN_DAYS) {
         setPlaceholderIds(new Set());
         return;
@@ -526,43 +479,12 @@ export default function MatchDetailScreen() {
     return isKickoffTbc(row, placeholderIds ?? undefined);
   }, [row, placeholderIds]);
 
-  const kickoffIso = useMemo(() => (row ? kickoffIsoOrNull(row) : null), [row]);
-
-  const certainty = useMemo(() => certaintyLevel({ tbc, kickoffIso }), [tbc, kickoffIso]);
-
-  // Kickoff changed banner (only if user is following, so we have a prior snapshot)
-  const kickoffChanged = useMemo(() => {
-    if (!row || !followedItem) return { changed: false as const, prev: null as string | null };
-
-    const prev = extractPrevKickoffIso(followedItem);
-    const cur = kickoffIsoOrNull(row);
-
-    if (!prev || !cur) return { changed: false as const, prev: prev ?? null };
-    if (prev.trim() === cur.trim()) return { changed: false as const, prev };
-
-    return { changed: true as const, prev };
-  }, [row, followedItem]);
-
-  const kickoffChangedText = useMemo(() => {
-    if (!kickoffChanged.changed) return null;
-    const prev = kickoffChanged.prev;
-    const cur = kickoffIsoOrNull(row);
-
-    const prevNice = prev ? formatUkDateTimeMaybe(prev) ?? prev : "—";
-    const curNice = cur ? formatUkDateTimeMaybe(cur) ?? cur : "—";
-
-    return { prevNice, curNice };
-  }, [kickoffChanged, row]);
-
   const kickoffSecondary = useMemo(() => {
     if (!row) return null;
-
     const iso = kickoffIsoOrNull(row);
     if (!iso) return "Kickoff time not set yet";
-
     const daysAway = daysUntilIso(iso);
     if (daysAway <= CONFIRMED_WITHIN_DAYS) return null;
-
     return tbc ? "TV schedule pending" : null;
   }, [row, tbc]);
 
@@ -631,11 +553,13 @@ export default function MatchDetailScreen() {
     return styles.chipUncertain;
   }, [tripStability]);
 
-  const certaintyChipStyle = useMemo(() => {
-    if (certainty.level === "High") return styles.chipCertHigh;
-    if (certainty.level === "Medium") return styles.chipCertMed;
-    return styles.chipCertLow;
-  }, [certainty.level]);
+  // ✅ CERTAINTY MODEL
+  const certainty = useMemo(() => {
+    return getFixtureCertainty(row, {
+      placeholderIds: placeholderIds ?? undefined,
+      previousKickoffIso: (followedItem as any)?.kickoffIso ?? null,
+    });
+  }, [row, placeholderIds, followedItem]);
 
   const homeTicketsSub = useMemo(() => {
     const when = kickoffDateOnly ? ` • ${kickoffDateOnly}` : "";
@@ -691,7 +615,6 @@ export default function MatchDetailScreen() {
     const where = place ? `Venue: ${place}` : "Venue: —";
     const meta = `League: ${leagueName} • Season: ${String(effectiveSeason)}`;
 
-    const certLine = `Certainty: ${certainty.level.toUpperCase()} • ${certainty.label}\n`;
     const stabilityLine = `Trip stability: ${tripStability.toUpperCase()}\n`;
     const guideLine = ticketGuide ? `Home ticket difficulty: ${difficultyLabel(ticketGuide.difficulty)}\n` : "";
 
@@ -701,7 +624,6 @@ export default function MatchDetailScreen() {
 
     const message =
       `${title}\n${when}\n${where}\n${meta}\n\n` +
-      certLine +
       stabilityLine +
       guideLine +
       seLine +
@@ -728,7 +650,6 @@ export default function MatchDetailScreen() {
     mapsUrl,
     ticketGuide,
     tripStability,
-    certainty,
   ]);
 
   const onToggleFollow = useCallback(() => {
@@ -988,6 +909,11 @@ export default function MatchDetailScreen() {
                   {home} vs {away}
                 </Text>
 
+                {/* ✅ Certainty badge */}
+                <View style={{ marginTop: 10 }}>
+                  <FixtureCertaintyBadge state={certainty} />
+                </View>
+
                 <View style={styles.chipRow}>
                   {tbc ? (
                     <>
@@ -1004,16 +930,6 @@ export default function MatchDetailScreen() {
                     </View>
                   )}
 
-                  <View style={[styles.chip, certaintyChipStyle]}>
-                    <Text style={styles.chipText}>
-                      {certainty.level === "High"
-                        ? "Safe to book"
-                        : certainty.level === "Medium"
-                        ? "Be flexible"
-                        : "Hold off booking"}
-                    </Text>
-                  </View>
-
                   <View style={[styles.chip, stabilityChipStyle]}>
                     <Text style={styles.chipText}>{stabilityLabel(tripStability)}</Text>
                   </View>
@@ -1023,28 +939,7 @@ export default function MatchDetailScreen() {
                       {ticketGuide ? `Home tickets: ${difficultyLabel(ticketGuide.difficulty)}` : "Home tickets: Guide pending"}
                     </Text>
                   </View>
-
-                  {kickoffChanged.changed ? (
-                    <View style={[styles.chip, styles.chipChanged]}>
-                      <Text style={[styles.chipText, styles.chipTextChanged]}>Kickoff changed</Text>
-                    </View>
-                  ) : null}
                 </View>
-
-                {kickoffChanged.changed && kickoffChangedText ? (
-                  <View style={styles.changeBox}>
-                    <Text style={styles.changeTitle}>Kickoff updated</Text>
-                    <Text style={styles.changeBody}>
-                      Old: <Text style={styles.changeStrong}>{kickoffChangedText.prevNice}</Text>
-                    </Text>
-                    <Text style={styles.changeBody}>
-                      New: <Text style={styles.changeStrong}>{kickoffChangedText.curNice}</Text>
-                    </Text>
-                    <Text style={styles.changeFoot}>
-                      If you booked travel already, double-check arrival/departure windows.
-                    </Text>
-                  </View>
-                ) : null}
 
                 <View style={styles.metaBlock}>
                   <Text style={styles.metaLine}>
@@ -1067,28 +962,6 @@ export default function MatchDetailScreen() {
                     <Text style={styles.metaLabel}>Season: </Text>
                     {String(effectiveSeason)}
                   </Text>
-
-                  <View style={styles.certBox}>
-                    <Text style={styles.certTitle}>Certainty</Text>
-                    <Text style={styles.certBody}>
-                      <Text style={styles.certStrong}>
-                        {certainty.level.toUpperCase()} • {certainty.label}
-                      </Text>
-                      {"\n"}
-                      {certainty.detail}
-                    </Text>
-
-                    {tbc ? (
-                      <View style={styles.certBtnRow}>
-                        <Pressable onPress={onToggleFollow} style={[styles.miniBtn, styles.miniBtnPrimary]}>
-                          <Text style={styles.miniBtnText}>Follow for alerts</Text>
-                        </Pressable>
-                        <Pressable onPress={onPlanTrip} style={[styles.miniBtn, styles.miniBtnSecondary]}>
-                          <Text style={styles.miniBtnText}>Plan weekend</Text>
-                        </Pressable>
-                      </View>
-                    ) : null}
-                  </View>
                 </View>
 
                 {tbc ? (
@@ -1369,43 +1242,10 @@ const styles = StyleSheet.create({
   chipFlexible: { borderColor: "rgba(255,200,0,0.22)", backgroundColor: "rgba(255,200,0,0.06)" },
   chipUncertain: { borderColor: "rgba(255,120,120,0.22)", backgroundColor: "rgba(255,120,120,0.06)" },
 
-  chipCertHigh: { borderColor: "rgba(0,255,136,0.28)", backgroundColor: "rgba(0,255,136,0.08)" },
-  chipCertMed: { borderColor: "rgba(255,200,0,0.22)", backgroundColor: "rgba(255,200,0,0.06)" },
-  chipCertLow: { borderColor: "rgba(255,120,120,0.22)", backgroundColor: "rgba(255,120,120,0.06)" },
-
-  chipChanged: { borderColor: "rgba(120,170,255,0.34)", backgroundColor: "rgba(120,170,255,0.10)" },
-  chipTextChanged: { color: "rgba(160,195,255,1)" },
-
-  changeBox: {
-    marginTop: 12,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "rgba(120,170,255,0.20)",
-    backgroundColor: "rgba(0,0,0,0.18)",
-    padding: 12,
-  },
-  changeTitle: { color: theme.colors.text, fontWeight: "900", fontSize: 13 },
-  changeBody: { marginTop: 6, color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12, lineHeight: 16 },
-  changeStrong: { color: theme.colors.text, fontWeight: "900" },
-  changeFoot: { marginTop: 8, color: theme.colors.textTertiary, fontWeight: "800", fontSize: 11, lineHeight: 14 },
-
   metaBlock: { marginTop: 12, gap: 6 },
   metaLine: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18, fontWeight: "700" },
   metaLabel: { color: theme.colors.text, fontWeight: "900" },
   metaSecondary: { color: theme.colors.textTertiary, fontSize: 12, fontWeight: "800" },
-
-  certBox: {
-    marginTop: 10,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.18)",
-    padding: 12,
-  },
-  certTitle: { color: theme.colors.text, fontWeight: "900", fontSize: 13 },
-  certBody: { marginTop: 6, color: theme.colors.textSecondary, fontWeight: "700", fontSize: 12, lineHeight: 16 },
-  certStrong: { color: theme.colors.text, fontWeight: "900" },
-  certBtnRow: { marginTop: 10, flexDirection: "row", gap: 10 },
 
   planningBox: {
     marginTop: 12,
