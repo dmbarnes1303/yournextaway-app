@@ -1,4 +1,18 @@
 // src/data/matchdayLogistics/index.ts
+
+/**
+ * ⚠️ SEASONAL MAINTENANCE REQUIRED
+ *
+ * This registry reflects CURRENT TOP-FLIGHT CLUBS ONLY.
+ * At the end of each season you MUST:
+ *
+ * 1. Remove relegated clubs from league files
+ * 2. Add promoted clubs with logistics
+ * 3. Update alias maps in clubKey.ts
+ * 4. Ensure normalizeClubKey(homeTeamName) matches keys
+ *
+ * Failure = wrong logistics shown in UI.
+ */
 import type { MatchdayLogistics, LogisticsStop } from "./types";
 
 import premierLeagueLogistics from "./premierLeague";
