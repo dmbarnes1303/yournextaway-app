@@ -1,13 +1,6 @@
 // src/data/matchdayLogistics/types.ts
 
-export type LogisticsStopType =
-  | "train"
-  | "metro"
-  | "tram"
-  | "bus"
-  | "ferry"
-  | "walk"
-  | "other";
+export type LogisticsStopType = "train" | "metro" | "tram" | "bus" | "ferry" | "walk" | "other";
 
 export type LogisticsStop = {
   name: string;
@@ -19,13 +12,6 @@ export type AreaRec = {
   area: string;
   notes?: string;
   budgetFriendly?: boolean;
-
-  /**
-   * Optional centroid for distance sorting / badges
-   * (lat/lng of neighbourhood centre)
-   */
-  lat?: number;
-  lng?: number;
 };
 
 export type FoodDrinkRec = {
@@ -40,12 +26,6 @@ export type MatchdayLogistics = {
   stadium: string;
   city: string;
   country: string;
-
-  /**
-   * Stadium coordinates (required for stadium distance logic)
-   */
-  stadiumLat: number;
-  stadiumLng: number;
 
   transport: {
     primaryStops: LogisticsStop[];
