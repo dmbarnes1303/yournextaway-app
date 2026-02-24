@@ -8,12 +8,15 @@ import {
   LayoutAnimation,
   Platform,
   UIManager,
-  AccessibilityProps,
 } from "react-native";
 
 import GlassCard from "@/src/components/GlassCard";
 import { theme } from "@/src/constants/theme";
-import type { MatchdayLogistics, ParkingAvailability } from "@/src/data/matchdayLogistics/types";
+import type {
+  MatchdayLogistics,
+  ParkingAvailability,
+  LogisticsStop,
+} from "@/src/data/matchdayLogistics/types";
 
 // Enable LayoutAnimation on Android
 if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -24,34 +27,42 @@ type Props = {
   logistics: MatchdayLogistics | null;
 
   /**
-   * Optional city for Maps deep-links.
-   * If omitted, handlers still work if you provide onOpenStop/onSelectStayArea.
+   * Optional overrides / wiring
+   * - city: used for map deep-link string composition (stop + city)
+   * - onOpenStop: open maps for a stop (stop name + city)
+   * - onSelectStayArea: push into trip build with area prefill
    */
   city?: string | null;
-
-  /** Defaults to "Matchday Logistics" */
-  title?: string;
-
-  /** Defaults to "Know before you go →" */
-  collapsedHint?: string;
-
-  /**
-   * Tap transport stop -> open maps.
-   * If not provided, transport rows are non-interactive.
-   */
-  onOpenStop?: (stopName: string) => void;
-
-  /**
-   * Tap stay area -> prefill Trip Build.
-   * If not provided, stay rows are non-interactive.
-   */
+  onOpenStop?: (query: string, stop?: LogisticsStop) => void;
   onSelectStayArea?: (area: string) => void;
+
+  title?: string; // defaults to "Matchday Logistics"
+  collapsedHint?: string; // defaults to "Know before you go →"
 };
 
 function parkingLabel(a: ParkingAvailability) {
   if (a === "easy") return "Easy";
   if (a === "medium") return "Medium";
   return "Hard";
+}
+
+function stopTypeGlyph(t: LogisticsStop["type"]) {
+  switch (t) {
+    case "train":
+      return "🚆";
+    case "metro":
+      return "Ⓜ️";
+    case "tram":
+      return "🚋";
+    case "bus":
+      return "🚌";
+    case "ferry":
+      return "⛴️";
+    case "walk":
+      return "🚶";
+    default:
+      return "📍";
+  }
 }
 
 function joinNames(items: Array<{ name: string }> | undefined | null, max = 3) {
@@ -101,38 +112,53 @@ function BulletList(props: { items?: string[]; max?: number }) {
   );
 }
 
-function RowLine(props: { primary: string; secondary?: string }) {
-  return (
+function RowLine(props: {
+  primary: string;
+  secondary?: string;
+  leftGlyph?: string;
+  onPress?: () => void;
+}) {
+  const content = (
     <View style={styles.rowLine}>
-      <Text style={styles.rowPrimary}>{props.primary}</Text>
+      <View style={styles.rowTop}>
+        {props.leftGlyph ? <Text style={styles.rowGlyph}>{props.leftGlyph}</Text> : null}
+        <Text style={styles.rowPrimary}>{props.primary}</Text>
+      </View>
       {props.secondary ? <Text style={styles.rowSecondary}>{props.secondary}</Text> : null}
     </View>
   );
-}
 
-function PressableRow(props: {
-  primary: string;
-  secondary?: string;
-  onPress?: () => void;
-  accessibilityLabel?: string;
-}) {
-  const interactive = typeof props.onPress === "function";
-
-  const a11y: AccessibilityProps = interactive
-    ? {
-        accessibilityRole: "button",
-        accessibilityLabel: props.accessibilityLabel || props.primary,
-      }
-    : {};
-
-  if (!interactive) return <RowLine primary={props.primary} secondary={props.secondary} />;
+  if (!props.onPress) return content;
 
   return (
-    <Pressable onPress={props.onPress} style={styles.pressRow} {...a11y}>
-      <RowLine primary={props.primary} secondary={props.secondary} />
-      <View style={styles.pressAffordance}>
-        <Text style={styles.pressAffordanceText}>Maps</Text>
-      </View>
+    <Pressable
+      onPress={props.onPress}
+      style={({ pressed }) => [styles.rowPress, pressed && { opacity: 0.78 }]}
+      accessibilityRole="button"
+    >
+      {content}
+    </Pressable>
+  );
+}
+
+function Chip(props: { text: string; onPress?: () => void }) {
+  const inner = (
+    <View style={styles.chip}>
+      <Text style={styles.chipText} numberOfLines={1}>
+        {props.text}
+      </Text>
+    </View>
+  );
+
+  if (!props.onPress) return inner;
+
+  return (
+    <Pressable
+      onPress={props.onPress}
+      style={({ pressed }) => [pressed && { opacity: 0.78 }]}
+      accessibilityRole="button"
+    >
+      {inner}
     </Pressable>
   );
 }
@@ -140,12 +166,20 @@ function PressableRow(props: {
 export default function MatchdayLogisticsCard({
   logistics,
   city,
-  title = "Matchday Logistics",
-  collapsedHint = "Know before you go →",
   onOpenStop,
   onSelectStayArea,
+  title = "Matchday Logistics",
+  collapsedHint = "Know before you go →",
 }: Props) {
   const [open, setOpen] = useState(false);
+
+  const headerLine = useMemo(() => {
+    if (!logistics) return "";
+    const s = String(logistics.stadium ?? "").trim();
+    const c = String(city ?? logistics.city ?? "").trim();
+    const parts = [s, c].filter(Boolean);
+    return parts.join(" • ");
+  }, [logistics, city]);
 
   const summary = useMemo(() => {
     if (!logistics) return null;
@@ -153,7 +187,9 @@ export default function MatchdayLogisticsCard({
     const transportLine = joinNames(logistics.transport?.primaryStops, 3);
     const parking = parkingLabel(logistics.parking.availability);
     const stayLine =
-      joinAreas(logistics.stay?.bestAreas, 2) || joinAreas(logistics.stay?.budgetAreas, 2) || "";
+      joinAreas(logistics.stay?.bestAreas, 2) ||
+      joinAreas(logistics.stay?.budgetAreas, 2) ||
+      "";
 
     return { transportLine, parking, stayLine };
   }, [logistics]);
@@ -163,31 +199,7 @@ export default function MatchdayLogisticsCard({
     setOpen((v) => !v);
   }, []);
 
-  const onStopPress = useCallback(
-    (stopName: string) => {
-      if (!stopName) return;
-      if (onOpenStop) return onOpenStop(stopName);
-      // If no handler provided, do nothing (caller owns navigation behavior)
-    },
-    [onOpenStop]
-  );
-
-  const onAreaPress = useCallback(
-    (area: string) => {
-      if (!area) return;
-      if (onSelectStayArea) return onSelectStayArea(area);
-    },
-    [onSelectStayArea]
-  );
-
   if (!logistics || !summary) return null;
-
-  const stadiumName = logistics?.stadium?.name ? String(logistics.stadium.name) : "";
-  const stadiumCity = logistics?.stadium?.city ? String(logistics.stadium.city) : "";
-  const headerLine = [stadiumName, stadiumCity || (city ? String(city) : "")]
-    .map((x) => String(x ?? "").trim())
-    .filter(Boolean)
-    .join(" • ");
 
   const transportStops = logistics.transport?.primaryStops ?? [];
   const parking = logistics.parking;
@@ -195,17 +207,19 @@ export default function MatchdayLogisticsCard({
   const stayBest = logistics.stay?.bestAreas ?? [];
   const stayBudget = logistics.stay?.budgetAreas ?? [];
   const arrivalTips = logistics.arrivalTips ?? [];
+  const transportTips = logistics.transport?.tips ?? [];
 
-  const stopInteractive = typeof onOpenStop === "function";
-  const areaInteractive = typeof onSelectStayArea === "function";
+  const effectiveCity = String(city ?? logistics.city ?? "").trim();
 
   return (
     <GlassCard style={styles.card} intensity={22}>
       <Pressable onPress={toggle} style={styles.headerPress} accessibilityRole="button">
         <View style={{ flex: 1 }}>
           <Text style={styles.h2}>{title}</Text>
-          {headerLine ? <Text style={styles.headerLine}>{headerLine}</Text> : null}
-          <Text style={styles.subtitle}>Neutral traveller view: arrive smoothly, enjoy the city, keep it simple.</Text>
+          {headerLine ? <Text style={styles.venueLine}>{headerLine}</Text> : null}
+          <Text style={styles.subtitle}>
+            Neutral traveller view: arrive smoothly, enjoy the city, keep it simple.
+          </Text>
         </View>
 
         <View style={[styles.chev, open && styles.chevOpen]}>
@@ -252,28 +266,32 @@ export default function MatchdayLogisticsCard({
             {transportStops.length ? (
               <View style={styles.rows}>
                 {transportStops.slice(0, 5).map((s, idx) => {
-                  const name = String((s as any)?.name ?? "").trim();
-                  const notes = (s as any)?.notes ? String((s as any).notes) : undefined;
-
+                  const q = effectiveCity ? `${s.name} ${effectiveCity}` : s.name;
+                  const tappable = !!onOpenStop;
                   return (
-                    <PressableRow
-                      key={`${idx}-${name}`}
-                      primary={name}
-                      secondary={notes}
-                      onPress={stopInteractive ? () => onStopPress(name) : undefined}
-                      accessibilityLabel={stopInteractive ? `Open maps for ${name}` : undefined}
+                    <RowLine
+                      key={`${idx}-${s.name}`}
+                      leftGlyph={stopTypeGlyph(s.type)}
+                      primary={s.name}
+                      secondary={s.notes ? String(s.notes) : undefined}
+                      onPress={
+                        tappable
+                          ? () => onOpenStop?.(q, s)
+                          : undefined
+                      }
                     />
                   );
                 })}
-                {stopInteractive ? (
-                  <Text style={styles.microHint}>Tip: tap a stop to open Maps</Text>
-                ) : null}
               </View>
             ) : (
-              <Text style={styles.muted}>Transport tips coming soon.</Text>
+              <Text style={styles.muted}>Transport stops coming soon.</Text>
             )}
 
-            <BulletList items={logistics.transport?.tips ?? []} max={4} />
+            <BulletList items={transportTips} max={5} />
+
+            {onOpenStop && transportStops.length ? (
+              <Text style={styles.tapHint}>Tip: tap a stop to open in Maps.</Text>
+            ) : null}
           </Section>
 
           <Section icon="🚗" title="Parking">
@@ -281,20 +299,28 @@ export default function MatchdayLogisticsCard({
               {parkingLabel(parking.availability)} — {parking.summary}
             </Text>
 
-            {parking.officialLots?.length ? <BulletList items={parking.officialLots} max={4} /> : null}
+            {parking.officialLots?.length ? <BulletList items={parking.officialLots} max={5} /> : null}
           </Section>
 
           {food.length ? (
             <Section icon="🍻" title="Food & drink">
-              <View style={styles.rows}>
-                {food.slice(0, 5).map((f, idx) => (
-                  <RowLine
-                    key={`${idx}-${String((f as any)?.name ?? "")}`}
-                    primary={String((f as any)?.name ?? "")}
-                    secondary={(f as any)?.notes ? String((f as any).notes) : undefined}
-                  />
-                ))}
+              <View style={styles.chipWrap}>
+                {food.slice(0, 10).map((f, idx) => {
+                  const label = String(f.name ?? "").trim();
+                  if (!label) return null;
+                  const q = effectiveCity ? `${label} ${effectiveCity}` : label;
+                  return (
+                    <Chip
+                      key={`${idx}-${label}`}
+                      text={label}
+                      onPress={onOpenStop ? () => onOpenStop(q) : undefined}
+                    />
+                  );
+                })}
               </View>
+              {onOpenStop ? (
+                <Text style={styles.tapHint}>Tap a place to search it in Maps.</Text>
+              ) : null}
             </Section>
           ) : null}
 
@@ -305,22 +331,28 @@ export default function MatchdayLogisticsCard({
                   <Text style={styles.groupLabel}>Best areas</Text>
                   <View style={styles.rows}>
                     {stayBest.slice(0, 4).map((a, idx) => {
-                      const area = String((a as any)?.area ?? "").trim();
-                      const notes = (a as any)?.notes ? String((a as any).notes) : undefined;
+                      const area = String(a.area ?? "").trim();
+                      const secondary = a.notes ? String(a.notes) : undefined;
+
+                      const press =
+                        onSelectStayArea
+                          ? () => onSelectStayArea(area)
+                          : onOpenStop
+                          ? () => {
+                              const q = effectiveCity ? `${area} ${effectiveCity}` : area;
+                              onOpenStop(q);
+                            }
+                          : undefined;
 
                       return (
-                        <PressableRow
+                        <RowLine
                           key={`best-${idx}-${area}`}
                           primary={area}
-                          secondary={notes}
-                          onPress={areaInteractive ? () => onAreaPress(area) : undefined}
-                          accessibilityLabel={areaInteractive ? `Use ${area} for trip stay area` : undefined}
+                          secondary={secondary}
+                          onPress={press}
                         />
                       );
                     })}
-                    {areaInteractive ? (
-                      <Text style={styles.microHint}>Tip: tap an area to prefill your trip</Text>
-                    ) : null}
                   </View>
                 </>
               ) : null}
@@ -330,28 +362,41 @@ export default function MatchdayLogisticsCard({
                   <Text style={[styles.groupLabel, { marginTop: 10 }]}>Budget areas</Text>
                   <View style={styles.rows}>
                     {stayBudget.slice(0, 4).map((a, idx) => {
-                      const area = String((a as any)?.area ?? "").trim();
-                      const notes = (a as any)?.notes ? String((a as any).notes) : undefined;
+                      const area = String(a.area ?? "").trim();
+                      const secondary = a.notes ? String(a.notes) : undefined;
+
+                      const press =
+                        onSelectStayArea
+                          ? () => onSelectStayArea(area)
+                          : onOpenStop
+                          ? () => {
+                              const q = effectiveCity ? `${area} ${effectiveCity}` : area;
+                              onOpenStop(q);
+                            }
+                          : undefined;
 
                       return (
-                        <PressableRow
+                        <RowLine
                           key={`budget-${idx}-${area}`}
                           primary={area}
-                          secondary={notes}
-                          onPress={areaInteractive ? () => onAreaPress(area) : undefined}
-                          accessibilityLabel={areaInteractive ? `Use ${area} for trip stay area` : undefined}
+                          secondary={secondary}
+                          onPress={press}
                         />
                       );
                     })}
                   </View>
                 </>
               ) : null}
+
+              {(onSelectStayArea && (stayBest.length || stayBudget.length)) ? (
+                <Text style={styles.tapHint}>Tap an area to prefill your trip stay search.</Text>
+              ) : null}
             </Section>
           ) : null}
 
           {arrivalTips.length ? (
-            <Section icon="⚠️" title="Arrival advice">
-              <BulletList items={arrivalTips} max={6} />
+            <Section icon="⚠️" title="Arrival tips">
+              <BulletList items={arrivalTips} max={7} />
             </Section>
           ) : null}
         </View>
@@ -376,12 +421,12 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
   },
 
-  headerLine: {
+  venueLine: {
     marginTop: 6,
     color: theme.colors.textTertiary,
     fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 0.2,
+    lineHeight: 16,
+    fontWeight: "800",
   },
 
   subtitle: {
@@ -404,9 +449,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
     transform: [{ rotate: "0deg" }],
   },
-  chevOpen: {
-    transform: [{ rotate: "90deg" }],
-  },
+  chevOpen: { transform: [{ rotate: "90deg" }] },
   chevText: {
     color: theme.colors.textSecondary,
     fontWeight: "900",
@@ -416,7 +459,6 @@ const styles = StyleSheet.create({
   },
 
   summaryWrap: { marginTop: 12, gap: 10 },
-
   summaryRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -453,57 +495,47 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.18)",
     padding: 12,
   },
-
   sectionHeader: { flexDirection: "row", alignItems: "center", gap: 8 },
   sectionIcon: { fontSize: 16 },
   sectionTitle: { color: theme.colors.text, fontWeight: "900", fontSize: 13 },
-
   sectionBody: { marginTop: 10 },
 
   rows: { gap: 10 },
 
-  // pressable row
-  pressRow: {
-    borderRadius: 14,
+  rowPress: {
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.10)",
+    borderColor: "rgba(255,255,255,0.08)",
+    backgroundColor: "rgba(0,0,0,0.14)",
     paddingVertical: 10,
-    paddingHorizontal: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-  },
-  pressAffordance: {
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "rgba(0,255,136,0.28)",
-    backgroundColor: "rgba(0,255,136,0.08)",
-    paddingVertical: 6,
     paddingHorizontal: 10,
   },
-  pressAffordanceText: {
-    color: "rgba(79,224,138,0.92)",
-    fontWeight: "900",
-    fontSize: 11,
-  },
 
-  rowLine: { flex: 1, gap: 4 },
+  rowLine: { gap: 4 },
+  rowTop: { flexDirection: "row", alignItems: "center", gap: 8 },
+  rowGlyph: { fontSize: 14 },
   rowPrimary: { color: theme.colors.text, fontWeight: "900", fontSize: 13 },
-  rowSecondary: { color: theme.colors.textSecondary, fontWeight: "700", fontSize: 12, lineHeight: 16 },
-
-  microHint: {
-    marginTop: 6,
-    color: theme.colors.textTertiary,
-    fontWeight: "800",
-    fontSize: 11,
+  rowSecondary: {
+    color: theme.colors.textSecondary,
+    fontWeight: "700",
+    fontSize: 12,
+    lineHeight: 16,
   },
 
   bullets: { marginTop: 10, gap: 6 },
-  bullet: { color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12, lineHeight: 16 },
+  bullet: {
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
+    fontSize: 12,
+    lineHeight: 16,
+  },
 
-  parkingHeadline: { color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12, lineHeight: 16 },
+  parkingHeadline: {
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
+    fontSize: 12,
+    lineHeight: 16,
+  },
 
   groupLabel: {
     color: theme.colors.textTertiary,
@@ -518,5 +550,32 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSize.sm,
     lineHeight: 18,
     fontWeight: "700",
+  },
+
+  tapHint: {
+    marginTop: 10,
+    color: theme.colors.textTertiary,
+    fontWeight: "800",
+    fontSize: 11,
+    lineHeight: 14,
+  },
+
+  chipWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  chip: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.16)",
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+  },
+  chipText: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 12,
   },
 });
