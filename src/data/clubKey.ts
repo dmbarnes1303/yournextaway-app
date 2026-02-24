@@ -74,7 +74,6 @@ export function normalizeClubKey(input: string): string {
     "atl madrid": "atletico-madrid",
     "atl. madrid": "atletico-madrid",
 
-
     "real madrid": "real-madrid",
     "real-madrid cf": "real-madrid",
     "real madrid cf": "real-madrid",
@@ -170,7 +169,6 @@ export function normalizeClubKey(input: string): string {
     "1 fsv mainz 05": "mainz-05",
 
     "vfl wolfsburg": "wolfsburg",
-    "wolfsburg": "wolfsburg",
 
     "hoffenheim": "tsg-hoffenheim",
     "tsg 1899 hoffenheim": "tsg-hoffenheim",
@@ -205,27 +203,48 @@ export function normalizeClubKey(input: string): string {
 
     "om": "marseille",
     "olympique de marseille": "marseille",
-    "marseille": "marseille",
 
     "ol": "lyon",
     "olympique lyonnais": "lyon",
-    "lyon": "lyon",
 
     "as monaco": "monaco",
-    "monaco": "monaco",
-
     "ogc nice": "nice",
-    "nice": "nice",
-
     "rc lens": "lens",
-    "lens": "lens",
 
     "rc strasbourg": "strasbourg",
     "rc strasbourg alsace": "strasbourg",
-    "strasbourg": "strasbourg",
 
     "paris fc": "paris-fc",
     "paris-fc": "paris-fc",
+
+    // Added: teams from your Ligue 1 list
+    "losc": "lille",
+    "lille osc": "lille",
+    "losc lille": "lille",
+
+    "stade rennais": "rennes",
+    "stade rennais fc": "rennes",
+
+    "fc lorient": "lorient",
+    "fc-lorient": "lorient",
+
+    "toulouse fc": "toulouse",
+    "toulouse fc.": "toulouse",
+
+    "stade brestois": "brest",
+    "stade brestois 29": "brest",
+
+    "angers sco": "angers",
+
+    "le havre ac": "le-havre",
+    "le havre": "le-havre",
+
+    "aja": "auxerre",
+    "aj auxerre": "auxerre",
+
+    "fc nantes": "nantes",
+
+    "fc metz": "metz",
   };
 
   const directAlias = alias[raw];
@@ -240,4 +259,4 @@ export function normalizeClubKey(input: string): string {
     .replace(/^-|-$/g, "");
 
   return alias[cleaned] ?? cleaned;
-    }
+}
