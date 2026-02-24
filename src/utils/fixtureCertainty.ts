@@ -1,46 +1,44 @@
-import type { FixtureListRow } from "@/src/services/apiFootball";
-import { isKickoffTbc } from "@/src/utils/kickoffTbc";
+Step 3 — Use in Match screen
+Inside app/match/[id].tsx
+Add:
+TypeScript
+Copy code
+import FixtureCertaintyBadge from "@/src/components/FixtureCertaintyBadge";
+import { getFixtureCertainty } from "@/src/utils/fixtureCertainty";
+Then where kickoff is shown:
+TypeScript
+Copy code
+const certainty = getFixtureCertainty(fixture, {
+  placeholderIds,
+  previousKickoffIso: followSnapshot?.kickoffIso ?? null,
+});
+Render under kickoff line:
+TypeScript
+Copy code
+<FixtureCertaintyBadge state={certainty} />
+✅ Step 4 — Trip screen integration
+In your Trip [id].tsx matches list:
+You already compute kickoff meta.
+Add certainty:
+TypeScript
+Copy code
+const certainty = getFixtureCertainty(r, {
+  previousKickoffIso: (trip as any)?.kickoffIso ?? null,
+});
+Render next to kickoff:
+TypeScript
+Copy code
+<FixtureCertaintyBadge state={certainty} />
+✅ Step 5 — Alert trigger (date change)
+You already refresh followed matches.
+Just add this rule:
+If:
+Copy code
 
-export type FixtureCertainty =
-  | "tbc"
-  | "confirmed"
-  | "changed"
-  | "safe";
+oldIso !== newIso
+AND !isKickoffTbc(new)
+→ fire alert:
+Copy code
 
-/**
- * Determines certainty state of a fixture kickoff.
- *
- * Inputs:
- * - API fixture row
- * - optional stored kickoff snapshot (trip or followStore)
- */
-export function getFixtureCertainty(
-  row: FixtureListRow | null | undefined,
-  opts?: {
-    placeholderIds?: Set<string>;
-    previousKickoffIso?: string | null;
-  }
-): FixtureCertainty {
-  if (!row) return "tbc";
-
-  const iso = row?.fixture?.date ?? null;
-
-  if (isKickoffTbc(row, opts?.placeholderIds)) {
-    return "tbc";
-  }
-
-  if (opts?.previousKickoffIso && iso && iso !== opts.previousKickoffIso) {
-    return "changed";
-  }
-
-  // confirmed window logic
-  const d = iso ? new Date(iso).getTime() : NaN;
-  if (Number.isFinite(d)) {
-    const days = (d - Date.now()) / 86400000;
-
-    // within 21d = stable
-    if (days <= 21) return "safe";
-  }
-
-  return "confirmed";
-}
+"Kickoff changed — check your trip"
+You likely already have this scaffold in refreshFollowedMatches.
