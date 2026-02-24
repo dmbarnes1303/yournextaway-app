@@ -47,6 +47,11 @@ import { getIataCityCodeForCity, debugCityKey } from "@/src/data/iataCityCodes";
 // matchday logistics
 import { getMatchdayLogistics, buildLogisticsSnippet } from "@/src/data/matchdayLogistics";
 
+// stadium proximity (distance + time)
+// NOTE: these files exist in your repo (per your log). This screen uses them.
+// If your export name differs, adjust the export in that file (not here).
+import { getStadiumProximity } from "@/src/utils/stadiumProximity";
+
 /* -------------------------------------------------------------------------- */
 /* helpers */
 /* -------------------------------------------------------------------------- */
@@ -181,18 +186,21 @@ function safeFixtureTitle(r: FixtureListRow | null | undefined, fallbackId: stri
   return `Match ${fallbackId}`;
 }
 
-function parseIsoToDate(iso?: string): Date | null {
+function parseIsoToDate(iso?: string | null): Date | null {
   const s = String(iso ?? "").trim();
   if (!s) return null;
   const d = new Date(s);
   return Number.isFinite(d.getTime()) ? d : null;
 }
 
-function formatKickoffMeta(row?: FixtureListRow | null, trip?: Trip | null): { line: string; tbc: boolean; iso: string | null } {
-  const iso = (row?.fixture?.date as any) ?? (trip as any)?.kickoffIso;
-  const isoClean = String(iso ?? "").trim() || null;
+function formatKickoffMeta(
+  row?: FixtureListRow | null,
+  trip?: Trip | null
+): { line: string; tbc: boolean; iso: string | null } {
+  const isoRaw = (row?.fixture?.date as any) ?? (trip as any)?.kickoffIso;
+  const iso = String(isoRaw ?? "").trim() || null;
 
-  const d = parseIsoToDate(isoClean ?? undefined);
+  const d = parseIsoToDate(iso);
 
   const short = String(row?.fixture?.status?.short ?? "").trim().toUpperCase();
   const long = String(row?.fixture?.status?.long ?? "").trim();
@@ -202,7 +210,7 @@ function formatKickoffMeta(row?: FixtureListRow | null, trip?: Trip | null): { l
 
   if (!d) {
     const tbc = looksTbc || snapTbc;
-    return { line: tbc ? "Kickoff: TBC" : "Kickoff: —", tbc: true, iso: isoClean };
+    return { line: tbc ? "Kickoff: TBC" : "Kickoff: —", tbc: true, iso };
   }
 
   const datePart = d.toLocaleDateString("en-GB", { weekday: "short", day: "2-digit", month: "short" });
@@ -211,10 +219,10 @@ function formatKickoffMeta(row?: FixtureListRow | null, trip?: Trip | null): { l
   const midnight = d.getHours() === 0 && d.getMinutes() === 0;
   const tbc = looksTbc || snapTbc || midnight;
 
-  if (tbc) return { line: `Kickoff: ${datePart} • TBC`, tbc: true, iso: isoClean };
+  if (tbc) return { line: `Kickoff: ${datePart} • TBC`, tbc: true, iso };
 
   const statusHint = long ? ` • ${long}` : "";
-  return { line: `Kickoff: ${datePart} • ${timePart}${statusHint}`, tbc: false, iso: isoClean };
+  return { line: `Kickoff: ${datePart} • ${timePart}${statusHint}`, tbc: false, iso };
 }
 
 function titleCaseCity(s: string) {
@@ -242,6 +250,21 @@ function isLateKickoff(kickoffIso?: string | null): boolean {
   const h = d.getHours();
   const m = d.getMinutes();
   return h > 20 || (h === 20 && m >= 30);
+}
+
+function fmtKm(km?: number | null) {
+  if (km == null || !Number.isFinite(km)) return "—";
+  if (km < 1) return `${Math.round(km * 1000)} m`;
+  return `${km.toFixed(km < 10 ? 1 : 0)} km`;
+}
+
+function fmtMins(mins?: number | null) {
+  if (mins == null || !Number.isFinite(mins)) return "—";
+  const m = Math.max(0, Math.round(mins));
+  if (m < 60) return `${m} min`;
+  const h = Math.floor(m / 60);
+  const r = m % 60;
+  return r ? `${h}h ${r}m` : `${h}h`;
 }
 
 function Pill({ label, kind }: { label: string; kind: "best" | "budget" }) {
@@ -423,7 +446,6 @@ export default function TripDetailScreen() {
   const pending = useMemo(() => savedItems.filter((x) => x.status === "pending"), [savedItems]);
   const saved = useMemo(() => savedItems.filter((x) => x.status === "saved" && x.type !== "note"), [savedItems]);
   const booked = useMemo(() => savedItems.filter((x) => x.status === "booked"), [savedItems]);
-
   const notes = useMemo(() => savedItems.filter((x) => x.type === "note" && x.status !== "archived"), [savedItems]);
 
   const matchIds = useMemo(() => {
@@ -433,7 +455,7 @@ export default function TripDetailScreen() {
 
   const numericMatchIds = useMemo(() => matchIds.filter(isNumericId), [matchIds]);
 
-  /* ---------------- matchday logistics (primary match → stay guidance) ---------------- */
+  /* ---------------- primary match / logistics / proximity ---------------- */
 
   const primaryMatchId = useMemo(() => numericMatchIds[0] ?? null, [numericMatchIds]);
 
@@ -445,17 +467,13 @@ export default function TripDetailScreen() {
   const primaryHomeName = useMemo(() => {
     const fromFixture = String(primaryFixture?.teams?.home?.name ?? "").trim();
     if (fromFixture) return fromFixture;
-
-    const snap = String((trip as any)?.homeName ?? "").trim();
-    return snap;
+    return String((trip as any)?.homeName ?? "").trim();
   }, [primaryFixture, trip]);
 
   const primaryLeagueName = useMemo(() => {
     const fromFixture = String(primaryFixture?.league?.name ?? "").trim();
     if (fromFixture) return fromFixture;
-
-    const snap = String((trip as any)?.leagueName ?? "").trim();
-    return snap;
+    return String((trip as any)?.leagueName ?? "").trim();
   }, [primaryFixture, trip]);
 
   const primaryKickoffIso = useMemo(() => {
@@ -472,6 +490,7 @@ export default function TripDetailScreen() {
     return primaryLogistics ? buildLogisticsSnippet(primaryLogistics) : "";
   }, [primaryLogistics]);
 
+  // Areas / stops / tips
   const stayBestAreas = useMemo(() => {
     const arr = Array.isArray(primaryLogistics?.stay?.bestAreas) ? primaryLogistics!.stay!.bestAreas : [];
     return arr
@@ -516,6 +535,44 @@ export default function TripDetailScreen() {
     }
     return "";
   }, [primaryLogistics, primaryKickoffIso]);
+
+  // Stadium identity
+  const stadiumName = useMemo(() => String(primaryLogistics?.stadium ?? "").trim(), [primaryLogistics]);
+  const stadiumCity = useMemo(() => String(primaryLogistics?.city ?? cityName ?? "").trim(), [primaryLogistics, cityName]);
+
+  const stadiumMapsUrl = useMemo(() => {
+    const q = [stadiumName || "stadium", stadiumCity].filter(Boolean).join(" ").trim();
+    return buildMapsSearchUrl(q);
+  }, [stadiumName, stadiumCity]);
+
+  // Proximity (distance + travel time)
+  const stadiumProximity = useMemo(() => {
+    // getStadiumProximity should be tolerant (return null) if coords are missing.
+    // Expected (recommended) shape:
+    // { distanceKm?: number; walkMinutes?: number; transitMinutes?: number; source?: "stadium_coords"|"fallback" }
+    try {
+      return getStadiumProximity({
+        homeTeamName: primaryHomeName,
+        leagueName: primaryLeagueName,
+        cityName: stadiumCity || cityName,
+      }) as any;
+    } catch {
+      return null;
+    }
+  }, [primaryHomeName, primaryLeagueName, stadiumCity, cityName]);
+
+  const distanceLine = useMemo(() => {
+    const km = stadiumProximity?.distanceKm ?? stadiumProximity?.km ?? null;
+    const walk = stadiumProximity?.walkMinutes ?? stadiumProximity?.walkMins ?? null;
+    const transit = stadiumProximity?.transitMinutes ?? stadiumProximity?.transitMins ?? null;
+
+    const bits: string[] = [];
+    if (km != null) bits.push(`Distance: ${fmtKm(km)}`);
+    if (transit != null) bits.push(`Transit: ${fmtMins(transit)}`);
+    if (walk != null) bits.push(`Walk: ${fmtMins(walk)}`);
+
+    return bits.join(" • ");
+  }, [stadiumProximity]);
 
   /* ---------------- dev-only IATA missing mapping warn ---------------- */
 
@@ -786,14 +843,6 @@ export default function TripDetailScreen() {
   const loading = Boolean(tripId && (!tripsLoaded || !savedLoaded));
   const showHeroBanners = pending.length > 0 || saved.length > 0 || booked.length > 0;
 
-  const stadiumName = String(primaryLogistics?.stadium ?? "").trim();
-  const stadiumCity = String(primaryLogistics?.city ?? cityName ?? "").trim();
-
-  const stadiumMapsUrl = useMemo(() => {
-    const q = [stadiumName || "stadium", stadiumCity].filter(Boolean).join(" ").trim();
-    return buildMapsSearchUrl(q);
-  }, [stadiumName, stadiumCity]);
-
   return (
     <Background imageSource={getBackground("trips")} overlayOpacity={0.86}>
       <Stack.Screen
@@ -993,9 +1042,29 @@ export default function TripDetailScreen() {
                         {primaryLogisticsSnippet || "Stadium-area stay guidance available."}
                       </Text>
 
-                      <Text style={styles.proxMuted}>
-                        Open in maps for live distance + travel time. (We can add offline estimates once coords are present.)
-                      </Text>
+                      {/* Distance + travel time */}
+                      <View style={styles.proxStatsRow}>
+                        <View style={styles.statChip}>
+                          <Text style={styles.statLabel}>Distance</Text>
+                          <Text style={styles.statValue}>
+                            {fmtKm(stadiumProximity?.distanceKm ?? stadiumProximity?.km ?? null)}
+                          </Text>
+                        </View>
+                        <View style={styles.statChip}>
+                          <Text style={styles.statLabel}>Transit</Text>
+                          <Text style={styles.statValue}>
+                            {fmtMins(stadiumProximity?.transitMinutes ?? stadiumProximity?.transitMins ?? null)}
+                          </Text>
+                        </View>
+                        <View style={styles.statChip}>
+                          <Text style={styles.statLabel}>Walk</Text>
+                          <Text style={styles.statValue}>
+                            {fmtMins(stadiumProximity?.walkMinutes ?? stadiumProximity?.walkMins ?? null)}
+                          </Text>
+                        </View>
+                      </View>
+
+                      {distanceLine ? <Text style={styles.proxMuted}>{distanceLine}</Text> : null}
 
                       <Pressable onPress={() => openUntracked(stadiumMapsUrl)} style={styles.proxBtn}>
                         <Text style={styles.proxBtnText}>Open stadium in maps</Text>
@@ -1249,7 +1318,11 @@ export default function TripDetailScreen() {
                     multiline
                   />
 
-                  <Pressable onPress={addNote} disabled={noteSaving} style={[styles.noteSaveBtn, noteSaving && { opacity: 0.7 }]}>
+                  <Pressable
+                    onPress={addNote}
+                    disabled={noteSaving}
+                    style={[styles.noteSaveBtn, noteSaving && { opacity: 0.7 }]}
+                  >
                     <Text style={styles.noteSaveText}>{noteSaving ? "Saving…" : "Save note"}</Text>
                   </Pressable>
                 </View>
@@ -1560,6 +1633,22 @@ const styles = StyleSheet.create({
   proxCity: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: 12 },
   proxBody: { marginTop: 8, color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12, lineHeight: 16 },
   proxMuted: { marginTop: 8, color: theme.colors.textTertiary, fontWeight: "900", fontSize: 11, lineHeight: 14 },
+
+  proxStatsRow: { marginTop: 10, flexDirection: "row", gap: 10 },
+  statChip: {
+    flex: 1,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.16)",
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  statLabel: { color: theme.colors.textTertiary, fontWeight: "900", fontSize: 11 },
+  statValue: { marginTop: 6, color: theme.colors.text, fontWeight: "900", fontSize: 12 },
+
   proxBtn: {
     marginTop: 10,
     paddingVertical: 12,
