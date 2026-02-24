@@ -43,7 +43,7 @@ import { getIataCityCodeForCity, debugCityKey } from "@/src/data/iataCityCodes";
 
 // matchday logistics
 import { getMatchdayLogistics } from "@/src/data/matchdayLogistics";
-import type { MatchdayLogistics, LogisticsStop, AreaRec } from "@/src/data/matchdayLogistics/types";
+import type { MatchdayLogistics, AreaRec, LogisticsStop } from "@/src/data/matchdayLogistics/types";
 
 /* -------------------------------------------------------------------------- */
 /* helpers */
@@ -226,7 +226,7 @@ function titleCaseCity(s: string) {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Matchday logistics summary (REAL schema-based, no made-up proximity) */
+/* logistics summary + proximity badges */
 /* -------------------------------------------------------------------------- */
 
 function stopTypeLabel(t: LogisticsStop["type"]) {
@@ -254,15 +254,32 @@ function parkingLabel(a: MatchdayLogistics["parking"]["availability"]) {
   return "Parking: Hard";
 }
 
-function pickAreaNames(list?: AreaRec[], max = 2): string[] {
+function pickAreas(list?: AreaRec[], max = 2) {
   if (!list?.length) return [];
-  const out: string[] = [];
+  const out: AreaRec[] = [];
   for (const a of list) {
     const name = String(a.area ?? "").trim();
-    if (name) out.push(name);
+    if (!name) continue;
+    out.push(a);
     if (out.length >= max) break;
   }
   return out;
+}
+
+function proximityBadge(a: AreaRec): string | null {
+  const p: any = (a as any)?.proximity;
+  if (!p) return null;
+
+  const mins = typeof p.minutes === "number" && p.minutes > 0 ? Math.round(p.minutes) : null;
+  const km = typeof p.distanceKm === "number" && p.distanceKm > 0 ? p.distanceKm : null;
+  const mode = String(p.mode ?? "").trim();
+
+  const bits: string[] = [];
+  if (mins) bits.push(`${mins}m`);
+  if (mode) bits.push(mode);
+  if (km) bits.push(`${km}km`);
+
+  return bits.length ? bits.join(" • ") : null;
 }
 
 function buildLogisticsSummary(logistics?: MatchdayLogistics | null) {
@@ -289,13 +306,22 @@ function buildLogisticsSummary(logistics?: MatchdayLogistics | null) {
 
   const parkLine = logistics.parking?.availability ? parkingLabel(logistics.parking.availability) : null;
 
-  const bestAreas = pickAreaNames(logistics.stay?.bestAreas, 2);
-  const budgetAreas = pickAreaNames(logistics.stay?.budgetAreas, 2);
+  const best = pickAreas(logistics.stay?.bestAreas, 2);
+  const budget = pickAreas(logistics.stay?.budgetAreas, 2);
 
-  const stayBits: string[] = [];
-  if (bestAreas.length) stayBits.push(`Best areas: ${bestAreas.join(" • ")}`);
-  if (budgetAreas.length) stayBits.push(`Budget: ${budgetAreas.join(" • ")}`);
-  const stayLine = stayBits.length ? stayBits.join("  |  ") : null;
+  const stayBadges: { label: string; badge?: string | null }[] = [];
+  for (const a of best) stayBadges.push({ label: a.area, badge: proximityBadge(a) });
+  for (const a of budget) stayBadges.push({ label: a.area, badge: proximityBadge(a) });
+
+  const stayLine =
+    best.length || budget.length
+      ? [
+          best.length ? `Best: ${best.map((x) => x.area).join(" • ")}` : null,
+          budget.length ? `Budget: ${budget.map((x) => x.area).join(" • ")}` : null,
+        ]
+          .filter(Boolean)
+          .join("  |  ")
+      : null;
 
   const hasArrivalTips = Boolean(logistics.arrivalTips?.length);
   const arrivalLine = hasArrivalTips ? "Arrival tips available" : null;
@@ -305,6 +331,7 @@ function buildLogisticsSummary(logistics?: MatchdayLogistics | null) {
     transportLine,
     parkLine,
     stayLine,
+    stayBadges, // for optional chips
     arrivalLine,
   };
 }
@@ -426,9 +453,7 @@ export default function TripDetailScreen() {
           try {
             const r = await getFixtureById(String(id));
             if (r) map[String(id)] = r;
-          } catch {
-            // best-effort
-          }
+          } catch {}
         }
         if (!cancelled) setFixturesById(map);
       } finally {
@@ -868,7 +893,8 @@ export default function TripDetailScreen() {
                       const homeName = String(r?.teams?.home?.name ?? (trip as any)?.homeName ?? "Home");
                       const awayName = String(r?.teams?.away?.name ?? (trip as any)?.awayName ?? "Away");
 
-                      const logistics = getMatchdayLogistics(homeName);
+                      // ✅ Correct call: object args
+                      const logistics = getMatchdayLogistics({ homeTeamName: homeName, leagueName });
                       const summary = buildLogisticsSummary(logistics);
 
                       return (
@@ -903,31 +929,43 @@ export default function TripDetailScreen() {
                               </Text>
                             ) : null}
 
-                            {/* NEW: logistics summary based on your real schema */}
                             {summary ? (
                               <View style={{ marginTop: 6, gap: 4 }}>
                                 <Text style={styles.logiLine} numberOfLines={1}>
                                   {summary.stadiumLine}
                                 </Text>
+
                                 {summary.transportLine ? (
                                   <Text style={styles.logiLineMuted} numberOfLines={1}>
                                     {summary.transportLine}
                                   </Text>
                                 ) : null}
+
                                 {summary.parkLine ? (
                                   <Text style={styles.logiLineMuted} numberOfLines={1}>
                                     {summary.parkLine}
                                   </Text>
                                 ) : null}
+
                                 {summary.stayLine ? (
                                   <Text style={styles.logiLineMuted} numberOfLines={1}>
                                     {summary.stayLine}
                                   </Text>
                                 ) : null}
-                                {summary.arrivalLine ? (
-                                  <Text style={styles.logiLineMuted} numberOfLines={1}>
-                                    {summary.arrivalLine}
-                                  </Text>
+
+                                {/* Optional: proximity chips (only when data exists) */}
+                                {summary.stayBadges?.length ? (
+                                  <View style={styles.proxRow}>
+                                    {summary.stayBadges
+                                      .map((x, i) => ({ ...x, i }))
+                                      .filter((x) => x.badge)
+                                      .slice(0, 3)
+                                      .map((x) => (
+                                        <View key={`${mid}-prox-${x.i}`} style={styles.proxChip}>
+                                          <Text style={styles.proxChipText}>{x.badge}</Text>
+                                        </View>
+                                      ))}
+                                  </View>
                                 ) : null}
                               </View>
                             ) : null}
@@ -1237,24 +1275,11 @@ const styles = StyleSheet.create({
 
   hero: { padding: theme.spacing.lg },
 
-  kicker: {
-    color: theme.colors.primary,
-    fontWeight: "900",
-    fontSize: theme.fontSize.xs,
-  },
+  kicker: { color: theme.colors.primary, fontWeight: "900", fontSize: theme.fontSize.xs },
 
-  cityTitle: {
-    marginTop: 6,
-    color: theme.colors.text,
-    fontSize: theme.fontSize.xl,
-    fontWeight: "900",
-  },
+  cityTitle: { marginTop: 6, color: theme.colors.text, fontSize: theme.fontSize.xl, fontWeight: "900" },
 
-  heroMeta: {
-    marginTop: 6,
-    color: theme.colors.textSecondary,
-    fontWeight: "800",
-  },
+  heroMeta: { marginTop: 6, color: theme.colors.textSecondary, fontWeight: "800" },
 
   heroTopRow: {
     marginTop: 10,
@@ -1285,71 +1310,28 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
 
-  walletBtnText: {
-    color: theme.colors.text,
-    fontWeight: "900",
-    fontSize: 12,
-  },
+  walletBtnText: { color: theme.colors.text, fontWeight: "900", fontSize: 12 },
 
   bannersRow: { marginTop: 12, gap: 10 },
 
-  pendingBanner: {
-    padding: 10,
-    borderRadius: 12,
-    backgroundColor: "rgba(255,200,80,0.15)",
-  },
+  pendingBanner: { padding: 10, borderRadius: 12, backgroundColor: "rgba(255,200,80,0.15)" },
+  pendingText: { color: "rgba(255,200,80,1)", fontWeight: "900" },
 
-  pendingText: {
-    color: "rgba(255,200,80,1)",
-    fontWeight: "900",
-  },
+  savedBanner: { padding: 10, borderRadius: 12, backgroundColor: "rgba(0,255,136,0.10)" },
+  savedText: { color: "rgba(0,255,136,1)", fontWeight: "900" },
 
-  savedBanner: {
-    padding: 10,
-    borderRadius: 12,
-    backgroundColor: "rgba(0,255,136,0.10)",
-  },
-
-  savedText: {
-    color: "rgba(0,255,136,1)",
-    fontWeight: "900",
-  },
-
-  bookedBanner: {
-    padding: 10,
-    borderRadius: 12,
-    backgroundColor: "rgba(120,170,255,0.14)",
-  },
-
-  bookedText: {
-    color: "rgba(160,195,255,1)",
-    fontWeight: "900",
-  },
+  bookedBanner: { padding: 10, borderRadius: 12, backgroundColor: "rgba(120,170,255,0.14)" },
+  bookedText: { color: "rgba(160,195,255,1)", fontWeight: "900" },
 
   heroActions: { marginTop: 12 },
 
-  btn: {
-    paddingVertical: 12,
-    borderRadius: 12,
-    alignItems: "center",
-    borderWidth: 1,
-  },
+  btn: { paddingVertical: 12, borderRadius: 12, alignItems: "center", borderWidth: 1 },
 
-  btnPrimary: {
-    borderColor: "rgba(0,255,136,0.6)",
-    backgroundColor: "rgba(0,0,0,0.22)",
-  },
+  btnPrimary: { borderColor: "rgba(0,255,136,0.6)", backgroundColor: "rgba(0,0,0,0.22)" },
 
-  btnPrimaryText: {
-    color: theme.colors.text,
-    fontWeight: "900",
-  },
+  btnPrimaryText: { color: theme.colors.text, fontWeight: "900" },
 
-  sectionTitle: {
-    color: theme.colors.text,
-    fontWeight: "900",
-    marginBottom: 8,
-  },
+  sectionTitle: { color: theme.colors.text, fontWeight: "900", marginBottom: 8 },
 
   matchRow: {
     flexDirection: "row",
@@ -1363,11 +1345,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.18)",
   },
 
-  matchTitleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
+  matchTitleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
 
   matchTitle: { color: theme.colors.text, fontWeight: "900", flexShrink: 1 },
 
@@ -1390,19 +1368,19 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
 
-  // NEW: schema-based logistics lines
-  logiLine: {
-    color: theme.colors.textSecondary,
-    fontWeight: "900",
-    fontSize: 12,
-    lineHeight: 16,
+  logiLine: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: 12, lineHeight: 16 },
+  logiLineMuted: { color: theme.colors.textTertiary, fontWeight: "900", fontSize: 11, lineHeight: 14 },
+
+  proxRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 4 },
+  proxChip: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+    paddingVertical: 4,
+    paddingHorizontal: 8,
   },
-  logiLineMuted: {
-    color: theme.colors.textTertiary,
-    fontWeight: "900",
-    fontSize: 11,
-    lineHeight: 14,
-  },
+  proxChipText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: 11 },
 
   matchHint: { marginTop: 6, color: theme.colors.textTertiary, fontWeight: "900", fontSize: 11 },
 
@@ -1431,38 +1409,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
 
-  itemTitleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-  },
+  itemTitleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
 
-  itemTitle: {
-    color: theme.colors.text,
-    fontWeight: "900",
-    flexShrink: 1,
-    paddingRight: 6,
-  },
+  itemTitle: { color: theme.colors.text, fontWeight: "900", flexShrink: 1, paddingRight: 6 },
 
-  itemMeta: {
-    marginTop: 4,
-    color: theme.colors.textSecondary,
-    fontWeight: "800",
-    fontSize: 12,
-  },
+  itemMeta: { marginTop: 4, color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12 },
 
-  priceLine: {
-    marginTop: 6,
-    color: "rgba(242,244,246,0.92)",
-    fontSize: 12,
-    fontWeight: "900",
-  },
+  priceLine: { marginTop: 6, color: "rgba(242,244,246,0.92)", fontSize: 12, fontWeight: "900" },
 
-  itemActions: {
-    gap: 8,
-    alignItems: "flex-end",
-  },
+  itemActions: { gap: 8, alignItems: "flex-end" },
 
   smallBtn: {
     paddingVertical: 8,
@@ -1473,48 +1428,18 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.15)",
   },
 
-  smallBtnDanger: {
-    borderColor: "rgba(255,80,80,0.35)",
-  },
+  smallBtnDanger: { borderColor: "rgba(255,80,80,0.35)" },
 
-  smallBtnText: {
-    color: theme.colors.text,
-    fontWeight: "900",
-    fontSize: 12,
-  },
+  smallBtnText: { color: theme.colors.text, fontWeight: "900", fontSize: 12 },
 
-  badge: {
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
+  badge: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
 
-  badgeText: {
-    color: theme.colors.text,
-    fontWeight: "900",
-    fontSize: 11,
-  },
+  badgeText: { color: theme.colors.text, fontWeight: "900", fontSize: 11 },
 
-  badgePending: {
-    borderColor: "rgba(255,200,80,0.40)",
-    backgroundColor: "rgba(255,200,80,0.10)",
-  },
-
-  badgeSaved: {
-    borderColor: "rgba(0,255,136,0.35)",
-    backgroundColor: "rgba(0,255,136,0.08)",
-  },
-
-  badgeBooked: {
-    borderColor: "rgba(120,170,255,0.45)",
-    backgroundColor: "rgba(120,170,255,0.10)",
-  },
-
-  badgeArchived: {
-    borderColor: "rgba(255,255,255,0.18)",
-    backgroundColor: "rgba(255,255,255,0.06)",
-  },
+  badgePending: { borderColor: "rgba(255,200,80,0.40)", backgroundColor: "rgba(255,200,80,0.10)" },
+  badgeSaved: { borderColor: "rgba(0,255,136,0.35)", backgroundColor: "rgba(0,255,136,0.08)" },
+  badgeBooked: { borderColor: "rgba(120,170,255,0.45)", backgroundColor: "rgba(120,170,255,0.10)" },
+  badgeArchived: { borderColor: "rgba(255,255,255,0.18)", backgroundColor: "rgba(255,255,255,0.06)" },
 
   noteBox: {
     borderWidth: 1,
@@ -1556,11 +1481,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.18)",
   },
 
-  bookGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-  },
+  bookGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
 
   bookBtn: {
     width: "48%",
@@ -1575,19 +1496,9 @@ const styles = StyleSheet.create({
 
   bookBtnText: { color: theme.colors.text, fontWeight: "900" },
 
-  bookBtnSub: {
-    marginTop: 4,
-    color: theme.colors.textSecondary,
-    fontWeight: "800",
-    fontSize: 12,
-  },
+  bookBtnSub: { marginTop: 4, color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12 },
 
-  mapsInline: {
-    marginTop: 10,
-    color: theme.colors.textSecondary,
-    textAlign: "center",
-    fontWeight: "900",
-  },
+  mapsInline: { marginTop: 10, color: theme.colors.textSecondary, textAlign: "center", fontWeight: "900" },
 
   chev: { color: theme.colors.textSecondary, fontSize: 24, marginTop: -2 },
 });
