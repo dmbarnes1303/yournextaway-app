@@ -12,6 +12,17 @@ import { refreshFollowedMatches } from "@/src/services/followedMatchesRefresh";
 // ✅ Load persisted preferences early (origin IATA, etc.)
 import preferencesStore from "@/src/state/preferences";
 
+// ✅ DEV ONLY: validate club keys once at app bootstrap (avoid Fast Refresh spam)
+if (__DEV__) {
+  import("@/src/data/_dev/validateClubKeys").then((m) => {
+    try {
+      m.validateAllClubKeys();
+    } catch {
+      // ignore - never crash dev boot
+    }
+  });
+}
+
 export default function RootLayout() {
   const router = useRouter();
 
