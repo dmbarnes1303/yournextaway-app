@@ -31,7 +31,10 @@ function toGuides(value: any): TeamGuide[] {
 
   if (typeof value === "object") {
     const vals = Object.values(value);
-    if (vals.length && vals.every((v) => v && typeof v === "object" && "teamKey" in (v as any))) {
+    if (
+      vals.length &&
+      vals.every((v) => v && typeof v === "object" && "teamKey" in (v as any))
+    ) {
       return (vals as TeamGuide[]).filter(Boolean);
     }
   }
@@ -56,7 +59,8 @@ function extractGuides(mod: any): TeamGuide[] {
     out.push(...toGuides(v));
   }
 
-  // De-dupe by teamKey while preserving first occurrence
+  // De-dupe by *raw* teamKey while preserving first occurrence
+  // (Normalization de-dupe happens later so we can log collisions properly.)
   const seen = new Set<string>();
   const deduped: TeamGuide[] = [];
   for (const g of out) {
@@ -84,37 +88,59 @@ const SOURCES: Record<string, TeamGuide[]> = {
 
 /**
  * Build registry: Record<teamKey, TeamGuide>
- * Track duplicates for debugging
+ * - Normalize keys on ingest
+ * - Track duplicates/collisions for debugging
  */
 const registry: Record<string, TeamGuide> = {};
 const duplicates: Record<string, number> = {};
+const normalizedCollisions: Array<{
+  normalizedKey: string;
+  existingRawKey: string;
+  incomingRawKey: string;
+  source: string;
+}> = [];
 
 for (const [sourceName, guides] of Object.entries(SOURCES)) {
   for (const guide of guides) {
-    const key = guide?.teamKey;
+    const rawKey = guide?.teamKey;
 
-    if (!key) {
+    if (!rawKey) {
       console.log(`[teamGuides] Skipping guide without teamKey from ${sourceName}`);
       continue;
     }
 
+    const key = normalizeTeamKey(rawKey);
+
+    // If normalization changed it, keep the guide consistent
+    const normalizedGuide =
+      key === rawKey ? guide : { ...guide, teamKey: key };
+
     if (registry[key]) {
       duplicates[key] = (duplicates[key] || 1) + 1;
-      console.log(`[teamGuides] Duplicate teamKey detected: ${key} (source: ${sourceName})`);
+      normalizedCollisions.push({
+        normalizedKey: key,
+        existingRawKey: registry[key].teamKey,
+        incomingRawKey: rawKey,
+        source: sourceName,
+      });
+      console.log(
+        `[teamGuides] Duplicate teamKey detected after normalization: ${key} (source: ${sourceName})`
+      );
       continue;
     }
 
-    registry[key] = guide;
+    registry[key] = normalizedGuide;
   }
 }
 
 /**
  * Identify missing team guides by comparing against teams registry
+ * Normalize team keys from teams registry too, so comparisons are consistent.
  */
 const missing = Object.values(teams)
-  .filter((t) => !registry[t.teamKey])
+  .filter((t) => !registry[normalizeTeamKey(t.teamKey)])
   .map((t) => ({
-    expectedGuideKey: t.teamKey,
+    expectedGuideKey: normalizeTeamKey(t.teamKey),
     name: t.name,
     leagueId: t.leagueId,
     season: t.season,
@@ -125,11 +151,11 @@ const missing = Object.values(teams)
 // -------------------------
 
 export function hasTeamGuide(teamKey: string): boolean {
-  return !!registry[teamKey];
+  return !!registry[normalizeTeamKey(teamKey)];
 }
 
 export function getTeamGuide(teamKey: string): TeamGuide | null {
-  return registry[teamKey] || null;
+  return registry[normalizeTeamKey(teamKey)] || null;
 }
 
 export type MissingTeamGuide = {
@@ -150,6 +176,7 @@ export function getTeamGuidesDebugSnapshot() {
     missingCount: missing.length,
     missing,
     duplicates: Object.entries(duplicates).map(([k, v]) => ({ teamKey: k, count: v })),
+    normalizedCollisions,
     bySource: Object.fromEntries(Object.entries(SOURCES).map(([k, v]) => [k, v.length])),
   };
 }
