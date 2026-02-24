@@ -188,9 +188,11 @@ function parseIsoToDate(iso?: string): Date | null {
   return Number.isFinite(d.getTime()) ? d : null;
 }
 
-function formatKickoffMeta(row?: FixtureListRow | null, trip?: Trip | null): { line: string; tbc: boolean } {
+function formatKickoffMeta(row?: FixtureListRow | null, trip?: Trip | null): { line: string; tbc: boolean; iso: string | null } {
   const iso = (row?.fixture?.date as any) ?? (trip as any)?.kickoffIso;
-  const d = parseIsoToDate(iso);
+  const isoClean = String(iso ?? "").trim() || null;
+
+  const d = parseIsoToDate(isoClean ?? undefined);
 
   const short = String(row?.fixture?.status?.short ?? "").trim().toUpperCase();
   const long = String(row?.fixture?.status?.long ?? "").trim();
@@ -200,7 +202,7 @@ function formatKickoffMeta(row?: FixtureListRow | null, trip?: Trip | null): { l
 
   if (!d) {
     const tbc = looksTbc || snapTbc;
-    return { line: tbc ? "Kickoff: TBC" : "Kickoff: —", tbc: true };
+    return { line: tbc ? "Kickoff: TBC" : "Kickoff: —", tbc: true, iso: isoClean };
   }
 
   const datePart = d.toLocaleDateString("en-GB", { weekday: "short", day: "2-digit", month: "short" });
@@ -209,10 +211,10 @@ function formatKickoffMeta(row?: FixtureListRow | null, trip?: Trip | null): { l
   const midnight = d.getHours() === 0 && d.getMinutes() === 0;
   const tbc = looksTbc || snapTbc || midnight;
 
-  if (tbc) return { line: `Kickoff: ${datePart} • TBC`, tbc: true };
+  if (tbc) return { line: `Kickoff: ${datePart} • TBC`, tbc: true, iso: isoClean };
 
   const statusHint = long ? ` • ${long}` : "";
-  return { line: `Kickoff: ${datePart} • ${timePart}${statusHint}`, tbc: false };
+  return { line: `Kickoff: ${datePart} • ${timePart}${statusHint}`, tbc: false, iso: isoClean };
 }
 
 function titleCaseCity(s: string) {
@@ -225,6 +227,34 @@ function titleCaseCity(s: string) {
     .filter(Boolean)
     .map((w) => w[0]?.toUpperCase() + w.slice(1))
     .join(" ");
+}
+
+function buildMapsSearchUrl(query: string) {
+  const q = encodeURIComponent(String(query ?? "").trim());
+  return `https://www.google.com/maps/search/?api=1&query=${q}`;
+}
+
+function isLateKickoff(kickoffIso?: string | null): boolean {
+  const iso = String(kickoffIso ?? "").trim();
+  if (!iso) return false;
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return false;
+  const h = d.getHours();
+  const m = d.getMinutes();
+  return h > 20 || (h === 20 && m >= 30);
+}
+
+function Pill({ label, kind }: { label: string; kind: "best" | "budget" }) {
+  const cfg =
+    kind === "best"
+      ? { border: "rgba(0,255,136,0.35)", bg: "rgba(0,255,136,0.08)" }
+      : { border: "rgba(255,200,80,0.40)", bg: "rgba(255,200,80,0.10)" };
+
+  return (
+    <View style={[styles.pill, { borderColor: cfg.border, backgroundColor: cfg.bg }]}>
+      <Text style={styles.pillText}>{label}</Text>
+    </View>
+  );
 }
 
 /* -------------------------------------------------------------------------- */
@@ -402,6 +432,90 @@ export default function TripDetailScreen() {
   }, [trip?.matchIds]);
 
   const numericMatchIds = useMemo(() => matchIds.filter(isNumericId), [matchIds]);
+
+  /* ---------------- matchday logistics (primary match → stay guidance) ---------------- */
+
+  const primaryMatchId = useMemo(() => numericMatchIds[0] ?? null, [numericMatchIds]);
+
+  const primaryFixture = useMemo(() => {
+    if (!primaryMatchId) return null;
+    return fixturesById[String(primaryMatchId)] ?? null;
+  }, [primaryMatchId, fixturesById]);
+
+  const primaryHomeName = useMemo(() => {
+    const fromFixture = String(primaryFixture?.teams?.home?.name ?? "").trim();
+    if (fromFixture) return fromFixture;
+
+    const snap = String((trip as any)?.homeName ?? "").trim();
+    return snap;
+  }, [primaryFixture, trip]);
+
+  const primaryLeagueName = useMemo(() => {
+    const fromFixture = String(primaryFixture?.league?.name ?? "").trim();
+    if (fromFixture) return fromFixture;
+
+    const snap = String((trip as any)?.leagueName ?? "").trim();
+    return snap;
+  }, [primaryFixture, trip]);
+
+  const primaryKickoffIso = useMemo(() => {
+    const iso = String(primaryFixture?.fixture?.date ?? (trip as any)?.kickoffIso ?? "").trim();
+    return iso || null;
+  }, [primaryFixture, trip]);
+
+  const primaryLogistics = useMemo(() => {
+    if (!primaryHomeName) return null;
+    return getMatchdayLogistics({ homeTeamName: primaryHomeName, leagueName: primaryLeagueName });
+  }, [primaryHomeName, primaryLeagueName]);
+
+  const primaryLogisticsSnippet = useMemo(() => {
+    return primaryLogistics ? buildLogisticsSnippet(primaryLogistics) : "";
+  }, [primaryLogistics]);
+
+  const stayBestAreas = useMemo(() => {
+    const arr = Array.isArray(primaryLogistics?.stay?.bestAreas) ? primaryLogistics!.stay!.bestAreas : [];
+    return arr
+      .map((x: any) => ({
+        area: String(x?.area ?? "").trim(),
+        notes: String(x?.notes ?? "").trim(),
+      }))
+      .filter((x: any) => x.area);
+  }, [primaryLogistics]);
+
+  const stayBudgetAreas = useMemo(() => {
+    const arr = Array.isArray(primaryLogistics?.stay?.budgetAreas) ? primaryLogistics!.stay!.budgetAreas : [];
+    return arr
+      .map((x: any) => ({
+        area: String(x?.area ?? "").trim(),
+        notes: String(x?.notes ?? "").trim(),
+      }))
+      .filter((x: any) => x.area);
+  }, [primaryLogistics]);
+
+  const transportStops = useMemo(() => {
+    const stops = Array.isArray(primaryLogistics?.transport?.primaryStops) ? primaryLogistics!.transport!.primaryStops : [];
+    return stops
+      .slice(0, 3)
+      .map((s: any) => `${String(s?.name ?? "").trim()}${s?.notes ? ` — ${String(s.notes).trim()}` : ""}`)
+      .filter(Boolean);
+  }, [primaryLogistics]);
+
+  const transportTips = useMemo(() => {
+    const tips = Array.isArray(primaryLogistics?.transport?.tips) ? primaryLogistics!.transport!.tips : [];
+    return tips
+      .slice(0, 3)
+      .map((t: any) => String(t).trim())
+      .filter(Boolean);
+  }, [primaryLogistics]);
+
+  const lateTransportNote = useMemo(() => {
+    const explicit = String(primaryLogistics?.transport?.lateNightNote ?? "").trim();
+    if (explicit) return explicit;
+    if (isLateKickoff(primaryKickoffIso)) {
+      return "Late kickoff: check last trains/metros and pre-book a taxi/Uber fallback after the match.";
+    }
+    return "";
+  }, [primaryLogistics, primaryKickoffIso]);
 
   /* ---------------- dev-only IATA missing mapping warn ---------------- */
 
@@ -672,6 +786,14 @@ export default function TripDetailScreen() {
   const loading = Boolean(tripId && (!tripsLoaded || !savedLoaded));
   const showHeroBanners = pending.length > 0 || saved.length > 0 || booked.length > 0;
 
+  const stadiumName = String(primaryLogistics?.stadium ?? "").trim();
+  const stadiumCity = String(primaryLogistics?.city ?? cityName ?? "").trim();
+
+  const stadiumMapsUrl = useMemo(() => {
+    const q = [stadiumName || "stadium", stadiumCity].filter(Boolean).join(" ").trim();
+    return buildMapsSearchUrl(q);
+  }, [stadiumName, stadiumCity]);
+
   return (
     <Background imageSource={getBackground("trips")} overlayOpacity={0.86}>
       <Stack.Screen
@@ -794,7 +916,6 @@ export default function TripDetailScreen() {
                       const logistics = getMatchdayLogistics({ homeTeamName: homeName, leagueName });
                       const logisticsLine = logistics ? buildLogisticsSnippet(logistics) : "";
 
-                      // ✅ CERTAINTY BADGE (per fixture row)
                       const certainty = getFixtureCertainty(r, {
                         previousKickoffIso: (trip as any)?.kickoffIso ?? null,
                       });
@@ -808,11 +929,6 @@ export default function TripDetailScreen() {
                               <Text style={styles.matchTitle} numberOfLines={1}>
                                 {title}
                               </Text>
-                              {kickoff.tbc ? (
-                                <View style={styles.tbcPill}>
-                                  <Text style={styles.tbcText}>TBC</Text>
-                                </View>
-                              ) : null}
                             </View>
 
                             <Text style={styles.matchMeta} numberOfLines={1}>
@@ -854,6 +970,131 @@ export default function TripDetailScreen() {
                 )}
 
                 {fxLoading ? <Text style={styles.mutedInline}>Loading match details…</Text> : null}
+              </GlassCard>
+
+              {/* STAY (stadium proximity guidance) */}
+              <GlassCard style={styles.card}>
+                <Text style={styles.sectionTitle}>Stay (near the stadium)</Text>
+
+                {!primaryLogistics ? (
+                  <EmptyState
+                    title="Stay tips not available"
+                    message="Add a match (or load match details) to unlock stadium-area stay suggestions."
+                  />
+                ) : (
+                  <View style={{ gap: 10 }}>
+                    <View style={styles.proxBox}>
+                      <Text style={styles.proxTitle} numberOfLines={2}>
+                        {stadiumName || "Stadium"}
+                        {stadiumCity ? <Text style={styles.proxCity}> • {stadiumCity}</Text> : null}
+                      </Text>
+
+                      <Text style={styles.proxBody}>
+                        {primaryLogisticsSnippet || "Stadium-area stay guidance available."}
+                      </Text>
+
+                      <Text style={styles.proxMuted}>
+                        Open in maps for live distance + travel time. (We can add offline estimates once coords are present.)
+                      </Text>
+
+                      <Pressable onPress={() => openUntracked(stadiumMapsUrl)} style={styles.proxBtn}>
+                        <Text style={styles.proxBtnText}>Open stadium in maps</Text>
+                      </Pressable>
+                    </View>
+
+                    {stayBestAreas.length > 0 ? (
+                      <View style={{ gap: 6 }}>
+                        <Text style={styles.stayLabel}>Best areas</Text>
+                        {stayBestAreas.slice(0, 3).map((x, idx) => {
+                          const q = [x.area, stadiumCity].filter(Boolean).join(" ").trim();
+                          return (
+                            <View key={`best-${idx}`} style={styles.areaRow}>
+                              <View style={{ flex: 1 }}>
+                                <View style={styles.areaTop}>
+                                  <Text style={styles.areaName} numberOfLines={1}>
+                                    {x.area}
+                                  </Text>
+                                  <Pill label="Best area" kind="best" />
+                                </View>
+                                {x.notes ? <Text style={styles.areaNotes}>{x.notes}</Text> : null}
+                              </View>
+
+                              <View style={styles.areaBtns}>
+                                <Pressable onPress={() => openUntracked(buildMapsSearchUrl(q || x.area))} style={styles.smallBtn}>
+                                  <Text style={styles.smallBtnText}>Maps</Text>
+                                </Pressable>
+                              </View>
+                            </View>
+                          );
+                        })}
+                      </View>
+                    ) : null}
+
+                    {stayBudgetAreas.length > 0 ? (
+                      <View style={{ gap: 6, marginTop: 6 }}>
+                        <Text style={styles.stayLabel}>Budget-friendly</Text>
+                        {stayBudgetAreas.slice(0, 2).map((x, idx) => {
+                          const q = [x.area, stadiumCity].filter(Boolean).join(" ").trim();
+                          return (
+                            <View key={`budget-${idx}`} style={styles.areaRow}>
+                              <View style={{ flex: 1 }}>
+                                <View style={styles.areaTop}>
+                                  <Text style={styles.areaName} numberOfLines={1}>
+                                    {x.area}
+                                  </Text>
+                                  <Pill label="Budget" kind="budget" />
+                                </View>
+                                {x.notes ? <Text style={styles.areaNotes}>{x.notes}</Text> : null}
+                              </View>
+
+                              <View style={styles.areaBtns}>
+                                <Pressable onPress={() => openUntracked(buildMapsSearchUrl(q || x.area))} style={styles.smallBtn}>
+                                  <Text style={styles.smallBtnText}>Maps</Text>
+                                </Pressable>
+                              </View>
+                            </View>
+                          );
+                        })}
+                      </View>
+                    ) : null}
+
+                    {transportStops.length > 0 ? (
+                      <View style={{ gap: 6, marginTop: 6 }}>
+                        <Text style={styles.stayLabel}>Best transport stops</Text>
+                        {transportStops.map((line, idx) => (
+                          <Pressable
+                            key={`stop-${idx}`}
+                            onPress={() => openUntracked(buildMapsSearchUrl([line, stadiumCity].filter(Boolean).join(" ")))}
+                            style={styles.stopRow}
+                          >
+                            <Text style={styles.stayBullet} numberOfLines={2}>
+                              • {line}
+                            </Text>
+                            <Text style={styles.chev}>›</Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    ) : null}
+
+                    {transportTips.length > 0 ? (
+                      <View style={{ gap: 6, marginTop: 6 }}>
+                        <Text style={styles.stayLabel}>Matchday tips</Text>
+                        {transportTips.map((line, idx) => (
+                          <Text key={`tip-${idx}`} style={styles.stayBullet}>
+                            • {line}
+                          </Text>
+                        ))}
+                      </View>
+                    ) : null}
+
+                    {lateTransportNote ? (
+                      <View style={styles.lateBox}>
+                        <Text style={styles.lateTitle}>Late transport note</Text>
+                        <Text style={styles.lateText}>{lateTransportNote}</Text>
+                      </View>
+                    ) : null}
+                  </View>
+                )}
               </GlassCard>
 
               {/* PENDING */}
@@ -1276,17 +1517,6 @@ const styles = StyleSheet.create({
 
   matchTitle: { color: theme.colors.text, fontWeight: "900", flexShrink: 1 },
 
-  tbcPill: {
-    borderWidth: 1,
-    borderColor: "rgba(255,200,80,0.40)",
-    backgroundColor: "rgba(255,200,80,0.10)",
-    borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-
-  tbcText: { color: "rgba(255,200,80,1)", fontWeight: "900", fontSize: 11 },
-
   matchMeta: {
     marginTop: 4,
     color: theme.colors.textSecondary,
@@ -1317,6 +1547,69 @@ const styles = StyleSheet.create({
   crestImg: { width: 26, height: 26 },
 
   crestFallback: { color: theme.colors.textSecondary, fontWeight: "900" },
+
+  /* Stay proximity */
+  proxBox: {
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    borderRadius: 14,
+    backgroundColor: "rgba(0,0,0,0.18)",
+    padding: 12,
+  },
+  proxTitle: { color: theme.colors.text, fontWeight: "900", fontSize: 14, lineHeight: 18 },
+  proxCity: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: 12 },
+  proxBody: { marginTop: 8, color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12, lineHeight: 16 },
+  proxMuted: { marginTop: 8, color: theme.colors.textTertiary, fontWeight: "900", fontSize: 11, lineHeight: 14 },
+  proxBtn: {
+    marginTop: 10,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(0,255,136,0.55)",
+    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.18)",
+  },
+  proxBtnText: { color: theme.colors.text, fontWeight: "900" },
+
+  stayLabel: { color: theme.colors.text, fontWeight: "900", fontSize: 12 },
+  stayBullet: { color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12, lineHeight: 16 },
+
+  areaRow: {
+    flexDirection: "row",
+    gap: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+    alignItems: "center",
+  },
+  areaTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
+  areaName: { color: theme.colors.text, fontWeight: "900", flexShrink: 1 },
+  areaNotes: { marginTop: 6, color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12, lineHeight: 16 },
+  areaBtns: { gap: 8, alignItems: "flex-end" },
+
+  pill: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  pillText: { color: theme.colors.text, fontWeight: "900", fontSize: 11 },
+
+  stopRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
+
+  lateBox: {
+    marginTop: 8,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,200,80,0.28)",
+    backgroundColor: "rgba(255,200,80,0.08)",
+    padding: 12,
+  },
+  lateTitle: { color: theme.colors.text, fontWeight: "900", fontSize: 12 },
+  lateText: { marginTop: 6, color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12, lineHeight: 16 },
 
   itemRow: {
     flexDirection: "row",
