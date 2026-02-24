@@ -30,6 +30,49 @@ export const LEAGUES: LeagueOption[] = [
 ];
 
 // --------------------
+// League slot rules (kickoff-likely heuristics)
+// --------------------
+
+/**
+ * Used when a fixture kickoff is not confirmed yet.
+ * This is intentionally display-first (strings) so UI can show "Likely Sat 15:00"
+ * without timezone complexity.
+ */
+export type LeagueSlotRule = {
+  leagueId: number;
+  primarySlot: string;     // display text e.g. "Sat 15:00"
+  typicalSlots: string[];  // optional: used later for UI
+};
+
+export const LEAGUE_SLOT_RULES: LeagueSlotRule[] = [
+  {
+    leagueId: 39,
+    primarySlot: "Sat 15:00",
+    typicalSlots: ["Fri 20:00", "Sat 12:30", "Sat 15:00", "Sat 17:30", "Sun 14:00", "Sun 16:30", "Mon 20:00"],
+  },
+  {
+    leagueId: 140,
+    primarySlot: "Sat 18:30",
+    typicalSlots: ["Fri 21:00", "Sat 14:00", "Sat 16:15", "Sat 18:30", "Sat 21:00", "Sun 14:00", "Sun 16:15", "Sun 18:30", "Sun 21:00", "Mon 21:00"],
+  },
+  {
+    leagueId: 135,
+    primarySlot: "Sun 20:45",
+    typicalSlots: ["Fri 20:45", "Sat 15:00", "Sat 18:00", "Sat 20:45", "Sun 12:30", "Sun 15:00", "Sun 18:00", "Sun 20:45", "Mon 20:45"],
+  },
+  {
+    leagueId: 78,
+    primarySlot: "Sat 15:30",
+    typicalSlots: ["Fri 20:30", "Sat 15:30", "Sat 18:30", "Sun 15:30", "Sun 17:30", "Sun 19:30"],
+  },
+  {
+    leagueId: 61,
+    primarySlot: "Sat 21:00",
+    typicalSlots: ["Fri 21:00", "Sat 17:00", "Sat 19:00", "Sat 21:00", "Sun 13:00", "Sun 15:00", "Sun 17:00", "Sun 20:45"],
+  },
+];
+
+// --------------------
 // Date helpers
 // --------------------
 
