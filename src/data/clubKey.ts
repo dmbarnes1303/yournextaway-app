@@ -124,6 +124,9 @@ export function normalizeClubKey(input: string): string {
     "ss lazio": "lazio",
     "s.s. lazio": "lazio",
 
+    "como 1907": "como",
+    "como-1907": "como",
+
     /* ------------------------------- Bundesliga -------------------------------- */
     "bayern munchen": "bayern-munich",
     "bayern münchen": "bayern-munich",
