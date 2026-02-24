@@ -21,7 +21,6 @@ import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
 import EmptyState from "@/src/components/EmptyState";
-import MatchdayLogisticsCard from "@/src/components/match/MatchdayLogisticsCard";
 
 import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
@@ -50,7 +49,7 @@ import { getTicketGuide } from "@/src/data/ticketGuides";
 import type { TicketDifficulty } from "@/src/data/ticketGuides/types";
 
 import { getMatchdayLogistics } from "@/src/data/matchdayLogistics";
-import type { LogisticsStop } from "@/src/data/matchdayLogistics/types";
+import type { MatchdayLogistics, LogisticsStop } from "@/src/data/matchdayLogistics/types";
 
 import { getStadiumByHomeTeam } from "@/src/data/stadiums";
 
@@ -272,6 +271,218 @@ function stabilityLabel(s: TripStability) {
 
 type ToastState = { visible: false } | { visible: true; title: string; message?: string };
 type TicketModalState = { open: boolean };
+
+/* -------------------------------------------------------------------------- */
+/* Matchday Logistics Card (LOCAL, NO EXTRA FILES) */
+/* -------------------------------------------------------------------------- */
+
+function capStops(stops: LogisticsStop[] | undefined | null, n = 3): LogisticsStop[] {
+  if (!Array.isArray(stops)) return [];
+  return stops.slice(0, Math.max(0, n));
+}
+
+function parkingLabel(v?: MatchdayLogistics["parking"] | null) {
+  const a = String(v?.availability ?? "").trim();
+  if (a === "easy") return "Parking: Easy";
+  if (a === "medium") return "Parking: Medium";
+  if (a === "hard") return "Parking: Hard";
+  return "Parking: Varies";
+}
+
+function safeCityLine(args: { stadium?: string | null; city?: string | null }) {
+  const s = String(args.stadium ?? "").trim();
+  const c = String(args.city ?? "").trim();
+  return [s || null, c || null].filter(Boolean).join(" • ");
+}
+
+function MatchdayLogisticsCardLocal(props: {
+  logistics: MatchdayLogistics | null;
+  fallbackCity?: string | null;
+  fallbackStadium?: string | null;
+  onOpenStop: (query: string, stop?: LogisticsStop) => void;
+  onOpenVenue: (query: string) => void;
+  onSelectStayArea?: (area: string) => void;
+}) {
+  const { logistics, fallbackCity, fallbackStadium, onOpenStop, onOpenVenue, onSelectStayArea } = props;
+
+  if (!logistics) {
+    return (
+      <View style={[styles.block, { marginTop: 12 }]}>
+        <Text style={styles.blockTitle}>Matchday logistics</Text>
+        <Text style={styles.blockSub}>Logistics not available for this home club yet.</Text>
+
+        <Pressable
+          onPress={() => {
+            const q = [fallbackStadium, fallbackCity].filter(Boolean).join(" ").trim() || "stadium";
+            onOpenVenue(q);
+          }}
+          style={[styles.blockBtn, styles.blockBtnSecondary]}
+        >
+          <Text style={styles.blockBtnTitle}>Open maps</Text>
+          <Text style={styles.blockBtnSub}>Search the stadium area</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  const stadium = String(logistics.stadium ?? fallbackStadium ?? "").trim();
+  const city = String(logistics.city ?? fallbackCity ?? "").trim();
+
+  const primaryStops = capStops(logistics.transport?.primaryStops, 3);
+  const tips = Array.isArray(logistics.transport?.tips) ? logistics.transport!.tips!.slice(0, 4) : [];
+  const stayAreas = Array.isArray(logistics.stay?.bestAreas) ? logistics.stay!.bestAreas!.slice(0, 3) : [];
+  const budgetAreas = Array.isArray(logistics.stay?.budgetAreas) ? logistics.stay!.budgetAreas!.slice(0, 2) : [];
+
+  const venueLine = safeCityLine({ stadium: stadium || null, city: city || null }) || "Stadium • City";
+
+  return (
+    <View style={[styles.block, { marginTop: 12 }]}>
+      <Text style={styles.blockTitle}>Matchday logistics</Text>
+      <Text style={styles.blockSub}>{venueLine}</Text>
+
+      <View style={{ gap: 10, marginTop: 12 }}>
+        <Pressable
+          onPress={() => {
+            const q = [stadium || null, city || null].filter(Boolean).join(" ").trim() || "stadium";
+            onOpenVenue(q);
+          }}
+          style={[styles.blockBtn, styles.blockBtnPrimary]}
+        >
+          <Text style={styles.blockBtnTitle}>Directions</Text>
+          <Text style={styles.blockBtnSub}>Open stadium in maps</Text>
+        </Pressable>
+
+        {primaryStops.length ? (
+          <View style={styles.subSection}>
+            <Text style={styles.subTitle}>Best transport stops</Text>
+
+            <View style={{ gap: 10, marginTop: 8 }}>
+              {primaryStops.map((s, idx) => {
+                const name = String(s?.name ?? "").trim();
+                if (!name) return null;
+
+                const type = String(s?.type ?? "").trim();
+                const notes = String(s?.notes ?? "").trim();
+
+                const query = [name, city].filter(Boolean).join(" ").trim();
+
+                return (
+                  <Pressable key={`${name}-${idx}`} onPress={() => onOpenStop(query, s)} style={styles.stopRow}>
+                    <View style={{ flex: 1 }}>
+                      <View style={styles.stopTopRow}>
+                        <Text style={styles.stopName} numberOfLines={1}>
+                          {name}
+                        </Text>
+                        {type ? (
+                          <View style={styles.stopTypePill}>
+                            <Text style={styles.stopTypeText}>{type.toUpperCase()}</Text>
+                          </View>
+                        ) : null}
+                      </View>
+
+                      {notes ? (
+                        <Text style={styles.stopNotes} numberOfLines={2}>
+                          {notes}
+                        </Text>
+                      ) : null}
+                    </View>
+
+                    <Text style={styles.chev}>›</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        ) : null}
+
+        {tips.length ? (
+          <View style={styles.subSection}>
+            <Text style={styles.subTitle}>Tips</Text>
+            <View style={{ gap: 6, marginTop: 8 }}>
+              {tips.map((t, i) => (
+                <Text key={`${t}-${i}`} style={styles.bullet}>
+                  • {t}
+                </Text>
+              ))}
+            </View>
+          </View>
+        ) : null}
+
+        <View style={styles.subSection}>
+          <Text style={styles.subTitle}>{parkingLabel(logistics.parking ?? null)}</Text>
+          {String(logistics.parking?.summary ?? "").trim() ? (
+            <Text style={styles.blockSub}>{String(logistics.parking!.summary!).trim()}</Text>
+          ) : (
+            <Text style={styles.blockSub}>Parking constraints vary. Public transport is usually the safe bet.</Text>
+          )}
+        </View>
+
+        {onSelectStayArea && (stayAreas.length || budgetAreas.length) ? (
+          <View style={styles.subSection}>
+            <Text style={styles.subTitle}>Where to stay</Text>
+
+            <View style={{ gap: 10, marginTop: 8 }}>
+              {stayAreas.map((a, i) => {
+                const area = String(a?.area ?? "").trim();
+                const notes = String(a?.notes ?? "").trim();
+                if (!area) return null;
+
+                return (
+                  <Pressable key={`${area}-${i}`} onPress={() => onSelectStayArea(area)} style={styles.areaRow}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.areaName} numberOfLines={1}>
+                        {area}
+                      </Text>
+                      {notes ? (
+                        <Text style={styles.areaNotes} numberOfLines={2}>
+                          {notes}
+                        </Text>
+                      ) : null}
+                    </View>
+                    <Text style={styles.chev}>›</Text>
+                  </Pressable>
+                );
+              })}
+
+              {budgetAreas.map((a, i) => {
+                const area = String(a?.area ?? "").trim();
+                const notes = String(a?.notes ?? "").trim();
+                if (!area) return null;
+
+                return (
+                  <Pressable key={`${area}-budget-${i}`} onPress={() => onSelectStayArea(area)} style={styles.areaRow}>
+                    <View style={{ flex: 1 }}>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                        <Text style={styles.areaName} numberOfLines={1}>
+                          {area}
+                        </Text>
+                        <View style={styles.budgetPill}>
+                          <Text style={styles.budgetPillText}>BUDGET</Text>
+                        </View>
+                      </View>
+                      {notes ? (
+                        <Text style={styles.areaNotes} numberOfLines={2}>
+                          {notes}
+                        </Text>
+                      ) : null}
+                    </View>
+                    <Text style={styles.chev}>›</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            <Text style={styles.miniHint}>Tap an area to prefill your Trip build screen.</Text>
+          </View>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* screen */
+/* -------------------------------------------------------------------------- */
 
 export default function MatchDetailScreen() {
   const router = useRouter();
@@ -516,8 +727,12 @@ export default function MatchDetailScreen() {
   const stadiumMeta = useMemo(() => getStadiumByHomeTeam(home), [home]);
   const stadiumName = stadiumMeta?.name ?? venue ?? "";
   const stadiumCity = stadiumMeta?.city ?? city ?? "";
+
   const mapsUrl = useMemo(() => buildMapsVenueUrl(stadiumName, stadiumCity), [stadiumName, stadiumCity]);
-  const stadiumInfoUrl = useMemo(() => buildStadiumInfoUrl(stadiumName, home, stadiumCity), [stadiumName, home, stadiumCity]);
+  const stadiumInfoUrl = useMemo(
+    () => buildStadiumInfoUrl(stadiumName, home, stadiumCity),
+    [stadiumName, home, stadiumCity]
+  );
 
   const logistics = useMemo(() => {
     return getMatchdayLogistics({ homeTeamName: home, leagueName });
@@ -812,7 +1027,7 @@ export default function MatchDetailScreen() {
     return `${hint} If you’re booking the weekend anyway, stay flexible and treat the kickoff slot as a bonus once confirmed.`;
   }, [leagueName]);
 
-  const onOpenStop = useCallback(async (query: string, _stop?: LogisticsStop) => {
+  const onOpenStop = useCallback(async (query: string) => {
     await openMapsPreferNative(query);
   }, []);
 
@@ -994,10 +1209,12 @@ export default function MatchDetailScreen() {
                   </Pressable>
                 </View>
 
-                <MatchdayLogisticsCard
+                <MatchdayLogisticsCardLocal
                   logistics={logistics}
-                  city={stadiumCity || logistics?.city || null}
-                  onOpenStop={onOpenStop}
+                  fallbackCity={stadiumCity || city || null}
+                  fallbackStadium={stadiumName || venue || null}
+                  onOpenStop={(q) => onOpenStop(q)}
+                  onOpenVenue={(q) => openMapsPreferNative(q)}
                   onSelectStayArea={onSelectStayArea}
                 />
 
@@ -1394,4 +1611,91 @@ const styles = StyleSheet.create({
   modalBtnGhost: { borderColor: "rgba(255,255,255,0.10)", backgroundColor: "transparent" },
   modalBtnGhostText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: 12, textAlign: "center" },
   modalFootnote: { marginTop: 10, color: theme.colors.textTertiary, fontWeight: "800", fontSize: 11, lineHeight: 14 },
+
+  /* Logistics (local card) */
+  block: {
+    marginTop: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+    padding: 12,
+  },
+  blockTitle: { color: theme.colors.text, fontWeight: "900", fontSize: 13 },
+  blockSub: { marginTop: 6, color: theme.colors.textSecondary, fontWeight: "700", fontSize: 12, lineHeight: 16 },
+
+  blockBtn: {
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+  },
+  blockBtnPrimary: { borderColor: "rgba(0,255,136,0.55)", backgroundColor: "rgba(0,0,0,0.34)" },
+  blockBtnSecondary: { borderColor: "rgba(255,255,255,0.10)", backgroundColor: "rgba(0,0,0,0.22)" },
+  blockBtnTitle: { color: theme.colors.text, fontWeight: "900", fontSize: 13 },
+  blockBtnSub: { marginTop: 6, color: theme.colors.textSecondary, fontWeight: "700", fontSize: 12, lineHeight: 16 },
+
+  subSection: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    backgroundColor: "rgba(0,0,0,0.14)",
+    padding: 12,
+  },
+  subTitle: { color: theme.colors.text, fontWeight: "900", fontSize: 13 },
+
+  stopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    backgroundColor: "rgba(0,0,0,0.16)",
+  },
+  stopTopRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  stopName: { color: theme.colors.text, fontWeight: "900", flexShrink: 1 },
+  stopNotes: { marginTop: 6, color: theme.colors.textSecondary, fontWeight: "700", fontSize: 12, lineHeight: 16 },
+
+  stopTypePill: {
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  stopTypeText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: 10 },
+
+  bullet: { color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12, lineHeight: 16 },
+
+  areaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    backgroundColor: "rgba(0,0,0,0.16)",
+  },
+  areaName: { color: theme.colors.text, fontWeight: "900", flexShrink: 1 },
+  areaNotes: { marginTop: 6, color: theme.colors.textSecondary, fontWeight: "700", fontSize: 12, lineHeight: 16 },
+
+  budgetPill: {
+    borderWidth: 1,
+    borderColor: "rgba(255,200,0,0.22)",
+    backgroundColor: "rgba(255,200,0,0.06)",
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  budgetPillText: { color: "rgba(255,220,140,0.92)", fontWeight: "900", fontSize: 10 },
+
+  miniHint: { marginTop: 10, color: theme.colors.textTertiary, fontWeight: "800", fontSize: 11, lineHeight: 14 },
+
+  chev: { color: theme.colors.textSecondary, fontSize: 24, marginTop: -2 },
 });
