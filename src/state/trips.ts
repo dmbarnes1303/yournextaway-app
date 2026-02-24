@@ -41,25 +41,13 @@ function sortTrips(trips: Trip[]) {
   return copy;
 }
 
-function cleanOptString(v: unknown): string | undefined {
-  const s = cleanString(v);
-  return s ? s : undefined;
-}
-
-function cleanOptBool(v: unknown): boolean | undefined {
-  if (typeof v === "boolean") return v;
-  return undefined;
-}
-
 /**
- * Conservative cleaner:
+ * Conservative cleaner + snapshot-preserving:
  * - requires id, cityId, startDate, endDate
  * - start/end must be YYYY-MM-DD
  * - matchIds coerced to string[]
  * - createdAt/updatedAt defaulted sanely
- * - ✅ preserves optional “snapshot” fields used for durability
- *
- * If something is unusable -> null (dropped).
+ * - preserves extra fields from storage (snapshots) so trip stays readable
  */
 function cleanLoadedTrip(raw: any): Trip | null {
   if (!raw || typeof raw !== "object") return null;
@@ -78,29 +66,26 @@ function cleanLoadedTrip(raw: any): Trip | null {
   const updatedAt =
     Number.isFinite(Number(raw.updatedAt)) && Number(raw.updatedAt) > 0 ? Number(raw.updatedAt) : createdAt;
 
-  const trip: Trip = {
+  // IMPORTANT: start from raw to preserve snapshot fields,
+  // then override core Trip invariants.
+  const tripAny: any = {
+    ...raw,
+
     id,
     cityId,
     citySlug: typeof raw.citySlug === "string" ? raw.citySlug : undefined,
+
     startDate,
     endDate,
+
     matchIds: cleanMatchIds(raw.matchIds),
     notes: typeof raw.notes === "string" ? raw.notes : undefined,
+
     createdAt,
     updatedAt,
   };
 
-  // ✅ Snapshot fields (safe to keep even if Trip type hasn’t been extended yet)
-  const anyTrip = trip as any;
-  anyTrip.displayCity = cleanOptString(raw.displayCity);
-  anyTrip.homeName = cleanOptString(raw.homeName);
-  anyTrip.awayName = cleanOptString(raw.awayName);
-  anyTrip.leagueName = cleanOptString(raw.leagueName);
-  anyTrip.venueName = cleanOptString(raw.venueName);
-  anyTrip.kickoffIso = cleanOptString(raw.kickoffIso);
-  anyTrip.kickoffTbc = cleanOptBool(raw.kickoffTbc);
-
-  return trip;
+  return tripAny as Trip;
 }
 
 async function persistTrips(trips: Trip[]) {
@@ -125,26 +110,16 @@ type TripsState = {
     matchIds?: string[];
     notes?: string;
 
-    // ✅ optional snapshot fields
-    displayCity?: string;
-    homeName?: string | null;
-    awayName?: string | null;
-    leagueName?: string | null;
-    venueName?: string | null;
-    kickoffIso?: string | null;
-    kickoffTbc?: boolean;
+    // allow snapshots without changing Trip type yet
+    [k: string]: any;
   }) => Promise<Trip>;
 
   updateTrip: (tripId: string, patch: Partial<Omit<Trip, "id" | "createdAt">> & Record<string, any>) => Promise<void>;
 
-  /**
-   * Deletes the trip AND deletes all SavedItems (and attachment files) belonging to the trip.
-   */
   deleteTripCascade: (tripId: string) => Promise<void>;
 
   clearAll: () => Promise<void>;
 
-  /** Dev convenience: seed mock trips + items if none exist */
   seedMockTrips: () => Promise<void>;
 };
 
@@ -178,7 +153,6 @@ const useTripsStore = create<TripsState>((set, get) => ({
       }
     })()
       .catch(() => {
-        // If load fails, don't brick the app: mark loaded but empty so UI can still run.
         set({ trips: [], loaded: true });
       })
       .finally(() => {
@@ -199,7 +173,11 @@ const useTripsStore = create<TripsState>((set, get) => ({
     if (!isIsoDateOnly(startDate)) throw new Error("startDate must be YYYY-MM-DD");
     if (!isIsoDateOnly(endDate)) throw new Error("endDate must be YYYY-MM-DD");
 
-    const trip: Trip = {
+    // IMPORTANT: allow passing snapshot fields without losing them:
+    // start from input, then override invariant fields.
+    const tripAny: any = {
+      ...input,
+
       id: makeTripId(),
       cityId,
       citySlug: input.citySlug ? cleanString(input.citySlug) : undefined,
@@ -211,25 +189,16 @@ const useTripsStore = create<TripsState>((set, get) => ({
       updatedAt: now(),
     };
 
-    const anyTrip = trip as any;
-    anyTrip.displayCity = cleanOptString(input.displayCity);
-    anyTrip.homeName = cleanOptString(input.homeName);
-    anyTrip.awayName = cleanOptString(input.awayName);
-    anyTrip.leagueName = cleanOptString(input.leagueName);
-    anyTrip.venueName = cleanOptString(input.venueName);
-    anyTrip.kickoffIso = cleanOptString(input.kickoffIso);
-    anyTrip.kickoffTbc = cleanOptBool(input.kickoffTbc);
-
-    const next = sortTrips([trip, ...get().trips]);
+    const next = sortTrips([tripAny as Trip, ...get().trips]);
     set({ trips: next, loaded: true });
 
     try {
       await persistTrips(next);
     } catch {
-      // keep in-memory state
+      // best-effort
     }
 
-    return trip;
+    return tripAny as Trip;
   },
 
   updateTrip: async (tripId, patch) => {
@@ -243,25 +212,16 @@ const useTripsStore = create<TripsState>((set, get) => ({
 
       const p: any = { ...(patch as any) };
 
-      // Guard: never allow an invalid date shape to enter storage.
       if ("startDate" in p && !isIsoDateOnly(p.startDate)) delete p.startDate;
       if ("endDate" in p && !isIsoDateOnly(p.endDate)) delete p.endDate;
 
       if ("cityId" in p) p.cityId = cleanString(p.cityId);
       if ("citySlug" in p && typeof p.citySlug === "string") p.citySlug = p.citySlug.trim();
       if ("matchIds" in p) p.matchIds = cleanMatchIds(p.matchIds);
+      if ("notes" in p && typeof p.notes === "string") p.notes = p.notes.trim();
 
-      // Snapshot field hygiene (best-effort)
-      if ("displayCity" in p) p.displayCity = cleanOptString(p.displayCity);
-      if ("homeName" in p) p.homeName = cleanOptString(p.homeName);
-      if ("awayName" in p) p.awayName = cleanOptString(p.awayName);
-      if ("leagueName" in p) p.leagueName = cleanOptString(p.leagueName);
-      if ("venueName" in p) p.venueName = cleanOptString(p.venueName);
-      if ("kickoffIso" in p) p.kickoffIso = cleanOptString(p.kickoffIso);
-      if ("kickoffTbc" in p) p.kickoffTbc = cleanOptBool(p.kickoffTbc);
-
-      const merged = { ...t, ...p, updatedAt: now() } as any;
-      return merged as Trip;
+      // IMPORTANT: spread patch to preserve snapshot fields too
+      return { ...(t as any), ...p, updatedAt: now() } as Trip;
     });
 
     const sorted = sortTrips(next);
@@ -282,25 +242,19 @@ const useTripsStore = create<TripsState>((set, get) => ({
 
     try {
       await savedItemsStore.clearTrip(id, { deleteAttachmentFiles: true });
-    } catch {
-      // best-effort
-    }
+    } catch {}
 
     const nextTrips = get().trips.filter((t) => t.id !== id);
     set({ trips: nextTrips, loaded: true });
 
     try {
       await persistTrips(nextTrips);
-    } catch {
-      // best-effort
-    }
+    } catch {}
 
     try {
       const validTripIds = nextTrips.map((t) => String(t.id));
       await savedItemsStore.clearOrphans(validTripIds, { deleteAttachmentFiles: true });
-    } catch {
-      // best-effort
-    }
+    } catch {}
   },
 
   clearAll: async () => {
@@ -388,7 +342,6 @@ const tripsStore = {
     await useTripsStore.getState().deleteTripCascade(tripId);
   },
 
-  // Backwards-compat alias
   removeTrip: async (tripId: string) => {
     await useTripsStore.getState().deleteTripCascade(tripId);
   },
