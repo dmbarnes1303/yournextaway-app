@@ -1,44 +1,49 @@
-Step 3 — Use in Match screen
-Inside app/match/[id].tsx
-Add:
-TypeScript
-Copy code
-import FixtureCertaintyBadge from "@/src/components/FixtureCertaintyBadge";
-import { getFixtureCertainty } from "@/src/utils/fixtureCertainty";
-Then where kickoff is shown:
-TypeScript
-Copy code
-const certainty = getFixtureCertainty(fixture, {
-  placeholderIds,
-  previousKickoffIso: followSnapshot?.kickoffIso ?? null,
-});
-Render under kickoff line:
-TypeScript
-Copy code
-<FixtureCertaintyBadge state={certainty} />
-✅ Step 4 — Trip screen integration
-In your Trip [id].tsx matches list:
-You already compute kickoff meta.
-Add certainty:
-TypeScript
-Copy code
-const certainty = getFixtureCertainty(r, {
-  previousKickoffIso: (trip as any)?.kickoffIso ?? null,
-});
-Render next to kickoff:
-TypeScript
-Copy code
-<FixtureCertaintyBadge state={certainty} />
-✅ Step 5 — Alert trigger (date change)
-You already refresh followed matches.
-Just add this rule:
-If:
-Copy code
+import type { FixtureListRow } from "@/src/services/apiFootball";
+import { isKickoffTbc } from "@/src/utils/kickoffTbc";
 
-oldIso !== newIso
-AND !isKickoffTbc(new)
-→ fire alert:
-Copy code
+export type FixtureCertaintyState =
+  | "confirmed"
+  | "likely_tbc"
+  | "tbc"
+  | "changed";
 
-"Kickoff changed — check your trip"
-You likely already have this scaffold in refreshFollowedMatches.
+type Options = {
+  placeholderIds?: Set<string>;
+  previousKickoffIso?: string | null;
+};
+
+function normalizeIso(v: unknown): string | null {
+  const s = String(v ?? "").trim();
+  return s || null;
+}
+
+export function getFixtureCertainty(
+  row: FixtureListRow | null | undefined,
+  opts?: Options
+): FixtureCertaintyState {
+  if (!row) return "tbc";
+
+  const currentIso = normalizeIso(row?.fixture?.date);
+  const previousIso = normalizeIso(opts?.previousKickoffIso);
+
+  const short = String(row?.fixture?.status?.short ?? "")
+    .trim()
+    .toUpperCase();
+
+  // Explicit TBC from API
+  if (short === "TBD" || short === "TBA") return "tbc";
+
+  // Missing kickoff
+  if (!currentIso) return "tbc";
+
+  // Kickoff changed
+  if (previousIso && currentIso !== previousIso) {
+    return "changed";
+  }
+
+  // Likely placeholder cluster
+  const tbc = isKickoffTbc(row, opts?.placeholderIds);
+  if (tbc) return "likely_tbc";
+
+  return "confirmed";
+}
