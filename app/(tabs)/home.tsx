@@ -66,9 +66,15 @@ const POPULAR_TEAMS: TeamChip[] = [
   { name: "Borussia Dortmund", teamId: 165 },
 ];
 
-// Curated top leagues for Home scroller only.
+// Home should NOT show 25+ leagues. Curate top leagues for Home scroller only.
 const HOME_TOP_LEAGUE_IDS = new Set<number>([
-  39, 140, 135, 78, 61, 88, 94,
+  39, // Premier League
+  140, // La Liga
+  135, // Serie A
+  78, // Bundesliga
+  61, // Ligue 1
+  88, // Eredivisie
+  94, // Primeira Liga
 ]);
 
 type DiscoverWindowKey = "wknd" | "d7" | "d14" | "d30";
@@ -98,23 +104,6 @@ function initials(name: string) {
   const parts = clean.split(/\s+/g).filter(Boolean);
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
   return `${parts[0][0] ?? ""}${parts[1][0] ?? ""}`.toUpperCase();
-}
-
-function titleCase(input: string) {
-  const s = String(input ?? "").trim();
-  if (!s) return "";
-  return s
-    .split(/\s+/g)
-    .filter(Boolean)
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
-    .join(" ");
-}
-
-function titleCaseFromSlug(slug: string) {
-  const s = String(slug ?? "").trim();
-  if (!s) return "Trip";
-  const base = s.includes("-") ? s.replace(/-/g, " ") : s;
-  return titleCase(base);
 }
 
 function tripSummaryLine(t: Trip) {
@@ -155,19 +144,13 @@ function splitSearchBuckets(results: SearchResult[]) {
   return { teams, cities, venues, countries, leagues };
 }
 
-function LeagueFlag({ code, size = 18 }: { code: string; size?: number }) {
+function LeagueFlag({ code }: { code: string }) {
   const url = getFlagImageUrl(code);
   if (!url) return null;
-  return (
-    <Image
-      source={{ uri: url }}
-      style={[styles.flag, { width: size, height: Math.round((size * 13) / 18) }]}
-      resizeMode="cover"
-    />
-  );
+  return <Image source={{ uri: url }} style={styles.flag} />;
 }
 
-function TeamCrest({ teamId, size = 16 }: { teamId: number; size?: number }) {
+function TeamCrest({ teamId, size = 14 }: { teamId: number; size?: number }) {
   const uri = API_SPORTS_TEAM_LOGO(teamId);
   return <Image source={{ uri }} style={{ width: size, height: size, opacity: 0.95 }} resizeMode="contain" />;
 }
@@ -208,14 +191,7 @@ function scoreFixture(r: FixtureListRow): number {
     if (day === 5 || day === 6 || day === 0) s += 10;
     const hr = dt.getHours();
     if (hr >= 17 && hr <= 21) s += 6;
-
-    // Penalize midnight placeholder kickoffs
-    if (dt.getHours() === 0 && dt.getMinutes() === 0) s -= 18;
   }
-
-  // Penalize obvious postponements/cancelled
-  const short = String(r?.fixture?.status?.short ?? "").toUpperCase();
-  if (short === "PST" || short === "CANC" || short === "ABD") s -= 999;
 
   return s;
 }
@@ -255,10 +231,7 @@ function pickRandom<T>(arr: T[]): T | null {
   return arr[Math.floor(Math.random() * arr.length)] ?? null;
 }
 
-/**
- * City chip: normal pill + small flag icon (NOT a background wash)
- */
-function CityChipNormal({
+function CityChipPremium({
   name,
   countryCode,
   onPress,
@@ -267,43 +240,19 @@ function CityChipNormal({
   countryCode: string;
   onPress: () => void;
 }) {
+  const flagUrl = getFlagImageUrl(countryCode, { size: 96 });
+
   return (
     <Pressable
       onPress={onPress}
       style={({ pressed }) => [styles.cityPill, pressed && styles.pressedPill]}
       android_ripple={{ color: "rgba(255,255,255,0.08)" }}
     >
-      <LeagueFlag code={countryCode} size={16} />
+      {flagUrl ? <Image source={{ uri: flagUrl }} style={styles.cityFlagBg} resizeMode="cover" /> : null}
+      <View pointerEvents="none" style={styles.cityPillOverlay} />
       <Text style={styles.pillText}>{name}</Text>
     </Pressable>
   );
-}
-
-/**
- * Trip snapshot readers (NO guessing).
- * We only use fields we actually store in TripBuild snapshot.
- */
-function getTripDisplayCitySafe(t: Trip): string {
-  const anyT: any = t as any;
-  const dc = String(anyT?.displayCity ?? "").trim();
-  if (dc) return titleCase(dc);
-
-  const cid = String(anyT?.cityId ?? "").trim();
-  if (cid) return titleCaseFromSlug(cid);
-
-  return "Trip";
-}
-
-function getTripHomeTeamIdSafe(t: Trip): number | null {
-  const anyT: any = t as any;
-  const v = anyT?.homeTeamId;
-  return typeof v === "number" && Number.isFinite(v) ? v : null;
-}
-
-function getTripCountryCodeSafe(t: Trip): string | null {
-  const anyT: any = t as any;
-  const cc = String(anyT?.countryCode ?? "").trim().toUpperCase();
-  return cc && cc.length === 2 ? cc : null;
 }
 
 export default function HomeScreen() {
@@ -316,10 +265,8 @@ export default function HomeScreen() {
 
   const [league, setLeague] = useState<LeagueOption>(homeTopLeagues[0] ?? LEAGUES[0]);
 
-  // ONE window for Home preview + navigation consistency
-  const homeWindow = useMemo(() => windowFromTomorrowIso(14), []);
-  const fromIso = homeWindow.from;
-  const toIso = homeWindow.to;
+  const { from: fromIso, to: toIso } = useMemo(() => getRollingWindowIso(), []);
+  const upcomingWindow = useMemo(() => windowFromTomorrowIso(14), []);
 
   // Trips
   const [loadedTrips, setLoadedTrips] = useState(tripsStore.getState().loaded);
@@ -367,8 +314,8 @@ export default function HomeScreen() {
         const rows = await getFixtures({
           league: league.leagueId,
           season: league.season,
-          from: fromIso,
-          to: toIso,
+          from: upcomingWindow.from,
+          to: upcomingWindow.to,
         });
 
         if (cancelled) return;
@@ -385,7 +332,7 @@ export default function HomeScreen() {
     return () => {
       cancelled = true;
     };
-  }, [league, fromIso, toIso]);
+  }, [league, upcomingWindow.from, upcomingWindow.to]);
 
   const fxOrdered = useMemo(() => {
     const scored = (fxRows ?? [])
@@ -411,8 +358,6 @@ export default function HomeScreen() {
 
   const indexRef = useRef<Awaited<ReturnType<typeof buildSearchIndex>> | null>(null);
 
-  // Still building on mount (kept as-is to avoid behaviour drift).
-  // If you want the lazy build on focus, say so and I’ll do it.
   useEffect(() => {
     let cancelled = false;
 
@@ -641,20 +586,49 @@ export default function HomeScreen() {
     ]
   );
 
-  const shortcuts = useMemo(
+  /**
+   * Quick Shortcuts (intent-based, not redundant time-only):
+   * - Weekend Break: next weekend window
+   * - Day Trip: next 14 days, user will pick (but labelled as day-trip intent)
+   * - Midweek Escape: next 7 days (intended 1 night)
+   * - Kickoff Confirmed: route into Fixtures (for now: same Fixtures, later params)
+   *
+   * NOTE: fixtures params for “confirmed only / evening only” require Fixtures tab support.
+   * For now these shortcuts route you to Fixtures or Trip Build in sensible windows.
+   */
+  const quickTiles = useMemo(
     () => [
-      { key: "wknd" as const, title: "This Weekend", sub: "Sat–Sun", icon: "📅", window: nextWeekendWindowIso() },
-      { key: "d7" as const, title: "Next 7 Days", sub: "Quick Break", icon: "⚡", window: windowFromTomorrowIso(7) },
-      { key: "d14" as const, title: "Next 14 Days", sub: "Pick A Match", icon: "🎟️", window: windowFromTomorrowIso(14) },
-      { key: "d30" as const, title: "Next 30 Days", sub: "More Options", icon: "🗺️", window: windowFromTomorrowIso(30) },
+      {
+        key: "weekend",
+        title: "Weekend Break",
+        sub: "Best for 1–2 nights",
+        icon: "📅",
+        onPress: () => goBuildTripGlobal(nextWeekendWindowIso()),
+      },
+      {
+        key: "daytrip",
+        title: "Day Trip",
+        sub: "Pick a same-day kickoff",
+        icon: "⏱️",
+        onPress: () => goBuildTripGlobal(windowFromTomorrowIso(14)),
+      },
+      {
+        key: "midweek",
+        title: "Midweek Escape",
+        sub: "One-night quick break",
+        icon: "⚡",
+        onPress: () => goBuildTripGlobal(windowFromTomorrowIso(7)),
+      },
+      {
+        key: "fixtures",
+        title: "Browse Fixtures",
+        sub: "Explore all options",
+        icon: "🎟️",
+        onPress: () => goFixturesAll(),
+      },
     ],
-    []
+    [goBuildTripGlobal, goFixturesAll]
   );
-
-  // Next trip visuals (snapshot-backed)
-  const nextTripDisplayCity = useMemo(() => (nextTrip ? getTripDisplayCitySafe(nextTrip) : "Trip"), [nextTrip]);
-  const nextTripTeamId = useMemo(() => (nextTrip ? getTripHomeTeamIdSafe(nextTrip) : null), [nextTrip]);
-  const nextTripCountry = useMemo(() => (nextTrip ? getTripCountryCodeSafe(nextTrip) : null), [nextTrip]);
 
   return (
     <Background imageSource={getBackground("home")} overlayOpacity={0.76}>
@@ -677,13 +651,13 @@ export default function HomeScreen() {
                 <TextInput
                   value={q}
                   onChangeText={setQ}
-                  placeholder="Search City, Team, Country, League, Venue"
+                  placeholder="Search…"
                   placeholderTextColor={theme.colors.textTertiary}
                   style={styles.searchInput}
                   autoCapitalize="none"
                   autoCorrect={false}
                   returnKeyType="search"
-                  onSubmitEditing={dismissKeyboard}
+                  onSubmitEditing={() => Keyboard.dismiss()}
                 />
                 {qNorm.length > 0 ? (
                   <Pressable onPress={clearSearch} style={styles.clearBtn} hitSlop={10}>
@@ -692,6 +666,7 @@ export default function HomeScreen() {
                 ) : null}
               </View>
 
+              {/* Primary actions */}
               {!showSearchResults ? (
                 <>
                   <View style={styles.heroActions}>
@@ -714,14 +689,15 @@ export default function HomeScreen() {
 
                   <Pressable
                     onPress={() => setHowOpen(true)}
-                    style={({ pressed }) => [styles.howPill, pressed && { opacity: 0.92 }]}
-                    android_ripple={{ color: "rgba(255,255,255,0.06)" }}
+                    style={({ pressed }) => [styles.howCta, pressed && { opacity: 0.92 }]}
+                    android_ripple={{ color: "rgba(79,224,138,0.10)" }}
                   >
-                    <Text style={styles.howPillText}>How It Works</Text>
+                    <Text style={styles.howCtaText}>How It Works</Text>
                   </Pressable>
                 </>
               ) : null}
 
+              {/* Search Results */}
               {showSearchResults ? (
                 <View style={styles.searchResults}>
                   {searchLoading ? (
@@ -766,17 +742,13 @@ export default function HomeScreen() {
                 </View>
               ) : null}
 
+              {/* Popular */}
               {!showSearchResults ? (
                 <View style={styles.popularBlock}>
                   <Text style={styles.sectionKicker}>Popular Cities</Text>
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.popularRow}
-                    decelerationRate="fast"
-                  >
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.popularRow} decelerationRate="fast">
                     {cities.map((c) => (
-                      <CityChipNormal key={`pc-${c.name}`} name={c.name} countryCode={c.countryCode} onPress={() => setQ(c.name)} />
+                      <CityChipPremium key={`pc-${c.name}`} name={c.name} countryCode={c.countryCode} onPress={() => setQ(c.name)} />
                     ))}
                   </ScrollView>
 
@@ -985,27 +957,8 @@ export default function HomeScreen() {
                         style={({ pressed }) => [styles.nextTripCard, pressed && styles.pressedRow]}
                         android_ripple={{ color: "rgba(255,255,255,0.06)" }}
                       >
-                        <View style={styles.nextTripHeaderRow}>
-                          <Text style={styles.nextTripKicker}>Next Up</Text>
-
-                          <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-                            {nextTripCountry ? <LeagueFlag code={nextTripCountry} size={18} /> : null}
-
-                            {nextTripTeamId ? (
-                              <View style={styles.tripCrestWrap}>
-                                <Image source={{ uri: API_SPORTS_TEAM_LOGO(nextTripTeamId) }} style={styles.tripCrestImg} resizeMode="contain" />
-                              </View>
-                            ) : (
-                              <View style={styles.tripCrestWrap}>
-                                <Text style={styles.tripCrestFallback}>
-                                  {initials(String((nextTrip as any)?.homeName ?? nextTripDisplayCity))}
-                                </Text>
-                              </View>
-                            )}
-                          </View>
-                        </View>
-
-                        <Text style={styles.nextTripTitle}>{nextTripDisplayCity}</Text>
+                        <Text style={styles.nextTripKicker}>Next Up</Text>
+                        <Text style={styles.nextTripTitle}>{nextTrip.cityId || "Trip"}</Text>
                         <Text style={styles.nextTripMeta}>{tripSummaryLine(nextTrip)}</Text>
                       </Pressable>
 
@@ -1032,19 +985,19 @@ export default function HomeScreen() {
             </View>
           ) : null}
 
-          {/* QUICK SHORTCUTS */}
+          {/* QUICK SHORTCUTS (intent-based tiles) */}
           {!showSearchResults ? (
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>Quick Shortcuts</Text>
-                <Text style={styles.sectionMeta}>Fast Windows For Trip Planning</Text>
+                <Text style={styles.sectionMeta}>One-tap starting points</Text>
               </View>
 
               <View style={styles.grid2}>
-                {shortcuts.map((s) => (
+                {quickTiles.map((s) => (
                   <Pressable
                     key={s.key}
-                    onPress={() => goBuildTripGlobal(s.window)}
+                    onPress={s.onPress}
                     style={({ pressed }) => [styles.tilePress, pressed && styles.pressed]}
                     android_ripple={{ color: "rgba(255,255,255,0.06)" }}
                   >
@@ -1296,7 +1249,6 @@ const styles = StyleSheet.create({
   heroTitle: { color: theme.colors.text, fontSize: 26, lineHeight: 32, fontWeight: theme.fontWeight.black, letterSpacing: 0.2 },
   heroSub: { color: theme.colors.textSecondary, fontSize: 14, lineHeight: 20, fontWeight: theme.fontWeight.bold, opacity: 0.94 },
 
-  // Search (fixed height + vertical centering, no clipping)
   searchBox: {
     marginTop: 6,
     borderWidth: 1,
@@ -1304,7 +1256,7 @@ const styles = StyleSheet.create({
     backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
     borderRadius: 18,
     paddingHorizontal: 14,
-    height: 52,
+    minHeight: 54,
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
@@ -1312,11 +1264,9 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     color: theme.colors.text,
-    fontSize: 16,
-    lineHeight: 20,
+    fontSize: 15,
     fontWeight: theme.fontWeight.bold,
-    paddingVertical: 0,
-    ...(Platform.OS === "android" ? { textAlignVertical: "center" as const } : null),
+    paddingVertical: Platform.OS === "ios" ? 14 : 12,
   },
   clearBtn: {
     paddingVertical: 8,
@@ -1341,18 +1291,19 @@ const styles = StyleSheet.create({
   },
   heroBtnGhostText: { color: theme.colors.textSecondary, fontSize: 14, fontWeight: theme.fontWeight.black },
 
-  howPill: {
-    alignSelf: "flex-start",
+  // NEW: centered green “How It Works” CTA
+  howCta: {
+    alignSelf: "center",
     marginTop: 2,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
+    borderColor: "rgba(79,224,138,0.28)",
     backgroundColor: Platform.OS === "android" ? "rgba(10,12,14,0.18)" : "rgba(10,12,14,0.14)",
     overflow: "hidden",
   },
-  howPillText: { color: theme.colors.textTertiary, fontSize: 12, fontWeight: theme.fontWeight.black },
+  howCtaText: { color: "rgba(79,224,138,0.92)", fontSize: 12, fontWeight: theme.fontWeight.black, letterSpacing: 0.2 },
 
   searchResults: { marginTop: 10, gap: 10 },
   resultList: {
@@ -1390,10 +1341,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     overflow: "hidden",
     justifyContent: "center",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
   },
+  cityFlagBg: {
+    position: "absolute",
+    right: -10,
+    top: -10,
+    bottom: -10,
+    width: 90,
+    opacity: 0.22,
+    borderRadius: 18,
+  },
+  cityPillOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.06)" },
   pillText: { color: "rgba(242,244,246,0.78)", fontSize: 13, fontWeight: theme.fontWeight.black },
 
   teamPill: {
@@ -1453,7 +1411,7 @@ const styles = StyleSheet.create({
   },
   leaguePillText: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.black },
   leaguePillTextActive: { color: theme.colors.text, fontWeight: theme.fontWeight.black },
-  flag: { borderRadius: 3, opacity: 0.9 },
+  flag: { width: 18, height: 13, borderRadius: 3, opacity: 0.9 },
 
   block: { borderRadius: 24 },
   blockInner: { padding: 14, gap: 12 },
@@ -1544,25 +1502,7 @@ const styles = StyleSheet.create({
     backgroundColor: Platform.OS === "android" ? "rgba(10,12,14,0.18)" : "rgba(10,12,14,0.14)",
     paddingVertical: 12,
     paddingHorizontal: 12,
-    overflow: "hidden",
   },
-
-  nextTripHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-
-  tripCrestWrap: {
-    width: 30,
-    height: 30,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.18)",
-    alignItems: "center",
-    justifyContent: "center",
-    overflow: "hidden",
-  },
-  tripCrestImg: { width: 20, height: 20, opacity: 0.95 },
-  tripCrestFallback: { color: theme.colors.textSecondary, fontSize: 11, fontWeight: theme.fontWeight.black },
-
   nextTripKicker: { color: theme.colors.textTertiary, fontSize: 12, fontWeight: theme.fontWeight.black },
   nextTripTitle: { marginTop: 6, color: theme.colors.text, fontSize: 18, fontWeight: theme.fontWeight.black },
   nextTripMeta: { marginTop: 6, color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold, lineHeight: 18 },
