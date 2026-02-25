@@ -1,3 +1,4 @@
+// app/(tabs)/wallet.tsx
 import React, { useEffect, useMemo, useState, useCallback } from "react";
 import {
   View,
@@ -10,6 +11,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useFocusEffect } from "expo-router";
 
 import * as DocumentPicker from "expo-document-picker";
 
@@ -19,7 +21,7 @@ import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
 
 import walletStore, { WalletTicket } from "@/src/state/walletStore";
-import storage from "@/src/services/storage";
+import identity from "@/src/services/identity";
 
 import {
   walletList,
@@ -53,7 +55,7 @@ export default function WalletScreen() {
   const [booked, setBooked] = useState<WalletTicket[]>([]);
 
   // R2 docs (new)
-  const [userId, setUserId] = useState<string>("anon");
+  const [userId, setUserId] = useState<string>(""); // resolved via identity
   const [tripId] = useState<string>("general"); // wire real trip ids later
   const [category, setCategory] = useState<CategoryId>("all");
 
@@ -62,9 +64,8 @@ export default function WalletScreen() {
   const [docs, setDocs] = useState<WalletDoc[]>([]);
 
   const docsPrefix = useMemo(() => {
-    if (category === "all") {
-      return walletPrefixForTrip({ userId, tripId });
-    }
+    if (!userId) return walletPrefixForTrip({ userId: "anon", tripId });
+    if (category === "all") return walletPrefixForTrip({ userId, tripId });
     return walletPrefixForTrip({ userId, tripId, category });
   }, [userId, tripId, category]);
 
@@ -76,12 +77,13 @@ export default function WalletScreen() {
   }, []);
 
   const loadUser = useCallback(async () => {
-    // Keep it simple: if you already store a user id somewhere else, change THIS ONE LINE.
-    const stored = await storage.getString("userId");
-    setUserId((stored || "anon").trim() || "anon");
+    const uid = await identity.getWalletUserId();
+    setUserId(uid);
   }, []);
 
   const loadDocs = useCallback(async () => {
+    if (!userId) return;
+
     try {
       setDocsLoading(true);
       const res = await walletList({ prefix: docsPrefix, limit: 200 });
@@ -90,6 +92,7 @@ export default function WalletScreen() {
         size: i.size,
         uploaded: i.uploaded,
       }));
+
       // newest first (best-effort)
       items.sort((a, b) => (b.uploaded || "").localeCompare(a.uploaded || ""));
       setDocs(items);
@@ -99,17 +102,26 @@ export default function WalletScreen() {
     } finally {
       setDocsLoading(false);
     }
-  }, [docsPrefix]);
+  }, [docsPrefix, userId]);
 
+  // Initial boot
   useEffect(() => {
-    loadTickets();
-    loadUser();
-  }, [loadTickets, loadUser]);
+    loadUser().catch(() => null);
+    loadTickets().catch(() => null);
+  }, [loadUser, loadTickets]);
 
+  // Load docs after user/category resolved
   useEffect(() => {
-    // once user is known OR category changes
-    loadDocs();
+    loadDocs().catch(() => null);
   }, [loadDocs]);
+
+  // Refresh when the tab/screen gains focus (critical for “I saved a ticket but wallet didn’t update”)
+  useFocusEffect(
+    useCallback(() => {
+      loadTickets().catch(() => null);
+      loadDocs().catch(() => null);
+    }, [loadTickets, loadDocs])
+  );
 
   function open(url?: string | null) {
     if (!url) return;
@@ -117,6 +129,11 @@ export default function WalletScreen() {
   }
 
   async function pickAndUpload() {
+    if (!userId) {
+      Alert.alert("Wallet", "User identity not ready yet. Try again in a moment.");
+      return;
+    }
+
     try {
       setDocsUploading(true);
 
@@ -135,7 +152,6 @@ export default function WalletScreen() {
 
       const filename = file.name || "upload";
       const mimeType = file.mimeType || "application/octet-stream";
-
       const uploadCategory = category === "all" ? "misc" : category;
 
       await walletUpload({
@@ -262,49 +278,38 @@ export default function WalletScreen() {
         >
           {/* Tickets */}
           <Text style={styles.section}>Pending tickets</Text>
-          {pending.length === 0 ? (
-            <Text style={styles.empty}>No pending tickets</Text>
-          ) : (
-            pending.map((t) => <TicketCard key={t.id} t={t} />)
-          )}
+          {pending.length === 0 ? <Text style={styles.empty}>No pending tickets</Text> : pending.map((t) => <TicketCard key={t.id} t={t} />)}
 
           <Text style={styles.section}>Booked tickets</Text>
-          {booked.length === 0 ? (
-            <Text style={styles.empty}>No booked tickets</Text>
-          ) : (
-            booked.map((t) => <TicketCard key={t.id} t={t} />)
-          )}
+          {booked.length === 0 ? <Text style={styles.empty}>No booked tickets</Text> : booked.map((t) => <TicketCard key={t.id} t={t} />)}
 
           {/* Wallet docs (R2) */}
           <View style={styles.docsHeader}>
             <Text style={styles.section}>Wallet documents</Text>
 
-            <Pressable style={[styles.btn, styles.btnPrimary]} onPress={pickAndUpload} disabled={docsUploading}>
+            <Pressable style={[styles.btn, styles.btnPrimary]} onPress={pickAndUpload} disabled={docsUploading || !userId}>
               {docsUploading ? <ActivityIndicator /> : <Text style={styles.btnText}>Upload</Text>}
             </Pressable>
           </View>
 
           <Text style={styles.subtle}>
-            User: <Text style={styles.subtleStrong}>{userId}</Text> • Trip:{" "}
-            <Text style={styles.subtleStrong}>{tripId}</Text>
+            User: <Text style={styles.subtleStrong}>{userId || "…"}</Text> • Trip: <Text style={styles.subtleStrong}>{tripId}</Text>
           </Text>
 
           <View style={styles.chipsRow}>
             {CATEGORIES.map((c) => {
               const active = c.id === category;
               return (
-                <Pressable
-                  key={c.id}
-                  onPress={() => setCategory(c.id)}
-                  style={[styles.chip, active && styles.chipActive]}
-                >
+                <Pressable key={c.id} onPress={() => setCategory(c.id)} style={[styles.chip, active && styles.chipActive]}>
                   <Text style={[styles.chipText, active && styles.chipTextActive]}>{c.label}</Text>
                 </Pressable>
               );
             })}
           </View>
 
-          {docsLoading ? (
+          {!userId ? (
+            <Text style={styles.empty}>Preparing identity…</Text>
+          ) : docsLoading ? (
             <Text style={styles.empty}>Loading documents…</Text>
           ) : docs.length === 0 ? (
             <Text style={styles.empty}>No documents yet. Upload your first receipt/confirmation.</Text>
@@ -318,39 +323,14 @@ export default function WalletScreen() {
 }
 
 const styles = StyleSheet.create({
-  section: {
-    color: theme.colors.text,
-    fontSize: 18,
-    fontWeight: "900",
-  },
-  empty: {
-    color: theme.colors.textSecondary,
-  },
-  card: {
-    gap: 6,
-  },
-  title: {
-    color: theme.colors.text,
-    fontWeight: "900",
-  },
-  meta: {
-    color: theme.colors.textSecondary,
-  },
-  metaSmall: {
-    color: theme.colors.textSecondary,
-    fontSize: 12,
-  },
-  provider: {
-    color: theme.colors.primary,
-    fontWeight: "700",
-    fontSize: 12,
-  },
-  row: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 8,
-    gap: 10,
-  },
+  section: { color: theme.colors.text, fontSize: 18, fontWeight: "900" },
+  empty: { color: theme.colors.textSecondary },
+  card: { gap: 6 },
+  title: { color: theme.colors.text, fontWeight: "900" },
+  meta: { color: theme.colors.textSecondary },
+  metaSmall: { color: theme.colors.textSecondary, fontSize: 12 },
+  provider: { color: theme.colors.primary, fontWeight: "700", fontSize: 12 },
+  row: { flexDirection: "row", justifyContent: "space-between", marginTop: 8, gap: 10 },
   btn: {
     borderWidth: 1,
     borderColor: theme.colors.border,
@@ -361,76 +341,19 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  btnText: {
-    color: theme.colors.text,
-    fontWeight: "800",
-  },
-  btnPrimary: {
-    borderColor: "rgba(255,255,255,0.25)",
-    backgroundColor: "rgba(255,255,255,0.08)",
-  },
-  btnDanger: {
-    borderColor: "rgba(255,80,80,0.35)",
-    backgroundColor: "rgba(255,80,80,0.08)",
-  },
-  pending: {
-    backgroundColor: "rgba(255,200,0,0.15)",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    alignSelf: "center",
-  },
-  pendingText: {
-    color: "#FFD54A",
-    fontWeight: "900",
-  },
-  booked: {
-    backgroundColor: "rgba(0,255,136,0.15)",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    alignSelf: "center",
-  },
-  bookedText: {
-    color: "#00FF88",
-    fontWeight: "900",
-  },
-  docsHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 12,
-  },
-  subtle: {
-    color: theme.colors.textSecondary,
-    fontSize: 12,
-  },
-  subtleStrong: {
-    color: theme.colors.text,
-    fontWeight: "800",
-  },
-  chipsRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  chip: {
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-  },
-  chipActive: {
-    backgroundColor: "rgba(255,255,255,0.10)",
-    borderColor: "rgba(255,255,255,0.25)",
-  },
-  chipText: {
-    color: theme.colors.textSecondary,
-    fontWeight: "800",
-    fontSize: 12,
-  },
-  chipTextActive: {
-    color: theme.colors.text,
-  },
+  btnText: { color: theme.colors.text, fontWeight: "800" },
+  btnPrimary: { borderColor: "rgba(255,255,255,0.25)", backgroundColor: "rgba(255,255,255,0.08)" },
+  btnDanger: { borderColor: "rgba(255,80,80,0.35)", backgroundColor: "rgba(255,80,80,0.08)" },
+  pending: { backgroundColor: "rgba(255,200,0,0.15)", paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, alignSelf: "center" },
+  pendingText: { color: "#FFD54A", fontWeight: "900" },
+  booked: { backgroundColor: "rgba(0,255,136,0.15)", paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, alignSelf: "center" },
+  bookedText: { color: "#00FF88", fontWeight: "900" },
+  docsHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
+  subtle: { color: theme.colors.textSecondary, fontSize: 12 },
+  subtleStrong: { color: theme.colors.text, fontWeight: "800" },
+  chipsRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  chip: { borderWidth: 1, borderColor: theme.colors.border, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999 },
+  chipActive: { backgroundColor: "rgba(255,255,255,0.10)", borderColor: "rgba(255,255,255,0.25)" },
+  chipText: { color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12 },
+  chipTextActive: { color: theme.colors.text },
 });
