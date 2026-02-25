@@ -1,46 +1,55 @@
 /**
  * YourNextAway Theme (V1 - Luxury Hospitality x Tech, Dark-Only)
  *
+ * Locked brand palette:
+ * - Primary green: #4B9E39
+ * - EU blue:       #0D2D67
+ * - Gold:          #E2B919
+ *
  * This revision:
- * - Glass surfaces MORE transparent globally
- * - Border slightly softer
- * - Keeps readability (still near-black tints, just less opaque)
+ * - Keeps your existing surface + text system
+ * - Updates accents to the locked palette
+ * - Keeps backwards-compatible aliases (primary/accent/etc.)
+ * - Avoids duplicate keys in colors (you had textSecondary/textTertiary twice)
  */
 
 export const theme = {
   colors: {
+    // Base surfaces
     bgBase: "#0F1113",
     bgSurface: "#16191D",
     bgElevated: "#1E2227",
 
+    // Text
     textPrimary: "#F2F4F6",
     textSecondary: "rgba(242,244,246,0.72)",
     textTertiary: "rgba(242,244,246,0.45)",
 
-    accentGreen: "#4FE08A",
-    accentBlue: "#2F6BFF",
-    accentGold: "rgba(214,181,106,0.70)",
+    // Brand accents (LOCKED)
+    accentGreen: "#4B9E39",
+    accentBlue: "#0D2D67",
+    accentGold: "#E2B919",
 
+    // Status
     warning: "#FFB800",
     error: "#FF5A6A",
+    success: "#4B9E39",
 
+    // Lines
     borderSubtle: "rgba(255,255,255,0.06)",
     dividerSubtle: "rgba(255,255,255,0.06)",
 
-    // Backwards compatible aliases
+    // Backwards compatible aliases (keep existing app usage stable)
     background: "#0F1113",
     backgroundSecondary: "#16191D",
 
     text: "#F2F4F6",
-    textSecondary: "rgba(242,244,246,0.72)",
-    textTertiary: "rgba(242,244,246,0.45)",
 
-    primary: "#4FE08A",
-    primaryDark: "rgba(79,224,138,0.75)",
-    primaryLight: "rgba(79,224,138,0.95)",
+    primary: "#4B9E39",
+    primaryDark: "rgba(75,158,57,0.75)",
+    primaryLight: "rgba(75,158,57,0.95)",
 
-    accent: "#2F6BFF",
-    success: "#4FE08A",
+    accent: "#0D2D67",
 
     border: "rgba(255,255,255,0.06)",
     divider: "rgba(255,255,255,0.06)",
@@ -111,3 +120,4 @@ export const theme = {
 };
 
 export type Theme = typeof theme;
+```0
