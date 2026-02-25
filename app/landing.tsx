@@ -1,99 +1,108 @@
 // app/landing.tsx
-import React, { useCallback } from "react";
-import { View, Text, StyleSheet, Pressable, Image } from "react-native";
+import React, { useCallback, useEffect, useState } from "react";
+import { View, Text, StyleSheet, Pressable, Image, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Stack, useRouter } from "expo-router";
 
 import Background from "@/src/components/Background";
-import { getBackgroundSource } from "@/src/constants/backgrounds";
+import GlassCard from "@/src/components/GlassCard";
 import { theme } from "@/src/constants/theme";
 import storage from "@/src/services/storage";
 
 const LOGO = require("@/src/yna-logo.png");
 
+// Remote Unsplash (stable URL). RN <ImageBackground> will follow redirects.
+const LANDING_BG = { uri: "https://unsplash.com/photos/5IS7UghgoMA/download?force=true" };
+
 const STORAGE_KEYS = {
-  seenLanding: "yna:seenLanding",
+  disableLanding: "yna:disableLanding", // if "true" -> skip landing (future Profile toggle)
 };
 
-/**
- * TUNING KNOBS (edit these only)
- * - BRAND_DROP: + moves logo/subtitle DOWN (stable across devices)
- * - CARD_RAISE: + moves card UP (exposes stadium)
- */
-const BRAND_DROP = 26;
-const CARD_RAISE = 36;
+// Tuning knobs (safe, simple)
+const LOGO_SIZE = 156;
+const HERO_GAP = 14;
+const CARD_GAP = 12;
 
 export default function Landing() {
   const router = useRouter();
+  const [booting, setBooting] = useState(true);
 
-  const markSeen = useCallback(async () => {
-    try {
-      await storage.setString(STORAGE_KEYS.seenLanding, "true");
-    } catch {
-      // ignore
-    }
-  }, []);
+  useEffect(() => {
+    let mounted = true;
 
-  const handleGetStarted = useCallback(async () => {
-    await markSeen();
+    (async () => {
+      try {
+        const disabled = (await storage.getString(STORAGE_KEYS.disableLanding))?.trim() === "true";
+        if (disabled) {
+          router.replace("/(tabs)/home");
+          return;
+        }
+      } catch {
+        // ignore: default to showing landing
+      } finally {
+        if (mounted) setBooting(false);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, [router]);
+
+  const handleStart = useCallback(() => {
     router.push("/onboarding");
-  }, [markSeen, router]);
+  }, [router]);
 
-  const handleExploreFirst = useCallback(async () => {
-    await markSeen();
+  const handleSkip = useCallback(() => {
     router.replace("/(tabs)/home");
-  }, [markSeen, router]);
+  }, [router]);
 
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
 
-      <Background
-        imageSource={getBackgroundSource("landing")}
-        overlayOpacity={0.58}
-      >
+      <Background imageSource={LANDING_BG} overlayOpacity={0.56}>
         <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
           <View style={styles.screen}>
-            {/* Top spacing so brand sits in top-third across devices */}
-            <View style={styles.topSpacer} />
-
-            {/* Brand block (nudged by BRAND_DROP) */}
-            <View style={[styles.brand, { transform: [{ translateY: BRAND_DROP }] }]}>
+            {/* Top brand block */}
+            <View style={styles.brand}>
               <Image source={LOGO} style={styles.logo} resizeMode="contain" />
-              <Text style={styles.tagline}>Football-First City Breaks Across Europe</Text>
+              <Text style={styles.motto}>PLAN • FLY • WATCH • REPEAT</Text>
             </View>
 
-            {/* Middle spacer keeps brand + card balanced without hard-coded magic numbers */}
-            <View style={styles.midSpacer} />
-
-            {/* CTA (raised to expose stadium) */}
-            <View style={[styles.cardWrap, { transform: [{ translateY: -CARD_RAISE }] }]}>
-              <View style={styles.card}>
-                <Text style={styles.h1}>Plan Your Next Away</Text>
-
-                <Text style={styles.body}>
-                  Pick a match or pick a city — we’ll help you build the full trip in one place.
-                </Text>
-
-                <View style={styles.actions}>
-                  <Pressable
-                    onPress={handleGetStarted}
-                    style={[styles.btn, styles.btnPrimary]}
-                  >
-                    <Text style={styles.btnPrimaryText}>Get Started</Text>
-                  </Pressable>
-
-                  <Pressable
-                    onPress={handleExploreFirst}
-                    style={[styles.btn, styles.btnGhost]}
-                  >
-                    <Text style={styles.btnGhostText}>Explore First</Text>
-                  </Pressable>
+            {/* Center content */}
+            <View style={styles.center}>
+              {booting ? (
+                <View style={styles.boot}>
+                  <ActivityIndicator />
                 </View>
+              ) : (
+                <GlassCard style={styles.card}>
+                  <Text style={styles.h1}>European football trips, perfectly planned</Text>
 
-                <Text style={styles.motto}>PLAN • FLY • WATCH • REPEAT</Text>
-              </View>
+                  <Text style={styles.body}>
+                    Build the whole trip in one place — fixtures, tickets, flights, stays, and the plan for matchday.
+                  </Text>
+
+                  <View style={styles.actions}>
+                    <Pressable onPress={handleStart} style={[styles.btn, styles.btnPrimary]}>
+                      <Text style={styles.btnPrimaryText}>Get Started</Text>
+                    </Pressable>
+
+                    <Pressable onPress={handleSkip} style={[styles.btn, styles.btnGhost]}>
+                      <Text style={styles.btnGhostText}>Skip for now</Text>
+                    </Pressable>
+                  </View>
+
+                  <Text style={styles.note}>
+                    You can turn this off on future openings in your Profile.
+                  </Text>
+                </GlassCard>
+              )}
             </View>
+
+            {/* Bottom spacer keeps everything centered and premium */}
+            <View style={{ height: 18 }} />
           </View>
         </SafeAreaView>
       </Background>
@@ -107,75 +116,69 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     paddingHorizontal: theme.spacing.lg,
-    paddingTop: theme.spacing.md,
+    paddingTop: theme.spacing.lg,
     paddingBottom: theme.spacing.lg,
-  },
-
-  // Keeps brand out of the extreme top on tall devices, without hard px hacks
-  topSpacer: {
-    flex: 0.22,
-    minHeight: 36,
+    justifyContent: "space-between",
   },
 
   brand: {
     alignItems: "center",
+    gap: HERO_GAP,
   },
 
   logo: {
-    width: 130,
-    height: 130,
+    width: LOGO_SIZE,
+    height: LOGO_SIZE,
   },
 
-  tagline: {
-    marginTop: 10,
-    maxWidth: 330,
-    color: "rgba(255,255,255,0.90)",
-    fontWeight: theme.fontWeight.black,
-    fontSize: theme.fontSize.sm,
+  motto: {
     textAlign: "center",
-    letterSpacing: 0.25,
-    textShadowColor: "rgba(0,0,0,0.65)",
+    color: theme.colors.primary, // your green
+    fontSize: theme.fontSize.xs,
+    fontWeight: theme.fontWeight.black,
+    letterSpacing: 1.1,
+    textShadowColor: "rgba(0,0,0,0.55)",
     textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 12,
+    textShadowRadius: 10,
   },
 
-  // Flexible breathing room so the card doesn't float too low/high on different screens
-  midSpacer: {
+  center: {
     flex: 1,
-    minHeight: 10,
+    justifyContent: "center",
+    paddingTop: 6,
   },
 
-  cardWrap: {
-    paddingBottom: theme.spacing.lg,
+  boot: {
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 160,
   },
 
-  // transparent + premium, NO blur
   card: {
-    padding: theme.spacing.md,
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.045)",
-    backgroundColor: "rgba(0,0,0,0.050)", // slightly more transparent than your current
+    padding: theme.spacing.lg,
+    borderRadius: 26,
+    gap: CARD_GAP,
   },
 
   h1: {
     color: theme.colors.text,
     fontWeight: theme.fontWeight.black,
-    fontSize: theme.fontSize.lg,
-    lineHeight: 30,
+    fontSize: 26,
+    lineHeight: 32,
+    textAlign: "center",
     letterSpacing: 0.2,
   },
 
   body: {
-    marginTop: 8,
-    color: "rgba(255,255,255,0.74)",
+    color: theme.colors.textSecondary,
     fontWeight: theme.fontWeight.bold,
     fontSize: theme.fontSize.md,
     lineHeight: 22,
+    textAlign: "center",
   },
 
   actions: {
-    marginTop: theme.spacing.md,
+    marginTop: 4,
     flexDirection: "row",
     gap: 12,
   },
@@ -185,37 +188,39 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     paddingVertical: 14,
     alignItems: "center",
+    justifyContent: "center",
     borderWidth: 1,
   },
 
   btnPrimary: {
-    borderColor: theme.colors.primary,
-    backgroundColor: "rgba(0,0,0,0.22)",
+    borderColor: "rgba(255,255,255,0.14)",
+    backgroundColor: "rgba(0,0,0,0.28)",
   },
 
   btnPrimaryText: {
     color: theme.colors.text,
     fontWeight: theme.fontWeight.black,
     fontSize: theme.fontSize.md,
+    letterSpacing: 0.2,
   },
 
   btnGhost: {
-    borderColor: "rgba(255,255,255,0.05)",
-    backgroundColor: "rgba(255,255,255,0.02)",
+    borderColor: "rgba(255,255,255,0.08)",
+    backgroundColor: "rgba(255,255,255,0.04)",
   },
 
   btnGhostText: {
-    color: "rgba(255,255,255,0.55)",
+    color: "rgba(255,255,255,0.68)",
     fontWeight: theme.fontWeight.black,
     fontSize: theme.fontSize.md,
+    letterSpacing: 0.1,
   },
 
-  motto: {
-    marginTop: 10,
+  note: {
+    marginTop: 4,
     textAlign: "center",
-    color: theme.colors.primary,
-    fontSize: theme.fontSize.xs,
-    fontWeight: theme.fontWeight.black,
-    letterSpacing: 0.8,
+    color: theme.colors.textTertiary,
+    fontSize: 12,
+    fontWeight: theme.fontWeight.bold,
   },
 });
