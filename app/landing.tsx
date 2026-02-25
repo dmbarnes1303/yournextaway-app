@@ -78,7 +78,7 @@ export default function Landing() {
                 </View>
               ) : (
                 <GlassCard style={styles.card}>
-                  <Text style={styles.h1}>European football trips, perfectly planned</Text>
+                  <Text style={styles.h1}>European Football Trips, Perfectly Planned</Text>
 
                   <Text style={styles.body}>
                     Build the whole trip in one place — fixtures, tickets, flights, stays, and the plan for matchday.
