@@ -95,76 +95,27 @@ function parseIsoToDate(iso?: string | null): Date | null {
   return Number.isFinite(d.getTime()) ? d : null;
 }
 
-/**
- * Minimal, pragmatic country-name -> ISO2 mapping.
- * This is NOT exhaustive; it covers the countries you’re likely to show as “tints”.
- * Unknown => "EU" (neutral).
- */
-function countryNameToCode(countryName: string): string {
-  const c = cleanText(countryName).toLowerCase();
-  if (!c) return "EU";
-
-  // High-frequency football travel countries (expand whenever needed)
-  const map: Record<string, string> = {
-    germany: "DE",
-    deutschland: "DE",
-    england: "GB",
-    "united kingdom": "GB",
-    uk: "GB",
-    scotland: "GB",
-    wales: "GB",
-    "northern ireland": "GB",
-    france: "FR",
-    spain: "ES",
-    italy: "IT",
-    portugal: "PT",
-    netherlands: "NL",
-    holland: "NL",
-    belgium: "BE",
-    switzerland: "CH",
-    austria: "AT",
-    "czech republic": "CZ",
-    czechia: "CZ",
-    poland: "PL",
-    denmark: "DK",
-    sweden: "SE",
-    norway: "NO",
-    ireland: "IE",
-    greece: "GR",
-    turkey: "TR",
-  };
-
-  return map[c] ?? "EU";
+function findCountryCodeForLeagueId(leagueId: number | null | undefined): string | undefined {
+  if (typeof leagueId !== "number") return undefined;
+  const l = LEAGUES.find((x) => x.leagueId === leagueId);
+  const cc = String(l?.countryCode ?? "").trim().toUpperCase();
+  return cc && cc.length === 2 ? cc : undefined;
 }
 
 /**
  * Snapshot builder for trip readability + durability.
- * Stores both cityId (slug) and displayCity (human).
- *
- * Adds: countryCode + logos so Home can show crest/tint without API calls.
+ * Stores:
+ * - cityId (slug) + displayCity (human)
+ * - home/away/league/venue + kickoffIso/kickoffTbc
+ * - leagueId/season/countryCode + homeTeamId (for Home visuals without guessing)
  */
-function buildTripSnapshot(args: {
-  selectedFixture: FixtureListRow;
-  placeholderTbcIds: Set<string>;
-  fallbackCountryCode?: string;
-}) {
-  const { selectedFixture, placeholderTbcIds, fallbackCountryCode } = args;
-
+function buildTripSnapshot(selectedFixture: FixtureListRow, placeholderTbcIds: Set<string>) {
   const displayCity = safeCityDisplay(selectedFixture?.fixture?.venue?.city);
   const cityId = slugifyCityId(displayCity);
 
   const homeName = cleanText(selectedFixture?.teams?.home?.name);
   const awayName = cleanText(selectedFixture?.teams?.away?.name);
-  const homeLogo = cleanText(selectedFixture?.teams?.home?.logo);
-  const awayLogo = cleanText(selectedFixture?.teams?.away?.logo);
-
   const leagueName = cleanText(selectedFixture?.league?.name);
-  const leagueLogo = cleanText((selectedFixture as any)?.league?.logo);
-  const leagueId = (selectedFixture as any)?.league?.id != null ? String((selectedFixture as any).league.id) : undefined;
-  const season =
-    (selectedFixture as any)?.league?.season != null ? String((selectedFixture as any).league.season) : undefined;
-  const round = cleanText(selectedFixture?.league?.round) || undefined;
-
   const venueName = cleanText(selectedFixture?.fixture?.venue?.name);
 
   const kickoffIsoRaw = selectedFixture?.fixture?.date ? String(selectedFixture.fixture.date) : "";
@@ -172,44 +123,38 @@ function buildTripSnapshot(args: {
 
   const kickoffTbc = isKickoffTbc(selectedFixture, placeholderTbcIds);
 
-  const leagueCountry = cleanText((selectedFixture as any)?.league?.country);
-  const countryCode =
-    leagueCountry ? countryNameToCode(leagueCountry) : cleanText(fallbackCountryCode) || "EU";
+  const leagueId = typeof selectedFixture?.league?.id === "number" ? selectedFixture.league.id : undefined;
+  const seasonRaw = (selectedFixture as any)?.league?.season;
+  const season = seasonRaw != null ? String(seasonRaw) : String(currentFootballSeasonStartYear());
+
+  const countryCode = findCountryCodeForLeagueId(leagueId);
+  const homeTeamId =
+    typeof selectedFixture?.teams?.home?.id === "number" ? selectedFixture.teams.home.id : undefined;
 
   return {
     cityId,
     displayCity,
-
     homeName: homeName || undefined,
     awayName: awayName || undefined,
-    homeLogo: homeLogo || undefined,
-    awayLogo: awayLogo || undefined,
-
     leagueName: leagueName || undefined,
-    leagueLogo: leagueLogo || undefined,
-    leagueId,
-    season,
-    round,
-
     venueName: venueName || undefined,
-
     kickoffIso,
     kickoffTbc,
 
-    // new: for Home tinting, badges, etc
+    leagueId: leagueId != null ? String(leagueId) : undefined,
+    season,
     countryCode,
-    leagueCountry: leagueCountry || undefined,
+    homeTeamId,
   };
 }
 
 async function computePlaceholderIdsForFixture(fx: FixtureListRow | null): Promise<Set<string>> {
   if (!fx) return new Set();
 
-  const leagueId = (fx as any)?.league?.id ?? null;
+  const leagueId = fx?.league?.id ?? null;
   const season = (fx as any)?.league?.season ?? currentFootballSeasonStartYear();
   const round = cleanText(fx?.league?.round);
 
-  // If we can’t cluster, fall back to empty set (isKickoffTbc still uses fixture state)
   if (!leagueId || !season || !round) return new Set();
 
   try {
@@ -235,7 +180,6 @@ export default function TripBuildScreen() {
   const routeFixtureId = useMemo(() => paramString((params as any)?.fixtureId), [params]);
   const routeCityArea = useMemo(() => paramString((params as any)?.cityArea), [params]);
 
-  // If fixtureId is provided and we're NOT editing, this is the “Build trip from fixture” flow.
   const isPrefilledFlow = !!routeFixtureId && !isEditing;
 
   const [loading, setLoading] = useState(false);
@@ -255,7 +199,6 @@ export default function TripBuildScreen() {
   const [endIso, setEndIso] = useState(addDaysIso(startIso, 2));
   const [notes, setNotes] = useState("");
 
-  // keep end date reacting to start changes (but don’t clobber if user is editing with a custom range)
   const [endTouched, setEndTouched] = useState(false);
   useEffect(() => {
     if (endTouched) return;
@@ -304,7 +247,6 @@ export default function TripBuildScreen() {
 
           setSelectedFixture(fx);
 
-          // ✅ compute placeholder ids for THIS fixture’s round
           const ids = await computePlaceholderIdsForFixture(fx);
           if (!cancelled) setPlaceholderTbcIds(ids);
         } else {
@@ -343,7 +285,6 @@ export default function TripBuildScreen() {
 
         setSelectedFixture(r);
 
-        // ✅ compute placeholder ids for THIS fixture’s round
         const ids = await computePlaceholderIdsForFixture(r);
         if (!cancelled) setPlaceholderTbcIds(ids);
 
@@ -351,7 +292,7 @@ export default function TripBuildScreen() {
         if (d0) {
           const start = clampFromIsoToTomorrow(d0);
           setStartIso(start);
-          setEndTouched(false); // allow auto end = +2 for new trip
+          setEndTouched(false);
         }
 
         if (routeCityArea) {
@@ -390,7 +331,7 @@ export default function TripBuildScreen() {
 
   useEffect(() => {
     if (isEditing) return;
-    if (isPrefilledFlow) return; // critical: do NOT load fixture lists in prefilled flow
+    if (isPrefilledFlow) return;
 
     let cancelled = false;
 
@@ -399,7 +340,6 @@ export default function TripBuildScreen() {
       setError(null);
 
       try {
-        // Small rolling window for picker only (tomorrow -> +30 days)
         const from = clampFromIsoToTomorrow(new Date().toISOString().slice(0, 10));
         const to = addDaysIso(from, 30);
 
@@ -477,14 +417,7 @@ export default function TripBuildScreen() {
     setError(null);
 
     const fixtureId = String(selectedFixture.fixture.id);
-
-    // countryCode fallback comes from picker-selected league (when in picker mode).
-    // In prefilled flow, selectedLeague may still be "All leagues" so snapshot also tries fixture.league.country.
-    const snap = buildTripSnapshot({
-      selectedFixture,
-      placeholderTbcIds,
-      fallbackCountryCode: selectedLeague?.countryCode,
-    });
+    const snap = buildTripSnapshot(selectedFixture, placeholderTbcIds);
 
     const patch: Partial<Omit<Trip, "id">> = {
       cityId: snap.cityId,
@@ -494,29 +427,20 @@ export default function TripBuildScreen() {
       notes: cleanText(notes),
     };
 
-    // snapshots
     (patch as any).displayCity = snap.displayCity;
-
     (patch as any).homeName = snap.homeName;
     (patch as any).awayName = snap.awayName;
-    (patch as any).homeLogo = snap.homeLogo;
-    (patch as any).awayLogo = snap.awayLogo;
-
     (patch as any).leagueName = snap.leagueName;
-    (patch as any).leagueLogo = snap.leagueLogo;
-    (patch as any).leagueId = snap.leagueId;
-    (patch as any).season = snap.season;
-    (patch as any).round = snap.round;
-
     (patch as any).venueName = snap.venueName;
-
     (patch as any).kickoffIso = snap.kickoffIso;
     (patch as any).kickoffTbc = snap.kickoffTbc;
 
+    // New: visuals + routing durability
+    (patch as any).leagueId = snap.leagueId;
+    (patch as any).season = snap.season;
     (patch as any).countryCode = snap.countryCode;
-    (patch as any).leagueCountry = snap.leagueCountry;
+    (patch as any).homeTeamId = snap.homeTeamId;
 
-    // Preserve “Stay area” hint if it was passed and user hasn't typed notes
     if (routeCityArea && !cleanText(patch.notes)) {
       (patch as any).notes = `Stay area: ${routeCityArea}`;
     }
@@ -540,7 +464,6 @@ export default function TripBuildScreen() {
     selectedFixture,
     validateDateOrder,
     placeholderTbcIds,
-    selectedLeague,
     startIso,
     endIso,
     notes,
@@ -611,7 +534,6 @@ export default function TripBuildScreen() {
             </GlassCard>
           )}
 
-          {/* Prefilled flow: show summary only (no picker) */}
           {isPrefilledFlow && !prefillLoading && selectedFixture ? (
             <GlassCard>
               <Text style={styles.h1}>Selected match</Text>
@@ -642,7 +564,6 @@ export default function TripBuildScreen() {
             </GlassCard>
           ) : null}
 
-          {/* Picker mode (only if not prefilled) */}
           {!isPrefilledFlow && !prefillLoading && !error ? (
             <GlassCard>
               <Text style={styles.h1}>Pick a match</Text>
@@ -698,8 +619,6 @@ export default function TripBuildScreen() {
                     key={id || String(i)}
                     onPress={async () => {
                       setSelectedFixture(r);
-
-                      // ✅ refresh placeholder ids based on the selected fixture’s round
                       const ids = await computePlaceholderIdsForFixture(r);
                       setPlaceholderTbcIds(ids);
                     }}
@@ -732,7 +651,6 @@ export default function TripBuildScreen() {
             </GlassCard>
           ) : null}
 
-          {/* Save */}
           <Pressable
             onPress={onSave}
             disabled={saving || prefillLoading}
