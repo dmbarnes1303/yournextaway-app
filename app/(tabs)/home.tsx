@@ -41,14 +41,6 @@ import { hasTeamGuide } from "@/src/data/teamGuides";
 import { getCityGuide } from "@/src/data/cityGuides";
 import { getFlagImageUrl } from "@/src/utils/flagImages";
 
-/**
- * Premium Home (Overhaul):
- * - Remove all “neon rails” / left-edge accents.
- * - Reduce density: hero search, featured upcoming, trips, compact shortcuts, compact discover.
- * - One glass recipe; no nested GlassCard stacks.
- * - Restraint: fewer CTAs visible at once.
- */
-
 const API_SPORTS_TEAM_LOGO = (teamId: number) => `https://media.api-sports.io/football/teams/${teamId}.png`;
 
 type ShortcutWindow = { from: string; to: string };
@@ -56,6 +48,7 @@ type ShortcutWindow = { from: string; to: string };
 type CityChip = { name: string; countryCode: string };
 type TeamChip = { name: string; teamId: number };
 
+// Popular cities/teams (Home-only)
 const POPULAR_CITIES: CityChip[] = [
   { name: "Paris", countryCode: "FR" },
   { name: "Rome", countryCode: "IT" },
@@ -71,6 +64,18 @@ const POPULAR_TEAMS: TeamChip[] = [
   { name: "Inter Milan", teamId: 505 },
   { name: "Borussia Dortmund", teamId: 165 },
 ];
+
+// Home should NOT show 25+ leagues. Curate top leagues for Home scroller only.
+const HOME_TOP_LEAGUE_IDS = new Set<number>([
+  39, // Premier League
+  140, // La Liga
+  135, // Serie A
+  78, // Bundesliga
+  61, // Ligue 1
+  88, // Eredivisie
+  94, // Primeira Liga
+  203, // Super Lig (optional)
+]);
 
 function toKey(s: string) {
   return String(s ?? "").trim().toLowerCase();
@@ -141,15 +146,9 @@ function LeagueFlag({ code }: { code: string }) {
   return <Image source={{ uri: url }} style={styles.flag} />;
 }
 
-function CityFlag({ code }: { code: string }) {
-  const url = getFlagImageUrl(code, { size: 40 });
-  if (!url) return null;
-  return <Image source={{ uri: url }} style={styles.cityFlag} />;
-}
-
-function TeamCrest({ teamId }: { teamId: number }) {
+function TeamCrest({ teamId, size = 14 }: { teamId: number; size?: number }) {
   const uri = API_SPORTS_TEAM_LOGO(teamId);
-  return <Image source={{ uri }} style={styles.teamCrest} resizeMode="contain" />;
+  return <Image source={{ uri }} style={{ width: size, height: size, opacity: 0.95 }} resizeMode="contain" />;
 }
 
 function CrestSquare({ row }: { row: FixtureListRow }) {
@@ -167,10 +166,6 @@ function CrestSquare({ row }: { row: FixtureListRow }) {
   );
 }
 
-/**
- * Deterministic “attractiveness” scoring (basic, safe).
- * (This is just for ordering top picks; not shown to user.)
- */
 function scoreFixture(r: FixtureListRow): number {
   let s = 0;
 
@@ -189,7 +184,7 @@ function scoreFixture(r: FixtureListRow): number {
   const dt = r?.fixture?.date ? new Date(r.fixture.date) : null;
   if (dt && !Number.isNaN(dt.getTime())) {
     const day = dt.getDay();
-    if (day === 5 || day === 6 || day === 0) s += 10; // Fri/Sat/Sun
+    if (day === 5 || day === 6 || day === 0) s += 10;
     const hr = dt.getHours();
     if (hr >= 17 && hr <= 21) s += 6;
   }
@@ -200,7 +195,14 @@ function scoreFixture(r: FixtureListRow): number {
 export default function HomeScreen() {
   const router = useRouter();
 
-  const [league, setLeague] = useState<LeagueOption>(LEAGUES[0]);
+  const homeTopLeagues = useMemo(() => {
+    const list = LEAGUES.filter((l) => HOME_TOP_LEAGUE_IDS.has(l.leagueId));
+    // Fallback to first 6 if IDs drift
+    return list.length ? list : LEAGUES.slice(0, 6);
+  }, []);
+
+  const [league, setLeague] = useState<LeagueOption>(homeTopLeagues[0] ?? LEAGUES[0]);
+
   const { from: fromIso, to: toIso } = useMemo(() => getRollingWindowIso(), []);
   const upcomingWindow = useMemo(() => windowFromTomorrowIso(14), []);
 
@@ -344,6 +346,10 @@ export default function HomeScreen() {
     } as any);
   }, [router, league.leagueId, league.season, fromIso, toIso]);
 
+  const goFixturesAll = useCallback(() => {
+    router.push({ pathname: "/(tabs)/fixtures" } as any);
+  }, [router]);
+
   const goBuildTripGlobal = useCallback(
     (window?: ShortcutWindow) => {
       const w = window ?? getRollingWindowIso({ days: 60 });
@@ -404,39 +410,21 @@ export default function HomeScreen() {
     return r.subtitle ?? "";
   }, []);
 
-  // Popular chips: dedupe / keep tight
-  const dedupedCities = useMemo(() => dedupeBy(POPULAR_CITIES, (c) => toKey(c.name)).slice(0, 5), []);
-  const dedupedTeams = useMemo(() => dedupeBy(POPULAR_TEAMS, (t) => String(t.teamId)).slice(0, 5), []);
+  const cities = useMemo(() => dedupeBy(POPULAR_CITIES, (c) => toKey(c.name)).slice(0, 5), []);
+  const teams = useMemo(() => dedupeBy(POPULAR_TEAMS, (t) => String(t.teamId)).slice(0, 5), []);
 
   // Modals
   const [howOpen, setHowOpen] = useState(false);
 
-  const shortcuts = useMemo(
-    () => [
-      { key: "wknd", label: "This Weekend", window: windowFromTomorrowIso(3) },
-      { key: "d7", label: "Next 7 Days", window: windowFromTomorrowIso(7) },
-      { key: "d14", label: "Next 14 Days", window: windowFromTomorrowIso(14) },
-      { key: "any", label: "Any Time", window: getRollingWindowIso({ days: 60 }) },
-    ],
-    []
-  );
-
   return (
     <Background imageSource={getBackground("home")} overlayOpacity={0.76}>
       <SafeAreaView style={styles.container} edges={["top"]}>
-        <ScrollView
-          style={styles.scroll}
-          contentContainerStyle={styles.content}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
+        <ScrollView style={styles.scroll} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           {/* HERO */}
           <GlassCard strength="strong" style={styles.hero} noPadding>
             <View style={styles.heroInner}>
               <Text style={styles.heroTitle}>Plan A Football City Break</Text>
-              <Text style={styles.heroSub}>
-                Search A City, Team, Country, League, Or Venue. Then Jump Into Fixtures Or Start A Trip Hub.
-              </Text>
+              <Text style={styles.heroSub}>Search A City, Team, Country, League, Or Venue. Then Jump Into Fixtures Or Start A Trip Hub.</Text>
 
               <View style={styles.searchBox}>
                 <TextInput
@@ -457,37 +445,39 @@ export default function HomeScreen() {
                 ) : null}
               </View>
 
-              {/* Primary actions: minimal */}
+              {/* Primary actions */}
               {!showSearchResults ? (
-                <View style={styles.heroActions}>
-                  <Pressable
-                    onPress={goFixtures}
-                    style={({ pressed }) => [styles.heroBtn, styles.heroBtnGhost, pressed && styles.pressed]}
-                    android_ripple={{ color: "rgba(255,255,255,0.08)" }}
-                  >
-                    <Text style={styles.heroBtnGhostText}>Browse Fixtures</Text>
-                  </Pressable>
+                <>
+                  <View style={styles.heroActions}>
+                    <Pressable
+                      onPress={goFixtures}
+                      style={({ pressed }) => [styles.heroBtn, styles.heroBtnGhost, pressed && styles.pressed]}
+                      android_ripple={{ color: "rgba(255,255,255,0.08)" }}
+                    >
+                      <Text style={styles.heroBtnGhostText}>Browse Fixtures</Text>
+                    </Pressable>
 
+                    <Pressable
+                      onPress={() => goBuildTripGlobal()}
+                      style={({ pressed }) => [styles.heroBtn, styles.heroBtnPrimary, pressed && styles.pressed]}
+                      android_ripple={{ color: "rgba(79,224,138,0.10)" }}
+                    >
+                      <Text style={styles.heroBtnPrimaryText}>Start A Trip Hub</Text>
+                    </Pressable>
+                  </View>
+
+                  {/* Intentional tertiary action */}
                   <Pressable
-                    onPress={() => goBuildTripGlobal()}
-                    style={({ pressed }) => [styles.heroBtn, styles.heroBtnPrimary, pressed && styles.pressed]}
-                    android_ripple={{ color: "rgba(79,224,138,0.10)" }}
+                    onPress={() => setHowOpen(true)}
+                    style={({ pressed }) => [styles.howPill, pressed && { opacity: 0.92 }]}
+                    android_ripple={{ color: "rgba(255,255,255,0.06)" }}
                   >
-                    <Text style={styles.heroBtnPrimaryText}>Start A Trip Hub</Text>
+                    <Text style={styles.howPillText}>How It Works</Text>
                   </Pressable>
-                </View>
+                </>
               ) : null}
 
-              {!showSearchResults ? (
-                <Pressable
-                  onPress={() => setHowOpen(true)}
-                  style={({ pressed }) => [styles.subtleLink, pressed && { opacity: 0.85 }]}
-                >
-                  <Text style={styles.subtleLinkText}>How It Works</Text>
-                </Pressable>
-              ) : null}
-
-              {/* Search Results (tight, no extra chrome) */}
+              {/* Search Results */}
               {showSearchResults ? (
                 <View style={styles.searchResults}>
                   {searchLoading ? (
@@ -501,8 +491,7 @@ export default function HomeScreen() {
 
                   {!searchLoading && !searchError ? (
                     <>
-                      {(buckets.teams.length + buckets.cities.length + buckets.venues.length + buckets.countries.length + buckets.leagues.length) ===
-                      0 ? (
+                      {(buckets.teams.length + buckets.cities.length + buckets.venues.length + buckets.countries.length + buckets.leagues.length) === 0 ? (
                         <Text style={styles.groupEmpty}>No Results.</Text>
                       ) : (
                         <View style={styles.resultList}>
@@ -529,32 +518,32 @@ export default function HomeScreen() {
                 </View>
               ) : null}
 
-              {/* Popular: optional + compact */}
+              {/* Popular (clear + premium chips) */}
               {!showSearchResults ? (
                 <View style={styles.popularBlock}>
-                  <Text style={styles.sectionKicker}>Popular</Text>
-
+                  <Text style={styles.sectionKicker}>Popular Cities</Text>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.popularRow} decelerationRate="fast">
-                    {dedupedCities.map((c) => (
-                      <Pressable
+                    {cities.map((c) => (
+                      <CityChipPremium
                         key={`pc-${c.name}`}
+                        name={c.name}
+                        countryCode={c.countryCode}
                         onPress={() => setQ(c.name)}
-                        style={({ pressed }) => [styles.pill, pressed && styles.pressedPill]}
-                        android_ripple={{ color: "rgba(255,255,255,0.08)" }}
-                      >
-                        <CityFlag code={c.countryCode} />
-                        <Text style={styles.pillText}>{c.name}</Text>
-                      </Pressable>
+                      />
                     ))}
-                    {dedupedTeams.map((t) => (
+                  </ScrollView>
+
+                  <Text style={[styles.sectionKicker, { marginTop: 10 }]}>Popular Teams</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.popularRow} decelerationRate="fast">
+                    {teams.map((t) => (
                       <Pressable
                         key={`pt-${t.teamId}`}
                         onPress={() => setQ(t.name)}
-                        style={({ pressed }) => [styles.pill, pressed && styles.pressedPill]}
+                        style={({ pressed }) => [styles.teamPill, pressed && styles.pressedPill]}
                         android_ripple={{ color: "rgba(255,255,255,0.08)" }}
                       >
-                        <View style={styles.crestDot}>
-                          <TeamCrest teamId={t.teamId} />
+                        <View style={styles.teamCrestDot}>
+                          <TeamCrest teamId={t.teamId} size={16} />
                         </View>
                         <Text style={styles.pillText}>{t.name}</Text>
                       </Pressable>
@@ -565,18 +554,25 @@ export default function HomeScreen() {
             </View>
           </GlassCard>
 
-          {/* UPCOMING (Featured + 3) */}
+          {/* UPCOMING */}
           {!showSearchResults ? (
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>Upcoming Matches</Text>
-                <Pressable onPress={goFixtures} style={({ pressed }) => [styles.miniPill, pressed && { opacity: 0.9 }]}>
-                  <Text style={styles.miniPillText}>View All</Text>
-                </Pressable>
+
+                <View style={{ flexDirection: "row", gap: 8 }}>
+                  <Pressable onPress={goFixturesAll} style={({ pressed }) => [styles.miniPill, pressed && { opacity: 0.9 }]}>
+                    <Text style={styles.miniPillText}>More Leagues</Text>
+                  </Pressable>
+
+                  <Pressable onPress={goFixtures} style={({ pressed }) => [styles.miniPill, pressed && { opacity: 0.9 }]}>
+                    <Text style={styles.miniPillText}>View All</Text>
+                  </Pressable>
+                </View>
               </View>
 
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.leagueRow}>
-                {LEAGUES.map((l) => {
+                {homeTopLeagues.map((l) => {
                   const active = l.leagueId === league.leagueId;
                   return (
                     <Pressable
@@ -630,6 +626,8 @@ export default function HomeScreen() {
                         {list.map((r, idx) => {
                           const id = r?.fixture?.id ? String(r.fixture.id) : null;
                           const line = fixtureLine(r);
+                          const homeLogo = r?.teams?.home?.logo;
+                          const awayLogo = r?.teams?.away?.logo;
 
                           return (
                             <Pressable
@@ -639,9 +637,21 @@ export default function HomeScreen() {
                               style={({ pressed }) => [styles.listRow, pressed && styles.pressedRow]}
                               android_ripple={{ color: "rgba(255,255,255,0.06)" }}
                             >
-                              <Text style={styles.listTitle} numberOfLines={1}>
-                                {line.title}
-                              </Text>
+                              <View style={styles.listRowTop}>
+                                <View style={styles.smallCrests}>
+                                  <View style={styles.smallCrest}>
+                                    {homeLogo ? <Image source={{ uri: homeLogo }} style={styles.smallCrestImg} resizeMode="contain" /> : null}
+                                  </View>
+                                  <View style={styles.smallCrest}>
+                                    {awayLogo ? <Image source={{ uri: awayLogo }} style={styles.smallCrestImg} resizeMode="contain" /> : null}
+                                  </View>
+                                </View>
+
+                                <Text style={styles.listTitle} numberOfLines={1}>
+                                  {line.title}
+                                </Text>
+                              </View>
+
                               <Text style={styles.listMeta} numberOfLines={1}>
                                 {line.meta}
                               </Text>
@@ -673,124 +683,6 @@ export default function HomeScreen() {
             </View>
           ) : null}
 
-          {/* TRIPS */}
-          {!showSearchResults ? (
-            <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Trips</Text>
-                <Pressable onPress={() => router.push("/(tabs)/trips")} style={({ pressed }) => [styles.miniPill, pressed && { opacity: 0.9 }]}>
-                  <Text style={styles.miniPillText}>Open</Text>
-                </Pressable>
-              </View>
-
-              <GlassCard strength="default" style={styles.block} noPadding>
-                <View style={styles.blockInner}>
-                  {!loadedTrips ? (
-                    <View style={styles.center}>
-                      <ActivityIndicator />
-                      <Text style={styles.muted}>Loading Trips…</Text>
-                    </View>
-                  ) : null}
-
-                  {loadedTrips && !nextTrip ? (
-                    <>
-                      <Text style={styles.blockKicker}>Your Next Plan</Text>
-                      <Text style={styles.emptyTitle}>No Trips Yet</Text>
-                      <Text style={styles.emptyMeta}>Pick A Match And Save Everything In One Place.</Text>
-
-                      <Pressable
-                        onPress={() => goBuildTripGlobal()}
-                        style={({ pressed }) => [styles.btnFull, styles.btnPrimary, pressed && styles.pressed]}
-                        android_ripple={{ color: "rgba(79,224,138,0.10)" }}
-                      >
-                        <Text style={styles.btnPrimaryText}>Start A Trip Hub</Text>
-                      </Pressable>
-                    </>
-                  ) : null}
-
-                  {loadedTrips && nextTrip ? (
-                    <Pressable
-                      onPress={() => router.push({ pathname: "/trip/[id]", params: { id: nextTrip.id } } as any)}
-                      style={({ pressed }) => [styles.tripCard, pressed && styles.pressedRow]}
-                      android_ripple={{ color: "rgba(255,255,255,0.06)" }}
-                    >
-                      <Text style={styles.blockKicker}>Next Up</Text>
-                      <Text style={styles.tripTitle}>{nextTrip.cityId || "Trip"}</Text>
-                      <Text style={styles.tripMeta}>{tripSummaryLine(nextTrip)}</Text>
-                      <Text style={styles.tripLink}>Open Trip ›</Text>
-                    </Pressable>
-                  ) : null}
-                </View>
-              </GlassCard>
-            </View>
-          ) : null}
-
-          {/* SHORTCUTS + DISCOVER (compact, premium) */}
-          {!showSearchResults ? (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Shortcuts</Text>
-              <Text style={styles.sectionSub}>Fast Windows For Planning</Text>
-
-              <View style={styles.chipGrid}>
-                {shortcuts.map((s) => (
-                  <Pressable
-                    key={s.key}
-                    onPress={() => goBuildTripGlobal(s.window)}
-                    style={({ pressed }) => [styles.gridChip, pressed && styles.pressedPill]}
-                    android_ripple={{ color: "rgba(255,255,255,0.06)" }}
-                  >
-                    <Text style={styles.gridChipText}>{s.label}</Text>
-                  </Pressable>
-                ))}
-              </View>
-
-              <Text style={[styles.sectionTitle, { marginTop: 18 }]}>Discover</Text>
-              <Text style={styles.sectionSub}>Let The App Pick Something Good</Text>
-
-              <View style={styles.discoverRow}>
-                <Pressable
-                  onPress={async () => {
-                    // Minimal: pick a random match from the current league window
-                    try {
-                      const rows = await getFixtures({
-                        league: league.leagueId,
-                        season: league.season,
-                        from: upcomingWindow.from,
-                        to: upcomingWindow.to,
-                      });
-                      const list = (Array.isArray(rows) ? rows : []).filter((r) => r?.fixture?.id != null);
-                      if (!list.length) {
-                        Alert.alert("No Matches Found", "Try Another League Or Window.");
-                        return;
-                      }
-                      const chosen = list[Math.floor(Math.random() * list.length)];
-                      router.push({
-                        pathname: "/trip/build",
-                        params: { global: "1", fixtureId: String(chosen.fixture.id), leagueId: String(league.leagueId), season: String(league.season), from: upcomingWindow.from, to: upcomingWindow.to },
-                      } as any);
-                    } catch (e: any) {
-                      Alert.alert("Discover Failed", e?.message ?? "Try Again.");
-                    }
-                  }}
-                  style={({ pressed }) => [styles.discoverChip, styles.discoverPrimary, pressed && styles.pressedPill]}
-                  android_ripple={{ color: "rgba(79,224,138,0.10)" }}
-                >
-                  <Text style={styles.discoverChipTitle}>Surprise Me</Text>
-                  <Text style={styles.discoverChipMeta}>Random Match • Next 14 Days</Text>
-                </Pressable>
-
-                <Pressable
-                  onPress={() => router.push("/(tabs)/fixtures")}
-                  style={({ pressed }) => [styles.discoverChip, pressed && styles.pressedPill]}
-                  android_ripple={{ color: "rgba(255,255,255,0.06)" }}
-                >
-                  <Text style={styles.discoverChipTitle}>Browse Instead</Text>
-                  <Text style={styles.discoverChipMeta}>Open Fixtures</Text>
-                </Pressable>
-              </View>
-            </View>
-          ) : null}
-
           <View style={{ height: 12 }} />
         </ScrollView>
 
@@ -809,7 +701,7 @@ export default function HomeScreen() {
 
                 <View style={styles.howItem}>
                   <Text style={styles.howQ}>Start With A Match</Text>
-                  <Text style={styles.howA}>Find Fixtures And Pick A Match That Fits Your Dates.</Text>
+                  <Text style={styles.howA}>Browse Fixtures And Pick A Match That Fits Your Dates.</Text>
                 </View>
 
                 <View style={styles.howItem}>
@@ -819,14 +711,14 @@ export default function HomeScreen() {
 
                 <View style={styles.howItem}>
                   <Text style={styles.howQ}>Use Guides When Available</Text>
-                  <Text style={styles.howA}>City And Team Guidance Helps You Plan The Break Beyond The Match.</Text>
+                  <Text style={styles.howA}>City And Team Guidance Helps You Plan Beyond The Match.</Text>
                 </View>
 
                 <View style={styles.modalActions}>
-                  <Pressable onPress={goFixtures} style={[styles.btn, styles.btnGhost]}>
+                  <Pressable onPress={() => { setHowOpen(false); goFixtures(); }} style={[styles.btn, styles.btnGhost]}>
                     <Text style={styles.btnGhostText}>Browse Fixtures</Text>
                   </Pressable>
-                  <Pressable onPress={() => goBuildTripGlobal()} style={[styles.btn, styles.btnPrimary]}>
+                  <Pressable onPress={() => { setHowOpen(false); goBuildTripGlobal(); }} style={[styles.btn, styles.btnPrimary]}>
                     <Text style={styles.btnPrimaryText}>Start A Trip Hub</Text>
                   </Pressable>
                 </View>
@@ -839,15 +731,36 @@ export default function HomeScreen() {
   );
 }
 
+/**
+ * Premium City Chip: “flag as subtle background”
+ * (This is the look you described—without needing custom waving assets.)
+ */
+function CityChipPremium({
+  name,
+  countryCode,
+  onPress,
+}: {
+  name: string;
+  countryCode: string;
+  onPress: () => void;
+}) {
+  const flagUrl = getFlagImageUrl(countryCode, { size: 96 });
+
+  return (
+    <Pressable onPress={onPress} style={({ pressed }) => [styles.cityPill, pressed && styles.pressedPill]} android_ripple={{ color: "rgba(255,255,255,0.08)" }}>
+      {flagUrl ? (
+        <Image source={{ uri: flagUrl }} style={styles.cityFlagBg} resizeMode="cover" />
+      ) : null}
+      <View pointerEvents="none" style={styles.cityPillOverlay} />
+      <Text style={styles.pillText}>{name}</Text>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
   container: { flex: 1 },
   scroll: { flex: 1 },
-
-  content: {
-    paddingHorizontal: theme.spacing.lg,
-    paddingBottom: theme.spacing.xxl,
-    gap: 18,
-  },
+  content: { paddingHorizontal: theme.spacing.lg, paddingBottom: theme.spacing.xxl, gap: 18 },
 
   pressed: { opacity: 0.94, transform: [{ scale: 0.995 }] },
   pressedRow: { opacity: 0.94 },
@@ -857,29 +770,19 @@ const styles = StyleSheet.create({
   hero: { marginTop: theme.spacing.lg, borderRadius: 26 },
   heroInner: { padding: theme.spacing.lg, gap: 10 },
 
-  heroTitle: {
-    color: theme.colors.text,
-    fontSize: 26,
-    lineHeight: 32,
-    fontWeight: theme.fontWeight.black,
-    letterSpacing: 0.2,
-  },
-  heroSub: {
-    color: theme.colors.textSecondary,
-    fontSize: 14,
-    lineHeight: 20,
-    fontWeight: theme.fontWeight.bold,
-    opacity: 0.94,
-  },
+  heroTitle: { color: theme.colors.text, fontSize: 26, lineHeight: 32, fontWeight: theme.fontWeight.black, letterSpacing: 0.2 },
+  heroSub: { color: theme.colors.textSecondary, fontSize: 14, lineHeight: 20, fontWeight: theme.fontWeight.bold, opacity: 0.94 },
 
+  // Search (taller + more premium)
   searchBox: {
     marginTop: 6,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
     backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: Platform.OS === "ios" ? 12 : 10,
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 0,
+    minHeight: 54,
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
@@ -889,11 +792,11 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     fontSize: 15,
     fontWeight: theme.fontWeight.bold,
-    paddingVertical: 0,
+    paddingVertical: Platform.OS === "ios" ? 14 : 12,
   },
   clearBtn: {
-    paddingVertical: 6,
-    paddingHorizontal: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
     borderRadius: 999,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.12)",
@@ -902,15 +805,7 @@ const styles = StyleSheet.create({
   clearText: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: theme.fontWeight.black },
 
   heroActions: { flexDirection: "row", gap: 10, marginTop: 4 },
-
-  heroBtn: {
-    flex: 1,
-    borderRadius: 16,
-    paddingVertical: 12,
-    alignItems: "center",
-    borderWidth: 1,
-    overflow: "hidden",
-  },
+  heroBtn: { flex: 1, borderRadius: 16, paddingVertical: 12, alignItems: "center", borderWidth: 1, overflow: "hidden" },
   heroBtnPrimary: {
     borderColor: "rgba(79,224,138,0.24)",
     backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.default : theme.glass.iosBg.default,
@@ -922,8 +817,19 @@ const styles = StyleSheet.create({
   },
   heroBtnGhostText: { color: theme.colors.textSecondary, fontSize: 14, fontWeight: theme.fontWeight.black },
 
-  subtleLink: { alignSelf: "flex-start", marginTop: 2, paddingVertical: 6, paddingHorizontal: 2 },
-  subtleLinkText: { color: theme.colors.textTertiary, fontSize: 12, fontWeight: theme.fontWeight.black },
+  // How it works (intentional tertiary)
+  howPill: {
+    alignSelf: "flex-start",
+    marginTop: 2,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: Platform.OS === "android" ? "rgba(10,12,14,0.18)" : "rgba(10,12,14,0.14)",
+    overflow: "hidden",
+  },
+  howPillText: { color: theme.colors.textTertiary, fontSize: 12, fontWeight: theme.fontWeight.black },
 
   // Search results
   searchResults: { marginTop: 10, gap: 10 },
@@ -945,47 +851,70 @@ const styles = StyleSheet.create({
   },
   resultTitle: { color: theme.colors.text, fontSize: 14, fontWeight: theme.fontWeight.black },
   resultMeta: { marginTop: 4, color: theme.colors.textSecondary, fontSize: 12, fontWeight: theme.fontWeight.bold },
-  chev: { color: theme.colors.textTertiary, fontSize: 22, marginTop: -2 },
-
   groupEmpty: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold },
 
-  // Popular (compact)
+  chev: { color: theme.colors.textTertiary, fontSize: 22, marginTop: -2 },
+
+  // Popular
   popularBlock: { marginTop: 4, gap: 8 },
   sectionKicker: { color: theme.colors.textTertiary, fontSize: 12, fontWeight: theme.fontWeight.black, letterSpacing: 0.3 },
   popularRow: { gap: 10, paddingRight: theme.spacing.lg, paddingVertical: 4 },
 
-  pill: {
+  // City pill w/ subtle background flag
+  cityPill: {
     borderRadius: 999,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
     backgroundColor: Platform.OS === "android" ? "rgba(18,20,24,0.32)" : "rgba(18,20,24,0.26)",
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    overflow: "hidden",
+    justifyContent: "center",
+  },
+  cityFlagBg: {
+    position: "absolute",
+    right: -10,
+    top: -10,
+    bottom: -10,
+    width: 90,
+    opacity: 0.22,
+    borderRadius: 18,
+  },
+  cityPillOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.06)",
+  },
+  pillText: { color: "rgba(242,244,246,0.78)", fontSize: 13, fontWeight: theme.fontWeight.black },
+
+  // Team pills
+  teamPill: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: Platform.OS === "android" ? "rgba(18,20,24,0.32)" : "rgba(18,20,24,0.26)",
+    paddingVertical: 10,
+    paddingHorizontal: 14,
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+    overflow: "hidden",
   },
-  pillText: { color: "rgba(242,244,246,0.78)", fontSize: 13, fontWeight: theme.fontWeight.black },
-  cityFlag: { width: 16, height: 12, borderRadius: 3, opacity: 0.92 },
-
-  crestDot: {
-    width: 18,
-    height: 18,
+  teamCrestDot: {
+    width: 22,
+    height: 22,
     borderRadius: 999,
     alignItems: "center",
     justifyContent: "center",
-    overflow: "hidden",
     backgroundColor: "rgba(0,0,0,0.20)",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
+    overflow: "hidden",
   },
-  teamCrest: { width: 14, height: 14, opacity: 0.95 },
 
   // Sections
   section: { gap: 10 },
   sectionHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
   sectionTitle: { color: theme.colors.text, fontSize: 18, fontWeight: theme.fontWeight.black },
-  sectionSub: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold, marginTop: -4 },
 
   miniPill: {
     paddingVertical: 8,
@@ -997,7 +926,7 @@ const styles = StyleSheet.create({
   },
   miniPillText: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: theme.fontWeight.black },
 
-  // League selector
+  // League selector (Home top leagues only)
   leagueRow: { gap: 10, paddingRight: theme.spacing.lg, marginTop: 2 },
   leaguePill: {
     paddingVertical: 8,
@@ -1063,66 +992,30 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.06)",
   },
-  listTitle: { color: theme.colors.text, fontSize: 13, fontWeight: theme.fontWeight.black },
+  listRowTop: { flexDirection: "row", alignItems: "center", gap: 10 },
+  smallCrests: { flexDirection: "row", gap: 6, alignItems: "center" },
+  smallCrest: {
+    width: 18,
+    height: 18,
+    borderRadius: 6,
+    backgroundColor: "rgba(0,0,0,0.18)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+  smallCrestImg: { width: 14, height: 14, opacity: 0.95 },
+
+  listTitle: { flex: 1, color: theme.colors.text, fontSize: 13, fontWeight: theme.fontWeight.black },
   listMeta: { marginTop: 4, color: theme.colors.textSecondary, fontSize: 12, fontWeight: theme.fontWeight.bold },
 
   blockActions: { flexDirection: "row", gap: 10, marginTop: 2 },
   btn: { flex: 1, borderRadius: 16, paddingVertical: 12, alignItems: "center", borderWidth: 1, overflow: "hidden" },
-  btnFull: { borderRadius: 16, paddingVertical: 12, alignItems: "center", borderWidth: 1, overflow: "hidden" },
-
-  btnPrimary: {
-    borderColor: "rgba(79,224,138,0.24)",
-    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.default : theme.glass.iosBg.default,
-  },
+  btnPrimary: { borderColor: "rgba(79,224,138,0.24)", backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.default : theme.glass.iosBg.default },
   btnPrimaryText: { color: theme.colors.text, fontSize: 14, fontWeight: theme.fontWeight.black },
-  btnGhost: {
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
-  },
+  btnGhost: { borderColor: "rgba(255,255,255,0.10)", backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle },
   btnGhostText: { color: theme.colors.textSecondary, fontSize: 14, fontWeight: theme.fontWeight.black },
-
-  // Trips card
-  emptyTitle: { color: theme.colors.text, fontSize: 15, fontWeight: theme.fontWeight.black },
-  emptyMeta: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold, lineHeight: 18 },
-
-  tripCard: {
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-    backgroundColor: Platform.OS === "android" ? "rgba(12,14,16,0.20)" : "rgba(12,14,16,0.16)",
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-  },
-  tripTitle: { marginTop: 6, color: theme.colors.text, fontSize: 18, fontWeight: theme.fontWeight.black },
-  tripMeta: { marginTop: 6, color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold },
-  tripLink: { marginTop: 10, color: "rgba(79,224,138,0.78)", fontSize: 12, fontWeight: theme.fontWeight.black },
-
-  // Compact chip grid
-  chipGrid: { marginTop: 8, flexDirection: "row", flexWrap: "wrap", gap: 10 },
-  gridChip: {
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
-  },
-  gridChipText: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.black },
-
-  // Discover compact
-  discoverRow: { flexDirection: "row", gap: 10, marginTop: 10 },
-  discoverChip: {
-    flex: 1,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-  },
-  discoverPrimary: { borderColor: "rgba(79,224,138,0.24)" },
-  discoverChipTitle: { color: theme.colors.text, fontSize: 14, fontWeight: theme.fontWeight.black },
-  discoverChipMeta: { marginTop: 6, color: theme.colors.textSecondary, fontSize: 12, fontWeight: theme.fontWeight.bold },
 
   // Modal
   modalBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.58)" },
@@ -1131,14 +1024,7 @@ const styles = StyleSheet.create({
   modalInner: { padding: 14, gap: 12 },
   modalHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
   modalTitle: { color: theme.colors.text, fontSize: 16, fontWeight: theme.fontWeight.black },
-  modalClose: {
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.18)",
-  },
+  modalClose: { paddingVertical: 6, paddingHorizontal: 10, borderRadius: 999, borderWidth: 1, borderColor: "rgba(255,255,255,0.10)", backgroundColor: "rgba(0,0,0,0.18)" },
   modalCloseText: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: theme.fontWeight.black },
 
   howItem: {
