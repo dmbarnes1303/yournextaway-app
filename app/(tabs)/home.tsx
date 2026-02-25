@@ -66,15 +66,9 @@ const POPULAR_TEAMS: TeamChip[] = [
   { name: "Borussia Dortmund", teamId: 165 },
 ];
 
-// Home should NOT show 25+ leagues. Curate top leagues for Home scroller only.
+// Curated top leagues for Home scroller only.
 const HOME_TOP_LEAGUE_IDS = new Set<number>([
-  39, // Premier League
-  140, // La Liga
-  135, // Serie A
-  78, // Bundesliga
-  61, // Ligue 1
-  88, // Eredivisie
-  94, // Primeira Liga
+  39, 140, 135, 78, 61, 88, 94,
 ]);
 
 type DiscoverWindowKey = "wknd" | "d7" | "d14" | "d30";
@@ -109,12 +103,18 @@ function initials(name: string) {
 function titleCase(input: string) {
   const s = String(input ?? "").trim();
   if (!s) return "";
-  // Keep hyphens/apostrophes reasonable, don’t over-engineer locale here.
   return s
     .split(/\s+/g)
     .filter(Boolean)
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
     .join(" ");
+}
+
+function titleCaseFromSlug(slug: string) {
+  const s = String(slug ?? "").trim();
+  if (!s) return "Trip";
+  const base = s.includes("-") ? s.replace(/-/g, " ") : s;
+  return titleCase(base);
 }
 
 function tripSummaryLine(t: Trip) {
@@ -158,11 +158,16 @@ function splitSearchBuckets(results: SearchResult[]) {
 function LeagueFlag({ code, size = 18 }: { code: string; size?: number }) {
   const url = getFlagImageUrl(code);
   if (!url) return null;
-  // keep flags as *icons*, not backgrounds
-  return <Image source={{ uri: url }} style={[styles.flag, { width: size, height: Math.round((size * 13) / 18) }]} />;
+  return (
+    <Image
+      source={{ uri: url }}
+      style={[styles.flag, { width: size, height: Math.round((size * 13) / 18) }]}
+      resizeMode="cover"
+    />
+  );
 }
 
-function TeamCrest({ teamId, size = 14 }: { teamId: number; size?: number }) {
+function TeamCrest({ teamId, size = 16 }: { teamId: number; size?: number }) {
   const uri = API_SPORTS_TEAM_LOGO(teamId);
   return <Image source={{ uri }} style={{ width: size, height: size, opacity: 0.95 }} resizeMode="contain" />;
 }
@@ -203,7 +208,14 @@ function scoreFixture(r: FixtureListRow): number {
     if (day === 5 || day === 6 || day === 0) s += 10;
     const hr = dt.getHours();
     if (hr >= 17 && hr <= 21) s += 6;
+
+    // Penalize midnight placeholder kickoffs
+    if (dt.getHours() === 0 && dt.getMinutes() === 0) s -= 18;
   }
+
+  // Penalize obvious postponements/cancelled
+  const short = String(r?.fixture?.status?.short ?? "").toUpperCase();
+  if (short === "PST" || short === "CANC" || short === "ABD") s -= 999;
 
   return s;
 }
@@ -268,44 +280,29 @@ function CityChipNormal({
 }
 
 /**
- * Best-effort extractors for crest + country tint from Trip.
- * If your Trip model uses different keys, paste src/state/trips and I’ll lock this down.
+ * Trip snapshot readers (NO guessing).
+ * We only use fields we actually store in TripBuild snapshot.
  */
-function getTripDisplayCity(t: Trip): string {
+function getTripDisplayCitySafe(t: Trip): string {
   const anyT: any = t as any;
-  const raw =
-    anyT?.cityName ??
-    anyT?.city ??
-    anyT?.cityLabel ??
-    anyT?.cityId ??
-    anyT?.destinationCity ??
-    "";
-  const s = String(raw ?? "").trim();
-  return s ? titleCase(s) : "Trip";
+  const dc = String(anyT?.displayCity ?? "").trim();
+  if (dc) return titleCase(dc);
+
+  const cid = String(anyT?.cityId ?? "").trim();
+  if (cid) return titleCaseFromSlug(cid);
+
+  return "Trip";
 }
 
-function getTripPrimaryTeamId(t: Trip): number | null {
+function getTripHomeTeamIdSafe(t: Trip): number | null {
   const anyT: any = t as any;
-  const candidate =
-    anyT?.teamId ??
-    anyT?.primaryTeamId ??
-    anyT?.clubId ??
-    anyT?.homeTeamId ??
-    anyT?.primaryClubId ??
-    anyT?.team?.id ??
-    null;
-  return typeof candidate === "number" && Number.isFinite(candidate) ? candidate : null;
+  const v = anyT?.homeTeamId;
+  return typeof v === "number" && Number.isFinite(v) ? v : null;
 }
 
-function getTripCountryCode(t: Trip): string | null {
+function getTripCountryCodeSafe(t: Trip): string | null {
   const anyT: any = t as any;
-  const raw =
-    anyT?.countryCode ??
-    anyT?.country ??
-    anyT?.nationCode ??
-    anyT?.leagueCountryCode ??
-    null;
-  const cc = String(raw ?? "").trim().toUpperCase();
+  const cc = String(anyT?.countryCode ?? "").trim().toUpperCase();
   return cc && cc.length === 2 ? cc : null;
 }
 
@@ -319,8 +316,10 @@ export default function HomeScreen() {
 
   const [league, setLeague] = useState<LeagueOption>(homeTopLeagues[0] ?? LEAGUES[0]);
 
-  const { from: fromIso, to: toIso } = useMemo(() => getRollingWindowIso(), []);
-  const upcomingWindow = useMemo(() => windowFromTomorrowIso(14), []);
+  // ONE window for Home preview + navigation consistency
+  const homeWindow = useMemo(() => windowFromTomorrowIso(14), []);
+  const fromIso = homeWindow.from;
+  const toIso = homeWindow.to;
 
   // Trips
   const [loadedTrips, setLoadedTrips] = useState(tripsStore.getState().loaded);
@@ -368,8 +367,8 @@ export default function HomeScreen() {
         const rows = await getFixtures({
           league: league.leagueId,
           season: league.season,
-          from: upcomingWindow.from,
-          to: upcomingWindow.to,
+          from: fromIso,
+          to: toIso,
         });
 
         if (cancelled) return;
@@ -386,7 +385,7 @@ export default function HomeScreen() {
     return () => {
       cancelled = true;
     };
-  }, [league, upcomingWindow.from, upcomingWindow.to]);
+  }, [league, fromIso, toIso]);
 
   const fxOrdered = useMemo(() => {
     const scored = (fxRows ?? [])
@@ -412,6 +411,8 @@ export default function HomeScreen() {
 
   const indexRef = useRef<Awaited<ReturnType<typeof buildSearchIndex>> | null>(null);
 
+  // Still building on mount (kept as-is to avoid behaviour drift).
+  // If you want the lazy build on focus, say so and I’ll do it.
   useEffect(() => {
     let cancelled = false;
 
@@ -650,11 +651,10 @@ export default function HomeScreen() {
     []
   );
 
-  // Next trip visuals
-  const nextTripDisplayCity = useMemo(() => (nextTrip ? getTripDisplayCity(nextTrip) : "Trip"), [nextTrip]);
-  const nextTripTeamId = useMemo(() => (nextTrip ? getTripPrimaryTeamId(nextTrip) : null), [nextTrip]);
-  const nextTripCountry = useMemo(() => (nextTrip ? getTripCountryCode(nextTrip) : null), [nextTrip]);
-  const nextTripCountryFlagUrl = useMemo(() => (nextTripCountry ? getFlagImageUrl(nextTripCountry, { size: 256 }) : null), [nextTripCountry]);
+  // Next trip visuals (snapshot-backed)
+  const nextTripDisplayCity = useMemo(() => (nextTrip ? getTripDisplayCitySafe(nextTrip) : "Trip"), [nextTrip]);
+  const nextTripTeamId = useMemo(() => (nextTrip ? getTripHomeTeamIdSafe(nextTrip) : null), [nextTrip]);
+  const nextTripCountry = useMemo(() => (nextTrip ? getTripCountryCodeSafe(nextTrip) : null), [nextTrip]);
 
   return (
     <Background imageSource={getBackground("home")} overlayOpacity={0.76}>
@@ -692,7 +692,6 @@ export default function HomeScreen() {
                 ) : null}
               </View>
 
-              {/* Primary actions */}
               {!showSearchResults ? (
                 <>
                   <View style={styles.heroActions}>
@@ -723,7 +722,6 @@ export default function HomeScreen() {
                 </>
               ) : null}
 
-              {/* Search Results */}
               {showSearchResults ? (
                 <View style={styles.searchResults}>
                   {searchLoading ? (
@@ -768,7 +766,6 @@ export default function HomeScreen() {
                 </View>
               ) : null}
 
-              {/* Popular */}
               {!showSearchResults ? (
                 <View style={styles.popularBlock}>
                   <Text style={styles.sectionKicker}>Popular Cities</Text>
@@ -988,20 +985,24 @@ export default function HomeScreen() {
                         style={({ pressed }) => [styles.nextTripCard, pressed && styles.pressedRow]}
                         android_ripple={{ color: "rgba(255,255,255,0.06)" }}
                       >
-                        {/* subtle country wash (only if we actually have a 2-letter country code) */}
-                        {nextTripCountryFlagUrl ? (
-                          <Image source={{ uri: nextTripCountryFlagUrl }} style={styles.tripFlagWash} resizeMode="cover" />
-                        ) : null}
-                        <View pointerEvents="none" style={styles.tripFlagWashOverlay} />
-
                         <View style={styles.nextTripHeaderRow}>
                           <Text style={styles.nextTripKicker}>Next Up</Text>
 
-                          {nextTripTeamId ? (
-                            <View style={styles.tripCrestWrap}>
-                              <Image source={{ uri: API_SPORTS_TEAM_LOGO(nextTripTeamId) }} style={styles.tripCrestImg} resizeMode="contain" />
-                            </View>
-                          ) : null}
+                          <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                            {nextTripCountry ? <LeagueFlag code={nextTripCountry} size={18} /> : null}
+
+                            {nextTripTeamId ? (
+                              <View style={styles.tripCrestWrap}>
+                                <Image source={{ uri: API_SPORTS_TEAM_LOGO(nextTripTeamId) }} style={styles.tripCrestImg} resizeMode="contain" />
+                              </View>
+                            ) : (
+                              <View style={styles.tripCrestWrap}>
+                                <Text style={styles.tripCrestFallback}>
+                                  {initials(String((nextTrip as any)?.homeName ?? nextTripDisplayCity))}
+                                </Text>
+                              </View>
+                            )}
+                          </View>
                         </View>
 
                         <Text style={styles.nextTripTitle}>{nextTripDisplayCity}</Text>
@@ -1289,7 +1290,6 @@ const styles = StyleSheet.create({
   pressedRow: { opacity: 0.94 },
   pressedPill: { opacity: 0.92 },
 
-  // HERO
   hero: { marginTop: theme.spacing.lg, borderRadius: 26 },
   heroInner: { padding: theme.spacing.lg, gap: 10 },
 
@@ -1341,7 +1341,6 @@ const styles = StyleSheet.create({
   },
   heroBtnGhostText: { color: theme.colors.textSecondary, fontSize: 14, fontWeight: theme.fontWeight.black },
 
-  // How
   howPill: {
     alignSelf: "flex-start",
     marginTop: 2,
@@ -1355,7 +1354,6 @@ const styles = StyleSheet.create({
   },
   howPillText: { color: theme.colors.textTertiary, fontSize: 12, fontWeight: theme.fontWeight.black },
 
-  // Search results
   searchResults: { marginTop: 10, gap: 10 },
   resultList: {
     borderWidth: 1,
@@ -1379,7 +1377,6 @@ const styles = StyleSheet.create({
 
   chev: { color: theme.colors.textTertiary, fontSize: 22, marginTop: -2 },
 
-  // Popular
   popularBlock: { marginTop: 4, gap: 8 },
   sectionKicker: { color: theme.colors.textTertiary, fontSize: 12, fontWeight: theme.fontWeight.black, letterSpacing: 0.3 },
   popularRow: { gap: 10, paddingRight: theme.spacing.lg, paddingVertical: 4 },
@@ -1423,7 +1420,6 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
 
-  // Section headers
   section: { gap: 10 },
   sectionHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
   sectionTitle: { color: theme.colors.text, fontSize: 18, fontWeight: theme.fontWeight.black },
@@ -1439,7 +1435,6 @@ const styles = StyleSheet.create({
   },
   miniPillText: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: theme.fontWeight.black },
 
-  // League selector
   leagueRow: { gap: 10, paddingRight: theme.spacing.lg, marginTop: 2 },
   leaguePill: {
     paddingVertical: 8,
@@ -1460,7 +1455,6 @@ const styles = StyleSheet.create({
   leaguePillTextActive: { color: theme.colors.text, fontWeight: theme.fontWeight.black },
   flag: { borderRadius: 3, opacity: 0.9 },
 
-  // Blocks
   block: { borderRadius: 24 },
   blockInner: { padding: 14, gap: 12 },
   blockKicker: { color: theme.colors.textTertiary, fontSize: 12, fontWeight: theme.fontWeight.black, letterSpacing: 0.3 },
@@ -1468,7 +1462,6 @@ const styles = StyleSheet.create({
   center: { paddingVertical: 14, alignItems: "center", gap: 10 },
   muted: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold },
 
-  // Featured
   featured: {
     borderRadius: 18,
     borderWidth: 1,
@@ -1530,7 +1523,6 @@ const styles = StyleSheet.create({
   btnGhost: { borderColor: "rgba(255,255,255,0.10)", backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle },
   btnGhostText: { color: theme.colors.textSecondary, fontSize: 14, fontWeight: theme.fontWeight.black },
 
-  // Trips hub
   hubTop: {
     borderRadius: 16,
     borderWidth: 1,
@@ -1554,19 +1546,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     overflow: "hidden",
   },
-  tripFlagWash: {
-    ...StyleSheet.absoluteFillObject,
-    opacity: 0.045, // subtle, premium
-  },
-  tripFlagWashOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.10)",
-  },
+
   nextTripHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+
   tripCrestWrap: {
     width: 30,
     height: 30,
-    borderRadius: 10,
+    borderRadius: 999,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
     backgroundColor: "rgba(0,0,0,0.18)",
@@ -1575,12 +1561,12 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   tripCrestImg: { width: 20, height: 20, opacity: 0.95 },
+  tripCrestFallback: { color: theme.colors.textSecondary, fontSize: 11, fontWeight: theme.fontWeight.black },
 
   nextTripKicker: { color: theme.colors.textTertiary, fontSize: 12, fontWeight: theme.fontWeight.black },
   nextTripTitle: { marginTop: 6, color: theme.colors.text, fontSize: 18, fontWeight: theme.fontWeight.black },
   nextTripMeta: { marginTop: 6, color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold, lineHeight: 18 },
 
-  // Grids
   grid2: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   tilePress: { width: "48.5%", borderRadius: 18, overflow: "hidden" },
   tile: { borderRadius: 18 },
@@ -1602,7 +1588,6 @@ const styles = StyleSheet.create({
   },
   tileBadgeText: { fontSize: 16, opacity: 0.95 },
 
-  // Modal shared
   modalBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.58)" },
   modalSheetWrap: { flex: 1, justifyContent: "flex-end" },
   modalSheet: { borderRadius: 22, marginHorizontal: theme.spacing.lg, marginBottom: theme.spacing.lg, overflow: "hidden" },
