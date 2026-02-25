@@ -8,64 +8,52 @@ import * as Notifications from "expo-notifications";
 import { ProProvider } from "@/src/context/ProContext";
 import { bootstrapPartnerReturnPrompt } from "@/src/services/partnerReturnBootstrap";
 import { refreshFollowedMatches } from "@/src/services/followedMatchesRefresh";
-
-// ✅ Load persisted preferences early (origin IATA, etc.)
 import preferencesStore from "@/src/state/preferences";
 
-// ✅ DEV ONLY: validate club keys once at app bootstrap (avoid Fast Refresh spam)
+// DEV club-key validation
 if (__DEV__) {
   import("@/src/data/_dev/validateClubKeys").then((m) => {
     try {
       m.validateAllClubKeys();
-    } catch {
-      // ignore - never crash dev boot
-    }
+    } catch {}
   });
 }
 
 export default function RootLayout() {
   const router = useRouter();
 
-  // Guards against stacked listeners / intervals during Fast Refresh
   const startedRef = useRef(false);
-
   const appStateSubRef = useRef<{ remove: () => void } | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const notifSubRef = useRef<{ remove: () => void } | null>(null);
 
   const lastRefreshAtRef = useRef<number>(0);
   const refreshInFlightRef = useRef(false);
-
-  const notifSubRef = useRef<{ remove: () => void } | null>(null);
 
   useEffect(() => {
     if (startedRef.current) return;
     startedRef.current = true;
 
-    // Phase-1 spine: partner click → return → “Booked?” prompt
+    // ✅ Partner return detection (booking completed prompt)
     bootstrapPartnerReturnPrompt();
 
-    // ✅ Rehydrate preferences early so affiliateLinks can use saved origin from first use
-    // Do NOT block render; best-effort only.
+    // Load preferences early
     preferencesStore.load().catch(() => null);
 
     // Notification tap → open match
     try {
-      notifSubRef.current = Notifications.addNotificationResponseReceivedListener((resp) => {
-        const data: any = resp?.notification?.request?.content?.data ?? {};
-        const kind = String(data?.kind ?? "").trim();
-        const fixtureId = String(data?.fixtureId ?? "").trim();
+      notifSubRef.current =
+        Notifications.addNotificationResponseReceivedListener((resp) => {
+          const data: any = resp?.notification?.request?.content?.data ?? {};
+          const kind = String(data?.kind ?? "").trim();
+          const fixtureId = String(data?.fixtureId ?? "").trim();
 
-        if (kind === "kickoff_update" && fixtureId) {
-          router.push({ pathname: "/match/[id]", params: { id: fixtureId } } as any);
-        }
-      });
-    } catch {
-      // ignore
-    }
+          if (kind === "kickoff_update" && fixtureId) {
+            router.push({ pathname: "/match/[id]", params: { id: fixtureId } } as any);
+          }
+        });
+    } catch {}
 
-    // NOTE:
-    // Do NOT request notification permissions here.
-    // Request them only when the user enables kickoffConfirmed in the UI.
     const minMinutesBetweenRefreshes = 10;
     const intervalMinutes = 15;
 
@@ -86,7 +74,6 @@ export default function RootLayout() {
       try {
         await refreshFollowedMatches({ limit: 25, concurrency: 3 });
       } catch {
-        // Never crash root on refresh failures
       } finally {
         refreshInFlightRef.current = false;
       }
@@ -105,30 +92,26 @@ export default function RootLayout() {
       if (!intervalRef.current) return;
       try {
         clearInterval(intervalRef.current);
-      } catch {
-        // ignore
-      } finally {
-        intervalRef.current = null;
-      }
+      } catch {}
+      intervalRef.current = null;
     };
 
-    // Startup refresh (delay so persisted stores rehydrate)
     const startupTimer = setTimeout(() => {
       runRefresh("startup").catch(() => null);
     }, 900);
 
-    // Foreground/background management
     let lastState: AppStateStatus = AppState.currentState;
 
     const onAppState = (next: AppStateStatus) => {
-      const becameActive = Boolean(String(lastState).match(/inactive|background/)) && next === "active";
+      const becameActive =
+        Boolean(String(lastState).match(/inactive|background/)) &&
+        next === "active";
+
       const becameInactive = lastState === "active" && next !== "active";
       lastState = next;
 
       if (becameActive) {
-        // ✅ Safety: ensure prefs are loaded if app was killed/fast-refreshed oddly
         preferencesStore.load().catch(() => null);
-
         runRefresh("foreground").catch(() => null);
         startInterval();
       }
@@ -138,9 +121,9 @@ export default function RootLayout() {
       }
     };
 
-    appStateSubRef.current = AppState.addEventListener("change", onAppState) as any;
+    appStateSubRef.current =
+      AppState.addEventListener("change", onAppState) as any;
 
-    // If we mount while already active, start interval
     if (AppState.currentState === "active") startInterval();
 
     return () => {
@@ -148,21 +131,15 @@ export default function RootLayout() {
 
       try {
         appStateSubRef.current?.remove?.();
-      } catch {
-        // ignore
-      } finally {
-        appStateSubRef.current = null;
-      }
+      } catch {}
+      appStateSubRef.current = null;
 
       stopInterval();
 
       try {
         notifSubRef.current?.remove?.();
-      } catch {
-        // ignore
-      } finally {
-        notifSubRef.current = null;
-      }
+      } catch {}
+      notifSubRef.current = null;
 
       startedRef.current = false;
     };
@@ -172,22 +149,14 @@ export default function RootLayout() {
     <ProProvider>
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(tabs)" />
-
-        {/* Core flows */}
         <Stack.Screen name="match/[id]" />
         <Stack.Screen name="trip/[id]" />
         <Stack.Screen name="trip/build" />
-
-        {/* Guides */}
         <Stack.Screen name="city/[slug]" />
         <Stack.Screen name="team/[teamKey]" />
-
-        {/* Monetisation */}
         <Stack.Screen name="paywall" />
-
-        {/* Modal */}
         <Stack.Screen name="modal" options={{ presentation: "modal" }} />
       </Stack>
     </ProProvider>
   );
-}
+        }
