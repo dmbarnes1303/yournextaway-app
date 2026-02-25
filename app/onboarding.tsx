@@ -1,6 +1,6 @@
 // app/onboarding.tsx
-import React, { useMemo, useState, useCallback } from "react";
-import { View, Text, StyleSheet, Image, Pressable } from "react-native";
+import React, { useEffect, useMemo, useState, useCallback } from "react";
+import { View, Text, StyleSheet, Image, Pressable, Image as RNImage } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 
@@ -10,55 +10,98 @@ import { theme } from "@/src/constants/theme";
 
 const LOGO = require("@/src/yna-logo.png");
 
-// Unsplash backgrounds (stable download links; RN will follow redirects)
-const BG_FIXTURE = { uri: "https://unsplash.com/photos/fF4I5-mxDRk/download?force=true" }; // stadium floodlights
-const BG_TRAVEL = { uri: "https://unsplash.com/photos/4hY4eS8zx0I/download?force=true" }; // airport departure sign
-const BG_CITY = { uri: "https://unsplash.com/photos/32g0GZ_4X44/download?force=true" }; // night city bokeh
-const BG_DEFAULTS = { uri: "https://unsplash.com/photos/O56IqS09zDw/download?force=true" }; // aircraft/sky mood
+// Local fallbacks you already have (never fails)
+const FALLBACK_1 = require("@/src/assets/backgrounds/onboarding-1.png");
+const FALLBACK_2 = require("@/src/assets/backgrounds/onboarding-2.png");
+const FALLBACK_3 = require("@/src/assets/backgrounds/onboarding-3.png");
+const FALLBACK_4 = require("@/src/assets/backgrounds/onboarding-4.png");
+
+/**
+ * Unsplash (RN-safe) sources.
+ * These are keyword-based and can change — acceptable for now.
+ * When you’re ready to lock it down, we’ll swap these to fixed images.unsplash.com photo IDs.
+ */
+const REMOTE_BG_1 = { uri: "https://source.unsplash.com/1600x2400/?football,stadium,night,floodlights" };
+const REMOTE_BG_2 = { uri: "https://source.unsplash.com/1600x2400/?airport,departure,travel,lounge,modern" }; // cleaner than “airport interior”
+const REMOTE_BG_3 = { uri: "https://source.unsplash.com/1600x2400/?europe,city,night,street,lights" };
+const REMOTE_BG_4 = { uri: "https://source.unsplash.com/1600x2400/?airplane,sunset,sky,travel" };
 
 type Step = {
   title: string;
   subtitle: string;
   body: string;
-  bg: any;
+  remoteBg: { uri: string };
+  fallbackBg: any;
 };
 
 const STEPS: Step[] = [
   {
-    title: "Start with a fixture",
-    subtitle: "Pick the match — we handle the rest",
+    title: "Start With A Fixture",
+    subtitle: "Pick The Match — We Handle The Rest",
     body:
       "Browse fixtures across Europe’s top leagues, follow the ones you like, and anchor your trip around the best option. If kickoff changes, you’ll be alerted — so you don’t book blind.",
-    bg: BG_FIXTURE,
+    remoteBg: REMOTE_BG_1,
+    fallbackBg: FALLBACK_1,
   },
   {
-    title: "Build the trip in one hub",
-    subtitle: "Tickets, flights, stays — organised",
+    title: "Build The Trip In One Hub",
+    subtitle: "Tickets, Flights, Stays — Organised",
     body:
       "Save ticket links, compare flights and places to stay, and keep everything in one place. No messy screenshots. No hunting through tabs. Just a clean trip workspace built around the match.",
-    bg: BG_TRAVEL,
+    remoteBg: REMOTE_BG_2,
+    fallbackBg: FALLBACK_2,
   },
   {
-    title: "Make the city break better",
-    subtitle: "Matchday planning, done properly",
+    title: "Make The City Break Better",
+    subtitle: "Matchday Planning, Done Properly",
     body:
       "Use city and team guidance to plan beyond the match — where to base yourself, how to time the day, and what to do around it. Your trip should feel effortless, not improvised.",
-    bg: BG_CITY,
+    remoteBg: REMOTE_BG_3,
+    fallbackBg: FALLBACK_3,
   },
   {
-    title: "Set your defaults",
-    subtitle: "So planning feels personal",
+    title: "Set Your Defaults",
+    subtitle: "So Planning Feels Personal",
     body:
       "Optional — set your usual departure city, currency, and preferences. You can change this anytime in Profile, but setting it now makes future planning faster.",
-    bg: BG_DEFAULTS,
+    remoteBg: REMOTE_BG_4,
+    fallbackBg: FALLBACK_4,
   },
 ];
 
 export default function Onboarding() {
   const [stepIndex, setStepIndex] = useState(0);
-  const step = useMemo(() => STEPS[stepIndex] ?? STEPS[0], [stepIndex]);
 
+  // Track which remote backgrounds failed so we can instantly fallback
+  const [failedRemote, setFailedRemote] = useState<Record<number, boolean>>({});
+
+  const step = useMemo(() => STEPS[stepIndex] ?? STEPS[0], [stepIndex]);
   const isLast = stepIndex === STEPS.length - 1;
+
+  const bgSource = useMemo(() => {
+    if (failedRemote[stepIndex]) return step.fallbackBg;
+    return step.remoteBg;
+  }, [failedRemote, step, stepIndex]);
+
+  // Prefetch remote background for the current step; fallback if it fails
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const ok = await RNImage.prefetch(step.remoteBg.uri);
+        if (!ok && !cancelled) {
+          setFailedRemote((prev) => ({ ...prev, [stepIndex]: true }));
+        }
+      } catch {
+        if (!cancelled) setFailedRemote((prev) => ({ ...prev, [stepIndex]: true }));
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [stepIndex, step.remoteBg.uri]);
 
   const goHome = useCallback(() => {
     router.replace("/(tabs)/home");
@@ -73,7 +116,7 @@ export default function Onboarding() {
   }, []);
 
   return (
-    <Background imageSource={step.bg} overlayOpacity={0.62}>
+    <Background imageSource={bgSource} overlayOpacity={0.62}>
       <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
         {/* Top controls */}
         <View style={styles.topRow}>
@@ -82,7 +125,7 @@ export default function Onboarding() {
               <Text style={styles.pillText}>Back</Text>
             </Pressable>
           ) : (
-            <View style={{ width: 84 }} />
+            <View style={{ width: 86 }} />
           )}
 
           <Pressable onPress={goHome} style={styles.pill}>
@@ -90,17 +133,17 @@ export default function Onboarding() {
           </Pressable>
         </View>
 
-        {/* Brand (small, premium) */}
+        {/* Brand */}
         <View style={styles.brand}>
           <Image source={LOGO} style={styles.logo} resizeMode="contain" />
           <Text style={styles.motto}>PLAN • FLY • WATCH • REPEAT</Text>
         </View>
 
-        {/* Card */}
+        {/* Content */}
         <View style={styles.cardWrap}>
           <GlassCard style={styles.card}>
             <Text style={styles.kicker}>
-              Step {stepIndex + 1} of {STEPS.length}
+              Step {stepIndex + 1} Of {STEPS.length}
             </Text>
 
             <Text style={styles.h1}>{step.title}</Text>
@@ -116,15 +159,15 @@ export default function Onboarding() {
 
             <View style={styles.actions}>
               <Pressable onPress={goHome} style={[styles.btn, styles.btnGhost]}>
-                <Text style={styles.btnGhostText}>Skip for now</Text>
+                <Text style={styles.btnGhostText}>Skip For Now</Text>
               </Pressable>
 
               <Pressable onPress={isLast ? goHome : next} style={[styles.btn, styles.btnPrimary]}>
-                <Text style={styles.btnPrimaryText}>{isLast ? "Start exploring" : "Continue"}</Text>
+                <Text style={styles.btnPrimaryText}>{isLast ? "Start Exploring" : "Continue"}</Text>
               </Pressable>
             </View>
 
-            <Text style={styles.micro}>Premium football travel, without the chaos.</Text>
+            <Text style={styles.micro}>Premium Football Travel, Without The Chaos.</Text>
           </GlassCard>
         </View>
       </SafeAreaView>
@@ -155,7 +198,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.22)",
     paddingVertical: 10,
     paddingHorizontal: 14,
-    minWidth: 84,
+    minWidth: 86,
     alignItems: "center",
   },
 
