@@ -27,62 +27,34 @@ import FixtureCertaintyBadge from "@/src/components/FixtureCertaintyBadge";
 import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
 
-import { getFixtureById, getFixturesByRound, type FixtureListRow } from "@/src/services/apiFootball";
-import {
-  getRollingWindowIso,
-  toIsoDate,
-  addDaysIso,
-  clampFromIsoToTomorrow,
-  normalizeWindowIso,
-} from "@/src/constants/football";
-
-import { coerceNumber, coerceString } from "@/src/utils/params";
+import { getFixtureById, type FixtureListRow } from "@/src/services/apiFootball";
 import { formatUkDateTimeMaybe } from "@/src/utils/formatters";
 
-import authStore from "@/src/state/auth";
-import useFollowStore from "@/src/state/followStore";
-import savedItemsStore from "@/src/state/savedItems";
-import tripsStore from "@/src/state/trips";
-
-import {
-  computeLikelyPlaceholderTbcIds,
-  isKickoffTbc,
-  kickoffIsoOrNull,
-  CONFIRMED_WITHIN_DAYS,
-} from "@/src/utils/kickoffTbc";
-
 import { getFixtureCertainty } from "@/src/utils/fixtureCertainty";
-import { getTicketGuide } from "@/src/data/ticketGuides";
 import { getMatchdayLogistics } from "@/src/data/matchdayLogistics";
 import { getStadiumByHomeTeam } from "@/src/data/stadiums";
 
+import savedItemsStore from "@/src/state/savedItems";
+import { registerPartnerClick } from "@/src/services/partnerReturnBootstrap";
+
+/* -------------------------------------------------------------------------- */
+/* helpers */
 /* -------------------------------------------------------------------------- */
 
 function enc(v: string) {
   return encodeURIComponent(v);
 }
 
-function isoDateOnly(isoMaybe?: string) {
-  if (!isoMaybe) return undefined;
-  const d = new Date(isoMaybe);
-  if (Number.isNaN(d.getTime())) return undefined;
-  return toIsoDate(d);
-}
-
 async function safeOpenUrl(url: string) {
-  const u = String(url ?? "").trim();
-  if (!u) return;
-  const hasScheme = /^https?:\/\//i.test(u);
-  const candidate = hasScheme ? u : `https://${u}`;
   try {
-    const can = await Linking.canOpenURL(candidate);
-    if (!can) throw new Error();
-    await Linking.openURL(candidate);
+    await Linking.openURL(url);
   } catch {
     Alert.alert("Couldn’t open link");
   }
 }
 
+/* -------------------------------------------------------------------------- */
+/* screen */
 /* -------------------------------------------------------------------------- */
 
 export default function MatchDetailScreen() {
@@ -90,40 +62,23 @@ export default function MatchDetailScreen() {
   const params = useLocalSearchParams();
   const insets = useSafeAreaInsets();
 
-  const id = useMemo(() => coerceString((params as any)?.id), [params]);
+  const id = String((params as any)?.id ?? "").trim();
 
   const [row, setRow] = useState<FixtureListRow | null>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  const [ticketModal, setTicketModal] = useState(false);
-
-  const [toast, setToast] = useState<string | null>(null);
-  const toastTimer = useRef<any>(null);
-
-  const showToast = useCallback((msg: string) => {
-    if (toastTimer.current) clearTimeout(toastTimer.current);
-    setToast(msg);
-    toastTimer.current = setTimeout(() => setToast(null), 2000);
-  }, []);
-
-  /* -------------------------------------------------------------------------- */
-  /* Load fixture                                                               */
-  /* -------------------------------------------------------------------------- */
+  const [ticketModalOpen, setTicketModalOpen] = useState(false);
 
   useEffect(() => {
+    if (!id) return;
+
     let cancelled = false;
 
     async function run() {
-      if (!id) return;
       setLoading(true);
-      setError(null);
-
       try {
         const r = await getFixtureById(id);
-        if (!cancelled) setRow(r);
-      } catch {
-        if (!cancelled) setError("Failed to load match");
+        if (!cancelled) setRow(r ?? null);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -135,51 +90,39 @@ export default function MatchDetailScreen() {
     };
   }, [id]);
 
-  /* -------------------------------------------------------------------------- */
-  /* Derived                                                                     */
-  /* -------------------------------------------------------------------------- */
+  const home = row?.teams?.home?.name ?? "Home";
+  const away = row?.teams?.away?.name ?? "Away";
 
-  const home = row?.teams?.home?.name ?? "";
-  const away = row?.teams?.away?.name ?? "";
-  const kickoffIso = row?.fixture?.date ?? null;
-
-  const venue = row?.fixture?.venue?.name ?? "";
-  const city = row?.fixture?.venue?.city ?? "";
+  const kickoffDisplay = formatUkDateTimeMaybe(row?.fixture?.date);
 
   const stadiumMeta = useMemo(() => getStadiumByHomeTeam(home), [home]);
+  const logistics = useMemo(() => getMatchdayLogistics({ homeTeamName: home }), [home]);
 
-  const se365Url = useMemo(() => {
-    const query = `${home} vs ${away}`;
-    return `https://www.sportsevents365.com/search?q=${enc(query)}&a_aid=69834e80ec9d3`;
-  }, [home, away]);
+  const stadiumName = stadiumMeta?.name ?? row?.fixture?.venue?.name ?? "";
+  const stadiumCity = stadiumMeta?.city ?? row?.fixture?.venue?.city ?? "";
 
-  const officialUrl = useMemo(() => {
-    return `https://www.google.com/search?q=${enc(home + " tickets")}`;
-  }, [home]);
+  const mapsUrl = useMemo(() => {
+    const q = [stadiumName, stadiumCity].filter(Boolean).join(" ");
+    return `https://www.google.com/maps/search/?api=1&query=${enc(q)}`;
+  }, [stadiumName, stadiumCity]);
+
+  const certainty = useMemo(() => {
+    return getFixtureCertainty(row, {});
+  }, [row]);
 
   /* -------------------------------------------------------------------------- */
-  /* Save ticket into trip wallet                                               */
+  /* SAVE TICKET → TRIP WALLET */
   /* -------------------------------------------------------------------------- */
 
   const saveTicketToTrip = useCallback(
-    async (provider: "se365" | "official" | "google", url: string) => {
+    async (provider: string, url: string) => {
       if (!row) return;
 
       try {
-        const trips = tripsStore.getState().items ?? [];
-        let trip = trips.find((t: any) => String(t.fixtureId) === String(row.fixture.id));
+        const tripId = String(row.fixture.id);
 
-        if (!trip) {
-          trip = await tripsStore.getState().add({
-            fixtureId: row.fixture.id,
-            title: `${home} vs ${away}`,
-            kickoffIso,
-            city: stadiumMeta?.city ?? city ?? null,
-          });
-        }
-
-        await savedItemsStore.add({
-          tripId: trip.id,
+        const item = await savedItemsStore.add({
+          tripId,
           type: "tickets",
           title: `${home} vs ${away} tickets`,
           status: "pending",
@@ -189,92 +132,133 @@ export default function MatchDetailScreen() {
             fixtureId: row.fixture.id,
             home,
             away,
-            kickoffIso,
+            kickoffIso: row.fixture.date ?? null,
           },
         });
 
-        showToast("Ticket saved to trip");
-      } catch {
-        // silent
+        registerPartnerClick({
+          itemId: item.id,
+          provider,
+          url,
+        });
+      } catch (e) {
+        console.log("saveTicketToTrip failed", e);
       }
     },
-    [row, home, away, kickoffIso, stadiumMeta, city, showToast]
+    [row, home, away]
   );
 
   /* -------------------------------------------------------------------------- */
-  /* Ticket actions                                                             */
+  /* TICKET LINKS */
   /* -------------------------------------------------------------------------- */
 
-  const openSe365 = useCallback(async () => {
-    setTicketModal(false);
-    await saveTicketToTrip("se365", se365Url);
-    await safeOpenUrl(se365Url);
-  }, [saveTicketToTrip, se365Url]);
+  const se365Url = useMemo(() => {
+    const query = `${home} vs ${away}`;
+    return `https://www.sportsevents365.com/search?q=${enc(query)}`;
+  }, [home, away]);
 
-  const openOfficial = useCallback(async () => {
-    setTicketModal(false);
+  const officialUrl = useMemo(() => {
+    return `https://www.google.com/search?q=${enc(home + " tickets")}`;
+  }, [home]);
+
+  const googleUrl = useMemo(() => {
+    return `https://www.google.com/search?q=${enc(home + " vs " + away + " tickets")}`;
+  }, [home, away]);
+
+  /* -------------------------------------------------------------------------- */
+  /* UI actions */
+  /* -------------------------------------------------------------------------- */
+
+  const openSe365 = async () => {
+    setTicketModalOpen(false);
+    await saveTicketToTrip("sportsevents365", se365Url);
+    await safeOpenUrl(se365Url);
+  };
+
+  const openOfficial = async () => {
+    setTicketModalOpen(false);
     await saveTicketToTrip("official", officialUrl);
     await safeOpenUrl(officialUrl);
-  }, [saveTicketToTrip, officialUrl]);
+  };
+
+  const openGoogle = async () => {
+    setTicketModalOpen(false);
+    await saveTicketToTrip("google", googleUrl);
+    await safeOpenUrl(googleUrl);
+  };
+
+  const onShare = async () => {
+    const text = `${home} vs ${away}\n${kickoffDisplay}\n${stadiumName}`;
+    try {
+      await Share.share({ message: text });
+    } catch {}
+  };
 
   /* -------------------------------------------------------------------------- */
-
-  if (loading) {
-    return (
-      <Background imageSource={getBackground("fixtures")} overlayOpacity={0.86}>
-        <SafeAreaView style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-          <ActivityIndicator />
-        </SafeAreaView>
-      </Background>
-    );
-  }
-
-  if (error || !row) {
-    return (
-      <Background imageSource={getBackground("fixtures")} overlayOpacity={0.86}>
-        <SafeAreaView style={{ flex: 1 }}>
-          <EmptyState title="Match unavailable" message={error ?? ""} />
-        </SafeAreaView>
-      </Background>
-    );
-  }
-
-  /* -------------------------------------------------------------------------- */
-  /* UI                                                                         */
+  /* render */
   /* -------------------------------------------------------------------------- */
 
   return (
     <Background imageSource={getBackground("fixtures")} overlayOpacity={0.86}>
       <Stack.Screen options={{ headerShown: true, title: "Match", headerTransparent: true }} />
 
-      <SafeAreaView style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={{ padding: 20, paddingTop: 100 }}>
+      <SafeAreaView style={{ flex: 1 }} edges={["bottom"]}>
+        <ScrollView
+          contentContainerStyle={{
+            paddingTop: 100,
+            paddingBottom: 80 + insets.bottom,
+            paddingHorizontal: theme.spacing.lg,
+            gap: theme.spacing.lg,
+          }}
+        >
           <GlassCard>
-            <Text style={styles.league}>{row.league?.name}</Text>
+            {loading ? (
+              <ActivityIndicator />
+            ) : !row ? (
+              <EmptyState title="Match not found" message="Unable to load match." />
+            ) : (
+              <>
+                <Text style={styles.title}>
+                  {home} vs {away}
+                </Text>
 
-            <Text style={styles.title}>
-              {home} vs {away}
-            </Text>
+                <View style={{ marginTop: 10 }}>
+                  <FixtureCertaintyBadge state={certainty} />
+                </View>
 
-            <Text style={styles.meta}>{formatUkDateTimeMaybe(kickoffIso)}</Text>
-            <Text style={styles.meta}>
-              {venue} • {city}
-            </Text>
+                <Text style={styles.meta}>Kickoff: {kickoffDisplay ?? "—"}</Text>
+                <Text style={styles.meta}>
+                  Venue: {stadiumName} • {stadiumCity}
+                </Text>
 
-            <Pressable style={styles.primaryBtn} onPress={() => setTicketModal(true)}>
-              <Text style={styles.primaryBtnText}>Find home tickets</Text>
-            </Pressable>
+                <MatchdayLogisticsCard
+                  logistics={logistics}
+                  city={stadiumCity}
+                  onOpenStop={async (q) => safeOpenUrl(`https://www.google.com/maps/search/?api=1&query=${enc(q)}`)}
+                  onSelectStayArea={() => {}}
+                />
+
+                <View style={{ gap: 10, marginTop: 14 }}>
+                  <Pressable style={styles.primaryBtn} onPress={() => setTicketModalOpen(true)}>
+                    <Text style={styles.btnText}>Find home tickets</Text>
+                  </Pressable>
+
+                  <Pressable style={styles.secondaryBtn} onPress={() => safeOpenUrl(mapsUrl)}>
+                    <Text style={styles.btnText}>Open maps</Text>
+                  </Pressable>
+
+                  <Pressable style={styles.secondaryBtn} onPress={onShare}>
+                    <Text style={styles.btnText}>Share</Text>
+                  </Pressable>
+                </View>
+              </>
+            )}
           </GlassCard>
         </ScrollView>
 
-        {toast ? (
-          <View style={styles.toast}>
-            <Text style={styles.toastText}>{toast}</Text>
-          </View>
-        ) : null}
-
-        <Modal visible={ticketModal} transparent animationType="fade">
-          <Pressable style={styles.modalBackdrop} onPress={() => setTicketModal(false)}>
+        {/* Ticket modal */}
+        <Modal visible={ticketModalOpen} transparent animationType="fade">
+          <Pressable style={styles.modalBackdrop} onPress={() => setTicketModalOpen(false)}>
             <View style={styles.modalCard}>
               <Text style={styles.modalTitle}>Home tickets</Text>
 
@@ -286,8 +270,12 @@ export default function MatchDetailScreen() {
                 <Text style={styles.modalBtnText}>Official club</Text>
               </Pressable>
 
-              <Pressable style={styles.modalBtn} onPress={() => setTicketModal(false)}>
-                <Text style={styles.modalBtnText}>Cancel</Text>
+              <Pressable style={styles.modalBtn} onPress={openGoogle}>
+                <Text style={styles.modalBtnText}>Google search</Text>
+              </Pressable>
+
+              <Pressable style={styles.modalCancel} onPress={() => setTicketModalOpen(false)}>
+                <Text style={styles.modalCancelText}>Cancel</Text>
               </Pressable>
             </View>
           </Pressable>
@@ -298,75 +286,86 @@ export default function MatchDetailScreen() {
 }
 
 /* -------------------------------------------------------------------------- */
+/* styles */
+/* -------------------------------------------------------------------------- */
 
 const styles = StyleSheet.create({
-  league: {
-    color: theme.colors.primary,
-    fontWeight: "900",
-    fontSize: 12,
-  },
   title: {
-    marginTop: 8,
+    color: theme.colors.text,
     fontSize: 22,
     fontWeight: "900",
-    color: theme.colors.text,
   },
+
   meta: {
     marginTop: 6,
     color: theme.colors.textSecondary,
     fontWeight: "700",
   },
+
   primaryBtn: {
-    marginTop: 16,
-    padding: 14,
     borderRadius: 12,
-    backgroundColor: "rgba(0,255,136,0.15)",
     borderWidth: 1,
-    borderColor: "rgba(0,255,136,0.4)",
+    borderColor: "rgba(0,255,136,0.6)",
+    paddingVertical: 12,
+    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.3)",
   },
-  primaryBtnText: {
-    textAlign: "center",
-    fontWeight: "900",
-    color: theme.colors.text,
-  },
-  toast: {
-    position: "absolute",
-    bottom: 40,
-    left: 20,
-    right: 20,
-    padding: 12,
+
+  secondaryBtn: {
     borderRadius: 12,
-    backgroundColor: "rgba(0,0,0,0.8)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.15)",
+    paddingVertical: 12,
+    alignItems: "center",
   },
-  toastText: {
-    color: "#fff",
-    textAlign: "center",
-    fontWeight: "800",
+
+  btnText: {
+    color: theme.colors.text,
+    fontWeight: "900",
   },
+
   modalBackdrop: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.7)",
     justifyContent: "center",
-    padding: 20,
+    padding: 24,
   },
+
   modalCard: {
-    backgroundColor: "#111",
     borderRadius: 16,
-    padding: 20,
-    gap: 12,
+    padding: 16,
+    backgroundColor: "#111",
+    gap: 10,
   },
+
   modalTitle: {
     color: "#fff",
     fontWeight: "900",
     fontSize: 16,
+    marginBottom: 4,
   },
+
   modalBtn: {
-    padding: 14,
     borderRadius: 10,
-    backgroundColor: "rgba(255,255,255,0.05)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.2)",
+    paddingVertical: 12,
+    alignItems: "center",
   },
+
   modalBtnText: {
     color: "#fff",
     fontWeight: "800",
+  },
+
+  modalCancel: {
+    marginTop: 6,
+    paddingVertical: 10,
+    alignItems: "center",
+  },
+
+  modalCancelText: {
+    color: "rgba(255,255,255,0.6)",
+    fontWeight: "700",
   },
 });
