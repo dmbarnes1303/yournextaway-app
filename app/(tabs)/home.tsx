@@ -109,7 +109,6 @@ function initials(name: string) {
 function titleFromSlug(s: string) {
   const clean = String(s ?? "").trim();
   if (!clean) return "";
-  // Handles "barcelona" or "barcelona-spain"
   const spaced = clean.replace(/[-_]+/g, " ");
   return spaced.replace(/\b\w/g, (m) => m.toUpperCase());
 }
@@ -240,8 +239,7 @@ function pickRandom<T>(arr: T[]): T | null {
 }
 
 /**
- * FIX #1: Popular Cities chip — remove background flag.
- * Return to small flag icon next to city name.
+ * Popular Cities chip — small flag icon next to city name (no background flag).
  */
 function CityChipPremium({
   name,
@@ -409,15 +407,6 @@ export default function HomeScreen() {
     setQ("");
     Keyboard.dismiss();
   }, []);
-
-  const dismissKeyboard = useCallback(() => Keyboard.dismiss(), []);
-
-  const goFixtures = useCallback(() => {
-    router.push({
-      pathname: "/(tabs)/fixtures",
-      params: { leagueId: String(league.leagueId), season: String(league.season), from: fromIso, to: toIso },
-    } as any);
-  }, [router, league.leagueId, league.season, fromIso, toIso]);
 
   const goFixturesAll = useCallback(() => {
     router.push({ pathname: "/(tabs)/fixtures" } as any);
@@ -631,7 +620,7 @@ export default function HomeScreen() {
     [goBuildTripGlobal, goFixturesAll]
   );
 
-  // FIX #2 (Trips): restore display assets (flag + team crest) and capitalise city name.
+  // Trips: restore display assets (flag + team crest) and capitalise city name.
   const nextTripCityTitle = useMemo(() => {
     if (!nextTrip) return "";
     const raw = (nextTrip as any).cityName || (nextTrip as any).city || nextTrip.cityId || "Trip";
@@ -667,7 +656,8 @@ export default function HomeScreen() {
   }, [nextTrip]);
 
   return (
-    <Background imageSource={getBackground("home")} overlayOpacity={0.76}>
+    // Brighten the Home background: lower overlay opacity.
+    <Background imageSource={getBackground("home")} overlayOpacity={0.62}>
       <SafeAreaView style={styles.container} edges={["top"]}>
         <ScrollView
           style={styles.scroll}
@@ -707,7 +697,7 @@ export default function HomeScreen() {
                 <>
                   <View style={styles.heroActions}>
                     <Pressable
-                      onPress={goFixtures}
+                      onPress={goFixturesAll}
                       style={({ pressed }) => [styles.heroBtn, styles.heroBtnGhost, pressed && styles.pressed]}
                       android_ripple={{ color: "rgba(255,255,255,0.08)" }}
                     >
@@ -782,14 +772,24 @@ export default function HomeScreen() {
               {!showSearchResults ? (
                 <View style={styles.popularBlock}>
                   <Text style={styles.sectionKicker}>Popular Cities</Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.popularRow} decelerationRate="fast">
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.popularRow}
+                    decelerationRate="fast"
+                  >
                     {cities.map((c) => (
                       <CityChipPremium key={`pc-${c.name}`} name={c.name} countryCode={c.countryCode} onPress={() => setQ(c.name)} />
                     ))}
                   </ScrollView>
 
                   <Text style={[styles.sectionKicker, { marginTop: 10 }]}>Popular Teams</Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.popularRow} decelerationRate="fast">
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.popularRow}
+                    decelerationRate="fast"
+                  >
                     {teams.map((t) => (
                       <Pressable
                         key={`pt-${t.teamId}`}
@@ -815,15 +815,10 @@ export default function HomeScreen() {
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>Upcoming Matches</Text>
 
-                <View style={{ flexDirection: "row", gap: 8 }}>
-                  <Pressable onPress={goFixturesAll} style={({ pressed }) => [styles.miniPill, pressed && { opacity: 0.9 }]}>
-                    <Text style={styles.miniPillText}>More Leagues</Text>
-                  </Pressable>
-
-                  <Pressable onPress={goFixtures} style={({ pressed }) => [styles.miniPill, pressed && { opacity: 0.9 }]}>
-                    <Text style={styles.miniPillText}>View All</Text>
-                  </Pressable>
-                </View>
+                {/* Keep ONLY View All */}
+                <Pressable onPress={goFixturesAll} style={({ pressed }) => [styles.miniPill, pressed && { opacity: 0.9 }]}>
+                  <Text style={styles.miniPillText}>View All</Text>
+                </Pressable>
               </View>
 
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.leagueRow}>
@@ -915,22 +910,14 @@ export default function HomeScreen() {
                         })}
                       </View>
 
-                      <View style={styles.blockActions}>
-                        <Pressable
-                          onPress={goFixtures}
-                          style={({ pressed }) => [styles.btn, styles.btnGhost, pressed && styles.pressed]}
-                          android_ripple={{ color: "rgba(255,255,255,0.08)" }}
-                        >
-                          <Text style={styles.btnGhostText}>Browse Fixtures</Text>
-                        </Pressable>
-                        <Pressable
-                          onPress={() => goBuildTripGlobal()}
-                          style={({ pressed }) => [styles.btn, styles.btnPrimary, pressed && styles.pressed]}
-                          android_ripple={{ color: "rgba(79,224,138,0.10)" }}
-                        >
-                          <Text style={styles.btnPrimaryText}>Start A Trip Hub</Text>
-                        </Pressable>
-                      </View>
+                      {/* Keep ONLY Start A Trip Hub, centered */}
+                      <Pressable
+                        onPress={() => goBuildTripGlobal()}
+                        style={({ pressed }) => [styles.singleCta, styles.btn, styles.btnPrimary, pressed && styles.pressed]}
+                        android_ripple={{ color: "rgba(79,224,138,0.10)" }}
+                      >
+                        <Text style={styles.btnPrimaryText}>Start A Trip Hub</Text>
+                      </Pressable>
                     </>
                   ) : null}
                 </View>
@@ -952,7 +939,8 @@ export default function HomeScreen() {
                 <View style={styles.blockInner}>
                   <View style={styles.hubTop}>
                     <Text style={styles.hubKicker}>Trip Hub</Text>
-                    <Text style={styles.hubSub}>Store Everything In One Place: Match, Stays, Links, Notes, And Bookings.</Text>
+                    {/* Sentence case body copy */}
+                    <Text style={styles.hubSub}>Store everything in one place: match, stays, links, notes and bookings.</Text>
                   </View>
 
                   {!loadedTrips ? (
@@ -995,7 +983,6 @@ export default function HomeScreen() {
                       >
                         <Text style={styles.nextTripKicker}>Next Up</Text>
 
-                        {/* FIX #2: Flag + Team Crest + Capitalised City */}
                         <View style={styles.nextTripTitleRow}>
                           {nextTripFlagUrl ? <Image source={{ uri: nextTripFlagUrl }} style={styles.nextTripFlag} /> : null}
                           {typeof nextTripTeamId === "number" ? (
@@ -1033,7 +1020,7 @@ export default function HomeScreen() {
             </View>
           ) : null}
 
-          {/* QUICK SHORTCUTS (intent-based tiles) */}
+          {/* QUICK SHORTCUTS */}
           {!showSearchResults ? (
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
@@ -1158,22 +1145,10 @@ export default function HomeScreen() {
                 </View>
 
                 <View style={styles.modalActions}>
-                  <Pressable
-                    onPress={() => {
-                      setHowOpen(false);
-                      goFixtures();
-                    }}
-                    style={[styles.btn, styles.btnGhost]}
-                  >
+                  <Pressable onPress={() => { setHowOpen(false); goFixturesAll(); }} style={[styles.btn, styles.btnGhost]}>
                     <Text style={styles.btnGhostText}>Browse Fixtures</Text>
                   </Pressable>
-                  <Pressable
-                    onPress={() => {
-                      setHowOpen(false);
-                      goBuildTripGlobal();
-                    }}
-                    style={[styles.btn, styles.btnPrimary]}
-                  >
+                  <Pressable onPress={() => { setHowOpen(false); goBuildTripGlobal(); }} style={[styles.btn, styles.btnPrimary]}>
                     <Text style={styles.btnPrimaryText}>Start A Trip Hub</Text>
                   </Pressable>
                 </View>
@@ -1391,7 +1366,6 @@ const styles = StyleSheet.create({
   sectionKicker: { color: theme.colors.textTertiary, fontSize: 12, fontWeight: theme.fontWeight.black, letterSpacing: 0.3 },
   popularRow: { gap: 10, paddingRight: theme.spacing.lg, paddingVertical: 4 },
 
-  // City chip (no background image anymore)
   cityPill: {
     borderRadius: 999,
     borderWidth: 1,
@@ -1528,11 +1502,19 @@ const styles = StyleSheet.create({
   listMeta: { marginTop: 4, color: theme.colors.textSecondary, fontSize: 12, fontWeight: theme.fontWeight.bold },
 
   blockActions: { flexDirection: "row", gap: 10, marginTop: 2 },
-  btn: { flex: 1, borderRadius: 16, paddingVertical: 12, alignItems: "center", borderWidth: 1, overflow: "hidden" },
+
+  btn: { borderRadius: 16, paddingVertical: 12, alignItems: "center", borderWidth: 1, overflow: "hidden" },
   btnPrimary: { borderColor: "rgba(79,224,138,0.24)", backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.default : theme.glass.iosBg.default },
   btnPrimaryText: { color: theme.colors.text, fontSize: 14, fontWeight: theme.fontWeight.black },
   btnGhost: { borderColor: "rgba(255,255,255,0.10)", backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle },
   btnGhostText: { color: theme.colors.textSecondary, fontSize: 14, fontWeight: theme.fontWeight.black },
+
+  // Single centered CTA in Upcoming Matches card
+  singleCta: {
+    alignSelf: "center",
+    marginTop: 2,
+    width: "72%",
+  },
 
   hubTop: {
     borderRadius: 16,
