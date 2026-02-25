@@ -1,5 +1,5 @@
 // app/match/[id].tsx
-import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
+import React, { useEffect, useMemo, useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -9,11 +9,6 @@ import {
   ActivityIndicator,
   Alert,
   Linking,
-  Share,
-  Platform,
-  TextInput,
-  Keyboard,
-  Modal,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
@@ -26,47 +21,22 @@ import FixtureCertaintyBadge from "@/src/components/FixtureCertaintyBadge";
 
 import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
+import { toIsoDate } from "@/src/constants/football";
 
-import { getFixtureById, getFixturesByRound, type FixtureListRow } from "@/src/services/apiFootball";
-import {
-  getRollingWindowIso,
-  toIsoDate,
-  addDaysIso,
-  clampFromIsoToTomorrow,
-  normalizeWindowIso,
-} from "@/src/constants/football";
-import { coerceNumber, coerceString } from "@/src/utils/params";
+import { getFixtureById, type FixtureListRow } from "@/src/services/apiFootball";
+import { coerceString } from "@/src/utils/params";
 import { formatUkDateTimeMaybe } from "@/src/utils/formatters";
 
-import authStore from "@/src/state/auth";
-import useFollowStore from "@/src/state/followStore";
 import savedItemsStore from "@/src/state/savedItems";
 import { registerPartnerClick } from "@/src/services/partnerReturnBootstrap";
-
-import {
-  computeLikelyPlaceholderTbcIds,
-  isKickoffTbc,
-  kickoffIsoOrNull,
-  CONFIRMED_WITHIN_DAYS,
-} from "@/src/utils/kickoffTbc";
-
 import { getFixtureCertainty } from "@/src/utils/fixtureCertainty";
-import { getTicketGuide } from "@/src/data/ticketGuides";
-import type { TicketDifficulty } from "@/src/data/ticketGuides/types";
 
 import { getMatchdayLogistics } from "@/src/data/matchdayLogistics";
-import type { LogisticsStop } from "@/src/data/matchdayLogistics/types";
 import { getStadiumByHomeTeam } from "@/src/data/stadiums";
 
 /* -------------------------------------------------------------------------- */
 /* helpers */
 /* -------------------------------------------------------------------------- */
-
-function currentFootballSeasonStartYear(now = new Date()): number {
-  const y = now.getFullYear();
-  const m = now.getMonth();
-  return m >= 6 ? y : y - 1;
-}
 
 function enc(v: string) {
   return encodeURIComponent(v);
@@ -85,12 +55,6 @@ async function safeOpenUrl(url: string) {
   } catch {
     Alert.alert("Couldn’t open link");
   }
-}
-
-function daysUntilIso(iso: string) {
-  const t = new Date(iso).getTime();
-  if (!Number.isFinite(t)) return Number.POSITIVE_INFINITY;
-  return (t - Date.now()) / (1000 * 60 * 60 * 24);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -124,6 +88,8 @@ export default function MatchDetailScreen() {
       try {
         const r = await getFixtureById(id);
         if (!cancelled) setRow(r ?? null);
+      } catch (e) {
+        if (!cancelled) setRow(null);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -147,49 +113,47 @@ export default function MatchDetailScreen() {
     return `https://www.google.com/maps/search/?api=1&query=${enc(q)}`;
   }, [stadiumName, stadiumCity]);
 
-  const logistics = useMemo(
-    () => getMatchdayLogistics({ homeTeamName: home }),
-    [home]
-  );
+  const logistics = useMemo(() => getMatchdayLogistics({ homeTeamName: home }), [home]);
 
-  const certainty = useMemo(() => {
-    return getFixtureCertainty(row, {});
-  }, [row]);
+  const certainty = useMemo(() => getFixtureCertainty(row, {}), [row]);
 
   /* ------------------------------------------------------------------ */
   /* SAVE TICKET → WALLET */
   /* ------------------------------------------------------------------ */
 
-  async function saveTicketToTrip(provider: string, url: string) {
-    try {
-      if (!row) return;
+  const saveTicketToTrip = useCallback(
+    async (provider: string, url: string) => {
+      try {
+        if (!row) return;
 
-      const tripId = String(row.fixture.id);
+        const tripId = String(row.fixture.id);
 
-      const item = await savedItemsStore.add({
-        tripId,
-        type: "tickets",
-        title: `${home} vs ${away} tickets`,
-        status: "pending",
-        partnerId: provider,
-        partnerUrl: url,
-        metadata: {
-          fixtureId: row.fixture.id,
-          home,
-          away,
-          kickoffIso: row.fixture.date ?? null,
-        },
-      });
+        const item = await savedItemsStore.add({
+          tripId,
+          type: "tickets",
+          title: `${home} vs ${away} tickets`,
+          status: "pending",
+          partnerId: provider,
+          partnerUrl: url,
+          metadata: {
+            fixtureId: row.fixture.id,
+            home,
+            away,
+            kickoffIso: row.fixture.date ?? null,
+          },
+        });
 
-      registerPartnerClick({
-        itemId: item.id,
-        provider,
-        url,
-      });
-    } catch (e) {
-      console.log("saveTicketToTrip failed", e);
-    }
-  }
+        registerPartnerClick({
+          itemId: item.id,
+          provider,
+          url,
+        });
+      } catch (e) {
+        console.log("saveTicketToTrip failed", e);
+      }
+    },
+    [row, home, away]
+  );
 
   /* ------------------------------------------------------------------ */
   /* TICKET URLS */
@@ -211,23 +175,24 @@ export default function MatchDetailScreen() {
   );
 
   /* ------------------------------------------------------------------ */
-  /* HANDLERS (MERGED) */
+  /* HANDLERS */
   /* ------------------------------------------------------------------ */
 
   const openSportsevents365 = useCallback(async () => {
     await saveTicketToTrip("sportsevents365", se365PrimaryUrl);
     await safeOpenUrl(se365PrimaryUrl);
-  }, [se365PrimaryUrl, row]);
+  }, [saveTicketToTrip, se365PrimaryUrl]);
 
   const openOfficialHomeTickets = useCallback(async () => {
     await saveTicketToTrip("official", officialHomeTicketsUrl);
     await safeOpenUrl(officialHomeTicketsUrl);
-  }, [officialHomeTicketsUrl, row]);
+  }, [saveTicketToTrip, officialHomeTicketsUrl]);
 
   const openGoogleFallback = useCallback(async () => {
-    await saveTicketToTrip("google", googleHomeTicketsertrticketsUrl);
+    // FIXED: previously referenced a garbage variable name
+    await saveTicketToTrip("google", googleHomeTicketsUrl);
     await safeOpenUrl(googleHomeTicketsUrl);
-  }, [googleHomeTicketsUrl, row]);
+  }, [saveTicketToTrip, googleHomeTicketsUrl]);
 
   /* ------------------------------------------------------------------ */
   /* RENDER */
@@ -248,7 +213,9 @@ export default function MatchDetailScreen() {
         >
           <GlassCard>
             {loading ? (
-              <ActivityIndicator />
+              <View style={styles.loadingWrap}>
+                <ActivityIndicator />
+              </View>
             ) : !row ? (
               <EmptyState title="Match not found" message="Unable to load match." />
             ) : (
@@ -257,13 +224,14 @@ export default function MatchDetailScreen() {
                   {home} vs {away}
                 </Text>
 
-                <View style={{ marginTop: 10 }}>
+                <View style={styles.badgeWrap}>
                   <FixtureCertaintyBadge state={certainty} />
                 </View>
 
                 <Text style={styles.meta}>Kickoff: {kickoffDisplay ?? "—"}</Text>
                 <Text style={styles.meta}>
-                  Venue: {stadiumName} • {stadiumCity}
+                  Venue: {stadiumName}
+                  {stadiumCity ? ` • ${stadiumCity}` : ""}
                 </Text>
 
                 <MatchdayLogisticsCard
@@ -275,7 +243,7 @@ export default function MatchDetailScreen() {
                   onSelectStayArea={() => {}}
                 />
 
-                <View style={{ gap: 10, marginTop: 14 }}>
+                <View style={styles.actions}>
                   <Pressable style={styles.primaryBtn} onPress={openSportsevents365}>
                     <Text style={styles.btnText}>Sportsevents365</Text>
                   </Pressable>
@@ -301,4 +269,52 @@ export default function MatchDetailScreen() {
   );
 }
 
-/* styles unchanged */
+/* -------------------------------------------------------------------------- */
+/* styles */
+/* -------------------------------------------------------------------------- */
+
+const styles = StyleSheet.create({
+  title: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 20,
+  },
+  meta: {
+    color: theme.colors.textSecondary,
+    marginTop: 6,
+  },
+  badgeWrap: {
+    marginTop: 10,
+  },
+  actions: {
+    gap: 10,
+    marginTop: 14,
+  },
+  loadingWrap: {
+    paddingVertical: 16,
+  },
+  primaryBtn: {
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.25)",
+    backgroundColor: "rgba(255,255,255,0.08)",
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  secondaryBtn: {
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: "rgba(0,0,0,0.10)",
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  btnText: {
+    color: theme.colors.text,
+    fontWeight: "900",
+  },
+});
