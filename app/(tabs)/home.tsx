@@ -106,6 +106,14 @@ function initials(name: string) {
   return `${parts[0][0] ?? ""}${parts[1][0] ?? ""}`.toUpperCase();
 }
 
+function titleFromSlug(s: string) {
+  const clean = String(s ?? "").trim();
+  if (!clean) return "";
+  // Handles "barcelona" or "barcelona-spain"
+  const spaced = clean.replace(/[-_]+/g, " ");
+  return spaced.replace(/\b\w/g, (m) => m.toUpperCase());
+}
+
 function tripSummaryLine(t: Trip) {
   const a = t.startDate ? formatUkDateOnly(t.startDate) : "—";
   const b = t.endDate ? formatUkDateOnly(t.endDate) : "—";
@@ -231,6 +239,10 @@ function pickRandom<T>(arr: T[]): T | null {
   return arr[Math.floor(Math.random() * arr.length)] ?? null;
 }
 
+/**
+ * FIX #1: Popular Cities chip — remove background flag.
+ * Return to small flag icon next to city name.
+ */
 function CityChipPremium({
   name,
   countryCode,
@@ -240,7 +252,7 @@ function CityChipPremium({
   countryCode: string;
   onPress: () => void;
 }) {
-  const flagUrl = getFlagImageUrl(countryCode, { size: 96 });
+  const flagUrl = getFlagImageUrl(countryCode, { size: 48 });
 
   return (
     <Pressable
@@ -248,8 +260,7 @@ function CityChipPremium({
       style={({ pressed }) => [styles.cityPill, pressed && styles.pressedPill]}
       android_ripple={{ color: "rgba(255,255,255,0.08)" }}
     >
-      {flagUrl ? <Image source={{ uri: flagUrl }} style={styles.cityFlagBg} resizeMode="cover" /> : null}
-      <View pointerEvents="none" style={styles.cityPillOverlay} />
+      {flagUrl ? <Image source={{ uri: flagUrl }} style={styles.cityFlagIcon} resizeMode="cover" /> : null}
       <Text style={styles.pillText}>{name}</Text>
     </Pressable>
   );
@@ -586,16 +597,6 @@ export default function HomeScreen() {
     ]
   );
 
-  /**
-   * Quick Shortcuts (intent-based, not redundant time-only):
-   * - Weekend Break: next weekend window
-   * - Day Trip: next 14 days, user will pick (but labelled as day-trip intent)
-   * - Midweek Escape: next 7 days (intended 1 night)
-   * - Kickoff Confirmed: route into Fixtures (for now: same Fixtures, later params)
-   *
-   * NOTE: fixtures params for “confirmed only / evening only” require Fixtures tab support.
-   * For now these shortcuts route you to Fixtures or Trip Build in sensible windows.
-   */
   const quickTiles = useMemo(
     () => [
       {
@@ -629,6 +630,41 @@ export default function HomeScreen() {
     ],
     [goBuildTripGlobal, goFixturesAll]
   );
+
+  // FIX #2 (Trips): restore display assets (flag + team crest) and capitalise city name.
+  const nextTripCityTitle = useMemo(() => {
+    if (!nextTrip) return "";
+    const raw = (nextTrip as any).cityName || (nextTrip as any).city || nextTrip.cityId || "Trip";
+    return titleFromSlug(String(raw));
+  }, [nextTrip]);
+
+  const nextTripCountryCode = useMemo(() => {
+    if (!nextTrip) return "";
+    const raw =
+      (nextTrip as any).countryCode ||
+      (nextTrip as any).country ||
+      (nextTrip as any).countryIso ||
+      (nextTrip as any).countryISO ||
+      "";
+    return String(raw).toUpperCase();
+  }, [nextTrip]);
+
+  const nextTripFlagUrl = useMemo(() => {
+    if (!nextTripCountryCode) return "";
+    return getFlagImageUrl(nextTripCountryCode, { size: 48 }) ?? "";
+  }, [nextTripCountryCode]);
+
+  const nextTripTeamId = useMemo(() => {
+    if (!nextTrip) return null;
+    const raw =
+      (nextTrip as any).teamId ||
+      (nextTrip as any).homeTeamId ||
+      (nextTrip as any).primaryTeamId ||
+      (nextTrip as any).clubTeamId ||
+      null;
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : null;
+  }, [nextTrip]);
 
   return (
     <Background imageSource={getBackground("home")} overlayOpacity={0.76}>
@@ -958,7 +994,19 @@ export default function HomeScreen() {
                         android_ripple={{ color: "rgba(255,255,255,0.06)" }}
                       >
                         <Text style={styles.nextTripKicker}>Next Up</Text>
-                        <Text style={styles.nextTripTitle}>{nextTrip.cityId || "Trip"}</Text>
+
+                        {/* FIX #2: Flag + Team Crest + Capitalised City */}
+                        <View style={styles.nextTripTitleRow}>
+                          {nextTripFlagUrl ? <Image source={{ uri: nextTripFlagUrl }} style={styles.nextTripFlag} /> : null}
+                          {typeof nextTripTeamId === "number" ? (
+                            <View style={styles.nextTripCrestDot}>
+                              <TeamCrest teamId={nextTripTeamId} size={16} />
+                            </View>
+                          ) : null}
+
+                          <Text style={styles.nextTripTitle}>{nextTripCityTitle || "Trip"}</Text>
+                        </View>
+
                         <Text style={styles.nextTripMeta}>{tripSummaryLine(nextTrip)}</Text>
                       </Pressable>
 
@@ -1110,10 +1158,22 @@ export default function HomeScreen() {
                 </View>
 
                 <View style={styles.modalActions}>
-                  <Pressable onPress={() => { setHowOpen(false); goFixtures(); }} style={[styles.btn, styles.btnGhost]}>
+                  <Pressable
+                    onPress={() => {
+                      setHowOpen(false);
+                      goFixtures();
+                    }}
+                    style={[styles.btn, styles.btnGhost]}
+                  >
                     <Text style={styles.btnGhostText}>Browse Fixtures</Text>
                   </Pressable>
-                  <Pressable onPress={() => { setHowOpen(false); goBuildTripGlobal(); }} style={[styles.btn, styles.btnPrimary]}>
+                  <Pressable
+                    onPress={() => {
+                      setHowOpen(false);
+                      goBuildTripGlobal();
+                    }}
+                    style={[styles.btn, styles.btnPrimary]}
+                  >
                     <Text style={styles.btnPrimaryText}>Start A Trip Hub</Text>
                   </Pressable>
                 </View>
@@ -1291,7 +1351,6 @@ const styles = StyleSheet.create({
   },
   heroBtnGhostText: { color: theme.colors.textSecondary, fontSize: 14, fontWeight: theme.fontWeight.black },
 
-  // NEW: centered green “How It Works” CTA
   howCta: {
     alignSelf: "center",
     marginTop: 2,
@@ -1332,6 +1391,7 @@ const styles = StyleSheet.create({
   sectionKicker: { color: theme.colors.textTertiary, fontSize: 12, fontWeight: theme.fontWeight.black, letterSpacing: 0.3 },
   popularRow: { gap: 10, paddingRight: theme.spacing.lg, paddingVertical: 4 },
 
+  // City chip (no background image anymore)
   cityPill: {
     borderRadius: 999,
     borderWidth: 1,
@@ -1340,18 +1400,11 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 14,
     overflow: "hidden",
-    justifyContent: "center",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
   },
-  cityFlagBg: {
-    position: "absolute",
-    right: -10,
-    top: -10,
-    bottom: -10,
-    width: 90,
-    opacity: 0.22,
-    borderRadius: 18,
-  },
-  cityPillOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.06)" },
+  cityFlagIcon: { width: 18, height: 13, borderRadius: 3, opacity: 0.9 },
   pillText: { color: "rgba(242,244,246,0.78)", fontSize: 13, fontWeight: theme.fontWeight.black },
 
   teamPill: {
@@ -1504,7 +1557,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   nextTripKicker: { color: theme.colors.textTertiary, fontSize: 12, fontWeight: theme.fontWeight.black },
-  nextTripTitle: { marginTop: 6, color: theme.colors.text, fontSize: 18, fontWeight: theme.fontWeight.black },
+  nextTripTitleRow: { marginTop: 6, flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
+  nextTripFlag: { width: 18, height: 13, borderRadius: 3, opacity: 0.9 },
+  nextTripCrestDot: {
+    width: 22,
+    height: 22,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0,0,0,0.20)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    overflow: "hidden",
+  },
+  nextTripTitle: { color: theme.colors.text, fontSize: 18, fontWeight: theme.fontWeight.black },
   nextTripMeta: { marginTop: 6, color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold, lineHeight: 18 },
 
   grid2: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
