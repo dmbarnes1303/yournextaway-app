@@ -1,32 +1,47 @@
 // src/components/Background.tsx
 import React from "react";
-import { View, StyleSheet, ViewStyle, StyleProp } from "react-native";
+import { ImageBackground, StyleSheet, View } from "react-native";
+import { theme } from "@/src/constants/theme";
 
-/**
- * Background (STRIPPED MODE)
- * Intentionally boring: no images, gradients, blur, or overlays.
- * This keeps the app usable while we lock routing/state.
- *
- * We keep the same prop names so nothing else breaks.
- */
 type Props = {
-  children: React.ReactNode;
-
-  // kept for compatibility; ignored in stripped mode
-  imageUrl?: string;
+  children?: React.ReactNode;
   imageSource?: any;
-
-  // kept for compatibility
-  overlay?: boolean;
-
-  style?: StyleProp<ViewStyle>;
-  contentStyle?: StyleProp<ViewStyle>;
+  /**
+   * Overlay opacity:
+   * landing: 0.55
+   * default: 0.72
+   * dense: 0.82
+   * modal: 0.90
+   */
+  overlayOpacity?: number;
 };
 
-export default function Background({ children, style, contentStyle }: Props) {
+export default function Background({
+  children,
+  imageSource,
+  overlayOpacity = 0.72,
+}: Props) {
   return (
-    <View style={[styles.root, style]}>
-      <View style={[styles.content, contentStyle]}>{children}</View>
+    <View style={styles.root}>
+      {imageSource ? (
+        <ImageBackground
+          source={imageSource}
+          resizeMode="cover"
+          style={styles.image}
+        >
+          <View
+            style={[
+              styles.overlay,
+              { backgroundColor: `rgba(0,0,0,${overlayOpacity})` },
+            ]}
+          />
+          <View style={styles.content}>{children}</View>
+        </ImageBackground>
+      ) : (
+        <View style={[styles.fallback, { backgroundColor: theme.colors.bgBase }]}>
+          <View style={styles.content}>{children}</View>
+        </View>
+      )}
     </View>
   );
 }
@@ -34,9 +49,21 @@ export default function Background({ children, style, contentStyle }: Props) {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: "#0B0F14",
   },
+
+  image: {
+    flex: 1,
+  },
+
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+  },
+
   content: {
+    flex: 1,
+  },
+
+  fallback: {
     flex: 1,
   },
 });
