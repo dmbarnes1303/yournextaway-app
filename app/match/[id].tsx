@@ -27,221 +27,268 @@ import FixtureCertaintyBadge from "@/src/components/FixtureCertaintyBadge";
 import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
 
-import { getFixtureById, type FixtureListRow } from "@/src/services/apiFootball";
-import { getSE365Tickets } from "@/src/services/se365";
+import { getFixtureById, getFixturesByRound, type FixtureListRow } from "@/src/services/apiFootball";
+import {
+  getRollingWindowIso,
+  toIsoDate,
+  addDaysIso,
+  clampFromIsoToTomorrow,
+  normalizeWindowIso,
+} from "@/src/constants/football";
 
+import { coerceNumber, coerceString } from "@/src/utils/params";
 import { formatUkDateTimeMaybe } from "@/src/utils/formatters";
-import { getFixtureCertainty } from "@/src/utils/fixtureCertainty";
-import { kickoffIsoOrNull } from "@/src/utils/kickoffTbc";
 
 import authStore from "@/src/state/auth";
 import useFollowStore from "@/src/state/followStore";
+import savedItemsStore from "@/src/state/savedItems";
+import tripsStore from "@/src/state/trips";
 
-type SE365Ticket = {
-  price: number;
-  currency: string;
-  quantity: number;
-  url: string;
-  provider?: string;
-};
+import {
+  computeLikelyPlaceholderTbcIds,
+  isKickoffTbc,
+  kickoffIsoOrNull,
+  CONFIRMED_WITHIN_DAYS,
+} from "@/src/utils/kickoffTbc";
+
+import { getFixtureCertainty } from "@/src/utils/fixtureCertainty";
+import { getTicketGuide } from "@/src/data/ticketGuides";
+import { getMatchdayLogistics } from "@/src/data/matchdayLogistics";
+import { getStadiumByHomeTeam } from "@/src/data/stadiums";
+
+/* -------------------------------------------------------------------------- */
+
+function enc(v: string) {
+  return encodeURIComponent(v);
+}
+
+function isoDateOnly(isoMaybe?: string) {
+  if (!isoMaybe) return undefined;
+  const d = new Date(isoMaybe);
+  if (Number.isNaN(d.getTime())) return undefined;
+  return toIsoDate(d);
+}
+
+async function safeOpenUrl(url: string) {
+  const u = String(url ?? "").trim();
+  if (!u) return;
+  const hasScheme = /^https?:\/\//i.test(u);
+  const candidate = hasScheme ? u : `https://${u}`;
+  try {
+    const can = await Linking.canOpenURL(candidate);
+    if (!can) throw new Error();
+    await Linking.openURL(candidate);
+  } catch {
+    Alert.alert("Couldn’t open link");
+  }
+}
+
+/* -------------------------------------------------------------------------- */
 
 export default function MatchDetailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const insets = useSafeAreaInsets();
 
-  const id = String(params?.id ?? "");
+  const id = useMemo(() => coerceString((params as any)?.id), [params]);
 
   const [row, setRow] = useState<FixtureListRow | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const [tickets, setTickets] = useState<SE365Ticket[]>([]);
-  const [ticketsLoading, setTicketsLoading] = useState(false);
 
   const [ticketModal, setTicketModal] = useState(false);
 
-  const followedItem = useFollowStore(
-    useMemo(() => {
-      return (s: any) =>
-        s.followed?.find((x: any) => String(x.fixtureId) === String(id)) ?? null;
-    }, [id])
-  );
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimer = useRef<any>(null);
 
-  const upsertLatestSnapshot = useFollowStore((s) => s.upsertLatestSnapshot);
+  const showToast = useCallback((msg: string) => {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    setToast(msg);
+    toastTimer.current = setTimeout(() => setToast(null), 2000);
+  }, []);
+
+  /* -------------------------------------------------------------------------- */
+  /* Load fixture                                                               */
+  /* -------------------------------------------------------------------------- */
 
   useEffect(() => {
     let cancelled = false;
 
-    async function load() {
+    async function run() {
+      if (!id) return;
+      setLoading(true);
+      setError(null);
+
       try {
-        setLoading(true);
         const r = await getFixtureById(id);
-        if (cancelled) return;
-        setRow(r);
-      } catch (e: any) {
-        setError(e?.message ?? "Failed to load match");
+        if (!cancelled) setRow(r);
+      } catch {
+        if (!cancelled) setError("Failed to load match");
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     }
 
-    load();
+    run();
     return () => {
       cancelled = true;
     };
   }, [id]);
 
-  const se365EventId = useMemo(() => {
-    const anyRow: any = row;
-    return (
-      anyRow?.fixture?.sportsevents365EventId ??
-      anyRow?.fixture?.se365EventId ??
-      null
-    );
-  }, [row]);
+  /* -------------------------------------------------------------------------- */
+  /* Derived                                                                     */
+  /* -------------------------------------------------------------------------- */
 
-  useEffect(() => {
-    if (!se365EventId) return;
+  const home = row?.teams?.home?.name ?? "";
+  const away = row?.teams?.away?.name ?? "";
+  const kickoffIso = row?.fixture?.date ?? null;
 
-    let cancelled = false;
+  const venue = row?.fixture?.venue?.name ?? "";
+  const city = row?.fixture?.venue?.city ?? "";
 
-    async function loadTickets() {
+  const stadiumMeta = useMemo(() => getStadiumByHomeTeam(home), [home]);
+
+  const se365Url = useMemo(() => {
+    const query = `${home} vs ${away}`;
+    return `https://www.sportsevents365.com/search?q=${enc(query)}&a_aid=69834e80ec9d3`;
+  }, [home, away]);
+
+  const officialUrl = useMemo(() => {
+    return `https://www.google.com/search?q=${enc(home + " tickets")}`;
+  }, [home]);
+
+  /* -------------------------------------------------------------------------- */
+  /* Save ticket into trip wallet                                               */
+  /* -------------------------------------------------------------------------- */
+
+  const saveTicketToTrip = useCallback(
+    async (provider: "se365" | "official" | "google", url: string) => {
+      if (!row) return;
+
       try {
-        setTicketsLoading(true);
-        const t = await getSE365Tickets(se365EventId);
-        if (!cancelled) setTickets(t ?? []);
-      } finally {
-        setTicketsLoading(false);
+        const trips = tripsStore.getState().items ?? [];
+        let trip = trips.find((t: any) => String(t.fixtureId) === String(row.fixture.id));
+
+        if (!trip) {
+          trip = await tripsStore.getState().add({
+            fixtureId: row.fixture.id,
+            title: `${home} vs ${away}`,
+            kickoffIso,
+            city: stadiumMeta?.city ?? city ?? null,
+          });
+        }
+
+        await savedItemsStore.add({
+          tripId: trip.id,
+          type: "tickets",
+          title: `${home} vs ${away} tickets`,
+          status: "pending",
+          partnerId: provider,
+          partnerUrl: url,
+          metadata: {
+            fixtureId: row.fixture.id,
+            home,
+            away,
+            kickoffIso,
+          },
+        });
+
+        showToast("Ticket saved to trip");
+      } catch {
+        // silent
       }
-    }
+    },
+    [row, home, away, kickoffIso, stadiumMeta, city, showToast]
+  );
 
-    loadTickets();
-    return () => {
-      cancelled = true;
-    };
-  }, [se365EventId]);
+  /* -------------------------------------------------------------------------- */
+  /* Ticket actions                                                             */
+  /* -------------------------------------------------------------------------- */
 
-  const home = row?.teams?.home?.name ?? "Home";
-  const away = row?.teams?.away?.name ?? "Away";
+  const openSe365 = useCallback(async () => {
+    setTicketModal(false);
+    await saveTicketToTrip("se365", se365Url);
+    await safeOpenUrl(se365Url);
+  }, [saveTicketToTrip, se365Url]);
 
-  const kickoff = formatUkDateTimeMaybe(row?.fixture?.date);
+  const openOfficial = useCallback(async () => {
+    setTicketModal(false);
+    await saveTicketToTrip("official", officialUrl);
+    await safeOpenUrl(officialUrl);
+  }, [saveTicketToTrip, officialUrl]);
 
-  const certainty = getFixtureCertainty(row, {
-    previousKickoffIso: followedItem?.kickoffIso ?? null,
-  });
+  /* -------------------------------------------------------------------------- */
 
-  const bestTicket = useMemo(() => {
-    if (!tickets?.length) return null;
-    return tickets.reduce((a, b) => (a.price < b.price ? a : b));
-  }, [tickets]);
-
-  const ticketTitle = bestTicket
-    ? `Tickets from £${bestTicket.price}`
-    : "Find home tickets";
-
-  const ticketSub = bestTicket
-    ? `${bestTicket.quantity} available`
-    : "Sportsevents365";
-
-  const openTickets = () => {
-    if (bestTicket?.url) Linking.openURL(bestTicket.url);
-  };
-
-  const onPlanTrip = () => {
-    if (!row) return;
-
-    upsertLatestSnapshot(id, {
-      kickoffIso: kickoffIsoOrNull(row),
-      homeName: home,
-      awayName: away,
-      sportsevents365EventId: se365EventId,
-      ticketPrice: bestTicket?.price ?? null,
-    });
-
-    router.push({
-      pathname: "/trip/build",
-      params: { fixtureId: id },
-    } as any);
-  };
-
-  if (loading)
+  if (loading) {
     return (
-      <Background imageSource={getBackground("fixtures")}>
+      <Background imageSource={getBackground("fixtures")} overlayOpacity={0.86}>
         <SafeAreaView style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
           <ActivityIndicator />
         </SafeAreaView>
       </Background>
     );
+  }
 
-  if (error)
+  if (error || !row) {
     return (
-      <Background imageSource={getBackground("fixtures")}>
-        <SafeAreaView>
-          <EmptyState title="Error" message={error} />
+      <Background imageSource={getBackground("fixtures")} overlayOpacity={0.86}>
+        <SafeAreaView style={{ flex: 1 }}>
+          <EmptyState title="Match unavailable" message={error ?? ""} />
         </SafeAreaView>
       </Background>
     );
+  }
+
+  /* -------------------------------------------------------------------------- */
+  /* UI                                                                         */
+  /* -------------------------------------------------------------------------- */
 
   return (
-    <Background imageSource={getBackground("fixtures")}>
-      <Stack.Screen options={{ title: "Match", headerTransparent: true }} />
+    <Background imageSource={getBackground("fixtures")} overlayOpacity={0.86}>
+      <Stack.Screen options={{ headerShown: true, title: "Match", headerTransparent: true }} />
 
       <SafeAreaView style={{ flex: 1 }}>
-        <ScrollView
-          contentContainerStyle={{
-            padding: theme.spacing.lg,
-            paddingBottom: 40 + insets.bottom,
-          }}
-        >
+        <ScrollView contentContainerStyle={{ padding: 20, paddingTop: 100 }}>
           <GlassCard>
-            <Text style={styles.league}>{row?.league?.name}</Text>
+            <Text style={styles.league}>{row.league?.name}</Text>
 
             <Text style={styles.title}>
               {home} vs {away}
             </Text>
 
-            <FixtureCertaintyBadge state={certainty} />
+            <Text style={styles.meta}>{formatUkDateTimeMaybe(kickoffIso)}</Text>
+            <Text style={styles.meta}>
+              {venue} • {city}
+            </Text>
 
-            <Text style={styles.meta}>Kickoff: {kickoff ?? "—"}</Text>
-          </GlassCard>
-
-          <GlassCard>
-            <Pressable style={styles.ticketBtn} onPress={() => setTicketModal(true)}>
-              <Text style={styles.ticketTitle}>{ticketTitle}</Text>
-              <Text style={styles.ticketSub}>{ticketSub}</Text>
-            </Pressable>
-          </GlassCard>
-
-          <GlassCard>
-            <Pressable style={styles.tripBtn} onPress={onPlanTrip}>
-              <Text style={styles.tripTitle}>Plan this trip</Text>
-              <Text style={styles.tripSub}>Pre-fill with this match</Text>
+            <Pressable style={styles.primaryBtn} onPress={() => setTicketModal(true)}>
+              <Text style={styles.primaryBtnText}>Find home tickets</Text>
             </Pressable>
           </GlassCard>
         </ScrollView>
 
+        {toast ? (
+          <View style={styles.toast}>
+            <Text style={styles.toastText}>{toast}</Text>
+          </View>
+        ) : null}
+
         <Modal visible={ticketModal} transparent animationType="fade">
-          <Pressable style={styles.modalBg} onPress={() => setTicketModal(false)}>
-            <View style={styles.modal}>
+          <Pressable style={styles.modalBackdrop} onPress={() => setTicketModal(false)}>
+            <View style={styles.modalCard}>
               <Text style={styles.modalTitle}>Home tickets</Text>
 
-              {ticketsLoading && <ActivityIndicator />}
+              <Pressable style={styles.modalBtn} onPress={openSe365}>
+                <Text style={styles.modalBtnText}>Sportsevents365</Text>
+              </Pressable>
 
-              {bestTicket ? (
-                <>
-                  <Text style={styles.modalPrice}>From £{bestTicket.price}</Text>
-                  <Text style={styles.modalQty}>{bestTicket.quantity} available</Text>
+              <Pressable style={styles.modalBtn} onPress={openOfficial}>
+                <Text style={styles.modalBtnText}>Official club</Text>
+              </Pressable>
 
-                  <Pressable style={styles.modalBtn} onPress={openTickets}>
-                    <Text style={styles.modalBtnText}>Open Sportsevents365</Text>
-                  </Pressable>
-                </>
-              ) : (
-                <Text style={styles.modalEmpty}>
-                  No tickets found yet. Check again later.
-                </Text>
-              )}
+              <Pressable style={styles.modalBtn} onPress={() => setTicketModal(false)}>
+                <Text style={styles.modalBtnText}>Cancel</Text>
+              </Pressable>
             </View>
           </Pressable>
         </Modal>
@@ -250,25 +297,76 @@ export default function MatchDetailScreen() {
   );
 }
 
+/* -------------------------------------------------------------------------- */
+
 const styles = StyleSheet.create({
-  league: { color: theme.colors.primary, fontWeight: "800", fontSize: 12 },
-  title: { color: theme.colors.text, fontSize: 22, fontWeight: "900", marginTop: 6 },
-  meta: { color: theme.colors.textSecondary, marginTop: 8 },
-
-  ticketBtn: { padding: 14 },
-  ticketTitle: { color: theme.colors.text, fontWeight: "900", fontSize: 16 },
-  ticketSub: { color: theme.colors.textSecondary, marginTop: 4 },
-
-  tripBtn: { padding: 14 },
-  tripTitle: { color: theme.colors.text, fontWeight: "900", fontSize: 16 },
-  tripSub: { color: theme.colors.textSecondary },
-
-  modalBg: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", justifyContent: "center", padding: 20 },
-  modal: { backgroundColor: "#111", padding: 20, borderRadius: 14 },
-  modalTitle: { color: "#fff", fontSize: 18, fontWeight: "900" },
-  modalPrice: { color: "#fff", fontSize: 22, fontWeight: "900", marginTop: 10 },
-  modalQty: { color: "#aaa", marginTop: 4 },
-  modalBtn: { marginTop: 14, backgroundColor: "#0f0", padding: 12, borderRadius: 10 },
-  modalBtnText: { color: "#000", fontWeight: "900", textAlign: "center" },
-  modalEmpty: { color: "#aaa", marginTop: 10 },
+  league: {
+    color: theme.colors.primary,
+    fontWeight: "900",
+    fontSize: 12,
+  },
+  title: {
+    marginTop: 8,
+    fontSize: 22,
+    fontWeight: "900",
+    color: theme.colors.text,
+  },
+  meta: {
+    marginTop: 6,
+    color: theme.colors.textSecondary,
+    fontWeight: "700",
+  },
+  primaryBtn: {
+    marginTop: 16,
+    padding: 14,
+    borderRadius: 12,
+    backgroundColor: "rgba(0,255,136,0.15)",
+    borderWidth: 1,
+    borderColor: "rgba(0,255,136,0.4)",
+  },
+  primaryBtnText: {
+    textAlign: "center",
+    fontWeight: "900",
+    color: theme.colors.text,
+  },
+  toast: {
+    position: "absolute",
+    bottom: 40,
+    left: 20,
+    right: 20,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: "rgba(0,0,0,0.8)",
+  },
+  toastText: {
+    color: "#fff",
+    textAlign: "center",
+    fontWeight: "800",
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.7)",
+    justifyContent: "center",
+    padding: 20,
+  },
+  modalCard: {
+    backgroundColor: "#111",
+    borderRadius: 16,
+    padding: 20,
+    gap: 12,
+  },
+  modalTitle: {
+    color: "#fff",
+    fontWeight: "900",
+    fontSize: 16,
+  },
+  modalBtn: {
+    padding: 14,
+    borderRadius: 10,
+    backgroundColor: "rgba(255,255,255,0.05)",
+  },
+  modalBtnText: {
+    color: "#fff",
+    fontWeight: "800",
+  },
 });
