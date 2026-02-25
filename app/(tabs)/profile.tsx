@@ -148,12 +148,6 @@ function normalizeStr(v: unknown) {
   return s ? s : null;
 }
 
-/**
- * Fallback heuristic ONLY when store has kickoffLikelyTbc === null:
- * - If no kickoffIso => TBC
- * - If <= 21 days away => confirmed
- * - Else: if >= 7 followed fixtures in same (leagueId+season+round) share same kickoff minute => likely placeholder => TBC
- */
 function computeLikelyPlaceholderTbcIdsFromFollowed(followed: FollowedMatch[]) {
   const CONFIRMED_WITHIN_DAYS = 21;
   const CLUSTER_THRESHOLD = 7;
@@ -262,17 +256,19 @@ function labelForIata(options: SelectOption[], code: string) {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Storage keys (keep your existing storage for non-origin prefs) */
+/* Storage keys */
 /* -------------------------------------------------------------------------- */
 
 const STORAGE_KEYS = {
-  seenLanding: "yna:seenLanding",
   setupComplete: "yna:setupComplete",
   plan: "yna:plan",
   currency: "yna:profile.currency",
   language: "yna:profile.language",
   budgetTarget: "yna:profile.budgetTarget",
   alerts: "yna:profile.alerts",
+
+  // NEW: Intro control (default true)
+  showIntroOnStartup: "yna:showIntroOnStartup",
 };
 
 type PlanValue = "not_set" | "free" | "premium";
@@ -284,21 +280,17 @@ type AlertsValue = "On" | "Off";
 
 const UK_ORIGIN_OPTIONS: SelectOption[] = [
   { label: "London (All airports) — LON", value: "LON" },
-
   { label: "Manchester — MAN", value: "MAN" },
   { label: "Birmingham — BHX", value: "BHX" },
   { label: "Newcastle — NCL", value: "NCL" },
   { label: "Edinburgh — EDI", value: "EDI" },
   { label: "Glasgow — GLA", value: "GLA" },
-
-  // South West / nearby
   { label: "Bristol (South West) — BRS", value: "BRS" },
   { label: "Exeter (Devon) — EXT", value: "EXT" },
   { label: "Newquay (Cornwall) — NQY", value: "NQY" },
   { label: "Bournemouth (Dorset) — BOH", value: "BOH" },
   { label: "Southampton (South Coast) — SOU", value: "SOU" },
   { label: "Cardiff (Wales) — CWL", value: "CWL" },
-
   { label: "Liverpool — LPL", value: "LPL" },
   { label: "Leeds Bradford — LBA", value: "LBA" },
   { label: "East Midlands — EMA", value: "EMA" },
@@ -345,6 +337,13 @@ function planLabel(plan: PlanValue) {
   return "Not set";
 }
 
+function parseBoolOrDefaultTrue(v: string | null): boolean {
+  const s = (v ?? "").trim().toLowerCase();
+  if (s === "false") return false;
+  if (s === "true") return true;
+  return true;
+}
+
 /* -------------------------------------------------------------------------- */
 /* Screen */
 /* -------------------------------------------------------------------------- */
@@ -373,12 +372,8 @@ export default function ProfileScreen() {
   const [loading, setLoading] = useState(true);
 
   const countryCode = useMemo(() => getCountryCodeBestEffort(), []);
-  const originOptions = useMemo(
-    () => (countryCode === "GB" ? UK_ORIGIN_OPTIONS : EURO_ORIGIN_OPTIONS),
-    [countryCode]
-  );
+  const originOptions = useMemo(() => (countryCode === "GB" ? UK_ORIGIN_OPTIONS : EURO_ORIGIN_OPTIONS), [countryCode]);
 
-  // ✅ Preferences store (preferred origin IATA)
   const [originIata, setOriginIata] = useState<string>(preferencesStore.getPreferredOriginIata());
   const [originLoaded, setOriginLoaded] = useState<boolean>(preferencesStore.getState().loaded);
 
@@ -389,7 +384,12 @@ export default function ProfileScreen() {
   const [alerts, setAlerts] = useState<AlertsValue>("Off");
   const [setupComplete, setSetupComplete] = useState(false);
 
-  const [activePicker, setActivePicker] = useState<null | "origin" | "currency" | "language" | "budget" | "plan">(null);
+  // NEW: intro-on-startup toggle
+  const [showIntroOnStartup, setShowIntroOnStartup] = useState<boolean>(true);
+
+  const [activePicker, setActivePicker] = useState<null | "origin" | "currency" | "language" | "budget" | "plan">(
+    null
+  );
   const closePicker = useCallback(() => setActivePicker(null), []);
 
   const logoSize = useMemo(() => {
@@ -461,15 +461,23 @@ export default function ProfileScreen() {
 
     (async () => {
       try {
-        const [storedSetup, storedPlan, storedCurrency, storedLanguage, storedBudget, storedAlerts] =
-          await Promise.all([
-            storage.getString(STORAGE_KEYS.setupComplete),
-            storage.getString(STORAGE_KEYS.plan),
-            storage.getString(STORAGE_KEYS.currency),
-            storage.getString(STORAGE_KEYS.language),
-            storage.getString(STORAGE_KEYS.budgetTarget),
-            storage.getString(STORAGE_KEYS.alerts),
-          ]);
+        const [
+          storedSetup,
+          storedPlan,
+          storedCurrency,
+          storedLanguage,
+          storedBudget,
+          storedAlerts,
+          storedShowIntro,
+        ] = await Promise.all([
+          storage.getString(STORAGE_KEYS.setupComplete),
+          storage.getString(STORAGE_KEYS.plan),
+          storage.getString(STORAGE_KEYS.currency),
+          storage.getString(STORAGE_KEYS.language),
+          storage.getString(STORAGE_KEYS.budgetTarget),
+          storage.getString(STORAGE_KEYS.alerts),
+          storage.getString(STORAGE_KEYS.showIntroOnStartup),
+        ]);
 
         if (!mounted) return;
 
@@ -479,6 +487,8 @@ export default function ProfileScreen() {
         if (storedLanguage) setLanguage(storedLanguage);
         if (storedBudget) setBudgetTarget(storedBudget);
         if (storedAlerts === "On" || storedAlerts === "Off") setAlerts(storedAlerts);
+
+        setShowIntroOnStartup(parseBoolOrDefaultTrue(storedShowIntro));
       } catch {
         // ignore
       } finally {
@@ -491,7 +501,7 @@ export default function ProfileScreen() {
     };
   }, []);
 
-  // Persist non-origin changes
+  // Persist non-origin changes (including intro toggle)
   useEffect(() => {
     if (loading) return;
 
@@ -503,12 +513,13 @@ export default function ProfileScreen() {
           storage.setString(STORAGE_KEYS.language, language),
           storage.setString(STORAGE_KEYS.budgetTarget, budgetTarget),
           storage.setString(STORAGE_KEYS.alerts, alerts),
+          storage.setString(STORAGE_KEYS.showIntroOnStartup, showIntroOnStartup ? "true" : "false"),
         ]);
       } catch {
         // ignore
       }
     })();
-  }, [alerts, budgetTarget, currency, language, loading, plan]);
+  }, [alerts, budgetTarget, currency, language, loading, plan, showIntroOnStartup]);
 
   const finishSetup = useCallback(async () => {
     try {
@@ -522,7 +533,7 @@ export default function ProfileScreen() {
   }, [router]);
 
   const resetSetup = useCallback(() => {
-    Alert.alert("Reset setup?", "This will make the app show Landing again on next launch.", [
+    Alert.alert("Reset setup?", "This resets your defaults and turns the intro back on for next launch.", [
       { text: "Cancel", style: "cancel" },
       {
         text: "Reset",
@@ -530,13 +541,13 @@ export default function ProfileScreen() {
         onPress: async () => {
           try {
             await Promise.all([
-              storage.setString(STORAGE_KEYS.seenLanding, "false"),
               storage.setString(STORAGE_KEYS.setupComplete, "false"),
               storage.setString(STORAGE_KEYS.plan, "not_set"),
               storage.setString(STORAGE_KEYS.currency, countryCode === "GB" ? "GBP" : "EUR"),
               storage.setString(STORAGE_KEYS.language, "English"),
               storage.setString(STORAGE_KEYS.budgetTarget, "Not Set"),
               storage.setString(STORAGE_KEYS.alerts, "Off"),
+              storage.setString(STORAGE_KEYS.showIntroOnStartup, "true"),
               preferencesStore.setPreferredOriginIata("LON"),
             ]);
 
@@ -547,6 +558,7 @@ export default function ProfileScreen() {
             setBudgetTarget("Not Set");
             setAlerts("Off");
             setOriginIata("LON");
+            setShowIntroOnStartup(true);
 
             Alert.alert("Reset complete", "Landing will show again next time you open the app.");
           } catch {
@@ -676,13 +688,17 @@ export default function ProfileScreen() {
 
   const onSelectOrigin = useCallback(async (v: string) => {
     const code = cleanUpper3(v, "LON");
-    setOriginIata(code); // optimistic
+    setOriginIata(code);
 
     try {
       await preferencesStore.setPreferredOriginIata(code);
     } catch {
       // best-effort
     }
+  }, []);
+
+  const onToggleIntro = useCallback((v: boolean) => {
+    setShowIntroOnStartup(!!v);
   }, []);
 
   return (
@@ -746,7 +762,7 @@ export default function ProfileScreen() {
 
               <Pressable onPress={resetSetup} style={[styles.btn, styles.btnGhost]}>
                 <Text style={styles.btnGhostText}>Reset</Text>
-                <Text style={styles.btnMeta}>Show Landing next launch</Text>
+                <Text style={styles.btnMeta}>Restore defaults</Text>
               </Pressable>
             </View>
           </GlassCard>
@@ -867,14 +883,6 @@ export default function ProfileScreen() {
                     </View>
                   );
                 })}
-
-                {followingCount > followedPreview.length ? (
-                  <View style={styles.followFooterNote}>
-                    <Text style={styles.followFooterText}>
-                      Showing {followedPreview.length} of {followingCount}. (Add “View all” later.)
-                    </Text>
-                  </View>
-                ) : null}
               </>
             )}
           </GlassCard>
@@ -887,6 +895,17 @@ export default function ProfileScreen() {
             </View>
 
             <Row
+              title="Show intro on startup"
+              subtitle="Landing + onboarding will appear when you open the app"
+              last={false}
+              rightSlot={
+                <View style={styles.switchWrap}>
+                  <Switch value={showIntroOnStartup} onValueChange={onToggleIntro} />
+                </View>
+              }
+            />
+
+            <Row
               title="Departure city"
               subtitle="Used to prefill flight searches (IATA city code)"
               value={originSummary}
@@ -894,12 +913,7 @@ export default function ProfileScreen() {
             />
 
             <Row title="Plan" subtitle="Free or Premium" value={planSummary} onPress={() => setActivePicker("plan")} />
-            <Row
-              title="Currency"
-              subtitle="Budgets and comparisons"
-              value={currency}
-              onPress={() => setActivePicker("currency")}
-            />
+            <Row title="Currency" subtitle="Budgets and comparisons" value={currency} onPress={() => setActivePicker("currency")} />
             <Row title="Language" subtitle="App language" value={language} onPress={() => setActivePicker("language")} />
             <Row
               title="Budget"
@@ -1178,8 +1192,6 @@ const styles = StyleSheet.create({
 
   chev: { color: theme.colors.textSecondary, fontSize: 26, marginTop: -2 },
 
-  /* ------------------------------ Following UI ----------------------------- */
-
   followingDefaultsPill: {
     borderRadius: 14,
     borderWidth: 1,
@@ -1269,14 +1281,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   unfollowText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: theme.fontSize.xs },
-
-  followFooterNote: {
-    borderTopWidth: 1,
-    borderTopColor: "rgba(255,255,255,0.10)",
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: 12,
-  },
-  followFooterText: { color: theme.colors.textTertiary, fontWeight: "800", fontSize: theme.fontSize.xs },
 
   footerNote: {
     textAlign: "center",
