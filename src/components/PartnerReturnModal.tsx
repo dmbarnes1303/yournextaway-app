@@ -1,33 +1,55 @@
-import React from "react";
-import { View, Text, Pressable, StyleSheet, Modal } from "react-native";
-import { theme } from "@/src/constants/theme";
+import React, { useState } from "react";
+import { View, Text, Pressable, StyleSheet, Modal, ActivityIndicator } from "react-native";
+import { attachTicketProof } from "@/src/services/ticketAttachment";
 
 type Props = {
   visible: boolean;
-  onBooked: () => void;
-  onNotBooked: () => void;
+  itemId: string | null;
+  onBooked: (itemId: string) => Promise<void>;
+  onClose: () => void;
 };
 
 export default function PartnerReturnModal({
   visible,
+  itemId,
   onBooked,
-  onNotBooked,
+  onClose,
 }: Props) {
+  const [loading, setLoading] = useState(false);
+
+  async function handleBooked() {
+    if (!itemId) return;
+
+    setLoading(true);
+
+    await onBooked(itemId);
+
+    // ask for attachment
+    await attachTicketProof(itemId);
+
+    setLoading(false);
+    onClose();
+  }
+
   return (
     <Modal visible={visible} transparent animationType="fade">
       <View style={styles.backdrop}>
         <View style={styles.card}>
           <Text style={styles.title}>Did you complete booking?</Text>
 
-          <View style={styles.row}>
-            <Pressable style={styles.noBtn} onPress={onNotBooked}>
-              <Text style={styles.noText}>Not yet</Text>
-            </Pressable>
+          {loading ? (
+            <ActivityIndicator />
+          ) : (
+            <View style={styles.row}>
+              <Pressable style={styles.noBtn} onPress={onClose}>
+                <Text style={styles.noText}>Not yet</Text>
+              </Pressable>
 
-            <Pressable style={styles.yesBtn} onPress={onBooked}>
-              <Text style={styles.yesText}>Yes, booked</Text>
-            </Pressable>
-          </View>
+              <Pressable style={styles.yesBtn} onPress={handleBooked}>
+                <Text style={styles.yesText}>Yes, booked</Text>
+              </Pressable>
+            </View>
+          )}
         </View>
       </View>
     </Modal>
