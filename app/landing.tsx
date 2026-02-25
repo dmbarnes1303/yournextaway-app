@@ -1,53 +1,20 @@
 // app/landing.tsx
-import React, { useCallback, useEffect, useState } from "react";
-import { View, Text, StyleSheet, Pressable, Image, ActivityIndicator } from "react-native";
+import React, { useCallback } from "react";
+import { View, Text, StyleSheet, Pressable, Image } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Stack, useRouter } from "expo-router";
 
 import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
 import { theme } from "@/src/constants/theme";
-import storage from "@/src/services/storage";
 
 const LOGO = require("@/src/yna-logo.png");
 
-// Remote Unsplash (stable URL). RN <ImageBackground> will follow redirects.
+// Remote Unsplash (stable URL). RN will follow redirects.
 const LANDING_BG = { uri: "https://unsplash.com/photos/5IS7UghgoMA/download?force=true" };
-
-const STORAGE_KEYS = {
-  disableLanding: "yna:disableLanding", // if "true" -> skip landing (future Profile toggle)
-};
-
-// Tuning knobs (safe, simple)
-const LOGO_SIZE = 156;
-const HERO_GAP = 14;
-const CARD_GAP = 12;
 
 export default function Landing() {
   const router = useRouter();
-  const [booting, setBooting] = useState(true);
-
-  useEffect(() => {
-    let mounted = true;
-
-    (async () => {
-      try {
-        const disabled = (await storage.getString(STORAGE_KEYS.disableLanding))?.trim() === "true";
-        if (disabled) {
-          router.replace("/(tabs)/home");
-          return;
-        }
-      } catch {
-        // ignore: default to showing landing
-      } finally {
-        if (mounted) setBooting(false);
-      }
-    })();
-
-    return () => {
-      mounted = false;
-    };
-  }, [router]);
 
   const handleStart = useCallback(() => {
     router.push("/onboarding");
@@ -64,44 +31,35 @@ export default function Landing() {
       <Background imageSource={LANDING_BG} overlayOpacity={0.56}>
         <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
           <View style={styles.screen}>
-            {/* Top brand block */}
+            {/* Brand */}
             <View style={styles.brand}>
               <Image source={LOGO} style={styles.logo} resizeMode="contain" />
               <Text style={styles.motto}>PLAN • FLY • WATCH • REPEAT</Text>
             </View>
 
-            {/* Center content */}
+            {/* Main CTA card */}
             <View style={styles.center}>
-              {booting ? (
-                <View style={styles.boot}>
-                  <ActivityIndicator />
+              <GlassCard style={styles.card}>
+                <Text style={styles.h1}>European Football Trips, Perfectly Planned</Text>
+
+                <Text style={styles.body}>
+                  Build the whole trip in one place — fixtures, tickets, flights, stays, and the plan for matchday.
+                </Text>
+
+                <View style={styles.actions}>
+                  <Pressable onPress={handleStart} style={[styles.btn, styles.btnPrimary]}>
+                    <Text style={styles.btnPrimaryText}>Get Started</Text>
+                  </Pressable>
+
+                  <Pressable onPress={handleSkip} style={[styles.btn, styles.btnGhost]}>
+                    <Text style={styles.btnGhostText}>Skip for now</Text>
+                  </Pressable>
                 </View>
-              ) : (
-                <GlassCard style={styles.card}>
-                  <Text style={styles.h1}>European Football Trips, Perfectly Planned</Text>
 
-                  <Text style={styles.body}>
-                    Build the whole trip in one place — fixtures, tickets, flights, stays, and the plan for matchday.
-                  </Text>
-
-                  <View style={styles.actions}>
-                    <Pressable onPress={handleStart} style={[styles.btn, styles.btnPrimary]}>
-                      <Text style={styles.btnPrimaryText}>Get Started</Text>
-                    </Pressable>
-
-                    <Pressable onPress={handleSkip} style={[styles.btn, styles.btnGhost]}>
-                      <Text style={styles.btnGhostText}>Skip for now</Text>
-                    </Pressable>
-                  </View>
-
-                  <Text style={styles.note}>
-                    You can turn this off on future openings in your Profile.
-                  </Text>
-                </GlassCard>
-              )}
+                <Text style={styles.note}>You can turn this off on future openings in your Profile.</Text>
+              </GlassCard>
             </View>
 
-            {/* Bottom spacer keeps everything centered and premium */}
             <View style={{ height: 18 }} />
           </View>
         </SafeAreaView>
@@ -123,17 +81,17 @@ const styles = StyleSheet.create({
 
   brand: {
     alignItems: "center",
-    gap: HERO_GAP,
+    gap: 14,
   },
 
   logo: {
-    width: LOGO_SIZE,
-    height: LOGO_SIZE,
+    width: 156,
+    height: 156,
   },
 
   motto: {
     textAlign: "center",
-    color: theme.colors.primary, // your green
+    color: theme.colors.primary,
     fontSize: theme.fontSize.xs,
     fontWeight: theme.fontWeight.black,
     letterSpacing: 1.1,
@@ -148,16 +106,10 @@ const styles = StyleSheet.create({
     paddingTop: 6,
   },
 
-  boot: {
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 160,
-  },
-
   card: {
     padding: theme.spacing.lg,
     borderRadius: 26,
-    gap: CARD_GAP,
+    gap: 12,
   },
 
   h1: {
