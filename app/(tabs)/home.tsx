@@ -106,6 +106,17 @@ function initials(name: string) {
   return `${parts[0][0] ?? ""}${parts[1][0] ?? ""}`.toUpperCase();
 }
 
+function titleCase(input: string) {
+  const s = String(input ?? "").trim();
+  if (!s) return "";
+  // Keep hyphens/apostrophes reasonable, don’t over-engineer locale here.
+  return s
+    .split(/\s+/g)
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(" ");
+}
+
 function tripSummaryLine(t: Trip) {
   const a = t.startDate ? formatUkDateOnly(t.startDate) : "—";
   const b = t.endDate ? formatUkDateOnly(t.endDate) : "—";
@@ -144,10 +155,11 @@ function splitSearchBuckets(results: SearchResult[]) {
   return { teams, cities, venues, countries, leagues };
 }
 
-function LeagueFlag({ code }: { code: string }) {
+function LeagueFlag({ code, size = 18 }: { code: string; size?: number }) {
   const url = getFlagImageUrl(code);
   if (!url) return null;
-  return <Image source={{ uri: url }} style={styles.flag} />;
+  // keep flags as *icons*, not backgrounds
+  return <Image source={{ uri: url }} style={[styles.flag, { width: size, height: Math.round((size * 13) / 18) }]} />;
 }
 
 function TeamCrest({ teamId, size = 14 }: { teamId: number; size?: number }) {
@@ -232,10 +244,9 @@ function pickRandom<T>(arr: T[]): T | null {
 }
 
 /**
- * Premium City Chip: “flag as subtle background”
- * (Matches your idea without needing custom waving assets.)
+ * City chip: normal pill + small flag icon (NOT a background wash)
  */
-function CityChipPremium({
+function CityChipNormal({
   name,
   countryCode,
   onPress,
@@ -244,15 +255,58 @@ function CityChipPremium({
   countryCode: string;
   onPress: () => void;
 }) {
-  const flagUrl = getFlagImageUrl(countryCode, { size: 96 });
-
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.cityPill, pressed && styles.pressedPill]} android_ripple={{ color: "rgba(255,255,255,0.08)" }}>
-      {flagUrl ? <Image source={{ uri: flagUrl }} style={styles.cityFlagBg} resizeMode="cover" /> : null}
-      <View pointerEvents="none" style={styles.cityPillOverlay} />
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [styles.cityPill, pressed && styles.pressedPill]}
+      android_ripple={{ color: "rgba(255,255,255,0.08)" }}
+    >
+      <LeagueFlag code={countryCode} size={16} />
       <Text style={styles.pillText}>{name}</Text>
     </Pressable>
   );
+}
+
+/**
+ * Best-effort extractors for crest + country tint from Trip.
+ * If your Trip model uses different keys, paste src/state/trips and I’ll lock this down.
+ */
+function getTripDisplayCity(t: Trip): string {
+  const anyT: any = t as any;
+  const raw =
+    anyT?.cityName ??
+    anyT?.city ??
+    anyT?.cityLabel ??
+    anyT?.cityId ??
+    anyT?.destinationCity ??
+    "";
+  const s = String(raw ?? "").trim();
+  return s ? titleCase(s) : "Trip";
+}
+
+function getTripPrimaryTeamId(t: Trip): number | null {
+  const anyT: any = t as any;
+  const candidate =
+    anyT?.teamId ??
+    anyT?.primaryTeamId ??
+    anyT?.clubId ??
+    anyT?.homeTeamId ??
+    anyT?.primaryClubId ??
+    anyT?.team?.id ??
+    null;
+  return typeof candidate === "number" && Number.isFinite(candidate) ? candidate : null;
+}
+
+function getTripCountryCode(t: Trip): string | null {
+  const anyT: any = t as any;
+  const raw =
+    anyT?.countryCode ??
+    anyT?.country ??
+    anyT?.nationCode ??
+    anyT?.leagueCountryCode ??
+    null;
+  const cc = String(raw ?? "").trim().toUpperCase();
+  return cc && cc.length === 2 ? cc : null;
 }
 
 export default function HomeScreen() {
@@ -596,6 +650,12 @@ export default function HomeScreen() {
     []
   );
 
+  // Next trip visuals
+  const nextTripDisplayCity = useMemo(() => (nextTrip ? getTripDisplayCity(nextTrip) : "Trip"), [nextTrip]);
+  const nextTripTeamId = useMemo(() => (nextTrip ? getTripPrimaryTeamId(nextTrip) : null), [nextTrip]);
+  const nextTripCountry = useMemo(() => (nextTrip ? getTripCountryCode(nextTrip) : null), [nextTrip]);
+  const nextTripCountryFlagUrl = useMemo(() => (nextTripCountry ? getFlagImageUrl(nextTripCountry, { size: 256 }) : null), [nextTripCountry]);
+
   return (
     <Background imageSource={getBackground("home")} overlayOpacity={0.76}>
       <SafeAreaView style={styles.container} edges={["top"]}>
@@ -712,9 +772,14 @@ export default function HomeScreen() {
               {!showSearchResults ? (
                 <View style={styles.popularBlock}>
                   <Text style={styles.sectionKicker}>Popular Cities</Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.popularRow} decelerationRate="fast">
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.popularRow}
+                    decelerationRate="fast"
+                  >
                     {cities.map((c) => (
-                      <CityChipPremium key={`pc-${c.name}`} name={c.name} countryCode={c.countryCode} onPress={() => setQ(c.name)} />
+                      <CityChipNormal key={`pc-${c.name}`} name={c.name} countryCode={c.countryCode} onPress={() => setQ(c.name)} />
                     ))}
                   </ScrollView>
 
@@ -923,8 +988,23 @@ export default function HomeScreen() {
                         style={({ pressed }) => [styles.nextTripCard, pressed && styles.pressedRow]}
                         android_ripple={{ color: "rgba(255,255,255,0.06)" }}
                       >
-                        <Text style={styles.nextTripKicker}>Next Up</Text>
-                        <Text style={styles.nextTripTitle}>{nextTrip.cityId || "Trip"}</Text>
+                        {/* subtle country wash (only if we actually have a 2-letter country code) */}
+                        {nextTripCountryFlagUrl ? (
+                          <Image source={{ uri: nextTripCountryFlagUrl }} style={styles.tripFlagWash} resizeMode="cover" />
+                        ) : null}
+                        <View pointerEvents="none" style={styles.tripFlagWashOverlay} />
+
+                        <View style={styles.nextTripHeaderRow}>
+                          <Text style={styles.nextTripKicker}>Next Up</Text>
+
+                          {nextTripTeamId ? (
+                            <View style={styles.tripCrestWrap}>
+                              <Image source={{ uri: API_SPORTS_TEAM_LOGO(nextTripTeamId) }} style={styles.tripCrestImg} resizeMode="contain" />
+                            </View>
+                          ) : null}
+                        </View>
+
+                        <Text style={styles.nextTripTitle}>{nextTripDisplayCity}</Text>
                         <Text style={styles.nextTripMeta}>{tripSummaryLine(nextTrip)}</Text>
                       </Pressable>
 
@@ -951,7 +1031,7 @@ export default function HomeScreen() {
             </View>
           ) : null}
 
-          {/* QUICK SHORTCUTS (premium grid, not busy) */}
+          {/* QUICK SHORTCUTS */}
           {!showSearchResults ? (
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
@@ -985,7 +1065,7 @@ export default function HomeScreen() {
             </View>
           ) : null}
 
-          {/* DISCOVER (clean, minimal) */}
+          {/* DISCOVER */}
           {!showSearchResults ? (
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
@@ -1216,7 +1296,7 @@ const styles = StyleSheet.create({
   heroTitle: { color: theme.colors.text, fontSize: 26, lineHeight: 32, fontWeight: theme.fontWeight.black, letterSpacing: 0.2 },
   heroSub: { color: theme.colors.textSecondary, fontSize: 14, lineHeight: 20, fontWeight: theme.fontWeight.bold, opacity: 0.94 },
 
-  // Search
+  // Search (fixed height + vertical centering, no clipping)
   searchBox: {
     marginTop: 6,
     borderWidth: 1,
@@ -1224,7 +1304,7 @@ const styles = StyleSheet.create({
     backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
     borderRadius: 18,
     paddingHorizontal: 14,
-    minHeight: 54,
+    height: 52,
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
@@ -1232,9 +1312,11 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     color: theme.colors.text,
-    fontSize: 15,
+    fontSize: 16,
+    lineHeight: 20,
     fontWeight: theme.fontWeight.bold,
-    paddingVertical: Platform.OS === "ios" ? 14 : 12,
+    paddingVertical: 0,
+    ...(Platform.OS === "android" ? { textAlignVertical: "center" as const } : null),
   },
   clearBtn: {
     paddingVertical: 8,
@@ -1311,17 +1393,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     overflow: "hidden",
     justifyContent: "center",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
-  cityFlagBg: {
-    position: "absolute",
-    right: -10,
-    top: -10,
-    bottom: -10,
-    width: 90,
-    opacity: 0.22,
-    borderRadius: 18,
-  },
-  cityPillOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.06)" },
   pillText: { color: "rgba(242,244,246,0.78)", fontSize: 13, fontWeight: theme.fontWeight.black },
 
   teamPill: {
@@ -1383,7 +1458,7 @@ const styles = StyleSheet.create({
   },
   leaguePillText: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.black },
   leaguePillTextActive: { color: theme.colors.text, fontWeight: theme.fontWeight.black },
-  flag: { width: 18, height: 13, borderRadius: 3, opacity: 0.9 },
+  flag: { borderRadius: 3, opacity: 0.9 },
 
   // Blocks
   block: { borderRadius: 24 },
@@ -1477,7 +1552,30 @@ const styles = StyleSheet.create({
     backgroundColor: Platform.OS === "android" ? "rgba(10,12,14,0.18)" : "rgba(10,12,14,0.14)",
     paddingVertical: 12,
     paddingHorizontal: 12,
+    overflow: "hidden",
   },
+  tripFlagWash: {
+    ...StyleSheet.absoluteFillObject,
+    opacity: 0.045, // subtle, premium
+  },
+  tripFlagWashOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.10)",
+  },
+  nextTripHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  tripCrestWrap: {
+    width: 30,
+    height: 30,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+  tripCrestImg: { width: 20, height: 20, opacity: 0.95 },
+
   nextTripKicker: { color: theme.colors.textTertiary, fontSize: 12, fontWeight: theme.fontWeight.black },
   nextTripTitle: { marginTop: 6, color: theme.colors.text, fontSize: 18, fontWeight: theme.fontWeight.black },
   nextTripMeta: { marginTop: 6, color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold, lineHeight: 18 },
