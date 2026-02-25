@@ -1,9 +1,12 @@
+// app/_layout.tsx
 import "@/src/utils/errorLogger";
 import React, { useEffect, useState } from "react";
 import { Stack } from "expo-router";
 
 import { ProProvider } from "@/src/context/ProContext";
 import preferencesStore from "@/src/state/preferences";
+
+import identity from "@/src/services/identity";
 
 import {
   bootstrapPartnerReturnPrompt,
@@ -17,12 +20,17 @@ export default function RootLayout() {
   const [modalItemId, setModalItemId] = useState<string | null>(null);
 
   useEffect(() => {
+    // 1) Ensure a stable device identity exists (guest path)
+    identity.ensureIdentity().catch(() => null);
+
+    // 2) Partner return detection (your booking loop)
     bootstrapPartnerReturnPrompt();
 
     registerReturnModalHandler((itemId) => {
       setModalItemId(itemId);
     });
 
+    // 3) Preferences
     preferencesStore.load().catch(() => null);
   }, []);
 
