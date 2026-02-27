@@ -1,6 +1,14 @@
 // app/team/[teamKey].tsx
 import React, { useEffect, useMemo, useState } from "react";
-import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  Pressable,
+  ActivityIndicator,
+  Image,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 
@@ -16,19 +24,9 @@ import { LEAGUES, getRollingWindowIso } from "@/src/constants/football";
 import { getFixtures, type FixtureListRow } from "@/src/services/apiFootball";
 import { formatUkDateOnly, formatUkDateTimeMaybe } from "@/src/utils/formatters";
 
-import teamGuidesRegistry, {
-  getTeamGuide,
-  hasTeamGuide,
-  getTeamGuidesDebugSnapshot,
-  normalizeTeamKey,
-} from "@/src/data/teamGuides";
+import { getTeamGuide, normalizeTeamKey } from "@/src/data/teamGuides";
 import { teams as teamsRegistry } from "@/src/data/teams";
 import { usePro } from "@/src/context/ProContext";
-
-function isDev() {
-  // eslint-disable-next-line no-undef
-  return typeof __DEV__ !== "undefined" ? !!__DEV__ : false;
-}
 
 function coerceString(v: unknown): string | null {
   if (typeof v === "string") {
@@ -55,29 +53,6 @@ function titleFromKey(key: string): string {
 function fixtureKey(r: FixtureListRow, idx: number) {
   const id = r?.fixture?.id;
   return id ? String(id) : `idx-${idx}`;
-}
-
-function teamMatchesRow(row: FixtureListRow, teamNorm: string): boolean {
-  const home = String(row?.teams?.home?.name ?? "");
-  const away = String(row?.teams?.away?.name ?? "");
-  const homeNorm = normalizeTeamKey(home);
-  const awayNorm = normalizeTeamKey(away);
-
-  if (!teamNorm) return false;
-
-  if (homeNorm === teamNorm || awayNorm === teamNorm) return true;
-
-  // Fuzzy fallback
-  if (
-    homeNorm.includes(teamNorm) ||
-    awayNorm.includes(teamNorm) ||
-    teamNorm.includes(homeNorm) ||
-    teamNorm.includes(awayNorm)
-  ) {
-    return true;
-  }
-
-  return false;
 }
 
 function isNonEmptyString(x: any): x is string {
@@ -124,13 +99,23 @@ function renderGuideSections(sections: any[], limit?: number) {
   );
 }
 
-function tokenize(s: string): string[] {
-  return String(s ?? "")
-    .trim()
-    .toLowerCase()
-    .split(/[^a-z0-9]+/g)
-    .map((x) => x.trim())
-    .filter(Boolean);
+function getMonthKey(iso?: string | null): string {
+  const s = String(iso ?? "");
+  if (!s) return "";
+  const d = new Date(s);
+  if (!Number.isFinite(d.getTime())) return "";
+  const y = d.getUTCFullYear();
+  const m = d.getUTCMonth() + 1; // 1-12
+  return `${y}-${String(m).padStart(2, "0")}`;
+}
+
+function monthLabel(monthKey: string): string {
+  // monthKey: YYYY-MM
+  const [y, m] = monthKey.split("-").map((x) => Number(x));
+  if (!y || !m) return "Upcoming";
+  const d = new Date(Date.UTC(y, m - 1, 1));
+  const label = d.toLocaleString("en-GB", { month: "long", year: "numeric", timeZone: "UTC" });
+  return label;
 }
 
 export default function TeamScreen() {
@@ -158,75 +143,47 @@ export default function TeamScreen() {
     return titleFromKey(teamKeyNorm || teamKeyRaw);
   }, [guide, teamRec, teamKeyNorm, teamKeyRaw]);
 
-  const teamNormForFixtures = useMemo(
-    () => normalizeTeamKey(teamKeyNorm || teamKeyRaw || teamName),
-    [teamKeyNorm, teamKeyRaw, teamName]
+  const rolling = useMemo(() => getRollingWindowIso(), []);
+  const from = useMemo(
+    () => coerceString((params as any)?.from) ?? rolling.from,
+    [params, rolling.from]
+  );
+  const to = useMemo(
+    () => coerceString((params as any)?.to) ?? rolling.to,
+    [params, rolling.to]
   );
 
-  const rolling = useMemo(() => getRollingWindowIso(), []);
-  const from = useMemo(() => coerceString((params as any)?.from) ?? rolling.from, [params, rolling.from]);
-  const to = useMemo(() => coerceString((params as any)?.to) ?? rolling.to, [params, rolling.to]);
-
   const heroBackground = useMemo(() => {
-    // Best effort: guide first, then registry, then just name/key.
     const stadium = String((guide as any)?.stadium ?? teamRec?.stadium ?? "").trim() || null;
     const city = String((guide as any)?.city ?? teamRec?.city ?? "").trim() || null;
     const country = String((guide as any)?.country ?? teamRec?.country ?? "").trim() || null;
 
-    return getTeamHeroBackground({
+    const url = getTeamHeroBackground({
       teamKey: teamKeyNorm || teamKeyRaw,
       teamName,
       stadium,
       city,
       country,
     });
+
+    // Hard fallback so we never render a blank background.
+    return url || getBackground("home");
   }, [guide, teamRec, teamKeyNorm, teamKeyRaw, teamName]);
 
+  // Best-effort crest sources (support both registry + API rows)
+  const crestUrl = useMemo(() => {
+    const c =
+      String(teamRec?.crestUrl ?? teamRec?.crest ?? teamRec?.logo ?? "").trim() ||
+      String((guide as any)?.crestUrl ?? (guide as any)?.logo ?? "").trim();
+    return c || null;
+  }, [teamRec, guide]);
+
+  const teamNormForFixtures = useMemo(
+    () => normalizeTeamKey(teamKeyNorm || teamKeyRaw || teamName),
+    [teamKeyNorm, teamKeyRaw, teamName]
+  );
+
   const [showLockCard, setShowLockCard] = useState(false);
-
-  const devGuideDebug = useMemo(() => {
-    if (!isDev()) return null;
-
-    const hasNorm = teamKeyNorm ? hasTeamGuide(teamKeyNorm) : false;
-    const hasRaw = teamKeyRaw ? hasTeamGuide(teamKeyRaw) : false;
-
-    const registryKeys = Object.keys(teamGuidesRegistry ?? {});
-    const qTokens = Array.from(new Set(tokenize(teamKeyRaw).concat(tokenize(teamKeyNorm))));
-    const candidates = registryKeys
-      .filter((k) => {
-        if (!k) return false;
-        if (teamKeyNorm && k === teamKeyNorm) return true;
-        if (teamKeyRaw && k === teamKeyRaw) return true;
-        if (qTokens.length === 0) return false;
-        return qTokens.some((t) => k.includes(t));
-      })
-      .slice(0, 12);
-
-    const snap = getTeamGuidesDebugSnapshot?.();
-    const missingSample = Array.isArray(snap?.missing) ? snap.missing.slice(0, 10) : [];
-
-    return {
-      raw: teamKeyRaw,
-      norm: teamKeyNorm,
-      hasRaw,
-      hasNorm,
-      guideKeyResolved: (guide as any)?.teamKey ?? null,
-      teamsRegistryHas: !!teamRec,
-      teamsRegistryName: teamRec?.name ?? null,
-      teamsRegistryLeagueId: typeof teamRec?.leagueId === "number" ? teamRec.leagueId : null,
-      keysTotal: registryKeys.length,
-      candidates,
-      snapshot: snap
-        ? {
-            guidesCount: snap.guidesCount,
-            registryTeamsCount: snap.registryTeamsCount,
-            missingCount: snap.missingCount,
-            duplicatesCount: Array.isArray(snap.duplicates) ? snap.duplicates.length : 0,
-          }
-        : null,
-      missingSample,
-    };
-  }, [teamKeyRaw, teamKeyNorm, guide, teamRec]);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -260,8 +217,12 @@ export default function TeamScreen() {
         for (const r of results) {
           if (r.status !== "fulfilled") continue;
           const list = Array.isArray(r.value) ? (r.value as FixtureListRow[]) : [];
+
           for (const row of list) {
-            if (teamMatchesRow(row, teamNormForFixtures)) merged.push(row);
+            // HOME FIXTURES ONLY:
+            const homeName = String(row?.teams?.home?.name ?? "");
+            const homeNorm = normalizeTeamKey(homeName);
+            if (homeNorm && homeNorm === teamNormForFixtures) merged.push(row);
           }
         }
 
@@ -323,6 +284,19 @@ export default function TeamScreen() {
   const sections = Array.isArray((guide as any)?.sections) ? ((guide as any).sections as any[]) : [];
   const FREE_SECTION_COUNT = 2;
 
+  // Group fixtures by month for readability
+  const grouped = useMemo(() => {
+    const map = new Map<string, FixtureListRow[]>();
+    for (const r of rows) {
+      const key = getMonthKey(String(r?.fixture?.date ?? ""));
+      const k = key || "upcoming";
+      if (!map.has(k)) map.set(k, []);
+      map.get(k)!.push(r);
+    }
+    const keys = Array.from(map.keys()).sort((a, b) => (a === "upcoming" ? 1 : b === "upcoming" ? -1 : a.localeCompare(b)));
+    return keys.map((k) => ({ key: k, label: k === "upcoming" ? "Upcoming" : monthLabel(k), items: map.get(k)! }));
+  }, [rows]);
+
   return (
     <Background imageUrl={heroBackground} overlayOpacity={0.88}>
       <Stack.Screen options={{ title: teamName, headerTransparent: true, headerTintColor: theme.colors.text }} />
@@ -331,12 +305,21 @@ export default function TeamScreen() {
         <ScrollView contentContainerStyle={styles.content}>
           {/* HEADER */}
           <GlassCard style={styles.hero} intensity={24}>
-            <Text style={styles.kicker}>TEAM</Text>
-            <Text style={styles.title}>{teamName}</Text>
+            <View style={styles.heroTopRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.kicker}>TEAM</Text>
+                <Text style={styles.title}>{teamName}</Text>
+                <Text style={styles.sub}>
+                  {formatUkDateOnly(from)} → {formatUkDateOnly(to)}
+                </Text>
+              </View>
 
-            <Text style={styles.sub}>
-              {formatUkDateOnly(from)} → {formatUkDateOnly(to)}
-            </Text>
+              {crestUrl ? (
+                <View style={styles.crestWrap}>
+                  <Image source={{ uri: crestUrl }} style={styles.crest} resizeMode="contain" />
+                </View>
+              ) : null}
+            </View>
 
             <View style={styles.pillsRow}>
               <Pressable
@@ -352,28 +335,6 @@ export default function TeamScreen() {
             </View>
           </GlassCard>
 
-          {/* DEV DEBUG */}
-          {devGuideDebug ? (
-            <GlassCard style={styles.card} intensity={22}>
-              <Text style={styles.devTitle}>DEV: Team Guide Resolution</Text>
-              <View style={{ marginTop: 10, gap: 6 }}>
-                <Text style={styles.devLine}>
-                  raw: <Text style={styles.devStrong}>{devGuideDebug.raw || "—"}</Text>
-                </Text>
-                <Text style={styles.devLine}>
-                  norm: <Text style={styles.devStrong}>{devGuideDebug.norm || "—"}</Text>
-                </Text>
-                <Text style={styles.devLine}>
-                  hasGuide(raw): <Text style={styles.devStrong}>{String(devGuideDebug.hasRaw)}</Text>
-                  {"   "}hasGuide(norm): <Text style={styles.devStrong}>{String(devGuideDebug.hasNorm)}</Text>
-                </Text>
-                <Text style={styles.devLine}>
-                  resolved guideKey: <Text style={styles.devStrong}>{devGuideDebug.guideKeyResolved ?? "—"}</Text>
-                </Text>
-              </View>
-            </GlassCard>
-          ) : null}
-
           {/* GUIDE (PRO-GATED) */}
           <GlassCard style={styles.card} intensity={22}>
             <View style={styles.sectionHeaderRow}>
@@ -382,7 +343,7 @@ export default function TeamScreen() {
             </View>
 
             {!guide ? (
-              <EmptyState title="Guide coming soon" message="No guide exists for this teamKey (or the key doesn’t match)." />
+              <EmptyState title="Guide coming soon" message="No guide exists for this team yet." />
             ) : pro.isPro ? (
               renderGuideSections(sections)
             ) : (
@@ -414,10 +375,15 @@ export default function TeamScreen() {
             )}
           </GlassCard>
 
-          {/* FIXTURES */}
+          {/* FIXTURES (HOME ONLY + CRESTS) */}
           <GlassCard style={styles.card} intensity={22}>
-            <Text style={styles.sectionTitle}>Fixtures for {teamName}</Text>
-            <Text style={styles.sectionSub}>Filtered from your supported leagues list, within the rolling window.</Text>
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.sectionTitle}>Home fixtures</Text>
+              <Text style={styles.sectionBadge}>Next {Math.min(20, rows.length)}</Text>
+            </View>
+            <Text style={styles.sectionSub}>
+              Showing only fixtures where <Text style={{ fontWeight: "900", color: theme.colors.text }}>{teamName}</Text> is the home team (within your rolling window).
+            </Text>
 
             {loading ? (
               <View style={styles.center}>
@@ -430,42 +396,82 @@ export default function TeamScreen() {
 
             {!loading && !error && rows.length === 0 ? (
               <EmptyState
-                title="No fixtures found"
-                message="Either this club isn’t in your supported leagues list, or the rolling window doesn’t include their matches."
+                title="No home fixtures found"
+                message="Either this club isn’t in your supported leagues list, or the rolling window doesn’t include their home matches."
               />
             ) : null}
 
             {!loading && !error && rows.length > 0 ? (
               <View style={styles.list}>
-                {rows.slice(0, 20).map((r, idx) => {
-                  const id = r?.fixture?.id ? String(r.fixture.id) : null;
-                  const home = r?.teams?.home?.name ?? "Home";
-                  const away = r?.teams?.away?.name ?? "Away";
-                  const kick = formatUkDateTimeMaybe(r?.fixture?.date);
-                  const venue = r?.fixture?.venue?.name ?? "";
-                  const city = r?.fixture?.venue?.city ?? "";
-                  const extra = [venue, city].filter(Boolean).join(" • ");
-                  const line2 = extra ? `${kick} • ${extra}` : kick;
+                {grouped.map((g) => (
+                  <View key={g.key} style={{ gap: 10 }}>
+                    <Text style={styles.monthHeader}>{g.label}</Text>
 
-                  return (
-                    <View key={fixtureKey(r, idx)} style={styles.fixtureRow}>
-                      <Pressable onPress={() => (id ? goMatch(id) : null)} style={{ flex: 1 }} disabled={!id}>
-                        <Text style={styles.rowTitle}>
-                          {home} vs {away}
-                        </Text>
-                        <Text style={styles.rowMeta}>{line2}</Text>
-                      </Pressable>
+                    {g.items.slice(0, 20).map((r, idx) => {
+                      const id = r?.fixture?.id ? String(r.fixture.id) : null;
 
-                      <Pressable
-                        disabled={!id}
-                        onPress={() => (id ? goBuildTrip(id) : null)}
-                        style={[styles.planBtn, !id && styles.disabled]}
-                      >
-                        <Text style={styles.planBtnText}>Plan Trip</Text>
-                      </Pressable>
-                    </View>
-                  );
-                })}
+                      const home = r?.teams?.home?.name ?? "Home";
+                      const away = r?.teams?.away?.name ?? "Away";
+
+                      const homeLogo = String((r as any)?.teams?.home?.logo ?? "").trim() || null;
+                      const awayLogo = String((r as any)?.teams?.away?.logo ?? "").trim() || null;
+
+                      const kick = formatUkDateTimeMaybe(r?.fixture?.date);
+                      const venue = r?.fixture?.venue?.name ?? "";
+                      const city = r?.fixture?.venue?.city ?? "";
+                      const extra = [venue, city].filter(Boolean).join(" • ");
+                      const line2 = extra ? `${kick} • ${extra}` : kick;
+
+                      return (
+                        <View key={fixtureKey(r, idx)} style={styles.fixtureRow}>
+                          <Pressable onPress={() => (id ? goMatch(id) : null)} style={{ flex: 1 }} disabled={!id}>
+                            <View style={styles.rowTitleRow}>
+                              <View style={styles.crestRow}>
+                                {homeLogo ? (
+                                  <Image source={{ uri: homeLogo }} style={styles.rowCrest} resizeMode="contain" />
+                                ) : (
+                                  <View style={styles.rowCrestFallback} />
+                                )}
+                                <Text style={styles.rowTitle} numberOfLines={1}>
+                                  {home}
+                                </Text>
+                              </View>
+
+                              <Text style={styles.vs}>vs</Text>
+
+                              <View style={[styles.crestRow, { justifyContent: "flex-end" }]}>
+                                <Text style={styles.rowTitle} numberOfLines={1}>
+                                  {away}
+                                </Text>
+                                {awayLogo ? (
+                                  <Image source={{ uri: awayLogo }} style={styles.rowCrest} resizeMode="contain" />
+                                ) : (
+                                  <View style={styles.rowCrestFallback} />
+                                )}
+                              </View>
+                            </View>
+
+                            <Text style={styles.rowMeta}>{line2}</Text>
+
+                            <View style={styles.tagsRow}>
+                              <View style={styles.tag}>
+                                <Text style={styles.tagText}>HOME</Text>
+                              </View>
+                            </View>
+                          </Pressable>
+
+                          <Pressable
+                            disabled={!id}
+                            onPress={() => (id ? goBuildTrip(id) : null)}
+                            style={[styles.planBtn, !id && styles.disabled]}
+                          >
+                            <Text style={styles.planBtnText}>Plan Trip</Text>
+                          </Pressable>
+                        </View>
+                      );
+                    })}
+                  </View>
+                ))}
               </View>
             ) : null}
           </GlassCard>
@@ -487,6 +493,20 @@ const styles = StyleSheet.create({
   },
 
   hero: { padding: theme.spacing.lg },
+  heroTopRow: { flexDirection: "row", gap: 14, alignItems: "center" },
+
+  crestWrap: {
+    width: 54,
+    height: 54,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    backgroundColor: "rgba(0,0,0,0.22)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  crest: { width: 40, height: 40 },
+
   kicker: { color: theme.colors.primary, fontWeight: "900", fontSize: theme.fontSize.xs, letterSpacing: 0.6 },
   title: { marginTop: 8, color: theme.colors.text, fontSize: theme.fontSize.xl, fontWeight: "900" },
   sub: { marginTop: 8, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, fontWeight: "800" },
@@ -508,7 +528,13 @@ const styles = StyleSheet.create({
   sectionTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.md },
   sectionBadge: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: theme.fontSize.xs },
 
-  sectionSub: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18, fontWeight: "800" },
+  sectionSub: {
+    marginTop: 6,
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSize.sm,
+    lineHeight: 18,
+    fontWeight: "800",
+  },
 
   guideSection: { paddingTop: 8, paddingBottom: 2, borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.08)" },
   blockTitle: { marginTop: 6, color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
@@ -551,7 +577,9 @@ const styles = StyleSheet.create({
   center: { paddingVertical: 14, alignItems: "center", gap: 10, marginTop: 10 },
   muted: { fontSize: theme.fontSize.sm, color: theme.colors.textSecondary, fontWeight: "800" },
 
-  list: { marginTop: 10, gap: 10 },
+  list: { marginTop: 10, gap: 16 },
+  monthHeader: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm, opacity: 0.95 },
+
   fixtureRow: {
     flexDirection: "row",
     gap: 12,
@@ -560,8 +588,35 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "rgba(255,255,255,0.08)",
   },
+
+  rowTitleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
+  crestRow: { flex: 1, flexDirection: "row", alignItems: "center", gap: 8 },
+
+  rowCrest: { width: 18, height: 18 },
+  rowCrestFallback: {
+    width: 18,
+    height: 18,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+  },
+
   rowTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.md },
-  rowMeta: { marginTop: 4, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, fontWeight: "700" },
+  vs: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: theme.fontSize.xs },
+
+  rowMeta: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, fontWeight: "700" },
+
+  tagsRow: { marginTop: 8, flexDirection: "row", gap: 8 },
+  tag: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+  },
+  tagText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.xs },
 
   planBtn: {
     paddingVertical: 10,
@@ -574,8 +629,4 @@ const styles = StyleSheet.create({
   planBtnText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.xs },
 
   disabled: { opacity: 0.5 },
-
-  devTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
-  devLine: { color: theme.colors.textSecondary, fontWeight: "800", fontSize: theme.fontSize.xs, lineHeight: 16 },
-  devStrong: { color: theme.colors.text, fontWeight: "900" },
 });
