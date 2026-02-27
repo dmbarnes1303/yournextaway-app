@@ -29,7 +29,9 @@ const BACKGROUNDS: Record<BackgroundKey, ImageSourcePropType> = {
   fixtures: require("@/src/assets/backgrounds/fixtures.png"),
   trips: require("@/src/assets/backgrounds/trips.png"),
   wallet: require("@/src/assets/backgrounds/wallet.png"),
-  profile: require("@/src/assets/backgrounds/profile.png"),
+
+  // PROFILE: calmer, less busy than the current profile art
+  profile: require("@/src/assets/backgrounds/trips.png"),
 };
 
 /** Preferred name */
