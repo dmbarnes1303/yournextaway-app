@@ -9,6 +9,7 @@ import {
   TextInput,
   ActivityIndicator,
   Platform,
+  Image,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
@@ -95,6 +96,19 @@ function parseIsoToDate(iso?: string | null): Date | null {
   return Number.isFinite(d.getTime()) ? d : null;
 }
 
+function daysBetweenIso(aIso: string, bIso: string) {
+  const a = parseIsoToDate(aIso);
+  const b = parseIsoToDate(bIso);
+  if (!a || !b) return null;
+  const d = Math.round((b.getTime() - a.getTime()) / (1000 * 60 * 60 * 24));
+  return d;
+}
+
+function findLeagueOptionByLeagueId(leagueId?: number | null) {
+  if (!leagueId) return null;
+  return LEAGUES.find((l) => l.leagueId === leagueId) ?? null;
+}
+
 function findCountryCodeForLeagueId(leagueId: number | null | undefined): string | undefined {
   if (typeof leagueId !== "number") return undefined;
   const l = LEAGUES.find((x) => x.leagueId === leagueId);
@@ -165,6 +179,21 @@ async function computePlaceholderIdsForFixture(fx: FixtureListRow | null): Promi
   }
 }
 
+function safeUri(u: unknown): string | null {
+  const s = String(u ?? "").trim();
+  if (!s) return null;
+  if (!/^https?:\/\//i.test(s)) return null;
+  return s;
+}
+
+function weekendHint(isoMaybe: unknown): "Weekend" | "Midweek" | null {
+  const d = parseIsoToDate(String(isoMaybe ?? ""));
+  if (!d) return null;
+  const day = d.getDay(); // 0 Sun ... 6 Sat
+  if (day === 0 || day === 6) return "Weekend";
+  return "Midweek";
+}
+
 /* -------------------------------------------------------------------------- */
 /* screen */
 /* -------------------------------------------------------------------------- */
@@ -191,7 +220,7 @@ export default function TripBuildScreen() {
   const [placeholderTbcIds, setPlaceholderTbcIds] = useState<Set<string>>(new Set());
 
   const [search, setSearch] = useState("");
-  const [visibleCount, setVisibleCount] = useState(12);
+  const [visibleCount, setVisibleCount] = useState(14);
 
   const [selectedFixture, setSelectedFixture] = useState<FixtureListRow | null>(null);
 
@@ -210,6 +239,24 @@ export default function TripBuildScreen() {
     if (!t) return;
     setNotes((prev) => (cleanText(prev) ? prev : t));
   }, []);
+
+  /* -------------------------------------------------------------------------- */
+  /* League options */
+  /* -------------------------------------------------------------------------- */
+
+  const ALL_LEAGUES: LeagueOption & { key: string } = useMemo(
+    () => ({
+      label: "All leagues",
+      leagueId: 0,
+      season: LEAGUES[0].season,
+      countryCode: "EU",
+      key: "all",
+    }),
+    []
+  );
+
+  const leagueOptions = useMemo(() => [ALL_LEAGUES, ...LEAGUES], [ALL_LEAGUES]);
+  const [selectedLeague, setSelectedLeague] = useState<LeagueOption>(ALL_LEAGUES);
 
   /* -------------------------------------------------------------------------- */
   /* Load edit trip */
@@ -249,6 +296,11 @@ export default function TripBuildScreen() {
 
           const ids = await computePlaceholderIdsForFixture(fx);
           if (!cancelled) setPlaceholderTbcIds(ids);
+
+          // set selected league to match league for context (best effort)
+          const lid = fx?.league?.id ?? null;
+          const opt = findLeagueOptionByLeagueId(typeof lid === "number" ? lid : null);
+          if (opt) setSelectedLeague(opt);
         } else {
           setPlaceholderTbcIds(new Set());
         }
@@ -298,6 +350,11 @@ export default function TripBuildScreen() {
         if (routeCityArea) {
           setNotesIfEmpty(`Stay area: ${routeCityArea}`);
         }
+
+        // set selected league to match league for context (best effort)
+        const lid = r?.league?.id ?? null;
+        const opt = findLeagueOptionByLeagueId(typeof lid === "number" ? lid : null);
+        if (opt) setSelectedLeague(opt);
       } catch {
         if (!cancelled) setError("Couldn’t load that fixture.");
       } finally {
@@ -312,22 +369,8 @@ export default function TripBuildScreen() {
   }, [routeFixtureId, isPrefilledFlow, routeCityArea, setNotesIfEmpty]);
 
   /* -------------------------------------------------------------------------- */
-  /* Fallback picker mode (only when NOT prefilled) */
+  /* Load fixtures (picker mode only) */
   /* -------------------------------------------------------------------------- */
-
-  const ALL_LEAGUES: LeagueOption & { key: string } = useMemo(
-    () => ({
-      label: "All leagues",
-      leagueId: 0,
-      season: LEAGUES[0].season,
-      countryCode: "EU",
-      key: "all",
-    }),
-    []
-  );
-
-  const leagueOptions = useMemo(() => [ALL_LEAGUES, ...LEAGUES], [ALL_LEAGUES]);
-  const [selectedLeague, setSelectedLeague] = useState<LeagueOption>(ALL_LEAGUES);
 
   useEffect(() => {
     if (isEditing) return;
@@ -346,6 +389,8 @@ export default function TripBuildScreen() {
         let res: FixtureListRow[] = [];
 
         if (selectedLeague.leagueId === 0) {
+          // Keep it bounded: all leagues is expensive. This is a Trip Hub, not a crawler.
+          // We still do it, but we’ll show fewer by default and sort intelligently.
           const batches = await Promise.all(
             LEAGUES.map((l) => getFixtures({ league: l.leagueId, season: l.season, from, to }))
           );
@@ -356,9 +401,27 @@ export default function TripBuildScreen() {
         }
 
         if (!cancelled) {
-          res.sort((a, b) => String(a?.fixture?.date ?? "").localeCompare(String(b?.fixture?.date ?? "")));
-          setRows(res);
-          setPlaceholderTbcIds(computeLikelyPlaceholderTbcIds(res));
+          // Precompute placeholder IDs for TBC inference in this list
+          const placeholder = computeLikelyPlaceholderTbcIds(res);
+          setPlaceholderTbcIds(placeholder);
+
+          // Trip-centric sort:
+          // 1) kickoff confirmed first
+          // 2) then date asc
+          const scored = res.map((r) => {
+            const iso = String(r?.fixture?.date ?? "");
+            const tbc = isKickoffTbc(r, placeholder);
+            return { r, iso, tbc };
+          });
+
+          scored.sort((a, b) => {
+            const aConf = a.tbc ? 1 : 0;
+            const bConf = b.tbc ? 1 : 0;
+            if (aConf !== bConf) return aConf - bConf; // confirmed first (0), TBC later (1)
+            return String(a.iso).localeCompare(String(b.iso));
+          });
+
+          setRows(scored.map((x) => x.r));
         }
       } catch {
         if (!cancelled) setError("Failed to load fixtures.");
@@ -390,6 +453,21 @@ export default function TripBuildScreen() {
   const visibleRows = useMemo(() => filtered.slice(0, visibleCount), [filtered, visibleCount]);
 
   /* -------------------------------------------------------------------------- */
+  /* Selection side effects (dates, tbc inference) */
+  /* -------------------------------------------------------------------------- */
+
+  useEffect(() => {
+    if (!selectedFixture) return;
+
+    const d0 = fixtureDateOnly(selectedFixture);
+    if (d0) {
+      const start = clampFromIsoToTomorrow(d0);
+      setStartIso(start);
+      setEndTouched(false);
+    }
+  }, [selectedFixture]);
+
+  /* -------------------------------------------------------------------------- */
   /* Save trip */
   /* -------------------------------------------------------------------------- */
 
@@ -403,7 +481,7 @@ export default function TripBuildScreen() {
 
   const onSave = useCallback(async () => {
     if (!selectedFixture?.fixture?.id) {
-      setError("Select a fixture first.");
+      setError("Select a match first.");
       return;
     }
 
@@ -474,7 +552,7 @@ export default function TripBuildScreen() {
   ]);
 
   /* -------------------------------------------------------------------------- */
-  /* UI */
+  /* UI computed */
   /* -------------------------------------------------------------------------- */
 
   const selectedTitle = useMemo(() => {
@@ -483,27 +561,58 @@ export default function TripBuildScreen() {
     return `${h} vs ${a}`;
   }, [selectedFixture]);
 
-  const selectedKick = useMemo(() => {
-    if (!selectedFixture) return "TBC";
+  const selectedKickLine = useMemo(() => {
+    if (!selectedFixture) return "Kickoff: TBC";
     const tbc = isKickoffTbc(selectedFixture, placeholderTbcIds);
-    if (tbc) return "TBC";
-    return formatUkDateTimeMaybe(selectedFixture?.fixture?.date) || "TBC";
+    if (tbc) return "Kickoff: TBC";
+    const f = formatUkDateTimeMaybe(selectedFixture?.fixture?.date);
+    return f ? `Kickoff: ${f}` : "Kickoff: TBC";
   }, [selectedFixture, placeholderTbcIds]);
 
   const selectedVenueLine = useMemo(() => {
-    if (!selectedFixture) return "Venue TBC";
+    if (!selectedFixture) return "Venue: —";
     const v = cleanText(selectedFixture?.fixture?.venue?.name);
     const c = cleanText(selectedFixture?.fixture?.venue?.city);
-    if (!v && !c) return "Venue TBC";
-    return [v, c].filter(Boolean).join(" • ");
+    const parts = [v, c].filter(Boolean);
+    return parts.length ? parts.join(" • ") : "Venue: —";
   }, [selectedFixture]);
+
+  const tripLength = useMemo(() => {
+    const d = daysBetweenIso(startIso, endIso);
+    if (d == null) return null;
+    const nights = Math.max(0, d);
+    return `${nights} night${nights === 1 ? "" : "s"}`;
+  }, [startIso, endIso]);
+
+  const headerTitle = useMemo(() => (isEditing ? "Edit Trip" : "Build Trip"), [isEditing]);
+
+  const intentSub = useMemo(() => {
+    if (isEditing) return "Update your trip hub details.";
+    return "Pick a match, then we’ll create a Trip Hub for flights, stay, tickets, and plans.";
+  }, [isEditing]);
+
+  const selectedLeagueLabel = useMemo(() => {
+    if (selectedLeague.leagueId === 0) return "All leagues";
+    return selectedLeague.label;
+  }, [selectedLeague]);
+
+  const dateWindowLabel = useMemo(() => {
+    const nights = tripLength ? ` • ${tripLength}` : "";
+    return `${startIso} → ${endIso}${nights}`;
+  }, [startIso, endIso, tripLength]);
+
+  const showPickerMode = !isPrefilledFlow && !isEditing;
+
+  /* -------------------------------------------------------------------------- */
+  /* UI */
+  /* -------------------------------------------------------------------------- */
 
   return (
     <Background imageSource={getBackground("trips")} overlayOpacity={0.86}>
       <Stack.Screen
         options={{
           headerShown: true,
-          title: isEditing ? "Edit Trip" : "Build Trip",
+          title: headerTitle,
           headerTransparent: true,
           headerTintColor: theme.colors.text,
         }}
@@ -518,9 +627,30 @@ export default function TripBuildScreen() {
             gap: theme.spacing.lg,
           }}
           keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
+          {/* INTENT HEADER */}
+          <GlassCard style={styles.headerCard} level="subtle">
+            <Text style={styles.bigTitle}>{isEditing ? "Edit your Trip Hub" : "Build a Trip Hub"}</Text>
+            <Text style={styles.bigSub}>{intentSub}</Text>
+
+            <View style={styles.chipRow}>
+              <View style={styles.chip}>
+                <Text style={styles.chipKicker}>Trip</Text>
+                <Text style={styles.chipValue}>{dateWindowLabel}</Text>
+              </View>
+
+              <View style={styles.chip}>
+                <Text style={styles.chipKicker}>League</Text>
+                <Text style={styles.chipValue} numberOfLines={1}>
+                  {selectedLeagueLabel}
+                </Text>
+              </View>
+            </View>
+          </GlassCard>
+
           {(loading || prefillLoading) && (
-            <GlassCard>
+            <GlassCard level="subtle">
               <View style={styles.center}>
                 <ActivityIndicator />
                 <Text style={styles.muted}>Loading…</Text>
@@ -529,25 +659,69 @@ export default function TripBuildScreen() {
           )}
 
           {!prefillLoading && error && (
-            <GlassCard>
+            <GlassCard level="subtle">
               <EmptyState title="Problem" message={error} />
             </GlassCard>
           )}
 
-          {isPrefilledFlow && !prefillLoading && selectedFixture ? (
-            <GlassCard>
+          {/* PREFILLED / EDIT SUMMARY */}
+          {!prefillLoading && selectedFixture ? (
+            <GlassCard level="default">
               <Text style={styles.h1}>Selected match</Text>
 
-              <View style={styles.summaryBox}>
-                <Text style={styles.summaryTitle}>{selectedTitle}</Text>
-                <Text style={styles.summaryMeta}>{selectedKick}</Text>
-                <Text style={styles.summaryMeta}>{selectedVenueLine}</Text>
+              <View style={styles.selectedRow}>
+                <View style={styles.selectedLeft}>
+                  <View style={styles.teamRow}>
+                    <View style={styles.crestStack}>
+                      <Image
+                        source={{ uri: safeUri(selectedFixture?.teams?.home?.logo) ?? undefined }}
+                        style={styles.crest}
+                      />
+                      <Image
+                        source={{ uri: safeUri(selectedFixture?.teams?.away?.logo) ?? undefined }}
+                        style={[styles.crest, { marginLeft: -10 }]}
+                      />
+                    </View>
+
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.selectedTitle} numberOfLines={1}>
+                        {selectedTitle}
+                      </Text>
+
+                      <Text style={styles.selectedMeta}>{selectedKickLine}</Text>
+                      <Text style={styles.selectedMeta}>{selectedVenueLine}</Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.badgeRow}>
+                    {isKickoffTbc(selectedFixture, placeholderTbcIds) ? (
+                      <>
+                        <View style={[styles.badge, styles.badgeTbc]}>
+                          <Text style={[styles.badgeText, styles.badgeTextTbc]}>Kickoff TBC</Text>
+                        </View>
+                        <View style={styles.badge}>
+                          <Text style={styles.badgeText}>TV schedule pending</Text>
+                        </View>
+                      </>
+                    ) : (
+                      <View style={[styles.badge, styles.badgeConfirmed]}>
+                        <Text style={[styles.badgeText, styles.badgeTextConfirmed]}>Kickoff confirmed</Text>
+                      </View>
+                    )}
+
+                    {weekendHint(selectedFixture?.fixture?.date) ? (
+                      <View style={styles.badge}>
+                        <Text style={styles.badgeText}>{weekendHint(selectedFixture?.fixture?.date)}</Text>
+                      </View>
+                    ) : null}
+                  </View>
+                </View>
               </View>
 
               {routeCityArea ? (
                 <View style={styles.infoBar}>
                   <Text style={styles.infoText}>
-                    Prefilled stay area: <Text style={{ fontWeight: "900" }}>{routeCityArea}</Text>
+                    Prefilled stay area: <Text style={{ fontWeight: "900", color: theme.colors.text }}>{routeCityArea}</Text>
                   </Text>
                 </View>
               ) : null}
@@ -564,10 +738,15 @@ export default function TripBuildScreen() {
             </GlassCard>
           ) : null}
 
-          {!isPrefilledFlow && !prefillLoading && !error ? (
-            <GlassCard>
+          {/* PICKER MODE */}
+          {showPickerMode && !prefillLoading && !error ? (
+            <GlassCard level="default">
               <Text style={styles.h1}>Pick a match</Text>
+              <Text style={styles.hint}>
+                This isn’t the Fixtures tab. Pick a match to create a Trip Hub with planning context.
+              </Text>
 
+              {/* League chips (keep it tight) */}
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 12 }}>
                 {leagueOptions.map((l) => {
                   const active = l.leagueId === selectedLeague.leagueId;
@@ -576,7 +755,7 @@ export default function TripBuildScreen() {
                       key={(l as any).key ?? String(l.leagueId)}
                       onPress={() => {
                         setSelectedLeague(l);
-                        setVisibleCount(12);
+                        setVisibleCount(14);
                       }}
                       style={[styles.leaguePill, active && styles.leaguePillActive]}
                     >
@@ -590,73 +769,170 @@ export default function TripBuildScreen() {
                 value={search}
                 onChangeText={(t) => {
                   setSearch(t);
-                  setVisibleCount(12);
+                  setVisibleCount(14);
                 }}
-                placeholder="Search team / venue / city / league"
+                placeholder="Search team / city / venue / league"
                 placeholderTextColor={theme.colors.textSecondary}
                 style={styles.search}
               />
 
               {visibleRows.length === 0 && !loading ? (
-                <EmptyState title="No fixtures" message="Try another league or search term." />
+                <View style={{ marginTop: 10 }}>
+                  <EmptyState title="No fixtures" message="Try another league or search term." />
+                </View>
               ) : null}
 
-              {visibleRows.map((r, i) => {
-                const id = fixtureIdStr(r);
-                const home = r?.teams?.home?.name ?? "Home";
-                const away = r?.teams?.away?.name ?? "Away";
-                const selected = fixtureIdStr(selectedFixture) === id;
+              {/* Fixture cards with crests + league flag */}
+              <View style={{ marginTop: 10 }}>
+                {visibleRows.map((r, i) => {
+                  const id = fixtureIdStr(r);
+                  const selected = fixtureIdStr(selectedFixture) === id;
 
-                const tbc = isKickoffTbc(r, placeholderTbcIds);
-                const kick = tbc ? "TBC" : formatUkDateTimeMaybe(r?.fixture?.date) || "TBC";
+                  const home = cleanText(r?.teams?.home?.name) || "Home";
+                  const away = cleanText(r?.teams?.away?.name) || "Away";
 
-                const v = cleanText(r?.fixture?.venue?.name);
-                const c = cleanText(r?.fixture?.venue?.city);
-                const vc = [v, c].filter(Boolean).join(" • ");
+                  const tbc = isKickoffTbc(r, placeholderTbcIds);
+                  const kick = tbc ? "Kickoff: TBC" : `Kickoff: ${formatUkDateTimeMaybe(r?.fixture?.date) || "TBC"}`;
 
-                return (
-                  <Pressable
-                    key={id || String(i)}
-                    onPress={async () => {
-                      setSelectedFixture(r);
-                      const ids = await computePlaceholderIdsForFixture(r);
-                      setPlaceholderTbcIds(ids);
-                    }}
-                    style={[styles.pickRow, selected && styles.pickRowSelected]}
-                  >
-                    <Text style={styles.rowTitle}>
-                      {home} vs {away}
-                    </Text>
-                    <Text style={styles.rowMeta}>{kick}</Text>
-                    {vc ? <Text style={styles.rowMetaSecondary}>{vc}</Text> : null}
-                  </Pressable>
-                );
-              })}
+                  const v = cleanText(r?.fixture?.venue?.name);
+                  const c = cleanText(r?.fixture?.venue?.city);
+                  const vc = [v, c].filter(Boolean).join(" • ");
+
+                  const leagueName = cleanText(r?.league?.name);
+                  const leagueFlag = safeUri((r as any)?.league?.flag);
+
+                  const homeLogo = safeUri(r?.teams?.home?.logo);
+                  const awayLogo = safeUri(r?.teams?.away?.logo);
+
+                  return (
+                    <Pressable
+                      key={id || String(i)}
+                      onPress={async () => {
+                        setSelectedFixture(r);
+                        const ids = await computePlaceholderIdsForFixture(r);
+                        setPlaceholderTbcIds(ids);
+                        setError(null);
+                      }}
+                      style={({ pressed }) => [
+                        styles.fxCard,
+                        selected && styles.fxCardSelected,
+                        { opacity: pressed ? 0.9 : 1 },
+                      ]}
+                    >
+                      <View style={styles.fxTop}>
+                        <View style={styles.fxLeft}>
+                          <View style={styles.crestStack}>
+                            {homeLogo ? <Image source={{ uri: homeLogo }} style={styles.crest} /> : <View style={styles.crestFallback} />}
+                            {awayLogo ? (
+                              <Image source={{ uri: awayLogo }} style={[styles.crest, { marginLeft: -10 }]} />
+                            ) : (
+                              <View style={[styles.crestFallback, { marginLeft: -10 }]} />
+                            )}
+                          </View>
+
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.fxTitle} numberOfLines={1}>
+                              {home} vs {away}
+                            </Text>
+
+                            <Text style={styles.fxMeta} numberOfLines={1}>
+                              {kick}
+                            </Text>
+
+                            {vc ? (
+                              <Text style={styles.fxMeta2} numberOfLines={1}>
+                                {vc}
+                              </Text>
+                            ) : null}
+                          </View>
+                        </View>
+
+                        <View style={styles.fxRight}>
+                          {leagueFlag ? <Image source={{ uri: leagueFlag }} style={styles.flag} /> : null}
+                          <Text style={styles.fxLeague} numberOfLines={1}>
+                            {leagueName || "League"}
+                          </Text>
+                        </View>
+                      </View>
+
+                      <View style={styles.badgeRow}>
+                        {tbc ? (
+                          <>
+                            <View style={[styles.badge, styles.badgeTbc]}>
+                              <Text style={[styles.badgeText, styles.badgeTextTbc]}>Kickoff TBC</Text>
+                            </View>
+                            <View style={styles.badge}>
+                              <Text style={styles.badgeText}>May change</Text>
+                            </View>
+                          </>
+                        ) : (
+                          <View style={[styles.badge, styles.badgeConfirmed]}>
+                            <Text style={[styles.badgeText, styles.badgeTextConfirmed]}>Kickoff confirmed</Text>
+                          </View>
+                        )}
+
+                        {weekendHint(r?.fixture?.date) ? (
+                          <View style={styles.badge}>
+                            <Text style={styles.badgeText}>{weekendHint(r?.fixture?.date)}</Text>
+                          </View>
+                        ) : null}
+                      </View>
+
+                      <View style={styles.fxSelectRow}>
+                        <View style={{ flex: 1 }} />
+                        <View style={[styles.selectPill, selected && styles.selectPillActive]}>
+                          <Text style={[styles.selectPillText, selected && styles.selectPillTextActive]}>
+                            {selected ? "Selected" : "Select"}
+                          </Text>
+                        </View>
+                      </View>
+                    </Pressable>
+                  );
+                })}
+              </View>
 
               {visibleCount < filtered.length ? (
-                <Pressable onPress={() => setVisibleCount((n) => n + 12)} style={styles.moreBtn}>
+                <Pressable onPress={() => setVisibleCount((n) => n + 14)} style={styles.moreBtn}>
                   <Text style={styles.moreText}>Show more</Text>
                 </Pressable>
               ) : null}
 
-              <Text style={styles.label}>Notes (optional)</Text>
-              <TextInput
-                value={notes}
-                onChangeText={setNotes}
-                placeholder="Anything you want to remember…"
-                placeholderTextColor={theme.colors.textSecondary}
-                style={styles.notes}
-                multiline
-              />
+              {/* Only show notes AFTER selection (otherwise it’s pointless friction) */}
+              {selectedFixture ? (
+                <>
+                  <Text style={styles.label}>Notes (optional)</Text>
+                  <TextInput
+                    value={notes}
+                    onChangeText={setNotes}
+                    placeholder="Anything you want to remember…"
+                    placeholderTextColor={theme.colors.textSecondary}
+                    style={styles.notes}
+                    multiline
+                  />
+                </>
+              ) : (
+                <View style={styles.pickEmptyHint}>
+                  <Text style={styles.pickEmptyHintT}>Select a match to unlock Trip Hub creation.</Text>
+                </View>
+              )}
             </GlassCard>
           ) : null}
 
+          {/* PRIMARY CTA */}
           <Pressable
             onPress={onSave}
-            disabled={saving || prefillLoading}
-            style={[styles.saveBtn, (saving || prefillLoading) && { opacity: 0.7 }]}
+            disabled={saving || prefillLoading || !selectedFixture}
+            style={[
+              styles.saveBtn,
+              (!selectedFixture || saving || prefillLoading) && { opacity: 0.55 },
+            ]}
           >
-            <Text style={styles.saveText}>{saving ? "Saving…" : isEditing ? "Update Trip" : "Save Trip"}</Text>
+            <Text style={styles.saveText}>
+              {saving ? "Creating…" : isEditing ? "Update Trip Hub" : "Create Trip Hub"}
+            </Text>
+            <Text style={styles.saveSub}>
+              {selectedFixture ? "Flights • Stay • Tickets • Plans in one place" : "Select a match to continue"}
+            </Text>
           </Pressable>
 
           {error ? <Text style={styles.err}>{error}</Text> : null}
@@ -671,22 +947,88 @@ export default function TripBuildScreen() {
 /* -------------------------------------------------------------------------- */
 
 const styles = StyleSheet.create({
+  headerCard: { padding: theme.spacing.lg },
+
+  bigTitle: {
+    fontSize: 22,
+    fontWeight: "900",
+    color: theme.colors.text,
+    letterSpacing: 0.2,
+  },
+  bigSub: {
+    marginTop: 8,
+    color: theme.colors.textSecondary,
+    fontWeight: "700",
+    lineHeight: 18,
+    fontSize: 13,
+  },
+
+  chipRow: { marginTop: 14, flexDirection: "row", gap: 10 },
+  chip: {
+    flex: 1,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  chipKicker: { color: theme.colors.textTertiary, fontWeight: "900", fontSize: 11 },
+  chipValue: { marginTop: 4, color: theme.colors.text, fontWeight: "900", fontSize: 12 },
+
   h1: {
     fontSize: theme.fontSize.lg,
     fontWeight: "900",
     color: theme.colors.text,
-    marginBottom: 10,
+    marginBottom: 8,
+  },
+  hint: { color: theme.colors.textSecondary, fontWeight: "700", fontSize: 13, lineHeight: 18 },
+
+  center: { paddingVertical: 14, alignItems: "center", gap: 10 },
+  muted: { color: theme.colors.textSecondary, fontWeight: "800" },
+
+  selectedRow: { marginTop: 6 },
+  selectedLeft: { flex: 1 },
+
+  teamRow: { flexDirection: "row", gap: 12, alignItems: "center" },
+
+  crestStack: { flexDirection: "row", alignItems: "center" },
+  crest: {
+    width: 30,
+    height: 30,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+  },
+  crestFallback: {
+    width: 30,
+    height: 30,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
   },
 
-  summaryBox: {
+  selectedTitle: { color: theme.colors.text, fontWeight: "900", fontSize: 16 },
+  selectedMeta: { color: theme.colors.textSecondary, marginTop: 6, fontWeight: "700", fontSize: 13 },
+
+  badgeRow: { marginTop: 10, flexDirection: "row", gap: 8, flexWrap: "wrap" },
+  badge: {
     borderWidth: 1,
-    borderColor: theme.colors.border,
-    borderRadius: 14,
-    padding: 12,
-    backgroundColor: "rgba(0,0,0,0.20)",
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 999,
   },
-  summaryTitle: { color: theme.colors.text, fontWeight: "900", fontSize: 16 },
-  summaryMeta: { color: theme.colors.textSecondary, marginTop: 6, fontWeight: "700" },
+  badgeText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: 11 },
+
+  badgeTbc: { borderColor: "rgba(255,200,0,0.22)", backgroundColor: "rgba(255,200,0,0.06)" },
+  badgeTextTbc: { color: "rgba(255,220,140,0.92)" },
+
+  badgeConfirmed: { borderColor: "rgba(75,158,57,0.35)", backgroundColor: "rgba(75,158,57,0.10)" },
+  badgeTextConfirmed: { color: "rgba(140,255,190,0.92)" },
 
   infoBar: {
     marginTop: 12,
@@ -697,18 +1039,9 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 12,
   },
-  infoText: {
-    color: theme.colors.textSecondary,
-    fontWeight: "800",
-    fontSize: 12,
-    lineHeight: 16,
-  },
+  infoText: { color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12, lineHeight: 16 },
 
-  label: {
-    marginTop: 14,
-    color: theme.colors.textSecondary,
-    fontWeight: "800",
-  },
+  label: { marginTop: 14, color: theme.colors.textSecondary, fontWeight: "800" },
 
   notes: {
     marginTop: 8,
@@ -732,10 +1065,7 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border,
     backgroundColor: "rgba(0,0,0,0.25)",
   },
-  leaguePillActive: {
-    borderColor: theme.colors.primary,
-    backgroundColor: "rgba(0,0,0,0.45)",
-  },
+  leaguePillActive: { borderColor: theme.colors.primary, backgroundColor: "rgba(0,0,0,0.45)" },
   leaguePillText: { color: theme.colors.textSecondary, fontWeight: "900" },
   leaguePillTextActive: { color: theme.colors.text },
 
@@ -749,25 +1079,60 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
   },
 
-  center: { paddingVertical: 14, alignItems: "center", gap: 10 },
-  muted: { color: theme.colors.textSecondary, fontWeight: "800" },
-
-  pickRow: {
+  fxCard: {
     marginTop: 10,
     padding: 12,
-    borderRadius: 14,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: theme.colors.border,
     backgroundColor: "rgba(0,0,0,0.20)",
   },
-  pickRowSelected: {
-    borderColor: theme.colors.primary,
+  fxCardSelected: {
+    borderColor: "rgba(75,158,57,0.55)",
     backgroundColor: "rgba(0,0,0,0.35)",
   },
 
-  rowTitle: { color: theme.colors.text, fontWeight: "900" },
-  rowMeta: { color: theme.colors.textSecondary, marginTop: 4, fontWeight: "800" },
-  rowMetaSecondary: { color: theme.colors.textTertiary, marginTop: 4, fontWeight: "800", fontSize: 12 },
+  fxTop: { flexDirection: "row", gap: 12, alignItems: "flex-start" },
+  fxLeft: { flex: 1, flexDirection: "row", gap: 12, alignItems: "center" },
+  fxRight: { width: 96, alignItems: "flex-end" },
+
+  flag: {
+    width: 22,
+    height: 14,
+    borderRadius: 3,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+  },
+  fxLeague: { marginTop: 6, color: theme.colors.textSecondary, fontWeight: "900", fontSize: 11, textAlign: "right" },
+
+  fxTitle: { color: theme.colors.text, fontWeight: "900", fontSize: 15 },
+  fxMeta: { color: theme.colors.textSecondary, marginTop: 5, fontWeight: "800", fontSize: 12 },
+  fxMeta2: { color: theme.colors.textTertiary, marginTop: 4, fontWeight: "800", fontSize: 12 },
+
+  fxSelectRow: { marginTop: 10, flexDirection: "row", alignItems: "center" },
+  selectPill: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+  },
+  selectPillActive: { borderColor: "rgba(75,158,57,0.55)", backgroundColor: "rgba(75,158,57,0.10)" },
+  selectPillText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: 12 },
+  selectPillTextActive: { color: theme.colors.text, fontWeight: "900", fontSize: 12 },
+
+  pickEmptyHint: {
+    marginTop: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.16)",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  pickEmptyHintT: { color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12 },
 
   moreBtn: {
     marginTop: 12,
@@ -780,19 +1145,16 @@ const styles = StyleSheet.create({
   moreText: { color: theme.colors.text, fontWeight: "900" },
 
   saveBtn: {
-    marginTop: 10,
+    marginTop: 2,
     paddingVertical: 14,
-    borderRadius: 14,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: "rgba(0,255,136,0.55)",
+    borderColor: "rgba(75,158,57,0.55)",
     backgroundColor: "rgba(0,0,0,0.30)",
     alignItems: "center",
   },
-  saveText: { color: theme.colors.text, fontWeight: "900" },
+  saveText: { color: theme.colors.text, fontWeight: "900", fontSize: 15 },
+  saveSub: { marginTop: 6, color: theme.colors.textSecondary, fontWeight: "800", fontSize: 11 },
 
-  err: {
-    marginTop: 10,
-    color: "rgba(255,80,80,0.95)",
-    fontWeight: "900",
-  },
+  err: { marginTop: 10, color: "rgba(255,80,80,0.95)", fontWeight: "900" },
 });
