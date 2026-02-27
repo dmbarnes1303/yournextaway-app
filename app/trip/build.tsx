@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   Platform,
   Image,
+  Alert,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
@@ -37,6 +38,12 @@ import {
 } from "@/src/constants/football";
 import { formatUkDateTimeMaybe } from "@/src/utils/formatters";
 import { computeLikelyPlaceholderTbcIds, isKickoffTbc } from "@/src/utils/kickoffTbc";
+
+/* -------------------------------------------------------------------------- */
+/* config */
+/* -------------------------------------------------------------------------- */
+
+const FREE_TRIP_CAP = 5;
 
 /* -------------------------------------------------------------------------- */
 /* helpers */
@@ -192,6 +199,20 @@ function weekendHint(isoMaybe: unknown): "Weekend" | "Midweek" | null {
   const day = d.getDay(); // 0 Sun ... 6 Sat
   if (day === 0 || day === 6) return "Weekend";
   return "Midweek";
+}
+
+function findExistingTripIdForFixture(fixtureId: string): string | null {
+  const s = tripsStore.getState();
+  const trips = Array.isArray(s.trips) ? s.trips : [];
+  const fid = String(fixtureId).trim();
+  if (!fid) return null;
+
+  const hit = trips.find((t: any) => {
+    const ids = Array.isArray(t?.matchIds) ? t.matchIds : [];
+    return ids.some((x: any) => String(x).trim() === fid);
+  });
+
+  return hit?.id ?? null;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -389,8 +410,6 @@ export default function TripBuildScreen() {
         let res: FixtureListRow[] = [];
 
         if (selectedLeague.leagueId === 0) {
-          // Keep it bounded: all leagues is expensive. This is a Trip Hub, not a crawler.
-          // We still do it, but we’ll show fewer by default and sort intelligently.
           const batches = await Promise.all(
             LEAGUES.map((l) => getFixtures({ league: l.leagueId, season: l.season, from, to }))
           );
@@ -401,13 +420,9 @@ export default function TripBuildScreen() {
         }
 
         if (!cancelled) {
-          // Precompute placeholder IDs for TBC inference in this list
           const placeholder = computeLikelyPlaceholderTbcIds(res);
           setPlaceholderTbcIds(placeholder);
 
-          // Trip-centric sort:
-          // 1) kickoff confirmed first
-          // 2) then date asc
           const scored = res.map((r) => {
             const iso = String(r?.fixture?.date ?? "");
             const tbc = isKickoffTbc(r, placeholder);
@@ -417,7 +432,7 @@ export default function TripBuildScreen() {
           scored.sort((a, b) => {
             const aConf = a.tbc ? 1 : 0;
             const bConf = b.tbc ? 1 : 0;
-            if (aConf !== bConf) return aConf - bConf; // confirmed first (0), TBC later (1)
+            if (aConf !== bConf) return aConf - bConf; // confirmed first
             return String(a.iso).localeCompare(String(b.iso));
           });
 
@@ -513,7 +528,6 @@ export default function TripBuildScreen() {
     (patch as any).kickoffIso = snap.kickoffIso;
     (patch as any).kickoffTbc = snap.kickoffTbc;
 
-    // New: visuals + routing durability
     (patch as any).leagueId = snap.leagueId;
     (patch as any).season = snap.season;
     (patch as any).countryCode = snap.countryCode;
@@ -526,13 +540,35 @@ export default function TripBuildScreen() {
     try {
       if (!tripsStore.getState().loaded) await tripsStore.loadTrips();
 
+      // EDIT FLOW: always just update.
       if (isEditing && routeTripId) {
         await tripsStore.updateTrip(routeTripId, patch);
         router.replace({ pathname: "/trip/[id]", params: { id: routeTripId } } as any);
-      } else {
-        const t = await tripsStore.addTrip(patch as any);
-        router.replace({ pathname: "/trip/[id]", params: { id: t.id } } as any);
+        return;
       }
+
+      // NEW TRIP FLOW:
+      // 1) Dedupe: if a trip already exists for this fixture, open it (don’t create clones).
+      const existingId = findExistingTripIdForFixture(fixtureId);
+      if (existingId) {
+        Alert.alert("Trip already exists", "You already have a Trip Hub for this match — opening it now.");
+        router.replace({ pathname: "/trip/[id]", params: { id: existingId } } as any);
+        return;
+      }
+
+      // 2) Enforce Free cap (hard cap until Pro is wired).
+      const tripCount = tripsStore.getState().trips?.length ?? 0;
+      if (tripCount >= FREE_TRIP_CAP) {
+        Alert.alert(
+          "Free plan limit reached",
+          `You can save up to ${FREE_TRIP_CAP} trips on the free plan.\n\nDelete an old trip or upgrade to Pro (coming next).`
+        );
+        return;
+      }
+
+      // 3) Create trip.
+      const t = await tripsStore.addTrip(patch as any);
+      router.replace({ pathname: "/trip/[id]", params: { id: t.id } } as any);
     } catch (e: any) {
       setError(e?.message ?? "Failed to save trip.");
     } finally {
@@ -603,6 +639,9 @@ export default function TripBuildScreen() {
 
   const showPickerMode = !isPrefilledFlow && !isEditing;
 
+  const selectedHomeLogo = useMemo(() => safeUri(selectedFixture?.teams?.home?.logo), [selectedFixture]);
+  const selectedAwayLogo = useMemo(() => safeUri(selectedFixture?.teams?.away?.logo), [selectedFixture]);
+
   /* -------------------------------------------------------------------------- */
   /* UI */
   /* -------------------------------------------------------------------------- */
@@ -647,6 +686,12 @@ export default function TripBuildScreen() {
                 </Text>
               </View>
             </View>
+
+            {!isEditing ? (
+              <View style={styles.capBar}>
+                <Text style={styles.capText}>Free plan: up to {FREE_TRIP_CAP} saved trips.</Text>
+              </View>
+            ) : null}
           </GlassCard>
 
           {(loading || prefillLoading) && (
@@ -673,14 +718,16 @@ export default function TripBuildScreen() {
                 <View style={styles.selectedLeft}>
                   <View style={styles.teamRow}>
                     <View style={styles.crestStack}>
-                      <Image
-                        source={{ uri: safeUri(selectedFixture?.teams?.home?.logo) ?? undefined }}
-                        style={styles.crest}
-                      />
-                      <Image
-                        source={{ uri: safeUri(selectedFixture?.teams?.away?.logo) ?? undefined }}
-                        style={[styles.crest, { marginLeft: -10 }]}
-                      />
+                      {selectedHomeLogo ? (
+                        <Image source={{ uri: selectedHomeLogo }} style={styles.crest} />
+                      ) : (
+                        <View style={styles.crestFallback} />
+                      )}
+                      {selectedAwayLogo ? (
+                        <Image source={{ uri: selectedAwayLogo }} style={[styles.crest, { marginLeft: -10 }]} />
+                      ) : (
+                        <View style={[styles.crestFallback, { marginLeft: -10 }]} />
+                      )}
                     </View>
 
                     <View style={{ flex: 1 }}>
@@ -721,7 +768,8 @@ export default function TripBuildScreen() {
               {routeCityArea ? (
                 <View style={styles.infoBar}>
                   <Text style={styles.infoText}>
-                    Prefilled stay area: <Text style={{ fontWeight: "900", color: theme.colors.text }}>{routeCityArea}</Text>
+                    Prefilled stay area:{" "}
+                    <Text style={{ fontWeight: "900", color: theme.colors.text }}>{routeCityArea}</Text>
                   </Text>
                 </View>
               ) : null}
@@ -746,7 +794,7 @@ export default function TripBuildScreen() {
                 This isn’t the Fixtures tab. Pick a match to create a Trip Hub with planning context.
               </Text>
 
-              {/* League chips (keep it tight) */}
+              {/* League chips */}
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 12 }}>
                 {leagueOptions.map((l) => {
                   const active = l.leagueId === selectedLeague.leagueId;
@@ -782,7 +830,7 @@ export default function TripBuildScreen() {
                 </View>
               ) : null}
 
-              {/* Fixture cards with crests + league flag */}
+              {/* Fixture cards */}
               <View style={{ marginTop: 10 }}>
                 {visibleRows.map((r, i) => {
                   const id = fixtureIdStr(r);
@@ -897,7 +945,6 @@ export default function TripBuildScreen() {
                 </Pressable>
               ) : null}
 
-              {/* Only show notes AFTER selection (otherwise it’s pointless friction) */}
               {selectedFixture ? (
                 <>
                   <Text style={styles.label}>Notes (optional)</Text>
@@ -975,6 +1022,17 @@ const styles = StyleSheet.create({
   },
   chipKicker: { color: theme.colors.textTertiary, fontWeight: "900", fontSize: 11 },
   chipValue: { marginTop: 4, color: theme.colors.text, fontWeight: "900", fontSize: 12 },
+
+  capBar: {
+    marginTop: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.16)",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  capText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: 12 },
 
   h1: {
     fontSize: theme.fontSize.lg,
