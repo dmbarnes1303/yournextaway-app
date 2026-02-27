@@ -8,6 +8,7 @@ import {
   Pressable,
   ActivityIndicator,
   Alert,
+  Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -27,6 +28,28 @@ import type { SavedItem } from "@/src/core/savedItemTypes";
 import { formatUkDateOnly } from "@/src/utils/formatters";
 
 /* -------------------------------- Helpers -------------------------------- */
+
+function titleCase(input: string) {
+  const s = String(input ?? "").trim();
+  if (!s) return "Trip";
+
+  // Handle kebab/snake, preserve accents, clean repeated spaces.
+  const cleaned = s.replace(/[-_]+/g, " ").replace(/\s+/g, " ").trim();
+
+  return cleaned
+    .split(" ")
+    .map((w) => {
+      const lower = w.toLowerCase();
+      // Keep common short words lower unless it's the first word.
+      return lower.charAt(0).toUpperCase() + lower.slice(1);
+    })
+    .join(" ");
+}
+
+function cityLabel(t: Trip) {
+  const raw = String(t.cityId ?? "").trim();
+  return titleCase(raw || "Trip");
+}
 
 function tripSummaryLine(t: Trip) {
   const a = t.startDate ? formatUkDateOnly(t.startDate) : "—";
@@ -54,8 +77,11 @@ function groupItemsByTrip(items: SavedItem[]) {
   return map;
 }
 
-function cityLabel(t: Trip) {
-  return String(t.cityId ?? "").trim() || "Trip";
+function countsFor(items: SavedItem[]) {
+  const total = items.length;
+  const pending = items.filter((x) => x.status === "pending").length;
+  const booked = items.filter((x) => x.status === "booked").length;
+  return { total, pending, booked };
 }
 
 /* -------------------------------- Screen -------------------------------- */
@@ -106,17 +132,13 @@ export default function TripsScreen() {
   const upcoming = useMemo(() => trips.filter(isUpcoming), [trips]);
   const past = useMemo(() => trips.filter((t) => !isUpcoming(t)), [trips]);
 
-  const counts = useCallback(
-    (tripId: string) => {
-      const arr = itemsByTrip[tripId] ?? [];
-      return {
-        total: arr.length,
-        pending: arr.filter((x) => x.status === "pending").length,
-        booked: arr.filter((x) => x.status === "booked").length,
-      };
-    },
+  const getCounts = useCallback(
+    (tripId: string) => countsFor(itemsByTrip[tripId] ?? []),
     [itemsByTrip]
   );
+
+  const loading = !loadedTrips || !loadedItems;
+  const showEmpty = !loading && trips.length === 0;
 
   /* ------------------------------ actions ------------------------------ */
 
@@ -132,7 +154,6 @@ export default function TripsScreen() {
 
   const actuallyDeleteTrip = useCallback(
     async (t: Trip) => {
-      // Hard guard against double taps / repeated confirms.
       if (deletingTripId) return;
 
       setDeletingTripId(t.id);
@@ -147,10 +168,9 @@ export default function TripsScreen() {
     [deletingTripId]
   );
 
-  // Two-step confirmation, because deleting a trip nukes its whole workspace.
   const deleteTrip = useCallback(
     (t: Trip) => {
-      const c = counts(t.id);
+      const c = getCounts(t.id);
       const name = cityLabel(t);
 
       Alert.alert(
@@ -162,11 +182,9 @@ export default function TripsScreen() {
             text: "Continue",
             style: "destructive",
             onPress: () => {
-              // Second prompt: explicit irreversible warning.
               const msg =
                 `This cannot be undone.\n\n` +
-                `Deleting this trip will also remove ALL saved links, pending items, booked items, and any Wallet attachments for this trip from this device.\n\n` +
-                `If you want to keep the workspace, archive items instead.`;
+                `Deleting this trip will also remove ALL saved links, pending items, booked items, and any Wallet attachments for this trip from this device.`;
 
               Alert.alert("Confirm delete", msg, [
                 { text: "Cancel", style: "cancel" },
@@ -183,31 +201,25 @@ export default function TripsScreen() {
         ]
       );
     },
-    [counts, actuallyDeleteTrip]
+    [getCounts, actuallyDeleteTrip]
   );
 
   const goBuild = () => router.push("/trip/build");
   const goFixtures = () => router.push("/(tabs)/fixtures");
 
-  const showEmpty = loadedTrips && trips.length === 0;
-
   /* -------------------------------- render -------------------------------- */
 
   return (
-    <Background imageUrl={getBackground("trips")} overlayOpacity={0.5}>
+    <Background imageSource={getBackground("trips")} overlayOpacity={0.82}>
       <SafeAreaView style={styles.safe} edges={["top"]}>
-        <ScrollView
-          style={styles.scroll}
-          contentContainerStyle={styles.content}
-          showsVerticalScrollIndicator={false}
-        >
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           <View style={styles.header}>
             <Text style={styles.title}>Trips</Text>
             <Text style={styles.subtitle}>Your travel workspaces</Text>
           </View>
 
-          {!loadedTrips || !loadedItems ? (
-            <GlassCard style={styles.card}>
+          {loading ? (
+            <GlassCard style={styles.card} strength="default">
               <View style={styles.center}>
                 <ActivityIndicator />
                 <Text style={styles.muted}>Loading trips…</Text>
@@ -216,8 +228,8 @@ export default function TripsScreen() {
           ) : null}
 
           {showEmpty ? (
-            <GlassCard style={styles.card}>
-              <EmptyState title="No trips yet" message="Start from a fixture and build the trip." />
+            <GlassCard style={styles.card} strength="default">
+              <EmptyState title="No trips yet" message="Start from a fixture and build your trip workspace." />
               <View style={{ gap: 10 }}>
                 <Pressable onPress={goBuild} style={[styles.btn, styles.btnPrimary]}>
                   <Text style={styles.btnPrimaryText}>Build trip</Text>
@@ -229,116 +241,134 @@ export default function TripsScreen() {
             </GlassCard>
           ) : null}
 
-          {upcoming.length > 0 ? (
+          {!loading && upcoming.length > 0 ? (
             <View style={styles.section}>
               <SectionHeader title="Upcoming" subtitle={`${upcoming.length}`} />
               <View style={styles.list}>
-                {upcoming.map((t) => {
-                  const c = counts(t.id);
-                  const isDeleting = deletingTripId === t.id;
-
-                  return (
-                    <GlassCard key={t.id} style={styles.tripCard}>
-                      <Pressable onPress={() => openTrip(t)} disabled={isDeleting}>
-                        <Text style={styles.tripTitle}>{cityLabel(t)}</Text>
-                        <Text style={styles.tripMeta}>{tripSummaryLine(t)}</Text>
-
-                        <View style={styles.countRow}>
-                          <Text style={styles.count}>Items {c.total}</Text>
-                          <Text style={styles.count}>Pending {c.pending}</Text>
-                          <Text style={styles.count}>Booked {c.booked}</Text>
-                        </View>
-                      </Pressable>
-
-                      <View style={styles.actions}>
-                        <Pressable
-                          onPress={() => editTrip(t)}
-                          disabled={isDeleting}
-                          style={[
-                            styles.actionBtn,
-                            styles.btnSecondary,
-                            isDeleting && { opacity: 0.5 },
-                          ]}
-                        >
-                          <Text style={styles.btnSecondaryText}>Edit</Text>
-                        </Pressable>
-
-                        <Pressable
-                          onPress={() => deleteTrip(t)}
-                          disabled={isDeleting}
-                          style={[
-                            styles.actionBtn,
-                            styles.btnDanger,
-                            isDeleting && { opacity: 0.5 },
-                          ]}
-                        >
-                          <Text style={styles.btnDangerText}>{isDeleting ? "Deleting…" : "Delete"}</Text>
-                        </Pressable>
-                      </View>
-                    </GlassCard>
-                  );
-                })}
+                {upcoming.map((t) => (
+                  <TripCard
+                    key={t.id}
+                    t={t}
+                    getCounts={getCounts}
+                    deletingTripId={deletingTripId}
+                    onOpen={openTrip}
+                    onEdit={editTrip}
+                    onDelete={deleteTrip}
+                  />
+                ))}
               </View>
             </View>
           ) : null}
 
-          {past.length > 0 ? (
+          {!loading && past.length > 0 ? (
             <View style={styles.section}>
               <SectionHeader title="Past & draft" subtitle={`${past.length}`} />
               <View style={styles.list}>
-                {past.map((t) => {
-                  const c = counts(t.id);
-                  const isDeleting = deletingTripId === t.id;
-
-                  return (
-                    <GlassCard key={t.id} style={styles.tripCard}>
-                      <Pressable onPress={() => openTrip(t)} disabled={isDeleting}>
-                        <Text style={styles.tripTitle}>{cityLabel(t)}</Text>
-                        <Text style={styles.tripMeta}>{tripSummaryLine(t)}</Text>
-
-                        <View style={styles.countRow}>
-                          <Text style={styles.count}>Items {c.total}</Text>
-                          <Text style={styles.count}>Pending {c.pending}</Text>
-                          <Text style={styles.count}>Booked {c.booked}</Text>
-                        </View>
-                      </Pressable>
-
-                      <View style={styles.actions}>
-                        <Pressable
-                          onPress={() => editTrip(t)}
-                          disabled={isDeleting}
-                          style={[
-                            styles.actionBtn,
-                            styles.btnSecondary,
-                            isDeleting && { opacity: 0.5 },
-                          ]}
-                        >
-                          <Text style={styles.btnSecondaryText}>Edit</Text>
-                        </Pressable>
-
-                        <Pressable
-                          onPress={() => deleteTrip(t)}
-                          disabled={isDeleting}
-                          style={[
-                            styles.actionBtn,
-                            styles.btnDanger,
-                            isDeleting && { opacity: 0.5 },
-                          ]}
-                        >
-                          <Text style={styles.btnDangerText}>{isDeleting ? "Deleting…" : "Delete"}</Text>
-                        </Pressable>
-                      </View>
-                    </GlassCard>
-                  );
-                })}
+                {past.map((t) => (
+                  <TripCard
+                    key={t.id}
+                    t={t}
+                    getCounts={getCounts}
+                    deletingTripId={deletingTripId}
+                    onOpen={openTrip}
+                    onEdit={editTrip}
+                    onDelete={deleteTrip}
+                  />
+                ))}
               </View>
             </View>
           ) : null}
 
-          <View style={{ height: 20 }} />
+          <View style={{ height: 18 }} />
         </ScrollView>
       </SafeAreaView>
     </Background>
+  );
+}
+
+/* ------------------------------ Trip Card ------------------------------ */
+
+function TripCard({
+  t,
+  getCounts,
+  deletingTripId,
+  onOpen,
+  onEdit,
+  onDelete,
+}: {
+  t: Trip;
+  getCounts: (tripId: string) => { total: number; pending: number; booked: number };
+  deletingTripId: string | null;
+  onOpen: (t: Trip) => void;
+  onEdit: (t: Trip) => void;
+  onDelete: (t: Trip) => void;
+}) {
+  const c = getCounts(t.id);
+  const isDeleting = deletingTripId === t.id;
+
+  return (
+    <GlassCard style={styles.tripCard} strength="subtle" noPadding>
+      <Pressable
+        onPress={() => onOpen(t)}
+        disabled={isDeleting}
+        style={({ pressed }) => [styles.tripPress, pressed && { opacity: 0.92 }]}
+        android_ripple={{ color: "rgba(255,255,255,0.05)" }}
+      >
+        <View style={styles.tripTopRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.tripTitle}>{cityLabel(t)}</Text>
+            <Text style={styles.tripMeta}>{tripSummaryLine(t)}</Text>
+          </View>
+
+          <Text style={styles.chev}>›</Text>
+        </View>
+
+        <View style={styles.pillRow}>
+          <View style={styles.pill}>
+            <Text style={styles.pillKey}>Items</Text>
+            <Text style={styles.pillVal}>{c.total}</Text>
+          </View>
+
+          <View style={styles.pill}>
+            <Text style={styles.pillKey}>Pending</Text>
+            <Text style={styles.pillVal}>{c.pending}</Text>
+          </View>
+
+          <View style={styles.pill}>
+            <Text style={styles.pillKey}>Booked</Text>
+            <Text style={styles.pillVal}>{c.booked}</Text>
+          </View>
+        </View>
+
+        <View style={styles.actionsRow}>
+          <Pressable
+            onPress={() => onEdit(t)}
+            disabled={isDeleting}
+            style={({ pressed }) => [
+              styles.actionBtn,
+              styles.actionGhost,
+              pressed && { opacity: 0.92 },
+              isDeleting && { opacity: 0.5 },
+            ]}
+          >
+            <Text style={styles.actionGhostText}>Edit</Text>
+          </Pressable>
+
+          <Pressable
+            onPress={() => onDelete(t)}
+            disabled={isDeleting}
+            style={({ pressed }) => [
+              styles.actionBtn,
+              styles.actionDanger,
+              pressed && { opacity: 0.92 },
+              isDeleting && { opacity: 0.5 },
+            ]}
+          >
+            <Text style={styles.actionDangerText}>{isDeleting ? "Deleting…" : "Delete"}</Text>
+          </Pressable>
+        </View>
+      </Pressable>
+    </GlassCard>
   );
 }
 
@@ -346,46 +376,90 @@ export default function TripsScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },
-  scroll: { flex: 1 },
 
   content: {
     paddingHorizontal: theme.spacing.lg,
+    paddingTop: theme.spacing.lg,
     paddingBottom: theme.spacing.xxl,
     gap: theme.spacing.lg,
   },
 
-  header: { paddingTop: theme.spacing.lg },
-  title: { color: theme.colors.text, fontSize: theme.fontSize.xxl, fontWeight: theme.fontWeight.black },
-  subtitle: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, fontWeight: "700" },
+  header: { gap: 6 },
+  title: { color: theme.colors.text, fontSize: 26, fontWeight: theme.fontWeight.black },
+  subtitle: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold },
 
   section: { gap: 10 },
-  list: { gap: 10 },
+  list: { gap: 12 },
 
   card: { padding: theme.spacing.lg },
-  tripCard: { padding: theme.spacing.md },
-
-  tripTitle: { color: theme.colors.text, fontSize: theme.fontSize.lg, fontWeight: theme.fontWeight.black },
-  tripMeta: { marginTop: 4, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, fontWeight: "700" },
-
-  countRow: { marginTop: 8, flexDirection: "row", gap: 14 },
-  count: { color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: "800" },
-
-  actions: { marginTop: 12, flexDirection: "row", gap: 10 },
-
-  actionBtn: { flex: 1, paddingVertical: 12, borderRadius: 12, alignItems: "center", borderWidth: 1 },
-
-  btnPrimary: { borderColor: "rgba(0,255,136,0.55)", backgroundColor: "rgba(0,0,0,0.34)" },
-  btnPrimaryText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.md },
-
-  btnSecondary: { borderColor: "rgba(255,255,255,0.12)", backgroundColor: "rgba(0,0,0,0.18)" },
-  btnSecondaryText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: theme.fontSize.sm },
-
-  btnDanger: { borderColor: "rgba(255,80,80,0.35)", backgroundColor: "rgba(0,0,0,0.18)" },
-  btnDangerText: { color: "rgba(255,120,120,0.95)", fontWeight: "900", fontSize: theme.fontSize.sm },
-
-  // used for empty-state buttons
-  btn: { paddingVertical: 12, borderRadius: 12, alignItems: "center", borderWidth: 1 },
 
   center: { paddingVertical: 12, alignItems: "center", gap: 10 },
-  muted: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, fontWeight: "700" },
+  muted: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold },
+
+  btn: {
+    paddingVertical: 12,
+    borderRadius: 14,
+    alignItems: "center",
+    borderWidth: 1,
+    overflow: "hidden",
+  },
+
+  btnPrimary: {
+    borderColor: "rgba(79,224,138,0.34)",
+    backgroundColor: Platform.OS === "android" ? "rgba(79,224,138,0.10)" : "rgba(79,224,138,0.08)",
+  },
+  btnPrimaryText: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: 14 },
+
+  btnSecondary: {
+    borderColor: "rgba(255,255,255,0.12)",
+    backgroundColor: Platform.OS === "android" ? "rgba(10,12,14,0.16)" : "rgba(10,12,14,0.12)",
+  },
+  btnSecondaryText: { color: theme.colors.textSecondary, fontWeight: theme.fontWeight.black, fontSize: 14 },
+
+  tripCard: { borderRadius: 24 },
+  tripPress: { padding: 14 },
+
+  tripTopRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  tripTitle: { color: theme.colors.text, fontSize: 18, fontWeight: theme.fontWeight.black },
+  tripMeta: { marginTop: 4, color: theme.colors.textSecondary, fontSize: 12, fontWeight: theme.fontWeight.bold },
+
+  chev: { color: theme.colors.textTertiary, fontSize: 26, fontWeight: theme.fontWeight.black, marginTop: -2 },
+
+  pillRow: { marginTop: 12, flexDirection: "row", gap: 10 },
+  pill: {
+    flex: 1,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: Platform.OS === "android" ? "rgba(10,12,14,0.16)" : "rgba(10,12,14,0.12)",
+    paddingVertical: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  pillKey: { color: theme.colors.textTertiary, fontSize: 11, fontWeight: theme.fontWeight.black },
+  pillVal: { marginTop: 4, color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.black },
+
+  actionsRow: { marginTop: 12, flexDirection: "row", gap: 10 },
+
+  actionBtn: {
+    flex: 1,
+    borderRadius: 16,
+    borderWidth: 1,
+    paddingVertical: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+
+  actionGhost: {
+    borderColor: "rgba(255,255,255,0.12)",
+    backgroundColor: Platform.OS === "android" ? "rgba(10,12,14,0.16)" : "rgba(10,12,14,0.12)",
+  },
+  actionGhostText: { color: theme.colors.textSecondary, fontWeight: theme.fontWeight.black, fontSize: 13 },
+
+  actionDanger: {
+    borderColor: "rgba(255,90,90,0.32)",
+    backgroundColor: Platform.OS === "android" ? "rgba(255,90,90,0.06)" : "rgba(255,90,90,0.05)",
+  },
+  actionDangerText: { color: "rgba(255,120,120,0.95)", fontWeight: theme.fontWeight.black, fontSize: 13 },
 });
