@@ -1,5 +1,5 @@
 // app/team/[teamKey].tsx
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -8,184 +8,180 @@ import {
   Pressable,
   ActivityIndicator,
   Image,
+  Platform,
+  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Stack, useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 
 import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
 import EmptyState from "@/src/components/EmptyState";
 
-import { getBackground } from "@/src/constants/backgrounds";
-import { getTeamHeroBackground } from "@/src/constants/teamBackgrounds";
 import { theme } from "@/src/constants/theme";
+import { getBackground } from "@/src/constants/backgrounds";
+import { getFlagImageUrl } from "@/src/utils/flagImages";
+import { formatUkDateTimeMaybe } from "@/src/utils/formatters";
 
-import { LEAGUES, getRollingWindowIso } from "@/src/constants/football";
 import { getFixtures, type FixtureListRow } from "@/src/services/apiFootball";
-import { formatUkDateOnly, formatUkDateTimeMaybe } from "@/src/utils/formatters";
+import { getTeam, leagueForTeam, normalizeTeamKey } from "@/src/data/teams";
 
-import { getTeamGuide, normalizeTeamKey } from "@/src/data/teamGuides";
-import { teams as teamsRegistry } from "@/src/data/teams";
-import { usePro } from "@/src/context/ProContext";
+import { hasTeamGuide } from "@/src/data/teamGuides";
 
-function coerceString(v: unknown): string | null {
-  if (typeof v === "string") {
-    const s = v.trim();
-    return s ? s : null;
+// Remote stadium backgrounds (V1). Use direct JPG/PNG URLs.
+// Keep it curated: only add teams you actively support in product.
+const TEAM_BACKGROUNDS: Record<string, string> = {
+  "real-madrid":
+    "https://images.unsplash.com/photo-1548600916-d2d8a0b2b3b6?auto=format&fit=crop&w=1400&q=80",
+  "arsenal":
+    "https://images.unsplash.com/photo-1533106418989-88406c7cc8ca?auto=format&fit=crop&w=1400&q=80",
+  "bayern-munich":
+    "https://images.unsplash.com/photo-1517927033932-b3d18e61fb3a?auto=format&fit=crop&w=1400&q=80",
+  "inter":
+    "https://images.unsplash.com/photo-1522770179533-24471fcdba45?auto=format&fit=crop&w=1400&q=80",
+  "borussia-dortmund":
+    "https://images.unsplash.com/photo-1521412644187-c49fa049e84d?auto=format&fit=crop&w=1400&q=80",
+};
+
+const API_SPORTS_TEAM_LOGO = (teamId: number) =>
+  `https://media.api-sports.io/football/teams/${teamId}.png`;
+
+function safeStr(v: any) {
+  return String(v ?? "").trim();
+}
+
+function toIsoOrEmpty(v: any) {
+  const s = safeStr(v);
+  return s;
+}
+
+function monthHeading(iso: string) {
+  const d = iso ? new Date(iso) : null;
+  if (!d || Number.isNaN(d.getTime())) return "";
+  return d.toLocaleString("en-GB", { month: "long", year: "numeric" });
+}
+
+function groupByMonth(rows: FixtureListRow[]) {
+  const out: { key: string; title: string; rows: FixtureListRow[] }[] = [];
+  const map = new Map<string, FixtureListRow[]>();
+
+  rows.forEach((r) => {
+    const iso = safeStr(r?.fixture?.date);
+    const title = monthHeading(iso);
+    const key = title || "Other";
+    if (!map.has(key)) map.set(key, []);
+    map.get(key)!.push(r);
+  });
+
+  for (const [key, list] of map.entries()) {
+    out.push({ key, title: key, rows: list });
   }
-  if (Array.isArray(v) && typeof v[0] === "string") {
-    const s = v[0].trim();
-    return s ? s : null;
-  }
-  return null;
+
+  // Month order: chronological by first fixture date
+  out.sort((a, b) => {
+    const da = a.rows[0]?.fixture?.date ? new Date(a.rows[0].fixture.date).getTime() : 0;
+    const db = b.rows[0]?.fixture?.date ? new Date(b.rows[0].fixture.date).getTime() : 0;
+    return da - db;
+  });
+
+  return out;
 }
 
-function titleFromKey(key: string): string {
-  const s = String(key ?? "").trim();
-  if (!s) return "Team";
-  return s
-    .split("-")
-    .filter(Boolean)
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(" ");
-}
-
-function fixtureKey(r: FixtureListRow, idx: number) {
-  const id = r?.fixture?.id;
-  return id ? String(id) : `idx-${idx}`;
-}
-
-function isNonEmptyString(x: any): x is string {
-  return typeof x === "string" && x.trim().length > 0;
-}
-
-function renderParagraphsMaybe(text: any) {
-  if (!isNonEmptyString(text)) return null;
-
-  const parts = text
-    .split(/\n{2,}/g)
-    .map((p) => p.trim())
-    .filter(Boolean);
-
+function TeamCrestHero({ teamId }: { teamId?: number }) {
+  if (typeof teamId !== "number") return null;
   return (
-    <View style={{ marginTop: 8, gap: 10 }}>
-      {parts.map((p, i) => (
-        <Text key={i} style={styles.body}>
-          {p}
-        </Text>
-      ))}
+    <View style={styles.heroCrestWrap}>
+      <Image source={{ uri: API_SPORTS_TEAM_LOGO(teamId) }} style={styles.heroCrestImg} resizeMode="contain" />
     </View>
   );
 }
 
-function renderGuideSections(sections: any[], limit?: number) {
-  const list = Array.isArray(sections) ? sections : [];
-  const sliced = typeof limit === "number" ? list.slice(0, limit) : list;
+function FlagMini({ countryCode }: { countryCode?: string }) {
+  const code = safeStr(countryCode).toUpperCase();
+  const url = code ? getFlagImageUrl(code, { size: 64 }) : null;
+  if (!url) return null;
+  return <Image source={{ uri: url }} style={styles.flagMini} resizeMode="cover" />;
+}
+
+/**
+ * This is the "must-fix" layout.
+ * Names must never overlap the "vs" and never collide into each other.
+ */
+function FixtureRow({
+  row,
+  onPressPlan,
+}: {
+  row: FixtureListRow;
+  onPressPlan: () => void;
+}) {
+  const homeName = safeStr(row?.teams?.home?.name);
+  const awayName = safeStr(row?.teams?.away?.name);
+  const homeLogo = safeStr(row?.teams?.home?.logo);
+  const awayLogo = safeStr(row?.teams?.away?.logo);
+
+  const kickoff = formatUkDateTimeMaybe(row?.fixture?.date);
+  const venue = safeStr(row?.fixture?.venue?.name);
+  const city = safeStr(row?.fixture?.venue?.city);
+  const meta = [kickoff, venue, city].filter(Boolean).join(" • ");
 
   return (
-    <View style={{ gap: 14, marginTop: 10 }}>
-      {sliced.map((s: any, idx: number) => {
-        const title = isNonEmptyString(s?.title) ? s.title : `Section ${idx + 1}`;
-        const body = s?.body;
-
-        return (
-          <View key={`${idx}-${title}`} style={styles.guideSection}>
-            <Text style={styles.blockTitle}>{title}</Text>
-            {renderParagraphsMaybe(body)}
+    <View style={styles.fxRow}>
+      <View style={styles.fxTop}>
+        <View style={styles.matchLine}>
+          {/* LEFT (home) */}
+          <View style={styles.teamSideLeft}>
+            {homeLogo ? <Image source={{ uri: homeLogo }} style={styles.smallCrestImg} resizeMode="contain" /> : null}
+            <Text style={styles.teamNameLeft} numberOfLines={1} ellipsizeMode="tail">
+              {homeName || "Home"}
+            </Text>
           </View>
-        );
-      })}
+
+          {/* CENTER (vs) */}
+          <View style={styles.vsPill}>
+            <Text style={styles.vsText}>vs</Text>
+          </View>
+
+          {/* RIGHT (away) */}
+          <View style={styles.teamSideRight}>
+            <Text style={styles.teamNameRight} numberOfLines={1} ellipsizeMode="tail">
+              {awayName || "Away"}
+            </Text>
+            {awayLogo ? <Image source={{ uri: awayLogo }} style={styles.smallCrestImg} resizeMode="contain" /> : null}
+          </View>
+        </View>
+
+        <Pressable
+          onPress={onPressPlan}
+          style={({ pressed }) => [styles.planBtn, pressed && styles.pressed]}
+          android_ripple={{ color: "rgba(79,224,138,0.10)" }}
+        >
+          <Text style={styles.planBtnText}>Plan Trip</Text>
+        </Pressable>
+      </View>
+
+      <Text style={styles.fxMeta} numberOfLines={2}>
+        {meta}
+      </Text>
     </View>
   );
-}
-
-function getMonthKey(iso?: string | null): string {
-  const s = String(iso ?? "");
-  if (!s) return "";
-  const d = new Date(s);
-  if (!Number.isFinite(d.getTime())) return "";
-  const y = d.getUTCFullYear();
-  const m = d.getUTCMonth() + 1; // 1-12
-  return `${y}-${String(m).padStart(2, "0")}`;
-}
-
-function monthLabel(monthKey: string): string {
-  // monthKey: YYYY-MM
-  const [y, m] = monthKey.split("-").map((x) => Number(x));
-  if (!y || !m) return "Upcoming";
-  const d = new Date(Date.UTC(y, m - 1, 1));
-  const label = d.toLocaleString("en-GB", { month: "long", year: "numeric", timeZone: "UTC" });
-  return label;
 }
 
 export default function TeamScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
-  const pro = usePro();
 
-  const teamKeyRaw = useMemo(() => coerceString((params as any)?.teamKey) ?? "", [params]);
-  const teamKeyNorm = useMemo(() => normalizeTeamKey(teamKeyRaw), [teamKeyRaw]);
+  const teamKeyParam = safeStr(params.teamKey);
+  const teamKey = useMemo(() => normalizeTeamKey(teamKeyParam), [teamKeyParam]);
 
-  const guide = useMemo(() => {
-    if (!teamKeyRaw) return null;
-    return getTeamGuide(teamKeyNorm) ?? getTeamGuide(teamKeyRaw) ?? null;
-  }, [teamKeyRaw, teamKeyNorm]);
+  const from = toIsoOrEmpty(params.from);
+  const to = toIsoOrEmpty(params.to);
 
-  const teamRec = useMemo(() => {
-    return (teamsRegistry as any)?.[teamKeyNorm] ?? (teamsRegistry as any)?.[teamKeyRaw] ?? null;
-  }, [teamKeyNorm, teamKeyRaw]);
+  const team = useMemo(() => getTeam(teamKey) ?? getTeam(teamKeyParam), [teamKey, teamKeyParam]);
+  const league = useMemo(() => (team ? leagueForTeam(team) : null), [team]);
 
-  const teamName = useMemo(() => {
-    const fromGuide = String((guide as any)?.name ?? "").trim();
-    if (fromGuide) return fromGuide;
-    const fromRegistry = String(teamRec?.name ?? "").trim();
-    if (fromRegistry) return fromRegistry;
-    return titleFromKey(teamKeyNorm || teamKeyRaw);
-  }, [guide, teamRec, teamKeyNorm, teamKeyRaw]);
+  const bgUrl = useMemo(() => TEAM_BACKGROUNDS[team?.teamKey ?? teamKey] ?? "", [team, teamKey]);
 
-  const rolling = useMemo(() => getRollingWindowIso(), []);
-  const from = useMemo(
-    () => coerceString((params as any)?.from) ?? rolling.from,
-    [params, rolling.from]
-  );
-  const to = useMemo(
-    () => coerceString((params as any)?.to) ?? rolling.to,
-    [params, rolling.to]
-  );
-
-  const heroBackground = useMemo(() => {
-    const stadium = String((guide as any)?.stadium ?? teamRec?.stadium ?? "").trim() || null;
-    const city = String((guide as any)?.city ?? teamRec?.city ?? "").trim() || null;
-    const country = String((guide as any)?.country ?? teamRec?.country ?? "").trim() || null;
-
-    const url = getTeamHeroBackground({
-      teamKey: teamKeyNorm || teamKeyRaw,
-      teamName,
-      stadium,
-      city,
-      country,
-    });
-
-    // Hard fallback so we never render a blank background.
-    return url || getBackground("home");
-  }, [guide, teamRec, teamKeyNorm, teamKeyRaw, teamName]);
-
-  // Best-effort crest sources (support both registry + API rows)
-  const crestUrl = useMemo(() => {
-    const c =
-      String(teamRec?.crestUrl ?? teamRec?.crest ?? teamRec?.logo ?? "").trim() ||
-      String((guide as any)?.crestUrl ?? (guide as any)?.logo ?? "").trim();
-    return c || null;
-  }, [teamRec, guide]);
-
-  const teamNormForFixtures = useMemo(
-    () => normalizeTeamKey(teamKeyNorm || teamKeyRaw || teamName),
-    [teamKeyNorm, teamKeyRaw, teamName]
-  );
-
-  const [showLockCard, setShowLockCard] = useState(false);
-
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [rows, setRows] = useState<FixtureListRow[]>([]);
 
@@ -193,52 +189,47 @@ export default function TeamScreen() {
     let cancelled = false;
 
     async function run() {
-      if (!teamNormForFixtures) return;
-
       setLoading(true);
       setError(null);
       setRows([]);
 
       try {
-        const results = await Promise.allSettled(
-          LEAGUES.map((l) =>
-            getFixtures({
-              league: l.leagueId,
-              season: l.season,
-              from,
-              to,
-            })
-          )
-        );
-
-        if (cancelled) return;
-
-        const merged: FixtureListRow[] = [];
-        for (const r of results) {
-          if (r.status !== "fulfilled") continue;
-          const list = Array.isArray(r.value) ? (r.value as FixtureListRow[]) : [];
-
-          for (const row of list) {
-            // HOME FIXTURES ONLY:
-            const homeName = String(row?.teams?.home?.name ?? "");
-            const homeNorm = normalizeTeamKey(homeName);
-            if (homeNorm && homeNorm === teamNormForFixtures) merged.push(row);
-          }
+        if (!team || !league) {
+          setRows([]);
+          setLoading(false);
+          return;
         }
 
-        merged.sort((a, b) => {
-          const ad = new Date(String(a?.fixture?.date ?? "")).getTime();
-          const bd = new Date(String(b?.fixture?.date ?? "")).getTime();
-          if (!Number.isFinite(ad) && !Number.isFinite(bd)) return 0;
-          if (!Number.isFinite(ad)) return 1;
-          if (!Number.isFinite(bd)) return -1;
-          return ad - bd;
+        // Team fixtures: rely on league window + filter by team id if present.
+        // If your API supports team= filter, swap this to server-side filtering.
+        const res = await getFixtures({
+          league: league.leagueId,
+          season: league.season,
+          from: from || undefined,
+          to: to || undefined,
         });
 
-        setRows(merged);
+        if (cancelled) return;
+
+        const list = Array.isArray(res) ? res : [];
+        const filtered =
+          typeof team.teamId === "number"
+            ? list.filter((r) => r?.teams?.home?.id === team.teamId || r?.teams?.away?.id === team.teamId)
+            : list;
+
+        // Keep only future-ish fixtures with ids
+        const cleaned = filtered
+          .filter((r) => r?.fixture?.id != null)
+          .sort((a, b) => {
+            const da = a?.fixture?.date ? new Date(a.fixture.date).getTime() : 0;
+            const db = b?.fixture?.date ? new Date(b.fixture.date).getTime() : 0;
+            return da - db;
+          });
+
+        setRows(cleaned);
       } catch (e: any) {
         if (cancelled) return;
-        setError(e?.message ?? "Couldn’t load team fixtures.");
+        setError(e?.message ?? "Failed to load fixtures.");
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -248,235 +239,169 @@ export default function TeamScreen() {
     return () => {
       cancelled = true;
     };
-  }, [teamNormForFixtures, from, to]);
+  }, [team, league, from, to]);
 
-  function goPaywallInline() {
-    setShowLockCard(true);
-  }
+  const grouped = useMemo(() => groupByMonth(rows), [rows]);
 
-  function goPaywall() {
-    router.push("/paywall");
-  }
+  const title = team?.name ?? (teamKeyParam ? teamKeyParam : "Team");
+  const leagueLabel = league?.label ?? "";
+  const countryCode = league?.countryCode ?? "";
 
-  function goBuildTrip(fixtureId: string) {
-    router.push({ pathname: "/trip/build", params: { fixtureId, from, to } } as any);
-  }
+  const canShowGuide = useMemo(() => (team?.teamKey ? hasTeamGuide(team.teamKey) : false), [team]);
 
-  function goMatch(fixtureId: string) {
-    router.push({ pathname: "/match/[id]", params: { id: fixtureId, from, to } } as any);
-  }
-
-  if (!teamKeyRaw) {
-    return (
-      <Background imageUrl={getBackground("home")} overlayOpacity={0.88}>
-        <Stack.Screen options={{ title: "Team", headerTransparent: true, headerTintColor: theme.colors.text }} />
-        <SafeAreaView style={styles.safe} edges={["top"]}>
-          <ScrollView contentContainerStyle={styles.content}>
-            <GlassCard style={styles.card} intensity={22}>
-              <EmptyState title="Missing team" message="No teamKey was provided. This route must be /team/[teamKey]." />
-            </GlassCard>
-          </ScrollView>
-        </SafeAreaView>
-      </Background>
-    );
-  }
-
-  const sections = Array.isArray((guide as any)?.sections) ? ((guide as any).sections as any[]) : [];
-  const FREE_SECTION_COUNT = 2;
-
-  // Group fixtures by month for readability
-  const grouped = useMemo(() => {
-    const map = new Map<string, FixtureListRow[]>();
-    for (const r of rows) {
-      const key = getMonthKey(String(r?.fixture?.date ?? ""));
-      const k = key || "upcoming";
-      if (!map.has(k)) map.set(k, []);
-      map.get(k)!.push(r);
+  const goBrowseFixtures = useCallback(() => {
+    if (!league) {
+      router.push("/(tabs)/fixtures" as any);
+      return;
     }
-    const keys = Array.from(map.keys()).sort((a, b) => (a === "upcoming" ? 1 : b === "upcoming" ? -1 : a.localeCompare(b)));
-    return keys.map((k) => ({ key: k, label: k === "upcoming" ? "Upcoming" : monthLabel(k), items: map.get(k)! }));
-  }, [rows]);
+    router.push({
+      pathname: "/(tabs)/fixtures",
+      params: {
+        leagueId: String(league.leagueId),
+        season: String(league.season),
+        from: from || undefined,
+        to: to || undefined,
+      },
+    } as any);
+  }, [router, league, from, to]);
+
+  const goHome = useCallback(() => {
+    router.push("/(tabs)/home" as any);
+  }, [router]);
+
+  const goPlanTrip = useCallback(
+    (fixtureId: string) => {
+      if (!fixtureId) return;
+      router.push({
+        pathname: "/trip/build",
+        params: {
+          global: "1",
+          fixtureId,
+          leagueId: league ? String(league.leagueId) : undefined,
+          season: league ? String(league.season) : undefined,
+          from: from || undefined,
+          to: to || undefined,
+        },
+      } as any);
+    },
+    [router, league, from, to]
+  );
+
+  const bgSource = bgUrl ? ({ uri: bgUrl } as any) : getBackground("team");
 
   return (
-    <Background imageUrl={heroBackground} overlayOpacity={0.88}>
-      <Stack.Screen options={{ title: teamName, headerTransparent: true, headerTintColor: theme.colors.text }} />
+    <Background imageSource={bgSource} overlayOpacity={0.70}>
+      <SafeAreaView style={styles.container} edges={["top"]}>
+        <ScrollView style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+          {/* HERO */}
+          <GlassCard strength="strong" style={styles.hero} noPadding>
+            <View style={styles.heroInner}>
+              <Text style={styles.kicker}>TEAM</Text>
 
-      <SafeAreaView style={styles.safe} edges={["top"]}>
-        <ScrollView contentContainerStyle={styles.content}>
-          {/* HEADER */}
-          <GlassCard style={styles.hero} intensity={24}>
-            <View style={styles.heroTopRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.kicker}>TEAM</Text>
-                <Text style={styles.title}>{teamName}</Text>
-                <Text style={styles.sub}>
-                  {formatUkDateOnly(from)} → {formatUkDateOnly(to)}
-                </Text>
+              <View style={styles.heroTitleRow}>
+                <TeamCrestHero teamId={team?.teamId} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.heroTitle} numberOfLines={2}>
+                    {title}
+                  </Text>
+
+                  <View style={styles.heroMetaRow}>
+                    {leagueLabel ? <Text style={styles.heroMetaText}>{leagueLabel}</Text> : null}
+                    {countryCode ? <FlagMini countryCode={countryCode} /> : null}
+                  </View>
+                </View>
               </View>
 
-              {crestUrl ? (
-                <View style={styles.crestWrap}>
-                  <Image source={{ uri: crestUrl }} style={styles.crest} resizeMode="contain" />
+              <Text style={styles.heroRange}>
+                {(from && to) ? `${from.split("-").reverse().join("/")} → ${to.split("-").reverse().join("/")}` : ""}
+              </Text>
+
+              <View style={styles.heroActions}>
+                <Pressable
+                  onPress={goBrowseFixtures}
+                  style={({ pressed }) => [styles.btn, styles.btnGhost, pressed && styles.pressed]}
+                  android_ripple={{ color: "rgba(255,255,255,0.08)" }}
+                >
+                  <Text style={styles.btnGhostText}>Browse fixtures</Text>
+                </Pressable>
+
+                <Pressable
+                  onPress={goHome}
+                  style={({ pressed }) => [styles.btn, styles.btnGhost, pressed && styles.pressed]}
+                  android_ripple={{ color: "rgba(255,255,255,0.08)" }}
+                >
+                  <Text style={styles.btnGhostText}>Back to Home</Text>
+                </Pressable>
+              </View>
+            </View>
+          </GlassCard>
+
+          {/* TEAM GUIDE (preview) */}
+          {canShowGuide ? (
+            <GlassCard strength="default" style={styles.block} noPadding>
+              <View style={styles.blockInner}>
+                <View style={styles.blockHeader}>
+                  <Text style={styles.blockTitle}>Team guide</Text>
+                  <Pressable
+                    onPress={() => router.push({ pathname: "/team/[teamKey]/guide", params: { teamKey: team?.teamKey } } as any)}
+                    style={({ pressed }) => [styles.previewPill, pressed && styles.pressed]}
+                    android_ripple={{ color: "rgba(255,255,255,0.06)" }}
+                  >
+                    <Text style={styles.previewPillText}>Preview</Text>
+                  </Pressable>
+                </View>
+                <Text style={styles.blockNote}>Guide content available for this team.</Text>
+              </View>
+            </GlassCard>
+          ) : null}
+
+          {/* FIXTURES */}
+          <GlassCard strength="default" style={styles.block} noPadding>
+            <View style={styles.blockInner}>
+              <Text style={styles.blockTitle}>Fixtures</Text>
+
+              {loading ? (
+                <View style={styles.center}>
+                  <ActivityIndicator />
+                  <Text style={styles.muted}>Loading fixtures…</Text>
+                </View>
+              ) : null}
+
+              {!loading && error ? <EmptyState title="Fixtures Unavailable" message={error} /> : null}
+
+              {!loading && !error && rows.length === 0 ? (
+                <EmptyState title="No Fixtures Found" message="Try another date window." />
+              ) : null}
+
+              {!loading && !error && rows.length > 0 ? (
+                <View style={{ gap: 14 }}>
+                  {grouped.map((g) => (
+                    <View key={g.key} style={{ gap: 10 }}>
+                      <Text style={styles.month}>{g.title}</Text>
+
+                      <View style={{ gap: 10 }}>
+                        {g.rows.map((r) => {
+                          const id = r?.fixture?.id != null ? String(r.fixture.id) : "";
+                          return (
+                            <FixtureRow
+                              key={id}
+                              row={r}
+                              onPressPlan={() => {
+                                if (!id) return;
+                                goPlanTrip(id);
+                              }}
+                            />
+                          );
+                        })}
+                      </View>
+                    </View>
+                  ))}
                 </View>
               ) : null}
             </View>
-
-            <View style={styles.pillsRow}>
-              <Pressable
-                onPress={() => router.push({ pathname: "/(tabs)/fixtures", params: { from, to } } as any)}
-                style={styles.pill}
-              >
-                <Text style={styles.pillText}>Browse fixtures</Text>
-              </Pressable>
-
-              <Pressable onPress={() => router.push("/(tabs)/home")} style={styles.pill}>
-                <Text style={styles.pillText}>Back to Home</Text>
-              </Pressable>
-            </View>
           </GlassCard>
 
-          {/* GUIDE (PRO-GATED) */}
-          <GlassCard style={styles.card} intensity={22}>
-            <View style={styles.sectionHeaderRow}>
-              <Text style={styles.sectionTitle}>Team guide</Text>
-              <Text style={styles.sectionBadge}>{pro.isPro ? "Pro" : "Preview"}</Text>
-            </View>
-
-            {!guide ? (
-              <EmptyState title="Guide coming soon" message="No guide exists for this team yet." />
-            ) : pro.isPro ? (
-              renderGuideSections(sections)
-            ) : (
-              <>
-                {renderGuideSections(sections, FREE_SECTION_COUNT)}
-
-                {sections.length > FREE_SECTION_COUNT ? (
-                  <Pressable onPress={goPaywallInline} style={styles.inlineCta}>
-                    <Text style={styles.inlineCtaText}>Show full guide</Text>
-                  </Pressable>
-                ) : null}
-
-                {showLockCard ? (
-                  <View style={styles.lockCard}>
-                    <Text style={styles.lockTitle}>Unlock YourNextAway Pro</Text>
-                    <Text style={styles.lockBody}>Full team guide detail is Pro-only. Unlock to see every section.</Text>
-
-                    <View style={{ flexDirection: "row", gap: 10, marginTop: 12 }}>
-                      <Pressable onPress={goPaywall} style={[styles.unlockBtn, styles.unlockBtnPrimary]}>
-                        <Text style={styles.unlockBtnText}>Unlock Pro</Text>
-                      </Pressable>
-                      <Pressable onPress={pro.refresh} style={styles.unlockBtn}>
-                        <Text style={styles.unlockBtnText}>Refresh</Text>
-                      </Pressable>
-                    </View>
-                  </View>
-                ) : null}
-              </>
-            )}
-          </GlassCard>
-
-          {/* FIXTURES (HOME ONLY + CRESTS) */}
-          <GlassCard style={styles.card} intensity={22}>
-            <View style={styles.sectionHeaderRow}>
-              <Text style={styles.sectionTitle}>Home fixtures</Text>
-              <Text style={styles.sectionBadge}>Next {Math.min(20, rows.length)}</Text>
-            </View>
-            <Text style={styles.sectionSub}>
-              Showing only fixtures where <Text style={{ fontWeight: "900", color: theme.colors.text }}>{teamName}</Text> is the home team (within your rolling window).
-            </Text>
-
-            {loading ? (
-              <View style={styles.center}>
-                <ActivityIndicator />
-                <Text style={styles.muted}>Loading fixtures…</Text>
-              </View>
-            ) : null}
-
-            {!loading && error ? <EmptyState title="Couldn’t load fixtures" message={error} /> : null}
-
-            {!loading && !error && rows.length === 0 ? (
-              <EmptyState
-                title="No home fixtures found"
-                message="Either this club isn’t in your supported leagues list, or the rolling window doesn’t include their home matches."
-              />
-            ) : null}
-
-            {!loading && !error && rows.length > 0 ? (
-              <View style={styles.list}>
-                {grouped.map((g) => (
-                  <View key={g.key} style={{ gap: 10 }}>
-                    <Text style={styles.monthHeader}>{g.label}</Text>
-
-                    {g.items.slice(0, 20).map((r, idx) => {
-                      const id = r?.fixture?.id ? String(r.fixture.id) : null;
-
-                      const home = r?.teams?.home?.name ?? "Home";
-                      const away = r?.teams?.away?.name ?? "Away";
-
-                      const homeLogo = String((r as any)?.teams?.home?.logo ?? "").trim() || null;
-                      const awayLogo = String((r as any)?.teams?.away?.logo ?? "").trim() || null;
-
-                      const kick = formatUkDateTimeMaybe(r?.fixture?.date);
-                      const venue = r?.fixture?.venue?.name ?? "";
-                      const city = r?.fixture?.venue?.city ?? "";
-                      const extra = [venue, city].filter(Boolean).join(" • ");
-                      const line2 = extra ? `${kick} • ${extra}` : kick;
-
-                      return (
-                        <View key={fixtureKey(r, idx)} style={styles.fixtureRow}>
-                          <Pressable onPress={() => (id ? goMatch(id) : null)} style={{ flex: 1 }} disabled={!id}>
-                            <View style={styles.rowTitleRow}>
-                              <View style={styles.crestRow}>
-                                {homeLogo ? (
-                                  <Image source={{ uri: homeLogo }} style={styles.rowCrest} resizeMode="contain" />
-                                ) : (
-                                  <View style={styles.rowCrestFallback} />
-                                )}
-                                <Text style={styles.rowTitle} numberOfLines={1}>
-                                  {home}
-                                </Text>
-                              </View>
-
-                              <Text style={styles.vs}>vs</Text>
-
-                              <View style={[styles.crestRow, { justifyContent: "flex-end" }]}>
-                                <Text style={styles.rowTitle} numberOfLines={1}>
-                                  {away}
-                                </Text>
-                                {awayLogo ? (
-                                  <Image source={{ uri: awayLogo }} style={styles.rowCrest} resizeMode="contain" />
-                                ) : (
-                                  <View style={styles.rowCrestFallback} />
-                                )}
-                              </View>
-                            </View>
-
-                            <Text style={styles.rowMeta}>{line2}</Text>
-
-                            <View style={styles.tagsRow}>
-                              <View style={styles.tag}>
-                                <Text style={styles.tagText}>HOME</Text>
-                              </View>
-                            </View>
-                          </Pressable>
-
-                          <Pressable
-                            disabled={!id}
-                            onPress={() => (id ? goBuildTrip(id) : null)}
-                            style={[styles.planBtn, !id && styles.disabled]}
-                          >
-                            <Text style={styles.planBtnText}>Plan Trip</Text>
-                          </Pressable>
-                        </View>
-                      );
-                    })}
-                  </View>
-                ))}
-              </View>
-            ) : null}
-          </GlassCard>
-
-          <View style={{ height: 18 }} />
+          <View style={{ height: 14 }} />
         </ScrollView>
       </SafeAreaView>
     </Background>
@@ -484,149 +409,121 @@ export default function TeamScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1 },
-  content: {
-    paddingHorizontal: theme.spacing.lg,
-    paddingTop: theme.spacing.lg,
-    paddingBottom: theme.spacing.xxl,
-    gap: theme.spacing.lg,
+  container: { flex: 1 },
+  scroll: { flex: 1 },
+  content: { paddingHorizontal: theme.spacing.lg, paddingBottom: theme.spacing.xxl, gap: 14 },
+
+  pressed: { opacity: 0.94, transform: [{ scale: 0.995 }] },
+
+  hero: { marginTop: theme.spacing.lg, borderRadius: 26 },
+  heroInner: { padding: theme.spacing.lg, gap: 10 },
+
+  kicker: { color: "rgba(79,224,138,0.70)", fontSize: 12, fontWeight: theme.fontWeight.black, letterSpacing: 0.4 },
+
+  heroTitleRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  heroTitle: { color: theme.colors.text, fontSize: 28, lineHeight: 34, fontWeight: theme.fontWeight.black },
+
+  heroCrestWrap: {
+    width: 64,
+    height: 64,
+    borderRadius: 22,
+    backgroundColor: "rgba(0,0,0,0.22)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
   },
+  heroCrestImg: { width: 46, height: 46, opacity: 0.98 },
 
-  hero: { padding: theme.spacing.lg },
-  heroTopRow: { flexDirection: "row", gap: 14, alignItems: "center" },
+  heroMetaRow: { marginTop: 6, flexDirection: "row", alignItems: "center", gap: 10, flexWrap: "wrap" },
+  heroMetaText: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.black },
+  flagMini: { width: 20, height: 14, borderRadius: 3, opacity: 0.9 },
 
-  crestWrap: {
-    width: 54,
-    height: 54,
+  heroRange: { color: theme.colors.textTertiary, fontSize: 13, fontWeight: theme.fontWeight.bold, marginTop: 2 },
+
+  heroActions: { flexDirection: "row", gap: 10, marginTop: 6 },
+
+  btn: { flex: 1, borderRadius: 16, paddingVertical: 12, alignItems: "center", borderWidth: 1, overflow: "hidden" },
+  btnGhost: {
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
+  },
+  btnGhostText: { color: theme.colors.textSecondary, fontSize: 14, fontWeight: theme.fontWeight.black },
+
+  block: { borderRadius: 24 },
+  blockInner: { padding: 14, gap: 12 },
+  blockHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  blockTitle: { color: theme.colors.text, fontSize: 18, fontWeight: theme.fontWeight.black },
+  blockNote: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold, lineHeight: 18 },
+
+  previewPill: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
+    overflow: "hidden",
+  },
+  previewPillText: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: theme.fontWeight.black },
+
+  center: { paddingVertical: 14, alignItems: "center", gap: 10 },
+  muted: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold },
+
+  month: { color: theme.colors.textTertiary, fontSize: 13, fontWeight: theme.fontWeight.black, letterSpacing: 0.2 },
+
+  // Fixture row (must-fix layout)
+  fxRow: {
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    backgroundColor: "rgba(0,0,0,0.22)",
+    borderColor: "rgba(255,255,255,0.08)",
+    backgroundColor: Platform.OS === "android" ? "rgba(10,12,14,0.18)" : "rgba(10,12,14,0.14)",
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    gap: 8,
+  },
+
+  fxTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
+
+  matchLine: {
+    flex: 1,
+    minWidth: 0, // critical so children can shrink instead of overlapping
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+
+  teamSideLeft: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 8 },
+  teamSideRight: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 8 },
+
+  teamNameLeft: { flex: 1, minWidth: 0, color: theme.colors.text, fontSize: 14, fontWeight: theme.fontWeight.black },
+  teamNameRight: { flex: 1, minWidth: 0, textAlign: "right", color: theme.colors.text, fontSize: 14, fontWeight: theme.fontWeight.black },
+
+  vsPill: {
+    width: 34, // fixed width = no collisions
+    height: 26,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.18)",
     alignItems: "center",
     justifyContent: "center",
   },
-  crest: { width: 40, height: 40 },
+  vsText: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: theme.fontWeight.black },
 
-  kicker: { color: theme.colors.primary, fontWeight: "900", fontSize: theme.fontSize.xs, letterSpacing: 0.6 },
-  title: { marginTop: 8, color: theme.colors.text, fontSize: theme.fontSize.xl, fontWeight: "900" },
-  sub: { marginTop: 8, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, fontWeight: "800" },
-
-  pillsRow: { marginTop: 12, flexDirection: "row", gap: 10, flexWrap: "wrap" },
-  pill: {
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    backgroundColor: "rgba(0,0,0,0.22)",
-  },
-  pillText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.xs },
-
-  card: { padding: theme.spacing.md },
-
-  sectionHeaderRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "baseline", gap: 12 },
-  sectionTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.md },
-  sectionBadge: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: theme.fontSize.xs },
-
-  sectionSub: {
-    marginTop: 6,
-    color: theme.colors.textSecondary,
-    fontSize: theme.fontSize.sm,
-    lineHeight: 18,
-    fontWeight: "800",
-  },
-
-  guideSection: { paddingTop: 8, paddingBottom: 2, borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.08)" },
-  blockTitle: { marginTop: 6, color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
-  body: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 19, fontWeight: "700" },
-
-  inlineCta: {
-    marginTop: 12,
-    paddingVertical: 10,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "rgba(0,255,136,0.40)",
-    backgroundColor: "rgba(0,0,0,0.18)",
-    alignItems: "center",
-  },
-  inlineCtaText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
-
-  lockCard: {
-    marginTop: 14,
-    padding: 12,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.20)",
-  },
-  lockTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.md },
-  lockBody: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18, fontWeight: "700" },
-
-  unlockBtn: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.22)",
-    alignItems: "center",
-  },
-  unlockBtnPrimary: { borderColor: "rgba(0,255,136,0.55)", backgroundColor: "rgba(0,0,0,0.30)" },
-  unlockBtnText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
-
-  center: { paddingVertical: 14, alignItems: "center", gap: 10, marginTop: 10 },
-  muted: { fontSize: theme.fontSize.sm, color: theme.colors.textSecondary, fontWeight: "800" },
-
-  list: { marginTop: 10, gap: 16 },
-  monthHeader: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm, opacity: 0.95 },
-
-  fixtureRow: {
-    flexDirection: "row",
-    gap: 12,
-    alignItems: "center",
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(255,255,255,0.08)",
-  },
-
-  rowTitleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
-  crestRow: { flex: 1, flexDirection: "row", alignItems: "center", gap: 8 },
-
-  rowCrest: { width: 18, height: 18 },
-  rowCrestFallback: {
-    width: 18,
-    height: 18,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.18)",
-  },
-
-  rowTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.md },
-  vs: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: theme.fontSize.xs },
-
-  rowMeta: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, fontWeight: "700" },
-
-  tagsRow: { marginTop: 8, flexDirection: "row", gap: 8 },
-  tag: {
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    backgroundColor: "rgba(0,0,0,0.18)",
-  },
-  tagText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.xs },
+  smallCrestImg: { width: 18, height: 18, opacity: 0.95 },
 
   planBtn: {
-    paddingVertical: 10,
+    paddingVertical: 9,
     paddingHorizontal: 12,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "rgba(0,255,136,0.45)",
-    backgroundColor: "rgba(0,0,0,0.22)",
+    borderColor: "rgba(79,224,138,0.26)",
+    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
+    overflow: "hidden",
   },
-  planBtnText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.xs },
+  planBtnText: { color: theme.colors.text, fontSize: 12, fontWeight: theme.fontWeight.black },
 
-  disabled: { opacity: 0.5 },
+  fxMeta: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: theme.fontWeight.bold, lineHeight: 16 },
 });
