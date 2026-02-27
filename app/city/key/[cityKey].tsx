@@ -6,7 +6,7 @@ import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 
 import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
-import { getBackground } from "@/src/constants/backgrounds";
+import { getCityBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
 import { getRollingWindowIso, normalizeWindowIso } from "@/src/constants/football";
 
@@ -54,7 +54,7 @@ export default function CityKeyRedirect() {
   }, [router, cityKey, exists, window.from, window.to]);
 
   return (
-    <Background imageUrl={getBackground("home")} overlayOpacity={0.88}>
+    <Background imageUrl={getCityBackground(cityKey)} overlayOpacity={0.88}>
       <Stack.Screen options={{ title: "City", headerTransparent: true, headerTintColor: theme.colors.text }} />
 
       <SafeAreaView style={styles.safe} edges={["top"]}>
