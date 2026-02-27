@@ -138,7 +138,7 @@ export const bundesligaTeamGuides: Record<string, TeamGuide> = {
     updatedAt: "2026-01-27"
   },
 
-  "bayer-leverkussn": {
+  "bayer-leverkusen": {
     teamKey: "bayer-leverkusen",
     name: "Bayer Leverkusen",
     city: "Leverkusen",
