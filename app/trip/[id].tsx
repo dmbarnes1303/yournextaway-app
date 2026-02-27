@@ -627,6 +627,7 @@ export default function TripDetailScreen() {
     );
   }
 
+  // ✅ FULL-FILE CHANGE: openMatch now passes tripId + source so match page saves tickets into this trip
   function openMatch(matchId: string) {
     if (!matchId) return;
 
@@ -641,6 +642,10 @@ export default function TripDetailScreen() {
       pathname: "/match/[id]",
       params: {
         id: String(matchId),
+
+        ...(tripId ? { tripId: String(tripId) } : {}),
+        source: "trip",
+
         ...(from ? { from } : {}),
         ...(to ? { to } : {}),
         ...(leagueId ? { leagueId } : {}),
@@ -1085,7 +1090,6 @@ export default function TripDetailScreen() {
         onPress: openHotels,
         secondaryCta: "Stay guidance",
         onSecondaryPress: () => {
-          // soft-scroll: for now just show a hint; later you can add refs/anchors
           Alert.alert("Tip", "Scroll down to ‘Stay guidance’ for areas + transport stops.");
         },
       };
@@ -1339,10 +1343,7 @@ export default function TripDetailScreen() {
                     {smartBookButtons.map((b, idx) => (
                       <Pressable
                         key={`${b.title}-${idx}`}
-                        style={[
-                          styles.smartBtn,
-                          b.kind === "primary" ? styles.smartBtnPrimary : undefined,
-                        ]}
+                        style={[styles.smartBtn, b.kind === "primary" ? styles.smartBtnPrimary : undefined]}
                         onPress={b.onPress}
                       >
                         <Text style={styles.smartBtnText}>{b.title}</Text>
@@ -1762,11 +1763,7 @@ export default function TripDetailScreen() {
                     multiline
                   />
 
-                  <Pressable
-                    onPress={addNote}
-                    disabled={noteSaving}
-                    style={[styles.noteSaveBtn, noteSaving && { opacity: 0.7 }]}
-                  >
+                  <Pressable onPress={addNote} disabled={noteSaving} style={[styles.noteSaveBtn, noteSaving && { opacity: 0.7 }]}>
                     <Text style={styles.noteSaveText}>{noteSaving ? "Saving…" : "Save note"}</Text>
                   </Pressable>
                 </View>
