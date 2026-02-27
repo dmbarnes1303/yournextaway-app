@@ -97,9 +97,15 @@ type CityData = {
   venueIds?: number[];
 };
 
+type GuideBlock = {
+  heading?: string;
+  text: string;
+};
+
 type GuideFull = {
   title: string;
-  blocks: { heading?: string; text: string }[];
+  countryName?: string;
+  blocks: GuideBlock[];
 };
 
 function normalizeText(v: any): string {
@@ -110,6 +116,36 @@ function joinParas(v: any): string {
   if (Array.isArray(v)) return v.filter(Boolean).map((x) => safeStr(x)).filter(Boolean).join("\n\n");
   return normalizeText(v);
 }
+
+/**
+ * Minimal, safe country-name -> ISO2 mapping (enough for current leagues).
+ * This is intentionally simple to avoid importing unknown utils.
+ */
+const COUNTRY_NAME_TO_ISO2: Record<string, string> = {
+  france: "FR",
+  england: "GB",
+  scotland: "GB",
+  wales: "GB",
+  spain: "ES",
+  germany: "DE",
+  italy: "IT",
+  netherlands: "NL",
+  portugal: "PT",
+  belgium: "BE",
+  austria: "AT",
+  switzerland: "CH",
+  monaco: "MC",
+  turkey: "TR",
+  greece: "GR",
+  poland: "PL",
+  czechia: "CZ",
+  "czech republic": "CZ",
+  croatia: "HR",
+  denmark: "DK",
+  sweden: "SE",
+  norway: "NO",
+  ireland: "IE",
+};
 
 /**
  * Runtime city metadata (safe, never crashes)
@@ -148,8 +184,29 @@ function getCityData(cityKey: string): CityData | null {
   return { cityKey: key, name: cityKeyToTitle(key) };
 }
 
+function bulletsFromStrings(items: string[]) {
+  return items
+    .map((x) => safeStr(x))
+    .filter(Boolean)
+    .map((x) => `- ${x}`)
+    .join("\n");
+}
+
+function bulletsFromTopThings(topThings: any[]) {
+  const lines: string[] = [];
+  for (const t of topThings ?? []) {
+    const title = safeStr(t?.title);
+    const tip = safeStr(t?.tip);
+    if (!title && !tip) continue;
+    if (title && tip) lines.push(`- ${title}: ${tip}`);
+    else lines.push(`- ${title || tip}`);
+  }
+  return lines.join("\n");
+}
+
 /**
- * Runtime guide loader (safe, never crashes)
+ * City guide loader that matches your CityGuide shape (overview/topThings/tips/food/transport/accommodation)
+ * Safe, never crashes.
  */
 function getCityGuideFull(cityKey: string): GuideFull | null {
   const key = safeStr(cityKey);
@@ -177,7 +234,7 @@ function getCityGuideFull(cityKey: string): GuideFull | null {
       safeStr(guide.cityName) ||
       "City guide";
 
-    const blocks: { heading?: string; text: string }[] = [];
+    const blocks: GuideBlock[] = [];
 
     const overview =
       normalizeText(guide.overview) ||
@@ -187,21 +244,48 @@ function getCityGuideFull(cityKey: string): GuideFull | null {
 
     if (overview) blocks.push({ heading: "Overview", text: overview });
 
+    // IMPORTANT: Your guides (e.g. ligue1.ts) use topThings/tips/food/transport/accommodation.
+    if (Array.isArray(guide.topThings) && guide.topThings.length) {
+      const txt = bulletsFromTopThings(guide.topThings);
+      if (txt) blocks.push({ heading: "Top things to do", text: txt });
+    }
+
+    if (Array.isArray(guide.tips) && guide.tips.length) {
+      const txt = bulletsFromStrings(guide.tips);
+      if (txt) blocks.push({ heading: "Quick tips", text: txt });
+    }
+
+    if (Array.isArray(guide.food) && guide.food.length) {
+      const txt = bulletsFromStrings(guide.food);
+      if (txt) blocks.push({ heading: "What to eat & drink", text: txt });
+    }
+
+    const transport =
+      normalizeText(guide.transport) ||
+      normalizeText(guide.gettingAround) ||
+      normalizeText(guide.transit) ||
+      "";
+
+    if (transport) blocks.push({ heading: "Getting around", text: transport });
+
+    const accommodation =
+      normalizeText(guide.accommodation) ||
+      normalizeText(guide.whereToStay) ||
+      normalizeText(guide.stay) ||
+      "";
+
+    if (accommodation) blocks.push({ heading: "Where to stay", text: accommodation });
+
+    // Back-compat: if some guides use sections/content/text
     if (Array.isArray(guide.sections) && guide.sections.length) {
       for (const s of guide.sections) {
-        const heading =
-          safeStr(s?.title) ||
-          safeStr(s?.heading) ||
-          safeStr(s?.name) ||
-          "";
-
+        const heading = safeStr(s?.title) || safeStr(s?.heading) || safeStr(s?.name) || "";
         const text =
           normalizeText(s?.body) ||
           normalizeText(s?.content) ||
           joinParas(s?.paragraphs) ||
           normalizeText(s?.text) ||
           "";
-
         if (text) blocks.push({ heading: heading || undefined, text });
       }
     }
@@ -213,7 +297,11 @@ function getCityGuideFull(cityKey: string): GuideFull | null {
 
     if (!blocks.length) blocks.push({ heading: undefined, text: "Guide content is available for this city." });
 
-    return { title, blocks };
+    return {
+      title,
+      countryName: safeStr(guide.country) || undefined,
+      blocks,
+    };
   } catch {
     return null;
   }
@@ -251,7 +339,7 @@ function GuideSectionCard({ heading, text }: { heading?: string; text: string })
 
         {bullets.length ? (
           <View style={styles.bulletList}>
-            {bullets.slice(0, 14).map((b, idx) => (
+            {bullets.map((b, idx) => (
               <View key={`b-${idx}`} style={styles.bulletRow}>
                 <View style={styles.bulletDot} />
                 <Text style={styles.bulletText}>{b}</Text>
@@ -345,7 +433,6 @@ export default function CityScreen() {
         const cityName = safeStr(city?.name);
         const venueIds = Array.isArray(city?.venueIds) ? city!.venueIds! : [];
 
-        // Parallel fetch (much faster than sequential)
         const settled = await Promise.allSettled(
           (LEAGUES ?? []).map((l) =>
             getFixtures({
@@ -366,7 +453,6 @@ export default function CityScreen() {
           all.push(...list);
         }
 
-        // Filter fixtures that happen in this city
         const cityLower = cityName.toLowerCase();
 
         const filtered = all.filter((r) => {
@@ -379,7 +465,6 @@ export default function CityScreen() {
           return byCityName || byVenueId;
         });
 
-        // Dedup by fixture id
         const dedup = new Map<string, FixtureListRow>();
         for (const r of filtered) {
           const id = r?.fixture?.id != null ? String(r.fixture.id) : "";
@@ -411,7 +496,15 @@ export default function CityScreen() {
   const grouped = useMemo(() => groupByMonth(fxRows), [fxRows]);
 
   const title = city?.name || cityKeyToTitle(cityKey);
-  const countryCode = safeStr(city?.countryCode);
+
+  // Country flag: prefer city registry; fallback to guide country name mapping.
+  const countryName =
+    safeStr(city?.countryName) || safeStr(guideFull?.countryName) || "";
+
+  const countryCode =
+    safeStr(city?.countryCode) ||
+    (countryName ? COUNTRY_NAME_TO_ISO2[countryName.toLowerCase()] : "") ||
+    "";
 
   const goHome = useCallback(() => {
     router.push("/(tabs)/home" as any);
@@ -422,7 +515,6 @@ export default function CityScreen() {
       const fixtureId = row?.fixture?.id != null ? String(row.fixture.id) : "";
       if (!fixtureId) return;
 
-      // pass leagueId/season when available (Trip Build usually needs it)
       const leagueId = row?.league?.id != null ? String(row.league.id) : undefined;
       const season = row?.league?.season != null ? String(row.league.season) : undefined;
 
@@ -443,6 +535,13 @@ export default function CityScreen() {
 
   const bgSource = getBackground("city");
 
+  // Preview: show a short guide on the page, full guide in modal.
+  const previewBlocks = useMemo(() => {
+    if (!guideFull?.blocks?.length) return [];
+    // Always show overview + next 1–2 sections for “depth” without turning the page into a novel.
+    return guideFull.blocks.slice(0, Math.min(3, guideFull.blocks.length));
+  }, [guideFull]);
+
   return (
     <Background imageSource={bgSource} overlayOpacity={0.7}>
       <SafeAreaView style={styles.container} edges={["top"]}>
@@ -460,7 +559,7 @@ export default function CityScreen() {
 
                   <View style={styles.heroMetaRow}>
                     {countryCode ? <FlagMini countryCode={countryCode} /> : null}
-                    {city?.countryName ? <Text style={styles.heroMetaText}>{safeStr(city.countryName)}</Text> : null}
+                    {countryName ? <Text style={styles.heroMetaText}>{countryName}</Text> : null}
                   </View>
                 </View>
               </View>
@@ -495,7 +594,7 @@ export default function CityScreen() {
             </View>
           </GlassCard>
 
-          {/* GUIDE (uplift: section cards like team guides) */}
+          {/* GUIDE PREVIEW */}
           <View style={{ gap: 12 }}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Guide</Text>
@@ -516,14 +615,24 @@ export default function CityScreen() {
               </GlassCard>
             ) : (
               <View style={{ gap: 12 }}>
-                {guideFull.blocks.map((b, idx) => (
+                {previewBlocks.map((b, idx) => (
                   <GuideSectionCard key={`sec-${idx}`} heading={b.heading} text={b.text} />
                 ))}
+
+                {guideFull.blocks.length > previewBlocks.length ? (
+                  <Pressable
+                    onPress={() => setGuideOpen(true)}
+                    style={({ pressed }) => [styles.openFullCard, pressed && styles.pressed]}
+                    android_ripple={{ color: "rgba(79,224,138,0.10)" }}
+                  >
+                    <Text style={styles.openFullText}>Open full city guide</Text>
+                  </Pressable>
+                ) : null}
               </View>
             )}
           </View>
 
-          {/* CITY FIXTURES (multi-team) */}
+          {/* CITY FIXTURES */}
           <GlassCard strength="default" style={styles.block} noPadding>
             <View style={styles.blockInner}>
               <Text style={styles.blockTitle}>Fixtures in {title}</Text>
@@ -564,7 +673,7 @@ export default function CityScreen() {
           <View style={{ height: 14 }} />
         </ScrollView>
 
-        {/* GUIDE MODAL */}
+        {/* GUIDE MODAL (FULL) */}
         <Modal visible={guideOpen} animationType="fade" transparent onRequestClose={() => setGuideOpen(false)}>
           <Pressable style={styles.modalBackdrop} onPress={() => setGuideOpen(false)} />
           <View style={styles.modalSheetWrap} pointerEvents="box-none">
@@ -580,13 +689,16 @@ export default function CityScreen() {
                 {!guideFull ? (
                   <Text style={styles.modalBodyText}>Guide content unavailable.</Text>
                 ) : (
-                  <ScrollView style={styles.modalScroll} contentContainerStyle={{ paddingBottom: 6 }} showsVerticalScrollIndicator={false}>
-                    {guideFull.blocks.map((b, idx) => (
-                      <View key={`g-${idx}`} style={styles.guideBlock}>
-                        {b.heading ? <Text style={styles.guideBlockTitle}>{b.heading}</Text> : null}
-                        <Text style={styles.modalBodyText}>{b.text}</Text>
-                      </View>
-                    ))}
+                  <ScrollView
+                    style={styles.modalScroll}
+                    contentContainerStyle={{ paddingBottom: 6 }}
+                    showsVerticalScrollIndicator={false}
+                  >
+                    <View style={{ gap: 12 }}>
+                      {guideFull.blocks.map((b, idx) => (
+                        <GuideSectionCard key={`m-${idx}`} heading={b.heading} text={b.text} />
+                      ))}
+                    </View>
                   </ScrollView>
                 )}
               </View>
@@ -647,6 +759,18 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   miniPillText: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: theme.fontWeight.black },
+
+  openFullCard: {
+    paddingVertical: 12,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "rgba(79,224,138,0.18)",
+    backgroundColor: Platform.OS === "android" ? "rgba(10,12,14,0.18)" : "rgba(10,12,14,0.14)",
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+  openFullText: { color: theme.colors.text, fontSize: 13, fontWeight: theme.fontWeight.black },
 
   block: { borderRadius: 24 },
   blockInner: { padding: 14, gap: 12 },
@@ -739,17 +863,4 @@ const styles = StyleSheet.create({
   },
   modalCloseText: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: theme.fontWeight.black },
   modalScroll: { maxHeight: 560 },
-
-  guideBlock: {
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-    backgroundColor: Platform.OS === "android" ? "rgba(12,14,16,0.20)" : "rgba(12,14,16,0.16)",
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    gap: 8,
-    marginBottom: 10,
-  },
-  guideBlockTitle: { color: theme.colors.text, fontSize: 14, fontWeight: theme.fontWeight.black },
-  modalBodyText: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold, lineHeight: 19 },
 });
