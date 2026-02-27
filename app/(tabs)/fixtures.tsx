@@ -39,12 +39,14 @@ import type { TicketDifficulty } from "@/src/data/ticketGuides/types";
 /* -------------------------------------------------------------------------- */
 
 const DAYS_AHEAD = 365;
-const STRIP_DAYS = 7;
 const MAX_MULTI_LEAGUES = 10;
 
+// Livescore-style strip: show a short, simple run of days (single-date only).
+const STRIP_DAYS = 7;
+
 /* -------------------------------------------------------------------------- */
-/* Param helpers */
-/* -------------------------------------------------------------------------- */
+/* Param helpers
+ * -------------------------------------------------------------------------- */
 
 function coerceString(v: any): string | null {
   const s = String(v ?? "").trim();
@@ -57,8 +59,8 @@ function coerceNumber(v: any): number | null {
 }
 
 /* -------------------------------------------------------------------------- */
-/* UTC-safe date helpers */
-/* -------------------------------------------------------------------------- */
+/* UTC-safe date helpers (prevents DST duplication)
+ * -------------------------------------------------------------------------- */
 
 function isoFromUtcParts(y: number, m0: number, d: number) {
   const ms = Date.UTC(y, m0, d, 0, 0, 0, 0);
@@ -96,28 +98,13 @@ function normalizeRange(fromIso: string, toIso: string) {
   return a <= b ? { from: a, to: b } : { from: b, to: a };
 }
 
-function isoToDate(iso: string) {
-  return new Date(`${iso}T00:00:00.000Z`);
-}
-
-function formatHeaderDateLong(iso: string) {
-  const d = isoToDate(iso);
-  return d.toLocaleDateString("en-GB", { weekday: "short", day: "2-digit", month: "short", year: "numeric" });
-}
-
-function formatStripTop(iso: string) {
-  const d = isoToDate(iso);
-  return d.toLocaleDateString("en-GB", { weekday: "short" });
-}
-
-function formatStripBottom(iso: string) {
-  const d = isoToDate(iso);
-  return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+function isValidIsoDateOnly(s: string) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(String(s ?? "").trim());
 }
 
 /* -------------------------------------------------------------------------- */
-/* Ticket badge helpers */
-/* -------------------------------------------------------------------------- */
+/* Ticket badge helpers
+ * -------------------------------------------------------------------------- */
 
 function ticketDifficultyLabel(d: TicketDifficulty | "unknown") {
   switch (d) {
@@ -129,14 +116,14 @@ function ticketDifficultyLabel(d: TicketDifficulty | "unknown") {
       return "Hard";
     case "very_hard":
       return "Very hard";
-    case "unknown":
+    default:
       return "Unknown";
   }
 }
 
 /* -------------------------------------------------------------------------- */
-/* Fixture helpers */
-/* -------------------------------------------------------------------------- */
+/* Fixture helpers
+ * -------------------------------------------------------------------------- */
 
 function norm(s: unknown) {
   return String(s ?? "").trim().toLowerCase();
@@ -149,6 +136,12 @@ function fixtureIsoDateOnly(r: FixtureListRow): string | null {
   return m?.[1] ?? null;
 }
 
+/**
+ * UI label:
+ * - If likely placeholder (clustered), show "Likely TBC" but keep the provisional time as secondary text.
+ * - If no kickoff, show "TBC".
+ * - Else show the formatted kickoff.
+ */
 function kickoffPresentation(r: FixtureListRow, placeholderIds?: Set<string>) {
   const likelyTbc = isKickoffTbc(r, placeholderIds);
   const iso = kickoffIsoOrNull(r);
@@ -170,6 +163,9 @@ function kickoffPresentation(r: FixtureListRow, placeholderIds?: Set<string>) {
   return { primary: formatted, secondary: null as string | null, likelyTbc: false };
 }
 
+/**
+ * If a fixture already belongs to an existing trip, route to that trip workspace.
+ */
 function resolveTripForFixture(fixtureId: string): string | null {
   const trips = tripsStore.getState().trips;
   const hit = trips.find((t) => (t.matchIds ?? []).includes(String(fixtureId)));
@@ -177,8 +173,8 @@ function resolveTripForFixture(fixtureId: string): string | null {
 }
 
 /* -------------------------------------------------------------------------- */
-/* League UI helpers */
-/* -------------------------------------------------------------------------- */
+/* League UI helpers
+ * -------------------------------------------------------------------------- */
 
 function LeagueFlag({ code }: { code: string }) {
   const url = getFlagImageUrl(code);
@@ -207,8 +203,8 @@ function TeamCrest({ name, logo }: { name: string; logo?: string | null }) {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Concurrency-limited fetch */
-/* -------------------------------------------------------------------------- */
+/* Concurrency-limited fetch (protects perf + rate limits)
+ * -------------------------------------------------------------------------- */
 
 async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
   const results: R[] = new Array(items.length) as any;
@@ -227,72 +223,109 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promis
 }
 
 /* -------------------------------------------------------------------------- */
-/* Calendar modal (simple, no deps) */
-/* -------------------------------------------------------------------------- */
+/* Calendar (simple, built-in, range capable)
+ * -------------------------------------------------------------------------- */
 
-function monthLabel(y: number, m0: number) {
-  const d = new Date(Date.UTC(y, m0, 1));
+function daysInMonthUtc(year: number, month0: number) {
+  // month0: 0-11
+  // Day 0 of next month = last day of current month
+  return new Date(Date.UTC(year, month0 + 1, 0)).getUTCDate();
+}
+
+function firstWeekdayUtc(year: number, month0: number) {
+  // 0=Sun ... 6=Sat
+  return new Date(Date.UTC(year, month0, 1)).getUTCDay();
+}
+
+function monthLabel(year: number, month0: number) {
+  const d = new Date(Date.UTC(year, month0, 1));
   return d.toLocaleDateString("en-GB", { month: "short", year: "numeric" });
 }
 
-function daysInMonth(y: number, m0: number) {
-  // day 0 of next month
-  return new Date(Date.UTC(y, m0 + 1, 0)).getUTCDate();
+function parseIsoToUtcParts(iso: string) {
+  const m = String(iso ?? "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return null;
+  return { y: Number(m[1]), m0: Number(m[2]) - 1, d: Number(m[3]) };
 }
 
-function weekdayIndexMonFirst(y: number, m0: number, d: number) {
-  // JS getUTCDay: 0 Sun .. 6 Sat
-  const wd = new Date(Date.UTC(y, m0, d)).getUTCDay();
-  // convert to Mon=0..Sun=6
-  return (wd + 6) % 7;
-}
+function buildMonthGrid(year: number, month0: number) {
+  const dim = daysInMonthUtc(year, month0);
+  const firstW = firstWeekdayUtc(year, month0); // Sun start
+  const cells: Array<{ iso: string; day: number; inMonth: boolean }> = [];
 
-type CalendarPick = { from: string; to: string };
+  // pad before
+  for (let i = 0; i < firstW; i++) {
+    cells.push({ iso: "", day: 0, inMonth: false });
+  }
 
-function isIsoInRange(iso: string, r: CalendarPick) {
-  const n = normalizeRange(r.from, r.to);
-  return iso >= n.from && iso <= n.to;
+  for (let day = 1; day <= dim; day++) {
+    const iso = isoFromUtcParts(year, month0, day);
+    cells.push({ iso, day, inMonth: true });
+  }
+
+  // pad after to complete weeks (6 rows max, but keep simple)
+  while (cells.length % 7 !== 0) {
+    cells.push({ iso: "", day: 0, inMonth: false });
+  }
+
+  return cells;
 }
 
 /* -------------------------------------------------------------------------- */
-/* Screen */
-/* -------------------------------------------------------------------------- */
+/* Screen
+ * -------------------------------------------------------------------------- */
 
 export default function FixturesScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
 
+  // 365-day window starting TOMORROW (never show today)
   const minIso = useMemo(() => tomorrowIsoUtc(), []);
   const maxIso = useMemo(() => addDaysIsoUtc(minIso, DAYS_AHEAD - 1), [minIso]);
 
+  // Route overrides (optional): leagueId, from, to
   const routeLeagueId = useMemo(() => coerceNumber((params as any)?.leagueId), [params]);
   const routeFrom = useMemo(() => coerceString((params as any)?.from), [params]);
   const routeTo = useMemo(() => coerceString((params as any)?.to), [params]);
 
-  const initialDay = useMemo(
-    () => clampIsoToWindow(routeFrom ?? minIso, minIso, maxIso),
-    [routeFrom, minIso, maxIso]
-  );
+  // Single-day selection (Livescore-style)
+  const initialDay = useMemo(() => {
+    const base = routeFrom && isValidIsoDateOnly(routeFrom) ? routeFrom : minIso;
+    return clampIsoToWindow(base, minIso, maxIso);
+  }, [routeFrom, minIso, maxIso]);
 
+  // Optional calendar range
   const initialRange = useMemo(() => {
-    const f = clampIsoToWindow(routeFrom ?? initialDay, minIso, maxIso);
-    const t = clampIsoToWindow(routeTo ?? f, minIso, maxIso);
-    return normalizeRange(f, t);
-  }, [routeFrom, routeTo, initialDay, minIso, maxIso]);
-
-  // Selected day always exists; range is optional and only set via calendar modal
-  const [selectedDayIso, setSelectedDayIso] = useState<string>(initialDay);
-  const [range, setRange] = useState<CalendarPick | null>(() => {
-    const n = initialRange;
-    if (n.from !== n.to) return { from: n.from, to: n.to };
+    const a = routeFrom && isValidIsoDateOnly(routeFrom) ? clampIsoToWindow(routeFrom, minIso, maxIso) : null;
+    const b = routeTo && isValidIsoDateOnly(routeTo) ? clampIsoToWindow(routeTo, minIso, maxIso) : null;
+    if (a && b && a !== b) return normalizeRange(a, b);
     return null;
-  });
+  }, [routeFrom, routeTo, minIso, maxIso]);
 
-  const effectiveFrom = range ? normalizeRange(range.from, range.to).from : selectedDayIso;
-  const effectiveTo = range ? normalizeRange(range.from, range.to).to : selectedDayIso;
-  const isRange = effectiveFrom !== effectiveTo;
+  const [selectedDay, setSelectedDay] = useState<string>(initialDay);
+  const [range, setRange] = useState<{ from: string; to: string } | null>(initialRange);
 
-  // Leagues
+  const effectiveRange = useMemo(() => {
+    return range ? normalizeRange(range.from, range.to) : { from: selectedDay, to: selectedDay };
+  }, [range, selectedDay]);
+
+  const isRange = useMemo(() => effectiveRange.from !== effectiveRange.to, [effectiveRange]);
+
+  // Date strip: simple, single-day only
+  const stripDays = useMemo(() => {
+    const start = clampIsoToWindow(selectedDay, minIso, maxIso);
+    return Array.from({ length: STRIP_DAYS }).map((_, i) => {
+      const iso = addDaysIsoUtc(start, i);
+      const d = new Date(`${iso}T00:00:00.000Z`);
+      return {
+        iso,
+        top: d.toLocaleDateString("en-GB", { weekday: "short" }),
+        bottom: d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" }),
+      };
+    });
+  }, [selectedDay, minIso, maxIso]);
+
+  // Leagues: multi-select up to 10, default = All (empty array => all leagues)
   const [selectedLeagueIds, setSelectedLeagueIds] = useState<number[]>(() => {
     if (routeLeagueId && Number.isFinite(routeLeagueId)) return [routeLeagueId];
     return [];
@@ -327,9 +360,15 @@ export default function FixturesScreen() {
     });
   }, []);
 
-  const setAllLeagues = useCallback(() => setSelectedLeagueIds([]), []);
+  const setAllLeagues = useCallback(() => {
+    setSelectedLeagueIds([]);
+  }, []);
 
-  // Follow state
+  // Search
+  const [query, setQuery] = useState("");
+  const qNorm = query.trim().toLowerCase();
+
+  // Follow state (fast lookup)
   const followed = useFollowStore((s) => s.followed);
   const toggleFollow = useFollowStore((s) => s.toggle);
 
@@ -342,111 +381,19 @@ export default function FixturesScreen() {
     return set;
   }, [followed]);
 
-  // Search
-  const [query, setQuery] = useState("");
-  const qNorm = query.trim().toLowerCase();
-
   // Data
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [rows, setRows] = useState<FixtureListRow[]>([]);
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
 
+  // Placeholder ids from the fetched set (works for single day or ranges)
   const placeholderIds = useMemo(() => computeLikelyPlaceholderTbcIds(rows), [rows]);
 
-  // Date strip (Livescore feel): 7 days around selected day, clamped
-  const dateStrip = useMemo(() => {
-    const out: { iso: string; top: string; bottom: string }[] = [];
-    const base = selectedDayIso;
+  // Fetch only for selected day or calendar range
+  const fetchFrom = effectiveRange.from;
+  const fetchTo = effectiveRange.to;
 
-    // aim: base centered
-    const start = clampIsoToWindow(addDaysIsoUtc(base, -3), minIso, maxIso);
-    for (let i = 0; i < STRIP_DAYS; i++) {
-      const iso = clampIsoToWindow(addDaysIsoUtc(start, i), minIso, maxIso);
-      if (out.length && out[out.length - 1].iso === iso) continue;
-      out.push({ iso, top: formatStripTop(iso), bottom: formatStripBottom(iso) });
-    }
-
-    return out;
-  }, [selectedDayIso, minIso, maxIso]);
-
-  // Calendar modal state
-  const [calOpen, setCalOpen] = useState(false);
-  const [calPick, setCalPick] = useState<CalendarPick>(() => ({ from: effectiveFrom, to: effectiveTo }));
-
-  const calMonthState = useMemo(() => {
-    const d = isoToDate(selectedDayIso);
-    return { y: d.getUTCFullYear(), m0: d.getUTCMonth() };
-  }, [selectedDayIso]);
-
-  const [calY, setCalY] = useState(calMonthState.y);
-  const [calM0, setCalM0] = useState(calMonthState.m0);
-
-  useEffect(() => {
-    // keep month in sync when opening
-    if (!calOpen) return;
-    const d = isoToDate(selectedDayIso);
-    setCalY(d.getUTCFullYear());
-    setCalM0(d.getUTCMonth());
-    setCalPick({ from: effectiveFrom, to: effectiveTo });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [calOpen]);
-
-  function prevMonth() {
-    const m = calM0 - 1;
-    if (m >= 0) setCalM0(m);
-    else {
-      setCalM0(11);
-      setCalY((y) => y - 1);
-    }
-  }
-
-  function nextMonth() {
-    const m = calM0 + 1;
-    if (m <= 11) setCalM0(m);
-    else {
-      setCalM0(0);
-      setCalY((y) => y + 1);
-    }
-  }
-
-  function calTapDay(iso: string) {
-    const d = clampIsoToWindow(iso, minIso, maxIso);
-
-    // start → end → reset start
-    const n = normalizeRange(calPick.from, calPick.to);
-    const isSingle = n.from === n.to;
-
-    if (isSingle) {
-      if (d === n.from) return;
-      setCalPick({ from: n.from, to: d });
-      return;
-    }
-
-    // reset to single day
-    setCalPick({ from: d, to: d });
-  }
-
-  const calendarCells = useMemo(() => {
-    const firstWd = weekdayIndexMonFirst(calY, calM0, 1); // 0..6
-    const dim = daysInMonth(calY, calM0);
-    const cells: Array<{ iso: string; label: string; disabled: boolean }> = [];
-
-    // pad
-    for (let i = 0; i < firstWd; i++) {
-      cells.push({ iso: "", label: "", disabled: true });
-    }
-
-    for (let d = 1; d <= dim; d++) {
-      const iso = isoFromUtcParts(calY, calM0, d);
-      const disabled = iso < minIso || iso > maxIso;
-      cells.push({ iso, label: String(d), disabled });
-    }
-
-    return cells;
-  }, [calY, calM0, minIso, maxIso]);
-
-  // Fetch fixtures
   useEffect(() => {
     let cancelled = false;
 
@@ -461,8 +408,8 @@ export default function FixturesScreen() {
           const res = await getFixtures({
             league: l.leagueId,
             season: l.season,
-            from: effectiveFrom,
-            to: effectiveTo,
+            from: fetchFrom,
+            to: fetchTo,
           });
           return Array.isArray(res) ? res : [];
         });
@@ -490,13 +437,13 @@ export default function FixturesScreen() {
     return () => {
       cancelled = true;
     };
-  }, [selectedLeagues, effectiveFrom, effectiveTo]);
+  }, [selectedLeagues, fetchFrom, fetchTo]);
 
   const filtered = useMemo(() => {
     const base = rows;
 
-    // If not range, keep only selected day (defensive)
-    const dayFiltered = !isRange ? base.filter((r) => fixtureIsoDateOnly(r) === selectedDayIso) : base;
+    // Defensive: if not range, keep only that day
+    const dayFiltered = !isRange ? base.filter((r) => fixtureIsoDateOnly(r) === effectiveRange.from) : base;
 
     if (!qNorm) return dayFiltered;
 
@@ -509,7 +456,7 @@ export default function FixturesScreen() {
         norm(r?.league?.name).includes(qNorm)
       );
     });
-  }, [rows, isRange, selectedDayIso, qNorm]);
+  }, [rows, isRange, effectiveRange.from, qNorm]);
 
   function goMatch(id: string, ctx?: { leagueId?: number | null; season?: number | null }) {
     const fid = String(id ?? "").trim();
@@ -519,8 +466,8 @@ export default function FixturesScreen() {
       pathname: "/match/[id]",
       params: {
         id: fid,
-        from: effectiveFrom,
-        to: effectiveTo,
+        from: effectiveRange.from,
+        to: effectiveRange.to,
         ...(ctx?.leagueId ? { leagueId: String(ctx.leagueId) } : {}),
         ...(ctx?.season ? { season: String(ctx.season) } : {}),
       },
@@ -542,8 +489,8 @@ export default function FixturesScreen() {
       pathname: "/trip/build",
       params: {
         fixtureId: fid,
-        from: effectiveFrom,
-        to: effectiveTo,
+        from: effectiveRange.from,
+        to: effectiveRange.to,
         ...(ctx?.leagueId ? { leagueId: String(ctx.leagueId) } : {}),
         ...(ctx?.season ? { season: String(ctx.season) } : {}),
       },
@@ -585,10 +532,132 @@ export default function FixturesScreen() {
     [toggleFollow]
   );
 
+  /* ----------------------------- Calendar modal ---------------------------- */
+
+  const [calendarOpen, setCalendarOpen] = useState(false);
+
+  const [calMonthYear, setCalMonthYear] = useState(() => {
+    const base = parseIsoToUtcParts(selectedDay) ?? parseIsoToUtcParts(minIso) ?? { y: 2026, m0: 0, d: 1 };
+    return { y: base.y, m0: base.m0 };
+  });
+
+  const [calPickA, setCalPickA] = useState<string>(selectedDay);
+  const [calPickB, setCalPickB] = useState<string>(selectedDay);
+
+  const calNorm = useMemo(() => normalizeRange(calPickA, calPickB), [calPickA, calPickB]);
+  const calIsRange = useMemo(() => calNorm.from !== calNorm.to, [calNorm]);
+
+  const openCalendar = useCallback(() => {
+    // Seed with current selection
+    if (range) {
+      setCalPickA(range.from);
+      setCalPickB(range.to);
+      const parts = parseIsoToUtcParts(range.from) ?? parseIsoToUtcParts(selectedDay);
+      if (parts) setCalMonthYear({ y: parts.y, m0: parts.m0 });
+    } else {
+      setCalPickA(selectedDay);
+      setCalPickB(selectedDay);
+      const parts = parseIsoToUtcParts(selectedDay);
+      if (parts) setCalMonthYear({ y: parts.y, m0: parts.m0 });
+    }
+    setCalendarOpen(true);
+  }, [range, selectedDay]);
+
+  const closeCalendar = useCallback(() => setCalendarOpen(false), []);
+
+  const calGrid = useMemo(() => buildMonthGrid(calMonthYear.y, calMonthYear.m0), [calMonthYear]);
+
+  const calPrevMonth = useCallback(() => {
+    setCalMonthYear((prev) => {
+      const m0 = prev.m0 - 1;
+      if (m0 < 0) return { y: prev.y - 1, m0: 11 };
+      return { y: prev.y, m0 };
+    });
+  }, []);
+
+  const calNextMonth = useCallback(() => {
+    setCalMonthYear((prev) => {
+      const m0 = prev.m0 + 1;
+      if (m0 > 11) return { y: prev.y + 1, m0: 0 };
+      return { y: prev.y, m0 };
+    });
+  }, []);
+
+  const calInRange = useCallback(
+    (iso: string) => {
+      if (!iso) return false;
+      return iso >= calNorm.from && iso <= calNorm.to;
+    },
+    [calNorm]
+  );
+
+  const calIsEdge = useCallback(
+    (iso: string) => {
+      if (!iso) return false;
+      return iso === calNorm.from || iso === calNorm.to;
+    },
+    [calNorm]
+  );
+
+  const onCalendarTapDay = useCallback(
+    (iso: string) => {
+      if (!iso) return;
+      const d = clampIsoToWindow(iso, minIso, maxIso);
+
+      // start → end → reset (inside modal only)
+      if (calPickA === calPickB) {
+        if (d === calPickA) return;
+        setCalPickB(d);
+        return;
+      }
+
+      setCalPickA(d);
+      setCalPickB(d);
+    },
+    [calPickA, calPickB, minIso, maxIso]
+  );
+
+  const applyCalendar = useCallback(() => {
+    const a = clampIsoToWindow(calNorm.from, minIso, maxIso);
+    const b = clampIsoToWindow(calNorm.to, minIso, maxIso);
+    const n = normalizeRange(a, b);
+
+    if (n.from === n.to) {
+      setSelectedDay(n.from);
+      setRange(null);
+    } else {
+      setRange({ from: n.from, to: n.to });
+
+      // Keep strip anchored to range start so it feels deterministic.
+      setSelectedDay(n.from);
+    }
+
+    setCalendarOpen(false);
+  }, [calNorm, minIso, maxIso]);
+
+  const clearCalendarRange = useCallback(() => {
+    setCalPickA(selectedDay);
+    setCalPickB(selectedDay);
+  }, [selectedDay]);
+
+  /* ----------------------------- Date strip tap ---------------------------- */
+
+  const onTapStripDate = useCallback(
+    (iso: string) => {
+      const d = clampIsoToWindow(iso, minIso, maxIso);
+      setSelectedDay(d);
+      setRange(null); // strip is single-date only (range happens in calendar)
+    },
+    [minIso, maxIso]
+  );
+
+  /* ----------------------------- Row rendering ---------------------------- */
+
   const renderRow = (r: FixtureListRow) => {
     const fixtureId = r?.fixture?.id != null ? String(r.fixture.id) : "";
     if (!fixtureId) return null;
 
+    // Bulletproof keys across multi-league merges
     const leagueIdStr = r?.league?.id != null ? String(r.league.id) : "L";
     const rowKey = `${leagueIdStr}-${fixtureId}`;
     const expanded = expandedKey === rowKey;
@@ -605,68 +674,86 @@ export default function FixturesScreen() {
     const ctxLeagueId = r?.league?.id != null ? Number(r.league.id) : null;
     const ctxSeason = (r as any)?.league?.season != null ? Number((r as any).league.season) : null;
 
-    // Always show a value (unknown fallback)
-    const difficulty = (home ? getTicketDifficultyBadge(home) : null) ?? "unknown";
+    // IMPORTANT: home-club difficulty only (no away ticket messaging anywhere).
+    const rawDifficulty = home ? getTicketDifficultyBadge(home) : null;
+    const difficulty: TicketDifficulty | "unknown" = rawDifficulty ?? "unknown";
 
     return (
       <View key={rowKey} style={styles.rowWrap}>
         <GlassCard noPadding style={styles.rowCard} strength="subtle">
+          {/* Main tappable area */}
           <Pressable
             onPress={() => setExpandedKey(expanded ? null : rowKey)}
-            style={({ pressed }) => [styles.cardPress, pressed && { opacity: 0.96 }]}
-            android_ripple={{ color: "rgba(255,255,255,0.06)" }}
+            style={({ pressed }) => [styles.rowMainPress, pressed && { opacity: 0.92 }]}
+            android_ripple={{ color: "rgba(255,255,255,0.05)" }}
           >
             <View style={styles.rowInner}>
+              {/* Top: crests + names */}
               <View style={styles.topRow}>
                 <TeamCrest name={home} logo={r?.teams?.home?.logo} />
+
                 <View style={styles.centerCol}>
-                  <Text style={styles.homeName} numberOfLines={2}>
+                  <Text style={styles.teamName} numberOfLines={1} ellipsizeMode="tail">
                     {home}
                   </Text>
                   <Text style={styles.vs}>vs</Text>
-                  <Text style={styles.awayName} numberOfLines={2}>
+                  <Text style={styles.teamName} numberOfLines={1} ellipsizeMode="tail">
                     {away}
                   </Text>
-
-                  <Text style={styles.kickoff} numberOfLines={2}>
-                    {kickoff.primary}
-                  </Text>
-
-                  {(venue || city) ? (
-                    <Text style={styles.venueLine} numberOfLines={3}>
-                      {[venue, city].filter(Boolean).join(" • ")}
-                    </Text>
-                  ) : null}
-
-                  {kickoff.secondary ? (
-                    <Text style={styles.kickoffHint} numberOfLines={2}>
-                      {kickoff.secondary}
-                    </Text>
-                  ) : null}
-
-                  <View style={styles.badgeRow}>
-                    {/* Confirmed / Likely TBC */}
-                    {!kickoff.likelyTbc ? (
-                      <View style={[styles.badge, styles.badgeGold]}>
-                        <Text style={[styles.badgeText, styles.badgeTextGold]}>Confirmed</Text>
-                      </View>
-                    ) : (
-                      <View style={[styles.badge, styles.badgeWarn]}>
-                        <Text style={[styles.badgeText, styles.badgeTextWarn]}>Likely TBC</Text>
-                      </View>
-                    )}
-
-                    {/* Always show home tickets */}
-                    <View style={styles.badge}>
-                      <Text style={styles.badgeText}>Home tickets: {ticketDifficultyLabel(difficulty as any)}</Text>
-                    </View>
-                  </View>
-
-                  <Text style={styles.tapHint}>Tap for actions</Text>
                 </View>
+
                 <TeamCrest name={away} logo={r?.teams?.away?.logo} />
               </View>
 
+              {/* Meta (NO truncation: allow wrap) */}
+              <View style={styles.metaBlock}>
+                <Text style={styles.metaPrimary}>{kickoff.primary}</Text>
+
+                {(venue || city) ? (
+                  <Text style={styles.metaVenue}>
+                    {[venue, city].filter(Boolean).join(" • ")}
+                  </Text>
+                ) : null}
+
+                {kickoff.secondary ? <Text style={styles.metaSecondary}>{kickoff.secondary}</Text> : null}
+              </View>
+
+              {/* Badges */}
+              <View style={styles.badgeRow}>
+                {/* Confirmed / Likely TBC */}
+                {kickoff.likelyTbc ? (
+                  <View style={[styles.badge, styles.badgeWarn]}>
+                    <Text style={[styles.badgeText, styles.badgeTextWarn]}>Likely TBC</Text>
+                  </View>
+                ) : (
+                  <View style={[styles.badge, styles.badgeConfirmed]}>
+                    <Text style={[styles.badgeText, styles.badgeTextConfirmed]}>Confirmed</Text>
+                  </View>
+                )}
+
+                {/* Tickets badge (ALWAYS visible) */}
+                <View
+                  style={[
+                    styles.badge,
+                    difficulty === "easy" && styles.badgeEasy,
+                    difficulty === "medium" && styles.badgeMedium,
+                    (difficulty === "hard" || difficulty === "very_hard") && styles.badgeHard,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.badgeText,
+                      difficulty === "easy" && styles.badgeTextEasy,
+                      difficulty === "medium" && styles.badgeTextMedium,
+                      (difficulty === "hard" || difficulty === "very_hard") && styles.badgeTextHard,
+                    ]}
+                  >
+                    Home tickets: {ticketDifficultyLabel(difficulty)}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Follow pill (CENTERED, not lifting crests) */}
               <Pressable
                 onPress={() => onToggleFollowFromRow(r)}
                 style={({ pressed }) => [
@@ -679,16 +766,25 @@ export default function FixturesScreen() {
                   {isFollowed ? "Following" : "Follow"}
                 </Text>
               </Pressable>
+
+              <Text style={styles.tapHint}>Tap for actions</Text>
             </View>
           </Pressable>
 
+          {/* Expanded actions */}
           {expanded ? (
             <View style={styles.expandArea}>
-              <Pressable onPress={() => goMatch(fixtureId, { leagueId: ctxLeagueId, season: ctxSeason })} style={styles.expandGhost}>
+              <Pressable
+                onPress={() => goMatch(fixtureId, { leagueId: ctxLeagueId, season: ctxSeason })}
+                style={styles.expandGhost}
+              >
                 <Text style={styles.expandGhostText}>Match</Text>
               </Pressable>
 
-              <Pressable onPress={() => goTripOrBuild(fixtureId, { leagueId: ctxLeagueId, season: ctxSeason })} style={styles.expandPrimary}>
+              <Pressable
+                onPress={() => goTripOrBuild(fixtureId, { leagueId: ctxLeagueId, season: ctxSeason })}
+                style={styles.expandPrimary}
+              >
                 <Text style={styles.expandPrimaryText}>Build trip</Text>
               </Pressable>
             </View>
@@ -698,29 +794,28 @@ export default function FixturesScreen() {
     );
   };
 
-  const topDateLabel = useMemo(() => {
-    if (isRange) return `${formatHeaderDateLong(effectiveFrom)} → ${formatHeaderDateLong(effectiveTo)}`;
-    return formatHeaderDateLong(selectedDayIso);
-  }, [isRange, effectiveFrom, effectiveTo, selectedDayIso]);
-
-  const helperLine = useMemo(() => {
-    if (isRange) return `Range • ${effectiveFrom} → ${effectiveTo}`;
-    return `Day • ${selectedDayIso}`;
-  }, [isRange, effectiveFrom, effectiveTo, selectedDayIso]);
+  const headerDateLine = useMemo(() => {
+    if (!isRange) {
+      const d = new Date(`${effectiveRange.from}T00:00:00.000Z`);
+      return d.toLocaleDateString("en-GB", { weekday: "short", day: "2-digit", month: "short", year: "numeric" });
+    }
+    return `${effectiveRange.from} → ${effectiveRange.to}`;
+  }, [isRange, effectiveRange]);
 
   return (
     <Background imageSource={getBackground("fixtures")} overlayOpacity={0.82}>
       <SafeAreaView style={styles.container} edges={["top"]}>
+        {/* Header */}
         <View style={styles.header}>
-          <View style={styles.headerTop}>
+          <View style={styles.headerTopRow}>
             <View style={{ flex: 1 }}>
               <Text style={styles.title}>Fixtures</Text>
               <Text style={styles.subtitle}>{leagueSubtitle}</Text>
-              <Text style={styles.dateLine}>{topDateLabel}</Text>
+              <Text style={styles.dateLine}>{headerDateLine}</Text>
             </View>
 
             <Pressable
-              onPress={() => setCalOpen(true)}
+              onPress={openCalendar}
               style={({ pressed }) => [styles.calendarBtn, pressed && { opacity: 0.92 }]}
               android_ripple={{ color: "rgba(255,255,255,0.06)" }}
             >
@@ -737,30 +832,33 @@ export default function FixturesScreen() {
             style={styles.search}
           />
 
-          {/* Date strip (single-day selection) */}
+          {/* Date strip (Livescore style): single day only */}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 12 }}>
-            {dateStrip.map((d) => {
-              const active = d.iso === selectedDayIso && !range;
+            {stripDays.map((d, i) => {
+              const active = !isRange && d.iso === selectedDay;
+
               return (
                 <Pressable
-                  key={d.iso}
-                  onPress={() => {
-                    setRange(null);
-                    setSelectedDayIso(clampIsoToWindow(d.iso, minIso, maxIso));
-                  }}
+                  key={`${d.iso}-${i}`}
+                  onPress={() => onTapStripDate(d.iso)}
                   style={[styles.datePill, active && styles.datePillActive]}
                 >
-                  <Text style={styles.dateTop}>{d.top}</Text>
-                  <Text style={styles.dateBottom}>{d.bottom}</Text>
+                  <Text style={[styles.dateTop, active && styles.dateTopActive]}>{d.top}</Text>
+                  <Text style={[styles.dateBottom, active && styles.dateBottomActive]}>{d.bottom}</Text>
                 </Pressable>
               );
             })}
           </ScrollView>
 
-          {/* Leagues */}
+          {/* Leagues: All + multi-select */}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 12 }}>
-            <Pressable onPress={setAllLeagues} style={[styles.leaguePill, selectedLeagueIds.length === 0 && styles.leaguePillActive]}>
-              <Text style={styles.leagueText}>All leagues</Text>
+            <Pressable
+              onPress={setAllLeagues}
+              style={[styles.leaguePill, selectedLeagueIds.length === 0 && styles.leaguePillActive]}
+            >
+              <Text style={[styles.leagueText, selectedLeagueIds.length === 0 && styles.leagueTextActive]}>
+                All leagues
+              </Text>
             </Pressable>
 
             {LEAGUES.map((l) => {
@@ -771,7 +869,7 @@ export default function FixturesScreen() {
                   onPress={() => toggleLeague(l.leagueId)}
                   style={[styles.leaguePill, selected && styles.leaguePillActive]}
                 >
-                  <Text style={styles.leagueText}>{l.label}</Text>
+                  <Text style={[styles.leagueText, selected && styles.leagueTextActive]}>{l.label}</Text>
                   <LeagueFlag code={l.countryCode} />
                 </Pressable>
               );
@@ -779,12 +877,13 @@ export default function FixturesScreen() {
           </ScrollView>
 
           <Text style={styles.helperLine}>
-            {helperLine}
+            {isRange ? `Range • ${effectiveRange.from} → ${effectiveRange.to}` : `Day • ${effectiveRange.from}`}
             {selectedLeagueIds.length ? ` • ${selectedLeagueIds.length}/${MAX_MULTI_LEAGUES} leagues` : ""}
           </Text>
         </View>
 
-        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        {/* Content */}
+        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           <GlassCard style={styles.card} strength="default">
             {loading && (
               <View style={styles.center}>
@@ -796,103 +895,92 @@ export default function FixturesScreen() {
             {!loading && error && <EmptyState title="Error" message={error} />}
 
             {!loading && !error && filtered.length === 0 && (
-              <EmptyState title="No matches found" message="Try another date, range, or league selection." />
+              <EmptyState title="No matches found" message="Try another date, calendar range, or league selection." />
             )}
 
             {!loading && !error && filtered.map(renderRow)}
           </GlassCard>
         </ScrollView>
 
-        {/* Calendar modal */}
-        <Modal visible={calOpen} animationType="fade" transparent onRequestClose={() => setCalOpen(false)}>
-          <Pressable style={styles.modalBackdrop} onPress={() => setCalOpen(false)} />
+        {/* Calendar Modal */}
+        <Modal visible={calendarOpen} animationType="fade" transparent onRequestClose={closeCalendar}>
+          <Pressable style={styles.modalBackdrop} onPress={closeCalendar} />
           <View style={styles.modalWrap} pointerEvents="box-none">
             <GlassCard strength="strong" style={styles.modalSheet} noPadding>
               <View style={styles.modalInner}>
                 <View style={styles.modalHeader}>
                   <Text style={styles.modalTitle}>Select dates</Text>
-                  <Pressable onPress={() => setCalOpen(false)} style={styles.modalClose} hitSlop={10}>
+                  <Pressable onPress={closeCalendar} style={styles.modalClose} hitSlop={10}>
                     <Text style={styles.modalCloseText}>Done</Text>
                   </Pressable>
                 </View>
 
-                <View style={styles.monthRow}>
-                  <Pressable onPress={prevMonth} style={styles.monthNav}>
-                    <Text style={styles.monthNavText}>‹</Text>
+                <Text style={styles.modalSub}>
+                  {calIsRange ? `Range: ${calNorm.from} → ${calNorm.to}` : `Day: ${calNorm.from}`}
+                </Text>
+
+                <View style={styles.calHeaderRow}>
+                  <Pressable onPress={calPrevMonth} style={styles.calNavBtn} hitSlop={10}>
+                    <Text style={styles.calNavText}>‹</Text>
                   </Pressable>
-                  <Text style={styles.monthLabel}>{monthLabel(calY, calM0)}</Text>
-                  <Pressable onPress={nextMonth} style={styles.monthNav}>
-                    <Text style={styles.monthNavText}>›</Text>
+
+                  <Text style={styles.calMonthText}>{monthLabel(calMonthYear.y, calMonthYear.m0)}</Text>
+
+                  <Pressable onPress={calNextMonth} style={styles.calNavBtn} hitSlop={10}>
+                    <Text style={styles.calNavText}>›</Text>
                   </Pressable>
                 </View>
 
-                <View style={styles.weekHeader}>
+                <View style={styles.calWeekRow}>
                   {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((w) => (
-                    <Text key={w} style={styles.weekDay}>
+                    <Text key={w} style={styles.calWeekText}>
                       {w}
                     </Text>
                   ))}
                 </View>
 
-                <View style={styles.grid}>
-                  {calendarCells.map((c, idx) => {
-                    const inPick = c.iso && isIsoInRange(c.iso, calPick);
-                    const edge = c.iso && (c.iso === normalizeRange(calPick.from, calPick.to).from || c.iso === normalizeRange(calPick.from, calPick.to).to);
-                    const disabled = c.disabled || !c.iso;
+                <View style={styles.calGrid}>
+                  {calGrid.map((c, idx) => {
+                    if (!c.inMonth) return <View key={`e-${idx}`} style={styles.calCell} />;
+
+                    const iso = c.iso;
+                    const disabled = iso < minIso || iso > maxIso;
+
+                    const inSel = !disabled && calInRange(iso);
+                    const edge = !disabled && calIsEdge(iso);
 
                     return (
                       <Pressable
-                        key={`${c.iso}-${idx}`}
+                        key={iso}
                         disabled={disabled}
-                        onPress={() => (c.iso ? calTapDay(c.iso) : null)}
+                        onPress={() => onCalendarTapDay(iso)}
                         style={[
-                          styles.dayCell,
-                          inPick && styles.dayCellInRange,
-                          edge && styles.dayCellEdge,
+                          styles.calCell,
+                          styles.calDayBtn,
+                          inSel && styles.calDayInRange,
+                          edge && styles.calDayEdge,
                           disabled && { opacity: 0.35 },
                         ]}
                       >
-                        <Text style={styles.dayText}>{c.label}</Text>
+                        <Text style={[styles.calDayText, edge && styles.calDayTextEdge]}>{c.day}</Text>
                       </Pressable>
                     );
                   })}
                 </View>
 
-                <Text style={styles.modalHint}>
-                  Tap once for a day. Tap again to set an end date for a range.
-                </Text>
-
                 <View style={styles.modalActions}>
-                  <Pressable
-                    onPress={() => {
-                      // clear to single day = selectedDay
-                      setCalPick({ from: selectedDayIso, to: selectedDayIso });
-                    }}
-                    style={[styles.actionBtn, styles.actionGhost]}
-                  >
-                    <Text style={styles.actionGhostText}>Clear range</Text>
+                  <Pressable onPress={clearCalendarRange} style={[styles.modalBtn, styles.modalBtnGhost]}>
+                    <Text style={styles.modalBtnGhostText}>Clear range</Text>
                   </Pressable>
 
-                  <Pressable
-                    onPress={() => {
-                      const n = normalizeRange(calPick.from, calPick.to);
-                      setCalOpen(false);
-
-                      if (n.from === n.to) {
-                        setRange(null);
-                        setSelectedDayIso(clampIsoToWindow(n.from, minIso, maxIso));
-                        return;
-                      }
-
-                      setRange({ from: clampIsoToWindow(n.from, minIso, maxIso), to: clampIsoToWindow(n.to, minIso, maxIso) });
-                    }}
-                    style={[styles.actionBtn, styles.actionPrimary]}
-                  >
-                    <Text style={styles.actionPrimaryText}>Apply</Text>
+                  <Pressable onPress={applyCalendar} style={[styles.modalBtn, styles.modalBtnPrimary]}>
+                    <Text style={styles.modalBtnPrimaryText}>Apply</Text>
                   </Pressable>
                 </View>
 
-                <Text style={styles.modalFootnote}>Note: Date window is limited to the next {DAYS_AHEAD} days.</Text>
+                <Text style={styles.modalFootnote}>
+                  Tip: Tap two different days to set a range. Tap again to reset back to a single day.
+                </Text>
               </View>
             </GlassCard>
           </View>
@@ -903,8 +991,8 @@ export default function FixturesScreen() {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Styles */
-/* -------------------------------------------------------------------------- */
+/* Styles
+ * -------------------------------------------------------------------------- */
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
@@ -914,11 +1002,15 @@ const styles = StyleSheet.create({
     gap: 12,
   },
 
-  headerTop: { flexDirection: "row", alignItems: "center", gap: 12 },
+  headerTopRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+  },
 
   title: { color: theme.colors.text, fontSize: 22, fontWeight: theme.fontWeight.black },
-  subtitle: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold },
-  dateLine: { marginTop: 6, color: theme.colors.textTertiary, fontSize: 12, fontWeight: theme.fontWeight.bold },
+  subtitle: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold, marginTop: 2 },
+  dateLine: { color: theme.colors.textTertiary, fontSize: 12, fontWeight: theme.fontWeight.bold, marginTop: 6 },
 
   calendarBtn: {
     flexDirection: "row",
@@ -945,14 +1037,15 @@ const styles = StyleSheet.create({
   search: {
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
-    borderRadius: 18,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: Platform.OS === "ios" ? 12 : 10,
     color: theme.colors.text,
     backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
     fontWeight: theme.fontWeight.bold,
   },
 
+  /* Date strip */
   datePill: {
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
@@ -960,50 +1053,71 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 12,
     marginRight: 8,
-    backgroundColor: Platform.OS === "android" ? "rgba(12,14,16,0.18)" : "rgba(12,14,16,0.14)",
-    minWidth: 82,
+    backgroundColor: Platform.OS === "android" ? "rgba(10,12,14,0.16)" : "rgba(10,12,14,0.12)",
+    minWidth: 76,
     alignItems: "center",
+    justifyContent: "center",
   },
   datePillActive: {
-    borderColor: "rgba(79,224,138,0.40)",
-    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.default : theme.glass.iosBg.default,
+    borderColor: "rgba(79,224,138,0.34)",
+    backgroundColor: Platform.OS === "android" ? "rgba(79,224,138,0.10)" : "rgba(79,224,138,0.08)",
   },
   dateTop: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: theme.fontWeight.black },
-  dateBottom: { color: theme.colors.text, fontSize: 13, fontWeight: theme.fontWeight.black, marginTop: 4 },
+  dateBottom: { color: theme.colors.text, fontSize: 13, fontWeight: theme.fontWeight.black, marginTop: 2 },
+  dateTopActive: { color: "rgba(79,224,138,0.95)" },
+  dateBottomActive: { color: theme.colors.text },
 
+  /* Leagues */
   leaguePill: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 6,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
     borderRadius: 999,
     paddingVertical: 8,
     paddingHorizontal: 12,
     marginRight: 8,
-    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
+    backgroundColor: Platform.OS === "android" ? "rgba(10,12,14,0.16)" : "rgba(10,12,14,0.12)",
   },
   leaguePillActive: {
-    borderColor: "rgba(79,224,138,0.28)",
-    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.default : theme.glass.iosBg.default,
+    borderColor: "rgba(79,224,138,0.34)",
+    backgroundColor: Platform.OS === "android" ? "rgba(79,224,138,0.10)" : "rgba(79,224,138,0.08)",
   },
   leagueText: { color: theme.colors.textSecondary, fontWeight: theme.fontWeight.black, fontSize: 12 },
+  leagueTextActive: { color: theme.colors.text },
+
   flag: { width: 18, height: 13, borderRadius: 3, opacity: 0.9 },
 
-  content: { padding: theme.spacing.lg },
+  /* Content */
+  content: { padding: theme.spacing.lg, paddingTop: 0 },
   card: { padding: theme.spacing.md },
 
+  center: { paddingVertical: 20, alignItems: "center", gap: 10 },
+  muted: { color: theme.colors.textSecondary, fontWeight: theme.fontWeight.bold },
+
+  /* Rows */
   rowWrap: { marginBottom: 12 },
   rowCard: { borderRadius: 24 },
-  cardPress: { borderRadius: 24, overflow: "hidden" },
+  rowMainPress: { borderRadius: 24, overflow: "hidden" },
 
-  rowInner: { padding: 16, gap: 12 },
+  rowInner: {
+    paddingVertical: 16,
+    paddingHorizontal: 14,
+    gap: 12,
+    alignItems: "center",
+  },
 
-  topRow: { flexDirection: "row", alignItems: "flex-start", gap: 14 },
+  topRow: {
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
 
   crestWrap: {
-    width: 58,
-    height: 58,
+    width: 56,
+    height: 56,
     borderRadius: 18,
     backgroundColor: "rgba(255,255,255,0.06)",
     borderWidth: 1,
@@ -1012,20 +1126,54 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     overflow: "hidden",
   },
-  crestImg: { width: 38, height: 38, opacity: 0.98 },
+  crestImg: { width: 36, height: 36, opacity: 0.95 },
   crestFallback: { color: theme.colors.textSecondary, fontWeight: theme.fontWeight.black },
 
-  centerCol: { flex: 1, alignItems: "center", gap: 6 },
+  centerCol: {
+    flex: 1,
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 6,
+  },
 
-  homeName: { color: theme.colors.text, fontSize: 17, fontWeight: theme.fontWeight.black, textAlign: "center" },
-  awayName: { color: theme.colors.text, fontSize: 17, fontWeight: theme.fontWeight.black, textAlign: "center" },
+  // Names are 1 line (pro look). If they truly overflow, tail ellipsis is acceptable.
+  teamName: {
+    color: theme.colors.text,
+    fontSize: 17,
+    fontWeight: theme.fontWeight.black,
+    width: "100%",
+    textAlign: "center",
+  },
+
   vs: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: theme.fontWeight.bold },
 
-  kickoff: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold, textAlign: "center", marginTop: 2 },
-  venueLine: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold, textAlign: "center" },
-  kickoffHint: { color: theme.colors.textTertiary, fontSize: 12, fontWeight: theme.fontWeight.bold, textAlign: "center" },
+  metaBlock: { width: "100%", alignItems: "center", gap: 4 },
+  metaPrimary: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: theme.fontWeight.bold, textAlign: "center" },
 
-  badgeRow: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "center", marginTop: 4 },
+  // NO truncation: let venue/city wrap naturally to avoid missing text.
+  metaVenue: {
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.black,
+    textAlign: "center",
+    opacity: 0.9,
+  },
+
+  metaSecondary: {
+    color: theme.colors.textTertiary,
+    fontSize: 11,
+    textAlign: "center",
+    fontWeight: theme.fontWeight.black,
+  },
+
+  badgeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "wrap",
+    justifyContent: "center",
+    paddingTop: 2,
+  },
 
   badge: {
     borderWidth: 1,
@@ -1036,31 +1184,50 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
 
-  // subtle gold for confirmed (important)
-  badgeGold: {
+  /* Confirmed = subtle gold (flag it) */
+  badgeConfirmed: {
+    borderColor: "rgba(214,178,92,0.35)",
+    backgroundColor: "rgba(214,178,92,0.10)",
+  },
+  badgeTextConfirmed: { color: "rgba(214,178,92,0.95)" },
+
+  /* Likely TBC = amber warn */
+  badgeWarn: {
     borderColor: "rgba(255,210,77,0.30)",
     backgroundColor: "rgba(255,210,77,0.10)",
   },
-  badgeText: { color: theme.colors.textSecondary, fontWeight: theme.fontWeight.black, fontSize: 11 },
-  badgeTextGold: { color: "rgba(255,210,77,0.92)" },
-
-  badgeWarn: {
-    borderColor: "rgba(255,210,77,0.30)",
-    backgroundColor: "rgba(255,210,77,0.08)",
-  },
   badgeTextWarn: { color: "rgba(255,210,77,0.92)" },
 
-  tapHint: { color: theme.colors.textTertiary, fontSize: 11, fontWeight: theme.fontWeight.bold, opacity: 0.9 },
+  badgeText: { color: theme.colors.textSecondary, fontWeight: theme.fontWeight.black, fontSize: 11 },
 
+  /* Ticket difficulty colors */
+  badgeEasy: {
+    borderColor: "rgba(79,224,138,0.35)",
+    backgroundColor: "rgba(79,224,138,0.10)",
+  },
+  badgeTextEasy: { color: "rgba(79,224,138,0.95)" },
+
+  badgeMedium: {
+    borderColor: "rgba(255,184,77,0.35)",
+    backgroundColor: "rgba(255,184,77,0.10)",
+  },
+  badgeTextMedium: { color: "rgba(255,184,77,0.95)" },
+
+  badgeHard: {
+    borderColor: "rgba(255,90,90,0.35)",
+    backgroundColor: "rgba(255,90,90,0.10)",
+  },
+  badgeTextHard: { color: "rgba(255,90,90,0.95)" },
+
+  /* Follow */
   followPill: {
-    alignSelf: "center",
+    marginTop: 4,
+    alignSelf: "stretch",
     borderRadius: 999,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.12)",
     backgroundColor: "rgba(0,0,0,0.16)",
     paddingVertical: 10,
-    paddingHorizontal: 18,
-    minWidth: 140,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1071,38 +1238,39 @@ const styles = StyleSheet.create({
   followPillText: { color: theme.colors.textSecondary, fontWeight: theme.fontWeight.black, fontSize: 12 },
   followPillTextOn: { color: "rgba(79,224,138,0.92)" },
 
-  expandArea: { flexDirection: "row", gap: 10, paddingHorizontal: 16, paddingBottom: 16 },
+  tapHint: { marginTop: -2, color: theme.colors.textTertiary, fontSize: 11, fontWeight: theme.fontWeight.bold },
+
+  /* Expanded actions */
+  expandArea: { flexDirection: "row", gap: 10, padding: 12, paddingTop: 0 },
 
   expandGhost: {
     flex: 1,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
+    borderColor: "rgba(255,255,255,0.12)",
     borderRadius: 16,
     paddingVertical: 12,
     alignItems: "center",
-    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
+    backgroundColor: Platform.OS === "android" ? "rgba(10,12,14,0.12)" : "rgba(10,12,14,0.10)",
   },
   expandGhostText: { color: theme.colors.textSecondary, fontWeight: theme.fontWeight.black },
 
   expandPrimary: {
     flex: 1,
     borderWidth: 1,
-    borderColor: "rgba(79,224,138,0.28)",
+    borderColor: "rgba(79,224,138,0.34)",
     borderRadius: 16,
     paddingVertical: 12,
     alignItems: "center",
-    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.default : theme.glass.iosBg.default,
+    backgroundColor: Platform.OS === "android" ? "rgba(79,224,138,0.10)" : "rgba(79,224,138,0.08)",
   },
   expandPrimaryText: { color: theme.colors.text, fontWeight: theme.fontWeight.black },
 
-  center: { paddingVertical: 20, alignItems: "center", gap: 10 },
-  muted: { color: theme.colors.textSecondary, fontWeight: theme.fontWeight.bold },
-
-  // Modal
+  /* Modal */
   modalBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.58)" },
   modalWrap: { flex: 1, justifyContent: "flex-end" },
   modalSheet: { borderRadius: 22, marginHorizontal: theme.spacing.lg, marginBottom: theme.spacing.lg, overflow: "hidden" },
   modalInner: { padding: 14, gap: 12 },
+
   modalHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
   modalTitle: { color: theme.colors.text, fontSize: 16, fontWeight: theme.fontWeight.black },
   modalClose: {
@@ -1114,48 +1282,59 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.18)",
   },
   modalCloseText: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: theme.fontWeight.black },
+  modalSub: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: theme.fontWeight.bold },
 
-  monthRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  monthNav: {
-    width: 38,
-    height: 38,
-    borderRadius: 14,
+  calHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  calNavBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 999,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
     backgroundColor: "rgba(0,0,0,0.18)",
     alignItems: "center",
     justifyContent: "center",
   },
-  monthNavText: { color: theme.colors.textSecondary, fontSize: 22, fontWeight: theme.fontWeight.black, marginTop: -2 },
-  monthLabel: { color: theme.colors.text, fontSize: 14, fontWeight: theme.fontWeight.black },
+  calNavText: { color: theme.colors.textSecondary, fontSize: 20, fontWeight: theme.fontWeight.black, marginTop: -2 },
+  calMonthText: { color: theme.colors.text, fontSize: 14, fontWeight: theme.fontWeight.black },
 
-  weekHeader: { flexDirection: "row", justifyContent: "space-between", paddingHorizontal: 2 },
-  weekDay: { width: "14.28%", textAlign: "center", color: theme.colors.textTertiary, fontSize: 11, fontWeight: theme.fontWeight.black },
+  calWeekRow: { flexDirection: "row", justifyContent: "space-between", paddingTop: 4 },
+  calWeekText: { width: "14.285%", textAlign: "center", color: theme.colors.textTertiary, fontSize: 11, fontWeight: theme.fontWeight.black },
 
-  grid: { flexDirection: "row", flexWrap: "wrap", gap: 6, paddingTop: 6 },
-  dayCell: {
-    width: "13.35%",
-    aspectRatio: 1,
-    borderRadius: 12,
+  calGrid: { flexDirection: "row", flexWrap: "wrap", marginTop: 4 },
+  calCell: { width: "14.285%", aspectRatio: 1, padding: 4 },
+  calDayBtn: {
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
     backgroundColor: "rgba(0,0,0,0.14)",
     alignItems: "center",
     justifyContent: "center",
   },
-  dayCellInRange: { borderColor: "rgba(255,255,255,0.10)", backgroundColor: "rgba(79,224,138,0.06)" },
-  dayCellEdge: { borderColor: "rgba(79,224,138,0.28)", backgroundColor: "rgba(79,224,138,0.10)" },
-  dayText: { color: theme.colors.text, fontSize: 12, fontWeight: theme.fontWeight.black },
+  calDayInRange: {
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(79,224,138,0.06)",
+  },
+  calDayEdge: {
+    borderColor: "rgba(79,224,138,0.34)",
+    backgroundColor: "rgba(79,224,138,0.10)",
+  },
+  calDayText: { color: theme.colors.textSecondary, fontWeight: theme.fontWeight.black, fontSize: 12 },
+  calDayTextEdge: { color: theme.colors.text },
 
-  modalHint: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: theme.fontWeight.bold, lineHeight: 16 },
+  modalActions: { flexDirection: "row", gap: 10, marginTop: 4 },
 
-  modalActions: { flexDirection: "row", gap: 10, marginTop: 2 },
-  actionBtn: { flex: 1, borderRadius: 16, paddingVertical: 12, alignItems: "center", borderWidth: 1, overflow: "hidden" },
-  actionGhost: { borderColor: "rgba(255,255,255,0.10)", backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle },
-  actionGhostText: { color: theme.colors.textSecondary, fontWeight: theme.fontWeight.black },
+  modalBtn: { flex: 1, borderRadius: 16, paddingVertical: 12, alignItems: "center", borderWidth: 1, overflow: "hidden" },
+  modalBtnPrimary: {
+    borderColor: "rgba(79,224,138,0.34)",
+    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.default : theme.glass.iosBg.default,
+  },
+  modalBtnPrimaryText: { color: theme.colors.text, fontSize: 14, fontWeight: theme.fontWeight.black },
+  modalBtnGhost: {
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
+  },
+  modalBtnGhostText: { color: theme.colors.textSecondary, fontSize: 14, fontWeight: theme.fontWeight.black },
 
-  actionPrimary: { borderColor: "rgba(79,224,138,0.28)", backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.default : theme.glass.iosBg.default },
-  actionPrimaryText: { color: theme.colors.text, fontWeight: theme.fontWeight.black },
-
-  modalFootnote: { color: theme.colors.textTertiary, fontSize: 12, fontWeight: theme.fontWeight.bold, lineHeight: 16, opacity: 0.9 },
+  modalFootnote: { color: theme.colors.textTertiary, fontSize: 12, fontWeight: theme.fontWeight.bold, lineHeight: 16 },
 });
