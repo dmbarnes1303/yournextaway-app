@@ -1,5 +1,5 @@
 // app/trip/[id].tsx
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -38,7 +38,6 @@ import { getFixtureById, type FixtureListRow } from "@/src/services/apiFootball"
 import { formatUkDateOnly } from "@/src/utils/formatters";
 import { buildAffiliateLinks } from "@/src/services/affiliateLinks";
 import { confirmBookedAndOfferProof } from "@/src/services/bookingProof";
-
 import { getFixtureCertainty } from "@/src/utils/fixtureCertainty";
 
 // dev-only IATA detection
@@ -103,11 +102,12 @@ function noteTitleFromText(text: string) {
   return firstLine.length > 42 ? firstLine.slice(0, 42).trim() + "…" : firstLine;
 }
 
-function statusLabel(s: SavedItem["status"]) {
-  if (s === "pending") return "Pending";
-  if (s === "saved") return "Saved";
-  if (s === "booked") return "Booked";
-  return "Archived";
+function safeTypeLabel(type: SavedItemType) {
+  try {
+    return getSavedItemTypeLabel(type);
+  } catch {
+    return "Notes";
+  }
 }
 
 function safePartnerName(item: SavedItem) {
@@ -116,14 +116,6 @@ function safePartnerName(item: SavedItem) {
     return getPartner(item.partnerId).name;
   } catch {
     return null;
-  }
-}
-
-function safeTypeLabel(type: SavedItemType) {
-  try {
-    return getSavedItemTypeLabel(type);
-  } catch {
-    return "Notes";
   }
 }
 
@@ -249,27 +241,41 @@ function buildMapsDirectionsUrl(
   return `https://www.google.com/maps/dir/?api=1&origin=${o}&destination=${d}&travelmode=${m}`;
 }
 
-function isLateKickoff(kickoffIso?: string | null): boolean {
-  const iso = String(kickoffIso ?? "").trim();
-  if (!iso) return false;
-  const d = new Date(iso);
-  if (!Number.isFinite(d.getTime())) return false;
-  const h = d.getHours();
-  const m = d.getMinutes();
-  return h > 20 || (h === 20 && m >= 30);
+function statusLabel(s: SavedItem["status"]) {
+  if (s === "pending") return "Pending";
+  if (s === "saved") return "Saved";
+  if (s === "booked") return "Booked";
+  return "Archived";
 }
 
-function Pill({ label, kind }: { label: string; kind: "best" | "budget" }) {
-  const cfg =
-    kind === "best"
-      ? { border: "rgba(0,255,136,0.35)", bg: "rgba(0,255,136,0.08)" }
-      : { border: "rgba(255,200,80,0.40)", bg: "rgba(255,200,80,0.10)" };
+function StatusBadge({ s }: { s: SavedItem["status"] }) {
+  const label = statusLabel(s);
+  const style =
+    s === "pending"
+      ? styles.badgePending
+      : s === "saved"
+      ? styles.badgeSaved
+      : s === "booked"
+      ? styles.badgeBooked
+      : styles.badgeArchived;
 
   return (
-    <View style={[styles.pill, { borderColor: cfg.border, backgroundColor: cfg.bg }]}>
-      <Text style={styles.pillText}>{label}</Text>
+    <View style={[styles.badge, style]}>
+      <Text style={styles.badgeText}>{label}</Text>
     </View>
   );
+}
+
+function stepState(items: SavedItem[], types: SavedItemType[]) {
+  const relevant = items.filter((x) => types.includes(x.type));
+  const booked = relevant.filter((x) => x.status === "booked").length;
+  const pending = relevant.filter((x) => x.status === "pending").length;
+  const saved = relevant.filter((x) => x.status === "saved").length;
+
+  if (booked > 0) return { state: "booked" as const, label: "Booked", count: booked };
+  if (pending > 0) return { state: "pending" as const, label: "Pending", count: pending };
+  if (saved > 0) return { state: "saved" as const, label: "Saved", count: saved };
+  return { state: "none" as const, label: "Not started", count: 0 };
 }
 
 /* -------------------------------------------------------------------------- */
@@ -299,6 +305,11 @@ export default function TripDetailScreen() {
 
   const [originLoaded, setOriginLoaded] = useState<boolean>(preferencesStore.getState().loaded);
   const [originIata, setOriginIata] = useState<string>(preferencesStore.getPreferredOriginIata());
+
+  // Calmness controls (default collapsed)
+  const [showStayDetails, setShowStayDetails] = useState(false);
+  const [showBookings, setShowBookings] = useState(false);
+  const [showNotes, setShowNotes] = useState(false);
 
   /* ---------------- load trip ---------------- */
 
@@ -407,6 +418,7 @@ export default function TripDetailScreen() {
 
   /* ---------------- derived ---------------- */
 
+  const loading = Boolean(tripId && (!tripsLoaded || !savedLoaded));
   const status = useMemo(() => (trip ? tripStatus(trip) : "Upcoming"), [trip]);
 
   const cityNameRaw = useMemo(() => {
@@ -424,6 +436,55 @@ export default function TripDetailScreen() {
 
   const cityName = useMemo(() => titleCaseCity(cityNameRaw), [cityNameRaw]);
 
+  const matchIds = useMemo(() => {
+    const raw = Array.isArray(trip?.matchIds) ? trip!.matchIds : [];
+    return raw.map((x) => String(x).trim()).filter(Boolean);
+  }, [trip?.matchIds]);
+
+  const numericMatchIds = useMemo(() => matchIds.filter(isNumericId), [matchIds]);
+  const primaryMatchId = useMemo(() => numericMatchIds[0] ?? null, [numericMatchIds]);
+  const primaryFixture = useMemo(() => (primaryMatchId ? fixturesById[String(primaryMatchId)] ?? null : null), [
+    primaryMatchId,
+    fixturesById,
+  ]);
+
+  const homeName = useMemo(() => {
+    const fromFixture = String(primaryFixture?.teams?.home?.name ?? "").trim();
+    if (fromFixture) return fromFixture;
+    return String((trip as any)?.homeName ?? "").trim();
+  }, [primaryFixture, trip]);
+
+  const awayName = useMemo(() => {
+    const fromFixture = String(primaryFixture?.teams?.away?.name ?? "").trim();
+    if (fromFixture) return fromFixture;
+    return String((trip as any)?.awayName ?? "").trim();
+  }, [primaryFixture, trip]);
+
+  const leagueName = useMemo(() => {
+    const fromFixture = String(primaryFixture?.league?.name ?? "").trim();
+    if (fromFixture) return fromFixture;
+    return String((trip as any)?.leagueName ?? "").trim();
+  }, [primaryFixture, trip]);
+
+  const venueName = useMemo(() => {
+    const fromFixture = String(primaryFixture?.fixture?.venue?.name ?? "").trim();
+    if (fromFixture) return fromFixture;
+    return String((trip as any)?.venueName ?? "").trim();
+  }, [primaryFixture, trip]);
+
+  const venueCity = useMemo(() => {
+    const fromFixture = String(primaryFixture?.fixture?.venue?.city ?? "").trim();
+    if (fromFixture) return fromFixture;
+    return String((trip as any)?.displayCity ?? "").trim() || cityName;
+  }, [primaryFixture, trip, cityName]);
+
+  const kickoffMeta = useMemo(() => formatKickoffMeta(primaryFixture, trip), [primaryFixture, trip]);
+
+  const certainty = useMemo(() => {
+    if (!primaryFixture) return null;
+    return getFixtureCertainty(primaryFixture, { previousKickoffIso: (trip as any)?.kickoffIso ?? null });
+  }, [primaryFixture, trip]);
+
   const bookingLinks = useMemo(() => {
     if (!trip || !cityName || cityName === "Trip") return null;
 
@@ -435,58 +496,29 @@ export default function TripDetailScreen() {
     });
   }, [trip, cityName, originIata]);
 
-  const pending = useMemo(() => savedItems.filter((x) => x.status === "pending"), [savedItems]);
-  const saved = useMemo(() => savedItems.filter((x) => x.status === "saved" && x.type !== "note"), [savedItems]);
-  const booked = useMemo(() => savedItems.filter((x) => x.status === "booked"), [savedItems]);
   const notes = useMemo(() => savedItems.filter((x) => x.type === "note" && x.status !== "archived"), [savedItems]);
+  const pending = useMemo(() => savedItems.filter((x) => x.status === "pending"), [savedItems]);
+  const booked = useMemo(() => savedItems.filter((x) => x.status === "booked"), [savedItems]);
 
-  const matchIds = useMemo(() => {
-    const raw = Array.isArray(trip?.matchIds) ? trip!.matchIds : [];
-    return raw.map((x) => String(x).trim()).filter(Boolean);
-  }, [trip?.matchIds]);
+  const ticketsStep = useMemo(() => stepState(savedItems, ["tickets"]), [savedItems]);
+  const flightsStep = useMemo(() => stepState(savedItems, ["flight", "train", "transfer"]), [savedItems]);
+  const stayStep = useMemo(() => stepState(savedItems, ["hotel"]), [savedItems]);
+  const thingsStep = useMemo(() => stepState(savedItems, ["things"]), [savedItems]);
+  const insuranceStep = useMemo(() => stepState(savedItems, ["insurance", "claim"]), [savedItems]);
 
-  const numericMatchIds = useMemo(() => matchIds.filter(isNumericId), [matchIds]);
-
-  /* ---------------- primary match logistics ---------------- */
-
-  const primaryMatchId = useMemo(() => numericMatchIds[0] ?? null, [numericMatchIds]);
-
-  const primaryFixture = useMemo(() => {
-    if (!primaryMatchId) return null;
-    return fixturesById[String(primaryMatchId)] ?? null;
-  }, [primaryMatchId, fixturesById]);
-
-  const primaryHomeName = useMemo(() => {
-    const fromFixture = String(primaryFixture?.teams?.home?.name ?? "").trim();
-    if (fromFixture) return fromFixture;
-    return String((trip as any)?.homeName ?? "").trim();
-  }, [primaryFixture, trip]);
-
-  const primaryLeagueName = useMemo(() => {
-    const fromFixture = String(primaryFixture?.league?.name ?? "").trim();
-    if (fromFixture) return fromFixture;
-    return String((trip as any)?.leagueName ?? "").trim();
-  }, [primaryFixture, trip]);
-
-  const primaryKickoffIso = useMemo(() => {
-    const iso = String(primaryFixture?.fixture?.date ?? (trip as any)?.kickoffIso ?? "").trim();
-    return iso || null;
-  }, [primaryFixture, trip]);
+  /* ---------------- matchday logistics (stay guidance) ---------------- */
 
   const primaryLogistics = useMemo(() => {
-    if (!primaryHomeName) return null;
-    return getMatchdayLogistics({ homeTeamName: primaryHomeName, leagueName: primaryLeagueName });
-  }, [primaryHomeName, primaryLeagueName]);
+    if (!homeName) return null;
+    return getMatchdayLogistics({ homeTeamName: homeName, leagueName });
+  }, [homeName, leagueName]);
 
-  const primaryLogisticsSnippet = useMemo(() => {
-    return primaryLogistics ? buildLogisticsSnippet(primaryLogistics) : "";
-  }, [primaryLogistics]);
+  const primaryLogisticsSnippet = useMemo(() => (primaryLogistics ? buildLogisticsSnippet(primaryLogistics) : ""), [
+    primaryLogistics,
+  ]);
 
-  const stadiumName = useMemo(() => String(primaryLogistics?.stadium ?? "").trim(), [primaryLogistics]);
-  const stadiumCity = useMemo(
-    () => String(primaryLogistics?.city ?? cityName ?? "").trim(),
-    [primaryLogistics, cityName]
-  );
+  const stadiumName = useMemo(() => String(primaryLogistics?.stadium ?? venueName ?? "").trim(), [primaryLogistics, venueName]);
+  const stadiumCity = useMemo(() => String(primaryLogistics?.city ?? venueCity ?? "").trim(), [primaryLogistics, venueCity]);
 
   const stadiumMapsUrl = useMemo(() => {
     const q = [stadiumName || "stadium", stadiumCity].filter(Boolean).join(" ").trim();
@@ -512,31 +544,6 @@ export default function TripDetailScreen() {
       }))
       .filter((x: any) => x.area);
   }, [primaryLogistics]);
-
-  const transportStops = useMemo(() => {
-    const stops = Array.isArray(primaryLogistics?.transport?.primaryStops) ? primaryLogistics!.transport!.primaryStops : [];
-    return stops
-      .slice(0, 3)
-      .map((s: any) => `${String(s?.name ?? "").trim()}${s?.notes ? ` — ${String(s.notes).trim()}` : ""}`)
-      .filter(Boolean);
-  }, [primaryLogistics]);
-
-  const transportTips = useMemo(() => {
-    const tips = Array.isArray(primaryLogistics?.transport?.tips) ? primaryLogistics!.transport!.tips : [];
-    return tips
-      .slice(0, 3)
-      .map((t: any) => String(t).trim())
-      .filter(Boolean);
-  }, [primaryLogistics]);
-
-  const lateTransportNote = useMemo(() => {
-    const explicit = String(primaryLogistics?.transport?.lateNightNote ?? "").trim();
-    if (explicit) return explicit;
-    if (isLateKickoff(primaryKickoffIso)) {
-      return "Late kickoff: check last trains/metros and pre-book a taxi/Uber fallback after the match.";
-    }
-    return "";
-  }, [primaryLogistics, primaryKickoffIso]);
 
   /* ---------------- dev-only IATA warning ---------------- */
 
@@ -567,137 +574,146 @@ export default function TripDetailScreen() {
 
   /* -------------------------------------------------------------------------- */
   /* navigation + link openers */
-/* -------------------------------------------------------------------------- */
+  /* -------------------------------------------------------------------------- */
 
-  function onEditTrip() {
+  const onEditTrip = useCallback(() => {
     if (!trip) return;
     router.push({ pathname: "/trip/build", params: { tripId: trip.id } } as any);
-  }
+  }, [router, trip]);
 
-  function onViewWallet() {
+  const onViewWallet = useCallback(() => {
     router.push("/(tabs)/wallet" as any);
-  }
+  }, [router]);
 
-  function openMatch(matchId: string) {
-    if (!matchId) return;
+  const openMatch = useCallback(
+    (matchId: string) => {
+      if (!matchId) return;
 
-    const r = fixturesById[String(matchId)];
-    const leagueId = r?.league?.id != null ? String(r.league.id) : undefined;
-    const season = (r as any)?.league?.season != null ? String((r as any).league.season) : undefined;
+      const r = fixturesById[String(matchId)];
+      const leagueId = r?.league?.id != null ? String(r.league.id) : undefined;
+      const season = (r as any)?.league?.season != null ? String((r as any).league.season) : undefined;
 
-    const from = trip?.startDate ? String(trip.startDate) : undefined;
-    const to = trip?.endDate ? String(trip.endDate) : undefined;
+      const from = trip?.startDate ? String(trip.startDate) : undefined;
+      const to = trip?.endDate ? String(trip.endDate) : undefined;
 
-    router.push({
-      pathname: "/match/[id]",
-      params: {
-        id: String(matchId),
-        ...(from ? { from } : {}),
-        ...(to ? { to } : {}),
-        ...(leagueId ? { leagueId } : {}),
-        ...(season ? { season } : {}),
-      },
-    } as any);
-  }
+      router.push({
+        pathname: "/match/[id]",
+        params: {
+          id: String(matchId),
+          ...(from ? { from } : {}),
+          ...(to ? { to } : {}),
+          ...(leagueId ? { leagueId } : {}),
+          ...(season ? { season } : {}),
+        },
+      } as any);
+    },
+    [fixturesById, router, trip?.startDate, trip?.endDate]
+  );
 
-  async function openUntracked(url?: string) {
+  const openUntracked = useCallback(async (url?: string) => {
     if (!url) return;
     try {
       await openUntrackedUrl(url);
     } catch {
       Alert.alert("Couldn’t open link");
     }
-  }
+  }, []);
 
-  async function openTrackedPartner(args: {
-    partnerId: PartnerId;
-    url: string;
-    title: string;
-    savedItemType?: SavedItemType;
-    metadata?: Record<string, any>;
-  }) {
-    if (!tripId) {
-      Alert.alert("Save trip first", "Save this trip before booking so we can store it in Wallet.");
-      return;
-    }
+  const openTrackedPartner = useCallback(
+    async (args: {
+      partnerId: PartnerId;
+      url: string;
+      title: string;
+      savedItemType?: SavedItemType;
+      metadata?: Record<string, any>;
+    }) => {
+      if (!tripId) {
+        Alert.alert("Save trip first", "Save this trip before booking so we can store it in Wallet.");
+        return;
+      }
 
-    if (args.partnerId === "googlemaps") {
-      await openUntracked(args.url);
-      return;
-    }
+      if (args.partnerId === "googlemaps") {
+        await openUntracked(args.url);
+        return;
+      }
 
-    try {
-      await beginPartnerClick({
-        tripId,
-        partnerId: args.partnerId,
-        url: args.url,
-        savedItemType: args.savedItemType,
-        title: args.title,
-        metadata: args.metadata,
-      });
-    } catch {
-      await openUntracked(args.url);
-    }
-  }
+      try {
+        await beginPartnerClick({
+          tripId,
+          partnerId: args.partnerId,
+          url: args.url,
+          savedItemType: args.savedItemType,
+          title: args.title,
+          metadata: args.metadata,
+        });
+      } catch {
+        await openUntracked(args.url);
+      }
+    },
+    [openUntracked, tripId]
+  );
 
   /* -------------------------------------------------------------------------- */
   /* saved item actions */
-/* -------------------------------------------------------------------------- */
+  /* -------------------------------------------------------------------------- */
 
-  async function openSavedItem(item: SavedItem) {
-    if (!item.partnerUrl) {
-      const text = String(item.metadata?.text ?? "").trim();
-      Alert.alert(item.title || "Notes", text || "No details saved.");
-      return;
-    }
+  const openSavedItem = useCallback(
+    async (item: SavedItem) => {
+      if (!item.partnerUrl) {
+        const text = String(item.metadata?.text ?? "").trim();
+        Alert.alert(item.title || "Notes", text || "No details saved.");
+        return;
+      }
 
-    if (item.status === "booked" || item.status === "archived") {
-      await openUntracked(item.partnerUrl);
-      return;
-    }
+      if (item.status === "booked" || item.status === "archived") {
+        await openUntracked(item.partnerUrl);
+        return;
+      }
 
-    const pid = String(item.partnerId ?? "").trim();
-    if (!pid || pid === "googlemaps") {
-      await openUntracked(item.partnerUrl);
-      return;
-    }
+      const pid = String(item.partnerId ?? "").trim();
+      if (!pid || pid === "googlemaps") {
+        await openUntracked(item.partnerUrl);
+        return;
+      }
 
-    if (!tripId) {
-      await openUntracked(item.partnerUrl);
-      return;
-    }
+      if (!tripId) {
+        await openUntracked(item.partnerUrl);
+        return;
+      }
 
-    try {
-      await beginPartnerClick({
-        tripId,
-        partnerId: pid as any,
-        url: item.partnerUrl,
-        savedItemType: item.type,
-        title: item.title,
-        metadata: item.metadata,
-      });
-    } catch {
-      await openUntracked(item.partnerUrl);
-    }
-  }
+      try {
+        await beginPartnerClick({
+          tripId,
+          partnerId: pid as any,
+          url: item.partnerUrl,
+          savedItemType: item.type,
+          title: item.title,
+          metadata: item.metadata,
+        });
+      } catch {
+        await openUntracked(item.partnerUrl);
+      }
+    },
+    [openUntracked, tripId]
+  );
 
-  async function archiveItem(item: SavedItem) {
+  const archiveItem = useCallback(async (item: SavedItem) => {
     try {
       await savedItemsStore.transitionStatus(item.id, "archived");
     } catch {
       Alert.alert("Couldn’t archive", "That item can’t be archived right now.");
     }
-  }
+  }, []);
 
-  async function moveToPending(item: SavedItem) {
+  const moveToPending = useCallback(async (item: SavedItem) => {
     try {
       await savedItemsStore.transitionStatus(item.id, "pending");
     } catch {
       Alert.alert("Couldn’t move", "That item can’t be moved right now.");
     }
-  }
+  }, []);
 
-  async function markBookedSmart(item: SavedItem) {
+  const markBookedSmart = useCallback(async (item: SavedItem) => {
     try {
       await savedItemsStore.transitionStatus(item.id, "booked");
       defer(() => {
@@ -706,42 +722,43 @@ export default function TripDetailScreen() {
     } catch {
       Alert.alert("Couldn’t mark booked", "That item can’t be marked booked right now.");
     }
-  }
+  }, []);
 
-  function confirmArchive(item: SavedItem) {
-    Alert.alert(
-      "Archive this item?",
-      "Archived items are hidden from the trip workspace. You can restore them later (Phase 2).",
-      [
+  const confirmArchive = useCallback(
+    (item: SavedItem) => {
+      Alert.alert("Archive this item?", "Archived items are hidden from the trip workspace.", [
         { text: "Cancel", style: "cancel" },
         { text: "Archive", style: "destructive", onPress: () => archiveItem(item) },
-      ]
-    );
-  }
+      ]);
+    },
+    [archiveItem]
+  );
 
-  function confirmMarkBooked(item: SavedItem) {
-    Alert.alert(
-      "Mark as booked?",
-      "Only do this if you completed the booking and want it in Wallet.",
-      [
+  const confirmMarkBooked = useCallback(
+    (item: SavedItem) => {
+      Alert.alert("Mark as booked?", "Only do this if you completed the booking and want it in Wallet.", [
         { text: "Cancel", style: "cancel" },
         { text: "Mark booked", style: "default", onPress: () => markBookedSmart(item) },
-      ]
-    );
-  }
+      ]);
+    },
+    [markBookedSmart]
+  );
 
-  function confirmMoveToPending(item: SavedItem) {
-    Alert.alert(
-      "Move to Pending?",
-      "Use Pending when you’re not sure if you booked it yet (so we’ll ask on return next time you open a partner).",
-      [
-        { text: "Cancel", style: "cancel" },
-        { text: "Move", style: "default", onPress: () => moveToPending(item) },
-      ]
-    );
-  }
+  const confirmMoveToPending = useCallback(
+    (item: SavedItem) => {
+      Alert.alert(
+        "Move to Pending?",
+        "Use Pending when you’re not sure if you booked it yet (so we’ll ask on return next time you open a partner).",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Move", style: "default", onPress: () => moveToPending(item) },
+        ]
+      );
+    },
+    [moveToPending]
+  );
 
-  async function addNote() {
+  const addNote = useCallback(async () => {
     const text = cleanNoteText(noteText);
     if (!tripId) return;
 
@@ -767,45 +784,45 @@ export default function TripDetailScreen() {
     } finally {
       setNoteSaving(false);
     }
-  }
+  }, [noteText, tripId]);
 
-  function openNoteActions(item: SavedItem) {
-    const text = String(item.metadata?.text ?? "").trim();
-    Alert.alert(
-      item.title || "Notes",
-      text || "No details saved.",
-      [
-        { text: "Close", style: "cancel" },
-        { text: "Archive", style: "destructive", onPress: () => archiveItem(item) },
-      ],
-      { cancelable: true }
-    );
-  }
+  const openNoteActions = useCallback(
+    (item: SavedItem) => {
+      const text = String(item.metadata?.text ?? "").trim();
+      Alert.alert(
+        item.title || "Notes",
+        text || "No details saved.",
+        [{ text: "Close", style: "cancel" }, { text: "Archive", style: "destructive", onPress: () => archiveItem(item) }],
+        { cancelable: true }
+      );
+    },
+    [archiveItem]
+  );
 
-  function StatusBadge({ s }: { s: SavedItem["status"] }) {
-    const label = statusLabel(s);
-    const style =
-      s === "pending"
-        ? styles.badgePending
-        : s === "saved"
-        ? styles.badgeSaved
-        : s === "booked"
-        ? styles.badgeBooked
-        : styles.badgeArchived;
+  /* -------------------------------------------------------------------------- */
+  /* calm itinerary (minimal) */
+  /* -------------------------------------------------------------------------- */
 
-    return (
-      <View style={[styles.badge, style]}>
-        <Text style={styles.badgeText}>{label}</Text>
-      </View>
-    );
-  }
+  const itineraryLines = useMemo(() => {
+    const a = trip?.startDate ? parseIsoDateOnly(trip.startDate) : null;
+    const b = trip?.endDate ? parseIsoDateOnly(trip.endDate) : null;
+    const lines: string[] = [];
+
+    if (a) lines.push(`Arrival: ${a.toLocaleDateString("en-GB", { weekday: "short", day: "2-digit", month: "short" })}`);
+    if (kickoffMeta?.iso) {
+      lines.push(kickoffMeta.tbc ? "Match: Kickoff TBC (follow for updates)" : kickoffMeta.line.replace(/^Kickoff:\s*/i, "Match: "));
+    } else {
+      lines.push("Match: Add a match to anchor your plan");
+    }
+    if (b) lines.push(`Departure: ${b.toLocaleDateString("en-GB", { weekday: "short", day: "2-digit", month: "short" })}`);
+
+    // Always cap at 3 lines; this is intentionally not a timeline screen.
+    return lines.slice(0, 3);
+  }, [trip?.startDate, trip?.endDate, kickoffMeta]);
 
   /* -------------------------------------------------------------------------- */
   /* render */
-/* -------------------------------------------------------------------------- */
-
-  const loading = Boolean(tripId && (!tripsLoaded || !savedLoaded));
-  const showHeroBanners = pending.length > 0 || saved.length > 0 || booked.length > 0;
+  /* -------------------------------------------------------------------------- */
 
   return (
     <Background imageSource={getBackground("trips")} overlayOpacity={0.86}>
@@ -847,195 +864,387 @@ export default function TripDetailScreen() {
 
           {trip ? (
             <>
-              {/* HERO */}
+              {/* 1) Trip header (anchor) */}
               <GlassCard style={styles.hero}>
-                <Text style={styles.kicker}>TRIP WORKSPACE</Text>
-                <Text style={styles.cityTitle}>{cityName}</Text>
-                <Text style={styles.heroMeta}>{summaryLine(trip)}</Text>
-
-                <View style={styles.heroTopRow}>
-                  <View style={styles.statusPill}>
-                    <Text style={styles.statusText}>{status}</Text>
+                <View style={styles.heroTop}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.kicker}>TRIP WORKSPACE</Text>
+                    <Text style={styles.cityTitle}>{cityName}</Text>
+                    <Text style={styles.heroMeta}>{summaryLine(trip)}</Text>
                   </View>
 
-                  <Pressable onPress={onViewWallet} style={styles.walletBtn}>
-                    <Text style={styles.walletBtnText}>Wallet ›</Text>
-                  </Pressable>
-                </View>
+                  <View style={styles.heroRight}>
+                    <View style={styles.statusPill}>
+                      <Text style={styles.statusText}>{status}</Text>
+                    </View>
 
-                {showHeroBanners ? (
-                  <View style={styles.bannersRow}>
-                    {pending.length > 0 ? (
-                      <View style={styles.pendingBanner}>
-                        <Text style={styles.pendingText}>
-                          {pending.length} pending booking{pending.length === 1 ? "" : "s"}
-                        </Text>
-                      </View>
-                    ) : null}
-
-                    {saved.length > 0 ? (
-                      <View style={styles.savedBanner}>
-                        <Text style={styles.savedText}>
-                          {saved.length} saved item{saved.length === 1 ? "" : "s"}
-                        </Text>
-                      </View>
-                    ) : null}
-
-                    {booked.length > 0 ? (
-                      <View style={styles.bookedBanner}>
-                        <Text style={styles.bookedText}>
-                          {booked.length} booked item{booked.length === 1 ? "" : "s"} in Wallet
-                        </Text>
-                      </View>
-                    ) : null}
+                    <Pressable onPress={onViewWallet} style={styles.walletBtn}>
+                      <Text style={styles.walletBtnText}>Wallet ›</Text>
+                    </Pressable>
                   </View>
-                ) : null}
-
-                <View style={styles.heroActions}>
-                  <Pressable onPress={onEditTrip} style={[styles.btn, styles.btnPrimary]}>
-                    <Text style={styles.btnPrimaryText}>Edit trip</Text>
-                  </Pressable>
                 </View>
 
-                {!originLoaded ? <Text style={styles.mutedInline}>Loading departure preference…</Text> : null}
-              </GlassCard>
+                <View style={styles.heroDivider} />
 
-              {/* MATCHES */}
-              <GlassCard style={styles.card}>
-                <Text style={styles.sectionTitle}>Matches</Text>
+                {/* Match anchor (single, calm) */}
+                {primaryMatchId ? (
+                  <Pressable onPress={() => openMatch(primaryMatchId)} style={styles.matchAnchor}>
+                    <TeamCrest name={homeName || "Home"} logo={primaryFixture?.teams?.home?.logo} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.matchTitle} numberOfLines={1}>
+                        {safeFixtureTitle(primaryFixture, primaryMatchId, trip)}
+                      </Text>
+                      <Text style={styles.matchMeta} numberOfLines={1}>
+                        {kickoffMeta.line}
+                      </Text>
+                      <Text style={styles.matchMetaSecondary} numberOfLines={1}>
+                        {[leagueName || null, venueName || null, venueCity || null].filter(Boolean).join(" • ") || "Match details"}
+                      </Text>
 
-                {numericMatchIds.length === 0 ? (
-                  <EmptyState title="No matches added" message="Add a match to unlock match-specific planning." />
+                      {certainty ? (
+                        <View style={{ marginTop: 8 }}>
+                          <FixtureCertaintyBadge state={certainty} />
+                        </View>
+                      ) : null}
+                    </View>
+                    <TeamCrest name={awayName || "Away"} logo={primaryFixture?.teams?.away?.logo} />
+                    <Text style={styles.chev}>›</Text>
+                  </Pressable>
                 ) : (
-                  <View style={{ gap: 10 }}>
-                    {numericMatchIds.map((mid) => {
-                      const r = fixturesById[String(mid)];
-                      const title = safeFixtureTitle(r, mid, trip);
-
-                      const leagueName = String(r?.league?.name ?? (trip as any)?.leagueName ?? "").trim();
-                      const round = String(r?.league?.round ?? "").trim();
-
-                      const venue = String(r?.fixture?.venue?.name ?? (trip as any)?.venueName ?? "").trim();
-                      const city = String(r?.fixture?.venue?.city ?? (trip as any)?.displayCity ?? "").trim();
-
-                      const kickoff = formatKickoffMeta(r, trip);
-
-                      const meta1 = [leagueName || null, round || null].filter(Boolean).join(" • ");
-                      const meta2 = [venue || null, city || null].filter(Boolean).join(" • ");
-
-                      const homeName = String(r?.teams?.home?.name ?? (trip as any)?.homeName ?? "Home");
-                      const awayName = String(r?.teams?.away?.name ?? (trip as any)?.awayName ?? "Away");
-
-                      const logistics = getMatchdayLogistics({ homeTeamName: homeName, leagueName });
-                      const logisticsLine = logistics ? buildLogisticsSnippet(logistics) : "";
-
-                      const certainty = getFixtureCertainty(r, {
-                        previousKickoffIso: (trip as any)?.kickoffIso ?? null,
-                      });
-
-                      return (
-                        <Pressable key={mid} onPress={() => openMatch(mid)} style={styles.matchRow}>
-                          <TeamCrest name={homeName} logo={r?.teams?.home?.logo} />
-
-                          <View style={{ flex: 1 }}>
-                            <View style={styles.matchTitleRow}>
-                              <Text style={styles.matchTitle} numberOfLines={1}>
-                                {title}
-                              </Text>
-                            </View>
-
-                            <Text style={styles.matchMeta} numberOfLines={1}>
-                              {kickoff.line}
-                            </Text>
-
-                            <View style={{ marginTop: 6 }}>
-                              <FixtureCertaintyBadge state={certainty} />
-                            </View>
-
-                            {meta1 ? (
-                              <Text style={styles.matchMeta} numberOfLines={1}>
-                                {meta1}
-                              </Text>
-                            ) : null}
-
-                            {meta2 ? (
-                              <Text style={styles.matchMeta} numberOfLines={1}>
-                                {meta2}
-                              </Text>
-                            ) : null}
-
-                            {logisticsLine ? (
-                              <Text style={styles.logisticsMeta} numberOfLines={1}>
-                                {logisticsLine}
-                              </Text>
-                            ) : null}
-
-                            <Text style={styles.matchHint} numberOfLines={1}>
-                              Open match → Tickets, directions, follow alerts
-                            </Text>
-                          </View>
-
-                          <TeamCrest name={awayName} logo={r?.teams?.away?.logo} />
-                          <Text style={styles.chev}>›</Text>
-                        </Pressable>
-                      );
-                    })}
+                  <View style={styles.matchAnchorEmpty}>
+                    <EmptyState title="Add a match" message="This trip needs a match to unlock match-specific planning." />
+                    <Pressable onPress={onEditTrip} style={[styles.cta, styles.ctaPrimary]}>
+                      <Text style={styles.ctaPrimaryText}>Add / change match</Text>
+                    </Pressable>
                   </View>
                 )}
+
+                {/* Primary CTA logic (don’t push risky booking if kickoff is TBC) */}
+                {primaryMatchId ? (
+                  <View style={styles.heroCtas}>
+                    <Pressable
+                      onPress={() => openMatch(primaryMatchId)}
+                      style={[styles.cta, styles.ctaPrimary]}
+                    >
+                      <Text style={styles.ctaPrimaryText}>
+                        {kickoffMeta.tbc ? "Open match (follow for kickoff alerts)" : "Open match (tickets + alerts)"}
+                      </Text>
+                    </Pressable>
+
+                    <View style={styles.heroCtasRow}>
+                      <Pressable
+                        onPress={() => setShowBookings(true)}
+                        style={[styles.cta, styles.ctaSecondary]}
+                      >
+                        <Text style={styles.ctaSecondaryText}>Bookings</Text>
+                        <Text style={styles.ctaSecondarySub}>
+                          {booked.length > 0 ? `${booked.length} booked` : pending.length > 0 ? `${pending.length} pending` : "None yet"}
+                        </Text>
+                      </Pressable>
+
+                      <Pressable
+                        onPress={() => setShowStayDetails((v) => !v)}
+                        style={[styles.cta, styles.ctaSecondary]}
+                      >
+                        <Text style={styles.ctaSecondaryText}>Stay guidance</Text>
+                        <Text style={styles.ctaSecondarySub}>
+                          {primaryLogistics ? "Best areas + maps" : "Match required"}
+                        </Text>
+                      </Pressable>
+                    </View>
+
+                    {!originLoaded ? <Text style={styles.mutedInline}>Loading departure preference…</Text> : null}
+                  </View>
+                ) : null}
+              </GlassCard>
+
+              {/* 2) Next steps pipeline (conversion engine) */}
+              <GlassCard style={styles.card}>
+                <View style={styles.sectionHead}>
+                  <Text style={styles.sectionTitle}>Next steps</Text>
+                  <Text style={styles.sectionSub}>Simple, in order. Tap to act.</Text>
+                </View>
+
+                <View style={{ gap: 10 }}>
+                  {/* Tickets */}
+                  <Pressable
+                    onPress={() => (primaryMatchId ? openMatch(primaryMatchId) : onEditTrip())}
+                    style={styles.stepRow}
+                  >
+                    <View style={styles.stepLeft}>
+                      <Text style={styles.stepTitle}>Tickets</Text>
+                      <Text style={styles.stepHint} numberOfLines={1}>
+                        {kickoffMeta.tbc ? "Kickoff TBC — follow for updates first" : "Most important booking for match-centric trips"}
+                      </Text>
+                    </View>
+                    <View style={styles.stepRight}>
+                      <StatusBadge s={ticketsStep.state === "none" ? "saved" : (ticketsStep.state as any)} />
+                      <Text style={styles.stepCount}>{ticketsStep.label}</Text>
+                      <Text style={styles.chev}>›</Text>
+                    </View>
+                  </Pressable>
+
+                  {/* Flights */}
+                  <View style={styles.stepRow}>
+                    <View style={styles.stepLeft}>
+                      <Text style={styles.stepTitle}>Flights</Text>
+                      <Text style={styles.stepHint} numberOfLines={1}>
+                        Set a baseline now. Book when kickoff feels safe.
+                      </Text>
+                    </View>
+
+                    <View style={styles.stepRight}>
+                      <StatusBadge s={flightsStep.state === "none" ? "saved" : (flightsStep.state as any)} />
+                      <Text style={styles.stepCount}>{flightsStep.label}</Text>
+                    </View>
+
+                    <Pressable
+                      disabled={!bookingLinks || !originLoaded}
+                      onPress={() => {
+                        if (!bookingLinks) return;
+                        openTrackedPartner({
+                          partnerId: "aviasales",
+                          url: bookingLinks.flightsUrl,
+                          savedItemType: "flight",
+                          title: `Flights to ${cityName}`,
+                          metadata: { city: cityName, originIata: cleanUpper3(originIata, "LON") },
+                        });
+                      }}
+                      style={[styles.stepCta, (!bookingLinks || !originLoaded) && { opacity: 0.55 }]}
+                    >
+                      <Text style={styles.stepCtaText}>Find</Text>
+                    </Pressable>
+                  </View>
+
+                  {/* Stay */}
+                  <View style={styles.stepRow}>
+                    <View style={styles.stepLeft}>
+                      <Text style={styles.stepTitle}>Stay</Text>
+                      <Text style={styles.stepHint} numberOfLines={1}>
+                        Choose an area first, then pick the hotel.
+                      </Text>
+                    </View>
+
+                    <View style={styles.stepRight}>
+                      <StatusBadge s={stayStep.state === "none" ? "saved" : (stayStep.state as any)} />
+                      <Text style={styles.stepCount}>{stayStep.label}</Text>
+                    </View>
+
+                    <Pressable
+                      disabled={!bookingLinks}
+                      onPress={() => {
+                        if (!bookingLinks) return;
+                        openTrackedPartner({
+                          partnerId: "expedia_stays",
+                          url: bookingLinks.hotelsUrl,
+                          savedItemType: "hotel",
+                          title: `Hotels in ${cityName}`,
+                          metadata: { city: cityName, startDate: trip.startDate, endDate: trip.endDate },
+                        });
+                      }}
+                      style={[styles.stepCta, !bookingLinks && { opacity: 0.55 }]}
+                    >
+                      <Text style={styles.stepCtaText}>Find</Text>
+                    </Pressable>
+                  </View>
+
+                  {/* Things */}
+                  <View style={styles.stepRow}>
+                    <View style={styles.stepLeft}>
+                      <Text style={styles.stepTitle}>Things to do</Text>
+                      <Text style={styles.stepHint} numberOfLines={1}>
+                        Keep it simple: 1–2 great picks for the trip.
+                      </Text>
+                    </View>
+
+                    <View style={styles.stepRight}>
+                      <StatusBadge s={thingsStep.state === "none" ? "saved" : (thingsStep.state as any)} />
+                      <Text style={styles.stepCount}>{thingsStep.label}</Text>
+                    </View>
+
+                    <Pressable
+                      disabled={!bookingLinks}
+                      onPress={() => {
+                        if (!bookingLinks) return;
+                        openTrackedPartner({
+                          partnerId: "getyourguide",
+                          url: bookingLinks.experiencesUrl,
+                          savedItemType: "things",
+                          title: `Experiences in ${cityName}`,
+                          metadata: { city: cityName },
+                        });
+                      }}
+                      style={[styles.stepCta, !bookingLinks && { opacity: 0.55 }]}
+                    >
+                      <Text style={styles.stepCtaText}>Find</Text>
+                    </Pressable>
+                  </View>
+
+                  {/* Insurance/claims (optional) */}
+                  <Pressable
+                    onPress={() => {
+                      Alert.alert(
+                        "Insurance & claims",
+                        "Phase 1: links + Wallet proof flow.\n\nWe’ll expand this into a dedicated section in Phase 2."
+                      );
+                    }}
+                    style={styles.stepRow}
+                  >
+                    <View style={styles.stepLeft}>
+                      <Text style={styles.stepTitle}>Insurance & claims</Text>
+                      <Text style={styles.stepHint} numberOfLines={1}>
+                        Useful later — keep it out of the way for now.
+                      </Text>
+                    </View>
+                    <View style={styles.stepRight}>
+                      <StatusBadge s={insuranceStep.state === "none" ? "saved" : (insuranceStep.state as any)} />
+                      <Text style={styles.stepCount}>{insuranceStep.label}</Text>
+                      <Text style={styles.chev}>›</Text>
+                    </View>
+                  </Pressable>
+                </View>
 
                 {fxLoading ? <Text style={styles.mutedInline}>Loading match details…</Text> : null}
               </GlassCard>
 
-              {/* STAY (Option 1: honest, no fake proximity) */}
+              {/* 3) Itinerary (minimal, calm) */}
               <GlassCard style={styles.card}>
-                <Text style={styles.sectionTitle}>Stay guidance (stadium + best areas)</Text>
+                <View style={styles.sectionHead}>
+                  <Text style={styles.sectionTitle}>Itinerary</Text>
+                  <Text style={styles.sectionSub}>A light structure (not a wall of text).</Text>
+                </View>
 
-                {!primaryLogistics ? (
-                  <EmptyState
-                    title="Stay tips not available"
-                    message="Add a match (or load match details) to unlock stadium-area stay suggestions."
-                  />
-                ) : (
-                  <View style={{ gap: 10 }}>
-                    <View style={styles.proxBox}>
-                      <Text style={styles.proxTitle} numberOfLines={2}>
+                <View style={styles.itinBox}>
+                  {itineraryLines.map((l, idx) => (
+                    <Text key={idx} style={styles.itinLine}>
+                      • {l}
+                    </Text>
+                  ))}
+                </View>
+
+                <Pressable
+                  onPress={() =>
+                    Alert.alert("Itinerary (Phase 1)", "We’ll add a dedicated itinerary editor screen once the spine is locked.")
+                  }
+                  style={[styles.cta, styles.ctaSecondary, { marginTop: 12 }]}
+                >
+                  <Text style={styles.ctaSecondaryText}>Edit itinerary</Text>
+                  <Text style={styles.ctaSecondarySub}>Coming next</Text>
+                </Pressable>
+              </GlassCard>
+
+              {/* 4) City essentials + Stay guidance (collapsed by default) */}
+              <GlassCard style={styles.card}>
+                <View style={styles.sectionHead}>
+                  <Text style={styles.sectionTitle}>City essentials</Text>
+                  <Text style={styles.sectionSub}>Quick actions that don’t overwhelm.</Text>
+                </View>
+
+                <View style={styles.quickGrid}>
+                  <Pressable
+                    style={styles.quickBtn}
+                    onPress={() => bookingLinks && openUntracked(bookingLinks.mapsUrl)}
+                    disabled={!bookingLinks}
+                  >
+                    <Text style={styles.quickTitle}>Maps</Text>
+                    <Text style={styles.quickSub}>Search nearby</Text>
+                  </Pressable>
+
+                  <Pressable
+                    style={styles.quickBtn}
+                    onPress={() => {
+                      if (!bookingLinks) return;
+                      openTrackedPartner({
+                        partnerId: "kiwitaxi",
+                        url: bookingLinks.transfersUrl,
+                        savedItemType: "transfer",
+                        title: `Transfers in ${cityName}`,
+                        metadata: { city: cityName, startDate: trip.startDate, endDate: trip.endDate },
+                      });
+                    }}
+                    disabled={!bookingLinks}
+                  >
+                    <Text style={styles.quickTitle}>Transfers</Text>
+                    <Text style={styles.quickSub}>KiwiTaxi</Text>
+                  </Pressable>
+
+                  <Pressable
+                    style={styles.quickBtn}
+                    onPress={() => {
+                      if (!bookingLinks) return;
+                      openTrackedPartner({
+                        partnerId: "getyourguide",
+                        url: bookingLinks.experiencesUrl,
+                        savedItemType: "things",
+                        title: `Experiences in ${cityName}`,
+                        metadata: { city: cityName },
+                      });
+                    }}
+                    disabled={!bookingLinks}
+                  >
+                    <Text style={styles.quickTitle}>Experiences</Text>
+                    <Text style={styles.quickSub}>GetYourGuide</Text>
+                  </Pressable>
+
+                  <Pressable style={styles.quickBtn} onPress={onEditTrip}>
+                    <Text style={styles.quickTitle}>Trip</Text>
+                    <Text style={styles.quickSub}>Edit dates</Text>
+                  </Pressable>
+                </View>
+
+                {/* Stay guidance (accordion) */}
+                <Pressable
+                  onPress={() => setShowStayDetails((v) => !v)}
+                  style={[styles.accordionHead, showStayDetails && styles.accordionHeadOpen]}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.accordionTitle}>Stay guidance (areas + stadium)</Text>
+                    <Text style={styles.accordionSub} numberOfLines={1}>
+                      {primaryLogisticsSnippet
+                        ? primaryLogisticsSnippet
+                        : primaryMatchId
+                        ? "Stay tips loading or unavailable for this club yet"
+                        : "Add a match to unlock stadium-area guidance"}
+                    </Text>
+                  </View>
+                  <Text style={styles.accordionChevron}>{showStayDetails ? "–" : "+"}</Text>
+                </Pressable>
+
+                {showStayDetails ? (
+                  <View style={{ marginTop: 12, gap: 12 }}>
+                    <View style={styles.stadiumBox}>
+                      <Text style={styles.stadiumTitle} numberOfLines={2}>
                         {stadiumName || "Stadium"}
-                        {stadiumCity ? <Text style={styles.proxCity}> • {stadiumCity}</Text> : null}
+                        {stadiumCity ? <Text style={styles.stadiumCity}> • {stadiumCity}</Text> : null}
                       </Text>
 
-                      <Text style={styles.proxBody}>
-                        {primaryLogisticsSnippet ||
-                          "Use the areas below as a shortlist. Tap Transit/Walk for real routes in Google Maps."}
-                      </Text>
-
-                      <Pressable onPress={() => openUntracked(stadiumMapsUrl)} style={styles.proxBtn}>
-                        <Text style={styles.proxBtnText}>Open stadium in maps</Text>
+                      <Pressable
+                        onPress={() => openUntracked(stadiumMapsUrl)}
+                        style={[styles.cta, styles.ctaPrimary, { marginTop: 10 }]}
+                        disabled={!stadiumMapsUrl}
+                      >
+                        <Text style={styles.ctaPrimaryText}>Open stadium in maps</Text>
                       </Pressable>
 
-                      <Text style={styles.proxMuted}>
-                        Note: distance/time depends on your exact hotel. Use Transit/Walk for real routes.
+                      <Text style={styles.stadiumNote}>
+                        Tip: distances depend on your exact hotel. Use Transit/Walk for real routes.
                       </Text>
                     </View>
 
                     {stayBestAreas.length > 0 ? (
-                      <View style={{ gap: 6 }}>
-                        <Text style={styles.stayLabel}>Best areas</Text>
-
+                      <View style={{ gap: 8 }}>
+                        <Text style={styles.smallSection}>Best areas</Text>
                         {stayBestAreas.slice(0, 3).map((x, idx) => {
                           const stadiumQ = [stadiumName || "stadium", stadiumCity].filter(Boolean).join(" ").trim();
-                          const areaQ = [x.area, stadiumCity].filter(Boolean).join(" ").trim();
-                          const origin = areaQ || x.area;
+                          const origin = [x.area, stadiumCity].filter(Boolean).join(" ").trim();
                           const dest = stadiumQ || stadiumName || "stadium";
 
                           return (
                             <View key={`best-${idx}`} style={styles.areaRow}>
                               <View style={{ flex: 1 }}>
-                                <View style={styles.areaTop}>
-                                  <Text style={styles.areaName} numberOfLines={1}>
-                                    {x.area}
-                                  </Text>
-                                  <Pill label="Best area" kind="best" />
-                                </View>
+                                <Text style={styles.areaName} numberOfLines={1}>
+                                  {x.area}
+                                </Text>
                                 {x.notes ? <Text style={styles.areaNotes}>{x.notes}</Text> : null}
                               </View>
 
@@ -1043,14 +1252,12 @@ export default function TripDetailScreen() {
                                 <Pressable onPress={() => openUntracked(buildMapsSearchUrl(origin))} style={styles.smallBtn}>
                                   <Text style={styles.smallBtnText}>Maps</Text>
                                 </Pressable>
-
                                 <Pressable
                                   onPress={() => openUntracked(buildMapsDirectionsUrl(origin, dest, "transit"))}
                                   style={styles.smallBtn}
                                 >
                                   <Text style={styles.smallBtnText}>Transit</Text>
                                 </Pressable>
-
                                 <Pressable
                                   onPress={() => openUntracked(buildMapsDirectionsUrl(origin, dest, "walking"))}
                                   style={styles.smallBtn}
@@ -1065,24 +1272,19 @@ export default function TripDetailScreen() {
                     ) : null}
 
                     {stayBudgetAreas.length > 0 ? (
-                      <View style={{ gap: 6, marginTop: 6 }}>
-                        <Text style={styles.stayLabel}>Budget-friendly</Text>
-
+                      <View style={{ gap: 8 }}>
+                        <Text style={styles.smallSection}>Budget-friendly</Text>
                         {stayBudgetAreas.slice(0, 2).map((x, idx) => {
                           const stadiumQ = [stadiumName || "stadium", stadiumCity].filter(Boolean).join(" ").trim();
-                          const areaQ = [x.area, stadiumCity].filter(Boolean).join(" ").trim();
-                          const origin = areaQ || x.area;
+                          const origin = [x.area, stadiumCity].filter(Boolean).join(" ").trim();
                           const dest = stadiumQ || stadiumName || "stadium";
 
                           return (
                             <View key={`budget-${idx}`} style={styles.areaRow}>
                               <View style={{ flex: 1 }}>
-                                <View style={styles.areaTop}>
-                                  <Text style={styles.areaName} numberOfLines={1}>
-                                    {x.area}
-                                  </Text>
-                                  <Pill label="Budget" kind="budget" />
-                                </View>
+                                <Text style={styles.areaName} numberOfLines={1}>
+                                  {x.area}
+                                </Text>
                                 {x.notes ? <Text style={styles.areaNotes}>{x.notes}</Text> : null}
                               </View>
 
@@ -1090,14 +1292,12 @@ export default function TripDetailScreen() {
                                 <Pressable onPress={() => openUntracked(buildMapsSearchUrl(origin))} style={styles.smallBtn}>
                                   <Text style={styles.smallBtnText}>Maps</Text>
                                 </Pressable>
-
                                 <Pressable
                                   onPress={() => openUntracked(buildMapsDirectionsUrl(origin, dest, "transit"))}
                                   style={styles.smallBtn}
                                 >
                                   <Text style={styles.smallBtnText}>Transit</Text>
                                 </Pressable>
-
                                 <Pressable
                                   onPress={() => openUntracked(buildMapsDirectionsUrl(origin, dest, "walking"))}
                                   style={styles.smallBtn}
@@ -1110,306 +1310,178 @@ export default function TripDetailScreen() {
                         })}
                       </View>
                     ) : null}
+                  </View>
+                ) : null}
+              </GlassCard>
 
-                    {transportStops.length > 0 ? (
-                      <View style={{ gap: 6, marginTop: 6 }}>
-                        <Text style={styles.stayLabel}>Best transport stops</Text>
-                        {transportStops.map((line, idx) => (
-                          <Pressable
-                            key={`stop-${idx}`}
-                            onPress={() => openUntracked(buildMapsSearchUrl([line, stadiumCity].filter(Boolean).join(" ")))}
-                            style={styles.stopRow}
-                          >
-                            <Text style={styles.stayBullet} numberOfLines={2}>
-                              • {line}
-                            </Text>
+              {/* 5) Bookings (merged, collapsible) */}
+              <GlassCard style={styles.card}>
+                <Pressable
+                  onPress={() => setShowBookings((v) => !v)}
+                  style={[styles.accordionHead, showBookings && styles.accordionHeadOpen]}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.accordionTitle}>Bookings</Text>
+                    <Text style={styles.accordionSub} numberOfLines={1}>
+                      {booked.length > 0
+                        ? `${booked.length} booked in Wallet`
+                        : pending.length > 0
+                        ? `${pending.length} pending confirmation`
+                        : "Nothing yet — partner clicks will appear here"}
+                    </Text>
+                  </View>
+                  <Text style={styles.accordionChevron}>{showBookings ? "–" : "+"}</Text>
+                </Pressable>
+
+                {showBookings ? (
+                  <View style={{ marginTop: 12, gap: 10 }}>
+                    {pending.length === 0 && booked.length === 0 ? (
+                      <EmptyState
+                        title="No bookings yet"
+                        message="When you open a partner link, we track it here until you confirm it’s booked."
+                      />
+                    ) : null}
+
+                    {pending.length > 0 ? (
+                      <View style={{ gap: 10 }}>
+                        <Text style={styles.smallSection}>Pending</Text>
+                        {pending.slice(0, 6).map((it) => (
+                          <View key={it.id} style={styles.itemRow}>
+                            <Pressable style={{ flex: 1 }} onPress={() => openSavedItem(it)}>
+                              <View style={styles.itemTitleRow}>
+                                <Text style={styles.itemTitle} numberOfLines={1}>
+                                  {it.title}
+                                </Text>
+                                <StatusBadge s={it.status} />
+                              </View>
+                              <Text style={styles.itemMeta} numberOfLines={1}>
+                                {buildMetaLine(it)}
+                              </Text>
+                              {it.priceText ? (
+                                <Text style={styles.priceLine} numberOfLines={1}>
+                                  {it.priceText}
+                                </Text>
+                              ) : null}
+                            </Pressable>
+
+                            <View style={styles.itemActions}>
+                              <Pressable onPress={() => confirmMarkBooked(it)} style={styles.smallBtn}>
+                                <Text style={styles.smallBtnText}>Booked</Text>
+                              </Pressable>
+                              <Pressable onPress={() => confirmArchive(it)} style={[styles.smallBtn, styles.smallBtnDanger]}>
+                                <Text style={styles.smallBtnText}>Archive</Text>
+                              </Pressable>
+                            </View>
+                          </View>
+                        ))}
+                      </View>
+                    ) : null}
+
+                    {booked.length > 0 ? (
+                      <View style={{ gap: 10 }}>
+                        <Text style={styles.smallSection}>Booked</Text>
+                        {booked.slice(0, 6).map((it) => (
+                          <View key={it.id} style={styles.itemRow}>
+                            <Pressable style={{ flex: 1 }} onPress={() => openSavedItem(it)}>
+                              <View style={styles.itemTitleRow}>
+                                <Text style={styles.itemTitle} numberOfLines={1}>
+                                  {it.title}
+                                </Text>
+                                <StatusBadge s={it.status} />
+                              </View>
+                              <Text style={styles.itemMeta} numberOfLines={1}>
+                                {buildMetaLine(it)}
+                              </Text>
+                              {it.priceText ? (
+                                <Text style={styles.priceLine} numberOfLines={1}>
+                                  {it.priceText}
+                                </Text>
+                              ) : null}
+                            </Pressable>
+
+                            <View style={styles.itemActions}>
+                              <Pressable onPress={onViewWallet} style={styles.smallBtn}>
+                                <Text style={styles.smallBtnText}>Wallet</Text>
+                              </Pressable>
+                              <Pressable onPress={() => confirmArchive(it)} style={[styles.smallBtn, styles.smallBtnDanger]}>
+                                <Text style={styles.smallBtnText}>Archive</Text>
+                              </Pressable>
+                            </View>
+                          </View>
+                        ))}
+                      </View>
+                    ) : null}
+
+                    {(pending.length > 6 || booked.length > 6) && (
+                      <Pressable onPress={onViewWallet} style={[styles.cta, styles.ctaSecondary]}>
+                        <Text style={styles.ctaSecondaryText}>View all in Wallet</Text>
+                        <Text style={styles.ctaSecondarySub}>Proof + confirmations</Text>
+                      </Pressable>
+                    )}
+                  </View>
+                ) : null}
+              </GlassCard>
+
+              {/* 6) Notes (collapsed) */}
+              <GlassCard style={styles.card}>
+                <Pressable
+                  onPress={() => setShowNotes((v) => !v)}
+                  style={[styles.accordionHead, showNotes && styles.accordionHeadOpen]}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.accordionTitle}>Notes</Text>
+                    <Text style={styles.accordionSub} numberOfLines={1}>
+                      {notes.length > 0 ? `${notes.length} saved` : "Optional — keep it light"}
+                    </Text>
+                  </View>
+                  <Text style={styles.accordionChevron}>{showNotes ? "–" : "+"}</Text>
+                </Pressable>
+
+                {showNotes ? (
+                  <View style={{ marginTop: 12 }}>
+                    <View style={styles.noteBox}>
+                      <TextInput
+                        value={noteText}
+                        onChangeText={setNoteText}
+                        placeholder="Add a note (shortlist, reminders, anything)…"
+                        placeholderTextColor={theme.colors.textSecondary}
+                        style={styles.noteInput}
+                        multiline
+                      />
+
+                      <Pressable
+                        onPress={addNote}
+                        disabled={noteSaving}
+                        style={[styles.noteSaveBtn, noteSaving && { opacity: 0.7 }]}
+                      >
+                        <Text style={styles.noteSaveText}>{noteSaving ? "Saving…" : "Save note"}</Text>
+                      </Pressable>
+                    </View>
+
+                    {notes.length === 0 ? (
+                      <View style={{ marginTop: 10 }}>
+                        <EmptyState title="No notes yet" message="Notes you save for this trip appear here." />
+                      </View>
+                    ) : (
+                      <View style={{ gap: 10, marginTop: 10 }}>
+                        {notes.slice(0, 6).map((it) => (
+                          <Pressable key={it.id} onPress={() => openNoteActions(it)} style={styles.noteRow}>
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.itemTitle} numberOfLines={1}>
+                                {it.title}
+                              </Text>
+                              <Text style={styles.itemMeta} numberOfLines={1}>
+                                Notes
+                              </Text>
+                            </View>
                             <Text style={styles.chev}>›</Text>
                           </Pressable>
                         ))}
                       </View>
-                    ) : null}
-
-                    {transportTips.length > 0 ? (
-                      <View style={{ gap: 6, marginTop: 6 }}>
-                        <Text style={styles.stayLabel}>Matchday tips</Text>
-                        {transportTips.map((line, idx) => (
-                          <Text key={`tip-${idx}`} style={styles.stayBullet}>
-                            • {line}
-                          </Text>
-                        ))}
-                      </View>
-                    ) : null}
-
-                    {lateTransportNote ? (
-                      <View style={styles.lateBox}>
-                        <Text style={styles.lateTitle}>Late transport note</Text>
-                        <Text style={styles.lateText}>{lateTransportNote}</Text>
-                      </View>
-                    ) : null}
+                    )}
                   </View>
-                )}
+                ) : null}
               </GlassCard>
-
-              {/* PENDING */}
-              <GlassCard style={styles.card}>
-                <Text style={styles.sectionTitle}>Pending</Text>
-
-                {pending.length === 0 ? (
-                  <EmptyState
-                    title="No pending bookings"
-                    message="When you click a partner link, it appears here until you confirm it’s booked."
-                  />
-                ) : (
-                  <View style={{ gap: 10 }}>
-                    {pending.map((it) => (
-                      <View key={it.id} style={styles.itemRow}>
-                        <Pressable style={{ flex: 1 }} onPress={() => openSavedItem(it)}>
-                          <View style={styles.itemTitleRow}>
-                            <Text style={styles.itemTitle} numberOfLines={1}>
-                              {it.title}
-                            </Text>
-                            <StatusBadge s={it.status} />
-                          </View>
-
-                          <Text style={styles.itemMeta} numberOfLines={1}>
-                            {buildMetaLine(it)}
-                          </Text>
-
-                          {it.priceText ? (
-                            <Text style={styles.priceLine} numberOfLines={1}>
-                              {it.priceText}
-                            </Text>
-                          ) : null}
-                        </Pressable>
-
-                        <View style={styles.itemActions}>
-                          <Pressable onPress={() => confirmMarkBooked(it)} style={styles.smallBtn}>
-                            <Text style={styles.smallBtnText}>Booked</Text>
-                          </Pressable>
-                          <Pressable onPress={() => confirmArchive(it)} style={[styles.smallBtn, styles.smallBtnDanger]}>
-                            <Text style={styles.smallBtnText}>Archive</Text>
-                          </Pressable>
-                        </View>
-                      </View>
-                    ))}
-                  </View>
-                )}
-              </GlassCard>
-
-              {/* BOOKED */}
-              <GlassCard style={styles.card}>
-                <Text style={styles.sectionTitle}>Booked (in Wallet)</Text>
-
-                {booked.length === 0 ? (
-                  <EmptyState title="No booked items yet" message="When you confirm a booking, it will show here and in Wallet." />
-                ) : (
-                  <View style={{ gap: 10 }}>
-                    {booked.map((it) => (
-                      <View key={it.id} style={styles.itemRow}>
-                        <Pressable style={{ flex: 1 }} onPress={() => openSavedItem(it)}>
-                          <View style={styles.itemTitleRow}>
-                            <Text style={styles.itemTitle} numberOfLines={1}>
-                              {it.title}
-                            </Text>
-                            <StatusBadge s={it.status} />
-                          </View>
-
-                          <Text style={styles.itemMeta} numberOfLines={1}>
-                            {buildMetaLine(it)}
-                          </Text>
-
-                          {it.priceText ? (
-                            <Text style={styles.priceLine} numberOfLines={1}>
-                              {it.priceText}
-                            </Text>
-                          ) : null}
-                        </Pressable>
-
-                        <View style={styles.itemActions}>
-                          <Pressable onPress={onViewWallet} style={styles.smallBtn}>
-                            <Text style={styles.smallBtnText}>Wallet</Text>
-                          </Pressable>
-
-                          <Pressable onPress={() => confirmArchive(it)} style={[styles.smallBtn, styles.smallBtnDanger]}>
-                            <Text style={styles.smallBtnText}>Archive</Text>
-                          </Pressable>
-                        </View>
-                      </View>
-                    ))}
-                  </View>
-                )}
-              </GlassCard>
-
-              {/* SAVED */}
-              <GlassCard style={styles.card}>
-                <Text style={styles.sectionTitle}>Saved</Text>
-
-                {saved.length === 0 ? (
-                  <EmptyState title="No saved items" message="If you answer “No” after returning from a partner, we keep the link here as Saved." />
-                ) : (
-                  <View style={{ gap: 10 }}>
-                    {saved.map((it) => (
-                      <View key={it.id} style={styles.itemRow}>
-                        <Pressable style={{ flex: 1 }} onPress={() => openSavedItem(it)}>
-                          <View style={styles.itemTitleRow}>
-                            <Text style={styles.itemTitle} numberOfLines={1}>
-                              {it.title}
-                            </Text>
-                            <StatusBadge s={it.status} />
-                          </View>
-
-                          <Text style={styles.itemMeta} numberOfLines={1}>
-                            {buildMetaLine(it)}
-                          </Text>
-
-                          {it.priceText ? (
-                            <Text style={styles.priceLine} numberOfLines={1}>
-                              {it.priceText}
-                            </Text>
-                          ) : null}
-                        </Pressable>
-
-                        <View style={styles.itemActions}>
-                          <Pressable onPress={() => confirmMarkBooked(it)} style={styles.smallBtn}>
-                            <Text style={styles.smallBtnText}>Booked</Text>
-                          </Pressable>
-
-                          <Pressable onPress={() => confirmMoveToPending(it)} style={styles.smallBtn}>
-                            <Text style={styles.smallBtnText}>Pending</Text>
-                          </Pressable>
-
-                          <Pressable onPress={() => confirmArchive(it)} style={[styles.smallBtn, styles.smallBtnDanger]}>
-                            <Text style={styles.smallBtnText}>Archive</Text>
-                          </Pressable>
-                        </View>
-                      </View>
-                    ))}
-                  </View>
-                )}
-              </GlassCard>
-
-              {/* NOTES */}
-              <GlassCard style={styles.card}>
-                <Text style={styles.sectionTitle}>Notes</Text>
-
-                <View style={styles.noteBox}>
-                  <TextInput
-                    value={noteText}
-                    onChangeText={setNoteText}
-                    placeholder="Add a note (tickets, hotel shortlist, reminders, anything)…"
-                    placeholderTextColor={theme.colors.textSecondary}
-                    style={styles.noteInput}
-                    multiline
-                  />
-
-                  <Pressable
-                    onPress={addNote}
-                    disabled={noteSaving}
-                    style={[styles.noteSaveBtn, noteSaving && { opacity: 0.7 }]}
-                  >
-                    <Text style={styles.noteSaveText}>{noteSaving ? "Saving…" : "Save note"}</Text>
-                  </Pressable>
-                </View>
-
-                {notes.length === 0 ? (
-                  <View style={{ marginTop: 10 }}>
-                    <EmptyState title="No notes yet" message="Notes you save for this trip appear here." />
-                  </View>
-                ) : (
-                  <View style={{ gap: 10, marginTop: 10 }}>
-                    {notes.map((it) => (
-                      <Pressable key={it.id} onPress={() => openNoteActions(it)} style={styles.noteRow}>
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.itemTitle} numberOfLines={1}>
-                            {it.title}
-                          </Text>
-                          <Text style={styles.itemMeta} numberOfLines={1}>
-                            Notes
-                          </Text>
-                        </View>
-                        <Text style={styles.chev}>›</Text>
-                      </Pressable>
-                    ))}
-                  </View>
-                )}
-              </GlassCard>
-
-              {/* BOOK YOUR TRIP */}
-              {bookingLinks ? (
-                <GlassCard style={styles.card}>
-                  <Text style={styles.sectionTitle}>Book your trip</Text>
-
-                  <View style={styles.bookGrid}>
-                    <Pressable
-                      style={styles.bookBtn}
-                      onPress={() =>
-                        openTrackedPartner({
-                          partnerId: "expedia_stays",
-                          url: bookingLinks.hotelsUrl,
-                          savedItemType: "hotel",
-                          title: `Hotels in ${cityName}`,
-                          metadata: { city: cityName, startDate: trip.startDate, endDate: trip.endDate },
-                        })
-                      }
-                    >
-                      <Text style={styles.bookBtnText}>Hotels</Text>
-                      <Text style={styles.bookBtnSub}>Expedia</Text>
-                    </Pressable>
-
-                    <Pressable
-                      style={styles.bookBtn}
-                      onPress={() =>
-                        openTrackedPartner({
-                          partnerId: "aviasales",
-                          url: bookingLinks.flightsUrl,
-                          savedItemType: "flight",
-                          title: `Flights to ${cityName}`,
-                          metadata: { city: cityName, originIata: cleanUpper3(originIata, "LON") },
-                        })
-                      }
-                    >
-                      <Text style={styles.bookBtnText}>Flights</Text>
-                      <Text style={styles.bookBtnSub}>Aviasales</Text>
-                    </Pressable>
-
-                    <Pressable
-                      style={styles.bookBtn}
-                      onPress={() =>
-                        openTrackedPartner({
-                          partnerId: "kiwitaxi",
-                          url: bookingLinks.transfersUrl,
-                          savedItemType: "transfer",
-                          title: `Transfers in ${cityName}`,
-                          metadata: { city: cityName, startDate: trip.startDate, endDate: trip.endDate },
-                        })
-                      }
-                    >
-                      <Text style={styles.bookBtnText}>Transfers</Text>
-                      <Text style={styles.bookBtnSub}>KiwiTaxi</Text>
-                    </Pressable>
-
-                    <Pressable
-                      style={styles.bookBtn}
-                      onPress={() =>
-                        openTrackedPartner({
-                          partnerId: "getyourguide",
-                          url: bookingLinks.experiencesUrl,
-                          savedItemType: "things",
-                          title: `Experiences in ${cityName}`,
-                          metadata: { city: cityName },
-                        })
-                      }
-                    >
-                      <Text style={styles.bookBtnText}>Experiences</Text>
-                      <Text style={styles.bookBtnSub}>GetYourGuide</Text>
-                    </Pressable>
-                  </View>
-
-                  <Pressable onPress={() => openUntracked(bookingLinks.mapsUrl)}>
-                    <Text style={styles.mapsInline}>Open maps search</Text>
-                  </Pressable>
-                </GlassCard>
-              ) : null}
             </>
           ) : null}
         </ScrollView>
@@ -1438,45 +1510,23 @@ const styles = StyleSheet.create({
   muted: { color: theme.colors.textSecondary, fontWeight: "800" },
   mutedInline: { marginTop: 10, color: theme.colors.textSecondary, textAlign: "center", fontWeight: "800" },
 
+  /* Hero */
   hero: { padding: theme.spacing.lg },
+  heroTop: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
+  heroRight: { alignItems: "flex-end", gap: 10 },
 
-  kicker: {
-    color: theme.colors.primary,
-    fontWeight: "900",
-    fontSize: theme.fontSize.xs,
-  },
-
-  cityTitle: {
-    marginTop: 6,
-    color: theme.colors.text,
-    fontSize: theme.fontSize.xl,
-    fontWeight: "900",
-  },
-
-  heroMeta: {
-    marginTop: 6,
-    color: theme.colors.textSecondary,
-    fontWeight: "800",
-  },
-
-  heroTopRow: {
-    marginTop: 10,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-  },
+  kicker: { color: theme.colors.primary, fontWeight: "900", fontSize: theme.fontSize.xs },
+  cityTitle: { marginTop: 6, color: theme.colors.text, fontSize: theme.fontSize.xl, fontWeight: "900" },
+  heroMeta: { marginTop: 6, color: theme.colors.textSecondary, fontWeight: "800" },
 
   statusPill: {
     borderWidth: 1,
-    borderColor: "rgba(0,255,136,0.4)",
+    borderColor: "rgba(0,255,136,0.35)",
     borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 4,
-    alignSelf: "flex-start",
     backgroundColor: "rgba(0,0,0,0.18)",
   },
-
   statusText: { color: theme.colors.text, fontWeight: "900" },
 
   walletBtn: {
@@ -1487,150 +1537,152 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
+  walletBtnText: { color: theme.colors.text, fontWeight: "900", fontSize: 12 },
 
-  walletBtnText: {
-    color: theme.colors.text,
-    fontWeight: "900",
-    fontSize: 12,
-  },
+  heroDivider: { marginTop: 14, height: 1, backgroundColor: "rgba(255,255,255,0.10)" },
 
-  bannersRow: { marginTop: 12, gap: 10 },
-
-  pendingBanner: {
-    padding: 10,
-    borderRadius: 12,
-    backgroundColor: "rgba(255,200,80,0.15)",
-  },
-
-  pendingText: {
-    color: "rgba(255,200,80,1)",
-    fontWeight: "900",
-  },
-
-  savedBanner: {
-    padding: 10,
-    borderRadius: 12,
-    backgroundColor: "rgba(0,255,136,0.10)",
-  },
-
-  savedText: {
-    color: "rgba(0,255,136,1)",
-    fontWeight: "900",
-  },
-
-  bookedBanner: {
-    padding: 10,
-    borderRadius: 12,
-    backgroundColor: "rgba(120,170,255,0.14)",
-  },
-
-  bookedText: {
-    color: "rgba(160,195,255,1)",
-    fontWeight: "900",
-  },
-
-  heroActions: { marginTop: 12 },
-
-  btn: {
-    paddingVertical: 12,
-    borderRadius: 12,
-    alignItems: "center",
-    borderWidth: 1,
-  },
-
-  btnPrimary: {
-    borderColor: "rgba(0,255,136,0.6)",
-    backgroundColor: "rgba(0,0,0,0.22)",
-  },
-
-  btnPrimaryText: {
-    color: theme.colors.text,
-    fontWeight: "900",
-  },
-
-  sectionTitle: {
-    color: theme.colors.text,
-    fontWeight: "900",
-    marginBottom: 8,
-  },
-
-  matchRow: {
+  matchAnchor: {
+    marginTop: 14,
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
     paddingVertical: 12,
     paddingHorizontal: 12,
-    borderRadius: 14,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
     backgroundColor: "rgba(0,0,0,0.18)",
   },
 
-  matchTitleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
+  matchAnchorEmpty: {
+    marginTop: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+    padding: 12,
   },
 
-  matchTitle: { color: theme.colors.text, fontWeight: "900", flexShrink: 1 },
+  matchTitle: { color: theme.colors.text, fontWeight: "900" },
 
-  matchMeta: {
-    marginTop: 4,
-    color: theme.colors.textSecondary,
-    fontWeight: "800",
-    fontSize: 12,
-    lineHeight: 16,
-  },
+  matchMeta: { marginTop: 4, color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12, lineHeight: 16 },
+  matchMetaSecondary: { marginTop: 4, color: theme.colors.textTertiary, fontWeight: "900", fontSize: 12, lineHeight: 16 },
 
-  logisticsMeta: {
-    marginTop: 6,
-    color: theme.colors.textTertiary,
-    fontWeight: "900",
-    fontSize: 12,
-    lineHeight: 16,
-  },
+  heroCtas: { marginTop: 14, gap: 10 },
+  heroCtasRow: { flexDirection: "row", gap: 10 },
 
-  matchHint: { marginTop: 6, color: theme.colors.textTertiary, fontWeight: "900", fontSize: 11 },
-
-  crestWrap: {
-    width: 40,
-    height: 40,
+  cta: {
+    borderWidth: 1,
     borderRadius: 14,
-    backgroundColor: "rgba(255,255,255,0.06)",
+    paddingVertical: 12,
+    paddingHorizontal: 12,
     alignItems: "center",
     justifyContent: "center",
   },
+  ctaPrimary: {
+    borderColor: "rgba(0,255,136,0.55)",
+    backgroundColor: "rgba(0,0,0,0.22)",
+  },
+  ctaPrimaryText: { color: theme.colors.text, fontWeight: "900" },
 
-  crestImg: { width: 26, height: 26 },
+  ctaSecondary: {
+    flex: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+    backgroundColor: "rgba(0,0,0,0.16)",
+  },
+  ctaSecondaryText: { color: theme.colors.text, fontWeight: "900" },
+  ctaSecondarySub: { marginTop: 4, color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12 },
 
-  crestFallback: { color: theme.colors.textSecondary, fontWeight: "900" },
+  /* Section head */
+  sectionHead: { marginBottom: 10 },
+  sectionTitle: { color: theme.colors.text, fontWeight: "900" },
+  sectionSub: { marginTop: 6, color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12 },
 
-  /* Stay guidance */
-  proxBox: {
+  /* Steps */
+  stepRow: {
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  stepLeft: { flex: 1 },
+  stepTitle: { color: theme.colors.text, fontWeight: "900" },
+  stepHint: { marginTop: 4, color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12 },
+  stepRight: { alignItems: "flex-end", gap: 6 },
+  stepCount: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: 12 },
+
+  stepCta: {
+    marginLeft: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(0,255,136,0.35)",
+    backgroundColor: "rgba(0,0,0,0.14)",
+  },
+  stepCtaText: { color: theme.colors.text, fontWeight: "900" },
+
+  /* Itinerary */
+  itinBox: {
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+    borderRadius: 14,
+    padding: 12,
+    gap: 8,
+  },
+  itinLine: { color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12, lineHeight: 16 },
+
+  /* Quick grid */
+  quickGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  quickBtn: {
+    width: "48%",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.15)",
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    backgroundColor: "rgba(0,0,0,0.16)",
+  },
+  quickTitle: { color: theme.colors.text, fontWeight: "900" },
+  quickSub: { marginTop: 6, color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12 },
+
+  /* Accordions */
+  accordionHead: {
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  accordionHeadOpen: { borderColor: "rgba(0,255,136,0.28)" },
+  accordionTitle: { color: theme.colors.text, fontWeight: "900" },
+  accordionSub: { marginTop: 4, color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12 },
+  accordionChevron: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: 18 },
+
+  /* Stadium + areas */
+  stadiumBox: {
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
     borderRadius: 14,
     backgroundColor: "rgba(0,0,0,0.18)",
     padding: 12,
   },
-  proxTitle: { color: theme.colors.text, fontWeight: "900", fontSize: 14, lineHeight: 18 },
-  proxCity: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: 12 },
-  proxBody: { marginTop: 8, color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12, lineHeight: 16 },
-  proxMuted: { marginTop: 8, color: theme.colors.textTertiary, fontWeight: "900", fontSize: 11, lineHeight: 14 },
+  stadiumTitle: { color: theme.colors.text, fontWeight: "900", fontSize: 14, lineHeight: 18 },
+  stadiumCity: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: 12 },
+  stadiumNote: { marginTop: 10, color: theme.colors.textTertiary, fontWeight: "900", fontSize: 11, lineHeight: 14 },
 
-  proxBtn: {
-    marginTop: 10,
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "rgba(0,255,136,0.55)",
-    alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.18)",
-  },
-  proxBtnText: { color: theme.colors.text, fontWeight: "900" },
-
-  stayLabel: { color: theme.colors.text, fontWeight: "900", fontSize: 12 },
-  stayBullet: { color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12, lineHeight: 16 },
+  smallSection: { color: theme.colors.text, fontWeight: "900", fontSize: 12 },
 
   areaRow: {
     flexDirection: "row",
@@ -1643,32 +1695,11 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.18)",
     alignItems: "center",
   },
-  areaTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
   areaName: { color: theme.colors.text, fontWeight: "900", flexShrink: 1 },
   areaNotes: { marginTop: 6, color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12, lineHeight: 16 },
   areaBtns: { gap: 8, alignItems: "flex-end" },
 
-  pill: {
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-  pillText: { color: theme.colors.text, fontWeight: "900", fontSize: 11 },
-
-  stopRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
-
-  lateBox: {
-    marginTop: 8,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "rgba(255,200,80,0.28)",
-    backgroundColor: "rgba(255,200,80,0.08)",
-    padding: 12,
-  },
-  lateTitle: { color: theme.colors.text, fontWeight: "900", fontSize: 12 },
-  lateText: { marginTop: 6, color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12, lineHeight: 16 },
-
+  /* Items */
   itemRow: {
     flexDirection: "row",
     gap: 12,
@@ -1680,92 +1711,13 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.18)",
     alignItems: "center",
   },
+  itemTitleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
+  itemTitle: { color: theme.colors.text, fontWeight: "900", flexShrink: 1, paddingRight: 6 },
+  itemMeta: { marginTop: 4, color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12 },
+  priceLine: { marginTop: 6, color: "rgba(242,244,246,0.92)", fontSize: 12, fontWeight: "900" },
+  itemActions: { gap: 8, alignItems: "flex-end" },
 
-  itemTitleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-  },
-
-  itemTitle: {
-    color: theme.colors.text,
-    fontWeight: "900",
-    flexShrink: 1,
-    paddingRight: 6,
-  },
-
-  itemMeta: {
-    marginTop: 4,
-    color: theme.colors.textSecondary,
-    fontWeight: "800",
-    fontSize: 12,
-  },
-
-  priceLine: {
-    marginTop: 6,
-    color: "rgba(242,244,246,0.92)",
-    fontSize: 12,
-    fontWeight: "900",
-  },
-
-  itemActions: {
-    gap: 8,
-    alignItems: "flex-end",
-  },
-
-  smallBtn: {
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.15)",
-    backgroundColor: "rgba(0,0,0,0.15)",
-  },
-
-  smallBtnDanger: {
-    borderColor: "rgba(255,80,80,0.35)",
-  },
-
-  smallBtnText: {
-    color: theme.colors.text,
-    fontWeight: "900",
-    fontSize: 12,
-  },
-
-  badge: {
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-
-  badgeText: {
-    color: theme.colors.text,
-    fontWeight: "900",
-    fontSize: 11,
-  },
-
-  badgePending: {
-    borderColor: "rgba(255,200,80,0.40)",
-    backgroundColor: "rgba(255,200,80,0.10)",
-  },
-
-  badgeSaved: {
-    borderColor: "rgba(0,255,136,0.35)",
-    backgroundColor: "rgba(0,255,136,0.08)",
-  },
-
-  badgeBooked: {
-    borderColor: "rgba(120,170,255,0.45)",
-    backgroundColor: "rgba(120,170,255,0.10)",
-  },
-
-  badgeArchived: {
-    borderColor: "rgba(255,255,255,0.18)",
-    backgroundColor: "rgba(255,255,255,0.06)",
-  },
-
+  /* Notes */
   noteBox: {
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
@@ -1773,7 +1725,6 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.18)",
     padding: 12,
   },
-
   noteInput: {
     minHeight: 80,
     color: theme.colors.text,
@@ -1781,7 +1732,6 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     ...(Platform.OS === "ios" ? { paddingTop: 10 } : null),
   },
-
   noteSaveBtn: {
     marginTop: 10,
     paddingVertical: 12,
@@ -1791,7 +1741,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "rgba(0,0,0,0.18)",
   },
-
   noteSaveText: { color: theme.colors.text, fontWeight: "900" },
 
   noteRow: {
@@ -1806,38 +1755,36 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.18)",
   },
 
-  bookGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
+  /* Crest */
+  crestWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    alignItems: "center",
+    justifyContent: "center",
   },
+  crestImg: { width: 26, height: 26 },
+  crestFallback: { color: theme.colors.textSecondary, fontWeight: "900" },
 
-  bookBtn: {
-    width: "48%",
+  /* Buttons + badges */
+  smallBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.15)",
-    borderRadius: 12,
-    paddingVertical: 12,
-    alignItems: "center",
-    paddingHorizontal: 10,
-    backgroundColor: "rgba(0,0,0,0.16)",
+    backgroundColor: "rgba(0,0,0,0.15)",
   },
+  smallBtnDanger: { borderColor: "rgba(255,80,80,0.35)" },
+  smallBtnText: { color: theme.colors.text, fontWeight: "900", fontSize: 12 },
 
-  bookBtnText: { color: theme.colors.text, fontWeight: "900" },
-
-  bookBtnSub: {
-    marginTop: 4,
-    color: theme.colors.textSecondary,
-    fontWeight: "800",
-    fontSize: 12,
-  },
-
-  mapsInline: {
-    marginTop: 10,
-    color: theme.colors.textSecondary,
-    textAlign: "center",
-    fontWeight: "900",
-  },
+  badge: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
+  badgeText: { color: theme.colors.text, fontWeight: "900", fontSize: 11 },
+  badgePending: { borderColor: "rgba(255,200,80,0.40)", backgroundColor: "rgba(255,200,80,0.10)" },
+  badgeSaved: { borderColor: "rgba(0,255,136,0.35)", backgroundColor: "rgba(0,255,136,0.08)" },
+  badgeBooked: { borderColor: "rgba(120,170,255,0.45)", backgroundColor: "rgba(120,170,255,0.10)" },
+  badgeArchived: { borderColor: "rgba(255,255,255,0.18)", backgroundColor: "rgba(255,255,255,0.06)" },
 
   chev: { color: theme.colors.textSecondary, fontSize: 24, marginTop: -2 },
 });
