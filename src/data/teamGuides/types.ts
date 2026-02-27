@@ -44,7 +44,7 @@ export type TeamGuide = {
 
   /**
    * V1 sections: flexible, easy to render, and future-proof.
-   * Keep this neutral: travel, logistics, tickets, matchday timing, transport, food areas.
+   * Keep this neutral: travel, logistics, tickets, timing, transport, areas, food.
    */
   sections: TeamGuideSection[];
 
