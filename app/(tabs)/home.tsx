@@ -465,12 +465,10 @@ export default function HomeScreen() {
 
   const cities = useMemo(() => dedupeBy(POPULAR_CITIES, (c) => toKey(c.name)).slice(0, 5), []);
 
+  // Popular Teams (deep-link, no search)
   const popularTeams = useMemo(() => {
-    // Only show teams with a numeric teamId (needed for crest).
-    const raw = getPopularTeams();
-    return raw
-      .filter((t) => typeof t.teamId === "number")
-      .map((t) => ({ name: t.name, teamId: t.teamId as number }))
+    return getPopularTeams()
+      .filter((t) => typeof (t as any)?.teamId === "number")
       .slice(0, 5);
   }, []);
 
@@ -746,27 +744,52 @@ export default function HomeScreen() {
               {!showSearchResults ? (
                 <View style={styles.popularBlock}>
                   <Text style={styles.sectionKicker}>Popular Cities</Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.popularRow} decelerationRate="fast">
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.popularRow}
+                    decelerationRate="fast"
+                  >
                     {cities.map((c) => (
                       <CityChipPremium key={`pc-${c.name}`} name={c.name} countryCode={c.countryCode} onPress={() => setQ(c.name)} />
                     ))}
                   </ScrollView>
 
                   <Text style={[styles.sectionKicker, { marginTop: 10 }]}>Popular Teams</Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.popularRow} decelerationRate="fast">
-                    {popularTeams.map((t) => (
-                      <Pressable
-                        key={`pt-${t.teamId}`}
-                        onPress={() => setQ(t.name)}
-                        style={({ pressed }) => [styles.teamPill, pressed && styles.pressedPill]}
-                        android_ripple={{ color: "rgba(255,255,255,0.08)" }}
-                      >
-                        <View style={styles.teamCrestDot}>
-                          <TeamCrest teamId={t.teamId} size={16} />
-                        </View>
-                        <Text style={styles.pillText}>{t.name}</Text>
-                      </Pressable>
-                    ))}
+
+                  {/* Popular Teams (deep-link, no search) */}
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.popularRow}
+                    decelerationRate="fast"
+                  >
+                    {popularTeams
+                      .filter((t) => typeof (t as any)?.teamId === "number")
+                      .slice(0, 5)
+                      .map((t: any) => (
+                        <Pressable
+                          key={`pt-${String(t.teamKey ?? t.teamId ?? t.name)}`}
+                          onPress={() => {
+                            Keyboard.dismiss();
+                            router.push({
+                              pathname: "/team/[teamKey]",
+                              params: { teamKey: String(t.teamKey), from: fromIso, to: toIso },
+                            } as any);
+                          }}
+                          style={({ pressed }) => [styles.teamPill, pressed && styles.pressedPill]}
+                          android_ripple={{ color: "rgba(255,255,255,0.08)" }}
+                        >
+                          <View style={styles.teamCrestDot}>
+                            <Image
+                              source={{ uri: `https://media.api-sports.io/football/teams/${t.teamId}.png` }}
+                              style={{ width: 16, height: 16, opacity: 0.95 }}
+                              resizeMode="contain"
+                            />
+                          </View>
+                          <Text style={styles.pillText}>{String(t.name ?? "")}</Text>
+                        </Pressable>
+                      ))}
                   </ScrollView>
                 </View>
               ) : null}
@@ -819,15 +842,30 @@ export default function HomeScreen() {
                       <Text style={styles.blockKicker}>Featured Pick</Text>
 
                       <Pressable
-                        onPress={() => router.push({ pathname: "/match/[id]", params: { id: String(featured.fixture.id), leagueId: String(league.leagueId), season: String(league.season), from: fromIso, to: toIso } } as any)}
+                        onPress={() =>
+                          router.push({
+                            pathname: "/match/[id]",
+                            params: {
+                              id: String(featured.fixture.id),
+                              leagueId: String(league.leagueId),
+                              season: String(league.season),
+                              from: fromIso,
+                              to: toIso,
+                            },
+                          } as any)
+                        }
                         style={({ pressed }) => [styles.featured, pressed && styles.pressedRow]}
                         android_ripple={{ color: "rgba(79,224,138,0.08)" }}
                       >
                         <View style={styles.featuredTop}>
                           <CrestSquare row={featured} />
                           <View style={{ flex: 1 }}>
-                            <Text style={styles.featuredTitle}>{fixtureLine(featured).title}</Text>
-                            <Text style={styles.featuredMeta}>{fixtureLine(featured).meta}</Text>
+                            <Text style={styles.featuredTitle} numberOfLines={1} ellipsizeMode="tail">
+                              {fixtureLine(featured).title}
+                            </Text>
+                            <Text style={styles.featuredMeta} numberOfLines={1} ellipsizeMode="tail">
+                              {fixtureLine(featured).meta}
+                            </Text>
                           </View>
                           <Text style={styles.chev}>›</Text>
                         </View>
@@ -860,12 +898,12 @@ export default function HomeScreen() {
                                   </View>
                                 </View>
 
-                                <Text style={styles.listTitle} numberOfLines={1}>
+                                <Text style={styles.listTitle} numberOfLines={1} ellipsizeMode="tail">
                                   {line.title}
                                 </Text>
                               </View>
 
-                              <Text style={styles.listMeta} numberOfLines={1}>
+                              <Text style={styles.listMeta} numberOfLines={1} ellipsizeMode="tail">
                                 {line.meta}
                               </Text>
                             </Pressable>
@@ -892,7 +930,10 @@ export default function HomeScreen() {
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>Trips</Text>
-                <Pressable onPress={() => router.push("/(tabs)/trips")} style={({ pressed }) => [styles.miniPill, pressed && { opacity: 0.9 }]}>
+                <Pressable
+                  onPress={() => router.push("/(tabs)/trips")}
+                  style={({ pressed }) => [styles.miniPill, pressed && { opacity: 0.9 }]}
+                >
                   <Text style={styles.miniPillText}>Open</Text>
                 </Pressable>
               </View>
@@ -1106,10 +1147,22 @@ export default function HomeScreen() {
                 </View>
 
                 <View style={styles.modalActions}>
-                  <Pressable onPress={() => { setHowOpen(false); goFixturesAll(); }} style={[styles.btn, styles.btnGhost]}>
+                  <Pressable
+                    onPress={() => {
+                      setHowOpen(false);
+                      goFixturesAll();
+                    }}
+                    style={[styles.btn, styles.btnGhost]}
+                  >
                     <Text style={styles.btnGhostText}>Browse Fixtures</Text>
                   </Pressable>
-                  <Pressable onPress={() => { setHowOpen(false); goBuildTripGlobal(); }} style={[styles.btn, styles.btnPrimary]}>
+                  <Pressable
+                    onPress={() => {
+                      setHowOpen(false);
+                      goBuildTripGlobal();
+                    }}
+                    style={[styles.btn, styles.btnPrimary]}
+                  >
                     <Text style={styles.btnPrimaryText}>Start A Trip Hub</Text>
                   </Pressable>
                 </View>
