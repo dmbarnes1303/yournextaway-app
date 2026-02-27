@@ -10,6 +10,7 @@ import {
   TextInput,
   Image,
   Alert,
+  Modal,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -54,7 +55,7 @@ function coerceNumber(v: any): number | null {
 }
 
 /* -------------------------------------------------------------------------- */
-/* UTC-safe date helpers (prevents DST duplication)
+/* UTC-safe ISO helpers
  * -------------------------------------------------------------------------- */
 
 function isoFromUtcParts(y: number, m0: number, d: number) {
@@ -83,6 +84,19 @@ function clampIsoToWindow(iso: string, minIso: string, maxIso: string) {
   if (s < minIso) return minIso;
   if (s > maxIso) return maxIso;
   return s;
+}
+
+function normalizeRange(fromIso: string, toIso: string) {
+  const a = String(fromIso ?? "").trim();
+  const b = String(toIso ?? "").trim();
+  if (!a) return { from: b, to: b };
+  if (!b) return { from: a, to: a };
+  return a <= b ? { from: a, to: b } : { from: b, to: a };
+}
+
+function formatIsoHuman(iso: string) {
+  const d = new Date(`${iso}T00:00:00.000Z`);
+  return d.toLocaleDateString("en-GB", { weekday: "short", day: "2-digit", month: "short", year: "numeric" });
 }
 
 /* -------------------------------------------------------------------------- */
@@ -117,12 +131,6 @@ function fixtureIsoDateOnly(r: FixtureListRow): string | null {
   return m?.[1] ?? null;
 }
 
-/**
- * UI label:
- * - If likely placeholder (clustered), keep the provisional time but flag "Likely placeholder".
- * - If no kickoff, show TBC.
- * - Else show formatted kickoff.
- */
 function kickoffPresentation(r: FixtureListRow, placeholderIds?: Set<string>) {
   const likelyTbc = isKickoffTbc(r, placeholderIds);
   const iso = kickoffIsoOrNull(r);
@@ -144,9 +152,6 @@ function kickoffPresentation(r: FixtureListRow, placeholderIds?: Set<string>) {
   return { primary: formatted, secondary: null as string | null, likelyTbc: false };
 }
 
-/**
- * If a fixture already belongs to an existing trip, route to that trip workspace.
- */
 function resolveTripForFixture(fixtureId: string): string | null {
   const trips = tripsStore.getState().trips;
   const hit = trips.find((t) => (t.matchIds ?? []).includes(String(fixtureId)));
@@ -184,7 +189,7 @@ function TeamCrest({ name, logo }: { name: string; logo?: string | null }) {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Concurrency-limited fetch (protects perf + rate limits)
+/* Concurrency-limited fetch
  * -------------------------------------------------------------------------- */
 
 async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
@@ -204,6 +209,66 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promis
 }
 
 /* -------------------------------------------------------------------------- */
+/* Calendar helpers (UTC month grid)
+ * -------------------------------------------------------------------------- */
+
+function isoToUtcDate(iso: string) {
+  return new Date(`${iso}T00:00:00.000Z`);
+}
+
+function utcPartsFromIso(iso: string) {
+  const d = isoToUtcDate(iso);
+  return { y: d.getUTCFullYear(), m0: d.getUTCMonth(), day: d.getUTCDate() };
+}
+
+function daysInUtcMonth(y: number, m0: number) {
+  // day 0 of next month = last day of this month
+  return new Date(Date.UTC(y, m0 + 1, 0)).getUTCDate();
+}
+
+function utcWeekdayMon0(y: number, m0: number, day: number) {
+  // JS: 0=Sun..6=Sat. We want 0=Mon..6=Sun
+  const js = new Date(Date.UTC(y, m0, day)).getUTCDay();
+  return (js + 6) % 7;
+}
+
+type CalCell = { iso: string; day: number; inMonth: boolean };
+
+function buildMonthGrid(y: number, m0: number): CalCell[] {
+  const firstWeekday = utcWeekdayMon0(y, m0, 1);
+  const dim = daysInUtcMonth(y, m0);
+
+  const prevM0 = m0 === 0 ? 11 : m0 - 1;
+  const prevY = m0 === 0 ? y - 1 : y;
+  const prevDim = daysInUtcMonth(prevY, prevM0);
+
+  const cells: CalCell[] = [];
+
+  // leading
+  for (let i = 0; i < firstWeekday; i++) {
+    const day = prevDim - (firstWeekday - 1 - i);
+    const iso = isoFromUtcParts(prevY, prevM0, day);
+    cells.push({ iso, day, inMonth: false });
+  }
+
+  // current
+  for (let d = 1; d <= dim; d++) {
+    const iso = isoFromUtcParts(y, m0, d);
+    cells.push({ iso, day: d, inMonth: true });
+  }
+
+  // trailing to fill 6 rows (42)
+  while (cells.length < 42) {
+    const last = cells[cells.length - 1];
+    const next = addDaysIsoUtc(last.iso, 1);
+    const np = utcPartsFromIso(next);
+    cells.push({ iso: next, day: np.day, inMonth: false });
+  }
+
+  return cells;
+}
+
+/* -------------------------------------------------------------------------- */
 /* Screen
  * -------------------------------------------------------------------------- */
 
@@ -211,20 +276,17 @@ export default function FixturesScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
 
-  // 365-day strip starting TOMORROW (never show today)
   const minIso = useMemo(() => tomorrowIsoUtc(), []);
   const maxIso = useMemo(() => addDaysIsoUtc(minIso, DAYS_AHEAD - 1), [minIso]);
 
-  // Route overrides (optional): leagueId, from, to
   const routeLeagueId = useMemo(() => coerceNumber((params as any)?.leagueId), [params]);
   const routeFrom = useMemo(() => coerceString((params as any)?.from), [params]);
   const routeTo = useMemo(() => coerceString((params as any)?.to), [params]);
 
-  const initialDay = useMemo(
-    () => clampIsoToWindow(routeFrom ?? minIso, minIso, maxIso),
-    [routeFrom, minIso, maxIso]
-  );
+  const initialDay = useMemo(() => clampIsoToWindow(routeFrom ?? minIso, minIso, maxIso), [routeFrom, minIso, maxIso]);
+  const initialTo = useMemo(() => clampIsoToWindow(routeTo ?? initialDay, minIso, maxIso), [routeTo, initialDay, minIso, maxIso]);
 
+  // Date strip is ALWAYS single-date selection
   const dateStrip = useMemo(() => {
     return Array.from({ length: DAYS_AHEAD }).map((_, i) => {
       const iso = addDaysIsoUtc(minIso, i);
@@ -237,27 +299,100 @@ export default function FixturesScreen() {
     });
   }, [minIso]);
 
-  // Single-day selection only (no tap-to-range; range belongs to calendar UI)
   const [selectedDay, setSelectedDay] = useState<string>(initialDay);
 
-  // Leagues: multi-select up to 10, default = All (empty array => all leagues)
+  // Range only exists via calendar modal (as requested)
+  const [rangeFrom, setRangeFrom] = useState<string>(initialDay);
+  const [rangeTo, setRangeTo] = useState<string>(initialTo);
+  const normalizedRange = useMemo(() => normalizeRange(rangeFrom, rangeTo), [rangeFrom, rangeTo]);
+  const isRange = useMemo(() => normalizedRange.from !== normalizedRange.to, [normalizedRange]);
+
+  // Calendar modal state
+  const [calendarOpen, setCalendarOpen] = useState(false);
+
+  const initMonth = useMemo(() => utcPartsFromIso(selectedDay), [selectedDay]);
+  const [calY, setCalY] = useState(initMonth.y);
+  const [calM0, setCalM0] = useState(initMonth.m0);
+
+  // Calendar selection staging (so Cancel doesn’t wreck state)
+  const [draftFrom, setDraftFrom] = useState<string>(normalizedRange.from);
+  const [draftTo, setDraftTo] = useState<string>(normalizedRange.to);
+
+  useEffect(() => {
+    // Keep draft in sync when range changes elsewhere
+    setDraftFrom(normalizedRange.from);
+    setDraftTo(normalizedRange.to);
+  }, [normalizedRange.from, normalizedRange.to]);
+
+  const monthGrid = useMemo(() => buildMonthGrid(calY, calM0), [calY, calM0]);
+
+  function openCalendar() {
+    const p = utcPartsFromIso(selectedDay);
+    setCalY(p.y);
+    setCalM0(p.m0);
+    setDraftFrom(normalizedRange.from);
+    setDraftTo(normalizedRange.to);
+    setCalendarOpen(true);
+  }
+
+  function moveMonth(dir: -1 | 1) {
+    let y = calY;
+    let m = calM0 + dir;
+    if (m < 0) {
+      m = 11;
+      y -= 1;
+    }
+    if (m > 11) {
+      m = 0;
+      y += 1;
+    }
+    setCalY(y);
+    setCalM0(m);
+  }
+
+  function draftNormalized() {
+    return normalizeRange(draftFrom, draftTo);
+  }
+
+  function isDraftInRange(iso: string) {
+    const { from, to } = draftNormalized();
+    return iso >= from && iso <= to;
+  }
+
+  function isDraftEdge(iso: string) {
+    const { from, to } = draftNormalized();
+    return iso === from || iso === to;
+  }
+
+  function tapCalendarDay(iso: string) {
+    const d = clampIsoToWindow(iso, minIso, maxIso);
+
+    // start → end → reset (inside calendar only)
+    if (draftFrom === draftTo) {
+      if (d === draftFrom) return;
+      setDraftTo(d);
+      return;
+    }
+    setDraftFrom(d);
+    setDraftTo(d);
+  }
+
+  function applyCalendar() {
+    const { from, to } = draftNormalized();
+    setRangeFrom(from);
+    setRangeTo(to);
+
+    // Keep strip highlight anchored to FROM
+    setSelectedDay(from);
+
+    setCalendarOpen(false);
+  }
+
+  // Leagues
   const [selectedLeagueIds, setSelectedLeagueIds] = useState<number[]>(() => {
     if (routeLeagueId && Number.isFinite(routeLeagueId)) return [routeLeagueId];
     return [];
   });
-
-  // Follow state (fast lookup)
-  const followed = useFollowStore((s) => s.followed);
-  const toggleFollow = useFollowStore((s) => s.toggle);
-
-  const followedIdSet = useMemo(() => {
-    const set = new Set<string>();
-    for (const f of followed) {
-      const id = String(f.fixtureId ?? "").trim();
-      if (id) set.add(id);
-    }
-    return set;
-  }, [followed]);
 
   const leagueSubtitle = useMemo(() => {
     if (selectedLeagueIds.length === 0) return "All leagues";
@@ -288,9 +423,20 @@ export default function FixturesScreen() {
     });
   }, []);
 
-  const setAllLeagues = useCallback(() => {
-    setSelectedLeagueIds([]);
-  }, []);
+  const setAllLeagues = useCallback(() => setSelectedLeagueIds([]), []);
+
+  // Follow state
+  const followed = useFollowStore((s) => s.followed);
+  const toggleFollow = useFollowStore((s) => s.toggle);
+
+  const followedIdSet = useMemo(() => {
+    const set = new Set<string>();
+    for (const f of followed) {
+      const id = String(f.fixtureId ?? "").trim();
+      if (id) set.add(id);
+    }
+    return set;
+  }, [followed]);
 
   // Search
   const [query, setQuery] = useState("");
@@ -302,12 +448,11 @@ export default function FixturesScreen() {
   const [rows, setRows] = useState<FixtureListRow[]>([]);
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
 
-  // Compute placeholder ids from the fetched set
   const placeholderIds = useMemo(() => computeLikelyPlaceholderTbcIds(rows), [rows]);
 
-  // Fetch only for selected day (calendar will handle ranges later)
-  const fetchFrom = selectedDay;
-  const fetchTo = useMemo(() => clampIsoToWindow(routeTo ?? selectedDay, minIso, maxIso), [routeTo, selectedDay, minIso, maxIso]);
+  // Fetch window: single day OR calendar range
+  const fetchFrom = isRange ? normalizedRange.from : selectedDay;
+  const fetchTo = isRange ? normalizedRange.to : selectedDay;
 
   useEffect(() => {
     let cancelled = false;
@@ -332,7 +477,6 @@ export default function FixturesScreen() {
         if (cancelled) return;
 
         const flat = batches.flat();
-
         flat.sort((a, b) => {
           const da = String(a?.fixture?.date ?? "");
           const db = String(b?.fixture?.date ?? "");
@@ -355,11 +499,14 @@ export default function FixturesScreen() {
   }, [selectedLeagues, fetchFrom, fetchTo]);
 
   const filtered = useMemo(() => {
-    const base = rows.filter((r) => fixtureIsoDateOnly(r) === selectedDay);
+    const base = rows;
 
-    if (!qNorm) return base;
+    // If NOT in range mode, keep only selected day (defensive)
+    const dayFiltered = !isRange ? base.filter((r) => fixtureIsoDateOnly(r) === selectedDay) : base;
 
-    return base.filter((r) => {
+    if (!qNorm) return dayFiltered;
+
+    return dayFiltered.filter((r) => {
       return (
         norm(r?.teams?.home?.name).includes(qNorm) ||
         norm(r?.teams?.away?.name).includes(qNorm) ||
@@ -368,11 +515,14 @@ export default function FixturesScreen() {
         norm(r?.league?.name).includes(qNorm)
       );
     });
-  }, [rows, selectedDay, qNorm]);
+  }, [rows, isRange, selectedDay, qNorm]);
 
-  function handleDateTap(iso: string) {
+  function handleStripDateTap(iso: string) {
     const d = clampIsoToWindow(iso, minIso, maxIso);
     setSelectedDay(d);
+    // strip selection cancels any prior range (keeps behavior obvious)
+    setRangeFrom(d);
+    setRangeTo(d);
   }
 
   function goMatch(id: string, ctx?: { leagueId?: number | null; season?: number | null }) {
@@ -383,8 +533,8 @@ export default function FixturesScreen() {
       pathname: "/match/[id]",
       params: {
         id: fid,
-        from: selectedDay,
-        to: selectedDay,
+        from: fetchFrom,
+        to: fetchTo,
         ...(ctx?.leagueId ? { leagueId: String(ctx.leagueId) } : {}),
         ...(ctx?.season ? { season: String(ctx.season) } : {}),
       },
@@ -396,7 +546,6 @@ export default function FixturesScreen() {
     if (!fid) return;
 
     const existingTripId = resolveTripForFixture(fid);
-
     if (existingTripId) {
       router.push({ pathname: "/trip/[id]", params: { id: existingTripId } } as any);
       return;
@@ -406,8 +555,8 @@ export default function FixturesScreen() {
       pathname: "/trip/build",
       params: {
         fixtureId: fid,
-        from: selectedDay,
-        to: selectedDay,
+        from: fetchFrom,
+        to: fetchTo,
         ...(ctx?.leagueId ? { leagueId: String(ctx.leagueId) } : {}),
         ...(ctx?.season ? { season: String(ctx.season) } : {}),
       },
@@ -453,10 +602,8 @@ export default function FixturesScreen() {
     const fixtureId = r?.fixture?.id != null ? String(r.fixture.id) : "";
     if (!fixtureId) return null;
 
-    // Make row keys bulletproof across multi-league merges
     const leagueIdStr = r?.league?.id != null ? String(r.league.id) : "L";
     const rowKey = `${leagueIdStr}-${fixtureId}`;
-
     const expanded = expandedKey === rowKey;
 
     const home = String(r?.teams?.home?.name ?? "Home");
@@ -467,77 +614,79 @@ export default function FixturesScreen() {
     const venueLine = [venue, city].filter(Boolean).join(" • ");
 
     const kickoff = kickoffPresentation(r, placeholderIds);
-
     const isFollowed = followedIdSet.has(fixtureId);
 
     const ctxLeagueId = r?.league?.id != null ? Number(r.league.id) : null;
     const ctxSeason = (r as any)?.league?.season != null ? Number((r as any).league.season) : null;
 
-    // IMPORTANT: home-club difficulty only (no away ticket messaging anywhere).
     const ticketDifficulty = home ? getTicketDifficultyBadge(home) : null;
 
     return (
       <View key={rowKey} style={styles.rowWrap}>
         <GlassCard noPadding style={styles.rowCard} strength="subtle">
-          <View style={styles.rowInner}>
+          {/* Top row: crests + wide center (fixes horrific skinny wraps) */}
+          <View style={styles.rowTop}>
             <TeamCrest name={home} logo={r?.teams?.home?.logo} />
 
             <Pressable
               onPress={() => setExpandedKey(expanded ? null : rowKey)}
-              style={({ pressed }) => [styles.centerPress, { opacity: pressed ? 0.88 : 1 }]}
+              style={({ pressed }) => [styles.centerPress, { opacity: pressed ? 0.9 : 1 }]}
             >
               <View style={styles.centerBlock}>
                 <Text style={styles.teamLine}>{home}</Text>
                 <Text style={styles.vs}>vs</Text>
                 <Text style={styles.teamLine}>{away}</Text>
-
-                <View style={styles.metaStack}>
-                  <Text style={styles.metaPrimary}>{kickoff.primary}</Text>
-
-                  {venueLine ? <Text style={styles.metaVenue}>{venueLine}</Text> : null}
-
-                  {kickoff.secondary ? <Text style={styles.metaSecondary}>{kickoff.secondary}</Text> : null}
-
-                  <View style={styles.badgeRow}>
-                    {!kickoff.likelyTbc ? (
-                      <View style={[styles.badge, styles.badgeGold]}>
-                        <Text style={[styles.badgeText, styles.badgeGoldText]}>Confirmed</Text>
-                      </View>
-                    ) : (
-                      <View style={[styles.badge, styles.badgeNeutral]}>
-                        <Text style={[styles.badgeText, styles.badgeNeutralText]}>Likely TBC</Text>
-                      </View>
-                    )}
-
-                    {ticketDifficulty ? (
-                      <View style={styles.badge}>
-                        <Text style={styles.badgeText}>Home tickets: {ticketDifficultyLabel(ticketDifficulty)}</Text>
-                      </View>
-                    ) : null}
-
-                    <Text style={styles.tapHint}>Tap for actions</Text>
-                  </View>
-                </View>
               </View>
             </Pressable>
 
-            {/* Right column: crest stays aligned, follow sits below without shifting anything */}
-            <View style={styles.rightCol}>
-              <TeamCrest name={away} logo={r?.teams?.away?.logo} />
+            <TeamCrest name={away} logo={r?.teams?.away?.logo} />
+          </View>
 
-              <Pressable
-                onPress={() => onToggleFollowFromRow(r)}
-                style={({ pressed }) => [
-                  styles.followPill,
-                  isFollowed && styles.followPillOn,
-                  { opacity: pressed ? 0.9 : 1 },
-                ]}
-              >
-                <Text style={[styles.followPillText, isFollowed && styles.followPillTextOn]}>
-                  {isFollowed ? "Following" : "Follow"}
-                </Text>
-              </Pressable>
+          {/* Meta row: full width, wraps cleanly */}
+          <Pressable
+            onPress={() => setExpandedKey(expanded ? null : rowKey)}
+            style={({ pressed }) => [styles.metaWrap, { opacity: pressed ? 0.9 : 1 }]}
+          >
+            <Text style={styles.metaPrimary}>{kickoff.primary}</Text>
+            {venueLine ? <Text style={styles.metaVenue}>{venueLine}</Text> : null}
+            {kickoff.secondary ? <Text style={styles.metaSecondary}>{kickoff.secondary}</Text> : null}
+
+            <View style={styles.badgeRow}>
+              {!kickoff.likelyTbc ? (
+                <View style={[styles.badge, styles.badgeGold]}>
+                  <Text style={[styles.badgeText, styles.badgeGoldText]}>Confirmed</Text>
+                </View>
+              ) : (
+                <View style={[styles.badge, styles.badgeNeutral]}>
+                  <Text style={[styles.badgeText, styles.badgeNeutralText]}>Likely TBC</Text>
+                </View>
+              )}
+
+              {ticketDifficulty ? (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>Home tickets: {ticketDifficultyLabel(ticketDifficulty)}</Text>
+                </View>
+              ) : null}
+
+              <Text style={styles.tapHint}>Tap for actions</Text>
             </View>
+          </Pressable>
+
+          {/* Actions row: follow sits here, not “lifting” a crest */}
+          <View style={styles.actionsRow}>
+            <View style={{ flex: 1 }} />
+            <Pressable
+              onPress={() => onToggleFollowFromRow(r)}
+              style={({ pressed }) => [
+                styles.followPill,
+                isFollowed && styles.followPillOn,
+                { opacity: pressed ? 0.92 : 1 },
+              ]}
+            >
+              <Text style={[styles.followPillText, isFollowed && styles.followPillTextOn]}>
+                {isFollowed ? "Following" : "Follow"}
+              </Text>
+            </Pressable>
           </View>
 
           {expanded ? (
@@ -556,14 +705,27 @@ export default function FixturesScreen() {
     );
   };
 
+  const headerDateLabel = useMemo(() => {
+    if (isRange) return `${formatIsoHuman(normalizedRange.from)} → ${formatIsoHuman(normalizedRange.to)}`;
+    return formatIsoHuman(selectedDay);
+  }, [isRange, normalizedRange.from, normalizedRange.to, selectedDay]);
+
   return (
     <Background imageSource={getBackground("fixtures")} overlayOpacity={0.82}>
       <SafeAreaView style={styles.container} edges={["top"]}>
         <View style={styles.header}>
-          <Text style={styles.title}>Fixtures</Text>
-          <Text style={styles.subtitle}>{leagueSubtitle}</Text>
+          <View style={styles.headerTopRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.title}>Fixtures</Text>
+              <Text style={styles.subtitle}>{leagueSubtitle}</Text>
+              <Text style={styles.dayLine}>{headerDateLabel}</Text>
+            </View>
 
-          <Text style={styles.dayLine}>{selectedDay}</Text>
+            <Pressable onPress={openCalendar} style={({ pressed }) => [styles.calendarBtn, pressed && { opacity: 0.92 }]}>
+              <Text style={styles.calendarIcon}>📅</Text>
+              <Text style={styles.calendarText}>Calendar</Text>
+            </Pressable>
+          </View>
 
           <TextInput
             value={query}
@@ -573,15 +735,14 @@ export default function FixturesScreen() {
             style={styles.search}
           />
 
-          {/* Date strip (tomorrow -> +365), single-date selection */}
+          {/* Date strip: single-date only */}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 12 }}>
             {dateStrip.map((d, i) => {
-              const active = d.iso === selectedDay;
-
+              const active = d.iso === selectedDay && !isRange; // strip highlights only in day mode
               return (
                 <Pressable
                   key={`${d.iso}-${i}`}
-                  onPress={() => handleDateTap(d.iso)}
+                  onPress={() => handleStripDateTap(d.iso)}
                   style={[styles.datePill, active && styles.datePillActive]}
                 >
                   <Text style={[styles.dateTop, active && styles.dateTopActive]}>{d.labelTop}</Text>
@@ -591,7 +752,7 @@ export default function FixturesScreen() {
             })}
           </ScrollView>
 
-          {/* Leagues: All + multi-select */}
+          {/* Leagues */}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 12 }}>
             <Pressable onPress={setAllLeagues} style={[styles.leaguePill, selectedLeagueIds.length === 0 && styles.leaguePillActive]}>
               <Text style={[styles.leagueText, selectedLeagueIds.length === 0 && styles.leagueTextActive]}>All leagues</Text>
@@ -613,7 +774,7 @@ export default function FixturesScreen() {
           </ScrollView>
 
           <Text style={styles.helperLine}>
-            Day • {selectedDay}
+            {isRange ? `Range • ${normalizedRange.from} → ${normalizedRange.to}` : `Day • ${selectedDay}`}
             {selectedLeagueIds.length ? ` • ${selectedLeagueIds.length}/${MAX_MULTI_LEAGUES} leagues` : ""}
           </Text>
         </View>
@@ -630,12 +791,100 @@ export default function FixturesScreen() {
             {!loading && error && <EmptyState title="Error" message={error} />}
 
             {!loading && !error && filtered.length === 0 && (
-              <EmptyState title="No matches found" message="Try another date or league selection." />
+              <EmptyState title="No matches found" message="Try another date, range (Calendar), or league selection." />
             )}
 
             {!loading && !error && filtered.map(renderRow)}
           </GlassCard>
         </ScrollView>
+
+        {/* Calendar modal */}
+        <Modal visible={calendarOpen} animationType="fade" transparent onRequestClose={() => setCalendarOpen(false)}>
+          <Pressable style={styles.modalBackdrop} onPress={() => setCalendarOpen(false)} />
+          <View style={styles.modalSheetWrap} pointerEvents="box-none">
+            <GlassCard strength="strong" style={styles.modalSheet} noPadding>
+              <View style={styles.modalInner}>
+                <View style={styles.modalHeader}>
+                  <Text style={styles.modalTitle}>Select date</Text>
+
+                  <View style={styles.modalHeaderRight}>
+                    <Pressable onPress={() => moveMonth(-1)} style={styles.monthBtn}>
+                      <Text style={styles.monthBtnText}>‹</Text>
+                    </Pressable>
+
+                    <Text style={styles.monthTitle}>
+                      {new Date(Date.UTC(calY, calM0, 1)).toLocaleDateString("en-GB", { month: "short", year: "numeric" })}
+                    </Text>
+
+                    <Pressable onPress={() => moveMonth(1)} style={styles.monthBtn}>
+                      <Text style={styles.monthBtnText}>›</Text>
+                    </Pressable>
+                  </View>
+                </View>
+
+                <Text style={styles.modalHint}>
+                  Tap once for a day. Tap a second date to set a range. Tap a third time to reset.
+                </Text>
+
+                <View style={styles.dowRow}>
+                  {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => (
+                    <Text key={d} style={styles.dowText}>
+                      {d}
+                    </Text>
+                  ))}
+                </View>
+
+                <View style={styles.grid}>
+                  {monthGrid.map((c, idx) => {
+                    const inRange = isDraftInRange(c.iso);
+                    const edge = isDraftEdge(c.iso);
+                    const disabled = c.iso < minIso || c.iso > maxIso;
+                    return (
+                      <Pressable
+                        key={`${c.iso}-${idx}`}
+                        disabled={disabled}
+                        onPress={() => tapCalendarDay(c.iso)}
+                        style={[
+                          styles.cell,
+                          !c.inMonth && styles.cellOutside,
+                          inRange && styles.cellInRange,
+                          edge && styles.cellEdge,
+                          disabled && styles.cellDisabled,
+                        ]}
+                      >
+                        <Text style={[styles.cellText, !c.inMonth && styles.cellTextOutside, disabled && styles.cellTextDisabled]}>
+                          {c.day}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+
+                <Text style={styles.modalRangeLine}>
+                  {draftNormalized().from === draftNormalized().to
+                    ? `Day • ${draftNormalized().from}`
+                    : `Range • ${draftNormalized().from} → ${draftNormalized().to}`}
+                </Text>
+
+                <View style={styles.modalActions}>
+                  <Pressable
+                    onPress={() => {
+                      setDraftFrom(selectedDay);
+                      setDraftTo(selectedDay);
+                    }}
+                    style={[styles.modalBtn, styles.modalBtnGhost]}
+                  >
+                    <Text style={styles.modalBtnGhostText}>Reset</Text>
+                  </Pressable>
+
+                  <Pressable onPress={applyCalendar} style={[styles.modalBtn, styles.modalBtnPrimary]}>
+                    <Text style={styles.modalBtnPrimaryText}>Apply</Text>
+                  </Pressable>
+                </View>
+              </View>
+            </GlassCard>
+          </View>
+        </Modal>
       </SafeAreaView>
     </Background>
   );
@@ -653,20 +902,27 @@ const styles = StyleSheet.create({
     gap: 10,
   },
 
+  headerTopRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
+
   title: { color: theme.colors.text, fontSize: 22, fontWeight: "700" },
   subtitle: { color: theme.colors.textSecondary, fontSize: 13 },
+  dayLine: { color: theme.colors.textTertiary, fontSize: 12, marginTop: 2 },
 
-  dayLine: {
-    color: theme.colors.textTertiary,
-    fontSize: 12,
-    marginTop: -2,
+  calendarBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.12)",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
   },
+  calendarIcon: { fontSize: 14, opacity: 0.9 },
+  calendarText: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: "900" },
 
-  helperLine: {
-    color: theme.colors.textTertiary,
-    fontSize: 12,
-    marginTop: -2,
-  },
+  helperLine: { color: theme.colors.textTertiary, fontSize: 12, marginTop: -2 },
 
   search: {
     borderWidth: 1,
@@ -689,10 +945,7 @@ const styles = StyleSheet.create({
     minWidth: 62,
     alignItems: "center",
   },
-  datePillActive: {
-    borderColor: "rgba(79,224,138,0.55)",
-    backgroundColor: "rgba(79,224,138,0.08)",
-  },
+  datePillActive: { borderColor: "rgba(79,224,138,0.55)", backgroundColor: "rgba(79,224,138,0.08)" },
   dateTop: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: "800" },
   dateBottom: { color: theme.colors.text, fontSize: 14, fontWeight: "900" },
   dateTopActive: { color: "rgba(79,224,138,0.92)" },
@@ -710,24 +963,66 @@ const styles = StyleSheet.create({
     marginRight: 8,
     backgroundColor: "rgba(0,0,0,0.12)",
   },
-  leaguePillActive: {
-    borderColor: "rgba(79,224,138,0.55)",
-    backgroundColor: "rgba(79,224,138,0.08)",
-  },
+  leaguePillActive: { borderColor: "rgba(79,224,138,0.55)", backgroundColor: "rgba(79,224,138,0.08)" },
   leagueText: { color: theme.colors.textSecondary, fontWeight: "800" },
   leagueTextActive: { color: theme.colors.text, fontWeight: "900" },
 
   content: { padding: theme.spacing.lg },
   card: { padding: theme.spacing.md },
 
-  rowWrap: { marginBottom: 10 },
+  rowWrap: { marginBottom: 12 },
   rowCard: { borderRadius: 18 },
 
-  rowInner: {
-    padding: 14,
+  // Card layout: give center real width (fixes awful word wraps)
+  rowTop: {
+    paddingTop: 14,
+    paddingHorizontal: 14,
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     gap: 12,
+  },
+  centerPress: { flex: 1 },
+  centerBlock: { alignItems: "center", gap: 6 },
+
+  teamLine: { color: theme.colors.text, fontSize: 16, fontWeight: "900", textAlign: "center" },
+  vs: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: "800" },
+
+  metaWrap: {
+    paddingTop: 10,
+    paddingHorizontal: 14,
+    paddingBottom: 12,
+    gap: 6,
+    alignItems: "center",
+  },
+
+  metaPrimary: { color: theme.colors.textSecondary, fontSize: 12, textAlign: "center", fontWeight: "800" },
+  metaVenue: { color: theme.colors.textSecondary, fontSize: 12, textAlign: "center" },
+  metaSecondary: { color: theme.colors.textTertiary, fontSize: 11, textAlign: "center", fontWeight: "800" },
+
+  badgeRow: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "center" },
+  badge: {
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+    paddingVertical: 5,
+    paddingHorizontal: 9,
+    borderRadius: 999,
+  },
+  badgeText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: 11 },
+
+  badgeGold: { borderColor: "rgba(255,210,77,0.32)", backgroundColor: "rgba(255,210,77,0.10)" },
+  badgeGoldText: { color: "rgba(255,210,77,0.92)" },
+
+  badgeNeutral: { borderColor: "rgba(255,255,255,0.14)", backgroundColor: "rgba(0,0,0,0.14)" },
+  badgeNeutralText: { color: theme.colors.textSecondary },
+
+  tapHint: { color: theme.colors.textTertiary, fontSize: 11, fontWeight: "800" },
+
+  actionsRow: {
+    paddingHorizontal: 14,
+    paddingBottom: 14,
+    flexDirection: "row",
+    alignItems: "center",
   },
 
   // Bigger crests
@@ -745,82 +1040,24 @@ const styles = StyleSheet.create({
   crestImg: { width: 36, height: 36, opacity: 0.95 },
   crestFallback: { color: theme.colors.textSecondary, fontWeight: "900" },
 
-  centerPress: { flex: 1 },
-  centerBlock: { alignItems: "center", gap: 6, paddingTop: 2 },
-
-  teamLine: { color: theme.colors.text, fontSize: 15, fontWeight: "900", textAlign: "center" },
-  vs: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: "800" },
-
-  metaStack: { alignItems: "center", gap: 6 },
-
-  // No truncation: wrap naturally
-  metaPrimary: { color: theme.colors.textSecondary, fontSize: 12, textAlign: "center", fontWeight: "800" },
-  metaVenue: { color: theme.colors.textSecondary, fontSize: 12, textAlign: "center" },
-  metaSecondary: { color: theme.colors.textTertiary, fontSize: 11, textAlign: "center", fontWeight: "800" },
-
-  badgeRow: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "center" },
-
-  badge: {
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.18)",
-    paddingVertical: 5,
-    paddingHorizontal: 9,
-    borderRadius: 999,
-  },
-  badgeText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: 11 },
-
-  // Confirmed = subtle gold highlight
-  badgeGold: {
-    borderColor: "rgba(255,210,77,0.32)",
-    backgroundColor: "rgba(255,210,77,0.10)",
-  },
-  badgeGoldText: { color: "rgba(255,210,77,0.92)" },
-
-  // Likely TBC = neutral (not gold)
-  badgeNeutral: {
-    borderColor: "rgba(255,255,255,0.14)",
-    backgroundColor: "rgba(0,0,0,0.14)",
-  },
-  badgeNeutralText: { color: theme.colors.textSecondary },
-
-  tapHint: { color: theme.colors.textTertiary, fontSize: 11, fontWeight: "800" },
-
-  // Right column stays aligned and symmetrical
-  rightCol: {
-    width: 96,
-    alignItems: "center",
-    gap: 10,
-  },
-
   followPill: {
     borderRadius: 999,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.12)",
     backgroundColor: "rgba(0,0,0,0.16)",
-    paddingVertical: 7,
-    paddingHorizontal: 12,
-    minWidth: 92,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    minWidth: 110,
     alignItems: "center",
     justifyContent: "center",
   },
-  followPillOn: {
-    borderColor: "rgba(79,224,138,0.35)",
-    backgroundColor: "rgba(79,224,138,0.10)",
-  },
+  followPillOn: { borderColor: "rgba(79,224,138,0.35)", backgroundColor: "rgba(79,224,138,0.10)" },
   followPillText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: 11 },
   followPillTextOn: { color: "rgba(79,224,138,0.92)" },
 
-  expandArea: { flexDirection: "row", gap: 10, padding: 12 },
+  expandArea: { flexDirection: "row", gap: 10, paddingHorizontal: 14, paddingBottom: 14 },
 
-  expandGhost: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    borderRadius: 14,
-    paddingVertical: 12,
-    alignItems: "center",
-  },
+  expandGhost: { flex: 1, borderWidth: 1, borderColor: theme.colors.border, borderRadius: 14, paddingVertical: 12, alignItems: "center" },
   expandGhostText: { color: theme.colors.textSecondary, fontWeight: "900" },
 
   expandPrimary: {
@@ -838,4 +1075,65 @@ const styles = StyleSheet.create({
   muted: { color: theme.colors.textSecondary },
 
   flag: { width: 18, height: 13, borderRadius: 3 },
+
+  // Modal
+  modalBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.58)" },
+  modalSheetWrap: { flex: 1, justifyContent: "flex-end" },
+  modalSheet: { borderRadius: 22, marginHorizontal: theme.spacing.lg, marginBottom: theme.spacing.lg, overflow: "hidden" },
+  modalInner: { padding: 14, gap: 12 },
+
+  modalHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
+  modalTitle: { color: theme.colors.text, fontSize: 16, fontWeight: "900" },
+
+  modalHeaderRight: { flexDirection: "row", alignItems: "center", gap: 8 },
+  monthBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  monthBtnText: { color: theme.colors.textSecondary, fontSize: 18, fontWeight: "900", marginTop: -2 },
+  monthTitle: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: "900" },
+
+  modalHint: { color: theme.colors.textTertiary, fontSize: 12, lineHeight: 16, fontWeight: "800" },
+
+  dowRow: { flexDirection: "row", justifyContent: "space-between", paddingHorizontal: 4 },
+  dowText: { width: "14.28%", textAlign: "center", color: theme.colors.textTertiary, fontSize: 11, fontWeight: "900" },
+
+  grid: { flexDirection: "row", flexWrap: "wrap" },
+  cell: {
+    width: "14.28%",
+    paddingVertical: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 12,
+  },
+  cellOutside: { opacity: 0.55 },
+  cellInRange: { backgroundColor: "rgba(79,224,138,0.08)" },
+  cellEdge: { backgroundColor: "rgba(79,224,138,0.14)" },
+  cellDisabled: { opacity: 0.25 },
+  cellText: { color: theme.colors.text, fontWeight: "900" },
+  cellTextOutside: { color: theme.colors.textSecondary },
+  cellTextDisabled: { color: theme.colors.textTertiary },
+
+  modalRangeLine: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: "900" },
+
+  modalActions: { flexDirection: "row", gap: 10, marginTop: 4 },
+  modalBtn: { flex: 1, borderRadius: 16, paddingVertical: 12, alignItems: "center", borderWidth: 1, overflow: "hidden" },
+
+  modalBtnPrimary: {
+    borderColor: "rgba(79,224,138,0.24)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+  },
+  modalBtnPrimaryText: { color: theme.colors.text, fontSize: 14, fontWeight: "900" },
+
+  modalBtnGhost: {
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.12)",
+  },
+  modalBtnGhostText: { color: theme.colors.textSecondary, fontSize: 14, fontWeight: "900" },
 });
