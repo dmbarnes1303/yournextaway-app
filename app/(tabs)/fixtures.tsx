@@ -40,8 +40,6 @@ import type { TicketDifficulty } from "@/src/data/ticketGuides/types";
 
 const DAYS_AHEAD = 365;
 const MAX_MULTI_LEAGUES = 10;
-
-// Livescore-style strip: show a short, simple run of days (single-date only).
 const STRIP_DAYS = 7;
 
 /* -------------------------------------------------------------------------- */
@@ -136,12 +134,6 @@ function fixtureIsoDateOnly(r: FixtureListRow): string | null {
   return m?.[1] ?? null;
 }
 
-/**
- * UI label:
- * - If likely placeholder (clustered), show "Likely TBC" but keep the provisional time as secondary text.
- * - If no kickoff, show "TBC".
- * - Else show the formatted kickoff.
- */
 function kickoffPresentation(r: FixtureListRow, placeholderIds?: Set<string>) {
   const likelyTbc = isKickoffTbc(r, placeholderIds);
   const iso = kickoffIsoOrNull(r);
@@ -163,9 +155,6 @@ function kickoffPresentation(r: FixtureListRow, placeholderIds?: Set<string>) {
   return { primary: formatted, secondary: null as string | null, likelyTbc: false };
 }
 
-/**
- * If a fixture already belongs to an existing trip, route to that trip workspace.
- */
 function resolveTripForFixture(fixtureId: string): string | null {
   const trips = tripsStore.getState().trips;
   const hit = trips.find((t) => (t.matchIds ?? []).includes(String(fixtureId)));
@@ -227,13 +216,10 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promis
  * -------------------------------------------------------------------------- */
 
 function daysInMonthUtc(year: number, month0: number) {
-  // month0: 0-11
-  // Day 0 of next month = last day of current month
   return new Date(Date.UTC(year, month0 + 1, 0)).getUTCDate();
 }
 
 function firstWeekdayUtc(year: number, month0: number) {
-  // 0=Sun ... 6=Sat
   return new Date(Date.UTC(year, month0, 1)).getUTCDay();
 }
 
@@ -250,23 +236,12 @@ function parseIsoToUtcParts(iso: string) {
 
 function buildMonthGrid(year: number, month0: number) {
   const dim = daysInMonthUtc(year, month0);
-  const firstW = firstWeekdayUtc(year, month0); // Sun start
+  const firstW = firstWeekdayUtc(year, month0);
   const cells: Array<{ iso: string; day: number; inMonth: boolean }> = [];
 
-  // pad before
-  for (let i = 0; i < firstW; i++) {
-    cells.push({ iso: "", day: 0, inMonth: false });
-  }
-
-  for (let day = 1; day <= dim; day++) {
-    const iso = isoFromUtcParts(year, month0, day);
-    cells.push({ iso, day, inMonth: true });
-  }
-
-  // pad after to complete weeks (6 rows max, but keep simple)
-  while (cells.length % 7 !== 0) {
-    cells.push({ iso: "", day: 0, inMonth: false });
-  }
+  for (let i = 0; i < firstW; i++) cells.push({ iso: "", day: 0, inMonth: false });
+  for (let day = 1; day <= dim; day++) cells.push({ iso: isoFromUtcParts(year, month0, day), day, inMonth: true });
+  while (cells.length % 7 !== 0) cells.push({ iso: "", day: 0, inMonth: false });
 
   return cells;
 }
@@ -279,22 +254,18 @@ export default function FixturesScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
 
-  // 365-day window starting TOMORROW (never show today)
   const minIso = useMemo(() => tomorrowIsoUtc(), []);
   const maxIso = useMemo(() => addDaysIsoUtc(minIso, DAYS_AHEAD - 1), [minIso]);
 
-  // Route overrides (optional): leagueId, from, to
   const routeLeagueId = useMemo(() => coerceNumber((params as any)?.leagueId), [params]);
   const routeFrom = useMemo(() => coerceString((params as any)?.from), [params]);
   const routeTo = useMemo(() => coerceString((params as any)?.to), [params]);
 
-  // Single-day selection (Livescore-style)
   const initialDay = useMemo(() => {
     const base = routeFrom && isValidIsoDateOnly(routeFrom) ? routeFrom : minIso;
     return clampIsoToWindow(base, minIso, maxIso);
   }, [routeFrom, minIso, maxIso]);
 
-  // Optional calendar range
   const initialRange = useMemo(() => {
     const a = routeFrom && isValidIsoDateOnly(routeFrom) ? clampIsoToWindow(routeFrom, minIso, maxIso) : null;
     const b = routeTo && isValidIsoDateOnly(routeTo) ? clampIsoToWindow(routeTo, minIso, maxIso) : null;
@@ -311,7 +282,6 @@ export default function FixturesScreen() {
 
   const isRange = useMemo(() => effectiveRange.from !== effectiveRange.to, [effectiveRange]);
 
-  // Date strip: simple, single-day only
   const stripDays = useMemo(() => {
     const start = clampIsoToWindow(selectedDay, minIso, maxIso);
     return Array.from({ length: STRIP_DAYS }).map((_, i) => {
@@ -325,7 +295,6 @@ export default function FixturesScreen() {
     });
   }, [selectedDay, minIso, maxIso]);
 
-  // Leagues: multi-select up to 10, default = All (empty array => all leagues)
   const [selectedLeagueIds, setSelectedLeagueIds] = useState<number[]>(() => {
     if (routeLeagueId && Number.isFinite(routeLeagueId)) return [routeLeagueId];
     return [];
@@ -364,11 +333,9 @@ export default function FixturesScreen() {
     setSelectedLeagueIds([]);
   }, []);
 
-  // Search
   const [query, setQuery] = useState("");
   const qNorm = query.trim().toLowerCase();
 
-  // Follow state (fast lookup)
   const followed = useFollowStore((s) => s.followed);
   const toggleFollow = useFollowStore((s) => s.toggle);
 
@@ -381,16 +348,13 @@ export default function FixturesScreen() {
     return set;
   }, [followed]);
 
-  // Data
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [rows, setRows] = useState<FixtureListRow[]>([]);
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
 
-  // Placeholder ids from the fetched set (works for single day or ranges)
   const placeholderIds = useMemo(() => computeLikelyPlaceholderTbcIds(rows), [rows]);
 
-  // Fetch only for selected day or calendar range
   const fetchFrom = effectiveRange.from;
   const fetchTo = effectiveRange.to;
 
@@ -441,8 +405,6 @@ export default function FixturesScreen() {
 
   const filtered = useMemo(() => {
     const base = rows;
-
-    // Defensive: if not range, keep only that day
     const dayFiltered = !isRange ? base.filter((r) => fixtureIsoDateOnly(r) === effectiveRange.from) : base;
 
     if (!qNorm) return dayFiltered;
@@ -548,7 +510,6 @@ export default function FixturesScreen() {
   const calIsRange = useMemo(() => calNorm.from !== calNorm.to, [calNorm]);
 
   const openCalendar = useCallback(() => {
-    // Seed with current selection
     if (range) {
       setCalPickA(range.from);
       setCalPickB(range.to);
@@ -604,7 +565,6 @@ export default function FixturesScreen() {
       if (!iso) return;
       const d = clampIsoToWindow(iso, minIso, maxIso);
 
-      // start → end → reset (inside modal only)
       if (calPickA === calPickB) {
         if (d === calPickA) return;
         setCalPickB(d);
@@ -627,8 +587,6 @@ export default function FixturesScreen() {
       setRange(null);
     } else {
       setRange({ from: n.from, to: n.to });
-
-      // Keep strip anchored to range start so it feels deterministic.
       setSelectedDay(n.from);
     }
 
@@ -646,7 +604,7 @@ export default function FixturesScreen() {
     (iso: string) => {
       const d = clampIsoToWindow(iso, minIso, maxIso);
       setSelectedDay(d);
-      setRange(null); // strip is single-date only (range happens in calendar)
+      setRange(null);
     },
     [minIso, maxIso]
   );
@@ -657,7 +615,6 @@ export default function FixturesScreen() {
     const fixtureId = r?.fixture?.id != null ? String(r.fixture.id) : "";
     if (!fixtureId) return null;
 
-    // Bulletproof keys across multi-league merges
     const leagueIdStr = r?.league?.id != null ? String(r.league.id) : "L";
     const rowKey = `${leagueIdStr}-${fixtureId}`;
     const expanded = expandedKey === rowKey;
@@ -674,30 +631,28 @@ export default function FixturesScreen() {
     const ctxLeagueId = r?.league?.id != null ? Number(r.league.id) : null;
     const ctxSeason = (r as any)?.league?.season != null ? Number((r as any).league.season) : null;
 
-    // IMPORTANT: home-club difficulty only (no away ticket messaging anywhere).
     const rawDifficulty = home ? getTicketDifficultyBadge(home) : null;
     const difficulty: TicketDifficulty | "unknown" = rawDifficulty ?? "unknown";
 
     return (
       <View key={rowKey} style={styles.rowWrap}>
         <GlassCard noPadding style={styles.rowCard} strength="subtle">
-          {/* Main tappable area */}
           <Pressable
             onPress={() => setExpandedKey(expanded ? null : rowKey)}
             style={({ pressed }) => [styles.rowMainPress, pressed && { opacity: 0.92 }]}
             android_ripple={{ color: "rgba(255,255,255,0.05)" }}
           >
             <View style={styles.rowInner}>
-              {/* Top: crests + names */}
               <View style={styles.topRow}>
                 <TeamCrest name={home} logo={r?.teams?.home?.logo} />
 
                 <View style={styles.centerCol}>
-                  <Text style={styles.teamName} numberOfLines={1} ellipsizeMode="tail">
+                  {/* GUARANTEE: no ellipsis. Allow wrap to 3 lines. */}
+                  <Text style={styles.teamName} numberOfLines={3} ellipsizeMode="clip">
                     {home}
                   </Text>
                   <Text style={styles.vs}>vs</Text>
-                  <Text style={styles.teamName} numberOfLines={1} ellipsizeMode="tail">
+                  <Text style={styles.teamName} numberOfLines={3} ellipsizeMode="clip">
                     {away}
                   </Text>
                 </View>
@@ -705,22 +660,17 @@ export default function FixturesScreen() {
                 <TeamCrest name={away} logo={r?.teams?.away?.logo} />
               </View>
 
-              {/* Meta (NO truncation: allow wrap) */}
               <View style={styles.metaBlock}>
                 <Text style={styles.metaPrimary}>{kickoff.primary}</Text>
 
-                {(venue || city) ? (
-                  <Text style={styles.metaVenue}>
-                    {[venue, city].filter(Boolean).join(" • ")}
-                  </Text>
+                {venue || city ? (
+                  <Text style={styles.metaVenue}>{[venue, city].filter(Boolean).join(" • ")}</Text>
                 ) : null}
 
                 {kickoff.secondary ? <Text style={styles.metaSecondary}>{kickoff.secondary}</Text> : null}
               </View>
 
-              {/* Badges */}
               <View style={styles.badgeRow}>
-                {/* Confirmed / Likely TBC */}
                 {kickoff.likelyTbc ? (
                   <View style={[styles.badge, styles.badgeWarn]}>
                     <Text style={[styles.badgeText, styles.badgeTextWarn]}>Likely TBC</Text>
@@ -731,7 +681,6 @@ export default function FixturesScreen() {
                   </View>
                 )}
 
-                {/* Tickets badge (ALWAYS visible) */}
                 <View
                   style={[
                     styles.badge,
@@ -753,7 +702,6 @@ export default function FixturesScreen() {
                 </View>
               </View>
 
-              {/* Follow pill (CENTERED, not lifting crests) */}
               <Pressable
                 onPress={() => onToggleFollowFromRow(r)}
                 style={({ pressed }) => [
@@ -771,7 +719,6 @@ export default function FixturesScreen() {
             </View>
           </Pressable>
 
-          {/* Expanded actions */}
           {expanded ? (
             <View style={styles.expandArea}>
               <Pressable
@@ -805,7 +752,6 @@ export default function FixturesScreen() {
   return (
     <Background imageSource={getBackground("fixtures")} overlayOpacity={0.82}>
       <SafeAreaView style={styles.container} edges={["top"]}>
-        {/* Header */}
         <View style={styles.header}>
           <View style={styles.headerTopRow}>
             <View style={{ flex: 1 }}>
@@ -832,7 +778,6 @@ export default function FixturesScreen() {
             style={styles.search}
           />
 
-          {/* Date strip (Livescore style): single day only */}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 12 }}>
             {stripDays.map((d, i) => {
               const active = !isRange && d.iso === selectedDay;
@@ -850,7 +795,6 @@ export default function FixturesScreen() {
             })}
           </ScrollView>
 
-          {/* Leagues: All + multi-select */}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 12 }}>
             <Pressable
               onPress={setAllLeagues}
@@ -882,7 +826,6 @@ export default function FixturesScreen() {
           </Text>
         </View>
 
-        {/* Content */}
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           <GlassCard style={styles.card} strength="default">
             {loading && (
@@ -902,7 +845,6 @@ export default function FixturesScreen() {
           </GlassCard>
         </ScrollView>
 
-        {/* Calendar Modal */}
         <Modal visible={calendarOpen} animationType="fade" transparent onRequestClose={closeCalendar}>
           <Pressable style={styles.modalBackdrop} onPress={closeCalendar} />
           <View style={styles.modalWrap} pointerEvents="box-none">
@@ -1045,7 +987,6 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeight.bold,
   },
 
-  /* Date strip */
   datePill: {
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
@@ -1067,7 +1008,6 @@ const styles = StyleSheet.create({
   dateTopActive: { color: "rgba(79,224,138,0.95)" },
   dateBottomActive: { color: theme.colors.text },
 
-  /* Leagues */
   leaguePill: {
     flexDirection: "row",
     alignItems: "center",
@@ -1089,14 +1029,12 @@ const styles = StyleSheet.create({
 
   flag: { width: 18, height: 13, borderRadius: 3, opacity: 0.9 },
 
-  /* Content */
   content: { padding: theme.spacing.lg, paddingTop: 0 },
   card: { padding: theme.spacing.md },
 
   center: { paddingVertical: 20, alignItems: "center", gap: 10 },
   muted: { color: theme.colors.textSecondary, fontWeight: theme.fontWeight.bold },
 
-  /* Rows */
   rowWrap: { marginBottom: 12 },
   rowCard: { borderRadius: 24 },
   rowMainPress: { borderRadius: 24, overflow: "hidden" },
@@ -1111,8 +1049,8 @@ const styles = StyleSheet.create({
   topRow: {
     width: "100%",
     flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
+    alignItems: "flex-start",
+    gap: 10,
   },
 
   crestWrap: {
@@ -1133,13 +1071,17 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     gap: 6,
-    paddingHorizontal: 6,
+    paddingHorizontal: 2,
   },
 
-  // Names are 1 line (pro look). If they truly overflow, tail ellipsis is acceptable.
+  // KEY CHANGE:
+  // - no truncation
+  // - wrap allowed
+  // - slightly smaller font + tighter line height to keep the card neat
   teamName: {
     color: theme.colors.text,
-    fontSize: 17,
+    fontSize: 16,
+    lineHeight: 19,
     fontWeight: theme.fontWeight.black,
     width: "100%",
     textAlign: "center",
@@ -1150,7 +1092,6 @@ const styles = StyleSheet.create({
   metaBlock: { width: "100%", alignItems: "center", gap: 4 },
   metaPrimary: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: theme.fontWeight.bold, textAlign: "center" },
 
-  // NO truncation: let venue/city wrap naturally to avoid missing text.
   metaVenue: {
     color: theme.colors.textSecondary,
     fontSize: 13,
@@ -1184,14 +1125,12 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
 
-  /* Confirmed = subtle gold (flag it) */
   badgeConfirmed: {
     borderColor: "rgba(214,178,92,0.35)",
     backgroundColor: "rgba(214,178,92,0.10)",
   },
   badgeTextConfirmed: { color: "rgba(214,178,92,0.95)" },
 
-  /* Likely TBC = amber warn */
   badgeWarn: {
     borderColor: "rgba(255,210,77,0.30)",
     backgroundColor: "rgba(255,210,77,0.10)",
@@ -1200,7 +1139,6 @@ const styles = StyleSheet.create({
 
   badgeText: { color: theme.colors.textSecondary, fontWeight: theme.fontWeight.black, fontSize: 11 },
 
-  /* Ticket difficulty colors */
   badgeEasy: {
     borderColor: "rgba(79,224,138,0.35)",
     backgroundColor: "rgba(79,224,138,0.10)",
@@ -1219,7 +1157,6 @@ const styles = StyleSheet.create({
   },
   badgeTextHard: { color: "rgba(255,90,90,0.95)" },
 
-  /* Follow */
   followPill: {
     marginTop: 4,
     alignSelf: "stretch",
@@ -1240,7 +1177,6 @@ const styles = StyleSheet.create({
 
   tapHint: { marginTop: -2, color: theme.colors.textTertiary, fontSize: 11, fontWeight: theme.fontWeight.bold },
 
-  /* Expanded actions */
   expandArea: { flexDirection: "row", gap: 10, padding: 12, paddingTop: 0 },
 
   expandGhost: {
@@ -1265,7 +1201,6 @@ const styles = StyleSheet.create({
   },
   expandPrimaryText: { color: theme.colors.text, fontWeight: theme.fontWeight.black },
 
-  /* Modal */
   modalBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.58)" },
   modalWrap: { flex: 1, justifyContent: "flex-end" },
   modalSheet: { borderRadius: 22, marginHorizontal: theme.spacing.lg, marginBottom: theme.spacing.lg, overflow: "hidden" },
@@ -1299,7 +1234,13 @@ const styles = StyleSheet.create({
   calMonthText: { color: theme.colors.text, fontSize: 14, fontWeight: theme.fontWeight.black },
 
   calWeekRow: { flexDirection: "row", justifyContent: "space-between", paddingTop: 4 },
-  calWeekText: { width: "14.285%", textAlign: "center", color: theme.colors.textTertiary, fontSize: 11, fontWeight: theme.fontWeight.black },
+  calWeekText: {
+    width: "14.285%",
+    textAlign: "center",
+    color: theme.colors.textTertiary,
+    fontSize: 11,
+    fontWeight: theme.fontWeight.black,
+  },
 
   calGrid: { flexDirection: "row", flexWrap: "wrap", marginTop: 4 },
   calCell: { width: "14.285%", aspectRatio: 1, padding: 4 },
