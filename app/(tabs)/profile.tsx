@@ -104,6 +104,9 @@ function labelForIata(options: SelectOption[], code: string) {
   return hit?.label ?? c;
 }
 
+type PlanValue = "not_set" | "free" | "premium";
+type AlertsValue = "On" | "Off";
+
 function planLabel(plan: PlanValue) {
   if (plan === "free") return "Free";
   if (plan === "premium") return "Premium";
@@ -129,9 +132,6 @@ const STORAGE_KEYS = {
   alerts: "yna:profile.alerts",
   showIntroOnStartup: "yna:showIntroOnStartup",
 };
-
-type PlanValue = "not_set" | "free" | "premium";
-type AlertsValue = "On" | "Off";
 
 /* -------------------------------------------------------------------------- */
 /* Options */
@@ -406,7 +406,7 @@ export default function ProfileScreen() {
   }, [countryCode]);
 
   return (
-    <Background imageUrl={getBackground("profile")} overlayOpacity={0.78}>
+    <Background imageUrl={getBackground("profile")} overlayOpacity={0.82}>
       <SafeAreaView style={styles.container} edges={["top"]}>
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           {/* HEADER */}
@@ -422,11 +422,12 @@ export default function ProfileScreen() {
                 style={{ width: logoSize, height: logoSize, transform: [{ scale: 1.15 }] }}
                 resizeMode="cover"
               />
+              <View style={styles.logoDim} />
             </View>
           </View>
 
           {/* ACCOUNT (compact, not a dashboard) */}
-          <GlassCard style={styles.card} strength="default">
+          <GlassCard style={styles.card} level="default">
             <View style={styles.accountTop}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.name}>{displayName}</Text>
@@ -451,7 +452,7 @@ export default function ProfileScreen() {
           </GlassCard>
 
           {/* DEFAULTS */}
-          <GlassCard style={[styles.card, { padding: 0 }]} strength="subtle" noPadding>
+          <GlassCard style={[styles.card, { padding: 0 }]} level="subtle">
             <View style={styles.listHeader}>
               <Text style={styles.sectionH}>Your defaults</Text>
               <Text style={styles.listSub}>{`Region: ${countryCode}`}</Text>
@@ -474,8 +475,18 @@ export default function ProfileScreen() {
               onPress={() => setActivePicker("origin")}
             />
 
-            <Row title="Currency" subtitle="Budgets and comparisons" value={currency} onPress={() => setActivePicker("currency")} />
-            <Row title="Language" subtitle="App language" value={language} onPress={() => setActivePicker("language")} />
+            <Row
+              title="Currency"
+              subtitle="Budgets and comparisons"
+              value={currency}
+              onPress={() => setActivePicker("currency")}
+            />
+            <Row
+              title="Language"
+              subtitle="App language"
+              value={language}
+              onPress={() => setActivePicker("language")}
+            />
 
             <Row
               title="Budget"
@@ -503,7 +514,7 @@ export default function ProfileScreen() {
           </GlassCard>
 
           {/* INFO */}
-          <GlassCard style={[styles.card, { padding: 0 }]} strength="subtle" noPadding>
+          <GlassCard style={[styles.card, { padding: 0 }]} level="subtle">
             <View style={styles.listHeader}>
               <Text style={styles.sectionH}>Help & info</Text>
               <Text style={styles.listSub}>No noise. Just the essentials.</Text>
@@ -583,6 +594,10 @@ export default function ProfileScreen() {
   );
 }
 
+/* -------------------------------------------------------------------------- */
+/* Styles */
+/* -------------------------------------------------------------------------- */
+
 const styles = StyleSheet.create({
   container: { flex: 1 },
   scrollView: { flex: 1 },
@@ -604,8 +619,15 @@ const styles = StyleSheet.create({
   logoMask: {
     borderRadius: 999,
     overflow: "hidden",
-    backgroundColor: "transparent",
+    backgroundColor: "rgba(0,0,0,0.22)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
     marginTop: 2,
+  },
+
+  logoDim: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.28)",
   },
 
   title: {
@@ -638,12 +660,17 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderWidth: 1,
-    borderColor: "rgba(0,255,136,0.28)",
-    backgroundColor: "rgba(0,0,0,0.20)",
+    borderColor: "rgba(75,158,57,0.26)",
+    backgroundColor: "rgba(0,0,0,0.18)",
     alignItems: "flex-end",
   },
   planPillLabel: { color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: theme.fontWeight.black },
-  planPillValue: { marginTop: 2, color: theme.colors.primary, fontSize: theme.fontSize.sm, fontWeight: theme.fontWeight.black },
+  planPillValue: {
+    marginTop: 2,
+    color: theme.colors.primary,
+    fontSize: theme.fontSize.sm,
+    fontWeight: theme.fontWeight.black,
+  },
 
   divider: {
     marginTop: 14,
@@ -709,7 +736,7 @@ const styles = StyleSheet.create({
 
   footerNote: {
     textAlign: "center",
-    color: "rgba(0,255,136,0.80)",
+    color: "rgba(75,158,57,0.85)",
     fontSize: theme.fontSize.xs,
     fontWeight: theme.fontWeight.black,
     letterSpacing: 0.6,
