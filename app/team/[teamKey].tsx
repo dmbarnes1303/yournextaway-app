@@ -9,7 +9,6 @@ import {
   ActivityIndicator,
   Image,
   Platform,
-  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -76,7 +75,6 @@ function groupByMonth(rows: FixtureListRow[]) {
   const out: { key: string; title: string; rows: FixtureListRow[] }[] = [];
   for (const [key, list] of map.entries()) out.push({ key, title: key, rows: list });
 
-  // Month order: chronological by first fixture date
   out.sort((a, b) => {
     const da = a.rows[0]?.fixture?.date ? new Date(a.rows[0].fixture.date).getTime() : 0;
     const db = b.rows[0]?.fixture?.date ? new Date(b.rows[0].fixture.date).getTime() : 0;
@@ -103,10 +101,70 @@ function FlagMini({ countryCode }: { countryCode?: string }) {
 }
 
 /**
- * Collision-proof row:
- * - team names can never overlap "vs"
- * - team names can never overlap each other
- * - "vs" and CTA never shrink unexpectedly
+ * Safe runtime access to team guide content without assuming exact exports.
+ * If your teamGuides module exports getTeamGuide(teamKey), we’ll preview it.
+ * If it doesn’t, we fall back to “Open guide”.
+ */
+function getTeamGuidePreview(teamKey: string): { title?: string; previewText?: string } | null {
+  const key = safeStr(teamKey);
+  if (!key) return null;
+
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const mod: any = require("@/src/data/teamGuides");
+
+    const getter =
+      typeof mod.getTeamGuide === "function"
+        ? mod.getTeamGuide
+        : typeof mod.getGuide === "function"
+          ? mod.getGuide
+          : null;
+
+    if (!getter) return null;
+
+    const guide = getter(key);
+    if (!guide) return null;
+
+    // Try a few common shapes without hard dependency.
+    // We just want a compelling readable preview, not perfect structure coupling.
+    const maybeTitle =
+      safeStr(guide.title) ||
+      safeStr(guide.name) ||
+      safeStr(guide.teamName) ||
+      "";
+
+    // Common patterns: guide.sections[], guide.overview, guide.intro, guide.content, etc.
+    let text =
+      safeStr(guide.overview) ||
+      safeStr(guide.intro) ||
+      safeStr(guide.description) ||
+      safeStr(guide.content) ||
+      "";
+
+    if (!text && Array.isArray(guide.sections) && guide.sections.length) {
+      const s0 = guide.sections[0];
+      text =
+        safeStr(s0?.body) ||
+        safeStr(s0?.content) ||
+        (Array.isArray(s0?.paragraphs) ? s0.paragraphs.filter(Boolean).join("\n\n") : "") ||
+        "";
+      if (!text && typeof s0?.text === "string") text = s0.text;
+    }
+
+    text = safeStr(text);
+    if (!text) return { title: maybeTitle || "Team guide", previewText: "" };
+
+    return {
+      title: maybeTitle || "Team guide",
+      previewText: text,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Collision-proof fixture row, with taller card + no cut-offs.
  */
 function FixtureRow({
   row,
@@ -129,7 +187,6 @@ function FixtureRow({
     <View style={styles.fxRow}>
       <View style={styles.fxTop}>
         <View style={styles.matchLine}>
-          {/* LEFT */}
           <View style={styles.teamSideLeft}>
             {homeLogo ? <Image source={{ uri: homeLogo }} style={styles.smallCrestImg} resizeMode="contain" /> : null}
             <Text style={styles.teamNameLeft} numberOfLines={1} ellipsizeMode="tail">
@@ -137,12 +194,10 @@ function FixtureRow({
             </Text>
           </View>
 
-          {/* CENTER */}
           <View style={styles.vsPill}>
             <Text style={styles.vsText}>vs</Text>
           </View>
 
-          {/* RIGHT */}
           <View style={styles.teamSideRight}>
             <Text style={styles.teamNameRight} numberOfLines={1} ellipsizeMode="tail">
               {awayName}
@@ -160,7 +215,7 @@ function FixtureRow({
         </Pressable>
       </View>
 
-      <Text style={styles.fxMeta} numberOfLines={2} ellipsizeMode="tail">
+      <Text style={styles.fxMeta} numberOfLines={3} ellipsizeMode="tail">
         {meta}
       </Text>
     </View>
@@ -185,6 +240,13 @@ export default function TeamScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [rows, setRows] = useState<FixtureListRow[]>([]);
+
+  const canShowGuide = useMemo(() => (team?.teamKey ? hasTeamGuide(team.teamKey) : false), [team]);
+  const guidePreview = useMemo(() => {
+    if (!team?.teamKey) return null;
+    if (!canShowGuide) return null;
+    return getTeamGuidePreview(team.teamKey);
+  }, [team, canShowGuide]);
 
   useEffect(() => {
     let cancelled = false;
@@ -214,10 +276,11 @@ export default function TeamScreen() {
 
         const list = Array.isArray(res) ? (res as FixtureListRow[]) : [];
 
+        // ONLY HOME FIXTURES for this team (your requirement).
         const filtered =
           typeof team.teamId === "number"
-            ? list.filter((r) => r?.teams?.home?.id === team.teamId || r?.teams?.away?.id === team.teamId)
-            : list;
+            ? list.filter((r) => r?.teams?.home?.id === team.teamId)
+            : [];
 
         const cleaned = filtered
           .filter((r) => r?.fixture?.id != null)
@@ -247,8 +310,6 @@ export default function TeamScreen() {
   const title = team?.name ?? (teamKeyParam ? teamKeyParam : "Team");
   const leagueLabel = league?.label ?? "";
   const countryCode = league?.countryCode ?? "";
-
-  const canShowGuide = useMemo(() => (team?.teamKey ? hasTeamGuide(team.teamKey) : false), [team]);
 
   const goBrowseFixtures = useCallback(() => {
     if (!league) {
@@ -337,31 +398,57 @@ export default function TeamScreen() {
             </View>
           </GlassCard>
 
-          {/* TEAM GUIDE (preview) */}
-          {canShowGuide ? (
-            <GlassCard strength="default" style={styles.block} noPadding>
-              <View style={styles.blockInner}>
-                <View style={styles.blockHeader}>
-                  <Text style={styles.blockTitle}>Team guide</Text>
+          {/* TEAM GUIDE (MAIN PURPOSE) */}
+          <GlassCard strength="default" style={styles.block} noPadding>
+            <View style={styles.blockInner}>
+              <View style={styles.blockHeader}>
+                <Text style={styles.blockTitle}>Team guide</Text>
+
+                {canShowGuide ? (
                   <Pressable
                     onPress={() =>
-                      router.push({ pathname: "/team/[teamKey]/guide", params: { teamKey: team?.teamKey } } as any)
+                      router.push({
+                        pathname: "/team/[teamKey]/guide",
+                        params: { teamKey: team?.teamKey },
+                      } as any)
                     }
                     style={({ pressed }) => [styles.previewPill, pressed && styles.pressed]}
                     android_ripple={{ color: "rgba(255,255,255,0.06)" }}
                   >
-                    <Text style={styles.previewPillText}>Preview</Text>
+                    <Text style={styles.previewPillText}>Open</Text>
                   </Pressable>
-                </View>
-                <Text style={styles.blockNote}>Guide content available for this team.</Text>
+                ) : null}
               </View>
-            </GlassCard>
-          ) : null}
 
-          {/* FIXTURES */}
+              {!canShowGuide ? (
+                <Text style={styles.blockNote}>Guide coming soon for this team.</Text>
+              ) : (
+                <>
+                  {guidePreview?.previewText ? (
+                    <>
+                      <Text style={styles.guideKicker}>Club Overview</Text>
+                      <Text style={styles.guidePreviewText} numberOfLines={10} ellipsizeMode="tail">
+                        {guidePreview.previewText}
+                      </Text>
+                      <Text style={styles.guideHint}>Open the full guide for the complete breakdown.</Text>
+                    </>
+                  ) : (
+                    <>
+                      <Text style={styles.blockNote}>
+                        Guide content is available for this team.
+                      </Text>
+                      <Text style={styles.guideHint}>Tap “Open” to view it.</Text>
+                    </>
+                  )}
+                </>
+              )}
+            </View>
+          </GlassCard>
+
+          {/* FIXTURES (HOME ONLY) */}
           <GlassCard strength="default" style={styles.block} noPadding>
             <View style={styles.blockInner}>
-              <Text style={styles.blockTitle}>Fixtures</Text>
+              <Text style={styles.blockTitle}>Home fixtures</Text>
 
               {loading ? (
                 <View style={styles.center}>
@@ -373,7 +460,7 @@ export default function TeamScreen() {
               {!loading && error ? <EmptyState title="Fixtures Unavailable" message={error} /> : null}
 
               {!loading && !error && rows.length === 0 ? (
-                <EmptyState title="No Fixtures Found" message="Try another date window." />
+                <EmptyState title="No Home Fixtures Found" message="Try another date window." />
               ) : null}
 
               {!loading && !error && rows.length > 0 ? (
@@ -382,7 +469,7 @@ export default function TeamScreen() {
                     <View key={g.key} style={{ gap: 10 }}>
                       <Text style={styles.month}>{g.title}</Text>
 
-                      <View style={{ gap: 10 }}>
+                      <View style={{ gap: 12 }}>
                         {g.rows.map((r, idx) => {
                           const id = r?.fixture?.id != null ? String(r.fixture.id) : "";
                           const stableKey = id ? `fx-${id}` : `fx-${g.key}-${idx}`;
@@ -463,33 +550,36 @@ const styles = StyleSheet.create({
   },
   previewPillText: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: theme.fontWeight.black },
 
+  guideKicker: { color: theme.colors.textTertiary, fontSize: 12, fontWeight: theme.fontWeight.black, letterSpacing: 0.25 },
+  guidePreviewText: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold, lineHeight: 19 },
+  guideHint: { color: theme.colors.textTertiary, fontSize: 12, fontWeight: theme.fontWeight.bold, lineHeight: 16, opacity: 0.9 },
+
   center: { paddingVertical: 14, alignItems: "center", gap: 10 },
   muted: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold },
 
   month: { color: theme.colors.textTertiary, fontSize: 13, fontWeight: theme.fontWeight.black, letterSpacing: 0.2 },
 
-  // Fixture row (collision-proof layout)
+  // Fixture row (taller + collision-proof)
   fxRow: {
     borderRadius: 18,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
     backgroundColor: Platform.OS === "android" ? "rgba(10,12,14,0.18)" : "rgba(10,12,14,0.14)",
-    paddingVertical: 12,
+    paddingVertical: 14,
     paddingHorizontal: 12,
-    gap: 8,
+    gap: 10,
   },
 
   fxTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
 
   matchLine: {
     flex: 1,
-    minWidth: 0, // allows children to shrink and ellipsize
+    minWidth: 0,
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
   },
 
-  // Critical: basis 0 + shrink 1 prevents collisions under extreme widths
   teamSideLeft: { flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 8 },
   teamSideRight: {
     flexGrow: 1,
