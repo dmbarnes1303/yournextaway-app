@@ -70,7 +70,7 @@ export const CITY_BACKGROUNDS: Record<string, string> = {
   valencia: u("photo-1501854140801-50d01698950b"),
   seville: u("photo-1501854140801-50d01698950b"),
   bilbao: u("photo-1533106418989-88406c7cc8ca"),
-  san-sebastian: u("photo-1533106418989-88406c7cc8ca"),
+  sanSebastian: u("photo-1533106418989-88406c7cc8ca"),
   vigo: u("photo-1501854140801-50d01698950b"),
   mallorca: u("photo-1501854140801-50d01698950b"),
   girona: u("photo-1533106418989-88406c7cc8ca"),
