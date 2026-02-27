@@ -9,15 +9,20 @@ import GlassCard from "@/src/components/GlassCard";
 import EmptyState from "@/src/components/EmptyState";
 
 import { getBackground } from "@/src/constants/backgrounds";
+import { getTeamHeroBackground } from "@/src/constants/teamBackgrounds";
 import { theme } from "@/src/constants/theme";
 
 import { LEAGUES, getRollingWindowIso } from "@/src/constants/football";
 import { getFixtures, type FixtureListRow } from "@/src/services/apiFootball";
 import { formatUkDateOnly, formatUkDateTimeMaybe } from "@/src/utils/formatters";
 
-import teamGuidesRegistry, { getTeamGuide, hasTeamGuide, getTeamGuidesDebugSnapshot, normalizeTeamKey } from "@/src/data/teamGuides";
+import teamGuidesRegistry, {
+  getTeamGuide,
+  hasTeamGuide,
+  getTeamGuidesDebugSnapshot,
+  normalizeTeamKey,
+} from "@/src/data/teamGuides";
 import { teams as teamsRegistry } from "@/src/data/teams";
-import type { TeamGuide } from "@/src/data/teamGuides/types";
 import { usePro } from "@/src/context/ProContext";
 
 function isDev() {
@@ -62,7 +67,13 @@ function teamMatchesRow(row: FixtureListRow, teamNorm: string): boolean {
 
   if (homeNorm === teamNorm || awayNorm === teamNorm) return true;
 
-  if (homeNorm.includes(teamNorm) || awayNorm.includes(teamNorm) || teamNorm.includes(homeNorm) || teamNorm.includes(awayNorm)) {
+  // Fuzzy fallback
+  if (
+    homeNorm.includes(teamNorm) ||
+    awayNorm.includes(teamNorm) ||
+    teamNorm.includes(homeNorm) ||
+    teamNorm.includes(awayNorm)
+  ) {
     return true;
   }
 
@@ -130,24 +141,52 @@ export default function TeamScreen() {
   const teamKeyRaw = useMemo(() => coerceString((params as any)?.teamKey) ?? "", [params]);
   const teamKeyNorm = useMemo(() => normalizeTeamKey(teamKeyRaw), [teamKeyRaw]);
 
-  const teamName = useMemo(() => titleFromKey(teamKeyNorm || teamKeyRaw), [teamKeyNorm, teamKeyRaw]);
-  const teamNormForFixtures = useMemo(() => normalizeTeamKey(teamKeyNorm || teamKeyRaw || teamName), [teamKeyNorm, teamKeyRaw, teamName]);
+  const guide = useMemo(() => {
+    if (!teamKeyRaw) return null;
+    return getTeamGuide(teamKeyNorm) ?? getTeamGuide(teamKeyRaw) ?? null;
+  }, [teamKeyRaw, teamKeyNorm]);
+
+  const teamRec = useMemo(() => {
+    return (teamsRegistry as any)?.[teamKeyNorm] ?? (teamsRegistry as any)?.[teamKeyRaw] ?? null;
+  }, [teamKeyNorm, teamKeyRaw]);
+
+  const teamName = useMemo(() => {
+    const fromGuide = String((guide as any)?.name ?? "").trim();
+    if (fromGuide) return fromGuide;
+    const fromRegistry = String(teamRec?.name ?? "").trim();
+    if (fromRegistry) return fromRegistry;
+    return titleFromKey(teamKeyNorm || teamKeyRaw);
+  }, [guide, teamRec, teamKeyNorm, teamKeyRaw]);
+
+  const teamNormForFixtures = useMemo(
+    () => normalizeTeamKey(teamKeyNorm || teamKeyRaw || teamName),
+    [teamKeyNorm, teamKeyRaw, teamName]
+  );
 
   const rolling = useMemo(() => getRollingWindowIso(), []);
   const from = useMemo(() => coerceString((params as any)?.from) ?? rolling.from, [params, rolling.from]);
   const to = useMemo(() => coerceString((params as any)?.to) ?? rolling.to, [params, rolling.to]);
 
-  const guide = useMemo(() => {
-    if (!teamKeyRaw) return null;
-    return getTeamGuide(teamKeyNorm) ?? getTeamGuide(teamKeyRaw) ?? null;
-  }, [teamKeyRaw, teamKeyNorm]);
+  const heroBackground = useMemo(() => {
+    // Best effort: guide first, then registry, then just name/key.
+    const stadium = String((guide as any)?.stadium ?? teamRec?.stadium ?? "").trim() || null;
+    const city = String((guide as any)?.city ?? teamRec?.city ?? "").trim() || null;
+    const country = String((guide as any)?.country ?? teamRec?.country ?? "").trim() || null;
+
+    return getTeamHeroBackground({
+      teamKey: teamKeyNorm || teamKeyRaw,
+      teamName,
+      stadium,
+      city,
+      country,
+    });
+  }, [guide, teamRec, teamKeyNorm, teamKeyRaw, teamName]);
 
   const [showLockCard, setShowLockCard] = useState(false);
 
   const devGuideDebug = useMemo(() => {
     if (!isDev()) return null;
 
-    const teamRec = (teamsRegistry as any)?.[teamKeyNorm] ?? (teamsRegistry as any)?.[teamKeyRaw] ?? null;
     const hasNorm = teamKeyNorm ? hasTeamGuide(teamKeyNorm) : false;
     const hasRaw = teamKeyRaw ? hasTeamGuide(teamKeyRaw) : false;
 
@@ -171,7 +210,7 @@ export default function TeamScreen() {
       norm: teamKeyNorm,
       hasRaw,
       hasNorm,
-      guideKeyResolved: guide?.teamKey ?? null,
+      guideKeyResolved: (guide as any)?.teamKey ?? null,
       teamsRegistryHas: !!teamRec,
       teamsRegistryName: teamRec?.name ?? null,
       teamsRegistryLeagueId: typeof teamRec?.leagueId === "number" ? teamRec.leagueId : null,
@@ -187,7 +226,7 @@ export default function TeamScreen() {
         : null,
       missingSample,
     };
-  }, [teamKeyRaw, teamKeyNorm, guide]);
+  }, [teamKeyRaw, teamKeyNorm, guide, teamRec]);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -285,7 +324,7 @@ export default function TeamScreen() {
   const FREE_SECTION_COUNT = 2;
 
   return (
-    <Background imageUrl={getBackground("home")} overlayOpacity={0.88}>
+    <Background imageUrl={heroBackground} overlayOpacity={0.88}>
       <Stack.Screen options={{ title: teamName, headerTransparent: true, headerTintColor: theme.colors.text }} />
 
       <SafeAreaView style={styles.safe} edges={["top"]}>
@@ -343,10 +382,7 @@ export default function TeamScreen() {
             </View>
 
             {!guide ? (
-              <EmptyState
-                title="Guide coming soon"
-                message="No guide exists for this teamKey (or the key doesn’t match)."
-              />
+              <EmptyState title="Guide coming soon" message="No guide exists for this teamKey (or the key doesn’t match)." />
             ) : pro.isPro ? (
               renderGuideSections(sections)
             ) : (
@@ -420,7 +456,11 @@ export default function TeamScreen() {
                         <Text style={styles.rowMeta}>{line2}</Text>
                       </Pressable>
 
-                      <Pressable disabled={!id} onPress={() => (id ? goBuildTrip(id) : null)} style={[styles.planBtn, !id && styles.disabled]}>
+                      <Pressable
+                        disabled={!id}
+                        onPress={() => (id ? goBuildTrip(id) : null)}
+                        style={[styles.planBtn, !id && styles.disabled]}
+                      >
                         <Text style={styles.planBtnText}>Plan Trip</Text>
                       </Pressable>
                     </View>
@@ -512,7 +552,14 @@ const styles = StyleSheet.create({
   muted: { fontSize: theme.fontSize.sm, color: theme.colors.textSecondary, fontWeight: "800" },
 
   list: { marginTop: 10, gap: 10 },
-  fixtureRow: { flexDirection: "row", gap: 12, alignItems: "center", paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.08)" },
+  fixtureRow: {
+    flexDirection: "row",
+    gap: 12,
+    alignItems: "center",
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255,255,255,0.08)",
+  },
   rowTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.md },
   rowMeta: { marginTop: 4, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, fontWeight: "700" },
 
