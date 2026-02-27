@@ -77,6 +77,10 @@ function toKey(s: string) {
   return String(s ?? "").trim().toLowerCase();
 }
 
+function cityKeyFromName(name: string) {
+  return toKey(name).replace(/\s+/g, "-");
+}
+
 function dedupeBy<T>(arr: T[], keyFn: (t: T) => string): T[] {
   const seen = new Set<string>();
   const out: T[] = [];
@@ -421,17 +425,36 @@ export default function HomeScreen() {
     [router, league.leagueId, league.season, fromIso, toIso]
   );
 
+  const goCity = useCallback(
+    (cityName: string) => {
+      const cityKey = cityKeyFromName(cityName);
+      if (!cityKey) return;
+      Keyboard.dismiss();
+      setQ(""); // ensure we don't "arrive" on the search UI
+      router.push({
+        pathname: "/city/[cityKey]",
+        params: { cityKey, from: fromIso, to: toIso },
+      } as any);
+    },
+    [router, fromIso, toIso]
+  );
+
   const onPressSearchResult = useCallback(
     (r: SearchResult) => {
       const p: any = r.payload;
 
       if (p?.kind === "team") {
+        Keyboard.dismiss();
+        setQ("");
         router.push({ pathname: "/team/[teamKey]", params: { teamKey: p.slug, from: fromIso, to: toIso } } as any);
         return;
       }
 
       if (p?.kind === "city") {
-        router.push({ pathname: "/city/[slug]", params: { slug: p.slug, from: fromIso, to: toIso } } as any);
+        // FIX: City routes are /city/[cityKey] (not /city/[slug])
+        Keyboard.dismiss();
+        setQ("");
+        router.push({ pathname: "/city/[cityKey]", params: { cityKey: p.slug, from: fromIso, to: toIso } } as any);
         return;
       }
 
@@ -751,7 +774,12 @@ export default function HomeScreen() {
                     decelerationRate="fast"
                   >
                     {cities.map((c) => (
-                      <CityChipPremium key={`pc-${c.name}`} name={c.name} countryCode={c.countryCode} onPress={() => setQ(c.name)} />
+                      <CityChipPremium
+                        key={`pc-${c.name}`}
+                        name={c.name}
+                        countryCode={c.countryCode}
+                        onPress={() => goCity(c.name)}
+                      />
                     ))}
                   </ScrollView>
 
@@ -772,6 +800,7 @@ export default function HomeScreen() {
                           key={`pt-${String(t.teamKey ?? t.teamId ?? t.name)}`}
                           onPress={() => {
                             Keyboard.dismiss();
+                            setQ("");
                             router.push({
                               pathname: "/team/[teamKey]",
                               params: { teamKey: String(t.teamKey), from: fromIso, to: toIso },
