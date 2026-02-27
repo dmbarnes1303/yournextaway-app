@@ -34,6 +34,15 @@ function toIsoOrEmpty(v: any) {
   return safeStr(v);
 }
 
+function cityKeyToTitle(cityKey: string) {
+  const key = safeStr(cityKey);
+  if (!key) return "City";
+  return key
+    .split("-")
+    .map((p) => (p ? p[0].toUpperCase() + p.slice(1) : p))
+    .join(" ");
+}
+
 function ddmmyyyyFromIsoDateOnly(iso: string) {
   const s = safeStr(iso);
   if (!s) return "";
@@ -85,7 +94,6 @@ type CityData = {
   countryCode?: string;
   countryName?: string;
   heroSubtitle?: string;
-  // optional: known venue ids for more precise fixture filtering
   venueIds?: number[];
 };
 
@@ -104,15 +112,12 @@ function joinParas(v: any): string {
 }
 
 /**
- * Safe runtime access to city data + guide content without hard-coupling to exact exports.
- * - City data: tries src/data/cities or src/data/cityGuides metadata
- * - Guide: tries src/data/cityGuides getter(s)
+ * Runtime city metadata (safe, never crashes)
  */
 function getCityData(cityKey: string): CityData | null {
   const key = safeStr(cityKey);
   if (!key) return null;
 
-  // Try src/data/cities first
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const citiesMod: any = require("@/src/data/cities");
@@ -128,7 +133,7 @@ function getCityData(cityKey: string): CityData | null {
       if (c) {
         return {
           cityKey: safeStr(c.cityKey) || key,
-          name: safeStr(c.name) || safeStr(c.title) || key,
+          name: safeStr(c.name) || safeStr(c.title) || cityKeyToTitle(key),
           countryCode: safeStr(c.countryCode),
           countryName: safeStr(c.countryName),
           heroSubtitle: safeStr(c.subtitle) || safeStr(c.tagline),
@@ -140,16 +145,12 @@ function getCityData(cityKey: string): CityData | null {
     // ignore
   }
 
-  // Fallback: minimal city data derived from key
-  return {
-    cityKey: key,
-    name: key
-      .split("-")
-      .map((p) => (p ? p[0].toUpperCase() + p.slice(1) : p))
-      .join(" "),
-  };
+  return { cityKey: key, name: cityKeyToTitle(key) };
 }
 
+/**
+ * Runtime guide loader (safe, never crashes)
+ */
 function getCityGuideFull(cityKey: string): GuideFull | null {
   const key = safeStr(cityKey);
   if (!key) return null;
@@ -218,6 +219,51 @@ function getCityGuideFull(cityKey: string): GuideFull | null {
   }
 }
 
+function splitLinesToBullets(text: string) {
+  const raw = safeStr(text);
+  if (!raw) return { bullets: [] as string[], paragraph: "" };
+
+  const lines = raw
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  const looksBulleted =
+    lines.length >= 3 &&
+    lines.filter((l) => /^[-•]/.test(l) || /^\d+[.)]\s/.test(l)).length >= Math.ceil(lines.length * 0.6);
+
+  if (!looksBulleted) return { bullets: [] as string[], paragraph: raw };
+
+  const bullets = lines.map((l) => l.replace(/^[-•]\s*/, "").replace(/^\d+[.)]\s*/, "").trim()).filter(Boolean);
+  return { bullets, paragraph: "" };
+}
+
+function GuideSectionCard({ heading, text }: { heading?: string; text: string }) {
+  const h = safeStr(heading);
+  const { bullets, paragraph } = splitLinesToBullets(text);
+
+  return (
+    <GlassCard strength="default" style={styles.sectionCard} noPadding>
+      <View style={styles.sectionCardInner}>
+        {h ? <Text style={styles.sectionHeading}>{h}</Text> : null}
+
+        {paragraph ? <Text style={styles.sectionText}>{paragraph}</Text> : null}
+
+        {bullets.length ? (
+          <View style={styles.bulletList}>
+            {bullets.slice(0, 14).map((b, idx) => (
+              <View key={`b-${idx}`} style={styles.bulletRow}>
+                <View style={styles.bulletDot} />
+                <Text style={styles.bulletText}>{b}</Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
+      </View>
+    </GlassCard>
+  );
+}
+
 function FixtureRow({ row, onPressPlan }: { row: FixtureListRow; onPressPlan: () => void }) {
   const homeName = safeStr(row?.teams?.home?.name) || "Home";
   const awayName = safeStr(row?.teams?.away?.name) || "Away";
@@ -269,13 +315,11 @@ export default function CityScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
 
-  const cityKeyParam = safeStr(params.cityKey);
-  const cityKey = cityKeyParam;
+  const cityKey = safeStr(params.cityKey);
 
   const fromParam = toIsoOrEmpty(params.from);
   const toParam = toIsoOrEmpty(params.to);
 
-  // Default rolling window if not provided
   const rolling = useMemo(() => getRollingWindowIso(), []);
   const from = fromParam || rolling.from;
   const to = toParam || rolling.to;
@@ -301,29 +345,33 @@ export default function CityScreen() {
         const cityName = safeStr(city?.name);
         const venueIds = Array.isArray(city?.venueIds) ? city!.venueIds! : [];
 
-        // Pull fixtures league-by-league (within rolling window) then filter to this city.
-        // This is heavier than a dedicated endpoint, but correct + simple for Phase 1.
-        const all: FixtureListRow[] = [];
-
-        for (const l of LEAGUES) {
-          const res = await getFixtures({
-            league: l.leagueId,
-            season: l.season,
-            from,
-            to,
-          });
-
-          const list = Array.isArray(res) ? (res as FixtureListRow[]) : [];
-          all.push(...list);
-        }
+        // Parallel fetch (much faster than sequential)
+        const settled = await Promise.allSettled(
+          (LEAGUES ?? []).map((l) =>
+            getFixtures({
+              league: l.leagueId,
+              season: l.season,
+              from,
+              to,
+            })
+          )
+        );
 
         if (cancelled) return;
 
-        // Filter: fixtures that actually happen in this city
+        const all: FixtureListRow[] = [];
+        for (const s of settled) {
+          if (s.status !== "fulfilled") continue;
+          const list = Array.isArray(s.value) ? (s.value as FixtureListRow[]) : [];
+          all.push(...list);
+        }
+
+        // Filter fixtures that happen in this city
+        const cityLower = cityName.toLowerCase();
+
         const filtered = all.filter((r) => {
           const vCity = safeStr(r?.fixture?.venue?.city).toLowerCase();
           const vId = r?.fixture?.venue?.id;
-          const cityLower = cityName.toLowerCase();
 
           const byCityName = cityLower && vCity && vCity === cityLower;
           const byVenueId = typeof vId === "number" && venueIds.includes(vId);
@@ -331,6 +379,7 @@ export default function CityScreen() {
           return byCityName || byVenueId;
         });
 
+        // Dedup by fixture id
         const dedup = new Map<string, FixtureListRow>();
         for (const r of filtered) {
           const id = r?.fixture?.id != null ? String(r.fixture.id) : "";
@@ -361,7 +410,7 @@ export default function CityScreen() {
 
   const grouped = useMemo(() => groupByMonth(fxRows), [fxRows]);
 
-  const title = city?.name || (cityKeyParam ? cityKeyParam : "City");
+  const title = city?.name || cityKeyToTitle(cityKey);
   const countryCode = safeStr(city?.countryCode);
 
   const goHome = useCallback(() => {
@@ -369,8 +418,14 @@ export default function CityScreen() {
   }, [router]);
 
   const goPlanTrip = useCallback(
-    (fixtureId: string) => {
+    (row: FixtureListRow) => {
+      const fixtureId = row?.fixture?.id != null ? String(row.fixture.id) : "";
       if (!fixtureId) return;
+
+      // pass leagueId/season when available (Trip Build usually needs it)
+      const leagueId = row?.league?.id != null ? String(row.league.id) : undefined;
+      const season = row?.league?.season != null ? String(row.league.season) : undefined;
+
       router.push({
         pathname: "/trip/build",
         params: {
@@ -378,6 +433,8 @@ export default function CityScreen() {
           fixtureId,
           from,
           to,
+          ...(leagueId ? { leagueId } : {}),
+          ...(season ? { season } : {}),
         },
       } as any);
     },
@@ -408,6 +465,12 @@ export default function CityScreen() {
                 </View>
               </View>
 
+              {safeStr(city?.heroSubtitle) ? (
+                <Text style={styles.heroSubtitle} numberOfLines={3} ellipsizeMode="tail">
+                  {safeStr(city?.heroSubtitle)}
+                </Text>
+              ) : null}
+
               <Text style={styles.heroRange}>
                 {from && to ? `${ddmmyyyyFromIsoDateOnly(from)} → ${ddmmyyyyFromIsoDateOnly(to)}` : ""}
               </Text>
@@ -432,33 +495,33 @@ export default function CityScreen() {
             </View>
           </GlassCard>
 
-          {/* GUIDE PREVIEW (same “uplift” style as team) */}
-          <GlassCard strength="default" style={styles.block} noPadding>
-            <View style={styles.blockInner}>
-              <View style={styles.blockHeader}>
-                <Text style={styles.blockTitle}>Guide</Text>
-                <Pressable
-                  onPress={() => setGuideOpen(true)}
-                  style={({ pressed }) => [styles.previewPill, pressed && styles.pressed]}
-                  android_ripple={{ color: "rgba(255,255,255,0.06)" }}
-                >
-                  <Text style={styles.previewPillText}>Open</Text>
-                </Pressable>
-              </View>
-
-              {guideFull?.blocks?.[0]?.text ? (
-                <>
-                  <Text style={styles.guideKicker}>Overview</Text>
-                  <Text style={styles.guidePreviewText} numberOfLines={10} ellipsizeMode="tail">
-                    {guideFull.blocks[0].text}
-                  </Text>
-                  <Text style={styles.guideHint}>Open the full guide for the complete breakdown.</Text>
-                </>
-              ) : (
-                <Text style={styles.blockNote}>Guide content available.</Text>
-              )}
+          {/* GUIDE (uplift: section cards like team guides) */}
+          <View style={{ gap: 12 }}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Guide</Text>
+              <Pressable
+                onPress={() => setGuideOpen(true)}
+                style={({ pressed }) => [styles.miniPill, pressed && styles.pressed]}
+                android_ripple={{ color: "rgba(255,255,255,0.06)" }}
+              >
+                <Text style={styles.miniPillText}>Open</Text>
+              </Pressable>
             </View>
-          </GlassCard>
+
+            {!guideFull ? (
+              <GlassCard strength="default" style={styles.block} noPadding>
+                <View style={styles.blockInner}>
+                  <Text style={styles.blockNote}>Guide content unavailable for this city yet.</Text>
+                </View>
+              </GlassCard>
+            ) : (
+              <View style={{ gap: 12 }}>
+                {guideFull.blocks.map((b, idx) => (
+                  <GuideSectionCard key={`sec-${idx}`} heading={b.heading} text={b.text} />
+                ))}
+              </View>
+            )}
+          </View>
 
           {/* CITY FIXTURES (multi-team) */}
           <GlassCard strength="default" style={styles.block} noPadding>
@@ -488,7 +551,7 @@ export default function CityScreen() {
                         {g.rows.map((r, idx) => {
                           const id = r?.fixture?.id != null ? String(r.fixture.id) : "";
                           const stableKey = id ? `fx-${id}` : `fx-${g.key}-${idx}`;
-                          return <FixtureRow key={stableKey} row={r} onPressPlan={() => (id ? goPlanTrip(id) : null)} />;
+                          return <FixtureRow key={stableKey} row={r} onPressPlan={() => goPlanTrip(r)} />;
                         })}
                       </View>
                     </View>
@@ -553,6 +616,8 @@ const styles = StyleSheet.create({
   heroMetaText: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.black },
   flagMini: { width: 20, height: 14, borderRadius: 3, opacity: 0.9 },
 
+  heroSubtitle: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold, lineHeight: 18, opacity: 0.95 },
+
   heroRange: { color: theme.colors.textTertiary, fontSize: 13, fontWeight: theme.fontWeight.bold, marginTop: 2 },
 
   heroActions: { flexDirection: "row", gap: 10, marginTop: 6 },
@@ -570,13 +635,9 @@ const styles = StyleSheet.create({
   },
   btnPrimaryText: { color: theme.colors.text, fontSize: 14, fontWeight: theme.fontWeight.black },
 
-  block: { borderRadius: 24 },
-  blockInner: { padding: 14, gap: 12 },
-  blockHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  blockTitle: { color: theme.colors.text, fontSize: 18, fontWeight: theme.fontWeight.black },
-  blockNote: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold, lineHeight: 18 },
-
-  previewPill: {
+  sectionHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
+  sectionTitle: { color: theme.colors.text, fontSize: 18, fontWeight: theme.fontWeight.black },
+  miniPill: {
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 999,
@@ -585,11 +646,28 @@ const styles = StyleSheet.create({
     backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
     overflow: "hidden",
   },
-  previewPillText: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: theme.fontWeight.black },
+  miniPillText: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: theme.fontWeight.black },
 
-  guideKicker: { color: theme.colors.textTertiary, fontSize: 12, fontWeight: theme.fontWeight.black, letterSpacing: 0.25 },
-  guidePreviewText: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold, lineHeight: 19 },
-  guideHint: { color: theme.colors.textTertiary, fontSize: 12, fontWeight: theme.fontWeight.bold, lineHeight: 16, opacity: 0.9 },
+  block: { borderRadius: 24 },
+  blockInner: { padding: 14, gap: 12 },
+  blockTitle: { color: theme.colors.text, fontSize: 18, fontWeight: theme.fontWeight.black },
+  blockNote: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold, lineHeight: 18 },
+
+  sectionCard: { borderRadius: 24 },
+  sectionCardInner: { padding: 14, gap: 10 },
+  sectionHeading: { color: theme.colors.text, fontSize: 16, fontWeight: theme.fontWeight.black },
+  sectionText: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold, lineHeight: 19 },
+
+  bulletList: { gap: 10, paddingTop: 2 },
+  bulletRow: { flexDirection: "row", gap: 10, alignItems: "flex-start" },
+  bulletDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 999,
+    marginTop: 7,
+    backgroundColor: "rgba(79,224,138,0.65)",
+  },
+  bulletText: { flex: 1, color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold, lineHeight: 19 },
 
   center: { paddingVertical: 14, alignItems: "center", gap: 10 },
   muted: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold },
