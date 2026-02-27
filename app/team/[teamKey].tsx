@@ -114,32 +114,16 @@ function getTeamGuidePreview(teamKey: string): { title?: string; previewText?: s
     const mod: any = require("@/src/data/teamGuides");
 
     const getter =
-      typeof mod.getTeamGuide === "function"
-        ? mod.getTeamGuide
-        : typeof mod.getGuide === "function"
-          ? mod.getGuide
-          : null;
+      typeof mod.getTeamGuide === "function" ? mod.getTeamGuide : typeof mod.getGuide === "function" ? mod.getGuide : null;
 
     if (!getter) return null;
 
     const guide = getter(key);
     if (!guide) return null;
 
-    // Try a few common shapes without hard dependency.
-    // We just want a compelling readable preview, not perfect structure coupling.
-    const maybeTitle =
-      safeStr(guide.title) ||
-      safeStr(guide.name) ||
-      safeStr(guide.teamName) ||
-      "";
+    const maybeTitle = safeStr(guide.title) || safeStr(guide.name) || safeStr(guide.teamName) || "";
 
-    // Common patterns: guide.sections[], guide.overview, guide.intro, guide.content, etc.
-    let text =
-      safeStr(guide.overview) ||
-      safeStr(guide.intro) ||
-      safeStr(guide.description) ||
-      safeStr(guide.content) ||
-      "";
+    let text = safeStr(guide.overview) || safeStr(guide.intro) || safeStr(guide.description) || safeStr(guide.content) || "";
 
     if (!text && Array.isArray(guide.sections) && guide.sections.length) {
       const s0 = guide.sections[0];
@@ -164,15 +148,12 @@ function getTeamGuidePreview(teamKey: string): { title?: string; previewText?: s
 }
 
 /**
- * Collision-proof fixture row, with taller card + no cut-offs.
+ * Fixture row — NO truncations:
+ * - team names can wrap
+ * - meta is split across lines (kickoff / stadium / city)
+ * - Plan Trip moved off the name row so it doesn't steal width
  */
-function FixtureRow({
-  row,
-  onPressPlan,
-}: {
-  row: FixtureListRow;
-  onPressPlan: () => void;
-}) {
+function FixtureRow({ row, onPressPlan }: { row: FixtureListRow; onPressPlan: () => void }) {
   const homeName = safeStr(row?.teams?.home?.name) || "Home";
   const awayName = safeStr(row?.teams?.away?.name) || "Away";
   const homeLogo = safeStr(row?.teams?.home?.logo);
@@ -181,31 +162,35 @@ function FixtureRow({
   const kickoff = formatUkDateTimeMaybe(row?.fixture?.date);
   const venue = safeStr(row?.fixture?.venue?.name);
   const city = safeStr(row?.fixture?.venue?.city);
-  const meta = [kickoff, venue, city].filter(Boolean).join(" • ");
 
   return (
     <View style={styles.fxRow}>
-      <View style={styles.fxTop}>
-        <View style={styles.matchLine}>
-          <View style={styles.teamSideLeft}>
-            {homeLogo ? <Image source={{ uri: homeLogo }} style={styles.smallCrestImg} resizeMode="contain" /> : null}
-            <Text style={styles.teamNameLeft} numberOfLines={1} ellipsizeMode="tail">
-              {homeName}
-            </Text>
-          </View>
-
-          <View style={styles.vsPill}>
-            <Text style={styles.vsText}>vs</Text>
-          </View>
-
-          <View style={styles.teamSideRight}>
-            <Text style={styles.teamNameRight} numberOfLines={1} ellipsizeMode="tail">
-              {awayName}
-            </Text>
-            {awayLogo ? <Image source={{ uri: awayLogo }} style={styles.smallCrestImg} resizeMode="contain" /> : null}
-          </View>
+      {/* Names row (full wrap, no truncation) */}
+      <View style={styles.matchLine}>
+        <View style={styles.teamSideLeft}>
+          {homeLogo ? <Image source={{ uri: homeLogo }} style={styles.smallCrestImg} resizeMode="contain" /> : null}
+          <Text style={styles.teamNameLeft}>{homeName}</Text>
         </View>
 
+        <View style={styles.vsPill}>
+          <Text style={styles.vsText}>vs</Text>
+        </View>
+
+        <View style={styles.teamSideRight}>
+          <Text style={styles.teamNameRight}>{awayName}</Text>
+          {awayLogo ? <Image source={{ uri: awayLogo }} style={styles.smallCrestImg} resizeMode="contain" /> : null}
+        </View>
+      </View>
+
+      {/* Meta lines (explicit, no truncation) */}
+      <View style={styles.fxMetaBlock}>
+        {kickoff ? <Text style={styles.fxMetaLine}>{kickoff}</Text> : null}
+        {venue ? <Text style={styles.fxMetaLine}>{venue}</Text> : null}
+        {city ? <Text style={styles.fxMetaLine}>{city}</Text> : null}
+      </View>
+
+      {/* CTA row */}
+      <View style={styles.fxCtaRow}>
         <Pressable
           onPress={onPressPlan}
           style={({ pressed }) => [styles.planBtn, pressed && styles.pressed]}
@@ -214,10 +199,6 @@ function FixtureRow({
           <Text style={styles.planBtnText}>Plan Trip</Text>
         </Pressable>
       </View>
-
-      <Text style={styles.fxMeta} numberOfLines={3} ellipsizeMode="tail">
-        {meta}
-      </Text>
     </View>
   );
 }
@@ -276,11 +257,8 @@ export default function TeamScreen() {
 
         const list = Array.isArray(res) ? (res as FixtureListRow[]) : [];
 
-        // ONLY HOME FIXTURES for this team (your requirement).
-        const filtered =
-          typeof team.teamId === "number"
-            ? list.filter((r) => r?.teams?.home?.id === team.teamId)
-            : [];
+        // ONLY HOME FIXTURES for this team.
+        const filtered = typeof team.teamId === "number" ? list.filter((r) => r?.teams?.home?.id === team.teamId) : [];
 
         const cleaned = filtered
           .filter((r) => r?.fixture?.id != null)
@@ -374,9 +352,7 @@ export default function TeamScreen() {
                 </View>
               </View>
 
-              <Text style={styles.heroRange}>
-                {from && to ? `${ddmmyyyyFromIsoDateOnly(from)} → ${ddmmyyyyFromIsoDateOnly(to)}` : ""}
-              </Text>
+              <Text style={styles.heroRange}>{from && to ? `${ddmmyyyyFromIsoDateOnly(from)} → ${ddmmyyyyFromIsoDateOnly(to)}` : ""}</Text>
 
               <View style={styles.heroActions}>
                 <Pressable
@@ -434,9 +410,7 @@ export default function TeamScreen() {
                     </>
                   ) : (
                     <>
-                      <Text style={styles.blockNote}>
-                        Guide content is available for this team.
-                      </Text>
+                      <Text style={styles.blockNote}>Guide content is available for this team.</Text>
                       <Text style={styles.guideHint}>Tap “Open” to view it.</Text>
                     </>
                   )}
@@ -459,9 +433,7 @@ export default function TeamScreen() {
 
               {!loading && error ? <EmptyState title="Fixtures Unavailable" message={error} /> : null}
 
-              {!loading && !error && rows.length === 0 ? (
-                <EmptyState title="No Home Fixtures Found" message="Try another date window." />
-              ) : null}
+              {!loading && !error && rows.length === 0 ? <EmptyState title="No Home Fixtures Found" message="Try another date window." /> : null}
 
               {!loading && !error && rows.length > 0 ? (
                 <View style={{ gap: 14 }}>
@@ -559,32 +531,33 @@ const styles = StyleSheet.create({
 
   month: { color: theme.colors.textTertiary, fontSize: 13, fontWeight: theme.fontWeight.black, letterSpacing: 0.2 },
 
-  // Fixture row (taller + collision-proof)
+  // Fixture row (no truncations)
   fxRow: {
     borderRadius: 18,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
     backgroundColor: Platform.OS === "android" ? "rgba(10,12,14,0.18)" : "rgba(10,12,14,0.14)",
-    paddingVertical: 14,
+    paddingVertical: 16,
     paddingHorizontal: 12,
-    gap: 10,
+    gap: 12,
   },
 
-  fxTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
-
   matchLine: {
-    flex: 1,
-    minWidth: 0,
+    width: "100%",
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
   },
 
-  teamSideLeft: { flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 8 },
+  teamSideLeft: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
   teamSideRight: {
-    flexGrow: 1,
-    flexShrink: 1,
-    flexBasis: 0,
+    flex: 1,
     minWidth: 0,
     flexDirection: "row",
     alignItems: "center",
@@ -592,22 +565,23 @@ const styles = StyleSheet.create({
     gap: 8,
   },
 
+  // IMPORTANT: no numberOfLines anywhere + allow wrap.
   teamNameLeft: {
-    flexGrow: 1,
-    flexShrink: 1,
+    flex: 1,
     minWidth: 0,
     color: theme.colors.text,
     fontSize: 14,
     fontWeight: theme.fontWeight.black,
+    flexWrap: "wrap",
   },
   teamNameRight: {
-    flexGrow: 1,
-    flexShrink: 1,
+    flex: 1,
     minWidth: 0,
     textAlign: "right",
     color: theme.colors.text,
     fontSize: 14,
     fontWeight: theme.fontWeight.black,
+    flexWrap: "wrap",
   },
 
   vsPill: {
@@ -625,8 +599,21 @@ const styles = StyleSheet.create({
 
   smallCrestImg: { width: 18, height: 18, opacity: 0.95 },
 
+  fxMetaBlock: { gap: 4 },
+  fxMetaLine: {
+    color: theme.colors.textSecondary,
+    fontSize: 12,
+    fontWeight: theme.fontWeight.bold,
+    lineHeight: 16,
+  },
+
+  fxCtaRow: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    alignItems: "center",
+  },
+
   planBtn: {
-    flexShrink: 0,
     paddingVertical: 9,
     paddingHorizontal: 12,
     borderRadius: 999,
@@ -636,6 +623,4 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   planBtnText: { color: theme.colors.text, fontSize: 12, fontWeight: theme.fontWeight.black },
-
-  fxMeta: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: theme.fontWeight.bold, lineHeight: 16 },
 });
