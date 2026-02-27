@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   Image,
   Platform,
+  Modal,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -100,12 +101,26 @@ function FlagMini({ countryCode }: { countryCode?: string }) {
   return <Image source={{ uri: url }} style={styles.flagMini} resizeMode="cover" />;
 }
 
+type GuideFull = {
+  title: string;
+  blocks: { heading?: string; text: string }[];
+};
+
+function normalizeText(v: any): string {
+  const s = safeStr(v);
+  return s;
+}
+
+function joinParas(v: any): string {
+  if (Array.isArray(v)) return v.filter(Boolean).map((x) => safeStr(x)).filter(Boolean).join("\n\n");
+  return normalizeText(v);
+}
+
 /**
- * Safe runtime access to team guide content without assuming exact exports.
- * If your teamGuides module exports getTeamGuide(teamKey), we’ll preview it.
- * If it doesn’t, we fall back to “Open guide”.
+ * Pull guide content without assuming a fixed structure.
+ * We create "blocks" that render nicely in a modal.
  */
-function getTeamGuidePreview(teamKey: string): { title?: string; previewText?: string } | null {
+function getTeamGuideFull(teamKey: string): GuideFull | null {
   const key = safeStr(teamKey);
   if (!key) return null;
 
@@ -121,27 +136,59 @@ function getTeamGuidePreview(teamKey: string): { title?: string; previewText?: s
     const guide = getter(key);
     if (!guide) return null;
 
-    const maybeTitle = safeStr(guide.title) || safeStr(guide.name) || safeStr(guide.teamName) || "";
+    const title =
+      safeStr(guide.title) ||
+      safeStr(guide.name) ||
+      safeStr(guide.teamName) ||
+      "Team guide";
 
-    let text = safeStr(guide.overview) || safeStr(guide.intro) || safeStr(guide.description) || safeStr(guide.content) || "";
+    const blocks: { heading?: string; text: string }[] = [];
 
-    if (!text && Array.isArray(guide.sections) && guide.sections.length) {
-      const s0 = guide.sections[0];
-      text =
-        safeStr(s0?.body) ||
-        safeStr(s0?.content) ||
-        (Array.isArray(s0?.paragraphs) ? s0.paragraphs.filter(Boolean).join("\n\n") : "") ||
-        "";
-      if (!text && typeof s0?.text === "string") text = s0.text;
+    // Common top-level fields
+    const overview =
+      normalizeText(guide.overview) ||
+      normalizeText(guide.intro) ||
+      normalizeText(guide.description) ||
+      "";
+
+    if (overview) blocks.push({ heading: "Overview", text: overview });
+
+    // Sections array shapes (very common in your data)
+    if (Array.isArray(guide.sections) && guide.sections.length) {
+      for (const s of guide.sections) {
+        const heading =
+          safeStr(s?.title) ||
+          safeStr(s?.heading) ||
+          safeStr(s?.name) ||
+          "";
+
+        const text =
+          normalizeText(s?.body) ||
+          normalizeText(s?.content) ||
+          joinParas(s?.paragraphs) ||
+          normalizeText(s?.text) ||
+          "";
+
+        if (text) blocks.push({ heading: heading || undefined, text });
+      }
     }
 
-    text = safeStr(text);
-    if (!text) return { title: maybeTitle || "Team guide", previewText: "" };
+    // Fallback if nothing parsed yet
+    if (!blocks.length) {
+      const anyText =
+        normalizeText(guide.content) ||
+        normalizeText(guide.text) ||
+        "";
 
-    return {
-      title: maybeTitle || "Team guide",
-      previewText: text,
-    };
+      if (anyText) blocks.push({ heading: undefined, text: anyText });
+    }
+
+    if (!blocks.length) {
+      // At least allow modal to open and say “content available”
+      blocks.push({ heading: undefined, text: "Guide content is available for this team." });
+    }
+
+    return { title, blocks };
   } catch {
     return null;
   }
@@ -165,7 +212,6 @@ function FixtureRow({ row, onPressPlan }: { row: FixtureListRow; onPressPlan: ()
 
   return (
     <View style={styles.fxRow}>
-      {/* Names row (full wrap, no truncation) */}
       <View style={styles.matchLine}>
         <View style={styles.teamSideLeft}>
           {homeLogo ? <Image source={{ uri: homeLogo }} style={styles.smallCrestImg} resizeMode="contain" /> : null}
@@ -182,14 +228,12 @@ function FixtureRow({ row, onPressPlan }: { row: FixtureListRow; onPressPlan: ()
         </View>
       </View>
 
-      {/* Meta lines (explicit, no truncation) */}
       <View style={styles.fxMetaBlock}>
         {kickoff ? <Text style={styles.fxMetaLine}>{kickoff}</Text> : null}
         {venue ? <Text style={styles.fxMetaLine}>{venue}</Text> : null}
         {city ? <Text style={styles.fxMetaLine}>{city}</Text> : null}
       </View>
 
-      {/* CTA row */}
       <View style={styles.fxCtaRow}>
         <Pressable
           onPress={onPressPlan}
@@ -223,11 +267,13 @@ export default function TeamScreen() {
   const [rows, setRows] = useState<FixtureListRow[]>([]);
 
   const canShowGuide = useMemo(() => (team?.teamKey ? hasTeamGuide(team.teamKey) : false), [team]);
-  const guidePreview = useMemo(() => {
+  const guideFull = useMemo(() => {
     if (!team?.teamKey) return null;
     if (!canShowGuide) return null;
-    return getTeamGuidePreview(team.teamKey);
+    return getTeamGuideFull(team.teamKey);
   }, [team, canShowGuide]);
+
+  const [guideOpen, setGuideOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -288,6 +334,11 @@ export default function TeamScreen() {
   const title = team?.name ?? (teamKeyParam ? teamKeyParam : "Team");
   const leagueLabel = league?.label ?? "";
   const countryCode = league?.countryCode ?? "";
+
+  const browseLeagueLabel = useMemo(() => {
+    const l = safeStr(leagueLabel);
+    return l ? `Browse ${l} fixtures` : "Browse league fixtures";
+  }, [leagueLabel]);
 
   const goBrowseFixtures = useCallback(() => {
     if (!league) {
@@ -360,7 +411,7 @@ export default function TeamScreen() {
                   style={({ pressed }) => [styles.btn, styles.btnGhost, pressed && styles.pressed]}
                   android_ripple={{ color: "rgba(255,255,255,0.08)" }}
                 >
-                  <Text style={styles.btnGhostText}>Browse fixtures</Text>
+                  <Text style={styles.btnGhostText}>{browseLeagueLabel}</Text>
                 </Pressable>
 
                 <Pressable
@@ -382,12 +433,7 @@ export default function TeamScreen() {
 
                 {canShowGuide ? (
                   <Pressable
-                    onPress={() =>
-                      router.push({
-                        pathname: "/team/[teamKey]/guide",
-                        params: { teamKey: team?.teamKey },
-                      } as any)
-                    }
+                    onPress={() => setGuideOpen(true)}
                     style={({ pressed }) => [styles.previewPill, pressed && styles.pressed]}
                     android_ripple={{ color: "rgba(255,255,255,0.06)" }}
                   >
@@ -400,11 +446,12 @@ export default function TeamScreen() {
                 <Text style={styles.blockNote}>Guide coming soon for this team.</Text>
               ) : (
                 <>
-                  {guidePreview?.previewText ? (
+                  {/* Keep your existing preview vibe */}
+                  {guideFull?.blocks?.[0]?.text ? (
                     <>
                       <Text style={styles.guideKicker}>Club Overview</Text>
                       <Text style={styles.guidePreviewText} numberOfLines={10} ellipsizeMode="tail">
-                        {guidePreview.previewText}
+                        {guideFull.blocks[0].text}
                       </Text>
                       <Text style={styles.guideHint}>Open the full guide for the complete breakdown.</Text>
                     </>
@@ -457,6 +504,36 @@ export default function TeamScreen() {
 
           <View style={{ height: 14 }} />
         </ScrollView>
+
+        {/* TEAM GUIDE MODAL (NO ROUTE = NO UNMATCHED ROUTE) */}
+        <Modal visible={guideOpen} animationType="fade" transparent onRequestClose={() => setGuideOpen(false)}>
+          <Pressable style={styles.modalBackdrop} onPress={() => setGuideOpen(false)} />
+          <View style={styles.modalSheetWrap} pointerEvents="box-none">
+            <GlassCard strength="strong" style={styles.modalSheet} noPadding>
+              <View style={styles.modalInner}>
+                <View style={styles.modalHeader}>
+                  <Text style={styles.modalTitle}>{guideFull?.title || "Team guide"}</Text>
+                  <Pressable onPress={() => setGuideOpen(false)} style={styles.modalClose} hitSlop={10}>
+                    <Text style={styles.modalCloseText}>Done</Text>
+                  </Pressable>
+                </View>
+
+                {!guideFull ? (
+                  <Text style={styles.modalBodyText}>Guide content unavailable.</Text>
+                ) : (
+                  <ScrollView style={styles.modalScroll} contentContainerStyle={{ paddingBottom: 6 }} showsVerticalScrollIndicator={false}>
+                    {guideFull.blocks.map((b, idx) => (
+                      <View key={`g-${idx}`} style={styles.guideBlock}>
+                        {b.heading ? <Text style={styles.guideBlockTitle}>{b.heading}</Text> : null}
+                        <Text style={styles.modalBodyText}>{b.text}</Text>
+                      </View>
+                    ))}
+                  </ScrollView>
+                )}
+              </View>
+            </GlassCard>
+          </View>
+        </Modal>
       </SafeAreaView>
     </Background>
   );
@@ -565,7 +642,6 @@ const styles = StyleSheet.create({
     gap: 8,
   },
 
-  // IMPORTANT: no numberOfLines anywhere + allow wrap.
   teamNameLeft: {
     flex: 1,
     minWidth: 0,
@@ -607,11 +683,7 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
 
-  fxCtaRow: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    alignItems: "center",
-  },
+  fxCtaRow: { flexDirection: "row", justifyContent: "flex-end", alignItems: "center" },
 
   planBtn: {
     paddingVertical: 9,
@@ -623,4 +695,35 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   planBtnText: { color: theme.colors.text, fontSize: 12, fontWeight: theme.fontWeight.black },
+
+  // Modal
+  modalBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.58)" },
+  modalSheetWrap: { flex: 1, justifyContent: "flex-end" },
+  modalSheet: { borderRadius: 22, marginHorizontal: theme.spacing.lg, marginBottom: theme.spacing.lg, overflow: "hidden" },
+  modalInner: { padding: 14, gap: 12 },
+  modalHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
+  modalTitle: { color: theme.colors.text, fontSize: 16, fontWeight: theme.fontWeight.black },
+  modalClose: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+  },
+  modalCloseText: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: theme.fontWeight.black },
+
+  modalScroll: { maxHeight: 520 },
+  guideBlock: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    backgroundColor: Platform.OS === "android" ? "rgba(12,14,16,0.20)" : "rgba(12,14,16,0.16)",
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    gap: 8,
+    marginBottom: 10,
+  },
+  guideBlockTitle: { color: theme.colors.text, fontSize: 14, fontWeight: theme.fontWeight.black },
+  modalBodyText: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold, lineHeight: 19 },
 });
