@@ -55,6 +55,21 @@ const GERMANY = "Germany";
 const FRANCE = "France";
 
 /**
+ * Popular teams (single source of truth)
+ * - Keys must exist in `teams`.
+ * - Team IDs must be correct for crest + scoring in Home.
+ */
+export const POPULAR_TEAM_KEYS = [
+  "real-madrid",
+  "arsenal",
+  "bayern-munich",
+  "inter",
+  "borussia-dortmund",
+] as const;
+
+export type PopularTeamKey = (typeof POPULAR_TEAM_KEYS)[number];
+
+/**
  * Remove diacritics safely (Köln -> Koln, München -> Munchen).
  * This is critical for matching API/fixture names to registry keys.
  */
@@ -106,6 +121,7 @@ export const teams: Record<string, TeamRecord> = {
 
   "arsenal": {
     teamKey: "arsenal",
+    teamId: 42, // API-Football
     name: "Arsenal",
     country: ENGLAND,
     city: "London",
@@ -413,6 +429,7 @@ export const teams: Record<string, TeamRecord> = {
 
   "real-madrid": {
     teamKey: "real-madrid",
+    teamId: 541, // API-Football
     name: "Real Madrid",
     country: SPAIN,
     city: "Madrid",
@@ -477,7 +494,6 @@ export const teams: Record<string, TeamRecord> = {
     aliases: ["milan", "a.c. milan", "rossoneri"],
   },
 
-  // ✅ ADDED (missing in your unresolved list)
   "atalanta": {
     teamKey: "atalanta",
     name: "Atalanta",
@@ -561,6 +577,7 @@ export const teams: Record<string, TeamRecord> = {
 
   "inter": {
     teamKey: "inter",
+    teamId: 505, // API-Football
     name: "Inter",
     country: ITALY,
     city: "Milan",
@@ -586,14 +603,13 @@ export const teams: Record<string, TeamRecord> = {
     aliases: ["ss lazio"],
   },
 
-  // ✅ FIXED: Lecce key was wrong in your file ("lecco")
   "lecce": {
     teamKey: "lecce",
     name: "Lecce",
     country: ITALY,
     city: "Lecce",
     leagueId: SERIE_A,
-    aliases: ["us lecce", "u.s. lecce", "lecco"], // keep "lecco" as a safety net if any old refs exist
+    aliases: ["us lecce", "u.s. lecce", "lecco"],
   },
 
   "napoli": {
@@ -673,11 +689,11 @@ export const teams: Record<string, TeamRecord> = {
 
   "bayern-munich": {
     teamKey: "bayern-munich",
+    teamId: 157, // API-Football
     name: "Bayern Munich",
     country: GERMANY,
     city: "Munich",
     leagueId: BUNDESLIGA,
-    // ✅ critical: cover API variants + diacritics
     aliases: [
       "bayern",
       "fc bayern",
@@ -695,6 +711,7 @@ export const teams: Record<string, TeamRecord> = {
 
   "borussia-dortmund": {
     teamKey: "borussia-dortmund",
+    teamId: 165, // API-Football
     name: "Borussia Dortmund",
     country: GERMANY,
     city: "Dortmund",
@@ -720,7 +737,6 @@ export const teams: Record<string, TeamRecord> = {
     aliases: ["frankfurt", "sge", "eintracht"],
   },
 
-  // ✅ critical: fixture names often come as "1. FC Köln"
   "fc-cologne": {
     teamKey: "fc-cologne",
     name: "FC Cologne",
@@ -769,7 +785,6 @@ export const teams: Record<string, TeamRecord> = {
     aliases: ["hsv", "hamburg"],
   },
 
-  // ✅ critical: fixture name often "1899 Hoffenheim"
   "hoffenheim": {
     teamKey: "hoffenheim",
     name: "Hoffenheim",
@@ -792,7 +807,6 @@ export const teams: Record<string, TeamRecord> = {
     country: GERMANY,
     city: "Mainz",
     leagueId: BUNDESLIGA,
-    // ✅ critical: fixture names often "FSV Mainz 05"
     aliases: ["mainz", "fsv mainz", "1. fsv mainz 05", "fsv mainz 05", "1 fsv mainz 05"],
   },
 
@@ -1015,6 +1029,17 @@ export const teams: Record<string, TeamRecord> = {
     aliases: ["tfc", "toulouse fc"],
   },
 };
+
+/**
+ * Export a single Set of popular IDs for fast lookups (Home scoring, etc.)
+ */
+export const POPULAR_TEAM_IDS = new Set<number>(
+  POPULAR_TEAM_KEYS.map((k) => teams[k]?.teamId).filter((n): n is number => typeof n === "number")
+);
+
+export function getPopularTeams(): TeamRecord[] {
+  return POPULAR_TEAM_KEYS.map((k) => teams[k]).filter(Boolean);
+}
 
 /**
  * Deterministic resolver:
