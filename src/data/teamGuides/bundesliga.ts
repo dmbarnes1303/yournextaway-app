@@ -1213,6 +1213,7 @@ export const bundesligaTeamGuides: Record<string, TeamGuide> = {
   ],
   links: [{ label: "Official site", url: "https://www.mainz05.de/" }],
   updatedAt: "2026-01-27",
-},
+  },
 };
+
 export default bundesligaTeamGuides;
