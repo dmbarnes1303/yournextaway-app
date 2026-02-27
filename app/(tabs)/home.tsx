@@ -76,6 +76,16 @@ function toKey(s: string) {
   return String(s ?? "").trim().toLowerCase();
 }
 
+// Important: your City screen lives at app/city/key/[cityKey].tsx
+// So the route is /city/key/:cityKey
+function cityKeyFromName(name: string) {
+  return toKey(name)
+    .replace(/[’']/g, "")
+    .replace(/[^a-z0-9\s-]/g, "")
+    .trim()
+    .replace(/\s+/g, "-");
+}
+
 function dedupeBy<T>(arr: T[], keyFn: (t: T) => string): T[] {
   const seen = new Set<string>();
   const out: T[] = [];
@@ -414,23 +424,51 @@ export default function HomeScreen() {
     [router, league.leagueId, league.season, fromIso, toIso]
   );
 
+  const goCityKey = useCallback(
+    (cityKey: string) => {
+      const ck = String(cityKey ?? "").trim();
+      if (!ck) return;
+      Keyboard.dismiss();
+      setQ("");
+      router.push({
+        pathname: "/city/key/[cityKey]",
+        params: { cityKey: ck, from: fromIso, to: toIso },
+      } as any);
+    },
+    [router, fromIso, toIso]
+  );
+
+  const goCityFromName = useCallback(
+    (name: string) => {
+      const ck = cityKeyFromName(name);
+      if (!ck) return;
+      goCityKey(ck);
+    },
+    [goCityKey]
+  );
+
   const onPressSearchResult = useCallback(
     (r: SearchResult) => {
       const p: any = r.payload;
 
       if (p?.kind === "team") {
+        Keyboard.dismiss();
+        setQ("");
         router.push({ pathname: "/team/[teamKey]", params: { teamKey: p.slug, from: fromIso, to: toIso } } as any);
         return;
       }
 
       if (p?.kind === "city") {
-        // IMPORTANT: your City screen route is /city/key/[cityKey]
-        router.push({ pathname: "/city/key/[cityKey]", params: { cityKey: p.slug, from: fromIso, to: toIso } } as any);
+        // Canonical city route: /city/key/:cityKey
+        // searchIndex city payload uses p.slug as the key.
+        goCityKey(p.slug);
         return;
       }
 
       if (p?.kind === "venue") {
         const venueName = String(r.title ?? "").trim();
+        Keyboard.dismiss();
+        setQ("");
         router.push({
           pathname: "/(tabs)/fixtures",
           params: { leagueId: String(league.leagueId), season: String(league.season), from: fromIso, to: toIso, venue: venueName },
@@ -439,6 +477,8 @@ export default function HomeScreen() {
       }
 
       if (p?.kind === "country" || p?.kind === "league") {
+        Keyboard.dismiss();
+        setQ("");
         router.push({
           pathname: "/(tabs)/fixtures",
           params: { leagueId: String(p.leagueId), season: String(p.season), from: fromIso, to: toIso },
@@ -446,7 +486,7 @@ export default function HomeScreen() {
         return;
       }
     },
-    [router, fromIso, toIso, league.leagueId, league.season]
+    [router, fromIso, toIso, league.leagueId, league.season, goCityKey]
   );
 
   const resultMeta = useCallback((r: SearchResult): string => {
@@ -614,19 +654,12 @@ export default function HomeScreen() {
   return (
     <Background imageSource={getBackground("home")} overlayOpacity={0.62}>
       <SafeAreaView style={styles.container} edges={["top"]}>
-        <ScrollView
-          style={styles.scroll}
-          contentContainerStyle={styles.content}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
+        <ScrollView style={styles.scroll} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           {/* HERO */}
           <GlassCard strength="strong" style={styles.hero} noPadding>
             <View style={styles.heroInner}>
               <Text style={styles.heroTitle}>Plan A Football City Break</Text>
-              <Text style={styles.heroSub}>
-                Search A City, Team, Country, League, Or Venue. Then Jump Into Fixtures Or Start A Trip Hub.
-              </Text>
+              <Text style={styles.heroSub}>Search A City, Team, Country, League, Or Venue. Then Jump Into Fixtures Or Start A Trip Hub.</Text>
 
               <View style={styles.searchBox}>
                 <TextInput
@@ -692,12 +725,7 @@ export default function HomeScreen() {
 
                   {!searchLoading && !searchError ? (
                     <>
-                      {buckets.teams.length +
-                        buckets.cities.length +
-                        buckets.venues.length +
-                        buckets.countries.length +
-                        buckets.leagues.length ===
-                      0 ? (
+                      {buckets.teams.length + buckets.cities.length + buckets.venues.length + buckets.countries.length + buckets.leagues.length === 0 ? (
                         <Text style={styles.groupEmpty}>No Results.</Text>
                       ) : (
                         <View style={styles.resultList}>
@@ -728,25 +756,15 @@ export default function HomeScreen() {
               {!showSearchResults ? (
                 <View style={styles.popularBlock}>
                   <Text style={styles.sectionKicker}>Popular Cities</Text>
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.popularRow}
-                    decelerationRate="fast"
-                  >
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.popularRow} decelerationRate="fast">
                     {cities.map((c) => (
-                      <CityChipPremium key={`pc-${c.name}`} name={c.name} countryCode={c.countryCode} onPress={() => setQ(c.name)} />
+                      <CityChipPremium key={`pc-${c.name}`} name={c.name} countryCode={c.countryCode} onPress={() => goCityFromName(c.name)} />
                     ))}
                   </ScrollView>
 
                   <Text style={[styles.sectionKicker, { marginTop: 10 }]}>Popular Teams</Text>
 
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.popularRow}
-                    decelerationRate="fast"
-                  >
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.popularRow} decelerationRate="fast">
                     {popularTeams
                       .filter((t) => typeof (t as any)?.teamId === "number")
                       .slice(0, 5)
@@ -755,6 +773,7 @@ export default function HomeScreen() {
                           key={`pt-${String(t.teamKey ?? t.teamId ?? t.name)}`}
                           onPress={() => {
                             Keyboard.dismiss();
+                            setQ("");
                             router.push({
                               pathname: "/team/[teamKey]",
                               params: { teamKey: String(t.teamKey), from: fromIso, to: toIso },
@@ -764,11 +783,7 @@ export default function HomeScreen() {
                           android_ripple={{ color: "rgba(255,255,255,0.08)" }}
                         >
                           <View style={styles.teamCrestDot}>
-                            <Image
-                              source={{ uri: API_SPORTS_TEAM_LOGO(Number(t.teamId)) }}
-                              style={{ width: 16, height: 16, opacity: 0.95 }}
-                              resizeMode="contain"
-                            />
+                            <Image source={{ uri: API_SPORTS_TEAM_LOGO(Number(t.teamId)) }} style={{ width: 16, height: 16, opacity: 0.95 }} resizeMode="contain" />
                           </View>
                           <Text style={styles.pillText}>{String(t.name ?? "")}</Text>
                         </Pressable>
@@ -1012,12 +1027,7 @@ export default function HomeScreen() {
 
               <View style={styles.grid2}>
                 {quickTiles.map((s) => (
-                  <Pressable
-                    key={s.key}
-                    onPress={s.onPress}
-                    style={({ pressed }) => [styles.tilePress, pressed && styles.pressed]}
-                    android_ripple={{ color: "rgba(255,255,255,0.06)" }}
-                  >
+                  <Pressable key={s.key} onPress={s.onPress} style={({ pressed }) => [styles.tilePress, pressed && styles.pressed]} android_ripple={{ color: "rgba(255,255,255,0.06)" }}>
                     <GlassCard strength="default" style={styles.tile} noPadding>
                       <View style={styles.tileInner}>
                         <View style={styles.tileTopRow}>
@@ -1065,9 +1075,7 @@ export default function HomeScreen() {
                       <Text style={styles.tileSub}>
                         {labelForKey(discoverWindowKey)} • {labelForTripLength(discoverTripLength)}
                       </Text>
-                      <Text style={styles.tileHint}>
-                        {discoverVibes.length ? discoverVibes.map(labelForVibe).join(" • ") : "Any Vibe"}
-                      </Text>
+                      <Text style={styles.tileHint}>{discoverVibes.length ? discoverVibes.map(labelForVibe).join(" • ") : "Any Vibe"}</Text>
                     </View>
                   </GlassCard>
                 </Pressable>
