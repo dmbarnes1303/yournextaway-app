@@ -25,6 +25,7 @@ import { formatUkDateTimeMaybe } from "@/src/utils/formatters";
 
 import { getFixtures, type FixtureListRow } from "@/src/services/apiFootball";
 import { LEAGUES, getRollingWindowIso } from "@/src/constants/football";
+import type { CityGuide, CityTopThing } from "@/src/data/cityGuides/types";
 
 function safeStr(v: any) {
   return String(v ?? "").trim();
@@ -97,14 +98,10 @@ type CityData = {
   venueIds?: number[];
 };
 
-type GuideBlock = {
-  heading?: string;
-  text: string;
-};
+type GuideBlock = { heading?: string; text: string };
 
 type GuideFull = {
   title: string;
-  countryName?: string;
   blocks: GuideBlock[];
 };
 
@@ -112,40 +109,28 @@ function normalizeText(v: any): string {
   return safeStr(v);
 }
 
-function joinParas(v: any): string {
-  if (Array.isArray(v)) return v.filter(Boolean).map((x) => safeStr(x)).filter(Boolean).join("\n\n");
-  return normalizeText(v);
+function joinBullets(items: string[] | undefined, max = 16) {
+  const list = Array.isArray(items) ? items.map((x) => safeStr(x)).filter(Boolean) : [];
+  if (!list.length) return "";
+  return list.slice(0, max).map((x) => `- ${x}`).join("\n");
 }
 
-/**
- * Minimal, safe country-name -> ISO2 mapping (enough for current leagues).
- * This is intentionally simple to avoid importing unknown utils.
- */
-const COUNTRY_NAME_TO_ISO2: Record<string, string> = {
-  france: "FR",
-  england: "GB",
-  scotland: "GB",
-  wales: "GB",
-  spain: "ES",
-  germany: "DE",
-  italy: "IT",
-  netherlands: "NL",
-  portugal: "PT",
-  belgium: "BE",
-  austria: "AT",
-  switzerland: "CH",
-  monaco: "MC",
-  turkey: "TR",
-  greece: "GR",
-  poland: "PL",
-  czechia: "CZ",
-  "czech republic": "CZ",
-  croatia: "HR",
-  denmark: "DK",
-  sweden: "SE",
-  norway: "NO",
-  ireland: "IE",
-};
+function joinTopThings(items: CityTopThing[] | undefined, max = 10) {
+  const list = Array.isArray(items) ? items : [];
+  if (!list.length) return "";
+  return list
+    .slice(0, max)
+    .map((x) => {
+      const t = safeStr(x?.title);
+      const tip = safeStr(x?.tip);
+      if (t && tip) return `- ${t}: ${tip}`;
+      if (t) return `- ${t}`;
+      if (tip) return `- ${tip}`;
+      return "";
+    })
+    .filter(Boolean)
+    .join("\n");
+}
 
 /**
  * Runtime city metadata (safe, never crashes)
@@ -168,10 +153,10 @@ function getCityData(cityKey: string): CityData | null {
       const c = getter(key);
       if (c) {
         return {
-          cityKey: safeStr(c.cityKey) || key,
+          cityKey: safeStr(c.slug) || safeStr(c.cityKey) || key,
           name: safeStr(c.name) || safeStr(c.title) || cityKeyToTitle(key),
           countryCode: safeStr(c.countryCode),
-          countryName: safeStr(c.countryName),
+          countryName: safeStr(c.country) || safeStr(c.countryName),
           heroSubtitle: safeStr(c.subtitle) || safeStr(c.tagline),
           venueIds: Array.isArray(c.venueIds) ? c.venueIds : undefined,
         };
@@ -184,29 +169,9 @@ function getCityData(cityKey: string): CityData | null {
   return { cityKey: key, name: cityKeyToTitle(key) };
 }
 
-function bulletsFromStrings(items: string[]) {
-  return items
-    .map((x) => safeStr(x))
-    .filter(Boolean)
-    .map((x) => `- ${x}`)
-    .join("\n");
-}
-
-function bulletsFromTopThings(topThings: any[]) {
-  const lines: string[] = [];
-  for (const t of topThings ?? []) {
-    const title = safeStr(t?.title);
-    const tip = safeStr(t?.tip);
-    if (!title && !tip) continue;
-    if (title && tip) lines.push(`- ${title}: ${tip}`);
-    else lines.push(`- ${title || tip}`);
-  }
-  return lines.join("\n");
-}
-
 /**
- * City guide loader that matches your CityGuide shape (overview/topThings/tips/food/transport/accommodation)
- * Safe, never crashes.
+ * Runtime guide loader (safe, never crashes)
+ * Converts CityGuide fields into section blocks so the City page has real depth.
  */
 function getCityGuideFull(cityKey: string): GuideFull | null {
   const key = safeStr(cityKey);
@@ -215,93 +180,36 @@ function getCityGuideFull(cityKey: string): GuideFull | null {
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const mod: any = require("@/src/data/cityGuides");
-
-    const getter =
-      typeof mod.getCityGuide === "function"
-        ? mod.getCityGuide
-        : typeof mod.getGuide === "function"
-          ? mod.getGuide
-          : null;
-
+    const getter = typeof mod.getCityGuide === "function" ? mod.getCityGuide : null;
     if (!getter) return null;
 
-    const guide = getter(key);
+    const guide = getter(key) as CityGuide | null;
     if (!guide) return null;
 
-    const title =
-      safeStr(guide.title) ||
-      safeStr(guide.name) ||
-      safeStr(guide.cityName) ||
-      "City guide";
-
+    const title = safeStr(guide.name) || safeStr(guide.cityId) || "City guide";
     const blocks: GuideBlock[] = [];
 
-    const overview =
-      normalizeText(guide.overview) ||
-      normalizeText(guide.intro) ||
-      normalizeText(guide.description) ||
-      "";
-
+    const overview = normalizeText(guide.overview);
     if (overview) blocks.push({ heading: "Overview", text: overview });
 
-    // IMPORTANT: Your guides (e.g. ligue1.ts) use topThings/tips/food/transport/accommodation.
-    if (Array.isArray(guide.topThings) && guide.topThings.length) {
-      const txt = bulletsFromTopThings(guide.topThings);
-      if (txt) blocks.push({ heading: "Top things to do", text: txt });
-    }
+    const topThingsText = joinTopThings(guide.topThings, 10);
+    if (topThingsText) blocks.push({ heading: "Top things to do", text: topThingsText });
 
-    if (Array.isArray(guide.tips) && guide.tips.length) {
-      const txt = bulletsFromStrings(guide.tips);
-      if (txt) blocks.push({ heading: "Quick tips", text: txt });
-    }
+    const tipsText = joinBullets(guide.tips, 14);
+    if (tipsText) blocks.push({ heading: "Quick tips", text: tipsText });
 
-    if (Array.isArray(guide.food) && guide.food.length) {
-      const txt = bulletsFromStrings(guide.food);
-      if (txt) blocks.push({ heading: "What to eat & drink", text: txt });
-    }
+    const foodText = joinBullets(guide.food, 14);
+    if (foodText) blocks.push({ heading: "Food & drink", text: foodText });
 
-    const transport =
-      normalizeText(guide.transport) ||
-      normalizeText(guide.gettingAround) ||
-      normalizeText(guide.transit) ||
-      "";
-
+    const transport = normalizeText(guide.transport);
     if (transport) blocks.push({ heading: "Getting around", text: transport });
 
-    const accommodation =
-      normalizeText(guide.accommodation) ||
-      normalizeText(guide.whereToStay) ||
-      normalizeText(guide.stay) ||
-      "";
+    const stay = normalizeText(guide.accommodation);
+    if (stay) blocks.push({ heading: "Where to stay", text: stay });
 
-    if (accommodation) blocks.push({ heading: "Where to stay", text: accommodation });
+    if (!blocks.length) return { title, blocks: [{ heading: undefined, text: "Guide content is available for this city." }] };
 
-    // Back-compat: if some guides use sections/content/text
-    if (Array.isArray(guide.sections) && guide.sections.length) {
-      for (const s of guide.sections) {
-        const heading = safeStr(s?.title) || safeStr(s?.heading) || safeStr(s?.name) || "";
-        const text =
-          normalizeText(s?.body) ||
-          normalizeText(s?.content) ||
-          joinParas(s?.paragraphs) ||
-          normalizeText(s?.text) ||
-          "";
-        if (text) blocks.push({ heading: heading || undefined, text });
-      }
-    }
-
-    if (!blocks.length) {
-      const anyText = normalizeText(guide.content) || normalizeText(guide.text) || "";
-      if (anyText) blocks.push({ heading: undefined, text: anyText });
-    }
-
-    if (!blocks.length) blocks.push({ heading: undefined, text: "Guide content is available for this city." });
-
-    return {
-      title,
-      countryName: safeStr(guide.country) || undefined,
-      blocks,
-    };
+    return { title, blocks };
   } catch {
     return null;
   }
@@ -322,7 +230,9 @@ function splitLinesToBullets(text: string) {
 
   if (!looksBulleted) return { bullets: [] as string[], paragraph: raw };
 
-  const bullets = lines.map((l) => l.replace(/^[-•]\s*/, "").replace(/^\d+[.)]\s*/, "").trim()).filter(Boolean);
+  const bullets = lines
+    .map((l) => l.replace(/^[-•]\s*/, "").replace(/^\d+[.)]\s*/, "").trim())
+    .filter(Boolean);
   return { bullets, paragraph: "" };
 }
 
@@ -339,7 +249,7 @@ function GuideSectionCard({ heading, text }: { heading?: string; text: string })
 
         {bullets.length ? (
           <View style={styles.bulletList}>
-            {bullets.map((b, idx) => (
+            {bullets.slice(0, 16).map((b, idx) => (
               <View key={`b-${idx}`} style={styles.bulletRow}>
                 <View style={styles.bulletDot} />
                 <Text style={styles.bulletText}>{b}</Text>
@@ -496,15 +406,8 @@ export default function CityScreen() {
   const grouped = useMemo(() => groupByMonth(fxRows), [fxRows]);
 
   const title = city?.name || cityKeyToTitle(cityKey);
-
-  // Country flag: prefer city registry; fallback to guide country name mapping.
-  const countryName =
-    safeStr(city?.countryName) || safeStr(guideFull?.countryName) || "";
-
-  const countryCode =
-    safeStr(city?.countryCode) ||
-    (countryName ? COUNTRY_NAME_TO_ISO2[countryName.toLowerCase()] : "") ||
-    "";
+  const countryCode = safeStr(city?.countryCode);
+  const countryName = safeStr(city?.countryName);
 
   const goHome = useCallback(() => {
     router.push("/(tabs)/home" as any);
@@ -534,13 +437,6 @@ export default function CityScreen() {
   );
 
   const bgSource = getBackground("city");
-
-  // Preview: show a short guide on the page, full guide in modal.
-  const previewBlocks = useMemo(() => {
-    if (!guideFull?.blocks?.length) return [];
-    // Always show overview + next 1–2 sections for “depth” without turning the page into a novel.
-    return guideFull.blocks.slice(0, Math.min(3, guideFull.blocks.length));
-  }, [guideFull]);
 
   return (
     <Background imageSource={bgSource} overlayOpacity={0.7}>
@@ -594,7 +490,7 @@ export default function CityScreen() {
             </View>
           </GlassCard>
 
-          {/* GUIDE PREVIEW */}
+          {/* GUIDE */}
           <View style={{ gap: 12 }}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Guide</Text>
@@ -615,18 +511,19 @@ export default function CityScreen() {
               </GlassCard>
             ) : (
               <View style={{ gap: 12 }}>
-                {previewBlocks.map((b, idx) => (
+                {/* Show first 3 sections inline (feels rich without turning this into a wall of text) */}
+                {guideFull.blocks.slice(0, 3).map((b, idx) => (
                   <GuideSectionCard key={`sec-${idx}`} heading={b.heading} text={b.text} />
                 ))}
 
-                {guideFull.blocks.length > previewBlocks.length ? (
-                  <Pressable
-                    onPress={() => setGuideOpen(true)}
-                    style={({ pressed }) => [styles.openFullCard, pressed && styles.pressed]}
-                    android_ripple={{ color: "rgba(79,224,138,0.10)" }}
-                  >
-                    <Text style={styles.openFullText}>Open full city guide</Text>
-                  </Pressable>
+                {guideFull.blocks.length > 3 ? (
+                  <GlassCard strength="default" style={styles.block} noPadding>
+                    <View style={styles.blockInner}>
+                      <Text style={styles.blockNote}>
+                        More sections available ({guideFull.blocks.length - 3}). Tap “Open” to read the full guide.
+                      </Text>
+                    </View>
+                  </GlassCard>
                 ) : null}
               </View>
             )}
@@ -673,7 +570,7 @@ export default function CityScreen() {
           <View style={{ height: 14 }} />
         </ScrollView>
 
-        {/* GUIDE MODAL (FULL) */}
+        {/* GUIDE MODAL */}
         <Modal visible={guideOpen} animationType="fade" transparent onRequestClose={() => setGuideOpen(false)}>
           <Pressable style={styles.modalBackdrop} onPress={() => setGuideOpen(false)} />
           <View style={styles.modalSheetWrap} pointerEvents="box-none">
@@ -694,11 +591,12 @@ export default function CityScreen() {
                     contentContainerStyle={{ paddingBottom: 6 }}
                     showsVerticalScrollIndicator={false}
                   >
-                    <View style={{ gap: 12 }}>
-                      {guideFull.blocks.map((b, idx) => (
-                        <GuideSectionCard key={`m-${idx}`} heading={b.heading} text={b.text} />
-                      ))}
-                    </View>
+                    {guideFull.blocks.map((b, idx) => (
+                      <View key={`g-${idx}`} style={styles.guideBlock}>
+                        {b.heading ? <Text style={styles.guideBlockTitle}>{b.heading}</Text> : null}
+                        <Text style={styles.modalBodyText}>{b.text}</Text>
+                      </View>
+                    ))}
                   </ScrollView>
                 )}
               </View>
@@ -760,18 +658,6 @@ const styles = StyleSheet.create({
   },
   miniPillText: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: theme.fontWeight.black },
 
-  openFullCard: {
-    paddingVertical: 12,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: "rgba(79,224,138,0.18)",
-    backgroundColor: Platform.OS === "android" ? "rgba(10,12,14,0.18)" : "rgba(10,12,14,0.14)",
-    alignItems: "center",
-    justifyContent: "center",
-    overflow: "hidden",
-  },
-  openFullText: { color: theme.colors.text, fontSize: 13, fontWeight: theme.fontWeight.black },
-
   block: { borderRadius: 24 },
   blockInner: { padding: 14, gap: 12 },
   blockTitle: { color: theme.colors.text, fontSize: 18, fontWeight: theme.fontWeight.black },
@@ -784,13 +670,7 @@ const styles = StyleSheet.create({
 
   bulletList: { gap: 10, paddingTop: 2 },
   bulletRow: { flexDirection: "row", gap: 10, alignItems: "flex-start" },
-  bulletDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 999,
-    marginTop: 7,
-    backgroundColor: "rgba(79,224,138,0.65)",
-  },
+  bulletDot: { width: 6, height: 6, borderRadius: 999, marginTop: 7, backgroundColor: "rgba(79,224,138,0.65)" },
   bulletText: { flex: 1, color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold, lineHeight: 19 },
 
   center: { paddingVertical: 14, alignItems: "center", gap: 10 },
@@ -798,7 +678,6 @@ const styles = StyleSheet.create({
 
   month: { color: theme.colors.textTertiary, fontSize: 13, fontWeight: theme.fontWeight.black, letterSpacing: 0.2 },
 
-  // Fixture row
   fxRow: {
     borderRadius: 18,
     borderWidth: 1,
@@ -846,7 +725,6 @@ const styles = StyleSheet.create({
   },
   planBtnText: { color: theme.colors.text, fontSize: 12, fontWeight: theme.fontWeight.black },
 
-  // Modal
   modalBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.58)" },
   modalSheetWrap: { flex: 1, justifyContent: "flex-end" },
   modalSheet: { borderRadius: 22, marginHorizontal: theme.spacing.lg, marginBottom: theme.spacing.lg, overflow: "hidden" },
@@ -863,4 +741,17 @@ const styles = StyleSheet.create({
   },
   modalCloseText: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: theme.fontWeight.black },
   modalScroll: { maxHeight: 560 },
+
+  guideBlock: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    backgroundColor: Platform.OS === "android" ? "rgba(12,14,16,0.20)" : "rgba(12,14,16,0.16)",
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    gap: 8,
+    marginBottom: 10,
+  },
+  guideBlockTitle: { color: theme.colors.text, fontSize: 14, fontWeight: theme.fontWeight.black },
+  modalBodyText: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold, lineHeight: 19 },
 });
