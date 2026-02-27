@@ -68,8 +68,68 @@ export const bundesligaTeamGuides: Record<string, TeamGuide> = {
   ],
   links: [
     { "label": "Official Website", "url": "https://www.fcaugsburg.de" },
-    { "label": "Tickets", "url": "https://www.fcaugsburg.de/tickets" },
-    { "label": "WWK Arena Info", "url": "https://www.fcaugsburg.de/stadion" }
+"augsburg": {
+  teamKey: "augsburg",
+  name: "FC Augsburg",
+  city: "Augsburg",
+  country: "Germany",
+  stadium: "WWK Arena",
+  sections: [
+    {
+      title: "Club Overview",
+      body:
+        "FC Augsburg are a properly established Bundesliga club with a very clear modern identity: organised, resilient, and built to compete through structure rather than star power. They’re not a club that sells you romance or glamour — they sell you competitiveness and fight.\n\nAugsburg’s story is ‘stability earned the hard way’. They’ve spent enough time in the top flight now that survival isn’t treated like a miracle, but it’s still the baseline target. Their best seasons come when the squad balance is right and the team turns the WWK Arena into a genuine points factory.\n\nFor neutral travellers, Augsburg are a strong pick if you want an authentic Bundesliga weekend without the mega-tourist feel: a historic, walkable city, efficient matchday logistics, and a ground that feels modern and football-first."
+    },
+    {
+      title: "History & Legacy",
+      body:
+        "Augsburg’s historical footprint is smaller than Germany’s great traditional clubs, but their modern legacy is significant: they turned themselves from a regional-level institution into a stable Bundesliga operator.\n\nThe defining legacy point is that Augsburg’s top-flight status is not a ‘cameo’ — it became normal. That matters in Germany, where the gap between established Bundesliga clubs and everyone else is brutal.\n\nTheir identity is rooted in the Bavarian-Swabian region: pragmatic, grounded, and proud of doing things without pretending to be something they’re not."
+    },
+    {
+      title: "Recent Seasons",
+      body:
+        "Augsburg’s recent seasons usually sit in the same pressure bracket: avoiding being dragged into a full-scale relegation panic while trying to build enough consistency to sit safely mid-table.\n\nPatterns you’ll keep seeing:\n• Runs of form driven by organisation and physical output.\n• Games decided by small margins — set pieces, transitions, game management.\n• Home form doing the heavy lifting.\n\nWhen Augsburg are working, they look like a team that knows exactly how to compete: uncomfortable to play against, hard to break down, and capable of turning opponent mistakes into goals. When they’re off, they can look blunt in possession and struggle to create enough chances — that’s usually the fault line."
+    },
+    {
+      title: "Playing Style",
+      body:
+        "Augsburg typically play competitive, intensity-driven football with a strong emphasis on structure.\n\nCommon traits:\n• Compact shape out of possession.\n• Physical duels and second-ball focus.\n• Direct progression when space opens.\n• Heavy importance on set pieces and deliveries.\n\nThey’re not usually a ‘slow possession’ team. Augsburg want the match to be contested: disrupt rhythm, win territory, and turn the game into a sequence of winnable moments.\n\nFor neutrals, this often produces games that feel urgent rather than sterile — even if they aren’t always pretty, they’re rarely passive."
+    },
+    {
+      title: "Stadium Profile",
+      body:
+        "WWK Arena is a modern, football-specific stadium opened in 2009.\n\nApproximate capacity: 30,000.\n\nIt’s clean, efficient, and built for Bundesliga matchday flow: good sightlines, covered stands, and a layout that keeps you close to the pitch. It won’t give you ‘historic cathedral’ vibes — it gives you a sharp, modern German matchday that works exactly as it should.\n\nPractical reality: it’s out-of-centre compared to some classic urban grounds, so the matchday experience is more ‘travel out, do the game, travel back’ than ‘stadium embedded in dense neighbourhood streets.’"
+    },
+    {
+      title: "Atmosphere & Matchday Feel",
+      body:
+        "Augsburg’s atmosphere is authentic and engaged rather than famous-for-Europe levels.\n\nTypical patterns:\n• Steady, family-friendly crowd energy.\n• Noticeable noise surges during tackles, defensive stands, and momentum swings.\n• Stronger volume in big fixtures and when the game has survival pressure.\n\nThe WWK can feel properly intense when Augsburg are under siege or chasing a result late. It’s not a constant wall-of-noise stadium — it’s a ‘match-driven’ stadium where the crowd reacts hard to the game state."
+    },
+    {
+      title: "Rivalries",
+      body:
+        "Augsburg’s rivalry heat is more regional than nationally iconic.\n\nMatches against Bayern Munich carry natural Bavarian edge, but it’s not a classic derby in competitive symmetry.\n\nFixtures against nearby southern clubs can feel sharper because geography matters — it’s less about historic hatred and more about regional pride and bragging rights."
+    },
+    {
+      title: "Legends",
+      body:
+        "Augsburg’s legend culture is modern-era focused — icons are usually tied to the club’s Bundesliga establishment rather than distant trophy eras.\n\nExpect local recognition for long-serving captains, promotion-era leaders, and players associated with keeping the club in the top flight.\n\nThis is a club where ‘service’ and ‘identity’ often matter more than global fame."
+    },
+    {
+      title: "Supporter Culture",
+      body:
+        "Augsburg support is loyal, grounded, and expectation-aware.\n\nKey traits:\n• High appreciation for effort, discipline, and visible fight.\n• Low tolerance for passive performances.\n• Pride in being an established Bundesliga club without big-club resources.\n\nThe vibe is more ‘proper local Bundesliga’ than tourist spectacle. You’ll see families, local regulars, and a supporter base that treats the club as part of normal city life."
+    },
+    {
+      title: "Neutral Visitor Notes",
+      body:
+        "• Augsburg is an underrated city break: historic centre, easy to walk, and calmer than Munich.\n• WWK Arena is modern and efficient — good sightlines almost everywhere.\n• Best matchday feel tends to come in meaningful fixtures (regional edge, big opponent, or relegation-pressure games).\n• Plan transport: tram connections are straightforward, but post-match crowds can bottleneck — waiting 10–20 minutes often makes the ride back easier.\n• Strong choice if you want ‘real Bundesliga’ without the mega-club chaos."
+    }
+  ],
+  links: [
+    { label: "Official Website", url: "https://www.fcaugsburg.de" },
+    { label: "Tickets", url: "https://www.fcaugsburg.de/tickets" },
+    { label: "WWK Arena Info", url: "https://www.fcaugsburg.de/stadion" }
   ],
   updatedAt: "2026-01-27"
 },
