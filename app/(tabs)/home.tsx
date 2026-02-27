@@ -41,29 +41,21 @@ import { buildSearchIndex, querySearchIndex, type SearchResult } from "@/src/ser
 import { hasTeamGuide } from "@/src/data/teamGuides";
 import { getCityGuide } from "@/src/data/cityGuides";
 import { getFlagImageUrl } from "@/src/utils/flagImages";
+import { getPopularTeams, POPULAR_TEAM_IDS } from "@/src/data/teams";
 
 const API_SPORTS_TEAM_LOGO = (teamId: number) => `https://media.api-sports.io/football/teams/${teamId}.png`;
 
 type ShortcutWindow = { from: string; to: string };
 
 type CityChip = { name: string; countryCode: string };
-type TeamChip = { name: string; teamId: number };
 
-// Popular cities/teams (Home-only)
+// Popular cities (Home-only)
 const POPULAR_CITIES: CityChip[] = [
   { name: "Paris", countryCode: "FR" },
   { name: "Rome", countryCode: "IT" },
   { name: "Barcelona", countryCode: "ES" },
   { name: "Amsterdam", countryCode: "NL" },
   { name: "Lisbon", countryCode: "PT" },
-];
-
-const POPULAR_TEAMS: TeamChip[] = [
-  { name: "Real Madrid", teamId: 541 },
-  { name: "Arsenal", teamId: 42 },
-  { name: "Bayern Munich", teamId: 157 },
-  { name: "Inter Milan", teamId: 505 },
-  { name: "Borussia Dortmund", teamId: 165 },
 ];
 
 // Home should NOT show 25+ leagues. Curate top leagues for Home scroller only.
@@ -183,9 +175,8 @@ function scoreFixture(r: FixtureListRow): number {
   const homeId = r?.teams?.home?.id;
   const awayId = r?.teams?.away?.id;
 
-  const popularIds = new Set(POPULAR_TEAMS.map((t) => t.teamId));
-  if (typeof homeId === "number" && popularIds.has(homeId)) s += 60;
-  if (typeof awayId === "number" && popularIds.has(awayId)) s += 60;
+  if (typeof homeId === "number" && POPULAR_TEAM_IDS.has(homeId)) s += 60;
+  if (typeof awayId === "number" && POPULAR_TEAM_IDS.has(awayId)) s += 60;
 
   const venue = String(r?.fixture?.venue?.name ?? "").trim();
   const city = String(r?.fixture?.venue?.city ?? "").trim();
@@ -473,7 +464,15 @@ export default function HomeScreen() {
   }, []);
 
   const cities = useMemo(() => dedupeBy(POPULAR_CITIES, (c) => toKey(c.name)).slice(0, 5), []);
-  const teams = useMemo(() => dedupeBy(POPULAR_TEAMS, (t) => String(t.teamId)).slice(0, 5), []);
+
+  const popularTeams = useMemo(() => {
+    // Only show teams with a numeric teamId (needed for crest).
+    const raw = getPopularTeams();
+    return raw
+      .filter((t) => typeof t.teamId === "number")
+      .map((t) => ({ name: t.name, teamId: t.teamId as number }))
+      .slice(0, 5);
+  }, []);
 
   // How + Discover prefs
   const [howOpen, setHowOpen] = useState(false);
@@ -588,34 +587,10 @@ export default function HomeScreen() {
 
   const quickTiles = useMemo(
     () => [
-      {
-        key: "weekend",
-        title: "Weekend Break",
-        sub: "Best for 1–2 nights",
-        icon: "📅",
-        onPress: () => goBuildTripGlobal(nextWeekendWindowIso()),
-      },
-      {
-        key: "daytrip",
-        title: "Day Trip",
-        sub: "Pick a same-day kickoff",
-        icon: "⏱️",
-        onPress: () => goBuildTripGlobal(windowFromTomorrowIso(14)),
-      },
-      {
-        key: "midweek",
-        title: "Midweek Escape",
-        sub: "One-night quick break",
-        icon: "⚡",
-        onPress: () => goBuildTripGlobal(windowFromTomorrowIso(7)),
-      },
-      {
-        key: "fixtures",
-        title: "Browse Fixtures",
-        sub: "Explore all options",
-        icon: "🎟️",
-        onPress: () => goFixturesAll(),
-      },
+      { key: "weekend", title: "Weekend Break", sub: "Best for 1–2 nights", icon: "📅", onPress: () => goBuildTripGlobal(nextWeekendWindowIso()) },
+      { key: "daytrip", title: "Day Trip", sub: "Pick a same-day kickoff", icon: "⏱️", onPress: () => goBuildTripGlobal(windowFromTomorrowIso(14)) },
+      { key: "midweek", title: "Midweek Escape", sub: "One-night quick break", icon: "⚡", onPress: () => goBuildTripGlobal(windowFromTomorrowIso(7)) },
+      { key: "fixtures", title: "Browse Fixtures", sub: "Explore all options", icon: "🎟️", onPress: () => goFixturesAll() },
     ],
     [goBuildTripGlobal, goFixturesAll]
   );
@@ -656,7 +631,6 @@ export default function HomeScreen() {
   }, [nextTrip]);
 
   return (
-    // Brighten the Home background: lower overlay opacity.
     <Background imageSource={getBackground("home")} overlayOpacity={0.62}>
       <SafeAreaView style={styles.container} edges={["top"]}>
         <ScrollView
@@ -772,25 +746,15 @@ export default function HomeScreen() {
               {!showSearchResults ? (
                 <View style={styles.popularBlock}>
                   <Text style={styles.sectionKicker}>Popular Cities</Text>
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.popularRow}
-                    decelerationRate="fast"
-                  >
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.popularRow} decelerationRate="fast">
                     {cities.map((c) => (
                       <CityChipPremium key={`pc-${c.name}`} name={c.name} countryCode={c.countryCode} onPress={() => setQ(c.name)} />
                     ))}
                   </ScrollView>
 
                   <Text style={[styles.sectionKicker, { marginTop: 10 }]}>Popular Teams</Text>
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.popularRow}
-                    decelerationRate="fast"
-                  >
-                    {teams.map((t) => (
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.popularRow} decelerationRate="fast">
+                    {popularTeams.map((t) => (
                       <Pressable
                         key={`pt-${t.teamId}`}
                         onPress={() => setQ(t.name)}
@@ -815,7 +779,6 @@ export default function HomeScreen() {
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>Upcoming Matches</Text>
 
-                {/* Keep ONLY View All */}
                 <Pressable onPress={goFixturesAll} style={({ pressed }) => [styles.miniPill, pressed && { opacity: 0.9 }]}>
                   <Text style={styles.miniPillText}>View All</Text>
                 </Pressable>
@@ -856,7 +819,7 @@ export default function HomeScreen() {
                       <Text style={styles.blockKicker}>Featured Pick</Text>
 
                       <Pressable
-                        onPress={() => goMatch(String(featured.fixture.id))}
+                        onPress={() => router.push({ pathname: "/match/[id]", params: { id: String(featured.fixture.id), leagueId: String(league.leagueId), season: String(league.season), from: fromIso, to: toIso } } as any)}
                         style={({ pressed }) => [styles.featured, pressed && styles.pressedRow]}
                         android_ripple={{ color: "rgba(79,224,138,0.08)" }}
                       >
@@ -910,7 +873,6 @@ export default function HomeScreen() {
                         })}
                       </View>
 
-                      {/* Keep ONLY Start A Trip Hub, centered */}
                       <Pressable
                         onPress={() => goBuildTripGlobal()}
                         style={({ pressed }) => [styles.singleCta, styles.btn, styles.btnPrimary, pressed && styles.pressed]}
@@ -939,7 +901,6 @@ export default function HomeScreen() {
                 <View style={styles.blockInner}>
                   <View style={styles.hubTop}>
                     <Text style={styles.hubKicker}>Trip Hub</Text>
-                    {/* Sentence case body copy */}
                     <Text style={styles.hubSub}>Store everything in one place: match, stays, links, notes and bookings.</Text>
                   </View>
 
@@ -1509,12 +1470,7 @@ const styles = StyleSheet.create({
   btnGhost: { borderColor: "rgba(255,255,255,0.10)", backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle },
   btnGhostText: { color: theme.colors.textSecondary, fontSize: 14, fontWeight: theme.fontWeight.black },
 
-  // Single centered CTA in Upcoming Matches card
-  singleCta: {
-    alignSelf: "center",
-    marginTop: 2,
-    width: "72%",
-  },
+  singleCta: { alignSelf: "center", marginTop: 2, width: "72%" },
 
   hubTop: {
     borderRadius: 16,
