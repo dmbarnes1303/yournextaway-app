@@ -1,1442 +1,618 @@
+// src/data/cityGuides/laLiga.ts
 import type { CityGuide } from "./types";
 
+/**
+ * GetYourGuide affiliate entry points (city-level “things to do” pages).
+ * Keep this as a single, obvious map so monetisation doesn’t get scattered.
+ *
+ * If a city doesn't have a clean GYG city landing page, leave it undefined and
+ * let UI fall back to buildAffiliateLinks({ city }).experiencesUrl.
+ */
+const GYG = {
+  barcelona: "https://www.getyourguide.com/en-gb/barcelona-l45/?partner_id=MAQJREP&utm_medium=online_publisher",
+  madrid: "https://www.getyourguide.com/en-gb/madrid-l46/?partner_id=MAQJREP&utm_medium=online_publisher",
+  bilbao: "https://www.getyourguide.com/en-gb/bilbao-l93/?partner_id=MAQJREP&utm_medium=online_publisher",
+  valencia: "https://www.getyourguide.com/en-gb/valencia-l49/?partner_id=MAQJREP&utm_medium=online_publisher",
+  seville: "https://www.getyourguide.com/en-gb/seville-l48/?partner_id=MAQJREP&utm_medium=online_publisher",
+  "san-sebastian":
+    "https://www.getyourguide.com/en-gb/san-sebastian-l94/?partner_id=MAQJREP&utm_medium=online_publisher",
+  // Palma city landing exists but the slug can vary; this ID-based page is stable.
+  "palma-de-mallorca": "https://www.getyourguide.com/en-gb/-l1260/?partner_id=MAQJREP&utm_medium=online_publisher",
+} as const;
+
 export const laLigaCityGuides: Record<string, CityGuide> = {
+  barcelona: {
+    cityId: "barcelona",
+    name: "Barcelona",
+    country: "Spain",
+    thingsToDoUrl: GYG.barcelona,
 
-barcelona: {
-  cityId: "barcelona",
-  name: "Barcelona",
-  country: "Spain",
-  tripAdvisorTopThingsUrl: "https://www.tripadvisor.com/Attractions-g187497-Activities-Barcelona_Catalonia.html",
-  overview:
-    "Barcelona combines world-class football, Mediterranean beaches, striking architecture, and one of Europe’s strongest food cultures. It is compact, walkable in the centre, and easy to navigate by metro, making it ideal for short football-focused breaks or longer city stays. Expect late nights, busy matchdays, and a strong street-life culture in almost every neighbourhood.",
+    overview:
+      "Barcelona is football + Mediterranean city life done properly: walkable neighbourhoods, great metro coverage, and enough standout sights to fill a weekend without over-planning. The win is pacing—cluster your days by area, book the one or two big attractions you care about, and keep matchday logistics boring and predictable.",
 
-  topThings: [
-    {
-      title: "Sagrada Família",
-      tip: "Book timed tickets several days ahead. Go early morning or late afternoon to avoid peak crowds.",
-    },
-    {
-      title: "Las Ramblas → Gothic Quarter walk",
-      tip: "Use Las Ramblas only as a corridor. Spend time in the Gothic Quarter’s side streets instead.",
-    },
-    {
-      title: "Park Güell",
-      tip: "Buy tickets online. Upper free areas still give good views if tickets sell out.",
-    },
-    {
-      title: "Barceloneta Beach",
-      tip: "Morning is calmer. Afternoons get busy and loud.",
-    },
-    {
-      title: "Montjuïc Hill",
-      tip: "Combine cable car, castle, and Olympic area in one half-day loop.",
-    },
-    {
-      title: "La Boqueria Market",
-      tip: "Go early and walk past the first few stalls for better prices.",
-    },
-    {
-      title: "El Born district",
-      tip: "Great area for evening food and bars. Wander, don’t plan tightly.",
-    },
-    {
-      title: "Casa Batlló or Casa Milà",
-      tip: "Choose one modernist house, not both, unless you’re an architecture fanatic.",
-    },
-    {
-      title: "Camp Nou / Olympic Stadium area",
-      tip: "Allow extra travel time on matchdays. Metro queues can be heavy.",
-    },
-    {
-      title: "Rooftop bar sunset",
-      tip: "Hotel rooftops offer better views than crowded viewpoints.",
-    },
-  ],
+    topThings: [
+      { title: "Sagrada Família", tip: "Book timed entry ahead. Early morning or late afternoon is the cleanest crowd profile." },
+      { title: "Gothic Quarter wander", tip: "Use Las Ramblas only as a corridor—your time belongs in the side streets." },
+      { title: "Park Güell", tip: "Get tickets online. If sold out, the upper/free areas still deliver strong viewpoints." },
+      { title: "El Born evenings", tip: "Pick one dinner booking, then let the rest be pintxo/tapas-style roaming." },
+      { title: "Montjuïc half-day loop", tip: "Cable car + castle + Olympic area works as one coherent block." },
+      { title: "La Boqueria market", tip: "Go early and walk past the first few stalls; the front row is tourist pricing." },
+      { title: "Beach reset (Barceloneta)", tip: "Morning is calmer. Afternoon can be noisy—choose it intentionally." },
+      { title: "Modernisme house (Casa Batlló OR Casa Milà)", tip: "Choose one unless you’re genuinely architecture-obsessed." },
+      { title: "Rooftop sunset", tip: "Hotel rooftops often beat crowded viewpoints for comfort + views." },
+      { title: "Matchday neighbourhood walk", tip: "Arrive early and walk the stadium area. The build-up is part of the experience." },
+    ],
 
-  tips: [
-    "Dinner rarely starts before 8pm. Many kitchens peak 9–10pm.",
-    "Pickpocketing exists in tourist zones. Zip pockets and cross-body bags.",
-    "Metro is faster than taxis at rush hour.",
-    "Book stadium tours and big attractions in advance on weekends.",
-    "Avoid restaurants with photo menus in tourist zones.",
-    "Pre-match drinks near stadiums fill early.",
-  ],
+    tips: [
+      "Dinner runs late (8:30pm+). Don’t panic—plan around it.",
+      "Pickpocket risk is real in tourist corridors. Zip pockets + cross-body bag.",
+      "Metro is faster than taxis during peak congestion.",
+      "Book big attractions for weekends—walk-ins get punished.",
+      "Avoid photo-menu restaurants in the busiest tourist strips.",
+      "On matchdays, build buffer time for metro queues near the ground.",
+    ],
 
-  food: [
-    "Tapas in El Born",
-    "Seafood paella by the coast",
-    "Bombas (potato croquettes)",
-    "Jamón + pan con tomate",
-    "Late-night churros and chocolate",
-  ],
+    food: [
+      "Tapas in El Born",
+      "Seafood rice near the coast",
+      "Jamón + pan con tomate",
+      "Bakeries for quick breakfast",
+      "Late-night churros and chocolate",
+    ],
 
-  transport:
-    "Barcelona Metro is cheap, clean, and extensive. A multi-day transport card usually pays for itself. Walking is ideal inside Ciutat Vella and Eixample. Airport trains and metro go directly into the city.",
+    transport:
+      "Metro is simple and extensive. Walking is best in Ciutat Vella/Eixample. If you’ll do multiple rides, a multi-journey/multi-day option usually pays back quickly.",
 
-  accommodation:
-    "Best bases: Eixample for central access, El Born for atmosphere, Poble-sec for value. Prioritise being near a metro line over being beachfront.",
-
-  // Football context
-  teams: [
-    {
-      name: "FC Barcelona",
-      teamId: "barcelona",
-      teamGuidePath: "/team/barcelona",
-    },
-    {
-      name: "RCD Espanyol",
-      teamId: "espanyol",
-      teamGuidePath: "/team/espanyol",
-    },
-  ],
-
-  // Monetisation entry points (future-wired)
-  bookingLinks: {
-    hotels: true,
-    flights: true,
-    trains: true,
-    experiences: true,
+    accommodation:
+      "Best bases: Eixample for convenience, El Born for atmosphere, Poble-sec for value. Prioritise being near a strong metro line over being ‘near the beach’.",
   },
 
-  // Fixtures surface hint (handled by app logic)
-  showUpcomingFixtures: true,
-},
+  madrid: {
+    cityId: "madrid",
+    name: "Madrid",
+    country: "Spain",
+    thingsToDoUrl: GYG.madrid,
 
-madrid: {
-  cityId: "madrid",
-  name: "Madrid",
-  country: "Spain",
-  tripAdvisorTopThingsUrl: "https://www.tripadvisor.com/Attractions-g187514-Activities-Madrid.html",
-  overview:
-    "Madrid is energetic, walkable, and built around food, nightlife, and football culture. The city feels alive late into the night, yet is easy to navigate and friendly for short trips. It’s one of Europe’s best cities for combining big-club football with neighbourhood exploration and relaxed daytime sightseeing.",
+    overview:
+      "Madrid is one of Europe’s best football-weekend cities: lively late, walkable central districts, and neighbourhoods that feel distinct without needing long travel. Build days around food and one strong cultural block, then let the evening carry itself.",
 
-  topThings: [
-    {
-      title: "Prado Museum",
-      tip: "Go early. Pick specific galleries instead of trying to see everything.",
-    },
-    {
-      title: "Retiro Park",
-      tip: "Ideal mid-day reset between sightseeing blocks.",
-    },
-    {
-      title: "Gran Vía evening walk",
-      tip: "Better after dark when the street lights up.",
-    },
-    {
-      title: "Puerta del Sol → Plaza Mayor",
-      tip: "Quick photos then move on; don’t linger too long.",
-    },
-    {
-      title: "Temple of Debod sunset",
-      tip: "Arrive early for space. Small but scenic.",
-    },
-    {
-      title: "La Latina tapas crawl",
-      tip: "Late afternoon into evening is best.",
-    },
-    {
-      title: "Malasaña nightlife",
-      tip: "Bars fill after 10pm.",
-    },
-    {
-      title: "Bernabéu area",
-      tip: "Explore before matchday to avoid crowds.",
-    },
-    {
-      title: "Metropolitano district",
-      tip: "Modern stadium area, plan transport ahead.",
-    },
-    {
-      title: "Rooftop terrace",
-      tip: "Many hotels offer skyline views without museum-style queues.",
-    },
-  ],
+    topThings: [
+      { title: "Prado Museum", tip: "Go early. Pick 2–3 sections rather than trying to ‘complete’ it." },
+      { title: "Retiro Park", tip: "Perfect mid-day reset between sightseeing blocks." },
+      { title: "Gran Vía after dark", tip: "The street reads better at night—lights, energy, people." },
+      { title: "Sol → Plaza Mayor loop", tip: "Quick photos, then move on. Don’t burn prime time here." },
+      { title: "Temple of Debod sunset", tip: "Arrive early for space; it’s small but scenic." },
+      { title: "La Latina tapas", tip: "Late afternoon into evening is the sweet spot." },
+      { title: "Malasaña night", tip: "Bars wake up after 10pm—don’t show up at 8 and call it dead." },
+      { title: "One rooftop terrace", tip: "Skyline views without a museum-style queue." },
+      { title: "Neighbourhood coffee loop", tip: "Madrid is a ‘walk and stop’ city. Keep it loose and it’s better." },
+      { title: "Matchday approach", tip: "Plan your transport in/out. Post-match crowds make improvisation expensive." },
+    ],
 
-  tips: [
-    "Lunch is typically 2–4pm. Dinner 8:30pm onwards.",
-    "Metro is faster than taxis at busy times.",
-    "Carry small change for cafés and bakeries.",
-    "Book stadium tours in advance on weekends.",
-    "Build days by neighbourhood rather than criss-crossing the city.",
-  ],
+    tips: [
+      "Lunch is often 2–4pm; dinner 8:30pm onwards—plan meals, don’t fight the rhythm.",
+      "Metro beats taxis when the city is busy.",
+      "Build days by neighbourhood (not scattered pins on a map).",
+      "Book stadium tours and popular restaurants on weekends.",
+      "Carry a bit of cash for small cafés/bakeries.",
+    ],
 
-  food: [
-    "Bocadillo de calamares",
-    "Churros con chocolate",
-    "Jamón ibérico",
-    "Tortilla española",
-    "Vermouth bars",
-  ],
+    food: [
+      "Bocadillo de calamares",
+      "Churros con chocolate",
+      "Jamón ibérico",
+      "Tortilla española",
+      "Vermouth bars",
+    ],
 
-  transport:
-    "Extensive metro network with clear signage. Multi-journey tickets are good value. Walking works well in central districts.",
+    transport:
+      "Madrid Metro is extensive and easy. Walking covers the centre well; use metro for longer jumps and to avoid wasting time in traffic.",
 
-  accommodation:
-    "Best areas: Sol/Gran Vía for first visits, Malasaña for nightlife, Salamanca for quieter upscale stays.",
-
-  // Football context
-  teams: [
-    {
-      name: "Real Madrid",
-      teamId: "real-madrid",
-      teamGuidePath: "/team/real-madrid",
-    },
-    {
-      name: "Atlético Madrid",
-      teamId: "atletico-madrid",
-      teamGuidePath: "/team/atletico-madrid",
-    },
-    {
-      name: "Rayo Vallecano",
-      teamId: "rayo-vallecano",
-      teamGuidePath: "/team/rayo-vallecano",
-    },
-    {
-      name: "Getafe CF",
-      teamId: "getafe",
-      teamGuidePath: "/team/getafe",
-    },
-  ],
-
-  // Monetisation entry points
-  bookingLinks: {
-    hotels: true,
-    flights: true,
-    trains: true,
-    experiences: true,
+    accommodation:
+      "Best bases: Sol/Gran Vía for first-timers, Malasaña for nightlife, Salamanca for quieter upscale. Prioritise walkability to food + metro access.",
   },
-
-  // Fixtures surface hint
-  showUpcomingFixtures: true,
-},
-
-villarreal: {
-  cityId: "villarreal",
-  name: "Villarreal",
-  country: "Spain",
-  tripAdvisorTopThingsUrl: "https://www.tripadvisor.com/Attractions-g1028711-Activities-Villarreal_Province_of_Castellon_Valencian_Community.html",
-  overview:
-    "Villarreal is a compact football-focused town best known for punching far above its weight through Villarreal CF. It’s ideal for travellers who want a relaxed base, easy matchday logistics, and access to the Costa del Azahar coastline without big-city crowds.",
-
-  topThings: [
-    {
-      title: "Estadio de la Cerámica",
-      tip: "Do the stadium tour if available. On matchday arrive early for atmosphere.",
-    },
-    {
-      title: "Plaza Mayor",
-      tip: "Central square for coffee, drinks, and people-watching.",
-    },
-    {
-      title: "Iglesia Arciprestal San Jaime",
-      tip: "Quick historic stop near the centre.",
-    },
-    {
-      title: "Villarreal town walk",
-      tip: "Entire centre is walkable in under an hour.",
-    },
-    {
-      title: "Castellón de la Plana",
-      tip: "15–20 minutes by train for bigger city dining options.",
-    },
-    {
-      title: "Grao de Castellón beach",
-      tip: "Combine beach time with seafood lunch.",
-    },
-    {
-      title: "Local ceramics shops",
-      tip: "Town is historically linked to ceramics manufacturing.",
-    },
-    {
-      title: "Tapas near stadium",
-      tip: "Bars around the ground fill up pre-match.",
-    },
-    {
-      title: "Café culture",
-      tip: "Late morning coffee is a local habit.",
-    },
-    {
-      title: "Matchday wandering",
-      tip: "Arrive 60–90 minutes before kickoff for best atmosphere.",
-    },
-  ],
-
-  tips: [
-    "Villarreal is small—don’t over-plan.",
-    "Most visitors stay in Castellón for more hotel choice.",
-    "English is less widely spoken than big cities; basic Spanish helps.",
-    "Match tickets often sell well—buy early.",
-    "Post-match trains back to Castellón get busy.",
-  ],
-
-  food: [
-    "Paella Valenciana",
-    "Seafood rice dishes",
-    "Tapas",
-    "Local pastries",
-  ],
-
-  transport:
-    "Villarreal has a train station with regional connections. Walking covers most of the town.",
-
-  accommodation:
-    "Limited hotel stock in town. Castellón de la Plana offers more choice and easy rail access.",
-
-  // Football context
-  teams: [
-    {
-      name: "Villarreal CF",
-      teamId: "villarreal",
-      teamGuidePath: "/team/villarreal",
-    },
-  ],
-
-  // Monetisation entry points
-  bookingLinks: {
-    hotels: true,
-    flights: true,
-    trains: true,
-    experiences: true,
-  },
-
-  // Fixtures surface hint
-  showUpcomingFixtures: true,
-},
-
-seville: {
-  cityId: "seville",
-  name: "Seville",
-  country: "Spain",
-  tripAdvisorTopThingsUrl: "https://www.tripadvisor.com/Attractions-g187443-Activities-Seville_Province_of_Seville_Andalucia.html",
-  overview:
-    "Seville is one of Spain’s great cultural capitals, famous for historic architecture, tapas culture, and intense football rivalries. It delivers high-impact sightseeing, strong nightlife, and excellent value compared with Madrid or Barcelona.",
-
-  topThings: [
-    {
-      title: "Seville Cathedral & Giralda Tower",
-      tip: "Go early. Climb the tower for city views.",
-    },
-    {
-      title: "Real Alcázar",
-      tip: "Book timed tickets in advance.",
-    },
-    {
-      title: "Plaza de España",
-      tip: "Best visited early morning or sunset.",
-    },
-    {
-      title: "Barrio Santa Cruz",
-      tip: "Wander without a map.",
-    },
-    {
-      title: "Metropol Parasol (Las Setas)",
-      tip: "Great sunset viewpoint.",
-    },
-    {
-      title: "Triana district",
-      tip: "Authentic tapas and flamenco roots.",
-    },
-    {
-      title: "Guadalquivir river walk",
-      tip: "Evening stroll is ideal.",
-    },
-    {
-      title: "Flamenco show",
-      tip: "Book a small venue rather than tourist mega-shows.",
-    },
-    {
-      title: "Mercado de Triana",
-      tip: "Casual food stop.",
-    },
-    {
-      title: "Matchday walk-up",
-      tip: "Stadium areas build atmosphere hours before kickoff.",
-    },
-  ],
-
-  tips: [
-    "Siesta hours still affect some businesses.",
-    "Summer daytime sightseeing is brutal—start early.",
-    "Most central areas are walkable.",
-    "Book major sights ahead in peak season.",
-    "Derby days sell out fast.",
-  ],
-
-  food: [
-    "Jamón ibérico",
-    "Salmorejo",
-    "Croquetas",
-    "Espinacas con garbanzos",
-  ],
-
-  transport:
-    "Metro is limited but useful. Walking and buses cover most routes.",
-
-  accommodation:
-    "Old Town and Triana are strong bases. Avoid staying too far out.",
-
-  // Football context
-  teams: [
-    {
-      name: "Sevilla FC",
-      teamId: "sevilla",
-      teamGuidePath: "/team/sevilla",
-    },
-    {
-      name: "Real Betis",
-      teamId: "real-betis",
-      teamGuidePath: "/team/real-betis",
-    },
-  ],
-
-  // Monetisation entry points
-  bookingLinks: {
-    hotels: true,
-    flights: true,
-    trains: true,
-    experiences: true,
-  },
-
-  // Fixtures surface hint
-  showUpcomingFixtures: true,
-},
-
-vigo: {
-  cityId: "vigo",
-  name: "Vigo",
-  country: "Spain",
-  tripAdvisorTopThingsUrl: "https://www.tripadvisor.com/Attractions-g187509-Activities-Vigo_Province_of_Pontevedra_Galicia.html",
-  overview:
-    "Vigo is a working Atlantic port city in Galicia with strong maritime identity, excellent seafood, and a proud football culture centred on Celta Vigo. It feels more local and less touristic than Spain’s major cities, making it ideal for travellers who want authenticity over spectacle.",
-
-  topThings: [
-    {
-      title: "Casco Vello (Old Town)",
-      tip: "Walk uphill from the port for bars and viewpoints.",
-    },
-    {
-      title: "Monte O Castro",
-      tip: "Best panoramic views over the city and bay.",
-    },
-    {
-      title: "Port area & marina",
-      tip: "Good for evening strolls.",
-    },
-    {
-      title: "Cíes Islands boat trip",
-      tip: "Book ahead in summer.",
-    },
-    {
-      title: "Samil Beach",
-      tip: "Best city beach option.",
-    },
-    {
-      title: "Seafood restaurants in O Berbés",
-      tip: "Look for busy local spots.",
-    },
-    {
-      title: "Praza da Constitución",
-      tip: "Good café base.",
-    },
-    {
-      title: "Shopping on Príncipe Street",
-      tip: "Compact pedestrian zone.",
-    },
-    {
-      title: "Seafood market visit",
-      tip: "Morning best.",
-    },
-    {
-      title: "Matchday walk-up",
-      tip: "Bars around Balaídos fill early.",
-    },
-  ],
-
-  tips: [
-    "Expect rain more often than southern Spain.",
-    "Seafood quality is outstanding.",
-    "English less widely spoken—basic Spanish helps.",
-    "Walking shoes useful.",
-    "Relaxed pace of life.",
-  ],
-
-  food: [
-    "Pulpo a la gallega",
-    "Grilled octopus",
-    "Empanadas",
-    "Fresh shellfish",
-  ],
-
-  transport:
-    "City buses cover most areas. Taxis inexpensive. Centre is walkable.",
-
-  accommodation:
-    "Stay near Old Town or waterfront for best atmosphere.",
-
-  // Football context
-  teams: [
-    {
-      name: "RC Celta Vigo",
-      teamId: "celta-vigo",
-      teamGuidePath: "/team/celta-vigo",
-    },
-  ],
-
-  // Monetisation entry points
-  bookingLinks: {
-    hotels: true,
-    flights: true,
-    trains: true,
-    experiences: true,
-  },
-
-  // Fixtures surface hint
-  showUpcomingFixtures: true,
-},
-
-sanSebastian: {
-  cityId: "san-sebastian",
-  name: "San Sebastián",
-  country: "Spain",
-  tripAdvisorTopThingsUrl: "https://www.tripadvisor.com/Attractions-g187457-Activities-San_Sebastian_Donostia_Province_of_Guipuzcoa_Basque_Country.html",
-  overview:
-    "San Sebastián (Donostia) is a compact, polished coastal city famous for beaches, food, and walkability. It delivers one of the best short-break football + food combinations in Europe, with everything concentrated around the bay and old town.",
-
-  topThings: [
-    {
-      title: "La Concha Beach",
-      tip: "Morning walk is best before crowds arrive.",
-    },
-    {
-      title: "Parte Vieja (Old Town)",
-      tip: "Base for pintxos hopping.",
-    },
-    {
-      title: "Monte Urgull",
-      tip: "Free viewpoints over the bay.",
-    },
-    {
-      title: "Monte Igueldo funicular",
-      tip: "Classic city viewpoint.",
-    },
-    {
-      title: "Zurriola Beach",
-      tip: "Surf-focused beach area.",
-    },
-    {
-      title: "San Telmo Museum",
-      tip: "Good Basque culture overview.",
-    },
-    {
-      title: "Boulevard area",
-      tip: "Easy walking hub.",
-    },
-    {
-      title: "Pintxos crawl",
-      tip: "Small plates, many stops.",
-    },
-    {
-      title: "Evening harbour walk",
-      tip: "Relaxed atmosphere.",
-    },
-    {
-      title: "Matchday stroll",
-      tip: "Bars around stadium fill steadily.",
-    },
-  ],
-
-  tips: [
-    "One of Spain’s more expensive food cities.",
-    "Eat earlier than Madrid but later than UK.",
-    "Compact centre—walk almost everywhere.",
-    "Book restaurants ahead on weekends.",
-    "Bring layers even in summer evenings.",
-  ],
-
-  food: [
-    "Pintxos",
-    "Txuleta steak",
-    "Cheesecake (Basque style)",
-    "Seafood rice",
-  ],
-
-  transport:
-    "Walkable centre. Local buses for beaches and stadium.",
-
-  accommodation:
-    "Old Town and Centro best for short stays.",
-
-  // Football context
-  teams: [
-    {
-      name: "Real Sociedad",
-      teamId: "real-sociedad",
-      teamGuidePath: "/team/real-sociedad",
-    },
-  ],
-
-  // Monetisation entry points
-  bookingLinks: {
-    hotels: true,
-    flights: true,
-    trains: true,
-    experiences: true,
-  },
-
-  // Fixtures surface hint
-  showUpcomingFixtures: true,
-},
-
-  pamplona: {
-  cityId: "pamplona",
-  name: "Pamplona",
-  country: "Spain",
-  tripAdvisorTopThingsUrl: "https://www.tripadvisor.com/Attractions-g187520-Activities-Pamplona_Navarra.html",
-  overview:
-    "Pamplona is a compact historic city in northern Spain best known for the Running of the Bulls, but year-round it offers a relaxed old town, strong food culture, and an easy football-focused short break.",
-
-  topThings: [
-    {
-      title: "Plaza del Ayuntamiento",
-      tip: "Central old town hub.",
-    },
-    {
-      title: "Ciudadela Park",
-      tip: "Green space near centre.",
-    },
-    {
-      title: "Pamplona Cathedral",
-      tip: "Historic core landmark.",
-    },
-    {
-      title: "Plaza del Castillo",
-      tip: "Good café square.",
-    },
-    {
-      title: "Old Town walk",
-      tip: "Easy wandering streets.",
-    },
-    {
-      title: "Bull Run route",
-      tip: "Marked path through streets.",
-    },
-    {
-      title: "Tapas crawl",
-      tip: "Try several bars.",
-    },
-    {
-      title: "Yamaguchi Park",
-      tip: "Quieter park area.",
-    },
-    {
-      title: "Local markets",
-      tip: "Good for lunch supplies.",
-    },
-    {
-      title: "Pre-match drinks area",
-      tip: "Bars around centre fill first.",
-    },
-  ],
-
-  tips: [
-    "Very walkable centre.",
-    "Food quality is high for size of city.",
-    "Book hotels early if match + festival periods.",
-    "Evenings are relaxed rather than wild.",
-    "Small city—1–2 days is ideal.",
-  ],
-
-  food: [
-    "Pintxos",
-    "Chistorra sausage",
-    "Lamb stews",
-    "Local wine",
-  ],
-
-  transport:
-    "Walkable centre. Local buses cover suburbs and stadium area.",
-
-  accommodation:
-    "Old Town or near Plaza del Castillo works best.",
-
-  // Football context
-  teams: [
-    {
-      name: "Osasuna",
-      teamId: "osasuna",
-      teamGuidePath: "/team/osasuna",
-    },
-  ],
-
-  // Monetisation entry points
-  bookingLinks: {
-    hotels: true,
-    flights: true,
-    trains: true,
-    experiences: true,
-  },
-
-  // Fixtures surface hint
-  showUpcomingFixtures: true,
-},
-
-  girona: {
-  cityId: "girona",
-  name: "Girona",
-  country: "Spain",
-  tripAdvisorTopThingsUrl: "https://www.tripadvisor.com/Attractions-g187499-Activities-Girona_Province_of_Girona_Catalonia.html",
-
-  overview:
-    "Girona is a beautiful, compact Catalan city with medieval architecture, excellent food culture, and a relaxed pace that suits a football-led weekend perfectly. It offers a strong alternative to Barcelona: cheaper, calmer, highly walkable, and still rich in history, atmosphere, and dining quality. Girona works especially well for short breaks built around a match plus old-town wandering and slow meals.",
-
-  topThings: [
-    {
-      title: "Girona Cathedral",
-      tip: "Climb the steps early morning or near sunset for lighter crowds and better photos. Go inside — the nave is the widest Gothic nave in the world."
-    },
-    {
-      title: "Onyar River Houses",
-      tip: "Best viewpoints from Eiffel Bridge and Pont de Pedra. Morning light is best for colour."
-    },
-    {
-      title: "Jewish Quarter (El Call)",
-      tip: "Get lost on purpose. Narrow lanes, stone staircases, and hidden courtyards."
-    },
-    {
-      title: "City Walls Walk",
-      tip: "Walk the full stretch if weather allows. Great skyline views and easy orientation."
-    },
-    {
-      title: "Plaça de la Independència",
-      tip: "Main dining square for lunch or early evening."
-    },
-    {
-      title: "Rambla de la Llibertat",
-      tip: "Coffee strip and shopping spine."
-    },
-    {
-      title: "Arab Baths",
-      tip: "Quick cultural stop (30 minutes)."
-    },
-    {
-      title: "Sant Feliu Church",
-      tip: "Nice interior and river views nearby."
-    },
-    {
-      title: "Devesa Park",
-      tip: "Good reset space between sightseeing blocks."
-    },
-    {
-      title: "Pre-match old town walk",
-      tip: "Start in centre, walk outward toward stadium area gradually."
-    }
-  ],
-
-  tips: [
-    "Girona is small — plan slow, not stacked itineraries.",
-    "Most restaurants close mid-afternoon; plan lunch earlier.",
-    "Book top restaurants Fri–Sun.",
-    "Comfortable shoes matter (stone streets + steps).",
-    "Matchday: eat before heading toward stadium zone.",
-    "If flying into Barcelona, train to Girona is simple.",
-  ],
-
-  food: [
-    "Catalan set-menu lunches",
-    "Seafood rice dishes",
-    "Tapas & vermouth bars",
-    "Bakery breakfast + coffee",
-    "Ice cream along the Rambla",
-  ],
-
-  transport:
-    "Historic centre is fully walkable. Local buses serve outer districts. Trains connect Girona with Barcelona and the Costa Brava region.",
-
-  accommodation:
-    "Old Town for atmosphere. Eixample district for modern hotels and easy access. Prioritise walkability over luxury.",
-
-  // Football context
-  teams: [
-    {
-      name: "Girona FC",
-      teamId: "girona",
-      teamGuidePath: "/team/girona",
-    },
-  ],
-
-  // Monetisation entry points
-  bookingLinks: {
-    hotels: true,
-    flights: true,
-    trains: true,
-    experiences: true,
-  },
-
-  // Fixtures surface hint
-  showUpcomingFixtures: true,
-},
-
-  elche: {
-  cityId: "elche",
-  name: "Elche",
-  country: "Spain",
-  tripAdvisorTopThingsUrl: "https://www.tripadvisor.com/Attractions-g187524-Activities-Elche_Province_of_Alicante_Valencian_Community.html",
-
-  overview:
-    "Elche (Elx) is a relaxed southeastern Spanish city best known for its vast palm groves, UNESCO-listed landscape, and calm everyday rhythm. It suits travellers who want a lower-intensity football weekend combined with warm weather, simple sightseeing, and easy access to beaches via nearby Alicante or Santa Pola. Elche is not about blockbuster attractions — it’s about space, sunshine, and slow, local Spanish living.",
-
-  topThings: [
-    {
-      title: "Palmeral of Elche (Palm Grove)",
-      tip: "Walk the central park paths in the morning or golden hour. It’s the city’s defining feature."
-    },
-    {
-      title: "Huerto del Cura Garden",
-      tip: "Paid botanical garden with the famous Imperial Palm. 45–60 minute visit."
-    },
-    {
-      title: "Basilica of Santa Maria",
-      tip: "Go inside, then walk around the square for coffee."
-    },
-    {
-      title: "Altamira Palace",
-      tip: "Small archaeological museum inside medieval fortress."
-    },
-    {
-      title: "Elche Archaeological Museum (MAHE)",
-      tip: "Good context for Iberian and Roman history."
-    },
-    {
-      title: "Municipal Park (Parque Municipal)",
-      tip: "Green space near river and palm groves."
-    },
-    {
-      title: "Glorieta area",
-      tip: "Central square for cafés and people-watching."
-    },
-    {
-      title: "Shopping streets (Corredora / Major de la Vila)",
-      tip: "Compact pedestrian zone."
-    },
-    {
-      title: "Santa Pola beach trip",
-      tip: "30 minutes by bus for seaside afternoon."
-    },
-    {
-      title: "Pre-match local bar crawl",
-      tip: "Small bars around centre rather than stadium zone."
-    }
-  ],
-
-  tips: [
-    "Elche runs at a slow pace — embrace it.",
-    "Most sightseeing fits into half a day.",
-    "Lunch menus (menú del día) offer best value.",
-    "Shops may close mid-afternoon.",
-    "Hydrate well in warmer months.",
-    "Evenings start late; dinner 8:30–10pm is normal.",
-  ],
-
-  food: [
-    "Arroz con costra (local speciality)",
-    "Paella / rice dishes",
-    "Tapas bars",
-    "Bakery breakfast",
-    "Seafood near coast",
-  ],
-
-  transport:
-    "City centre is walkable. Buses connect to beaches and Alicante. Alicante-Elche airport is nearby for arrivals.",
-
-  accommodation:
-    "Central Elche for simplicity. Alternatively stay in Alicante and train/bus in for matchday.",
-
-  // Football context
-  teams: [
-    {
-      name: "Elche CF",
-      teamId: "elche",
-      teamGuidePath: "/team/elche",
-    },
-  ],
-
-  // Monetisation entry points
-  bookingLinks: {
-    hotels: true,
-    flights: true,
-    trains: true,
-    experiences: true,
-  },
-
-  // Fixtures surface hint
-  showUpcomingFixtures: true,
-},
 
   bilbao: {
-  cityId: "bilbao",
-  name: "Bilbao",
-  country: "Spain",
-  tripAdvisorTopThingsUrl: "https://www.tripadvisor.com/Attractions-g187454-Activities-Bilbao_Province_of_Vizcaya_Basque_Country.html",
+    cityId: "bilbao",
+    name: "Bilbao",
+    country: "Spain",
+    thingsToDoUrl: GYG.bilbao,
 
-  overview:
-    "Bilbao is one of Spain’s best football-trip cities: compact, characterful, food-obsessed, and culturally rich. The city blends industrial heritage with modern architecture and an extremely strong local identity. It works perfectly for 2–3 night breaks combining football, pintxos crawling, and relaxed sightseeing.",
+    overview:
+      "Bilbao is elite for football trips: compact, characterful, and built around food. It’s a city where a simple plan wins—one cultural anchor, one long pintxos evening, and a matchday that’s calm because logistics are easy.",
 
-  topThings: [
-    {
-      title: "Guggenheim Museum Bilbao",
-      tip: "Visit early morning or late afternoon. Even if you skip inside, walk the exterior."
-    },
-    {
-      title: "Casco Viejo (Old Town)",
-      tip: "Base yourself here for bars, food, and atmosphere."
-    },
-    {
-      title: "Pintxos crawl",
-      tip: "Small plates, one drink per bar, move often."
-    },
-    {
-      title: "Ribera Market",
-      tip: "Good daytime food stop."
-    },
-    {
-      title: "Zubizuri Bridge",
-      tip: "Short riverside walk."
-    },
-    {
-      title: "Funicular to Mount Artxanda",
-      tip: "Best city viewpoint."
-    },
-    {
-      title: "San Mamés Stadium exterior",
-      tip: "Walk past even on non-matchdays."
-    },
-    {
-      title: "Azkuna Zentroa",
-      tip: "Cultural centre with cafés."
-    },
-    {
-      title: "Abando district",
-      tip: "Shopping and restaurants."
-    },
-    {
-      title: "Day trip to Getxo coast",
-      tip: "If staying longer."
-    }
-  ],
+    topThings: [
+      { title: "Guggenheim (inside or just exterior loop)", tip: "Even if you skip entry, do the riverside exterior walk—high impact, low time." },
+      { title: "Casco Viejo (Old Town)", tip: "Base for bars and atmosphere. Wander, don’t route-plan." },
+      { title: "Pintxos crawl", tip: "One drink + one bite, then move. Don’t camp in one place." },
+      { title: "Ribera Market", tip: "Strong daytime food stop. Go hungry." },
+      { title: "Mount Artxanda viewpoint", tip: "Best city overview. Ideal before dinner." },
+      { title: "Riverside walk", tip: "A simple connector that makes the city feel coherent." },
+      { title: "Azkuna Zentroa", tip: "Good indoor reset and coffee stop." },
+      { title: "Abando district", tip: "Shopping + nicer hotels; good ‘base’ area." },
+      { title: "Coastal add-on (Getxo)", tip: "If you have a spare half-day, it’s a strong contrast to the city core." },
+      { title: "Matchday approach", tip: "Arrive early and walk the stadium area—Bilbao build-up is quality." },
+    ],
 
-  tips: [
-    "Food culture is elite — budget for eating well.",
-    "Book restaurants Friday/Saturday.",
-    "Rain is common — pack waterproofs.",
-    "Most sightseeing fits in walking radius.",
-    "Pre-match bars cluster near San Mamés.",
-  ],
+    tips: [
+      "Budget to eat well—this is a food city.",
+      "Rain is common; pack a light waterproof.",
+      "Book Friday/Saturday dinner if you want a specific restaurant.",
+      "Most of the core is walkable—taxis are usually unnecessary.",
+      "Treat pintxos as a ‘many stops’ game, not one big meal.",
+    ],
 
-  food: [
-    "Pintxos",
-    "Txuleta steak",
-    "Bacalao dishes",
-    "Cheesecake Basque-style",
-  ],
+    food: ["Pintxos", "Txuleta steak", "Bacalao dishes", "Basque cheesecake"],
 
-  transport:
-    "Metro and tram are simple. Centre is walkable.",
+    transport:
+      "Metro and tram are simple. Walking covers most central routes. Use public transport for coast/outskirts rather than taxis.",
 
-  accommodation:
-    "Old Town or Abando are best bases.",
-
-  teams: [
-    {
-      name: "Athletic Club Bilbao",
-      teamId: "athletic-bilbao",
-      teamGuidePath: "/team/athletic-bilbao",
-    },
-  ],
-
-  bookingLinks: {
-    hotels: true,
-    flights: true,
-    trains: true,
-    experiences: true,
+    accommodation:
+      "Old Town for atmosphere, Abando for convenience and hotel choice. Prioritise walkability to food + easy transit.",
   },
-
-  showUpcomingFixtures: true,
-},
 
   valencia: {
-  cityId: "valencia",
-  name: "Valencia",
-  country: "Spain",
-  tripAdvisorTopThingsUrl: "https://www.tripadvisor.com/Attractions-g187529-Activities-Valencia_Province_of_Valencia_Valencian_Community.html",
+    cityId: "valencia",
+    name: "Valencia",
+    country: "Spain",
+    thingsToDoUrl: GYG.valencia,
 
-  overview:
-    "Valencia blends historic old town, futuristic architecture, and a Mediterranean beach lifestyle into one of Spain’s most rounded football-trip cities. It offers strong sightseeing value, excellent food, reliable transport, and two major football clubs — making it ideal for both short weekend breaks and longer stays.",
+    overview:
+      "Valencia is one of Spain’s most rounded weekend cities: historic old town, futuristic architecture, and beach lifestyle in a single place. It’s easy to structure days cleanly—one culture block, one food block, one sea-air reset—and still have plenty left for matchday.",
 
-  topThings: [
-    {
-      title: "City of Arts & Sciences",
-      tip: "Go early morning or near sunset for best photos and fewer crowds."
-    },
-    {
-      title: "Valencia Cathedral & Miguelete Tower",
-      tip: "Climb for city views."
-    },
-    {
-      title: "Central Market (Mercado Central)",
-      tip: "Great breakfast or lunch stop."
-    },
-    {
-      title: "Turia Gardens",
-      tip: "Walk or cycle through former riverbed park."
-    },
-    {
-      title: "La Lonja de la Seda",
-      tip: "Quick historic highlight."
-    },
-    {
-      title: "Malvarrosa Beach",
-      tip: "Combine with seafood lunch."
-    },
-    {
-      title: "El Carmen district",
-      tip: "Bars, street art, nightlife."
-    },
-    {
-      title: "Oceanogràfic",
-      tip: "Half-day attraction if interested."
-    },
-    {
-      title: "Ruzafa neighbourhood",
-      tip: "Trendy food and cocktail area."
-    },
-    {
-      title: "Mestalla exterior",
-      tip: "Walk past even if not attending match."
-    }
-  ],
+    topThings: [
+      { title: "City of Arts & Sciences", tip: "Go early or near sunset for the best photos and fewer crowds." },
+      { title: "Central Market (Mercado Central)", tip: "Best for breakfast/lunch supplies. Don’t go when you’re already full." },
+      { title: "Turia Gardens", tip: "Walk or cycle; it’s the city’s best ‘reset’ corridor." },
+      { title: "Cathedral + Miguelete Tower", tip: "Climb for orientation—then the city makes more sense." },
+      { title: "La Lonja de la Seda", tip: "Quick historic highlight with high payoff." },
+      { title: "Ruzafa", tip: "Strong food/cocktail neighbourhood; ideal evening base." },
+      { title: "El Carmen", tip: "Old streets + bars; best at night." },
+      { title: "Malvarrosa Beach", tip: "Weekday mornings are calm. Pair with seafood lunch." },
+      { title: "Paella proper", tip: "Do it once, do it well—avoid tourist strip traps." },
+      { title: "Matchday timing", tip: "Eat before heading to the stadium area—post-match kitchens can be chaos." },
+    ],
 
-  tips: [
-    "This is the home of paella — order paella Valenciana (rabbit/chicken) if you want authentic.",
-    "Most attractions are walkable or bikeable.",
-    "Evenings start late; dinner after 8pm.",
-    "Book match tickets early for big games.",
-    "Beaches are best weekday mornings."
-  ],
+    tips: [
+      "This is paella territory—order intentionally (and don’t expect it in 10 minutes).",
+      "Dinner runs late; plan one earlier meal if you hate 10pm dining.",
+      "City centre is walkable; use metro/tram for beach and longer jumps.",
+      "Book Fri/Sat restaurants if you care where you eat.",
+      "Heat can be serious in summer—do sightseeing early/late.",
+    ],
 
-  food: [
-    "Paella Valenciana",
-    "Seafood rice",
-    "Horchata + fartons",
-    "Fresh orange juice",
-  ],
+    food: ["Paella Valenciana", "Seafood rice", "Horchata + fartons", "Fresh orange juice", "Tapas in Ruzafa"],
 
-  transport:
-    "Metro links airport to city. Trams run to beach. Bikes popular.",
+    transport:
+      "Metro links airport; trams run to the beach. Walking covers the central core. Bikes are popular for the Turia corridor.",
 
-  accommodation:
-    "Old Town for sightseeing, Ruzafa for nightlife, near Mestalla for match-focused stays.",
-
-  teams: [
-    {
-      name: "Valencia CF",
-      teamId: "valencia",
-      teamGuidePath: "/team/valencia",
-    },
-    {
-      name: "Levante UD",
-      teamId: "levante",
-      teamGuidePath: "/team/levante",
-    },
-  ],
-
-  bookingLinks: {
-    hotels: true,
-    flights: true,
-    trains: true,
-    experiences: true,
+    accommodation:
+      "Old Town for sightseeing, Ruzafa for nightlife/food, or near the centre for a clean all-round base. Prioritise walkability over ‘luxury’ rooms.",
   },
 
-  showUpcomingFixtures: true,
-},
+  seville: {
+    cityId: "seville",
+    name: "Seville",
+    country: "Spain",
+    thingsToDoUrl: GYG.seville,
+
+    overview:
+      "Seville is high-impact: historic architecture, intense street life, and a food culture built for roaming and small plates. It’s perfect for football trips because the centre is walkable and the atmosphere is consistent day to night.",
+
+    topThings: [
+      { title: "Cathedral & Giralda", tip: "Go early. The tower views are worth the effort." },
+      { title: "Real Alcázar", tip: "Timed tickets in advance—walk-ins get destroyed in peak periods." },
+      { title: "Plaza de España", tip: "Best at sunrise or sunset. Midday heat can be brutal." },
+      { title: "Barrio Santa Cruz", tip: "Wander without a route; it’s built for getting slightly lost." },
+      { title: "Triana", tip: "Cross the river for a more local-feeling evening." },
+      { title: "Metropol Parasol (Las Setas)", tip: "Strong sunset viewpoint if you time it right." },
+      { title: "Tapas crawl", tip: "Small orders, many stops. Don’t turn it into one long sit-down." },
+      { title: "Flamenco (small venue)", tip: "Book a smaller spot; big tourist shows are often sterile." },
+      { title: "Guadalquivir river walk", tip: "Easy evening reset and a clean connector between areas." },
+      { title: "Matchday build-up", tip: "Arrive early; the stadium-area atmosphere builds properly here." },
+    ],
+
+    tips: [
+      "Summer heat is no joke—start early and rest midday.",
+      "Some places still run siesta hours; plan meals around closures.",
+      "Walkability is a superpower here—don’t overuse taxis.",
+      "Derby weeks tighten tickets and hotels quickly—book early.",
+      "Aim for one ‘anchor’ booking each day, then roam.",
+    ],
+
+    food: ["Jamón ibérico", "Salmorejo", "Croquetas", "Espinacas con garbanzos", "Vermouth + olives"],
+
+    transport:
+      "Walking covers the core. Buses handle longer jumps; metro is limited but useful in specific corridors.",
+
+    accommodation:
+      "Old Town for first visits; Triana for a slightly calmer base with strong local vibe. Keep it walkable and your trip becomes effortless.",
+  },
+
+  "san-sebastian": {
+    cityId: "san-sebastian",
+    name: "San Sebastián",
+    country: "Spain",
+    thingsToDoUrl: GYG["san-sebastian"],
+
+    overview:
+      "San Sebastián (Donostia) is compact, polished, and built around food. It’s one of the best ‘football + eating’ weekends in Europe because the city is walkable, the bay is stunning, and you don’t need logistics to have a great time.",
+
+    topThings: [
+      { title: "La Concha bay walk", tip: "Do it early morning for calm and clean photos." },
+      { title: "Parte Vieja (Old Town)", tip: "The correct plan is pintxos roaming, not one big sit-down meal." },
+      { title: "Monte Urgull viewpoints", tip: "Free, easy, and gives instant orientation." },
+      { title: "Monte Igueldo funicular", tip: "Classic viewpoint; best in clear weather." },
+      { title: "Zurriola Beach", tip: "Surf vibe and a calmer alternative to the main bay." },
+      { title: "San Telmo Museum", tip: "Good Basque context without being a time sink." },
+      { title: "Harbour evening loop", tip: "Low effort, high vibe after dinner." },
+      { title: "One booked restaurant", tip: "If you want a specific place, reserve. Walk-ins get punished." },
+      { title: "Coffee + pastry morning", tip: "This city rewards slow mornings." },
+      { title: "Matchday timing", tip: "Bars fill steadily—arrive early if you want your pick of spots." },
+    ],
+
+    tips: [
+      "It can be pricier than other Spanish cities—budget accordingly.",
+      "Walk almost everywhere; taxis are rarely necessary.",
+      "Book weekends if you care where you eat.",
+      "Even summer evenings can be cool—bring a layer.",
+      "If weather is poor, pivot to food and museums, not forced viewpoints.",
+    ],
+
+    food: ["Pintxos", "Txuleta steak", "Basque cheesecake", "Seafood rice dishes"],
+
+    transport:
+      "Walkable centre; buses cover beaches and outer areas. Keep your base central and you won’t think about transport.",
+
+    accommodation:
+      "Centro or Old Town for short stays. Prioritise location over room size—your time will be outside eating.",
+  },
+
+  // Smaller / less consistently indexed by GYG city landing pages → leave thingsToDoUrl undefined.
+  // UI will fall back to buildAffiliateLinks({ city }).experiencesUrl.
+
+  villarreal: {
+    cityId: "villarreal",
+    name: "Villarreal",
+    country: "Spain",
+
+    overview:
+      "Villarreal is a compact football town that’s best treated as a relaxed base: simple matchday logistics, easy walking, and quick access to the wider Castellón coast. The trip works when you keep expectations realistic—this is football + calm Spanish rhythm, not a headline attraction city.",
+
+    topThings: [
+      { title: "Town centre loop", tip: "You can cover the core quickly—use it as a vibe check, not an all-day plan." },
+      { title: "Plaza Mayor coffee stop", tip: "Best simple people-watching base." },
+      { title: "Local tapas near centre", tip: "Choose busy local bars; quiet tourist-facing spots are weaker." },
+      { title: "Short walk before matchday", tip: "A calm pre-match reset makes the day feel like a ‘trip’ not just a game." },
+      { title: "Castellón de la Plana add-on", tip: "Easy for broader dining and nightlife choice." },
+      { title: "Coast half-day (if staying longer)", tip: "Pair beach time with seafood lunch to make the weekend feel bigger." },
+      { title: "Evening stroll", tip: "Spanish small-city evenings are built for slow walking + stopping." },
+      { title: "Matchday bar timing", tip: "Arrive earlier than you think if you want seating." },
+      { title: "Post-match exit plan", tip: "Have a plan for trains/taxis if returning to Castellón—surges happen." },
+      { title: "One strong meal booking", tip: "A single reservation makes the whole trip feel organised." },
+    ],
+
+    tips: [
+      "Don’t over-plan—small city rhythm wins here.",
+      "If you want hotel choice, Castellón is often the smarter base.",
+      "Basic Spanish helps more than in big tourist hubs.",
+      "After the match, transport back can spike—leave buffer time.",
+      "Treat it as football-led and it delivers.",
+    ],
+
+    food: ["Tapas", "Seafood rice dishes", "Simple grills", "Local bakeries for breakfast"],
+
+    transport:
+      "Walking covers most of Villarreal. Regional rail/bus connections make Castellón and the coast easy if you plan timings.",
+
+    accommodation:
+      "Limited central hotel stock—Castellón can be a practical base if prices/availability are better.",
+  },
+
+  vigo: {
+    cityId: "vigo",
+    name: "Vigo",
+    country: "Spain",
+
+    overview:
+      "Vigo is a working Atlantic port city in Galicia: less tourist gloss, more authenticity, excellent seafood, and a calm everyday rhythm. It’s ideal if you want a real local-feeling football weekend instead of a highlight-reel city break.",
+
+    topThings: [
+      { title: "Casco Vello (Old Town)", tip: "Walk uphill from the port for bars and viewpoints." },
+      { title: "Monte O Castro viewpoint", tip: "Best panoramic view over the bay." },
+      { title: "Port & marina evening walk", tip: "Strong low-effort sunset loop." },
+      { title: "Seafood in O Berbés", tip: "Pick busy local spots—Galicia does seafood properly." },
+      { title: "Samil Beach", tip: "Best city beach option; calmer earlier in the day." },
+      { title: "Day trip (Cíes Islands, seasonal)", tip: "Book ahead in summer if you want it—capacity can be limited." },
+      { title: "Praza da Constitución", tip: "Good café base in the centre." },
+      { title: "Market visit", tip: "Morning is best for energy and atmosphere." },
+      { title: "Neighbourhood bar crawl", tip: "Small bars beat ‘designed’ tourist venues here." },
+      { title: "Matchday pre-walk", tip: "Arrive early and let the build-up happen around the ground." },
+    ],
+
+    tips: [
+      "Expect more rain than southern Spain—bring a light waterproof.",
+      "English is less common; basic Spanish helps.",
+      "Seafood is the move—don’t waste meals on generic options.",
+      "Walking shoes matter (hills).",
+      "Keep plans simple and the city shines.",
+    ],
+
+    food: ["Pulpo a la gallega", "Shellfish", "Empanadas", "Seafood stews"],
+
+    transport:
+      "Centre is walkable; buses and taxis fill gaps. Don’t over-think it—Vigo is straightforward.",
+
+    accommodation:
+      "Old Town or waterfront areas give the best atmosphere and easiest evenings.",
+  },
+
+  pamplona: {
+    cityId: "pamplona",
+    name: "Pamplona",
+    country: "Spain",
+
+    overview:
+      "Pamplona is compact and historic with a strong food culture. Outside festival periods it’s calm, walkable, and perfect for a short football-led break where you want good eating, easy logistics, and zero stress.",
+
+    topThings: [
+      { title: "Plaza del Castillo", tip: "The natural base for coffee and a slow start." },
+      { title: "Old Town walk", tip: "Wander without a route—the streets are the point." },
+      { title: "Cathedral area", tip: "Quick cultural stop that anchors the historic core." },
+      { title: "Ciudadela Park", tip: "Good green reset between food blocks." },
+      { title: "Pintxos crawl", tip: "Small plates, many stops—don’t do one giant meal." },
+      { title: "Bull Run route (seasonal context)", tip: "Worth a quick look for the story even if you’re not here in July." },
+      { title: "Local markets", tip: "Good for casual lunch supplies." },
+      { title: "Evening squares", tip: "The city comes alive in concentrated pockets—easy night." },
+      { title: "Pre-match plan", tip: "Eat earlier; queues and packed kitchens are common on matchdays." },
+      { title: "Post-match move", tip: "Either leave cleanly or commit to one bar—don’t hover in the surge zone." },
+    ],
+
+    tips: [
+      "Very walkable—taxis are rarely needed.",
+      "Book early if you overlap with festival periods.",
+      "Food quality is high; avoid tourist traps near the most obvious squares.",
+      "Evenings are lively but not chaotic.",
+      "1–2 days is the ideal pace.",
+    ],
+
+    food: ["Pintxos", "Chistorra sausage", "Local stews", "Navarra wines"],
+
+    transport:
+      "Walkable centre; local buses cover outer areas. Simple city, simple logistics.",
+
+    accommodation:
+      "Old Town or near Plaza del Castillo gives the best short-break feel.",
+  },
+
+  girona: {
+    cityId: "girona",
+    name: "Girona",
+    country: "Spain",
+
+    overview:
+      "Girona is a compact Catalan gem: medieval streets, great food, and a calm pace that suits football-led weekends perfectly. It’s the right choice when you want ‘Barcelona energy’ nearby without Barcelona intensity and prices.",
+
+    topThings: [
+      { title: "Girona Cathedral", tip: "Go early or near sunset for lighter crowds and better photos." },
+      { title: "Jewish Quarter (El Call)", tip: "Get lost on purpose—this area rewards wandering." },
+      { title: "City Walls walk", tip: "Do the full stretch if weather allows—best skyline views." },
+      { title: "Onyar River houses", tip: "Best viewpoints from Pont de Pedra and Eiffel Bridge." },
+      { title: "Plaça de la Independència", tip: "Ideal lunch/dinner square—simple choice that works." },
+      { title: "Rambla de la Llibertat", tip: "Coffee strip and walking spine." },
+      { title: "Arab Baths", tip: "Quick cultural hit (30–45 minutes). Don’t overcommit." },
+      { title: "Devesa Park", tip: "Good reset space between sightseeing blocks." },
+      { title: "Slow evening roam", tip: "Girona evenings are built for walking + stopping, not rushing." },
+      { title: "Matchday pacing", tip: "Eat before heading toward the stadium area. Keep it calm." },
+    ],
+
+    tips: [
+      "Girona is small—plan slow rather than stacking 10 things.",
+      "Stone streets and steps: comfortable shoes matter.",
+      "Book Fri–Sun dining if you care where you eat.",
+      "If arriving via Barcelona, train logistics are simple—don’t overthink it.",
+      "The win is calm + quality meals + atmosphere.",
+    ],
+
+    food: ["Catalan set-menu lunches", "Tapas & vermouth bars", "Bakery breakfast + coffee", "Ice cream along the Rambla"],
+
+    transport:
+      "Historic centre is fully walkable. Trains connect Girona with Barcelona and wider Catalonia.",
+
+    accommodation:
+      "Old Town for atmosphere, Eixample for modern hotels and easy access. Location beats luxury here.",
+  },
+
+  elche: {
+    cityId: "elche",
+    name: "Elche",
+    country: "Spain",
+
+    overview:
+      "Elche (Elx) is relaxed and sunny, best known for its UNESCO-listed palm groves and everyday Spanish rhythm. It’s a football weekend for travellers who want low intensity: warm weather, simple sightseeing, and easy access to the Alicante coast.",
+
+    topThings: [
+      { title: "Palmeral (Palm Grove) walk", tip: "Do it in the morning or golden hour—this is the city’s signature." },
+      { title: "Huerto del Cura", tip: "45–60 minutes is enough. It’s a clean paid garden visit with a standout ‘Imperial Palm’." },
+      { title: "Basilica of Santa Maria", tip: "Quick stop, then coffee nearby." },
+      { title: "Altamira Palace area", tip: "Small historic block—good context without being a time sink." },
+      { title: "MAHE (archaeology museum)", tip: "A solid indoor option if heat or weather turns." },
+      { title: "Central squares (Glorieta)", tip: "People-watching and cafés—simple but effective." },
+      { title: "Shopping streets", tip: "Compact pedestrian zones; don’t burn prime hours here." },
+      { title: "Santa Pola beach add-on", tip: "Short bus ride for sea air and a seafood lunch." },
+      { title: "Menú del día lunch", tip: "Best value meal format—use it." },
+      { title: "Matchday bar plan", tip: "Choose busy local bars near centre rather than hunting ‘stadium attractions’." },
+    ],
+
+    tips: [
+      "Elche is calm—embrace the slower rhythm.",
+      "Most sightseeing fits half a day; don’t force a packed plan.",
+      "Shops can close mid-afternoon (siesta effect).",
+      "Hydration matters in hot months—plan shade breaks.",
+      "Dinner runs late as standard.",
+    ],
+
+    food: ["Arroz con costra (local)", "Rice dishes", "Tapas", "Bakery breakfasts", "Seafood near the coast"],
+
+    transport:
+      "Centre is walkable; buses connect to the coast and Alicante. Alicante–Elche airport proximity is a practical bonus.",
+
+    accommodation:
+      "Central Elche for simplicity, or base in Alicante for more hotel choice and do Elche as matchday.",
+  },
 
   "vitoria-gasteiz": {
-  cityId: "vitoria-gasteiz",
-  name: "Vitoria-Gasteiz",
-  country: "Spain",
-  tripAdvisorTopThingsUrl: "https://www.tripadvisor.com/Attractions-g187457-Activities-Vitoria_Gasteiz_Province_of_Alava_Basque_Country.html",
+    cityId: "vitoria-gasteiz",
+    name: "Vitoria-Gasteiz",
+    country: "Spain",
 
-  overview:
-    "Vitoria-Gasteiz is the compact, well-organised capital of Spain’s Basque Country and one of the most liveable cities in the region. It combines a beautifully preserved medieval old town, strong food culture, and a calm, authentic local atmosphere. For football travellers, it offers a relaxed alternative to larger Basque cities while still delivering a proper top-flight matchday experience through Deportivo Alavés.",
+    overview:
+      "Vitoria-Gasteiz is compact, tidy, and quietly brilliant: a medieval old town, strong pintxos culture, and a calm local vibe that makes football weekends feel easy. It’s a great Basque option if you want authenticity without the intensity (and prices) of the bigger neighbours.",
 
-  topThings: [
-    {
-      title: "Medieval Old Town (Casco Viejo)",
-      tip: "Start at Plaza de la Virgen Blanca and wander uphill."
-    },
-    {
-      title: "Santa María Cathedral",
-      tip: "Guided tours access towers and restoration areas."
-    },
-    {
-      title: "Plaza de la Virgen Blanca",
-      tip: "Main social square; good coffee stop."
-    },
-    {
-      title: "Florida Park",
-      tip: "Short green break near city centre."
-    },
-    {
-      title: "Basque Pintxos crawl",
-      tip: "Stick around Cuchillería Street."
-    },
-    {
-      title: "Green Ring cycle paths",
-      tip: "Easy cycling routes around city."
-    },
-    {
-      title: "Museo Artium",
-      tip: "Basque modern art focus."
-    },
-    {
-      title: "Los Arquillos",
-      tip: "Historic stepped arcades."
-    },
-    {
-      title: "Salburua Wetlands",
-      tip: "Nature reserve tram-accessible."
-    },
-    {
-      title: "Mendizorroza area walk",
-      tip: "Pre-match stroll near stadium."
-    }
-  ],
+    topThings: [
+      { title: "Casco Viejo (Medieval Old Town)", tip: "Start at Plaza de la Virgen Blanca and wander uphill." },
+      { title: "Santa Maria Cathedral", tip: "Guided tour is the best version—don’t just do a quick exterior photo." },
+      { title: "Cuchillería Street pintxos", tip: "Keep it to many small stops, not one big sit-down." },
+      { title: "Florida Park", tip: "Short green reset near the centre." },
+      { title: "Los Arquillos", tip: "A quick ‘this is different’ architectural moment." },
+      { title: "Museo Artium", tip: "Modern art option if you want one cultural anchor." },
+      { title: "Green Ring paths", tip: "Good if you want a light walk outside the centre." },
+      { title: "Coffee loop", tip: "This city rewards slow mornings." },
+      { title: "Pre-match pacing", tip: "Eat earlier, then drift towards the stadium area calmly." },
+      { title: "Post-match plan", tip: "Commit to one bar or leave cleanly—don’t get trapped in the surge." },
+    ],
 
-  tips: [
-    "City is very walkable.",
-    "Pintxos are cheaper than Bilbao/San Sebastián.",
-    "Dinner times run late.",
-    "Book stadium tickets early for big opponents.",
-    "Expect quiet nightlife midweek."
-  ],
+    tips: [
+      "Very walkable; taxis are rarely necessary.",
+      "Pintxos can be better value than Bilbao/San Sebastián.",
+      "Dinner runs late; plan accordingly.",
+      "Quiet midweek nightlife—weekend is livelier.",
+      "Keep the plan simple and it’s a perfect 1–2 night stop.",
+    ],
 
-  food: [
-    "Pintxos",
-    "Txuleta steak",
-    "Basque cheesecake",
-    "Local Rioja Alavesa wine"
-  ],
+    food: ["Pintxos", "Txuleta steak", "Basque cheesecake", "Rioja Alavesa wine"],
 
-  transport:
-    "Compact city; walking covers most areas. Trams and buses reliable.",
+    transport:
+      "Walking covers most of what you want. Trams and buses are reliable for longer jumps.",
 
-  accommodation:
-    "Stay near Old Town or along tram lines for easy stadium access.",
-
-  teams: [
-    {
-      name: "Deportivo Alavés",
-      teamId: "alaves",
-      teamGuidePath: "/team/alaves",
-    }
-  ],
-
-  bookingLinks: {
-    hotels: true,
-    flights: true,
-    trains: true,
-    experiences: true,
+    accommodation:
+      "Old Town/centre is the best base. Prioritise walkability to food and a simple matchday route.",
   },
 
-  showUpcomingFixtures: true,
-},
+  getafe: {
+    cityId: "getafe",
+    name: "Getafe",
+    country: "Spain",
 
-    "getafe": {
-  cityId: "getafe",
-  name: "Getafe",
-  country: "Spain",
-  tripAdvisorTopThingsUrl: "https://www.tripadvisor.com/Attractions-g562657-Activities-Getafe.html",
+    overview:
+      "Getafe is essentially a matchday satellite of Madrid. Treat it that way: stay and sightsee in Madrid, then travel into Getafe for the football. If you try to make Getafe a standalone tourist base, you’ll be forcing it.",
 
-  overview:
-    "Getafe is a working-class city immediately south of Madrid that functions primarily as a residential and football-focused destination rather than a classic tourist base. Most visitors will treat Getafe as a matchday satellite of Madrid: you stay or spend time in Madrid proper, then travel into Getafe specifically for the football. That dynamic suits short breaks perfectly — combine big-city sightseeing with a smaller-city La Liga matchday experience.",
+    topThings: [
+      { title: "Madrid as your main city block", tip: "Do the culture/food/neighbourhood time in Madrid, not here." },
+      { title: "Simple pre-match plan", tip: "Eat in Madrid or near Getafe centre before heading to the ground." },
+      { title: "Local café stop", tip: "Getafe centre is fine for coffee and a calm start." },
+      { title: "Matchday early arrival", tip: "Arrive 60–90 minutes early—options around the ground are limited." },
+      { title: "Post-match exit strategy", tip: "Walk away from the immediate surge before committing to transport." },
+      { title: "One calm drink", tip: "Either have one planned drink or leave—hovering is the worst option." },
+      { title: "Neighbourhood realism", tip: "Expect everyday Spain, not polished tourist infrastructure." },
+      { title: "Madrid night after", tip: "If you want nightlife, go back into Madrid—don’t try to force it locally." },
+      { title: "Quick essentials run", tip: "Use local shops for basics; keep it functional." },
+      { title: "Comfort-first pacing", tip: "This is about efficient football logistics, not sightseeing volume." },
+    ],
 
-  topThings: [
-    {
-      title: "Coliseum Stadium area",
-      tip: "Arrive at least 60–90 minutes before kickoff. There are limited attractions around the ground itself, so use this time for food, drinks, and soaking up pre-match atmosphere rather than sightseeing."
-    },
-    {
-      title: "Getafe city centre (Plaza General Palacio)",
-      tip: "Small but walkable hub with cafés, bakeries, and everyday Spanish life. Useful for a casual pre-match coffee or lunch."
-    },
-    {
-      title: "Cerro de los Ángeles",
-      tip: "Symbolic geographical centre of Spain. Best visited by taxi or rideshare if you have spare time and want a quiet viewpoint."
-    },
-    {
-      title: "Juan Carlos I Park (Madrid)",
-      tip: "Large modern park reachable via Metro if you are staying south of Madrid."
-    },
-    {
-      title: "Madrid city day exploration",
-      tip: "Treat Madrid itself as your main sightseeing base: museums, parks, neighbourhood walks, and food scenes."
-    },
-    {
-      title: "La Latina tapas zone (Madrid)",
-      tip: "Excellent pre-evening match food option if kickoff is late."
-    },
-    {
-      title: "Malasaña nightlife (Madrid)",
-      tip: "Better for post-match drinks than staying in Getafe."
-    },
-    {
-      title: "Retiro Park (Madrid)",
-      tip: "Good daytime break between sightseeing blocks."
-    },
-    {
-      title: "Bernabéu / Metropolitano areas",
-      tip: "If combining multiple matches, cluster Madrid stadium visits efficiently."
-    },
-    {
-      title: "Local neighbourhood bars",
-      tip: "Stick to busy, simple bars with locals rather than empty tourist-facing venues."
-    }
-  ],
+    tips: [
+      "Base in Madrid unless price forces you otherwise.",
+      "Plan return transport timing, especially for late kickoffs.",
+      "Expect a no-frills matchday environment—good, but not touristy.",
+      "Buffer time is required; crowds stack near kickoff and full-time.",
+      "Cash can still help in smaller bars.",
+    ],
 
-  tips: [
-    "Base yourself in Madrid unless you have a specific reason to stay overnight in Getafe. Transport links are fast and reliable.",
-    "Use Metro Line 12 (MetroSur) or Cercanías trains to reach Getafe; check return times for late kickoffs.",
-    "Eat in Madrid before travelling to the stadium area if you want broader choice.",
-    "Expect a more traditional, no-frills stadium environment rather than a polished tourist experience.",
-    "Allow buffer time on matchdays because MetroSur trains can become busy close to kickoff.",
-    "If attending a high-profile opponent match, secure tickets earlier than usual.",
-    "Spanish dinner runs late — plan food around kickoff rather than after if you dislike eating at 10pm+.",
-    "Cash is still useful in smaller neighbourhood bars.",
-    "Wear comfortable shoes: you’ll likely combine heavy walking in Madrid with transit to Getafe.",
-    "Treat Getafe as a football stop, not a sightseeing destination."
-  ],
+    food: ["Menú del día lunches", "Simple tapas", "Bakery breakfasts", "Grilled meats"],
 
-  food: [
-    "Traditional Spanish menus del día",
-    "Grilled meats",
-    "Simple tapas (patatas bravas, croquettes, calamari)",
-    "Coffee + pastries from local bakeries"
-  ],
+    transport:
+      "Best approached from Madrid via metro/train connections. Treat the whole thing as a planned out-and-back rather than a spontaneous hop.",
 
-  transport:
-    "Getafe is connected by Metro Line 12 (MetroSur), Cercanías trains, and buses. From central Madrid, expect roughly 30–40 minutes travel time. Walking inside Getafe is straightforward once you arrive.",
-
-  accommodation:
-    "Stay in Madrid city centre or along Metro Line 12 / Cercanías routes. Only stay in Getafe itself if price or proximity to the stadium is a priority.",
-
-  teams: [
-    {
-      name: "Getafe CF",
-      teamId: "getafe",
-      teamGuidePath: "/team/getafe",
-    }
-  ],
-
-  bookingLinks: {
-    hotels: true,
-    flights: true,
-    trains: true,
-    experiences: true,
+    accommodation:
+      "Madrid is the correct base for almost everyone. Only stay in Getafe if price or proximity is the priority.",
   },
 
-  showUpcomingFixtures: true,
-},
+  "palma-de-mallorca": {
+    cityId: "palma-de-mallorca",
+    name: "Palma de Mallorca",
+    country: "Spain",
+    thingsToDoUrl: GYG["palma-de-mallorca"],
 
-    "palma-de-mallorca": {
-  cityId: "palma-de-mallorca",
-  name: "Palma de Mallorca",
-  country: "Spain",
-  tripAdvisorTopThingsUrl: "https://www.tripadvisor.com/Attractions-g187463-Activities-Palma_de_Mallorca_Majorca_Balearic_Islands.html",
+    overview:
+      "Palma turns a football trip into a mini-holiday: historic old town, waterfront walks, strong food scene, and beach options without needing a packed itinerary. The trick is split-days—old town in the morning, sea air later, match in the evening.",
 
-  overview:
-    "Palma de Mallorca combines beach city energy with a historic old town and strong food scene, making it one of the easiest Mediterranean football trips to turn into a short holiday. It works well for travellers who want a balance of sightseeing, relaxed daytime pacing, and an evening match — without needing a packed itinerary.",
+    topThings: [
+      { title: "Palma Cathedral (La Seu)", tip: "Early morning for better light and fewer crowds; pair with a waterfront walk." },
+      { title: "Old Town wander", tip: "No rigid route—small squares and shaded streets are the value." },
+      { title: "Passeig del Born", tip: "Great for daytime strolling and evening atmosphere." },
+      { title: "Bellver Castle", tip: "Go for views; taxi/bus unless you love uphill walks." },
+      { title: "Port promenade at sunset", tip: "Easy win with drinks/dinner afterwards." },
+      { title: "Santa Catalina", tip: "One of the best food/bar neighbourhoods—ideal evening base." },
+      { title: "Beach reset", tip: "Choose a calmer beach window (morning/late afternoon) rather than peak midday." },
+      { title: "Market stop", tip: "Good for a casual food hit without a full restaurant sit-down." },
+      { title: "Matchday transport plan", tip: "Stadium isn’t central—decide taxi/bus timing early." },
+      { title: "One strong dinner booking", tip: "Peak season punishes walk-ins—book if you care where you eat." },
+    ],
 
-  topThings: [
-    {
-      title: "Palma Cathedral (La Seu)",
-      tip: "Visit early morning for fewer crowds and better light. Combine with a walk along the seafront afterwards."
-    },
-    {
-      title: "Old Town (Casco Antiguo)",
-      tip: "Wander without a rigid route. The value is in small squares, cafés, and shaded streets rather than ticking landmarks."
-    },
-    {
-      title: "Passeig del Born",
-      tip: "Good daytime stroll and evening atmosphere zone with cafés and bars."
-    },
-    {
-      title: "Bellver Castle",
-      tip: "Offers elevated views over Palma. Taxi or bus recommended unless you enjoy uphill walks."
-    },
-    {
-      title: "Port of Palma promenade",
-      tip: "Nice sunset walk; pair with drinks or dinner afterwards."
-    },
-    {
-      title: "City beach (Can Pere Antoni)",
-      tip: "Closest beach to the centre. Convenient rather than spectacular."
-    },
-    {
-      title: "Cala Major",
-      tip: "Better swimming beach reachable by bus or taxi."
-    },
-    {
-      title: "Santa Catalina neighbourhood",
-      tip: "One of the best food and bar areas in Palma."
-    },
-    {
-      title: "Mercat de l’Olivar",
-      tip: "Good daytime food stop or ingredient browsing."
-    },
-    {
-      title: "Matchday area (Estadi Mallorca Son Moix)",
-      tip: "Plan transport ahead; it’s outside the central walking zone."
-    }
-  ],
+    tips: [
+      "Split your day: old town + sea air beats trying to do everything at once.",
+      "Book restaurants Fri/Sat in peak season.",
+      "Stadium travel needs buffer time—expect queues after full-time.",
+      "Hydrate and plan shade if visiting in high summer.",
+      "Palma works best when it’s relaxed.",
+    ],
 
-  tips: [
-    "Palma is compact enough to walk most central areas comfortably.",
-    "Beach + city split days work better than trying to do everything in one block.",
-    "Book restaurants for Friday and Saturday nights in peak season.",
-    "Allow buffer time getting to Son Moix — it’s not central.",
-    "If visiting in summer, do sightseeing early and late; rest midday.",
-    "Tap water is drinkable.",
-    "Light clothing plus one warmer layer for evenings outside peak summer.",
-    "Matchday transport back can be slow; expect queues."
-  ],
+    food: ["Seafood", "Pa amb oli", "Tapas", "Ensaimadas (pastry)", "Mediterranean grills"],
 
-  food: [
-    "Seafood rice dishes",
-    "Pa amb oli",
-    "Tapas",
-    "Mallorcan pastries (ensaimadas)",
-    "Mediterranean fish restaurants"
-  ],
+    transport:
+      "Good bus network and cheap taxis. Plan stadium travel as a deliberate out-and-back rather than winging it.",
 
-  transport:
-    "Palma has a good bus network and cheap taxis. From the centre to Son Moix, allow roughly 20–30 minutes by taxi or bus depending on traffic.",
-
-  accommodation:
-    "Best areas: Old Town, Santa Catalina, or near Passeig del Born. Prioritise walkable access to food and nightlife rather than stadium proximity.",
-
-  teams: [
-    {
-      name: "RCD Mallorca",
-      teamId: "mallorca",
-      teamGuidePath: "/team/mallorca",
-    }
-  ],
-
-  bookingLinks: {
-    hotels: true,
-    flights: true,
-    trains: false,
-    experiences: true,
+    accommodation:
+      "Old Town, Santa Catalina, or near Passeig del Born are the best bases. Location to food + walking beats stadium proximity.",
   },
 
-  showUpcomingFixtures: true,
-},
+  oviedo: {
+    cityId: "oviedo",
+    name: "Oviedo",
+    country: "Spain",
 
-    "oviedo": {
-  cityId: "oviedo",
-  name: "Oviedo",
-  country: "Spain",
-  tripAdvisorTopThingsUrl: "https://www.tripadvisor.com/Attractions-g187454-Activities-Oviedo_Asturias.html",
+    overview:
+      "Oviedo is compact, elegant, and food-forward, with a historic centre that’s easy to explore on foot. It’s ideal for travellers who prefer culture, walkability, and a calmer northern Spain vibe over beach intensity.",
 
-  overview:
-    "Oviedo is a compact, elegant northern Spanish city with a historic centre, strong food culture, and a relaxed pace compared to Spain’s southern and coastal hubs. It suits travellers who prefer culture, walkability, and traditional Spanish atmosphere rather than beach-focused itineraries.",
+    topThings: [
+      { title: "Old Town loop", tip: "Walkable in under two hours, but allow longer for cafés and small squares." },
+      { title: "Cathedral of San Salvador", tip: "Anchor point for the historic core—do it early." },
+      { title: "Campo de San Francisco Park", tip: "Best mid-day reset space." },
+      { title: "Statue trail", tip: "Treat it as a casual scavenger hunt while you wander." },
+      { title: "Plaza del Fontán", tip: "Strong food/drinks square—great evening base." },
+      { title: "Sidrerías (cider houses)", tip: "Try several small pours; it’s part of the ritual." },
+      { title: "Monte Naranco viewpoints", tip: "Taxi/bus recommended; do it in clear weather." },
+      { title: "Local shopping spine", tip: "Useful connector, not a destination." },
+      { title: "Pre-match food plan", tip: "Eat earlier before travelling to the stadium area." },
+      { title: "Post-match calm exit", tip: "Leave cleanly or commit to one planned stop—avoid the surge zone." },
+    ],
 
-  topThings: [
-    {
-      title: "Oviedo Old Town",
-      tip: "Walkable in under two hours, but allow longer for cafés, shops, and small plazas."
-    },
-    {
-      title: "Cathedral of San Salvador",
-      tip: "Central landmark; combine with Old Town wandering."
-    },
-    {
-      title: "Campo de San Francisco Park",
-      tip: "Good green break between sightseeing blocks."
-    },
-    {
-      title: "Statue Trail",
-      tip: "Oviedo’s streets are dotted with sculptures — treat it as a casual scavenger hunt."
-    },
-    {
-      title: "Monte Naranco viewpoints",
-      tip: "Taxi or bus recommended for hilltop views and monuments."
-    },
-    {
-      title: "Sidrerías (cider houses)",
-      tip: "Core Asturian experience — try several small pours rather than one big order."
-    },
-    {
-      title: "Plaza del Fontán",
-      tip: "Lively square with bars and restaurants."
-    },
-    {
-      title: "Shopping streets (Calle Uría)",
-      tip: "Good central spine connecting areas."
-    },
-    {
-      title: "Pre-match bar stop",
-      tip: "Look near city centre before heading out."
-    },
-    {
-      title: "Matchday at Estadio Carlos Tartiere",
-      tip: "Modern stadium outside the historic core."
-    }
-  ],
+    tips: [
+      "Bring a light rain jacket—northern Spain is greener for a reason.",
+      "Food quality is strong across the city; avoid lazy tourist traps.",
+      "Cider culture is a ‘thing’ here—lean into it.",
+      "Book Fri/Sat dining if you care where you eat.",
+      "Centre is walkable—keep transport minimal.",
+    ],
 
-  tips: [
-    "Oviedo is easy to explore entirely on foot.",
-    "Food quality is high across the city; avoid tourist-only menus near main monuments.",
-    "Cider is traditionally poured from height — don’t be surprised.",
-    "Evenings are lively but not rowdy.",
-    "Bring a light rain jacket; northern Spain is greener for a reason.",
-    "Allow 25–30 minutes to reach the stadium.",
-    "Book restaurants Friday and Saturday nights.",
-    "Cash still useful in smaller bars."
-  ],
+    food: ["Fabada asturiana", "Local cheeses", "Seafood stews", "Sidra (cider)"],
 
-  food: [
-    "Fabada asturiana",
-    "Chorizo in cider",
-    "Seafood stews",
-    "Local cheeses",
-    "Sidra (cider)"
-  ],
+    transport:
+      "City centre is walkable; buses and taxis cover the stadium corridor in ~20–30 minutes depending on traffic.",
 
-  transport:
-    "City centre is walkable. Buses and taxis connect to Carlos Tartiere in around 20–30 minutes.",
-
-  accommodation:
-    "Stay near Old Town or Plaza del Fontán for best atmosphere and walkability.",
-
-  teams: [
-    {
-      name: "Real Oviedo",
-      teamId: "real-oviedo",
-      teamGuidePath: "/team/real-oviedo",
-    }
-  ],
-
-  bookingLinks: {
-    hotels: true,
-    flights: true,
-    trains: true,
-    experiences: true,
+    accommodation:
+      "Stay near Old Town or Plaza del Fontán for the best atmosphere + easiest evenings.",
   },
-
-  showUpcomingFixtures: true,
-},
-
-    };
+};
 
 export default laLigaCityGuides;
