@@ -1086,7 +1086,7 @@ export const bundesligaTeamGuides: Record<string, TeamGuide> = {
   updatedAt: "2026-01-27"
 },
 
- "wolfsburg": {
+  "wolfsburg": {
   teamKey: "wolfsburg",
   name: "VfL Wolfsburg",
   city: "Wolfsburg",
@@ -1096,58 +1096,56 @@ export const bundesligaTeamGuides: Record<string, TeamGuide> = {
     {
       title: "Club Overview",
       body:
-        "VfL Wolfsburg are a modern Bundesliga club whose identity is shaped by corporate backing, periodic elite-level competitiveness, and an ongoing attempt to establish themselves as a permanent top-tier force rather than an occasional challenger.\n\nWolfsburg are not driven by century-old mythology in the way many German clubs are. Instead, their identity is functional and performance-oriented: qualify for Europe, challenge for trophies when cycles align, and operate as a serious professional organisation.\n\nFor neutral travellers, Wolfsburg offer a clean, modern Bundesliga experience focused on football quality rather than historical romance."
+        "VfL Wolfsburg are a modern Bundesliga club whose identity is shaped by corporate backing, periodic elite-level competitiveness, and an ongoing attempt to establish themselves as a permanent top-tier force rather than an occasional challenger.\n\nWolfsburg are not driven by century-old mythology in the way many German clubs are. Instead, their identity is functional and performance-oriented: qualify for Europe, challenge for trophies when cycles align, and operate as a serious professional organisation.\n\nFor neutral travellers, Wolfsburg offer a clean, modern Bundesliga experience focused on football quality rather than historical romance.",
     },
     {
       title: "History & Legacy",
       body:
-        "Founded in 1945, Wolfsburg rose rapidly through German football and reached their defining peak by winning the Bundesliga title in 2009.\n\nThat championship remains the central reference point in club history and demonstrated Wolfsburg’s potential when recruitment, investment, and tactical execution align.\n\nWhile they have not built sustained dominance, Wolfsburg are widely regarded as a club capable of entering European places during strong cycles."
+        "Founded in 1945, Wolfsburg rose rapidly through German football and reached their defining peak by winning the Bundesliga title in 2009.\n\nThat championship remains the central reference point in club history and demonstrated Wolfsburg’s potential when recruitment, investment, and tactical execution align.\n\nWhile they have not built sustained dominance, Wolfsburg are widely regarded as a club capable of entering European places during strong cycles.",
     },
     {
       title: "Recent Seasons",
       body:
-        "Wolfsburg’s recent seasons reflect mid-to-upper table volatility.\n\nPatterns:\n• Finishes across mid-table and European qualification positions.\n• Frequent squad refreshes.\n• Periodic managerial changes.\n\nWolfsburg often look capable of strong runs, but consistency across full seasons remains elusive."
+        "Wolfsburg’s recent seasons reflect mid-to-upper table volatility.\n\nPatterns:\n• Finishes across mid-table and European qualification positions.\n• Frequent squad refreshes.\n• Periodic managerial changes.\n\nWolfsburg often look capable of strong runs, but consistency across full seasons remains elusive.",
     },
     {
       title: "Playing Style",
       body:
-        "Wolfsburg typically favour structured, balanced football.\n\nCommon traits:\n• Organised defensive shape.\n• Vertical transitions.\n• Emphasis on physical midfield profiles.\n\nThey are comfortable mixing possession phases with direct attacking movements.\n\nMatches tend to feel tactically controlled rather than chaotic."
+        "Wolfsburg typically favour structured, balanced football.\n\nCommon traits:\n• Organised defensive shape.\n• Vertical transitions.\n• Emphasis on physical midfield profiles.\n\nThey are comfortable mixing possession phases with direct attacking movements.\n\nMatches tend to feel tactically controlled rather than chaotic.",
     },
     {
       title: "Stadium Profile",
       body:
-        "Volkswagen Arena is a modern football stadium.\n\nApproximate capacity: 30,000+.\n\nCompact, enclosed design with good sightlines and modern facilities."
+        "Volkswagen Arena is a modern football stadium.\n\nApproximate capacity: 30,000+.\n\nCompact, enclosed design with good sightlines and modern facilities.",
     },
     {
       title: "Atmosphere & Matchday Feel",
       body:
-        "Atmosphere is solid but not among Germany’s most intense.\n\nTypical patterns:\n• Good noise in European or big domestic matches.\n• More subdued in routine fixtures.\n\nCrowd engagement rises with team performance."
+        "Atmosphere is solid but not among Germany’s most intense.\n\nTypical patterns:\n• Good noise in European or big domestic matches.\n• More subdued in routine fixtures.\n\nCrowd engagement rises with team performance.",
     },
     {
       title: "Rivalries",
       body:
-        "Hannover 96 – Lower Saxony derby.\n\nBayern Munich – competitive rivalry from title-era encounters."
+        "Hannover 96 – Lower Saxony derby.\n\nBayern Munich – competitive rivalry from title-era encounters.",
     },
     {
       title: "Legends",
       body:
-        "• Grafite\n• Edin Džeko\n• Diego\n\nKey figures from the 2009 title-winning side."
+        "• Grafite\n• Edin Džeko\n• Diego\n\nKey figures from the 2009 title-winning side.",
     },
     {
       title: "Supporter Culture",
       body:
-        "Wolfsburg supporters are pragmatic and performance-focused.\n\nKey traits:\n• Appreciation for professionalism.\n• Less tradition-driven than many Bundesliga clubs.\n• Loyal core support despite corporate image."
+        "Wolfsburg supporters are pragmatic and performance-focused.\n\nKey traits:\n• Appreciation for professionalism.\n• Less tradition-driven than many Bundesliga clubs.\n• Loyal core support despite corporate image.",
     },
     {
       title: "Neutral Visitor Notes",
       body:
-        "• Modern, comfortable stadium.\n• Good chance of seeing technically solid football.\n• Atmosphere depends on opponent.\n• Better suited to football-quality seekers than ultra-culture hunters."
-    }
+        "• Modern, comfortable stadium.\n• Good chance of seeing technically solid football.\n• Atmosphere depends on opponent.\n• Better suited to football-quality seekers than ultra-culture hunters.",
+    },
   ],
-  links: [
-    { label: "Official site", url: "https://www.vfl-wolfsburg.de/" }
-  ],
-  updatedAt: "2026-01-27"
+  links: [{ label: "Official site", url: "https://www.vfl-wolfsburg.de/" }],
+  updatedAt: "2026-01-27",
 },
 
 "mainz-05": {
@@ -1160,66 +1158,61 @@ export const bundesligaTeamGuides: Record<string, TeamGuide> = {
     {
       title: "Club Overview",
       body:
-        "1. FSV Mainz 05 are one of the Bundesliga’s most identity-driven overachievers: a club that survives and competes through structure, coaching clarity, and collective intensity rather than star power. Mainz are rarely built to dominate matches on talent — they’re built to make matches uncomfortable, disrupt rhythm, and win through organisation.\n\nThey’re also a “system club” in the German sense: recruitment, squad profiles, and match plans tend to serve a clear idea rather than a collection of individuals. For neutral travellers, Mainz are a strong pick if you want a properly local Bundesliga experience with real edge — not a tourist spectacle, but a club that feels serious about what it is."
+        "1. FSV Mainz 05 are one of the Bundesliga’s most identity-driven overachievers: a club that survives and competes through structure, coaching clarity, and collective intensity rather than star power. Mainz are rarely built to dominate matches on talent — they’re built to make matches uncomfortable, disrupt rhythm, and win through organisation.\n\nThey’re also a “system club” in the German sense: recruitment, squad profiles, and match plans tend to serve a clear idea rather than a collection of individuals. For neutral travellers, Mainz are a strong pick if you want a properly local Bundesliga experience with real edge — not a tourist spectacle, but a club that feels serious about what it is.",
     },
     {
       title: "History & Legacy",
       body:
-        "Mainz spent most of their existence outside the top tier and only became a consistent Bundesliga presence in the modern era. Their legacy isn’t trophy-driven — it’s reputation-driven.\n\nThe club is widely associated with one of German football’s defining themes: elite coaching development. Mainz are often discussed as part of the Klopp/Tuchel lineage era, where the club became synonymous with high-intensity, tactically detailed football.\n\nTheir modern identity is built on earning Bundesliga status the hard way: smart coaching, strong conditioning, and cohesion over glamour."
+        "Mainz spent most of their existence outside the top tier and only became a consistent Bundesliga presence in the modern era. Their legacy isn’t trophy-driven — it’s reputation-driven.\n\nThe club is widely associated with one of German football’s defining themes: elite coaching development. Mainz are often discussed as part of the Klopp/Tuchel lineage era, where the club became synonymous with high-intensity, tactically detailed football.\n\nTheir modern identity is built on earning Bundesliga status the hard way: smart coaching, strong conditioning, and cohesion over glamour.",
     },
     {
       title: "Coaching Identity & Tactical Reputation",
       body:
-        "Mainz are regularly described as a “coaches’ club.” That’s not hype — it’s how they survive.\n\nCommon traits across Mainz eras:\n• Clear tactical structure (especially without the ball).\n• Aggressive pressing phases.\n• Strong emphasis on transitions and set pieces.\n• High physical output and collective responsibility.\n\nEven when Mainz are struggling in the table, the expectation is not beautiful dominance — it’s visible organisation, fight, and a plan."
+        "Mainz are regularly described as a “coaches’ club.” That’s not hype — it’s how they survive.\n\nCommon traits across Mainz eras:\n• Clear tactical structure (especially without the ball).\n• Aggressive pressing phases.\n• Strong emphasis on transitions and set pieces.\n• High physical output and collective responsibility.\n\nEven when Mainz are struggling in the table, the expectation is not beautiful dominance — it’s visible organisation, fight, and a plan.",
     },
     {
       title: "Recent Seasons",
       body:
-        "Mainz’s recent seasons tend to fall into a familiar pattern: periods of strong form driven by intensity and cohesion, followed by stretches where chance creation dries up and the margins get tight.\n\nThey often operate in the “survival plus upside” bracket:\n• The baseline goal is Bundesliga stability.\n• A good cycle looks like top-half pushes and big scalp wins at home.\n• Bad cycles look like long runs of narrow games decided by small moments.\n\nMainz are rarely a soft touch — even when the results are poor, they’re usually hard to play against."
+        "Mainz’s recent seasons tend to fall into a familiar pattern: periods of strong form driven by intensity and cohesion, followed by stretches where chance creation dries up and the margins get tight.\n\nThey often operate in the “survival plus upside” bracket:\n• The baseline goal is Bundesliga stability.\n• A good cycle looks like top-half pushes and big scalp wins at home.\n• Bad cycles look like long runs of narrow games decided by small moments.\n\nMainz are rarely a soft touch — even when the results are poor, they’re usually hard to play against.",
     },
     {
       title: "Playing Style",
       body:
-        "Mainz football is usually built around disruption and intensity.\n\nCommon traits:\n• Pressing in coordinated waves rather than constant all-out chaos.\n• Direct progression once the ball is won.\n• Heavy reliance on duel-winning and second balls.\n• Set-piece threat as a genuine weapon.\n\nThey’re not typically a possession exhibition team. The goal is to turn the match into a series of winning moments: win the press, win the duel, win the set piece, punish mistakes."
+        "Mainz football is usually built around disruption and intensity.\n\nCommon traits:\n• Pressing in coordinated waves rather than constant all-out chaos.\n• Direct progression once the ball is won.\n• Heavy reliance on duel-winning and second balls.\n• Set-piece threat as a genuine weapon.\n\nThey’re not typically a possession exhibition team. The goal is to turn the match into a series of winning moments: win the press, win the duel, win the set piece, punish mistakes.",
     },
     {
       title: "Stadium Profile",
       body:
-        "MEWA Arena is a modern football-specific stadium with steep stands and a compact feel.\n\nApproximate capacity: 33,000+.\n\nIt’s big enough to feel like Bundesliga, but tight enough that noise carries well. Sightlines are strong, and the ground feels purpose-built for a direct, intense matchday rather than a diluted multi-use venue."
+        "MEWA Arena is a modern football-specific stadium with steep stands and a compact feel.\n\nApproximate capacity: 33,000+.\n\nIt’s big enough to feel like Bundesliga, but tight enough that noise carries well. Sightlines are strong, and the ground feels purpose-built for a direct, intense matchday rather than a diluted multi-use venue.",
     },
     {
       title: "Atmosphere & Matchday Feel",
       body:
-        "Mainz atmosphere is organised and reactive rather than theatrical.\n\nTypical patterns:\n• Strong volume when the team’s intensity is high.\n• Noticeable surges during pressing phases, tackles, and momentum swings.\n• Big uplift against major opponents and regional rivals.\n\nMEWA can feel properly hostile (in a football sense) when Mainz are in “fight mode.” It’s not Dortmund-style spectacle — it’s intensity built from the game itself."
+        "Mainz atmosphere is organised and reactive rather than theatrical.\n\nTypical patterns:\n• Strong volume when the team’s intensity is high.\n• Noticeable surges during pressing phases, tackles, and momentum swings.\n• Big uplift against major opponents and regional rivals.\n\nMEWA can feel properly hostile (in a football sense) when Mainz are in “fight mode.” It’s not Dortmund-style spectacle — it’s intensity built from the game itself.",
     },
     {
       title: "Rivalries",
       body:
-        "Eintracht Frankfurt – the Rhine-Main derby edge and the most emotionally charged fixture.\n\nKaiserslautern – historic regional tension (less frequent depending on divisions).\n\nMainz also have a practical ‘statement’ mindset: matches against Bayern/Dortmund often carry extra bite because the club’s identity is tied to proving they can disrupt bigger teams."
+        "Eintracht Frankfurt – the Rhine-Main derby edge and the most emotionally charged fixture.\n\nKaiserslautern – historic regional tension (less frequent depending on divisions).\n\nMainz also have a practical ‘statement’ mindset: matches against Bayern/Dortmund often carry extra bite because the club’s identity is tied to proving they can disrupt bigger teams.",
     },
     {
       title: "Legends & Icons",
       body:
-        "Mainz legends skew toward figures who represent the club’s modern rise and identity rather than trophy eras.\n\nCommonly referenced icons include:\n• Jürgen Klopp (as a defining modern figure)\n• Nikolče Noveski\n\nThe legend culture is less about global superstardom and more about people who embodied Mainz’s intensity, cohesion, and upward story."
+        "Mainz legends skew toward figures who represent the club’s modern rise and identity rather than trophy eras.\n\nCommonly referenced icons include:\n• Jürgen Klopp (as a defining modern figure)\n• Nikolče Noveski\n\nThe legend culture is less about global superstardom and more about people who embodied Mainz’s intensity, cohesion, and upward story.",
     },
     {
       title: "Supporter Culture",
       body:
-        "Mainz support is local, identity-focused, and expects visible effort.\n\nKey traits:\n• Appreciation for pressing and aggression.\n• Low tolerance for passive, lifeless performances.\n• Strong pride in being organised and underestimated.\n\nThis is a fanbase that judges you on whether you compete properly — not whether you provide entertainment."
+        "Mainz support is local, identity-focused, and expects visible effort.\n\nKey traits:\n• Appreciation for pressing and aggression.\n• Low tolerance for passive, lifeless performances.\n• Strong pride in being organised and underestimated.\n\nThis is a fanbase that judges you on whether you compete properly — not whether you provide entertainment.",
     },
     {
       title: "Neutral Visitor Notes",
       body:
-        "• A good pick if you prefer ‘real’ Bundesliga intensity over tourist-scale spectacle.\n• Best matchday experience tends to come against Frankfurt and big-name opponents.\n• Mainz games often feel physical and momentum-driven — you’ll notice the pressing and duel battles.\n• MEWA Arena gives a compact, football-first viewing experience with strong sightlines."
-    }
+        "• A good pick if you prefer ‘real’ Bundesliga intensity over tourist-scale spectacle.\n• Best matchday experience tends to come against Frankfurt and big-name opponents.\n• Mainz games often feel physical and momentum-driven — you’ll notice the pressing and duel battles.\n• MEWA Arena gives a compact, football-first viewing experience with strong sightlines.",
+    },
   ],
-  links: [
-    { label: "Official site", url: "https://www.mainz05.de/" }
-  ],
-  updatedAt: "2026-01-27"
+  links: [{ label: "Official site", url: "https://www.mainz05.de/" }],
+  updatedAt: "2026-01-27",
 },
-
 };
-
 export default bundesligaTeamGuides;
-
