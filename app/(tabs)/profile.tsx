@@ -10,7 +10,6 @@ import {
   Image,
   useWindowDimensions,
   Switch,
-  ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -23,10 +22,7 @@ import { theme } from "@/src/constants/theme";
 import storage from "@/src/services/storage";
 
 import preferencesStore from "@/src/state/preferences";
-
-import useFollowStore, { type FollowedMatch } from "@/src/state/followStore";
-import { refreshFollowedMatches } from "@/src/services/followedMatchesRefresh";
-import { ensureNotificationsReady } from "@/src/services/followKickoffNotifications";
+import useFollowStore from "@/src/state/followStore";
 
 /* -------------------------------------------------------------------------- */
 /* Row UI */
@@ -90,158 +86,11 @@ function getCountryCodeBestEffort(): string {
     if (tz.includes("Europe/Rome")) return "IT";
     if (tz.includes("Europe/Berlin")) return "DE";
     if (tz.includes("Europe/Paris")) return "FR";
+    if (tz.includes("Europe/Amsterdam")) return "NL";
   } catch {
     // ignore
   }
   return "GB";
-}
-
-function safeIsoToUkDateTime(iso?: string | null) {
-  if (!iso) return "Kickoff: TBC";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "Kickoff: TBC";
-  return d.toLocaleString("en-GB", {
-    weekday: "short",
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function compactPlace(venue?: string | null, city?: string | null) {
-  const v = String(venue ?? "").trim();
-  const c = String(city ?? "").trim();
-  const parts = [v, c].filter(Boolean);
-  return parts.length ? parts.join(" • ") : "Venue: —";
-}
-
-function matchTitle(m: FollowedMatch) {
-  const h = String((m as any).homeName ?? "").trim();
-  const a = String((m as any).awayName ?? "").trim();
-  if (h && a) return `${h} vs ${a}`;
-  if (h) return `${h} vs —`;
-  if (a) return `— vs ${a}`;
-  return `Match #${String(m.fixtureId ?? "").trim()}`;
-}
-
-function leagueLine(m: FollowedMatch) {
-  const ln = String((m as any).leagueName ?? "").trim();
-  return ln ? ln : null;
-}
-
-function daysUntilIso(iso: string) {
-  const t = new Date(iso).getTime();
-  if (!Number.isFinite(t)) return Number.POSITIVE_INFINITY;
-  return (t - Date.now()) / (1000 * 60 * 60 * 24);
-}
-
-function isoMinuteKey(iso: string) {
-  const s = String(iso ?? "").trim();
-  const m = s.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})/);
-  return m?.[1] ?? s.slice(0, 16);
-}
-
-function normalizeStr(v: unknown) {
-  const s = String(v ?? "").trim();
-  return s ? s : null;
-}
-
-function computeLikelyPlaceholderTbcIdsFromFollowed(followed: FollowedMatch[]) {
-  const CONFIRMED_WITHIN_DAYS = 21;
-  const CLUSTER_THRESHOLD = 7;
-
-  const out = new Set<string>();
-  if (!Array.isArray(followed) || followed.length === 0) return out;
-
-  const groups = new Map<string, FollowedMatch[]>();
-
-  for (const m of followed) {
-    const fixtureId = String(m.fixtureId ?? "").trim();
-    const kickoffIso = String(m.kickoffIso ?? "").trim();
-    if (!fixtureId) continue;
-
-    if (!kickoffIso) {
-      out.add(fixtureId);
-      continue;
-    }
-
-    if (daysUntilIso(kickoffIso) <= CONFIRMED_WITHIN_DAYS) continue;
-
-    const leagueId = Number((m as any).leagueId ?? 0) || 0;
-    const season = Number((m as any).season ?? 0) || 0;
-    const round = normalizeStr((m as any).round);
-
-    if (!leagueId || !season || !round) continue;
-
-    const key = `${leagueId}:${season}:${round}`;
-    const arr = groups.get(key) ?? [];
-    arr.push(m);
-    groups.set(key, arr);
-  }
-
-  for (const groupRows of groups.values()) {
-    if (groupRows.length < CLUSTER_THRESHOLD) continue;
-
-    const counts = new Map<string, number>();
-    for (const m of groupRows) {
-      const iso = String(m.kickoffIso ?? "").trim();
-      if (!iso) continue;
-      const k = isoMinuteKey(iso);
-      counts.set(k, (counts.get(k) ?? 0) + 1);
-    }
-
-    let topKey: string | null = null;
-    let topCount = 0;
-    for (const [k, c] of counts.entries()) {
-      if (c > topCount) {
-        topKey = k;
-        topCount = c;
-      }
-    }
-
-    if (!topKey || topCount < CLUSTER_THRESHOLD) continue;
-
-    for (const m of groupRows) {
-      const id = String(m.fixtureId ?? "").trim();
-      const iso = String(m.kickoffIso ?? "").trim();
-      if (!id || !iso) continue;
-      if (isoMinuteKey(iso) === topKey) out.add(id);
-    }
-  }
-
-  return out;
-}
-
-function kickoffStateForFollowed(m: FollowedMatch, fallbackLikelyTbcIds: Set<string>) {
-  const storeFlag = (m as any)?.kickoffLikelyTbc;
-  if (storeFlag === true) return { isTbc: true, secondary: "TV schedule pending" };
-  if (storeFlag === false) return { isTbc: false, secondary: null };
-
-  const id = String(m.fixtureId ?? "").trim();
-  const iso = String(m.kickoffIso ?? "").trim();
-
-  if (!iso) return { isTbc: true, secondary: "Kickoff time not set yet" };
-
-  if (daysUntilIso(iso) <= 21) return { isTbc: false, secondary: null };
-
-  if (id && fallbackLikelyTbcIds.has(id)) return { isTbc: true, secondary: "TV schedule pending" };
-
-  return { isTbc: true, secondary: "Kickoff may change" };
-}
-
-function formatLastRefreshed(ms: number | null) {
-  if (!ms) return "Last refreshed: —";
-  const d = new Date(ms);
-  if (Number.isNaN(d.getTime())) return "Last refreshed: —";
-  return `Last refreshed: ${d.toLocaleString("en-GB", {
-    weekday: "short",
-    day: "2-digit",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  })}`;
 }
 
 function cleanUpper3(v: unknown, fallback: string) {
@@ -255,19 +104,29 @@ function labelForIata(options: SelectOption[], code: string) {
   return hit?.label ?? c;
 }
 
+function planLabel(plan: PlanValue) {
+  if (plan === "free") return "Free";
+  if (plan === "premium") return "Premium";
+  return "Not set";
+}
+
+function parseBoolOrDefaultTrue(v: string | null): boolean {
+  const s = (v ?? "").trim().toLowerCase();
+  if (s === "false") return false;
+  if (s === "true") return true;
+  return true;
+}
+
 /* -------------------------------------------------------------------------- */
 /* Storage keys */
 /* -------------------------------------------------------------------------- */
 
 const STORAGE_KEYS = {
-  setupComplete: "yna:setupComplete",
   plan: "yna:plan",
   currency: "yna:profile.currency",
   language: "yna:profile.language",
   budgetTarget: "yna:profile.budgetTarget",
   alerts: "yna:profile.alerts",
-
-  // NEW: Intro control (default true)
   showIntroOnStartup: "yna:showIntroOnStartup",
 };
 
@@ -331,19 +190,6 @@ const PLAN_OPTIONS: SelectOption[] = [
   { label: "Premium Plan", value: "premium" },
 ];
 
-function planLabel(plan: PlanValue) {
-  if (plan === "free") return "Free";
-  if (plan === "premium") return "Premium";
-  return "Not set";
-}
-
-function parseBoolOrDefaultTrue(v: string | null): boolean {
-  const s = (v ?? "").trim().toLowerCase();
-  if (s === "false") return false;
-  if (s === "true") return true;
-  return true;
-}
-
 /* -------------------------------------------------------------------------- */
 /* Screen */
 /* -------------------------------------------------------------------------- */
@@ -353,23 +199,10 @@ export default function ProfileScreen() {
   const { width } = useWindowDimensions();
 
   const LOGO = useMemo(() => require("@/src/yna-logo.png"), []);
-  const displayName = useMemo(() => "Guest Traveller", []);
-  const email = useMemo(() => "Not Signed In", []);
+  const displayName = useMemo(() => "Guest traveller", []);
+  const email = useMemo(() => "Not signed in", []);
 
-  const followed = useFollowStore((s) => s.followed);
-  const followingCount = followed.length;
-
-  const unfollow = useFollowStore((s) => s.unfollow);
-  const setKickoffConfirmedDefaultAndAll = useFollowStore((s) => s.setKickoffConfirmedDefaultAndAll);
-  const defaultAlerts = useFollowStore((s) => s.defaultAlerts);
-
-  const [kickoffToggleBusy, setKickoffToggleBusy] = useState(false);
-
-  const [refreshing, setRefreshing] = useState(false);
-  const [lastRefreshedAt, setLastRefreshedAt] = useState<number | null>(null);
-  const [refreshSummary, setRefreshSummary] = useState<string | null>(null);
-
-  const [loading, setLoading] = useState(true);
+  const followedCount = useFollowStore((s) => (Array.isArray(s.followed) ? s.followed.length : 0));
 
   const countryCode = useMemo(() => getCountryCodeBestEffort(), []);
   const originOptions = useMemo(() => (countryCode === "GB" ? UK_ORIGIN_OPTIONS : EURO_ORIGIN_OPTIONS), [countryCode]);
@@ -382,28 +215,25 @@ export default function ProfileScreen() {
   const [language, setLanguage] = useState("English");
   const [budgetTarget, setBudgetTarget] = useState("Not Set");
   const [alerts, setAlerts] = useState<AlertsValue>("Off");
-  const [setupComplete, setSetupComplete] = useState(false);
-
-  // NEW: intro-on-startup toggle
   const [showIntroOnStartup, setShowIntroOnStartup] = useState<boolean>(true);
 
-  const [activePicker, setActivePicker] = useState<null | "origin" | "currency" | "language" | "budget" | "plan">(
-    null
-  );
+  const [activePicker, setActivePicker] = useState<null | "origin" | "currency" | "language" | "budget" | "plan">(null);
   const closePicker = useCallback(() => setActivePicker(null), []);
 
   const logoSize = useMemo(() => {
-    const max = 86;
-    const min = 62;
+    const max = 74;
+    const min = 58;
     if (width < 360) return min;
-    if (width < 410) return 76;
+    if (width < 410) return 64;
     return max;
   }, [width]);
 
-  const budgetSummary = useMemo(() => {
-    const b = budgetTarget === "Not Set" ? "Not set" : `${currency} ${budgetTarget}`;
-    return alerts === "On" ? `${b} • Alerts on` : `${b} • Alerts off`;
-  }, [alerts, budgetTarget, currency]);
+  const planSummary = useMemo(() => planLabel(plan), [plan]);
+
+  const originSummary = useMemo(() => {
+    if (!originLoaded) return "Loading…";
+    return labelForIata(originOptions, originIata);
+  }, [originIata, originLoaded, originOptions]);
 
   const budgetOptions = useMemo<SelectOption[]>(() => {
     return [
@@ -415,15 +245,6 @@ export default function ProfileScreen() {
       { label: `${currency} 750`, value: "750" },
     ];
   }, [currency]);
-
-  const followedSorted = useMemo(() => {
-    const copy = [...followed];
-    copy.sort((a, b) => String(b.createdAt ?? "").localeCompare(String(a.createdAt ?? "")));
-    return copy;
-  }, [followed]);
-
-  const followedPreview = useMemo(() => followedSorted.slice(0, 6), [followedSorted]);
-  const fallbackLikelyTbcIds = useMemo(() => computeLikelyPlaceholderTbcIdsFromFollowed(followed), [followed]);
 
   /* --------------------------- preferences load --------------------------- */
 
@@ -461,38 +282,26 @@ export default function ProfileScreen() {
 
     (async () => {
       try {
-        const [
-          storedSetup,
-          storedPlan,
-          storedCurrency,
-          storedLanguage,
-          storedBudget,
-          storedAlerts,
-          storedShowIntro,
-        ] = await Promise.all([
-          storage.getString(STORAGE_KEYS.setupComplete),
-          storage.getString(STORAGE_KEYS.plan),
-          storage.getString(STORAGE_KEYS.currency),
-          storage.getString(STORAGE_KEYS.language),
-          storage.getString(STORAGE_KEYS.budgetTarget),
-          storage.getString(STORAGE_KEYS.alerts),
-          storage.getString(STORAGE_KEYS.showIntroOnStartup),
-        ]);
+        const [storedPlan, storedCurrency, storedLanguage, storedBudget, storedAlerts, storedShowIntro] =
+          await Promise.all([
+            storage.getString(STORAGE_KEYS.plan),
+            storage.getString(STORAGE_KEYS.currency),
+            storage.getString(STORAGE_KEYS.language),
+            storage.getString(STORAGE_KEYS.budgetTarget),
+            storage.getString(STORAGE_KEYS.alerts),
+            storage.getString(STORAGE_KEYS.showIntroOnStartup),
+          ]);
 
         if (!mounted) return;
 
-        setSetupComplete(storedSetup === "true");
         if (storedPlan === "free" || storedPlan === "premium") setPlan(storedPlan);
         if (storedCurrency) setCurrency(storedCurrency);
         if (storedLanguage) setLanguage(storedLanguage);
         if (storedBudget) setBudgetTarget(storedBudget);
         if (storedAlerts === "On" || storedAlerts === "Off") setAlerts(storedAlerts);
-
         setShowIntroOnStartup(parseBoolOrDefaultTrue(storedShowIntro));
       } catch {
         // ignore
-      } finally {
-        if (mounted) setLoading(false);
       }
     })();
 
@@ -501,10 +310,9 @@ export default function ProfileScreen() {
     };
   }, []);
 
-  // Persist non-origin changes (including intro toggle)
-  useEffect(() => {
-    if (loading) return;
+  /* ------------------------------ persist prefs --------------------------- */
 
+  useEffect(() => {
     (async () => {
       try {
         await Promise.all([
@@ -519,57 +327,23 @@ export default function ProfileScreen() {
         // ignore
       }
     })();
-  }, [alerts, budgetTarget, currency, language, loading, plan, showIntroOnStartup]);
+  }, [alerts, budgetTarget, currency, language, plan, showIntroOnStartup]);
 
-  const finishSetup = useCallback(async () => {
+  /* ------------------------------ actions -------------------------------- */
+
+  const onSelectOrigin = useCallback(async (v: string) => {
+    const code = cleanUpper3(v, "LON");
+    setOriginIata(code);
     try {
-      await storage.setString(STORAGE_KEYS.setupComplete, "true");
+      await preferencesStore.setPreferredOriginIata(code);
     } catch {
-      // ignore
-    } finally {
-      setSetupComplete(true);
-      router.replace("/(tabs)/home");
+      // best-effort
     }
+  }, []);
+
+  const openFollowing = useCallback(() => {
+    router.push("/following" as any);
   }, [router]);
-
-  const resetSetup = useCallback(() => {
-    Alert.alert("Reset setup?", "This resets your defaults and turns the intro back on for next launch.", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Reset",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            await Promise.all([
-              storage.setString(STORAGE_KEYS.setupComplete, "false"),
-              storage.setString(STORAGE_KEYS.plan, "not_set"),
-              storage.setString(STORAGE_KEYS.currency, countryCode === "GB" ? "GBP" : "EUR"),
-              storage.setString(STORAGE_KEYS.language, "English"),
-              storage.setString(STORAGE_KEYS.budgetTarget, "Not Set"),
-              storage.setString(STORAGE_KEYS.alerts, "Off"),
-              storage.setString(STORAGE_KEYS.showIntroOnStartup, "true"),
-              preferencesStore.setPreferredOriginIata("LON"),
-            ]);
-
-            setSetupComplete(false);
-            setPlan("not_set");
-            setCurrency(countryCode === "GB" ? "GBP" : "EUR");
-            setLanguage("English");
-            setBudgetTarget("Not Set");
-            setAlerts("Off");
-            setOriginIata("LON");
-            setShowIntroOnStartup(true);
-
-            Alert.alert("Reset complete", "Landing will show again next time you open the app.");
-          } catch {
-            Alert.alert("Reset failed", "Couldn’t reset setup status.");
-          }
-        },
-      },
-    ]);
-  }, [countryCode]);
-
-  /* ------------------------------- info/legal ------------------------------ */
 
   const openFAQ = useCallback(() => {
     showInfo(
@@ -596,110 +370,40 @@ export default function ProfileScreen() {
     showInfo("Terms", "Terms will be available here.");
   }, []);
 
-  const planSummary = useMemo(() => planLabel(plan), [plan]);
+  const resetDefaults = useCallback(() => {
+    Alert.alert("Reset defaults?", "This restores the default preferences on this device.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Reset",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await Promise.all([
+              storage.setString(STORAGE_KEYS.plan, "not_set"),
+              storage.setString(STORAGE_KEYS.currency, countryCode === "GB" ? "GBP" : "EUR"),
+              storage.setString(STORAGE_KEYS.language, "English"),
+              storage.setString(STORAGE_KEYS.budgetTarget, "Not Set"),
+              storage.setString(STORAGE_KEYS.alerts, "Off"),
+              storage.setString(STORAGE_KEYS.showIntroOnStartup, "true"),
+              preferencesStore.setPreferredOriginIata("LON"),
+            ]);
 
-  const originSummary = useMemo(() => {
-    if (!originLoaded) return "Loading…";
-    return labelForIata(originOptions, originIata);
-  }, [originIata, originLoaded, originOptions]);
+            setPlan("not_set");
+            setCurrency(countryCode === "GB" ? "GBP" : "EUR");
+            setLanguage("English");
+            setBudgetTarget("Not Set");
+            setAlerts("Off");
+            setOriginIata("LON");
+            setShowIntroOnStartup(true);
 
-  const openMatch = useCallback(
-    (fixtureId: string) => {
-      const id = String(fixtureId ?? "").trim();
-      if (!id) return;
-      router.push({ pathname: "/match/[id]", params: { id } } as any);
-    },
-    [router]
-  );
-
-  const confirmUnfollow = useCallback(
-    (m: FollowedMatch) => {
-      const id = String(m.fixtureId ?? "").trim();
-      if (!id) return;
-
-      Alert.alert("Unfollow match?", "You’ll stop getting kickoff alerts for this match.", [
-        { text: "Cancel", style: "cancel" },
-        { text: "Unfollow", style: "destructive", onPress: () => unfollow(id) },
-      ]);
-    },
-    [unfollow]
-  );
-
-  const onRefreshFollowing = useCallback(async () => {
-    if (refreshing) return;
-
-    if (followingCount === 0) {
-      setRefreshSummary("Nothing to refresh — you’re not following any matches.");
-      setLastRefreshedAt(Date.now());
-      return;
-    }
-
-    setRefreshing(true);
-    setRefreshSummary(null);
-
-    try {
-      const rows = await refreshFollowedMatches({ limit: 25, concurrency: 3 });
-      setLastRefreshedAt(Date.now());
-
-      const refreshed = rows.filter((r: any) => r?.refreshed).length;
-      const notified = rows.filter((r: any) => r?.notified).length;
-      setRefreshSummary(`Checked ${refreshed} • Kickoff notifications ${notified}`);
-    } catch {
-      setLastRefreshedAt(Date.now());
-      setRefreshSummary("Refresh failed (network or rate limit). Try again.");
-    } finally {
-      setRefreshing(false);
-    }
-  }, [refreshing, followingCount]);
-
-  const onToggleKickoffDefault = useCallback(
-    async (nextValue: boolean) => {
-      if (kickoffToggleBusy) return;
-
-      if (!nextValue) {
-        setKickoffConfirmedDefaultAndAll(false);
-        return;
-      }
-
-      setKickoffToggleBusy(true);
-
-      try {
-        const ok = await ensureNotificationsReady({ request: true });
-
-        if (!ok) {
-          setKickoffConfirmedDefaultAndAll(false);
-
-          Alert.alert(
-            "Notifications disabled",
-            "To enable kickoff alerts, allow notifications for YourNextAway in your phone settings, then toggle this on again.",
-            [{ text: "OK" }],
-            { cancelable: true }
-          );
-          return;
-        }
-
-        setKickoffConfirmedDefaultAndAll(true);
-      } finally {
-        setKickoffToggleBusy(false);
-      }
-    },
-    [kickoffToggleBusy, setKickoffConfirmedDefaultAndAll]
-  );
-
-  const onSelectOrigin = useCallback(async (v: string) => {
-    const code = cleanUpper3(v, "LON");
-    setOriginIata(code);
-
-    try {
-      await preferencesStore.setPreferredOriginIata(code);
-    } catch {
-      // best-effort
-    }
-  }, []);
-
-  const onToggleIntro = useCallback((v: boolean) => {
-    setShowIntroOnStartup(!!v);
-  }, []);
+            Alert.alert("Reset complete", "Defaults restored.");
+          } catch {
+            Alert.alert("Reset failed", "Couldn’t reset defaults.");
+          }
+        },
+      },
+    ]);
+  }, [countryCode]);
 
   return (
     <Background imageUrl={getBackground("profile")} overlayOpacity={0.78}>
@@ -715,23 +419,18 @@ export default function ProfileScreen() {
             <View style={[styles.logoMask, { width: logoSize, height: logoSize }]} pointerEvents="none">
               <Image
                 source={LOGO}
-                style={{ width: logoSize, height: logoSize, transform: [{ scale: 1.18 }] }}
+                style={{ width: logoSize, height: logoSize, transform: [{ scale: 1.15 }] }}
                 resizeMode="cover"
               />
             </View>
           </View>
 
-          {/* IDENTITY */}
+          {/* ACCOUNT (compact, not a dashboard) */}
           <GlassCard style={styles.card} strength="default">
-            <View style={styles.identityTop}>
+            <View style={styles.accountTop}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.name}>{displayName}</Text>
                 <Text style={styles.meta}>{email}</Text>
-
-                <View style={styles.followingPill}>
-                  <Text style={styles.followingKicker}>Following</Text>
-                  <Text style={styles.followingValue}>{followingCount} matches</Text>
-                </View>
               </View>
 
               <Pressable onPress={() => setActivePicker("plan")} style={styles.planPill}>
@@ -742,149 +441,13 @@ export default function ProfileScreen() {
 
             <View style={styles.divider} />
 
-            <View style={styles.setupBlock}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.sectionH}>Setup</Text>
-                <Text style={styles.sectionHint}>Set your defaults. You can change them anytime.</Text>
-              </View>
-
-              <View style={styles.setupStatusPill}>
-                <Text style={styles.setupStatusKicker}>Status</Text>
-                <Text style={styles.setupStatusValue}>{setupComplete ? "Complete" : "Incomplete"}</Text>
-              </View>
-            </View>
-
-            <View style={styles.primaryActions}>
-              <Pressable onPress={finishSetup} style={[styles.btn, styles.btnPrimary]}>
-                <Text style={styles.btnPrimaryText}>Finish setup</Text>
-                <Text style={styles.btnMeta}>Save & continue</Text>
-              </Pressable>
-
-              <Pressable onPress={resetSetup} style={[styles.btn, styles.btnGhost]}>
-                <Text style={styles.btnGhostText}>Reset</Text>
-                <Text style={styles.btnMeta}>Restore defaults</Text>
-              </Pressable>
-            </View>
-          </GlassCard>
-
-          {/* FOLLOWING */}
-          <GlassCard style={[styles.card, { padding: 0 }]} strength="subtle" noPadding>
-            <View style={styles.listHeader}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.sectionH}>Following</Text>
-                <Text style={styles.listSub}>
-                  Kickoff alerts (local notifications). {followingCount ? `${followingCount} saved.` : "None yet."}
-                </Text>
-              </View>
-
-              <View style={styles.followingDefaultsPill}>
-                <Text style={styles.followingDefaultsKicker}>Default alert</Text>
-                <View style={styles.followingDefaultsRow}>
-                  <Text style={styles.followingDefaultsValue}>Kickoff</Text>
-                  <Switch
-                    value={!!defaultAlerts.kickoffConfirmed}
-                    onValueChange={onToggleKickoffDefault}
-                    disabled={kickoffToggleBusy}
-                  />
-                </View>
-              </View>
-            </View>
-
-            <View style={styles.refreshBar}>
-              <Pressable
-                onPress={onRefreshFollowing}
-                disabled={refreshing}
-                style={({ pressed }) => [
-                  styles.refreshBtn,
-                  refreshing && styles.refreshBtnDisabled,
-                  { opacity: pressed ? 0.9 : 1 },
-                ]}
-              >
-                {refreshing ? <ActivityIndicator /> : <Text style={styles.refreshBtnText}>Refresh Following</Text>}
-              </Pressable>
-
-              <View style={{ flex: 1 }}>
-                <Text style={styles.refreshMeta}>{formatLastRefreshed(lastRefreshedAt)}</Text>
-                {refreshSummary ? <Text style={styles.refreshMeta2}>{refreshSummary}</Text> : null}
-              </View>
-            </View>
-
-            {followedPreview.length === 0 ? (
-              <View style={styles.followEmpty}>
-                <Text style={styles.followEmptyTitle}>You’re not following any matches</Text>
-                <Text style={styles.followEmptyBody}>
-                  Open a match and tap <Text style={{ fontWeight: "900", color: theme.colors.text }}>Follow</Text>. We’ll
-                  notify you if kickoff changes.
-                </Text>
-              </View>
-            ) : (
-              <>
-                {followedPreview.map((m, idx) => {
-                  const last = idx === followedPreview.length - 1;
-                  const title = matchTitle(m);
-                  const league = leagueLine(m);
-                  const ko = kickoffStateForFollowed(m, fallbackLikelyTbcIds);
-
-                  return (
-                    <View key={m.fixtureId} style={[styles.followRow, last && styles.followRowLast]}>
-                      <Pressable
-                        onPress={() => openMatch(m.fixtureId)}
-                        style={({ pressed }) => [styles.followRowMain, { opacity: pressed ? 0.85 : 1 }]}
-                      >
-                        <Text style={styles.followRowTitle} numberOfLines={1}>
-                          {title}
-                        </Text>
-
-                        {league ? (
-                          <Text style={styles.followRowLeague} numberOfLines={1}>
-                            {league}
-                          </Text>
-                        ) : null}
-
-                        <Text style={styles.followRowSub} numberOfLines={1}>
-                          {safeIsoToUkDateTime(m.kickoffIso)}
-                          {" • "}
-                          {compactPlace(m.venue, m.city)}
-                        </Text>
-
-                        <View style={styles.followTagRow}>
-                          {ko.isTbc ? (
-                            <>
-                              <View style={[styles.followTag, styles.followTagTbc]}>
-                                <Text style={[styles.followTagText, styles.followTagTextTbc]}>Kickoff TBC</Text>
-                              </View>
-                              {ko.secondary ? (
-                                <View style={styles.followTag}>
-                                  <Text style={styles.followTagText}>{ko.secondary}</Text>
-                                </View>
-                              ) : null}
-                            </>
-                          ) : (
-                            <View style={[styles.followTag, styles.followTagConfirmed]}>
-                              <Text style={[styles.followTagText, styles.followTagTextConfirmed]}>Kickoff confirmed</Text>
-                            </View>
-                          )}
-
-                          {m.alerts?.kickoffConfirmed ? (
-                            <View style={[styles.followTag, styles.followTagOn]}>
-                              <Text style={[styles.followTagText, styles.followTagTextOn]}>Alert on</Text>
-                            </View>
-                          ) : (
-                            <View style={styles.followTag}>
-                              <Text style={styles.followTagText}>Alert off</Text>
-                            </View>
-                          )}
-                        </View>
-                      </Pressable>
-
-                      <Pressable onPress={() => confirmUnfollow(m)} style={styles.unfollowBtn}>
-                        <Text style={styles.unfollowText}>Unfollow</Text>
-                      </Pressable>
-                    </View>
-                  );
-                })}
-              </>
-            )}
+            <Row
+              title="Following"
+              subtitle="Kickoff alerts and updates"
+              value={`${followedCount} match${followedCount === 1 ? "" : "es"}`}
+              onPress={openFollowing}
+              last
+            />
           </GlassCard>
 
           {/* DEFAULTS */}
@@ -897,10 +460,9 @@ export default function ProfileScreen() {
             <Row
               title="Show intro on startup"
               subtitle="Landing + onboarding will appear when you open the app"
-              last={false}
               rightSlot={
                 <View style={styles.switchWrap}>
-                  <Switch value={showIntroOnStartup} onValueChange={onToggleIntro} />
+                  <Switch value={showIntroOnStartup} onValueChange={(v) => setShowIntroOnStartup(!!v)} />
                 </View>
               }
             />
@@ -912,25 +474,32 @@ export default function ProfileScreen() {
               onPress={() => setActivePicker("origin")}
             />
 
-            <Row title="Plan" subtitle="Free or Premium" value={planSummary} onPress={() => setActivePicker("plan")} />
             <Row title="Currency" subtitle="Budgets and comparisons" value={currency} onPress={() => setActivePicker("currency")} />
             <Row title="Language" subtitle="App language" value={language} onPress={() => setActivePicker("language")} />
+
             <Row
               title="Budget"
               subtitle={budgetTarget === "Not Set" ? "Optional" : "Target budget for quick planning"}
               value={budgetTarget === "Not Set" ? "Not set" : `${currency} ${budgetTarget}`}
               onPress={() => setActivePicker("budget")}
             />
+
             <Row
-              title="Alerts"
-              subtitle="Budget drop alerts (quiet, useful)"
-              last
+              title="Budget alerts"
+              subtitle="Quiet, useful drop alerts"
               rightSlot={
                 <View style={styles.switchWrap}>
                   <Switch value={alerts === "On"} onValueChange={(v) => setAlerts(v ? "On" : "Off")} />
                 </View>
               }
+              last
             />
+
+            <View style={styles.resetWrap}>
+              <Pressable onPress={resetDefaults} style={({ pressed }) => [{ opacity: pressed ? 0.85 : 1 }]}>
+                <Text style={styles.resetText}>Reset defaults</Text>
+              </Pressable>
+            </View>
           </GlassCard>
 
           {/* INFO */}
@@ -1000,7 +569,7 @@ export default function ProfileScreen() {
         <SelectModal
           visible={activePicker === "budget"}
           title="Budget"
-          subtitle={budgetSummary}
+          subtitle={alerts === "On" ? "Alerts on" : "Alerts off"}
           options={budgetOptions}
           selectedValue={budgetTarget}
           onClose={closePicker}
@@ -1013,10 +582,6 @@ export default function ProfileScreen() {
     </Background>
   );
 }
-
-/* -------------------------------------------------------------------------- */
-/* Styles */
-/* -------------------------------------------------------------------------- */
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
@@ -1058,7 +623,7 @@ const styles = StyleSheet.create({
 
   card: { padding: theme.spacing.lg },
 
-  identityTop: { flexDirection: "row", alignItems: "center", gap: 12 },
+  accountTop: { flexDirection: "row", alignItems: "center", gap: 12 },
 
   name: { color: theme.colors.text, fontSize: theme.fontSize.lg, fontWeight: theme.fontWeight.black },
   meta: {
@@ -1067,22 +632,6 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSize.sm,
     fontWeight: theme.fontWeight.bold,
   },
-
-  followingPill: {
-    marginTop: 10,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "rgba(79,224,138,0.24)",
-    backgroundColor: "rgba(0,0,0,0.18)",
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    alignSelf: "flex-start",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  followingKicker: { color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: theme.fontWeight.black },
-  followingValue: { color: theme.colors.text, fontSize: theme.fontSize.sm, fontWeight: theme.fontWeight.black },
 
   planPill: {
     borderRadius: 999,
@@ -1098,56 +647,12 @@ const styles = StyleSheet.create({
 
   divider: {
     marginTop: 14,
-    marginBottom: 12,
+    marginBottom: 4,
     height: 1,
     backgroundColor: "rgba(255,255,255,0.10)",
   },
 
   sectionH: { color: theme.colors.text, fontSize: theme.fontSize.md, fontWeight: theme.fontWeight.black },
-
-  sectionHint: {
-    marginTop: 6,
-    color: theme.colors.textSecondary,
-    fontSize: theme.fontSize.sm,
-    lineHeight: 18,
-    fontWeight: "700",
-  },
-
-  setupBlock: { flexDirection: "row", alignItems: "center", gap: 10 },
-
-  setupStatusPill: {
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.18)",
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    minWidth: 110,
-    alignItems: "flex-end",
-  },
-  setupStatusKicker: { color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: theme.fontWeight.black },
-  setupStatusValue: { marginTop: 3, color: theme.colors.text, fontSize: theme.fontSize.sm, fontWeight: theme.fontWeight.black },
-
-  primaryActions: { marginTop: 14, flexDirection: "row", gap: 10 },
-
-  btn: {
-    flex: 1,
-    borderRadius: 14,
-    paddingVertical: 12,
-    paddingHorizontal: 10,
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 2,
-  },
-
-  btnPrimary: { borderColor: "rgba(0,255,136,0.50)", backgroundColor: "rgba(0,0,0,0.30)" },
-  btnPrimaryText: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.sm },
-
-  btnGhost: { borderColor: "rgba(255,255,255,0.10)", backgroundColor: "rgba(0,0,0,0.18)" },
-  btnGhostText: { color: theme.colors.textSecondary, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.sm },
-
-  btnMeta: { color: theme.colors.textTertiary, fontSize: theme.fontSize.xs, fontWeight: "800" },
 
   listHeader: {
     paddingHorizontal: theme.spacing.lg,
@@ -1156,6 +661,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 12,
     alignItems: "flex-start",
+    justifyContent: "space-between",
   },
 
   listSub: { marginTop: 6, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, fontWeight: "700" },
@@ -1192,95 +698,14 @@ const styles = StyleSheet.create({
 
   chev: { color: theme.colors.textSecondary, fontSize: 26, marginTop: -2 },
 
-  followingDefaultsPill: {
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.18)",
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    minWidth: 165,
-  },
-  followingDefaultsKicker: { color: theme.colors.textSecondary, fontSize: theme.fontSize.xs, fontWeight: theme.fontWeight.black },
-  followingDefaultsRow: { marginTop: 6, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
-  followingDefaultsValue: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.sm },
-
-  refreshBar: {
+  resetWrap: {
+    paddingHorizontal: theme.spacing.lg,
+    paddingTop: 12,
+    paddingBottom: theme.spacing.lg,
     borderTopWidth: 1,
     borderTopColor: "rgba(255,255,255,0.10)",
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: 12,
-    flexDirection: "row",
-    gap: 12,
-    alignItems: "center",
   },
-  refreshBtn: {
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "rgba(0,255,136,0.35)",
-    backgroundColor: "rgba(0,0,0,0.22)",
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    minWidth: 160,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  refreshBtnDisabled: {
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.16)",
-  },
-  refreshBtnText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.xs },
-  refreshMeta: { color: theme.colors.textSecondary, fontWeight: "800", fontSize: theme.fontSize.xs },
-  refreshMeta2: { marginTop: 4, color: theme.colors.textTertiary, fontWeight: "800", fontSize: theme.fontSize.xs },
-
-  followEmpty: { paddingHorizontal: theme.spacing.lg, paddingTop: 6, paddingBottom: theme.spacing.lg },
-  followEmptyTitle: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.md },
-  followEmptyBody: { marginTop: 6, color: theme.colors.textSecondary, fontWeight: "700", lineHeight: 18, fontSize: theme.fontSize.sm },
-
-  followRow: {
-    borderTopWidth: 1,
-    borderTopColor: "rgba(255,255,255,0.10)",
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: 12,
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 12,
-  },
-  followRowLast: {},
-
-  followRowMain: { flex: 1 },
-  followRowTitle: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: theme.fontSize.md },
-  followRowLeague: { marginTop: 6, color: theme.colors.primary, fontWeight: "900", fontSize: theme.fontSize.xs, opacity: 0.92 },
-  followRowSub: { marginTop: 6, color: theme.colors.textSecondary, fontWeight: "700", fontSize: theme.fontSize.sm },
-
-  followTagRow: { marginTop: 10, flexDirection: "row", gap: 8, flexWrap: "wrap" },
-  followTag: {
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.18)",
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 999,
-  },
-  followTagOn: { borderColor: "rgba(79,224,138,0.35)", backgroundColor: "rgba(79,224,138,0.10)" },
-  followTagText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: theme.fontSize.xs },
-  followTagTextOn: { color: "rgba(79,224,138,0.92)" },
-
-  followTagTbc: { borderColor: "rgba(255,200,0,0.22)", backgroundColor: "rgba(255,200,0,0.06)" },
-  followTagTextTbc: { color: "rgba(255,220,140,0.92)" },
-
-  followTagConfirmed: { borderColor: "rgba(0,255,136,0.28)", backgroundColor: "rgba(0,255,136,0.08)" },
-  followTagTextConfirmed: { color: "rgba(79,224,138,0.92)" },
-
-  unfollowBtn: {
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.18)",
-    paddingVertical: 10,
-    paddingHorizontal: 10,
-  },
-  unfollowText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: theme.fontSize.xs },
+  resetText: { color: "rgba(255,120,120,0.95)", fontWeight: "900" },
 
   footerNote: {
     textAlign: "center",
