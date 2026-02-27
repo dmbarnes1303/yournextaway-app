@@ -1,7 +1,6 @@
 // src/services/walletApi.ts
 import * as FileSystem from "expo-file-system";
 import * as Sharing from "expo-sharing";
-import { Platform } from "react-native";
 
 type WalletListItem = {
   key: string;
@@ -102,9 +101,6 @@ export async function walletList(opts?: {
 /**
  * UPLOAD
  * POST /wallet/upload (multipart/form-data)
- * Fields: file, userId?, tripId?, matchId?, category?
- *
- * fileUri should be a local uri from DocumentPicker/ImagePicker/etc.
  */
 export async function walletUpload(opts: {
   fileUri: string;
@@ -113,7 +109,7 @@ export async function walletUpload(opts: {
   userId?: string;
   tripId?: string;
   matchId?: string;
-  category?: string; // tickets|hotel|flight|insurance|misc etc
+  category?: string;
 }): Promise<WalletUploadResponse> {
   assertConfigured();
 
@@ -131,9 +127,7 @@ export async function walletUpload(opts: {
 
   const res = await fetch(buildUrl("/wallet/upload"), {
     method: "POST",
-    headers: withAuthHeaders({
-      // NOTE: DON'T set Content-Type manually for FormData in RN; fetch will set boundary.
-    }),
+    headers: withAuthHeaders(),
     body: form,
   });
 
@@ -144,8 +138,7 @@ export async function walletUpload(opts: {
 
 /**
  * DOWNLOAD (auth required)
- * GET /wallet/file?key=...
- * Saves into cacheDirectory and returns local path.
+ * Uses FileSystem.downloadAsync with headers (reliable, no base64, no btoa).
  */
 export async function walletDownloadToCache(opts: {
   key: string;
@@ -157,33 +150,24 @@ export async function walletDownloadToCache(opts: {
     opts.suggestedFilename ||
     decodeURIComponent(opts.key.split("/").pop() || "wallet-file");
 
+  const safeName = sanitizeFilename(filename);
+  const localUri = `${FileSystem.cacheDirectory}${safeName}`;
+
   const url = buildUrl("/wallet/file", { key: opts.key });
 
-  // We must fetch with header → save ourselves
-  const res = await fetch(url, {
-    method: "GET",
+  const result = await FileSystem.downloadAsync(url, localUri, {
     headers: withAuthHeaders(),
   });
 
-  if (!res.ok) {
-    const data = await safeJson(res);
-    throw new Error(data?.error || `Wallet download failed (${res.status})`);
+  if (result?.status && result.status >= 400) {
+    throw new Error(`Wallet download failed (${result.status})`);
   }
 
-  const bytes = new Uint8Array(await res.arrayBuffer());
-  const base64 = BufferFromUint8(bytes);
-
-  const localUri = `${FileSystem.cacheDirectory}${sanitizeFilename(filename)}`;
-  await FileSystem.writeAsStringAsync(localUri, base64, {
-    encoding: FileSystem.EncodingType.Base64,
-  });
-
-  return { localUri, filename };
+  return { localUri: result.uri, filename: safeName };
 }
 
 /**
- * VIEW/SHARE helper: downloads then opens share sheet (best universal option).
- * If Sharing isn’t available (rare), it just returns localUri so you can handle it.
+ * VIEW/SHARE helper
  */
 export async function walletOpenOrShare(opts: { key: string }) {
   const { localUri } = await walletDownloadToCache({ key: opts.key });
@@ -194,7 +178,6 @@ export async function walletOpenOrShare(opts: { key: string }) {
     return;
   }
 
-  // Fallback: caller can open using WebView / intent, etc.
   return localUri;
 }
 
@@ -217,9 +200,7 @@ export async function walletDelete(opts: { key: string }): Promise<{ ok: boolean
 }
 
 /**
- * Prefix builders (so you don’t mess this up across screens)
- * Matches your Worker’s storage pattern:
- * wallet/{userId}/{tripId}/{category}/[matchId/]timestamp-filename
+ * Prefix builders
  */
 export function walletPrefixForTrip(opts: { userId: string; tripId: string; category?: string }) {
   const user = safeSegment(opts.userId || "anon");
@@ -238,23 +219,14 @@ export function walletPrefixForUser(opts: { userId: string }) {
 // -----------------------
 
 function safeSegment(s: string) {
-  return (s || "").toString().trim().replace(/[/\\?%*:|"<>]/g, "-").replace(/\s+/g, " ").slice(0, 120);
+  return (s || "")
+    .toString()
+    .trim()
+    .replace(/[/\\?%*:|"<>]/g, "-")
+    .replace(/\s+/g, " ")
+    .slice(0, 120);
 }
 
 function sanitizeFilename(name: string) {
   return safeSegment(name);
 }
-
-// RN doesn’t have Node Buffer by default in all setups; implement base64 encoding ourselves.
-function BufferFromUint8(u8: Uint8Array): string {
-  // Base64 encode without external deps
-  let binary = "";
-  const chunk = 0x8000;
-  for (let i = 0; i < u8.length; i += chunk) {
-    binary += String.fromCharCode(...u8.subarray(i, i + chunk));
-  }
-  return btoa(binary);
-}
-
-// btoa on Android sometimes missing in certain JS runtimes; if yours lacks it, uncomment below:
-// const btoa = globalThis.btoa || ((str: string) => Buffer.from(str, "binary").toString("base64"));
