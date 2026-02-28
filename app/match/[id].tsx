@@ -8,11 +8,11 @@ import {
   Pressable,
   ActivityIndicator,
   Alert,
-  Linking,
   Image,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
+import * as WebBrowser from "expo-web-browser";
 
 import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
@@ -28,7 +28,7 @@ import { coerceString } from "@/src/utils/params";
 import { formatUkDateTimeMaybe } from "@/src/utils/formatters";
 
 import savedItemsStore from "@/src/state/savedItems";
-import { registerPartnerClick } from "@/src/services/partnerReturnBootstrap";
+import { beginPartnerClick } from "@/src/services/partnerClicks";
 import { getFixtureCertainty } from "@/src/utils/fixtureCertainty";
 
 import { getMatchdayLogistics } from "@/src/data/matchdayLogistics";
@@ -42,12 +42,13 @@ function enc(v: string) {
   return encodeURIComponent(String(v ?? "").trim());
 }
 
-async function safeOpenUrl(url: string) {
-  try {
-    await Linking.openURL(url);
-  } catch {
-    Alert.alert("Couldn’t open link");
-  }
+async function openExternalUrl(url: string) {
+  const u = String(url ?? "").trim();
+  if (!u) throw new Error("Empty URL");
+  // WebBrowser is more reliable than Linking for many Android setups.
+  await WebBrowser.openBrowserAsync(u, {
+    presentationStyle: WebBrowser.WebBrowserPresentationStyle.FULL_SCREEN,
+  });
 }
 
 function cleanText(v: unknown) {
@@ -184,20 +185,17 @@ export default function MatchDetailScreen() {
   }, [router, row, tripId, source]);
 
   /* ------------------------------------------------------------------ */
-  /* SAVE TICKET → WALLET (trip-aware) */
+  /* SAVE NON-AFFILIATE LINKS → WALLET (trip-aware) */
   /* ------------------------------------------------------------------ */
 
   const saveTicketToTrip = useCallback(
     async (provider: string, url: string) => {
       if (!row) return;
-      if (!tripId) {
-        // No trip = nowhere correct to store this.
-        return;
-      }
+      if (!tripId) return;
 
       const title = `${home} vs ${away} tickets`;
 
-      const item = await savedItemsStore.add({
+      await savedItemsStore.add({
         tripId,
         type: "tickets",
         title,
@@ -212,18 +210,12 @@ export default function MatchDetailScreen() {
           source: "match",
         },
       });
-
-      registerPartnerClick({
-        itemId: item.id,
-        provider,
-        url,
-      });
     },
     [row, tripId, home, away]
   );
 
   /* ------------------------------------------------------------------ */
-  /* TICKET URLS */
+  /* URLS */
   /* ------------------------------------------------------------------ */
 
   const se365PrimaryUrl = useMemo(() => {
@@ -232,8 +224,6 @@ export default function MatchDetailScreen() {
   }, [home, away]);
 
   const officialHomeTicketsUrl = useMemo(() => {
-    // Honest: we don’t have official endpoints, so this is a Google query.
-    // Later: replace with club ticketing URLs per team.
     return `https://www.google.com/search?q=${enc(`${home} official tickets`)}`;
   }, [home]);
 
@@ -245,16 +235,51 @@ export default function MatchDetailScreen() {
   /* HANDLERS */
   /* ------------------------------------------------------------------ */
 
-  const openTickets = useCallback(
-    async (provider: string, url: string) => {
+  const openTicketsAffiliate = useCallback(
+    async (partnerId: "sportsevents365", url: string) => {
       try {
-        // Only save to Wallet if we have a real trip context.
-        if (tripId) {
-          await saveTicketToTrip(provider, url);
+        // If there is a trip, use the partner click pipeline (saves + opens + return tracking).
+        // If no trip, just open the URL (no wallet tracking).
+        if (tripId && row?.fixture?.id) {
+          await beginPartnerClick({
+            partnerId,
+            tripId,
+            category: "tickets",
+            title: `${home} vs ${away} tickets`,
+            url,
+            metadata: {
+              fixtureId: row.fixture.id,
+              home,
+              away,
+              kickoffIso: row.fixture.date ?? null,
+              source: "match",
+            },
+          });
+          return;
         }
-        await safeOpenUrl(url);
+
+        await openExternalUrl(url);
       } catch {
         Alert.alert("Couldn’t open tickets");
+      }
+    },
+    [tripId, row, home, away]
+  );
+
+  const openTicketsNonAffiliate = useCallback(
+    async (provider: string, url: string) => {
+      try {
+        // Best-effort save (don’t block opening if saving fails)
+        if (tripId) {
+          try {
+            await saveTicketToTrip(provider, url);
+          } catch {
+            // silent: opening matters more than tracking
+          }
+        }
+        await openExternalUrl(url);
+      } catch {
+        Alert.alert("Couldn’t open link");
       }
     },
     [tripId, saveTicketToTrip]
@@ -281,7 +306,14 @@ export default function MatchDetailScreen() {
 
   return (
     <Background imageSource={getBackground("fixtures")} overlayOpacity={0.86}>
-      <Stack.Screen options={{ headerShown: true, title: headerTitle, headerTransparent: true, headerTintColor: theme.colors.text }} />
+      <Stack.Screen
+        options={{
+          headerShown: true,
+          title: headerTitle,
+          headerTransparent: true,
+          headerTintColor: theme.colors.text,
+        }}
+      />
 
       <SafeAreaView style={{ flex: 1 }} edges={["bottom"]}>
         <ScrollView
@@ -303,7 +335,6 @@ export default function MatchDetailScreen() {
               <EmptyState title="Match not found" message="Unable to load match." />
             ) : (
               <>
-                {/* Top header */}
                 <Text style={styles.kicker}>{tripId ? "MATCH (FROM TRIP)" : "MATCH"}</Text>
 
                 <View style={styles.headerRow}>
@@ -327,12 +358,11 @@ export default function MatchDetailScreen() {
                   {stadiumCity ? ` • ${stadiumCity}` : ""}
                 </Text>
 
-                {/* Primary CTA */}
                 <Pressable style={styles.primaryCta} onPress={onPrimaryCta}>
                   <Text style={styles.primaryCtaText}>{primaryCtaLabel}</Text>
                 </Pressable>
 
-                {/* Logistics (collapsed by default) */}
+                {/* Logistics */}
                 <View style={styles.section}>
                   <View style={styles.sectionHeader}>
                     <Text style={styles.sectionTitle}>Matchday logistics</Text>
@@ -346,7 +376,7 @@ export default function MatchDetailScreen() {
                     <View style={styles.summaryBox}>
                       <Text style={styles.summaryText}>{logisticsSummary}</Text>
 
-                      <Pressable onPress={() => safeOpenUrl(mapsUrl)} style={styles.inlineBtn}>
+                      <Pressable onPress={() => openExternalUrl(mapsUrl)} style={styles.inlineBtn}>
                         <Text style={styles.inlineBtnText}>Stadium in Maps</Text>
                       </Pressable>
                     </View>
@@ -356,12 +386,12 @@ export default function MatchDetailScreen() {
                         logistics={logistics}
                         city={stadiumCity}
                         onOpenStop={async (q) =>
-                          safeOpenUrl(`https://www.google.com/maps/search/?api=1&query=${enc(q)}`)
+                          openExternalUrl(`https://www.google.com/maps/search/?api=1&query=${enc(q)}`)
                         }
                         onSelectStayArea={() => {}}
                       />
 
-                      <Pressable onPress={() => safeOpenUrl(mapsUrl)} style={styles.secondaryBtn}>
+                      <Pressable onPress={() => openExternalUrl(mapsUrl)} style={styles.secondaryBtn}>
                         <Text style={styles.btnText}>Stadium in Maps</Text>
                       </Pressable>
                     </>
@@ -382,22 +412,31 @@ export default function MatchDetailScreen() {
                   ) : null}
 
                   <View style={styles.ticketGrid}>
-                    <Pressable style={styles.ticketBtn} onPress={() => openTickets("sportsevents365", se365PrimaryUrl)}>
+                    <Pressable
+                      style={styles.ticketBtn}
+                      onPress={() => openTicketsAffiliate("sportsevents365", se365PrimaryUrl)}
+                    >
                       <Text style={styles.ticketBtnText}>Tickets</Text>
                       <Text style={styles.ticketBtnSub}>Sportsevents365</Text>
                     </Pressable>
 
-                    <Pressable style={styles.ticketBtn} onPress={() => openTickets("official", officialHomeTicketsUrl)}>
+                    <Pressable
+                      style={styles.ticketBtn}
+                      onPress={() => openTicketsNonAffiliate("official", officialHomeTicketsUrl)}
+                    >
                       <Text style={styles.ticketBtnText}>Official club</Text>
                       <Text style={styles.ticketBtnSub}>Search</Text>
                     </Pressable>
 
-                    <Pressable style={styles.ticketBtn} onPress={() => openTickets("google", googleTicketsUrl)}>
+                    <Pressable
+                      style={styles.ticketBtn}
+                      onPress={() => openTicketsNonAffiliate("google", googleTicketsUrl)}
+                    >
                       <Text style={styles.ticketBtnText}>Search tickets</Text>
                       <Text style={styles.ticketBtnSub}>Google</Text>
                     </Pressable>
 
-                    <Pressable style={styles.ticketBtn} onPress={() => safeOpenUrl(mapsUrl)}>
+                    <Pressable style={styles.ticketBtn} onPress={() => openExternalUrl(mapsUrl)}>
                       <Text style={styles.ticketBtnText}>Directions</Text>
                       <Text style={styles.ticketBtnSub}>Google Maps</Text>
                     </Pressable>
@@ -405,7 +444,8 @@ export default function MatchDetailScreen() {
 
                   {tripId ? (
                     <Text style={styles.smallHint}>
-                      Ticket links you open from here are saved into your Trip Workspace as <Text style={{ fontWeight: "900" }}>Pending</Text>.
+                      Ticket links you open from here are saved into your Trip Workspace as{" "}
+                      <Text style={{ fontWeight: "900" }}>Pending</Text>.
                     </Text>
                   ) : (
                     <Text style={styles.smallHint}>
