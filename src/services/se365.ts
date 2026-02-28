@@ -1,79 +1,118 @@
 // src/services/se365.ts
+import { FixtureListRow } from "@/src/services/apiFootball";
 
-export type SE365Event = {
+const BASE = process.env.EXPO_PUBLIC_SE365_BASE_URL;
+const KEY = process.env.EXPO_PUBLIC_SE365_API_KEY;
+const AFF = process.env.EXPO_PUBLIC_SE365_AFFILIATE_ID;
+
+type Se365Event = {
   id: number;
   name: string;
-  date: string;
   eventUrl?: string;
+  date?: string;
 };
 
-const BASE = process.env.EXPO_PUBLIC_SE365_BASE_URL!;
-const API_KEY = process.env.EXPO_PUBLIC_SE365_API_KEY!;
-const AFFILIATE = process.env.EXPO_PUBLIC_SE365_AFFILIATE_ID!;
+const cache: Record<string, string | null> = {};
 
 /**
- * Map your app leagues → SE365 tournament IDs
- * IMPORTANT: replace with real IDs when provided by SE365
+ * Normalize team name for matching
  */
-export const SE365_TOURNAMENT_MAP: Record<number, number> = {
-  39: 694,   // Premier League (example)
-  140: 693,  // La Liga
-  135: 695,  // Serie A
-  78: 696,   // Bundesliga
-  61: 697,   // Ligue 1
-};
-
-export async function fetchTournamentEvents(
-  leagueId: number
-): Promise<SE365Event[]> {
-  const tournamentId = SE365_TOURNAMENT_MAP[leagueId];
-  if (!tournamentId) return [];
-
-  const url = `${BASE}/events/tournament/${tournamentId}?perPage=200&apiKey=${API_KEY}`;
-
-  const res = await fetch(url);
-  if (!res.ok) return [];
-
-  const json = await res.json();
-
-  return (json?.data ?? []).map((e: any) => ({
-    id: e.id,
-    name: e.name,
-    date: e.date,
-    eventUrl: e.eventUrl,
-  }));
+function norm(s?: string | null) {
+  return String(s ?? "")
+    .toLowerCase()
+    .replace(/fc|cf|club|de|the/gi, "")
+    .replace(/[^a-z0-9]/g, "")
+    .trim();
 }
 
 /**
- * Match SE365 event to fixture
+ * Extract YYYY-MM-DD
  */
-export function findMatchingEvent(
-  events: SE365Event[],
+function isoDateOnly(iso?: string | null) {
+  if (!iso) return "";
+  return iso.slice(0, 10);
+}
+
+/**
+ * Try match SE365 event from fixture
+ */
+function matchEvent(
+  events: Se365Event[],
   home: string,
   away: string,
-  dateIso: string
-): SE365Event | null {
-  const d = dateIso.slice(0, 10);
+  date: string
+): Se365Event | null {
+  const h = norm(home);
+  const a = norm(away);
 
-  return (
-    events.find(e => {
-      if (!e.eventUrl) return false;
-      const sameDate = e.date?.slice(0, 10) === d;
-      const name = (e.name ?? "").toLowerCase();
-      return (
-        sameDate &&
-        name.includes(home.toLowerCase()) &&
-        name.includes(away.toLowerCase())
-      );
-    }) ?? null
-  );
+  for (const e of events) {
+    const n = norm(e.name);
+    const d = isoDateOnly(e.date);
+
+    if (n.includes(h) && n.includes(a)) {
+      if (!date || !d || d === date) {
+        return e;
+      }
+    }
+  }
+
+  return null;
 }
 
 /**
- * Build final deep link with affiliate
+ * Fetch SE365 events for tournament (league)
  */
-export function buildAffiliateUrl(eventUrl: string): string {
-  if (!eventUrl) return "";
-  const sep = eventUrl.includes("?") ? "&" : "?";
-  return `${eventUrl}${sep}aid=${AFFILIATE}`;
+async function fetchTournamentEvents(tournamentId: string) {
+  const url = `${BASE}/events/tournament/${tournamentId}?perPage=100&apiKey=${KEY}`;
+  const r = await fetch(url);
+  if (!r.ok) return [];
+  const j = await r.json();
+  return (j?.data ?? []) as Se365Event[];
+}
+
+/**
+ * MAIN: get ticket URL for fixture
+ */
+export async function getSe365EventUrl(
+  fixture: FixtureListRow
+): Promise<string | null> {
+  const id = String(fixture?.fixture?.id ?? "");
+  if (!id) return null;
+
+  if (cache[id] !== undefined) {
+    return cache[id];
+  }
+
+  try {
+    const leagueId = String(fixture?.league?.id ?? "");
+    const home = fixture?.teams?.home?.name ?? "";
+    const away = fixture?.teams?.away?.name ?? "";
+    const date = isoDateOnly(fixture?.fixture?.date);
+
+    if (!leagueId || !home || !away) {
+      cache[id] = null;
+      return null;
+    }
+
+    const events = await fetchTournamentEvents(leagueId);
+
+    const match = matchEvent(events, home, away, date);
+
+    if (!match?.eventUrl) {
+      cache[id] = null;
+      return null;
+    }
+
+    let url = match.eventUrl;
+
+    if (AFF && !url.includes("aff=")) {
+      url += url.includes("?") ? `&aff=${AFF}` : `?aff=${AFF}`;
+    }
+
+    cache[id] = url;
+    return url;
+  } catch {
+    cache[id] = null;
+    return null;
+  }
 }
