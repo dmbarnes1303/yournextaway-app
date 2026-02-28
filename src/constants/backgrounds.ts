@@ -1,5 +1,6 @@
 // src/constants/backgrounds.ts
 import type { ImageSourcePropType } from "react-native";
+import { normalizeCityKey } from "@/src/utils/city";
 
 export type BackgroundKey =
   | "home"
@@ -18,7 +19,7 @@ export type BackgroundKey =
 const BACKGROUNDS: Record<BackgroundKey, ImageSourcePropType> = {
   home: require("@/src/assets/backgrounds/home.png"),
 
-  // Used by City pages as a safe fallback imageSource (actual city hero uses getCityBackground())
+  // Safe fallback used by city screens if no remote match exists
   city: require("@/src/assets/backgrounds/home.png"),
 
   landing: require("@/src/assets/backgrounds/landing-hero.png"),
@@ -33,7 +34,7 @@ const BACKGROUNDS: Record<BackgroundKey, ImageSourcePropType> = {
   trips: require("@/src/assets/backgrounds/trips.png"),
   wallet: require("@/src/assets/backgrounds/wallet.png"),
 
-  // If you don't have a dedicated profile.png yet, reusing trips is OK — but be explicit.
+  // If you don’t have a dedicated profile background yet, reuse trips intentionally.
   profile: require("@/src/assets/backgrounds/trips.png"),
 };
 
@@ -43,14 +44,14 @@ export function getBackground(key: BackgroundKey): ImageSourcePropType {
 
 /**
  * Remote Unsplash helper
- * NOTE: The `id` should be the path segment after images.unsplash.com/, e.g. "photo-123..."
+ * NOTE: `id` must be an images.unsplash.com path segment, e.g. "photo-123..."
  */
 const u = (id: string) =>
   `https://images.unsplash.com/${id}?auto=format&fit=crop&w=1800&h=3200&fm=jpg&q=80`;
 
 /**
  * CITY HERO BACKGROUNDS
- * Keys must match normalizeCityKey output (lowercase, hyphenless, etc.)
+ * Keys MUST match normalizeCityKey() output (lowercase + hyphen-separated).
  */
 export const CITY_BACKGROUNDS: Record<string, string> = {
   /* ---------------- PREMIER LEAGUE ---------------- */
@@ -65,7 +66,7 @@ export const CITY_BACKGROUNDS: Record<string, string> = {
   sheffield: u("photo-1519681393784-d120267933ba"),
   nottingham: u("photo-1470123808288-1e59739a7a31"),
   leicester: u("photo-1544986581-efac024faf62"),
-  wolves: u("photo-1519681393784-d120267933ba"),
+  wolverhampton: u("photo-1519681393784-d120267933ba"),
 
   /* ---------------- LA LIGA ---------------- */
   madrid: u("photo-1543783207-ec64e4d95325"),
@@ -73,7 +74,7 @@ export const CITY_BACKGROUNDS: Record<string, string> = {
   valencia: u("photo-1501854140801-50d01698950b"),
   seville: u("photo-1501854140801-50d01698950b"),
   bilbao: u("photo-1533106418989-88406c7cc8ca"),
-  sansebastian: u("photo-1533106418989-88406c7cc8ca"),
+  "san-sebastian": u("photo-1533106418989-88406c7cc8ca"),
   vigo: u("photo-1501854140801-50d01698950b"),
   mallorca: u("photo-1501854140801-50d01698950b"),
   girona: u("photo-1533106418989-88406c7cc8ca"),
@@ -127,16 +128,17 @@ export const CITY_BACKGROUNDS: Record<string, string> = {
   auxerre: u("photo-1528909514045-2fa4ac7a08ba"),
   brest: u("photo-1520975693411-b0f2f7d1c40b"),
   lorient: u("photo-1520975693411-b0f2f7d1c40b"),
-  lehavre: u("photo-1500530855697-b586d89ba3ee"),
+  "le-havre": u("photo-1500530855697-b586d89ba3ee"),
   angers: u("photo-1470123808288-1e59739a7a31"),
 };
 
 /**
- * Return city background URL (remote) or a safe local fallback ImageSource.
- * City screens can pass either `{ uri }` or `require(...)` into Background.imageSource.
+ * Returns a city hero background:
+ * - If we have a remote Unsplash URL for the normalized city key, return that URL string.
+ * - Otherwise return a safe local fallback ImageSource.
  */
-export function getCityBackground(cityKey: string): string | ImageSourcePropType {
-  const key = String(cityKey || "").trim().toLowerCase();
+export function getCityBackground(cityInput: string): string | ImageSourcePropType {
+  const key = normalizeCityKey(cityInput);
   if (!key) return BACKGROUNDS.city;
   return CITY_BACKGROUNDS[key] ?? BACKGROUNDS.city;
 }
