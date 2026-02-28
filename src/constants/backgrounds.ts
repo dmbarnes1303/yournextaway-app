@@ -41,20 +41,28 @@ export function getBackgroundSource(key: BackgroundKey): ImageSourcePropType {
 }
 
 /**
- * Remote Unsplash helper (fixed photo IDs).
- * NOTE: "images.unsplash.com/photo-..." is the correct pattern.
+ * Curated Unsplash fixed-photo helper (stable).
  */
 const u = (photoId: string) =>
   `https://images.unsplash.com/${photoId}?auto=format&fit=crop&w=1800&h=3200&fm=jpg&q=80`;
 
 /**
+ * Automatic city background fallback (no keys required).
+ * NOTE: This is "city-specific" but not guaranteed stable.
+ */
+function unsplashCityFallback(cityKey: string) {
+  const q = cityKey.replace(/-/g, " ").trim();
+  // featured endpoint: no API key required
+  return `https://source.unsplash.com/featured/1800x3200/?${encodeURIComponent(q + " city skyline")}`;
+}
+
+/**
  * CITY HERO BACKGROUNDS
  * Keys MUST match normalizeCityKey() output (kebab-case).
+ * Add to this list for stable, curated picks.
  */
 export const CITY_BACKGROUNDS: Record<string, string> = {
-  /* ---------------- PREMIER LEAGUE (examples) ---------------- */
   london: u("photo-1528909514045-2fa4ac7a08ba"),
-  "crystal-palace": u("photo-1528909514045-2fa4ac7a08ba"),
   manchester: u("photo-1505761671935-60b3a7427bad"),
   liverpool: u("photo-1505761671935-60b3a7427bad"),
   birmingham: u("photo-1512453979798-5ea266f8880c"),
@@ -63,14 +71,13 @@ export const CITY_BACKGROUNDS: Record<string, string> = {
   brighton: u("photo-1501854140801-50d01698950b"),
   bournemouth: u("photo-1501854140801-50d01698950b"),
   nottingham: u("photo-1470123808288-1e59739a7a31"),
-  leicester: u("photo-1544986581-efac024faf62"),
   burnley: u("photo-1519681393784-d120267933ba"),
   sunderland: u("photo-1500530855697-b586d89ba3ee"),
   brentford: u("photo-1528909514045-2fa4ac7a08ba"),
   fulham: u("photo-1528909514045-2fa4ac7a08ba"),
   wolverhampton: u("photo-1519681393784-d120267933ba"),
+  "crystal-palace": u("photo-1528909514045-2fa4ac7a08ba"),
 
-  /* ---------------- LA LIGA ---------------- */
   madrid: u("photo-1543783207-ec64e4d95325"),
   barcelona: u("photo-1505761671935-60b3a7427bad"),
   valencia: u("photo-1501854140801-50d01698950b"),
@@ -87,7 +94,6 @@ export const CITY_BACKGROUNDS: Record<string, string> = {
   elche: u("photo-1529260830199-42c24126f198"),
   oviedo: u("photo-1529260830199-42c24126f198"),
 
-  /* ---------------- BUNDESLIGA ---------------- */
   munich: u("photo-1526481280695-3c687fd643ed"),
   dortmund: u("photo-1500530855697-b586d89ba3ee"),
   berlin: u("photo-1526481280695-3c687fd643ed"),
@@ -106,7 +112,6 @@ export const CITY_BACKGROUNDS: Record<string, string> = {
   wolfsburg: u("photo-1519681393784-d120267933ba"),
   heidenheim: u("photo-1519681393784-d120267933ba"),
 
-  /* ---------------- SERIE A ---------------- */
   milan: u("photo-1526481280695-3c687fd643ed"),
   rome: u("photo-1529156069898-49953e39b3ac"),
   naples: u("photo-1529260830199-42c24126f198"),
@@ -123,7 +128,6 @@ export const CITY_BACKGROUNDS: Record<string, string> = {
   parma: u("photo-1526481280695-3c687fd643ed"),
   pisa: u("photo-1501854140801-50d01698950b"),
 
-  /* ---------------- LIGUE 1 ---------------- */
   paris: u("photo-1502602898657-3e91760cbb34"),
   lyon: u("photo-1529429617124-95b109e86bb8"),
   lille: u("photo-1533106418989-88406c7cc8ca"),
@@ -144,13 +148,18 @@ export const CITY_BACKGROUNDS: Record<string, string> = {
 };
 
 /**
- * Return a city-specific background if available, else fall back.
- * Accepts ANY user input (slug/name/etc).
+ * Return city background or fallback.
+ * Accepts any user input (slug/name/etc).
  */
 export function getCityBackground(cityInput: string): string | ImageSourcePropType {
   const key = normalizeCityKey(cityInput);
   if (!key) return BACKGROUNDS.home;
-  return CITY_BACKGROUNDS[key] ?? BACKGROUNDS.home;
+
+  const mapped = CITY_BACKGROUNDS[key];
+  if (mapped) return mapped;
+
+  // automatic city-specific fallback
+  return unsplashCityFallback(key);
 }
 
 export default BACKGROUNDS;
