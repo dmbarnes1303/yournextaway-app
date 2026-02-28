@@ -28,7 +28,7 @@ function cleanString(v: unknown) {
 }
 
 /**
- * Canonical city key normalizer:
+ * Canonical city key normalizer (Option 1):
  * - lowercases
  * - "&" -> "and"
  * - strips punctuation
@@ -64,29 +64,16 @@ function sortTrips(trips: Trip[]) {
   return copy;
 }
 
-/**
- * Ensure fixtureIdPrimary is always consistent:
- * - If matchIds empty => fixtureIdPrimary undefined
- * - If fixtureIdPrimary missing => first matchId
- * - If fixtureIdPrimary not in matchIds => first matchId
- */
-function reconcilePrimaryFixture(trip: any): any {
-  const matchIds = Array.isArray(trip?.matchIds) ? cleanMatchIds(trip.matchIds) : [];
-  const primary = cleanString(trip?.fixtureIdPrimary);
+function toOptionalNumber(v: unknown): number | undefined {
+  const n = typeof v === "number" ? v : Number(v);
+  return Number.isFinite(n) ? n : undefined;
+}
 
-  if (matchIds.length === 0) {
-    const out = { ...trip, matchIds };
-    if ("fixtureIdPrimary" in out) out.fixtureIdPrimary = undefined;
-    return out;
-  }
-
-  const nextPrimary = primary && matchIds.includes(primary) ? primary : matchIds[0];
-
-  return {
-    ...trip,
-    matchIds,
-    fixtureIdPrimary: nextPrimary,
-  };
+function toOptionalBool(v: unknown): boolean | undefined {
+  if (typeof v === "boolean") return v;
+  if (v === "true") return true;
+  if (v === "false") return false;
+  return undefined;
 }
 
 /**
@@ -95,14 +82,9 @@ function reconcilePrimaryFixture(trip: any): any {
  * - start/end must be YYYY-MM-DD
  * - matchIds coerced to string[]
  * - createdAt/updatedAt defaulted sanely
- * - preserves extra fields from storage (snapshots) so trip stays readable
- *
- * Migration:
- * - force cityId -> normalized cityKey
- * - if legacy cityId looked like a human string (e.g. "Barcelona") and displayCity missing,
- *   capture it into displayCity
- * - keep citySlug optional; if present but inconsistent, set to normalized cityId
- * - reconcile fixtureIdPrimary vs matchIds
+ * - normalizes cityId
+ * - ensures fixtureIdPrimary (if present) is in matchIds; otherwise uses matchIds[0]
+ * - preserves extra fields from storage so trip stays readable
  */
 function cleanLoadedTrip(raw: any): Trip | null {
   if (!raw || typeof raw !== "object") return null;
@@ -112,7 +94,6 @@ function cleanLoadedTrip(raw: any): Trip | null {
   const rawCityId = cleanString(raw.cityId);
   const rawCitySlug = typeof raw.citySlug === "string" ? cleanString(raw.citySlug) : "";
 
-  // Prefer raw.cityId; fallback to citySlug; fallback to displayCity
   const citySource = rawCityId || rawCitySlug || cleanString(raw.displayCity);
   const cityId = normalizeCityKey(citySource);
 
@@ -128,41 +109,74 @@ function cleanLoadedTrip(raw: any): Trip | null {
   const updatedAt =
     Number.isFinite(Number(raw.updatedAt)) && Number(raw.updatedAt) > 0 ? Number(raw.updatedAt) : createdAt;
 
-  // If displayCity is missing, try to preserve a nice human label from legacy inputs.
+  const matchIds = cleanMatchIds(raw.matchIds);
+
+  // Primary fixture sanity
+  const rawPrimary = cleanString(raw.fixtureIdPrimary);
+  let fixtureIdPrimary = rawPrimary || (matchIds[0] ? String(matchIds[0]) : "");
+
+  // Ensure primary is included in matchIds
+  let nextMatchIds = matchIds;
+  if (fixtureIdPrimary && !nextMatchIds.includes(fixtureIdPrimary)) {
+    nextMatchIds = [...nextMatchIds, fixtureIdPrimary];
+  }
+
+  // If no matchIds but primary exists, set matchIds = [primary]
+  if (fixtureIdPrimary && nextMatchIds.length === 0) nextMatchIds = [fixtureIdPrimary];
+
+  // If still no primary but matchIds exist, set primary = first
+  if (!fixtureIdPrimary && nextMatchIds.length > 0) fixtureIdPrimary = String(nextMatchIds[0]);
+
+  // Preserve a nice displayCity when legacy cityId looked human
   const displayCity =
     typeof raw.displayCity === "string" && raw.displayCity.trim()
       ? raw.displayCity.trim()
       : rawCityId && rawCityId !== cityId
-      ? rawCityId // likely "Barcelona" vs "barcelona"
+      ? rawCityId
       : undefined;
 
-  // Start from raw to preserve snapshot fields, then override invariants.
   const tripAny: any = {
     ...raw,
 
     id,
     cityId,
-    citySlug: cityId, // keep URL helper consistent
+    citySlug: cityId,
 
     startDate,
     endDate,
+
+    matchIds: nextMatchIds,
+    fixtureIdPrimary: fixtureIdPrimary || undefined,
 
     notes: typeof raw.notes === "string" ? raw.notes.trim() : undefined,
 
     ...(displayCity ? { displayCity } : {}),
 
+    // Coerce known snapshot fields to correct types
+    homeTeamId: toOptionalNumber(raw.homeTeamId),
+    awayTeamId: toOptionalNumber(raw.awayTeamId),
+    leagueId: toOptionalNumber(raw.leagueId),
+    sportsevents365EventId: toOptionalNumber(raw.sportsevents365EventId),
+    kickoffTbc: toOptionalBool(raw.kickoffTbc),
+
     createdAt,
     updatedAt,
   };
 
-  // Reconcile primary fixture + matchIds
-  const reconciled = reconcilePrimaryFixture(tripAny);
-
-  return reconciled as Trip;
+  return tripAny as Trip;
 }
 
 async function persistTrips(trips: Trip[]) {
   await writeJson(STORAGE_KEY, trips);
+}
+
+function uniqPush(arr: string[], id: string) {
+  if (!arr.includes(id)) arr.push(id);
+  return arr;
+}
+
+function removeFrom(arr: string[], id: string) {
+  return arr.filter((x) => x !== id);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -190,10 +204,9 @@ type TripsState = {
 
   updateTrip: (tripId: string, patch: Partial<Omit<Trip, "id" | "createdAt">> & Record<string, any>) => Promise<void>;
 
-  /** Multi-match helpers (Phase 1+): */
-  addMatchToTrip: (tripId: string, matchId: string, opts?: { setPrimary?: boolean }) => Promise<void>;
-  removeMatchFromTrip: (tripId: string, matchId: string) => Promise<void>;
-  setPrimaryMatchForTrip: (tripId: string, matchId: string) => Promise<void>;
+  addMatchToTrip: (tripId: string, fixtureId: string, opts?: { setPrimary?: boolean }) => Promise<void>;
+  removeMatchFromTrip: (tripId: string, fixtureId: string) => Promise<void>;
+  setPrimaryMatchForTrip: (tripId: string, fixtureId: string) => Promise<void>;
 
   deleteTripCascade: (tripId: string) => Promise<void>;
 
@@ -252,30 +265,30 @@ const useTripsStore = create<TripsState>((set, get) => ({
     if (!isIsoDateOnly(startDate)) throw new Error("startDate must be YYYY-MM-DD");
     if (!isIsoDateOnly(endDate)) throw new Error("endDate must be YYYY-MM-DD");
 
-    // Preserve displayCity if provided (nice UI label)
-    const displayCity =
-      typeof input.displayCity === "string" && input.displayCity.trim() ? input.displayCity.trim() : undefined;
-
-    const matchIds = cleanMatchIds(input.matchIds);
-
-    // Allow caller to suggest a primary; otherwise we auto-pick first match.
-    const preferredPrimary = cleanString(input.fixtureIdPrimary);
+    const matchIds = Array.isArray(input.matchIds) ? cleanMatchIds(input.matchIds) : [];
+    const fixtureIdPrimaryRaw = cleanString(input.fixtureIdPrimary);
     const fixtureIdPrimary =
-      matchIds.length === 0 ? undefined : preferredPrimary && matchIds.includes(preferredPrimary) ? preferredPrimary : matchIds[0];
+      fixtureIdPrimaryRaw || (matchIds[0] ? String(matchIds[0]) : "");
 
-    // IMPORTANT: allow passing snapshot fields without losing them:
-    // start from input, then override invariant fields.
+    const nextMatchIds = fixtureIdPrimary ? uniqPush([...matchIds], fixtureIdPrimary) : matchIds;
+
+    const displayCity =
+      typeof input.displayCity === "string" && input.displayCity.trim()
+        ? input.displayCity.trim()
+        : undefined;
+
     const tripAny: any = {
       ...input,
 
       id: makeTripId(),
       cityId: cityIdNorm,
-      citySlug: cityIdNorm, // keep consistent
+      citySlug: cityIdNorm,
+
       startDate,
       endDate,
 
-      matchIds,
-      fixtureIdPrimary,
+      matchIds: nextMatchIds,
+      fixtureIdPrimary: fixtureIdPrimary || undefined,
 
       notes: typeof input.notes === "string" ? input.notes.trim() : undefined,
 
@@ -290,9 +303,7 @@ const useTripsStore = create<TripsState>((set, get) => ({
 
     try {
       await persistTrips(next);
-    } catch {
-      // best-effort
-    }
+    } catch {}
 
     return tripAny as Trip;
   },
@@ -312,10 +323,15 @@ const useTripsStore = create<TripsState>((set, get) => ({
       if ("endDate" in p && !isIsoDateOnly(p.endDate)) delete p.endDate;
 
       if ("cityId" in p) p.cityId = normalizeCityKey(p.cityId);
-      // Keep slug consistent; never trust it as canonical
       if ("citySlug" in p) p.citySlug = normalizeCityKey(p.cityId ?? t.cityId);
 
       if ("matchIds" in p) p.matchIds = cleanMatchIds(p.matchIds);
+
+      if ("fixtureIdPrimary" in p) {
+        const fp = cleanString(p.fixtureIdPrimary);
+        p.fixtureIdPrimary = fp || undefined;
+      }
+
       if ("notes" in p && typeof p.notes === "string") p.notes = p.notes.trim();
 
       if ("displayCity" in p && typeof p.displayCity === "string") {
@@ -323,51 +339,30 @@ const useTripsStore = create<TripsState>((set, get) => ({
         p.displayCity = dc || undefined;
       }
 
-      if ("fixtureIdPrimary" in p) {
-        const fp = cleanString(p.fixtureIdPrimary);
-        p.fixtureIdPrimary = fp || undefined;
+      // Coerce common snapshot numeric fields if provided
+      if ("homeTeamId" in p) p.homeTeamId = toOptionalNumber(p.homeTeamId);
+      if ("awayTeamId" in p) p.awayTeamId = toOptionalNumber(p.awayTeamId);
+      if ("leagueId" in p) p.leagueId = toOptionalNumber(p.leagueId);
+      if ("sportsevents365EventId" in p) p.sportsevents365EventId = toOptionalNumber(p.sportsevents365EventId);
+
+      if ("kickoffTbc" in p) {
+        const kb = toOptionalBool(p.kickoffTbc);
+        p.kickoffTbc = kb;
       }
 
-      // Merge then reconcile primary fixture vs matchIds
-      const merged = { ...(t as any), ...p, updatedAt: now() };
-      return reconcilePrimaryFixture(merged) as Trip;
-    });
+      // Post-normalize: if we have matchIds and primary, ensure consistency
+      const merged: any = { ...(t as any), ...p };
 
-    const sorted = sortTrips(next);
-    set({ trips: sorted, loaded: true });
+      const mids: string[] = Array.isArray(merged.matchIds) ? cleanMatchIds(merged.matchIds) : [];
+      let primary = cleanString(merged.fixtureIdPrimary);
 
-    try {
-      await persistTrips(sorted);
-    } catch {
-      // best-effort
-    }
-  },
+      if (primary && !mids.includes(primary)) merged.matchIds = [...mids, primary];
+      else merged.matchIds = mids;
 
-  addMatchToTrip: async (tripId, matchId, opts) => {
-    if (!get().loaded) await get().loadTrips();
+      if (!primary && merged.matchIds.length > 0) primary = String(merged.matchIds[0]);
+      merged.fixtureIdPrimary = primary || undefined;
 
-    const id = cleanString(tripId);
-    const mid = cleanString(matchId);
-    if (!id || !mid) return;
-
-    const setPrimary = Boolean(opts?.setPrimary);
-
-    const next = get().trips.map((t) => {
-      if (t.id !== id) return t;
-
-      const matchIds = cleanMatchIds([...(t.matchIds ?? []), mid]);
-      const merged: any = {
-        ...(t as any),
-        matchIds,
-        updatedAt: now(),
-      };
-
-      // If trip had no matches, or caller wants it, set as primary.
-      if (setPrimary || !cleanString((t as any).fixtureIdPrimary)) {
-        merged.fixtureIdPrimary = mid;
-      }
-
-      return reconcilePrimaryFixture(merged) as Trip;
+      return { ...merged, updatedAt: now() } as Trip;
     });
 
     const sorted = sortTrips(next);
@@ -378,64 +373,65 @@ const useTripsStore = create<TripsState>((set, get) => ({
     } catch {}
   },
 
-  removeMatchFromTrip: async (tripId, matchId) => {
+  addMatchToTrip: async (tripId, fixtureId, opts) => {
     if (!get().loaded) await get().loadTrips();
 
     const id = cleanString(tripId);
-    const mid = cleanString(matchId);
-    if (!id || !mid) return;
+    const fid = cleanString(fixtureId);
+    if (!id || !fid) return;
+
+    const setPrimary = !!opts?.setPrimary;
 
     const next = get().trips.map((t) => {
       if (t.id !== id) return t;
+      const mids = Array.isArray(t.matchIds) ? cleanMatchIds(t.matchIds) : [];
+      const merged = uniqPush([...mids], fid);
 
-      const matchIds = cleanMatchIds((t.matchIds ?? []).filter((x) => cleanString(x) !== mid));
-      const merged: any = {
-        ...(t as any),
-        matchIds,
-        updatedAt: now(),
-      };
+      const out: any = { ...(t as any), matchIds: merged, updatedAt: now() };
+      if (setPrimary) out.fixtureIdPrimary = fid;
+      if (!out.fixtureIdPrimary) out.fixtureIdPrimary = merged[0] || undefined;
 
-      // If the removed one was primary, reconcilePrimaryFixture will pick first remaining (or unset).
-      if (cleanString((t as any).fixtureIdPrimary) === mid) {
-        merged.fixtureIdPrimary = undefined;
-      }
-
-      return reconcilePrimaryFixture(merged) as Trip;
+      return out as Trip;
     });
 
     const sorted = sortTrips(next);
     set({ trips: sorted, loaded: true });
-
     try {
       await persistTrips(sorted);
     } catch {}
   },
 
-  setPrimaryMatchForTrip: async (tripId, matchId) => {
+  removeMatchFromTrip: async (tripId, fixtureId) => {
     if (!get().loaded) await get().loadTrips();
 
     const id = cleanString(tripId);
-    const mid = cleanString(matchId);
-    if (!id || !mid) return;
+    const fid = cleanString(fixtureId);
+    if (!id || !fid) return;
 
     const next = get().trips.map((t) => {
       if (t.id !== id) return t;
 
-      const merged: any = {
-        ...(t as any),
-        fixtureIdPrimary: mid,
-        updatedAt: now(),
-      };
+      const mids = Array.isArray(t.matchIds) ? cleanMatchIds(t.matchIds) : [];
+      const after = removeFrom(mids, fid);
 
-      return reconcilePrimaryFixture(merged) as Trip;
+      const out: any = { ...(t as any), matchIds: after, updatedAt: now() };
+
+      const primary = cleanString(out.fixtureIdPrimary);
+      if (primary === fid) out.fixtureIdPrimary = after[0] || undefined;
+      if (!out.fixtureIdPrimary && after.length > 0) out.fixtureIdPrimary = after[0];
+
+      return out as Trip;
     });
 
     const sorted = sortTrips(next);
     set({ trips: sorted, loaded: true });
-
     try {
       await persistTrips(sorted);
     } catch {}
+  },
+
+  setPrimaryMatchForTrip: async (tripId, fixtureId) => {
+    await get().addMatchToTrip(tripId, fixtureId, { setPrimary: true });
   },
 
   deleteTripCascade: async (tripId) => {
@@ -482,16 +478,13 @@ const useTripsStore = create<TripsState>((set, get) => ({
     } catch {}
 
     for (const seed of MOCK_TRIP_SEEDS) {
-      const matchIds = cleanMatchIds(seed.matchIds ?? []);
-      const fixtureIdPrimary = matchIds.length ? matchIds[0] : undefined;
-
       const trip = await get().addTrip({
         cityId: seed.cityId,
         citySlug: seed.citySlug,
         startDate: seed.startDate,
         endDate: seed.endDate,
-        matchIds,
-        fixtureIdPrimary,
+        matchIds: seed.matchIds ?? [],
+        fixtureIdPrimary: seed.matchIds?.[0] ? String(seed.matchIds[0]) : undefined,
         notes: seed.notes,
       });
 
@@ -526,7 +519,7 @@ const useTripsStore = create<TripsState>((set, get) => ({
 }));
 
 /* -------------------------------------------------------------------------- */
-/* Wrapper */
+/* Wrapper                                                                     */
 /* -------------------------------------------------------------------------- */
 
 const tripsStore = {
@@ -546,16 +539,16 @@ const tripsStore = {
     await useTripsStore.getState().updateTrip(tripId, patch);
   },
 
-  addMatchToTrip: async (tripId: string, matchId: string, opts?: { setPrimary?: boolean }) => {
-    await useTripsStore.getState().addMatchToTrip(tripId, matchId, opts);
+  addMatchToTrip: async (tripId: string, fixtureId: string, opts?: { setPrimary?: boolean }) => {
+    await useTripsStore.getState().addMatchToTrip(tripId, fixtureId, opts);
   },
 
-  removeMatchFromTrip: async (tripId: string, matchId: string) => {
-    await useTripsStore.getState().removeMatchFromTrip(tripId, matchId);
+  removeMatchFromTrip: async (tripId: string, fixtureId: string) => {
+    await useTripsStore.getState().removeMatchFromTrip(tripId, fixtureId);
   },
 
-  setPrimaryMatchForTrip: async (tripId: string, matchId: string) => {
-    await useTripsStore.getState().setPrimaryMatchForTrip(tripId, matchId);
+  setPrimaryMatchForTrip: async (tripId: string, fixtureId: string) => {
+    await useTripsStore.getState().setPrimaryMatchForTrip(tripId, fixtureId);
   },
 
   deleteTripCascade: async (tripId: string) => {
