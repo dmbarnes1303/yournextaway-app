@@ -5,30 +5,21 @@ export type TripId = string;
 
 /**
  * Trip
- * Phase 1: Trip workspace anchored around 1+ fixtures.
- *
- * CITY IDENTITY (OPTION 1 — LOCKED):
- * - `cityId` is the canonical cityKey (normalized, stable).
- * - `citySlug` is optional/legacy (URL presentation only).
- * - `displayCity` is optional UI text captured at save time.
+ * Phase 1: "trip workspace" anchored around 1+ fixtures, with pragmatic cityId.
  *
  * IMPORTANT:
- * - Snapshot fields are optional and may be stale.
- * - Live API data can override when available.
+ * - We store snapshot fields to keep the UI readable offline and resilient
+ *   if API responses change or fixture lookups fail.
+ * - All snapshot fields are optional and may be stale; live API data can override.
  */
 export type Trip = {
   id: TripId;
 
   /**
-   * Canonical city key (normalized).
-   * Example: "barcelona", "san-sebastian", "munich"
+   * For Phase 1 we keep this pragmatic: the "destination" identifier
+   * derived from venue city. Later: normalize to city registry IDs.
    */
   cityId: string;
-
-  /**
-   * Optional URL slug. Do NOT treat as canonical.
-   * In Option 1, we often keep this equal to `cityId` for convenience.
-   */
   citySlug?: string;
 
   /** YYYY-MM-DD */
@@ -37,7 +28,7 @@ export type Trip = {
   endDate: string;
 
   /**
-   * Match IDs (API-Football fixture IDs stored as strings).
+   * Match IDs (API-Football fixture IDs stored as strings)
    * Phase 1: one fixture per trip, but keep as array for future.
    */
   matchIds: string[];
@@ -50,7 +41,7 @@ export type Trip = {
 
   /**
    * Human display city captured at trip creation time.
-   * Example: "Barcelona"
+   * Useful when cityId is a slug or when fixture enrichment fails.
    */
   displayCity?: string;
 
@@ -90,6 +81,12 @@ export type Trip = {
    * If missing, match screen falls back to SE365 search.
    */
   sportsevents365EventId?: number;
+
+  /**
+   * Snapshot of the best-known SE365 URL for this match (tickets/event/search).
+   * Used to open the exact game page when available.
+   */
+  sportsevents365EventUrl?: string;
 
   createdAt: number;
   updatedAt: number;
