@@ -27,6 +27,29 @@ function cleanString(v: unknown) {
   return typeof v === "string" ? v.trim() : String(v ?? "").trim();
 }
 
+/**
+ * Canonical city key normalizer (Option 1):
+ * - lowercases
+ * - "&" -> "and"
+ * - strips punctuation
+ * - spaces -> "-"
+ * - collapses repeated "-"
+ *
+ * IMPORTANT: This is the *source of truth* for Trip.cityId.
+ */
+function normalizeCityKey(cityRaw: unknown): string {
+  const s = cleanString(cityRaw).toLowerCase();
+  if (!s) return "trip";
+  const out =
+    s
+      .replace(/&/g, "and")
+      .replace(/[^\p{L}\p{N}\s-]/gu, "")
+      .replace(/\s+/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "") || "trip";
+  return out;
+}
+
 function cleanMatchIds(v: unknown): string[] {
   if (!Array.isArray(v)) return [];
   return v
@@ -48,12 +71,25 @@ function sortTrips(trips: Trip[]) {
  * - matchIds coerced to string[]
  * - createdAt/updatedAt defaulted sanely
  * - preserves extra fields from storage (snapshots) so trip stays readable
+ *
+ * Option 1 migration:
+ * - force cityId -> normalized cityKey
+ * - if legacy cityId looked like a human string (e.g. "Barcelona") and displayCity missing,
+ *   capture it into displayCity
+ * - keep citySlug optional; if present but inconsistent, we set it to normalized cityId
  */
 function cleanLoadedTrip(raw: any): Trip | null {
   if (!raw || typeof raw !== "object") return null;
 
   const id = cleanString(raw.id);
-  const cityId = cleanString(raw.cityId);
+
+  const rawCityId = cleanString(raw.cityId);
+  const rawCitySlug = typeof raw.citySlug === "string" ? cleanString(raw.citySlug) : "";
+
+  // Prefer raw.cityId; fallback to citySlug; fallback to displayCity
+  const citySource = rawCityId || rawCitySlug || cleanString(raw.displayCity);
+  const cityId = normalizeCityKey(citySource);
+
   const startDate = cleanString(raw.startDate);
   const endDate = cleanString(raw.endDate);
 
@@ -66,6 +102,14 @@ function cleanLoadedTrip(raw: any): Trip | null {
   const updatedAt =
     Number.isFinite(Number(raw.updatedAt)) && Number(raw.updatedAt) > 0 ? Number(raw.updatedAt) : createdAt;
 
+  // If displayCity is missing, try to preserve a nice human label from legacy inputs.
+  const displayCity =
+    typeof raw.displayCity === "string" && raw.displayCity.trim()
+      ? raw.displayCity.trim()
+      : rawCityId && rawCityId !== cityId
+      ? rawCityId // likely "Barcelona" vs "barcelona"
+      : undefined;
+
   // IMPORTANT: start from raw to preserve snapshot fields,
   // then override core Trip invariants.
   const tripAny: any = {
@@ -73,13 +117,15 @@ function cleanLoadedTrip(raw: any): Trip | null {
 
     id,
     cityId,
-    citySlug: typeof raw.citySlug === "string" ? raw.citySlug : undefined,
+    citySlug: cityId, // keep URL helper consistent
 
     startDate,
     endDate,
 
     matchIds: cleanMatchIds(raw.matchIds),
-    notes: typeof raw.notes === "string" ? raw.notes : undefined,
+    notes: typeof raw.notes === "string" ? raw.notes.trim() : undefined,
+
+    ...(displayCity ? { displayCity } : {}),
 
     createdAt,
     updatedAt,
@@ -165,13 +211,19 @@ const useTripsStore = create<TripsState>((set, get) => ({
   addTrip: async (input) => {
     if (!get().loaded) await get().loadTrips();
 
-    const cityId = cleanString(input.cityId);
+    const cityIdNorm = normalizeCityKey(input.cityId);
     const startDate = cleanString(input.startDate);
     const endDate = cleanString(input.endDate);
 
-    if (!cityId) throw new Error("cityId required");
+    if (!cityIdNorm) throw new Error("cityId required");
     if (!isIsoDateOnly(startDate)) throw new Error("startDate must be YYYY-MM-DD");
     if (!isIsoDateOnly(endDate)) throw new Error("endDate must be YYYY-MM-DD");
+
+    // Preserve displayCity if provided (nice UI label)
+    const displayCity =
+      typeof input.displayCity === "string" && input.displayCity.trim()
+        ? input.displayCity.trim()
+        : undefined;
 
     // IMPORTANT: allow passing snapshot fields without losing them:
     // start from input, then override invariant fields.
@@ -179,12 +231,15 @@ const useTripsStore = create<TripsState>((set, get) => ({
       ...input,
 
       id: makeTripId(),
-      cityId,
-      citySlug: input.citySlug ? cleanString(input.citySlug) : undefined,
+      cityId: cityIdNorm,
+      citySlug: cityIdNorm, // keep consistent
       startDate,
       endDate,
       matchIds: Array.isArray(input.matchIds) ? cleanMatchIds(input.matchIds) : [],
-      notes: typeof input.notes === "string" ? input.notes : undefined,
+      notes: typeof input.notes === "string" ? input.notes.trim() : undefined,
+
+      ...(displayCity ? { displayCity } : {}),
+
       createdAt: now(),
       updatedAt: now(),
     };
@@ -215,12 +270,18 @@ const useTripsStore = create<TripsState>((set, get) => ({
       if ("startDate" in p && !isIsoDateOnly(p.startDate)) delete p.startDate;
       if ("endDate" in p && !isIsoDateOnly(p.endDate)) delete p.endDate;
 
-      if ("cityId" in p) p.cityId = cleanString(p.cityId);
-      if ("citySlug" in p && typeof p.citySlug === "string") p.citySlug = p.citySlug.trim();
+      if ("cityId" in p) p.cityId = normalizeCityKey(p.cityId);
+      // Keep slug consistent; never trust it as canonical
+      if ("citySlug" in p) p.citySlug = normalizeCityKey(p.cityId ?? t.cityId);
+
       if ("matchIds" in p) p.matchIds = cleanMatchIds(p.matchIds);
       if ("notes" in p && typeof p.notes === "string") p.notes = p.notes.trim();
 
-      // IMPORTANT: spread patch to preserve snapshot fields too
+      if ("displayCity" in p && typeof p.displayCity === "string") {
+        const dc = p.displayCity.trim();
+        p.displayCity = dc || undefined;
+      }
+
       return { ...(t as any), ...p, updatedAt: now() } as Trip;
     });
 
