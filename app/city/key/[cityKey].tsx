@@ -9,7 +9,6 @@ import {
   ActivityIndicator,
   Image,
   Platform,
-  Modal,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -73,11 +72,21 @@ function groupByMonth(rows: FixtureListRow[]) {
   const out: { key: string; title: string; rows: FixtureListRow[] }[] = [];
   for (const [key, list] of map.entries()) out.push({ key, title: key, rows: list });
 
+  // Sort groups by first fixture date
   out.sort((a, b) => {
     const da = a.rows[0]?.fixture?.date ? new Date(a.rows[0].fixture.date).getTime() : 0;
     const db = b.rows[0]?.fixture?.date ? new Date(b.rows[0].fixture.date).getTime() : 0;
     return da - db;
   });
+
+  // Sort fixtures within each group
+  for (const g of out) {
+    g.rows.sort((a, b) => {
+      const da = a?.fixture?.date ? new Date(a.fixture.date).getTime() : 0;
+      const db = b?.fixture?.date ? new Date(b.fixture.date).getTime() : 0;
+      return da - db;
+    });
+  }
 
   return out;
 }
@@ -99,11 +108,7 @@ type CityData = {
 };
 
 type GuideBlock = { heading?: string; text: string };
-
-type GuideFull = {
-  title: string;
-  blocks: GuideBlock[];
-};
+type GuideFull = { title: string; blocks: GuideBlock[] };
 
 function normalizeText(v: any): string {
   return safeStr(v);
@@ -207,7 +212,9 @@ function getCityGuideFull(cityKey: string): GuideFull | null {
     const stay = normalizeText(guide.accommodation);
     if (stay) blocks.push({ heading: "Where to stay", text: stay });
 
-    if (!blocks.length) return { title, blocks: [{ heading: undefined, text: "Guide content is available for this city." }] };
+    if (!blocks.length) {
+      return { title, blocks: [{ heading: undefined, text: "Guide content is available for this city." }] };
+    }
 
     return { title, blocks };
   } catch {
@@ -233,28 +240,63 @@ function splitLinesToBullets(text: string) {
   const bullets = lines
     .map((l) => l.replace(/^[-•]\s*/, "").replace(/^\d+[.)]\s*/, "").trim())
     .filter(Boolean);
+
   return { bullets, paragraph: "" };
 }
 
-function GuideSectionCard({ heading, text }: { heading?: string; text: string }) {
-  const h = safeStr(heading);
+function GuideSectionCard({
+  heading,
+  text,
+  expanded,
+  onToggle,
+}: {
+  heading?: string;
+  text: string;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  const h = safeStr(heading) || "Guide";
   const { bullets, paragraph } = splitLinesToBullets(text);
+
+  const previewChars = 260;
+  const preview =
+    paragraph && paragraph.length > previewChars && !expanded ? `${paragraph.slice(0, previewChars).trim()}…` : paragraph;
+
+  const showToggle =
+    (paragraph && paragraph.length > previewChars) || (bullets && bullets.length > 6); // heuristic
 
   return (
     <GlassCard strength="default" style={styles.sectionCard} noPadding>
       <View style={styles.sectionCardInner}>
-        {h ? <Text style={styles.sectionHeading}>{h}</Text> : null}
+        <View style={styles.sectionCardHeader}>
+          <Text style={styles.sectionHeading}>{h}</Text>
 
-        {paragraph ? <Text style={styles.sectionText}>{paragraph}</Text> : null}
+          {showToggle ? (
+            <Pressable
+              onPress={onToggle}
+              accessibilityRole="button"
+              accessibilityLabel={expanded ? "Collapse section" : "Expand section"}
+              style={({ pressed }) => [styles.miniPill, pressed && styles.pressed]}
+              android_ripple={{ color: "rgba(255,255,255,0.06)" }}
+            >
+              <Text style={styles.miniPillText}>{expanded ? "Collapse" : "Expand"}</Text>
+            </Pressable>
+          ) : null}
+        </View>
+
+        {preview ? <Text style={styles.sectionText}>{preview}</Text> : null}
 
         {bullets.length ? (
           <View style={styles.bulletList}>
-            {bullets.slice(0, 16).map((b, idx) => (
-              <View key={`b-${idx}`} style={styles.bulletRow}>
+            {(expanded ? bullets : bullets.slice(0, 6)).map((b, idx) => (
+              <View key={`b-${h}-${idx}`} style={styles.bulletRow}>
                 <View style={styles.bulletDot} />
                 <Text style={styles.bulletText}>{b}</Text>
               </View>
             ))}
+            {!expanded && bullets.length > 6 ? (
+              <Text style={styles.moreHint}>+ {bullets.length - 6} more</Text>
+            ) : null}
           </View>
         ) : null}
       </View>
@@ -277,7 +319,9 @@ function FixtureRow({ row, onPressPlan }: { row: FixtureListRow; onPressPlan: ()
       <View style={styles.matchLine}>
         <View style={styles.teamSideLeft}>
           {homeLogo ? <Image source={{ uri: homeLogo }} style={styles.smallCrestImg} resizeMode="contain" /> : null}
-          <Text style={styles.teamNameLeft}>{homeName}</Text>
+          <Text style={styles.teamNameLeft} numberOfLines={2}>
+            {homeName}
+          </Text>
         </View>
 
         <View style={styles.vsPill}>
@@ -285,7 +329,9 @@ function FixtureRow({ row, onPressPlan }: { row: FixtureListRow; onPressPlan: ()
         </View>
 
         <View style={styles.teamSideRight}>
-          <Text style={styles.teamNameRight}>{awayName}</Text>
+          <Text style={styles.teamNameRight} numberOfLines={2}>
+            {awayName}
+          </Text>
           {awayLogo ? <Image source={{ uri: awayLogo }} style={styles.smallCrestImg} resizeMode="contain" /> : null}
         </View>
       </View>
@@ -299,6 +345,8 @@ function FixtureRow({ row, onPressPlan }: { row: FixtureListRow; onPressPlan: ()
       <View style={styles.fxCtaRow}>
         <Pressable
           onPress={onPressPlan}
+          accessibilityRole="button"
+          accessibilityLabel="Plan trip"
           style={({ pressed }) => [styles.planBtn, pressed && styles.pressed]}
           android_ripple={{ color: "rgba(79,224,138,0.10)" }}
         >
@@ -325,11 +373,17 @@ export default function CityScreen() {
   const city = useMemo(() => getCityData(cityKey), [cityKey]);
   const guideFull = useMemo(() => getCityGuideFull(cityKey), [cityKey]);
 
-  const [guideOpen, setGuideOpen] = useState(false);
-
   const [loadingFx, setLoadingFx] = useState(true);
   const [fxError, setFxError] = useState<string | null>(null);
   const [fxRows, setFxRows] = useState<FixtureListRow[]>([]);
+
+  // Guide expansion state
+  const [showAllGuide, setShowAllGuide] = useState(false);
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
+
+  const toggleSection = useCallback((key: string) => {
+    setExpandedSections((prev) => ({ ...prev, [key]: !prev[key] }));
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -438,6 +492,10 @@ export default function CityScreen() {
 
   const bgSource = getBackground("city");
 
+  const guideBlocks = guideFull?.blocks ?? [];
+  const previewCount = 2;
+  const visibleBlocks = showAllGuide ? guideBlocks : guideBlocks.slice(0, previewCount);
+
   return (
     <Background imageSource={bgSource} overlayOpacity={0.7}>
       <SafeAreaView style={styles.container} edges={["top"]}>
@@ -472,19 +530,13 @@ export default function CityScreen() {
 
               <View style={styles.heroActions}>
                 <Pressable
-                  onPress={() => setGuideOpen(true)}
-                  style={({ pressed }) => [styles.btn, styles.btnPrimary, pressed && styles.pressed]}
-                  android_ripple={{ color: "rgba(79,224,138,0.10)" }}
-                >
-                  <Text style={styles.btnPrimaryText}>Open city guide</Text>
-                </Pressable>
-
-                <Pressable
                   onPress={goHome}
+                  accessibilityRole="button"
+                  accessibilityLabel="Back to Home"
                   style={({ pressed }) => [styles.btn, styles.btnGhost, pressed && styles.pressed]}
                   android_ripple={{ color: "rgba(255,255,255,0.08)" }}
                 >
-                  <Text style={styles.btnGhostText}>Back to Home</Text>
+                  <Text style={styles.btnGhostText}>Back</Text>
                 </Pressable>
               </View>
             </View>
@@ -494,13 +546,18 @@ export default function CityScreen() {
           <View style={{ gap: 12 }}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Guide</Text>
-              <Pressable
-                onPress={() => setGuideOpen(true)}
-                style={({ pressed }) => [styles.miniPill, pressed && styles.pressed]}
-                android_ripple={{ color: "rgba(255,255,255,0.06)" }}
-              >
-                <Text style={styles.miniPillText}>Open</Text>
-              </Pressable>
+
+              {guideBlocks.length > previewCount ? (
+                <Pressable
+                  onPress={() => setShowAllGuide((v) => !v)}
+                  accessibilityRole="button"
+                  accessibilityLabel={showAllGuide ? "Collapse guide" : "Show full guide"}
+                  style={({ pressed }) => [styles.miniPill, pressed && styles.pressed]}
+                  android_ripple={{ color: "rgba(255,255,255,0.06)" }}
+                >
+                  <Text style={styles.miniPillText}>{showAllGuide ? "Collapse" : "Show all"}</Text>
+                </Pressable>
+              ) : null}
             </View>
 
             {!guideFull ? (
@@ -511,16 +568,25 @@ export default function CityScreen() {
               </GlassCard>
             ) : (
               <View style={{ gap: 12 }}>
-                {/* Show first 3 sections inline (feels rich without turning this into a wall of text) */}
-                {guideFull.blocks.slice(0, 3).map((b, idx) => (
-                  <GuideSectionCard key={`sec-${idx}`} heading={b.heading} text={b.text} />
-                ))}
+                {visibleBlocks.map((b, idx) => {
+                  const key = `${safeStr(b.heading) || "Guide"}-${idx}`;
+                  const isExpanded = !!expandedSections[key] || showAllGuide; // if showing all, treat as expanded
+                  return (
+                    <GuideSectionCard
+                      key={`sec-${key}`}
+                      heading={b.heading}
+                      text={b.text}
+                      expanded={isExpanded}
+                      onToggle={() => toggleSection(key)}
+                    />
+                  );
+                })}
 
-                {guideFull.blocks.length > 3 ? (
+                {!showAllGuide && guideBlocks.length > previewCount ? (
                   <GlassCard strength="default" style={styles.block} noPadding>
                     <View style={styles.blockInner}>
                       <Text style={styles.blockNote}>
-                        More sections available ({guideFull.blocks.length - 3}). Tap “Open” to read the full guide.
+                        More sections available ({guideBlocks.length - previewCount}). Tap “Show all” to expand the full guide.
                       </Text>
                     </View>
                   </GlassCard>
@@ -569,40 +635,6 @@ export default function CityScreen() {
 
           <View style={{ height: 14 }} />
         </ScrollView>
-
-        {/* GUIDE MODAL */}
-        <Modal visible={guideOpen} animationType="fade" transparent onRequestClose={() => setGuideOpen(false)}>
-          <Pressable style={styles.modalBackdrop} onPress={() => setGuideOpen(false)} />
-          <View style={styles.modalSheetWrap} pointerEvents="box-none">
-            <GlassCard strength="strong" style={styles.modalSheet} noPadding>
-              <View style={styles.modalInner}>
-                <View style={styles.modalHeader}>
-                  <Text style={styles.modalTitle}>{guideFull?.title || "City guide"}</Text>
-                  <Pressable onPress={() => setGuideOpen(false)} style={styles.modalClose} hitSlop={10}>
-                    <Text style={styles.modalCloseText}>Done</Text>
-                  </Pressable>
-                </View>
-
-                {!guideFull ? (
-                  <Text style={styles.modalBodyText}>Guide content unavailable.</Text>
-                ) : (
-                  <ScrollView
-                    style={styles.modalScroll}
-                    contentContainerStyle={{ paddingBottom: 6 }}
-                    showsVerticalScrollIndicator={false}
-                  >
-                    {guideFull.blocks.map((b, idx) => (
-                      <View key={`g-${idx}`} style={styles.guideBlock}>
-                        {b.heading ? <Text style={styles.guideBlockTitle}>{b.heading}</Text> : null}
-                        <Text style={styles.modalBodyText}>{b.text}</Text>
-                      </View>
-                    ))}
-                  </ScrollView>
-                )}
-              </View>
-            </GlassCard>
-          </View>
-        </Modal>
       </SafeAreaView>
     </Background>
   );
@@ -626,7 +658,13 @@ const styles = StyleSheet.create({
   heroMetaText: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.black },
   flagMini: { width: 20, height: 14, borderRadius: 3, opacity: 0.9 },
 
-  heroSubtitle: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold, lineHeight: 18, opacity: 0.95 },
+  heroSubtitle: {
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.bold,
+    lineHeight: 18,
+    opacity: 0.95,
+  },
 
   heroRange: { color: theme.colors.textTertiary, fontSize: 13, fontWeight: theme.fontWeight.bold, marginTop: 2 },
 
@@ -639,14 +677,9 @@ const styles = StyleSheet.create({
   },
   btnGhostText: { color: theme.colors.textSecondary, fontSize: 14, fontWeight: theme.fontWeight.black },
 
-  btnPrimary: {
-    borderColor: "rgba(79,224,138,0.26)",
-    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
-  },
-  btnPrimaryText: { color: theme.colors.text, fontSize: 14, fontWeight: theme.fontWeight.black },
-
   sectionHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
   sectionTitle: { color: theme.colors.text, fontSize: 18, fontWeight: theme.fontWeight.black },
+
   miniPill: {
     paddingVertical: 8,
     paddingHorizontal: 12,
@@ -665,8 +698,12 @@ const styles = StyleSheet.create({
 
   sectionCard: { borderRadius: 24 },
   sectionCardInner: { padding: 14, gap: 10 },
+  sectionCardHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
+
   sectionHeading: { color: theme.colors.text, fontSize: 16, fontWeight: theme.fontWeight.black },
   sectionText: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold, lineHeight: 19 },
+
+  moreHint: { color: theme.colors.textTertiary, fontSize: 12, fontWeight: theme.fontWeight.bold, marginTop: 2 },
 
   bulletList: { gap: 10, paddingTop: 2 },
   bulletRow: { flexDirection: "row", gap: 10, alignItems: "flex-start" },
@@ -692,8 +729,8 @@ const styles = StyleSheet.create({
   teamSideLeft: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 8 },
   teamSideRight: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 8 },
 
-  teamNameLeft: { flex: 1, minWidth: 0, color: theme.colors.text, fontSize: 14, fontWeight: theme.fontWeight.black, flexWrap: "wrap" },
-  teamNameRight: { flex: 1, minWidth: 0, textAlign: "right", color: theme.colors.text, fontSize: 14, fontWeight: theme.fontWeight.black, flexWrap: "wrap" },
+  teamNameLeft: { flex: 1, minWidth: 0, color: theme.colors.text, fontSize: 14, fontWeight: theme.fontWeight.black },
+  teamNameRight: { flex: 1, minWidth: 0, textAlign: "right", color: theme.colors.text, fontSize: 14, fontWeight: theme.fontWeight.black },
 
   vsPill: {
     flexShrink: 0,
@@ -724,34 +761,4 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   planBtnText: { color: theme.colors.text, fontSize: 12, fontWeight: theme.fontWeight.black },
-
-  modalBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.58)" },
-  modalSheetWrap: { flex: 1, justifyContent: "flex-end" },
-  modalSheet: { borderRadius: 22, marginHorizontal: theme.spacing.lg, marginBottom: theme.spacing.lg, overflow: "hidden" },
-  modalInner: { padding: 14, gap: 12 },
-  modalHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
-  modalTitle: { color: theme.colors.text, fontSize: 16, fontWeight: theme.fontWeight.black },
-  modalClose: {
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.18)",
-  },
-  modalCloseText: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: theme.fontWeight.black },
-  modalScroll: { maxHeight: 560 },
-
-  guideBlock: {
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-    backgroundColor: Platform.OS === "android" ? "rgba(12,14,16,0.20)" : "rgba(12,14,16,0.16)",
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    gap: 8,
-    marginBottom: 10,
-  },
-  guideBlockTitle: { color: theme.colors.text, fontSize: 14, fontWeight: theme.fontWeight.black },
-  modalBodyText: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold, lineHeight: 19 },
 });
