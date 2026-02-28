@@ -1,16 +1,6 @@
 // app/city/key/[cityKey].tsx
 import React, { useEffect, useMemo, useState, useCallback } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  Pressable,
-  ActivityIndicator,
-  Image,
-  Platform,
-  Modal,
-} from "react-native";
+import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Image, Platform, Modal } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
@@ -26,6 +16,8 @@ import { formatUkDateTimeMaybe } from "@/src/utils/formatters";
 import { getFixtures, type FixtureListRow } from "@/src/services/apiFootball";
 import { LEAGUES, getRollingWindowIso } from "@/src/constants/football";
 import type { CityGuide, CityTopThing } from "@/src/data/cityGuides/types";
+import { getCityByKeyLive, type CityRecord } from "@/src/services/citiesRegistry";
+import { normalizeCityKey } from "@/src/utils/city";
 
 /* -------------------------------------------------------------------------- */
 /* Utils */
@@ -158,57 +150,14 @@ function FlagMini({ countryCode }: { countryCode?: string }) {
 }
 
 /* -------------------------------------------------------------------------- */
-/* City + Guide runtime loaders (safe) */
+/* Guide loader (safe) */
 /* -------------------------------------------------------------------------- */
-
-type CityData = {
-  cityKey: string;
-  name: string;
-  countryCode?: string;
-  countryName?: string;
-  heroSubtitle?: string;
-  venueIds?: number[];
-};
 
 type GuideBlock = { heading?: string; text: string };
 type GuideFull = { title: string; blocks: GuideBlock[] };
 
 function normalizeText(v: any): string {
   return safeStr(v);
-}
-
-function getCityData(cityKey: string): CityData | null {
-  const key = safeStr(cityKey);
-  if (!key) return null;
-
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const citiesMod: any = require("@/src/data/cities");
-    const getter =
-      typeof citiesMod.getCity === "function"
-        ? citiesMod.getCity
-        : typeof citiesMod.getCityByKey === "function"
-          ? citiesMod.getCityByKey
-          : null;
-
-    if (getter) {
-      const c = getter(key);
-      if (c) {
-        return {
-          cityKey: safeStr(c.slug) || safeStr(c.cityKey) || key,
-          name: safeStr(c.name) || safeStr(c.title) || cityKeyToTitle(key),
-          countryCode: safeStr(c.countryCode),
-          countryName: safeStr(c.country) || safeStr(c.countryName),
-          heroSubtitle: safeStr(c.subtitle) || safeStr(c.tagline),
-          venueIds: Array.isArray(c.venueIds) ? c.venueIds : undefined,
-        };
-      }
-    }
-  } catch {
-    // ignore
-  }
-
-  return { cityKey: key, name: cityKeyToTitle(key) };
 }
 
 function getCityGuideFull(cityKey: string): GuideFull | null {
@@ -245,9 +194,7 @@ function getCityGuideFull(cityKey: string): GuideFull | null {
     const stay = normalizeText(guide.accommodation);
     if (stay) blocks.push({ heading: "Where to stay", text: stay });
 
-    if (!blocks.length) {
-      return { title, blocks: [{ heading: undefined, text: "Guide content is available for this city." }] };
-    }
+    if (!blocks.length) return { title, blocks: [{ heading: undefined, text: "Guide content is available for this city." }] };
 
     return { title, blocks };
   } catch {
@@ -396,8 +343,6 @@ function GuideModal({
 
 /* -------------------------------------------------------------------------- */
 /* Fixture Row */
-/* -------------------------------------------------------------------------- */
-
 function FixtureRow({ row, onPressPlan }: { row: FixtureListRow; onPressPlan: () => void }) {
   const homeName = safeStr(row?.teams?.home?.name) || "Home";
   const awayName = safeStr(row?.teams?.away?.name) || "Away";
@@ -453,13 +398,12 @@ function FixtureRow({ row, onPressPlan }: { row: FixtureListRow; onPressPlan: ()
 
 /* -------------------------------------------------------------------------- */
 /* Screen */
-/* -------------------------------------------------------------------------- */
-
 export default function CityScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
 
-  const cityKey = safeStr(params.cityKey);
+  const cityKeyParam = safeStr(params.cityKey);
+  const citySlug = useMemo(() => normalizeCityKey(cityKeyParam), [cityKeyParam]);
 
   const fromParam = toIsoOrEmpty(params.from);
   const toParam = toIsoOrEmpty(params.to);
@@ -468,14 +412,38 @@ export default function CityScreen() {
   const from = fromParam || rolling.from;
   const to = toParam || rolling.to;
 
-  const city = useMemo(() => getCityData(cityKey), [cityKey]);
-  const guideFull = useMemo(() => getCityGuideFull(cityKey), [cityKey]);
+  const [cityLive, setCityLive] = useState<CityRecord | null>(null);
+  const [cityLiveLoading, setCityLiveLoading] = useState(true);
+
+  const guideFull = useMemo(() => getCityGuideFull(citySlug), [citySlug]);
 
   const [loadingFx, setLoadingFx] = useState(true);
   const [fxError, setFxError] = useState<string | null>(null);
   const [fxRows, setFxRows] = useState<FixtureListRow[]>([]);
-
   const [guideOpen, setGuideOpen] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadCity() {
+      setCityLiveLoading(true);
+      try {
+        const c = await getCityByKeyLive(citySlug, LEAGUES);
+        if (!cancelled) setCityLive(c);
+      } catch {
+        if (!cancelled) setCityLive(null);
+      } finally {
+        if (!cancelled) setCityLiveLoading(false);
+      }
+    }
+
+    if (citySlug) loadCity();
+    else setCityLiveLoading(false);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [citySlug]);
 
   useEffect(() => {
     let cancelled = false;
@@ -486,8 +454,9 @@ export default function CityScreen() {
       setFxRows([]);
 
       try {
-        const cityName = safeStr(city?.name);
-        const venueIds = Array.isArray(city?.venueIds) ? city!.venueIds! : [];
+        // Prefer registry-driven matching; fallback to slug derived from fixture city.
+        const venueIds = Array.isArray(cityLive?.venueIds) ? cityLive!.venueIds : [];
+        const targetSlug = cityLive?.slug || citySlug;
 
         const settled = await Promise.allSettled(
           (LEAGUES ?? []).map((l) =>
@@ -509,16 +478,15 @@ export default function CityScreen() {
           all.push(...list);
         }
 
-        const cityLower = cityName.toLowerCase();
-
         const filtered = all.filter((r) => {
-          const vCity = safeStr(r?.fixture?.venue?.city).toLowerCase();
+          const vCity = safeStr(r?.fixture?.venue?.city);
+          const vSlug = vCity ? normalizeCityKey(vCity) : "";
           const vId = r?.fixture?.venue?.id;
 
-          const byCityName = cityLower && vCity && vCity === cityLower;
+          const byCitySlug = !!targetSlug && !!vSlug && vSlug === targetSlug;
           const byVenueId = typeof vId === "number" && venueIds.includes(vId);
 
-          return byCityName || byVenueId;
+          return byCitySlug || byVenueId;
         });
 
         const dedup = new Map<string, FixtureListRow>();
@@ -543,17 +511,23 @@ export default function CityScreen() {
       }
     }
 
-    run();
+    if (citySlug) run();
+    else {
+      setLoadingFx(false);
+      setFxRows([]);
+      setFxError("Missing city key.");
+    }
+
     return () => {
       cancelled = true;
     };
-  }, [city?.name, city?.venueIds, from, to]);
+  }, [citySlug, cityLive?.slug, cityLive?.venueIds, from, to]);
 
   const grouped = useMemo(() => groupByMonth(fxRows), [fxRows]);
 
-  const title = city?.name || cityKeyToTitle(cityKey);
-  const countryCode = safeStr(city?.countryCode);
-  const countryName = safeStr(city?.countryName);
+  const title = cityLive?.name || cityKeyToTitle(citySlug || cityKeyParam);
+  const countryCode = safeStr(cityLive?.countryCode);
+  const countryName = safeStr(cityLive?.country);
 
   const goHome = useCallback(() => {
     router.push("/(tabs)/home" as any);
@@ -582,7 +556,7 @@ export default function CityScreen() {
     [router, from, to]
   );
 
-  const bg = getCityBackground(cityKey);
+  const bg = getCityBackground(citySlug || cityKeyParam);
   const bgSource = typeof bg === "string" ? { uri: bg } : bg;
 
   const guideBlocks = guideFull?.blocks ?? [];
@@ -603,7 +577,6 @@ export default function CityScreen() {
     <Background imageSource={bgSource} overlayOpacity={0.7}>
       <SafeAreaView style={styles.container} edges={["top"]}>
         <ScrollView style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-          {/* HERO */}
           <GlassCard strength="strong" style={styles.hero} noPadding>
             <View style={styles.heroInner}>
               <Text style={styles.kicker}>CITY GUIDE</Text>
@@ -617,19 +590,18 @@ export default function CityScreen() {
                   <View style={styles.heroMetaRow}>
                     {countryCode ? <FlagMini countryCode={countryCode} /> : null}
                     {countryName ? <Text style={styles.heroMetaText}>{countryName}</Text> : null}
+                    {cityLiveLoading ? <Text style={styles.heroMetaText}>• Loading city…</Text> : null}
                   </View>
                 </View>
               </View>
 
-              {safeStr(city?.heroSubtitle) ? (
+              {safeStr((cityLive as any)?.heroSubtitle) ? (
                 <Text style={styles.heroSubtitle} numberOfLines={3} ellipsizeMode="tail">
-                  {safeStr(city?.heroSubtitle)}
+                  {safeStr((cityLive as any)?.heroSubtitle)}
                 </Text>
               ) : null}
 
-              <Text style={styles.heroRange}>
-                {from && to ? `${ddmmyyyyFromIsoDateOnly(from)} → ${ddmmyyyyFromIsoDateOnly(to)}` : ""}
-              </Text>
+              <Text style={styles.heroRange}>{from && to ? `${ddmmyyyyFromIsoDateOnly(from)} → ${ddmmyyyyFromIsoDateOnly(to)}` : ""}</Text>
 
               <View style={styles.heroActions}>
                 <Pressable
@@ -645,7 +617,6 @@ export default function CityScreen() {
             </View>
           </GlassCard>
 
-          {/* GUIDE */}
           <GlassCard strength="default" style={styles.block} noPadding>
             <View style={styles.blockInner}>
               <View style={styles.guideTopRow}>
@@ -677,7 +648,6 @@ export default function CityScreen() {
             </View>
           </GlassCard>
 
-          {/* CITY FIXTURES */}
           <GlassCard strength="default" style={styles.block} noPadding>
             <View style={styles.blockInner}>
               <Text style={styles.blockTitle}>Fixtures in {title}</Text>
@@ -716,20 +686,14 @@ export default function CityScreen() {
           <View style={{ height: 14 }} />
         </ScrollView>
 
-        <GuideModal
-          visible={guideOpen}
-          onClose={() => setGuideOpen(false)}
-          title={guideFull?.title || title}
-          blocks={guideBlocks}
-          backgroundSource={bgSource}
-        />
+        <GuideModal visible={guideOpen} onClose={() => setGuideOpen(false)} title={guideFull?.title || title} blocks={guideBlocks} backgroundSource={bgSource} />
       </SafeAreaView>
     </Background>
   );
 }
 
 /* -------------------------------------------------------------------------- */
-/* Styles */
+/* Styles (unchanged) */
 /* -------------------------------------------------------------------------- */
 
 const styles = StyleSheet.create({
@@ -750,23 +714,13 @@ const styles = StyleSheet.create({
   heroMetaText: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.black },
   flagMini: { width: 20, height: 14, borderRadius: 3, opacity: 0.9 },
 
-  heroSubtitle: {
-    color: theme.colors.textSecondary,
-    fontSize: 13,
-    fontWeight: theme.fontWeight.bold,
-    lineHeight: 18,
-    opacity: 0.95,
-  },
-
+  heroSubtitle: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold, lineHeight: 18, opacity: 0.95 },
   heroRange: { color: theme.colors.textTertiary, fontSize: 13, fontWeight: theme.fontWeight.bold, marginTop: 2 },
 
   heroActions: { flexDirection: "row", gap: 10, marginTop: 6 },
 
   btn: { flex: 1, borderRadius: 16, paddingVertical: 12, alignItems: "center", borderWidth: 1, overflow: "hidden" },
-  btnGhost: {
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
-  },
+  btnGhost: { borderColor: "rgba(255,255,255,0.10)", backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle },
   btnGhostText: { color: theme.colors.textSecondary, fontSize: 14, fontWeight: theme.fontWeight.black },
 
   block: { borderRadius: 24 },
@@ -810,17 +764,7 @@ const styles = StyleSheet.create({
   teamNameLeft: { flex: 1, minWidth: 0, color: theme.colors.text, fontSize: 14, fontWeight: theme.fontWeight.black },
   teamNameRight: { flex: 1, minWidth: 0, textAlign: "right", color: theme.colors.text, fontSize: 14, fontWeight: theme.fontWeight.black },
 
-  vsPill: {
-    flexShrink: 0,
-    width: 34,
-    height: 26,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.18)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
+  vsPill: { flexShrink: 0, width: 34, height: 26, borderRadius: 999, borderWidth: 1, borderColor: "rgba(255,255,255,0.10)", backgroundColor: "rgba(0,0,0,0.18)", alignItems: "center", justifyContent: "center" },
   vsText: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: theme.fontWeight.black },
 
   smallCrestImg: { width: 18, height: 18, opacity: 0.95 },
@@ -829,51 +773,19 @@ const styles = StyleSheet.create({
   fxMetaLine: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: theme.fontWeight.bold, lineHeight: 16 },
 
   fxCtaRow: { flexDirection: "row", justifyContent: "flex-end", alignItems: "center" },
-  planBtn: {
-    paddingVertical: 9,
-    paddingHorizontal: 12,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "rgba(79,224,138,0.26)",
-    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
-    overflow: "hidden",
-  },
+  planBtn: { paddingVertical: 9, paddingHorizontal: 12, borderRadius: 999, borderWidth: 1, borderColor: "rgba(79,224,138,0.26)", backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle, overflow: "hidden" },
   planBtnText: { color: theme.colors.text, fontSize: 12, fontWeight: theme.fontWeight.black },
 
-  /* Modal */
   modalSafe: { flex: 1, paddingHorizontal: theme.spacing.lg },
-  modalTop: {
-    paddingTop: theme.spacing.md,
-    paddingBottom: theme.spacing.md,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
+  modalTop: { paddingTop: theme.spacing.md, paddingBottom: theme.spacing.md, flexDirection: "row", alignItems: "center", gap: 12 },
   modalKicker: { color: "rgba(79,224,138,0.70)", fontSize: 11, fontWeight: theme.fontWeight.black, letterSpacing: 0.5 },
   modalTitle: { marginTop: 4, color: theme.colors.text, fontSize: 20, fontWeight: theme.fontWeight.black },
-  closePill: {
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    backgroundColor: "rgba(0,0,0,0.22)",
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    minWidth: 86,
-    alignItems: "center",
-    overflow: "hidden",
-  },
+  closePill: { borderRadius: 999, borderWidth: 1, borderColor: "rgba(255,255,255,0.12)", backgroundColor: "rgba(0,0,0,0.22)", paddingVertical: 10, paddingHorizontal: 14, minWidth: 86, alignItems: "center", overflow: "hidden" },
   closePillText: { color: "rgba(255,255,255,0.78)", fontWeight: theme.fontWeight.black, fontSize: 12, letterSpacing: 0.2 },
   modalContent: { paddingBottom: theme.spacing.xxl, gap: 12 },
 
   guideSecCard: { borderRadius: 22 },
-  guideSecHeader: {
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 12,
-  },
+  guideSecHeader: { paddingHorizontal: 14, paddingVertical: 14, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
   guideSecHeading: { color: theme.colors.text, fontSize: 15, fontWeight: theme.fontWeight.black },
   guideSecChevron: { color: theme.colors.textSecondary, fontSize: 18, fontWeight: "900", marginTop: -2 },
   guideSecBody: { paddingHorizontal: 14, paddingBottom: 14, gap: 10 },
