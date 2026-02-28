@@ -22,20 +22,10 @@ import EmptyState from "@/src/components/EmptyState";
 import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
 
-import {
-  getFixtures,
-  getFixtureById,
-  getFixturesByRound,
-  type FixtureListRow,
-} from "@/src/services/apiFootball";
+import { getFixtures, getFixtureById, getFixturesByRound, type FixtureListRow } from "@/src/services/apiFootball";
 import tripsStore, { type Trip } from "@/src/state/trips";
 
-import {
-  LEAGUES,
-  addDaysIso,
-  clampFromIsoToTomorrow,
-  type LeagueOption,
-} from "@/src/constants/football";
+import { LEAGUES, addDaysIso, clampFromIsoToTomorrow, type LeagueOption } from "@/src/constants/football";
 import { formatUkDateTimeMaybe } from "@/src/utils/formatters";
 import { computeLikelyPlaceholderTbcIds, isKickoffTbc } from "@/src/utils/kickoffTbc";
 
@@ -150,8 +140,7 @@ function buildTripSnapshot(selectedFixture: FixtureListRow, placeholderTbcIds: S
   const season = seasonRaw != null ? String(seasonRaw) : String(currentFootballSeasonStartYear());
 
   const countryCode = findCountryCodeForLeagueId(leagueId);
-  const homeTeamId =
-    typeof selectedFixture?.teams?.home?.id === "number" ? selectedFixture.teams.home.id : undefined;
+  const homeTeamId = typeof selectedFixture?.teams?.home?.id === "number" ? selectedFixture.teams.home.id : undefined;
 
   return {
     cityId,
@@ -319,7 +308,6 @@ export default function TripBuildScreen() {
           const ids = await computePlaceholderIdsForFixture(fx);
           if (!cancelled) setPlaceholderTbcIds(ids);
 
-          // set selected league to match league for context (best effort)
           const lid = fx?.league?.id ?? null;
           const opt = findLeagueOptionByLeagueId(typeof lid === "number" ? lid : null);
           if (opt) setSelectedLeague(opt);
@@ -369,11 +357,8 @@ export default function TripBuildScreen() {
           setEndTouched(false);
         }
 
-        if (routeCityArea) {
-          setNotesIfEmpty(`Stay area: ${routeCityArea}`);
-        }
+        if (routeCityArea) setNotesIfEmpty(`Stay area: ${routeCityArea}`);
 
-        // set selected league to match league for context (best effort)
         const lid = r?.league?.id ?? null;
         const opt = findLeagueOptionByLeagueId(typeof lid === "number" ? lid : null);
         if (opt) setSelectedLeague(opt);
@@ -411,9 +396,7 @@ export default function TripBuildScreen() {
         let res: FixtureListRow[] = [];
 
         if (selectedLeague.leagueId === 0) {
-          const batches = await Promise.all(
-            LEAGUES.map((l) => getFixtures({ league: l.leagueId, season: l.season, from, to }))
-          );
+          const batches = await Promise.all(LEAGUES.map((l) => getFixtures({ league: l.leagueId, season: l.season, from, to })));
           res = batches.flat();
         } else {
           res =
@@ -547,15 +530,14 @@ export default function TripBuildScreen() {
     try {
       if (!tripsStore.getState().loaded) await tripsStore.loadTrips();
 
-      // EDIT FLOW: always just update.
+      // EDIT FLOW
       if (isEditing && routeTripId) {
         await tripsStore.updateTrip(routeTripId, patch);
         router.replace({ pathname: "/trip/[id]", params: { id: routeTripId } } as any);
         return;
       }
 
-      // NEW TRIP FLOW:
-      // 1) Dedupe: if a trip already exists for this fixture, open it (don’t create clones).
+      // NEW TRIP FLOW: dedupe
       const existingId = findExistingTripIdForFixture(fixtureId);
       if (existingId) {
         Alert.alert("Trip already exists", "You already have a Trip Hub for this match — opening it now.");
@@ -563,7 +545,7 @@ export default function TripBuildScreen() {
         return;
       }
 
-      // 2) Enforce Free cap (hard cap until Pro is wired).
+      // Free cap
       const tripCount = tripsStore.getState().trips?.length ?? 0;
       if (tripCount >= FREE_TRIP_CAP) {
         Alert.alert(
@@ -573,7 +555,7 @@ export default function TripBuildScreen() {
         return;
       }
 
-      // 3) Create trip.
+      // Create
       const t = await tripsStore.addTrip(patch as any);
       router.replace({ pathname: "/trip/[id]", params: { id: t.id } } as any);
     } catch (e: any) {
@@ -725,11 +707,7 @@ export default function TripBuildScreen() {
                 <View style={styles.selectedLeft}>
                   <View style={styles.teamRow}>
                     <View style={styles.crestStack}>
-                      {selectedHomeLogo ? (
-                        <Image source={{ uri: selectedHomeLogo }} style={styles.crest} />
-                      ) : (
-                        <View style={styles.crestFallback} />
-                      )}
+                      {selectedHomeLogo ? <Image source={{ uri: selectedHomeLogo }} style={styles.crest} /> : <View style={styles.crestFallback} />}
                       {selectedAwayLogo ? (
                         <Image source={{ uri: selectedAwayLogo }} style={[styles.crest, { marginLeft: -10 }]} />
                       ) : (
@@ -775,8 +753,7 @@ export default function TripBuildScreen() {
               {routeCityArea ? (
                 <View style={styles.infoBar}>
                   <Text style={styles.infoText}>
-                    Prefilled stay area:{" "}
-                    <Text style={{ fontWeight: "900", color: theme.colors.text }}>{routeCityArea}</Text>
+                    Prefilled stay area: <Text style={{ fontWeight: "900", color: theme.colors.text }}>{routeCityArea}</Text>
                   </Text>
                 </View>
               ) : null}
@@ -868,20 +845,12 @@ export default function TripBuildScreen() {
                         setPlaceholderTbcIds(ids);
                         setError(null);
                       }}
-                      style={({ pressed }) => [
-                        styles.fxCard,
-                        selected && styles.fxCardSelected,
-                        { opacity: pressed ? 0.9 : 1 },
-                      ]}
+                      style={({ pressed }) => [styles.fxCard, selected && styles.fxCardSelected, { opacity: pressed ? 0.9 : 1 }]}
                     >
                       <View style={styles.fxTop}>
                         <View style={styles.fxLeft}>
                           <View style={styles.crestStack}>
-                            {homeLogo ? (
-                              <Image source={{ uri: homeLogo }} style={styles.crest} />
-                            ) : (
-                              <View style={styles.crestFallback} />
-                            )}
+                            {homeLogo ? <Image source={{ uri: homeLogo }} style={styles.crest} /> : <View style={styles.crestFallback} />}
                             {awayLogo ? (
                               <Image source={{ uri: awayLogo }} style={[styles.crest, { marginLeft: -10 }]} />
                             ) : (
@@ -940,9 +909,7 @@ export default function TripBuildScreen() {
                       <View style={styles.fxSelectRow}>
                         <View style={{ flex: 1 }} />
                         <View style={[styles.selectPill, selected && styles.selectPillActive]}>
-                          <Text style={[styles.selectPillText, selected && styles.selectPillTextActive]}>
-                            {selected ? "Selected" : "Select"}
-                          </Text>
+                          <Text style={[styles.selectPillText, selected && styles.selectPillTextActive]}>{selected ? "Selected" : "Select"}</Text>
                         </View>
                       </View>
                     </Pressable>
@@ -983,9 +950,7 @@ export default function TripBuildScreen() {
             style={[styles.saveBtn, (!selectedFixture || saving || prefillLoading) && { opacity: 0.55 }]}
           >
             <Text style={styles.saveText}>{saving ? "Creating…" : isEditing ? "Update Trip Hub" : "Create Trip Hub"}</Text>
-            <Text style={styles.saveSub}>
-              {selectedFixture ? "Flights • Stay • Tickets • Plans in one place" : "Select a match to continue"}
-            </Text>
+            <Text style={styles.saveSub}>{selectedFixture ? "Flights • Stay • Tickets • Plans in one place" : "Select a match to continue"}</Text>
           </Pressable>
 
           {error ? <Text style={styles.err}>{error}</Text> : null}
@@ -1002,19 +967,8 @@ export default function TripBuildScreen() {
 const styles = StyleSheet.create({
   headerCard: { padding: theme.spacing.lg },
 
-  bigTitle: {
-    fontSize: 22,
-    fontWeight: "900",
-    color: theme.colors.text,
-    letterSpacing: 0.2,
-  },
-  bigSub: {
-    marginTop: 8,
-    color: theme.colors.textSecondary,
-    fontWeight: "700",
-    lineHeight: 18,
-    fontSize: 13,
-  },
+  bigTitle: { fontSize: 22, fontWeight: "900", color: theme.colors.text, letterSpacing: 0.2 },
+  bigSub: { marginTop: 8, color: theme.colors.textSecondary, fontWeight: "700", lineHeight: 18, fontSize: 13 },
 
   chipRow: { marginTop: 14, flexDirection: "row", gap: 10 },
   chip: {
@@ -1040,12 +994,7 @@ const styles = StyleSheet.create({
   },
   capText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: 12 },
 
-  h1: {
-    fontSize: theme.fontSize.lg,
-    fontWeight: "900",
-    color: theme.colors.text,
-    marginBottom: 8,
-  },
+  h1: { fontSize: theme.fontSize.lg, fontWeight: "900", color: theme.colors.text, marginBottom: 8 },
   hint: { color: theme.colors.textSecondary, fontWeight: "700", fontSize: 13, lineHeight: 18 },
 
   center: { paddingVertical: 14, alignItems: "center", gap: 10 },
@@ -1151,10 +1100,7 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border,
     backgroundColor: "rgba(0,0,0,0.20)",
   },
-  fxCardSelected: {
-    borderColor: "rgba(75,158,57,0.55)",
-    backgroundColor: "rgba(0,0,0,0.35)",
-  },
+  fxCardSelected: { borderColor: "rgba(75,158,57,0.55)", backgroundColor: "rgba(0,0,0,0.35)" },
 
   fxTop: { flexDirection: "row", gap: 12, alignItems: "flex-start" },
   fxLeft: { flex: 1, flexDirection: "row", gap: 12, alignItems: "center" },
