@@ -1,54 +1,59 @@
-import { AppState } from "react-native";
+// src/services/partnerReturnBootstrap.ts
 import savedItemsStore from "@/src/state/savedItems";
+import {
+  ensurePartnerReturnWatcher,
+  markBooked,
+  markNotBooked,
+  dismissReturnPrompt,
+  type LastPartnerClick,
+} from "@/src/services/partnerClicks";
 
-type PendingClick = {
-  itemId: string;
-  provider: string;
-  url: string;
-  ts: number;
-};
+/**
+ * Root-level bootstrap:
+ * - Subscribes to partner return watcher
+ * - On return, tells UI "show modal for itemId"
+ *
+ * UI decides:
+ * - YES -> markBooked(itemId)
+ * - NO  -> markNotBooked(itemId)
+ * - NOT NOW -> dismissReturnPrompt(itemId) (keeps pending)
+ */
 
-let pendingClick: PendingClick | null = null;
-let modalHandler: ((itemId: string) => void) | null = null;
+let bootstrapped = false;
+let handler: ((itemId: string, click: LastPartnerClick) => void) | null = null;
 
-export function registerPartnerClick(args: {
-  itemId: string;
-  provider: string;
-  url: string;
-}) {
-  pendingClick = {
-    itemId: String(args.itemId),
-    provider: String(args.provider),
-    url: String(args.url),
-    ts: Date.now(),
-  };
+export function registerReturnModalHandler(fn: (itemId: string, click: LastPartnerClick) => void) {
+  handler = fn;
 }
 
-export function registerReturnModalHandler(fn: (itemId: string) => void) {
-  modalHandler = fn;
-}
-
+/**
+ * Call once from app/_layout.tsx
+ */
 export function bootstrapPartnerReturnPrompt() {
-  let lastState = AppState.currentState;
+  if (bootstrapped) return;
+  bootstrapped = true;
 
-  AppState.addEventListener("change", (next) => {
-    const wasBackground =
-      lastState === "inactive" || lastState === "background";
+  // Ensure store is available; watcher itself loads click state.
+  savedItemsStore.load().catch(() => null);
 
-    if (wasBackground && next === "active") {
-      if (pendingClick && modalHandler) {
-        const click = pendingClick;
-        pendingClick = null;
-        modalHandler(click.itemId);
-      }
-    }
-
-    lastState = next;
+  ensurePartnerReturnWatcher(async (click) => {
+    const fn = handler;
+    if (!fn) return; // keep click persisted in partnerClicks until handler exists
+    fn(click.itemId, click);
   });
 }
 
-export async function markTicketBooked(itemId: string) {
-  try {
-    await savedItemsStore.transitionStatus(itemId, "booked");
-  } catch {}
+/** UI action: user confirms booking */
+export async function markItemBooked(itemId: string) {
+  await markBooked(itemId);
+}
+
+/** UI action: user says they did NOT book */
+export async function markItemNotBooked(itemId: string) {
+  await markNotBooked(itemId);
+}
+
+/** UI action: user dismisses ("Not now") */
+export async function dismissPartnerReturn(itemId?: string) {
+  await dismissReturnPrompt(itemId);
 }
