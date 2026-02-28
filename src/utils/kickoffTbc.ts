@@ -7,6 +7,7 @@ import type { FixtureListRow } from "@/src/services/apiFootball";
  * 2) fixture has no kickoff date
  * 3) fixture is > CONFIRMED_WITHIN_DAYS away AND belongs to a round where
  *    >= PLACEHOLDER_CLUSTER_THRESHOLD fixtures share the exact same kickoff timestamp (bucketed to minute)
+ * 4) fixture is > CONFIRMED_WITHIN_DAYS away AND kickoff time is exactly 00:00 (common placeholder)
  *
  * This is a heuristic. It will not be perfect, but it’s pragmatic and matches real scheduling behaviour.
  */
@@ -44,13 +45,24 @@ function daysUntil(iso: string, now: Date) {
   return ms / (1000 * 60 * 60 * 24);
 }
 
+function isMidnightPlaceholder(iso: string): boolean {
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return false;
+  return d.getHours() === 0 && d.getMinutes() === 0;
+}
+
 /**
  * Quick check for a single row.
  * If you pass `placeholderIds` (computed from a fixtures list), this becomes accurate.
- * If you don't, it only uses explicit TBD/TBA + missing kickoff + <=21 day rule.
+ * If you don't, it only uses explicit TBD/TBA + missing kickoff + <=21 day rule + midnight heuristic.
  */
-export function isKickoffTbc(row: FixtureListRow, placeholderIds?: Set<string>, opts?: { now?: Date }) {
+export function isKickoffTbc(
+  row: FixtureListRow,
+  placeholderIds?: Set<string>,
+  opts?: { now?: Date; confirmedWithinDays?: number }
+) {
   const now = opts?.now ?? new Date();
+  const confirmedWithinDays = opts?.confirmedWithinDays ?? CONFIRMED_WITHIN_DAYS;
 
   const id = normalizeId(row?.fixture?.id);
   const iso = kickoffIsoOrNull(row);
@@ -60,7 +72,10 @@ export function isKickoffTbc(row: FixtureListRow, placeholderIds?: Set<string>, 
   if (!iso) return true;
 
   // Anything within the "late window" is treated as confirmed
-  if (daysUntil(iso, now) <= CONFIRMED_WITHIN_DAYS) return false;
+  if (daysUntil(iso, now) <= confirmedWithinDays) return false;
+
+  // Midnight kickoff far out is very often a placeholder
+  if (isMidnightPlaceholder(iso)) return true;
 
   // If caller gave placeholder set, trust it
   if (placeholderIds && id && placeholderIds.has(id)) return true;
@@ -96,7 +111,15 @@ export function computeLikelyPlaceholderTbcIds(
     }
 
     const iso = kickoffIsoOrNull(r);
-    if (!iso) out.add(id);
+    if (!iso) {
+      out.add(id);
+      continue;
+    }
+
+    // Midnight far out is a common placeholder
+    if (daysUntil(iso, now) > confirmedWithinDays && isMidnightPlaceholder(iso)) {
+      out.add(id);
+    }
   }
 
   // 2) Group eligible fixtures by league+season+round (only those > confirmedWithinDays away)
@@ -114,7 +137,7 @@ export function computeLikelyPlaceholderTbcIds(
     if (daysUntil(iso, now) <= confirmedWithinDays) continue;
 
     const leagueId = r?.league?.id != null ? String(r.league.id) : "";
-    const season = r?.league?.season != null ? String(r.league.season) : "";
+    const season = (r as any)?.league?.season != null ? String((r as any).league.season) : "";
     const round = String(r?.league?.round ?? "").trim();
     if (!leagueId || !season || !round) continue;
 
