@@ -169,7 +169,11 @@ function CrestSquare({ row }: { row: FixtureListRow }) {
 
   return (
     <View style={styles.crestWrap}>
-      {logo ? <Image source={{ uri: logo }} style={styles.crestImg} resizeMode="contain" /> : <Text style={styles.crestFallback}>{initials(homeName)}</Text>}
+      {logo ? (
+        <Image source={{ uri: logo }} style={styles.crestImg} resizeMode="contain" />
+      ) : (
+        <Text style={styles.crestFallback}>{initials(homeName)}</Text>
+      )}
     </View>
   );
 }
@@ -237,15 +241,7 @@ function pickRandom<T>(arr: T[]): T | null {
 /**
  * Popular Cities chip — small flag icon next to city name (no background flag).
  */
-function CityChipPremium({
-  name,
-  countryCode,
-  onPress,
-}: {
-  name: string;
-  countryCode: string;
-  onPress: () => void;
-}) {
+function CityChipPremium({ name, countryCode, onPress }: { name: string; countryCode: string; onPress: () => void }) {
   const flagUrl = getFlagImageUrl(countryCode, { size: 48 });
 
   return (
@@ -402,17 +398,30 @@ export default function HomeScreen() {
     Keyboard.dismiss();
   }, []);
 
-  const goFixturesAll = useCallback(() => {
-    router.push({ pathname: "/(tabs)/fixtures" } as any);
-  }, [router]);
-
-  const goBuildTripGlobal = useCallback(
-    (window?: ShortcutWindow) => {
-      const w = window ?? getRollingWindowIso({ days: 60 });
-      router.push({ pathname: "/trip/build", params: { global: "1", from: w.from, to: w.to } } as any);
+  /**
+   * ✅ Primary Home path: Fixtures (not Build Trip).
+   * Home can pass a window + optional league context.
+   */
+  const goFixtures = useCallback(
+    (opts?: { window?: ShortcutWindow; leagueId?: number; season?: number }) => {
+      const w = opts?.window ?? getRollingWindowIso({ days: 60 });
+      router.push({
+        pathname: "/(tabs)/fixtures",
+        params: {
+          from: w.from,
+          to: w.to,
+          ...(opts?.leagueId ? { leagueId: String(opts.leagueId) } : {}),
+          ...(opts?.season ? { season: String(opts.season) } : {}),
+        },
+      } as any);
     },
     [router]
   );
+
+  const goFixturesAll = useCallback(() => {
+    // Keep it deterministic: Fixtures opens with a sensible rolling window.
+    goFixtures({ window: getRollingWindowIso({ days: 60 }) as any });
+  }, [goFixtures]);
 
   const goMatch = useCallback(
     (fixtureId: string) => {
@@ -459,8 +468,6 @@ export default function HomeScreen() {
       }
 
       if (p?.kind === "city") {
-        // Canonical city route: /city/key/:cityKey
-        // searchIndex city payload uses p.slug as the key.
         goCityKey(p.slug);
         return;
       }
@@ -504,9 +511,7 @@ export default function HomeScreen() {
     return getPopularTeams().filter((t) => typeof (t as any)?.teamId === "number").slice(0, 5);
   }, []);
 
-  // How + Discover prefs
-  const [howOpen, setHowOpen] = useState(false);
-
+  // Discover prefs (left as-is for now; this still uses /trip/build)
   const [discoverOpen, setDiscoverOpen] = useState(false);
   const [discoverWindowKey, setDiscoverWindowKey] = useState<DiscoverWindowKey>("wknd");
   const [discoverTripLength, setDiscoverTripLength] = useState<DiscoverTripLength>("2");
@@ -608,12 +613,30 @@ export default function HomeScreen() {
 
   const quickTiles = useMemo(
     () => [
-      { key: "weekend", title: "Weekend Break", sub: "Best for 1–2 nights", icon: "📅", onPress: () => goBuildTripGlobal(nextWeekendWindowIso()) },
-      { key: "daytrip", title: "Day Trip", sub: "Pick a same-day kickoff", icon: "⏱️", onPress: () => goBuildTripGlobal(windowFromTomorrowIso(14)) },
-      { key: "midweek", title: "Midweek Escape", sub: "One-night quick break", icon: "⚡", onPress: () => goBuildTripGlobal(windowFromTomorrowIso(7)) },
+      {
+        key: "weekend",
+        title: "Weekend Break",
+        sub: "Best for 1–2 nights",
+        icon: "📅",
+        onPress: () => goFixtures({ window: nextWeekendWindowIso() }),
+      },
+      {
+        key: "daytrip",
+        title: "Day Trip",
+        sub: "Pick a same-day kickoff",
+        icon: "⏱️",
+        onPress: () => goFixtures({ window: windowFromTomorrowIso(14) }),
+      },
+      {
+        key: "midweek",
+        title: "Midweek Escape",
+        sub: "One-night quick break",
+        icon: "⚡",
+        onPress: () => goFixtures({ window: windowFromTomorrowIso(7) }),
+      },
       { key: "fixtures", title: "Browse Fixtures", sub: "Explore all options", icon: "🎟️", onPress: () => goFixturesAll() },
     ],
-    [goBuildTripGlobal, goFixturesAll]
+    [goFixtures, goFixturesAll]
   );
 
   // Trips: restore display assets (flag + team crest) and capitalise city name.
@@ -659,7 +682,7 @@ export default function HomeScreen() {
           <GlassCard strength="strong" style={styles.hero} noPadding>
             <View style={styles.heroInner}>
               <Text style={styles.heroTitle}>Plan A Football City Break</Text>
-              <Text style={styles.heroSub}>Search A City, Team, Country, League, Or Venue. Then Jump Into Fixtures Or Start A Trip Hub.</Text>
+              <Text style={styles.heroSub}>Search A City, Team, Country, League, Or Venue. Then Browse Fixtures Or Start Planning.</Text>
 
               <View style={styles.searchBox}>
                 <TextInput
@@ -682,33 +705,23 @@ export default function HomeScreen() {
 
               {/* Primary actions */}
               {!showSearchResults ? (
-                <>
-                  <View style={styles.heroActions}>
-                    <Pressable
-                      onPress={goFixturesAll}
-                      style={({ pressed }) => [styles.heroBtn, styles.heroBtnGhost, pressed && styles.pressed]}
-                      android_ripple={{ color: "rgba(255,255,255,0.08)" }}
-                    >
-                      <Text style={styles.heroBtnGhostText}>Browse Fixtures</Text>
-                    </Pressable>
-
-                    <Pressable
-                      onPress={() => goBuildTripGlobal()}
-                      style={({ pressed }) => [styles.heroBtn, styles.heroBtnPrimary, pressed && styles.pressed]}
-                      android_ripple={{ color: "rgba(79,224,138,0.10)" }}
-                    >
-                      <Text style={styles.heroBtnPrimaryText}>Start A Trip Hub</Text>
-                    </Pressable>
-                  </View>
+                <View style={styles.heroActions}>
+                  <Pressable
+                    onPress={goFixturesAll}
+                    style={({ pressed }) => [styles.heroBtn, styles.heroBtnGhost, pressed && styles.pressed]}
+                    android_ripple={{ color: "rgba(255,255,255,0.08)" }}
+                  >
+                    <Text style={styles.heroBtnGhostText}>Browse Fixtures</Text>
+                  </Pressable>
 
                   <Pressable
-                    onPress={() => setHowOpen(true)}
-                    style={({ pressed }) => [styles.howCta, pressed && { opacity: 0.92 }]}
+                    onPress={() => goFixtures({ window: getRollingWindowIso({ days: 60 }) as any })}
+                    style={({ pressed }) => [styles.heroBtn, styles.heroBtnPrimary, pressed && styles.pressed]}
                     android_ripple={{ color: "rgba(79,224,138,0.10)" }}
                   >
-                    <Text style={styles.howCtaText}>How It Works</Text>
+                    <Text style={styles.heroBtnPrimaryText}>Plan A Trip</Text>
                   </Pressable>
-                </>
+                </View>
               ) : null}
 
               {/* Search Results */}
@@ -800,7 +813,10 @@ export default function HomeScreen() {
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>Upcoming Matches</Text>
 
-                <Pressable onPress={goFixturesAll} style={({ pressed }) => [styles.miniPill, pressed && { opacity: 0.9 }]}>
+                <Pressable
+                  onPress={() => goFixtures({ window: upcomingWindow, leagueId: league.leagueId, season: league.season })}
+                  style={({ pressed }) => [styles.miniPill, pressed && { opacity: 0.9 }]}
+                >
                   <Text style={styles.miniPillText}>View All</Text>
                 </Pressable>
               </View>
@@ -910,11 +926,11 @@ export default function HomeScreen() {
                       </View>
 
                       <Pressable
-                        onPress={() => goBuildTripGlobal()}
+                        onPress={() => goFixtures({ window: upcomingWindow, leagueId: league.leagueId, season: league.season })}
                         style={({ pressed }) => [styles.singleCta, styles.btn, styles.btnPrimary, pressed && styles.pressed]}
                         android_ripple={{ color: "rgba(79,224,138,0.10)" }}
                       >
-                        <Text style={styles.btnPrimaryText}>Start A Trip Hub</Text>
+                        <Text style={styles.btnPrimaryText}>Plan A Trip</Text>
                       </Pressable>
                     </>
                   ) : null}
@@ -936,8 +952,8 @@ export default function HomeScreen() {
               <GlassCard strength="default" style={styles.block} noPadding>
                 <View style={styles.blockInner}>
                   <View style={styles.hubTop}>
-                    <Text style={styles.hubKicker}>Trip Hub</Text>
-                    <Text style={styles.hubSub}>Store everything in one place: match, stays, links, notes and bookings.</Text>
+                    <Text style={styles.hubKicker}>Trips</Text>
+                    <Text style={styles.hubSub}>Save your match, links, notes and bookings in one place.</Text>
                   </View>
 
                   {!loadedTrips ? (
@@ -950,15 +966,15 @@ export default function HomeScreen() {
                   {loadedTrips && !nextTrip ? (
                     <>
                       <Text style={styles.emptyTitle}>No Trips Yet</Text>
-                      <Text style={styles.emptyMeta}>Start With Fixtures, Then Build A Trip Hub Around The Match.</Text>
+                      <Text style={styles.emptyMeta}>Pick a match in Fixtures, then build your trip around it.</Text>
 
                       <View style={styles.blockActions}>
                         <Pressable
-                          onPress={() => goBuildTripGlobal()}
+                          onPress={() => goFixturesAll()}
                           style={({ pressed }) => [styles.btn, styles.btnPrimary, pressed && styles.pressed]}
                           android_ripple={{ color: "rgba(79,224,138,0.10)" }}
                         >
-                          <Text style={styles.btnPrimaryText}>Start A Trip Hub</Text>
+                          <Text style={styles.btnPrimaryText}>Plan A Trip</Text>
                         </Pressable>
                         <Pressable
                           onPress={() => router.push("/(tabs)/trips")}
@@ -1003,11 +1019,11 @@ export default function HomeScreen() {
                           <Text style={styles.btnGhostText}>Open Trips</Text>
                         </Pressable>
                         <Pressable
-                          onPress={() => goBuildTripGlobal()}
+                          onPress={() => goFixturesAll()}
                           style={({ pressed }) => [styles.btn, styles.btnPrimary, pressed && styles.pressed]}
                           android_ripple={{ color: "rgba(79,224,138,0.10)" }}
                         >
-                          <Text style={styles.btnPrimaryText}>Start Another</Text>
+                          <Text style={styles.btnPrimaryText}>Plan Another</Text>
                         </Pressable>
                       </View>
                     </>
@@ -1027,7 +1043,12 @@ export default function HomeScreen() {
 
               <View style={styles.grid2}>
                 {quickTiles.map((s) => (
-                  <Pressable key={s.key} onPress={s.onPress} style={({ pressed }) => [styles.tilePress, pressed && styles.pressed]} android_ripple={{ color: "rgba(255,255,255,0.06)" }}>
+                  <Pressable
+                    key={s.key}
+                    onPress={s.onPress}
+                    style={({ pressed }) => [styles.tilePress, pressed && styles.pressed]}
+                    android_ripple={{ color: "rgba(255,255,255,0.06)" }}
+                  >
                     <GlassCard strength="default" style={styles.tile} noPadding>
                       <View style={styles.tileInner}>
                         <View style={styles.tileTopRow}>
@@ -1105,59 +1126,6 @@ export default function HomeScreen() {
 
           <View style={{ height: 14 }} />
         </ScrollView>
-
-        {/* HOW IT WORKS */}
-        <Modal visible={howOpen} animationType="fade" transparent onRequestClose={() => setHowOpen(false)}>
-          <Pressable style={styles.modalBackdrop} onPress={() => setHowOpen(false)} />
-          <View style={styles.modalSheetWrap} pointerEvents="box-none">
-            <GlassCard strength="strong" style={styles.modalSheet} noPadding>
-              <View style={styles.modalInner}>
-                <View style={styles.modalHeader}>
-                  <Text style={styles.modalTitle}>How It Works</Text>
-                  <Pressable onPress={() => setHowOpen(false)} style={styles.modalClose} hitSlop={10}>
-                    <Text style={styles.modalCloseText}>Done</Text>
-                  </Pressable>
-                </View>
-
-                <View style={styles.howItem}>
-                  <Text style={styles.howQ}>Start With A Match</Text>
-                  <Text style={styles.howA}>Browse Fixtures And Pick A Match That Fits Your Dates.</Text>
-                </View>
-
-                <View style={styles.howItem}>
-                  <Text style={styles.howQ}>Build A Trip Hub</Text>
-                  <Text style={styles.howA}>Save Links, Notes, And Bookings In One Place (Flights, Stays, Tickets).</Text>
-                </View>
-
-                <View style={styles.howItem}>
-                  <Text style={styles.howQ}>Use Guides When Available</Text>
-                  <Text style={styles.howA}>City And Team Guidance Helps You Plan Beyond The Match.</Text>
-                </View>
-
-                <View style={styles.modalActions}>
-                  <Pressable
-                    onPress={() => {
-                      setHowOpen(false);
-                      goFixturesAll();
-                    }}
-                    style={[styles.btn, styles.btnGhost]}
-                  >
-                    <Text style={styles.btnGhostText}>Browse Fixtures</Text>
-                  </Pressable>
-                  <Pressable
-                    onPress={() => {
-                      setHowOpen(false);
-                      goBuildTripGlobal();
-                    }}
-                    style={[styles.btn, styles.btnPrimary]}
-                  >
-                    <Text style={styles.btnPrimaryText}>Start A Trip Hub</Text>
-                  </Pressable>
-                </View>
-              </View>
-            </GlassCard>
-          </View>
-        </Modal>
 
         {/* DISCOVER PREFS */}
         <Modal visible={discoverOpen} animationType="fade" transparent onRequestClose={() => setDiscoverOpen(false)}>
@@ -1327,19 +1295,6 @@ const styles = StyleSheet.create({
     backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
   },
   heroBtnGhostText: { color: theme.colors.textSecondary, fontSize: 14, fontWeight: theme.fontWeight.black },
-
-  howCta: {
-    alignSelf: "center",
-    marginTop: 2,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "rgba(79,224,138,0.28)",
-    backgroundColor: Platform.OS === "android" ? "rgba(10,12,14,0.18)" : "rgba(10,12,14,0.14)",
-    overflow: "hidden",
-  },
-  howCtaText: { color: "rgba(79,224,138,0.92)", fontSize: 12, fontWeight: theme.fontWeight.black, letterSpacing: 0.2 },
 
   searchResults: { marginTop: 10, gap: 10 },
   resultList: {
@@ -1581,17 +1536,6 @@ const styles = StyleSheet.create({
   modalTitle: { color: theme.colors.text, fontSize: 16, fontWeight: theme.fontWeight.black },
   modalClose: { paddingVertical: 6, paddingHorizontal: 10, borderRadius: 999, borderWidth: 1, borderColor: "rgba(255,255,255,0.10)", backgroundColor: "rgba(0,0,0,0.18)" },
   modalCloseText: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: theme.fontWeight.black },
-
-  howItem: {
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-    backgroundColor: Platform.OS === "android" ? "rgba(12,14,16,0.20)" : "rgba(12,14,16,0.16)",
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-  },
-  howQ: { color: theme.colors.text, fontSize: 14, fontWeight: theme.fontWeight.black },
-  howA: { marginTop: 6, color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold, lineHeight: 18 },
 
   modalKicker: { color: theme.colors.textTertiary, fontSize: 12, fontWeight: theme.fontWeight.black },
   modalInputWrap: {
