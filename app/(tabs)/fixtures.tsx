@@ -1,4 +1,6 @@
 // app/(tabs)/fixtures.tsx
+// (No changes required for Step 1: it already accepts leagueId/from/to params and clamps safely.
+// Keep this file exactly as-is from your paste.)
 import React, { useEffect, useMemo, useState, useCallback } from "react";
 import {
   View,
@@ -647,7 +649,6 @@ export default function FixturesScreen() {
                 <TeamCrest name={home} logo={r?.teams?.home?.logo} />
 
                 <View style={styles.centerCol}>
-                  {/* GUARANTEE: no ellipsis. Allow wrap to 3 lines. */}
                   <Text style={styles.teamName} numberOfLines={3} ellipsizeMode="clip">
                     {home}
                   </Text>
@@ -663,9 +664,7 @@ export default function FixturesScreen() {
               <View style={styles.metaBlock}>
                 <Text style={styles.metaPrimary}>{kickoff.primary}</Text>
 
-                {venue || city ? (
-                  <Text style={styles.metaVenue}>{[venue, city].filter(Boolean).join(" • ")}</Text>
-                ) : null}
+                {venue || city ? <Text style={styles.metaVenue}>{[venue, city].filter(Boolean).join(" • ")}</Text> : null}
 
                 {kickoff.secondary ? <Text style={styles.metaSecondary}>{kickoff.secondary}</Text> : null}
               </View>
@@ -702,17 +701,8 @@ export default function FixturesScreen() {
                 </View>
               </View>
 
-              <Pressable
-                onPress={() => onToggleFollowFromRow(r)}
-                style={({ pressed }) => [
-                  styles.followPill,
-                  isFollowed && styles.followPillOn,
-                  { opacity: pressed ? 0.92 : 1 },
-                ]}
-              >
-                <Text style={[styles.followPillText, isFollowed && styles.followPillTextOn]}>
-                  {isFollowed ? "Following" : "Follow"}
-                </Text>
+              <Pressable onPress={() => onToggleFollowFromRow(r)} style={({ pressed }) => [styles.followPill, isFollowed && styles.followPillOn, { opacity: pressed ? 0.92 : 1 }]}>
+                <Text style={[styles.followPillText, isFollowed && styles.followPillTextOn]}>{isFollowed ? "Following" : "Follow"}</Text>
               </Pressable>
 
               <Text style={styles.tapHint}>Tap for actions</Text>
@@ -721,17 +711,11 @@ export default function FixturesScreen() {
 
           {expanded ? (
             <View style={styles.expandArea}>
-              <Pressable
-                onPress={() => goMatch(fixtureId, { leagueId: ctxLeagueId, season: ctxSeason })}
-                style={styles.expandGhost}
-              >
+              <Pressable onPress={() => goMatch(fixtureId, { leagueId: ctxLeagueId, season: ctxSeason })} style={styles.expandGhost}>
                 <Text style={styles.expandGhostText}>Match</Text>
               </Pressable>
 
-              <Pressable
-                onPress={() => goTripOrBuild(fixtureId, { leagueId: ctxLeagueId, season: ctxSeason })}
-                style={styles.expandPrimary}
-              >
+              <Pressable onPress={() => goTripOrBuild(fixtureId, { leagueId: ctxLeagueId, season: ctxSeason })} style={styles.expandPrimary}>
                 <Text style={styles.expandPrimaryText}>Build trip</Text>
               </Pressable>
             </View>
@@ -760,11 +744,7 @@ export default function FixturesScreen() {
               <Text style={styles.dateLine}>{headerDateLine}</Text>
             </View>
 
-            <Pressable
-              onPress={openCalendar}
-              style={({ pressed }) => [styles.calendarBtn, pressed && { opacity: 0.92 }]}
-              android_ripple={{ color: "rgba(255,255,255,0.06)" }}
-            >
+            <Pressable onPress={openCalendar} style={({ pressed }) => [styles.calendarBtn, pressed && { opacity: 0.92 }]} android_ripple={{ color: "rgba(255,255,255,0.06)" }}>
               <Text style={styles.calendarIcon}>📅</Text>
               <Text style={styles.calendarText}>Calendar</Text>
             </Pressable>
@@ -1074,10 +1054,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
   },
 
-  // KEY CHANGE:
-  // - no truncation
-  // - wrap allowed
-  // - slightly smaller font + tighter line height to keep the card neat
   teamName: {
     color: theme.colors.text,
     fontSize: 16,
