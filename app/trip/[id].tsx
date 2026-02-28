@@ -15,7 +15,6 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import * as Linking from "expo-linking";
 
 import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
@@ -46,6 +45,9 @@ import { confirmBookedAndOfferProof } from "@/src/services/bookingProof";
 import storage from "@/src/services/storage";
 
 import { getFixtureCertainty } from "@/src/utils/fixtureCertainty";
+
+// ✅ NEW: tickets builder (SE365 resolver + affiliate wrapping)
+import { buildTicketLink } from "@/src/services/partnerLinks";
 
 // dev-only IATA detection
 import { getIataCityCodeForCity, debugCityKey } from "@/src/data/iataCityCodes";
@@ -162,10 +164,6 @@ function buildMetaLine(item: SavedItem) {
 }
 
 function livePriceLine(item: SavedItem): string | null {
-  // Truthful pricing policy:
-  // - We do NOT show estimates.
-  // - For pending/saved: we only promise "live price on partner".
-  // - For booked: we show priceText ONLY if you've saved a real amount (e.g. "Paid: £123").
   const hasUrl = !!String(item.partnerUrl ?? "").trim();
   if (!hasUrl) return null;
 
@@ -222,6 +220,18 @@ function parseIsoToDate(iso?: string | null): Date | null {
   return Number.isFinite(d.getTime()) ? d : null;
 }
 
+function isoDateOnlyFromKickoffIso(kickoffIso?: string | null): string | null {
+  const raw = String(kickoffIso ?? "").trim();
+  if (!raw) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  const d = new Date(raw);
+  if (!Number.isFinite(d.getTime())) return null;
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 function formatKickoffMeta(
   row?: FixtureListRow | null,
   trip?: Trip | null
@@ -234,7 +244,6 @@ function formatKickoffMeta(
   const short = String((row as any)?.fixture?.status?.short ?? "").trim().toUpperCase();
   const long = String((row as any)?.fixture?.status?.long ?? "").trim();
 
-  // NOTE: status.short isn't fully reliable, so we also use snapshot + midnight heuristic.
   const looksTbc = short === "TBD" || short === "TBA" || short === "NS" || short === "PST";
   const snapTbc = Boolean((trip as any)?.kickoffTbc);
 
@@ -541,10 +550,23 @@ export default function TripDetailScreen() {
     return String((trip as any)?.homeName ?? "").trim();
   }, [primaryFixture, trip]);
 
+  const primaryAwayName = useMemo(() => {
+    const fromFixture = String((primaryFixture as any)?.teams?.away?.name ?? "").trim();
+    if (fromFixture) return fromFixture;
+    return String((trip as any)?.awayName ?? "").trim();
+  }, [primaryFixture, trip]);
+
   const primaryLeagueName = useMemo(() => {
     const fromFixture = String((primaryFixture as any)?.league?.name ?? "").trim();
     if (fromFixture) return fromFixture;
     return String((trip as any)?.leagueName ?? "").trim();
+  }, [primaryFixture, trip]);
+
+  const primaryLeagueId = useMemo(() => {
+    const fromFixture = (primaryFixture as any)?.league?.id;
+    if (typeof fromFixture === "number") return fromFixture;
+    const fromTrip = (trip as any)?.leagueId;
+    return typeof fromTrip === "number" ? fromTrip : undefined;
   }, [primaryFixture, trip]);
 
   const primaryKickoffIso = useMemo(() => {
@@ -676,18 +698,6 @@ export default function TripDetailScreen() {
     );
   }
 
-  // IMPORTANT:
-  // openMatch should open the Match screen (not the ticket site).
-  // The Match screen owns the Tickets CTA + follow alerts + directions.
-  function openMatch(matchId: string) {
-    if (!matchId) return;
-
-    router.push({
-      pathname: "/match/[id]" as any,
-      params: { id: String(matchId), tripId: String(tripId ?? "") },
-    } as any);
-  }
-
   async function openUntracked(url?: string) {
     if (!url) return;
     try {
@@ -726,6 +736,73 @@ export default function TripDetailScreen() {
     } catch {
       await openUntracked(args.url);
     }
+  }
+
+  // ✅ Option 2: match tap opens tickets directly (SE365 -> saved as pending -> open)
+  async function openTicketsForMatch(matchId: string) {
+    const mid = String(matchId ?? "").trim();
+    if (!mid) return;
+
+    if (!tripId) {
+      Alert.alert("Save trip first", "Save this trip before booking so we can store it in Wallet.");
+      return;
+    }
+
+    const r = fixturesById[mid] ?? null;
+
+    const homeName = String((r as any)?.teams?.home?.name ?? (trip as any)?.homeName ?? "").trim();
+    const awayName = String((r as any)?.teams?.away?.name ?? (trip as any)?.awayName ?? "").trim();
+    const kickoffIso = String((r as any)?.fixture?.date ?? (trip as any)?.kickoffIso ?? "").trim() || null;
+
+    const leagueName = String((r as any)?.league?.name ?? (trip as any)?.leagueName ?? "").trim() || undefined;
+    const leagueIdRaw = (r as any)?.league?.id ?? (trip as any)?.leagueId;
+    const leagueId = typeof leagueIdRaw === "number" || typeof leagueIdRaw === "string" ? leagueIdRaw : undefined;
+
+    if (!homeName || !awayName || !kickoffIso) {
+      Alert.alert("Tickets not available", "Missing team names or kickoff time for this match.");
+      return;
+    }
+
+    const dateIso = trip?.startDate || isoDateOnlyFromKickoffIso(kickoffIso) || undefined;
+
+    let url: string | null = null;
+    try {
+      url = await buildTicketLink({
+        fixtureId: mid,
+        home: homeName,
+        away: awayName,
+        kickoffIso,
+        leagueName,
+        leagueId,
+        se365EventId: typeof (trip as any)?.sportsevents365EventId === "number" ? (trip as any).sportsevents365EventId : undefined,
+      });
+    } catch {
+      url = null;
+    }
+
+    if (!url) {
+      Alert.alert("Tickets not found", "We couldn’t find a suitable tickets listing for this match.");
+      return;
+    }
+
+    const title = `Tickets: ${homeName} vs ${awayName}`;
+
+    await openTrackedPartner({
+      partnerId: "sportsevents365" as any,
+      url,
+      title,
+      savedItemType: "tickets",
+      metadata: {
+        fixtureId: mid,
+        leagueId,
+        leagueName,
+        dateIso,
+        kickoffIso,
+        homeName,
+        awayName,
+        priceMode: "live",
+      },
+    });
   }
 
   /* ------------------------------------------------------------------------ */
@@ -919,7 +996,6 @@ export default function TripDetailScreen() {
   }, [savedItems]);
 
   const readiness = useMemo(() => {
-    // weights: Tickets 30, Flights 25, Hotel 25, Transfers 10, Things 10
     const score =
       (presentByType.hasTickets ? 30 : 0) +
       (presentByType.hasFlight ? 25 : 0) +
@@ -943,7 +1019,7 @@ export default function TripDetailScreen() {
         Alert.alert("Add a match first", "Add a match to unlock tickets + match planning.");
         return;
       }
-      openMatch(primaryMatchId);
+      openTicketsForMatch(primaryMatchId);
     };
 
     const openHotels = () => {
@@ -1031,7 +1107,7 @@ export default function TripDetailScreen() {
         Alert.alert("Add a match first", "Add a match to unlock tickets + match planning.");
         return;
       }
-      openMatch(primaryMatchId);
+      openTicketsForMatch(primaryMatchId);
     };
 
     const openFlights = () => {
@@ -1078,8 +1154,6 @@ export default function TripDetailScreen() {
       });
     };
 
-    // Priority order:
-    // 1) Tickets
     if (!presentByType.hasTickets) {
       return {
         title: "Start with match tickets",
@@ -1090,21 +1164,19 @@ export default function TripDetailScreen() {
       };
     }
 
-    // 2) Kickoff TBC
     if (kickoffMeta.tbc) {
       return {
         title: "Kickoff not confirmed — book flexible travel",
         body: "When kickoff is TBC, choose flights/hotels with free changes or good cancellation terms.",
         cta: presentByType.hasFlight ? "View hotels (live)" : "View flights (live)",
         onPress: presentByType.hasFlight ? openHotels : openFlights,
-        secondaryCta: "Open match details",
+        secondaryCta: "Open tickets",
         onSecondaryPress: openTickets,
         badge: "TBC",
         proLocked: true,
       };
     }
 
-    // 3) Flights
     if (!presentByType.hasFlight) {
       return {
         title: "Add flights for this trip",
@@ -1114,7 +1186,6 @@ export default function TripDetailScreen() {
       };
     }
 
-    // 4) Hotel
     if (!presentByType.hasHotel) {
       return {
         title: "Pick a hotel in a smart area",
@@ -1128,7 +1199,6 @@ export default function TripDetailScreen() {
       };
     }
 
-    // 5) Transfers
     if (!presentByType.hasTransfer) {
       return {
         title: "Plan airport → hotel → stadium transport",
@@ -1138,7 +1208,6 @@ export default function TripDetailScreen() {
       };
     }
 
-    // 6) Things
     if (!presentByType.hasThings) {
       return {
         title: "Add a couple of city experiences",
@@ -1214,17 +1283,15 @@ export default function TripDetailScreen() {
         metadata: { city: cityName, priceMode: "live" },
       });
 
-    // Build minimal, calm set: show missing first, then 1 extra.
-    // Tickets should open Match screen (which owns the Tickets CTA).
+    // ✅ Tickets goes direct to SE365 now
     if (!presentByType.hasTickets && primaryMatchId) {
-      add("Tickets", "Live listings", () => openMatch(primaryMatchId), "primary");
+      add("Tickets", "Live listings", () => openTicketsForMatch(primaryMatchId), "primary");
     }
     if (!presentByType.hasFlight) add("Flights", "Live prices", openFlights, "primary");
     if (!presentByType.hasHotel) add("Hotels", "Live prices", openHotels, "primary");
     if (!presentByType.hasTransfer) add("Transfers", "Live prices", openTransfers);
     if (!presentByType.hasThings) add("Things to do", "Live prices", openThings);
 
-    // If everything done, show 2 stable options
     if (btns.length === 0) {
       add("Hotels", "Live prices", openHotels, "primary");
       add("Things to do", "Live prices", openThings);
@@ -1424,7 +1491,7 @@ export default function TripDetailScreen() {
                       });
 
                       return (
-                        <Pressable key={mid} onPress={() => openMatch(mid)} style={styles.matchRow}>
+                        <Pressable key={mid} onPress={() => openTicketsForMatch(mid)} style={styles.matchRow}>
                           <TeamCrest name={homeName} logo={(r as any)?.teams?.home?.logo} />
 
                           <View style={{ flex: 1 }}>
@@ -1461,7 +1528,7 @@ export default function TripDetailScreen() {
                             ) : null}
 
                             <Text style={styles.matchHint} numberOfLines={1}>
-                              Open match → Tickets, directions, follow alerts
+                              Tap to open tickets (saved to Pending)
                             </Text>
                           </View>
 
@@ -1807,7 +1874,11 @@ export default function TripDetailScreen() {
                     multiline
                   />
 
-                  <Pressable onPress={addNote} disabled={noteSaving} style={[styles.noteSaveBtn, noteSaving && { opacity: 0.7 }]}>
+                  <Pressable
+                    onPress={addNote}
+                    disabled={noteSaving}
+                    style={[styles.noteSaveBtn, noteSaving && { opacity: 0.7 }]}
+                  >
                     <Text style={styles.noteSaveText}>{noteSaving ? "Saving…" : "Save note"}</Text>
                   </Pressable>
                 </View>
