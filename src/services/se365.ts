@@ -18,7 +18,7 @@ type ResolveArgs = {
   fixtureId: string | number;
   homeName: string;
   awayName: string;
-  kickoffIso: string; // from API-Football fixture.date
+  kickoffIso: string; // ISO
   leagueName?: string;
   leagueId?: string | number;
 };
@@ -29,43 +29,30 @@ type ResolveResult = {
   reason?: string;
 };
 
-function env(name: string): string | undefined {
-  const extra = (Constants?.expoConfig as any)?.extra ?? (Constants as any)?.manifest?.extra ?? {};
+function extraEnv(name: string): string | undefined {
+  const extra =
+    (Constants?.expoConfig?.extra as any) ||
+    (Constants as any)?.manifest2?.extra ||
+    (Constants as any)?.manifest?.extra ||
+    {};
+
   const v =
-    (extra && typeof extra[name] === "string" ? String(extra[name]) : undefined) ??
     (typeof process !== "undefined" &&
-    (process as any)?.env &&
-    typeof (process as any).env[name] === "string"
-      ? String((process as any).env[name])
-      : undefined);
+      (process as any)?.env &&
+      typeof (process as any).env[name] === "string" &&
+      String((process as any).env[name])) ||
+    (typeof extra?.[name] === "string" ? String(extra[name]) : undefined);
 
   const s = String(v ?? "").trim();
   return s || undefined;
 }
 
-function clean(s: any): string {
-  return String(s ?? "").trim();
+function clean(v: any): string {
+  return String(v ?? "").trim();
 }
 
-function norm(s: any): string {
-  return clean(s).toLowerCase();
-}
-
-function dateOnlyFromIso(iso: string): string | null {
-  const raw = clean(iso);
-  if (!raw) return null;
-  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
-  const d = new Date(raw);
-  if (Number.isNaN(d.getTime())) return null;
-  const y = d.getUTCFullYear();
-  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
-  const day = String(d.getUTCDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
-function absDays(a: Date, b: Date): number {
-  const ms = Math.abs(a.getTime() - b.getTime());
-  return Math.floor(ms / (24 * 60 * 60 * 1000));
+function norm(v: any): string {
+  return clean(v).toLowerCase();
 }
 
 function safeDate(iso?: string): Date | null {
@@ -75,12 +62,29 @@ function safeDate(iso?: string): Date | null {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
+function absDays(a: Date, b: Date): number {
+  const ms = Math.abs(a.getTime() - b.getTime());
+  return Math.floor(ms / (24 * 60 * 60 * 1000));
+}
+
+function dateOnlyFromIso(iso: string): string | null {
+  const raw = clean(iso);
+  if (!raw) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return null;
+
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 function containsTeamName(eventName: string, home: string, away: string): boolean {
   const n = norm(eventName);
   const h = norm(home);
   const a = norm(away);
-
-  // Basic containment — works well for "Team A vs Team B" / "Team A - Team B"
   return n.includes(h) && n.includes(a);
 }
 
@@ -99,71 +103,110 @@ function scoreEvent(ev: Se365Event, home: string, away: string, kickoffIso: stri
     else if (diff === 2) score += 5;
   }
 
-  // Slight bump for having a URL
   if (clean(ev.url)) score += 5;
 
   return score;
 }
 
 /**
- * Build final affiliate-tracked URL.
- * - We prefer appending an affiliate param only if SE365 supports it.
- * - Keep it deterministic and simple.
+ * Build final affiliate URL for Sportsevents365 event pages.
+ *
+ * IMPORTANT:
+ * - SE365 commonly uses a_aid=<id> as the affiliate parameter.
+ * - Your .env currently has EXPO_PUBLIC_SE365_AFFILIATE_ID="a_aid=958" (already includes the key).
+ *   We support BOTH formats:
+ *     - "958"  -> appends "a_aid=958"
+ *     - "a_aid=958" (or any "key=value") -> appends exactly that
  */
 export function buildAffiliateUrl(eventUrl: string): string {
   const url = clean(eventUrl);
   if (!url) return "";
 
-  const aff = clean(env("EXPO_PUBLIC_SE365_AFFILIATE_ID"));
-  if (!aff) return url;
+  const rawAff = clean(extraEnv("EXPO_PUBLIC_SE365_AFFILIATE_ID"));
+  if (!rawAff) return url;
 
-  // avoid duplication
-  if (url.includes("aff=") || url.includes("affiliate=")) return url;
+  // If URL already has a_aid or affiliate-ish param, don’t duplicate.
+  if (/\ba_aid=/.test(url) || /\baffiliate=/.test(url)) return url;
+
+  // If env already looks like "key=value" (e.g. "a_aid=958"), use it as-is.
+  // If it's just a number/string, use a_aid=<value>.
+  const affParam = rawAff.includes("=") ? rawAff : `a_aid=${encodeURIComponent(rawAff)}`;
 
   const sep = url.includes("?") ? "&" : "?";
-  return `${url}${sep}aff=${encodeURIComponent(aff)}`;
+  return `${url}${sep}${affParam}`;
+}
+
+function getSe365Config() {
+  // Prefer proxy for production (keeps API key off-device)
+  const proxyUrl = clean(extraEnv("EXPO_PUBLIC_SE365_PROXY_URL"));
+  const baseUrl = clean(extraEnv("EXPO_PUBLIC_SE365_BASE_URL"));
+  const apiKey = clean(extraEnv("EXPO_PUBLIC_SE365_API_KEY"));
+
+  return {
+    proxyUrl: proxyUrl || "",
+    baseUrl: baseUrl || "",
+    apiKey: apiKey || "",
+  };
 }
 
 /**
- * Core resolver: Search SE365 and pick the best matching event.
+ * Resolve SE365 event for a fixture.
  *
  * Strategy:
- * - Query using team names (best recall)
- * - Filter/score by name contains both teams + date tolerance ±1 day
+ * - Search by "home away"
+ * - Score by name contains both teams + date proximity
  * - Pick highest score
+ *
+ * Transport:
+ * - If EXPO_PUBLIC_SE365_PROXY_URL is set => call that (no key on device)
+ * - Else call baseUrl with x-api-key (dev fallback)
  */
 export async function resolveSe365EventForFixture(args: ResolveArgs): Promise<ResolveResult> {
-  const baseUrl = clean(env("EXPO_PUBLIC_SE365_BASE_URL"));
-  const apiKey = clean(env("EXPO_PUBLIC_SE365_API_KEY"));
-
-  if (!baseUrl || !apiKey) {
-    return { eventId: null, eventUrl: null, reason: "missing_config" };
-  }
+  const cfg = getSe365Config();
 
   const home = clean(args.homeName);
   const away = clean(args.awayName);
   const kickoffIso = clean(args.kickoffIso);
+
   if (!home || !away || !kickoffIso) {
     return { eventId: null, eventUrl: null, reason: "missing_match_fields" };
   }
 
   const query = encodeURIComponent(`${home} ${away}`);
-  const url = `${baseUrl.replace(/\/+$/, "")}/events/search?q=${query}`;
 
-  const res = await fetch(url, {
-    headers: {
-      "content-type": "application/json",
-      "x-api-key": apiKey,
-    },
-  });
+  let url = "";
+  const headers: Record<string, string> = { "content-type": "application/json" };
+
+  if (cfg.proxyUrl) {
+    url = `${cfg.proxyUrl.replace(/\/+$/, "")}/events/search?q=${query}`;
+    // proxy should handle auth
+  } else {
+    if (!cfg.baseUrl || !cfg.apiKey) {
+      return { eventId: null, eventUrl: null, reason: "missing_config" };
+    }
+    url = `${cfg.baseUrl.replace(/\/+$/, "")}/events/search?q=${query}`;
+    headers["x-api-key"] = cfg.apiKey;
+  }
+
+  let res: Response;
+  try {
+    res = await fetch(url, { headers });
+  } catch {
+    return { eventId: null, eventUrl: null, reason: "network_error" };
+  }
 
   if (!res.ok) {
     return { eventId: null, eventUrl: null, reason: `http_${res.status}` };
   }
 
-  const json = (await res.json()) as Se365SearchResponse;
-  const events = Array.isArray(json.events) ? json.events : [];
+  let json: Se365SearchResponse;
+  try {
+    json = (await res.json()) as Se365SearchResponse;
+  } catch {
+    return { eventId: null, eventUrl: null, reason: "bad_json" };
+  }
 
+  const events = Array.isArray(json.events) ? json.events : [];
   if (events.length === 0) {
     return { eventId: null, eventUrl: null, reason: "no_events" };
   }
@@ -171,12 +214,11 @@ export async function resolveSe365EventForFixture(args: ResolveArgs): Promise<Re
   const kickoffDate = safeDate(kickoffIso);
   const kickoffDay = kickoffDate ? dateOnlyFromIso(kickoffIso) : null;
 
-  // Score and pick best
   const scored = events
     .map((ev) => {
       const s = scoreEvent(ev, home, away, kickoffIso);
 
-      // Hard filter if date is too far out when both dates exist
+      // Hard filter if too far out when both dates exist
       if (kickoffDate && ev.startDate) {
         const start = safeDate(ev.startDate);
         if (start) {
@@ -185,11 +227,10 @@ export async function resolveSe365EventForFixture(args: ResolveArgs): Promise<Re
         }
       }
 
-      // Soft filter: if we have date-only and event has startDate-only mismatch
+      // Soft penalty for date-only mismatch (±1 day already gets bumped)
       if (kickoffDay && ev.startDate) {
         const evDay = dateOnlyFromIso(ev.startDate);
         if (evDay && evDay !== kickoffDay) {
-          // allow ±1 day already handled by absDays bump; this is a small penalty only
           const kd = safeDate(kickoffIso);
           const sd = safeDate(ev.startDate);
           if (kd && sd) {
@@ -216,8 +257,7 @@ export async function resolveSe365EventForFixture(args: ResolveArgs): Promise<Re
 }
 
 /**
- * High-level helper used by screens/services.
- * Returns a fully affiliate-wrapped event URL if resolvable.
+ * Helper used elsewhere: returns affiliate-wrapped URL if resolvable.
  */
 export async function getSe365EventUrl(args: ResolveArgs): Promise<string | null> {
   const { eventUrl } = await resolveSe365EventForFixture(args);
