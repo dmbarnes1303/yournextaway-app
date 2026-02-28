@@ -75,6 +75,7 @@ async function apiGet<T>(path: string): Promise<T> {
 /**
  * Minimal fixture shape we actually use in UI.
  * NOTE: includes team logos so we can render crests.
+ * NOTE: includes venue.id because City filtering needs it.
  */
 export type FixtureListRow = {
   fixture?: {
@@ -97,48 +98,28 @@ export type FixtureListRow = {
 };
 
 /**
- * Teams endpoint shape (API-Football /teams?league=&season=)
- * We keep only what we need for automatic city registry.
+ * Teams endpoint row (we use it for automatic city registry).
  */
-export type TeamRow = {
-  team?: {
-    id?: number;
-    name?: string;
-    code?: string;
-    country?: string;
-    logo?: string;
-    founded?: number;
-    national?: boolean;
-  };
-  venue?: {
-    id?: number;
-    name?: string;
-    city?: string;
-    address?: string;
-    capacity?: number;
-    surface?: string;
-    image?: string;
-  };
+export type ApiFootballTeamRow = {
+  team?: { id?: number; name?: string; logo?: string; country?: string };
+  venue?: { id?: number; name?: string; city?: string };
+};
+
+export type ApiFootballCountryRow = {
+  name?: string;
+  code?: string; // ISO2
+  flag?: string;
 };
 
 /* -------------------------------------------------------------------------- */
 /* Normalization */
 /* -------------------------------------------------------------------------- */
 
-/**
- * Ensure we don’t leak inconsistent city strings across the app.
- * This directly improves:
- * - Trip cityName fallback
- * - Affiliate link generation (IATA mapping)
- * - Any future city guide routing
- */
 function normalizeFixtureCityInPlace(row: FixtureListRow | null | undefined) {
-  if (!row?.fixture?.venue?.city) return row;
-  const raw = row.fixture.venue.city;
+  const raw = row?.fixture?.venue?.city;
+  if (!raw) return row;
   const canon = normalizeCityName(raw);
-  if (canon && canon !== raw) {
-    row.fixture.venue.city = canon;
-  }
+  if (canon && canon !== raw) row!.fixture!.venue!.city = canon;
   return row;
 }
 
@@ -148,30 +129,15 @@ function normalizeRows(rows: FixtureListRow[]): FixtureListRow[] {
   return rows;
 }
 
-function normalizeTeamVenueCityInPlace(row: TeamRow | null | undefined) {
-  if (!row?.venue?.city) return row;
-  const raw = row.venue.city;
-  const canon = normalizeCityName(raw);
-  if (canon && canon !== raw) {
-    row.venue.city = canon;
-  }
-  return row;
-}
-
-function normalizeTeamRows(rows: TeamRow[]): TeamRow[] {
-  if (!Array.isArray(rows) || rows.length === 0) return [];
-  for (const r of rows) normalizeTeamVenueCityInPlace(r);
-  return rows;
-}
-
 /* -------------------------------------------------------------------------- */
 /* In-memory caching */
 /* -------------------------------------------------------------------------- */
 
 const FIXTURES_TTL_MS = 10 * 60 * 1000; // 10 minutes
 const FIXTURE_BY_ID_TTL_MS = 30 * 60 * 1000; // 30 minutes
-const FIXTURES_BY_ROUND_TTL_MS = 30 * 60 * 1000; // 30 minutes (round lists are stable-ish)
-const TEAMS_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours (rosters stable)
+const FIXTURES_BY_ROUND_TTL_MS = 30 * 60 * 1000; // 30 minutes
+const TEAMS_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+const COUNTRIES_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 type CacheEntry<T> = {
   ts: number;
@@ -182,12 +148,12 @@ type CacheEntry<T> = {
 const fixturesCache = new Map<string, CacheEntry<FixtureListRow[]>>();
 const fixtureByIdCache = new Map<string, CacheEntry<FixtureListRow | null>>();
 const fixturesByRoundCache = new Map<string, CacheEntry<FixtureListRow[]>>();
-const teamsCache = new Map<string, CacheEntry<TeamRow[]>>();
+const teamsCache = new Map<string, CacheEntry<ApiFootballTeamRow[]>>();
+const countriesCache = new Map<string, CacheEntry<ApiFootballCountryRow[]>>();
 
 function now() {
   return Date.now();
 }
-
 function isFresh(ts: number, ttlMs: number) {
   return now() - ts < ttlMs;
 }
@@ -195,17 +161,17 @@ function isFresh(ts: number, ttlMs: number) {
 function fixturesKey(params: { league: number; season: number; from: string; to: string }) {
   return `fixtures:${params.league}:${params.season}:${params.from}:${params.to}`;
 }
-
 function fixtureIdKey(id: string | number) {
   return `fixture:${String(id)}`;
 }
-
 function fixturesByRoundKey(params: { league: number; season: number; round: string }) {
   return `fixturesRound:${params.league}:${params.season}:${params.round}`;
 }
-
 function teamsKey(params: { league: number; season: number }) {
   return `teams:${params.league}:${params.season}`;
+}
+function countriesKey() {
+  return `countries`;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -221,20 +187,10 @@ export async function getFixtures(params: {
   const key = fixturesKey(params);
   const existing = fixturesCache.get(key);
 
-  if (existing?.value && isFresh(existing.ts, FIXTURES_TTL_MS)) {
-    return existing.value;
-  }
+  if (existing?.value && isFresh(existing.ts, FIXTURES_TTL_MS)) return existing.value;
+  if (existing?.inflight) return existing.inflight;
 
-  if (existing?.inflight) {
-    return existing.inflight;
-  }
-
-  const qs = enc({
-    league: params.league,
-    season: params.season,
-    from: params.from,
-    to: params.to,
-  });
+  const qs = enc({ league: params.league, season: params.season, from: params.from, to: params.to });
 
   const inflight = apiGet<FixtureListRow[]>(`/fixtures${qs}`)
     .then((rows) => (Array.isArray(rows) ? rows : []))
@@ -256,17 +212,14 @@ export async function getFixtureById(fixtureId: string | number): Promise<Fixtur
   const key = fixtureIdKey(fixtureId);
   const existing = fixtureByIdCache.get(key);
 
-  if (existing && "value" in existing && isFresh(existing.ts, FIXTURE_BY_ID_TTL_MS)) {
-    return existing.value ?? null;
-  }
-
+  if (existing && "value" in existing && isFresh(existing.ts, FIXTURE_BY_ID_TTL_MS)) return existing.value ?? null;
   if (existing?.inflight) return existing.inflight;
 
   const qs = enc({ id: fixtureId });
 
   const inflight = apiGet<FixtureListRow[]>(`/fixtures${qs}`)
     .then((rows) => (Array.isArray(rows) ? rows : []))
-    .then((rows) => (rows?.[0] ?? null))
+    .then((rows) => rows?.[0] ?? null)
     .then((row) => normalizeFixtureCityInPlace(row) ?? row)
     .then((row) => {
       fixtureByIdCache.set(key, { ts: now(), value: row });
@@ -281,32 +234,17 @@ export async function getFixtureById(fixtureId: string | number): Promise<Fixtur
   return inflight;
 }
 
-/**
- * Fetch all fixtures for a given league/season/round.
- * This is the key to “Likely TBC” clustering on the Match screen.
- */
-export async function getFixturesByRound(params: {
-  league: number;
-  season: number;
-  round: string;
-}): Promise<FixtureListRow[]> {
+export async function getFixturesByRound(params: { league: number; season: number; round: string }): Promise<FixtureListRow[]> {
   const round = String(params.round ?? "").trim();
   if (!round) return [];
 
   const key = fixturesByRoundKey({ league: params.league, season: params.season, round });
   const existing = fixturesByRoundCache.get(key);
 
-  if (existing?.value && isFresh(existing.ts, FIXTURES_BY_ROUND_TTL_MS)) {
-    return existing.value;
-  }
-
+  if (existing?.value && isFresh(existing.ts, FIXTURES_BY_ROUND_TTL_MS)) return existing.value;
   if (existing?.inflight) return existing.inflight;
 
-  const qs = enc({
-    league: params.league,
-    season: params.season,
-    round,
-  });
+  const qs = enc({ league: params.league, season: params.season, round });
 
   const inflight = apiGet<FixtureListRow[]>(`/fixtures${qs}`)
     .then((rows) => (Array.isArray(rows) ? rows : []))
@@ -325,24 +263,19 @@ export async function getFixturesByRound(params: {
 }
 
 /**
- * Fetch teams for a league + season.
- * Used for automatic city registry (25/26 correctness).
+ * Fetch teams for a league+season (used to build automatic city registry).
  */
-export async function getTeams(params: { league: number; season: number }): Promise<TeamRow[]> {
+export async function getTeams(params: { league: number; season: number }): Promise<ApiFootballTeamRow[]> {
   const key = teamsKey(params);
   const existing = teamsCache.get(key);
 
-  if (existing?.value && isFresh(existing.ts, TEAMS_TTL_MS)) {
-    return existing.value;
-  }
-
+  if (existing?.value && isFresh(existing.ts, TEAMS_TTL_MS)) return existing.value;
   if (existing?.inflight) return existing.inflight;
 
   const qs = enc({ league: params.league, season: params.season });
 
-  const inflight = apiGet<TeamRow[]>(`/teams${qs}`)
+  const inflight = apiGet<ApiFootballTeamRow[]>(`/teams${qs}`)
     .then((rows) => (Array.isArray(rows) ? rows : []))
-    .then((rows) => normalizeTeamRows(rows))
     .then((rows) => {
       teamsCache.set(key, { ts: now(), value: rows });
       return rows;
@@ -356,9 +289,35 @@ export async function getTeams(params: { league: number; season: number }): Prom
   return inflight;
 }
 
+/**
+ * Fetch countries list to map country name -> ISO2 code.
+ */
+export async function getCountries(): Promise<ApiFootballCountryRow[]> {
+  const key = countriesKey();
+  const existing = countriesCache.get(key);
+
+  if (existing?.value && isFresh(existing.ts, COUNTRIES_TTL_MS)) return existing.value;
+  if (existing?.inflight) return existing.inflight;
+
+  const inflight = apiGet<ApiFootballCountryRow[]>(`/countries`)
+    .then((rows) => (Array.isArray(rows) ? rows : []))
+    .then((rows) => {
+      countriesCache.set(key, { ts: now(), value: rows });
+      return rows;
+    })
+    .catch((err) => {
+      countriesCache.delete(key);
+      throw err;
+    });
+
+  countriesCache.set(key, { ts: now(), inflight });
+  return inflight;
+}
+
 export function __clearApiFootballCache() {
   fixturesCache.clear();
   fixtureByIdCache.clear();
   fixturesByRoundCache.clear();
   teamsCache.clear();
+  countriesCache.clear();
 }
