@@ -37,41 +37,62 @@ type FixturesParams = {
 
 const API_BASE = "https://v3.football.api-sports.io";
 
+function cleanKey(v: unknown): string {
+  const s = String(v ?? "").trim();
+  return s;
+}
+
+/**
+ * Expo env rules:
+ * - Use EXPO_PUBLIC_* for values available at runtime.
+ * - process.env.EXPO_PUBLIC_* is available (after restart with -c).
+ * - Constants.expoConfig.extra is only available if you wire it in app.config/app.json.
+ */
 function getApiKey(): string {
-  const key =
-    (Constants.expoConfig?.extra as any)?.API_FOOTBALL_KEY ??
+  const fromExtra =
+    (Constants.expoConfig?.extra as any)?.EXPO_PUBLIC_API_FOOTBALL_KEY ??
+    (Constants.expoConfig?.extra as any)?.API_FOOTBALL_KEY;
+
+  const fromEnv =
+    process.env.EXPO_PUBLIC_API_FOOTBALL_KEY ??
     process.env.API_FOOTBALL_KEY;
 
+  const key = cleanKey(fromExtra ?? fromEnv);
+
   if (!key) {
-    console.warn("API-Football key missing");
+    console.warn("[YNA] API-Football key missing (expected EXPO_PUBLIC_API_FOOTBALL_KEY)");
   }
 
   return key;
 }
 
 async function apiFetch<T>(path: string, params?: Record<string, any>): Promise<T> {
+  const key = getApiKey();
+  if (!key) return [] as unknown as T; // fail soft for UI (prevents endless throws)
+
   const url = new URL(API_BASE + path);
 
   if (params) {
-    Object.entries(params).forEach(([k, v]) => {
+    for (const [k, v] of Object.entries(params)) {
       if (v !== undefined && v !== null && v !== "") {
         url.searchParams.append(k, String(v));
       }
-    });
+    }
   }
 
   const res = await fetch(url.toString(), {
     headers: {
-      "x-apisports-key": getApiKey(),
+      "x-apisports-key": key,
     },
   });
 
   if (!res.ok) {
-    throw new Error(`API-Football ${res.status}`);
+    const body = await res.text().catch(() => "");
+    throw new Error(`API-Football ${res.status}${body ? ` — ${body.slice(0, 140)}` : ""}`);
   }
 
   const json = await res.json();
-  return json.response as T;
+  return (json?.response ?? []) as T;
 }
 
 /**
@@ -119,27 +140,21 @@ export async function getFixturesByRound(opts: {
 /**
  * Countries list
  */
-export async function getCountries(): Promise<
-  { name: string; code: string; flag: string }[]
-> {
+export async function getCountries(): Promise<{ name: string; code: string; flag: string }[]> {
   const rows = await apiFetch<any[]>("/countries");
+  const arr = Array.isArray(rows) ? rows : [];
 
-  return rows.map((r) => ({
-    name: r.name,
-    code: r.code,
-    flag: r.flag,
+  return arr.map((r) => ({
+    name: r?.name,
+    code: r?.code,
+    flag: r?.flag,
   }));
 }
 
 /**
  * Teams in league+season
  */
-export async function getTeams(opts: {
-  leagueId: number;
-  season: number;
-}): Promise<
-  { id: number; name: string; logo?: string | null }[]
-> {
+export async function getTeams(opts: { leagueId: number; season: number }): Promise<{ id: number; name: string; logo?: string | null }[]> {
   if (!opts.leagueId || !opts.season) return [];
 
   const rows = await apiFetch<any[]>("/teams", {
@@ -147,9 +162,11 @@ export async function getTeams(opts: {
     season: opts.season,
   });
 
-  return rows.map((r) => ({
-    id: r.team?.id,
-    name: r.team?.name,
-    logo: r.team?.logo ?? null,
+  const arr = Array.isArray(rows) ? rows : [];
+
+  return arr.map((r) => ({
+    id: r?.team?.id,
+    name: r?.team?.name,
+    logo: r?.team?.logo ?? null,
   }));
 }
