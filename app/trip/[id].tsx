@@ -157,6 +157,25 @@ function buildMetaLine(item: SavedItem) {
   return bits.join(" • ");
 }
 
+function livePriceLine(item: SavedItem): string | null {
+  // Truthful pricing policy:
+  // - We do NOT show estimates.
+  // - For pending/saved: we only promise "live price on partner".
+  // - For booked: we show priceText ONLY if you've saved a real amount (e.g. "Paid: £123").
+  const hasUrl = !!String(item.partnerUrl ?? "").trim();
+  if (!hasUrl) return null;
+
+  if (item.status === "booked") {
+    const p = String(item.priceText ?? "").trim();
+    return p ? p : null;
+  }
+
+  const pName = safePartnerName(item);
+  const dom = shortDomain(item.partnerUrl);
+  const tail = pName ? pName : dom ? dom : "partner";
+  return `Live price on ${tail}`;
+}
+
 function initials(name: string) {
   const clean = String(name ?? "").trim();
   if (!clean) return "—";
@@ -283,29 +302,6 @@ function proCapHint(cap: number, tripCount: number) {
   return `Free plan cap reached (${cap}). Pro removes the cap.`;
 }
 
-/* -------------------------- dates helpers (inline edit) -------------------------- */
-
-function isIsoDateOnly(s: unknown) {
-  return typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(String(s).trim());
-}
-
-function isoAddDays(iso: string, deltaDays: number): string {
-  const d = parseIsoDateOnly(iso);
-  if (!d) return iso;
-  const x = new Date(d.getFullYear(), d.getMonth(), d.getDate() + deltaDays);
-  const yyyy = String(x.getFullYear());
-  const mm = String(x.getMonth() + 1).padStart(2, "0");
-  const dd = String(x.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
-}
-
-function compareIsoDates(aIso: string, bIso: string): number | null {
-  const a = parseIsoDateOnly(aIso);
-  const b = parseIsoDateOnly(bIso);
-  if (!a || !b) return null;
-  return a.getTime() - b.getTime();
-}
-
 /* -------------------------------------------------------------------------- */
 /* screen                                                                      */
 /* -------------------------------------------------------------------------- */
@@ -339,12 +335,6 @@ export default function TripDetailScreen() {
 
   const [plan, setPlan] = useState<PlanValue>("not_set");
 
-  // Inline dates edit
-  const [datesEditing, setDatesEditing] = useState(false);
-  const [startDraft, setStartDraft] = useState("");
-  const [endDraft, setEndDraft] = useState("");
-  const [datesSaving, setDatesSaving] = useState(false);
-
   /* ---------------- load plan ---------------- */
 
   useEffect(() => {
@@ -375,14 +365,7 @@ export default function TripDetailScreen() {
     const sync = () => {
       const s = tripsStore.getState();
       setTripsLoaded(s.loaded);
-      const t = s.trips.find((x) => x.id === tripId) ?? null;
-      setTrip(t);
-
-      // keep drafts in sync when NOT editing
-      if (t && !datesEditing) {
-        setStartDraft(String(t.startDate ?? ""));
-        setEndDraft(String(t.endDate ?? ""));
-      }
+      setTrip(s.trips.find((x) => x.id === tripId) ?? null);
     };
 
     const unsub = tripsStore.subscribe(sync);
@@ -393,8 +376,7 @@ export default function TripDetailScreen() {
     }
 
     return () => unsub();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tripId, datesEditing]);
+  }, [tripId]);
 
   /* ---------------- load saved items ---------------- */
 
@@ -593,7 +575,9 @@ export default function TripDetailScreen() {
   }, [primaryLogistics]);
 
   const transportStops = useMemo(() => {
-    const stops = Array.isArray(primaryLogistics?.transport?.primaryStops) ? primaryLogistics!.transport!.primaryStops : [];
+    const stops = Array.isArray(primaryLogistics?.transport?.primaryStops)
+      ? primaryLogistics!.transport!.primaryStops
+      : [];
     return stops
       .slice(0, 3)
       .map((s: any) => `${String(s?.name ?? "").trim()}${s?.notes ? ` — ${String(s.notes).trim()}` : ""}`)
@@ -658,7 +642,7 @@ export default function TripDetailScreen() {
   function onUpgradePress() {
     Alert.alert(
       "Go Pro",
-      "Pro removes caps and adds automation (timeline + price tracking). Hook up paywall later — this is the placeholder entry point.",
+      "Pro removes caps and adds automation (timeline + alerts). Hook up paywall later — this is the placeholder entry point.",
       [{ text: "OK" }]
     );
   }
@@ -727,87 +711,6 @@ export default function TripDetailScreen() {
       });
     } catch {
       await openUntracked(args.url);
-    }
-  }
-
-  /* ---------------- inline date edit actions ---------------- */
-
-  const dateEditError = useMemo(() => {
-    if (!datesEditing) return null;
-    const a = String(startDraft ?? "").trim();
-    const b = String(endDraft ?? "").trim();
-    if (!isIsoDateOnly(a) || !isIsoDateOnly(b)) return "Use YYYY-MM-DD for both dates.";
-    const cmp = compareIsoDates(a, b);
-    if (cmp == null) return "Invalid dates.";
-    if (cmp > 0) return "End date must be on/after start date.";
-    return null;
-  }, [datesEditing, startDraft, endDraft]);
-
-  async function saveDates() {
-    if (!trip) return;
-    const a = String(startDraft ?? "").trim();
-    const b = String(endDraft ?? "").trim();
-
-    if (!isIsoDateOnly(a) || !isIsoDateOnly(b)) {
-      Alert.alert("Invalid dates", "Use YYYY-MM-DD for both dates.");
-      return;
-    }
-    const cmp = compareIsoDates(a, b);
-    if (cmp == null) {
-      Alert.alert("Invalid dates", "Please check the format.");
-      return;
-    }
-    if (cmp > 0) {
-      Alert.alert("Invalid dates", "End date must be on/after start date.");
-      return;
-    }
-
-    setDatesSaving(true);
-    try {
-      await tripsStore.updateTrip(trip.id, { startDate: a, endDate: b } as any);
-      setDatesEditing(false);
-      Keyboard.dismiss();
-    } catch {
-      Alert.alert("Couldn’t update dates", "Try again.");
-    } finally {
-      setDatesSaving(false);
-    }
-  }
-
-  function cancelDates() {
-    if (trip) {
-      setStartDraft(String(trip.startDate ?? ""));
-      setEndDraft(String(trip.endDate ?? ""));
-    }
-    setDatesEditing(false);
-    Keyboard.dismiss();
-  }
-
-  function bumpStart(delta: number) {
-    const a = String(startDraft ?? "").trim();
-    if (!isIsoDateOnly(a)) return;
-    const next = isoAddDays(a, delta);
-    setStartDraft(next);
-
-    // keep end at/after start
-    const b = String(endDraft ?? "").trim();
-    if (isIsoDateOnly(b)) {
-      const cmp = compareIsoDates(next, b);
-      if (cmp != null && cmp > 0) setEndDraft(next);
-    }
-  }
-
-  function bumpEnd(delta: number) {
-    const b = String(endDraft ?? "").trim();
-    if (!isIsoDateOnly(b)) return;
-    const next = isoAddDays(b, delta);
-    setEndDraft(next);
-
-    // keep end at/after start
-    const a = String(startDraft ?? "").trim();
-    if (isIsoDateOnly(a)) {
-      const cmp = compareIsoDates(a, next);
-      if (cmp != null && cmp > 0) setStartDraft(next);
     }
   }
 
@@ -1039,7 +942,7 @@ export default function TripDetailScreen() {
         url: bookingLinks.hotelsUrl,
         savedItemType: "hotel",
         title: `Hotels in ${cityName}`,
-        metadata: { city: cityName, startDate: trip?.startDate, endDate: trip?.endDate },
+        metadata: { city: cityName, startDate: trip?.startDate, endDate: trip?.endDate, priceMode: "live" },
       });
     };
 
@@ -1053,7 +956,7 @@ export default function TripDetailScreen() {
         url: bookingLinks.flightsUrl,
         savedItemType: "flight",
         title: `Flights to ${cityName}`,
-        metadata: { city: cityName, originIata: cleanUpper3(originIata, "LON") },
+        metadata: { city: cityName, originIata: cleanUpper3(originIata, "LON"), priceMode: "live" },
       });
     };
 
@@ -1067,7 +970,7 @@ export default function TripDetailScreen() {
         url: bookingLinks.transfersUrl,
         savedItemType: "transfer",
         title: `Transfers in ${cityName}`,
-        metadata: { city: cityName, startDate: trip?.startDate, endDate: trip?.endDate },
+        metadata: { city: cityName, startDate: trip?.startDate, endDate: trip?.endDate, priceMode: "live" },
       });
     };
 
@@ -1081,7 +984,7 @@ export default function TripDetailScreen() {
         url: bookingLinks.experiencesUrl,
         savedItemType: "things",
         title: `Experiences in ${cityName}`,
-        metadata: { city: cityName },
+        metadata: { city: cityName, priceMode: "live" },
       });
     };
 
@@ -1124,7 +1027,7 @@ export default function TripDetailScreen() {
         url: bookingLinks.flightsUrl,
         savedItemType: "flight",
         title: `Flights to ${cityName}`,
-        metadata: { city: cityName, originIata: cleanUpper3(originIata, "LON") },
+        metadata: { city: cityName, originIata: cleanUpper3(originIata, "LON"), priceMode: "live" },
       });
     };
 
@@ -1135,7 +1038,7 @@ export default function TripDetailScreen() {
         url: bookingLinks.hotelsUrl,
         savedItemType: "hotel",
         title: `Hotels in ${cityName}`,
-        metadata: { city: cityName, startDate: trip?.startDate, endDate: trip?.endDate },
+        metadata: { city: cityName, startDate: trip?.startDate, endDate: trip?.endDate, priceMode: "live" },
       });
     };
 
@@ -1146,7 +1049,7 @@ export default function TripDetailScreen() {
         url: bookingLinks.transfersUrl,
         savedItemType: "transfer",
         title: `Transfers in ${cityName}`,
-        metadata: { city: cityName, startDate: trip?.startDate, endDate: trip?.endDate },
+        metadata: { city: cityName, startDate: trip?.startDate, endDate: trip?.endDate, priceMode: "live" },
       });
     };
 
@@ -1157,7 +1060,7 @@ export default function TripDetailScreen() {
         url: bookingLinks.experiencesUrl,
         savedItemType: "things",
         title: `Experiences in ${cityName}`,
-        metadata: { city: cityName },
+        metadata: { city: cityName, priceMode: "live" },
       });
     };
 
@@ -1178,7 +1081,7 @@ export default function TripDetailScreen() {
       return {
         title: "Kickoff not confirmed — book flexible travel",
         body: "When kickoff is TBC, choose flights/hotels with free changes or good cancellation terms.",
-        cta: presentByType.hasFlight ? "Book hotel flexibly" : "Book flights flexibly",
+        cta: presentByType.hasFlight ? "View hotels (live)" : "View flights (live)",
         onPress: presentByType.hasFlight ? openHotels : openFlights,
         secondaryCta: "Open match details",
         onSecondaryPress: openTickets,
@@ -1191,8 +1094,8 @@ export default function TripDetailScreen() {
     if (!presentByType.hasFlight) {
       return {
         title: "Add flights for this trip",
-        body: "Lock your travel window now. You can refine the exact times later if needed.",
-        cta: "Find flights",
+        body: "We’ll always show live prices on the partner (no made-up estimates).",
+        cta: "View flights (live)",
         onPress: openFlights,
       };
     }
@@ -1201,8 +1104,8 @@ export default function TripDetailScreen() {
     if (!presentByType.hasHotel) {
       return {
         title: "Pick a hotel in a smart area",
-        body: "Use stay guidance to avoid bad logistics. Prioritise late-safe transport if kickoff is late.",
-        cta: "Find hotels",
+        body: "We’ll open live availability on Expedia. Use stay guidance to avoid bad logistics.",
+        cta: "View hotels (live)",
         onPress: openHotels,
         secondaryCta: "Stay guidance",
         onSecondaryPress: () => {
@@ -1215,8 +1118,8 @@ export default function TripDetailScreen() {
     if (!presentByType.hasTransfer) {
       return {
         title: "Plan airport → hotel → stadium transport",
-        body: "Transfers are the quiet failure point. Decide your default transport now, then adjust later.",
-        cta: "Find transfers",
+        body: "We’ll open live transfer options on KiwiTaxi.",
+        cta: "View transfers (live)",
         onPress: openTransfers,
       };
     }
@@ -1225,8 +1128,8 @@ export default function TripDetailScreen() {
     if (!presentByType.hasThings) {
       return {
         title: "Add a couple of city experiences",
-        body: "Fill the gaps around matchday. Keep it simple: 1–2 quality activities.",
-        cta: "Find things to do",
+        body: "We’ll open live options on GetYourGuide.",
+        cta: "View things to do (live)",
         onPress: openThings,
       };
     }
@@ -1234,7 +1137,7 @@ export default function TripDetailScreen() {
     return {
       title: "You’re set — add extras if you want",
       body: "Core planning is complete. If you’re staying longer, add activities or notes.",
-      cta: "Find things to do",
+      cta: "View things to do (live)",
       onPress: openThings,
       badge: "Ready",
     };
@@ -1267,7 +1170,7 @@ export default function TripDetailScreen() {
         url: bookingLinks.hotelsUrl,
         savedItemType: "hotel",
         title: `Hotels in ${cityName}`,
-        metadata: { city: cityName, startDate: trip.startDate, endDate: trip.endDate },
+        metadata: { city: cityName, startDate: trip.startDate, endDate: trip.endDate, priceMode: "live" },
       });
 
     const openFlights = () =>
@@ -1276,7 +1179,7 @@ export default function TripDetailScreen() {
         url: bookingLinks.flightsUrl,
         savedItemType: "flight",
         title: `Flights to ${cityName}`,
-        metadata: { city: cityName, originIata: cleanUpper3(originIata, "LON") },
+        metadata: { city: cityName, originIata: cleanUpper3(originIata, "LON"), priceMode: "live" },
       });
 
     const openTransfers = () =>
@@ -1285,7 +1188,7 @@ export default function TripDetailScreen() {
         url: bookingLinks.transfersUrl,
         savedItemType: "transfer",
         title: `Transfers in ${cityName}`,
-        metadata: { city: cityName, startDate: trip.startDate, endDate: trip.endDate },
+        metadata: { city: cityName, startDate: trip.startDate, endDate: trip.endDate, priceMode: "live" },
       });
 
     const openThings = () =>
@@ -1294,22 +1197,22 @@ export default function TripDetailScreen() {
         url: bookingLinks.experiencesUrl,
         savedItemType: "things",
         title: `Experiences in ${cityName}`,
-        metadata: { city: cityName },
+        metadata: { city: cityName, priceMode: "live" },
       });
 
     // Build minimal, calm set: show missing first, then 1 extra.
     if (!presentByType.hasTickets && primaryMatchId) {
-      add("Tickets", "Match", () => openMatch(primaryMatchId), "primary");
+      add("Tickets", "Live listings", () => openMatch(primaryMatchId), "primary");
     }
-    if (!presentByType.hasFlight) add("Flights", "Aviasales", openFlights, "primary");
-    if (!presentByType.hasHotel) add("Hotels", "Expedia", openHotels, "primary");
-    if (!presentByType.hasTransfer) add("Transfers", "KiwiTaxi", openTransfers);
-    if (!presentByType.hasThings) add("Things to do", "GetYourGuide", openThings);
+    if (!presentByType.hasFlight) add("Flights", "Live prices", openFlights, "primary");
+    if (!presentByType.hasHotel) add("Hotels", "Live prices", openHotels, "primary");
+    if (!presentByType.hasTransfer) add("Transfers", "Live prices", openTransfers);
+    if (!presentByType.hasThings) add("Things to do", "Live prices", openThings);
 
     // If everything done, show 2 stable options
     if (btns.length === 0) {
-      add("Hotels", "Expedia", openHotels, "primary");
-      add("Things to do", "GetYourGuide", openThings);
+      add("Hotels", "Live prices", openHotels, "primary");
+      add("Things to do", "Live prices", openThings);
     }
 
     return btns.slice(0, 4);
@@ -1379,88 +1282,6 @@ export default function TripDetailScreen() {
                 <Text style={styles.cityTitle}>{cityName}</Text>
                 <Text style={styles.heroMeta}>{summaryLine(trip)}</Text>
                 <Text style={styles.heroMetaSmall}>{kickoffMeta.line}</Text>
-
-                {/* Inline dates editor */}
-                <View style={styles.datesWrap}>
-                  <View style={styles.datesHeader}>
-                    <Text style={styles.datesLabel}>Dates</Text>
-
-                    {!datesEditing ? (
-                      <Pressable onPress={() => setDatesEditing(true)} style={styles.datesEditBtn}>
-                        <Text style={styles.datesEditText}>Edit</Text>
-                      </Pressable>
-                    ) : (
-                      <Pressable onPress={cancelDates} style={styles.datesEditBtn}>
-                        <Text style={styles.datesEditText}>Cancel</Text>
-                      </Pressable>
-                    )}
-                  </View>
-
-                  {!datesEditing ? (
-                    <Text style={styles.datesLine}>
-                      {formatUkDateOnly(trip.startDate)} → {formatUkDateOnly(trip.endDate)}
-                    </Text>
-                  ) : (
-                    <View style={{ gap: 10 }}>
-                      <View style={styles.dateRow}>
-                        <Text style={styles.dateKicker}>Start</Text>
-                        <View style={styles.dateInputsRow}>
-                          <Pressable onPress={() => bumpStart(-1)} style={styles.dateStepBtn}>
-                            <Text style={styles.dateStepTxt}>−</Text>
-                          </Pressable>
-
-                          <TextInput
-                            value={startDraft}
-                            onChangeText={setStartDraft}
-                            placeholder="YYYY-MM-DD"
-                            placeholderTextColor={theme.colors.textSecondary}
-                            autoCapitalize="none"
-                            autoCorrect={false}
-                            style={styles.dateInput}
-                          />
-
-                          <Pressable onPress={() => bumpStart(1)} style={styles.dateStepBtn}>
-                            <Text style={styles.dateStepTxt}>+</Text>
-                          </Pressable>
-                        </View>
-                      </View>
-
-                      <View style={styles.dateRow}>
-                        <Text style={styles.dateKicker}>End</Text>
-                        <View style={styles.dateInputsRow}>
-                          <Pressable onPress={() => bumpEnd(-1)} style={styles.dateStepBtn}>
-                            <Text style={styles.dateStepTxt}>−</Text>
-                          </Pressable>
-
-                          <TextInput
-                            value={endDraft}
-                            onChangeText={setEndDraft}
-                            placeholder="YYYY-MM-DD"
-                            placeholderTextColor={theme.colors.textSecondary}
-                            autoCapitalize="none"
-                            autoCorrect={false}
-                            style={styles.dateInput}
-                          />
-
-                          <Pressable onPress={() => bumpEnd(1)} style={styles.dateStepBtn}>
-                            <Text style={styles.dateStepTxt}>+</Text>
-                          </Pressable>
-                        </View>
-                      </View>
-
-                      {dateEditError ? <Text style={styles.dateError}>{dateEditError}</Text> : null}
-
-                      <Pressable
-                        onPress={saveDates}
-                        disabled={datesSaving || !!dateEditError}
-                        style={[styles.dateSaveBtn, (datesSaving || !!dateEditError) && { opacity: 0.55 }]}
-                      >
-                        <Text style={styles.dateSaveText}>{datesSaving ? "Saving…" : "Save dates"}</Text>
-                        <Text style={styles.dateSaveSub}>Updates flights/hotels links instantly</Text>
-                      </Pressable>
-                    </View>
-                  )}
-                </View>
 
                 <View style={styles.heroTopRow}>
                   <View style={styles.statusPill}>
@@ -1532,7 +1353,7 @@ export default function TripDetailScreen() {
                 <GlassCard style={styles.card}>
                   <View style={styles.sectionTitleRow}>
                     <Text style={styles.sectionTitle}>Smart booking</Text>
-                    <Text style={styles.sectionSub}>Only what you need next</Text>
+                    <Text style={styles.sectionSub}>Live prices on partners</Text>
                   </View>
 
                   <View style={styles.smartGrid}>
@@ -1771,7 +1592,9 @@ export default function TripDetailScreen() {
                         {transportStops.map((line, idx) => (
                           <Pressable
                             key={`stop-${idx}`}
-                            onPress={() => openUntracked(buildMapsSearchUrl([line, stadiumCity].filter(Boolean).join(" ")))}
+                            onPress={() =>
+                              openUntracked(buildMapsSearchUrl([line, stadiumCity].filter(Boolean).join(" ")))
+                            }
                             style={styles.stopRow}
                           >
                             <Text style={styles.stayBullet} numberOfLines={2}>
@@ -1815,37 +1638,40 @@ export default function TripDetailScreen() {
                   />
                 ) : (
                   <View style={{ gap: 10 }}>
-                    {pending.map((it) => (
-                      <View key={it.id} style={styles.itemRow}>
-                        <Pressable style={{ flex: 1 }} onPress={() => openSavedItem(it)}>
-                          <View style={styles.itemTitleRow}>
-                            <Text style={styles.itemTitle} numberOfLines={1}>
-                              {it.title}
+                    {pending.map((it) => {
+                      const lp = livePriceLine(it);
+                      return (
+                        <View key={it.id} style={styles.itemRow}>
+                          <Pressable style={{ flex: 1 }} onPress={() => openSavedItem(it)}>
+                            <View style={styles.itemTitleRow}>
+                              <Text style={styles.itemTitle} numberOfLines={1}>
+                                {it.title}
+                              </Text>
+                              <StatusBadge s={it.status} />
+                            </View>
+
+                            <Text style={styles.itemMeta} numberOfLines={1}>
+                              {buildMetaLine(it)}
                             </Text>
-                            <StatusBadge s={it.status} />
+
+                            {lp ? (
+                              <Text style={styles.livePriceLine} numberOfLines={1}>
+                                {lp}
+                              </Text>
+                            ) : null}
+                          </Pressable>
+
+                          <View style={styles.itemActions}>
+                            <Pressable onPress={() => confirmMarkBooked(it)} style={styles.smallBtn}>
+                              <Text style={styles.smallBtnText}>Booked</Text>
+                            </Pressable>
+                            <Pressable onPress={() => confirmArchive(it)} style={[styles.smallBtn, styles.smallBtnDanger]}>
+                              <Text style={styles.smallBtnText}>Archive</Text>
+                            </Pressable>
                           </View>
-
-                          <Text style={styles.itemMeta} numberOfLines={1}>
-                            {buildMetaLine(it)}
-                          </Text>
-
-                          {it.priceText ? (
-                            <Text style={styles.priceLine} numberOfLines={1}>
-                              {it.priceText}
-                            </Text>
-                          ) : null}
-                        </Pressable>
-
-                        <View style={styles.itemActions}>
-                          <Pressable onPress={() => confirmMarkBooked(it)} style={styles.smallBtn}>
-                            <Text style={styles.smallBtnText}>Booked</Text>
-                          </Pressable>
-                          <Pressable onPress={() => confirmArchive(it)} style={[styles.smallBtn, styles.smallBtnDanger]}>
-                            <Text style={styles.smallBtnText}>Archive</Text>
-                          </Pressable>
                         </View>
-                      </View>
-                    ))}
+                      );
+                    })}
                   </View>
                 )}
               </GlassCard>
@@ -1858,38 +1684,41 @@ export default function TripDetailScreen() {
                   <EmptyState title="No booked items yet" message="When you confirm a booking, it will show here and in Wallet." />
                 ) : (
                   <View style={{ gap: 10 }}>
-                    {booked.map((it) => (
-                      <View key={it.id} style={styles.itemRow}>
-                        <Pressable style={{ flex: 1 }} onPress={() => openSavedItem(it)}>
-                          <View style={styles.itemTitleRow}>
-                            <Text style={styles.itemTitle} numberOfLines={1}>
-                              {it.title}
+                    {booked.map((it) => {
+                      const lp = livePriceLine(it);
+                      return (
+                        <View key={it.id} style={styles.itemRow}>
+                          <Pressable style={{ flex: 1 }} onPress={() => openSavedItem(it)}>
+                            <View style={styles.itemTitleRow}>
+                              <Text style={styles.itemTitle} numberOfLines={1}>
+                                {it.title}
+                              </Text>
+                              <StatusBadge s={it.status} />
+                            </View>
+
+                            <Text style={styles.itemMeta} numberOfLines={1}>
+                              {buildMetaLine(it)}
                             </Text>
-                            <StatusBadge s={it.status} />
+
+                            {lp ? (
+                              <Text style={styles.paidLine} numberOfLines={1}>
+                                {lp}
+                              </Text>
+                            ) : null}
+                          </Pressable>
+
+                          <View style={styles.itemActions}>
+                            <Pressable onPress={onViewWallet} style={styles.smallBtn}>
+                              <Text style={styles.smallBtnText}>Wallet</Text>
+                            </Pressable>
+
+                            <Pressable onPress={() => confirmArchive(it)} style={[styles.smallBtn, styles.smallBtnDanger]}>
+                              <Text style={styles.smallBtnText}>Archive</Text>
+                            </Pressable>
                           </View>
-
-                          <Text style={styles.itemMeta} numberOfLines={1}>
-                            {buildMetaLine(it)}
-                          </Text>
-
-                          {it.priceText ? (
-                            <Text style={styles.priceLine} numberOfLines={1}>
-                              {it.priceText}
-                            </Text>
-                          ) : null}
-                        </Pressable>
-
-                        <View style={styles.itemActions}>
-                          <Pressable onPress={onViewWallet} style={styles.smallBtn}>
-                            <Text style={styles.smallBtnText}>Wallet</Text>
-                          </Pressable>
-
-                          <Pressable onPress={() => confirmArchive(it)} style={[styles.smallBtn, styles.smallBtnDanger]}>
-                            <Text style={styles.smallBtnText}>Archive</Text>
-                          </Pressable>
                         </View>
-                      </View>
-                    ))}
+                      );
+                    })}
                   </View>
                 )}
               </GlassCard>
@@ -1905,42 +1734,45 @@ export default function TripDetailScreen() {
                   />
                 ) : (
                   <View style={{ gap: 10 }}>
-                    {saved.map((it) => (
-                      <View key={it.id} style={styles.itemRow}>
-                        <Pressable style={{ flex: 1 }} onPress={() => openSavedItem(it)}>
-                          <View style={styles.itemTitleRow}>
-                            <Text style={styles.itemTitle} numberOfLines={1}>
-                              {it.title}
+                    {saved.map((it) => {
+                      const lp = livePriceLine(it);
+                      return (
+                        <View key={it.id} style={styles.itemRow}>
+                          <Pressable style={{ flex: 1 }} onPress={() => openSavedItem(it)}>
+                            <View style={styles.itemTitleRow}>
+                              <Text style={styles.itemTitle} numberOfLines={1}>
+                                {it.title}
+                              </Text>
+                              <StatusBadge s={it.status} />
+                            </View>
+
+                            <Text style={styles.itemMeta} numberOfLines={1}>
+                              {buildMetaLine(it)}
                             </Text>
-                            <StatusBadge s={it.status} />
+
+                            {lp ? (
+                              <Text style={styles.livePriceLine} numberOfLines={1}>
+                                {lp}
+                              </Text>
+                            ) : null}
+                          </Pressable>
+
+                          <View style={styles.itemActions}>
+                            <Pressable onPress={() => confirmMarkBooked(it)} style={styles.smallBtn}>
+                              <Text style={styles.smallBtnText}>Booked</Text>
+                            </Pressable>
+
+                            <Pressable onPress={() => confirmMoveToPending(it)} style={styles.smallBtn}>
+                              <Text style={styles.smallBtnText}>Pending</Text>
+                            </Pressable>
+
+                            <Pressable onPress={() => confirmArchive(it)} style={[styles.smallBtn, styles.smallBtnDanger]}>
+                              <Text style={styles.smallBtnText}>Archive</Text>
+                            </Pressable>
                           </View>
-
-                          <Text style={styles.itemMeta} numberOfLines={1}>
-                            {buildMetaLine(it)}
-                          </Text>
-
-                          {it.priceText ? (
-                            <Text style={styles.priceLine} numberOfLines={1}>
-                              {it.priceText}
-                            </Text>
-                          ) : null}
-                        </Pressable>
-
-                        <View style={styles.itemActions}>
-                          <Pressable onPress={() => confirmMarkBooked(it)} style={styles.smallBtn}>
-                            <Text style={styles.smallBtnText}>Booked</Text>
-                          </Pressable>
-
-                          <Pressable onPress={() => confirmMoveToPending(it)} style={styles.smallBtn}>
-                            <Text style={styles.smallBtnText}>Pending</Text>
-                          </Pressable>
-
-                          <Pressable onPress={() => confirmArchive(it)} style={[styles.smallBtn, styles.smallBtnDanger]}>
-                            <Text style={styles.smallBtnText}>Archive</Text>
-                          </Pressable>
                         </View>
-                      </View>
-                    ))}
+                      );
+                    })}
                   </View>
                 )}
               </GlassCard>
@@ -2045,67 +1877,6 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     fontSize: 12,
   },
-
-  /* Inline dates */
-  datesWrap: {
-    marginTop: 12,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.18)",
-    borderRadius: 14,
-    padding: 12,
-  },
-  datesHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
-  datesLabel: { color: theme.colors.text, fontWeight: "900", fontSize: 12 },
-  datesEditBtn: {
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.14)",
-    backgroundColor: "rgba(0,0,0,0.14)",
-  },
-  datesEditText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: 12 },
-  datesLine: { marginTop: 8, color: theme.colors.text, fontWeight: "900" },
-
-  dateRow: { gap: 6 },
-  dateKicker: { color: theme.colors.textTertiary, fontWeight: "900", fontSize: 11 },
-  dateInputsRow: { flexDirection: "row", alignItems: "center", gap: 10 },
-  dateStepBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.14)",
-    backgroundColor: "rgba(0,0,0,0.14)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  dateStepTxt: { color: theme.colors.text, fontWeight: "900", fontSize: 18, marginTop: -1 },
-  dateInput: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.14)",
-    backgroundColor: "rgba(0,0,0,0.18)",
-    borderRadius: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    color: theme.colors.text,
-    fontWeight: "900",
-  },
-  dateError: { marginTop: 2, color: "rgba(255,120,120,0.95)", fontWeight: "900", fontSize: 12 },
-
-  dateSaveBtn: {
-    marginTop: 6,
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "rgba(0,255,136,0.55)",
-    alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.18)",
-  },
-  dateSaveText: { color: theme.colors.text, fontWeight: "900" },
-  dateSaveSub: { marginTop: 4, color: theme.colors.textSecondary, fontWeight: "800", fontSize: 11 },
 
   heroTopRow: {
     marginTop: 10,
@@ -2386,7 +2157,14 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
 
-  priceLine: {
+  livePriceLine: {
+    marginTop: 6,
+    color: theme.colors.textTertiary,
+    fontSize: 12,
+    fontWeight: "900",
+  },
+
+  paidLine: {
     marginTop: 6,
     color: "rgba(242,244,246,0.92)",
     fontSize: 12,
