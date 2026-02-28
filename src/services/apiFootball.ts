@@ -80,7 +80,7 @@ export type FixtureListRow = {
   fixture?: {
     id?: number;
     date?: string; // ISO
-    venue?: { name?: string; city?: string };
+    venue?: { id?: number; name?: string; city?: string };
     status?: { long?: string; short?: string };
   };
   league?: {
@@ -93,6 +93,31 @@ export type FixtureListRow = {
   teams?: {
     home?: { id?: number; name?: string; logo?: string };
     away?: { id?: number; name?: string; logo?: string };
+  };
+};
+
+/**
+ * Teams endpoint shape (API-Football /teams?league=&season=)
+ * We keep only what we need for automatic city registry.
+ */
+export type TeamRow = {
+  team?: {
+    id?: number;
+    name?: string;
+    code?: string;
+    country?: string;
+    logo?: string;
+    founded?: number;
+    national?: boolean;
+  };
+  venue?: {
+    id?: number;
+    name?: string;
+    city?: string;
+    address?: string;
+    capacity?: number;
+    surface?: string;
+    image?: string;
   };
 };
 
@@ -123,6 +148,22 @@ function normalizeRows(rows: FixtureListRow[]): FixtureListRow[] {
   return rows;
 }
 
+function normalizeTeamVenueCityInPlace(row: TeamRow | null | undefined) {
+  if (!row?.venue?.city) return row;
+  const raw = row.venue.city;
+  const canon = normalizeCityName(raw);
+  if (canon && canon !== raw) {
+    row.venue.city = canon;
+  }
+  return row;
+}
+
+function normalizeTeamRows(rows: TeamRow[]): TeamRow[] {
+  if (!Array.isArray(rows) || rows.length === 0) return [];
+  for (const r of rows) normalizeTeamVenueCityInPlace(r);
+  return rows;
+}
+
 /* -------------------------------------------------------------------------- */
 /* In-memory caching */
 /* -------------------------------------------------------------------------- */
@@ -130,6 +171,7 @@ function normalizeRows(rows: FixtureListRow[]): FixtureListRow[] {
 const FIXTURES_TTL_MS = 10 * 60 * 1000; // 10 minutes
 const FIXTURE_BY_ID_TTL_MS = 30 * 60 * 1000; // 30 minutes
 const FIXTURES_BY_ROUND_TTL_MS = 30 * 60 * 1000; // 30 minutes (round lists are stable-ish)
+const TEAMS_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours (rosters stable)
 
 type CacheEntry<T> = {
   ts: number;
@@ -140,6 +182,7 @@ type CacheEntry<T> = {
 const fixturesCache = new Map<string, CacheEntry<FixtureListRow[]>>();
 const fixtureByIdCache = new Map<string, CacheEntry<FixtureListRow | null>>();
 const fixturesByRoundCache = new Map<string, CacheEntry<FixtureListRow[]>>();
+const teamsCache = new Map<string, CacheEntry<TeamRow[]>>();
 
 function now() {
   return Date.now();
@@ -159,6 +202,10 @@ function fixtureIdKey(id: string | number) {
 
 function fixturesByRoundKey(params: { league: number; season: number; round: string }) {
   return `fixturesRound:${params.league}:${params.season}:${params.round}`;
+}
+
+function teamsKey(params: { league: number; season: number }) {
+  return `teams:${params.league}:${params.season}`;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -277,8 +324,41 @@ export async function getFixturesByRound(params: {
   return inflight;
 }
 
+/**
+ * Fetch teams for a league + season.
+ * Used for automatic city registry (25/26 correctness).
+ */
+export async function getTeams(params: { league: number; season: number }): Promise<TeamRow[]> {
+  const key = teamsKey(params);
+  const existing = teamsCache.get(key);
+
+  if (existing?.value && isFresh(existing.ts, TEAMS_TTL_MS)) {
+    return existing.value;
+  }
+
+  if (existing?.inflight) return existing.inflight;
+
+  const qs = enc({ league: params.league, season: params.season });
+
+  const inflight = apiGet<TeamRow[]>(`/teams${qs}`)
+    .then((rows) => (Array.isArray(rows) ? rows : []))
+    .then((rows) => normalizeTeamRows(rows))
+    .then((rows) => {
+      teamsCache.set(key, { ts: now(), value: rows });
+      return rows;
+    })
+    .catch((err) => {
+      teamsCache.delete(key);
+      throw err;
+    });
+
+  teamsCache.set(key, { ts: now(), inflight });
+  return inflight;
+}
+
 export function __clearApiFootballCache() {
   fixturesCache.clear();
   fixtureByIdCache.clear();
   fixturesByRoundCache.clear();
+  teamsCache.clear();
 }
