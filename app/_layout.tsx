@@ -1,6 +1,6 @@
 // app/_layout.tsx
 import "@/src/utils/errorLogger";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Stack } from "expo-router";
 
 import { ProProvider } from "@/src/context/ProContext";
@@ -23,38 +23,72 @@ export default function RootLayout() {
   const [modalItemId, setModalItemId] = useState<string | null>(null);
   const [modalClick, setModalClick] = useState<LastPartnerClick | null>(null);
 
+  const mountedRef = useRef(true);
+
+  function closeModal() {
+    if (!mountedRef.current) return;
+    setModalItemId(null);
+    setModalClick(null);
+  }
+
   useEffect(() => {
-    // 1) Ensure a stable device identity exists (guest path)
+    mountedRef.current = true;
+
+    // 1) Stable device identity (guest path)
     identity.ensureIdentity().catch(() => null);
 
     // 2) Partner return detection (booking loop)
     bootstrapPartnerReturnPrompt();
 
-    registerReturnModalHandler((itemId, click) => {
+    // IMPORTANT: ensure we can unregister on refresh/remount
+    // If registerReturnModalHandler doesn't currently return an unsubscribe,
+    // update it so it does. Otherwise you WILL get duplicate handlers over time.
+    const maybeUnsub = registerReturnModalHandler((itemId, click) => {
+      if (!mountedRef.current) return;
       setModalItemId(itemId);
       setModalClick(click);
     });
 
-    // 3) Preferences
+    // 3) Preferences (e.g. origin IATA)
     preferencesStore.load().catch(() => null);
+
+    return () => {
+      mountedRef.current = false;
+      try {
+        // If your registerReturnModalHandler returns () => void, this cleans up properly.
+        if (typeof maybeUnsub === "function") maybeUnsub();
+      } catch {
+        // ignore
+      }
+    };
   }, []);
 
   async function handleBooked(itemId: string) {
-    await markItemBooked(itemId);
+    try {
+      await markItemBooked(itemId);
+    } finally {
+      closeModal();
+    }
   }
 
   async function handleNotBooked(itemId: string) {
-    await markItemNotBooked(itemId);
+    try {
+      await markItemNotBooked(itemId);
+    } finally {
+      closeModal();
+    }
   }
 
   async function handleNotNow(itemId?: string | null) {
-    if (!itemId) return;
-    await dismissPartnerReturn(itemId);
-  }
-
-  function closeModal() {
-    setModalItemId(null);
-    setModalClick(null);
+    if (!itemId) {
+      closeModal();
+      return;
+    }
+    try {
+      await dismissPartnerReturn(itemId);
+    } finally {
+      closeModal();
+    }
   }
 
   return (
