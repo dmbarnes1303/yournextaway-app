@@ -181,6 +181,15 @@ function CrestSquare({ row }: { row: FixtureListRow }) {
 function scoreFixture(r: FixtureListRow): number {
   let s = 0;
 
+  // League weight (simple but effective)
+  const leagueId = r?.league?.id;
+  if (leagueId === 39) s += 120;
+  else if (leagueId === 140) s += 105;
+  else if (leagueId === 135) s += 100;
+  else if (leagueId === 78) s += 95;
+  else if (leagueId === 61) s += 90;
+  else s += 60;
+
   const homeId = r?.teams?.home?.id;
   const awayId = r?.teams?.away?.id;
 
@@ -195,9 +204,11 @@ function scoreFixture(r: FixtureListRow): number {
   const dt = r?.fixture?.date ? new Date(r.fixture.date) : null;
   if (dt && !Number.isNaN(dt.getTime())) {
     const day = dt.getDay();
-    if (day === 5 || day === 6 || day === 0) s += 10;
+    // Fri/Sat/Sun
+    if (day === 5 || day === 6 || day === 0) s += 12;
+    // Evening kickoff boost
     const hr = dt.getHours();
-    if (hr >= 17 && hr <= 21) s += 6;
+    if (hr >= 17 && hr <= 21) s += 8;
   }
 
   return s;
@@ -298,7 +309,7 @@ export default function HomeScreen() {
 
   const nextTrip = useMemo(() => upcomingTrips[0] ?? null, [upcomingTrips]);
 
-  // Fixtures preview
+  // Fixtures preview (still per-league, but sorted by score)
   const [fxLoading, setFxLoading] = useState(false);
   const [fxError, setFxError] = useState<string | null>(null);
   const [fxRows, setFxRows] = useState<FixtureListRow[]>([]);
@@ -399,11 +410,10 @@ export default function HomeScreen() {
   }, []);
 
   /**
-   * Primary Home path: Fixtures (not Build Trip).
-   * Home passes a window + optional league context.
+   * Home -> Fixtures (with window + optional league context).
    */
   const goFixtures = useCallback(
-    (opts?: { window?: ShortcutWindow; leagueId?: number; season?: number }) => {
+    (opts?: { window?: ShortcutWindow; leagueId?: number; season?: number; sort?: "rating" | "date" }) => {
       const w = opts?.window ?? getRollingWindowIso({ days: 60 });
       router.push({
         pathname: "/(tabs)/fixtures",
@@ -412,19 +422,20 @@ export default function HomeScreen() {
           to: w.to,
           ...(opts?.leagueId ? { leagueId: String(opts.leagueId) } : {}),
           ...(opts?.season ? { season: String(opts.season) } : {}),
+          ...(opts?.sort ? { sort: String(opts.sort) } : {}),
         },
       } as any);
     },
     [router]
   );
 
-  const goFixturesAll = useCallback(() => {
-    goFixtures({ window: getRollingWindowIso({ days: 60 }) as any });
-  }, [goFixtures]);
-
+  /**
+   * PLAN A TRIP (locked):
+   * Next 14 days, sorted by rating, across all leagues.
+   */
   const goPlanTrip = useCallback(() => {
-    // Intentful default: weekend-first. This makes the CTA actually mean something.
-    goFixtures({ window: nextWeekendWindowIso() });
+    const w = windowFromTomorrowIso(14);
+    goFixtures({ window: w, sort: "rating" });
   }, [goFixtures]);
 
   const goMatch = useCallback(
@@ -482,7 +493,7 @@ export default function HomeScreen() {
         setQ("");
         router.push({
           pathname: "/(tabs)/fixtures",
-          params: { leagueId: String(league.leagueId), season: String(league.season), from: fromIso, to: toIso, venue: venueName },
+          params: { from: fromIso, to: toIso, venue: venueName },
         } as any);
         return;
       }
@@ -497,7 +508,7 @@ export default function HomeScreen() {
         return;
       }
     },
-    [router, fromIso, toIso, league.leagueId, league.season, goCityKey]
+    [router, fromIso, toIso, goCityKey]
   );
 
   const resultMeta = useCallback((r: SearchResult): string => {
@@ -638,9 +649,15 @@ export default function HomeScreen() {
         icon: "⚡",
         onPress: () => goFixtures({ window: windowFromTomorrowIso(7) }),
       },
-      { key: "fixtures", title: "Browse Fixtures", sub: "Explore all options", icon: "🎟️", onPress: () => goFixturesAll() },
+      {
+        key: "topPicks",
+        title: "Top Picks",
+        sub: "Best games • 14 days",
+        icon: "⭐",
+        onPress: () => goPlanTrip(),
+      },
     ],
-    [goFixtures, goFixturesAll]
+    [goFixtures, goPlanTrip]
   );
 
   // Trips: restore display assets (flag + team crest) and capitalise city name.
@@ -686,7 +703,7 @@ export default function HomeScreen() {
           <GlassCard strength="strong" style={styles.hero} noPadding>
             <View style={styles.heroInner}>
               <Text style={styles.heroTitle}>Plan A Football City Break</Text>
-              <Text style={styles.heroSub}>Search A City, Team, Country, League, Or Venue. Then Browse Fixtures Or Start Planning.</Text>
+              <Text style={styles.heroSub}>Search a city, team, country, league, or venue. Then pick a match and start planning.</Text>
 
               <View style={styles.searchBox}>
                 <TextInput
@@ -707,20 +724,12 @@ export default function HomeScreen() {
                 ) : null}
               </View>
 
-              {/* Primary actions */}
+              {/* Primary action (Browse Fixtures removed — Fixtures tab exists) */}
               {!showSearchResults ? (
-                <View style={styles.heroActions}>
-                  <Pressable
-                    onPress={goFixturesAll}
-                    style={({ pressed }) => [styles.heroBtn, styles.heroBtnGhost, pressed && styles.pressed]}
-                    android_ripple={{ color: "rgba(255,255,255,0.08)" }}
-                  >
-                    <Text style={styles.heroBtnGhostText}>Browse Fixtures</Text>
-                  </Pressable>
-
+                <View style={styles.heroActionsSingle}>
                   <Pressable
                     onPress={goPlanTrip}
-                    style={({ pressed }) => [styles.heroBtn, styles.heroBtnPrimary, pressed && styles.pressed]}
+                    style={({ pressed }) => [styles.heroBtnSingle, styles.heroBtnPrimary, pressed && styles.pressed]}
                     android_ripple={{ color: "rgba(79,224,138,0.10)" }}
                   >
                     <Text style={styles.heroBtnPrimaryText}>Plan A Trip</Text>
@@ -1244,8 +1253,7 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  // unchanged from your current file
-  // (kept identical to avoid accidental visual drift)
+  // identical base + tiny additions for the single CTA row
   container: { flex: 1 },
   scroll: { flex: 1 },
   content: { paddingHorizontal: theme.spacing.lg, paddingBottom: theme.spacing.xxl, gap: 18 },
@@ -1289,18 +1297,14 @@ const styles = StyleSheet.create({
   },
   clearText: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: theme.fontWeight.black },
 
-  heroActions: { flexDirection: "row", gap: 10, marginTop: 4 },
-  heroBtn: { flex: 1, borderRadius: 16, paddingVertical: 12, alignItems: "center", borderWidth: 1, overflow: "hidden" },
+  heroActionsSingle: { marginTop: 4 },
+  heroBtnSingle: { borderRadius: 16, paddingVertical: 12, alignItems: "center", borderWidth: 1, overflow: "hidden" },
+
   heroBtnPrimary: {
     borderColor: "rgba(79,224,138,0.24)",
     backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.default : theme.glass.iosBg.default,
   },
   heroBtnPrimaryText: { color: theme.colors.text, fontSize: 14, fontWeight: theme.fontWeight.black },
-  heroBtnGhost: {
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
-  },
-  heroBtnGhostText: { color: theme.colors.textSecondary, fontSize: 14, fontWeight: theme.fontWeight.black },
 
   searchResults: { marginTop: 10, gap: 10 },
   resultList: {
