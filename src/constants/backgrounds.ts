@@ -3,6 +3,7 @@ import type { ImageSourcePropType } from "react-native";
 
 export type BackgroundKey =
   | "home"
+  | "city"
   | "landing"
   | "landing-hero"
   | "onboarding-1"
@@ -17,6 +18,9 @@ export type BackgroundKey =
 const BACKGROUNDS: Record<BackgroundKey, ImageSourcePropType> = {
   home: require("@/src/assets/backgrounds/home.png"),
 
+  // Used by City pages as a safe fallback imageSource (actual city hero uses getCityBackground())
+  city: require("@/src/assets/backgrounds/home.png"),
+
   landing: require("@/src/assets/backgrounds/landing-hero.png"),
   "landing-hero": require("@/src/assets/backgrounds/landing-hero.png"),
 
@@ -28,6 +32,8 @@ const BACKGROUNDS: Record<BackgroundKey, ImageSourcePropType> = {
   fixtures: require("@/src/assets/backgrounds/fixtures.png"),
   trips: require("@/src/assets/backgrounds/trips.png"),
   wallet: require("@/src/assets/backgrounds/wallet.png"),
+
+  // If you don't have a dedicated profile.png yet, reusing trips is OK — but be explicit.
   profile: require("@/src/assets/backgrounds/trips.png"),
 };
 
@@ -35,19 +41,16 @@ export function getBackground(key: BackgroundKey): ImageSourcePropType {
   return BACKGROUNDS[key];
 }
 
-export function getBackgroundSource(key: BackgroundKey): ImageSourcePropType {
-  return BACKGROUNDS[key];
-}
-
 /**
  * Remote Unsplash helper
+ * NOTE: The `id` should be the path segment after images.unsplash.com/, e.g. "photo-123..."
  */
 const u = (id: string) =>
   `https://images.unsplash.com/${id}?auto=format&fit=crop&w=1800&h=3200&fm=jpg&q=80`;
 
 /**
  * CITY HERO BACKGROUNDS
- * Keys must match normalizeCityKey output
+ * Keys must match normalizeCityKey output (lowercase, hyphenless, etc.)
  */
 export const CITY_BACKGROUNDS: Record<string, string> = {
   /* ---------------- PREMIER LEAGUE ---------------- */
@@ -70,7 +73,7 @@ export const CITY_BACKGROUNDS: Record<string, string> = {
   valencia: u("photo-1501854140801-50d01698950b"),
   seville: u("photo-1501854140801-50d01698950b"),
   bilbao: u("photo-1533106418989-88406c7cc8ca"),
-  sanSebastian: u("photo-1533106418989-88406c7cc8ca"),
+  sansebastian: u("photo-1533106418989-88406c7cc8ca"),
   vigo: u("photo-1501854140801-50d01698950b"),
   mallorca: u("photo-1501854140801-50d01698950b"),
   girona: u("photo-1533106418989-88406c7cc8ca"),
@@ -129,12 +132,13 @@ export const CITY_BACKGROUNDS: Record<string, string> = {
 };
 
 /**
- * Return city background or fallback
+ * Return city background URL (remote) or a safe local fallback ImageSource.
+ * City screens can pass either `{ uri }` or `require(...)` into Background.imageSource.
  */
 export function getCityBackground(cityKey: string): string | ImageSourcePropType {
   const key = String(cityKey || "").trim().toLowerCase();
-  if (!key) return BACKGROUNDS.home;
-  return CITY_BACKGROUNDS[key] ?? BACKGROUNDS.home;
+  if (!key) return BACKGROUNDS.city;
+  return CITY_BACKGROUNDS[key] ?? BACKGROUNDS.city;
 }
 
 export default BACKGROUNDS;
