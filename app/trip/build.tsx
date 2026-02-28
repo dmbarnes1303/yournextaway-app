@@ -540,7 +540,7 @@ export default function TripBuildScreen() {
       // NEW TRIP FLOW: dedupe
       const existingId = findExistingTripIdForFixture(fixtureId);
       if (existingId) {
-        Alert.alert("Trip already exists", "You already have a Trip Hub for this match — opening it now.");
+        Alert.alert("Trip already exists", "You already have a trip for this match — opening it now.");
         router.replace({ pathname: "/trip/[id]", params: { id: existingId } } as any);
         return;
       }
@@ -609,11 +609,11 @@ export default function TripBuildScreen() {
     return `${nights} night${nights === 1 ? "" : "s"}`;
   }, [startIso, endIso]);
 
-  const headerTitle = useMemo(() => (isEditing ? "Edit Trip" : "Build Trip"), [isEditing]);
+  const headerTitle = useMemo(() => (isEditing ? "Edit trip" : "Plan trip"), [isEditing]);
 
   const intentSub = useMemo(() => {
-    if (isEditing) return "Update your trip hub details.";
-    return "Pick a match, then we’ll create a Trip Hub for flights, stay, tickets, and plans.";
+    if (isEditing) return "Update your trip details.";
+    return "Pick a match, then we’ll save a trip with dates, notes, and planning links.";
   }, [isEditing]);
 
   const selectedLeagueLabel = useMemo(() => {
@@ -659,12 +659,12 @@ export default function TripBuildScreen() {
         >
           {/* INTENT HEADER */}
           <GlassCard style={styles.headerCard} level="subtle">
-            <Text style={styles.bigTitle}>{isEditing ? "Edit your Trip Hub" : "Build a Trip Hub"}</Text>
+            <Text style={styles.bigTitle}>{isEditing ? "Edit your trip" : "Plan your trip"}</Text>
             <Text style={styles.bigSub}>{intentSub}</Text>
 
             <View style={styles.chipRow}>
               <View style={styles.chip}>
-                <Text style={styles.chipKicker}>Trip</Text>
+                <Text style={styles.chipKicker}>Dates</Text>
                 <Text style={styles.chipValue}>{dateWindowLabel}</Text>
               </View>
 
@@ -774,9 +774,7 @@ export default function TripBuildScreen() {
           {showPickerMode && !prefillLoading && !error ? (
             <GlassCard level="default">
               <Text style={styles.h1}>Pick a match</Text>
-              <Text style={styles.hint}>
-                This isn’t the Fixtures tab. Pick a match to create a Trip Hub with planning context.
-              </Text>
+              <Text style={styles.hint}>Choose a match to start a trip around it.</Text>
 
               {/* League chips */}
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 12 }}>
@@ -937,7 +935,7 @@ export default function TripBuildScreen() {
                 </>
               ) : (
                 <View style={styles.pickEmptyHint}>
-                  <Text style={styles.pickEmptyHintT}>Select a match to unlock Trip Hub creation.</Text>
+                  <Text style={styles.pickEmptyHintT}>Select a match to continue.</Text>
                 </View>
               )}
             </GlassCard>
@@ -949,8 +947,8 @@ export default function TripBuildScreen() {
             disabled={saving || prefillLoading || !selectedFixture}
             style={[styles.saveBtn, (!selectedFixture || saving || prefillLoading) && { opacity: 0.55 }]}
           >
-            <Text style={styles.saveText}>{saving ? "Creating…" : isEditing ? "Update Trip Hub" : "Create Trip Hub"}</Text>
-            <Text style={styles.saveSub}>{selectedFixture ? "Flights • Stay • Tickets • Plans in one place" : "Select a match to continue"}</Text>
+            <Text style={styles.saveText}>{saving ? "Saving…" : isEditing ? "Update trip" : "Save trip"}</Text>
+            <Text style={styles.saveSub}>{selectedFixture ? "Keep links, notes, and bookings in one place" : "Select a match to continue"}</Text>
           </Pressable>
 
           {error ? <Text style={styles.err}>{error}</Text> : null}
