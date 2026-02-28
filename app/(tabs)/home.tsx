@@ -399,8 +399,8 @@ export default function HomeScreen() {
   }, []);
 
   /**
-   * ✅ Primary Home path: Fixtures (not Build Trip).
-   * Home can pass a window + optional league context.
+   * Primary Home path: Fixtures (not Build Trip).
+   * Home passes a window + optional league context.
    */
   const goFixtures = useCallback(
     (opts?: { window?: ShortcutWindow; leagueId?: number; season?: number }) => {
@@ -419,8 +419,12 @@ export default function HomeScreen() {
   );
 
   const goFixturesAll = useCallback(() => {
-    // Keep it deterministic: Fixtures opens with a sensible rolling window.
     goFixtures({ window: getRollingWindowIso({ days: 60 }) as any });
+  }, [goFixtures]);
+
+  const goPlanTrip = useCallback(() => {
+    // Intentful default: weekend-first. This makes the CTA actually mean something.
+    goFixtures({ window: nextWeekendWindowIso() });
   }, [goFixtures]);
 
   const goMatch = useCallback(
@@ -715,7 +719,7 @@ export default function HomeScreen() {
                   </Pressable>
 
                   <Pressable
-                    onPress={() => goFixtures({ window: getRollingWindowIso({ days: 60 }) as any })}
+                    onPress={goPlanTrip}
                     style={({ pressed }) => [styles.heroBtn, styles.heroBtnPrimary, pressed && styles.pressed]}
                     android_ripple={{ color: "rgba(79,224,138,0.10)" }}
                   >
@@ -926,7 +930,7 @@ export default function HomeScreen() {
                       </View>
 
                       <Pressable
-                        onPress={() => goFixtures({ window: upcomingWindow, leagueId: league.leagueId, season: league.season })}
+                        onPress={goPlanTrip}
                         style={({ pressed }) => [styles.singleCta, styles.btn, styles.btnPrimary, pressed && styles.pressed]}
                         android_ripple={{ color: "rgba(79,224,138,0.10)" }}
                       >
@@ -966,11 +970,11 @@ export default function HomeScreen() {
                   {loadedTrips && !nextTrip ? (
                     <>
                       <Text style={styles.emptyTitle}>No Trips Yet</Text>
-                      <Text style={styles.emptyMeta}>Pick a match in Fixtures, then build your trip around it.</Text>
+                      <Text style={styles.emptyMeta}>Pick a match in Fixtures, then plan your trip around it.</Text>
 
                       <View style={styles.blockActions}>
                         <Pressable
-                          onPress={() => goFixturesAll()}
+                          onPress={goPlanTrip}
                           style={({ pressed }) => [styles.btn, styles.btnPrimary, pressed && styles.pressed]}
                           android_ripple={{ color: "rgba(79,224,138,0.10)" }}
                         >
@@ -1019,7 +1023,7 @@ export default function HomeScreen() {
                           <Text style={styles.btnGhostText}>Open Trips</Text>
                         </Pressable>
                         <Pressable
-                          onPress={() => goFixturesAll()}
+                          onPress={goPlanTrip}
                           style={({ pressed }) => [styles.btn, styles.btnPrimary, pressed && styles.pressed]}
                           android_ripple={{ color: "rgba(79,224,138,0.10)" }}
                         >
@@ -1240,6 +1244,8 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
+  // unchanged from your current file
+  // (kept identical to avoid accidental visual drift)
   container: { flex: 1 },
   scroll: { flex: 1 },
   content: { paddingHorizontal: theme.spacing.lg, paddingBottom: theme.spacing.xxl, gap: 18 },
