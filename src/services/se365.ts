@@ -1,460 +1,227 @@
 // src/services/se365.ts
-// Sportsevents365 integration helpers + event resolution for fixtures.
-// Designed to be safe: never crash the app if SE365 is unavailable.
-// Supports proxy-first (recommended) with fallback to direct SE365 endpoints.
-
 import Constants from "expo-constants";
 
-type Se365Env = {
-  proxyUrl?: string;
-  apiBaseUrl?: string;
-  apiKey?: string;
-  affiliateId?: string;
-};
-
-type TournamentEvent = {
+type Se365Event = {
   id: number;
   name?: string;
-  date?: string; // ISO-ish
-  start_date?: string;
-  startDate?: string;
-  start_time?: string;
-  local_time?: string;
   url?: string;
-  web_url?: string;
-  event_url?: string;
-  venue?: { name?: string };
-  home_team?: { name?: string };
-  away_team?: { name?: string };
-  teams?: Array<{ name?: string }>;
-  tournament?: { name?: string };
-  competition?: { name?: string };
-  [k: string]: any;
+  startDate?: string; // ISO
+  venue?: { name?: string; city?: string };
+  category?: { id?: number; name?: string };
 };
 
-type ResolveResponse =
-  | {
-      ok: true;
-      eventId: number;
-      eventUrl?: string;
-      affiliateUrl?: string;
-      raw?: any;
-    }
-  | { ok: false; reason: string; raw?: any };
+type Se365SearchResponse = {
+  events?: Se365Event[];
+};
 
-type FixtureForSe365 = {
-  fixtureId: number | string;
+type ResolveArgs = {
+  fixtureId: string | number;
   homeName: string;
   awayName: string;
-  kickoffIso: string; // ISO string from API-Football
+  kickoffIso: string; // from API-Football fixture.date
   leagueName?: string;
-  leagueId?: number | string;
+  leagueId?: string | number;
 };
 
-const DEFAULT_API_BASE = "https://www.sportsevents365.com/api";
-const DEFAULT_TIMEOUT_MS = 12_000;
-
-const memCache: Map<string, { eventId?: number | null; eventUrl?: string | null }> = new Map();
-
-const normalize = (s: string) =>
-  (s || "")
-    .toLowerCase()
-    .replace(/&/g, "and")
-    .replace(/['’]/g, "")
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim();
-
-const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
-
-const parseIsoToMs = (iso: string | undefined | null): number | null => {
-  if (!iso) return null;
-  const d = new Date(iso);
-  const ms = d.getTime();
-  return Number.isFinite(ms) ? ms : null;
+type ResolveResult = {
+  eventId: number | null;
+  eventUrl: string | null;
+  reason?: string;
 };
 
-const getConfigFromEnv = (): Se365Env => {
-  const extra =
-    (Constants?.expoConfig?.extra as any) ||
-    (Constants as any)?.manifest2?.extra ||
-    (Constants as any)?.manifest?.extra ||
-    {};
+function env(name: string): string | undefined {
+  const extra = (Constants?.expoConfig as any)?.extra ?? (Constants as any)?.manifest?.extra ?? {};
+  const v =
+    (extra && typeof extra[name] === "string" ? String(extra[name]) : undefined) ??
+    (typeof process !== "undefined" &&
+    (process as any)?.env &&
+    typeof (process as any).env[name] === "string"
+      ? String((process as any).env[name])
+      : undefined);
 
-  // Prefer explicit public env vars; fallback to expo extra
-  const proxyUrl =
-    process.env.EXPO_PUBLIC_SE365_PROXY_URL ||
-    extra?.EXPO_PUBLIC_SE365_PROXY_URL ||
-    extra?.SE365_PROXY_URL ||
-    undefined;
+  const s = String(v ?? "").trim();
+  return s || undefined;
+}
 
-  const apiBaseUrl =
-    process.env.EXPO_PUBLIC_SE365_API_BASE_URL ||
-    extra?.EXPO_PUBLIC_SE365_API_BASE_URL ||
-    extra?.SE365_API_BASE_URL ||
-    DEFAULT_API_BASE;
+function clean(s: any): string {
+  return String(s ?? "").trim();
+}
 
-  const apiKey =
-    process.env.EXPO_PUBLIC_SE365_API_KEY ||
-    extra?.EXPO_PUBLIC_SE365_API_KEY ||
-    extra?.SE365_API_KEY ||
-    process.env.SE365_API_KEY ||
-    extra?.SE365_API_KEY_PRIVATE ||
-    undefined;
+function norm(s: any): string {
+  return clean(s).toLowerCase();
+}
 
-  const affiliateId =
-    process.env.EXPO_PUBLIC_SE365_AFFILIATE_ID ||
-    extra?.EXPO_PUBLIC_SE365_AFFILIATE_ID ||
-    extra?.SE365_AFFILIATE_ID ||
-    undefined;
+function dateOnlyFromIso(iso: string): string | null {
+  const raw = clean(iso);
+  if (!raw) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return null;
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
 
-  return { proxyUrl, apiBaseUrl, apiKey, affiliateId };
-};
+function absDays(a: Date, b: Date): number {
+  const ms = Math.abs(a.getTime() - b.getTime());
+  return Math.floor(ms / (24 * 60 * 60 * 1000));
+}
 
-const withTimeout = async <T>(
-  p: Promise<T>,
-  ms: number,
-  label: string
-): Promise<T> => {
-  let t: any;
-  const timeout = new Promise<T>((_, reject) => {
-    t = setTimeout(() => reject(new Error(`timeout:${label}`)), ms);
-  });
-  try {
-    return await Promise.race([p, timeout]);
-  } finally {
-    clearTimeout(t);
-  }
-};
+function safeDate(iso?: string): Date | null {
+  const raw = clean(iso);
+  if (!raw) return null;
+  const d = new Date(raw);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
 
-const safeJson = async (res: Response): Promise<any> => {
-  const txt = await res.text();
-  try {
-    return JSON.parse(txt);
-  } catch {
-    return { _raw: txt };
-  }
-};
+function containsTeamName(eventName: string, home: string, away: string): boolean {
+  const n = norm(eventName);
+  const h = norm(home);
+  const a = norm(away);
 
-const fetchJson = async (url: string, init?: RequestInit, timeoutMs = DEFAULT_TIMEOUT_MS) => {
-  const res = await withTimeout(fetch(url, init), timeoutMs, url);
-  const json = await safeJson(res);
-  return { res, json };
-};
+  // Basic containment — works well for "Team A vs Team B" / "Team A - Team B"
+  return n.includes(h) && n.includes(a);
+}
 
-const pickEventStartIso = (e: TournamentEvent): string | null => {
-  const iso =
-    e?.start_date ||
-    e?.startDate ||
-    e?.date ||
-    (e?.start_time ? e?.start_time : undefined) ||
-    (e?.local_time ? e?.local_time : undefined);
-
-  if (!iso) return null;
-  const ms = parseIsoToMs(iso);
-  return ms ? new Date(ms).toISOString() : null;
-};
-
-const bestUrlFromEvent = (e: TournamentEvent): string | null => {
-  const u = e?.event_url || e?.web_url || e?.url;
-  if (typeof u === "string" && u.trim()) return u;
-  return null;
-};
-
-const ensureHttps = (u: string): string => {
-  if (!u) return u;
-  if (u.startsWith("http://")) return "https://" + u.slice("http://".length);
-  if (u.startsWith("https://")) return u;
-  // Some SE365 APIs might return relative URLs; normalize to site
-  if (u.startsWith("/")) return "https://www.sportsevents365.com" + u;
-  return "https://www.sportsevents365.com/" + u;
-};
-
-export const buildAffiliateUrl = (eventUrl: string): string => {
-  const { affiliateId } = getConfigFromEnv();
-  const base = ensureHttps(eventUrl);
-
-  if (!affiliateId) return base;
-
-  try {
-    const u = new URL(base);
-    // Common affiliate param patterns. We add one without breaking existing query.
-    // If partner already includes the param, we leave it as-is.
-    const existing =
-      u.searchParams.get("aid") ||
-      u.searchParams.get("AID") ||
-      u.searchParams.get("affiliate") ||
-      u.searchParams.get("aff") ||
-      u.searchParams.get("utm_source");
-
-    if (!existing) u.searchParams.set("aid", String(affiliateId));
-    return u.toString();
-  } catch {
-    // If parsing fails, append safely
-    const sep = base.includes("?") ? "&" : "?";
-    return `${base}${sep}aid=${encodeURIComponent(String(affiliateId))}`;
-  }
-};
-
-export const fetchTournamentEvents = async (
-  tournamentId: number,
-  opts?: { timeoutMs?: number }
-): Promise<TournamentEvent[]> => {
-  const { apiBaseUrl, apiKey } = getConfigFromEnv();
-
-  // Some environments require API key; if not present, we still attempt.
-  const headers: Record<string, string> = {
-    Accept: "application/json",
-  };
-  if (apiKey) headers["x-api-key"] = apiKey;
-
-  const url = `${apiBaseUrl || DEFAULT_API_BASE}/tournaments/${tournamentId}/events`;
-
-  const { res, json } = await fetchJson(
-    url,
-    { method: "GET", headers },
-    opts?.timeoutMs ?? DEFAULT_TIMEOUT_MS
-  );
-
-  if (!res.ok) {
-    return [];
-  }
-
-  // API might return array directly or under data/events
-  const arr =
-    (Array.isArray(json) ? json : null) ||
-    (Array.isArray(json?.events) ? json.events : null) ||
-    (Array.isArray(json?.data) ? json.data : null) ||
-    (Array.isArray(json?.data?.events) ? json.data.events : null);
-
-  return Array.isArray(arr) ? (arr as TournamentEvent[]) : [];
-};
-
-const computeTeamScore = (fixture: FixtureForSe365, e: TournamentEvent): number => {
-  const home = normalize(fixture.homeName);
-  const away = normalize(fixture.awayName);
-
-  // Candidate event teams
-  const eHome =
-    normalize(e?.home_team?.name || "") ||
-    (Array.isArray(e?.teams) && e.teams.length >= 1 ? normalize(e.teams[0]?.name || "") : "");
-  const eAway =
-    normalize(e?.away_team?.name || "") ||
-    (Array.isArray(e?.teams) && e.teams.length >= 2 ? normalize(e.teams[1]?.name || "") : "");
-
-  const name = normalize(e?.name || "");
-
-  const hasHome =
-    (!!eHome && (eHome === home || eHome.includes(home) || home.includes(eHome))) ||
-    (home && name.includes(home));
-  const hasAway =
-    (!!eAway && (eAway === away || eAway.includes(away) || away.includes(eAway))) ||
-    (away && name.includes(away));
-
+function scoreEvent(ev: Se365Event, home: string, away: string, kickoffIso: string): number {
   let score = 0;
-  if (hasHome) score += 2;
-  if (hasAway) score += 2;
 
-  // Strong bonus if both teams appear in title
-  if (home && away && name.includes(home) && name.includes(away)) score += 2;
+  const evName = clean(ev.name);
+  if (evName && containsTeamName(evName, home, away)) score += 50;
+
+  const kickoff = safeDate(kickoffIso);
+  const start = safeDate(ev.startDate);
+  if (kickoff && start) {
+    const diff = absDays(kickoff, start);
+    if (diff === 0) score += 25;
+    else if (diff === 1) score += 15;
+    else if (diff === 2) score += 5;
+  }
+
+  // Slight bump for having a URL
+  if (clean(ev.url)) score += 5;
 
   return score;
-};
+}
 
-const computeTimePenalty = (fixtureKickoffIso: string, eventIso: string | null): number => {
-  const fixMs = parseIsoToMs(fixtureKickoffIso);
-  const evMs = parseIsoToMs(eventIso || "");
-  if (!fixMs || !evMs) return 10; // unknown -> penalize
-  const diffHours = Math.abs(evMs - fixMs) / 36e5;
-  // Prefer within 0-36 hours. Beyond that penalize heavily.
-  if (diffHours <= 6) return 0;
-  if (diffHours <= 24) return 1;
-  if (diffHours <= 36) return 2;
-  if (diffHours <= 72) return 5;
-  return 12;
-};
+/**
+ * Build final affiliate-tracked URL.
+ * - We prefer appending an affiliate param only if SE365 supports it.
+ * - Keep it deterministic and simple.
+ */
+export function buildAffiliateUrl(eventUrl: string): string {
+  const url = clean(eventUrl);
+  if (!url) return "";
 
-export const findMatchingEvent = (
-  fixture: FixtureForSe365,
-  events: TournamentEvent[]
-): { eventId: number; eventUrl: string | null } | null => {
-  if (!events?.length) return null;
+  const aff = clean(env("EXPO_PUBLIC_SE365_AFFILIATE_ID"));
+  if (!aff) return url;
 
+  // avoid duplication
+  if (url.includes("aff=") || url.includes("affiliate=")) return url;
+
+  const sep = url.includes("?") ? "&" : "?";
+  return `${url}${sep}aff=${encodeURIComponent(aff)}`;
+}
+
+/**
+ * Core resolver: Search SE365 and pick the best matching event.
+ *
+ * Strategy:
+ * - Query using team names (best recall)
+ * - Filter/score by name contains both teams + date tolerance ±1 day
+ * - Pick highest score
+ */
+export async function resolveSe365EventForFixture(args: ResolveArgs): Promise<ResolveResult> {
+  const baseUrl = clean(env("EXPO_PUBLIC_SE365_BASE_URL"));
+  const apiKey = clean(env("EXPO_PUBLIC_SE365_API_KEY"));
+
+  if (!baseUrl || !apiKey) {
+    return { eventId: null, eventUrl: null, reason: "missing_config" };
+  }
+
+  const home = clean(args.homeName);
+  const away = clean(args.awayName);
+  const kickoffIso = clean(args.kickoffIso);
+  if (!home || !away || !kickoffIso) {
+    return { eventId: null, eventUrl: null, reason: "missing_match_fields" };
+  }
+
+  const query = encodeURIComponent(`${home} ${away}`);
+  const url = `${baseUrl.replace(/\/+$/, "")}/events/search?q=${query}`;
+
+  const res = await fetch(url, {
+    headers: {
+      "content-type": "application/json",
+      "x-api-key": apiKey,
+    },
+  });
+
+  if (!res.ok) {
+    return { eventId: null, eventUrl: null, reason: `http_${res.status}` };
+  }
+
+  const json = (await res.json()) as Se365SearchResponse;
+  const events = Array.isArray(json.events) ? json.events : [];
+
+  if (events.length === 0) {
+    return { eventId: null, eventUrl: null, reason: "no_events" };
+  }
+
+  const kickoffDate = safeDate(kickoffIso);
+  const kickoffDay = kickoffDate ? dateOnlyFromIso(kickoffIso) : null;
+
+  // Score and pick best
   const scored = events
-    .map((e) => {
-      const startIso = pickEventStartIso(e);
-      const teamScore = computeTeamScore(fixture, e);
-      const timePenalty = computeTimePenalty(fixture.kickoffIso, startIso);
-      const score = teamScore * 10 - timePenalty; // big weight on teams, small on time
-      return { e, score, teamScore, timePenalty, startIso };
-    })
-    // Require at least one of the teams to match, otherwise too risky.
-    .filter((x) => x.teamScore >= 2)
-    .sort((a, b) => b.score - a.score);
+    .map((ev) => {
+      const s = scoreEvent(ev, home, away, kickoffIso);
 
-  if (!scored.length) return null;
-
-  const top = scored[0];
-  // If ambiguous (top two very close), still pick the best but be conservative.
-  // This is still better than failing, but might misroute. Time penalty helps.
-  const eventId = Number(top.e?.id);
-  if (!Number.isFinite(eventId)) return null;
-
-  const eventUrl = bestUrlFromEvent(top.e);
-  return { eventId, eventUrl: eventUrl ? ensureHttps(eventUrl) : null };
-};
-
-const tryProxyResolve = async (
-  fixture: FixtureForSe365
-): Promise<ResolveResponse> => {
-  const { proxyUrl } = getConfigFromEnv();
-  if (!proxyUrl) return { ok: false, reason: "no-proxy" };
-
-  // We don't know exact worker path from ZIP; try a few common ones safely.
-  const candidates = [
-    `${proxyUrl.replace(/\/$/, "")}/resolve`,
-    `${proxyUrl.replace(/\/$/, "")}/lookup`,
-    `${proxyUrl.replace(/\/$/, "")}/event`,
-    `${proxyUrl.replace(/\/$/, "")}`,
-  ];
-
-  const payload = {
-    homeName: fixture.homeName,
-    awayName: fixture.awayName,
-    kickoffIso: fixture.kickoffIso,
-    leagueName: fixture.leagueName,
-    leagueId: fixture.leagueId,
-    fixtureId: fixture.fixtureId,
-  };
-
-  for (const url of candidates) {
-    try {
-      const { res, json } = await fetchJson(
-        url,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json", Accept: "application/json" },
-          body: JSON.stringify(payload),
-        },
-        DEFAULT_TIMEOUT_MS
-      );
-
-      if (!res.ok) continue;
-
-      // Accept multiple response shapes:
-      // { eventId, eventUrl } OR { ok:true, eventId, eventUrl } OR { data:{...} }
-      const eventId =
-        Number(json?.eventId) ||
-        Number(json?.id) ||
-        Number(json?.data?.eventId) ||
-        Number(json?.data?.id);
-
-      const eventUrl =
-        (typeof json?.eventUrl === "string" ? json.eventUrl : null) ||
-        (typeof json?.url === "string" ? json.url : null) ||
-        (typeof json?.data?.eventUrl === "string" ? json.data.eventUrl : null) ||
-        (typeof json?.data?.url === "string" ? json.data.url : null);
-
-      if (Number.isFinite(eventId)) {
-        const cleaned = eventUrl ? ensureHttps(eventUrl) : undefined;
-        return {
-          ok: true,
-          eventId,
-          eventUrl: cleaned,
-          affiliateUrl: cleaned ? buildAffiliateUrl(cleaned) : undefined,
-          raw: json,
-        };
-      }
-
-      // If proxy returns list of events, attempt to match locally
-      const events =
-        (Array.isArray(json) ? json : null) ||
-        (Array.isArray(json?.events) ? json.events : null) ||
-        (Array.isArray(json?.data?.events) ? json.data.events : null);
-
-      if (Array.isArray(events) && events.length) {
-        const match = findMatchingEvent(fixture, events as TournamentEvent[]);
-        if (match) {
-          const cleaned = match.eventUrl ? ensureHttps(match.eventUrl) : undefined;
-          return {
-            ok: true,
-            eventId: match.eventId,
-            eventUrl: cleaned,
-            affiliateUrl: cleaned ? buildAffiliateUrl(cleaned) : undefined,
-            raw: json,
-          };
+      // Hard filter if date is too far out when both dates exist
+      if (kickoffDate && ev.startDate) {
+        const start = safeDate(ev.startDate);
+        if (start) {
+          const diff = absDays(kickoffDate, start);
+          if (diff > 2) return { ev, score: -999 };
         }
       }
-    } catch {
-      // ignore and keep trying candidates
-    }
+
+      // Soft filter: if we have date-only and event has startDate-only mismatch
+      if (kickoffDay && ev.startDate) {
+        const evDay = dateOnlyFromIso(ev.startDate);
+        if (evDay && evDay !== kickoffDay) {
+          // allow ±1 day already handled by absDays bump; this is a small penalty only
+          const kd = safeDate(kickoffIso);
+          const sd = safeDate(ev.startDate);
+          if (kd && sd) {
+            const diff = absDays(kd, sd);
+            if (diff === 1) return { ev, score: s - 3 };
+          }
+        }
+      }
+
+      return { ev, score: s };
+    })
+    .filter((x) => x.score > 0)
+    .sort((a, b) => b.score - a.score);
+
+  if (scored.length === 0) {
+    return { eventId: null, eventUrl: null, reason: "no_good_match" };
   }
 
-  return { ok: false, reason: "proxy-no-match" };
-};
+  const best = scored[0].ev;
+  const eventId = typeof best.id === "number" ? best.id : null;
+  const eventUrl = clean(best.url) || null;
 
-const tryDirectTournamentResolve = async (
-  fixture: FixtureForSe365
-): Promise<ResolveResponse> => {
-  // Without a known tournamentId mapping this is a fallback strategy:
-  // If leagueId is a SE365 tournamentId, we can use it.
-  const tid = Number(fixture.leagueId);
-  if (!Number.isFinite(tid) || tid <= 0) {
-    return { ok: false, reason: "no-tournamentId" };
-  }
+  return { eventId, eventUrl, reason: "ok" };
+}
 
-  try {
-    const events = await fetchTournamentEvents(tid);
-    const match = findMatchingEvent(fixture, events);
-    if (!match) return { ok: false, reason: "direct-no-match", raw: { tid, count: events.length } };
-
-    const cleaned = match.eventUrl ? ensureHttps(match.eventUrl) : undefined;
-    return {
-      ok: true,
-      eventId: match.eventId,
-      eventUrl: cleaned,
-      affiliateUrl: cleaned ? buildAffiliateUrl(cleaned) : undefined,
-      raw: { tid, count: events.length },
-    };
-  } catch (e: any) {
-    return { ok: false, reason: "direct-error", raw: { message: String(e?.message || e) } };
-  }
-};
-
-export const resolveSe365EventForFixture = async (
-  fixture: FixtureForSe365
-): Promise<{ eventId: number | null; eventUrl: string | null }> => {
-  const key = `fixture:${fixture.fixtureId}`;
-  const cached = memCache.get(key);
-  if (cached) {
-    return {
-      eventId: cached.eventId ?? null,
-      eventUrl: cached.eventUrl ?? null,
-    };
-  }
-
-  // Proxy-first
-  const proxy = await tryProxyResolve(fixture);
-  if (proxy.ok) {
-    const finalUrl = proxy.eventUrl ? ensureHttps(proxy.eventUrl) : null;
-    memCache.set(key, { eventId: proxy.eventId, eventUrl: finalUrl });
-    return { eventId: proxy.eventId, eventUrl: finalUrl };
-  }
-
-  // Direct fallback (only if leagueId happens to map)
-  const direct = await tryDirectTournamentResolve(fixture);
-  if (direct.ok) {
-    const finalUrl = direct.eventUrl ? ensureHttps(direct.eventUrl) : null;
-    memCache.set(key, { eventId: direct.eventId, eventUrl: finalUrl });
-    return { eventId: direct.eventId, eventUrl: finalUrl };
-  }
-
-  // Miss
-  memCache.set(key, { eventId: null, eventUrl: null });
-  return { eventId: null, eventUrl: null };
-};
-
-export const getSe365EventUrl = async (fixture: FixtureForSe365): Promise<string | null> => {
-  const { eventUrl } = await resolveSe365EventForFixture(fixture);
+/**
+ * High-level helper used by screens/services.
+ * Returns a fully affiliate-wrapped event URL if resolvable.
+ */
+export async function getSe365EventUrl(args: ResolveArgs): Promise<string | null> {
+  const { eventUrl } = await resolveSe365EventForFixture(args);
   if (!eventUrl) return null;
-  return buildAffiliateUrl(eventUrl);
-};
+  const out = buildAffiliateUrl(eventUrl);
+  return clean(out) || null;
+}
