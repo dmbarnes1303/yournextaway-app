@@ -1,245 +1,155 @@
 // src/services/apiFootball.ts
-// API-Football fixtures service.
-// Includes safe SE365 enrichment for fixtures (best-effort, non-blocking).
+// API-Football client — returns RAW API rows (fixture/league/teams/goals/score)
+// Compatible with existing UI expectations across Fixtures, Match, Follow, etc.
 
 import Constants from "expo-constants";
-import { resolveSe365EventForFixture } from "@/src/services/se365";
-
-type ApiFootballEnv = {
-  baseUrl: string;
-  apiKey?: string;
-  host?: string;
-};
-
-const getEnv = (): ApiFootballEnv => {
-  const extra =
-    (Constants?.expoConfig?.extra as any) ||
-    (Constants as any)?.manifest2?.extra ||
-    (Constants as any)?.manifest?.extra ||
-    {};
-
-  const baseUrl =
-    process.env.EXPO_PUBLIC_API_FOOTBALL_BASE_URL ||
-    extra?.EXPO_PUBLIC_API_FOOTBALL_BASE_URL ||
-    extra?.API_FOOTBALL_BASE_URL ||
-    "https://v3.football.api-sports.io";
-
-  const apiKey =
-    process.env.EXPO_PUBLIC_API_FOOTBALL_KEY ||
-    extra?.EXPO_PUBLIC_API_FOOTBALL_KEY ||
-    extra?.API_FOOTBALL_KEY ||
-    process.env.API_FOOTBALL_KEY;
-
-  const host =
-    process.env.EXPO_PUBLIC_API_FOOTBALL_HOST ||
-    extra?.EXPO_PUBLIC_API_FOOTBALL_HOST ||
-    extra?.API_FOOTBALL_HOST ||
-    "v3.football.api-sports.io";
-
-  return { baseUrl, apiKey, host };
-};
 
 export type FixtureListRow = {
-  id: number;
-  kickoffIso: string;
-
-  leagueId: number;
-  leagueName: string;
-  countryName?: string | null;
-  season?: number | null;
-
-  homeId: number;
-  homeName: string;
-  homeLogo?: string | null;
-
-  awayId: number;
-  awayName: string;
-  awayLogo?: string | null;
-
-  venueName?: string | null;
-  venueCity?: string | null;
-
-  statusShort?: string | null;
-  statusLong?: string | null;
-
-  // SE365 enrichment (optional)
-  se365EventId?: number | null;
-  se365EventUrl?: string | null;
-};
-
-type ApiFootballFixture = {
   fixture: {
     id: number;
-    date: string;
-    timestamp?: number;
-    venue?: { name?: string; city?: string };
-    status?: { short?: string; long?: string };
+    date: string | null;
+    status?: { short?: string | null };
+    venue?: { name?: string | null; city?: string | null };
   };
   league: {
     id: number;
-    name: string;
-    country?: string;
-    season?: number;
+    name?: string | null;
+    season?: number | null;
+    round?: string | null;
   };
   teams: {
-    home: { id: number; name: string; logo?: string };
-    away: { id: number; name: string; logo?: string };
+    home?: { id?: number; name?: string | null; logo?: string | null };
+    away?: { id?: number; name?: string | null; logo?: string | null };
   };
-  [k: string]: any;
+  goals?: { home?: number | null; away?: number | null };
+  score?: any;
 };
 
-const toRow = (f: ApiFootballFixture): FixtureListRow => {
-  return {
-    id: f.fixture.id,
-    kickoffIso: new Date(f.fixture.date).toISOString(),
-
-    leagueId: f.league.id,
-    leagueName: f.league.name,
-    countryName: f.league.country ?? null,
-    season: f.league.season ?? null,
-
-    homeId: f.teams.home.id,
-    homeName: f.teams.home.name,
-    homeLogo: f.teams.home.logo ?? null,
-
-    awayId: f.teams.away.id,
-    awayName: f.teams.away.name,
-    awayLogo: f.teams.away.logo ?? null,
-
-    venueName: f.fixture.venue?.name ?? null,
-    venueCity: f.fixture.venue?.city ?? null,
-
-    statusShort: f.fixture.status?.short ?? null,
-    statusLong: f.fixture.status?.long ?? null,
-
-    se365EventId: null,
-    se365EventUrl: null,
-  };
+type FixturesParams = {
+  league?: number;
+  leagueId?: number;
+  season?: number;
+  from?: string;
+  to?: string;
+  fromIso?: string;
+  toIso?: string;
 };
 
-const fetchJson = async (path: string): Promise<any> => {
-  const { baseUrl, apiKey, host } = getEnv();
+const API_BASE = "https://v3.football.api-sports.io";
 
-  const headers: Record<string, string> = {
-    Accept: "application/json",
-    "x-rapidapi-host": host ?? "v3.football.api-sports.io",
-  };
-  if (apiKey) {
-    headers["x-rapidapi-key"] = apiKey;
+function getApiKey(): string {
+  const key =
+    (Constants.expoConfig?.extra as any)?.API_FOOTBALL_KEY ??
+    process.env.API_FOOTBALL_KEY;
+
+  if (!key) {
+    console.warn("API-Football key missing");
   }
 
-  const url = `${baseUrl.replace(/\/$/, "")}${path.startsWith("/") ? "" : "/"}${path}`;
-
-  const res = await fetch(url, { method: "GET", headers });
-  const txt = await res.text();
-  let json: any;
-  try {
-    json = JSON.parse(txt);
-  } catch {
-    json = { _raw: txt };
-  }
-
-  if (!res.ok) {
-    const msg = json?.message || json?.errors || json?._raw || `HTTP ${res.status}`;
-    throw new Error(`API-Football error: ${msg}`);
-  }
-
-  return json;
-};
-
-const enrichOne = async (row: FixtureListRow): Promise<FixtureListRow> => {
-  try {
-    const { eventId, eventUrl } = await resolveSe365EventForFixture({
-      fixtureId: row.id,
-      homeName: row.homeName,
-      awayName: row.awayName,
-      kickoffIso: row.kickoffIso,
-      leagueName: row.leagueName,
-      leagueId: row.leagueId,
-    });
-
-    return {
-      ...row,
-      se365EventId: eventId ?? null,
-      se365EventUrl: eventUrl ?? null,
-    };
-  } catch {
-    return row;
-  }
-};
-
-const pMap = async <T, R>(
-  items: T[],
-  mapper: (t: T, idx: number) => Promise<R>,
-  concurrency = 6
-): Promise<R[]> => {
-  const out: R[] = new Array(items.length) as any;
-  let idx = 0;
-
-  const workers = new Array(Math.max(1, concurrency)).fill(0).map(async () => {
-    while (idx < items.length) {
-      const cur = idx++;
-      try {
-        out[cur] = await mapper(items[cur], cur);
-      } catch {
-        out[cur] = items[cur] as any;
-      }
-    }
-  });
-
-  await Promise.all(workers);
-  return out;
-};
-
-const safeGetResponseArray = (json: any): ApiFootballFixture[] => {
-  const arr = json?.response;
-  return Array.isArray(arr) ? (arr as ApiFootballFixture[]) : [];
-};
-
-export async function getFixtures(params: {
-  leagueId: number;
-  season: number;
-  fromIso: string;
-  toIso: string;
-}): Promise<FixtureListRow[]> {
-  const path = `/fixtures?league=${encodeURIComponent(String(params.leagueId))}&season=${encodeURIComponent(
-    String(params.season)
-  )}&from=${encodeURIComponent(params.fromIso.slice(0, 10))}&to=${encodeURIComponent(params.toIso.slice(0, 10))}`;
-
-  const json = await fetchJson(path);
-  const fixtures = safeGetResponseArray(json);
-  const rows = fixtures.map(toRow);
-
-  return await pMap(rows, async (r) => await enrichOne(r), 6);
+  return key;
 }
 
-export async function getFixturesByRound(params: {
+async function apiFetch<T>(path: string, params?: Record<string, any>): Promise<T> {
+  const url = new URL(API_BASE + path);
+
+  if (params) {
+    Object.entries(params).forEach(([k, v]) => {
+      if (v !== undefined && v !== null && v !== "") {
+        url.searchParams.append(k, String(v));
+      }
+    });
+  }
+
+  const res = await fetch(url.toString(), {
+    headers: {
+      "x-apisports-key": getApiKey(),
+    },
+  });
+
+  if (!res.ok) {
+    throw new Error(`API-Football ${res.status}`);
+  }
+
+  const json = await res.json();
+  return json.response as T;
+}
+
+/**
+ * Get fixtures list
+ * Accepts both:
+ *  - { league, season, from, to }
+ *  - { leagueId, season, fromIso, toIso }
+ */
+export async function getFixtures(params: FixturesParams): Promise<FixtureListRow[]> {
+  const league = params.league ?? params.leagueId;
+  const from = params.from ?? params.fromIso;
+  const to = params.to ?? params.toIso;
+
+  if (!league || !params.season) return [];
+
+  const rows = await apiFetch<FixtureListRow[]>("/fixtures", {
+    league,
+    season: params.season,
+    from,
+    to,
+  });
+
+  return Array.isArray(rows) ? rows : [];
+}
+
+/**
+ * Fixtures by round
+ */
+export async function getFixturesByRound(opts: {
   leagueId: number;
   season: number;
   round: string;
 }): Promise<FixtureListRow[]> {
-  const path = `/fixtures?league=${encodeURIComponent(String(params.leagueId))}&season=${encodeURIComponent(
-    String(params.season)
-  )}&round=${encodeURIComponent(params.round)}`;
+  if (!opts.leagueId || !opts.season || !opts.round) return [];
 
-  const json = await fetchJson(path);
-  const fixtures = safeGetResponseArray(json);
-  const rows = fixtures.map(toRow);
+  const rows = await apiFetch<FixtureListRow[]>("/fixtures", {
+    league: opts.leagueId,
+    season: opts.season,
+    round: opts.round,
+  });
 
-  return await pMap(rows, async (r) => await enrichOne(r), 6);
+  return Array.isArray(rows) ? rows : [];
 }
 
-// Accept string OR number (your Trip screen passes strings)
-export async function getFixtureById(fixtureId: string | number): Promise<FixtureListRow | null> {
-  const fid = String(fixtureId ?? "").trim();
-  if (!fid) return null;
+/**
+ * Countries list
+ */
+export async function getCountries(): Promise<
+  { name: string; code: string; flag: string }[]
+> {
+  const rows = await apiFetch<any[]>("/countries");
 
-  const path = `/fixtures?id=${encodeURIComponent(fid)}`;
-  const json = await fetchJson(path);
-  const fixtures = safeGetResponseArray(json);
-  const first = fixtures[0];
-  if (!first) return null;
+  return rows.map((r) => ({
+    name: r.name,
+    code: r.code,
+    flag: r.flag,
+  }));
+}
 
-  const row = toRow(first);
-  return await enrichOne(row);
+/**
+ * Teams in league+season
+ */
+export async function getTeams(opts: {
+  leagueId: number;
+  season: number;
+}): Promise<
+  { id: number; name: string; logo?: string | null }[]
+> {
+  if (!opts.leagueId || !opts.season) return [];
+
+  const rows = await apiFetch<any[]>("/teams", {
+    league: opts.leagueId,
+    season: opts.season,
+  });
+
+  return rows.map((r) => ({
+    id: r.team?.id,
+    name: r.team?.name,
+    logo: r.team?.logo ?? null,
+  }));
 }
