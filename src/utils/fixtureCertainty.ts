@@ -2,11 +2,7 @@
 import type { FixtureListRow } from "@/src/services/apiFootball";
 import { isKickoffTbc } from "@/src/utils/kickoffTbc";
 
-export type FixtureCertainty =
-  | "confirmed"
-  | "likely_tbc"
-  | "tbc"
-  | "changed";
+export type FixtureCertaintyState = "confirmed" | "likely_tbc" | "tbc" | "changed";
 
 type Options = {
   placeholderIds?: Set<string>;
@@ -21,15 +17,13 @@ function normalizeIso(v: unknown): string | null {
 export function getFixtureCertainty(
   row: FixtureListRow | null | undefined,
   opts?: Options
-): FixtureCertainty {
+): FixtureCertaintyState {
   if (!row) return "tbc";
 
   const currentIso = normalizeIso(row?.fixture?.date);
   const previousIso = normalizeIso(opts?.previousKickoffIso);
 
-  const short = String(row?.fixture?.status?.short ?? "")
-    .trim()
-    .toUpperCase();
+  const short = String(row?.fixture?.status?.short ?? "").trim().toUpperCase();
 
   // Explicit TBC from API
   if (short === "TBD" || short === "TBA") return "tbc";
@@ -37,11 +31,12 @@ export function getFixtureCertainty(
   // Missing kickoff
   if (!currentIso) return "tbc";
 
-  // Kickoff changed (diff vs snapshot / previous)
+  // Kickoff changed
   if (previousIso && currentIso !== previousIso) return "changed";
 
-  // Likely placeholder cluster (only accurate if placeholderIds provided)
-  if (isKickoffTbc(row, opts?.placeholderIds)) return "likely_tbc";
+  // Likely placeholder cluster
+  const tbc = isKickoffTbc(row, opts?.placeholderIds);
+  if (tbc) return "likely_tbc";
 
   return "confirmed";
 }
