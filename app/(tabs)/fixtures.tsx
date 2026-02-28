@@ -19,6 +19,8 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
 import EmptyState from "@/src/components/EmptyState";
+import FixtureCertaintyBadge from "@/src/components/FixtureCertaintyBadge";
+
 import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
 import { getFixtures, type FixtureListRow } from "@/src/services/apiFootball";
@@ -29,7 +31,9 @@ import { getFlagImageUrl } from "@/src/utils/flagImages";
 
 import tripsStore from "@/src/state/trips";
 import useFollowStore from "@/src/state/followStore";
-import { computeLikelyPlaceholderTbcIds, isKickoffTbc, kickoffIsoOrNull } from "@/src/utils/kickoffTbc";
+
+import { computeLikelyPlaceholderTbcIds, kickoffIsoOrNull } from "@/src/utils/kickoffTbc";
+import { getFixtureCertainty } from "@/src/utils/fixtureCertainty";
 
 import { getTicketDifficultyBadge } from "@/src/data/ticketGuides";
 import type { TicketDifficulty } from "@/src/data/ticketGuides/types";
@@ -136,24 +140,32 @@ function fixtureIsoDateOnly(r: FixtureListRow): string | null {
 }
 
 function kickoffPresentation(r: FixtureListRow, placeholderIds?: Set<string>) {
-  const likelyTbc = isKickoffTbc(r, placeholderIds);
+  const certainty = getFixtureCertainty(r, { placeholderIds });
   const iso = kickoffIsoOrNull(r);
 
   if (!iso) {
-    return { primary: "TBC", secondary: "Kickoff time not set yet", likelyTbc: true };
+    return { primary: "TBC", secondary: "Kickoff time not set yet", certainty };
   }
 
   const formatted = formatUkDateTimeMaybe(iso) || "TBC";
 
-  if (likelyTbc) {
+  if (certainty === "likely_tbc") {
     return {
       primary: formatted,
       secondary: "Likely placeholder (TV schedule not confirmed)",
-      likelyTbc: true,
+      certainty,
     };
   }
 
-  return { primary: formatted, secondary: null as string | null, likelyTbc: false };
+  if (certainty === "tbc") {
+    return {
+      primary: formatted,
+      secondary: "Kickoff time not confirmed",
+      certainty,
+    };
+  }
+
+  return { primary: formatted, secondary: null as string | null, certainty };
 }
 
 function resolveTripForFixture(fixtureId: string): string | null {
@@ -447,15 +459,14 @@ export default function FixturesScreen() {
         const flat = batches.flat();
 
         if (isTopPicksMode) {
-          flat
-            .sort((a, b) => {
-              const sa = scoreFixture(a);
-              const sb = scoreFixture(b);
-              if (sb !== sa) return sb - sa;
-              const da = String(a?.fixture?.date ?? "");
-              const db = String(b?.fixture?.date ?? "");
-              return da.localeCompare(db);
-            });
+          flat.sort((a, b) => {
+            const sa = scoreFixture(a);
+            const sb = scoreFixture(b);
+            if (sb !== sa) return sb - sa;
+            const da = String(a?.fixture?.date ?? "");
+            const db = String(b?.fixture?.date ?? "");
+            return da.localeCompare(db);
+          });
         } else {
           flat.sort((a, b) => {
             const da = String(a?.fixture?.date ?? "");
@@ -702,6 +713,8 @@ export default function FixturesScreen() {
     const city = String(r?.fixture?.venue?.city ?? "").trim();
 
     const kickoff = kickoffPresentation(r, placeholderIds);
+    const certainty = kickoff.certainty;
+
     const isFollowed = followedIdSet.has(fixtureId);
 
     const ctxLeagueId = r?.league?.id != null ? Number(r.league.id) : null;
@@ -744,15 +757,7 @@ export default function FixturesScreen() {
               </View>
 
               <View style={styles.badgeRow}>
-                {kickoff.likelyTbc ? (
-                  <View style={[styles.badge, styles.badgeWarn]}>
-                    <Text style={[styles.badgeText, styles.badgeTextWarn]}>Likely TBC</Text>
-                  </View>
-                ) : (
-                  <View style={[styles.badge, styles.badgeConfirmed]}>
-                    <Text style={[styles.badgeText, styles.badgeTextConfirmed]}>Confirmed</Text>
-                  </View>
-                )}
+                <FixtureCertaintyBadge state={certainty} />
 
                 <View
                   style={[
@@ -775,8 +780,17 @@ export default function FixturesScreen() {
                 </View>
               </View>
 
-              <Pressable onPress={() => onToggleFollowFromRow(r)} style={({ pressed }) => [styles.followPill, isFollowed && styles.followPillOn, { opacity: pressed ? 0.92 : 1 }]}>
-                <Text style={[styles.followPillText, isFollowed && styles.followPillTextOn]}>{isFollowed ? "Following" : "Follow"}</Text>
+              <Pressable
+                onPress={() => onToggleFollowFromRow(r)}
+                style={({ pressed }) => [
+                  styles.followPill,
+                  isFollowed && styles.followPillOn,
+                  { opacity: pressed ? 0.92 : 1 },
+                ]}
+              >
+                <Text style={[styles.followPillText, isFollowed && styles.followPillTextOn]}>
+                  {isFollowed ? "Following" : "Follow"}
+                </Text>
               </Pressable>
 
               <Text style={styles.tapHint}>Tap for actions</Text>
@@ -820,7 +834,11 @@ export default function FixturesScreen() {
               <Text style={styles.dateLine}>{headerDateLine}</Text>
             </View>
 
-            <Pressable onPress={openCalendar} style={({ pressed }) => [styles.calendarBtn, pressed && { opacity: 0.92 }]} android_ripple={{ color: "rgba(255,255,255,0.06)" }}>
+            <Pressable
+              onPress={openCalendar}
+              style={({ pressed }) => [styles.calendarBtn, pressed && { opacity: 0.92 }]}
+              android_ripple={{ color: "rgba(255,255,255,0.06)" }}
+            >
               <Text style={styles.calendarIcon}>📅</Text>
               <Text style={styles.calendarText}>Calendar</Text>
             </Pressable>
@@ -852,10 +870,7 @@ export default function FixturesScreen() {
           </ScrollView>
 
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 12 }}>
-            <Pressable
-              onPress={setAllLeagues}
-              style={[styles.leaguePill, selectedLeagueIds.length === 0 && styles.leaguePillActive]}
-            >
+            <Pressable onPress={setAllLeagues} style={[styles.leaguePill, selectedLeagueIds.length === 0 && styles.leaguePillActive]}>
               <Text style={[styles.leagueText, selectedLeagueIds.length === 0 && styles.leagueTextActive]}>
                 All leagues
               </Text>
@@ -1178,18 +1193,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     borderRadius: 999,
   },
-
-  badgeConfirmed: {
-    borderColor: "rgba(214,178,92,0.35)",
-    backgroundColor: "rgba(214,178,92,0.10)",
-  },
-  badgeTextConfirmed: { color: "rgba(214,178,92,0.95)" },
-
-  badgeWarn: {
-    borderColor: "rgba(255,210,77,0.30)",
-    backgroundColor: "rgba(255,210,77,0.10)",
-  },
-  badgeTextWarn: { color: "rgba(255,210,77,0.92)" },
 
   badgeText: { color: theme.colors.textSecondary, fontWeight: theme.fontWeight.black, fontSize: 11 },
 
