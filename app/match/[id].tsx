@@ -3,22 +3,20 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Stack, useLocalSearchParams, useRouter } from "expo-router";
+import * as Linking from "expo-linking";
+import { useLocalSearchParams, useRouter } from "expo-router";
 
 import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
 import EmptyState from "@/src/components/EmptyState";
-
-import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
 
 import { useFixture } from "@/src/hooks/useFixtures";
 import { useTripsStore } from "@/src/state/trips";
 import savedItemsStore from "@/src/state/savedItems";
 
-import type { PartnerId } from "@/src/core/partners";
-import { beginPartnerClick, openUntrackedUrl } from "@/src/services/partnerClicks";
 import { buildTicketLink } from "@/src/services/partnerLinks";
+import { beginPartnerClick } from "@/src/services/partnerClicks";
 
 /* -------------------------------------------------------------------------- */
 /* Helpers                                                                    */
@@ -49,14 +47,10 @@ function formatKickoffLocal(kickoffIso?: string | null): string {
   return `${date}, ${time}`;
 }
 
-function mapsSearchUrl(query: string) {
-  const q = encodeURIComponent(String(query ?? "").trim());
-  return `https://www.google.com/maps/search/?api=1&query=${q}`;
-}
-
-function googleSearchUrl(query: string) {
-  const q = encodeURIComponent(String(query ?? "").trim());
-  return `https://www.google.com/search?q=${q}`;
+async function openExternalUrl(url: string) {
+  const clean = String(url ?? "").trim();
+  if (!clean) throw new Error("Missing URL");
+  await Linking.openURL(clean);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -67,8 +61,8 @@ export default function MatchScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
 
-  const fixtureId = String((params as any)?.id ?? "").trim();
-  const tripId = String((params as any)?.tripId ?? "").trim();
+  const fixtureId = String(params.id ?? "").trim();
+  const tripId = String(params.tripId ?? "").trim();
 
   const { fixture, loading } = useFixture(fixtureId);
 
@@ -78,30 +72,18 @@ export default function MatchScreen() {
 
   const [openingTickets, setOpeningTickets] = useState(false);
 
-  const homeName = useMemo(
-    () => String(trip?.homeName ?? fixture?.teams?.home?.name ?? "").trim(),
-    [trip?.homeName, fixture?.teams?.home?.name]
-  );
-
-  const awayName = useMemo(
-    () => String(trip?.awayName ?? fixture?.teams?.away?.name ?? "").trim(),
-    [trip?.awayName, fixture?.teams?.away?.name]
-  );
-
   const title = useMemo(() => {
-    if (homeName && awayName) return `${homeName} vs ${awayName}`;
-    return "Match";
-  }, [homeName, awayName]);
+    const h = trip?.homeName ?? fixture?.teams?.home?.name;
+    const a = trip?.awayName ?? fixture?.teams?.away?.name;
+    return h && a ? `${h} vs ${a}` : "Match";
+  }, [trip?.homeName, trip?.awayName, fixture?.teams?.home?.name, fixture?.teams?.away?.name]);
 
   const kickoffIso = useMemo(() => {
     const k = String(trip?.kickoffIso ?? fixture?.fixture?.date ?? "").trim();
     return k || null;
   }, [trip?.kickoffIso, fixture?.fixture?.date]);
 
-  const kickoffText = useMemo(
-    () => (kickoffIso ? formatKickoffLocal(kickoffIso) : "Kickoff TBD"),
-    [kickoffIso]
-  );
+  const kickoffText = useMemo(() => (kickoffIso ? formatKickoffLocal(kickoffIso) : "Kickoff TBD"), [kickoffIso]);
 
   const venueText = useMemo(() => {
     const venueName = trip?.venueName ?? fixture?.fixture?.venue?.name;
@@ -110,28 +92,29 @@ export default function MatchScreen() {
     return [venueName, venueCity].filter(Boolean).join(" • ");
   }, [trip?.venueName, trip?.venueCity, fixture?.fixture?.venue?.name, fixture?.fixture?.venue?.city]);
 
-  const crestHome = useMemo(() => {
-    if (trip?.homeTeamId) return `https://media.api-sports.io/football/teams/${trip.homeTeamId}.png`;
-    return fixture?.teams?.home?.logo ?? null;
-  }, [trip?.homeTeamId, fixture?.teams?.home?.logo]);
+  const crestHome = trip?.homeTeamId
+    ? `https://media.api-sports.io/football/teams/${trip.homeTeamId}.png`
+    : fixture?.teams?.home?.logo;
 
-  const crestAway = useMemo(() => {
-    if (trip?.awayTeamId) return `https://media.api-sports.io/football/teams/${trip.awayTeamId}.png`;
-    return fixture?.teams?.away?.logo ?? null;
-  }, [trip?.awayTeamId, fixture?.teams?.away?.logo]);
+  const crestAway = trip?.awayTeamId
+    ? `https://media.api-sports.io/football/teams/${trip.awayTeamId}.png`
+    : fixture?.teams?.away?.logo;
 
   const leagueId =
-    (typeof (trip as any)?.leagueId === "number" ? (trip as any).leagueId : undefined) ??
-    (typeof (fixture as any)?.league?.id === "number" ? (fixture as any).league.id : undefined);
+    (typeof trip?.leagueId === "number" ? trip.leagueId : undefined) ??
+    (typeof fixture?.league?.id === "number" ? fixture.league.id : undefined);
+
+  const homeName = String(trip?.homeName ?? fixture?.teams?.home?.name ?? "").trim();
+  const awayName = String(trip?.awayName ?? fixture?.teams?.away?.name ?? "").trim();
 
   const dateIso = useMemo(() => {
     return (
-      String((trip as any)?.startDate ?? "").trim() ||
-      isoDateOnlyFromKickoffIso((trip as any)?.kickoffIso) ||
-      isoDateOnlyFromKickoffIso((fixture as any)?.fixture?.date) ||
+      String(trip?.startDate ?? "").trim() ||
+      isoDateOnlyFromKickoffIso(trip?.kickoffIso) ||
+      isoDateOnlyFromKickoffIso(fixture?.fixture?.date) ||
       null
     );
-  }, [trip, fixture]);
+  }, [trip?.startDate, trip?.kickoffIso, fixture?.fixture?.date]);
 
   const goBackToTrip = useCallback(() => {
     if (tripId) {
@@ -144,8 +127,8 @@ export default function MatchScreen() {
   async function openTickets() {
     if (openingTickets) return;
 
-    if (!fixtureId) {
-      Alert.alert("Match not available", "Missing fixture ID.");
+    if (!tripId) {
+      Alert.alert("Open this from a trip", "Tickets are tracked when opened from a Trip Workspace.");
       return;
     }
 
@@ -162,9 +145,8 @@ export default function MatchScreen() {
         away: awayName,
         kickoffIso,
         leagueId,
-        leagueName: (trip as any)?.leagueName ?? (fixture as any)?.league?.name,
-        se365EventId:
-          typeof (trip as any)?.sportsevents365EventId === "number" ? (trip as any).sportsevents365EventId : undefined,
+        leagueName: trip?.leagueName ?? fixture?.league?.name,
+        se365EventId: typeof trip?.sportsevents365EventId === "number" ? trip.sportsevents365EventId : undefined,
         se365EventUrl: (fixture as any)?.se365EventUrl ?? null,
       });
 
@@ -173,19 +155,18 @@ export default function MatchScreen() {
         return;
       }
 
-      // Consistent tracking pipeline: creates Pending + tracks click when tripId exists.
-      if (tripId) {
-        await beginPartnerClick({
-          tripId,
-          partnerId: "sportsevents365" as PartnerId,
-          url,
-          savedItemType: "tickets",
-          title: `Tickets: ${homeName} vs ${awayName}`,
-          metadata: { fixtureId, leagueId, dateIso, kickoffIso, priceMode: "live" },
-        });
-      } else {
-        await openUntrackedUrl(url);
-      }
+      // Use the same tracked pipeline as the rest of the app:
+      // - creates Pending saved item
+      // - records click
+      // - opens partner URL
+      await beginPartnerClick({
+        tripId,
+        partnerId: "sportsevents365",
+        url,
+        savedItemType: "tickets",
+        title: `Tickets: ${homeName} vs ${awayName}`,
+        metadata: { fixtureId, leagueId, dateIso, kickoffIso, priceMode: "live" },
+      });
     } catch {
       Alert.alert("Couldn't open tickets");
     } finally {
@@ -194,7 +175,9 @@ export default function MatchScreen() {
   }
 
   const openOfficialClub = useCallback(async () => {
-    const url = googleSearchUrl(`${homeName} vs ${awayName} official tickets`);
+    const q = encodeURIComponent(`${homeName} vs ${awayName} official tickets`);
+    const url = `https://www.google.com/search?q=${q}`;
+
     try {
       if (tripId) {
         await savedItemsStore.add({
@@ -202,7 +185,6 @@ export default function MatchScreen() {
           type: "tickets",
           status: "pending",
           title: `Official club tickets: ${homeName} vs ${awayName}`,
-          partnerId: "google",
           partnerUrl: url,
           priceText: "View live price",
           currency: "GBP",
@@ -210,15 +192,14 @@ export default function MatchScreen() {
         } as any);
       }
     } catch {}
-    try {
-      await openUntrackedUrl(url);
-    } catch {
-      Alert.alert("Couldn't open link");
-    }
+
+    await openExternalUrl(url);
   }, [homeName, awayName, tripId, fixtureId, dateIso, kickoffIso]);
 
   const openGoogleTicketsSearch = useCallback(async () => {
-    const url = googleSearchUrl(`${homeName} vs ${awayName} tickets`);
+    const q = encodeURIComponent(`${homeName} vs ${awayName} tickets`);
+    const url = `https://www.google.com/search?q=${q}`;
+
     try {
       if (tripId) {
         await savedItemsStore.add({
@@ -226,7 +207,6 @@ export default function MatchScreen() {
           type: "tickets",
           status: "pending",
           title: `Tickets search: ${homeName} vs ${awayName}`,
-          partnerId: "google",
           partnerUrl: url,
           priceText: "View live price",
           currency: "GBP",
@@ -234,49 +214,39 @@ export default function MatchScreen() {
         } as any);
       }
     } catch {}
-    try {
-      await openUntrackedUrl(url);
-    } catch {
-      Alert.alert("Couldn't open link");
-    }
+
+    await openExternalUrl(url);
   }, [homeName, awayName, tripId, fixtureId, dateIso, kickoffIso]);
 
   const openDirections = useCallback(async () => {
-    const venueName = (trip as any)?.venueName ?? (fixture as any)?.fixture?.venue?.name;
-    const venueCity = (trip as any)?.venueCity ?? (fixture as any)?.fixture?.venue?.city;
-    const q = [venueName, venueCity].filter(Boolean).join(" ").trim() || venueText;
-    const url = mapsSearchUrl(q);
-    try {
-      await openUntrackedUrl(url);
-    } catch {
-      Alert.alert("Couldn't open maps");
-    }
-  }, [trip, fixture, venueText]);
+    const venueName = trip?.venueName ?? fixture?.fixture?.venue?.name;
+    const venueCity = trip?.venueCity ?? fixture?.fixture?.venue?.city;
+    const q = encodeURIComponent([venueName, venueCity].filter(Boolean).join(" ") || venueText);
+    const url = `https://www.google.com/maps/search/?api=1&query=${q}`;
+    await openExternalUrl(url);
+  }, [trip?.venueName, trip?.venueCity, fixture?.fixture?.venue?.name, fixture?.fixture?.venue?.city, venueText]);
 
   if (!fixtureId) {
     return (
-      <Background imageSource={getBackground("trips")} overlayOpacity={0.86}>
+      <Background>
         <SafeAreaView style={styles.safe}>
-          <GlassCard style={{ padding: theme.spacing.lg }}>
-            <EmptyState title="Match not found" message="Missing fixture ID." />
-          </GlassCard>
+          <EmptyState title="Match not found" subtitle="Missing fixture ID." actionText="Go back" onAction={() => router.back()} />
         </SafeAreaView>
       </Background>
     );
   }
 
   return (
-    <Background imageSource={getBackground("trips")} overlayOpacity={0.86}>
-      <Stack.Screen
-        options={{
-          headerShown: true,
-          title: "Tickets + logistics",
-          headerTransparent: true,
-          headerTintColor: theme.colors.text,
-        }}
-      />
+    <Background>
+      <SafeAreaView style={styles.safe}>
+        <View style={styles.headerRow}>
+          <Pressable onPress={() => router.back()} style={styles.backBtn}>
+            <Text style={styles.backText}>←</Text>
+          </Pressable>
+          <Text style={styles.headerTitle}>Tickets + logistics</Text>
+          <View style={{ width: 36 }} />
+        </View>
 
-      <SafeAreaView style={styles.safe} edges={["bottom"]}>
         <ScrollView contentContainerStyle={styles.content}>
           <GlassCard style={styles.matchCard}>
             <Text style={styles.smallLabel}>MATCH</Text>
@@ -290,7 +260,7 @@ export default function MatchScreen() {
                 </Text>
                 <View style={styles.badgeRow}>
                   <View style={styles.badge}>
-                    <Text style={styles.badgeText}>{(trip as any)?.kickoffTbc ? "TBC" : "Confirmed"}</Text>
+                    <Text style={styles.badgeText}>{trip?.kickoffTbc ? "TBC" : "Confirmed"}</Text>
                   </View>
                 </View>
               </View>
@@ -331,11 +301,9 @@ export default function MatchScreen() {
               </Pressable>
             </View>
 
-            <Text style={styles.hintText}>
-              Ticket links opened from here are saved into your Trip Workspace as Pending.
-            </Text>
+            <Text style={styles.hintText}>Ticket links opened here are tracked and saved into your Trip Workspace as Pending.</Text>
 
-            {loading ? <Text style={styles.loadingText}>Loading match…</Text> : null}
+            {loading ? <View style={{ height: 20 }} /> : null}
           </GlassCard>
         </ScrollView>
       </SafeAreaView>
@@ -346,86 +314,65 @@ export default function MatchScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1 },
 
-  content: {
-    paddingTop: 100,
-    paddingHorizontal: theme.spacing.lg,
-    paddingBottom: theme.spacing.xxl,
-    gap: theme.spacing.lg,
-  },
-
-  matchCard: { padding: theme.spacing.lg },
-  actionsCard: { padding: theme.spacing.lg },
-
-  smallLabel: {
-    color: theme.colors.textTertiary,
-    fontSize: 12,
-    letterSpacing: 0.4,
-    fontWeight: "900",
-    marginBottom: 10,
-  },
-
-  teamRow: {
+  headerRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    marginBottom: 10,
+    paddingHorizontal: 14,
+    paddingTop: 8,
+    paddingBottom: 6,
   },
+  backBtn: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
+  backText: { color: theme.colors.text, fontSize: 18 },
+  headerTitle: { flex: 1, textAlign: "center", color: theme.colors.text, fontSize: 16, fontWeight: "700" },
+
+  content: { padding: 14, paddingBottom: 24, gap: 12 },
+
+  matchCard: { padding: 14 },
+  smallLabel: { color: theme.colors.textTertiary, fontSize: 12, letterSpacing: 0.4, marginBottom: 10 },
+
+  teamRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 10 },
   teamCol: { width: 54, alignItems: "center" },
   teamMid: { flex: 1, alignItems: "center" },
 
   crest: { width: 44, height: 44, borderRadius: 22 },
 
-  matchTitle: {
-    color: theme.colors.text,
-    fontSize: 18,
-    fontWeight: "900",
-    textAlign: "center",
-  },
+  matchTitle: { color: theme.colors.text, fontSize: 18, fontWeight: "800", textAlign: "center" },
 
   badgeRow: { flexDirection: "row", marginTop: 8 },
-  badge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.10)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.14)",
-  },
-  badgeText: { color: theme.colors.text, fontSize: 12, fontWeight: "900" },
+  badge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.10)" },
+  badgeText: { color: theme.colors.text, fontSize: 12, fontWeight: "700" },
 
-  metaText: { color: theme.colors.textSecondary, fontSize: 13, marginTop: 4, textAlign: "center", fontWeight: "800" },
+  metaText: { color: theme.colors.textSecondary, fontSize: 13, marginTop: 4, textAlign: "center" },
 
   primaryBtn: {
     marginTop: 12,
     height: 44,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "rgba(0,255,160,0.25)",
+    borderColor: "rgba(75,158,57,0.35)",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(0,0,0,0.18)",
+    backgroundColor: "rgba(0,0,0,0.12)",
   },
-  primaryBtnText: { color: theme.colors.text, fontSize: 14, fontWeight: "900" },
+  primaryBtnText: { color: theme.colors.text, fontSize: 14, fontWeight: "700" },
 
-  sectionTitle: { color: theme.colors.text, fontSize: 14, fontWeight: "900", marginBottom: 10 },
+  actionsCard: { padding: 14 },
+  sectionTitle: { color: theme.colors.text, fontSize: 14, fontWeight: "800", marginBottom: 10 },
 
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
-
   gridBtn: {
     width: "48%",
     minHeight: 64,
     borderRadius: 14,
     padding: 12,
-    backgroundColor: "rgba(0,0,0,0.16)",
+    backgroundColor: "rgba(255,255,255,0.06)",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
     justifyContent: "center",
   },
-  gridBtnDisabled: { opacity: 0.55 },
+  gridBtnDisabled: { opacity: 0.5 },
+  gridTitle: { color: theme.colors.text, fontSize: 14, fontWeight: "800" },
+  gridSub: { color: theme.colors.textSecondary, fontSize: 12, marginTop: 4 },
 
-  gridTitle: { color: theme.colors.text, fontSize: 14, fontWeight: "900" },
-  gridSub: { color: theme.colors.textSecondary, fontSize: 12, marginTop: 4, fontWeight: "800" },
-
-  hintText: { color: theme.colors.textTertiary, fontSize: 12, marginTop: 10, lineHeight: 16, fontWeight: "900" },
-  loadingText: { marginTop: 10, color: theme.colors.textSecondary, fontWeight: "800" },
+  hintText: { color: theme.colors.textSecondary, fontSize: 12, marginTop: 10, lineHeight: 16 },
 });
