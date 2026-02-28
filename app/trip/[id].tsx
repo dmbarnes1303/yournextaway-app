@@ -42,7 +42,6 @@ import { getFixtureById, type FixtureListRow } from "@/src/services/apiFootball"
 import { formatUkDateOnly } from "@/src/utils/formatters";
 import { buildAffiliateLinks } from "@/src/services/affiliateLinks";
 import { confirmBookedAndOfferProof } from "@/src/services/bookingProof";
-import storage from "@/src/services/storage";
 
 import { getFixtureCertainty } from "@/src/utils/fixtureCertainty";
 
@@ -54,6 +53,8 @@ import { getIataCityCodeForCity, debugCityKey } from "@/src/data/iataCityCodes";
 
 // matchday logistics (areas + stadium metadata)
 import { getMatchdayLogistics, buildLogisticsSnippet } from "@/src/data/matchdayLogistics";
+
+import storage from "@/src/services/storage";
 
 /* -------------------------------------------------------------------------- */
 /* small helpers                                                              */
@@ -198,11 +199,7 @@ function TeamCrest({ name, logo }: { name: string; logo?: string | null }) {
   );
 }
 
-function safeFixtureTitle(
-  r: FixtureListRow | null | undefined,
-  fallbackId: string,
-  trip?: Trip | null
-) {
+function safeFixtureTitle(r: FixtureListRow | null | undefined, fallbackId: string, trip?: Trip | null) {
   const home =
     String((r as any)?.teams?.home?.name ?? "").trim() || String((trip as any)?.homeName ?? "").trim();
   const away =
@@ -244,7 +241,6 @@ function formatKickoffMeta(
   const short = String((row as any)?.fixture?.status?.short ?? "").trim().toUpperCase();
   const long = String((row as any)?.fixture?.status?.long ?? "").trim();
 
-  // NOTE: we still treat "NS" as "could be placeholder", but real truth is diffing in your follow refresh.
   const looksTbc = short === "TBD" || short === "TBA" || short === "NS" || short === "PST";
   const snapTbc = Boolean((trip as any)?.kickoffTbc);
 
@@ -253,11 +249,7 @@ function formatKickoffMeta(
     return { line: tbc ? "Kickoff: TBC" : "Kickoff: —", tbc: true, iso };
   }
 
-  const datePart = d.toLocaleDateString("en-GB", {
-    weekday: "short",
-    day: "2-digit",
-    month: "short",
-  });
+  const datePart = d.toLocaleDateString("en-GB", { weekday: "short", day: "2-digit", month: "short" });
   const timePart = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 
   const midnight = d.getHours() === 0 && d.getMinutes() === 0;
@@ -518,22 +510,25 @@ export default function TripDetailScreen() {
   }, [primaryMatchId, fixturesById]);
 
   const cityNameRaw = useMemo(() => {
-    // Prefer saved human label
     const snapCity = String((trip as any)?.displayCity ?? "").trim();
     if (snapCity) return snapCity;
 
-    // Legacy fallback
     const snapVenueCity = String((trip as any)?.city ?? "").trim();
     if (snapVenueCity) return snapVenueCity;
 
-    // cityId slug fallback
     if (trip?.cityId) return trip.cityId;
 
-    // last resort: primary fixture
     return String((primaryFixture as any)?.fixture?.venue?.city ?? "").trim() || "Trip";
   }, [trip, primaryFixture]);
 
   const cityName = useMemo(() => titleCaseCity(cityNameRaw), [cityNameRaw]);
+
+  const primaryLeagueId = useMemo(() => {
+    const fromFixture = (primaryFixture as any)?.league?.id;
+    if (typeof fromFixture === "number") return fromFixture;
+    const fromTrip = (trip as any)?.leagueId;
+    return typeof fromTrip === "number" ? fromTrip : undefined;
+  }, [primaryFixture, trip]);
 
   const bookingLinks = useMemo(() => {
     if (!trip || !cityName || cityName === "Trip") return null;
@@ -565,23 +560,10 @@ export default function TripDetailScreen() {
     return String((trip as any)?.homeName ?? "").trim();
   }, [primaryFixture, trip]);
 
-  const primaryAwayName = useMemo(() => {
-    const fromFixture = String((primaryFixture as any)?.teams?.away?.name ?? "").trim();
-    if (fromFixture) return fromFixture;
-    return String((trip as any)?.awayName ?? "").trim();
-  }, [primaryFixture, trip]);
-
   const primaryLeagueName = useMemo(() => {
     const fromFixture = String((primaryFixture as any)?.league?.name ?? "").trim();
     if (fromFixture) return fromFixture;
     return String((trip as any)?.leagueName ?? "").trim();
-  }, [primaryFixture, trip]);
-
-  const primaryLeagueId = useMemo(() => {
-    const fromFixture = (primaryFixture as any)?.league?.id;
-    if (typeof fromFixture === "number") return fromFixture;
-    const fromTrip = (trip as any)?.leagueId;
-    return typeof fromTrip === "number" ? fromTrip : undefined;
   }, [primaryFixture, trip]);
 
   const primaryKickoffIso = useMemo(() => {
@@ -730,7 +712,32 @@ export default function TripDetailScreen() {
 
   function onEditTrip() {
     if (!trip) return;
-    router.push({ pathname: "/trip/build", params: { tripId: trip.id } } as any);
+
+    // Prefill add-match picker with this trip’s context
+    router.push({
+      pathname: "/trip/build",
+      params: {
+        tripId: trip.id,
+        from: trip.startDate,
+        to: trip.endDate,
+        city: cityName,
+        leagueId: String(primaryLeagueId ?? ""),
+      },
+    } as any);
+  }
+
+  function onAddMatch() {
+    if (!trip) return;
+    router.push({
+      pathname: "/trip/build",
+      params: {
+        tripId: trip.id,
+        from: trip.startDate,
+        to: trip.endDate,
+        city: cityName,
+        leagueId: String(primaryLeagueId ?? ""),
+      },
+    } as any);
   }
 
   function onViewWallet() {
@@ -950,13 +957,10 @@ export default function TripDetailScreen() {
     const mid = String(matchId ?? "").trim();
     if (!mid) return;
 
-    if (mid === String((trip as any)?.fixtureIdPrimary ?? "").trim()) {
-      return; // already primary
-    }
+    if (mid === String((trip as any)?.fixtureIdPrimary ?? "").trim()) return;
 
     const r = fixturesById[mid] ?? null;
 
-    // We also refresh trip snapshot fields so UI stays readable offline.
     const homeName = String((r as any)?.teams?.home?.name ?? "").trim() || undefined;
     const awayName = String((r as any)?.teams?.away?.name ?? "").trim() || undefined;
 
@@ -966,12 +970,13 @@ export default function TripDetailScreen() {
     const kickoffIso = String((r as any)?.fixture?.date ?? "").trim() || undefined;
 
     const statusShort = String((r as any)?.fixture?.status?.short ?? "").trim().toUpperCase();
-    const midnight = kickoffIso ? (() => {
-      const d = new Date(kickoffIso);
-      return Number.isFinite(d.getTime()) ? d.getHours() === 0 && d.getMinutes() === 0 : false;
-    })() : true;
+    const midnight = kickoffIso
+      ? (() => {
+          const d = new Date(kickoffIso);
+          return Number.isFinite(d.getTime()) ? d.getHours() === 0 && d.getMinutes() === 0 : false;
+        })()
+      : true;
 
-    // Conservative: treat these as likely placeholder, but your true logic is diffing in follow refresh.
     const kickoffTbc =
       statusShort === "TBD" || statusShort === "TBA" || statusShort === "NS" || statusShort === "PST" || midnight;
 
@@ -981,7 +986,6 @@ export default function TripDetailScreen() {
     try {
       await tripsStore.setPrimaryMatchForTrip(trip.id, mid);
 
-      // Snapshot patch for Phase 1 readability
       await tripsStore.updateTrip(trip.id, {
         fixtureIdPrimary: mid,
 
@@ -1059,7 +1063,6 @@ export default function TripDetailScreen() {
       return;
     }
 
-    // ✅ If we already have a tickets item for this fixture, open it.
     const existing = ticketsByMatchId[mid];
     if (existing && existing.type === "tickets" && existing.status !== "archived" && existing.partnerUrl) {
       await openSavedItem(existing);
@@ -1186,11 +1189,8 @@ export default function TripDetailScreen() {
     };
 
     const openHotels = () => {
-      if (!bookingLinks) {
-        Alert.alert("Not ready", "We need a city + dates saved to build booking links.");
-        return;
-      }
-      openTrackedPartner({
+      if (!bookingLinks) return Alert.alert("Not ready", "We need a city + dates saved to build booking links.");
+      return openTrackedPartner({
         partnerId: "expedia_stays",
         url: bookingLinks.hotelsUrl,
         savedItemType: "hotel",
@@ -1200,11 +1200,8 @@ export default function TripDetailScreen() {
     };
 
     const openFlights = () => {
-      if (!bookingLinks) {
-        Alert.alert("Not ready", "We need a city + dates saved to build booking links.");
-        return;
-      }
-      openTrackedPartner({
+      if (!bookingLinks) return Alert.alert("Not ready", "We need a city + dates saved to build booking links.");
+      return openTrackedPartner({
         partnerId: "aviasales",
         url: bookingLinks.flightsUrl,
         savedItemType: "flight",
@@ -1214,11 +1211,8 @@ export default function TripDetailScreen() {
     };
 
     const openTransfers = () => {
-      if (!bookingLinks) {
-        Alert.alert("Not ready", "We need a city + dates saved to build booking links.");
-        return;
-      }
-      openTrackedPartner({
+      if (!bookingLinks) return Alert.alert("Not ready", "We need a city + dates saved to build booking links.");
+      return openTrackedPartner({
         partnerId: "kiwitaxi",
         url: bookingLinks.transfersUrl,
         savedItemType: "transfer",
@@ -1228,11 +1222,8 @@ export default function TripDetailScreen() {
     };
 
     const openThings = () => {
-      if (!bookingLinks) {
-        Alert.alert("Not ready", "We need a city + dates saved to build booking links.");
-        return;
-      }
-      openTrackedPartner({
+      if (!bookingLinks) return Alert.alert("Not ready", "We need a city + dates saved to build booking links.");
+      return openTrackedPartner({
         partnerId: "getyourguide",
         url: bookingLinks.experiencesUrl,
         savedItemType: "things",
@@ -1295,28 +1286,6 @@ export default function TripDetailScreen() {
       });
     };
 
-    const openTransfers = () => {
-      if (!bookingLinks) return Alert.alert("Not ready", "We need a city + dates saved to build booking links.");
-      return openTrackedPartner({
-        partnerId: "kiwitaxi",
-        url: bookingLinks.transfersUrl,
-        savedItemType: "transfer",
-        title: `Transfers in ${cityName}`,
-        metadata: { city: cityName, startDate: trip?.startDate, endDate: trip?.endDate, priceMode: "live" },
-      });
-    };
-
-    const openThings = () => {
-      if (!bookingLinks) return Alert.alert("Not ready", "We need a city + dates saved to build booking links.");
-      return openTrackedPartner({
-        partnerId: "getyourguide",
-        url: bookingLinks.experiencesUrl,
-        savedItemType: "things",
-        title: `Experiences in ${cityName}`,
-        metadata: { city: cityName, priceMode: "live" },
-      });
-    };
-
     if (!presentByType.hasTickets) {
       return {
         title: "Start with match tickets",
@@ -1356,35 +1325,15 @@ export default function TripDetailScreen() {
         cta: "View hotels (live)",
         onPress: openHotels,
         secondaryCta: "Stay guidance",
-        onSecondaryPress: () => {
-          Alert.alert("Tip", "Scroll down to ‘Stay guidance’ for areas + transport stops.");
-        },
-      };
-    }
-
-    if (!presentByType.hasTransfer) {
-      return {
-        title: "Plan airport → hotel → stadium transport",
-        body: "We’ll open live transfer options on KiwiTaxi.",
-        cta: "View transfers (live)",
-        onPress: openTransfers,
-      };
-    }
-
-    if (!presentByType.hasThings) {
-      return {
-        title: "Add a couple of city experiences",
-        body: "We’ll open live options on GetYourGuide.",
-        cta: "View things to do (live)",
-        onPress: openThings,
+        onSecondaryPress: () => Alert.alert("Tip", "Scroll down to ‘Stay guidance’ for areas + transport stops."),
       };
     }
 
     return {
       title: "You’re set — add extras if you want",
       body: "Core planning is complete. If you’re staying longer, add activities or notes.",
-      cta: "View things to do (live)",
-      onPress: openThings,
+      cta: "View hotels (live)",
+      onPress: openHotels,
       badge: "Ready",
     };
   }, [
@@ -1397,8 +1346,6 @@ export default function TripDetailScreen() {
     presentByType.hasTickets,
     presentByType.hasFlight,
     presentByType.hasHotel,
-    presentByType.hasTransfer,
-    presentByType.hasThings,
     kickoffMeta.tbc,
   ]);
 
@@ -1629,7 +1576,7 @@ export default function TripDetailScreen() {
               <GlassCard style={styles.card}>
                 <View style={styles.sectionTitleRow}>
                   <Text style={styles.sectionTitle}>Matches</Text>
-                  <Pressable onPress={onEditTrip} style={styles.inlineLinkBtn}>
+                  <Pressable onPress={onAddMatch} style={styles.inlineLinkBtn}>
                     <Text style={styles.inlineLinkText}>Add match ›</Text>
                   </Pressable>
                 </View>
@@ -1730,7 +1677,6 @@ export default function TripDetailScreen() {
                             <Text style={styles.chev}>›</Text>
                           </Pressable>
 
-                          {/* quick actions row */}
                           <View style={styles.matchActionsRow}>
                             <Pressable
                               onPress={() => openTicketsForMatch(mid)}
@@ -1935,7 +1881,6 @@ export default function TripDetailScreen() {
               {/* PENDING */}
               <GlassCard style={styles.card}>
                 <Text style={styles.sectionTitle}>Pending</Text>
-
                 {pending.length === 0 ? (
                   <EmptyState
                     title="No pending bookings"
@@ -1984,12 +1929,8 @@ export default function TripDetailScreen() {
               {/* BOOKED */}
               <GlassCard style={styles.card}>
                 <Text style={styles.sectionTitle}>Booked (in Wallet)</Text>
-
                 {booked.length === 0 ? (
-                  <EmptyState
-                    title="No booked items yet"
-                    message="When you confirm a booking, it will show here and in Wallet."
-                  />
+                  <EmptyState title="No booked items yet" message="When you confirm a booking, it will show here and in Wallet." />
                 ) : (
                   <View style={{ gap: 10 }}>
                     {booked.map((it) => {
@@ -2034,7 +1975,6 @@ export default function TripDetailScreen() {
               {/* SAVED */}
               <GlassCard style={styles.card}>
                 <Text style={styles.sectionTitle}>Saved</Text>
-
                 {saved.length === 0 ? (
                   <EmptyState
                     title="No saved items"
@@ -2393,7 +2333,6 @@ const styles = StyleSheet.create({
 
   crestFallback: { color: theme.colors.textSecondary, fontWeight: "900" },
 
-  /* Stay guidance */
   proxBox: {
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
@@ -2436,12 +2375,7 @@ const styles = StyleSheet.create({
   areaNotes: { marginTop: 6, color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12, lineHeight: 16 },
   areaBtns: { gap: 8, alignItems: "flex-end" },
 
-  pill: {
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
+  pill: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
   pillText: { color: theme.colors.text, fontWeight: "900", fontSize: 11 },
 
   stopRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
@@ -2476,38 +2410,14 @@ const styles = StyleSheet.create({
     gap: 10,
   },
 
-  itemTitle: {
-    color: theme.colors.text,
-    fontWeight: "900",
-    flexShrink: 1,
-    paddingRight: 6,
-  },
+  itemTitle: { color: theme.colors.text, fontWeight: "900", flexShrink: 1, paddingRight: 6 },
 
-  itemMeta: {
-    marginTop: 4,
-    color: theme.colors.textSecondary,
-    fontWeight: "800",
-    fontSize: 12,
-  },
+  itemMeta: { marginTop: 4, color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12 },
 
-  livePriceLine: {
-    marginTop: 6,
-    color: theme.colors.textTertiary,
-    fontSize: 12,
-    fontWeight: "900",
-  },
+  livePriceLine: { marginTop: 6, color: theme.colors.textTertiary, fontSize: 12, fontWeight: "900" },
+  paidLine: { marginTop: 6, color: "rgba(242,244,246,0.92)", fontSize: 12, fontWeight: "900" },
 
-  paidLine: {
-    marginTop: 6,
-    color: "rgba(242,244,246,0.92)",
-    fontSize: 12,
-    fontWeight: "900",
-  },
-
-  itemActions: {
-    gap: 8,
-    alignItems: "flex-end",
-  },
+  itemActions: { gap: 8, alignItems: "flex-end" },
 
   smallBtn: {
     paddingVertical: 8,
@@ -2517,60 +2427,20 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.15)",
     backgroundColor: "rgba(0,0,0,0.15)",
   },
-
   smallBtnWide: { flex: 1, alignItems: "center" },
-
   smallBtnPrimary: { borderColor: "rgba(0,255,136,0.35)" },
-
   smallBtnDisabled: { opacity: 0.65 },
+  smallBtnDanger: { borderColor: "rgba(255,80,80,0.35)" },
+  smallBtnText: { color: theme.colors.text, fontWeight: "900", fontSize: 12 },
 
-  smallBtnDanger: {
-    borderColor: "rgba(255,80,80,0.35)",
-  },
+  badge: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
+  badgeText: { color: theme.colors.text, fontWeight: "900", fontSize: 11 },
 
-  smallBtnText: {
-    color: theme.colors.text,
-    fontWeight: "900",
-    fontSize: 12,
-  },
-
-  badge: {
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-
-  badgeText: {
-    color: theme.colors.text,
-    fontWeight: "900",
-    fontSize: 11,
-  },
-
-  badgePrimary: {
-    borderColor: "rgba(0,255,136,0.45)",
-    backgroundColor: "rgba(0,255,136,0.10)",
-  },
-
-  badgePending: {
-    borderColor: "rgba(255,200,80,0.40)",
-    backgroundColor: "rgba(255,200,80,0.10)",
-  },
-
-  badgeSaved: {
-    borderColor: "rgba(0,255,136,0.35)",
-    backgroundColor: "rgba(0,255,136,0.08)",
-  },
-
-  badgeBooked: {
-    borderColor: "rgba(120,170,255,0.45)",
-    backgroundColor: "rgba(120,170,255,0.10)",
-  },
-
-  badgeArchived: {
-    borderColor: "rgba(255,255,255,0.18)",
-    backgroundColor: "rgba(255,255,255,0.06)",
-  },
+  badgePrimary: { borderColor: "rgba(0,255,136,0.45)", backgroundColor: "rgba(0,255,136,0.10)" },
+  badgePending: { borderColor: "rgba(255,200,80,0.40)", backgroundColor: "rgba(255,200,80,0.10)" },
+  badgeSaved: { borderColor: "rgba(0,255,136,0.35)", backgroundColor: "rgba(0,255,136,0.08)" },
+  badgeBooked: { borderColor: "rgba(120,170,255,0.45)", backgroundColor: "rgba(120,170,255,0.10)" },
+  badgeArchived: { borderColor: "rgba(255,255,255,0.18)", backgroundColor: "rgba(255,255,255,0.06)" },
 
   noteBox: {
     borderWidth: 1,
@@ -2612,12 +2482,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.18)",
   },
 
-  mapsInline: {
-    marginTop: 10,
-    color: theme.colors.textSecondary,
-    textAlign: "center",
-    fontWeight: "900",
-  },
+  mapsInline: { marginTop: 10, color: theme.colors.textSecondary, textAlign: "center", fontWeight: "900" },
 
   chev: { color: theme.colors.textSecondary, fontSize: 24, marginTop: -2 },
 });
