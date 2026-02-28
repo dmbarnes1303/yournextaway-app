@@ -7,6 +7,8 @@ import { ProProvider } from "@/src/context/ProContext";
 import preferencesStore from "@/src/state/preferences";
 import identity from "@/src/services/identity";
 
+import PartnerReturnModal from "@/src/components/PartnerReturnModal";
+
 import {
   bootstrapPartnerReturnPrompt,
   registerReturnModalHandler,
@@ -15,7 +17,6 @@ import {
   dismissPartnerReturn,
 } from "@/src/services/partnerReturnBootstrap";
 
-import PartnerReturnModal from "@/src/components/PartnerReturnModal";
 import type { LastPartnerClick } from "@/src/services/partnerClicks";
 
 export default function RootLayout() {
@@ -26,7 +27,7 @@ export default function RootLayout() {
     // 1) Ensure a stable device identity exists (guest path)
     identity.ensureIdentity().catch(() => null);
 
-    // 2) Partner return detection (Phase-1 booking loop)
+    // 2) Partner return detection (booking loop)
     bootstrapPartnerReturnPrompt();
 
     registerReturnModalHandler((itemId, click) => {
@@ -46,7 +47,8 @@ export default function RootLayout() {
     await markItemNotBooked(itemId);
   }
 
-  async function handleNotNow(itemId?: string) {
+  async function handleNotNow(itemId?: string | null) {
+    if (!itemId) return;
     await dismissPartnerReturn(itemId);
   }
 
