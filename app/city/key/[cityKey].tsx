@@ -19,7 +19,7 @@ import GlassCard from "@/src/components/GlassCard";
 import EmptyState from "@/src/components/EmptyState";
 
 import { theme } from "@/src/constants/theme";
-import { getBackground } from "@/src/constants/backgrounds";
+import { getCityBackground } from "@/src/constants/backgrounds";
 import { getFlagImageUrl } from "@/src/utils/flagImages";
 import { formatUkDateTimeMaybe } from "@/src/utils/formatters";
 
@@ -144,6 +144,13 @@ function splitLinesToBullets(text: string) {
     .filter(Boolean);
 
   return { bullets, paragraph: "" };
+}
+
+function resolveBackgroundSource(bg: string | any) {
+  // getCityBackground() returns either a remote URL string or a local ImageSourcePropType.
+  if (!bg) return undefined;
+  if (typeof bg === "string") return { uri: bg };
+  return bg;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -327,11 +334,13 @@ function GuideModal({
   onClose,
   title,
   blocks,
+  backgroundSource,
 }: {
   visible: boolean;
   onClose: () => void;
   title: string;
   blocks: GuideBlock[];
+  backgroundSource?: any;
 }) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
@@ -347,7 +356,7 @@ function GuideModal({
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose}>
-      <Background imageSource={getBackground("city")} overlayOpacity={0.78}>
+      <Background imageSource={backgroundSource} overlayOpacity={0.78}>
         <SafeAreaView style={styles.modalSafe} edges={["top", "bottom"]}>
           <View style={styles.modalTop}>
             <View style={{ flex: 1, minWidth: 0 }}>
@@ -368,11 +377,7 @@ function GuideModal({
             </Pressable>
           </View>
 
-          <ScrollView
-            style={{ flex: 1 }}
-            contentContainerStyle={styles.modalContent}
-            showsVerticalScrollIndicator={false}
-          >
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.modalContent} showsVerticalScrollIndicator={false}>
             {!blocks.length ? (
               <GlassCard strength="default" style={styles.block} noPadding>
                 <View style={styles.blockInner}>
@@ -592,10 +597,14 @@ export default function CityScreen() {
     [router, from, to]
   );
 
-  const bgSource = getBackground("city");
+  // ✅ City-specific background (remote URL or local fallback)
+  const cityBg = useMemo(() => resolveBackgroundSource(getCityBackground(cityKey)), [cityKey]);
 
   const guideBlocks = guideFull?.blocks ?? [];
-  const overview = guideBlocks.find((b) => safeStr(b.heading).toLowerCase() === "overview")?.text || guideBlocks[0]?.text || "";
+  const overview =
+    guideBlocks.find((b) => safeStr(b.heading).toLowerCase() === "overview")?.text ||
+    guideBlocks[0]?.text ||
+    "";
 
   const guidePreview = guideFull ? clampText(overview, 220) : "";
   const guideStats = useMemo(() => {
@@ -603,16 +612,14 @@ export default function CityScreen() {
     const sections = guideBlocks.length;
     const hasTop = guideBlocks.some((b) => safeStr(b.heading).toLowerCase().includes("top"));
     const hasStay = guideBlocks.some((b) => safeStr(b.heading).toLowerCase().includes("stay"));
-    const parts = [
-      sections ? `${sections} sections` : "",
-      hasTop ? "things to do" : "",
-      hasStay ? "where to stay" : "",
-    ].filter(Boolean);
+    const parts = [sections ? `${sections} sections` : "", hasTop ? "things to do" : "", hasStay ? "where to stay" : ""].filter(
+      Boolean
+    );
     return parts.join(" • ");
   }, [guideFull, guideBlocks]);
 
   return (
-    <Background imageSource={bgSource} overlayOpacity={0.7}>
+    <Background imageSource={cityBg} overlayOpacity={0.7}>
       <SafeAreaView style={styles.container} edges={["top"]}>
         <ScrollView style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           {/* HERO */}
@@ -664,7 +671,9 @@ export default function CityScreen() {
                 <View style={{ flex: 1, minWidth: 0 }}>
                   <Text style={styles.blockTitle}>Guide</Text>
                   <Text style={styles.guideSub} numberOfLines={1}>
-                    {guideFull ? guideStats || "Practical, city-break planning notes." : "Guide content unavailable for this city yet."}
+                    {guideFull
+                      ? guideStats || "Practical, city-break planning notes."
+                      : "Guide content unavailable for this city yet."}
                   </Text>
                 </View>
 
@@ -736,6 +745,7 @@ export default function CityScreen() {
           onClose={() => setGuideOpen(false)}
           title={guideFull?.title || title}
           blocks={guideBlocks}
+          backgroundSource={cityBg}
         />
       </SafeAreaView>
     </Background>
