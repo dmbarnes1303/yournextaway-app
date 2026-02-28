@@ -13,7 +13,7 @@ import { readJson, writeJson } from "@/src/state/persist";
  * - tracked open ensures a SavedItem exists in "pending" and stores lastClick
  * - on return, UI can prompt:
  *   YES -> booked
- *   NO -> saved
+ *   NO  -> saved
  *   NOT NOW -> keep pending
  *
  * Hardening:
@@ -43,13 +43,17 @@ const STORAGE_KEY = "yna_last_partner_click_v1";
 let lastClick: LastPartnerClick | null = null;
 let lastClickLoaded = false;
 
+// Watcher lifecycle
 let subscribed = false;
 let appStateSub: { remove: () => void } | null = null;
-
 let onReturnHandler: ((click: LastPartnerClick) => void | Promise<void>) | null = null;
 
-/** Prevent double-taps / concurrent opens */
+// Prevent double-taps / concurrent opens
 let opening = false;
+
+// Return de-dupe gate (prevents double modal from AppState + browser dismiss)
+let returnInFlight = false;
+let lastReturnHandledAt = 0;
 
 function now() {
   return Date.now();
@@ -67,6 +71,7 @@ function normalizeUrl(url: string): string {
     const pathname = u.pathname || "/";
     const search = u.search || "";
     const proto = (u.protocol || "https:").toLowerCase();
+    // (hash intentionally dropped for dedupe)
     return `${proto}//${host}${pathname}${search}`.trim();
   } catch {
     return withProto.trim();
@@ -184,6 +189,7 @@ async function openUrlInternal(url: string) {
   if (!u) throw new Error("URL is required");
 
   if (Platform.OS === "web") {
+    // eslint-disable-next-line no-undef
     window.open(u, "_blank", "noopener,noreferrer");
     return { type: "opened" as const };
   }
@@ -197,54 +203,66 @@ async function openUrlInternal(url: string) {
 }
 
 /**
- * Consume lastClick exactly once and invoke handler.
+ * Consume lastClick and invoke handler (once).
  *
  * Instant dismiss policy:
  * - if browser session was too brief => do NOT prompt
  * - auto-demote pending -> saved so Pending doesn't rot
  *
  * IMPORTANT HARDENING:
- * Some OS/device flows return via AppState without a `dismiss` result.
- * We apply the same minimum-open-time rule for BOTH reasons using openedAt as a fallback.
+ * - AppState and browser dismiss can both fire; we de-dupe with returnInFlight + lastReturnHandledAt.
  */
-async function triggerReturnIfPresent(
-  reason: "appstate" | "browser_dismiss",
-  meta?: { openDurationMs?: number }
-) {
-  await loadLastClickOnce();
-  if (!lastClick) return;
+async function triggerReturnIfPresent(reason: "appstate" | "browser_dismiss", meta?: { openDurationMs?: number }) {
+  // De-dupe gate: if we just handled a return, ignore repeats.
+  const t = now();
+  if (returnInFlight) return;
+  if (t - lastReturnHandledAt < 1500) return; // 1.5s safety window
 
-  if (!isRecent(lastClick)) {
-    await persistLastClick(null);
-    return;
-  }
-
-  const click = lastClick;
-
-  // Compute duration:
-  const explicitDur = Number(meta?.openDurationMs ?? 0);
-  const fallbackDur = Math.max(0, now() - Number(click.openedAt || 0));
-  const dur = explicitDur > 0 ? explicitDur : fallbackDur;
-
-  const minOpenMs = 8000;
-
-  // If it was basically instant, we don't prompt.
-  // Applies to both "browser_dismiss" and "appstate" returns.
-  if (dur > 0 && dur < minOpenMs) {
-    await persistLastClick(null);
-    await tryTransitionPendingToSaved(click.itemId);
-    return;
-  }
-
-  const handler = onReturnHandler;
-  if (!handler) return; // keep lastClick persisted until handler exists
-
-  await persistLastClick(null);
-
+  returnInFlight = true;
   try {
-    await Promise.resolve(handler(click));
-  } catch {
-    // never crash app on return prompt
+    await loadLastClickOnce();
+    if (!lastClick) return;
+
+    if (!isRecent(lastClick)) {
+      await persistLastClick(null);
+      return;
+    }
+
+    const click = lastClick;
+
+    // Compute duration:
+    const explicitDur = Number(meta?.openDurationMs ?? 0);
+    const fallbackDur = Math.max(0, t - Number(click.openedAt || 0));
+    const dur = explicitDur > 0 ? explicitDur : fallbackDur;
+
+    const minOpenMs = 8000;
+
+    // Too brief => no prompt, auto-demote pending -> saved.
+    if (dur > 0 && dur < minOpenMs) {
+      await persistLastClick(null);
+      await tryTransitionPendingToSaved(click.itemId);
+      lastReturnHandledAt = now();
+      return;
+    }
+
+    const handler = onReturnHandler;
+    if (!handler) {
+      // Keep lastClick persisted until handler exists.
+      return;
+    }
+
+    // Consume BEFORE calling handler to guarantee exactly-once semantics.
+    await persistLastClick(null);
+
+    try {
+      await Promise.resolve(handler(click));
+    } catch {
+      // Never crash the app on return prompt
+    } finally {
+      lastReturnHandledAt = now();
+    }
+  } finally {
+    returnInFlight = false;
   }
 }
 
@@ -254,13 +272,25 @@ export function getPartnerClicksDebugState() {
 }
 
 /**
- * ✅ IMPORTANT: This MUST be a named export and MUST exist.
- * Root uses this via partnerReturnBootstrap.
+ * ✅ Root uses this via partnerReturnBootstrap.
+ * Idempotent + returns an unsubscribe for safety.
  */
 export function ensurePartnerReturnWatcher(onReturn: (click: LastPartnerClick) => void | Promise<void>) {
   onReturnHandler = onReturn;
 
-  if (subscribed) return;
+  if (subscribed) {
+    // Already subscribed; handler updated above.
+    return () => {
+      // only unsubscribe if still subscribed
+      try {
+        appStateSub?.remove?.();
+      } catch {}
+      appStateSub = null;
+      subscribed = false;
+      onReturnHandler = null;
+    };
+  }
+
   subscribed = true;
 
   loadLastClickOnce().catch(() => null);
@@ -276,6 +306,15 @@ export function ensurePartnerReturnWatcher(onReturn: (click: LastPartnerClick) =
   });
 
   appStateSub = sub as any;
+
+  return () => {
+    try {
+      appStateSub?.remove?.();
+    } catch {}
+    appStateSub = null;
+    subscribed = false;
+    onReturnHandler = null;
+  };
 }
 
 /**
@@ -476,6 +515,8 @@ export async function markBooked(itemId: string) {
   if (lastClick?.itemId === id) {
     await persistLastClick(null);
   }
+
+  lastReturnHandledAt = now();
 }
 
 export async function markNotBooked(itemId: string) {
@@ -487,19 +528,25 @@ export async function markNotBooked(itemId: string) {
   if (lastClick?.itemId === id) {
     await persistLastClick(null);
   }
+
+  lastReturnHandledAt = now();
 }
 
 export async function dismissReturnPrompt(itemId?: string) {
+  // "Not now" means: don't prompt again for this click.
+  // Pending item remains pending.
   if (!lastClick) return;
 
   if (!itemId) {
     await persistLastClick(null);
+    lastReturnHandledAt = now();
     return;
   }
 
   const id = String(itemId ?? "").trim();
   if (id && lastClick.itemId === id) {
     await persistLastClick(null);
+    lastReturnHandledAt = now();
   }
 }
 
@@ -523,4 +570,6 @@ export function __unsafeResetPartnerClickStateForDevOnly() {
   void persistLastClick(null);
   opening = false;
   lastClickLoaded = false;
+  returnInFlight = false;
+  lastReturnHandledAt = 0;
 }
