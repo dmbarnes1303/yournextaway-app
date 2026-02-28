@@ -46,7 +46,7 @@ import storage from "@/src/services/storage";
 
 import { getFixtureCertainty } from "@/src/utils/fixtureCertainty";
 
-// ✅ NEW: tickets builder (SE365 resolver + affiliate wrapping)
+// ✅ Tickets builder (SE365 resolver + affiliate wrapping)
 import { buildTicketLink } from "@/src/services/partnerLinks";
 
 // dev-only IATA detection
@@ -469,7 +469,7 @@ export default function TripDetailScreen() {
         const map: Record<string, FixtureListRow> = {};
         for (const id of numericIds) {
           try {
-            const r = await getFixtureById(String(id));
+            const r = await getFixtureById(Number(String(id)));
             if (r) map[String(id)] = r;
           } catch {
             // best-effort
@@ -652,6 +652,41 @@ export default function TripDetailScreen() {
     return "";
   }, [primaryLogistics, primaryKickoffIso]);
 
+  /* ---------------- tickets: per-match state ---------------- */
+
+  function getTicketItemForFixture(matchId: string): SavedItem | null {
+    const mid = String(matchId ?? "").trim();
+    if (!mid) return null;
+
+    const candidates = savedItems.filter((x) => x.type === "tickets" && x.status !== "archived");
+
+    const byFixtureId = candidates.filter((x) => String((x.metadata as any)?.fixtureId ?? "").trim() === mid);
+
+    const pool = byFixtureId.length > 0 ? byFixtureId : candidates;
+
+    // Prefer the "most actionable" state when multiple exist
+    return (
+      pool.find((x) => x.status === "pending") ??
+      pool.find((x) => x.status === "saved") ??
+      pool.find((x) => x.status === "booked") ??
+      null
+    );
+  }
+
+  const ticketsByMatchId = useMemo(() => {
+    const map: Record<string, SavedItem | null> = {};
+    for (const mid of numericMatchIds) {
+      map[String(mid)] = getTicketItemForFixture(String(mid));
+    }
+    return map;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [numericMatchIds, savedItems]);
+
+  const primaryTicketItem = useMemo(() => {
+    if (!primaryMatchId) return null;
+    return ticketsByMatchId[String(primaryMatchId)] ?? null;
+  }, [primaryMatchId, ticketsByMatchId]);
+
   /* ---------------- dev-only IATA warning ---------------- */
 
   useEffect(() => {
@@ -736,73 +771,6 @@ export default function TripDetailScreen() {
     } catch {
       await openUntracked(args.url);
     }
-  }
-
-  // ✅ Option 2: match tap opens tickets directly (SE365 -> saved as pending -> open)
-  async function openTicketsForMatch(matchId: string) {
-    const mid = String(matchId ?? "").trim();
-    if (!mid) return;
-
-    if (!tripId) {
-      Alert.alert("Save trip first", "Save this trip before booking so we can store it in Wallet.");
-      return;
-    }
-
-    const r = fixturesById[mid] ?? null;
-
-    const homeName = String((r as any)?.teams?.home?.name ?? (trip as any)?.homeName ?? "").trim();
-    const awayName = String((r as any)?.teams?.away?.name ?? (trip as any)?.awayName ?? "").trim();
-    const kickoffIso = String((r as any)?.fixture?.date ?? (trip as any)?.kickoffIso ?? "").trim() || null;
-
-    const leagueName = String((r as any)?.league?.name ?? (trip as any)?.leagueName ?? "").trim() || undefined;
-    const leagueIdRaw = (r as any)?.league?.id ?? (trip as any)?.leagueId;
-    const leagueId = typeof leagueIdRaw === "number" || typeof leagueIdRaw === "string" ? leagueIdRaw : undefined;
-
-    if (!homeName || !awayName || !kickoffIso) {
-      Alert.alert("Tickets not available", "Missing team names or kickoff time for this match.");
-      return;
-    }
-
-    const dateIso = trip?.startDate || isoDateOnlyFromKickoffIso(kickoffIso) || undefined;
-
-    let url: string | null = null;
-    try {
-      url = await buildTicketLink({
-        fixtureId: mid,
-        home: homeName,
-        away: awayName,
-        kickoffIso,
-        leagueName,
-        leagueId,
-        se365EventId: typeof (trip as any)?.sportsevents365EventId === "number" ? (trip as any).sportsevents365EventId : undefined,
-      });
-    } catch {
-      url = null;
-    }
-
-    if (!url) {
-      Alert.alert("Tickets not found", "We couldn’t find a suitable tickets listing for this match.");
-      return;
-    }
-
-    const title = `Tickets: ${homeName} vs ${awayName}`;
-
-    await openTrackedPartner({
-      partnerId: "sportsevents365" as any,
-      url,
-      title,
-      savedItemType: "tickets",
-      metadata: {
-        fixtureId: mid,
-        leagueId,
-        leagueName,
-        dateIso,
-        kickoffIso,
-        homeName,
-        awayName,
-        priceMode: "live",
-      },
-    });
   }
 
   /* ------------------------------------------------------------------------ */
@@ -959,6 +927,84 @@ export default function TripDetailScreen() {
         <Text style={styles.badgeText}>{label}</Text>
       </View>
     );
+  }
+
+  /* ------------------------------------------------------------------------ */
+  /* tickets: smart open                                                       */
+  /* ------------------------------------------------------------------------ */
+
+  async function openTicketsForMatch(matchId: string) {
+    const mid = String(matchId ?? "").trim();
+    if (!mid) return;
+
+    if (!tripId) {
+      Alert.alert("Save trip first", "Save this trip before booking so we can store it in Wallet.");
+      return;
+    }
+
+    // ✅ If we already have a tickets item for this fixture, open it.
+    const existing = ticketsByMatchId[mid];
+    if (existing && existing.type === "tickets" && existing.status !== "archived" && existing.partnerUrl) {
+      await openSavedItem(existing);
+      return;
+    }
+
+    const r = fixturesById[mid] ?? null;
+
+    const homeName = String((r as any)?.teams?.home?.name ?? (trip as any)?.homeName ?? "").trim();
+    const awayName = String((r as any)?.teams?.away?.name ?? (trip as any)?.awayName ?? "").trim();
+    const kickoffIso = String((r as any)?.fixture?.date ?? (trip as any)?.kickoffIso ?? "").trim() || null;
+
+    const leagueName = String((r as any)?.league?.name ?? (trip as any)?.leagueName ?? "").trim() || undefined;
+    const leagueIdRaw = (r as any)?.league?.id ?? (trip as any)?.leagueId;
+    const leagueId = typeof leagueIdRaw === "number" || typeof leagueIdRaw === "string" ? leagueIdRaw : undefined;
+
+    if (!homeName || !awayName || !kickoffIso) {
+      Alert.alert("Tickets not available", "Missing team names or kickoff time for this match.");
+      return;
+    }
+
+    const dateIso = trip?.startDate || isoDateOnlyFromKickoffIso(kickoffIso) || undefined;
+
+    let url: string | null = null;
+    try {
+      url = await buildTicketLink({
+        fixtureId: mid,
+        home: homeName,
+        away: awayName,
+        kickoffIso,
+        leagueName,
+        leagueId,
+        // If you later store a per-match se365EventUrl in fixtures, pass it here too.
+        se365EventId: typeof (trip as any)?.sportsevents365EventId === "number" ? (trip as any).sportsevents365EventId : undefined,
+      });
+    } catch {
+      url = null;
+    }
+
+    if (!url) {
+      Alert.alert("Tickets not found", "We couldn’t find a suitable tickets listing for this match.");
+      return;
+    }
+
+    const title = `Tickets: ${homeName} vs ${awayName}`;
+
+    await openTrackedPartner({
+      partnerId: "sportsevents365" as any,
+      url,
+      title,
+      savedItemType: "tickets",
+      metadata: {
+        fixtureId: mid,
+        leagueId,
+        leagueName,
+        dateIso,
+        kickoffIso,
+        homeName,
+        awayName,
+        priceMode: "live",
+      },
+    });
   }
 
   /* ------------------------------------------------------------------------ */
@@ -1283,9 +1329,9 @@ export default function TripDetailScreen() {
         metadata: { city: cityName, priceMode: "live" },
       });
 
-    // ✅ Tickets goes direct to SE365 now
+    // ✅ Tickets now respect existing item state per match
     if (!presentByType.hasTickets && primaryMatchId) {
-      add("Tickets", "Live listings", () => openTicketsForMatch(primaryMatchId), "primary");
+      add("Tickets", primaryTicketItem ? statusLabel(primaryTicketItem.status) : "Live listings", () => openTicketsForMatch(primaryMatchId), "primary");
     }
     if (!presentByType.hasFlight) add("Flights", "Live prices", openFlights, "primary");
     if (!presentByType.hasHotel) add("Hotels", "Live prices", openHotels, "primary");
@@ -1309,6 +1355,7 @@ export default function TripDetailScreen() {
     presentByType.hasHotel,
     presentByType.hasTransfer,
     presentByType.hasThings,
+    primaryTicketItem,
   ]);
 
   /* ------------------------------------------------------------------------ */
@@ -1490,6 +1537,8 @@ export default function TripDetailScreen() {
                         previousKickoffIso: (trip as any)?.kickoffIso ?? null,
                       });
 
+                      const ticketItem = ticketsByMatchId[String(mid)];
+
                       return (
                         <Pressable key={mid} onPress={() => openTicketsForMatch(mid)} style={styles.matchRow}>
                           <TeamCrest name={homeName} logo={(r as any)?.teams?.home?.logo} />
@@ -1499,6 +1548,8 @@ export default function TripDetailScreen() {
                               <Text style={styles.matchTitle} numberOfLines={1}>
                                 {title}
                               </Text>
+
+                              {ticketItem ? <StatusBadge s={ticketItem.status} /> : null}
                             </View>
 
                             <Text style={styles.matchMeta} numberOfLines={1}>
@@ -1528,7 +1579,9 @@ export default function TripDetailScreen() {
                             ) : null}
 
                             <Text style={styles.matchHint} numberOfLines={1}>
-                              Tap to open tickets (saved to Pending)
+                              {ticketItem
+                                ? `Tap to open tickets (${statusLabel(ticketItem.status)})`
+                                : "Tap to open tickets (saved to Pending)"}
                             </Text>
                           </View>
 
