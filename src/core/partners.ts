@@ -36,7 +36,7 @@ export const PARTNERS: Partner[] = [
     name: "SportsEvents365",
     category: "tickets",
     affiliate: true,
-    api: true,
+    api: true, // set false if you don't actually use an API yet
     deepLinkBase: "https://www.sportsevents365.com/",
   },
   {
@@ -50,30 +50,22 @@ export const PARTNERS: Partner[] = [
 
   // Flights
   {
-    id: "expedia",
-    name: "Expedia",
-    category: "flights",
-    affiliate: true,
-    api: false,
-    deepLinkBase: "https://www.expedia.com/",
-  },
-  {
     id: "aviasales",
-    name: "AviaSales",
+    name: "Aviasales",
     category: "flights",
     affiliate: true,
     api: false,
     deepLinkBase: "https://www.aviasales.com/",
   },
 
-  // Stays (Expedia is also your stays coverage)
+  // Stays
   {
-    id: "expedia_stays",
+    id: "expedia",
     name: "Expedia",
     category: "stays",
     affiliate: true,
     api: false,
-    deepLinkBase: "https://www.expedia.com/Hotels",
+    deepLinkBase: "https://www.expedia.co.uk/",
   },
 
   // Transfers
