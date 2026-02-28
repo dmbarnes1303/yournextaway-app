@@ -5,21 +5,30 @@ export type TripId = string;
 
 /**
  * Trip
- * Phase 1: "trip workspace" anchored around 1+ fixtures, with pragmatic cityId.
+ * Phase 1: Trip workspace anchored around 1+ fixtures.
+ *
+ * CITY IDENTITY (OPTION 1 — LOCKED):
+ * - `cityId` is the canonical cityKey (normalized, stable).
+ * - `citySlug` is optional/legacy (URL presentation only).
+ * - `displayCity` is optional UI text captured at save time.
  *
  * IMPORTANT:
- * - We store snapshot fields to keep the UI readable offline and resilient
- *   if API responses change or fixture lookups fail.
- * - All snapshot fields are optional and may be stale; live API data can override.
+ * - Snapshot fields are optional and may be stale.
+ * - Live API data can override when available.
  */
 export type Trip = {
   id: TripId;
 
   /**
-   * For Phase 1 we keep this pragmatic: the "destination" identifier
-   * derived from venue city. Later: normalize to city registry IDs.
+   * Canonical city key (normalized).
+   * Example: "barcelona", "san-sebastian", "munich"
    */
   cityId: string;
+
+  /**
+   * Optional URL slug. Do NOT treat as canonical.
+   * In Option 1, we often keep this equal to `cityId` for convenience.
+   */
   citySlug?: string;
 
   /** YYYY-MM-DD */
@@ -28,7 +37,7 @@ export type Trip = {
   endDate: string;
 
   /**
-   * Match IDs (API-Football fixture IDs stored as strings)
+   * Match IDs (API-Football fixture IDs stored as strings).
    * Phase 1: one fixture per trip, but keep as array for future.
    */
   matchIds: string[];
@@ -41,7 +50,7 @@ export type Trip = {
 
   /**
    * Human display city captured at trip creation time.
-   * Useful when cityId is a slug or when fixture enrichment fails.
+   * Example: "Barcelona"
    */
   displayCity?: string;
 
