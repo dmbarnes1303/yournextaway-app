@@ -698,7 +698,12 @@ export default function HomeScreen() {
   return (
     <Background imageSource={getBackground("home")} overlayOpacity={0.62}>
       <SafeAreaView style={styles.container} edges={["top"]}>
-        <ScrollView style={styles.scroll} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
           {/* HERO */}
           <GlassCard strength="strong" style={styles.hero} noPadding>
             <View style={styles.heroInner}>
@@ -732,7 +737,7 @@ export default function HomeScreen() {
                     style={({ pressed }) => [styles.heroBtnSingle, styles.heroBtnPrimary, pressed && styles.pressed]}
                     android_ripple={{ color: "rgba(79,224,138,0.10)" }}
                   >
-                    <Text style={styles.heroBtnPrimaryText}>Plan A Trip</Text>
+                    <Text style={styles.heroBtnPrimaryText}>Plan a trip</Text>
                   </Pressable>
                 </View>
               ) : null}
@@ -943,7 +948,7 @@ export default function HomeScreen() {
                         style={({ pressed }) => [styles.singleCta, styles.btn, styles.btnPrimary, pressed && styles.pressed]}
                         android_ripple={{ color: "rgba(79,224,138,0.10)" }}
                       >
-                        <Text style={styles.btnPrimaryText}>Plan A Trip</Text>
+                        <Text style={styles.btnPrimaryText}>Plan a trip</Text>
                       </Pressable>
                     </>
                   ) : null}
@@ -987,7 +992,7 @@ export default function HomeScreen() {
                           style={({ pressed }) => [styles.btn, styles.btnPrimary, pressed && styles.pressed]}
                           android_ripple={{ color: "rgba(79,224,138,0.10)" }}
                         >
-                          <Text style={styles.btnPrimaryText}>Plan A Trip</Text>
+                          <Text style={styles.btnPrimaryText}>Plan a trip</Text>
                         </Pressable>
                         <Pressable
                           onPress={() => router.push("/(tabs)/trips")}
@@ -1036,7 +1041,7 @@ export default function HomeScreen() {
                           style={({ pressed }) => [styles.btn, styles.btnPrimary, pressed && styles.pressed]}
                           android_ripple={{ color: "rgba(79,224,138,0.10)" }}
                         >
-                          <Text style={styles.btnPrimaryText}>Plan Another</Text>
+                          <Text style={styles.btnPrimaryText}>Plan another trip</Text>
                         </Pressable>
                       </View>
                     </>
