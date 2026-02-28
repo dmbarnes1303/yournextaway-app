@@ -11,6 +11,7 @@ import {
   Platform,
   Image,
   Alert,
+  Switch,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
@@ -120,6 +121,8 @@ function findCountryCodeForLeagueId(leagueId: number | null | undefined): string
  * - cityId (slug) + displayCity (human)
  * - home/away/league/venue + kickoffIso/kickoffTbc
  * - leagueId/season/countryCode + homeTeamId (for Home visuals without guessing)
+ *
+ * NOTE: This is trip-level snapshot (primary match). Secondary matches are stored via matchIds only for now.
  */
 function buildTripSnapshot(selectedFixture: FixtureListRow, placeholderTbcIds: Set<string>) {
   const displayCity = safeCityDisplay(selectedFixture?.fixture?.venue?.city);
@@ -240,6 +243,15 @@ export default function TripBuildScreen() {
   const [notes, setNotes] = useState("");
 
   const [endTouched, setEndTouched] = useState(false);
+
+  // Edit-trip context (so we can ADD matches without overwriting)
+  const [editTrip, setEditTrip] = useState<Trip | null>(null);
+  const [existingMatchIds, setExistingMatchIds] = useState<string[]>([]);
+  const [existingPrimaryId, setExistingPrimaryId] = useState<string | null>(null);
+
+  // Edit-only: optionally set the newly selected fixture as Primary
+  const [setAsPrimaryOnSave, setSetAsPrimaryOnSave] = useState(false);
+
   useEffect(() => {
     if (endTouched) return;
     setEndIso(addDaysIso(startIso, 2));
@@ -252,7 +264,7 @@ export default function TripBuildScreen() {
   }, []);
 
   /* ------------------------------------------------------------------------ */
-  /* League options                                                           */
+  /* League options                                                            */
   /* ------------------------------------------------------------------------ */
 
   const ALL_LEAGUES: LeagueOption & { key: string } = useMemo(
@@ -270,7 +282,7 @@ export default function TripBuildScreen() {
   const [selectedLeague, setSelectedLeague] = useState<LeagueOption>(ALL_LEAGUES);
 
   /* ------------------------------------------------------------------------ */
-  /* Load edit trip                                                           */
+  /* Load edit trip                                                            */
   /* ------------------------------------------------------------------------ */
 
   useEffect(() => {
@@ -293,14 +305,23 @@ export default function TripBuildScreen() {
           return;
         }
 
+        setEditTrip(t);
+
+        const mids = Array.isArray((t as any)?.matchIds) ? (t as any).matchIds.map((x: any) => String(x).trim()).filter(Boolean) : [];
+        setExistingMatchIds(mids);
+
+        const primary = cleanText((t as any)?.fixtureIdPrimary) || (mids[0] ? String(mids[0]) : "");
+        setExistingPrimaryId(primary || null);
+
         setStartIso(t.startDate);
         setEndIso(t.endDate);
         setEndTouched(true);
-        setNotes(t.notes ?? "");
+        setNotes((t as any).notes ?? "");
 
-        const mid = t.matchIds?.[0];
-        if (mid) {
-          const fx = await getFixtureById(String(mid));
+        // Load the PRIMARY match for context (not just matchIds[0])
+        const loadId = primary || (mids[0] ? String(mids[0]) : "");
+        if (loadId) {
+          const fx = await getFixtureById(String(loadId));
           if (cancelled) return;
 
           setSelectedFixture(fx);
@@ -312,8 +333,12 @@ export default function TripBuildScreen() {
           const opt = findLeagueOptionByLeagueId(typeof lid === "number" ? lid : null);
           if (opt) setSelectedLeague(opt);
         } else {
+          setSelectedFixture(null);
           setPlaceholderTbcIds(new Set());
         }
+
+        // default: don’t change primary unless user explicitly toggles it
+        setSetAsPrimaryOnSave(false);
       } catch (e: any) {
         if (!cancelled) setError(e?.message ?? "Failed to load trip.");
       } finally {
@@ -328,7 +353,7 @@ export default function TripBuildScreen() {
   }, [routeTripId]);
 
   /* ------------------------------------------------------------------------ */
-  /* Prefill fixture (new trip)                                               */
+  /* Prefill fixture (new trip)                                                */
   /* ------------------------------------------------------------------------ */
 
   useEffect(() => {
@@ -376,11 +401,10 @@ export default function TripBuildScreen() {
   }, [routeFixtureId, isPrefilledFlow, routeCityArea, setNotesIfEmpty]);
 
   /* ------------------------------------------------------------------------ */
-  /* Load fixtures (picker mode only)                                         */
+  /* Load fixtures (picker mode only)                                          */
   /* ------------------------------------------------------------------------ */
 
   useEffect(() => {
-    if (isEditing) return;
     if (isPrefilledFlow) return;
 
     let cancelled = false;
@@ -396,7 +420,9 @@ export default function TripBuildScreen() {
         let res: FixtureListRow[] = [];
 
         if (selectedLeague.leagueId === 0) {
-          const batches = await Promise.all(LEAGUES.map((l) => getFixtures({ league: l.leagueId, season: l.season, from, to })));
+          const batches = await Promise.all(
+            LEAGUES.map((l) => getFixtures({ league: l.leagueId, season: l.season, from, to }))
+          );
           res = batches.flat();
         } else {
           res =
@@ -438,7 +464,7 @@ export default function TripBuildScreen() {
     return () => {
       cancelled = true;
     };
-  }, [selectedLeague, isEditing, isPrefilledFlow]);
+  }, [selectedLeague, isPrefilledFlow]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -457,7 +483,7 @@ export default function TripBuildScreen() {
   const visibleRows = useMemo(() => filtered.slice(0, visibleCount), [filtered, visibleCount]);
 
   /* ------------------------------------------------------------------------ */
-  /* Selection side effects (dates)                                           */
+  /* Selection side effects (dates)                                            */
   /* ------------------------------------------------------------------------ */
 
   useEffect(() => {
@@ -469,10 +495,13 @@ export default function TripBuildScreen() {
       setStartIso(start);
       setEndTouched(false);
     }
-  }, [selectedFixture]);
+
+    // In edit mode, if user selects a different fixture, keep the toggle default OFF.
+    if (isEditing) setSetAsPrimaryOnSave(false);
+  }, [selectedFixture, isEditing]);
 
   /* ------------------------------------------------------------------------ */
-  /* Save trip                                                                 */
+  /* Save trip                                                                  */
   /* ------------------------------------------------------------------------ */
 
   const validateDateOrder = useCallback((): string | null => {
@@ -498,46 +527,74 @@ export default function TripBuildScreen() {
     setSaving(true);
     setError(null);
 
-    const fixtureId = String(selectedFixture.fixture.id);
+    const fixtureId = String(selectedFixture.fixture.id).trim();
     const snap = buildTripSnapshot(selectedFixture, placeholderTbcIds);
-
-    const patch: Partial<Omit<Trip, "id">> = {
-      cityId: snap.cityId,
-      startDate: startIso,
-      endDate: endIso,
-      matchIds: [fixtureId],
-      notes: cleanText(notes),
-    };
-
-    // snapshot fields (durable UI)
-    (patch as any).displayCity = snap.displayCity;
-    (patch as any).homeName = snap.homeName;
-    (patch as any).awayName = snap.awayName;
-    (patch as any).leagueName = snap.leagueName;
-    (patch as any).venueName = snap.venueName;
-    (patch as any).kickoffIso = snap.kickoffIso;
-    (patch as any).kickoffTbc = snap.kickoffTbc;
-
-    (patch as any).leagueId = snap.leagueId;
-    (patch as any).season = snap.season;
-    (patch as any).countryCode = snap.countryCode;
-    (patch as any).homeTeamId = snap.homeTeamId;
-
-    if (routeCityArea && !cleanText(patch.notes)) {
-      (patch as any).notes = `Stay area: ${routeCityArea}`;
-    }
 
     try {
       if (!tripsStore.getState().loaded) await tripsStore.loadTrips();
 
-      // EDIT FLOW
+      // EDIT FLOW (multi-match safe)
       if (isEditing && routeTripId) {
-        await tripsStore.updateTrip(routeTripId, patch);
+        const current = tripsStore.getState().trips.find((x) => x.id === routeTripId) as any;
+        const currentMatchIds: string[] = Array.isArray(current?.matchIds)
+          ? current.matchIds.map((x: any) => String(x).trim()).filter(Boolean)
+          : [];
+
+        const alreadyHas = currentMatchIds.includes(fixtureId);
+
+        // Always update dates + notes
+        const basePatch: any = {
+          startDate: startIso,
+          endDate: endIso,
+          notes: cleanText(notes),
+        };
+
+        if (routeCityArea && !cleanText(basePatch.notes)) {
+          basePatch.notes = `Stay area: ${routeCityArea}`;
+        }
+
+        // If user toggles "Set as primary", we:
+        // - ensure match is added
+        // - set fixtureIdPrimary
+        // - overwrite trip-level snapshot fields to match new primary
+        if (setAsPrimaryOnSave) {
+          const mergedMatchIds = alreadyHas ? currentMatchIds : [...currentMatchIds, fixtureId];
+
+          basePatch.matchIds = mergedMatchIds;
+          basePatch.fixtureIdPrimary = fixtureId;
+
+          basePatch.cityId = snap.cityId;
+          basePatch.displayCity = snap.displayCity;
+          basePatch.homeName = snap.homeName;
+          basePatch.awayName = snap.awayName;
+          basePatch.leagueName = snap.leagueName;
+          basePatch.venueName = snap.venueName;
+          basePatch.kickoffIso = snap.kickoffIso;
+          basePatch.kickoffTbc = snap.kickoffTbc;
+
+          basePatch.leagueId = snap.leagueId;
+          basePatch.season = snap.season;
+          basePatch.countryCode = snap.countryCode;
+          basePatch.homeTeamId = snap.homeTeamId;
+
+          await tripsStore.updateTrip(routeTripId, basePatch);
+          router.replace({ pathname: "/trip/[id]", params: { id: routeTripId } } as any);
+          return;
+        }
+
+        // Otherwise: add as secondary match (if not already in trip),
+        // and DO NOT overwrite trip-level primary snapshot.
+        await tripsStore.updateTrip(routeTripId, basePatch);
+
+        if (!alreadyHas) {
+          await tripsStore.addMatchToTrip(routeTripId, fixtureId, { setPrimary: false });
+        }
+
         router.replace({ pathname: "/trip/[id]", params: { id: routeTripId } } as any);
         return;
       }
 
-      // NEW TRIP FLOW: dedupe
+      // NEW TRIP FLOW: dedupe by fixtureId
       const existingId = findExistingTripIdForFixture(fixtureId);
       if (existingId) {
         Alert.alert("Trip already exists", "You already have a trip for this match — opening it now.");
@@ -555,8 +612,35 @@ export default function TripBuildScreen() {
         return;
       }
 
-      // Create
-      const t = await tripsStore.addTrip(patch as any);
+      // Create (primary = selected)
+      const patch: any = {
+        cityId: snap.cityId,
+        startDate: startIso,
+        endDate: endIso,
+        matchIds: [fixtureId],
+        fixtureIdPrimary: fixtureId,
+        notes: cleanText(notes),
+
+        // snapshot fields (durable UI) for PRIMARY
+        displayCity: snap.displayCity,
+        homeName: snap.homeName,
+        awayName: snap.awayName,
+        leagueName: snap.leagueName,
+        venueName: snap.venueName,
+        kickoffIso: snap.kickoffIso,
+        kickoffTbc: snap.kickoffTbc,
+
+        leagueId: snap.leagueId,
+        season: snap.season,
+        countryCode: snap.countryCode,
+        homeTeamId: snap.homeTeamId,
+      };
+
+      if (routeCityArea && !cleanText(patch.notes)) {
+        patch.notes = `Stay area: ${routeCityArea}`;
+      }
+
+      const t = await tripsStore.addTrip(patch);
       router.replace({ pathname: "/trip/[id]", params: { id: t.id } } as any);
     } catch (e: any) {
       setError(e?.message ?? "Failed to save trip.");
@@ -574,6 +658,7 @@ export default function TripBuildScreen() {
     isEditing,
     routeTripId,
     router,
+    setAsPrimaryOnSave,
   ]);
 
   /* ------------------------------------------------------------------------ */
@@ -612,9 +697,13 @@ export default function TripBuildScreen() {
   const headerTitle = useMemo(() => (isEditing ? "Edit trip" : "Plan trip"), [isEditing]);
 
   const intentSub = useMemo(() => {
-    if (isEditing) return "Update your trip details.";
+    if (isEditing) {
+      const n = existingMatchIds.length;
+      const p = existingPrimaryId ? `Primary match set.` : `No primary match set.`;
+      return `Update dates/notes, and add more matches to this trip. (${n} match${n === 1 ? "" : "es"} • ${p})`;
+    }
     return "Pick a match, then we’ll save a trip with dates, notes, and planning links.";
-  }, [isEditing]);
+  }, [isEditing, existingMatchIds.length, existingPrimaryId]);
 
   const selectedLeagueLabel = useMemo(() => {
     if (selectedLeague.leagueId === 0) return "All leagues";
@@ -626,10 +715,17 @@ export default function TripBuildScreen() {
     return `${startIso} → ${endIso}${nights}`;
   }, [startIso, endIso, tripLength]);
 
-  const showPickerMode = !isPrefilledFlow && !isEditing;
-
   const selectedHomeLogo = useMemo(() => safeUri(selectedFixture?.teams?.home?.logo), [selectedFixture]);
   const selectedAwayLogo = useMemo(() => safeUri(selectedFixture?.teams?.away?.logo), [selectedFixture]);
+
+  const selectedFixtureId = useMemo(() => fixtureIdStr(selectedFixture), [selectedFixture]);
+  const isAlreadyInTrip = useMemo(() => {
+    if (!isEditing) return false;
+    if (!selectedFixtureId) return false;
+    return existingMatchIds.includes(String(selectedFixtureId).trim());
+  }, [isEditing, selectedFixtureId, existingMatchIds]);
+
+  const showPickerMode = !isPrefilledFlow; // allow picker even in edit mode (to add matches)
 
   /* ------------------------------------------------------------------------ */
   /* render                                                                    */
@@ -698,7 +794,7 @@ export default function TripBuildScreen() {
             </GlassCard>
           )}
 
-          {/* PREFILLED / EDIT SUMMARY */}
+          {/* SELECTED SUMMARY */}
           {!prefillLoading && selectedFixture ? (
             <GlassCard level="default">
               <Text style={styles.h1}>Selected match</Text>
@@ -707,7 +803,11 @@ export default function TripBuildScreen() {
                 <View style={styles.selectedLeft}>
                   <View style={styles.teamRow}>
                     <View style={styles.crestStack}>
-                      {selectedHomeLogo ? <Image source={{ uri: selectedHomeLogo }} style={styles.crest} /> : <View style={styles.crestFallback} />}
+                      {selectedHomeLogo ? (
+                        <Image source={{ uri: selectedHomeLogo }} style={styles.crest} />
+                      ) : (
+                        <View style={styles.crestFallback} />
+                      )}
                       {selectedAwayLogo ? (
                         <Image source={{ uri: selectedAwayLogo }} style={[styles.crest, { marginLeft: -10 }]} />
                       ) : (
@@ -746,14 +846,39 @@ export default function TripBuildScreen() {
                         <Text style={styles.badgeText}>{weekendHint(selectedFixture?.fixture?.date)}</Text>
                       </View>
                     ) : null}
+
+                    {isEditing ? (
+                      <View style={styles.badge}>
+                        <Text style={styles.badgeText}>
+                          {isAlreadyInTrip ? "Already in trip" : "Will be added to trip"}
+                        </Text>
+                      </View>
+                    ) : null}
                   </View>
+
+                  {/* Edit-only: set as primary toggle */}
+                  {isEditing ? (
+                    <View style={styles.primaryRow}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.primaryTitle}>Set as primary match</Text>
+                        <Text style={styles.primarySub}>
+                          Primary match drives kickoff banner + stay guidance + smart booking defaults.
+                        </Text>
+                      </View>
+                      <Switch
+                        value={setAsPrimaryOnSave}
+                        onValueChange={setSetAsPrimaryOnSave}
+                      />
+                    </View>
+                  ) : null}
                 </View>
               </View>
 
               {routeCityArea ? (
                 <View style={styles.infoBar}>
                   <Text style={styles.infoText}>
-                    Prefilled stay area: <Text style={{ fontWeight: "900", color: theme.colors.text }}>{routeCityArea}</Text>
+                    Prefilled stay area:{" "}
+                    <Text style={{ fontWeight: "900", color: theme.colors.text }}>{routeCityArea}</Text>
                   </Text>
                 </View>
               ) : null}
@@ -770,11 +895,13 @@ export default function TripBuildScreen() {
             </GlassCard>
           ) : null}
 
-          {/* PICKER MODE */}
+          {/* PICKER MODE (also in edit mode so you can add matches) */}
           {showPickerMode && !prefillLoading && !error ? (
             <GlassCard level="default">
-              <Text style={styles.h1}>Pick a match</Text>
-              <Text style={styles.hint}>Choose a match to start a trip around it.</Text>
+              <Text style={styles.h1}>{isEditing ? "Add a match" : "Pick a match"}</Text>
+              <Text style={styles.hint}>
+                {isEditing ? "Select another match to add it to this trip." : "Choose a match to start a trip around it."}
+              </Text>
 
               {/* League chips */}
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 12 }}>
@@ -843,7 +970,11 @@ export default function TripBuildScreen() {
                         setPlaceholderTbcIds(ids);
                         setError(null);
                       }}
-                      style={({ pressed }) => [styles.fxCard, selected && styles.fxCardSelected, { opacity: pressed ? 0.9 : 1 }]}
+                      style={({ pressed }) => [
+                        styles.fxCard,
+                        selected && styles.fxCardSelected,
+                        { opacity: pressed ? 0.9 : 1 },
+                      ]}
                     >
                       <View style={styles.fxTop}>
                         <View style={styles.fxLeft}>
@@ -902,12 +1033,20 @@ export default function TripBuildScreen() {
                             <Text style={styles.badgeText}>{weekendHint(r?.fixture?.date)}</Text>
                           </View>
                         ) : null}
+
+                        {isEditing && existingMatchIds.includes(String(id).trim()) ? (
+                          <View style={styles.badge}>
+                            <Text style={styles.badgeText}>Already in trip</Text>
+                          </View>
+                        ) : null}
                       </View>
 
                       <View style={styles.fxSelectRow}>
                         <View style={{ flex: 1 }} />
                         <View style={[styles.selectPill, selected && styles.selectPillActive]}>
-                          <Text style={[styles.selectPillText, selected && styles.selectPillTextActive]}>{selected ? "Selected" : "Select"}</Text>
+                          <Text style={[styles.selectPillText, selected && styles.selectPillTextActive]}>
+                            {selected ? "Selected" : "Select"}
+                          </Text>
                         </View>
                       </View>
                     </Pressable>
@@ -921,23 +1060,11 @@ export default function TripBuildScreen() {
                 </Pressable>
               ) : null}
 
-              {selectedFixture ? (
-                <>
-                  <Text style={styles.label}>Notes (optional)</Text>
-                  <TextInput
-                    value={notes}
-                    onChangeText={setNotes}
-                    placeholder="Anything you want to remember…"
-                    placeholderTextColor={theme.colors.textSecondary}
-                    style={styles.notes}
-                    multiline
-                  />
-                </>
-              ) : (
+              {!selectedFixture ? (
                 <View style={styles.pickEmptyHint}>
                   <Text style={styles.pickEmptyHintT}>Select a match to continue.</Text>
                 </View>
-              )}
+              ) : null}
             </GlassCard>
           ) : null}
 
@@ -947,8 +1074,16 @@ export default function TripBuildScreen() {
             disabled={saving || prefillLoading || !selectedFixture}
             style={[styles.saveBtn, (!selectedFixture || saving || prefillLoading) && { opacity: 0.55 }]}
           >
-            <Text style={styles.saveText}>{saving ? "Saving…" : isEditing ? "Update trip" : "Save trip"}</Text>
-            <Text style={styles.saveSub}>{selectedFixture ? "Keep links, notes, and bookings in one place" : "Select a match to continue"}</Text>
+            <Text style={styles.saveText}>
+              {saving ? "Saving…" : isEditing ? "Update trip" : "Save trip"}
+            </Text>
+            <Text style={styles.saveSub}>
+              {selectedFixture
+                ? isEditing
+                  ? (setAsPrimaryOnSave ? "This match will become the trip’s primary." : "This match will be added to the trip.")
+                  : "Keep links, notes, and bookings in one place"
+                : "Select a match to continue"}
+            </Text>
           </Pressable>
 
           {error ? <Text style={styles.err}>{error}</Text> : null}
@@ -1040,6 +1175,21 @@ const styles = StyleSheet.create({
 
   badgeConfirmed: { borderColor: "rgba(75,158,57,0.35)", backgroundColor: "rgba(75,158,57,0.10)" },
   badgeTextConfirmed: { color: "rgba(140,255,190,0.92)" },
+
+  primaryRow: {
+    marginTop: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.16)",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  primaryTitle: { color: theme.colors.text, fontWeight: "900", fontSize: 12 },
+  primarySub: { marginTop: 4, color: theme.colors.textSecondary, fontWeight: "800", fontSize: 11, lineHeight: 14 },
 
   infoBar: {
     marginTop: 12,
