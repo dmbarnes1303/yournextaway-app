@@ -283,6 +283,29 @@ function proCapHint(cap: number, tripCount: number) {
   return `Free plan cap reached (${cap}). Pro removes the cap.`;
 }
 
+/* -------------------------- dates helpers (inline edit) -------------------------- */
+
+function isIsoDateOnly(s: unknown) {
+  return typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(String(s).trim());
+}
+
+function isoAddDays(iso: string, deltaDays: number): string {
+  const d = parseIsoDateOnly(iso);
+  if (!d) return iso;
+  const x = new Date(d.getFullYear(), d.getMonth(), d.getDate() + deltaDays);
+  const yyyy = String(x.getFullYear());
+  const mm = String(x.getMonth() + 1).padStart(2, "0");
+  const dd = String(x.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function compareIsoDates(aIso: string, bIso: string): number | null {
+  const a = parseIsoDateOnly(aIso);
+  const b = parseIsoDateOnly(bIso);
+  if (!a || !b) return null;
+  return a.getTime() - b.getTime();
+}
+
 /* -------------------------------------------------------------------------- */
 /* screen                                                                      */
 /* -------------------------------------------------------------------------- */
@@ -316,6 +339,12 @@ export default function TripDetailScreen() {
 
   const [plan, setPlan] = useState<PlanValue>("not_set");
 
+  // Inline dates edit
+  const [datesEditing, setDatesEditing] = useState(false);
+  const [startDraft, setStartDraft] = useState("");
+  const [endDraft, setEndDraft] = useState("");
+  const [datesSaving, setDatesSaving] = useState(false);
+
   /* ---------------- load plan ---------------- */
 
   useEffect(() => {
@@ -346,7 +375,14 @@ export default function TripDetailScreen() {
     const sync = () => {
       const s = tripsStore.getState();
       setTripsLoaded(s.loaded);
-      setTrip(s.trips.find((x) => x.id === tripId) ?? null);
+      const t = s.trips.find((x) => x.id === tripId) ?? null;
+      setTrip(t);
+
+      // keep drafts in sync when NOT editing
+      if (t && !datesEditing) {
+        setStartDraft(String(t.startDate ?? ""));
+        setEndDraft(String(t.endDate ?? ""));
+      }
     };
 
     const unsub = tripsStore.subscribe(sync);
@@ -357,7 +393,8 @@ export default function TripDetailScreen() {
     }
 
     return () => unsub();
-  }, [tripId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tripId, datesEditing]);
 
   /* ---------------- load saved items ---------------- */
 
@@ -690,6 +727,87 @@ export default function TripDetailScreen() {
       });
     } catch {
       await openUntracked(args.url);
+    }
+  }
+
+  /* ---------------- inline date edit actions ---------------- */
+
+  const dateEditError = useMemo(() => {
+    if (!datesEditing) return null;
+    const a = String(startDraft ?? "").trim();
+    const b = String(endDraft ?? "").trim();
+    if (!isIsoDateOnly(a) || !isIsoDateOnly(b)) return "Use YYYY-MM-DD for both dates.";
+    const cmp = compareIsoDates(a, b);
+    if (cmp == null) return "Invalid dates.";
+    if (cmp > 0) return "End date must be on/after start date.";
+    return null;
+  }, [datesEditing, startDraft, endDraft]);
+
+  async function saveDates() {
+    if (!trip) return;
+    const a = String(startDraft ?? "").trim();
+    const b = String(endDraft ?? "").trim();
+
+    if (!isIsoDateOnly(a) || !isIsoDateOnly(b)) {
+      Alert.alert("Invalid dates", "Use YYYY-MM-DD for both dates.");
+      return;
+    }
+    const cmp = compareIsoDates(a, b);
+    if (cmp == null) {
+      Alert.alert("Invalid dates", "Please check the format.");
+      return;
+    }
+    if (cmp > 0) {
+      Alert.alert("Invalid dates", "End date must be on/after start date.");
+      return;
+    }
+
+    setDatesSaving(true);
+    try {
+      await tripsStore.updateTrip(trip.id, { startDate: a, endDate: b } as any);
+      setDatesEditing(false);
+      Keyboard.dismiss();
+    } catch {
+      Alert.alert("Couldn’t update dates", "Try again.");
+    } finally {
+      setDatesSaving(false);
+    }
+  }
+
+  function cancelDates() {
+    if (trip) {
+      setStartDraft(String(trip.startDate ?? ""));
+      setEndDraft(String(trip.endDate ?? ""));
+    }
+    setDatesEditing(false);
+    Keyboard.dismiss();
+  }
+
+  function bumpStart(delta: number) {
+    const a = String(startDraft ?? "").trim();
+    if (!isIsoDateOnly(a)) return;
+    const next = isoAddDays(a, delta);
+    setStartDraft(next);
+
+    // keep end at/after start
+    const b = String(endDraft ?? "").trim();
+    if (isIsoDateOnly(b)) {
+      const cmp = compareIsoDates(next, b);
+      if (cmp != null && cmp > 0) setEndDraft(next);
+    }
+  }
+
+  function bumpEnd(delta: number) {
+    const b = String(endDraft ?? "").trim();
+    if (!isIsoDateOnly(b)) return;
+    const next = isoAddDays(b, delta);
+    setEndDraft(next);
+
+    // keep end at/after start
+    const a = String(startDraft ?? "").trim();
+    if (isIsoDateOnly(a)) {
+      const cmp = compareIsoDates(a, next);
+      if (cmp != null && cmp > 0) setStartDraft(next);
     }
   }
 
@@ -1261,6 +1379,88 @@ export default function TripDetailScreen() {
                 <Text style={styles.cityTitle}>{cityName}</Text>
                 <Text style={styles.heroMeta}>{summaryLine(trip)}</Text>
                 <Text style={styles.heroMetaSmall}>{kickoffMeta.line}</Text>
+
+                {/* Inline dates editor */}
+                <View style={styles.datesWrap}>
+                  <View style={styles.datesHeader}>
+                    <Text style={styles.datesLabel}>Dates</Text>
+
+                    {!datesEditing ? (
+                      <Pressable onPress={() => setDatesEditing(true)} style={styles.datesEditBtn}>
+                        <Text style={styles.datesEditText}>Edit</Text>
+                      </Pressable>
+                    ) : (
+                      <Pressable onPress={cancelDates} style={styles.datesEditBtn}>
+                        <Text style={styles.datesEditText}>Cancel</Text>
+                      </Pressable>
+                    )}
+                  </View>
+
+                  {!datesEditing ? (
+                    <Text style={styles.datesLine}>
+                      {formatUkDateOnly(trip.startDate)} → {formatUkDateOnly(trip.endDate)}
+                    </Text>
+                  ) : (
+                    <View style={{ gap: 10 }}>
+                      <View style={styles.dateRow}>
+                        <Text style={styles.dateKicker}>Start</Text>
+                        <View style={styles.dateInputsRow}>
+                          <Pressable onPress={() => bumpStart(-1)} style={styles.dateStepBtn}>
+                            <Text style={styles.dateStepTxt}>−</Text>
+                          </Pressable>
+
+                          <TextInput
+                            value={startDraft}
+                            onChangeText={setStartDraft}
+                            placeholder="YYYY-MM-DD"
+                            placeholderTextColor={theme.colors.textSecondary}
+                            autoCapitalize="none"
+                            autoCorrect={false}
+                            style={styles.dateInput}
+                          />
+
+                          <Pressable onPress={() => bumpStart(1)} style={styles.dateStepBtn}>
+                            <Text style={styles.dateStepTxt}>+</Text>
+                          </Pressable>
+                        </View>
+                      </View>
+
+                      <View style={styles.dateRow}>
+                        <Text style={styles.dateKicker}>End</Text>
+                        <View style={styles.dateInputsRow}>
+                          <Pressable onPress={() => bumpEnd(-1)} style={styles.dateStepBtn}>
+                            <Text style={styles.dateStepTxt}>−</Text>
+                          </Pressable>
+
+                          <TextInput
+                            value={endDraft}
+                            onChangeText={setEndDraft}
+                            placeholder="YYYY-MM-DD"
+                            placeholderTextColor={theme.colors.textSecondary}
+                            autoCapitalize="none"
+                            autoCorrect={false}
+                            style={styles.dateInput}
+                          />
+
+                          <Pressable onPress={() => bumpEnd(1)} style={styles.dateStepBtn}>
+                            <Text style={styles.dateStepTxt}>+</Text>
+                          </Pressable>
+                        </View>
+                      </View>
+
+                      {dateEditError ? <Text style={styles.dateError}>{dateEditError}</Text> : null}
+
+                      <Pressable
+                        onPress={saveDates}
+                        disabled={datesSaving || !!dateEditError}
+                        style={[styles.dateSaveBtn, (datesSaving || !!dateEditError) && { opacity: 0.55 }]}
+                      >
+                        <Text style={styles.dateSaveText}>{datesSaving ? "Saving…" : "Save dates"}</Text>
+                        <Text style={styles.dateSaveSub}>Updates flights/hotels links instantly</Text>
+                      </Pressable>
+                    </View>
+                  )}
+                </View>
 
                 <View style={styles.heroTopRow}>
                   <View style={styles.statusPill}>
@@ -1845,6 +2045,67 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     fontSize: 12,
   },
+
+  /* Inline dates */
+  datesWrap: {
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+    borderRadius: 14,
+    padding: 12,
+  },
+  datesHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
+  datesLabel: { color: theme.colors.text, fontWeight: "900", fontSize: 12 },
+  datesEditBtn: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+    backgroundColor: "rgba(0,0,0,0.14)",
+  },
+  datesEditText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: 12 },
+  datesLine: { marginTop: 8, color: theme.colors.text, fontWeight: "900" },
+
+  dateRow: { gap: 6 },
+  dateKicker: { color: theme.colors.textTertiary, fontWeight: "900", fontSize: 11 },
+  dateInputsRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  dateStepBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+    backgroundColor: "rgba(0,0,0,0.14)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  dateStepTxt: { color: theme.colors.text, fontWeight: "900", fontSize: 18, marginTop: -1 },
+  dateInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    color: theme.colors.text,
+    fontWeight: "900",
+  },
+  dateError: { marginTop: 2, color: "rgba(255,120,120,0.95)", fontWeight: "900", fontSize: 12 },
+
+  dateSaveBtn: {
+    marginTop: 6,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(0,255,136,0.55)",
+    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.18)",
+  },
+  dateSaveText: { color: theme.colors.text, fontWeight: "900" },
+  dateSaveSub: { marginTop: 4, color: theme.colors.textSecondary, fontWeight: "800", fontSize: 11 },
 
   heroTopRow: {
     marginTop: 10,
