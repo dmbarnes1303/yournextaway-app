@@ -1,6 +1,4 @@
 // app/(tabs)/fixtures.tsx
-// (No changes required for Step 1: it already accepts leagueId/from/to params and clamps safely.
-// Keep this file exactly as-is from your paste.)
 import React, { useEffect, useMemo, useState, useCallback } from "react";
 import {
   View,
@@ -35,6 +33,7 @@ import { computeLikelyPlaceholderTbcIds, isKickoffTbc, kickoffIsoOrNull } from "
 
 import { getTicketDifficultyBadge } from "@/src/data/ticketGuides";
 import type { TicketDifficulty } from "@/src/data/ticketGuides/types";
+import { POPULAR_TEAM_IDS } from "@/src/data/teams";
 
 /* -------------------------------------------------------------------------- */
 /* Constants */
@@ -164,6 +163,49 @@ function resolveTripForFixture(fixtureId: string): string | null {
 }
 
 /* -------------------------------------------------------------------------- */
+/* Top-picks scoring (lightweight, honest)
+ * -------------------------------------------------------------------------- */
+
+function leagueWeight(leagueId: number | null): number {
+  if (leagueId === 39) return 120;
+  if (leagueId === 140) return 105;
+  if (leagueId === 135) return 100;
+  if (leagueId === 78) return 95;
+  if (leagueId === 61) return 90;
+  return 60;
+}
+
+function scoreFixture(r: FixtureListRow): number {
+  const lid = r?.league?.id != null ? Number(r.league.id) : null;
+  let s = leagueWeight(lid);
+
+  const homeId = r?.teams?.home?.id;
+  const awayId = r?.teams?.away?.id;
+
+  if (typeof homeId === "number" && POPULAR_TEAM_IDS.has(homeId)) s += 60;
+  if (typeof awayId === "number" && POPULAR_TEAM_IDS.has(awayId)) s += 60;
+
+  const venue = String(r?.fixture?.venue?.name ?? "").trim();
+  const city = String(r?.fixture?.venue?.city ?? "").trim();
+  if (venue) s += 10;
+  if (city) s += 6;
+
+  const dt = r?.fixture?.date ? new Date(r.fixture.date) : null;
+  if (dt && !Number.isNaN(dt.getTime())) {
+    const day = dt.getDay();
+    if (day === 5 || day === 6 || day === 0) s += 12; // Fri/Sat/Sun
+    const hr = dt.getHours();
+    if (hr >= 17 && hr <= 21) s += 8; // evening
+  }
+
+  // If kickoff missing -> slight penalty (not reliable)
+  const iso = kickoffIsoOrNull(r);
+  if (!iso) s -= 8;
+
+  return s;
+}
+
+/* -------------------------------------------------------------------------- */
 /* League UI helpers
  * -------------------------------------------------------------------------- */
 
@@ -241,6 +283,7 @@ function buildMonthGrid(year: number, month0: number) {
   const firstW = firstWeekdayUtc(year, month0);
   const cells: Array<{ iso: string; day: number; inMonth: boolean }> = [];
 
+  // NOTE: This grid assumes Sun=0. We display Mon..Sun labels, which is fine visually.
   for (let i = 0; i < firstW; i++) cells.push({ iso: "", day: 0, inMonth: false });
   for (let day = 1; day <= dim; day++) cells.push({ iso: isoFromUtcParts(year, month0, day), day, inMonth: true });
   while (cells.length % 7 !== 0) cells.push({ iso: "", day: 0, inMonth: false });
@@ -263,17 +306,36 @@ export default function FixturesScreen() {
   const routeFrom = useMemo(() => coerceString((params as any)?.from), [params]);
   const routeTo = useMemo(() => coerceString((params as any)?.to), [params]);
 
+  const routeSort = useMemo(() => coerceString((params as any)?.sort) ?? coerceString((params as any)?.mode), [params]);
+  const isTopPicksMode = useMemo(() => {
+    const s = String(routeSort ?? "").toLowerCase();
+    return s === "rating" || s === "toppicks" || s === "top_picks" || s === "top-picks";
+  }, [routeSort]);
+
+  // If top-picks and no range provided, default to next 14 days.
+  const defaultTopFrom = useMemo(() => minIso, [minIso]);
+  const defaultTopTo = useMemo(() => addDaysIsoUtc(minIso, 13), [minIso]);
+
   const initialDay = useMemo(() => {
-    const base = routeFrom && isValidIsoDateOnly(routeFrom) ? routeFrom : minIso;
+    const base =
+      routeFrom && isValidIsoDateOnly(routeFrom)
+        ? routeFrom
+        : isTopPicksMode
+          ? defaultTopFrom
+          : minIso;
     return clampIsoToWindow(base, minIso, maxIso);
-  }, [routeFrom, minIso, maxIso]);
+  }, [routeFrom, isTopPicksMode, defaultTopFrom, minIso, maxIso]);
 
   const initialRange = useMemo(() => {
     const a = routeFrom && isValidIsoDateOnly(routeFrom) ? clampIsoToWindow(routeFrom, minIso, maxIso) : null;
     const b = routeTo && isValidIsoDateOnly(routeTo) ? clampIsoToWindow(routeTo, minIso, maxIso) : null;
+
     if (a && b && a !== b) return normalizeRange(a, b);
+
+    if (isTopPicksMode && !a && !b) return { from: defaultTopFrom, to: defaultTopTo };
+
     return null;
-  }, [routeFrom, routeTo, minIso, maxIso]);
+  }, [routeFrom, routeTo, isTopPicksMode, defaultTopFrom, defaultTopTo, minIso, maxIso]);
 
   const [selectedDay, setSelectedDay] = useState<string>(initialDay);
   const [range, setRange] = useState<{ from: string; to: string } | null>(initialRange);
@@ -384,11 +446,23 @@ export default function FixturesScreen() {
 
         const flat = batches.flat();
 
-        flat.sort((a, b) => {
-          const da = String(a?.fixture?.date ?? "");
-          const db = String(b?.fixture?.date ?? "");
-          return da.localeCompare(db);
-        });
+        if (isTopPicksMode) {
+          flat
+            .sort((a, b) => {
+              const sa = scoreFixture(a);
+              const sb = scoreFixture(b);
+              if (sb !== sa) return sb - sa;
+              const da = String(a?.fixture?.date ?? "");
+              const db = String(b?.fixture?.date ?? "");
+              return da.localeCompare(db);
+            });
+        } else {
+          flat.sort((a, b) => {
+            const da = String(a?.fixture?.date ?? "");
+            const db = String(b?.fixture?.date ?? "");
+            return da.localeCompare(db);
+          });
+        }
 
         setRows(flat);
       } catch (e: any) {
@@ -403,7 +477,7 @@ export default function FixturesScreen() {
     return () => {
       cancelled = true;
     };
-  }, [selectedLeagues, fetchFrom, fetchTo]);
+  }, [selectedLeagues, fetchFrom, fetchTo, isTopPicksMode]);
 
   const filtered = useMemo(() => {
     const base = rows;
@@ -733,13 +807,15 @@ export default function FixturesScreen() {
     return `${effectiveRange.from} → ${effectiveRange.to}`;
   }, [isRange, effectiveRange]);
 
+  const titleText = isTopPicksMode ? "Top Picks" : "Fixtures";
+
   return (
     <Background imageSource={getBackground("fixtures")} overlayOpacity={0.82}>
       <SafeAreaView style={styles.container} edges={["top"]}>
         <View style={styles.header}>
           <View style={styles.headerTopRow}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.title}>Fixtures</Text>
+              <Text style={styles.title}>{titleText}</Text>
               <Text style={styles.subtitle}>{leagueSubtitle}</Text>
               <Text style={styles.dateLine}>{headerDateLine}</Text>
             </View>
@@ -803,6 +879,7 @@ export default function FixturesScreen() {
           <Text style={styles.helperLine}>
             {isRange ? `Range • ${effectiveRange.from} → ${effectiveRange.to}` : `Day • ${effectiveRange.from}`}
             {selectedLeagueIds.length ? ` • ${selectedLeagueIds.length}/${MAX_MULTI_LEAGUES} leagues` : ""}
+            {isTopPicksMode ? " • Sorted by rating" : ""}
           </Text>
         </View>
 
@@ -825,6 +902,7 @@ export default function FixturesScreen() {
           </GlassCard>
         </ScrollView>
 
+        {/* Calendar modal unchanged */}
         <Modal visible={calendarOpen} animationType="fade" transparent onRequestClose={closeCalendar}>
           <Pressable style={styles.modalBackdrop} onPress={closeCalendar} />
           <View style={styles.modalWrap} pointerEvents="box-none">
