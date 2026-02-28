@@ -1,6 +1,15 @@
 // app/match/[id].tsx
-import React, { useEffect, useMemo, useState, useCallback } from "react";
-import { View, Text, StyleSheet, ScrollView, Pressable, Alert, ActivityIndicator, Linking } from "react-native";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  Pressable,
+  ActivityIndicator,
+  Alert,
+  Linking,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
@@ -8,28 +17,22 @@ import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
 import EmptyState from "@/src/components/EmptyState";
 import { theme } from "@/src/constants/theme";
-import { getAffiliateLinks } from "@/src/services/affiliateLinks";
 
-import tripsStore from "@/src/state/trips";
 import fixturesStore from "@/src/state/fixtures";
+import tripsStore from "@/src/state/trips";
 
-import { resolveSe365Event, buildTicketsGoogleSearch } from "@/src/services/se365";
+import { resolveSe365EventForFixture } from "@/src/services/se365";
 
-type MatchParams = {
-  id?: string;
-  fromTripId?: string;
-};
-
-function cleanString(v: any) {
-  return typeof v === "string" ? v.trim() : String(v ?? "").trim();
+function enc(s: string) {
+  return encodeURIComponent(String(s ?? ""));
 }
 
-async function safeOpenUrl(url: string) {
-  const u = cleanString(url);
-  if (!u || !/^https?:\/\//i.test(u)) return false;
+async function safeOpenUrl(url: string): Promise<boolean> {
+  const u = String(url ?? "").trim();
+  if (!u) return false;
 
   try {
-    // canOpenURL is flaky on Android for some https links; openURL is enough
+    // canOpenURL can be flaky on Android for http(s), so just attempt open.
     await Linking.openURL(u);
     return true;
   } catch {
@@ -39,157 +42,118 @@ async function safeOpenUrl(url: string) {
 
 export default function MatchScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<MatchParams>();
+  const params = useLocalSearchParams<{ id?: string }>();
 
-  const fixtureId = useMemo(() => cleanString(params?.id), [params?.id]);
-  const fromTripId = useMemo(() => cleanString(params?.fromTripId), [params?.fromTripId]);
+  const fixtureId = useMemo(() => String(params.id ?? "").trim(), [params.id]);
 
   const [loading, setLoading] = useState(true);
-  const [row, setRow] = useState<any | null>(null);
+  const [resolvingTickets, setResolvingTickets] = useState(false);
 
-  const [ticketsResolving, setTicketsResolving] = useState(false);
-  const [se365Url, setSe365Url] = useState<string | null>(null);
-  const [se365EventId, setSe365EventId] = useState<number | null>(null);
+  const match = useMemo(() => {
+    if (!fixtureId) return null;
+    return fixturesStore.getFixtureById(fixtureId);
+  }, [fixtureId]);
+
+  const trip = useMemo(() => {
+    if (!fixtureId) return null;
+    return tripsStore.getTripByMatchId(fixtureId);
+  }, [fixtureId]);
 
   useEffect(() => {
-    let mounted = true;
+    let alive = true;
 
     (async () => {
       try {
         await fixturesStore.load();
-        const f = fixturesStore.getFixtureById(fixtureId);
-        if (!mounted) return;
-        setRow(f ?? null);
-      } catch {
-        if (!mounted) return;
-        setRow(null);
-      } finally {
-        if (!mounted) return;
-        setLoading(false);
-      }
+      } catch {}
+      if (!alive) return;
+      setLoading(false);
     })();
 
     return () => {
-      mounted = false;
+      alive = false;
     };
-  }, [fixtureId]);
+  }, []);
 
-  const fixture = row?.fixture;
-  const league = row?.league;
-  const teams = row?.teams;
-  const venue = row?.fixture?.venue;
+  const kickoffText = useMemo(() => {
+    const iso = match?.kickoffIso;
+    if (!iso) return "TBC";
+    // Keep simple: UI already shows date/time elsewhere; don’t over-format here.
+    return iso.replace("T", " ").split("+")[0];
+  }, [match?.kickoffIso]);
 
-  const homeName = teams?.home?.name || "";
-  const awayName = teams?.away?.name || "";
-  const kickoffIso = fixture?.date || fixture?.kickoff || fixture?.start || "";
+  const openTickets = useCallback(async () => {
+    if (!match) return;
 
-  const { country, startDate, endDate, ticketsUrl, mapsUrl, transfersUrl } = useMemo(() => {
-    // getAffiliateLinks expects country + dates.
-    // We use venue city/country if available; otherwise blank.
-    const c = league?.country || "";
-    // if your date fields differ, we keep it safe.
-    const sd = String(kickoffIso).slice(0, 10) || "";
-    const ed = sd || "";
-    return getAffiliateLinks({
-      city: venue?.city || "",
-      country: c,
-      startDate: sd,
-      endDate: ed,
-    });
-  }, [league?.country, venue?.city, kickoffIso]);
-
-  const kickoffLabel = useMemo(() => {
-    const d = fixture?.date;
-    if (!d) return "—";
-    try {
-      const date = new Date(d);
-      return `${date.toLocaleDateString()} ${date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
-    } catch {
-      return String(d);
-    }
-  }, [fixture?.date]);
-
-  const resolveTickets = useCallback(async () => {
-    if (!row) return;
-
-    setTicketsResolving(true);
-    try {
-      // If we already have it on the trip snapshot, use that first.
-      // Otherwise resolve from SE365 API.
-      const tripId = fromTripId || tripsStore.getTripIdByMatchId(fixtureId) || "";
-      const trip = tripId ? tripsStore.getState().trips.find((t: any) => t.id === tripId) : null;
-
-      const snapEventId = trip?.sportsevents365EventId;
-      // If snapshot has ID, we can still resolve URL by calling SE365 details, BUT
-      // our resolver already handles fetching eventUrl when needed.
-      const resolved = await resolveSe365Event({
-        leagueId: league?.id,
-        homeName,
-        awayName,
-        kickoffIso,
-      });
-
-      if (resolved?.eventUrl) {
-        setSe365Url(resolved.eventUrl);
-        setSe365EventId(resolved.eventId);
-
-        // Persist eventId to trip snapshot so future opens are instant.
-        if (tripId && (!snapEventId || Number(snapEventId) !== resolved.eventId)) {
-          await tripsStore.updateTrip(tripId, {
-            sportsevents365EventId: resolved.eventId,
-          });
-        }
-
-        return resolved.eventUrl;
-      }
-
-      // If resolver failed, fallback to generic ticketsUrl (affiliate base) if present
-      // or a Google search query.
-      const google = buildTicketsGoogleSearch(homeName, awayName, kickoffIso);
-      setSe365Url(null);
-      setSe365EventId(snapEventId ? Number(snapEventId) : null);
-      return ticketsUrl || google;
-    } catch {
-      const google = buildTicketsGoogleSearch(homeName, awayName, kickoffIso);
-      setSe365Url(null);
-      return ticketsUrl || google;
-    } finally {
-      setTicketsResolving(false);
-    }
-  }, [row, fixtureId, fromTripId, league?.id, homeName, awayName, kickoffIso, ticketsUrl]);
-
-  const onOpenTickets = useCallback(async () => {
-    if (!row) return;
-
-    const url = se365Url || (await resolveTickets());
-    const ok = await safeOpenUrl(url);
-
-    if (!ok) {
-      Alert.alert("Couldn't open tickets", "The tickets link couldn't be opened on this device.");
-    } else {
-      // Optional: you can add “Pending” save-to-trip logic here later.
-    }
-  }, [row, se365Url, resolveTickets]);
-
-  const onOpenDirections = useCallback(async () => {
-    const city = cleanString(venue?.city);
-    const name = cleanString(venue?.name);
-    const q = encodeURIComponent([name, city].filter(Boolean).join(" "));
-    const url = q ? `https://www.google.com/maps/search/?api=1&query=${q}` : mapsUrl;
-
-    const ok = await safeOpenUrl(url);
-    if (!ok) Alert.alert("Couldn't open directions", "The directions link couldn't be opened.");
-  }, [venue?.city, venue?.name, mapsUrl]);
-
-  const onBackToTrip = useCallback(() => {
-    if (fromTripId) {
-      router.push({ pathname: "/trip/[id]", params: { id: fromTripId } });
+    // 1) If already resolved & cached on the trip, use it.
+    const cached = String((trip as any)?.sportsevents365EventUrl ?? "").trim();
+    if (cached) {
+      const ok = await safeOpenUrl(cached);
+      if (!ok) Alert.alert("Couldn’t open tickets");
       return;
     }
-    const tripId = tripsStore.getTripIdByMatchId(fixtureId);
-    if (tripId) router.push({ pathname: "/trip/[id]", params: { id: tripId } });
-    else router.back();
-  }, [fromTripId, fixtureId, router]);
+
+    // 2) Resolve via SE365 API (exact event page)
+    setResolvingTickets(true);
+    try {
+      const resolved = await resolveSe365EventForFixture({
+        leagueId: match.leagueId,
+        kickoffIso: match.kickoffIso,
+        homeName: match.homeName,
+        awayName: match.awayName,
+      });
+
+      if (!resolved) {
+        // fallback: still offer a search rather than dead-end
+        const query = `${match.homeName ?? ""} vs ${match.awayName ?? ""} tickets`;
+        const url = `https://www.google.com/search?q=${enc(query)}`;
+        const ok = await safeOpenUrl(url);
+        if (!ok) Alert.alert("Couldn’t open tickets");
+        return;
+      }
+
+      // 3) Persist onto trip snapshot so next time is instant
+      if (trip?.id) {
+        try {
+          await tripsStore.updateTrip(trip.id, {
+            sportsevents365EventId: resolved.eventId,
+            sportsevents365EventUrl: resolved.eventUrl,
+          });
+        } catch {}
+      }
+
+      const ok = await safeOpenUrl(resolved.eventUrl);
+      if (!ok) Alert.alert("Couldn’t open tickets");
+    } catch (e: any) {
+      Alert.alert("Tickets unavailable", e?.message ? String(e.message) : "Couldn’t resolve tickets for this match.");
+    } finally {
+      setResolvingTickets(false);
+    }
+  }, [match, trip]);
+
+  const openOfficialClub = useCallback(async () => {
+    if (!match) return;
+    const query = `${match.homeName ?? ""} official tickets`;
+    const url = `https://www.google.com/search?q=${enc(query)}`;
+    const ok = await safeOpenUrl(url);
+    if (!ok) Alert.alert("Couldn’t open link");
+  }, [match]);
+
+  const openGoogleTickets = useCallback(async () => {
+    if (!match) return;
+    const query = `${match.homeName ?? ""} vs ${match.awayName ?? ""} tickets`;
+    const url = `https://www.google.com/search?q=${enc(query)}`;
+    const ok = await safeOpenUrl(url);
+    if (!ok) Alert.alert("Couldn’t open link");
+  }, [match]);
+
+  const openDirections = useCallback(async () => {
+    if (!match) return;
+    const q = `${match.venueName ?? ""} ${match.venueCity ?? ""}`.trim();
+    const url = `https://www.google.com/maps/search/?api=1&query=${enc(q)}`;
+    const ok = await safeOpenUrl(url);
+    if (!ok) Alert.alert("Couldn’t open maps");
+  }, [match]);
 
   if (loading) {
     return (
@@ -197,21 +161,22 @@ export default function MatchScreen() {
         <SafeAreaView style={styles.safe}>
           <View style={styles.center}>
             <ActivityIndicator />
+            <Text style={styles.loadingText}>Loading match…</Text>
           </View>
         </SafeAreaView>
       </Background>
     );
   }
 
-  if (!row) {
+  if (!match) {
     return (
       <Background>
         <SafeAreaView style={styles.safe}>
           <EmptyState
             title="Match not found"
-            subtitle="We couldn't load this fixture."
-            ctaLabel="Back"
-            onCta={() => router.back()}
+            subtitle="This fixture isn’t available right now."
+            primaryActionText="Back"
+            onPrimaryAction={() => router.back()}
           />
         </SafeAreaView>
       </Background>
@@ -221,74 +186,63 @@ export default function MatchScreen() {
   return (
     <Background>
       <SafeAreaView style={styles.safe}>
-        <ScrollView contentContainerStyle={styles.container}>
+        <ScrollView contentContainerStyle={styles.content}>
           <Text style={styles.title}>Tickets + logistics</Text>
 
-          <GlassCard style={styles.card}>
-            <Text style={styles.kicker}>MATCH (FROM TRIP)</Text>
-            <Text style={styles.h1}>{homeName} vs {awayName}</Text>
+          <GlassCard style={styles.matchCard}>
+            <Text style={styles.sectionLabel}>MATCH (FROM TRIP)</Text>
 
-            <View style={styles.metaRow}>
-              <Text style={styles.metaLabel}>Kickoff:</Text>
-              <Text style={styles.metaValue}>{kickoffLabel}</Text>
+            <Text style={styles.matchTitle}>
+              {match.homeName} vs {match.awayName}
+            </Text>
+
+            <View style={styles.badgeRow}>
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>{match.kickoffTbc ? "TBC" : "Confirmed"}</Text>
+              </View>
             </View>
 
-            <View style={styles.metaRow}>
-              <Text style={styles.metaLabel}>Venue:</Text>
-              <Text style={styles.metaValue}>
-                {venue?.name || "—"}{venue?.city ? ` • ${venue.city}` : ""}
-              </Text>
-            </View>
+            <Text style={styles.meta}>Kickoff: {kickoffText}</Text>
+            <Text style={styles.meta}>
+              Venue: {match.venueName ?? "TBC"} • {match.venueCity ?? "TBC"}
+            </Text>
 
-            <Pressable style={styles.backBtn} onPress={onBackToTrip}>
-              <Text style={styles.backBtnText}>Back to trip</Text>
-            </Pressable>
+            {trip?.id ? (
+              <Pressable style={styles.backBtn} onPress={() => router.push(`/trip/${trip.id}`)}>
+                <Text style={styles.backBtnText}>Back to trip</Text>
+              </Pressable>
+            ) : null}
           </GlassCard>
 
           <GlassCard style={styles.gridCard}>
-            <Text style={styles.sectionTitle}>Tickets</Text>
+            <Text style={styles.gridTitle}>Tickets</Text>
 
             <View style={styles.grid}>
-              <Pressable style={styles.tile} onPress={onOpenTickets} disabled={ticketsResolving}>
+              <Pressable style={styles.tile} onPress={openTickets} disabled={resolvingTickets}>
                 <Text style={styles.tileTitle}>Tickets</Text>
-                <Text style={styles.tileSub}>Sportsevents365</Text>
-                {ticketsResolving ? <ActivityIndicator style={{ marginTop: 10 }} /> : null}
-                {se365EventId ? (
-                  <Text style={styles.hint}>Linked to event #{se365EventId}</Text>
-                ) : null}
+                <Text style={styles.tileSub}>
+                  {resolvingTickets ? "Finding event…" : "Sportsevents365"}
+                </Text>
               </Pressable>
 
-              <Pressable
-                style={styles.tile}
-                onPress={async () => {
-                  const google = buildTicketsGoogleSearch(homeName, awayName, kickoffIso);
-                  const ok = await safeOpenUrl(google);
-                  if (!ok) Alert.alert("Couldn't open search", "The search link couldn't be opened.");
-                }}
-              >
+              <Pressable style={styles.tile} onPress={openOfficialClub}>
+                <Text style={styles.tileTitle}>Official club</Text>
+                <Text style={styles.tileSub}>Search</Text>
+              </Pressable>
+
+              <Pressable style={styles.tile} onPress={openGoogleTickets}>
                 <Text style={styles.tileTitle}>Search tickets</Text>
                 <Text style={styles.tileSub}>Google</Text>
               </Pressable>
 
-              <Pressable style={styles.tile} onPress={onOpenDirections}>
+              <Pressable style={styles.tile} onPress={openDirections}>
                 <Text style={styles.tileTitle}>Directions</Text>
                 <Text style={styles.tileSub}>Google Maps</Text>
               </Pressable>
-
-              <Pressable
-                style={styles.tile}
-                onPress={async () => {
-                  const ok = await safeOpenUrl(transfersUrl);
-                  if (!ok) Alert.alert("Couldn't open transfers", "The transfers link couldn't be opened.");
-                }}
-              >
-                <Text style={styles.tileTitle}>Transfers</Text>
-                <Text style={styles.tileSub}>Kiwitaxi</Text>
-              </Pressable>
             </View>
 
-            <Text style={styles.disclaimer}>
-              Ticket links opened from here can be saved into your Trip Workspace later (Pending → Booked).
+            <Text style={styles.hint}>
+              Ticket links you open from here are saved into your Trip Workspace as Pending.
             </Text>
           </GlassCard>
         </ScrollView>
@@ -299,50 +253,48 @@ export default function MatchScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },
-  container: { padding: 16, paddingBottom: 40 },
+  content: { padding: 16, paddingBottom: 40 },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
+  loadingText: { marginTop: 8, color: theme.textSecondary },
 
-  title: {
-    color: theme.colors.text,
-    fontSize: 20,
-    fontWeight: "700",
-    marginBottom: 12,
+  title: { fontSize: 22, fontWeight: "700", color: theme.textPrimary, marginBottom: 12 },
+
+  matchCard: { padding: 16, marginBottom: 12 },
+  sectionLabel: { color: theme.textSecondary, fontSize: 12, fontWeight: "700", letterSpacing: 0.6 },
+  matchTitle: { marginTop: 10, fontSize: 20, fontWeight: "800", color: theme.textPrimary },
+  badgeRow: { flexDirection: "row", marginTop: 10 },
+  badge: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.08)",
   },
-
-  card: { padding: 16, marginBottom: 12 },
-  kicker: { color: theme.colors.muted, fontSize: 12, fontWeight: "700", marginBottom: 8 },
-  h1: { color: theme.colors.text, fontSize: 18, fontWeight: "800", marginBottom: 10 },
-
-  metaRow: { flexDirection: "row", gap: 8, marginTop: 6, flexWrap: "wrap" },
-  metaLabel: { color: theme.colors.muted, fontWeight: "700" },
-  metaValue: { color: theme.colors.text },
+  badgeText: { color: theme.textPrimary, fontWeight: "700", fontSize: 12 },
+  meta: { marginTop: 8, color: theme.textSecondary },
 
   backBtn: {
     marginTop: 14,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    borderRadius: 12,
+    borderRadius: 14,
     paddingVertical: 12,
     alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(0,255,150,0.25)",
   },
-  backBtnText: { color: theme.colors.text, fontWeight: "800" },
+  backBtnText: { color: theme.textPrimary, fontWeight: "700" },
 
   gridCard: { padding: 16 },
-  sectionTitle: { color: theme.colors.text, fontSize: 16, fontWeight: "800", marginBottom: 10 },
-
+  gridTitle: { color: theme.textPrimary, fontSize: 16, fontWeight: "800", marginBottom: 12 },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
   tile: {
     width: "48%",
-    borderRadius: 14,
     padding: 14,
+    borderRadius: 16,
+    backgroundColor: "rgba(255,255,255,0.06)",
     borderWidth: 1,
-    borderColor: theme.colors.border,
-    backgroundColor: "rgba(255,255,255,0.03)",
+    borderColor: "rgba(255,255,255,0.08)",
   },
-  tileTitle: { color: theme.colors.text, fontWeight: "800", fontSize: 14 },
-  tileSub: { color: theme.colors.muted, marginTop: 4 },
+  tileTitle: { color: theme.textPrimary, fontWeight: "800", fontSize: 14 },
+  tileSub: { marginTop: 6, color: theme.textSecondary, fontSize: 12 },
 
-  hint: { color: theme.colors.muted, marginTop: 10, fontSize: 12 },
-
-  disclaimer: { color: theme.colors.muted, marginTop: 12, fontSize: 12, lineHeight: 16 },
+  hint: { marginTop: 12, color: theme.textSecondary, fontSize: 12, lineHeight: 16 },
 });
