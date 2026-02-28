@@ -5,7 +5,7 @@ import storage from "@/src/services/storage";
  * Persistence adapter for Zustand stores.
  *
  * IMPORTANT:
- * - Must match the actual storage API we ship in src/services/storage.ts
+ * - Must match src/services/storage.ts
  * - Best-effort: never crash the app if storage fails
  *
  * storage.ts exports:
