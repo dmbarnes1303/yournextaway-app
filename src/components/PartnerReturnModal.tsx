@@ -2,149 +2,110 @@
 import React, { useMemo, useState } from "react";
 import { View, Text, Pressable, StyleSheet, Modal, ActivityIndicator } from "react-native";
 
-import savedItemsStore from "@/src/state/savedItems";
-import type { SavedItemType } from "@/src/core/savedItemTypes";
-import type { LastPartnerClick } from "@/src/services/partnerClicks";
-
+import { theme } from "@/src/constants/theme";
 import { attachTicketProof } from "@/src/services/ticketAttachment";
+import type { LastPartnerClick } from "@/src/services/partnerClicks";
+import { getPartnerOrNull } from "@/src/core/partners";
 
 type Props = {
   visible: boolean;
   itemId: string | null;
-
-  /**
-   * Optional context (nice-to-have for UI text),
-   * comes from partnerClicks watcher.
-   */
   click?: LastPartnerClick | null;
 
-  // Actions
   onBooked: (itemId: string) => Promise<void>;
   onNotBooked: (itemId: string) => Promise<void>;
-  onNotNow: (itemId?: string) => Promise<void>;
+  onNotNow: (itemId: string) => Promise<void>;
+
   onClose: () => void;
 };
 
-export default function PartnerReturnModal({
-  visible,
-  itemId,
-  click,
-  onBooked,
-  onNotBooked,
-  onNotNow,
-  onClose,
-}: Props) {
-  const [loading, setLoading] = useState<null | "booked" | "not_booked" | "not_now">(null);
+function shortDomain(url?: string) {
+  if (!url) return "";
+  try {
+    const u = new URL(url);
+    return u.hostname.replace(/^www\./, "");
+  } catch {
+    return "";
+  }
+}
 
-  const item = useMemo(() => {
-    const id = String(itemId ?? "").trim();
-    if (!id) return null;
-    return savedItemsStore.getState().items.find((x) => x.id === id) ?? null;
-  }, [itemId]);
+export default function PartnerReturnModal({ visible, itemId, click, onBooked, onNotBooked, onNotNow, onClose }: Props) {
+  const [loading, setLoading] = useState<"booked" | "notBooked" | "notNow" | null>(null);
 
-  const itemType: SavedItemType | null = (item?.type as any) ?? null;
-
-  const title = useMemo(() => {
-    const partner = String(click?.partnerId ?? "").trim();
-    if (partner) return "Did you complete booking?";
-    return "Did you complete booking?";
+  const meta = useMemo(() => {
+    const partnerName = click?.partnerId ? getPartnerOrNull(click.partnerId)?.name : null;
+    const domain = shortDomain(click?.url);
+    const bits = [partnerName, domain].filter(Boolean);
+    return bits.length ? bits.join(" • ") : null;
   }, [click]);
 
-  const subtitle = useMemo(() => {
-    // Keep copy simple. The statuses are what matters.
-    if (item?.title) return item.title;
-    return "We’ll keep your plan organised in your Trip Hub.";
-  }, [item?.title]);
+  async function run(kind: "booked" | "notBooked" | "notNow") {
+    if (!itemId) return;
 
-  async function handleBooked() {
-    const id = String(itemId ?? "").trim();
-    if (!id || loading) return;
-
-    setLoading("booked");
+    setLoading(kind);
     try {
-      await onBooked(id);
+      if (kind === "booked") {
+        await onBooked(itemId);
 
-      // Proof attachment: only for match tickets (Phase 1)
-      if (itemType === "tickets") {
-        await attachTicketProof(id);
+        // Ask for attachment proof (Phase 1).
+        // NOTE: current implementation is ticket-focused. If you later generalise attachments,
+        // swap this to a generic "attachProof" service.
+        await attachTicketProof(itemId);
+
+        onClose();
+        return;
       }
 
+      if (kind === "notBooked") {
+        await onNotBooked(itemId);
+        onClose();
+        return;
+      }
+
+      // notNow
+      await onNotNow(itemId);
       onClose();
     } finally {
       setLoading(null);
     }
   }
 
-  async function handleNotBooked() {
-    const id = String(itemId ?? "").trim();
-    if (!id || loading) return;
-
-    setLoading("not_booked");
-    try {
-      await onNotBooked(id);
-      onClose();
-    } finally {
-      setLoading(null);
-    }
-  }
-
-  async function handleNotNow() {
-    const id = String(itemId ?? "").trim();
-    if (loading) return;
-
-    setLoading("not_now");
-    try {
-      // Keep pending; just dismiss prompt.
-      await onNotNow(id || undefined);
-      onClose();
-    } finally {
-      setLoading(null);
-    }
-  }
-
-  const isBusy = !!loading;
+  const busy = loading !== null;
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.backdrop}>
         <View style={styles.card}>
-          <Text style={styles.title}>{title}</Text>
-          <Text style={styles.sub}>{subtitle}</Text>
+          <Text style={styles.title}>Did you complete booking?</Text>
+          {meta ? <Text style={styles.meta}>{meta}</Text> : null}
 
-          {isBusy ? (
+          {busy ? (
             <View style={styles.loadingRow}>
               <ActivityIndicator />
               <Text style={styles.loadingText}>
-                {loading === "booked"
-                  ? "Saving as booked…"
-                  : loading === "not_booked"
-                  ? "Moving to saved…"
-                  : "Keeping it pending…"}
+                {loading === "booked" ? "Saving to Wallet…" : loading === "notBooked" ? "Updating…" : "Dismissing…"}
               </Text>
             </View>
           ) : (
-            <View style={styles.row}>
-              <Pressable style={styles.noBtn} onPress={handleNotBooked}>
-                <Text style={styles.noText}>No</Text>
-                <Text style={styles.small}>Didn’t book</Text>
+            <View style={styles.actions}>
+              <Pressable style={[styles.btn, styles.btnNeutral]} onPress={() => run("notNow")}>
+                <Text style={styles.btnNeutralText}>Not now</Text>
               </Pressable>
 
-              <Pressable style={styles.maybeBtn} onPress={handleNotNow}>
-                <Text style={styles.maybeText}>Not now</Text>
-                <Text style={styles.small}>Keep pending</Text>
+              <Pressable style={[styles.btn, styles.btnNo]} onPress={() => run("notBooked")}>
+                <Text style={styles.btnNoText}>No, didn’t book</Text>
               </Pressable>
 
-              <Pressable style={styles.yesBtn} onPress={handleBooked}>
-                <Text style={styles.yesText}>Yes</Text>
-                <Text style={styles.smallYes}>Booked</Text>
+              <Pressable style={[styles.btn, styles.btnYes]} onPress={() => run("booked")}>
+                <Text style={styles.btnYesText}>Yes, booked</Text>
               </Pressable>
             </View>
           )}
 
-          {!isBusy ? (
-            <Pressable onPress={onClose} style={styles.dismiss}>
-              <Text style={styles.dismissText}>Close</Text>
-            </Pressable>
+          {!busy ? (
+            <Text style={styles.hint}>
+              Tip: “Not now” keeps it Pending. “No” moves it to Saved so it doesn’t keep nagging you.
+            </Text>
           ) : null}
         </View>
       </View>
@@ -155,111 +116,72 @@ export default function PartnerReturnModal({
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.7)",
+    backgroundColor: "rgba(0,0,0,0.72)",
     justifyContent: "center",
     padding: 24,
   },
   card: {
     backgroundColor: "#111",
     borderRadius: 16,
-    padding: 20,
-    gap: 12,
+    padding: 18,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
+    borderColor: "rgba(255,255,255,0.10)",
+    gap: 10,
   },
   title: {
     color: "#fff",
     fontWeight: "900",
     fontSize: 16,
   },
-  sub: {
-    color: "rgba(255,255,255,0.75)",
-    fontWeight: "700",
+  meta: {
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
     fontSize: 12,
-    lineHeight: 16,
   },
-
   loadingRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    paddingVertical: 10,
+    paddingTop: 6,
+    paddingBottom: 2,
   },
   loadingText: {
-    color: "rgba(255,255,255,0.75)",
+    color: theme.colors.textSecondary,
     fontWeight: "800",
-    fontSize: 12,
   },
-
-  row: {
-    flexDirection: "row",
-    gap: 10,
-    marginTop: 8,
-  },
-
-  noBtn: {
-    flex: 1,
-    backgroundColor: "rgba(255,255,255,0.10)",
-    padding: 12,
-    borderRadius: 10,
-    alignItems: "center",
-    gap: 2,
-  },
-  noText: {
-    color: "#fff",
-    fontWeight: "900",
-  },
-
-  maybeBtn: {
-    flex: 1,
-    backgroundColor: "rgba(255,200,0,0.10)",
-    padding: 12,
-    borderRadius: 10,
-    alignItems: "center",
-    gap: 2,
-    borderWidth: 1,
-    borderColor: "rgba(255,200,0,0.18)",
-  },
-  maybeText: {
-    color: "rgba(255,220,140,0.95)",
-    fontWeight: "900",
-  },
-
-  yesBtn: {
-    flex: 1,
-    backgroundColor: "rgba(0,255,136,0.18)",
-    padding: 12,
-    borderRadius: 10,
-    alignItems: "center",
-    gap: 2,
-    borderWidth: 1,
-    borderColor: "rgba(0,255,136,0.22)",
-  },
-  yesText: {
-    color: "#00FF88",
-    fontWeight: "900",
-  },
-
-  small: {
-    color: "rgba(255,255,255,0.65)",
-    fontWeight: "800",
-    fontSize: 11,
-  },
-  smallYes: {
-    color: "rgba(0,255,136,0.85)",
-    fontWeight: "800",
-    fontSize: 11,
-  },
-
-  dismiss: {
+  actions: {
     marginTop: 6,
-    alignSelf: "center",
-    paddingVertical: 10,
-    paddingHorizontal: 14,
+    gap: 10,
   },
-  dismissText: {
-    color: "rgba(255,255,255,0.55)",
+  btn: {
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: "center",
+    borderWidth: 1,
+  },
+  btnNeutral: {
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderColor: "rgba(255,255,255,0.14)",
+  },
+  btnNeutralText: { color: "#fff", fontWeight: "900" },
+
+  btnNo: {
+    backgroundColor: "rgba(255,80,80,0.10)",
+    borderColor: "rgba(255,80,80,0.35)",
+  },
+  btnNoText: { color: "rgba(255,140,140,1)", fontWeight: "900" },
+
+  btnYes: {
+    backgroundColor: "rgba(0,255,136,0.16)",
+    borderColor: "rgba(0,255,136,0.45)",
+  },
+  btnYesText: { color: "#00FF88", fontWeight: "900" },
+
+  hint: {
+    marginTop: 6,
+    color: theme.colors.textTertiary,
     fontWeight: "800",
-    fontSize: 12,
+    fontSize: 11,
+    lineHeight: 14,
   },
 });
