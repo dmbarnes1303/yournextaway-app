@@ -1,29 +1,38 @@
 // src/services/partnerLinks.ts
+// Central place to build outbound partner URLs.
+// Tickets are Sportsevents365 and use SE365 enrichment where available.
 
-import {
-  fetchTournamentEvents,
-  findMatchingEvent,
-  buildAffiliateUrl,
-} from "@/src/services/se365";
+import { buildAffiliateUrl } from "@/src/services/se365";
 
-/**
- * Resolve SE365 ticket link for a fixture
- */
-export async function buildTicketLink(params: {
-  leagueId?: number;
-  home: string;
-  away: string;
-  dateIso: string;
-}): Promise<string | null> {
-  const { leagueId, home, away, dateIso } = params;
+export type PartnerKey = "tickets" | "flights" | "hotels" | "transfers" | "things";
 
-  if (!leagueId || !home || !away || !dateIso) return null;
+export type PartnerLinkContext = {
+  // Tickets:
+  se365EventUrl?: string | null;
 
-  const events = await fetchTournamentEvents(leagueId);
-  if (!events.length) return null;
+  // General:
+  cityName?: string;
+  countryName?: string;
+  startDateIso?: string;
+  endDateIso?: string;
 
-  const match = findMatchingEvent(events, home, away, dateIso);
-  if (!match?.eventUrl) return null;
+  // Flights:
+  originIata?: string;
+  destinationIata?: string;
 
-  return buildAffiliateUrl(match.eventUrl);
+  // Hotels / things:
+  lat?: number;
+  lng?: number;
+};
+
+export function getPartnerLink(partner: PartnerKey, ctx: PartnerLinkContext): string | null {
+  if (partner === "tickets") {
+    if (!ctx.se365EventUrl) return null;
+    return buildAffiliateUrl(ctx.se365EventUrl);
+  }
+
+  // Other partners are already wired elsewhere in your app.
+  // This file acts as a light glue layer and should not duplicate existing integrations.
+  // Return null here to allow existing buttons/services to handle their own URL building.
+  return null;
 }
