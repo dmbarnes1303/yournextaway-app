@@ -1,227 +1,209 @@
 // src/services/se365.ts
-/**
- * Sportsevents365 resolver + helpers.
- *
- * Goal:
- * - Given a fixture context (leagueId, home/away, kickoffIso),
- *   find the matching SE365 event and return a deep-link URL.
- * - Add affiliate param to the eventUrl for tracking.
- *
- * Notes:
- * - SE365 provides:
- *   - list events by tournament: /events/tournament/{tournamentId}
- *   - event details: /events/{eventId}
- *   Each event details response contains `eventUrl`.
- */
+import { ENV } from "@/src/config/env";
 
-type Json = any;
+type Se365Event = {
+  id?: number;
+  eventId?: number;
+  eventUrl?: string;
+  url?: string;
 
-export type Se365ResolveInput = {
+  name?: string;
+  homeTeam?: string;
+  awayTeam?: string;
+
+  startDate?: string;
+  startTime?: string;
+  date?: string;
+  time?: string;
+
+  tournamentId?: number;
+};
+
+type ResolveInput = {
   leagueId?: number;
+  kickoffIso?: string;
   homeName?: string;
   awayName?: string;
-  kickoffIso?: string; // ISO string
 };
 
-export type Se365Resolved = {
+type ResolveResult = {
   eventId: number;
-  eventUrl: string; // tracked deep-link
-  rawEventUrl?: string; // original from API
+  eventUrl: string;
 };
 
-const DEFAULT_TIMEOUT_MS = 12000;
+function must(key: string, v: string) {
+  if (!v) throw new Error(`${key} missing`);
+}
 
-// You can override these via app config / env.
-// If you don't, it will default to SANDBOX (safe for dev).
-const BASE_URL =
-  (process.env.EXPO_PUBLIC_SE365_BASE_URL || "").trim() ||
-  "https://api-v2.sandbox365.com";
+function baseUrl() {
+  const b = (ENV.se365BaseUrl || "").replace(/\/+$/, "");
+  must("EXPO_PUBLIC_SE365_BASE_URL", b);
+  return b;
+}
 
-const API_KEY = (process.env.EXPO_PUBLIC_SE365_API_KEY || "").trim();
+function apiKey() {
+  must("EXPO_PUBLIC_SE365_API_KEY", ENV.se365ApiKey);
+  return ENV.se365ApiKey;
+}
 
-// Affiliate ID for WEB deep-links (NOT API key).
-// If you already have a tracked tickets base url elsewhere, this still works.
-// Example: "12345"
-const AFFILIATE_ID = (process.env.EXPO_PUBLIC_SE365_AFFILIATE_ID || "").trim();
+function affiliateId() {
+  // can be blank in dev, but opening should still work
+  return (ENV.se365AffiliateId || "").trim();
+}
 
 /**
  * IMPORTANT:
- * You need a mapping from your API-Football leagueId to SE365 tournamentId.
- * Without this, you can't deterministically list the correct set of events.
+ * You MUST ensure these tournament IDs are correct in your SE365 account.
+ * Eugene’s example used tournament 694 (looks like La Liga in their system).
  *
- * These tournamentIds are placeholders until you confirm them from SE365.
- * You can still ship with this + fallback search, but for "exact match every time"
- * you must fill these accurately.
+ * If any are wrong, resolution won’t find the event.
  */
 const LEAGUE_TO_TOURNAMENT: Record<number, number> = {
-  // API-Football -> SE365 tournament
-  39: 694, // Premier League (example from your email)
-  // 140: <LaLiga tournamentId>,
-  // 135: <Serie A tournamentId>,
-  // 78:  <Bundesliga tournamentId>,
-  // 61:  <Ligue 1 tournamentId>,
+  39: 1,    // Premier League  (CHANGE IF NEEDED)
+  140: 694, // La Liga         (likely correct per Eugene email example)
+  135: 2,   // Serie A         (CHANGE IF NEEDED)
+  78: 3,    // Bundesliga      (CHANGE IF NEEDED)
+  61: 4,    // Ligue 1         (CHANGE IF NEEDED)
 };
 
-function withTimeout<T>(p: Promise<T>, ms = DEFAULT_TIMEOUT_MS): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const t = setTimeout(() => reject(new Error("timeout")), ms);
-    p.then((v) => {
-      clearTimeout(t);
-      resolve(v);
-    }).catch((e) => {
-      clearTimeout(t);
-      reject(e);
-    });
-  });
-}
-
-async function fetchJson(url: string): Promise<Json> {
-  const res = await withTimeout(fetch(url), DEFAULT_TIMEOUT_MS);
-  if (!res.ok) {
-    const txt = await res.text().catch(() => "");
-    throw new Error(`SE365 HTTP ${res.status}: ${txt}`.trim());
-  }
-  return await res.json();
-}
-
-function isoDateOnly(iso?: string): string | null {
-  const s = String(iso ?? "").trim();
-  if (!s) return null;
-  // "2026-03-01T17:30:00+00:00" -> "2026-03-01"
+function toDateOnly(iso?: string): string {
+  if (!iso) return "";
+  // handles "YYYY-MM-DD" or full ISO
+  const s = String(iso);
   const m = s.match(/^(\d{4}-\d{2}-\d{2})/);
-  return m ? m[1] : null;
+  return m ? m[1] : "";
 }
 
-function normTeam(s?: string): string {
+function norm(s?: string): string {
   return String(s ?? "")
     .toLowerCase()
-    .trim()
     .replace(/&/g, "and")
-    .replace(/[^a-z0-9\s]/g, " ")
-    .replace(/\b(fc|cf|sc|afc|cfc|cd|ud|ac|sv|ss|de|la|the)\b/g, " ")
+    .replace(/[^a-z0-9 ]/g, " ")
+    .replace(/\b(fc|cf|sc|ac|afc|cfc|cd|ud|sv|fk|ss|as|the)\b/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
 
-function includesLoose(hay: string, needle: string): boolean {
-  if (!hay || !needle) return false;
-  if (hay === needle) return true;
-  return hay.includes(needle) || needle.includes(hay);
+function scoreNameMatch(a?: string, b?: string): number {
+  const A = norm(a);
+  const B = norm(b);
+  if (!A || !B) return 0;
+  if (A === B) return 10;
+  if (A.includes(B) || B.includes(A)) return 7;
+
+  // token overlap
+  const ta = new Set(A.split(" ").filter(Boolean));
+  const tb = new Set(B.split(" ").filter(Boolean));
+  let overlap = 0;
+  for (const t of ta) if (tb.has(t)) overlap++;
+  return overlap >= 2 ? 5 : overlap === 1 ? 2 : 0;
 }
 
-function addAffiliateParam(url: string): string {
-  const u = String(url ?? "").trim();
-  if (!u) return u;
-  if (!AFFILIATE_ID) return u;
+function withAffiliate(url: string): string {
+  const a = affiliateId();
+  if (!a) return url;
 
-  // Avoid duplicates
-  if (u.includes("affiliate_id=") || u.includes("a_aid=")) return u;
+  // already has affiliate param
+  if (/[?&]a=/.test(url)) return url;
 
-  const join = u.includes("?") ? "&" : "?";
-  // Based on SE365 guidance: "add your affiliate ID parameter to the URL".
-  // If they require a different param name for your account, change here.
-  return `${u}${join}affiliate_id=${encodeURIComponent(AFFILIATE_ID)}`;
+  const join = url.includes("?") ? "&" : "?";
+  return `${url}${join}a=${encodeURIComponent(a)}`;
 }
 
-async function listTournamentEvents(tournamentId: number, perPage = 200, page = 1) {
-  if (!API_KEY) throw new Error("Missing EXPO_PUBLIC_SE365_API_KEY");
-
-  const url =
-    `${BASE_URL}/events/tournament/${tournamentId}` +
-    `?perPage=${encodeURIComponent(String(perPage))}` +
-    `&page=${encodeURIComponent(String(page))}` +
-    `&apiKey=${encodeURIComponent(API_KEY)}`;
-
-  return await fetchJson(url);
+async function fetchJson<T>(url: string): Promise<T> {
+  const res = await fetch(url);
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`SE365 ${res.status}: ${text || "request failed"}`);
+  }
+  return (await res.json()) as T;
 }
 
-async function getEventDetails(eventId: number) {
-  if (!API_KEY) throw new Error("Missing EXPO_PUBLIC_SE365_API_KEY");
-  const url =
-    `${BASE_URL}/events/${eventId}` +
-    `?apiKey=${encodeURIComponent(API_KEY)}`;
-  return await fetchJson(url);
+async function listTournamentEvents(tournamentId: number): Promise<Se365Event[]> {
+  // per Eugene: /events/tournament/{id}?perPage=15&apiKey=...
+  // We request more so we can match properly.
+  const url = `${baseUrl()}/events/tournament/${tournamentId}?perPage=250&apiKey=${encodeURIComponent(apiKey())}`;
+  const data: any = await fetchJson<any>(url);
+
+  // be defensive: API might return {events:[...]} or an array
+  const events: any[] = Array.isArray(data) ? data : Array.isArray(data?.events) ? data.events : [];
+  return events as Se365Event[];
+}
+
+function extractEventId(e: Se365Event): number {
+  const n =
+    (typeof e.eventId === "number" && e.eventId) ||
+    (typeof e.id === "number" && e.id) ||
+    0;
+  return n;
+}
+
+function extractEventUrl(e: Se365Event): string {
+  return String(e.eventUrl ?? e.url ?? "").trim();
+}
+
+function extractHomeAway(e: Se365Event): { home?: string; away?: string } {
+  // Different schemas exist. Use best effort.
+  const name = String(e.name ?? "").trim();
+  if (name.includes(" vs ")) {
+    const [h, a] = name.split(" vs ").map((x) => x.trim());
+    return { home: h, away: a };
+  }
+  return {
+    home: (e as any).homeTeam ?? (e as any).home ?? undefined,
+    away: (e as any).awayTeam ?? (e as any).away ?? undefined,
+  };
+}
+
+function extractDateOnly(e: Se365Event): string {
+  // try common keys
+  const d = String(e.startDate ?? e.date ?? "").trim();
+  const t = toDateOnly(d);
+  return t;
 }
 
 /**
- * Best-effort event matching:
- * - Pull tournament events
- * - Compare date-only + home/away names (loose normalize)
- * - If eventUrl missing, fetch event details
+ * Resolve the exact SE365 event for a fixture.
+ * Returns eventId + deep-link eventUrl.
  */
-export async function resolveSe365Event(input: Se365ResolveInput): Promise<Se365Resolved | null> {
-  const leagueId = Number(input.leagueId);
-  if (!Number.isFinite(leagueId)) return null;
-
+export async function resolveSe365EventForFixture(input: ResolveInput): Promise<ResolveResult | null> {
+  const leagueId = Number(input.leagueId ?? 0) || 0;
   const tournamentId = LEAGUE_TO_TOURNAMENT[leagueId];
+
   if (!tournamentId) return null;
 
-  const home = normTeam(input.homeName);
-  const away = normTeam(input.awayName);
-  const dateOnly = isoDateOnly(input.kickoffIso);
+  const home = String(input.homeName ?? "").trim();
+  const away = String(input.awayName ?? "").trim();
+  const targetDate = toDateOnly(input.kickoffIso);
 
-  if (!home || !away) return null;
-  if (!dateOnly) return null;
+  if (!home || !away || !targetDate) return null;
 
-  // Pull first page large enough for most tournaments.
-  // If your tournaments exceed this, we can implement pagination later.
-  const data = await listTournamentEvents(tournamentId, 250, 1);
+  const events = await listTournamentEvents(tournamentId);
 
-  const events: any[] = Array.isArray(data?.events) ? data.events : Array.isArray(data) ? data : [];
-  if (!events.length) return null;
+  // score candidates: date must match, then name similarity
+  let best: { score: number; e: Se365Event } | null = null;
 
-  // Try to find best match
-  let best: any | null = null;
+  for (const e of events) {
+    const d = extractDateOnly(e);
+    if (!d || d !== targetDate) continue;
 
-  for (const ev of events) {
-    const evHome = normTeam(ev?.homeTeam?.name || ev?.homeTeamName || ev?.home || ev?.teamHome || "");
-    const evAway = normTeam(ev?.awayTeam?.name || ev?.awayTeamName || ev?.away || ev?.teamAway || "");
+    const { home: eh, away: ea } = extractHomeAway(e);
 
-    const evDate =
-      isoDateOnly(ev?.startDate || ev?.date || ev?.eventDate || ev?.kickoff || ev?.start_time) ||
-      isoDateOnly(ev?.startDateTime);
+    // score both orientations
+    const s1 = scoreNameMatch(home, eh) + scoreNameMatch(away, ea);
+    const s2 = scoreNameMatch(home, ea) + scoreNameMatch(away, eh);
+    const score = Math.max(s1, s2);
 
-    if (!evDate || evDate !== dateOnly) continue;
-
-    const homeOk = includesLoose(evHome, home);
-    const awayOk = includesLoose(evAway, away);
-
-    if (homeOk && awayOk) {
-      best = ev;
-      break;
-    }
+    if (score <= 0) continue;
+    if (!best || score > best.score) best = { score, e };
   }
 
   if (!best) return null;
 
-  const eventId = Number(best?.id || best?.eventId);
-  if (!Number.isFinite(eventId) || eventId <= 0) return null;
+  const eventId = extractEventId(best.e);
+  const rawUrl = extractEventUrl(best.e);
 
-  // eventUrl can be on the event list OR only in details
-  let rawEventUrl = String(best?.eventUrl || best?.url || "").trim();
+  if (!eventId || !rawUrl) return null;
 
-  if (!rawEventUrl) {
-    const detail = await getEventDetails(eventId);
-    rawEventUrl = String(detail?.eventUrl || detail?.event?.eventUrl || "").trim();
-  }
-
-  if (!rawEventUrl) return null;
-
-  const tracked = addAffiliateParam(rawEventUrl);
-
-  return {
-    eventId,
-    eventUrl: tracked,
-    rawEventUrl,
-  };
-}
-
-/**
- * Fallback: build a safe Google query url for tickets.
- */
-export function buildTicketsGoogleSearch(homeName?: string, awayName?: string, kickoffIso?: string) {
-  const dateOnly = isoDateOnly(kickoffIso) || "";
-  const q = `${homeName ?? ""} vs ${awayName ?? ""} tickets ${dateOnly}`.trim();
-  const qs = encodeURIComponent(q);
-  return `https://www.google.com/search?q=${qs}`;
+  return { eventId, eventUrl: withAffiliate(rawUrl) };
 }
