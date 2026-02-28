@@ -1,5 +1,5 @@
 // src/services/bookingProof.ts
-import { Alert, Platform } from "react-native";
+import { Alert } from "react-native";
 
 import savedItemsStore from "@/src/state/savedItems";
 import type { SavedItem } from "@/src/core/savedItemTypes";
@@ -29,10 +29,8 @@ function getAttachments(item: SavedItem | null) {
 }
 
 async function persistLastBookedPointer(item: SavedItem | null) {
-  if (!item) return;
-
-  const itemId = String(item.id ?? "").trim();
-  const tripId = String(item.tripId ?? "").trim();
+  const itemId = String(item?.id ?? "").trim();
+  const tripId = String(item?.tripId ?? "").trim();
   if (!itemId || !tripId) return;
 
   try {
@@ -58,6 +56,7 @@ async function promptAddProof(itemId: string) {
   } catch (e: any) {
     const msg = String(e?.message ?? "");
     if (msg === "cancelled") return;
+
     Alert.alert("Couldn’t add attachment", msg || "Try again.", [{ text: "OK" }], {
       cancelable: true,
     });
@@ -67,11 +66,8 @@ async function promptAddProof(itemId: string) {
 /**
  * Call after an item is marked "booked".
  * - Sets "last booked" pointer (for Wallet highlight + back-to-trip)
- * - Always confirms it was added to Wallet
+ * - Confirms it was added to Wallet
  * - If no attachments exist, offers proof upload (PDF/screenshot) for offline access
- *
- * Android reliability rules:
- * - keep <= 2 actions (+ implicit cancelable) to avoid flaky nested alert behavior
  */
 export async function confirmBookedAndOfferProof(itemId: string) {
   const id = String(itemId ?? "").trim();
@@ -80,8 +76,10 @@ export async function confirmBookedAndOfferProof(itemId: string) {
   await ensureSavedItemsLoaded();
   const item = savedItemsStore.getState().items.find((x) => x.id === id) ?? null;
 
-  // ✅ Centralised: keep Wallet highlight + "Back to trip" accurate everywhere
-  await persistLastBookedPointer(item);
+  // Persist pointer only if item exists (prevents junk pointers)
+  if (item) {
+    await persistLastBookedPointer(item);
+  }
 
   const title = String(item?.title ?? "").trim() || "Booking";
   const atts = getAttachments(item);
@@ -98,16 +96,13 @@ export async function confirmBookedAndOfferProof(itemId: string) {
     `"${title}" is now marked as booked.\n\n` +
     `Want to add booking proof (PDF/screenshot) for offline access?`;
 
-  const buttons =
-    Platform.OS === "android"
-      ? [
-          { text: "Not now", style: "cancel" as const },
-          { text: "Add booking proof", onPress: () => defer(() => promptAddProof(id)) },
-        ]
-      : [
-          { text: "Not now", style: "cancel" as const },
-          { text: "Add booking proof", onPress: () => defer(() => promptAddProof(id)) },
-        ];
-
-  Alert.alert("Added to Wallet", message, buttons as any, { cancelable: true });
+  Alert.alert(
+    "Added to Wallet",
+    message,
+    [
+      { text: "Not now", style: "cancel" as const },
+      { text: "Add booking proof", onPress: () => defer(() => promptAddProof(id)) },
+    ] as any,
+    { cancelable: true }
+  );
 }
