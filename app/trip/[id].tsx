@@ -244,6 +244,7 @@ function formatKickoffMeta(
   const short = String((row as any)?.fixture?.status?.short ?? "").trim().toUpperCase();
   const long = String((row as any)?.fixture?.status?.long ?? "").trim();
 
+  // NOTE: we still treat "NS" as "could be placeholder", but real truth is diffing in your follow refresh.
   const looksTbc = short === "TBD" || short === "TBA" || short === "NS" || short === "PST";
   const snapTbc = Boolean((trip as any)?.kickoffTbc);
 
@@ -323,6 +324,13 @@ function Pill({ label, kind }: { label: string; kind: "best" | "budget" }) {
 function proCapHint(cap: number, tripCount: number) {
   if (tripCount < cap) return `Free plan: up to ${cap} saved trips.`;
   return `Free plan cap reached (${cap}). Pro removes the cap.`;
+}
+
+function safeUri(u: unknown): string | null {
+  const s = String(u ?? "").trim();
+  if (!s) return null;
+  if (!/^https?:\/\//i.test(s)) return null;
+  return s;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -447,17 +455,30 @@ export default function TripDetailScreen() {
     };
   }, []);
 
+  /* ---------------- derived ids ---------------- */
+
+  const matchIds = useMemo(() => {
+    const raw = Array.isArray(trip?.matchIds) ? trip!.matchIds : [];
+    return raw.map((x) => String(x).trim()).filter(Boolean);
+  }, [trip?.matchIds]);
+
+  const numericMatchIds = useMemo(() => matchIds.filter(isNumericId), [matchIds]);
+
+  const primaryMatchId = useMemo(() => {
+    const preferred = String((trip as any)?.fixtureIdPrimary ?? "").trim();
+    if (preferred && numericMatchIds.includes(preferred)) return preferred;
+    return numericMatchIds[0] ?? null;
+  }, [trip, numericMatchIds]);
+
   /* ---------------- fixtures enrichment ---------------- */
 
   useEffect(() => {
     let cancelled = false;
 
     async function run() {
-      const idsRaw = Array.isArray(trip?.matchIds) ? trip!.matchIds : [];
-      const ids = idsRaw.map((x) => String(x).trim()).filter(Boolean);
-      const numericIds = ids.filter(isNumericId);
+      const ids = numericMatchIds;
 
-      if (numericIds.length === 0) {
+      if (ids.length === 0) {
         setFixturesById({});
         setFxLoading(false);
         return;
@@ -467,7 +488,7 @@ export default function TripDetailScreen() {
 
       try {
         const map: Record<string, FixtureListRow> = {};
-        for (const id of numericIds) {
+        for (const id of ids) {
           try {
             const r = await getFixtureById(Number(String(id)));
             if (r) map[String(id)] = r;
@@ -485,24 +506,32 @@ export default function TripDetailScreen() {
     return () => {
       cancelled = true;
     };
-  }, [trip?.matchIds]);
+  }, [numericMatchIds]);
 
-  /* ---------------- derived ---------------- */
+  /* ---------------- derived (content) ---------------- */
 
   const status = useMemo(() => (trip ? tripStatus(trip) : "Upcoming"), [trip]);
 
+  const primaryFixture = useMemo(() => {
+    if (!primaryMatchId) return null;
+    return fixturesById[String(primaryMatchId)] ?? null;
+  }, [primaryMatchId, fixturesById]);
+
   const cityNameRaw = useMemo(() => {
+    // Prefer saved human label
     const snapCity = String((trip as any)?.displayCity ?? "").trim();
     if (snapCity) return snapCity;
 
+    // Legacy fallback
     const snapVenueCity = String((trip as any)?.city ?? "").trim();
     if (snapVenueCity) return snapVenueCity;
 
+    // cityId slug fallback
     if (trip?.cityId) return trip.cityId;
 
-    const first = trip?.matchIds?.[0];
-    return (fixturesById[String(first ?? "")] as any)?.fixture?.venue?.city || "Trip";
-  }, [trip, fixturesById]);
+    // last resort: primary fixture
+    return String((primaryFixture as any)?.fixture?.venue?.city ?? "").trim() || "Trip";
+  }, [trip, primaryFixture]);
 
   const cityName = useMemo(() => titleCaseCity(cityNameRaw), [cityNameRaw]);
 
@@ -528,21 +557,7 @@ export default function TripDetailScreen() {
     [savedItems]
   );
 
-  const matchIds = useMemo(() => {
-    const raw = Array.isArray(trip?.matchIds) ? trip!.matchIds : [];
-    return raw.map((x) => String(x).trim()).filter(Boolean);
-  }, [trip?.matchIds]);
-
-  const numericMatchIds = useMemo(() => matchIds.filter(isNumericId), [matchIds]);
-
-  /* ---------------- primary match logistics ---------------- */
-
-  const primaryMatchId = useMemo(() => numericMatchIds[0] ?? null, [numericMatchIds]);
-
-  const primaryFixture = useMemo(() => {
-    if (!primaryMatchId) return null;
-    return fixturesById[String(primaryMatchId)] ?? null;
-  }, [primaryMatchId, fixturesById]);
+  /* ---------------- primary match fields ---------------- */
 
   const primaryHomeName = useMemo(() => {
     const fromFixture = String((primaryFixture as any)?.teams?.home?.name ?? "").trim();
@@ -575,6 +590,8 @@ export default function TripDetailScreen() {
   }, [primaryFixture, trip]);
 
   const kickoffMeta = useMemo(() => formatKickoffMeta(primaryFixture, trip), [primaryFixture, trip]);
+
+  /* ---------------- primary logistics ---------------- */
 
   const primaryLogistics = useMemo(() => {
     if (!primaryHomeName) return null;
@@ -626,10 +643,7 @@ export default function TripDetailScreen() {
       : [];
     return stops
       .slice(0, 3)
-      .map(
-        (s: any) =>
-          `${String(s?.name ?? "").trim()}${s?.notes ? ` — ${String(s.notes).trim()}` : ""}`
-      )
+      .map((s: any) => `${String(s?.name ?? "").trim()}${s?.notes ? ` — ${String(s.notes).trim()}` : ""}`)
       .filter(Boolean);
   }, [primaryLogistics]);
 
@@ -661,10 +675,8 @@ export default function TripDetailScreen() {
     const candidates = savedItems.filter((x) => x.type === "tickets" && x.status !== "archived");
 
     const byFixtureId = candidates.filter((x) => String((x.metadata as any)?.fixtureId ?? "").trim() === mid);
-
     const pool = byFixtureId.length > 0 ? byFixtureId : candidates;
 
-    // Prefer the "most actionable" state when multiple exist
     return (
       pool.find((x) => x.status === "pending") ??
       pool.find((x) => x.status === "saved") ??
@@ -930,6 +942,111 @@ export default function TripDetailScreen() {
   }
 
   /* ------------------------------------------------------------------------ */
+  /* matches: set primary + remove                                              */
+  /* ------------------------------------------------------------------------ */
+
+  async function setPrimaryMatch(matchId: string) {
+    if (!trip) return;
+    const mid = String(matchId ?? "").trim();
+    if (!mid) return;
+
+    if (mid === String((trip as any)?.fixtureIdPrimary ?? "").trim()) {
+      return; // already primary
+    }
+
+    const r = fixturesById[mid] ?? null;
+
+    // We also refresh trip snapshot fields so UI stays readable offline.
+    const homeName = String((r as any)?.teams?.home?.name ?? "").trim() || undefined;
+    const awayName = String((r as any)?.teams?.away?.name ?? "").trim() || undefined;
+
+    const leagueName = String((r as any)?.league?.name ?? "").trim() || undefined;
+    const leagueId = typeof (r as any)?.league?.id === "number" ? (r as any).league.id : undefined;
+
+    const kickoffIso = String((r as any)?.fixture?.date ?? "").trim() || undefined;
+
+    const statusShort = String((r as any)?.fixture?.status?.short ?? "").trim().toUpperCase();
+    const midnight = kickoffIso ? (() => {
+      const d = new Date(kickoffIso);
+      return Number.isFinite(d.getTime()) ? d.getHours() === 0 && d.getMinutes() === 0 : false;
+    })() : true;
+
+    // Conservative: treat these as likely placeholder, but your true logic is diffing in follow refresh.
+    const kickoffTbc =
+      statusShort === "TBD" || statusShort === "TBA" || statusShort === "NS" || statusShort === "PST" || midnight;
+
+    const venueName = String((r as any)?.fixture?.venue?.name ?? "").trim() || undefined;
+    const venueCity = String((r as any)?.fixture?.venue?.city ?? "").trim() || undefined;
+
+    try {
+      await tripsStore.setPrimaryMatchForTrip(trip.id, mid);
+
+      // Snapshot patch for Phase 1 readability
+      await tripsStore.updateTrip(trip.id, {
+        fixtureIdPrimary: mid,
+
+        homeName,
+        awayName,
+        leagueName,
+        leagueId,
+
+        kickoffIso,
+        kickoffTbc,
+
+        venueName,
+        venueCity,
+
+        displayCity: venueCity || (trip as any)?.displayCity,
+      } as any);
+    } catch {
+      Alert.alert("Couldn’t set primary match", "Try again.");
+    }
+  }
+
+  async function removeMatch(matchId: string) {
+    if (!trip) return;
+    const mid = String(matchId ?? "").trim();
+    if (!mid) return;
+
+    const count = Array.isArray(trip.matchIds) ? trip.matchIds.length : 0;
+    if (count <= 1) {
+      Alert.alert("Can’t remove", "A trip needs at least one match. Add another match first.");
+      return;
+    }
+
+    Alert.alert("Remove this match?", "This only removes it from the trip — it won’t delete Wallet items.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Remove",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await tripsStore.removeMatchFromTrip(trip.id, mid);
+          } catch {
+            Alert.alert("Couldn’t remove match", "Try again.");
+          }
+        },
+      },
+    ]);
+  }
+
+  function openMatchActions(matchId: string) {
+    if (!trip) return;
+    const mid = String(matchId ?? "").trim();
+    const isPrimary = mid && mid === String((trip as any)?.fixtureIdPrimary ?? "").trim();
+
+    Alert.alert(
+      "Match options",
+      isPrimary ? "This is the primary match for the trip." : "Choose what you want to do with this match.",
+      [
+        { text: "Cancel", style: "cancel" },
+        !isPrimary ? { text: "Set as primary", style: "default", onPress: () => setPrimaryMatch(mid) } : null,
+        { text: "Remove from trip", style: "destructive", onPress: () => removeMatch(mid) },
+      ].filter(Boolean) as any
+    );
+  }
+
+  /* ------------------------------------------------------------------------ */
   /* tickets: smart open                                                       */
   /* ------------------------------------------------------------------------ */
 
@@ -975,8 +1092,8 @@ export default function TripDetailScreen() {
         kickoffIso,
         leagueName,
         leagueId,
-        // If you later store a per-match se365EventUrl in fixtures, pass it here too.
-        se365EventId: typeof (trip as any)?.sportsevents365EventId === "number" ? (trip as any).sportsevents365EventId : undefined,
+        se365EventId:
+          typeof (trip as any)?.sportsevents365EventId === "number" ? (trip as any).sportsevents365EventId : undefined,
       });
     } catch {
       url = null;
@@ -1329,9 +1446,13 @@ export default function TripDetailScreen() {
         metadata: { city: cityName, priceMode: "live" },
       });
 
-    // ✅ Tickets now respect existing item state per match
     if (!presentByType.hasTickets && primaryMatchId) {
-      add("Tickets", primaryTicketItem ? statusLabel(primaryTicketItem.status) : "Live listings", () => openTicketsForMatch(primaryMatchId), "primary");
+      add(
+        "Tickets",
+        primaryTicketItem ? statusLabel(primaryTicketItem.status) : "Live listings",
+        () => openTicketsForMatch(primaryMatchId),
+        "primary"
+      );
     }
     if (!presentByType.hasFlight) add("Flights", "Live prices", openFlights, "primary");
     if (!presentByType.hasHotel) add("Hotels", "Live prices", openHotels, "primary");
@@ -1506,7 +1627,12 @@ export default function TripDetailScreen() {
 
               {/* MATCHES */}
               <GlassCard style={styles.card}>
-                <Text style={styles.sectionTitle}>Matches</Text>
+                <View style={styles.sectionTitleRow}>
+                  <Text style={styles.sectionTitle}>Matches</Text>
+                  <Pressable onPress={onEditTrip} style={styles.inlineLinkBtn}>
+                    <Text style={styles.inlineLinkText}>Add match ›</Text>
+                  </Pressable>
+                </View>
 
                 {numericMatchIds.length === 0 ? (
                   <EmptyState title="No matches added" message="Add a match to unlock match-specific planning." />
@@ -1530,6 +1656,9 @@ export default function TripDetailScreen() {
                       const homeName = String((r as any)?.teams?.home?.name ?? (trip as any)?.homeName ?? "Home");
                       const awayName = String((r as any)?.teams?.away?.name ?? (trip as any)?.awayName ?? "Away");
 
+                      const homeLogo = safeUri((r as any)?.teams?.home?.logo);
+                      const awayLogo = safeUri((r as any)?.teams?.away?.logo);
+
                       const logistics = getMatchdayLogistics({ homeTeamName: homeName, leagueName });
                       const logisticsLine = logistics ? buildLogisticsSnippet(logistics) : "";
 
@@ -1538,56 +1667,99 @@ export default function TripDetailScreen() {
                       });
 
                       const ticketItem = ticketsByMatchId[String(mid)];
+                      const isPrimary = String(primaryMatchId ?? "") === String(mid);
 
                       return (
-                        <Pressable key={mid} onPress={() => openTicketsForMatch(mid)} style={styles.matchRow}>
-                          <TeamCrest name={homeName} logo={(r as any)?.teams?.home?.logo} />
+                        <View key={mid} style={styles.matchRowWrap}>
+                          <Pressable
+                            onPress={() => openTicketsForMatch(mid)}
+                            onLongPress={() => openMatchActions(mid)}
+                            style={styles.matchRow}
+                          >
+                            <TeamCrest name={homeName} logo={homeLogo} />
 
-                          <View style={{ flex: 1 }}>
-                            <View style={styles.matchTitleRow}>
-                              <Text style={styles.matchTitle} numberOfLines={1}>
-                                {title}
+                            <View style={{ flex: 1 }}>
+                              <View style={styles.matchTitleRow}>
+                                <Text style={styles.matchTitle} numberOfLines={1}>
+                                  {title}
+                                </Text>
+
+                                {isPrimary ? (
+                                  <View style={[styles.badge, styles.badgePrimary]}>
+                                    <Text style={styles.badgeText}>Primary</Text>
+                                  </View>
+                                ) : null}
+
+                                {ticketItem ? <StatusBadge s={ticketItem.status} /> : null}
+                              </View>
+
+                              <Text style={styles.matchMeta} numberOfLines={1}>
+                                {kickoff.line}
                               </Text>
 
-                              {ticketItem ? <StatusBadge s={ticketItem.status} /> : null}
+                              <View style={{ marginTop: 6 }}>
+                                <FixtureCertaintyBadge state={certainty} />
+                              </View>
+
+                              {meta1 ? (
+                                <Text style={styles.matchMeta} numberOfLines={1}>
+                                  {meta1}
+                                </Text>
+                              ) : null}
+
+                              {meta2 ? (
+                                <Text style={styles.matchMeta} numberOfLines={1}>
+                                  {meta2}
+                                </Text>
+                              ) : null}
+
+                              {logisticsLine ? (
+                                <Text style={styles.logisticsMeta} numberOfLines={1}>
+                                  {logisticsLine}
+                                </Text>
+                              ) : null}
+
+                              <Text style={styles.matchHint} numberOfLines={1}>
+                                {ticketItem
+                                  ? `Tap to open tickets (${statusLabel(ticketItem.status)}) • Hold for options`
+                                  : "Tap to open tickets (saved to Pending) • Hold for options"}
+                              </Text>
                             </View>
 
-                            <Text style={styles.matchMeta} numberOfLines={1}>
-                              {kickoff.line}
-                            </Text>
+                            <TeamCrest name={awayName} logo={awayLogo} />
+                            <Text style={styles.chev}>›</Text>
+                          </Pressable>
 
-                            <View style={{ marginTop: 6 }}>
-                              <FixtureCertaintyBadge state={certainty} />
-                            </View>
+                          {/* quick actions row */}
+                          <View style={styles.matchActionsRow}>
+                            <Pressable
+                              onPress={() => openTicketsForMatch(mid)}
+                              style={[styles.smallBtn, styles.smallBtnWide]}
+                            >
+                              <Text style={styles.smallBtnText}>Tickets</Text>
+                            </Pressable>
 
-                            {meta1 ? (
-                              <Text style={styles.matchMeta} numberOfLines={1}>
-                                {meta1}
-                              </Text>
-                            ) : null}
+                            {!isPrimary ? (
+                              <Pressable
+                                onPress={() => setPrimaryMatch(mid)}
+                                style={[styles.smallBtn, styles.smallBtnWide, styles.smallBtnPrimary]}
+                              >
+                                <Text style={styles.smallBtnText}>Set primary</Text>
+                              </Pressable>
+                            ) : (
+                              <View style={[styles.smallBtn, styles.smallBtnWide, styles.smallBtnDisabled]}>
+                                <Text style={styles.smallBtnText}>Primary</Text>
+                              </View>
+                            )}
 
-                            {meta2 ? (
-                              <Text style={styles.matchMeta} numberOfLines={1}>
-                                {meta2}
-                              </Text>
-                            ) : null}
-
-                            {logisticsLine ? (
-                              <Text style={styles.logisticsMeta} numberOfLines={1}>
-                                {logisticsLine}
-                              </Text>
-                            ) : null}
-
-                            <Text style={styles.matchHint} numberOfLines={1}>
-                              {ticketItem
-                                ? `Tap to open tickets (${statusLabel(ticketItem.status)})`
-                                : "Tap to open tickets (saved to Pending)"}
-                            </Text>
+                            <Pressable
+                              onPress={() => removeMatch(mid)}
+                              style={[styles.smallBtn, styles.smallBtnWide, styles.smallBtnDanger]}
+                            >
+                              <Text style={styles.smallBtnText}>Remove</Text>
+                            </Pressable>
                           </View>
-
-                          <TeamCrest name={awayName} logo={(r as any)?.teams?.away?.logo} />
-                          <Text style={styles.chev}>›</Text>
-                        </Pressable>
+                        </View>
                       );
                     })}
                   </View>
@@ -2132,6 +2304,17 @@ const styles = StyleSheet.create({
   },
   sectionSub: { color: theme.colors.textTertiary, fontWeight: "900", fontSize: 12 },
 
+  inlineLinkBtn: {
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginTop: 2,
+  },
+  inlineLinkText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: 12 },
+
   smartGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   smartBtn: {
     width: "48%",
@@ -2154,6 +2337,8 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     fontSize: 12,
   },
+
+  matchRowWrap: { gap: 8 },
 
   matchRow: {
     flexDirection: "row",
@@ -2192,6 +2377,8 @@ const styles = StyleSheet.create({
   },
 
   matchHint: { marginTop: 6, color: theme.colors.textTertiary, fontWeight: "900", fontSize: 11 },
+
+  matchActionsRow: { flexDirection: "row", gap: 8 },
 
   crestWrap: {
     width: 40,
@@ -2331,6 +2518,12 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.15)",
   },
 
+  smallBtnWide: { flex: 1, alignItems: "center" },
+
+  smallBtnPrimary: { borderColor: "rgba(0,255,136,0.35)" },
+
+  smallBtnDisabled: { opacity: 0.65 },
+
   smallBtnDanger: {
     borderColor: "rgba(255,80,80,0.35)",
   },
@@ -2352,6 +2545,11 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     fontWeight: "900",
     fontSize: 11,
+  },
+
+  badgePrimary: {
+    borderColor: "rgba(0,255,136,0.45)",
+    backgroundColor: "rgba(0,255,136,0.10)",
   },
 
   badgePending: {
