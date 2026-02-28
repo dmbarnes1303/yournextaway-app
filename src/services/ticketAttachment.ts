@@ -1,47 +1,49 @@
-import * as ImagePicker from "expo-image-picker";
-import * as DocumentPicker from "expo-document-picker";
+// src/services/ticketAttachment.ts
+import { Alert } from "react-native";
+
 import savedItemsStore from "@/src/state/savedItems";
+import { pickAndStoreAttachmentForItem } from "@/src/services/walletAttachments";
 
-export async function attachTicketProof(itemId: string) {
+/**
+ * LEGACY WRAPPER (Phase 1):
+ * This exists because some UI flows still call attachTicketProof(itemId).
+ *
+ * Rules:
+ * - Use the same picker + storage path as Wallet (pickAndStoreAttachmentForItem)
+ * - Then attach it onto the SavedItem so it appears in Wallet offline
+ * - Return boolean for simple call sites
+ *
+ * IMPORTANT:
+ * This is NOT tickets-only anymore. It's just "attach booking proof".
+ */
+async function ensureSavedItemsLoaded() {
+  if (savedItemsStore.getState().loaded) return;
   try {
-    // ask user: image or file
-    const img = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 1,
-    });
-
-    if (!img.canceled && img.assets?.length) {
-      const a = img.assets[0];
-
-      await savedItemsStore.addAttachment(itemId, {
-        id: String(Date.now()),
-        uri: a.uri,
-        kind: "image",
-        name: "ticket.jpg",
-        createdAt: Date.now(),
-      });
-
-      return true;
-    }
-
-    const doc = await DocumentPicker.getDocumentAsync({
-      copyToCacheDirectory: true,
-    });
-
-    if (doc.type === "success") {
-      await savedItemsStore.addAttachment(itemId, {
-        id: String(Date.now()),
-        uri: doc.uri,
-        kind: "file",
-        name: doc.name,
-        createdAt: Date.now(),
-      });
-
-      return true;
-    }
-
-    return false;
+    await savedItemsStore.load();
   } catch {
+    // ignore
+  }
+}
+
+export async function attachTicketProof(itemId: string): Promise<boolean> {
+  const id = String(itemId ?? "").trim();
+  if (!id) return false;
+
+  try {
+    const att = await pickAndStoreAttachmentForItem(id);
+
+    await ensureSavedItemsLoaded();
+    await savedItemsStore.addAttachment(id, att);
+
+    return true;
+  } catch (e: any) {
+    const msg = String(e?.message ?? "");
+
+    // walletAttachments uses this convention
+    if (msg === "cancelled") return false;
+
+    // Best-effort feedback; don't crash any booking flow
+    Alert.alert("Couldn’t add attachment", msg || "Try again.", [{ text: "OK" }], { cancelable: true });
     return false;
   }
 }
