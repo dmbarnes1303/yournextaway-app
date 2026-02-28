@@ -146,13 +146,6 @@ function splitLinesToBullets(text: string) {
   return { bullets, paragraph: "" };
 }
 
-function resolveBackgroundSource(bg: string | any) {
-  // getCityBackground() returns either a remote URL string or a local ImageSourcePropType.
-  if (!bg) return undefined;
-  if (typeof bg === "string") return { uri: bg };
-  return bg;
-}
-
 /* -------------------------------------------------------------------------- */
 /* Small UI */
 /* -------------------------------------------------------------------------- */
@@ -184,9 +177,6 @@ function normalizeText(v: any): string {
   return safeStr(v);
 }
 
-/**
- * Runtime city metadata (safe, never crashes)
- */
 function getCityData(cityKey: string): CityData | null {
   const key = safeStr(cityKey);
   if (!key) return null;
@@ -221,10 +211,6 @@ function getCityData(cityKey: string): CityData | null {
   return { cityKey: key, name: cityKeyToTitle(key) };
 }
 
-/**
- * Runtime guide loader (safe, never crashes)
- * Converts CityGuide fields into section blocks.
- */
 function getCityGuideFull(cityKey: string): GuideFull | null {
   const key = safeStr(cityKey);
   if (!key) return null;
@@ -340,13 +326,12 @@ function GuideModal({
   onClose: () => void;
   title: string;
   blocks: GuideBlock[];
-  backgroundSource?: any;
+  backgroundSource: any;
 }) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (!visible) return;
-    // reset expansion each open (keeps behaviour predictable)
     setExpanded({});
   }, [visible]);
 
@@ -597,14 +582,12 @@ export default function CityScreen() {
     [router, from, to]
   );
 
-  // ✅ City-specific background (remote URL or local fallback)
-  const cityBg = useMemo(() => resolveBackgroundSource(getCityBackground(cityKey)), [cityKey]);
+  const bg = getCityBackground(cityKey);
+  const bgSource = typeof bg === "string" ? { uri: bg } : bg;
 
   const guideBlocks = guideFull?.blocks ?? [];
   const overview =
-    guideBlocks.find((b) => safeStr(b.heading).toLowerCase() === "overview")?.text ||
-    guideBlocks[0]?.text ||
-    "";
+    guideBlocks.find((b) => safeStr(b.heading).toLowerCase() === "overview")?.text || guideBlocks[0]?.text || "";
 
   const guidePreview = guideFull ? clampText(overview, 220) : "";
   const guideStats = useMemo(() => {
@@ -612,14 +595,12 @@ export default function CityScreen() {
     const sections = guideBlocks.length;
     const hasTop = guideBlocks.some((b) => safeStr(b.heading).toLowerCase().includes("top"));
     const hasStay = guideBlocks.some((b) => safeStr(b.heading).toLowerCase().includes("stay"));
-    const parts = [sections ? `${sections} sections` : "", hasTop ? "things to do" : "", hasStay ? "where to stay" : ""].filter(
-      Boolean
-    );
+    const parts = [sections ? `${sections} sections` : "", hasTop ? "things to do" : "", hasStay ? "where to stay" : ""].filter(Boolean);
     return parts.join(" • ");
   }, [guideFull, guideBlocks]);
 
   return (
-    <Background imageSource={cityBg} overlayOpacity={0.7}>
+    <Background imageSource={bgSource} overlayOpacity={0.7}>
       <SafeAreaView style={styles.container} edges={["top"]}>
         <ScrollView style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           {/* HERO */}
@@ -664,16 +645,14 @@ export default function CityScreen() {
             </View>
           </GlassCard>
 
-          {/* GUIDE (single CTA: Open guide) */}
+          {/* GUIDE */}
           <GlassCard strength="default" style={styles.block} noPadding>
             <View style={styles.blockInner}>
               <View style={styles.guideTopRow}>
                 <View style={{ flex: 1, minWidth: 0 }}>
                   <Text style={styles.blockTitle}>Guide</Text>
                   <Text style={styles.guideSub} numberOfLines={1}>
-                    {guideFull
-                      ? guideStats || "Practical, city-break planning notes."
-                      : "Guide content unavailable for this city yet."}
+                    {guideFull ? guideStats || "Practical, city-break planning notes." : "Guide content unavailable for this city yet."}
                   </Text>
                 </View>
 
@@ -712,9 +691,7 @@ export default function CityScreen() {
 
               {!loadingFx && fxError ? <EmptyState title="Fixtures Unavailable" message={fxError} /> : null}
 
-              {!loadingFx && !fxError && fxRows.length === 0 ? (
-                <EmptyState title="No City Fixtures Found" message="Try another date window." />
-              ) : null}
+              {!loadingFx && !fxError && fxRows.length === 0 ? <EmptyState title="No City Fixtures Found" message="Try another date window." /> : null}
 
               {!loadingFx && !fxError && fxRows.length > 0 ? (
                 <View style={{ gap: 14 }}>
@@ -739,13 +716,12 @@ export default function CityScreen() {
           <View style={{ height: 14 }} />
         </ScrollView>
 
-        {/* Guide Modal */}
         <GuideModal
           visible={guideOpen}
           onClose={() => setGuideOpen(false)}
           title={guideFull?.title || title}
           blocks={guideBlocks}
-          backgroundSource={cityBg}
+          backgroundSource={bgSource}
         />
       </SafeAreaView>
     </Background>
