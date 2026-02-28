@@ -5,29 +5,33 @@ import { Stack } from "expo-router";
 
 import { ProProvider } from "@/src/context/ProContext";
 import preferencesStore from "@/src/state/preferences";
-
 import identity from "@/src/services/identity";
 
 import {
   bootstrapPartnerReturnPrompt,
   registerReturnModalHandler,
-  markTicketBooked,
+  markItemBooked,
+  markItemNotBooked,
+  dismissPartnerReturn,
 } from "@/src/services/partnerReturnBootstrap";
 
 import PartnerReturnModal from "@/src/components/PartnerReturnModal";
+import type { LastPartnerClick } from "@/src/services/partnerClicks";
 
 export default function RootLayout() {
   const [modalItemId, setModalItemId] = useState<string | null>(null);
+  const [modalClick, setModalClick] = useState<LastPartnerClick | null>(null);
 
   useEffect(() => {
     // 1) Ensure a stable device identity exists (guest path)
     identity.ensureIdentity().catch(() => null);
 
-    // 2) Partner return detection (your booking loop)
+    // 2) Partner return detection (Phase-1 booking loop)
     bootstrapPartnerReturnPrompt();
 
-    registerReturnModalHandler((itemId) => {
+    registerReturnModalHandler((itemId, click) => {
       setModalItemId(itemId);
+      setModalClick(click);
     });
 
     // 3) Preferences
@@ -35,11 +39,20 @@ export default function RootLayout() {
   }, []);
 
   async function handleBooked(itemId: string) {
-    await markTicketBooked(itemId);
+    await markItemBooked(itemId);
+  }
+
+  async function handleNotBooked(itemId: string) {
+    await markItemNotBooked(itemId);
+  }
+
+  async function handleNotNow(itemId?: string) {
+    await dismissPartnerReturn(itemId);
   }
 
   function closeModal() {
     setModalItemId(null);
+    setModalClick(null);
   }
 
   return (
@@ -56,7 +69,10 @@ export default function RootLayout() {
       <PartnerReturnModal
         visible={!!modalItemId}
         itemId={modalItemId}
+        click={modalClick}
         onBooked={handleBooked}
+        onNotBooked={handleNotBooked}
+        onNotNow={handleNotNow}
         onClose={closeModal}
       />
     </ProProvider>
