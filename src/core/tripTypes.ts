@@ -83,8 +83,8 @@ export type Trip = {
   sportsevents365EventId?: number;
 
   /**
-   * Snapshot of the best-known SE365 URL for this match (tickets/event/search).
-   * Used to open the exact game page when available.
+   * Direct event deep-link URL from SE365 (preferred).
+   * Store snapshot so opening tickets is instant next time.
    */
   sportsevents365EventUrl?: string;
 
