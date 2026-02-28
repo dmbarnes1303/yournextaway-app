@@ -345,10 +345,17 @@ export default function ProfileScreen() {
     router.push("/following" as any);
   }, [router]);
 
+  const openFAQ = useCallback(() => {
+    showInfo(
+      "FAQ",
+      "How it works:\n• Start with a fixture\n• Follow it for kickoff alerts\n• Save it as a trip\n• Build everything else in one place (travel, stay, tickets, what to do)\n\nIf anything feels unclear, we tighten the flow."
+    );
+  }, []);
+
   const about = useCallback(() => {
     showInfo(
       "About YourNextAway",
-      "YourNextAway helps you plan football-first city breaks across Europe.\n\nPick a match, then organise your trip — travel, stay, tickets and things to do."
+      "YourNextAway helps you plan football-first city breaks across Europe.\n\nStart with a match, then build the trip in one place — travel, stay, tickets, and what to do."
     );
   }, []);
 
@@ -399,7 +406,7 @@ export default function ProfileScreen() {
   }, [countryCode]);
 
   return (
-    <Background imageUrl={getBackground("profile")} overlayOpacity={0.82}>
+    <Background imageSource={getBackground("profile")} overlayOpacity={0.82}>
       <SafeAreaView style={styles.container} edges={["top"]}>
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           {/* HEADER */}
@@ -513,6 +520,7 @@ export default function ProfileScreen() {
               <Text style={styles.listSub}>No noise. Just the essentials.</Text>
             </View>
 
+            <Row title="FAQ" subtitle="How the flow works" onPress={openFAQ} />
             <Row title="About" subtitle="What YourNextAway does" onPress={about} />
             <Row title="Privacy" subtitle="What’s stored and where" onPress={privacy} />
             <Row title="Terms" subtitle="Legal" onPress={terms} last />
