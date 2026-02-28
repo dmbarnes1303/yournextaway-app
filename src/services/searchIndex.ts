@@ -14,9 +14,6 @@ import { getFixtures, type FixtureListRow } from "@/src/services/apiFootball";
  * - Home uses:
  *    buildSearchIndex({ from, to, leagues })
  *    querySearchIndex(index, query, { limit })
- *
- * Debug:
- * - In __DEV__, index.debug contains counts + unresolved fixture team names
  */
 
 export type SearchEntityType = "team" | "city" | "venue" | "country" | "league";
@@ -30,10 +27,10 @@ export type SearchPayload =
 
 export type SearchResult = {
   type: SearchEntityType;
-  key: string; // stable key used for rendering + routing
+  key: string;
   title: string;
   subtitle?: string;
-  score: number; // higher is better
+  score: number;
   payload: SearchPayload;
 };
 
@@ -50,8 +47,6 @@ export type SearchIndexDebug = {
   enabled: boolean;
   counts: Record<SearchEntityType, number>;
   totalEntries: number;
-
-  // Fixture-derived signal
   fixtureRowsScanned: number;
   unresolvedFixtureTeamNames: string[];
 };
@@ -62,7 +57,6 @@ export type SearchIndex = {
   to: string;
   leagues: LeagueOption[];
   entries: IndexEntry[];
-
   debug?: SearchIndexDebug;
 };
 
@@ -78,8 +72,8 @@ function normalizeVenueKey(input: string | undefined | null): string {
   return String(input ?? "")
     .trim()
     .toLowerCase()
-    .replace(/\(.*?\)/g, "") // remove bracketed noise
-    .replace(/[,/|].*$/, "") // cut after comma/slash/pipe
+    .replace(/\(.*?\)/g, "")
+    .replace(/[,/|].*$/, "")
     .replace(/\s+/g, "-")
     .replace(/[^a-z0-9-]/g, "")
     .replace(/-+/g, "-")
@@ -95,13 +89,8 @@ function isDebugEnabled(): boolean {
   return typeof __DEV__ !== "undefined" ? !!__DEV__ : false;
 }
 
-/**
- * Try to resolve a name to a canonical registry key.
- * If you haven't implemented resolveTeamKey in src/data/teams, this will just fallback safely.
- */
 function tryResolveTeamKey(input: string): string | null {
   try {
-    // Optional import at runtime: avoids hard crash if not exported
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const mod = require("@/src/data/teams");
     const fn = mod?.resolveTeamKey;
@@ -115,11 +104,6 @@ function tryResolveTeamKey(input: string): string | null {
   return null;
 }
 
-/**
- * Canonical team slug resolver:
- * - Prefer registry canonical key (handles aliases/diacritics/name variations)
- * - Fallback to normalized input so unknown teams still appear
- */
 function canonicalTeamSlug(input: string | undefined | null): { slug: string | null; resolved: boolean } {
   const s = safeStr(input);
   if (!s) return { slug: null, resolved: false };
@@ -135,8 +119,6 @@ function canonicalTeamSlug(input: string | undefined | null): { slug: string | n
 }
 
 /**
- * IMPORTANT:
- * We must never return "matches" purely because of typeBoost.
  * scoreMatch MUST return 0 when there is no meaningful overlap.
  */
 function scoreMatch(queryTokens: string[], entryTokens: string[]): number {
@@ -185,17 +167,12 @@ function upsertEntry(map: Map<string, IndexEntry>, entry: IndexEntry) {
     return;
   }
 
-  // Prefer keeping richer payload (teamId etc) if present
   const existingPayload: any = existing.payload;
   const nextPayload: any = entry.payload;
 
   const mergedPayload =
     existingPayload?.kind === "team" && nextPayload?.kind === "team"
-      ? {
-          ...existingPayload,
-          ...nextPayload,
-          teamId: existingPayload.teamId ?? nextPayload.teamId,
-        }
+      ? { ...existingPayload, ...nextPayload, teamId: existingPayload.teamId ?? nextPayload.teamId }
       : existing.payload ?? entry.payload;
 
   map.set(entry.key, {
@@ -207,7 +184,7 @@ function upsertEntry(map: Map<string, IndexEntry>, entry: IndexEntry) {
   });
 }
 
-function buildCityAndCountryEntries(map: Map<string, IndexEntry>) {
+function buildCityGuideEntries(map: Map<string, IndexEntry>) {
   Object.values(cityGuidesRegistry as any).forEach((g: any) => {
     const name = safeStr(g?.name ?? g?.cityId);
     if (!name) return;
@@ -221,12 +198,14 @@ function buildCityAndCountryEntries(map: Map<string, IndexEntry>) {
       type: "city",
       key: `city:${slug}`,
       title: name,
-      subtitle: country || undefined,
+      subtitle: country || "City",
       tokens: toEntryTokens([name, slug, country]),
       payload: { kind: "city", slug },
     });
   });
+}
 
+function buildCountriesFromGuides(map: Map<string, IndexEntry>) {
   const countries = uniq(
     Object.values(cityGuidesRegistry as any)
       .map((g: any) => safeStr(g?.country))
@@ -249,7 +228,6 @@ function buildCityAndCountryEntries(map: Map<string, IndexEntry>) {
 }
 
 function buildTeamsRegistryEntries(map: Map<string, IndexEntry>) {
-  // teamsRegistry default export is a map of teamKey -> TeamRecord
   Object.values(teamsRegistry as any).forEach((t: any) => {
     const name = safeStr(t?.name);
     const teamKey = safeStr(t?.teamKey);
@@ -273,8 +251,6 @@ function buildTeamsRegistryEntries(map: Map<string, IndexEntry>) {
 }
 
 function buildTeamGuideEntries(map: Map<string, IndexEntry>) {
-  // teamGuidesRegistry default export is an object that includes the guide maps
-  // We only need to index the guide objects
   Object.values(teamGuidesRegistry as any).forEach((g: any) => {
     const name = safeStr(g?.name ?? g?.teamName ?? g?.teamKey ?? g?.teamId);
     if (!name) return;
@@ -323,17 +299,14 @@ function patchCountryPayloads(entries: IndexEntry[], leagues: LeagueOption[]): I
       leagueList.find((l) => normalizeSearchText(l.label).includes(cn)) ??
       leagueList.find((l) => {
         const label = normalizeSearchText(l.label);
-
         if (cn.includes("england") || cn.includes("uk") || cn.includes("britain")) return label.includes("premier");
         if (cn.includes("spain")) return label.includes("la liga") || label.includes("laliga");
         if (cn.includes("italy")) return label.includes("serie a") || label.includes("seriea");
         if (cn.includes("germany")) return label.includes("bundesliga");
         if (cn.includes("france")) return label.includes("ligue 1") || label.includes("ligue1");
         if (cn.includes("austria")) return label.includes("austrian") || label.includes("bundesliga");
-
         return false;
-      }) ??
-      fallback;
+      }) ?? fallback;
 
     return match;
   };
@@ -346,10 +319,7 @@ function patchCountryPayloads(entries: IndexEntry[], leagues: LeagueOption[]): I
     const leagueId = chosen?.leagueId ?? 0;
     const season = Number(chosen?.season) || 0;
 
-    return {
-      ...e,
-      payload: { kind: "country", country: e.payload.country, leagueId, season },
-    };
+    return { ...e, payload: { kind: "country", country: e.payload.country, leagueId, season } };
   });
 }
 
@@ -460,45 +430,29 @@ export async function buildSearchIndex(args: { from: string; to: string; leagues
   const debugEnabled = isDebugEnabled();
   const unresolvedFixtureTeams = debugEnabled ? new Set<string>() : undefined;
 
-  buildCityAndCountryEntries(map);
-  buildTeamsRegistryEntries(map); // deterministic teams exist even without fixtures/guides
+  // Deterministic base
+  buildCityGuideEntries(map);
+  buildCountriesFromGuides(map);
+  buildTeamsRegistryEntries(map);
   buildTeamGuideEntries(map);
   buildLeagueEntries(map, leagues);
 
+  // Fixture-derived (adds missing cities/venues/teams automatically per current season)
   let fixtureRowsScanned = 0;
   try {
-    fixtureRowsScanned = await buildFixtureDerivedEntries({
-      map,
-      from,
-      to,
-      leagues,
-      unresolvedFixtureTeams,
-    });
+    fixtureRowsScanned = await buildFixtureDerivedEntries({ map, from, to, leagues, unresolvedFixtureTeams });
   } catch {
-    // ignore fixture failures (offline safe)
+    // offline-safe
   }
 
   let entries = Array.from(map.values());
   entries = patchCountryPayloads(entries, leagues);
 
   if (!debugEnabled) {
-    return {
-      builtAt: Date.now(),
-      from,
-      to,
-      leagues,
-      entries,
-    };
+    return { builtAt: Date.now(), from, to, leagues, entries };
   }
 
-  const counts: Record<SearchEntityType, number> = {
-    team: 0,
-    city: 0,
-    venue: 0,
-    country: 0,
-    league: 0,
-  };
-
+  const counts: Record<SearchEntityType, number> = { team: 0, city: 0, venue: 0, country: 0, league: 0 };
   for (const e of entries) counts[e.type] += 1;
 
   return {
@@ -519,7 +473,6 @@ export async function buildSearchIndex(args: { from: string; to: string; leagues
 
 export function querySearchIndex(index: SearchIndex, query: string, opts?: { limit?: number }): SearchResult[] {
   const limit = Math.max(1, Math.min(Number(opts?.limit ?? 20), 100));
-
   const q = safeStr(query);
   if (!q) return [];
 
@@ -547,4 +500,4 @@ export function querySearchIndex(index: SearchIndex, query: string, opts?: { lim
     .sort((a, b) => b.score - a.score);
 
   return scored.slice(0, limit);
-      }
+}
