@@ -11,6 +11,8 @@ import {
   Platform,
   Image,
   Alert,
+  Modal,
+  Keyboard,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
@@ -99,8 +101,16 @@ function safeCityDisplay(cityRaw: string): string {
 function parseIsoToDate(iso?: string | null): Date | null {
   const s = cleanText(iso);
   if (!s) return null;
+  // Accept YYYY-MM-DD only (safer) and ISO datetimes
   const d = new Date(s);
   return Number.isFinite(d.getTime()) ? d : null;
+}
+
+function toIsoDateOnly(d: Date): string {
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
 }
 
 function daysBetweenIso(aIso: string, bIso: string) {
@@ -121,6 +131,19 @@ function findCountryCodeForLeagueId(leagueId: number | null | undefined): string
   const l = LEAGUES.find((x) => x.leagueId === leagueId);
   const cc = String(l?.countryCode ?? "").trim().toUpperCase();
   return cc && cc.length === 2 ? cc : undefined;
+}
+
+function isIsoDateOnly(s: string) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(String(s ?? "").trim());
+}
+
+function clampEndAfterStart(startIso: string, endIso: string) {
+  const a = parseIsoToDate(startIso);
+  const b = parseIsoToDate(endIso);
+  if (!a) return endIso;
+  if (!b) return addDaysIso(startIso, 2);
+  if (b.getTime() < a.getTime()) return startIso;
+  return endIso;
 }
 
 /**
@@ -216,6 +239,20 @@ function findExistingTripIdForFixture(fixtureId: string): string | null {
 }
 
 /* -------------------------------------------------------------------------- */
+/* date editor (Build Trip) */
+/* -------------------------------------------------------------------------- */
+
+function nightsFromDates(startIso: string, endIso: string): number | null {
+  const d = daysBetweenIso(startIso, endIso);
+  if (d == null) return null;
+  return Math.max(0, d);
+}
+
+function labelNight(n: number) {
+  return `${n} night${n === 1 ? "" : "s"}`;
+}
+
+/* -------------------------------------------------------------------------- */
 /* screen */
 /* -------------------------------------------------------------------------- */
 
@@ -245,15 +282,15 @@ export default function TripBuildScreen() {
 
   const [selectedFixture, setSelectedFixture] = useState<FixtureListRow | null>(null);
 
+  // Canonical trip dates (user-driven)
   const [startIso, setStartIso] = useState(clampFromIsoToTomorrow(new Date().toISOString().slice(0, 10)));
   const [endIso, setEndIso] = useState(addDaysIso(startIso, 2));
-  const [notes, setNotes] = useState("");
 
-  const [endTouched, setEndTouched] = useState(false);
-  useEffect(() => {
-    if (endTouched) return;
-    setEndIso(addDaysIso(startIso, 2));
-  }, [startIso, endTouched]);
+  const [dateModalOpen, setDateModalOpen] = useState(false);
+  const [dateDraftStart, setDateDraftStart] = useState(startIso);
+  const [dateDraftNights, setDateDraftNights] = useState<number>(2);
+
+  const [notes, setNotes] = useState("");
 
   const setNotesIfEmpty = useCallback((text: string) => {
     const t = cleanText(text);
@@ -280,6 +317,59 @@ export default function TripBuildScreen() {
   const [selectedLeague, setSelectedLeague] = useState<LeagueOption>(ALL_LEAGUES);
 
   /* -------------------------------------------------------------------------- */
+  /* keep modal draft in sync */
+  /* -------------------------------------------------------------------------- */
+
+  useEffect(() => {
+    setDateDraftStart(startIso);
+    const n = nightsFromDates(startIso, endIso);
+    setDateDraftNights(n == null ? 2 : Math.max(0, n));
+  }, [startIso, endIso]);
+
+  const applyDateDraft = useCallback(() => {
+    const s = cleanText(dateDraftStart);
+    if (!isIsoDateOnly(s)) {
+      Alert.alert("Invalid date", "Use format YYYY-MM-DD");
+      return;
+    }
+    const clampedStart = clampFromIsoToTomorrow(s);
+    const nights = Math.max(0, Number.isFinite(dateDraftNights) ? dateDraftNights : 2);
+    const nextEnd = addDaysIso(clampedStart, nights);
+
+    setStartIso(clampedStart);
+    setEndIso(nextEnd);
+
+    // If user already selected a fixture and it no longer fits the window, deselect it.
+    const fxDate = fixtureDateOnly(selectedFixture);
+    if (fxDate) {
+      const a = parseIsoToDate(clampedStart);
+      const b = parseIsoToDate(nextEnd);
+      const f = parseIsoToDate(fxDate);
+      if (a && b && f) {
+        const ok = f.getTime() >= a.getTime() && f.getTime() <= b.getTime();
+        if (!ok) setSelectedFixture(null);
+      }
+    }
+
+    setVisibleCount(14);
+    setDateModalOpen(false);
+    Keyboard.dismiss();
+  }, [dateDraftStart, dateDraftNights, selectedFixture]);
+
+  const openDateModal = useCallback(() => {
+    setDateModalOpen(true);
+    deferKeyboardDismiss();
+  }, []);
+
+  function deferKeyboardDismiss() {
+    setTimeout(() => {
+      try {
+        Keyboard.dismiss();
+      } catch {}
+    }, 60);
+  }
+
+  /* -------------------------------------------------------------------------- */
   /* Load edit trip */
   /* -------------------------------------------------------------------------- */
 
@@ -304,8 +394,7 @@ export default function TripBuildScreen() {
         }
 
         setStartIso(t.startDate);
-        setEndIso(t.endDate);
-        setEndTouched(true);
+        setEndIso(clampEndAfterStart(t.startDate, t.endDate));
         setNotes(t.notes ?? "");
 
         const mid = t.matchIds?.[0];
@@ -361,11 +450,12 @@ export default function TripBuildScreen() {
         const ids = await computePlaceholderIdsForFixture(r);
         if (!cancelled) setPlaceholderTbcIds(ids);
 
+        // Best-effort: set start to fixture date, but keep user control.
         const d0 = fixtureDateOnly(r);
         if (d0) {
           const start = clampFromIsoToTomorrow(d0);
           setStartIso(start);
-          setEndTouched(false);
+          setEndIso(addDaysIso(start, 2));
         }
 
         if (routeCityArea) {
@@ -390,12 +480,13 @@ export default function TripBuildScreen() {
   }, [routeFixtureId, isPrefilledFlow, routeCityArea, setNotesIfEmpty]);
 
   /* -------------------------------------------------------------------------- */
-  /* Load fixtures (picker mode only) */
+  /* Load fixtures (picker mode only) - fetched by chosen date window */
   /* -------------------------------------------------------------------------- */
 
+  const showPickerMode = !isPrefilledFlow && !isEditing;
+
   useEffect(() => {
-    if (isEditing) return;
-    if (isPrefilledFlow) return;
+    if (!showPickerMode) return;
 
     let cancelled = false;
 
@@ -404,40 +495,63 @@ export default function TripBuildScreen() {
       setError(null);
 
       try {
-        const from = clampFromIsoToTomorrow(new Date().toISOString().slice(0, 10));
-        const to = addDaysIso(from, 30);
+        const from = clampFromIsoToTomorrow(startIso);
+        const to = clampEndAfterStart(from, endIso);
 
         let res: FixtureListRow[] = [];
 
         if (selectedLeague.leagueId === 0) {
           const batches = await Promise.all(
-            LEAGUES.map((l) => getFixtures({ league: l.leagueId, season: l.season, from, to }))
+            LEAGUES.map((l) =>
+              getFixtures({
+                league: l.leagueId,
+                season: l.season,
+                from,
+                to,
+              })
+            )
           );
           res = batches.flat();
         } else {
           res =
-            (await getFixtures({ league: selectedLeague.leagueId, season: selectedLeague.season, from, to })) || [];
+            (await getFixtures({
+              league: selectedLeague.leagueId,
+              season: selectedLeague.season,
+              from,
+              to,
+            })) || [];
         }
 
-        if (!cancelled) {
-          const placeholder = computeLikelyPlaceholderTbcIds(res);
-          setPlaceholderTbcIds(placeholder);
+        if (cancelled) return;
 
-          const scored = res.map((r) => {
-            const iso = String(r?.fixture?.date ?? "");
-            const tbc = isKickoffTbc(r, placeholder);
-            return { r, iso, tbc };
-          });
+        const placeholder = computeLikelyPlaceholderTbcIds(res);
+        setPlaceholderTbcIds(placeholder);
 
-          scored.sort((a, b) => {
-            const aConf = a.tbc ? 1 : 0;
-            const bConf = b.tbc ? 1 : 0;
-            if (aConf !== bConf) return aConf - bConf; // confirmed first
-            return String(a.iso).localeCompare(String(b.iso));
-          });
+        // Score + sort:
+        // - confirmed first
+        // - weekend first
+        // - then chronological
+        const scored = res.map((r) => {
+          const iso = String(r?.fixture?.date ?? "");
+          const tbc = isKickoffTbc(r, placeholder);
+          const wk = weekendHint(iso) === "Weekend" ? 1 : 0;
+          return { r, iso, tbc, wk };
+        });
 
-          setRows(scored.map((x) => x.r));
-        }
+        scored.sort((a, b) => {
+          // confirmed first
+          const aT = a.tbc ? 1 : 0;
+          const bT = b.tbc ? 1 : 0;
+          if (aT !== bT) return aT - bT;
+
+          // weekend first
+          if (a.wk !== b.wk) return b.wk - a.wk;
+
+          // earliest kickoff
+          return String(a.iso).localeCompare(String(b.iso));
+        });
+
+        setRows(scored.map((x) => x.r));
       } catch {
         if (!cancelled) setError("Failed to load fixtures.");
       } finally {
@@ -449,7 +563,7 @@ export default function TripBuildScreen() {
     return () => {
       cancelled = true;
     };
-  }, [selectedLeague, isEditing, isPrefilledFlow]);
+  }, [showPickerMode, selectedLeague, startIso, endIso]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -466,21 +580,6 @@ export default function TripBuildScreen() {
   }, [rows, search]);
 
   const visibleRows = useMemo(() => filtered.slice(0, visibleCount), [filtered, visibleCount]);
-
-  /* -------------------------------------------------------------------------- */
-  /* Selection side effects (dates, tbc inference) */
-  /* -------------------------------------------------------------------------- */
-
-  useEffect(() => {
-    if (!selectedFixture) return;
-
-    const d0 = fixtureDateOnly(selectedFixture);
-    if (d0) {
-      const start = clampFromIsoToTomorrow(d0);
-      setStartIso(start);
-      setEndTouched(false);
-    }
-  }, [selectedFixture]);
 
   /* -------------------------------------------------------------------------- */
   /* Save trip */
@@ -540,23 +639,22 @@ export default function TripBuildScreen() {
     try {
       if (!tripsStore.getState().loaded) await tripsStore.loadTrips();
 
-      // EDIT FLOW: always just update.
+      // EDIT FLOW
       if (isEditing && routeTripId) {
         await tripsStore.updateTrip(routeTripId, patch);
         router.replace({ pathname: "/trip/[id]", params: { id: routeTripId } } as any);
         return;
       }
 
-      // NEW TRIP FLOW:
-      // 1) Dedupe: if a trip already exists for this fixture, open it (don’t create clones).
+      // NEW TRIP FLOW dedupe
       const existingId = findExistingTripIdForFixture(fixtureId);
       if (existingId) {
-        Alert.alert("Trip already exists", "You already have a Trip Hub for this match — opening it now.");
+        Alert.alert("Trip already exists", "You already have a trip for this match — opening it now.");
         router.replace({ pathname: "/trip/[id]", params: { id: existingId } } as any);
         return;
       }
 
-      // 2) Enforce Free cap (hard cap until Pro is wired).
+      // Free cap
       const tripCount = tripsStore.getState().trips?.length ?? 0;
       if (tripCount >= FREE_TRIP_CAP) {
         Alert.alert(
@@ -566,7 +664,6 @@ export default function TripBuildScreen() {
         return;
       }
 
-      // 3) Create trip.
       const t = await tripsStore.addTrip(patch as any);
       router.replace({ pathname: "/trip/[id]", params: { id: t.id } } as any);
     } catch (e: any) {
@@ -591,6 +688,19 @@ export default function TripBuildScreen() {
   /* UI computed */
   /* -------------------------------------------------------------------------- */
 
+  const headerTitle = useMemo(() => (isEditing ? "Edit Trip" : "Plan a Trip"), [isEditing]);
+
+  const dateWindowLabel = useMemo(() => {
+    const nights = nightsFromDates(startIso, endIso);
+    const nightsLabel = nights == null ? "" : ` • ${labelNight(nights)}`;
+    return `${startIso} → ${endIso}${nightsLabel}`;
+  }, [startIso, endIso]);
+
+  const selectedLeagueLabel = useMemo(() => {
+    if (selectedLeague.leagueId === 0) return "All leagues";
+    return selectedLeague.label;
+  }, [selectedLeague]);
+
   const selectedTitle = useMemo(() => {
     const h = cleanText(selectedFixture?.teams?.home?.name) || "Home";
     const a = cleanText(selectedFixture?.teams?.away?.name) || "Away";
@@ -613,34 +723,13 @@ export default function TripBuildScreen() {
     return parts.length ? parts.join(" • ") : "Venue: —";
   }, [selectedFixture]);
 
-  const tripLength = useMemo(() => {
-    const d = daysBetweenIso(startIso, endIso);
-    if (d == null) return null;
-    const nights = Math.max(0, d);
-    return `${nights} night${nights === 1 ? "" : "s"}`;
-  }, [startIso, endIso]);
-
-  const headerTitle = useMemo(() => (isEditing ? "Edit Trip" : "Build Trip"), [isEditing]);
-
-  const intentSub = useMemo(() => {
-    if (isEditing) return "Update your trip hub details.";
-    return "Pick a match, then we’ll create a Trip Hub for flights, stay, tickets, and plans.";
-  }, [isEditing]);
-
-  const selectedLeagueLabel = useMemo(() => {
-    if (selectedLeague.leagueId === 0) return "All leagues";
-    return selectedLeague.label;
-  }, [selectedLeague]);
-
-  const dateWindowLabel = useMemo(() => {
-    const nights = tripLength ? ` • ${tripLength}` : "";
-    return `${startIso} → ${endIso}${nights}`;
-  }, [startIso, endIso, tripLength]);
-
-  const showPickerMode = !isPrefilledFlow && !isEditing;
-
   const selectedHomeLogo = useMemo(() => safeUri(selectedFixture?.teams?.home?.logo), [selectedFixture]);
   const selectedAwayLogo = useMemo(() => safeUri(selectedFixture?.teams?.away?.logo), [selectedFixture]);
+
+  const windowTitle = useMemo(() => {
+    if (isEditing) return "Edit trip";
+    return "Pick dates → pick a match → create your trip";
+  }, [isEditing]);
 
   /* -------------------------------------------------------------------------- */
   /* UI */
@@ -668,16 +757,20 @@ export default function TripBuildScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* INTENT HEADER */}
+          {/* TOP FUNNEL HEADER */}
           <GlassCard style={styles.headerCard} level="subtle">
-            <Text style={styles.bigTitle}>{isEditing ? "Edit your Trip Hub" : "Build a Trip Hub"}</Text>
-            <Text style={styles.bigSub}>{intentSub}</Text>
+            <Text style={styles.bigTitle}>{windowTitle}</Text>
+            <Text style={styles.bigSub}>
+              Set your trip dates first. We’ll show matches that fit, then build your trip workspace.
+            </Text>
 
             <View style={styles.chipRow}>
-              <View style={styles.chip}>
-                <Text style={styles.chipKicker}>Trip</Text>
-                <Text style={styles.chipValue}>{dateWindowLabel}</Text>
-              </View>
+              <Pressable onPress={openDateModal} style={styles.chipPress}>
+                <View style={styles.chip}>
+                  <Text style={styles.chipKicker}>Trip dates</Text>
+                  <Text style={styles.chipValue}>{dateWindowLabel}</Text>
+                </View>
+              </Pressable>
 
               <View style={styles.chip}>
                 <Text style={styles.chipKicker}>League</Text>
@@ -694,6 +787,54 @@ export default function TripBuildScreen() {
             ) : null}
           </GlassCard>
 
+          {/* DATE MODAL */}
+          <Modal visible={dateModalOpen} transparent animationType="fade" onRequestClose={() => setDateModalOpen(false)}>
+            <Pressable style={styles.modalBackdrop} onPress={() => setDateModalOpen(false)}>
+              <Pressable style={styles.modalCard} onPress={() => null}>
+                <Text style={styles.modalTitle}>Trip dates</Text>
+                <Text style={styles.modalSub}>Use YYYY-MM-DD. Nights controls the end date.</Text>
+
+                <Text style={styles.label}>Start date</Text>
+                <TextInput
+                  value={dateDraftStart}
+                  onChangeText={setDateDraftStart}
+                  placeholder="YYYY-MM-DD"
+                  placeholderTextColor={theme.colors.textSecondary}
+                  style={styles.input}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+
+                <Text style={[styles.label, { marginTop: 12 }]}>Trip length</Text>
+                <View style={styles.nightsRow}>
+                  {[1, 2, 3].map((n) => {
+                    const active = dateDraftNights === n;
+                    return (
+                      <Pressable
+                        key={n}
+                        onPress={() => setDateDraftNights(n)}
+                        style={[styles.nightPill, active && styles.nightPillActive]}
+                      >
+                        <Text style={[styles.nightPillText, active && styles.nightPillTextActive]}>
+                          {labelNight(n)}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+
+                <View style={styles.modalActions}>
+                  <Pressable onPress={() => setDateModalOpen(false)} style={[styles.btn, styles.btnSecondary]}>
+                    <Text style={styles.btnSecondaryText}>Cancel</Text>
+                  </Pressable>
+                  <Pressable onPress={applyDateDraft} style={[styles.btn, styles.btnPrimary]}>
+                    <Text style={styles.btnPrimaryText}>Apply</Text>
+                  </Pressable>
+                </View>
+              </Pressable>
+            </Pressable>
+          </Modal>
+
           {(loading || prefillLoading) && (
             <GlassCard level="subtle">
               <View style={styles.center}>
@@ -709,59 +850,53 @@ export default function TripBuildScreen() {
             </GlassCard>
           )}
 
-          {/* PREFILLED / EDIT SUMMARY */}
+          {/* SELECTED SUMMARY (prefilled/edit OR after user selects from list) */}
           {!prefillLoading && selectedFixture ? (
             <GlassCard level="default">
               <Text style={styles.h1}>Selected match</Text>
 
               <View style={styles.selectedRow}>
-                <View style={styles.selectedLeft}>
-                  <View style={styles.teamRow}>
-                    <View style={styles.crestStack}>
-                      {selectedHomeLogo ? (
-                        <Image source={{ uri: selectedHomeLogo }} style={styles.crest} />
-                      ) : (
-                        <View style={styles.crestFallback} />
-                      )}
-                      {selectedAwayLogo ? (
-                        <Image source={{ uri: selectedAwayLogo }} style={[styles.crest, { marginLeft: -10 }]} />
-                      ) : (
-                        <View style={[styles.crestFallback, { marginLeft: -10 }]} />
-                      )}
-                    </View>
-
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.selectedTitle} numberOfLines={1}>
-                        {selectedTitle}
-                      </Text>
-
-                      <Text style={styles.selectedMeta}>{selectedKickLine}</Text>
-                      <Text style={styles.selectedMeta}>{selectedVenueLine}</Text>
-                    </View>
-                  </View>
-
-                  <View style={styles.badgeRow}>
-                    {isKickoffTbc(selectedFixture, placeholderTbcIds) ? (
-                      <>
-                        <View style={[styles.badge, styles.badgeTbc]}>
-                          <Text style={[styles.badgeText, styles.badgeTextTbc]}>Kickoff TBC</Text>
-                        </View>
-                        <View style={styles.badge}>
-                          <Text style={styles.badgeText}>TV schedule pending</Text>
-                        </View>
-                      </>
+                <View style={styles.teamRow}>
+                  <View style={styles.crestStack}>
+                    {selectedHomeLogo ? <Image source={{ uri: selectedHomeLogo }} style={styles.crest} /> : <View style={styles.crestFallback} />}
+                    {selectedAwayLogo ? (
+                      <Image source={{ uri: selectedAwayLogo }} style={[styles.crest, { marginLeft: -10 }]} />
                     ) : (
-                      <View style={[styles.badge, styles.badgeConfirmed]}>
-                        <Text style={[styles.badgeText, styles.badgeTextConfirmed]}>Kickoff confirmed</Text>
-                      </View>
+                      <View style={[styles.crestFallback, { marginLeft: -10 }]} />
                     )}
-
-                    {weekendHint(selectedFixture?.fixture?.date) ? (
-                      <View style={styles.badge}>
-                        <Text style={styles.badgeText}>{weekendHint(selectedFixture?.fixture?.date)}</Text>
-                      </View>
-                    ) : null}
                   </View>
+
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.selectedTitle} numberOfLines={1}>
+                      {selectedTitle}
+                    </Text>
+
+                    <Text style={styles.selectedMeta}>{selectedKickLine}</Text>
+                    <Text style={styles.selectedMeta}>{selectedVenueLine}</Text>
+                  </View>
+                </View>
+
+                <View style={styles.badgeRow}>
+                  {isKickoffTbc(selectedFixture, placeholderTbcIds) ? (
+                    <>
+                      <View style={[styles.badge, styles.badgeTbc]}>
+                        <Text style={[styles.badgeText, styles.badgeTextTbc]}>Kickoff TBC</Text>
+                      </View>
+                      <View style={styles.badge}>
+                        <Text style={styles.badgeText}>TV schedule pending</Text>
+                      </View>
+                    </>
+                  ) : (
+                    <View style={[styles.badge, styles.badgeConfirmed]}>
+                      <Text style={[styles.badgeText, styles.badgeTextConfirmed]}>Kickoff confirmed</Text>
+                    </View>
+                  )}
+
+                  {weekendHint(selectedFixture?.fixture?.date) ? (
+                    <View style={styles.badge}>
+                      <Text style={styles.badgeText}>{weekendHint(selectedFixture?.fixture?.date)}</Text>
+                    </View>
+                  ) : null}
                 </View>
               </View>
 
@@ -791,7 +926,7 @@ export default function TripBuildScreen() {
             <GlassCard level="default">
               <Text style={styles.h1}>Pick a match</Text>
               <Text style={styles.hint}>
-                This isn’t the Fixtures tab. Pick a match to create a Trip Hub with planning context.
+                Showing fixtures within your selected trip window. Change dates if you want a different shortlist.
               </Text>
 
               {/* League chips */}
@@ -826,7 +961,7 @@ export default function TripBuildScreen() {
 
               {visibleRows.length === 0 && !loading ? (
                 <View style={{ marginTop: 10 }}>
-                  <EmptyState title="No fixtures" message="Try another league or search term." />
+                  <EmptyState title="No fixtures in this window" message="Try different dates, league, or search." />
                 </View>
               ) : null}
 
@@ -959,7 +1094,7 @@ export default function TripBuildScreen() {
                 </>
               ) : (
                 <View style={styles.pickEmptyHint}>
-                  <Text style={styles.pickEmptyHintT}>Select a match to unlock Trip Hub creation.</Text>
+                  <Text style={styles.pickEmptyHintT}>Select a match to create the trip.</Text>
                 </View>
               )}
             </GlassCard>
@@ -975,10 +1110,10 @@ export default function TripBuildScreen() {
             ]}
           >
             <Text style={styles.saveText}>
-              {saving ? "Creating…" : isEditing ? "Update Trip Hub" : "Create Trip Hub"}
+              {saving ? "Creating…" : isEditing ? "Update trip" : "Create trip"}
             </Text>
             <Text style={styles.saveSub}>
-              {selectedFixture ? "Flights • Stay • Tickets • Plans in one place" : "Select a match to continue"}
+              {selectedFixture ? "Flights • Hotel • Tickets • Plans in one place" : "Select a match to continue"}
             </Text>
           </Pressable>
 
@@ -997,7 +1132,7 @@ const styles = StyleSheet.create({
   headerCard: { padding: theme.spacing.lg },
 
   bigTitle: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: "900",
     color: theme.colors.text,
     letterSpacing: 0.2,
@@ -1011,6 +1146,7 @@ const styles = StyleSheet.create({
   },
 
   chipRow: { marginTop: 14, flexDirection: "row", gap: 10 },
+  chipPress: { flex: 1 },
   chip: {
     flex: 1,
     borderRadius: 14,
@@ -1046,8 +1182,6 @@ const styles = StyleSheet.create({
   muted: { color: theme.colors.textSecondary, fontWeight: "800" },
 
   selectedRow: { marginTop: 6 },
-  selectedLeft: { flex: 1 },
-
   teamRow: { flexDirection: "row", gap: 12, alignItems: "center" },
 
   crestStack: { flexDirection: "row", alignItems: "center" },
@@ -1215,4 +1349,58 @@ const styles = StyleSheet.create({
   saveSub: { marginTop: 6, color: theme.colors.textSecondary, fontWeight: "800", fontSize: 11 },
 
   err: { marginTop: 10, color: "rgba(255,80,80,0.95)", fontWeight: "900" },
+
+  /* modal */
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.60)",
+    padding: 18,
+    justifyContent: "center",
+  },
+  modalCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+    backgroundColor: "rgba(12,12,12,0.92)",
+    padding: 14,
+  },
+  modalTitle: { color: theme.colors.text, fontWeight: "900", fontSize: 16 },
+  modalSub: { marginTop: 6, color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12, lineHeight: 16 },
+  input: {
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: "rgba(0,0,0,0.25)",
+    borderRadius: 12,
+    padding: 12,
+    color: theme.colors.text,
+    fontWeight: "900",
+  },
+  nightsRow: { flexDirection: "row", gap: 10, marginTop: 8, flexWrap: "wrap" },
+  nightPill: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  nightPillActive: {
+    borderColor: "rgba(0,255,136,0.45)",
+    backgroundColor: "rgba(0,255,136,0.08)",
+  },
+  nightPillText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: 12 },
+  nightPillTextActive: { color: theme.colors.text, fontWeight: "900", fontSize: 12 },
+  modalActions: { marginTop: 14, flexDirection: "row", gap: 10 },
+  btn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: "center",
+    borderWidth: 1,
+  },
+  btnPrimary: { borderColor: "rgba(0,255,136,0.55)", backgroundColor: "rgba(0,0,0,0.18)" },
+  btnPrimaryText: { color: theme.colors.text, fontWeight: "900" },
+  btnSecondary: { borderColor: "rgba(255,255,255,0.14)", backgroundColor: "rgba(0,0,0,0.14)" },
+  btnSecondaryText: { color: theme.colors.textSecondary, fontWeight: "900" },
 });
