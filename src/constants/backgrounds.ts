@@ -4,7 +4,6 @@ import { normalizeCityKey } from "@/src/utils/city";
 
 export type BackgroundKey =
   | "home"
-  | "city"
   | "landing"
   | "landing-hero"
   | "onboarding-1"
@@ -19,9 +18,6 @@ export type BackgroundKey =
 const BACKGROUNDS: Record<BackgroundKey, ImageSourcePropType> = {
   home: require("@/src/assets/backgrounds/home.png"),
 
-  // Safe fallback used by city screens if no remote match exists
-  city: require("@/src/assets/backgrounds/home.png"),
-
   landing: require("@/src/assets/backgrounds/landing-hero.png"),
   "landing-hero": require("@/src/assets/backgrounds/landing-hero.png"),
 
@@ -33,8 +29,6 @@ const BACKGROUNDS: Record<BackgroundKey, ImageSourcePropType> = {
   fixtures: require("@/src/assets/backgrounds/fixtures.png"),
   trips: require("@/src/assets/backgrounds/trips.png"),
   wallet: require("@/src/assets/backgrounds/wallet.png"),
-
-  // If you don’t have a dedicated profile background yet, reuse trips intentionally.
   profile: require("@/src/assets/backgrounds/trips.png"),
 };
 
@@ -42,16 +36,21 @@ export function getBackground(key: BackgroundKey): ImageSourcePropType {
   return BACKGROUNDS[key];
 }
 
+export function getBackgroundSource(key: BackgroundKey): ImageSourcePropType {
+  return BACKGROUNDS[key];
+}
+
 /**
- * Remote Unsplash helper
- * NOTE: `id` must be an images.unsplash.com path segment, e.g. "photo-123..."
+ * Remote Unsplash helper (direct JPG)
  */
 const u = (id: string) =>
   `https://images.unsplash.com/${id}?auto=format&fit=crop&w=1800&h=3200&fm=jpg&q=80`;
 
 /**
  * CITY HERO BACKGROUNDS
- * Keys MUST match normalizeCityKey() output (lowercase + hyphen-separated).
+ * IMPORTANT:
+ * - Keys MUST match normalizeCityKey() output (and your cities[].slug)
+ * - If a city is missing, we fall back to BACKGROUNDS.home
  */
 export const CITY_BACKGROUNDS: Record<string, string> = {
   /* ---------------- PREMIER LEAGUE ---------------- */
@@ -63,10 +62,13 @@ export const CITY_BACKGROUNDS: Record<string, string> = {
   leeds: u("photo-1500530855697-b586d89ba3ee"),
   brighton: u("photo-1501854140801-50d01698950b"),
   bournemouth: u("photo-1501854140801-50d01698950b"),
-  sheffield: u("photo-1519681393784-d120267933ba"),
   nottingham: u("photo-1470123808288-1e59739a7a31"),
-  leicester: u("photo-1544986581-efac024faf62"),
+  brentford: u("photo-1519681393784-d120267933ba"),
+  fulham: u("photo-1519681393784-d120267933ba"),
+  sunderland: u("photo-1519681393784-d120267933ba"),
+  burnley: u("photo-1544986581-efac024faf62"),
   wolverhampton: u("photo-1519681393784-d120267933ba"),
+  "crystal-palace": u("photo-1528909514045-2fa4ac7a08ba"),
 
   /* ---------------- LA LIGA ---------------- */
   madrid: u("photo-1543783207-ec64e4d95325"),
@@ -76,11 +78,13 @@ export const CITY_BACKGROUNDS: Record<string, string> = {
   bilbao: u("photo-1533106418989-88406c7cc8ca"),
   "san-sebastian": u("photo-1533106418989-88406c7cc8ca"),
   vigo: u("photo-1501854140801-50d01698950b"),
-  mallorca: u("photo-1501854140801-50d01698950b"),
   girona: u("photo-1533106418989-88406c7cc8ca"),
-  granada: u("photo-1529260830199-42c24126f198"),
-  almeria: u("photo-1529260830199-42c24126f198"),
-  getafe: u("photo-1543783207-ec64e4d95325"),
+  palma: u("photo-1501854140801-50d01698950b"),
+  oviedo: u("photo-1501854140801-50d01698950b"),
+  pamplona: u("photo-1529260830199-42c24126f198"),
+  "vitoria-gasteiz": u("photo-1529260830199-42c24126f198"),
+  villarreal: u("photo-1533106418989-88406c7cc8ca"),
+  elche: u("photo-1501854140801-50d01698950b"),
 
   /* ---------------- BUNDESLIGA ---------------- */
   munich: u("photo-1526481280695-3c687fd643ed"),
@@ -94,25 +98,31 @@ export const CITY_BACKGROUNDS: Record<string, string> = {
   leipzig: u("photo-1500530855697-b586d89ba3ee"),
   leverkusen: u("photo-1526481280695-3c687fd643ed"),
   augsburg: u("photo-1526481280695-3c687fd643ed"),
-  hoffenheim: u("photo-1519681393784-d120267933ba"),
   freiburg: u("photo-1500530855697-b586d89ba3ee"),
+  sinsheim: u("photo-1519681393784-d120267933ba"),
+  mainz: u("photo-1519681393784-d120267933ba"),
+  monchengladbach: u("photo-1519681393784-d120267933ba"),
+  wolfsburg: u("photo-1519681393784-d120267933ba"),
+  heidenheim: u("photo-1519681393784-d120267933ba"),
 
   /* ---------------- SERIE A ---------------- */
   milan: u("photo-1526481280695-3c687fd643ed"),
-  rome: u("photo-1529156069898-49953e39b3ac"),
   naples: u("photo-1529260830199-42c24126f198"),
+  rome: u("photo-1529156069898-49953e39b3ac"),
   turin: u("photo-1526481280695-3c687fd643ed"),
-  florence: u("photo-1526481280695-3c687fd643ed"),
-  bologna: u("photo-1549899599-7b5d3b74e6c8"),
-  bergamo: u("photo-1512453979798-5ea266f8880c"),
-  genoa: u("photo-1533106418989-88406c7cc8ca"),
-  verona: u("photo-1526481280695-3c687fd643ed"),
-  udine: u("photo-1519681393784-d120267933ba"),
-  lecce: u("photo-1529260830199-42c24126f198"),
-  cagliari: u("photo-1501854140801-50d01698950b"),
   como: u("photo-1501854140801-50d01698950b"),
+  bergamo: u("photo-1512453979798-5ea266f8880c"),
+  bologna: u("photo-1549899599-7b5d3b74e6c8"),
+  sassuolo: u("photo-1526481280695-3c687fd643ed"),
+  udine: u("photo-1519681393784-d120267933ba"),
   parma: u("photo-1526481280695-3c687fd643ed"),
+  cagliari: u("photo-1501854140801-50d01698950b"),
+  genoa: u("photo-1533106418989-88406c7cc8ca"),
+  florence: u("photo-1526481280695-3c687fd643ed"),
+  cremona: u("photo-1519681393784-d120267933ba"),
+  lecce: u("photo-1529260830199-42c24126f198"),
   pisa: u("photo-1501854140801-50d01698950b"),
+  verona: u("photo-1526481280695-3c687fd643ed"),
 
   /* ---------------- LIGUE 1 ---------------- */
   paris: u("photo-1502602898657-3e91760cbb34"),
@@ -130,17 +140,18 @@ export const CITY_BACKGROUNDS: Record<string, string> = {
   lorient: u("photo-1520975693411-b0f2f7d1c40b"),
   "le-havre": u("photo-1500530855697-b586d89ba3ee"),
   angers: u("photo-1470123808288-1e59739a7a31"),
+  marseille: u("photo-1529260830199-42c24126f198"),
+  lens: u("photo-1519681393784-d120267933ba"),
 };
 
 /**
- * Returns a city hero background:
- * - If we have a remote Unsplash URL for the normalized city key, return that URL string.
- * - Otherwise return a safe local fallback ImageSource.
+ * Return city background or fallback.
+ * Accepts any input (slug, name, "San Sebastián", etc).
  */
 export function getCityBackground(cityInput: string): string | ImageSourcePropType {
   const key = normalizeCityKey(cityInput);
-  if (!key) return BACKGROUNDS.city;
-  return CITY_BACKGROUNDS[key] ?? BACKGROUNDS.city;
+  if (!key) return BACKGROUNDS.home;
+  return CITY_BACKGROUNDS[key] ?? BACKGROUNDS.home;
 }
 
 export default BACKGROUNDS;
