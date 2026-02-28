@@ -5,39 +5,40 @@ import { theme } from "@/src/constants/theme";
 import type { FixtureCertainty } from "@/src/utils/fixtureCertainty";
 
 function cfg(state: FixtureCertainty) {
-  if (state === "tbc") {
-    return {
-      label: "Kickoff TBC",
-      border: "rgba(255,200,80,0.40)",
-      bg: "rgba(255,200,80,0.10)",
-      fg: "rgba(255,200,80,1)",
-    };
-  }
+  switch (state) {
+    case "tbc":
+      return {
+        label: "Kickoff TBC",
+        border: "rgba(255,200,80,0.40)",
+        bg: "rgba(255,200,80,0.10)",
+        fg: "rgba(255,200,80,1)",
+      };
 
-  if (state === "likely_tbc") {
-    return {
-      label: "Likely TBC",
-      border: "rgba(255,210,77,0.30)",
-      bg: "rgba(255,210,77,0.10)",
-      fg: "rgba(255,210,77,0.92)",
-    };
-  }
+    case "likely_tbc":
+      return {
+        label: "Likely placeholder",
+        border: "rgba(255,210,77,0.30)",
+        bg: "rgba(255,210,77,0.10)",
+        fg: "rgba(255,210,77,0.92)",
+      };
 
-  if (state === "changed") {
-    return {
-      label: "Date changed",
-      border: "rgba(255,80,80,0.40)",
-      bg: "rgba(255,80,80,0.10)",
-      fg: "rgba(255,120,120,1)",
-    };
-  }
+    case "changed":
+      return {
+        label: "Date changed",
+        border: "rgba(255,80,80,0.40)",
+        bg: "rgba(255,80,80,0.10)",
+        fg: "rgba(255,120,120,1)",
+      };
 
-  return {
-    label: "Confirmed",
-    border: "rgba(160,195,255,0.35)",
-    bg: "rgba(160,195,255,0.10)",
-    fg: "rgba(160,195,255,1)",
-  };
+    case "confirmed":
+    default:
+      return {
+        label: "Confirmed",
+        border: "rgba(160,195,255,0.35)",
+        bg: "rgba(160,195,255,0.10)",
+        fg: "rgba(160,195,255,1)",
+      };
+  }
 }
 
 export default function FixtureCertaintyBadge({ state }: { state: FixtureCertainty }) {
@@ -62,6 +63,5 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "900",
     letterSpacing: 0.2,
-    color: theme.colors.text,
   },
 });
