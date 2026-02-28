@@ -10,8 +10,8 @@ import {
 
 /**
  * Root-level bootstrap:
- * - Ensure the return watcher is running (exactly once)
- * - When a return is detected, notify the UI via a registered handler
+ * - Ensure the return watcher is running
+ * - When a return is detected, notify UI via a registered handler
  *
  * UI decides:
  * - YES -> markItemBooked(itemId)
@@ -19,9 +19,9 @@ import {
  * - NOT NOW -> dismissPartnerReturn(itemId)
  *
  * Production goals:
- * - No duplicate handlers on fast refresh / remount
- * - Can unsubscribe handler cleanly
- * - If a click arrives before handler exists, we hold it and replay once
+ * - No duplicate UI handlers on fast refresh / remount
+ * - If a click arrives before handler exists, hold it and replay once
+ * - Never “lose” a click because a handler threw
  */
 
 let bootstrapped = false;
@@ -29,18 +29,26 @@ let bootstrapped = false;
 // Current UI handler (set by app/_layout.tsx)
 let handler: ((itemId: string, click: LastPartnerClick) => void) | null = null;
 
-// If a partner return fires before UI registers a handler, hold latest
+// If a return fires before UI registers a handler, hold latest
 let pendingClick: LastPartnerClick | null = null;
 
-// Prevent double-delivery of the same click (defensive)
+// Defensive: prevent double-delivery of the same click
 let lastDeliveredKey: string | null = null;
 
+function clean(s: any) {
+  return String(s ?? "").trim();
+}
+
 function clickKey(c: LastPartnerClick): string {
-  // itemId should be stable; add timestamp-ish if present to reduce collisions
-  const t = (c as any)?.ts ?? (c as any)?.timestamp ?? "";
-  const pid = (c as any)?.partnerId ?? "";
-  const url = (c as any)?.url ?? "";
-  return `${String(c.itemId)}|${String(pid)}|${String(t)}|${String(url)}`;
+  // Deterministic key from actual fields in LastPartnerClick
+  // openedAt is the best “session” discriminator
+  return [
+    clean(c.itemId),
+    clean(c.tripId),
+    clean(c.partnerId),
+    clean(c.url),
+    String(Number(c.openedAt || 0)),
+  ].join("|");
 }
 
 function deliverToHandler(c: LastPartnerClick) {
@@ -51,17 +59,21 @@ function deliverToHandler(c: LastPartnerClick) {
   }
 
   const key = clickKey(c);
+
+  // If we *successfully* delivered this exact click already, ignore repeats
   if (lastDeliveredKey && key === lastDeliveredKey) return;
 
-  lastDeliveredKey = key;
-  pendingClick = null;
-
   try {
-    fn(String(c.itemId), c);
+    fn(clean(c.itemId), c);
+
+    // Mark delivered ONLY after success
+    lastDeliveredKey = key;
+    pendingClick = null;
   } catch {
     // Never crash the app due to UI handler errors.
-    // If handler throws, keep click so it can be retried on next handler set.
+    // Keep click so it can be replayed when handler is re-registered.
     pendingClick = c;
+    // IMPORTANT: do NOT set lastDeliveredKey on failure
   }
 }
 
@@ -72,10 +84,9 @@ function deliverToHandler(c: LastPartnerClick) {
 export function registerReturnModalHandler(fn: (itemId: string, click: LastPartnerClick) => void) {
   handler = fn;
 
-  // If we already have a pending click, replay it once.
+  // If we already have a pending click, replay it once (next tick).
   if (pendingClick) {
     const c = pendingClick;
-    // Defer to next tick so UI has mounted fully.
     setTimeout(() => deliverToHandler(c), 0);
   }
 
@@ -95,10 +106,8 @@ export function bootstrapPartnerReturnPrompt() {
   // Ensure store is available; watcher itself loads click state.
   savedItemsStore.load().catch(() => null);
 
-  // Ensure watcher runs and pushes returns into this module.
-  // We assume ensurePartnerReturnWatcher is itself idempotent and safe to call once.
-  ensurePartnerReturnWatcher(async (click) => {
-    // Always route through our delivery gate.
+  // Start watcher (partnerClicks.ts is idempotent + de-duped)
+  ensurePartnerReturnWatcher((click) => {
     deliverToHandler(click);
   });
 }
@@ -106,7 +115,7 @@ export function bootstrapPartnerReturnPrompt() {
 /** UI action: user confirms booking */
 export async function markItemBooked(itemId: string) {
   await markBooked(itemId);
-  // After a decision, clear last-delivered guard so a future click can show again.
+  // After decision, allow future clicks to deliver normally
   lastDeliveredKey = null;
 }
 
@@ -119,6 +128,6 @@ export async function markItemNotBooked(itemId: string) {
 /** UI action: user dismisses ("Not now") */
 export async function dismissPartnerReturn(itemId?: string) {
   await dismissReturnPrompt(itemId);
-  // Not-now means we intentionally suppress for now; keep delivered guard cleared.
+  // Not-now intentionally suppresses this click; allow future clicks
   lastDeliveredKey = null;
 }
