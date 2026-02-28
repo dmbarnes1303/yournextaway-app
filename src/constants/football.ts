@@ -13,9 +13,20 @@ export type LeagueOption = {
 };
 
 /**
- * Keep this aligned with your API-Football season.
+ * European football seasons generally start in July/August.
+ * API-Football uses the season "start year" (e.g. 2025 means 2025/26).
  */
-export const DEFAULT_SEASON = 2025;
+export function currentFootballSeasonStartYear(now = new Date()): number {
+  const y = now.getFullYear();
+  const m = now.getMonth(); // 0=Jan
+  return m >= 6 ? y : y - 1; // July(6) onward = new season start year
+}
+
+/**
+ * Keep this aligned with your API-Football season.
+ * IMPORTANT: this is computed so you don't forget to bump it each year.
+ */
+export const DEFAULT_SEASON = currentFootballSeasonStartYear();
 
 /**
  * Single source of truth for all top leagues used in the app.
@@ -40,8 +51,8 @@ export const LEAGUES: LeagueOption[] = [
  */
 export type LeagueSlotRule = {
   leagueId: number;
-  primarySlot: string;     // display text e.g. "Sat 15:00"
-  typicalSlots: string[];  // optional: used later for UI
+  primarySlot: string; // display text e.g. "Sat 15:00"
+  typicalSlots: string[]; // optional: used later for UI
 };
 
 export const LEAGUE_SLOT_RULES: LeagueSlotRule[] = [
@@ -53,7 +64,18 @@ export const LEAGUE_SLOT_RULES: LeagueSlotRule[] = [
   {
     leagueId: 140,
     primarySlot: "Sat 18:30",
-    typicalSlots: ["Fri 21:00", "Sat 14:00", "Sat 16:15", "Sat 18:30", "Sat 21:00", "Sun 14:00", "Sun 16:15", "Sun 18:30", "Sun 21:00", "Mon 21:00"],
+    typicalSlots: [
+      "Fri 21:00",
+      "Sat 14:00",
+      "Sat 16:15",
+      "Sat 18:30",
+      "Sat 21:00",
+      "Sun 14:00",
+      "Sun 16:15",
+      "Sun 18:30",
+      "Sun 21:00",
+      "Mon 21:00",
+    ],
   },
   {
     leagueId: 135,
@@ -144,10 +166,7 @@ function isIsoDateOnly(s?: string): boolean {
  * - clamps `from` to tomorrow
  * - ensures `to >= from` (if not, sets `to = from + (daysIfInvalidTo-1)`)
  */
-export function normalizeWindowIso(
-  input: { from: string; to: string },
-  daysIfInvalidTo = 90
-): RollingWindowIso {
+export function normalizeWindowIso(input: { from: string; to: string }, daysIfInvalidTo = 90): RollingWindowIso {
   const from = clampFromIsoToTomorrow(String(input.from ?? "").trim());
 
   const fromDate = parseIsoDateOnly(from);
@@ -158,8 +177,6 @@ export function normalizeWindowIso(
   const fallbackTo = addDaysIso(from, safeDays - 1);
 
   if (!fromDate) {
-    // If from itself is unparsable, clampFromIsoToTomorrow already returned tomorrowIso(),
-    // but keep a safe fallback anyway.
     return { from: tomorrowIso(), to: addDaysIso(tomorrowIso(), safeDays - 1) };
   }
 
