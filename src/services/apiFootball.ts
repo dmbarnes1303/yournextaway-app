@@ -1,6 +1,6 @@
 // src/services/apiFootball.ts
 // API-Football client — returns RAW API rows (fixture/league/teams/goals/score)
-// Matches UI usage in Fixtures + kickoffTbc + followStore.
+// Compatible with existing UI expectations across Fixtures, Match, Follow, etc.
 
 import Constants from "expo-constants";
 
@@ -8,7 +8,7 @@ export type FixtureListRow = {
   fixture: {
     id: number;
     date: string | null;
-    status?: { short?: string | null };
+    status?: { short?: string | null; long?: string | null };
     venue?: { name?: string | null; city?: string | null };
   };
   league: {
@@ -16,6 +16,7 @@ export type FixtureListRow = {
     name?: string | null;
     season?: number | null;
     round?: string | null;
+    flag?: string | null;
   };
   teams: {
     home?: { id?: number; name?: string | null; logo?: string | null };
@@ -38,53 +39,49 @@ type FixturesParams = {
 const API_BASE = "https://v3.football.api-sports.io";
 
 function getApiKey(): string {
-  // Prefer Expo public env var (works with .env + EAS)
-  const envKey = (process.env.EXPO_PUBLIC_API_FOOTBALL_KEY ?? "").trim();
+  // In Expo, only EXPO_PUBLIC_* vars are available at runtime.
+  // Support both names for backwards compatibility.
+  const extra = (Constants.expoConfig?.extra ?? {}) as any;
 
-  // Fallback: app config extra (only if you inject it)
-  const extraKey = String((Constants.expoConfig?.extra as any)?.EXPO_PUBLIC_API_FOOTBALL_KEY ?? "").trim();
+  const key =
+    extra.EXPO_PUBLIC_API_FOOTBALL_KEY ??
+    extra.API_FOOTBALL_KEY ??
+    process.env.EXPO_PUBLIC_API_FOOTBALL_KEY ??
+    process.env.API_FOOTBALL_KEY ??
+    "";
 
-  const key = envKey || extraKey;
-
-  if (!key) console.warn("[YNA] API-Football key missing (EXPO_PUBLIC_API_FOOTBALL_KEY)");
-  return key;
+  const cleaned = String(key).trim();
+  if (!cleaned) console.warn("[YNA] API-Football key missing");
+  return cleaned;
 }
 
 async function apiFetch<T>(path: string, params?: Record<string, any>): Promise<T> {
-  const key = getApiKey();
-  if (!key) throw new Error("API-Football key missing");
-
   const url = new URL(API_BASE + path);
 
   if (params) {
-    for (const [k, v] of Object.entries(params)) {
+    Object.entries(params).forEach(([k, v]) => {
       if (v !== undefined && v !== null && v !== "") url.searchParams.append(k, String(v));
-    }
+    });
   }
+
+  const key = getApiKey();
 
   const res = await fetch(url.toString(), {
     headers: {
+      // API-Sports header
       "x-apisports-key": key,
+      // Some setups still use this name; harmless if ignored
+      "x-rapidapi-key": key,
     },
   });
 
-  const text = await res.text();
-  let json: any = null;
-  try {
-    json = text ? JSON.parse(text) : null;
-  } catch {
-    // ignore
-  }
-
   if (!res.ok) {
-    // API-Football often returns useful error payloads on 4xx
-    const payload = json ? JSON.stringify(json) : text;
-    throw new Error(`API-Football ${res.status} — ${payload}`);
+    const text = await res.text().catch(() => "");
+    throw new Error(`API-Football ${res.status} — ${text || "Request failed"}`);
   }
 
-  // API-Football shape: { response: [...] }
-  const response = json?.response;
-  return response as T;
+  const json = await res.json();
+  return json.response as T;
 }
 
 /**
@@ -95,32 +92,28 @@ async function apiFetch<T>(path: string, params?: Record<string, any>): Promise<
  */
 export async function getFixtures(params: FixturesParams): Promise<FixtureListRow[]> {
   const league = params.league ?? params.leagueId;
-  const season = params.season;
   const from = params.from ?? params.fromIso;
   const to = params.to ?? params.toIso;
 
-  if (!league || !season) return [];
+  if (!league || !params.season) return [];
 
   const rows = await apiFetch<FixtureListRow[]>("/fixtures", {
     league,
-    season,
-    ...(from ? { from } : {}),
-    ...(to ? { to } : {}),
+    season: params.season,
+    from,
+    to,
   });
 
   return Array.isArray(rows) ? rows : [];
 }
 
 /**
- * Get a single fixture by id
+ * Fixture by id
  */
-export async function getFixtureById(id: string | number): Promise<FixtureListRow | null> {
-  const fid = String(id ?? "").trim();
-  if (!fid) return null;
-
-  const rows = await apiFetch<FixtureListRow[]>("/fixtures", { id: fid });
+export async function getFixtureById(id: number | string): Promise<FixtureListRow | null> {
+  const rows = await apiFetch<any[]>("/fixtures", { id });
   if (!Array.isArray(rows) || rows.length === 0) return null;
-  return rows[0] ?? null;
+  return rows[0] as FixtureListRow;
 }
 
 /**
@@ -147,22 +140,20 @@ export async function getFixturesByRound(opts: {
  */
 export async function getCountries(): Promise<{ name: string; code: string; flag: string }[]> {
   const rows = await apiFetch<any[]>("/countries");
-  if (!Array.isArray(rows)) return [];
 
-  return rows.map((r) => ({
-    name: r?.name ?? "",
-    code: r?.code ?? "",
-    flag: r?.flag ?? "",
+  return (rows || []).map((r) => ({
+    name: r.name,
+    code: r.code,
+    flag: r.flag,
   }));
 }
 
 /**
  * Teams in league+season
  */
-export async function getTeams(opts: {
-  leagueId: number;
-  season: number;
-}): Promise<{ id: number; name: string; logo?: string | null }[]> {
+export async function getTeams(opts: { leagueId: number; season: number }): Promise<
+  { id: number; name: string; logo?: string | null }[]
+> {
   if (!opts.leagueId || !opts.season) return [];
 
   const rows = await apiFetch<any[]>("/teams", {
@@ -170,13 +161,9 @@ export async function getTeams(opts: {
     season: opts.season,
   });
 
-  if (!Array.isArray(rows)) return [];
-
-  return rows
-    .map((r) => ({
-      id: Number(r?.team?.id ?? 0),
-      name: String(r?.team?.name ?? "").trim(),
-      logo: r?.team?.logo ?? null,
-    }))
-    .filter((t) => Number.isFinite(t.id) && t.id > 0 && !!t.name);
+  return (rows || []).map((r) => ({
+    id: r.team?.id,
+    name: r.team?.name,
+    logo: r.team?.logo ?? null,
+  }));
 }
