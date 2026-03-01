@@ -1,6 +1,7 @@
 // src/services/affiliateLinks.ts
 // Centralised affiliate link builders + safe defaults.
 // MUST NEVER crash the UI if partner config is missing.
+// MUST NOT use Google fallbacks for monetised categories.
 
 import { getIataCityCodeForCity } from "@/src/constants/iataCities";
 import { AffiliateConfig } from "@/src/constants/partners";
@@ -8,15 +9,19 @@ import { formatIsoToYmd } from "@/src/utils/dates";
 
 type AffiliateCfg = {
   aviasalesMarker?: string;
+
+  // Optional tracked bases (recommended)
+  expediaStaysTracked?: string;      // e.g. https://www.expedia.co.uk/?affcid=...
+  expediaCarsTracked?: string;
+
+  getyourguideTracked?: string;      // e.g. https://www.getyourguide.com/?partner_id=...
+  tiqetsTracked?: string;
+
+  kiwitaxiTracked?: string;          // e.g. https://kiwitaxi.com/?utm_source=...
+  sportsevents365Tracked?: string;   // e.g. https://www.sportsevents365.com/?ref=...
+
   safetywingTracked?: string;
   airhelpTracked?: string;
-  // Optional tracked bases (future proof)
-  expediaStaysTracked?: string;
-  expediaCarsTracked?: string;
-  getyourguideTracked?: string;
-  tiqetsTracked?: string;
-  kiwitaxiTracked?: string;
-  sportsevents365Tracked?: string;
 };
 
 function enc(v: any) {
@@ -31,6 +36,11 @@ function safeObj<T extends object>(v: any): T {
   return v && typeof v === "object" ? (v as T) : ({} as T);
 }
 
+function isHttpUrl(v: any): boolean {
+  const s = clean(v);
+  return /^https?:\/\//i.test(s);
+}
+
 function ymdOrNull(iso: string | null | undefined): string | null {
   const s = clean(iso);
   if (!s) return null;
@@ -42,17 +52,29 @@ function ymdOrNull(iso: string | null | undefined): string | null {
 }
 
 function ymdOrNullFromAny(v: any): string | null {
-  // Accept Date-ish ISO strings or already YYYY-MM-DD.
   const s = clean(v);
   if (!s) return null;
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
   return ymdOrNull(s);
 }
 
+function addQuery(base: string, params: Record<string, any>) {
+  const b = clean(base);
+  if (!isHttpUrl(b)) return null;
+
+  const qs = Object.entries(params)
+    .filter(([, val]) => clean(val))
+    .map(([k, val]) => `${enc(k)}=${enc(val)}`)
+    .join("&");
+
+  if (!qs) return b;
+  return b.includes("?") ? `${b}&${qs}` : `${b}?${qs}`;
+}
+
 function pickFirstUrl(...candidates: Array<string | null | undefined>) {
   for (const c of candidates) {
     const s = clean(c);
-    if (s) return s;
+    if (isHttpUrl(s)) return s;
   }
   return null;
 }
@@ -61,20 +83,16 @@ function pickFirstUrl(...candidates: Array<string | null | undefined>) {
  * Builds partner links with best-effort prefill.
  * Contract: return keys used by Trip workspace.
  *
- * NOTE: For now, many links use Google intent searches (reliable + prefilled).
- * Tracked URLs can be swapped in later when stable deep-link formats are implemented.
+ * Hard rule: NO Google fallbacks for monetised categories.
+ * If tracked bases are missing, we use the partner’s normal public search URLs.
  */
 export function buildAffiliateLinks(args: {
   city: string;
-
-  // optional: city country info (not required for current link building)
   countryCode?: string | null;
 
-  // accept both naming conventions (Trip screen uses startDate/endDate)
+  // accept both naming conventions
   startDate?: string | null;
   endDate?: string | null;
-
-  // older naming (some screens may still use these)
   startDateIso?: string | null;
   endDateIso?: string | null;
 
@@ -83,7 +101,7 @@ export function buildAffiliateLinks(args: {
   const cfg = safeObj<AffiliateCfg>((AffiliateConfig as any) ?? null);
 
   const cityRaw = clean(args.city);
-  const query = cityRaw || "city";
+  const city = cityRaw || "city";
 
   const startDate = ymdOrNullFromAny(args.startDate ?? args.startDateIso);
   const endDate = ymdOrNullFromAny(args.endDate ?? args.endDateIso);
@@ -91,64 +109,86 @@ export function buildAffiliateLinks(args: {
   const originIata = clean(args.originIata) || "LON";
   const destIata = cityRaw ? getIataCityCodeForCity(cityRaw) : null;
 
-  const dateHint =
-    startDate && endDate ? `${startDate} to ${endDate}` : startDate ? startDate : "";
-
   /* -------------------- */
   /* Flights (Aviasales)  */
   /* -------------------- */
   const aviasalesMarker = clean(cfg.aviasalesMarker);
+
+  // Aviasales deep link with marker (best). If missing IATA/dates, open Aviasales destination search page.
   const flightsUrl =
     destIata && startDate && aviasalesMarker
       ? `https://www.aviasales.com/search/${enc(originIata)}${enc(destIata)}${startDate.replace(/-/g, "")}1?marker=${enc(
           aviasalesMarker
         )}`
-      : `https://www.google.com/search?q=${enc([query, "flights"].join(" "))}`;
+      : addQuery("https://www.aviasales.com/", {
+          // Not perfect, but keeps user on Aviasales instead of Google.
+          // If you later add full deep-link format for flexible dates, update here.
+          "search": city,
+        }) ?? "https://www.aviasales.com/";
 
   /* -------------------- */
   /* Hotels (Expedia)     */
   /* -------------------- */
-  // Keep reliable intent search until you implement stable deep links.
-  const hotelsUrl = `https://www.google.com/search?q=${enc(
-    [query, "hotels", startDate, endDate].filter(Boolean).join(" ")
-  )}`;
+  // Prefer tracked base if you have it; otherwise normal Expedia hotel search URL.
+  // Expedia’s parameters vary by locale; this is a stable-enough pattern:
+  // - destination
+  // - startDate / endDate (YYYY-MM-DD)
+  const expediaBase = pickFirstUrl(cfg.expediaStaysTracked, "https://www.expedia.co.uk/Hotel-Search");
+
+  const hotelsUrl =
+    addQuery(expediaBase!, {
+      destination: city,
+      startDate: startDate ?? undefined,
+      endDate: endDate ?? undefined,
+    }) ?? "https://www.expedia.co.uk/Hotel-Search";
 
   /* -------------------- */
-  /* Car hire             */
+  /* Car hire (Expedia)   */
   /* -------------------- */
-  const carHireUrl = `https://www.google.com/search?q=${enc(
-    [query, "car hire", startDate, endDate].filter(Boolean).join(" ")
-  )}`;
+  const expediaCarsBase = pickFirstUrl(cfg.expediaCarsTracked, "https://www.expedia.co.uk/Cars");
+  const carHireUrl =
+    addQuery(expediaCarsBase!, {
+      // keep it simple: car hire by city; you can later enhance with airport/IATA mapping.
+      "location": city,
+      "startDate": startDate ?? undefined,
+      "endDate": endDate ?? undefined,
+    }) ?? "https://www.expedia.co.uk/Cars";
 
   /* -------------------- */
-  /* Experiences          */
+  /* Activities (GetYourGuide) */
   /* -------------------- */
-  const experiencesUrl = `https://www.google.com/search?q=${enc(
-    [query, "things to do"].join(" ")
-  )}`;
+  const gygBase = pickFirstUrl(cfg.getyourguideTracked, "https://www.getyourguide.com/s/");
+  const experiencesUrl =
+    // GYG’s search uses /s/?q=...
+    addQuery(gygBase!, { q: city }) ?? `https://www.getyourguide.com/s/?q=${enc(city)}`;
 
   /* -------------------- */
-  /* Transfers / Tickets  */
+  /* Transfers (Kiwitaxi) */
   /* -------------------- */
-  const transfersUrl = `https://www.google.com/search?q=${enc(
-    ["kiwitaxi", query, dateHint, "airport transfer"].filter(Boolean).join(" ")
-  )}`;
+  const kiwitaxiBase = pickFirstUrl(cfg.kiwitaxiTracked, "https://kiwitaxi.com/en/search");
+  const transfersUrl =
+    // Keep it as a “city transfer” search, user refines pickup/dropoff.
+    addQuery(kiwitaxiBase!, { place: city }) ?? `https://kiwitaxi.com/en/search?place=${enc(city)}`;
 
-  const ticketsUrl = `https://www.google.com/search?q=${enc(
-    ["sportsevents365", query, "tickets"].filter(Boolean).join(" ")
-  )}`;
+  /* -------------------- */
+  /* Tickets (SportsEvents365) */
+  /* -------------------- */
+  const se365Base = pickFirstUrl(cfg.sportsevents365Tracked, "https://www.sportsevents365.com/search");
+  const ticketsUrl =
+    // This is only a general entry; match-specific tickets should use buildTicketLink().
+    addQuery(se365Base!, { q: city }) ?? `https://www.sportsevents365.com/search?q=${enc(city)}`;
 
   /* -------------------- */
   /* Insurance / Claims   */
   /* -------------------- */
-  // These MUST be safe even if cfg is missing.
-  const insuranceUrl = pickFirstUrl(cfg.safetywingTracked, null) ?? `https://www.google.com/search?q=${enc([query, "travel insurance"].join(" "))}`;
-  const claimsUrl = pickFirstUrl(cfg.airhelpTracked, null) ?? `https://www.google.com/search?q=${enc(["flight compensation", "AirHelp"].join(" "))}`;
+  // These are still monetised but safe fallback is the partner homepage (not Google).
+  const insuranceUrl = pickFirstUrl(cfg.safetywingTracked, "https://safetywing.com/") ?? "https://safetywing.com/";
+  const claimsUrl = pickFirstUrl(cfg.airhelpTracked, "https://www.airhelp.com/") ?? "https://www.airhelp.com/";
 
   /* -------------------- */
   /* Maps                 */
   /* -------------------- */
-  const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${enc(query)}`;
+  const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${enc(city)}`;
 
   return {
     flightsUrl,
@@ -161,4 +201,4 @@ export function buildAffiliateLinks(args: {
     claimsUrl,
     mapsUrl,
   };
-}
+                                                                         }
