@@ -7,11 +7,15 @@
     "icon": "./assets/images/natively-dark.png",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+
+    "scheme": "yournextaway",
+
     "splash": {
       "image": "./assets/images/natively-dark.png",
       "resizeMode": "contain",
       "backgroundColor": "#000000"
     },
+
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.diabloaquila.yournextaway",
@@ -19,6 +23,7 @@
         "ITSAppUsesNonExemptEncryption": false
       }
     },
+
     "android": {
       "package": "com.diabloaquila.yournextaway",
       "adaptiveIcon": {
@@ -27,29 +32,32 @@
       },
       "edgeToEdgeEnabled": true
     },
+
     "web": {
       "bundler": "metro",
       "favicon": "./assets/images/final_quest_240x240.png"
     },
+
     "plugins": [
       "expo-font",
       "expo-router",
       "expo-web-browser",
       "@react-native-community/datetimepicker"
     ],
-    "scheme": "yournextaway",
+
     "experiments": {
       "typedRoutes": true
     },
 
     "extra": {
-      "router": {},
-      "backendUrl": "https://h5354xkb5ak2jcn98rjgh6tywsyw9qva.app.specular.dev"
+      "backendUrl": "https://h5354xkb5ak2jcn98rjgh6tywsyw9qva.app.specular.dev",
+      "EXPO_PUBLIC_API_FOOTBALL_KEY": "ENV_EXPO_PUBLIC_API_FOOTBALL_KEY"
     },
 
     "updates": {
       "fallbackToCacheTimeout": 0
     },
+
     "runtimeVersion": {
       "policy": "appVersion"
     }
