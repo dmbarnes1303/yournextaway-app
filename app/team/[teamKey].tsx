@@ -39,6 +39,10 @@ const TEAM_BACKGROUNDS: Record<string, string> = {
 
 const API_SPORTS_TEAM_LOGO = (teamId: number) => `https://media.api-sports.io/football/teams/${teamId}.png`;
 
+/* -------------------------------------------------------------------------- */
+/* Utils */
+/* -------------------------------------------------------------------------- */
+
 function safeStr(v: any) {
   return String(v ?? "").trim();
 }
@@ -82,8 +86,100 @@ function groupByMonth(rows: FixtureListRow[]) {
     return da - db;
   });
 
+  for (const g of out) {
+    g.rows.sort((a, b) => {
+      const da = a?.fixture?.date ? new Date(a.fixture.date).getTime() : 0;
+      const db = b?.fixture?.date ? new Date(b.fixture.date).getTime() : 0;
+      return da - db;
+    });
+  }
+
   return out;
 }
+
+function clampText(text: string, maxChars: number) {
+  const s = safeStr(text);
+  if (!s) return "";
+  if (s.length <= maxChars) return s;
+  return `${s.slice(0, maxChars).trim()}…`;
+}
+
+function splitLinesToBullets(text: string) {
+  const raw = safeStr(text);
+  if (!raw) return { bullets: [] as string[], paragraph: "" };
+
+  const lines = raw
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  const looksBulleted =
+    lines.length >= 3 &&
+    lines.filter((l) => /^[-•]/.test(l) || /^\d+[.)]\s/.test(l)).length >= Math.ceil(lines.length * 0.6);
+
+  if (!looksBulleted) return { bullets: [] as string[], paragraph: raw };
+
+  const bullets = lines
+    .map((l) => l.replace(/^[-•]\s*/, "").replace(/^\d+[.)]\s*/, "").trim())
+    .filter(Boolean);
+
+  return { bullets, paragraph: "" };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Flags */
+/* -------------------------------------------------------------------------- */
+
+// Tiny pragmatic fallback: if you only have a country *name* we map it.
+// Add to this as you notice missing flags in your content.
+const COUNTRY_NAME_TO_ISO2: Record<string, string> = {
+  england: "GB",
+  "united kingdom": "GB",
+  scotland: "GB",
+  wales: "GB",
+  "northern ireland": "GB",
+  germany: "DE",
+  spain: "ES",
+  france: "FR",
+  italy: "IT",
+  netherlands: "NL",
+  portugal: "PT",
+  belgium: "BE",
+  austria: "AT",
+  switzerland: "CH",
+  poland: "PL",
+  "czech republic": "CZ",
+  czechia: "CZ",
+  sweden: "SE",
+  norway: "NO",
+  denmark: "DK",
+  finland: "FI",
+  ireland: "IE",
+  turkey: "TR",
+  greece: "GR",
+  croatia: "HR",
+  serbia: "RS",
+  romania: "RO",
+  bulgaria: "BG",
+  ukraine: "UA",
+  russia: "RU",
+};
+
+function normalizeCountryNameToIso2(name: string) {
+  const k = safeStr(name).toLowerCase();
+  return k ? COUNTRY_NAME_TO_ISO2[k] : "";
+}
+
+function FlagMini({ countryCode }: { countryCode?: string }) {
+  const code = safeStr(countryCode).toUpperCase();
+  const url = code ? getFlagImageUrl(code, { size: 64 }) : null;
+  if (!url) return null;
+  return <Image source={{ uri: url }} style={styles.flagMini} resizeMode="cover" />;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Small UI */
+/* -------------------------------------------------------------------------- */
 
 function TeamCrestHero({ teamId }: { teamId?: number }) {
   if (typeof teamId !== "number") return null;
@@ -94,21 +190,15 @@ function TeamCrestHero({ teamId }: { teamId?: number }) {
   );
 }
 
-function FlagMini({ countryCode }: { countryCode?: string }) {
-  const code = safeStr(countryCode).toUpperCase();
-  const url = code ? getFlagImageUrl(code, { size: 64 }) : null;
-  if (!url) return null;
-  return <Image source={{ uri: url }} style={styles.flagMini} resizeMode="cover" />;
-}
+/* -------------------------------------------------------------------------- */
+/* Guide loader (safe) */
+/* -------------------------------------------------------------------------- */
 
-type GuideFull = {
-  title: string;
-  blocks: { heading?: string; text: string }[];
-};
+type GuideBlock = { heading?: string; text: string };
+type GuideFull = { title: string; blocks: GuideBlock[] };
 
 function normalizeText(v: any): string {
-  const s = safeStr(v);
-  return s;
+  return safeStr(v);
 }
 
 function joinParas(v: any): string {
@@ -118,7 +208,7 @@ function joinParas(v: any): string {
 
 /**
  * Pull guide content without assuming a fixed structure.
- * We create "blocks" that render nicely in a modal.
+ * We create "blocks" that render nicely in a full-screen modal (same behavior as City guide).
  */
 function getTeamGuideFull(teamKey: string): GuideFull | null {
   const key = safeStr(teamKey);
@@ -136,15 +226,9 @@ function getTeamGuideFull(teamKey: string): GuideFull | null {
     const guide = getter(key);
     if (!guide) return null;
 
-    const title =
-      safeStr(guide.title) ||
-      safeStr(guide.name) ||
-      safeStr(guide.teamName) ||
-      "Team guide";
+    const title = safeStr(guide.title) || safeStr(guide.name) || safeStr(guide.teamName) || "Team guide";
+    const blocks: GuideBlock[] = [];
 
-    const blocks: { heading?: string; text: string }[] = [];
-
-    // Common top-level fields
     const overview =
       normalizeText(guide.overview) ||
       normalizeText(guide.intro) ||
@@ -153,15 +237,9 @@ function getTeamGuideFull(teamKey: string): GuideFull | null {
 
     if (overview) blocks.push({ heading: "Overview", text: overview });
 
-    // Sections array shapes (very common in your data)
     if (Array.isArray(guide.sections) && guide.sections.length) {
       for (const s of guide.sections) {
-        const heading =
-          safeStr(s?.title) ||
-          safeStr(s?.heading) ||
-          safeStr(s?.name) ||
-          "";
-
+        const heading = safeStr(s?.title) || safeStr(s?.heading) || safeStr(s?.name) || "";
         const text =
           normalizeText(s?.body) ||
           normalizeText(s?.content) ||
@@ -173,20 +251,12 @@ function getTeamGuideFull(teamKey: string): GuideFull | null {
       }
     }
 
-    // Fallback if nothing parsed yet
     if (!blocks.length) {
-      const anyText =
-        normalizeText(guide.content) ||
-        normalizeText(guide.text) ||
-        "";
-
+      const anyText = normalizeText(guide.content) || normalizeText(guide.text) || "";
       if (anyText) blocks.push({ heading: undefined, text: anyText });
     }
 
-    if (!blocks.length) {
-      // At least allow modal to open and say “content available”
-      blocks.push({ heading: undefined, text: "Guide content is available for this team." });
-    }
+    if (!blocks.length) blocks.push({ heading: undefined, text: "Guide content is available for this team." });
 
     return { title, blocks };
   } catch {
@@ -194,12 +264,149 @@ function getTeamGuideFull(teamKey: string): GuideFull | null {
   }
 }
 
-/**
- * Fixture row — NO truncations:
- * - team names can wrap
- * - meta is split across lines (kickoff / stadium / city)
- * - Plan Trip moved off the name row so it doesn't steal width
- */
+/* -------------------------------------------------------------------------- */
+/* Guide Modal (same UX as City guide) */
+/* -------------------------------------------------------------------------- */
+
+function GuideAccordionSection({
+  heading,
+  text,
+  expanded,
+  onToggle,
+}: {
+  heading?: string;
+  text: string;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  const h = safeStr(heading) || "Guide";
+  const { bullets, paragraph } = splitLinesToBullets(text);
+
+  const paragraphPreview = paragraph ? clampText(paragraph, 260) : "";
+  const showInlinePreview = !expanded && !!paragraphPreview;
+
+  return (
+    <GlassCard strength="default" style={styles.guideSecCard} noPadding>
+      <Pressable
+        onPress={onToggle}
+        accessibilityRole="button"
+        accessibilityLabel={expanded ? `Collapse ${h}` : `Expand ${h}`}
+        style={({ pressed }) => [styles.guideSecHeader, pressed && styles.pressed]}
+        android_ripple={{ color: "rgba(255,255,255,0.06)" }}
+      >
+        <Text style={styles.guideSecHeading}>{h}</Text>
+        <Text style={styles.guideSecChevron}>{expanded ? "˄" : "˅"}</Text>
+      </Pressable>
+
+      {showInlinePreview ? (
+        <View style={styles.guideSecBody}>
+          <Text style={styles.guideText}>{paragraphPreview}</Text>
+        </View>
+      ) : null}
+
+      {expanded ? (
+        <View style={styles.guideSecBody}>
+          {paragraph ? <Text style={styles.guideText}>{paragraph}</Text> : null}
+
+          {bullets.length ? (
+            <View style={styles.bulletList}>
+              {bullets.map((b, idx) => (
+                <View key={`gb-${h}-${idx}`} style={styles.bulletRow}>
+                  <View style={styles.bulletDot} />
+                  <Text style={styles.bulletText}>{b}</Text>
+                </View>
+              ))}
+            </View>
+          ) : null}
+        </View>
+      ) : null}
+    </GlassCard>
+  );
+}
+
+function GuideModal({
+  visible,
+  onClose,
+  title,
+  blocks,
+  backgroundSource,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  title: string;
+  blocks: GuideBlock[];
+  backgroundSource: any;
+}) {
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    if (!visible) return;
+    setExpanded({});
+  }, [visible]);
+
+  const toggle = useCallback((key: string) => {
+    setExpanded((prev) => ({ ...prev, [key]: !prev[key] }));
+  }, []);
+
+  return (
+    <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose}>
+      <Background imageSource={backgroundSource} overlayOpacity={0.78}>
+        <SafeAreaView style={styles.modalSafe} edges={["top", "bottom"]}>
+          <View style={styles.modalTop}>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={styles.modalKicker}>TEAM GUIDE</Text>
+              <Text style={styles.modalTitle} numberOfLines={1}>
+                {title}
+              </Text>
+            </View>
+
+            <Pressable
+              onPress={onClose}
+              accessibilityRole="button"
+              accessibilityLabel="Close guide"
+              style={({ pressed }) => [styles.closePill, pressed && styles.pressed]}
+              android_ripple={{ color: "rgba(255,255,255,0.08)" }}
+            >
+              <Text style={styles.closePillText}>Close</Text>
+            </Pressable>
+          </View>
+
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.modalContent} showsVerticalScrollIndicator={false}>
+            {!blocks.length ? (
+              <GlassCard strength="default" style={styles.block} noPadding>
+                <View style={styles.blockInner}>
+                  <Text style={styles.blockNote}>Guide content unavailable for this team yet.</Text>
+                </View>
+              </GlassCard>
+            ) : (
+              <View style={{ gap: 12 }}>
+                {blocks.map((b, idx) => {
+                  const key = `${safeStr(b.heading) || "Guide"}-${idx}`;
+                  return (
+                    <GuideAccordionSection
+                      key={`gsec-${key}`}
+                      heading={b.heading}
+                      text={b.text}
+                      expanded={!!expanded[key]}
+                      onToggle={() => toggle(key)}
+                    />
+                  );
+                })}
+              </View>
+            )}
+
+            <View style={{ height: 18 }} />
+          </ScrollView>
+        </SafeAreaView>
+      </Background>
+    </Modal>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Fixture Row */
+/* -------------------------------------------------------------------------- */
+
 function FixtureRow({ row, onPressPlan }: { row: FixtureListRow; onPressPlan: () => void }) {
   const homeName = safeStr(row?.teams?.home?.name) || "Home";
   const awayName = safeStr(row?.teams?.away?.name) || "Away";
@@ -237,6 +444,8 @@ function FixtureRow({ row, onPressPlan }: { row: FixtureListRow; onPressPlan: ()
       <View style={styles.fxCtaRow}>
         <Pressable
           onPress={onPressPlan}
+          accessibilityRole="button"
+          accessibilityLabel="Plan trip"
           style={({ pressed }) => [styles.planBtn, pressed && styles.pressed]}
           android_ripple={{ color: "rgba(79,224,138,0.10)" }}
         >
@@ -246,6 +455,10 @@ function FixtureRow({ row, onPressPlan }: { row: FixtureListRow; onPressPlan: ()
     </View>
   );
 }
+
+/* -------------------------------------------------------------------------- */
+/* Screen */
+/* -------------------------------------------------------------------------- */
 
 export default function TeamScreen() {
   const router = useRouter();
@@ -265,15 +478,31 @@ export default function TeamScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [rows, setRows] = useState<FixtureListRow[]>([]);
+  const [guideOpen, setGuideOpen] = useState(false);
 
   const canShowGuide = useMemo(() => (team?.teamKey ? hasTeamGuide(team.teamKey) : false), [team]);
+
   const guideFull = useMemo(() => {
     if (!team?.teamKey) return null;
     if (!canShowGuide) return null;
     return getTeamGuideFull(team.teamKey);
   }, [team, canShowGuide]);
 
-  const [guideOpen, setGuideOpen] = useState(false);
+  // Compute a best-effort country code that can actually render a flag.
+  // Priority: league.countryCode -> team.countryCode -> league.countryName -> team.countryName
+  const countryCode = useMemo(() => {
+    const leagueCode = safeStr((league as any)?.countryCode);
+    if (leagueCode) return leagueCode;
+
+    const teamCode = safeStr((team as any)?.countryCode);
+    if (teamCode) return teamCode;
+
+    const leagueCountryName = safeStr((league as any)?.country);
+    const teamCountryName = safeStr((team as any)?.country);
+
+    const mapped = normalizeCountryNameToIso2(leagueCountryName || teamCountryName);
+    return mapped || "";
+  }, [league, team]);
 
   useEffect(() => {
     let cancelled = false;
@@ -332,8 +561,7 @@ export default function TeamScreen() {
   const grouped = useMemo(() => groupByMonth(rows), [rows]);
 
   const title = team?.name ?? (teamKeyParam ? teamKeyParam : "Team");
-  const leagueLabel = league?.label ?? "";
-  const countryCode = league?.countryCode ?? "";
+  const leagueLabel = safeStr(league?.label);
 
   const browseLeagueLabel = useMemo(() => {
     const l = safeStr(leagueLabel);
@@ -380,6 +608,19 @@ export default function TeamScreen() {
 
   const bgSource = bgUrl ? ({ uri: bgUrl } as any) : getBackground("team");
 
+  // Guide preview mirrors the City screen vibe (first section text, clamped)
+  const guideBlocks = guideFull?.blocks ?? [];
+  const overview = guideBlocks.find((b) => safeStr(b.heading).toLowerCase() === "overview")?.text || guideBlocks[0]?.text || "";
+  const guidePreview = guideFull ? clampText(overview, 220) : "";
+  const guideStats = useMemo(() => {
+    if (!guideFull) return "";
+    const sections = guideBlocks.length;
+    const hasTop = guideBlocks.some((b) => safeStr(b.heading).toLowerCase().includes("top"));
+    const hasHistory = guideBlocks.some((b) => safeStr(b.heading).toLowerCase().includes("history"));
+    const parts = [sections ? `${sections} sections` : "", hasTop ? "key notes" : "", hasHistory ? "history" : ""].filter(Boolean);
+    return parts.join(" • ");
+  }, [guideFull, guideBlocks]);
+
   return (
     <Background imageSource={bgSource} overlayOpacity={0.7}>
       <SafeAreaView style={styles.container} edges={["top"]}>
@@ -391,23 +632,32 @@ export default function TeamScreen() {
 
               <View style={styles.heroTitleRow}>
                 <TeamCrestHero teamId={team?.teamId} />
+
                 <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text style={styles.heroTitle} numberOfLines={2} ellipsizeMode="tail">
-                    {title}
-                  </Text>
+                  {/* Team name + FLAG (flag is visually next to team name) */}
+                  <View style={styles.heroNameRow}>
+                    <Text style={styles.heroTitle} numberOfLines={2} ellipsizeMode="tail">
+                      {title}
+                    </Text>
+                    {/* Always attempt to show a flag beside team name */}
+                    {countryCode ? <FlagMini countryCode={countryCode} /> : null}
+                  </View>
 
                   <View style={styles.heroMetaRow}>
                     {leagueLabel ? <Text style={styles.heroMetaText}>{leagueLabel}</Text> : null}
-                    {countryCode ? <FlagMini countryCode={countryCode} /> : null}
                   </View>
                 </View>
               </View>
 
-              <Text style={styles.heroRange}>{from && to ? `${ddmmyyyyFromIsoDateOnly(from)} → ${ddmmyyyyFromIsoDateOnly(to)}` : ""}</Text>
+              <Text style={styles.heroRange}>
+                {from && to ? `${ddmmyyyyFromIsoDateOnly(from)} → ${ddmmyyyyFromIsoDateOnly(to)}` : ""}
+              </Text>
 
               <View style={styles.heroActions}>
                 <Pressable
                   onPress={goBrowseFixtures}
+                  accessibilityRole="button"
+                  accessibilityLabel={browseLeagueLabel}
                   style={({ pressed }) => [styles.btn, styles.btnGhost, pressed && styles.pressed]}
                   android_ripple={{ color: "rgba(255,255,255,0.08)" }}
                 >
@@ -416,6 +666,8 @@ export default function TeamScreen() {
 
                 <Pressable
                   onPress={goHome}
+                  accessibilityRole="button"
+                  accessibilityLabel="Back to Home"
                   style={({ pressed }) => [styles.btn, styles.btnGhost, pressed && styles.pressed]}
                   android_ripple={{ color: "rgba(255,255,255,0.08)" }}
                 >
@@ -425,44 +677,35 @@ export default function TeamScreen() {
             </View>
           </GlassCard>
 
-          {/* TEAM GUIDE (MAIN PURPOSE) */}
+          {/* TEAM GUIDE */}
           <GlassCard strength="default" style={styles.block} noPadding>
             <View style={styles.blockInner}>
-              <View style={styles.blockHeader}>
-                <Text style={styles.blockTitle}>Team guide</Text>
+              <View style={styles.guideTopRow}>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={styles.blockTitle}>Team guide</Text>
+                  <Text style={styles.guideSub} numberOfLines={1}>
+                    {guideFull ? guideStats || "Practical, trip-planning notes." : "Guide content unavailable for this team yet."}
+                  </Text>
+                </View>
 
-                {canShowGuide ? (
+                {guideFull ? (
                   <Pressable
                     onPress={() => setGuideOpen(true)}
-                    style={({ pressed }) => [styles.previewPill, pressed && styles.pressed]}
-                    android_ripple={{ color: "rgba(255,255,255,0.06)" }}
+                    accessibilityRole="button"
+                    accessibilityLabel="Open team guide"
+                    style={({ pressed }) => [styles.miniPrimaryPill, pressed && styles.pressed]}
+                    android_ripple={{ color: "rgba(79,224,138,0.10)" }}
                   >
-                    <Text style={styles.previewPillText}>Open</Text>
+                    <Text style={styles.miniPrimaryPillText}>Open guide</Text>
                   </Pressable>
                 ) : null}
               </View>
 
-              {!canShowGuide ? (
-                <Text style={styles.blockNote}>Guide coming soon for this team.</Text>
-              ) : (
-                <>
-                  {/* Keep your existing preview vibe */}
-                  {guideFull?.blocks?.[0]?.text ? (
-                    <>
-                      <Text style={styles.guideKicker}>Club Overview</Text>
-                      <Text style={styles.guidePreviewText} numberOfLines={10} ellipsizeMode="tail">
-                        {guideFull.blocks[0].text}
-                      </Text>
-                      <Text style={styles.guideHint}>Open the full guide for the complete breakdown.</Text>
-                    </>
-                  ) : (
-                    <>
-                      <Text style={styles.blockNote}>Guide content is available for this team.</Text>
-                      <Text style={styles.guideHint}>Tap “Open” to view it.</Text>
-                    </>
-                  )}
-                </>
-              )}
+              {guideFull && guidePreview ? (
+                <Text style={styles.blockNote}>{guidePreview}</Text>
+              ) : !guideFull ? (
+                <Text style={styles.blockNote}>We’ll add this team soon. For now, use the fixtures below to anchor your trip.</Text>
+              ) : null}
             </View>
           </GlassCard>
 
@@ -480,7 +723,9 @@ export default function TeamScreen() {
 
               {!loading && error ? <EmptyState title="Fixtures Unavailable" message={error} /> : null}
 
-              {!loading && !error && rows.length === 0 ? <EmptyState title="No Home Fixtures Found" message="Try another date window." /> : null}
+              {!loading && !error && rows.length === 0 ? (
+                <EmptyState title="No Home Fixtures Found" message="Try another date window." />
+              ) : null}
 
               {!loading && !error && rows.length > 0 ? (
                 <View style={{ gap: 14 }}>
@@ -505,39 +750,22 @@ export default function TeamScreen() {
           <View style={{ height: 14 }} />
         </ScrollView>
 
-        {/* TEAM GUIDE MODAL (NO ROUTE = NO UNMATCHED ROUTE) */}
-        <Modal visible={guideOpen} animationType="fade" transparent onRequestClose={() => setGuideOpen(false)}>
-          <Pressable style={styles.modalBackdrop} onPress={() => setGuideOpen(false)} />
-          <View style={styles.modalSheetWrap} pointerEvents="box-none">
-            <GlassCard strength="strong" style={styles.modalSheet} noPadding>
-              <View style={styles.modalInner}>
-                <View style={styles.modalHeader}>
-                  <Text style={styles.modalTitle}>{guideFull?.title || "Team guide"}</Text>
-                  <Pressable onPress={() => setGuideOpen(false)} style={styles.modalClose} hitSlop={10}>
-                    <Text style={styles.modalCloseText}>Done</Text>
-                  </Pressable>
-                </View>
-
-                {!guideFull ? (
-                  <Text style={styles.modalBodyText}>Guide content unavailable.</Text>
-                ) : (
-                  <ScrollView style={styles.modalScroll} contentContainerStyle={{ paddingBottom: 6 }} showsVerticalScrollIndicator={false}>
-                    {guideFull.blocks.map((b, idx) => (
-                      <View key={`g-${idx}`} style={styles.guideBlock}>
-                        {b.heading ? <Text style={styles.guideBlockTitle}>{b.heading}</Text> : null}
-                        <Text style={styles.modalBodyText}>{b.text}</Text>
-                      </View>
-                    ))}
-                  </ScrollView>
-                )}
-              </View>
-            </GlassCard>
-          </View>
-        </Modal>
+        {/* TEAM GUIDE MODAL (same open UX as City guide) */}
+        <GuideModal
+          visible={guideOpen}
+          onClose={() => setGuideOpen(false)}
+          title={guideFull?.title || title}
+          blocks={guideBlocks}
+          backgroundSource={bgSource}
+        />
       </SafeAreaView>
     </Background>
   );
 }
+
+/* -------------------------------------------------------------------------- */
+/* Styles */
+/* -------------------------------------------------------------------------- */
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
@@ -552,7 +780,6 @@ const styles = StyleSheet.create({
   kicker: { color: "rgba(79,224,138,0.70)", fontSize: 12, fontWeight: theme.fontWeight.black, letterSpacing: 0.4 },
 
   heroTitleRow: { flexDirection: "row", alignItems: "center", gap: 12 },
-  heroTitle: { color: theme.colors.text, fontSize: 28, lineHeight: 34, fontWeight: theme.fontWeight.black },
 
   heroCrestWrap: {
     width: 64,
@@ -567,8 +794,14 @@ const styles = StyleSheet.create({
   },
   heroCrestImg: { width: 46, height: 46, opacity: 0.98 },
 
+  // Team name row with flag visually next to the title
+  heroNameRow: { flexDirection: "row", alignItems: "center", gap: 10, flexWrap: "nowrap" },
+  heroTitle: { flex: 1, minWidth: 0, color: theme.colors.text, fontSize: 28, lineHeight: 34, fontWeight: theme.fontWeight.black },
+
   heroMetaRow: { marginTop: 6, flexDirection: "row", alignItems: "center", gap: 10, flexWrap: "wrap" },
   heroMetaText: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.black },
+
+  // Flag mini (works for team + any other spots)
   flagMini: { width: 20, height: 14, borderRadius: 3, opacity: 0.9 },
 
   heroRange: { color: theme.colors.textTertiary, fontSize: 13, fontWeight: theme.fontWeight.bold, marginTop: 2 },
@@ -583,32 +816,30 @@ const styles = StyleSheet.create({
   btnGhostText: { color: theme.colors.textSecondary, fontSize: 14, fontWeight: theme.fontWeight.black },
 
   block: { borderRadius: 24 },
-  blockInner: { padding: 14, gap: 12 },
-  blockHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  blockInner: { padding: 14, gap: 10 },
   blockTitle: { color: theme.colors.text, fontSize: 18, fontWeight: theme.fontWeight.black },
-  blockNote: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold, lineHeight: 18 },
+  blockNote: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold, lineHeight: 19 },
 
-  previewPill: {
-    paddingVertical: 8,
+  guideTopRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
+  guideSub: { marginTop: 4, color: theme.colors.textTertiary, fontSize: 12, fontWeight: theme.fontWeight.bold },
+
+  miniPrimaryPill: {
+    paddingVertical: 10,
     paddingHorizontal: 12,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
+    borderColor: "rgba(79,224,138,0.26)",
     backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
     overflow: "hidden",
   },
-  previewPillText: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: theme.fontWeight.black },
-
-  guideKicker: { color: theme.colors.textTertiary, fontSize: 12, fontWeight: theme.fontWeight.black, letterSpacing: 0.25 },
-  guidePreviewText: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold, lineHeight: 19 },
-  guideHint: { color: theme.colors.textTertiary, fontSize: 12, fontWeight: theme.fontWeight.bold, lineHeight: 16, opacity: 0.9 },
+  miniPrimaryPillText: { color: theme.colors.text, fontSize: 12, fontWeight: theme.fontWeight.black },
 
   center: { paddingVertical: 14, alignItems: "center", gap: 10 },
   muted: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold },
 
   month: { color: theme.colors.textTertiary, fontSize: 13, fontWeight: theme.fontWeight.black, letterSpacing: 0.2 },
 
-  // Fixture row (no truncations)
+  // Fixture row
   fxRow: {
     borderRadius: 18,
     borderWidth: 1,
@@ -618,47 +849,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     gap: 12,
   },
+  matchLine: { width: "100%", flexDirection: "row", alignItems: "center", gap: 10 },
 
-  matchLine: {
-    width: "100%",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
+  teamSideLeft: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 8 },
+  teamSideRight: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 8 },
 
-  teamSideLeft: {
-    flex: 1,
-    minWidth: 0,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  teamSideRight: {
-    flex: 1,
-    minWidth: 0,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "flex-end",
-    gap: 8,
-  },
-
-  teamNameLeft: {
-    flex: 1,
-    minWidth: 0,
-    color: theme.colors.text,
-    fontSize: 14,
-    fontWeight: theme.fontWeight.black,
-    flexWrap: "wrap",
-  },
-  teamNameRight: {
-    flex: 1,
-    minWidth: 0,
-    textAlign: "right",
-    color: theme.colors.text,
-    fontSize: 14,
-    fontWeight: theme.fontWeight.black,
-    flexWrap: "wrap",
-  },
+  teamNameLeft: { flex: 1, minWidth: 0, color: theme.colors.text, fontSize: 14, fontWeight: theme.fontWeight.black, flexWrap: "wrap" },
+  teamNameRight: { flex: 1, minWidth: 0, textAlign: "right", color: theme.colors.text, fontSize: 14, fontWeight: theme.fontWeight.black, flexWrap: "wrap" },
 
   vsPill: {
     flexShrink: 0,
@@ -676,15 +873,9 @@ const styles = StyleSheet.create({
   smallCrestImg: { width: 18, height: 18, opacity: 0.95 },
 
   fxMetaBlock: { gap: 4 },
-  fxMetaLine: {
-    color: theme.colors.textSecondary,
-    fontSize: 12,
-    fontWeight: theme.fontWeight.bold,
-    lineHeight: 16,
-  },
+  fxMetaLine: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: theme.fontWeight.bold, lineHeight: 16 },
 
   fxCtaRow: { flexDirection: "row", justifyContent: "flex-end", alignItems: "center" },
-
   planBtn: {
     paddingVertical: 9,
     paddingHorizontal: 12,
@@ -696,34 +887,35 @@ const styles = StyleSheet.create({
   },
   planBtnText: { color: theme.colors.text, fontSize: 12, fontWeight: theme.fontWeight.black },
 
-  // Modal
-  modalBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.58)" },
-  modalSheetWrap: { flex: 1, justifyContent: "flex-end" },
-  modalSheet: { borderRadius: 22, marginHorizontal: theme.spacing.lg, marginBottom: theme.spacing.lg, overflow: "hidden" },
-  modalInner: { padding: 14, gap: 12 },
-  modalHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
-  modalTitle: { color: theme.colors.text, fontSize: 16, fontWeight: theme.fontWeight.black },
-  modalClose: {
-    paddingVertical: 6,
-    paddingHorizontal: 10,
+  // Guide modal styles (mirrors City screen)
+  modalSafe: { flex: 1, paddingHorizontal: theme.spacing.lg },
+  modalTop: { paddingTop: theme.spacing.md, paddingBottom: theme.spacing.md, flexDirection: "row", alignItems: "center", gap: 12 },
+  modalKicker: { color: "rgba(79,224,138,0.70)", fontSize: 11, fontWeight: theme.fontWeight.black, letterSpacing: 0.5 },
+  modalTitle: { marginTop: 4, color: theme.colors.text, fontSize: 20, fontWeight: theme.fontWeight.black },
+  closePill: {
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.18)",
+    borderColor: "rgba(255,255,255,0.12)",
+    backgroundColor: "rgba(0,0,0,0.22)",
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    minWidth: 86,
+    alignItems: "center",
+    overflow: "hidden",
   },
-  modalCloseText: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: theme.fontWeight.black },
+  closePillText: { color: "rgba(255,255,255,0.78)", fontWeight: theme.fontWeight.black, fontSize: 12, letterSpacing: 0.2 },
+  modalContent: { paddingBottom: theme.spacing.xxl, gap: 12 },
 
-  modalScroll: { maxHeight: 520 },
-  guideBlock: {
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-    backgroundColor: Platform.OS === "android" ? "rgba(12,14,16,0.20)" : "rgba(12,14,16,0.16)",
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    gap: 8,
-    marginBottom: 10,
-  },
-  guideBlockTitle: { color: theme.colors.text, fontSize: 14, fontWeight: theme.fontWeight.black },
-  modalBodyText: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold, lineHeight: 19 },
+  guideSecCard: { borderRadius: 22 },
+  guideSecHeader: { paddingHorizontal: 14, paddingVertical: 14, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
+  guideSecHeading: { color: theme.colors.text, fontSize: 15, fontWeight: theme.fontWeight.black },
+  guideSecChevron: { color: theme.colors.textSecondary, fontSize: 18, fontWeight: "900", marginTop: -2 },
+  guideSecBody: { paddingHorizontal: 14, paddingBottom: 14, gap: 10 },
+
+  guideText: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold, lineHeight: 19 },
+
+  bulletList: { gap: 10, paddingTop: 2 },
+  bulletRow: { flexDirection: "row", gap: 10, alignItems: "flex-start" },
+  bulletDot: { width: 6, height: 6, borderRadius: 999, marginTop: 7, backgroundColor: "rgba(79,224,138,0.65)" },
+  bulletText: { flex: 1, color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold, lineHeight: 19 },
 });
