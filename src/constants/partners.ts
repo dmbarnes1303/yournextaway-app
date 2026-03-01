@@ -24,25 +24,34 @@ export type Partner = {
  * REAL TRACKED VALUES — DO NOT REMOVE
  *
  * Notes:
- * - Aviasales: keep Travelpayouts short link for tracking fallback.
- * - Expedia: expediaToken is the suffix token from your
- *   expedia.com/affiliates/hotel-search-<slug>.<TOKEN> links.
- * - GetYourGuide: partner id used as query param in affiliateLinks.ts.
+ * - Aviasales:
+ *   - aviasalesTracked is your Travelpayouts short link fallback (always tracked).
+ *   - aviasalesMarker enables true prefilled search URLs (recommended).
+ * - Expedia:
+ *   - expediaToken is the suffix token from expedia.com/affiliates/hotel-search-*.TOKEN links.
+ * - GetYourGuide:
+ *   - partner id is used in URL params for tracking.
  */
 export const AffiliateConfig = {
-  // Aviasales
+  // Aviasales — tracking fallback (Travelpayouts short link)
   aviasalesTracked: "https://aviasales.tpm.lv/VYu40Vnv",
 
-  // Expedia
+  // Aviasales — marker for prefilled search URL (set if you want full prefill + tracking)
+  // If you're unsure, leave blank and we'll fall back to aviasalesTracked.
+  aviasalesMarker: "700937",
+
+  // Expedia Creator Program token extracted from your link
+  // Example:
+  // https://expedia.com/affiliates/hotel-search-dortmund.HQeXTbR
   expediaToken: "HQeXTbR",
 
-  // KiwiTaxi
+  // KiwiTaxi (Travelpayouts short link)
   kiwitaxiTracked: "https://kiwitaxi.tpm.lv/oFUnzcw9",
 
-  // SportsEvents365
+  // Tickets (SportsEvents365)
   sportsevents365Tracked: "https://www.sportsevents365.com/?a_aid=69834e80ec9d3",
 
-  // GetYourGuide (REAL ID)
+  // GetYourGuide (REAL partner ID)
   getyourguidePartnerId: "MAQJIREP",
 
   // Optional
@@ -51,6 +60,7 @@ export const AffiliateConfig = {
 } as const;
 
 export const PARTNERS: Partner[] = [
+  // Tickets
   {
     id: "sportsevents365",
     name: "SportsEvents365",
@@ -59,6 +69,8 @@ export const PARTNERS: Partner[] = [
     api: true,
     deepLinkBase: "https://www.sportsevents365.com/",
   },
+
+  // Flights
   {
     id: "aviasales",
     name: "Aviasales",
@@ -67,6 +79,8 @@ export const PARTNERS: Partner[] = [
     api: false,
     deepLinkBase: "https://www.aviasales.com/",
   },
+
+  // Stays
   {
     id: "expedia",
     name: "Expedia",
@@ -75,6 +89,18 @@ export const PARTNERS: Partner[] = [
     api: false,
     deepLinkBase: "https://www.expedia.com/",
   },
+
+  // Back-compat alias (older screens may still reference this id)
+  {
+    id: "expedia_stays",
+    name: "Expedia",
+    category: "stays",
+    affiliate: true,
+    api: false,
+    deepLinkBase: "https://www.expedia.com/",
+  },
+
+  // Transfers
   {
     id: "kiwitaxi",
     name: "KiwiTaxi",
@@ -83,6 +109,8 @@ export const PARTNERS: Partner[] = [
     api: false,
     deepLinkBase: "https://kiwitaxi.com/",
   },
+
+  // Experiences
   {
     id: "getyourguide",
     name: "GetYourGuide",
@@ -91,6 +119,8 @@ export const PARTNERS: Partner[] = [
     api: false,
     deepLinkBase: "https://www.getyourguide.com/",
   },
+
+  // Insurance
   {
     id: "safetywing",
     name: "SafetyWing",
@@ -99,6 +129,8 @@ export const PARTNERS: Partner[] = [
     api: false,
     deepLinkBase: "https://safetywing.com/",
   },
+
+  // Compensation
   {
     id: "airhelp",
     name: "AirHelp",
