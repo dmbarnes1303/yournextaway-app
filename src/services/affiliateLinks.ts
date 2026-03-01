@@ -1,13 +1,25 @@
 // src/services/affiliateLinks.ts
 // Centralised affiliate link builders + safe defaults.
+// MUST NEVER crash the UI if partner config is missing.
 
 import { getIataCityCodeForCity } from "@/src/constants/iataCities";
 import { AffiliateConfig } from "@/src/constants/partners";
 import { formatIsoToYmd } from "@/src/utils/dates";
 
-const AFFILIATE = AffiliateConfig;
+type AffiliateCfg = {
+  aviasalesMarker?: string;
+  safetywingTracked?: string;
+  airhelpTracked?: string;
+  // Optional tracked bases (future proof)
+  expediaStaysTracked?: string;
+  expediaCarsTracked?: string;
+  getyourguideTracked?: string;
+  tiqetsTracked?: string;
+  kiwitaxiTracked?: string;
+  sportsevents365Tracked?: string;
+};
 
-function enc(v: string) {
+function enc(v: any) {
   return encodeURIComponent(String(v ?? "").trim());
 }
 
@@ -15,7 +27,11 @@ function clean(v: any): string {
   return String(v ?? "").trim();
 }
 
-function ymdOrNull(iso: string | null): string | null {
+function safeObj<T extends object>(v: any): T {
+  return v && typeof v === "object" ? (v as T) : ({} as T);
+}
+
+function ymdOrNull(iso: string | null | undefined): string | null {
   const s = clean(iso);
   if (!s) return null;
   try {
@@ -25,68 +41,95 @@ function ymdOrNull(iso: string | null): string | null {
   }
 }
 
+function ymdOrNullFromAny(v: any): string | null {
+  // Accept Date-ish ISO strings or already YYYY-MM-DD.
+  const s = clean(v);
+  if (!s) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  return ymdOrNull(s);
+}
+
+function pickFirstUrl(...candidates: Array<string | null | undefined>) {
+  for (const c of candidates) {
+    const s = clean(c);
+    if (s) return s;
+  }
+  return null;
+}
+
 /**
  * Builds partner links with best-effort prefill.
- * NOTE: some partners do not support stable deep-link prefill without breaking attribution;
- * for demo flows we prioritise "works reliably" and use intent-prefilled fallbacks.
+ * Contract: return keys used by Trip workspace.
+ *
+ * NOTE: For now, many links use Google intent searches (reliable + prefilled).
+ * Tracked URLs can be swapped in later when stable deep-link formats are implemented.
  */
 export function buildAffiliateLinks(args: {
   city: string;
-  countryCode: string | null;
-  startDateIso: string | null;
-  endDateIso: string | null;
+
+  // optional: city country info (not required for current link building)
+  countryCode?: string | null;
+
+  // accept both naming conventions (Trip screen uses startDate/endDate)
+  startDate?: string | null;
+  endDate?: string | null;
+
+  // older naming (some screens may still use these)
+  startDateIso?: string | null;
+  endDateIso?: string | null;
+
   originIata?: string | null;
 }) {
+  const cfg = safeObj<AffiliateCfg>((AffiliateConfig as any) ?? null);
+
   const cityRaw = clean(args.city);
   const query = cityRaw || "city";
 
-  const countryCode = clean(args.countryCode) || null;
-
-  const startDate = ymdOrNull(args.startDateIso);
-  const endDate = ymdOrNull(args.endDateIso);
+  const startDate = ymdOrNullFromAny(args.startDate ?? args.startDateIso);
+  const endDate = ymdOrNullFromAny(args.endDate ?? args.endDateIso);
 
   const originIata = clean(args.originIata) || "LON";
   const destIata = cityRaw ? getIataCityCodeForCity(cityRaw) : null;
 
+  const dateHint =
+    startDate && endDate ? `${startDate} to ${endDate}` : startDate ? startDate : "";
+
   /* -------------------- */
-  /* Flights (Aviasales) */
+  /* Flights (Aviasales)  */
   /* -------------------- */
+  const aviasalesMarker = clean(cfg.aviasalesMarker);
   const flightsUrl =
-    destIata && startDate
-      ? `https://www.aviasales.com/search/${enc(originIata)}${enc(destIata)}${startDate.replaceAll("-", "")}1?marker=${enc(
-          AFFILIATE.aviasalesMarker
+    destIata && startDate && aviasalesMarker
+      ? `https://www.aviasales.com/search/${enc(originIata)}${enc(destIata)}${startDate.replace(/-/g, "")}1?marker=${enc(
+          aviasalesMarker
         )}`
-      : // Fallback: query search (still useful)
-        `https://www.google.com/search?q=${enc([query, "flights"].join(" "))}`;
+      : `https://www.google.com/search?q=${enc([query, "flights"].join(" "))}`;
 
   /* -------------------- */
-  /* Stays (Expedia) */
+  /* Hotels (Expedia)     */
   /* -------------------- */
-  // Expedia deep link formats vary; keep a stable intent prefill.
-  const staysUrl = `https://www.google.com/search?q=${enc([query, "hotels", startDate, endDate].filter(Boolean).join(" "))}`;
+  // Keep reliable intent search until you implement stable deep links.
+  const hotelsUrl = `https://www.google.com/search?q=${enc(
+    [query, "hotels", startDate, endDate].filter(Boolean).join(" ")
+  )}`;
 
   /* -------------------- */
-  /* Car hire (Expedia) */
+  /* Car hire             */
   /* -------------------- */
-  const carHireUrl = `https://www.google.com/search?q=${enc([query, "car hire", startDate, endDate].filter(Boolean).join(" "))}`;
+  const carHireUrl = `https://www.google.com/search?q=${enc(
+    [query, "car hire", startDate, endDate].filter(Boolean).join(" ")
+  )}`;
 
   /* -------------------- */
-  /* Activities (GetYourGuide / Tiqets etc.) */
+  /* Experiences          */
   /* -------------------- */
-  const activitiesUrl = `https://www.google.com/search?q=${enc([query, "things to do"].join(" "))}`;
+  const experiencesUrl = `https://www.google.com/search?q=${enc(
+    [query, "things to do"].join(" ")
+  )}`;
 
   /* -------------------- */
-  /* Transfers / Insurance / Claims / Tickets */
+  /* Transfers / Tickets  */
   /* -------------------- */
-  // Demo-first behaviour:
-  // Transfers & Tickets need to land on something relevant immediately.
-  // Many affiliate shortlinks don't safely accept arbitrary search parameters,
-  // so (for now) we use a Google site-search which *is* prefilled.
-  // We keep the tracked bases in AffiliateConfig so we can swap back once we
-  // implement partner-supported deep-link formats.
-
-  const dateHint = startDate && endDate ? `${startDate} to ${endDate}` : startDate ? startDate : "";
-
   const transfersUrl = `https://www.google.com/search?q=${enc(
     ["kiwitaxi", query, dateHint, "airport transfer"].filter(Boolean).join(" ")
   )}`;
@@ -95,17 +138,27 @@ export function buildAffiliateLinks(args: {
     ["sportsevents365", query, "tickets"].filter(Boolean).join(" ")
   )}`;
 
-  const insuranceUrl = AFFILIATE.safetywingTracked;
-  const claimsUrl = AFFILIATE.airhelpTracked;
+  /* -------------------- */
+  /* Insurance / Claims   */
+  /* -------------------- */
+  // These MUST be safe even if cfg is missing.
+  const insuranceUrl = pickFirstUrl(cfg.safetywingTracked, null) ?? `https://www.google.com/search?q=${enc([query, "travel insurance"].join(" "))}`;
+  const claimsUrl = pickFirstUrl(cfg.airhelpTracked, null) ?? `https://www.google.com/search?q=${enc(["flight compensation", "AirHelp"].join(" "))}`;
+
+  /* -------------------- */
+  /* Maps                 */
+  /* -------------------- */
+  const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${enc(query)}`;
 
   return {
     flightsUrl,
-    staysUrl,
+    hotelsUrl,
     carHireUrl,
-    insuranceUrl,
-    claimsUrl,
-    activitiesUrl,
+    experiencesUrl,
     transfersUrl,
     ticketsUrl,
+    insuranceUrl,
+    claimsUrl,
+    mapsUrl,
   };
 }
