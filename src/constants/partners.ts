@@ -24,29 +24,29 @@ export type Partner = {
  * REAL TRACKED VALUES — DO NOT REMOVE
  *
  * Notes:
- * - Aviasales: you can keep the Travelpayouts short link for tracking,
- *   but for PREFILLED searches we build a direct aviasales.com/search URL with marker (in affiliateLinks.ts).
- * - Expedia: expediaToken is the suffix token from your expedia.com/affiliates/hotel-search-*.TOKEN links.
+ * - Aviasales: Travelpayouts short link kept for tracking fallback.
+ *   Prefilled searches use marker logic in affiliateLinks.ts.
+ * - Expedia: expediaToken is suffix from expedia.com/affiliates/hotel-search-*.TOKEN
+ * - GetYourGuide: partnerId used to build city search URLs
  */
 export const AffiliateConfig = {
-  // Aviasales (Travelpayouts short link) — tracking fallback
+  // Aviasales
   aviasalesTracked: "https://aviasales.tpm.lv/VYu40Vnv",
 
-  // Expedia Creator Program token extracted from your link
-  // Example:
-  // https://expedia.com/affiliates/hotel-search-dortmund.HQeXTbR
+  // Expedia token
   expediaToken: "HQeXTbR",
 
-  // KiwiTaxi (Travelpayouts short link)
+  // KiwiTaxi
   kiwitaxiTracked: "https://kiwitaxi.tpm.lv/oFUnzcw9",
 
-  // Experiences (GetYourGuide) — add your tracked link here when you have it
-  getyourguideTracked: "YOUR_GYG_LINK",
+  // SportsEvents365
+  sportsevents365Tracked:
+    "https://www.sportsevents365.com/?a_aid=69834e80ec9d3",
 
-  // Tickets (SportsEvents365)
-  sportsevents365Tracked: "https://www.sportsevents365.com/?a_aid=69834e80ec9d3",
+  // GetYourGuide partner ID
+  getyourguidePartnerId: "MAQJIREP",
 
-  // Insurance / claims (optional)
+  // Optional
   safetywingTracked: "",
   airhelpTracked: "",
 } as const;
