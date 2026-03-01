@@ -24,26 +24,25 @@ export type Partner = {
  * REAL TRACKED VALUES — DO NOT REMOVE
  *
  * Notes:
- * - Aviasales: Travelpayouts short link kept for tracking fallback.
- *   Prefilled searches use marker logic in affiliateLinks.ts.
- * - Expedia: expediaToken is suffix from expedia.com/affiliates/hotel-search-*.TOKEN
- * - GetYourGuide: partnerId used to build city search URLs
+ * - Aviasales: keep Travelpayouts short link for tracking fallback.
+ * - Expedia: expediaToken is the suffix token from your
+ *   expedia.com/affiliates/hotel-search-<slug>.<TOKEN> links.
+ * - GetYourGuide: partner id used as query param in affiliateLinks.ts.
  */
 export const AffiliateConfig = {
   // Aviasales
   aviasalesTracked: "https://aviasales.tpm.lv/VYu40Vnv",
 
-  // Expedia token
+  // Expedia
   expediaToken: "HQeXTbR",
 
   // KiwiTaxi
   kiwitaxiTracked: "https://kiwitaxi.tpm.lv/oFUnzcw9",
 
   // SportsEvents365
-  sportsevents365Tracked:
-    "https://www.sportsevents365.com/?a_aid=69834e80ec9d3",
+  sportsevents365Tracked: "https://www.sportsevents365.com/?a_aid=69834e80ec9d3",
 
-  // GetYourGuide partner ID
+  // GetYourGuide (REAL ID)
   getyourguidePartnerId: "MAQJIREP",
 
   // Optional
