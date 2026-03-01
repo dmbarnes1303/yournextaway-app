@@ -40,7 +40,6 @@ import { getPartner, type PartnerId } from "@/src/core/partners";
 import { beginPartnerClick, openUntrackedUrl } from "@/src/services/partnerClicks";
 import { getFixtureById, type FixtureListRow } from "@/src/services/apiFootball";
 import { formatUkDateOnly } from "@/src/utils/formatters";
-import { buildAffiliateLinks } from "@/src/services/affiliateLinks";
 import { confirmBookedAndOfferProof } from "@/src/services/bookingProof";
 
 import { getFixtureCertainty } from "@/src/utils/fixtureCertainty";
@@ -325,6 +324,109 @@ function safeUri(u: unknown): string | null {
   return s;
 }
 
+function clampIso(iso?: string | null): string | null {
+  const s = String(iso ?? "").trim();
+  if (!s) return null;
+  const m = s.match(/^(\d{4}-\d{2}-\d{2})/);
+  return m?.[1] ?? null;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Affiliate URL resolving (partner-first, NO GOOGLE)                          */
+/* -------------------------------------------------------------------------- */
+
+type AffiliateContext = {
+  city: string;
+  startDate?: string | null;
+  endDate?: string | null;
+  originIata?: string | null;
+};
+
+function safeGetPartner(pid: PartnerId) {
+  try {
+    return getPartner(pid);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * We try to use partner-provided builders first (so your affiliate tags apply).
+ * Duck-typed to avoid depending on a specific interface.
+ */
+function partnerUrlFromRegistry(pid: PartnerId, ctx: AffiliateContext): string | null {
+  const p: any = safeGetPartner(pid);
+  if (!p) return null;
+
+  const args = {
+    city: ctx.city,
+    startDate: ctx.startDate || undefined,
+    endDate: ctx.endDate || undefined,
+    originIata: ctx.originIata || undefined,
+  };
+
+  const fns = [
+    "buildUrl",
+    "buildSearchUrl",
+    "buildLink",
+    "getUrl",
+    "getSearchUrl",
+    "makeUrl",
+    "makeLink",
+  ];
+
+  for (const name of fns) {
+    const fn = p?.[name];
+    if (typeof fn === "function") {
+      try {
+        const out = fn(args);
+        const s = String(out ?? "").trim();
+        if (s && /^https?:\/\//i.test(s)) return s;
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  // Some registries store a base url or template.
+  const raw =
+    String(p?.url ?? "").trim() ||
+    String(p?.baseUrl ?? "").trim() ||
+    String(p?.homepage ?? "").trim();
+
+  if (raw && /^https?:\/\//i.test(raw)) return raw;
+
+  return null;
+}
+
+/**
+ * LAST RESORT fallback: partner-domain search pages (NOT google).
+ * This keeps user on the correct partner domain even if registry lacks builders.
+ * If your affiliate attribution relies on tags, you MUST implement builders in partners.
+ */
+function partnerDomainFallback(pid: PartnerId, ctx: AffiliateContext): string | null {
+  const city = encodeURIComponent(ctx.city);
+
+  if (pid === "aviasales") {
+    // fallback to Aviasales landing/search entry
+    return `https://www.aviasales.com/search?destination=${city}`;
+  }
+  if (pid === "expedia_stays") {
+    return `https://www.expedia.com/Hotel-Search?destination=${city}`;
+  }
+  if (pid === "kiwitaxi") {
+    return `https://kiwitaxi.com/en/search?place=${city}`;
+  }
+  if (pid === "getyourguide") {
+    return `https://www.getyourguide.com/s/?q=${city}`;
+  }
+  return null;
+}
+
+function resolveAffiliateUrl(pid: PartnerId, ctx: AffiliateContext): string | null {
+  return partnerUrlFromRegistry(pid, ctx) || partnerDomainFallback(pid, ctx) || null;
+}
+
 /* -------------------------------------------------------------------------- */
 /* screen                                                                      */
 /* -------------------------------------------------------------------------- */
@@ -530,54 +632,34 @@ export default function TripDetailScreen() {
     return typeof fromTrip === "number" ? fromTrip : undefined;
   }, [primaryFixture, trip]);
 
-  /**
-   * ✅ Booking city resolver (fixes affiliate links being hidden)
-   * We must not hide booking links just because the displayed city falls back to "Trip".
-   * Priority:
-   * 1) trip.displayCity (explicit user-facing)
-   * 2) trip.venueCity (snapshot from primary match)
-   * 3) primaryFixture.fixture.venue.city (fresh from API)
-   * 4) trip.city (legacy field)
-   * 5) trip.cityId (slug) -> titleCaseCity makes it readable
-   */
-  const bookingCity = useMemo(() => {
+  /* ---------------- affiliate urls (partner-first) ---------------- */
+
+  const affiliateCtx = useMemo<AffiliateContext | null>(() => {
     if (!trip) return null;
+    const city = String(cityName ?? "").trim();
+    if (!city || city === "Trip") return null;
 
-    const a = String((trip as any)?.displayCity ?? "").trim();
-    if (a && a.toLowerCase() !== "trip") return titleCaseCity(a);
-
-    const b = String((trip as any)?.venueCity ?? "").trim();
-    if (b && b.toLowerCase() !== "trip") return titleCaseCity(b);
-
-    const c = String((primaryFixture as any)?.fixture?.venue?.city ?? "").trim();
-    if (c && c.toLowerCase() !== "trip") return titleCaseCity(c);
-
-    const d = String((trip as any)?.city ?? "").trim();
-    if (d && d.toLowerCase() !== "trip") return titleCaseCity(d);
-
-    const e = String((trip as any)?.cityId ?? "").trim();
-    if (e && e.toLowerCase() !== "trip") return titleCaseCity(e);
-
-    return null;
-  }, [trip, primaryFixture]);
-
-  /**
-   * ✅ Booking links are built when we have dates + any usable city.
-   * If city is missing, we keep the "Smart booking" card visible but show a clear empty-state message.
-   */
-  const bookingLinks = useMemo(() => {
-    if (!trip) return null;
-
-    const city = bookingCity;
-    if (!city) return null;
-
-    return buildAffiliateLinks({
+    return {
       city,
-      startDate: trip.startDate,
-      endDate: trip.endDate,
+      startDate: trip.startDate || null,
+      endDate: trip.endDate || null,
       originIata: cleanUpper3(originIata, "LON"),
-    });
-  }, [trip, bookingCity, originIata]);
+    };
+  }, [trip, cityName, originIata]);
+
+  const affiliateUrls = useMemo(() => {
+    if (!affiliateCtx) return null;
+
+    const flightsUrl = resolveAffiliateUrl("aviasales", affiliateCtx);
+    const hotelsUrl = resolveAffiliateUrl("expedia_stays", affiliateCtx);
+    const transfersUrl = resolveAffiliateUrl("kiwitaxi", affiliateCtx);
+    const experiencesUrl = resolveAffiliateUrl("getyourguide", affiliateCtx);
+
+    const mapsUrl = buildMapsSearchUrl(`${affiliateCtx.city} travel`);
+
+    // If any are missing, we still return the object; UI will guard per-button.
+    return { flightsUrl, hotelsUrl, transfersUrl, experiencesUrl, mapsUrl };
+  }, [affiliateCtx]);
 
   const pending = useMemo(() => savedItems.filter((x) => x.status === "pending"), [savedItems]);
   const saved = useMemo(
@@ -724,7 +806,7 @@ export default function TripDetailScreen() {
   useEffect(() => {
     if (!DEV) return;
 
-    const city = String(bookingCity ?? cityName ?? "").trim();
+    const city = String(cityName ?? "").trim();
     if (!city || city === "Trip") return;
 
     const code = getIataCityCodeForCity(city);
@@ -742,7 +824,7 @@ export default function TripDetailScreen() {
       [{ text: "OK" }],
       { cancelable: true }
     );
-  }, [cityName, bookingCity, devWarnedCityKey]);
+  }, [cityName, devWarnedCityKey]);
 
   /* ------------------------------------------------------------------------ */
   /* navigation + link openers                                                 */
@@ -751,7 +833,6 @@ export default function TripDetailScreen() {
   function onEditTrip() {
     if (!trip) return;
 
-    // Prefill add-match picker with this trip’s context
     router.push({
       pathname: "/trip/build",
       params: {
@@ -790,7 +871,7 @@ export default function TripDetailScreen() {
     );
   }
 
-  async function openUntracked(url?: string) {
+  async function openUntracked(url?: string | null) {
     if (!url) return;
     try {
       await openUntrackedUrl(url);
@@ -1227,46 +1308,50 @@ export default function TripDetailScreen() {
     };
 
     const openHotels = () => {
-      if (!bookingLinks) return Alert.alert("Not ready", "We need a city + dates saved to build booking links.");
+      const url = affiliateUrls?.hotelsUrl;
+      if (!url) return Alert.alert("Not ready", "We need a city + dates saved to build booking links.");
       return openTrackedPartner({
         partnerId: "expedia_stays",
-        url: bookingLinks.hotelsUrl,
+        url,
         savedItemType: "hotel",
-        title: `Hotels in ${bookingCity || cityName}`,
-        metadata: { city: bookingCity || cityName, startDate: trip?.startDate, endDate: trip?.endDate, priceMode: "live" },
+        title: `Hotels in ${cityName}`,
+        metadata: { city: cityName, startDate: trip?.startDate, endDate: trip?.endDate, priceMode: "live" },
       });
     };
 
     const openFlights = () => {
-      if (!bookingLinks) return Alert.alert("Not ready", "We need a city + dates saved to build booking links.");
+      const url = affiliateUrls?.flightsUrl;
+      if (!url) return Alert.alert("Not ready", "We need a city + dates saved to build booking links.");
       return openTrackedPartner({
         partnerId: "aviasales",
-        url: bookingLinks.flightsUrl,
+        url,
         savedItemType: "flight",
-        title: `Flights to ${bookingCity || cityName}`,
-        metadata: { city: bookingCity || cityName, originIata: cleanUpper3(originIata, "LON"), priceMode: "live" },
+        title: `Flights to ${cityName}`,
+        metadata: { city: cityName, originIata: cleanUpper3(originIata, "LON"), priceMode: "live" },
       });
     };
 
     const openTransfers = () => {
-      if (!bookingLinks) return Alert.alert("Not ready", "We need a city + dates saved to build booking links.");
+      const url = affiliateUrls?.transfersUrl;
+      if (!url) return Alert.alert("Not ready", "We need a city + dates saved to build booking links.");
       return openTrackedPartner({
         partnerId: "kiwitaxi",
-        url: bookingLinks.transfersUrl,
+        url,
         savedItemType: "transfer",
-        title: `Transfers in ${bookingCity || cityName}`,
-        metadata: { city: bookingCity || cityName, startDate: trip?.startDate, endDate: trip?.endDate, priceMode: "live" },
+        title: `Transfers in ${cityName}`,
+        metadata: { city: cityName, startDate: trip?.startDate, endDate: trip?.endDate, priceMode: "live" },
       });
     };
 
     const openThings = () => {
-      if (!bookingLinks) return Alert.alert("Not ready", "We need a city + dates saved to build booking links.");
+      const url = affiliateUrls?.experiencesUrl;
+      if (!url) return Alert.alert("Not ready", "We need a city saved to build booking links.");
       return openTrackedPartner({
         partnerId: "getyourguide",
-        url: bookingLinks.experiencesUrl,
+        url,
         savedItemType: "things",
-        title: `Experiences in ${bookingCity || cityName}`,
-        metadata: { city: bookingCity || cityName, priceMode: "live" },
+        title: `Experiences in ${cityName}`,
+        metadata: { city: cityName, priceMode: "live" },
       });
     };
 
@@ -1279,8 +1364,7 @@ export default function TripDetailScreen() {
     ];
   }, [
     primaryMatchId,
-    bookingLinks,
-    bookingCity,
+    affiliateUrls,
     cityName,
     originIata,
     trip?.startDate,
@@ -1304,24 +1388,26 @@ export default function TripDetailScreen() {
     };
 
     const openFlights = () => {
-      if (!bookingLinks) return Alert.alert("Not ready", "We need a city + dates saved to build booking links.");
+      const url = affiliateUrls?.flightsUrl;
+      if (!url) return Alert.alert("Not ready", "We need a city + dates saved to build booking links.");
       return openTrackedPartner({
         partnerId: "aviasales",
-        url: bookingLinks.flightsUrl,
+        url,
         savedItemType: "flight",
-        title: `Flights to ${bookingCity || cityName}`,
-        metadata: { city: bookingCity || cityName, originIata: cleanUpper3(originIata, "LON"), priceMode: "live" },
+        title: `Flights to ${cityName}`,
+        metadata: { city: cityName, originIata: cleanUpper3(originIata, "LON"), priceMode: "live" },
       });
     };
 
     const openHotels = () => {
-      if (!bookingLinks) return Alert.alert("Not ready", "We need a city + dates saved to build booking links.");
+      const url = affiliateUrls?.hotelsUrl;
+      if (!url) return Alert.alert("Not ready", "We need a city + dates saved to build booking links.");
       return openTrackedPartner({
         partnerId: "expedia_stays",
-        url: bookingLinks.hotelsUrl,
+        url,
         savedItemType: "hotel",
-        title: `Hotels in ${bookingCity || cityName}`,
-        metadata: { city: bookingCity || cityName, startDate: trip?.startDate, endDate: trip?.endDate, priceMode: "live" },
+        title: `Hotels in ${cityName}`,
+        metadata: { city: cityName, startDate: trip?.startDate, endDate: trip?.endDate, priceMode: "live" },
       });
     };
 
@@ -1377,8 +1463,7 @@ export default function TripDetailScreen() {
     };
   }, [
     primaryMatchId,
-    bookingLinks,
-    bookingCity,
+    affiliateUrls,
     cityName,
     originIata,
     trip?.startDate,
@@ -1390,48 +1475,56 @@ export default function TripDetailScreen() {
   ]);
 
   const smartBookButtons = useMemo(() => {
-    if (!bookingLinks || !trip) return [];
+    if (!affiliateUrls || !trip) return [];
 
     const btns: Array<{ title: string; sub: string; onPress: () => void; kind?: "primary" | "neutral" }> = [];
 
     const add = (title: string, sub: string, onPress: () => void, kind?: "primary" | "neutral") =>
       btns.push({ title, sub, onPress, kind });
 
-    const openHotels = () =>
-      openTrackedPartner({
+    const openHotels = () => {
+      if (!affiliateUrls.hotelsUrl) return Alert.alert("Not ready", "Hotels link couldn’t be built.");
+      return openTrackedPartner({
         partnerId: "expedia_stays",
-        url: bookingLinks.hotelsUrl,
+        url: affiliateUrls.hotelsUrl,
         savedItemType: "hotel",
-        title: `Hotels in ${bookingCity || cityName}`,
-        metadata: { city: bookingCity || cityName, startDate: trip.startDate, endDate: trip.endDate, priceMode: "live" },
+        title: `Hotels in ${cityName}`,
+        metadata: { city: cityName, startDate: trip.startDate, endDate: trip.endDate, priceMode: "live" },
       });
+    };
 
-    const openFlights = () =>
-      openTrackedPartner({
+    const openFlights = () => {
+      if (!affiliateUrls.flightsUrl) return Alert.alert("Not ready", "Flights link couldn’t be built.");
+      return openTrackedPartner({
         partnerId: "aviasales",
-        url: bookingLinks.flightsUrl,
+        url: affiliateUrls.flightsUrl,
         savedItemType: "flight",
-        title: `Flights to ${bookingCity || cityName}`,
-        metadata: { city: bookingCity || cityName, originIata: cleanUpper3(originIata, "LON"), priceMode: "live" },
+        title: `Flights to ${cityName}`,
+        metadata: { city: cityName, originIata: cleanUpper3(originIata, "LON"), priceMode: "live" },
       });
+    };
 
-    const openTransfers = () =>
-      openTrackedPartner({
+    const openTransfers = () => {
+      if (!affiliateUrls.transfersUrl) return Alert.alert("Not ready", "Transfers link couldn’t be built.");
+      return openTrackedPartner({
         partnerId: "kiwitaxi",
-        url: bookingLinks.transfersUrl,
+        url: affiliateUrls.transfersUrl,
         savedItemType: "transfer",
-        title: `Transfers in ${bookingCity || cityName}`,
-        metadata: { city: bookingCity || cityName, startDate: trip.startDate, endDate: trip.endDate, priceMode: "live" },
+        title: `Transfers in ${cityName}`,
+        metadata: { city: cityName, startDate: trip.startDate, endDate: trip.endDate, priceMode: "live" },
       });
+    };
 
-    const openThings = () =>
-      openTrackedPartner({
+    const openThings = () => {
+      if (!affiliateUrls.experiencesUrl) return Alert.alert("Not ready", "Activities link couldn’t be built.");
+      return openTrackedPartner({
         partnerId: "getyourguide",
-        url: bookingLinks.experiencesUrl,
+        url: affiliateUrls.experiencesUrl,
         savedItemType: "things",
-        title: `Experiences in ${bookingCity || cityName}`,
-        metadata: { city: bookingCity || cityName, priceMode: "live" },
+        title: `Experiences in ${cityName}`,
+        metadata: { city: cityName, priceMode: "live" },
       });
+    };
 
     if (!presentByType.hasTickets && primaryMatchId) {
       add(
@@ -1441,21 +1534,20 @@ export default function TripDetailScreen() {
         "primary"
       );
     }
-    if (!presentByType.hasFlight) add("Flights", "Live prices", openFlights, "primary");
-    if (!presentByType.hasHotel) add("Hotels", "Live prices", openHotels, "primary");
-    if (!presentByType.hasTransfer) add("Transfers", "Live prices", openTransfers);
-    if (!presentByType.hasThings) add("Things to do", "Live prices", openThings);
+    if (!presentByType.hasFlight) add("Flights", "Aviasales (live)", openFlights, "primary");
+    if (!presentByType.hasHotel) add("Hotels", "Expedia (live)", openHotels, "primary");
+    if (!presentByType.hasTransfer) add("Transfers", "Kiwitaxi (live)", openTransfers);
+    if (!presentByType.hasThings) add("Activities", "GetYourGuide (live)", openThings);
 
     if (btns.length === 0) {
-      add("Hotels", "Live prices", openHotels, "primary");
-      add("Things to do", "Live prices", openThings);
+      add("Hotels", "Expedia (live)", openHotels, "primary");
+      add("Activities", "GetYourGuide (live)", openThings);
     }
 
     return btns.slice(0, 4);
   }, [
-    bookingLinks,
+    affiliateUrls,
     trip,
-    bookingCity,
     cityName,
     originIata,
     primaryMatchId,
@@ -1586,41 +1678,32 @@ export default function TripDetailScreen() {
                 </View>
               </GlassCard>
 
-              {/* SMART BOOK (never silently disappears) */}
-              <GlassCard style={styles.card}>
-                <View style={styles.sectionTitleRow}>
-                  <Text style={styles.sectionTitle}>Smart booking</Text>
-                  <Text style={styles.sectionSub}>Live prices on partners</Text>
-                </View>
-
-                {bookingLinks ? (
-                  <>
-                    <View style={styles.smartGrid}>
-                      {smartBookButtons.map((b, idx) => (
-                        <Pressable
-                          key={`${b.title}-${idx}`}
-                          style={[styles.smartBtn, b.kind === "primary" ? styles.smartBtnPrimary : undefined]}
-                          onPress={b.onPress}
-                        >
-                          <Text style={styles.smartBtnText}>{b.title}</Text>
-                          <Text style={styles.smartBtnSub}>{b.sub}</Text>
-                        </Pressable>
-                      ))}
-                    </View>
-
-                    <Pressable onPress={() => openUntracked(bookingLinks.mapsUrl)}>
-                      <Text style={styles.mapsInline}>Open maps search</Text>
-                    </Pressable>
-                  </>
-                ) : (
-                  <View style={{ paddingTop: 6 }}>
-                    <EmptyState
-                      title="Booking links not ready"
-                      message="We need a city + trip dates saved to build flights/hotels/transfers/activities links. Edit the trip and set the city (or load match details)."
-                    />
+              {/* SMART BOOK */}
+              {affiliateUrls ? (
+                <GlassCard style={styles.card}>
+                  <View style={styles.sectionTitleRow}>
+                    <Text style={styles.sectionTitle}>Smart booking</Text>
+                    <Text style={styles.sectionSub}>Live prices on partners</Text>
                   </View>
-                )}
-              </GlassCard>
+
+                  <View style={styles.smartGrid}>
+                    {smartBookButtons.map((b, idx) => (
+                      <Pressable
+                        key={`${b.title}-${idx}`}
+                        style={[styles.smartBtn, b.kind === "primary" ? styles.smartBtnPrimary : undefined]}
+                        onPress={b.onPress}
+                      >
+                        <Text style={styles.smartBtnText}>{b.title}</Text>
+                        <Text style={styles.smartBtnSub}>{b.sub}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+
+                  <Pressable onPress={() => openUntracked(affiliateUrls.mapsUrl)}>
+                    <Text style={styles.mapsInline}>Open maps search</Text>
+                  </Pressable>
+                </GlassCard>
+              ) : null}
 
               {/* MATCHES */}
               <GlassCard style={styles.card}>
