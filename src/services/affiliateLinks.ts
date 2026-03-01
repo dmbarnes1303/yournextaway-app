@@ -1,237 +1,111 @@
 // src/services/affiliateLinks.ts
-import Constants from "expo-constants";
+// Centralised affiliate link builders + safe defaults.
 
-import { devWarnIfUnknownCity, getIataCityCodeForCity } from "@/src/constants/iataCities";
+import { getIataCityCodeForCity } from "@/src/constants/iataCities";
+import { AffiliateConfig } from "@/src/constants/partners";
+import { formatIsoToYmd } from "@/src/utils/dates";
 
-/**
- * Centralised affiliate URL builder.
- *
- * RULES (Phase-1 spine):
- * - This file ONLY builds URLs (pure + deterministic).
- * - NO stores, NO async, NO side effects (except dev warnings).
- * - Partner IDs live in src/core/partners.ts
- * - Keep output keys stable to avoid screen refactors.
- *
- * CRITICAL COMMISSION RULE:
- * - Do NOT append extra query params to third-party tracking links (TPM, etc).
- *   Many tracking/redirect systems do not guarantee passthrough and can break attribution.
- *   Keep those tracking URLs EXACT.
- */
-
-export type AffiliateLinks = {
-  city: string;
-  country?: string;
-  startDate?: string; // YYYY-MM-DD
-  endDate?: string; // YYYY-MM-DD
-
-  // Legacy (already used by screens)
-  hotelsUrl: string; // Expedia
-  flightsUrl: string; // Aviasales
-  trainsUrl: string; // fallback (untracked)
-  experiencesUrl: string; // GetYourGuide
-  mapsUrl: string; // Google Maps (untracked)
-
-  // Approved additions (Phase 1)
-  transfersUrl: string; // KiwiTaxi (tracked)
-  insuranceUrl: string; // SafetyWing (tracked)
-  claimsUrl: string; // AirHelp (tracked)
-  ticketsUrl: string; // SportsEvents365 (tracked)
-};
-
-/* -------------------------------------------------------------------------- */
-/* helpers */
-/* -------------------------------------------------------------------------- */
-
-function env(name: string): string | undefined {
-  const extra = (Constants?.expoConfig as any)?.extra ?? (Constants as any)?.manifest?.extra ?? {};
-
-  const v =
-    (extra && typeof extra[name] === "string" ? String(extra[name]) : undefined) ??
-    (typeof process !== "undefined" &&
-    (process as any)?.env &&
-    typeof (process as any).env[name] === "string"
-      ? String((process as any).env[name])
-      : undefined);
-
-  const s = String(v ?? "").trim();
-  return s || undefined;
-}
+const AFFILIATE = AffiliateConfig;
 
 function enc(v: string) {
-  return encodeURIComponent(v);
+  return encodeURIComponent(String(v ?? "").trim());
 }
 
-function cleanCity(input: string) {
-  return String(input ?? "").trim();
+function clean(v: any): string {
+  return String(v ?? "").trim();
 }
 
-function cleanCountry(input?: string) {
-  const s = String(input ?? "").trim();
-  return s || undefined;
-}
-
-function safeQueryCity(city: string, country?: string) {
-  const c = cleanCity(city);
-  const co = cleanCountry(country);
-  return co ? `${c}, ${co}` : c;
-}
-
-function isIsoDateOnly(s?: string) {
-  return !!s && /^\d{4}-\d{2}-\d{2}$/.test(String(s).trim());
-}
-
-function isIata3(s?: string) {
-  return !!s && /^[A-Z]{3}$/.test(String(s).trim().toUpperCase());
-}
-
-function formatDdMm(dateIso?: string): string | null {
-  if (!dateIso || !/^\d{4}-\d{2}-\d{2}$/.test(dateIso)) return null;
-  const [, m, d] = dateIso.split("-");
-  return `${d}${m}`;
+function ymdOrNull(iso: string | null): string | null {
+  const s = clean(iso);
+  if (!s) return null;
+  try {
+    return formatIsoToYmd(s);
+  } catch {
+    return null;
+  }
 }
 
 /**
- * Deterministic origin chooser:
- * - args.originIata (if valid)
- * - EXPO_PUBLIC_DEFAULT_ORIGIN_IATA (if valid)
- * - "LON"
- *
- * NOTE: caller is responsible for reading preferences stores (if any) and passing originIata in.
+ * Builds partner links with best-effort prefill.
+ * NOTE: some partners do not support stable deep-link prefill without breaking attribution;
+ * for demo flows we prioritise "works reliably" and use intent-prefilled fallbacks.
  */
-function resolveOriginIata(argsOrigin?: string, envOrigin?: string): string {
-  const fromArgs = String(argsOrigin ?? "").trim().toUpperCase();
-  if (isIata3(fromArgs)) return fromArgs;
-
-  const fromEnv = String(envOrigin ?? "").trim().toUpperCase();
-  if (isIata3(fromEnv)) return fromEnv;
-
-  return "LON";
-}
-
-/* -------------------------------------------------------------------------- */
-/* affiliate config */
-/* -------------------------------------------------------------------------- */
-
-const AFFILIATE = {
-  // Optional IDs (safe if missing)
-  aviasalesMarker: env("EXPO_PUBLIC_AVIASALES_MARKER"),
-  gygPartnerId: env("EXPO_PUBLIC_GYG_PARTNER_ID"),
-  expediaAffilId: env("EXPO_PUBLIC_EXPEDIA_AFFIL_ID"),
-
-  // Optional default origin IATA (prefer CITY codes, e.g. LON)
-  defaultOriginIata: env("EXPO_PUBLIC_DEFAULT_ORIGIN_IATA"),
-
-  // ✅ EXACT tracking links provided by you (DO NOT MODIFY)
-  kiwitaxiTracked: "https://kiwitaxi.tpm.lv/ZnnAV8eH",
-  airhelpTracked: "https://airhelp.tpm.lv/6tipSUue",
-  safetywingTracked: "https://safetywing.com/?referenceID=26471369&utm_source=26471369&utm_medium=Ambassador",
-  sportsevents365Tracked: "https://www.sportsevents365.com/?a_aid=69834e80ec9d3",
-};
-
-/* -------------------------------------------------------------------------- */
-/* public */
-/* -------------------------------------------------------------------------- */
-
 export function buildAffiliateLinks(args: {
   city: string;
-  country?: string;
-  startDate?: string;
-  endDate?: string;
+  countryCode: string | null;
+  startDateIso: string | null;
+  endDateIso: string | null;
+  originIata?: string | null;
+}) {
+  const cityRaw = clean(args.city);
+  const query = cityRaw || "city";
 
-  /**
-   * Optional override for flight origin (CITY code preferred).
-   * If not provided, we fall back to env → "LON".
-   */
-  originIata?: string;
-}): AffiliateLinks {
-  const city = cleanCity(args.city);
-  const country = cleanCountry(args.country);
+  const countryCode = clean(args.countryCode) || null;
 
-  const startDate = isIsoDateOnly(args.startDate) ? String(args.startDate).trim() : undefined;
-  const endDate = isIsoDateOnly(args.endDate) ? String(args.endDate).trim() : undefined;
+  const startDate = ymdOrNull(args.startDateIso);
+  const endDate = ymdOrNull(args.endDateIso);
 
-  const query = safeQueryCity(city, country);
+  const originIata = clean(args.originIata) || "LON";
+  const destIata = cityRaw ? getIataCityCodeForCity(cityRaw) : null;
 
   /* -------------------- */
-  /* Hotels: Expedia */
+  /* Flights (Aviasales) */
   /* -------------------- */
-  const expediaParams: string[] = [`destination=${enc(query)}`];
-  if (startDate) expediaParams.push(`startDate=${enc(startDate)}`);
-  if (endDate) expediaParams.push(`endDate=${enc(endDate)}`);
-  if (AFFILIATE.expediaAffilId) expediaParams.push(`affcid=${enc(AFFILIATE.expediaAffilId)}`);
-  const hotelsUrl = `https://www.expedia.co.uk/Hotel-Search?${expediaParams.join("&")}`;
+  const flightsUrl =
+    destIata && startDate
+      ? `https://www.aviasales.com/search/${enc(originIata)}${enc(destIata)}${startDate.replaceAll("-", "")}1?marker=${enc(
+          AFFILIATE.aviasalesMarker
+        )}`
+      : // Fallback: query search (still useful)
+        `https://www.google.com/search?q=${enc([query, "flights"].join(" "))}`;
 
   /* -------------------- */
-  /* Flights: Aviasales */
+  /* Stays (Expedia) */
   /* -------------------- */
-  const destIata = getIataCityCodeForCity(city);
-  if (!destIata) devWarnIfUnknownCity(city, "affiliateLinks.dest");
-
-  const originIata = resolveOriginIata(args.originIata, AFFILIATE.defaultOriginIata);
-
-  let flightsUrl: string;
-
-  // If we have enough data, use the /search deep link so the form is prefilled.
-  if (destIata && startDate && endDate) {
-    const dd = formatDdMm(startDate);
-    const rd = formatDdMm(endDate);
-
-    if (dd && rd) {
-      flightsUrl =
-        `https://www.aviasales.com/search/${originIata}${dd}${destIata}${rd}1` +
-        (AFFILIATE.aviasalesMarker ? `?marker=${enc(AFFILIATE.aviasalesMarker)}` : "");
-    } else {
-      flightsUrl =
-        `https://www.aviasales.com/` +
-        (AFFILIATE.aviasalesMarker ? `?marker=${enc(AFFILIATE.aviasalesMarker)}` : "");
-    }
-  } else {
-    flightsUrl =
-      `https://www.aviasales.com/` + (AFFILIATE.aviasalesMarker ? `?marker=${enc(AFFILIATE.aviasalesMarker)}` : "");
-  }
+  // Expedia deep link formats vary; keep a stable intent prefill.
+  const staysUrl = `https://www.google.com/search?q=${enc([query, "hotels", startDate, endDate].filter(Boolean).join(" "))}`;
 
   /* -------------------- */
-  /* Trains/Buses: fallback (UNTRACKED) */
+  /* Car hire (Expedia) */
   /* -------------------- */
-  const trainsUrl = `https://www.google.com/maps/search/?api=1&query=${enc(`${query} train station`)}`;
+  const carHireUrl = `https://www.google.com/search?q=${enc([query, "car hire", startDate, endDate].filter(Boolean).join(" "))}`;
 
   /* -------------------- */
-  /* Experiences: GetYourGuide */
+  /* Activities (GetYourGuide / Tiqets etc.) */
   /* -------------------- */
-  const gygParams: string[] = [`q=${enc(query)}`];
-  if (AFFILIATE.gygPartnerId) gygParams.push(`partner_id=${enc(AFFILIATE.gygPartnerId)}`);
-  const experiencesUrl = `https://www.getyourguide.com/s/?${gygParams.join("&")}`;
+  const activitiesUrl = `https://www.google.com/search?q=${enc([query, "things to do"].join(" "))}`;
 
   /* -------------------- */
-  /* Transfers / Insurance / Claims / Tickets: TRACKED BASE LINKS (EXACT) */
+  /* Transfers / Insurance / Claims / Tickets */
   /* -------------------- */
-  const transfersUrl = AFFILIATE.kiwitaxiTracked;
+  // Demo-first behaviour:
+  // Transfers & Tickets need to land on something relevant immediately.
+  // Many affiliate shortlinks don't safely accept arbitrary search parameters,
+  // so (for now) we use a Google site-search which *is* prefilled.
+  // We keep the tracked bases in AffiliateConfig so we can swap back once we
+  // implement partner-supported deep-link formats.
+
+  const dateHint = startDate && endDate ? `${startDate} to ${endDate}` : startDate ? startDate : "";
+
+  const transfersUrl = `https://www.google.com/search?q=${enc(
+    ["kiwitaxi", query, dateHint, "airport transfer"].filter(Boolean).join(" ")
+  )}`;
+
+  const ticketsUrl = `https://www.google.com/search?q=${enc(
+    ["sportsevents365", query, "tickets"].filter(Boolean).join(" ")
+  )}`;
+
   const insuranceUrl = AFFILIATE.safetywingTracked;
   const claimsUrl = AFFILIATE.airhelpTracked;
-  const ticketsUrl = AFFILIATE.sportsevents365Tracked;
-
-  /* -------------------- */
-  /* Maps: Google Maps (UNTRACKED) */
-  /* -------------------- */
-  const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${enc(query)}`;
 
   return {
-    city,
-    country,
-    startDate,
-    endDate,
-    hotelsUrl,
     flightsUrl,
-    trainsUrl,
-    experiencesUrl,
-    mapsUrl,
-    transfersUrl,
+    staysUrl,
+    carHireUrl,
     insuranceUrl,
     claimsUrl,
+    activitiesUrl,
+    transfersUrl,
     ticketsUrl,
   };
-}
-
-export function normalizeUrlForCompare(url: string): string {
-  return String(url ?? "").trim().toLowerCase();
 }
