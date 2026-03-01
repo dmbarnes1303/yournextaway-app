@@ -1,41 +1,67 @@
+# ------------------------------
+# Dependencies
+# ------------------------------
 node_modules/
+.pnpm-store/
 
-.git/
+# ------------------------------
+# Expo / React Native
+# ------------------------------
 .expo/
-
+.expo-shared/
+.expo-env.d.ts
 dist/
 web-build/
-expo-env.d.ts
+.natively/
 
-*.orig.*
+# Native build folders (managed by Expo prebuild)
+android/
+ios/
+
+# ------------------------------
+# Build / caches
+# ------------------------------
+.metro-health-check*
+*.tsbuildinfo
+
+# ------------------------------
+# Environment variables (NEVER COMMIT)
+# ------------------------------
+.env
+.env.*
+!.env.example
+
+# ------------------------------
+# Keys / certificates (NEVER COMMIT)
+# ------------------------------
 *.jks
 *.p8
 *.p12
 *.key
 *.mobileprovision
+*.pem
 
-.metro-health-check*
-
+# ------------------------------
+# Logs
+# ------------------------------
 npm-debug.*
 yarn-debug.*
 yarn-error.*
 
+# ------------------------------
+# OS / editor
+# ------------------------------
 .DS_Store
-*.pem
+*.orig.*
 
-.env*.local
-
-*.tsbuildinfo
-
-.natively/
-
-android/
-ios/
-
-pnpm-lock.yaml
-package-lock.json
-
-# Chat history contains presigned URLs that get flagged by GitHub
+# ------------------------------
+# Git / misc
+# ------------------------------
+.git/
 chat_history.json
 
-.env
+# ------------------------------
+# Lockfiles (Expo/EAS handles installs)
+# ------------------------------
+pnpm-lock.yaml
+package-lock.json
