@@ -1,6 +1,5 @@
 // src/constants/partners.ts
-// Canonical partner registry + affiliate link config.
-// This file MUST export AffiliateConfig for src/services/affiliateLinks.ts.
+// Canonical partner registry + affiliate config for affiliateLinks.ts
 
 export type PartnerCategory =
   | "tickets"
@@ -22,78 +21,57 @@ export type Partner = {
 
 /**
  * AffiliateConfig
- * Put your real tracking values in here.
- *
- * If these are empty, the app will still open the partner site,
- * but you may NOT get paid if the program requires tags on every link.
+ * REAL TRACKED VALUES — DO NOT REMOVE
  */
 export const AffiliateConfig = {
-  // Flights (Aviasales)
-  // Example marker: "123456" (whatever Aviasales gives you)
-  aviasalesMarker: "",
+  // Aviasales (Travelpayouts short link)
+  aviasalesTracked: "https://aviasales.tpm.lv/VYu40Vnv",
 
-  // Expedia
-  // Put your tracked landing URL (with affcid/utm/etc) if you have one.
-  // If you don't, leave blank and the app uses normal Expedia URLs.
-  expediaStaysTracked: "",
-  expediaCarsTracked: "",
+  // Expedia Creator Program token extracted from your link
+  // Example base:
+  // https://expedia.com/affiliates/hotel-search-dortmund.HQeXTbR
+  expediaToken: "HQeXTbR",
 
-  // GetYourGuide
-  // Some programs use partner_id or similar; store a full tracked base URL.
+  // KiwiTaxi (Travelpayouts short link)
+  kiwitaxiTracked: "https://kiwitaxi.tpm.lv/oFUnzcw9",
+
+  // SportsEvents365 tracked base
+  sportsevents365Tracked:
+    "https://www.sportsevents365.com/?a_aid=69834e80ec9d3",
+
+  // Experiences (none provided yet)
   getyourguideTracked: "",
 
-  // KiwiTaxi
-  kiwitaxiTracked: "",
-
-  // SportsEvents365
-  sportsevents365Tracked: "",
-
-  // Insurance / Claims
+  // Insurance / claims (optional)
   safetywingTracked: "",
   airhelpTracked: "",
 } as const;
 
 export const PARTNERS: Partner[] = [
-  // =====================
-  // TICKETS
-  // =====================
   {
     id: "sportsevents365",
     name: "SportsEvents365",
     category: "tickets",
     affiliate: true,
     api: true,
-    // keep generic base; tracked base goes in AffiliateConfig if required
     deepLinkBase: "https://www.sportsevents365.com/",
   },
-
-  // =====================
-  // FLIGHTS
-  // =====================
   {
     id: "aviasales",
     name: "Aviasales",
     category: "flights",
     affiliate: true,
     api: false,
-    deepLinkBase: "https://www.aviasales.com/",
+    deepLinkBase: "https://aviasales.com/",
   },
-
-  // =====================
-  // STAYS (Hotels)
-  // =====================
   {
     id: "expedia",
     name: "Expedia",
     category: "stays",
     affiliate: true,
     api: false,
-    deepLinkBase: "https://www.expedia.co.uk/",
+    deepLinkBase: "https://expedia.com/",
   },
-
-  // =====================
-  // TRANSFERS
-  // =====================
   {
     id: "kiwitaxi",
     name: "KiwiTaxi",
@@ -102,22 +80,14 @@ export const PARTNERS: Partner[] = [
     api: false,
     deepLinkBase: "https://kiwitaxi.com/",
   },
-
-  // =====================
-  // EXPERIENCES (Activities)
-  // =====================
   {
     id: "getyourguide",
     name: "GetYourGuide",
     category: "experiences",
     affiliate: true,
     api: false,
-    deepLinkBase: "https://www.getyourguide.com/",
+    deepLinkBase: "https://getyourguide.com/",
   },
-
-  // =====================
-  // INSURANCE
-  // =====================
   {
     id: "safetywing",
     name: "SafetyWing",
@@ -126,22 +96,17 @@ export const PARTNERS: Partner[] = [
     api: false,
     deepLinkBase: "https://safetywing.com/",
   },
-
-  // =====================
-  // COMPENSATION (Claims)
-  // =====================
   {
     id: "airhelp",
     name: "AirHelp",
     category: "compensation",
     affiliate: true,
     api: false,
-    deepLinkBase: "https://www.airhelp.com/",
+    deepLinkBase: "https://airhelp.com/",
   },
 ];
 
-// --------- selectors / helpers ---------
-
+// helpers
 export type PartnerId = (typeof PARTNERS)[number]["id"];
 
 export function getPartnersByCategory(category: PartnerCategory): Partner[] {
