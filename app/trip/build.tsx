@@ -1,4 +1,5 @@
 // app/trip/build.tsx
+
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   View,
@@ -8,12 +9,14 @@ import {
   Pressable,
   TextInput,
   ActivityIndicator,
+  Platform,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 
 import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
+import EmptyState from "@/src/components/EmptyState";
 
 import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
@@ -21,9 +24,11 @@ import { theme } from "@/src/constants/theme";
 import { getFixtures, getFixtureById, type FixtureListRow } from "@/src/services/apiFootball";
 import tripsStore from "@/src/state/trips";
 
-import { LEAGUES } from "@/src/constants/football";
+import { LEAGUES, addDaysIso, clampFromIsoToTomorrow, type LeagueOption } from "@/src/constants/football";
 import { formatUkDateTimeMaybe } from "@/src/utils/formatters";
 
+/* -------------------------------------------------------------------------- */
+/* Param helpers — FIXED                                                     */
 /* -------------------------------------------------------------------------- */
 
 function paramString(v: unknown): string | null {
@@ -32,11 +37,28 @@ function paramString(v: unknown): string | null {
   return null;
 }
 
+/* -------------------------------------------------------------------------- */
+/* Fixture helpers                                                           */
+/* -------------------------------------------------------------------------- */
+
 function fixtureIdStr(r: any): string {
   const id = r?.fixture?.id;
   return id != null ? String(id) : "";
 }
 
+function fixtureDateOnly(r: FixtureListRow | null): string | null {
+  const raw = r?.fixture?.date;
+  if (!raw) return null;
+  const m = String(raw).match(/^(\d{4}-\d{2}-\d{2})/);
+  return m?.[1] ?? null;
+}
+
+function clean(v: any) {
+  return String(v ?? "").trim();
+}
+
+/* -------------------------------------------------------------------------- */
+/* Screen                                                                    */
 /* -------------------------------------------------------------------------- */
 
 export default function TripBuildScreen() {
@@ -44,23 +66,39 @@ export default function TripBuildScreen() {
   const params = useLocalSearchParams();
   const insets = useSafeAreaInsets();
 
-  const routeFixtureId = useMemo(
-    () => paramString((params as any)?.fixtureId),
-    [params]
-  );
+  /* ------------------------------------------------------------------ */
+  /* Params — FIXED                                                     */
+  /* ------------------------------------------------------------------ */
 
-  const isPrefilledFlow = !!routeFixtureId;
+  const routeTripId = useMemo(() => paramString((params as any)?.tripId), [params]);
+  const routeFixtureId = useMemo(() => paramString((params as any)?.fixtureId), [params]);
+
+  const isEditing = !!routeTripId;
+  const isPrefilledFlow = !!routeFixtureId && !isEditing;
+
+  /* ------------------------------------------------------------------ */
+  /* State                                                              */
+  /* ------------------------------------------------------------------ */
 
   const [rows, setRows] = useState<FixtureListRow[]>([]);
   const [selectedFixture, setSelectedFixture] = useState<FixtureListRow | null>(null);
 
   const [search, setSearch] = useState("");
+  const [visibleCount, setVisibleCount] = useState(14);
+
+  const [startIso, setStartIso] = useState(
+    clampFromIsoToTomorrow(new Date().toISOString().slice(0, 10))
+  );
+  const [endIso, setEndIso] = useState(addDaysIso(startIso, 2));
+
+  const [notes, setNotes] = useState("");
+
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   /* ------------------------------------------------------------------ */
-  /* Prefill from fixture route                                         */
+  /* Prefill fixture — FIXED                                           */
   /* ------------------------------------------------------------------ */
 
   useEffect(() => {
@@ -71,7 +109,16 @@ export default function TripBuildScreen() {
     (async () => {
       try {
         const fx = await getFixtureById(routeFixtureId);
-        if (!cancelled) setSelectedFixture(fx);
+        if (cancelled) return;
+
+        setSelectedFixture(fx);
+
+        const d0 = fixtureDateOnly(fx);
+        if (d0) {
+          const start = clampFromIsoToTomorrow(d0);
+          setStartIso(start);
+          setEndIso(addDaysIso(start, 2));
+        }
       } catch {
         if (!cancelled) setError("Couldn’t load that fixture.");
       }
@@ -83,7 +130,7 @@ export default function TripBuildScreen() {
   }, [routeFixtureId]);
 
   /* ------------------------------------------------------------------ */
-  /* Load fixtures list (only if NOT prefilled)                         */
+  /* Load fixtures list                                                */
   /* ------------------------------------------------------------------ */
 
   useEffect(() => {
@@ -96,11 +143,16 @@ export default function TripBuildScreen() {
       setError(null);
 
       try {
+        const from = clampFromIsoToTomorrow(new Date().toISOString().slice(0, 10));
+        const to = addDaysIso(from, 30);
+
         const batches = await Promise.all(
           LEAGUES.map((l) =>
             getFixtures({
               league: l.leagueId,
               season: l.season,
+              from,
+              to,
             })
           )
         );
@@ -119,7 +171,7 @@ export default function TripBuildScreen() {
   }, [isPrefilledFlow]);
 
   /* ------------------------------------------------------------------ */
-  /* Save trip                                                          */
+  /* Save trip                                                         */
   /* ------------------------------------------------------------------ */
 
   const onSave = useCallback(async () => {
@@ -132,68 +184,64 @@ export default function TripBuildScreen() {
     setError(null);
 
     try {
-      const t = await tripsStore.addTrip({
+      if (!tripsStore.getState().loaded) await tripsStore.loadTrips();
+
+      const snap = {
         fixtureIdPrimary: String(selectedFixture.fixture.id),
-        homeName: selectedFixture.teams?.home?.name,
-        awayName: selectedFixture.teams?.away?.name,
-        leagueName: selectedFixture.league?.name,
-        venueName: selectedFixture.fixture?.venue?.name,
-        venueCity: selectedFixture.fixture?.venue?.city,
-        kickoffIso: selectedFixture.fixture?.date,
-        displayCity: selectedFixture.fixture?.venue?.city,
+        displayCity: clean(selectedFixture?.fixture?.venue?.city),
+        homeName: clean(selectedFixture?.teams?.home?.name),
+        awayName: clean(selectedFixture?.teams?.away?.name),
+        leagueName: clean(selectedFixture?.league?.name),
+        kickoffIso: selectedFixture?.fixture?.date,
+        venueName: clean(selectedFixture?.fixture?.venue?.name),
+        venueCity: clean(selectedFixture?.fixture?.venue?.city),
+      };
+
+      const trip = await tripsStore.addTrip({
+        fixtureIdPrimary: snap.fixtureIdPrimary,
+        matchIds: [snap.fixtureIdPrimary],
+        displayCity: snap.displayCity,
+        homeName: snap.homeName,
+        awayName: snap.awayName,
+        leagueName: snap.leagueName,
+        kickoffIso: snap.kickoffIso,
+        venueName: snap.venueName,
+        venueCity: snap.venueCity,
+        startDate: startIso,
+        endDate: endIso,
+        notes,
       });
 
-      router.replace({
-        pathname: "/trip/[id]",
-        params: { id: t.id },
-      } as any);
+      router.replace({ pathname: "/trip/[id]", params: { id: trip.id } } as any);
     } catch (e: any) {
       setError(e?.message ?? "Failed to save trip.");
     } finally {
       setSaving(false);
     }
-  }, [selectedFixture, router]);
+  }, [selectedFixture, startIso, endIso, notes, router]);
 
+  /* ------------------------------------------------------------------ */
+  /* Filter                                                            */
   /* ------------------------------------------------------------------ */
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return rows;
     return rows.filter((r) => {
-      const h = String(r?.teams?.home?.name ?? "").toLowerCase();
-      const a = String(r?.teams?.away?.name ?? "").toLowerCase();
-      const c = String(r?.fixture?.venue?.city ?? "").toLowerCase();
+      const h = clean(r?.teams?.home?.name).toLowerCase();
+      const a = clean(r?.teams?.away?.name).toLowerCase();
+      const c = clean(r?.fixture?.venue?.city).toLowerCase();
       return h.includes(q) || a.includes(q) || c.includes(q);
     });
   }, [rows, search]);
 
+  const visibleRows = useMemo(
+    () => filtered.slice(0, visibleCount),
+    [filtered, visibleCount]
+  );
+
   /* ------------------------------------------------------------------ */
-
-  function FixtureCard({ r }: { r: FixtureListRow }) {
-    const home = r?.teams?.home?.name;
-    const away = r?.teams?.away?.name;
-
-    return (
-      <Pressable
-        onPress={() => setSelectedFixture(r)}
-        style={({ pressed }) => [
-          styles.fixtureCard,
-          selectedFixture &&
-            fixtureIdStr(selectedFixture) === fixtureIdStr(r) &&
-            styles.fixtureSelected,
-          pressed && { opacity: 0.9 },
-        ]}
-      >
-        <Text style={styles.fixtureTeams}>
-          {home} vs {away}
-        </Text>
-        <Text style={styles.fixtureMeta}>
-          {formatUkDateTimeMaybe(r?.fixture?.date) || "Kickoff TBC"}
-        </Text>
-      </Pressable>
-    );
-  }
-
+  /* UI                                                                 */
   /* ------------------------------------------------------------------ */
 
   return (
@@ -216,18 +264,20 @@ export default function TripBuildScreen() {
             gap: theme.spacing.lg,
           }}
         >
-          {/* ---------- Prefilled fixture ---------- */}
-          {isPrefilledFlow && selectedFixture && (
+          {loading && (
             <GlassCard>
-              <Text style={styles.sectionTitle}>Selected match</Text>
-              <FixtureCard r={selectedFixture} />
+              <ActivityIndicator />
+              <Text style={{ color: theme.colors.textSecondary }}>
+                Loading fixtures…
+              </Text>
             </GlassCard>
           )}
 
-          {/* ---------- Manual picker ---------- */}
-          {!isPrefilledFlow && (
+          {!loading && (
             <GlassCard>
-              <Text style={styles.sectionTitle}>Pick a match</Text>
+              <Text style={{ fontWeight: "900", color: theme.colors.text }}>
+                Pick a match
+              </Text>
 
               <TextInput
                 value={search}
@@ -237,15 +287,34 @@ export default function TripBuildScreen() {
                 style={styles.search}
               />
 
-              {loading && <ActivityIndicator style={{ marginTop: 12 }} />}
+              {visibleRows.map((r) => {
+                const id = fixtureIdStr(r);
+                const selected = fixtureIdStr(selectedFixture) === id;
+                const home = r?.teams?.home?.name;
+                const away = r?.teams?.away?.name;
 
-              {!loading && filtered.slice(0, 20).map((r) => (
-                <FixtureCard key={fixtureIdStr(r)} r={r} />
-              ))}
+                return (
+                  <Pressable
+                    key={id}
+                    onPress={() => setSelectedFixture(r)}
+                    style={[
+                      styles.row,
+                      selected && { borderColor: theme.colors.primary },
+                    ]}
+                  >
+                    <Text style={styles.rowTitle}>
+                      {home} vs {away}
+                    </Text>
+                    <Text style={styles.rowMeta}>
+                      {formatUkDateTimeMaybe(r?.fixture?.date) ||
+                        "Kickoff TBC"}
+                    </Text>
+                  </Pressable>
+                );
+              })}
             </GlassCard>
           )}
 
-          {/* ---------- Save ---------- */}
           <Pressable
             onPress={onSave}
             disabled={!selectedFixture || saving}
@@ -267,16 +336,12 @@ export default function TripBuildScreen() {
 }
 
 /* -------------------------------------------------------------------------- */
+/* Styles                                                                    */
+/* -------------------------------------------------------------------------- */
 
 const styles = StyleSheet.create({
-  sectionTitle: {
-    color: theme.colors.text,
-    fontWeight: "900",
-    marginBottom: 8,
-  },
-
   search: {
-    marginTop: 8,
+    marginTop: 12,
     borderWidth: 1,
     borderColor: theme.colors.border,
     borderRadius: 12,
@@ -284,7 +349,7 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
   },
 
-  fixtureCard: {
+  row: {
     marginTop: 10,
     padding: 12,
     borderRadius: 14,
@@ -292,18 +357,13 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border,
   },
 
-  fixtureSelected: {
-    borderColor: theme.colors.primary,
-  },
-
-  fixtureTeams: {
+  rowTitle: {
     color: theme.colors.text,
     fontWeight: "900",
   },
 
-  fixtureMeta: {
+  rowMeta: {
     color: theme.colors.textSecondary,
-    marginTop: 4,
   },
 
   saveBtn: {
