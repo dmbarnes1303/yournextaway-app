@@ -1,8 +1,7 @@
 // src/services/apiFootball.ts
-// API-Football client — returns RAW API rows (fixture/league/teams/goals/score)
-// Compatible with existing UI expectations across Fixtures, Match, Follow, etc.
-
-import Constants from "expo-constants";
+// API-Football (API-Sports) client — returns RAW API rows (fixture/league/teams/goals/score)
+// Key point: In Expo/EAS builds, use process.env.EXPO_PUBLIC_* (inlined at build time).
+// Do NOT rely on app.json "extra" interpolation for secrets.
 
 export type FixtureListRow = {
   fixture: {
@@ -30,6 +29,8 @@ type FixturesParams = {
   league?: number;
   leagueId?: number;
   season?: number;
+
+  // support both naming styles used in the app
   from?: string;
   to?: string;
   fromIso?: string;
@@ -38,50 +39,78 @@ type FixturesParams = {
 
 const API_BASE = "https://v3.football.api-sports.io";
 
-function getApiKey(): string {
-  // In Expo, only EXPO_PUBLIC_* vars are available at runtime.
-  // Support both names for backwards compatibility.
-  const extra = (Constants.expoConfig?.extra ?? {}) as any;
+// Set to true temporarily if you want logs in dev builds.
+// Keep false for normal use.
+const DEBUG = false;
 
-  const key =
-    extra.EXPO_PUBLIC_API_FOOTBALL_KEY ??
-    extra.API_FOOTBALL_KEY ??
-    process.env.EXPO_PUBLIC_API_FOOTBALL_KEY ??
-    process.env.API_FOOTBALL_KEY ??
-    "";
-
-  const cleaned = String(key).trim();
-  if (!cleaned) console.warn("[YNA] API-Football key missing");
-  return cleaned;
+function isPlaceholder(v: string) {
+  // Catches literal strings like "${EXPO_PUBLIC_API_FOOTBALL_KEY}"
+  return v.includes("${") || v.includes("EXPO_PUBLIC_") || v.includes("API_FOOTBALL");
 }
 
-async function apiFetch<T>(path: string, params?: Record<string, any>): Promise<T> {
+function getApiKey(): string {
+  const raw = (process.env.EXPO_PUBLIC_API_FOOTBALL_KEY ?? "").trim();
+
+  if (!raw) {
+    if (DEBUG) console.warn("[YNA] API-Football key missing (EXPO_PUBLIC_API_FOOTBALL_KEY)");
+    return "";
+  }
+
+  if (isPlaceholder(raw)) {
+    if (DEBUG)
+      console.warn(
+        `[YNA] API-Football key looks like a placeholder ("${raw}"). Fix EAS env vars / app config.`
+      );
+    return "";
+  }
+
+  if (DEBUG) console.log("[YNA] API-Football key length:", raw.length);
+  return raw;
+}
+
+async function apiFetch<TResponseRows>(
+  path: string,
+  params?: Record<string, string | number | boolean | null | undefined>
+): Promise<TResponseRows> {
   const url = new URL(API_BASE + path);
 
   if (params) {
-    Object.entries(params).forEach(([k, v]) => {
-      if (v !== undefined && v !== null && v !== "") url.searchParams.append(k, String(v));
-    });
+    for (const [k, v] of Object.entries(params)) {
+      if (v === undefined || v === null || v === "") continue;
+      url.searchParams.append(k, String(v));
+    }
   }
 
   const key = getApiKey();
+  if (!key) {
+    throw new Error(
+      "API-Football key missing at runtime. Set EXPO_PUBLIC_API_FOOTBALL_KEY in EAS Environment Variables and rebuild."
+    );
+  }
 
   const res = await fetch(url.toString(), {
     headers: {
-      // API-Sports header
+      // Correct API-Sports header:
       "x-apisports-key": key,
-      // Some setups still use this name; harmless if ignored
-      "x-rapidapi-key": key,
     },
   });
 
+  const text = await res.text().catch(() => "");
   if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`API-Football ${res.status} — ${text || "Request failed"}`);
+    // Give you maximum signal without crashing the app with huge logs.
+    const snippet = text ? text.slice(0, 600) : "";
+    throw new Error(`API-Football ${res.status} — ${snippet || "Request failed"}`);
   }
 
-  const json = await res.json();
-  return json.response as T;
+  // API-Sports responses are JSON with { response: [...] }
+  let json: any;
+  try {
+    json = text ? JSON.parse(text) : {};
+  } catch {
+    throw new Error("API-Football returned non-JSON response.");
+  }
+
+  return json?.response as TResponseRows;
 }
 
 /**
@@ -92,14 +121,16 @@ async function apiFetch<T>(path: string, params?: Record<string, any>): Promise<
  */
 export async function getFixtures(params: FixturesParams): Promise<FixtureListRow[]> {
   const league = params.league ?? params.leagueId;
+  const season = params.season;
+
   const from = params.from ?? params.fromIso;
   const to = params.to ?? params.toIso;
 
-  if (!league || !params.season) return [];
+  if (!league || !season) return [];
 
   const rows = await apiFetch<FixtureListRow[]>("/fixtures", {
     league,
-    season: params.season,
+    season,
     from,
     to,
   });
@@ -111,6 +142,8 @@ export async function getFixtures(params: FixturesParams): Promise<FixtureListRo
  * Fixture by id
  */
 export async function getFixtureById(id: number | string): Promise<FixtureListRow | null> {
+  if (!id) return null;
+
   const rows = await apiFetch<any[]>("/fixtures", { id });
   if (!Array.isArray(rows) || rows.length === 0) return null;
   return rows[0] as FixtureListRow;
@@ -142,18 +175,19 @@ export async function getCountries(): Promise<{ name: string; code: string; flag
   const rows = await apiFetch<any[]>("/countries");
 
   return (rows || []).map((r) => ({
-    name: r.name,
-    code: r.code,
-    flag: r.flag,
+    name: r?.name,
+    code: r?.code,
+    flag: r?.flag,
   }));
 }
 
 /**
  * Teams in league+season
  */
-export async function getTeams(opts: { leagueId: number; season: number }): Promise<
-  { id: number; name: string; logo?: string | null }[]
-> {
+export async function getTeams(opts: {
+  leagueId: number;
+  season: number;
+}): Promise<{ id: number; name: string; logo?: string | null }[]> {
   if (!opts.leagueId || !opts.season) return [];
 
   const rows = await apiFetch<any[]>("/teams", {
@@ -161,9 +195,11 @@ export async function getTeams(opts: { leagueId: number; season: number }): Prom
     season: opts.season,
   });
 
-  return (rows || []).map((r) => ({
-    id: r.team?.id,
-    name: r.team?.name,
-    logo: r.team?.logo ?? null,
-  }));
+  return (rows || [])
+    .map((r) => ({
+      id: r?.team?.id,
+      name: r?.team?.name,
+      logo: r?.team?.logo ?? null,
+    }))
+    .filter((t) => typeof t.id === "number" && !!t.name);
 }
