@@ -27,6 +27,12 @@ export async function buildTicketLink(args: TicketLinkArgs): Promise<string | nu
   const kickoffIso = clean(args.kickoffIso);
   if (!home || !away || !kickoffIso) return null;
 
+  const googleFallback = () => {
+    const date = kickoffIso ? kickoffIso.slice(0, 10) : "";
+    const q = ["site:sportsevents365.com", home, away, args.leagueName, date, "tickets"].filter(Boolean).join(" ");
+    return `https://www.google.com/search?q=${encodeURIComponent(q)}`;
+  };
+
   const directUrl = clean(args.se365EventUrl);
   if (directUrl) return buildAffiliateUrl(directUrl);
 
@@ -42,7 +48,7 @@ export async function buildTicketLink(args: TicketLinkArgs): Promise<string | nu
       leagueId: args.leagueId,
     });
 
-    if (!eventUrl) return null;
+    if (!eventUrl) return googleFallback();
     return buildAffiliateUrl(eventUrl);
   } catch {
     try {
@@ -54,9 +60,9 @@ export async function buildTicketLink(args: TicketLinkArgs): Promise<string | nu
         leagueName: args.leagueName,
         leagueId: args.leagueId,
       });
-      return url || null;
+      return url || googleFallback();
     } catch {
-      return null;
+      return googleFallback();
     }
   }
 }
