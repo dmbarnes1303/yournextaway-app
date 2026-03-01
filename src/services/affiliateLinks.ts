@@ -1,6 +1,6 @@
 // src/services/affiliateLinks.ts
-// Centralised affiliate link builders.
-// MUST NEVER crash the UI. Always return safe URLs.
+// Central affiliate link builders.
+// Contract: MUST NEVER crash UI. Always return safe URLs.
 
 import { getIataCityCodeForCity } from "@/src/constants/iataCities";
 import { AffiliateConfig } from "@/src/constants/partners";
@@ -48,17 +48,19 @@ function clampInt(v: any, min: number, max: number, fallback: number) {
   return Math.max(min, Math.min(max, i));
 }
 
-function normalizeCabin(v: any): CabinClass {
-  const s = clean(v).toLowerCase();
-  if (s === "premium" || s === "premiumeconomy" || s === "premium-economy") return "premium";
-  if (s === "business") return "business";
-  if (s === "first") return "first";
-  return "economy";
+function appendQuery(base: string, params: Record<string, string | null | undefined>) {
+  const entries = Object.entries(params).filter(([, v]) => clean(v));
+  if (!entries.length) return base;
+
+  const joiner = base.includes("?") ? "&" : "?";
+  const qs = entries.map(([k, v]) => `${enc(k)}=${enc(v)}`).join("&");
+  return `${base}${joiner}${qs}`;
 }
 
 /**
  * Builds partner links with best-effort prefill.
- * IMPORTANT: Must never crash UI. Always return safe URLs.
+ * Where possible: uses real tracked URLs.
+ * Where fragile: uses stable partner “affiliate landing” patterns.
  */
 export function buildAffiliateLinks(args: {
   city: string;
@@ -66,103 +68,94 @@ export function buildAffiliateLinks(args: {
   endDate?: string | null;
   originIata?: string | null;
 
-  // enhancements
-  passengers?: number | null; // total passengers (1–9)
-  cabinClass?: CabinClass | string | null;
+  passengers?: number | null; // total pax (1–9)
+  cabinClass?: CabinClass | null;
 }) {
-  const cfg = (AffiliateConfig ?? {}) as any;
+  const cfg = AffiliateConfig ?? ({} as any);
 
-  const city = clean(args.city);
+  const cityName = clean(args.city);
   const startDate = ymdOrNull(args.startDate);
   const endDate = ymdOrNull(args.endDate);
 
   const origin = clean(args.originIata) || "LON";
-  const dest = getIataCityCodeForCity(city);
+  const dest = getIataCityCodeForCity(cityName);
 
   const passengers = clampInt(args.passengers, 1, 9, 1);
-  const cabinClass = normalizeCabin(args.cabinClass);
+  const cabinClass: CabinClass = (clean(args.cabinClass) as CabinClass) || "economy";
 
   /* -------------------- */
   /* Flights — Aviasales  */
   /* -------------------- */
-  // True prefill: build an Aviasales search URL (origin/dest/date).
-  // Return date: auto from trip end date when provided.
-  // Passengers + cabin: best-effort query params (safe if ignored).
-  let flightsUrl = `https://www.google.com/search?q=${enc(city + " flights")}`;
+  // Prefer true prefill + tracking (marker).
+  // Fallback to your Travelpayouts short link if marker or dates are missing.
+  let flightsUrl = `https://www.google.com/search?q=${enc(cityName + " flights")}`;
 
-  if (dest && startDate) {
+  if (dest && startDate && clean(cfg.aviasalesMarker)) {
     const out = yyyymmdd(startDate);
-    const ret = yyyymmdd(endDate); // auto-return from trip end
+    const base = `https://www.aviasales.com/search/${origin}${dest}${out}1?marker=${enc(cfg.aviasalesMarker)}`;
 
-    // NOTE: Aviasales markers are normally numeric (Travelpayouts).
-    // If you later want to use a marker value, add it to AffiliateConfig and swap here.
-    const base = `https://www.aviasales.com/search/${enc(origin)}${enc(dest)}${enc(out)}1`;
-
-    const params: string[] = [];
-    // tracking fallback: if you only have a short link, we still prefill via aviasales.com (better UX)
-    // If you add a real marker later, append marker=... here.
-    if (ret) params.push(`return_date=${enc(ret)}`);
-    if (passengers !== 1) params.push(`adults=${enc(passengers)}`);
-    if (cabinClass !== "economy") params.push(`cabin=${enc(cabinClass)}`);
-
-    flightsUrl = params.length ? `${base}?${params.join("&")}` : base;
-  } else if (cfg.aviasalesTracked) {
-    // fallback tracked link if we can't prefill
-    flightsUrl = String(cfg.aviasalesTracked);
+    // Best-effort extras:
+    // - return date from trip end
+    // - passengers (adults)
+    // - cabin class
+    const ret = yyyymmdd(endDate);
+    flightsUrl = appendQuery(base, {
+      return_date: ret,
+      adults: passengers !== 1 ? String(passengers) : null,
+      cabin: cabinClass !== "economy" ? cabinClass : null,
+    });
+  } else if (clean(cfg.aviasalesTracked)) {
+    flightsUrl = cfg.aviasalesTracked;
   }
 
   /* -------------------- */
   /* Hotels — Expedia     */
   /* -------------------- */
-  // Primary: stable Expedia affiliates token link for the city.
-  // Dates: append best-effort params (some flows ignore them; safe either way).
-  let hotelsUrl = `https://www.google.com/search?q=${enc(city + " hotels")}`;
+  // Expedia affiliate token link is stable.
+  // Date-prefill on Expedia affiliate URLs is messy; we only append best-effort params.
+  let hotelsUrl = `https://www.google.com/search?q=${enc(cityName + " hotels")}`;
 
-  if (cfg.expediaToken) {
-    const slug = slugCity(city);
-    hotelsUrl = `https://expedia.com/affiliates/hotel-search-${slug}.${String(cfg.expediaToken)}`;
+  if (clean(cfg.expediaToken)) {
+    const slug = slugCity(cityName);
+    hotelsUrl = `https://expedia.com/affiliates/hotel-search-${slug}.${cfg.expediaToken}`;
 
-    const hotelParams: string[] = [];
-    if (startDate) hotelParams.push(`startDate=${enc(startDate)}`);
-    if (endDate) hotelParams.push(`endDate=${enc(endDate)}`);
-
-    if (hotelParams.length) hotelsUrl = `${hotelsUrl}?${hotelParams.join("&")}`;
+    // Best-effort: append common date params (Expedia will ignore unknown safely).
+    hotelsUrl = appendQuery(hotelsUrl, {
+      startDate: startDate,
+      endDate: endDate,
+      adults: String(passengers),
+    });
   }
 
   /* -------------------- */
   /* Transfers — KiwiTaxi */
   /* -------------------- */
   const transfersUrl =
-    cfg.kiwitaxiTracked
-      ? String(cfg.kiwitaxiTracked)
-      : `https://www.google.com/search?q=${enc(city + " airport transfer")}`;
+    clean(cfg.kiwitaxiTracked) ||
+    `https://www.google.com/search?q=${enc(cityName + " airport transfer")}`;
 
   /* -------------------- */
-  /* Tickets — SportsEvents365 */
+  /* Tickets — SportsEvents365 (generic fallback) */
   /* -------------------- */
   const ticketsUrl =
-    cfg.sportsevents365Tracked
-      ? String(cfg.sportsevents365Tracked)
-      : `https://www.google.com/search?q=${enc(city + " football tickets")}`;
+    clean(cfg.sportsevents365Tracked) ||
+    `https://www.google.com/search?q=${enc(cityName + " football tickets")}`;
 
   /* -------------------- */
   /* Experiences — GetYourGuide */
   /* -------------------- */
-  // Use partner id to ensure attribution.
-  // This is a safe search-style link; if GYG changes params later, it will still open.
-  let experiencesUrl = `https://www.google.com/search?q=${enc(city + " things to do")}`;
-
-  if (cfg.getyourguidePartnerId) {
-    // Keep it simple + robust: partner_id + query
-    experiencesUrl = `https://www.getyourguide.com/s/?q=${enc(city)}&partner_id=${enc(
-      String(cfg.getyourguidePartnerId)
+  // Use search with partner_id tracking. This is robust + works everywhere.
+  let experiencesUrl = `https://www.google.com/search?q=${enc(cityName + " things to do")}`;
+  if (clean(cfg.getyourguidePartnerId)) {
+    experiencesUrl = `https://www.getyourguide.com/s/?q=${enc(cityName)}&partner_id=${enc(
+      cfg.getyourguidePartnerId
     )}`;
   }
 
   /* -------------------- */
   /* Maps */
   /* -------------------- */
-  const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${enc(city)}`;
+  const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${enc(cityName)}`;
 
   return {
     flightsUrl,
