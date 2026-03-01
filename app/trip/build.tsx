@@ -24,11 +24,11 @@ import { theme } from "@/src/constants/theme";
 import { getFixtures, getFixtureById, type FixtureListRow } from "@/src/services/apiFootball";
 import tripsStore from "@/src/state/trips";
 
-import { LEAGUES, addDaysIso, clampFromIsoToTomorrow, type LeagueOption } from "@/src/constants/football";
+import { LEAGUES, addDaysIso, clampFromIsoToTomorrow } from "@/src/constants/football";
 import { formatUkDateTimeMaybe } from "@/src/utils/formatters";
 
 /* -------------------------------------------------------------------------- */
-/* Param helpers — FIXED                                                     */
+/* Param helpers                                                             */
 /* -------------------------------------------------------------------------- */
 
 function paramString(v: unknown): string | null {
@@ -58,6 +58,53 @@ function clean(v: any) {
 }
 
 /* -------------------------------------------------------------------------- */
+/* Timeline builder                                                          */
+/* -------------------------------------------------------------------------- */
+
+function buildTimeline(
+  fixture: FixtureListRow | null,
+  startIso: string,
+  endIso: string
+) {
+  if (!fixture || !fixture.fixture?.date) return [];
+
+  const kickoff = new Date(fixture.fixture.date);
+  const kickoffIso = kickoff.toISOString().slice(0, 10);
+
+  const days: { iso: string; label: string }[] = [];
+
+  const d0 = new Date(startIso);
+  const d1 = new Date(endIso);
+
+  for (let d = new Date(d0); d <= d1; d.setDate(d.getDate() + 1)) {
+    const iso = d.toISOString().slice(0, 10);
+
+    if (iso === kickoffIso) {
+      const home = clean(fixture.teams?.home?.name);
+      const away = clean(fixture.teams?.away?.name);
+      days.push({ iso, label: `Match: ${home} vs ${away}` });
+    } else if (iso === startIso) {
+      days.push({ iso, label: "Arrival" });
+    } else if (iso === endIso) {
+      days.push({ iso, label: "Departure" });
+    } else {
+      days.push({ iso, label: "Stay / explore" });
+    }
+  }
+
+  return days;
+}
+
+function formatDay(iso: string) {
+  const d = new Date(iso + "T00:00:00Z");
+  return d.toLocaleDateString("en-GB", {
+    weekday: "short",
+    day: "2-digit",
+    month: "short",
+  });
+}
+
+/* -------------------------------------------------------------------------- */
 /* Screen                                                                    */
 /* -------------------------------------------------------------------------- */
 
@@ -66,22 +113,17 @@ export default function TripBuildScreen() {
   const params = useLocalSearchParams();
   const insets = useSafeAreaInsets();
 
-  /* ------------------------------------------------------------------ */
-  /* Params — FIXED                                                     */
-  /* ------------------------------------------------------------------ */
+  const routeFixtureId = useMemo(
+    () => paramString((params as any)?.fixtureId),
+    [params]
+  );
 
-  const routeTripId = useMemo(() => paramString((params as any)?.tripId), [params]);
-  const routeFixtureId = useMemo(() => paramString((params as any)?.fixtureId), [params]);
-
-  const isEditing = !!routeTripId;
-  const isPrefilledFlow = !!routeFixtureId && !isEditing;
-
-  /* ------------------------------------------------------------------ */
-  /* State                                                              */
-  /* ------------------------------------------------------------------ */
+  const isPrefilledFlow = !!routeFixtureId;
 
   const [rows, setRows] = useState<FixtureListRow[]>([]);
-  const [selectedFixture, setSelectedFixture] = useState<FixtureListRow | null>(null);
+  const [selectedFixture, setSelectedFixture] = useState<FixtureListRow | null>(
+    null
+  );
 
   const [search, setSearch] = useState("");
   const [visibleCount, setVisibleCount] = useState(14);
@@ -98,7 +140,7 @@ export default function TripBuildScreen() {
   const [error, setError] = useState<string | null>(null);
 
   /* ------------------------------------------------------------------ */
-  /* Prefill fixture — FIXED                                           */
+  /* Prefill fixture                                                    */
   /* ------------------------------------------------------------------ */
 
   useEffect(() => {
@@ -130,7 +172,7 @@ export default function TripBuildScreen() {
   }, [routeFixtureId]);
 
   /* ------------------------------------------------------------------ */
-  /* Load fixtures list                                                */
+  /* Load fixtures                                                      */
   /* ------------------------------------------------------------------ */
 
   useEffect(() => {
@@ -143,7 +185,9 @@ export default function TripBuildScreen() {
       setError(null);
 
       try {
-        const from = clampFromIsoToTomorrow(new Date().toISOString().slice(0, 10));
+        const from = clampFromIsoToTomorrow(
+          new Date().toISOString().slice(0, 10)
+        );
         const to = addDaysIso(from, 30);
 
         const batches = await Promise.all(
@@ -171,7 +215,16 @@ export default function TripBuildScreen() {
   }, [isPrefilledFlow]);
 
   /* ------------------------------------------------------------------ */
-  /* Save trip                                                         */
+  /* Timeline                                                           */
+  /* ------------------------------------------------------------------ */
+
+  const timeline = useMemo(
+    () => buildTimeline(selectedFixture, startIso, endIso),
+    [selectedFixture, startIso, endIso]
+  );
+
+  /* ------------------------------------------------------------------ */
+  /* Save                                                               */
   /* ------------------------------------------------------------------ */
 
   const onSave = useCallback(async () => {
@@ -221,7 +274,7 @@ export default function TripBuildScreen() {
   }, [selectedFixture, startIso, endIso, notes, router]);
 
   /* ------------------------------------------------------------------ */
-  /* Filter                                                            */
+  /* Filter                                                             */
   /* ------------------------------------------------------------------ */
 
   const filtered = useMemo(() => {
@@ -264,6 +317,20 @@ export default function TripBuildScreen() {
             gap: theme.spacing.lg,
           }}
         >
+          {/* Timeline */}
+          {selectedFixture && timeline.length > 0 && (
+            <GlassCard>
+              <Text style={styles.timelineTitle}>Trip timeline</Text>
+
+              {timeline.map((d) => (
+                <View key={d.iso} style={styles.timelineRow}>
+                  <Text style={styles.timelineDate}>{formatDay(d.iso)}</Text>
+                  <Text style={styles.timelineLabel}>{d.label}</Text>
+                </View>
+              ))}
+            </GlassCard>
+          )}
+
           {loading && (
             <GlassCard>
               <ActivityIndicator />
@@ -377,5 +444,27 @@ const styles = StyleSheet.create({
   saveText: {
     color: theme.colors.text,
     fontWeight: "900",
+  },
+
+  timelineTitle: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    marginBottom: 8,
+  },
+
+  timelineRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingVertical: 4,
+  },
+
+  timelineDate: {
+    color: theme.colors.textSecondary,
+    fontWeight: "700",
+  },
+
+  timelineLabel: {
+    color: theme.colors.text,
+    fontWeight: "700",
   },
 });
