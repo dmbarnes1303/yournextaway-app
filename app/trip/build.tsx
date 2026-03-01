@@ -8,43 +8,23 @@ import {
   Pressable,
   TextInput,
   ActivityIndicator,
-  Platform,
-  Image,
-  Alert,
-  Switch,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 
 import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
-import EmptyState from "@/src/components/EmptyState";
 
 import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
 
-import { getFixtures, getFixtureById, getFixturesByRound, type FixtureListRow } from "@/src/services/apiFootball";
-import tripsStore, { type Trip } from "@/src/state/trips";
+import { getFixtures, getFixtureById, type FixtureListRow } from "@/src/services/apiFootball";
+import tripsStore from "@/src/state/trips";
 
-import { LEAGUES, addDaysIso, clampFromIsoToTomorrow, type LeagueOption } from "@/src/constants/football";
+import { LEAGUES } from "@/src/constants/football";
 import { formatUkDateTimeMaybe } from "@/src/utils/formatters";
-import { computeLikelyPlaceholderTbcIds, isKickoffTbc } from "@/src/utils/kickoffTbc";
 
 /* -------------------------------------------------------------------------- */
-/* config                                                                      */
-/* -------------------------------------------------------------------------- */
-
-const FREE_TRIP_CAP = 5;
-
-/* -------------------------------------------------------------------------- */
-/* helpers                                                                     */
-/* -------------------------------------------------------------------------- */
-
-function currentFootballSeasonStartYear(now = new Date()): number {
-  const y = now.getFullYear();
-  const m = now.getMonth();
-  return m >= 6 ? y : y - 1;
-}
 
 function paramString(v: unknown): string | null {
   if (typeof v === "string") return v.trim() || null;
@@ -57,110 +37,6 @@ function fixtureIdStr(r: any): string {
   return id != null ? String(id) : "";
 }
 
-function fixtureDateOnly(r: FixtureListRow | null): string | null {
-  const raw = r?.fixture?.date;
-  if (!raw) return null;
-  const s = String(raw);
-  const m = s.match(/^(\d{4}-\d{2}-\d{2})/);
-  return m?.[1] ?? null;
-}
-
-function cleanText(v: unknown): string {
-  return String(v ?? "").trim();
-}
-
-function slugifyCityId(cityRaw: string): string {
-  const s = String(cityRaw ?? "").trim().toLowerCase();
-  if (!s) return "trip";
-  return (
-    s
-      .replace(/&/g, "and")
-      .replace(/[^\p{L}\p{N}\s-]/gu, "")
-      .replace(/\s+/g, "-")
-      .replace(/-+/g, "-")
-      .replace(/^-|-$/g, "") || "trip"
-  );
-}
-
-function safeCityDisplay(cityRaw: string): string {
-  const s = cleanText(cityRaw);
-  return s || "Trip";
-}
-
-function parseIsoToDate(iso?: string | null): Date | null {
-  const s = cleanText(iso);
-  if (!s) return null;
-  const d = new Date(s);
-  return Number.isFinite(d.getTime()) ? d : null;
-}
-
-function daysBetweenIso(aIso: string, bIso: string) {
-  const a = parseIsoToDate(aIso);
-  const b = parseIsoToDate(bIso);
-  if (!a || !b) return null;
-  return Math.round((b.getTime() - a.getTime()) / (1000 * 60 * 60 * 24));
-}
-
-function findLeagueOptionByLeagueId(leagueId?: number | null) {
-  if (!leagueId) return null;
-  return LEAGUES.find((l) => l.leagueId === leagueId) ?? null;
-}
-
-function buildTripSnapshot(selectedFixture: FixtureListRow, placeholderTbcIds: Set<string>) {
-  const displayCity = safeCityDisplay(selectedFixture?.fixture?.venue?.city);
-  const cityId = slugifyCityId(displayCity);
-
-  const homeName = cleanText(selectedFixture?.teams?.home?.name);
-  const awayName = cleanText(selectedFixture?.teams?.away?.name);
-  const leagueName = cleanText(selectedFixture?.league?.name);
-  const venueName = cleanText(selectedFixture?.fixture?.venue?.name);
-  const venueCity = cleanText(selectedFixture?.fixture?.venue?.city);
-
-  const kickoffIsoRaw = selectedFixture?.fixture?.date ? String(selectedFixture.fixture.date) : "";
-  const kickoffIso = cleanText(kickoffIsoRaw) || undefined;
-
-  const kickoffTbc = isKickoffTbc(selectedFixture, placeholderTbcIds);
-
-  const leagueId = typeof selectedFixture?.league?.id === "number" ? selectedFixture.league.id : undefined;
-  const homeTeamId = typeof selectedFixture?.teams?.home?.id === "number" ? selectedFixture.teams.home.id : undefined;
-  const awayTeamId = typeof selectedFixture?.teams?.away?.id === "number" ? selectedFixture.teams.away.id : undefined;
-
-  return {
-    cityId,
-    displayCity,
-    fixtureIdPrimary: selectedFixture?.fixture?.id != null ? String(selectedFixture.fixture.id) : undefined,
-    homeTeamId,
-    awayTeamId,
-    homeName: homeName || undefined,
-    awayName: awayName || undefined,
-    leagueId,
-    leagueName: leagueName || undefined,
-    kickoffIso,
-    kickoffTbc,
-    venueName: venueName || undefined,
-    venueCity: venueCity || undefined,
-  };
-}
-
-async function computePlaceholderIdsForFixture(fx: FixtureListRow | null): Promise<Set<string>> {
-  if (!fx) return new Set();
-
-  const leagueId = fx?.league?.id ?? null;
-  const season = (fx as any)?.league?.season ?? currentFootballSeasonStartYear();
-  const round = cleanText(fx?.league?.round);
-
-  if (!leagueId || !season || !round) return new Set();
-
-  try {
-    const roundRows = await getFixturesByRound({ league: leagueId, season, round });
-    return computeLikelyPlaceholderTbcIds(roundRows || []);
-  } catch {
-    return new Set();
-  }
-}
-
-/* -------------------------------------------------------------------------- */
-/* screen                                                                      */
 /* -------------------------------------------------------------------------- */
 
 export default function TripBuildScreen() {
@@ -168,43 +44,23 @@ export default function TripBuildScreen() {
   const params = useLocalSearchParams();
   const insets = useSafeAreaInsets();
 
-  const routeTripId = useMemo(() => paramString((params as any)?.tripId), [params]);
-  const routeFixtureId = useMemo(() => paramString((params as any)?.fixtureId), [params]);
+  const routeFixtureId = useMemo(
+    () => paramString((params as any)?.fixtureId),
+    [params]
+  );
 
-  const isEditing = !!routeTripId;
-  const isPrefilledFlow = !!routeFixtureId && !isEditing;
+  const isPrefilledFlow = !!routeFixtureId;
 
   const [rows, setRows] = useState<FixtureListRow[]>([]);
-  const [placeholderTbcIds, setPlaceholderTbcIds] = useState<Set<string>>(new Set());
   const [selectedFixture, setSelectedFixture] = useState<FixtureListRow | null>(null);
 
   const [search, setSearch] = useState("");
-  const [visibleCount, setVisibleCount] = useState(14);
-
-  const [startIso, setStartIso] = useState(clampFromIsoToTomorrow(new Date().toISOString().slice(0, 10)));
-  const [endIso, setEndIso] = useState(addDaysIso(startIso, 2));
-  const [notes, setNotes] = useState("");
-
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const ALL_LEAGUES: LeagueOption & { key: string } = useMemo(
-    () => ({
-      label: "All leagues",
-      leagueId: 0,
-      season: LEAGUES[0].season,
-      countryCode: "EU",
-      key: "all",
-    }),
-    []
-  );
-
-  const leagueOptions = useMemo(() => [ALL_LEAGUES, ...LEAGUES], [ALL_LEAGUES]);
-  const [selectedLeague, setSelectedLeague] = useState<LeagueOption>(ALL_LEAGUES);
-
   /* ------------------------------------------------------------------ */
-  /* Prefill selected fixture                                           */
+  /* Prefill from fixture route                                         */
   /* ------------------------------------------------------------------ */
 
   useEffect(() => {
@@ -215,23 +71,7 @@ export default function TripBuildScreen() {
     (async () => {
       try {
         const fx = await getFixtureById(routeFixtureId);
-        if (cancelled) return;
-
-        setSelectedFixture(fx);
-
-        const ids = await computePlaceholderIdsForFixture(fx);
-        if (!cancelled) setPlaceholderTbcIds(ids);
-
-        const d0 = fixtureDateOnly(fx);
-        if (d0) {
-          const start = clampFromIsoToTomorrow(d0);
-          setStartIso(start);
-          setEndIso(addDaysIso(start, 2));
-        }
-
-        const lid = fx?.league?.id ?? null;
-        const opt = findLeagueOptionByLeagueId(typeof lid === "number" ? lid : null);
-        if (opt) setSelectedLeague(opt);
+        if (!cancelled) setSelectedFixture(fx);
       } catch {
         if (!cancelled) setError("Couldn’t load that fixture.");
       }
@@ -243,7 +83,7 @@ export default function TripBuildScreen() {
   }, [routeFixtureId]);
 
   /* ------------------------------------------------------------------ */
-  /* Load fixtures list                                                 */
+  /* Load fixtures list (only if NOT prefilled)                         */
   /* ------------------------------------------------------------------ */
 
   useEffect(() => {
@@ -256,31 +96,16 @@ export default function TripBuildScreen() {
       setError(null);
 
       try {
-        const from = clampFromIsoToTomorrow(new Date().toISOString().slice(0, 10));
-        const to = addDaysIso(from, 30);
+        const batches = await Promise.all(
+          LEAGUES.map((l) =>
+            getFixtures({
+              league: l.leagueId,
+              season: l.season,
+            })
+          )
+        );
 
-        let res: FixtureListRow[] = [];
-
-        if (selectedLeague.leagueId === 0) {
-          const batches = await Promise.all(
-            LEAGUES.map((l) => getFixtures({ league: l.leagueId, season: l.season, from, to }))
-          );
-          res = batches.flat();
-        } else {
-          res =
-            (await getFixtures({
-              league: selectedLeague.leagueId,
-              season: selectedLeague.season,
-              from,
-              to,
-            })) || [];
-        }
-
-        if (!cancelled) {
-          const placeholder = computeLikelyPlaceholderTbcIds(res);
-          setPlaceholderTbcIds(placeholder);
-          setRows(res);
-        }
+        if (!cancelled) setRows(batches.flat());
       } catch {
         if (!cancelled) setError("Failed to load fixtures.");
       } finally {
@@ -291,7 +116,7 @@ export default function TripBuildScreen() {
     return () => {
       cancelled = true;
     };
-  }, [selectedLeague, isPrefilledFlow]);
+  }, [isPrefilledFlow]);
 
   /* ------------------------------------------------------------------ */
   /* Save trip                                                          */
@@ -306,42 +131,29 @@ export default function TripBuildScreen() {
     setSaving(true);
     setError(null);
 
-    const snap = buildTripSnapshot(selectedFixture, placeholderTbcIds);
-
     try {
-      if (!tripsStore.getState().loaded) await tripsStore.loadTrips();
+      const t = await tripsStore.addTrip({
+        fixtureIdPrimary: String(selectedFixture.fixture.id),
+        homeName: selectedFixture.teams?.home?.name,
+        awayName: selectedFixture.teams?.away?.name,
+        leagueName: selectedFixture.league?.name,
+        venueName: selectedFixture.fixture?.venue?.name,
+        venueCity: selectedFixture.fixture?.venue?.city,
+        kickoffIso: selectedFixture.fixture?.date,
+        displayCity: selectedFixture.fixture?.venue?.city,
+      });
 
-      const patch: any = {
-        cityId: snap.cityId,
-        startDate: startIso,
-        endDate: endIso,
-        matchIds: [snap.fixtureIdPrimary],
-        fixtureIdPrimary: snap.fixtureIdPrimary,
-        notes: cleanText(notes),
-        displayCity: snap.displayCity,
-        homeTeamId: snap.homeTeamId,
-        awayTeamId: snap.awayTeamId,
-        homeName: snap.homeName,
-        awayName: snap.awayName,
-        leagueId: snap.leagueId,
-        leagueName: snap.leagueName,
-        kickoffIso: snap.kickoffIso,
-        kickoffTbc: snap.kickoffTbc,
-        venueName: snap.venueName,
-        venueCity: snap.venueCity,
-      };
-
-      const t = await tripsStore.addTrip(patch);
-      router.replace({ pathname: "/trip/[id]", params: { id: t.id } } as any);
+      router.replace({
+        pathname: "/trip/[id]",
+        params: { id: t.id },
+      } as any);
     } catch (e: any) {
       setError(e?.message ?? "Failed to save trip.");
     } finally {
       setSaving(false);
     }
-  }, [selectedFixture, placeholderTbcIds, startIso, endIso, notes, router]);
+  }, [selectedFixture, router]);
 
-  /* ------------------------------------------------------------------ */
-  /* Render                                                             */
   /* ------------------------------------------------------------------ */
 
   const filtered = useMemo(() => {
@@ -355,7 +167,34 @@ export default function TripBuildScreen() {
     });
   }, [rows, search]);
 
-  const visibleRows = useMemo(() => filtered.slice(0, visibleCount), [filtered, visibleCount]);
+  /* ------------------------------------------------------------------ */
+
+  function FixtureCard({ r }: { r: FixtureListRow }) {
+    const home = r?.teams?.home?.name;
+    const away = r?.teams?.away?.name;
+
+    return (
+      <Pressable
+        onPress={() => setSelectedFixture(r)}
+        style={({ pressed }) => [
+          styles.fixtureCard,
+          selectedFixture &&
+            fixtureIdStr(selectedFixture) === fixtureIdStr(r) &&
+            styles.fixtureSelected,
+          pressed && { opacity: 0.9 },
+        ]}
+      >
+        <Text style={styles.fixtureTeams}>
+          {home} vs {away}
+        </Text>
+        <Text style={styles.fixtureMeta}>
+          {formatUkDateTimeMaybe(r?.fixture?.date) || "Kickoff TBC"}
+        </Text>
+      </Pressable>
+    );
+  }
+
+  /* ------------------------------------------------------------------ */
 
   return (
     <Background imageSource={getBackground("trips")} overlayOpacity={0.86}>
@@ -377,75 +216,45 @@ export default function TripBuildScreen() {
             gap: theme.spacing.lg,
           }}
         >
-          {loading && (
+          {/* ---------- Prefilled fixture ---------- */}
+          {isPrefilledFlow && selectedFixture && (
             <GlassCard>
-              <ActivityIndicator />
-              <Text style={{ color: theme.colors.textSecondary }}>Loading fixtures…</Text>
+              <Text style={styles.sectionTitle}>Selected match</Text>
+              <FixtureCard r={selectedFixture} />
             </GlassCard>
           )}
 
-          {!loading && (
+          {/* ---------- Manual picker ---------- */}
+          {!isPrefilledFlow && (
             <GlassCard>
-              <Text style={{ fontWeight: "900", color: theme.colors.text }}>Pick a match</Text>
+              <Text style={styles.sectionTitle}>Pick a match</Text>
 
               <TextInput
                 value={search}
                 onChangeText={setSearch}
                 placeholder="Search team / city"
                 placeholderTextColor={theme.colors.textSecondary}
-                style={{
-                  marginTop: 12,
-                  borderWidth: 1,
-                  borderColor: theme.colors.border,
-                  borderRadius: 12,
-                  padding: 12,
-                  color: theme.colors.text,
-                }}
+                style={styles.search}
               />
 
-              {visibleRows.map((r) => {
-                const id = fixtureIdStr(r);
-                const selected = fixtureIdStr(selectedFixture) === id;
-                const home = r?.teams?.home?.name;
-                const away = r?.teams?.away?.name;
+              {loading && <ActivityIndicator style={{ marginTop: 12 }} />}
 
-                return (
-                  <Pressable
-                    key={id}
-                    onPress={() => setSelectedFixture(r)}
-                    style={{
-                      marginTop: 10,
-                      padding: 12,
-                      borderRadius: 14,
-                      borderWidth: 1,
-                      borderColor: selected ? theme.colors.primary : theme.colors.border,
-                    }}
-                  >
-                    <Text style={{ color: theme.colors.text, fontWeight: "900" }}>
-                      {home} vs {away}
-                    </Text>
-                    <Text style={{ color: theme.colors.textSecondary }}>
-                      {formatUkDateTimeMaybe(r?.fixture?.date) || "Kickoff TBC"}
-                    </Text>
-                  </Pressable>
-                );
-              })}
+              {!loading && filtered.slice(0, 20).map((r) => (
+                <FixtureCard key={fixtureIdStr(r)} r={r} />
+              ))}
             </GlassCard>
           )}
 
+          {/* ---------- Save ---------- */}
           <Pressable
             onPress={onSave}
             disabled={!selectedFixture || saving}
-            style={{
-              padding: 14,
-              borderRadius: 14,
-              borderWidth: 1,
-              borderColor: theme.colors.primary,
-              alignItems: "center",
-              opacity: !selectedFixture || saving ? 0.6 : 1,
-            }}
+            style={[
+              styles.saveBtn,
+              (!selectedFixture || saving) && { opacity: 0.6 },
+            ]}
           >
-            <Text style={{ color: theme.colors.text, fontWeight: "900" }}>
+            <Text style={styles.saveText}>
               {saving ? "Saving…" : "Save trip"}
             </Text>
           </Pressable>
@@ -456,3 +265,57 @@ export default function TripBuildScreen() {
     </Background>
   );
 }
+
+/* -------------------------------------------------------------------------- */
+
+const styles = StyleSheet.create({
+  sectionTitle: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    marginBottom: 8,
+  },
+
+  search: {
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: 12,
+    padding: 12,
+    color: theme.colors.text,
+  },
+
+  fixtureCard: {
+    marginTop: 10,
+    padding: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+
+  fixtureSelected: {
+    borderColor: theme.colors.primary,
+  },
+
+  fixtureTeams: {
+    color: theme.colors.text,
+    fontWeight: "900",
+  },
+
+  fixtureMeta: {
+    color: theme.colors.textSecondary,
+    marginTop: 4,
+  },
+
+  saveBtn: {
+    padding: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: theme.colors.primary,
+    alignItems: "center",
+  },
+
+  saveText: {
+    color: theme.colors.text,
+    fontWeight: "900",
+  },
+});
