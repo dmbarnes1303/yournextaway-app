@@ -1,115 +1,88 @@
 // src/constants/iataCities.ts
-/**
- * Single place for:
- * - city name normalization (canonical string used across app)
- * - IATA city lookup (best-effort)
- * - dev warnings (non-fatal)
- *
- * IMPORTANT:
- * Keep this module "light" to avoid circular deps and runtime undefined exports.
- */
+import { IATA_CITY_CODES } from "@/src/data/iataCityCodes";
 
-import { Platform } from "react-native";
+function normalizeCityName(input: string): string {
+  let s = String(input ?? "").trim().toLowerCase();
+  if (!s) return "";
 
-// Reuse your existing mapping module (you already import these elsewhere)
-import { getIataCityCodeForCity as _getIataFromData, debugCityKey } from "@/src/data/iataCityCodes";
-
-/* -------------------------------------------------------------------------- */
-/* Normalization */
-/* -------------------------------------------------------------------------- */
-
-/**
- * Converts "raw" city strings from APIs into a stable canonical form.
- * Goal: keep the same city string everywhere (Trips, Affiliate links, City guides).
- */
-export function normalizeCityName(input: string): string {
-  const raw = String(input ?? "").trim();
-  if (!raw) return "";
-
-  // Collapse whitespace
-  let s = raw.replace(/\s+/g, " ");
-
-  // Remove trailing weird punctuation
-  s = s.replace(/[,\s]+$/g, "");
-
-  // Normalize common separators
-  s = s.replace(/\s*\/\s*/g, " / ");
-  s = s.replace(/\s*-\s*/g, " - ");
-
-  // If API gives "City, Region" keep only city (most IATA mapping keys expect city)
-  // But don't break places like "San Sebastián" (no comma anyway).
-  if (s.includes(",")) {
-    const first = s.split(",")[0]?.trim();
-    if (first) s = first;
-  }
-
-  // Title-case-ish (keeps existing casing for acronyms)
+  // Basic cleanup
   s = s
-    .split(" ")
-    .map((w) => {
-      const t = w.trim();
-      if (!t) return t;
-      if (/^[A-Z]{2,}$/.test(t)) return t; // keep acronyms
-      return t[0].toUpperCase() + t.slice(1).toLowerCase();
-    })
-    .join(" ");
+    .replace(/[\u2019']/g, "") // apostrophes
+    .replace(/[()]/g, " ")
+    .replace(/[^\p{L}\p{N}\s,-]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 
+  // Common noise words
+  s = s
+    .replace(/\bmetropolitan\b/g, "")
+    .replace(/\bdistrict\b/g, "")
+    .replace(/\barea\b/g, "")
+    .replace(/\bregion\b/g, "")
+    .replace(/\bprovince\b/g, "")
+    .replace(/\bmunicipality\b/g, "")
+    .replace(/\bcounty\b/g, "")
+    .replace(/\bcity\b/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  // Title case keys in data are mixed; we store normalized keys in our lookup map.
   return s;
 }
 
-/* -------------------------------------------------------------------------- */
-/* IATA lookup */
-/* -------------------------------------------------------------------------- */
-
-/**
- * Best-effort lookup:
- * - normalize input
- * - use your mapping table via src/data/iataCityCodes
- */
-export function getIataCityCodeForCity(city: string): string | null {
-  const canon = normalizeCityName(city);
-  if (!canon) return null;
-
-  try {
-    const code = _getIataFromData(canon);
-    return code ? String(code).trim().toUpperCase() : null;
-  } catch {
-    return null;
+function buildIndex() {
+  const index: Record<string, string> = {};
+  for (const row of IATA_CITY_CODES) {
+    const name = String(row.city ?? "").trim();
+    const code = String(row.iata ?? "").trim().toUpperCase();
+    if (!name || !code) continue;
+    index[normalizeCityName(name)] = code;
   }
+  return index;
 }
 
-/**
- * Dev-only warning helper (does not throw, does not block UI).
- * Keeps services from importing Alert and crashing in non-UI contexts.
- */
-export function devWarnIfUnknownCity(city: string, source: string) {
-  // @ts-ignore
-  const isDev = typeof __DEV__ !== "undefined" && __DEV__;
-  if (!isDev) return;
+const INDEX = buildIndex();
 
-  const canon = normalizeCityName(city);
-  if (!canon) return;
+function _getIataFromData(canon: string): string | null {
+  return INDEX[canon] ?? null;
+}
 
-  const code = getIataCityCodeForCity(canon);
-  if (code) return;
+export function getIataCityCodeForCity(city: string): string | null {
+  const raw = String(city ?? "").trim();
+  const canon = normalizeCityName(raw);
+  if (!canon) return null;
 
-  // Use your existing debug key helper so you can paste directly into mappings.
-  let key = "";
-  try {
-    key = debugCityKey(canon) || "";
-  } catch {
-    key = "";
+  const tryLookup = (candidate: string): string | null => {
+    const c = normalizeCityName(candidate);
+    if (!c) return null;
+    try {
+      const code = _getIataFromData(c);
+      return code ? String(code).trim().toUpperCase() : null;
+    } catch {
+      return null;
+    }
+  };
+
+  // Direct
+  const direct = tryLookup(canon);
+  if (direct) return direct;
+
+  // Fallbacks for verbose venue.city strings from API-Football.
+  // Example: "West district in London" -> "London"
+  const lower = raw.toLowerCase();
+  const inIdx = lower.lastIndexOf(" in ");
+  if (inIdx >= 0) {
+    const tail = raw.slice(inIdx + 4).trim();
+    const tailCode = tryLookup(tail);
+    if (tailCode) return tailCode;
   }
 
-  // Console-only: services shouldn't pop Alerts.
-  // This shows clearly in Metro logs + device logs.
-  const msg =
-    `[IATA] Missing mapping` +
-    ` | source=${source}` +
-    ` | city="${canon}"` +
-    (key ? ` | key="${key}"` : "") +
-    ` | platform=${Platform.OS}`;
+  // Example: "Barcelona, Spain" -> "Barcelona"
+  if (raw.includes(",")) {
+    const head = raw.split(",")[0].trim();
+    const headCode = tryLookup(head);
+    if (headCode) return headCode;
+  }
 
-  // eslint-disable-next-line no-console
-  console.warn(msg);
+  return null;
 }
