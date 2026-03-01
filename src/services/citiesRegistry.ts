@@ -7,6 +7,11 @@ function safeStr(v: any) {
   return String(v ?? "").trim();
 }
 
+/**
+ * IMPORTANT:
+ * This must match your route slugging behavior.
+ * Do NOT slug from "pretty" names (Roma) if routes are built from user input (Rome).
+ */
 function normalizeCityKey(input: string) {
   return safeStr(input)
     .toLowerCase()
@@ -18,8 +23,8 @@ function normalizeCityKey(input: string) {
 }
 
 export type CityRecord = {
-  slug: string;
-  name: string;
+  slug: string; // canonical slug (built from raw venue city)
+  name: string; // display name (pretty/canonical)
   country: string;
   countryCode: string; // ISO2 for flags
   venueIds: number[];
@@ -28,26 +33,33 @@ export type CityRecord = {
 
 type CitySnapshot = {
   builtAt: number;
-  bySlug: Record<string, CityRecord>;
+  bySlug: Record<string, CityRecord>; // includes alias slugs too
   list: CityRecord[];
 };
 
-const TTL_MS = 24 * 60 * 60 * 1000; // 24h (cities don't change hourly)
+const TTL_MS = 24 * 60 * 60 * 1000; // 24h
 let cache: { ts: number; value: CitySnapshot } | null = null;
 let inflight: Promise<CitySnapshot> | null = null;
 
 function pickDisplayName(rawCity: string): string {
-  const canon = normalizeCityName(rawCity);
-  return canon ? canon : safeStr(rawCity);
+  // Pretty name for UI (may differ from raw; e.g. Rome -> Roma)
+  const canon = safeStr(normalizeCityName(rawCity));
+  return canon || safeStr(rawCity);
 }
 
 function countryCodeFallback(countryName: string): string {
-  // fallback is better than crashing; flags may not render until /countries fetch works
+  // Better than nothing. Never throw.
   const s = safeStr(countryName).toUpperCase();
+
+  // UK home nations (display as GB flag in your UI system)
   if (s === "ENGLAND" || s === "UNITED KINGDOM" || s === "UK") return "GB";
-  if (s === "SCOTLAND") return "GB";
-  if (s === "WALES") return "GB";
-  if (s === "NORTHERN IRELAND") return "GB";
+  if (s === "SCOTLAND" || s === "WALES" || s === "NORTHERN IRELAND") return "GB";
+
+  // Common full names where first 2 letters are NOT the ISO2:
+  if (s === "UNITED STATES" || s === "USA") return "US";
+  if (s === "UNITED ARAB EMIRATES") return "AE";
+
+  // Default: first 2 letters (works for Italy -> IT, Spain -> ES, etc.)
   return s.length >= 2 ? s.slice(0, 2) : "";
 }
 
@@ -57,26 +69,35 @@ function mergeTeam(list: { id: number; name: string }[], t: { id: number; name: 
   list.push(t);
 }
 
+function mergeVenueId(list: number[], venueId: number) {
+  if (!Number.isFinite(venueId) || venueId <= 0) return;
+  if (!list.includes(venueId)) list.push(venueId);
+}
+
 export async function getCitySnapshot(leagues: LeagueOption[]): Promise<CitySnapshot> {
   const now = Date.now();
-
   if (cache && now - cache.ts < TTL_MS) return cache.value;
   if (inflight) return inflight;
 
   inflight = (async () => {
     const leagueList = Array.isArray(leagues) ? leagues : [];
+
+    // Countries map (name -> code)
     const countries = await getCountries().catch(() => []);
-    const countryMap = new Map<string, string>(); // name -> code
+    const countryMap = new Map<string, string>();
 
     for (const c of countries) {
-      const name = safeStr((c as any)?.name);
+      const name = safeStr((c as any)?.name).toLowerCase();
       const code = safeStr((c as any)?.code).toUpperCase();
-      if (name && code) countryMap.set(name.toLowerCase(), code);
+      if (name && code) countryMap.set(name, code);
     }
 
+    // Primary records keyed by canonical slug (raw venue city)
     const cityMap = new Map<string, CityRecord>();
 
-    // Fetch teams for each league/season; build city buckets from venue.city
+    // Alias mapping: any extra slug -> canonical slug
+    const aliasToCanonical = new Map<string, string>();
+
     const settled = await Promise.allSettled(
       leagueList.map(async (l) => {
         const rows = await getTeams({ league: l.leagueId, season: l.season });
@@ -99,22 +120,25 @@ export async function getCitySnapshot(leagues: LeagueOption[]): Promise<CitySnap
       const venueId = Number((row as any)?.venue?.id);
       const venueCityRaw = safeStr((row as any)?.venue?.city);
 
-      // We only consider teams with a known city
       if (!venueCityRaw) continue;
 
-      const cityName = pickDisplayName(venueCityRaw);
-      const slug = normalizeCityKey(cityName);
-      if (!slug) continue;
+      // ✅ Canonical slug is from RAW city value (stable vs route)
+      const slugRaw = normalizeCityKey(venueCityRaw);
+      if (!slugRaw) continue;
+
+      // Display name can differ (Roma), but should not drive canonical slug
+      const displayName = pickDisplayName(venueCityRaw);
+      const slugDisplay = displayName ? normalizeCityKey(displayName) : "";
 
       const cc =
         (countryName && countryMap.get(countryName.toLowerCase())) ||
         (countryName ? countryCodeFallback(countryName) : "");
 
-      const existing = cityMap.get(slug);
+      const existing = cityMap.get(slugRaw);
       if (!existing) {
-        cityMap.set(slug, {
-          slug,
-          name: cityName,
+        cityMap.set(slugRaw, {
+          slug: slugRaw,
+          name: displayName || venueCityRaw,
           country: countryName || "",
           countryCode: cc || "",
           venueIds: Number.isFinite(venueId) && venueId > 0 ? [venueId] : [],
@@ -122,19 +146,33 @@ export async function getCitySnapshot(leagues: LeagueOption[]): Promise<CitySnap
         });
       } else {
         // Prefer richer values if missing
+        if (!existing.name && (displayName || venueCityRaw)) existing.name = displayName || venueCityRaw;
         if (!existing.country && countryName) existing.country = countryName;
         if (!existing.countryCode && cc) existing.countryCode = cc;
 
-        if (Number.isFinite(venueId) && venueId > 0 && !existing.venueIds.includes(venueId)) {
-          existing.venueIds.push(venueId);
-        }
+        mergeVenueId(existing.venueIds, venueId);
         if (teamId && teamName) mergeTeam(existing.teams, { id: teamId, name: teamName });
+      }
+
+      // ✅ Add alias mapping if display slug differs (rome <-> roma case)
+      if (slugDisplay && slugDisplay !== slugRaw) {
+        // Point alias slug to the canonical record
+        if (!aliasToCanonical.has(slugDisplay)) aliasToCanonical.set(slugDisplay, slugRaw);
       }
     }
 
+    // Build list
     const list = Array.from(cityMap.values()).sort((a, b) => a.name.localeCompare(b.name, "en"));
+
+    // Build bySlug including aliases
     const bySlug: Record<string, CityRecord> = {};
-    list.forEach((c) => (bySlug[c.slug] = c));
+    for (const c of list) {
+      bySlug[c.slug] = c;
+    }
+    for (const [alias, canonical] of aliasToCanonical.entries()) {
+      const rec = cityMap.get(canonical);
+      if (rec) bySlug[alias] = rec;
+    }
 
     const snapshot: CitySnapshot = { builtAt: now, bySlug, list };
     cache = { ts: now, value: snapshot };
@@ -149,8 +187,18 @@ export async function getCitySnapshot(leagues: LeagueOption[]): Promise<CitySnap
 }
 
 export async function getCityByKeyLive(cityKey: string, leagues: LeagueOption[]): Promise<CityRecord | null> {
-  const key = normalizeCityKey(cityKey);
-  if (!key) return null;
+  const keyRaw = normalizeCityKey(cityKey);
+  if (!keyRaw) return null;
+
   const snap = await getCitySnapshot(leagues);
-  return snap.bySlug[key] ?? null;
-  }
+
+  // Direct match (preferred)
+  if (snap.bySlug[keyRaw]) return snap.bySlug[keyRaw];
+
+  // Fallback: try normalised display name version (rare)
+  const pretty = safeStr(normalizeCityName(cityKey));
+  const keyPretty = pretty ? normalizeCityKey(pretty) : "";
+  if (keyPretty && snap.bySlug[keyPretty]) return snap.bySlug[keyPretty];
+
+  return null;
+}
