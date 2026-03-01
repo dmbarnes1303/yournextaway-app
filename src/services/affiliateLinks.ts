@@ -4,6 +4,8 @@ import { getIataCityCodeForCity } from "@/src/constants/iataCities";
 import { AffiliateConfig } from "@/src/constants/partners";
 import { formatIsoToYmd } from "@/src/utils/dates";
 
+type CabinClass = "economy" | "premium" | "business" | "first";
+
 function enc(v: any) {
   return encodeURIComponent(String(v ?? "").trim());
 }
@@ -37,11 +39,26 @@ function slugCity(city: string) {
     .replace(/\s+/g, "-");
 }
 
+function clampInt(v: any, min: number, max: number, fallback: number) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return fallback;
+  const i = Math.floor(n);
+  return Math.max(min, Math.min(max, i));
+}
+
+/**
+ * Builds partner links with best-effort prefill.
+ * IMPORTANT: Must never crash UI. Always return safe URLs.
+ */
 export function buildAffiliateLinks(args: {
   city: string;
   startDate?: string | null;
   endDate?: string | null;
   originIata?: string | null;
+
+  // new optional enhancements
+  passengers?: number | null; // total passengers
+  cabinClass?: CabinClass | null;
 }) {
   const cfg = AffiliateConfig ?? {};
   const city = clean(args.city);
@@ -52,14 +69,36 @@ export function buildAffiliateLinks(args: {
   const origin = clean(args.originIata) || "LON";
   const dest = getIataCityCodeForCity(city);
 
+  const passengers = clampInt(args.passengers, 1, 9, 1); // 1–9
+  const cabinClass: CabinClass = (clean(args.cabinClass) as CabinClass) || "economy";
+
   /* -------------------- */
   /* Flights — Aviasales  */
   /* -------------------- */
+  // We build a direct aviasales search URL for true prefill.
+  // marker is your Travelpayouts id (495355).
+  //
+  // Outbound date required for prefill. Return date optional (auto from trip end).
+  // Passengers and cabin are appended as query params (best-effort; Aviasales ignores unknown params safely).
   let flightsUrl = `https://www.google.com/search?q=${enc(city + " flights")}`;
 
   if (dest && startDate) {
-    const date = yyyymmdd(startDate);
-    flightsUrl = `https://www.aviasales.com/search/${origin}${dest}${date}1?marker=495355`;
+    const out = yyyymmdd(startDate);
+    const ret = yyyymmdd(endDate); // auto-return date from trip end (if provided)
+
+    // Base pattern (works): /search/ORIGDESTYYYYMMDD1?marker=...
+    // If return date exists, we add it as query param (best-effort).
+    const base = `https://www.aviasales.com/search/${origin}${dest}${out}1?marker=495355`;
+
+    const extraParams: string[] = [];
+    if (ret) extraParams.push(`return_date=${enc(ret)}`);
+    if (passengers && passengers !== 1) extraParams.push(`adults=${enc(passengers)}`);
+    if (cabinClass && cabinClass !== "economy") extraParams.push(`cabin=${enc(cabinClass)}`);
+
+    flightsUrl = extraParams.length ? `${base}&${extraParams.join("&")}` : base;
+  } else if (cfg.aviasalesTracked) {
+    // fallback tracked link if we can't prefill
+    flightsUrl = cfg.aviasalesTracked;
   }
 
   /* -------------------- */
@@ -71,6 +110,9 @@ export function buildAffiliateLinks(args: {
     const slug = slugCity(city);
     hotelsUrl = `https://expedia.com/affiliates/hotel-search-${slug}.${cfg.expediaToken}`;
   }
+
+  // If you later find an Expedia format that supports check-in/out parameters reliably,
+  // we can append them here. For now: stable token link beats fragile params.
 
   /* -------------------- */
   /* Transfers — KiwiTaxi */
@@ -84,7 +126,7 @@ export function buildAffiliateLinks(args: {
   /* -------------------- */
   const ticketsUrl =
     cfg.sportsevents365Tracked ||
-    `https://www.sportsevents365.com/?a_aid=69834e80ec9d3`;
+    `https://www.google.com/search?q=${enc(city + " football tickets")}`;
 
   /* -------------------- */
   /* Experiences — GetYourGuide */
