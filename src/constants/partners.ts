@@ -1,4 +1,6 @@
 // src/constants/partners.ts
+// Canonical partner registry + affiliate link config.
+// This file MUST export AffiliateConfig for src/services/affiliateLinks.ts.
 
 export type PartnerCategory =
   | "tickets"
@@ -18,6 +20,39 @@ export type Partner = {
   deepLinkBase?: string;
 };
 
+/**
+ * AffiliateConfig
+ * Put your real tracking values in here.
+ *
+ * If these are empty, the app will still open the partner site,
+ * but you may NOT get paid if the program requires tags on every link.
+ */
+export const AffiliateConfig = {
+  // Flights (Aviasales)
+  // Example marker: "123456" (whatever Aviasales gives you)
+  aviasalesMarker: "",
+
+  // Expedia
+  // Put your tracked landing URL (with affcid/utm/etc) if you have one.
+  // If you don't, leave blank and the app uses normal Expedia URLs.
+  expediaStaysTracked: "",
+  expediaCarsTracked: "",
+
+  // GetYourGuide
+  // Some programs use partner_id or similar; store a full tracked base URL.
+  getyourguideTracked: "",
+
+  // KiwiTaxi
+  kiwitaxiTracked: "",
+
+  // SportsEvents365
+  sportsevents365Tracked: "",
+
+  // Insurance / Claims
+  safetywingTracked: "",
+  airhelpTracked: "",
+} as const;
+
 export const PARTNERS: Partner[] = [
   // =====================
   // TICKETS
@@ -28,31 +63,16 @@ export const PARTNERS: Partner[] = [
     category: "tickets",
     affiliate: true,
     api: true,
+    // keep generic base; tracked base goes in AffiliateConfig if required
     deepLinkBase: "https://www.sportsevents365.com/",
-  },
-  {
-    id: "seatpick",
-    name: "SeatPick",
-    category: "tickets",
-    affiliate: true,
-    api: false,
-    deepLinkBase: "https://seatpick.com/",
   },
 
   // =====================
   // FLIGHTS
   // =====================
   {
-    id: "expedia",
-    name: "Expedia",
-    category: "flights",
-    affiliate: true,
-    api: false,
-    deepLinkBase: "https://www.expedia.com/",
-  },
-  {
     id: "aviasales",
-    name: "AviaSales",
+    name: "Aviasales",
     category: "flights",
     affiliate: true,
     api: false,
@@ -60,15 +80,15 @@ export const PARTNERS: Partner[] = [
   },
 
   // =====================
-  // STAYS
+  // STAYS (Hotels)
   // =====================
   {
-    id: "expedia_stays",
+    id: "expedia",
     name: "Expedia",
     category: "stays",
     affiliate: true,
     api: false,
-    deepLinkBase: "https://www.expedia.com/Hotels",
+    deepLinkBase: "https://www.expedia.co.uk/",
   },
 
   // =====================
@@ -82,42 +102,10 @@ export const PARTNERS: Partner[] = [
     api: false,
     deepLinkBase: "https://kiwitaxi.com/",
   },
-  {
-    id: "welcomepickups",
-    name: "Welcome Pickups",
-    category: "transfers",
-    affiliate: true,
-    api: false,
-    deepLinkBase: "https://www.welcomepickups.com/",
-  },
-  {
-    id: "klook_transfers",
-    name: "Klook",
-    category: "transfers",
-    affiliate: true,
-    api: false,
-    deepLinkBase: "https://www.klook.com/",
-  },
 
   // =====================
-  // EXPERIENCES
+  // EXPERIENCES (Activities)
   // =====================
-  {
-    id: "tiqets",
-    name: "Tiqets",
-    category: "experiences",
-    affiliate: true,
-    api: false,
-    deepLinkBase: "https://www.tiqets.com/",
-  },
-  {
-    id: "klook",
-    name: "Klook",
-    category: "experiences",
-    affiliate: true,
-    api: false,
-    deepLinkBase: "https://www.klook.com/",
-  },
   {
     id: "getyourguide",
     name: "GetYourGuide",
@@ -125,14 +113,6 @@ export const PARTNERS: Partner[] = [
     affiliate: true,
     api: false,
     deepLinkBase: "https://www.getyourguide.com/",
-  },
-  {
-    id: "wegotrip",
-    name: "WeGoTrip",
-    category: "experiences",
-    affiliate: true,
-    api: false,
-    deepLinkBase: "https://wegotrip.com/",
   },
 
   // =====================
@@ -146,17 +126,9 @@ export const PARTNERS: Partner[] = [
     api: false,
     deepLinkBase: "https://safetywing.com/",
   },
-  {
-    id: "ekta",
-    name: "EKTA",
-    category: "insurance",
-    affiliate: true,
-    api: false,
-    deepLinkBase: "https://ektatraveling.com/",
-  },
 
   // =====================
-  // COMPENSATION
+  // COMPENSATION (Claims)
   // =====================
   {
     id: "airhelp",
@@ -165,14 +137,6 @@ export const PARTNERS: Partner[] = [
     affiliate: true,
     api: false,
     deepLinkBase: "https://www.airhelp.com/",
-  },
-  {
-    id: "compensair",
-    name: "Compensair",
-    category: "compensation",
-    affiliate: true,
-    api: false,
-    deepLinkBase: "https://www.compensair.com/",
   },
 ];
 
@@ -188,10 +152,6 @@ export function getPartnerOrNull(id: string): Partner | null {
   return PARTNERS.find((p) => p.id === id) ?? null;
 }
 
-/**
- * Strict accessor: throws if partner id is unknown.
- * Use for "should never happen" code paths.
- */
 export function getPartner(id: string): Partner {
   const p = getPartnerOrNull(id);
   if (!p) throw new Error(`Unknown partner id: ${id}`);
