@@ -22,25 +22,29 @@ export type Partner = {
 /**
  * AffiliateConfig
  * REAL TRACKED VALUES — DO NOT REMOVE
+ *
+ * Notes:
+ * - Aviasales: you can keep the Travelpayouts short link for tracking,
+ *   but for PREFILLED searches we build a direct aviasales.com/search URL with marker (in affiliateLinks.ts).
+ * - Expedia: expediaToken is the suffix token from your expedia.com/affiliates/hotel-search-*.TOKEN links.
  */
 export const AffiliateConfig = {
-  // Aviasales (Travelpayouts short link)
+  // Aviasales (Travelpayouts short link) — tracking fallback
   aviasalesTracked: "https://aviasales.tpm.lv/VYu40Vnv",
 
   // Expedia Creator Program token extracted from your link
-  // Example base:
+  // Example:
   // https://expedia.com/affiliates/hotel-search-dortmund.HQeXTbR
   expediaToken: "HQeXTbR",
 
   // KiwiTaxi (Travelpayouts short link)
   kiwitaxiTracked: "https://kiwitaxi.tpm.lv/oFUnzcw9",
 
-  // SportsEvents365 tracked base
-  sportsevents365Tracked:
-    "https://www.sportsevents365.com/?a_aid=69834e80ec9d3",
+  // Experiences (GetYourGuide) — add your tracked link here when you have it
+  getyourguideTracked: "YOUR_GYG_LINK",
 
-  // Experiences (none provided yet)
-  getyourguideTracked: "",
+  // Tickets (SportsEvents365)
+  sportsevents365Tracked: "https://www.sportsevents365.com/?a_aid=69834e80ec9d3",
 
   // Insurance / claims (optional)
   safetywingTracked: "",
@@ -62,7 +66,7 @@ export const PARTNERS: Partner[] = [
     category: "flights",
     affiliate: true,
     api: false,
-    deepLinkBase: "https://aviasales.com/",
+    deepLinkBase: "https://www.aviasales.com/",
   },
   {
     id: "expedia",
@@ -70,7 +74,7 @@ export const PARTNERS: Partner[] = [
     category: "stays",
     affiliate: true,
     api: false,
-    deepLinkBase: "https://expedia.com/",
+    deepLinkBase: "https://www.expedia.com/",
   },
   {
     id: "kiwitaxi",
@@ -86,7 +90,7 @@ export const PARTNERS: Partner[] = [
     category: "experiences",
     affiliate: true,
     api: false,
-    deepLinkBase: "https://getyourguide.com/",
+    deepLinkBase: "https://www.getyourguide.com/",
   },
   {
     id: "safetywing",
@@ -102,7 +106,7 @@ export const PARTNERS: Partner[] = [
     category: "compensation",
     affiliate: true,
     api: false,
-    deepLinkBase: "https://airhelp.com/",
+    deepLinkBase: "https://www.airhelp.com/",
   },
 ];
 
