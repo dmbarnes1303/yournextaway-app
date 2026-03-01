@@ -1,7 +1,5 @@
 // src/services/apiFootball.ts
-// API-Football client — secure Expo runtime key loading
-
-import Constants from "expo-constants";
+// API-Football client (secure Expo env usage)
 
 export type FixtureListRow = {
   fixture: {
@@ -37,21 +35,8 @@ type FixturesParams = {
 
 const API_BASE = "https://v3.football.api-sports.io";
 
-/**
- * Expo runtime env resolver
- * Works in:
- * - local dev
- * - Expo Go
- * - APK
- * - EAS builds
- */
 function getApiKey(): string {
-  const extra = (Constants.expoConfig?.extra ?? {}) as any;
-
-  const key =
-    process.env.EXPO_PUBLIC_API_FOOTBALL_KEY ||
-    extra.EXPO_PUBLIC_API_FOOTBALL_KEY ||
-    "";
+  const key = process.env.EXPO_PUBLIC_API_FOOTBALL_KEY ?? "";
 
   const cleaned = String(key).trim();
 
@@ -62,7 +47,10 @@ function getApiKey(): string {
   return cleaned;
 }
 
-async function apiFetch<T>(path: string, params?: Record<string, any>): Promise<T> {
+async function apiFetch<T>(
+  path: string,
+  params?: Record<string, any>
+): Promise<T> {
   const url = new URL(API_BASE + path);
 
   if (params) {
@@ -82,15 +70,17 @@ async function apiFetch<T>(path: string, params?: Record<string, any>): Promise<
   });
 
   if (!res.ok) {
-    const txt = await res.text().catch(() => "");
-    throw new Error(`API-Football ${res.status} — ${txt}`);
+    const text = await res.text().catch(() => "");
+    throw new Error(`API-Football ${res.status} — ${text}`);
   }
 
   const json = await res.json();
   return json.response as T;
 }
 
-export async function getFixtures(params: FixturesParams): Promise<FixtureListRow[]> {
+export async function getFixtures(
+  params: FixturesParams
+): Promise<FixtureListRow[]> {
   const league = params.league ?? params.leagueId;
   const from = params.from ?? params.fromIso;
   const to = params.to ?? params.toIso;
@@ -107,10 +97,12 @@ export async function getFixtures(params: FixturesParams): Promise<FixtureListRo
   return Array.isArray(rows) ? rows : [];
 }
 
-export async function getFixtureById(id: number | string): Promise<FixtureListRow | null> {
+export async function getFixtureById(
+  id: number | string
+): Promise<FixtureListRow | null> {
   const rows = await apiFetch<any[]>("/fixtures", { id });
   if (!Array.isArray(rows) || rows.length === 0) return null;
-  return rows[0];
+  return rows[0] as FixtureListRow;
 }
 
 export async function getFixturesByRound(opts: {
@@ -126,7 +118,7 @@ export async function getFixturesByRound(opts: {
     round: opts.round
   });
 
-  return rows;
+  return Array.isArray(rows) ? rows : [];
 }
 
 export async function getCountries(): Promise<
