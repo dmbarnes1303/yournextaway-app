@@ -1,14 +1,13 @@
 // src/constants/partners.ts
-// Canonical partner registry WITH TRACKED BUILDERS
+// Canonical affiliate registry WITH TRACKED BUILDERS
+// Used by Trip + Smart Booking
 
 export type PartnerCategory =
   | "tickets"
   | "flights"
   | "stays"
   | "transfers"
-  | "experiences"
-  | "insurance"
-  | "compensation";
+  | "experiences";
 
 export type AffiliateContext = {
   city: string;
@@ -23,8 +22,29 @@ export type Partner = {
   category: PartnerCategory;
   affiliate: boolean;
   api: boolean;
-  buildUrl?: (ctx: AffiliateContext) => string | null;
+  buildUrl: (ctx: AffiliateContext) => string | null;
 };
+
+/* ------------------------------------------------------------------ */
+/* YOUR REAL AFFILIATE IDS                                            */
+/* ------------------------------------------------------------------ */
+
+export const AffiliateConfig = {
+  aviasalesMarker: "700937",
+  aviasalesFallback: "https://aviasales.tpm.lv/VYu40Vnv",
+
+  expediaToken: "HQeXTbR",
+
+  kiwitaxiTracked: "https://kiwitaxi.tpm.lv/oFUnzcw9",
+
+  sportsevents365Tracked: "https://www.sportsevents365.com/?a_aid=69834e80ec9d3",
+
+  getyourguidePartnerId: "MAQJIREP",
+} as const;
+
+/* ------------------------------------------------------------------ */
+/* Helpers                                                            */
+/* ------------------------------------------------------------------ */
 
 function enc(v: any) {
   return encodeURIComponent(String(v ?? "").trim());
@@ -45,40 +65,17 @@ function slugCity(city: string) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Affiliate IDs — YOUR REAL VALUES                                   */
+/* BUILDERS                                                           */
 /* ------------------------------------------------------------------ */
 
-export const AffiliateConfig = {
-  aviasalesMarker: "700937",
-  aviasalesFallback: "https://aviasales.tpm.lv/VYu40Vnv",
+function buildAviasales(ctx: AffiliateContext): string {
+  if (!ctx.city) return AffiliateConfig.aviasalesFallback;
 
-  expediaToken: "HQeXTbR",
-
-  kiwitaxiTracked: "https://kiwitaxi.tpm.lv/oFUnzcw9",
-
-  sportsevents365Tracked: "https://www.sportsevents365.com/?a_aid=69834e80ec9d3",
-
-  getyourguidePartnerId: "MAQJIREP",
-} as const;
-
-/* ------------------------------------------------------------------ */
-/* Builders                                                           */
-/* ------------------------------------------------------------------ */
-
-function buildAviasales(ctx: AffiliateContext): string | null {
-  const city = ctx.city;
   const start = ymd(ctx.startDate);
-  const origin = ctx.originIata || "LON";
+  if (!start) return AffiliateConfig.aviasalesFallback;
 
-  if (!city || !start) return AffiliateConfig.aviasalesFallback;
-
-  // destination unknown → fallback
-  const dest = city.slice(0, 3).toUpperCase();
-
-  return `https://www.aviasales.com/search/${origin}${dest}${start.replace(
-    /-/g,
-    ""
-  )}1?marker=${AffiliateConfig.aviasalesMarker}`;
+  // NOTE: We don’t have IATA lookup here — fallback search works fine
+  return `https://www.aviasales.com/search/${enc(ctx.city)}/${start}?marker=${AffiliateConfig.aviasalesMarker}`;
 }
 
 function buildExpedia(ctx: AffiliateContext): string | null {
@@ -95,7 +92,7 @@ function buildExpedia(ctx: AffiliateContext): string | null {
   return `${base}?startDate=${start}&endDate=${end}`;
 }
 
-function buildKiwitaxi(ctx: AffiliateContext): string | null {
+function buildKiwitaxi(): string {
   return AffiliateConfig.kiwitaxiTracked;
 }
 
@@ -109,7 +106,7 @@ function buildSE365(): string {
 }
 
 /* ------------------------------------------------------------------ */
-/* Registry                                                           */
+/* REGISTRY                                                           */
 /* ------------------------------------------------------------------ */
 
 export const PARTNERS: Partner[] = [
@@ -151,12 +148,12 @@ export const PARTNERS: Partner[] = [
     category: "tickets",
     affiliate: true,
     api: true,
-    buildUrl: () => buildSE365(),
+    buildUrl: buildSE365,
   },
 ];
 
 /* ------------------------------------------------------------------ */
-/* Helpers                                                            */
+/* HELPERS                                                            */
 /* ------------------------------------------------------------------ */
 
 export type PartnerId = (typeof PARTNERS)[number]["id"];
@@ -171,10 +168,8 @@ export function buildPartnerUrl(
   id: PartnerId,
   ctx: AffiliateContext
 ): string | null {
-  const p = getPartner(id);
-  if (!p.buildUrl) return null;
   try {
-    return p.buildUrl(ctx);
+    return getPartner(id).buildUrl(ctx);
   } catch {
     return null;
   }
