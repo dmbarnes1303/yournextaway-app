@@ -1,6 +1,17 @@
 // app/city/key/[cityKey].tsx
-import React, { useEffect, useMemo, useState, useCallback } from "react";
-import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Image, Platform, Modal } from "react-native";
+import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  Pressable,
+  ActivityIndicator,
+  Image,
+  Platform,
+  Modal,
+  RefreshControl,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
@@ -14,8 +25,9 @@ import { getFlagImageUrl } from "@/src/utils/flagImages";
 import { formatUkDateTimeMaybe } from "@/src/utils/formatters";
 
 import { getFixtures, type FixtureListRow } from "@/src/services/apiFootball";
-import { LEAGUES, getRollingWindowIso } from "@/src/constants/football";
+import { LEAGUES, getRollingWindowIso, type LeagueOption } from "@/src/constants/football";
 import type { CityGuide, CityTopThing } from "@/src/data/cityGuides/types";
+import { getCityGuide } from "@/src/data/cityGuides";
 import { getCityByKeyLive, type CityRecord } from "@/src/services/citiesRegistry";
 import { normalizeCityKey } from "@/src/utils/city";
 
@@ -139,16 +151,13 @@ function splitLinesToBullets(text: string) {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Country → ISO2 resolver (guarantees flags for common cases) */
+/* Country → ISO2 resolver (flags) */
 /* -------------------------------------------------------------------------- */
 
 function countryToIso2(code?: string, name?: string): string | null {
   const c = safeStr(code).toUpperCase();
-
-  // If we already have a 2-letter ISO2, use it.
   if (c.length === 2) return c;
 
-  // Some APIs return ISO3; map the common ones we may see.
   const iso3Map: Record<string, string> = {
     FRA: "FR",
     ESP: "ES",
@@ -185,8 +194,6 @@ function countryToIso2(code?: string, name?: string): string | null {
   if (c.length === 3 && iso3Map[c]) return iso3Map[c];
 
   const n = safeStr(name).toLowerCase();
-
-  // Name-based fallbacks for the most common European leagues + UK edges.
   const nameMap: Record<string, string> = {
     france: "FR",
     spain: "ES",
@@ -214,7 +221,6 @@ function countryToIso2(code?: string, name?: string): string | null {
     slovakia: "SK",
     slovenia: "SI",
     bulgaria: "BG",
-
     england: "GB",
     scotland: "GB",
     wales: "GB",
@@ -227,17 +233,11 @@ function countryToIso2(code?: string, name?: string): string | null {
   return nameMap[n] || null;
 }
 
-/* -------------------------------------------------------------------------- */
-/* Small UI */
-/* -------------------------------------------------------------------------- */
-
 function FlagMini({ countryCode, countryName }: { countryCode?: string; countryName?: string }) {
   const iso2 = countryToIso2(countryCode, countryName);
   if (!iso2) return null;
-
   const url = getFlagImageUrl(iso2, { size: 64 });
   if (!url) return null;
-
   return <Image source={{ uri: url }} style={styles.flagMini} resizeMode="cover" />;
 }
 
@@ -248,50 +248,36 @@ function FlagMini({ countryCode, countryName }: { countryCode?: string; countryN
 type GuideBlock = { heading?: string; text: string };
 type GuideFull = { title: string; blocks: GuideBlock[] };
 
-function normalizeText(v: any): string {
-  return safeStr(v);
-}
-
 function getCityGuideFull(cityKey: string): GuideFull | null {
   const key = safeStr(cityKey);
   if (!key) return null;
 
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const mod: any = require("@/src/data/cityGuides");
-    const getter = typeof mod.getCityGuide === "function" ? mod.getCityGuide : null;
-    if (!getter) return null;
+  const guide = getCityGuide(key) as CityGuide | null;
+  if (!guide) return null;
 
-    const guide = getter(key) as CityGuide | null;
-    if (!guide) return null;
+  const title = safeStr(guide.name) || safeStr(guide.cityId) || "City guide";
+  const blocks: GuideBlock[] = [];
 
-    const title = safeStr(guide.name) || safeStr(guide.cityId) || "City guide";
-    const blocks: GuideBlock[] = [];
+  const overview = safeStr(guide.overview);
+  if (overview) blocks.push({ heading: "Overview", text: overview });
 
-    const overview = normalizeText(guide.overview);
-    if (overview) blocks.push({ heading: "Overview", text: overview });
+  const topThingsText = joinTopThings(guide.topThings, 10);
+  if (topThingsText) blocks.push({ heading: "Top things to do", text: topThingsText });
 
-    const topThingsText = joinTopThings(guide.topThings, 10);
-    if (topThingsText) blocks.push({ heading: "Top things to do", text: topThingsText });
+  const tipsText = joinBullets(guide.tips, 14);
+  if (tipsText) blocks.push({ heading: "Quick tips", text: tipsText });
 
-    const tipsText = joinBullets(guide.tips, 14);
-    if (tipsText) blocks.push({ heading: "Quick tips", text: tipsText });
+  const foodText = joinBullets(guide.food, 14);
+  if (foodText) blocks.push({ heading: "Food & drink", text: foodText });
 
-    const foodText = joinBullets(guide.food, 14);
-    if (foodText) blocks.push({ heading: "Food & drink", text: foodText });
+  const transport = safeStr(guide.transport);
+  if (transport) blocks.push({ heading: "Getting around", text: transport });
 
-    const transport = normalizeText(guide.transport);
-    if (transport) blocks.push({ heading: "Getting around", text: transport });
+  const stay = safeStr(guide.accommodation);
+  if (stay) blocks.push({ heading: "Where to stay", text: stay });
 
-    const stay = normalizeText(guide.accommodation);
-    if (stay) blocks.push({ heading: "Where to stay", text: stay });
-
-    if (!blocks.length) return { title, blocks: [{ heading: undefined, text: "Guide content is available for this city." }] };
-
-    return { title, blocks };
-  } catch {
-    return null;
-  }
+  if (!blocks.length) return { title, blocks: [{ heading: undefined, text: "Guide content is available for this city." }] };
+  return { title, blocks };
 }
 
 /* -------------------------------------------------------------------------- */
@@ -491,6 +477,83 @@ function FixtureRow({ row, onPressPlan }: { row: FixtureListRow; onPressPlan: ()
 }
 
 /* -------------------------------------------------------------------------- */
+/* Fixtures fetching strategy */
+/* -------------------------------------------------------------------------- */
+
+function uniqueLeaguesById(list: LeagueOption[]) {
+  const seen = new Set<number>();
+  const out: LeagueOption[] = [];
+  for (const l of list) {
+    if (!l?.leagueId) continue;
+    if (seen.has(l.leagueId)) continue;
+    seen.add(l.leagueId);
+    out.push(l);
+  }
+  return out;
+}
+
+function pickLeaguesForCity(city: CityRecord | null, fallback: LeagueOption[]): { leagues: LeagueOption[]; reason: string } {
+  const all = uniqueLeaguesById(fallback);
+
+  const leagueIds = Array.isArray((city as any)?.leagueIds) ? ((city as any).leagueIds as any[]) : [];
+  const leagueIdNums = leagueIds.map((x) => Number(x)).filter((n) => Number.isFinite(n));
+
+  if (leagueIdNums.length) {
+    const byIds = all.filter((l) => leagueIdNums.includes(l.leagueId));
+    if (byIds.length) return { leagues: byIds, reason: "registry-leagueIds" };
+  }
+
+  const iso2 = countryToIso2(safeStr(city?.countryCode), safeStr(city?.country));
+  if (iso2) {
+    const byCountry = all.filter((l) => safeStr((l as any).countryCode).toUpperCase() === iso2);
+    if (byCountry.length) return { leagues: byCountry, reason: "country-filter" };
+  }
+
+  return { leagues: all, reason: "all-leagues" };
+}
+
+async function fetchFixturesBatched({
+  leagues,
+  from,
+  to,
+  concurrency,
+  onProgress,
+  shouldCancel,
+}: {
+  leagues: LeagueOption[];
+  from: string;
+  to: string;
+  concurrency: number;
+  onProgress?: (done: number, total: number) => void;
+  shouldCancel: () => boolean;
+}) {
+  const total = leagues.length;
+  const out: FixtureListRow[] = [];
+  let done = 0;
+
+  const runOne = async (l: LeagueOption) => {
+    const rows = await getFixtures({ league: l.leagueId, season: l.season, from, to });
+    return Array.isArray(rows) ? (rows as FixtureListRow[]) : [];
+  };
+
+  for (let i = 0; i < leagues.length; i += concurrency) {
+    if (shouldCancel()) break;
+
+    const batch = leagues.slice(i, i + concurrency);
+    const settled = await Promise.allSettled(batch.map(runOne));
+
+    for (const s of settled) {
+      if (s.status === "fulfilled") out.push(...s.value);
+    }
+
+    done = Math.min(i + batch.length, total);
+    onProgress?.(done, total);
+  }
+
+  return out;
+}
+
+/* -------------------------------------------------------------------------- */
 /* Screen */
 /* -------------------------------------------------------------------------- */
 
@@ -518,106 +581,119 @@ export default function CityScreen() {
   const [fxRows, setFxRows] = useState<FixtureListRow[]>([]);
   const [guideOpen, setGuideOpen] = useState(false);
 
+  const [progress, setProgress] = useState<{ done: number; total: number; reason: string }>({ done: 0, total: 0, reason: "" });
+  const cancelRef = useRef(false);
+
+  const [refreshing, setRefreshing] = useState(false);
+
   useEffect(() => {
-    let cancelled = false;
-
-    async function loadCity() {
-      setCityLiveLoading(true);
-      try {
-        const c = await getCityByKeyLive(citySlug, LEAGUES);
-        if (!cancelled) setCityLive(c);
-      } catch {
-        if (!cancelled) setCityLive(null);
-      } finally {
-        if (!cancelled) setCityLiveLoading(false);
-      }
-    }
-
-    if (citySlug) loadCity();
-    else setCityLiveLoading(false);
-
+    cancelRef.current = false;
     return () => {
-      cancelled = true;
+      cancelRef.current = true;
     };
+  }, []);
+
+  const loadCity = useCallback(async () => {
+    setCityLiveLoading(true);
+    try {
+      const c = await getCityByKeyLive(citySlug, LEAGUES);
+      setCityLive(c);
+    } catch {
+      setCityLive(null);
+    } finally {
+      setCityLiveLoading(false);
+    }
   }, [citySlug]);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function run() {
-      setLoadingFx(true);
-      setFxError(null);
-      setFxRows([]);
-
-      try {
-        // Prefer registry-driven matching; fallback to slug derived from fixture city.
-        const venueIds = Array.isArray(cityLive?.venueIds) ? cityLive!.venueIds : [];
-        const targetSlug = cityLive?.slug || citySlug;
-
-        const settled = await Promise.allSettled(
-          (LEAGUES ?? []).map((l) =>
-            getFixtures({
-              league: l.leagueId,
-              season: l.season,
-              from,
-              to,
-            })
-          )
-        );
-
-        if (cancelled) return;
-
-        const all: FixtureListRow[] = [];
-        for (const s of settled) {
-          if (s.status !== "fulfilled") continue;
-          const list = Array.isArray(s.value) ? (s.value as FixtureListRow[]) : [];
-          all.push(...list);
-        }
-
-        const filtered = all.filter((r) => {
-          const vCity = safeStr(r?.fixture?.venue?.city);
-          const vSlug = vCity ? normalizeCityKey(vCity) : "";
-          const vId = r?.fixture?.venue?.id;
-
-          const byCitySlug = !!targetSlug && !!vSlug && vSlug === targetSlug;
-          const byVenueId = typeof vId === "number" && venueIds.includes(vId);
-
-          return byCitySlug || byVenueId;
-        });
-
-        const dedup = new Map<string, FixtureListRow>();
-        for (const r of filtered) {
-          const id = r?.fixture?.id != null ? String(r.fixture.id) : "";
-          if (!id) continue;
-          if (!dedup.has(id)) dedup.set(id, r);
-        }
-
-        const cleaned = Array.from(dedup.values()).sort((a, b) => {
-          const da = a?.fixture?.date ? new Date(a.fixture.date).getTime() : 0;
-          const db = b?.fixture?.date ? new Date(b.fixture.date).getTime() : 0;
-          return da - db;
-        });
-
-        setFxRows(cleaned);
-      } catch (e: any) {
-        if (cancelled) return;
-        setFxError(e?.message ?? "Failed to load city fixtures.");
-      } finally {
-        if (!cancelled) setLoadingFx(false);
-      }
-    }
-
-    if (citySlug) run();
-    else {
+  const loadCityFixtures = useCallback(async () => {
+    if (!citySlug) {
       setLoadingFx(false);
       setFxRows([]);
       setFxError("Missing city key.");
+      return;
     }
 
+    setLoadingFx(true);
+    setFxError(null);
+    setFxRows([]);
+
+    try {
+      const venueIds = Array.isArray(cityLive?.venueIds) ? cityLive!.venueIds : [];
+      const targetSlug = cityLive?.slug || citySlug;
+
+      const pick = pickLeaguesForCity(cityLive, LEAGUES);
+      setProgress({ done: 0, total: pick.leagues.length, reason: pick.reason });
+
+      const all = await fetchFixturesBatched({
+        leagues: pick.leagues,
+        from,
+        to,
+        concurrency: 5,
+        onProgress: (done, total) => setProgress((p) => ({ ...p, done, total })),
+        shouldCancel: () => cancelRef.current,
+      });
+
+      if (cancelRef.current) return;
+
+      const filtered = all.filter((r) => {
+        const vCity = safeStr(r?.fixture?.venue?.city);
+        const vSlug = vCity ? normalizeCityKey(vCity) : "";
+        const vId = r?.fixture?.venue?.id;
+
+        const byCitySlug = !!targetSlug && !!vSlug && vSlug === targetSlug;
+        const byVenueId = typeof vId === "number" && venueIds.includes(vId);
+
+        return byCitySlug || byVenueId;
+      });
+
+      const dedup = new Map<string, FixtureListRow>();
+      for (const r of filtered) {
+        const id = r?.fixture?.id != null ? String(r.fixture.id) : "";
+        if (!id) continue;
+        if (!dedup.has(id)) dedup.set(id, r);
+      }
+
+      const cleaned = Array.from(dedup.values()).sort((a, b) => {
+        const da = a?.fixture?.date ? new Date(a.fixture.date).getTime() : 0;
+        const db = b?.fixture?.date ? new Date(b.fixture.date).getTime() : 0;
+        return da - db;
+      });
+
+      setFxRows(cleaned);
+    } catch (e: any) {
+      setFxError(e?.message ?? "Failed to load city fixtures.");
+    } finally {
+      setLoadingFx(false);
+    }
+  }, [citySlug, cityLive, from, to]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function boot() {
+      if (!citySlug) return;
+      await loadCity();
+      if (!mounted) return;
+      await loadCityFixtures();
+    }
+
+    boot().catch(() => null);
+
     return () => {
-      cancelled = true;
+      mounted = false;
     };
-  }, [citySlug, cityLive?.slug, cityLive?.venueIds, from, to]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [citySlug, from, to]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await loadCity();
+      await loadCityFixtures();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [loadCity, loadCityFixtures]);
 
   const grouped = useMemo(() => groupByMonth(fxRows), [fxRows]);
 
@@ -658,8 +734,8 @@ export default function CityScreen() {
   const guideBlocks = guideFull?.blocks ?? [];
   const overview =
     guideBlocks.find((b) => safeStr(b.heading).toLowerCase() === "overview")?.text || guideBlocks[0]?.text || "";
-
   const guidePreview = guideFull ? clampText(overview, 220) : "";
+
   const guideStats = useMemo(() => {
     if (!guideFull) return "";
     const sections = guideBlocks.length;
@@ -669,10 +745,24 @@ export default function CityScreen() {
     return parts.join(" • ");
   }, [guideFull, guideBlocks]);
 
+  const progressLine = useMemo(() => {
+    if (!loadingFx) return "";
+    if (!progress.total) return "Searching leagues…";
+    const base = `Searching ${progress.done}/${progress.total} leagues…`;
+    if (progress.reason === "registry-leagueIds") return `${base} (matched by city registry)`;
+    if (progress.reason === "country-filter") return `${base} (filtered to country)`;
+    return base;
+  }, [loadingFx, progress]);
+
   return (
     <Background imageSource={bgSource} overlayOpacity={0.7}>
       <SafeAreaView style={styles.container} edges={["top"]}>
-        <ScrollView style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.textSecondary} />}
+        >
           <GlassCard strength="strong" style={styles.hero} noPadding>
             <View style={styles.heroInner}>
               <Text style={styles.kicker}>CITY GUIDE</Text>
@@ -751,13 +841,15 @@ export default function CityScreen() {
               {loadingFx ? (
                 <View style={styles.center}>
                   <ActivityIndicator />
-                  <Text style={styles.muted}>Loading fixtures…</Text>
+                  <Text style={styles.muted}>{progressLine || "Loading fixtures…"}</Text>
                 </View>
               ) : null}
 
               {!loadingFx && fxError ? <EmptyState title="Fixtures Unavailable" message={fxError} /> : null}
 
-              {!loadingFx && !fxError && fxRows.length === 0 ? <EmptyState title="No City Fixtures Found" message="Try another date window." /> : null}
+              {!loadingFx && !fxError && fxRows.length === 0 ? (
+                <EmptyState title="No City Fixtures Found" message="Try another date window." />
+              ) : null}
 
               {!loadingFx && !fxError && fxRows.length > 0 ? (
                 <View style={{ gap: 14 }}>
@@ -795,7 +887,7 @@ export default function CityScreen() {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Styles (unchanged) */
+/* Styles */
 /* -------------------------------------------------------------------------- */
 
 const styles = StyleSheet.create({
