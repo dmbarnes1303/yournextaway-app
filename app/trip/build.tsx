@@ -6,6 +6,7 @@ import {
   StyleSheet,
   ScrollView,
   Pressable,
+  TextInput,
   ActivityIndicator,
   Platform,
   Image,
@@ -18,9 +19,6 @@ import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
 import EmptyState from "@/src/components/EmptyState";
-import Button from "@/src/components/Button";
-import Input from "@/src/components/Input";
-import Chip from "@/src/components/Chip";
 
 import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
@@ -52,6 +50,13 @@ function paramString(v: unknown): string | null {
   if (typeof v === "string") return v.trim() || null;
   if (Array.isArray(v) && typeof v[0] === "string") return v[0].trim() || null;
   return null;
+}
+
+function paramNumber(v: unknown): number | null {
+  const s = paramString(v);
+  if (!s) return null;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
 }
 
 function fixtureIdStr(r: any): string {
@@ -96,6 +101,11 @@ function parseIsoToDate(iso?: string | null): Date | null {
   return Number.isFinite(d.getTime()) ? d : null;
 }
 
+function isIsoDateOnly(s?: string | null): boolean {
+  const v = cleanText(s);
+  return /^\d{4}-\d{2}-\d{2}$/.test(v);
+}
+
 function daysBetweenIso(aIso: string, bIso: string) {
   const a = parseIsoToDate(aIso);
   const b = parseIsoToDate(bIso);
@@ -104,9 +114,15 @@ function daysBetweenIso(aIso: string, bIso: string) {
   return d;
 }
 
-function findLeagueOptionByLeagueId(leagueId?: number | null) {
+function findLeagueOptionByLeagueId(leagueId?: number | null, season?: number | null) {
   if (!leagueId) return null;
-  return LEAGUES.find((l) => l.leagueId === leagueId) ?? null;
+  const byId = LEAGUES.find((l) => l.leagueId === leagueId) ?? null;
+  if (!byId) return null;
+  if (season && typeof byId.season === "number" && byId.season !== season) {
+    // If season override provided, keep label/country but use requested season
+    return { ...byId, season } as LeagueOption;
+  }
+  return byId;
 }
 
 function buildTripSnapshot(selectedFixture: FixtureListRow, placeholderTbcIds: Set<string>) {
@@ -151,11 +167,13 @@ function buildTripSnapshot(selectedFixture: FixtureListRow, placeholderTbcIds: S
   };
 }
 
-async function computePlaceholderIdsForFixture(fx: FixtureListRow | null): Promise<Set<string>> {
+async function computePlaceholderIdsForFixture(fx: FixtureListRow | null, seasonOverride?: number | null): Promise<Set<string>> {
   if (!fx) return new Set();
 
   const leagueId = fx?.league?.id ?? null;
-  const season = (fx as any)?.league?.season ?? currentFootballSeasonStartYear();
+  const season =
+    seasonOverride ??
+    (typeof (fx as any)?.league?.season === "number" ? (fx as any).league.season : currentFootballSeasonStartYear());
   const round = cleanText(fx?.league?.round);
 
   if (!leagueId || !season || !round) return new Set();
@@ -187,18 +205,6 @@ function findExistingTripIdForFixture(fixtureId: string): string | null {
   return tripsStore.getTripIdByMatchId(String(fixtureId).trim());
 }
 
-function chipVariantForKickoff(tbc: boolean): "success" | "primary" | "default" {
-  // confirmed = success, tbc = primary (attention but not alarm)
-  return tbc ? "primary" : "success";
-}
-
-function dateWindowLine(startIso: string, endIso: string) {
-  const d = daysBetweenIso(startIso, endIso);
-  const nights = d == null ? null : Math.max(0, d);
-  const suffix = nights == null ? "" : ` • ${nights} night${nights === 1 ? "" : "s"}`;
-  return `${startIso} → ${endIso}${suffix}`;
-}
-
 /* -------------------------------------------------------------------------- */
 /* screen                                                                      */
 /* -------------------------------------------------------------------------- */
@@ -208,11 +214,19 @@ export default function TripBuildScreen() {
   const params = useLocalSearchParams();
   const insets = useSafeAreaInsets();
 
+  // --- route params we already used ---
   const routeTripId = useMemo(() => paramString((params as any)?.tripId), [params]);
   const isEditing = !!routeTripId;
 
   const routeFixtureId = useMemo(() => paramString((params as any)?.fixtureId), [params]);
   const routeCityArea = useMemo(() => paramString((params as any)?.cityArea), [params]);
+
+  // --- NEW: optional context params (from Trip Detail / elsewhere) ---
+  const routeFrom = useMemo(() => paramString((params as any)?.from), [params]);
+  const routeTo = useMemo(() => paramString((params as any)?.to), [params]);
+  const routeCity = useMemo(() => paramString((params as any)?.city), [params]);
+  const routeLeagueId = useMemo(() => paramNumber((params as any)?.leagueId), [params]);
+  const routeSeason = useMemo(() => paramNumber((params as any)?.season), [params]);
 
   const isPrefilledFlow = !!routeFixtureId && !isEditing;
 
@@ -229,11 +243,22 @@ export default function TripBuildScreen() {
 
   const [selectedFixture, setSelectedFixture] = useState<FixtureListRow | null>(null);
 
-  const [startIso, setStartIso] = useState(clampFromIsoToTomorrow(new Date().toISOString().slice(0, 10)));
-  const [endIso, setEndIso] = useState(addDaysIso(startIso, 2));
+  // Dates default: tomorrow → +2 nights, but allow route from/to to override
+  const initialStart = useMemo(() => {
+    if (isIsoDateOnly(routeFrom)) return clampFromIsoToTomorrow(routeFrom!);
+    return clampFromIsoToTomorrow(new Date().toISOString().slice(0, 10));
+  }, [routeFrom]);
+
+  const initialEnd = useMemo(() => {
+    if (isIsoDateOnly(routeTo)) return String(routeTo);
+    return addDaysIso(initialStart, 2);
+  }, [routeTo, initialStart]);
+
+  const [startIso, setStartIso] = useState(initialStart);
+  const [endIso, setEndIso] = useState(initialEnd);
   const [notes, setNotes] = useState("");
 
-  const [endTouched, setEndTouched] = useState(false);
+  const [endTouched, setEndTouched] = useState<boolean>(Boolean(isIsoDateOnly(routeTo)));
 
   const [editTrip, setEditTrip] = useState<Trip | null>(null);
   const [existingMatchIds, setExistingMatchIds] = useState<string[]>([]);
@@ -241,6 +266,7 @@ export default function TripBuildScreen() {
 
   const [setAsPrimaryOnSave, setSetAsPrimaryOnSave] = useState(false);
 
+  // Keep end auto-following start unless user touched end
   useEffect(() => {
     if (endTouched) return;
     setEndIso(addDaysIso(startIso, 2));
@@ -260,7 +286,7 @@ export default function TripBuildScreen() {
     () => ({
       label: "All leagues",
       leagueId: 0,
-      season: LEAGUES[0].season,
+      season: LEAGUES[0]?.season ?? currentFootballSeasonStartYear(),
       countryCode: "EU",
       key: "all",
     }),
@@ -268,7 +294,28 @@ export default function TripBuildScreen() {
   );
 
   const leagueOptions = useMemo(() => [ALL_LEAGUES, ...LEAGUES], [ALL_LEAGUES]);
-  const [selectedLeague, setSelectedLeague] = useState<LeagueOption>(ALL_LEAGUES);
+
+  const [selectedLeague, setSelectedLeague] = useState<LeagueOption>(() => {
+    const opt = findLeagueOptionByLeagueId(routeLeagueId, routeSeason);
+    return opt ?? ALL_LEAGUES;
+  });
+
+  // If navigation passes a leagueId (and we’re NOT in fixture-prefill flow), apply it once.
+  useEffect(() => {
+    if (isPrefilledFlow) return;
+    const opt = findLeagueOptionByLeagueId(routeLeagueId, routeSeason);
+    if (opt) setSelectedLeague(opt);
+    else if (routeLeagueId === 0) setSelectedLeague(ALL_LEAGUES);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routeLeagueId, routeSeason, isPrefilledFlow]);
+
+  /* ------------------------------------------------------------------------ */
+  /* Apply route city to notes (non-destructive)                               */
+  /* ------------------------------------------------------------------------ */
+
+  useEffect(() => {
+    if (routeCity) setNotesIfEmpty(`City: ${routeCity}`);
+  }, [routeCity, setNotesIfEmpty]);
 
   /* ------------------------------------------------------------------------ */
   /* Load edit trip                                                            */
@@ -304,8 +351,12 @@ export default function TripBuildScreen() {
         const primary = cleanText((t as any)?.fixtureIdPrimary) || (mids[0] ? String(mids[0]) : "");
         setExistingPrimaryId(primary || null);
 
-        setStartIso(t.startDate);
-        setEndIso(t.endDate);
+        // Prefer trip dates; if route from/to passed, they override (useful when calling build from other places)
+        const nextStart = isIsoDateOnly(routeFrom) ? clampFromIsoToTomorrow(routeFrom!) : t.startDate;
+        const nextEnd = isIsoDateOnly(routeTo) ? String(routeTo) : t.endDate;
+
+        setStartIso(nextStart);
+        setEndIso(nextEnd);
         setEndTouched(true);
         setNotes((t as any).notes ?? "");
 
@@ -316,11 +367,11 @@ export default function TripBuildScreen() {
 
           setSelectedFixture(fx);
 
-          const ids = await computePlaceholderIdsForFixture(fx);
+          const ids = await computePlaceholderIdsForFixture(fx, routeSeason);
           if (!cancelled) setPlaceholderTbcIds(ids);
 
           const lid = fx?.league?.id ?? null;
-          const opt = findLeagueOptionByLeagueId(typeof lid === "number" ? lid : null);
+          const opt = findLeagueOptionByLeagueId(typeof lid === "number" ? lid : null, routeSeason);
           if (opt) setSelectedLeague(opt);
         } else {
           setSelectedFixture(null);
@@ -339,7 +390,7 @@ export default function TripBuildScreen() {
     return () => {
       cancelled = true;
     };
-  }, [routeTripId]);
+  }, [routeTripId, routeFrom, routeTo, routeSeason]);
 
   /* ------------------------------------------------------------------------ */
   /* Prefill fixture (new trip)                                                */
@@ -361,20 +412,32 @@ export default function TripBuildScreen() {
 
         setSelectedFixture(r);
 
-        const ids = await computePlaceholderIdsForFixture(r);
+        const ids = await computePlaceholderIdsForFixture(r, routeSeason);
         if (!cancelled) setPlaceholderTbcIds(ids);
 
-        const d0 = fixtureDateOnly(r);
-        if (d0) {
-          const start = clampFromIsoToTomorrow(d0);
-          setStartIso(start);
+        // If from/to were provided explicitly, keep them.
+        // Otherwise derive trip start from fixture date (clamped) and keep auto end behaviour.
+        const hasFrom = isIsoDateOnly(routeFrom);
+        const hasTo = isIsoDateOnly(routeTo);
+
+        if (hasFrom) {
+          setStartIso(clampFromIsoToTomorrow(routeFrom!));
+        } else {
+          const d0 = fixtureDateOnly(r);
+          if (d0) setStartIso(clampFromIsoToTomorrow(d0));
+        }
+
+        if (hasTo) {
+          setEndIso(String(routeTo));
+          setEndTouched(true);
+        } else {
           setEndTouched(false);
         }
 
         if (routeCityArea) setNotesIfEmpty(`Stay area: ${routeCityArea}`);
 
         const lid = r?.league?.id ?? null;
-        const opt = findLeagueOptionByLeagueId(typeof lid === "number" ? lid : null);
+        const opt = findLeagueOptionByLeagueId(typeof lid === "number" ? lid : null, routeSeason);
         if (opt) setSelectedLeague(opt);
       } catch {
         if (!cancelled) setError("Couldn’t load that fixture.");
@@ -387,7 +450,7 @@ export default function TripBuildScreen() {
     return () => {
       cancelled = true;
     };
-  }, [routeFixtureId, isPrefilledFlow, routeCityArea, setNotesIfEmpty]);
+  }, [routeFixtureId, isPrefilledFlow, routeCityArea, setNotesIfEmpty, routeFrom, routeTo, routeSeason]);
 
   /* ------------------------------------------------------------------------ */
   /* Load fixtures (picker mode)                                               */
@@ -403,8 +466,13 @@ export default function TripBuildScreen() {
       setError(null);
 
       try {
-        const from = clampFromIsoToTomorrow(new Date().toISOString().slice(0, 10));
-        const to = addDaysIso(from, 30);
+        // Use passed window if provided (e.g. adding a match to an existing trip),
+        // else default to tomorrow → +30 days.
+        const from = isIsoDateOnly(routeFrom)
+          ? clampFromIsoToTomorrow(routeFrom!)
+          : clampFromIsoToTomorrow(new Date().toISOString().slice(0, 10));
+
+        const to = isIsoDateOnly(routeTo) ? String(routeTo) : addDaysIso(from, 30);
 
         let res: FixtureListRow[] = [];
 
@@ -453,7 +521,7 @@ export default function TripBuildScreen() {
     return () => {
       cancelled = true;
     };
-  }, [selectedLeague, isPrefilledFlow]);
+  }, [selectedLeague, isPrefilledFlow, routeFrom, routeTo]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -474,15 +542,19 @@ export default function TripBuildScreen() {
   useEffect(() => {
     if (!selectedFixture) return;
 
-    const d0 = fixtureDateOnly(selectedFixture);
-    if (d0) {
-      const start = clampFromIsoToTomorrow(d0);
-      setStartIso(start);
-      setEndTouched(false);
+    // If from/to were explicitly provided, do not auto-overwrite with fixture date.
+    // Otherwise keep your existing behavior (start = fixture day, end auto+2 nights).
+    if (!isIsoDateOnly(routeFrom)) {
+      const d0 = fixtureDateOnly(selectedFixture);
+      if (d0) {
+        const start = clampFromIsoToTomorrow(d0);
+        setStartIso(start);
+        setEndTouched(false);
+      }
     }
 
     if (isEditing) setSetAsPrimaryOnSave(false);
-  }, [selectedFixture, isEditing]);
+  }, [selectedFixture, isEditing, routeFrom]);
 
   /* ------------------------------------------------------------------------ */
   /* Save                                                                       */
@@ -517,7 +589,7 @@ export default function TripBuildScreen() {
     try {
       if (!tripsStore.getState().loaded) await tripsStore.loadTrips();
 
-      // EDIT
+      // EDIT: update dates/notes, then add match; optionally set primary + overwrite snapshot
       if (isEditing && routeTripId) {
         const basePatch: any = {
           startDate: startIso,
@@ -531,16 +603,20 @@ export default function TripBuildScreen() {
 
         await tripsStore.updateTrip(routeTripId, basePatch);
 
+        // Add the match (dedupe handled by store)
         await tripsStore.addMatchToTrip(routeTripId, fixtureId, { setPrimary: !!setAsPrimaryOnSave });
 
+        // If set as primary, update trip-level snapshot fields to match new primary
         if (setAsPrimaryOnSave) {
           const primaryPatch: any = {
             cityId: snap.cityId,
             displayCity: snap.displayCity,
+
             fixtureIdPrimary: fixtureId,
 
             homeTeamId: snap.homeTeamId,
             awayTeamId: snap.awayTeamId,
+
             homeName: snap.homeName,
             awayName: snap.awayName,
 
@@ -635,21 +711,6 @@ export default function TripBuildScreen() {
   /* UI computed                                                               */
   /* ------------------------------------------------------------------------ */
 
-  const headerTitle = useMemo(() => (isEditing ? "Edit trip" : "Plan trip"), [isEditing]);
-
-  const intentSub = useMemo(() => {
-    if (isEditing) {
-      const n = existingMatchIds.length;
-      return `Update dates/notes and add more matches. (${n} match${n === 1 ? "" : "es"})`;
-    }
-    return "Pick a match, confirm dates, add notes — then we’ll build your Trip Workspace.";
-  }, [isEditing, existingMatchIds.length]);
-
-  const selectedLeagueLabel = useMemo(() => {
-    if (selectedLeague.leagueId === 0) return "All leagues";
-    return selectedLeague.label;
-  }, [selectedLeague]);
-
   const selectedTitle = useMemo(() => {
     const h = cleanText(selectedFixture?.teams?.home?.name) || "Home";
     const a = cleanText(selectedFixture?.teams?.away?.name) || "Away";
@@ -657,23 +718,51 @@ export default function TripBuildScreen() {
   }, [selectedFixture]);
 
   const selectedKickLine = useMemo(() => {
-    if (!selectedFixture) return "TBC";
+    if (!selectedFixture) return "Kickoff: TBC";
     const tbc = isKickoffTbc(selectedFixture, placeholderTbcIds);
-    if (tbc) return "Kickoff time not confirmed";
+    if (tbc) return "Kickoff: TBC";
     const f = formatUkDateTimeMaybe(selectedFixture?.fixture?.date);
-    return f ? f : "TBC";
+    return f ? `Kickoff: ${f}` : "Kickoff: TBC";
   }, [selectedFixture, placeholderTbcIds]);
 
   const selectedVenueLine = useMemo(() => {
-    if (!selectedFixture) return "Venue TBD";
+    if (!selectedFixture) return "Venue: —";
     const v = cleanText(selectedFixture?.fixture?.venue?.name);
     const c = cleanText(selectedFixture?.fixture?.venue?.city);
     const parts = [v, c].filter(Boolean);
-    return parts.length ? parts.join(" • ") : "Venue TBD";
+    return parts.length ? parts.join(" • ") : "Venue: —";
   }, [selectedFixture]);
+
+  const tripLength = useMemo(() => {
+    const d = daysBetweenIso(startIso, endIso);
+    if (d == null) return null;
+    const nights = Math.max(0, d);
+    return `${nights} night${nights === 1 ? "" : "s"}`;
+  }, [startIso, endIso]);
+
+  const headerTitle = useMemo(() => (isEditing ? "Edit trip" : "Plan trip"), [isEditing]);
+
+  const intentSub = useMemo(() => {
+    if (isEditing) {
+      const n = existingMatchIds.length;
+      return `Update dates/notes and add more matches to this trip. (${n} match${n === 1 ? "" : "es"})`;
+    }
+    return "Pick a match, then we’ll save a trip with dates, notes, and planning links.";
+  }, [isEditing, existingMatchIds.length]);
+
+  const selectedLeagueLabel = useMemo(() => {
+    if (selectedLeague.leagueId === 0) return "All leagues";
+    return selectedLeague.label;
+  }, [selectedLeague]);
+
+  const dateWindowLabel = useMemo(() => {
+    const nights = tripLength ? ` • ${tripLength}` : "";
+    return `${startIso} → ${endIso}${nights}`;
+  }, [startIso, endIso, tripLength]);
 
   const selectedHomeLogo = useMemo(() => safeUri(selectedFixture?.teams?.home?.logo), [selectedFixture]);
   const selectedAwayLogo = useMemo(() => safeUri(selectedFixture?.teams?.away?.logo), [selectedFixture]);
+
   const selectedFixtureId = useMemo(() => fixtureIdStr(selectedFixture), [selectedFixture]);
 
   const isAlreadyInTrip = useMemo(() => {
@@ -682,20 +771,7 @@ export default function TripBuildScreen() {
     return existingMatchIds.includes(String(selectedFixtureId).trim());
   }, [isEditing, selectedFixtureId, existingMatchIds]);
 
-  const kickoffTbc = useMemo(() => {
-    if (!selectedFixture) return true;
-    return isKickoffTbc(selectedFixture, placeholderTbcIds);
-  }, [selectedFixture, placeholderTbcIds]);
-
   const showPickerMode = !isPrefilledFlow;
-
-  const saveDisabled = saving || prefillLoading || !selectedFixture;
-
-  const saveSubtitle = useMemo(() => {
-    if (!selectedFixture) return "Select a match to continue";
-    if (isEditing) return setAsPrimaryOnSave ? "This match becomes the trip primary." : "This match will be added to the trip.";
-    return "Keep links, notes, and bookings in one place";
-  }, [selectedFixture, isEditing, setAsPrimaryOnSave]);
 
   /* ------------------------------------------------------------------------ */
   /* render                                                                    */
@@ -708,7 +784,7 @@ export default function TripBuildScreen() {
           headerShown: true,
           title: headerTitle,
           headerTransparent: true,
-          headerTintColor: theme.colors.textPrimary,
+          headerTintColor: theme.colors.text,
         }}
       />
 
@@ -723,36 +799,33 @@ export default function TripBuildScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* Hero / context */}
-          <GlassCard level="default" variant="matte" style={styles.hero} noPadding>
-            <View style={styles.heroInner}>
-              <Text style={styles.heroTitle}>{isEditing ? "Edit your trip" : "Plan your trip"}</Text>
-              <Text style={styles.heroSub}>{intentSub}</Text>
+          <GlassCard style={styles.headerCard} level="subtle">
+            <Text style={styles.bigTitle}>{isEditing ? "Edit your trip" : "Plan your trip"}</Text>
+            <Text style={styles.bigSub}>{intentSub}</Text>
 
-              <View style={styles.heroMetaRow}>
-                <View style={styles.heroMeta}>
-                  <Text style={styles.heroMetaKicker}>DATES</Text>
-                  <Text style={styles.heroMetaValue}>{dateWindowLine(startIso, endIso)}</Text>
-                </View>
-                <View style={styles.heroMeta}>
-                  <Text style={styles.heroMetaKicker}>LEAGUE</Text>
-                  <Text style={styles.heroMetaValue} numberOfLines={1}>
-                    {selectedLeagueLabel}
-                  </Text>
-                </View>
+            <View style={styles.chipRow}>
+              <View style={styles.chip}>
+                <Text style={styles.chipKicker}>Dates</Text>
+                <Text style={styles.chipValue}>{dateWindowLabel}</Text>
               </View>
 
-              {!isEditing ? (
-                <View style={styles.heroCap}>
-                  <Text style={styles.heroCapText}>Free plan: up to {FREE_TRIP_CAP} saved trips.</Text>
-                </View>
-              ) : null}
+              <View style={styles.chip}>
+                <Text style={styles.chipKicker}>League</Text>
+                <Text style={styles.chipValue} numberOfLines={1}>
+                  {selectedLeagueLabel}
+                </Text>
+              </View>
             </View>
+
+            {!isEditing ? (
+              <View style={styles.capBar}>
+                <Text style={styles.capText}>Free plan: up to {FREE_TRIP_CAP} saved trips.</Text>
+              </View>
+            ) : null}
           </GlassCard>
 
-          {/* Loading / error */}
           {(loading || prefillLoading) && (
-            <GlassCard level="default" variant="matte" style={styles.block} noPadding>
+            <GlassCard level="subtle">
               <View style={styles.center}>
                 <ActivityIndicator />
                 <Text style={styles.muted}>Loading…</Text>
@@ -761,268 +834,266 @@ export default function TripBuildScreen() {
           )}
 
           {!prefillLoading && error && (
-            <GlassCard level="default" variant="matte" style={styles.block} noPadding>
-              <View style={{ padding: 12 }}>
-                <EmptyState title="Problem" message={error} />
-              </View>
+            <GlassCard level="subtle">
+              <EmptyState title="Problem" message={error} />
             </GlassCard>
           )}
 
-          {/* Selected match + trip inputs */}
           {!prefillLoading && selectedFixture ? (
-            <GlassCard level="default" variant="matte" style={styles.block} noPadding>
-              <View style={styles.section}>
-                <View style={styles.sectionHeaderRow}>
-                  <Text style={styles.h1}>Selected match</Text>
+            <GlassCard level="default">
+              <Text style={styles.h1}>Selected match</Text>
+
+              <View style={styles.teamRow}>
+                <View style={styles.crestStack}>
+                  {selectedHomeLogo ? (
+                    <Image source={{ uri: selectedHomeLogo }} style={styles.crest} />
+                  ) : (
+                    <View style={styles.crestFallback} />
+                  )}
+                  {selectedAwayLogo ? (
+                    <Image source={{ uri: selectedAwayLogo }} style={[styles.crest, { marginLeft: -10 }]} />
+                  ) : (
+                    <View style={[styles.crestFallback, { marginLeft: -10 }]} />
+                  )}
                 </View>
 
-                <View style={styles.matchRow}>
-                  <View style={styles.crestStack}>
-                    {selectedHomeLogo ? (
-                      <Image source={{ uri: selectedHomeLogo }} style={styles.crest} />
-                    ) : (
-                      <View style={styles.crestFallback} />
-                    )}
-                    {selectedAwayLogo ? (
-                      <Image source={{ uri: selectedAwayLogo }} style={[styles.crest, { marginLeft: -10 }]} />
-                    ) : (
-                      <View style={[styles.crestFallback, { marginLeft: -10 }]} />
-                    )}
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.selectedTitle} numberOfLines={1}>
+                    {selectedTitle}
+                  </Text>
+                  <Text style={styles.selectedMeta}>{selectedKickLine}</Text>
+                  <Text style={styles.selectedMeta}>{selectedVenueLine}</Text>
+                </View>
+              </View>
+
+              <View style={styles.badgeRow}>
+                {isKickoffTbc(selectedFixture, placeholderTbcIds) ? (
+                  <View style={[styles.badge, styles.badgeTbc]}>
+                    <Text style={[styles.badgeText, styles.badgeTextTbc]}>Kickoff TBC</Text>
                   </View>
-
-                  <View style={{ flex: 1, minWidth: 0 }}>
-                    <Text style={styles.matchTitle} numberOfLines={1}>
-                      {selectedTitle}
-                    </Text>
-                    <Text style={styles.matchMeta} numberOfLines={1}>
-                      {selectedKickLine}
-                    </Text>
-                    <Text style={styles.matchMeta} numberOfLines={1}>
-                      {selectedVenueLine}
-                    </Text>
+                ) : (
+                  <View style={[styles.badge, styles.badgeConfirmed]}>
+                    <Text style={[styles.badgeText, styles.badgeTextConfirmed]}>Kickoff confirmed</Text>
                   </View>
-                </View>
+                )}
 
-                <View style={styles.chipsRow}>
-                  <Chip
-                    label={kickoffTbc ? "Kickoff TBC" : "Kickoff confirmed"}
-                    variant={chipVariantForKickoff(kickoffTbc)}
-                  />
-                  {weekendHint(selectedFixture?.fixture?.date) ? (
-                    <Chip label={String(weekendHint(selectedFixture?.fixture?.date))} variant="default" />
-                  ) : null}
-                  {isEditing ? <Chip label={isAlreadyInTrip ? "Already in trip" : "Will be added"} variant="default" /> : null}
-                </View>
+                {weekendHint(selectedFixture?.fixture?.date) ? (
+                  <View style={styles.badge}>
+                    <Text style={styles.badgeText}>{weekendHint(selectedFixture?.fixture?.date)}</Text>
+                  </View>
+                ) : null}
 
                 {isEditing ? (
-                  <View style={styles.primaryRow}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.primaryTitle}>Set as primary match</Text>
-                      <Text style={styles.primarySub}>
-                        Primary drives the kickoff banner, stay guidance, and planning defaults.
-                      </Text>
-                    </View>
-                    <Switch value={setAsPrimaryOnSave} onValueChange={setSetAsPrimaryOnSave} />
+                  <View style={styles.badge}>
+                    <Text style={styles.badgeText}>{isAlreadyInTrip ? "Already in trip" : "Will be added"}</Text>
                   </View>
                 ) : null}
+              </View>
 
-                {routeCityArea ? (
-                  <View style={styles.infoBar}>
-                    <Text style={styles.infoText}>
-                      Prefilled stay area:{" "}
-                      <Text style={{ fontWeight: theme.fontWeight.black, color: theme.colors.textPrimary }}>
-                        {routeCityArea}
-                      </Text>
+              {isEditing ? (
+                <View style={styles.primaryRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.primaryTitle}>Set as primary match</Text>
+                    <Text style={styles.primarySub}>
+                      Primary match drives kickoff banner + stay guidance + planning defaults.
                     </Text>
                   </View>
-                ) : null}
-
-                <Text style={styles.label}>Notes (optional)</Text>
-                <Input
-                  value={notes}
-                  onChangeText={setNotes}
-                  placeholder="Anything you want to remember…"
-                  multiline
-                  style={{ minHeight: 92 }}
-                />
-              </View>
-            </GlassCard>
-          ) : null}
-
-          {/* Picker */}
-          {showPickerMode && !prefillLoading && !error ? (
-            <GlassCard level="default" variant="matte" style={styles.block} noPadding>
-              <View style={styles.section}>
-                <Text style={styles.h1}>{isEditing ? "Add a match" : "Pick a match"}</Text>
-                <Text style={styles.hint}>
-                  {isEditing ? "Select another match to add it to this trip." : "Choose a match to start a trip around it."}
-                </Text>
-
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 12 }}>
-                  {leagueOptions.map((l) => {
-                    const active = l.leagueId === selectedLeague.leagueId;
-                    return (
-                      <Pressable
-                        key={(l as any).key ?? String(l.leagueId)}
-                        onPress={() => {
-                          setSelectedLeague(l);
-                          setVisibleCount(14);
-                        }}
-                        style={({ pressed }) => [
-                          styles.leaguePill,
-                          active && styles.leaguePillActive,
-                          pressed && { opacity: 0.92 },
-                        ]}
-                        android_ripple={{ color: "rgba(255,255,255,0.04)" }}
-                      >
-                        <Text style={[styles.leaguePillText, active && styles.leaguePillTextActive]}>{l.label}</Text>
-                      </Pressable>
-                    );
-                  })}
-                </ScrollView>
-
-                <Input
-                  value={search}
-                  onChangeText={(t) => {
-                    setSearch(t);
-                    setVisibleCount(14);
-                  }}
-                  placeholder="Search team / city / venue / league"
-                />
-
-                <View style={{ marginTop: 12, gap: 10 }}>
-                  {visibleRows.map((r, i) => {
-                    const id = fixtureIdStr(r);
-                    const selected = fixtureIdStr(selectedFixture) === id;
-
-                    const home = cleanText(r?.teams?.home?.name) || "Home";
-                    const away = cleanText(r?.teams?.away?.name) || "Away";
-
-                    const tbc = isKickoffTbc(r, placeholderTbcIds);
-                    const kick = tbc ? "Kickoff: TBC" : `Kickoff: ${formatUkDateTimeMaybe(r?.fixture?.date) || "TBC"}`;
-
-                    const v = cleanText(r?.fixture?.venue?.name);
-                    const c = cleanText(r?.fixture?.venue?.city);
-                    const vc = [v, c].filter(Boolean).join(" • ");
-
-                    const leagueName = cleanText(r?.league?.name);
-                    const leagueFlag = safeUri((r as any)?.league?.flag);
-
-                    const homeLogo = safeUri(r?.teams?.home?.logo);
-                    const awayLogo = safeUri(r?.teams?.away?.logo);
-
-                    return (
-                      <Pressable
-                        key={id || String(i)}
-                        onPress={async () => {
-                          setSelectedFixture(r);
-                          const ids = await computePlaceholderIdsForFixture(r);
-                          setPlaceholderTbcIds(ids);
-                          setError(null);
-                        }}
-                        style={({ pressed }) => [
-                          styles.fxPress,
-                          pressed && { opacity: 0.94 },
-                        ]}
-                        android_ripple={{ color: "rgba(255,255,255,0.04)" }}
-                      >
-                        <GlassCard
-                          level="default"
-                          variant={selected ? "glow" : "matte"}
-                          style={[styles.fxCard, selected && styles.fxCardSelected]}
-                          noPadding
-                        >
-                          <View style={styles.fxInner}>
-                            <View style={styles.fxTop}>
-                              <View style={styles.fxLeft}>
-                                <View style={styles.crestStack}>
-                                  {homeLogo ? <Image source={{ uri: homeLogo }} style={styles.crestSm} /> : <View style={styles.crestFallbackSm} />}
-                                  {awayLogo ? (
-                                    <Image source={{ uri: awayLogo }} style={[styles.crestSm, { marginLeft: -8 }]} />
-                                  ) : (
-                                    <View style={[styles.crestFallbackSm, { marginLeft: -8 }]} />
-                                  )}
-                                </View>
-
-                                <View style={{ flex: 1, minWidth: 0 }}>
-                                  <Text style={styles.fxTitle} numberOfLines={1}>
-                                    {home} vs {away}
-                                  </Text>
-
-                                  <Text style={styles.fxMeta} numberOfLines={1}>
-                                    {kick}
-                                  </Text>
-
-                                  {vc ? (
-                                    <Text style={styles.fxMeta2} numberOfLines={1}>
-                                      {vc}
-                                    </Text>
-                                  ) : null}
-                                </View>
-                              </View>
-
-                              <View style={styles.fxRight}>
-                                {leagueFlag ? <Image source={{ uri: leagueFlag }} style={styles.flag} /> : null}
-                                <Text style={styles.fxLeague} numberOfLines={2}>
-                                  {leagueName || "League"}
-                                </Text>
-                              </View>
-                            </View>
-
-                            <View style={styles.fxBottomRow}>
-                              <View style={styles.chipsRow}>
-                                <Chip label={tbc ? "Kickoff TBC" : "Confirmed"} variant={chipVariantForKickoff(tbc)} />
-                                {weekendHint(r?.fixture?.date) ? (
-                                  <Chip label={String(weekendHint(r?.fixture?.date))} variant="default" />
-                                ) : null}
-                                {isEditing && existingMatchIds.includes(String(id).trim()) ? (
-                                  <Chip label="Already in trip" variant="default" />
-                                ) : null}
-                              </View>
-
-                              <Chip label={selected ? "Selected" : "Select"} variant={selected ? "success" : "default"} />
-                            </View>
-                          </View>
-                        </GlassCard>
-                      </Pressable>
-                    );
-                  })}
+                  <Switch value={setAsPrimaryOnSave} onValueChange={setSetAsPrimaryOnSave} />
                 </View>
+              ) : null}
 
-                {visibleCount < filtered.length ? (
-                  <View style={{ marginTop: 12 }}>
-                    <Button label="Show more" tone="secondary" onPress={() => setVisibleCount((n) => n + 14)} />
-                  </View>
-                ) : null}
-              </View>
+              {routeCityArea ? (
+                <View style={styles.infoBar}>
+                  <Text style={styles.infoText}>
+                    Prefilled stay area:{" "}
+                    <Text style={{ fontWeight: "900", color: theme.colors.text }}>{routeCityArea}</Text>
+                  </Text>
+                </View>
+              ) : null}
+
+              <Text style={styles.label}>Notes (optional)</Text>
+              <TextInput
+                value={notes}
+                onChangeText={setNotes}
+                placeholder="Anything you want to remember…"
+                placeholderTextColor={theme.colors.textSecondary}
+                style={styles.notes}
+                multiline
+              />
             </GlassCard>
           ) : null}
 
-          {/* CTA */}
-          <GlassCard level="default" variant="matte" style={styles.ctaCard} noPadding>
-            <View style={styles.ctaInner}>
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={styles.ctaTitle}>{isEditing ? "Update trip" : "Save trip"}</Text>
-                <Text style={styles.ctaSub} numberOfLines={2}>
-                  {saveSubtitle}
-                </Text>
-                {error ? <Text style={styles.err}>{error}</Text> : null}
+          {showPickerMode && !prefillLoading && !error ? (
+            <GlassCard level="default">
+              <Text style={styles.h1}>{isEditing ? "Add a match" : "Pick a match"}</Text>
+              <Text style={styles.hint}>
+                {isEditing ? "Select another match to add it to this trip." : "Choose a match to start a trip around it."}
+              </Text>
+
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 12 }}>
+                {leagueOptions.map((l) => {
+                  const active = l.leagueId === selectedLeague.leagueId;
+                  return (
+                    <Pressable
+                      key={(l as any).key ?? String(l.leagueId)}
+                      onPress={() => {
+                        setSelectedLeague(l);
+                        setVisibleCount(14);
+                      }}
+                      style={[styles.leaguePill, active && styles.leaguePillActive]}
+                    >
+                      <Text style={[styles.leaguePillText, active && styles.leaguePillTextActive]}>{l.label}</Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+
+              <TextInput
+                value={search}
+                onChangeText={(t) => {
+                  setSearch(t);
+                  setVisibleCount(14);
+                }}
+                placeholder="Search team / city / venue / league"
+                placeholderTextColor={theme.colors.textSecondary}
+                style={styles.search}
+              />
+
+              <View style={{ marginTop: 10 }}>
+                {visibleRows.map((r, i) => {
+                  const id = fixtureIdStr(r);
+                  const selected = fixtureIdStr(selectedFixture) === id;
+
+                  const home = cleanText(r?.teams?.home?.name) || "Home";
+                  const away = cleanText(r?.teams?.away?.name) || "Away";
+
+                  const tbc = isKickoffTbc(r, placeholderTbcIds);
+                  const kick = tbc ? "Kickoff: TBC" : `Kickoff: ${formatUkDateTimeMaybe(r?.fixture?.date) || "TBC"}`;
+
+                  const v = cleanText(r?.fixture?.venue?.name);
+                  const c = cleanText(r?.fixture?.venue?.city);
+                  const vc = [v, c].filter(Boolean).join(" • ");
+
+                  const leagueName = cleanText(r?.league?.name);
+                  const leagueFlag = safeUri((r as any)?.league?.flag);
+
+                  const homeLogo = safeUri(r?.teams?.home?.logo);
+                  const awayLogo = safeUri(r?.teams?.away?.logo);
+
+                  return (
+                    <Pressable
+                      key={id || String(i)}
+                      onPress={async () => {
+                        setSelectedFixture(r);
+                        const ids = await computePlaceholderIdsForFixture(r, routeSeason);
+                        setPlaceholderTbcIds(ids);
+                        setError(null);
+                      }}
+                      style={({ pressed }) => [
+                        styles.fxCard,
+                        selected && styles.fxCardSelected,
+                        { opacity: pressed ? 0.9 : 1 },
+                      ]}
+                    >
+                      <View style={styles.fxTop}>
+                        <View style={styles.fxLeft}>
+                          <View style={styles.crestStack}>
+                            {homeLogo ? <Image source={{ uri: homeLogo }} style={styles.crest} /> : <View style={styles.crestFallback} />}
+                            {awayLogo ? (
+                              <Image source={{ uri: awayLogo }} style={[styles.crest, { marginLeft: -10 }]} />
+                            ) : (
+                              <View style={[styles.crestFallback, { marginLeft: -10 }]} />
+                            )}
+                          </View>
+
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.fxTitle} numberOfLines={1}>
+                              {home} vs {away}
+                            </Text>
+
+                            <Text style={styles.fxMeta} numberOfLines={1}>
+                              {kick}
+                            </Text>
+
+                            {vc ? (
+                              <Text style={styles.fxMeta2} numberOfLines={1}>
+                                {vc}
+                              </Text>
+                            ) : null}
+                          </View>
+                        </View>
+
+                        <View style={styles.fxRight}>
+                          {leagueFlag ? <Image source={{ uri: leagueFlag }} style={styles.flag} /> : null}
+                          <Text style={styles.fxLeague} numberOfLines={1}>
+                            {leagueName || "League"}
+                          </Text>
+                        </View>
+                      </View>
+
+                      <View style={styles.badgeRow}>
+                        {tbc ? (
+                          <View style={[styles.badge, styles.badgeTbc]}>
+                            <Text style={[styles.badgeText, styles.badgeTextTbc]}>Kickoff TBC</Text>
+                          </View>
+                        ) : (
+                          <View style={[styles.badge, styles.badgeConfirmed]}>
+                            <Text style={[styles.badgeText, styles.badgeTextConfirmed]}>Kickoff confirmed</Text>
+                          </View>
+                        )}
+
+                        {weekendHint(r?.fixture?.date) ? (
+                          <View style={styles.badge}>
+                            <Text style={styles.badgeText}>{weekendHint(r?.fixture?.date)}</Text>
+                          </View>
+                        ) : null}
+
+                        {isEditing && existingMatchIds.includes(String(id).trim()) ? (
+                          <View style={styles.badge}>
+                            <Text style={styles.badgeText}>Already in trip</Text>
+                          </View>
+                        ) : null}
+                      </View>
+
+                      <View style={styles.fxSelectRow}>
+                        <View style={{ flex: 1 }} />
+                        <View style={[styles.selectPill, selected && styles.selectPillActive]}>
+                          <Text style={[styles.selectPillText, selected && styles.selectPillTextActive]}>
+                            {selected ? "Selected" : "Select"}
+                          </Text>
+                        </View>
+                      </View>
+                    </Pressable>
+                  );
+                })}
               </View>
 
-              <View style={{ width: 150 }}>
-                <Button
-                  label={saving ? "Saving…" : isEditing ? "Update" : "Save"}
-                  tone="primary"
-                  glow
-                  disabled={saveDisabled}
-                  onPress={onSave}
-                />
-              </View>
-            </View>
-          </GlassCard>
+              {visibleCount < filtered.length ? (
+                <Pressable onPress={() => setVisibleCount((n) => n + 14)} style={styles.moreBtn}>
+                  <Text style={styles.moreText}>Show more</Text>
+                </Pressable>
+              ) : null}
+            </GlassCard>
+          ) : null}
 
-          {/* spacing */}
-          <View style={{ height: 4 }} />
+          <Pressable
+            onPress={onSave}
+            disabled={saving || prefillLoading || !selectedFixture}
+            style={[styles.saveBtn, (!selectedFixture || saving || prefillLoading) && { opacity: 0.55 }]}
+          >
+            <Text style={styles.saveText}>{saving ? "Saving…" : isEditing ? "Update trip" : "Save trip"}</Text>
+            <Text style={styles.saveSub}>
+              {selectedFixture
+                ? isEditing
+                  ? setAsPrimaryOnSave
+                    ? "This match becomes the trip primary."
+                    : "This match will be added to the trip."
+                  : "Keep links, notes, and bookings in one place"
+                : "Select a match to continue"}
+            </Text>
+          </Pressable>
+
+          {error ? <Text style={styles.err}>{error}</Text> : null}
         </ScrollView>
       </SafeAreaView>
     </Background>
@@ -1034,151 +1105,121 @@ export default function TripBuildScreen() {
 /* -------------------------------------------------------------------------- */
 
 const styles = StyleSheet.create({
-  hero: {
-    borderRadius: theme.borderRadius.sheet,
-    overflow: "hidden",
-  },
-  heroInner: {
-    padding: 14,
-    gap: 10,
-  },
-  heroTitle: {
-    color: theme.colors.textPrimary,
-    fontSize: 22,
-    fontWeight: theme.fontWeight.black,
-    letterSpacing: 0.2,
-  },
-  heroSub: {
-    color: theme.colors.textSecondary,
-    fontWeight: theme.fontWeight.medium,
-    lineHeight: 18,
-    fontSize: 13,
-  },
-  heroMetaRow: {
-    flexDirection: "row",
-    gap: 10,
-    marginTop: 2,
-  },
-  heroMeta: {
-    flex: 1,
-    borderRadius: theme.borderRadius.input,
-    borderWidth: 1,
-    borderColor: theme.colors.borderSubtle,
-    backgroundColor: "rgba(255,255,255,0.03)",
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    gap: 4,
-  },
-  heroMetaKicker: {
-    color: theme.colors.textMuted,
-    fontWeight: theme.fontWeight.black,
-    fontSize: 11,
-    letterSpacing: 0.6,
-  },
-  heroMetaValue: {
-    color: theme.colors.textPrimary,
-    fontWeight: theme.fontWeight.black,
-    fontSize: 12,
-  },
-  heroCap: {
-    marginTop: 2,
-    borderRadius: theme.borderRadius.input,
-    borderWidth: 1,
-    borderColor: theme.colors.borderSubtle,
-    backgroundColor: "rgba(0,0,0,0.14)",
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-  },
-  heroCapText: {
-    color: theme.colors.textSecondary,
-    fontWeight: theme.fontWeight.semibold,
-    fontSize: 12,
-  },
+  headerCard: { padding: theme.spacing.lg },
 
-  block: {
-    borderRadius: theme.borderRadius.sheet,
-    overflow: "hidden",
+  bigTitle: { fontSize: 22, fontWeight: "900", color: theme.colors.text, letterSpacing: 0.2 },
+  bigSub: { marginTop: 8, color: theme.colors.textSecondary, fontWeight: "700", lineHeight: 18, fontSize: 13 },
+
+  chipRow: { marginTop: 14, flexDirection: "row", gap: 10 },
+  chip: {
+    flex: 1,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
   },
-  section: {
-    padding: 14,
-    gap: 10,
+  chipKicker: { color: theme.colors.textTertiary, fontWeight: "900", fontSize: 11 },
+  chipValue: { marginTop: 4, color: theme.colors.text, fontWeight: "900", fontSize: 12 },
+
+  capBar: {
+    marginTop: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.16)",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
   },
+  capText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: 12 },
+
+  h1: { fontSize: theme.fontSize.lg, fontWeight: "900", color: theme.colors.text, marginBottom: 8 },
+  hint: { color: theme.colors.textSecondary, fontWeight: "700", fontSize: 13, lineHeight: 18 },
 
   center: { paddingVertical: 14, alignItems: "center", gap: 10 },
-  muted: { color: theme.colors.textSecondary, fontWeight: theme.fontWeight.semibold },
+  muted: { color: theme.colors.textSecondary, fontWeight: "800" },
 
-  h1: {
-    fontSize: 16,
-    fontWeight: theme.fontWeight.black,
-    color: theme.colors.textPrimary,
-    letterSpacing: 0.2,
-  },
-  hint: {
-    marginTop: -4,
-    color: theme.colors.textSecondary,
-    fontWeight: theme.fontWeight.medium,
-    fontSize: 13,
-    lineHeight: 18,
-  },
-
-  sectionHeaderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-  },
-
-  matchRow: { flexDirection: "row", gap: 12, alignItems: "center", marginTop: 4 },
+  teamRow: { flexDirection: "row", gap: 12, alignItems: "center" },
 
   crestStack: { flexDirection: "row", alignItems: "center" },
   crest: {
-    width: 34,
-    height: 34,
+    width: 30,
+    height: 30,
     borderRadius: 999,
     backgroundColor: "rgba(255,255,255,0.06)",
     borderWidth: 1,
-    borderColor: theme.colors.borderSubtle,
+    borderColor: "rgba(255,255,255,0.10)",
   },
   crestFallback: {
-    width: 34,
-    height: 34,
+    width: 30,
+    height: 30,
     borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.05)",
+    backgroundColor: "rgba(255,255,255,0.06)",
     borderWidth: 1,
-    borderColor: theme.colors.borderSubtle,
+    borderColor: "rgba(255,255,255,0.10)",
   },
 
-  matchTitle: { color: theme.colors.textPrimary, fontWeight: theme.fontWeight.black, fontSize: 16 },
-  matchMeta: { color: theme.colors.textSecondary, marginTop: 4, fontWeight: theme.fontWeight.medium, fontSize: 12 },
+  selectedTitle: { color: theme.colors.text, fontWeight: "900", fontSize: 16 },
+  selectedMeta: { color: theme.colors.textSecondary, marginTop: 6, fontWeight: "700", fontSize: 13 },
 
-  chipsRow: { flexDirection: "row", gap: 8, flexWrap: "wrap", marginTop: 4 },
+  badgeRow: { marginTop: 10, flexDirection: "row", gap: 8, flexWrap: "wrap" },
+  badge: {
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+  },
+  badgeText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: 11 },
+
+  badgeTbc: { borderColor: "rgba(255,200,0,0.22)", backgroundColor: "rgba(255,200,0,0.06)" },
+  badgeTextTbc: { color: "rgba(255,220,140,0.92)" },
+
+  badgeConfirmed: { borderColor: "rgba(75,158,57,0.35)", backgroundColor: "rgba(75,158,57,0.10)" },
+  badgeTextConfirmed: { color: "rgba(140,255,190,0.92)" },
 
   primaryRow: {
-    marginTop: 2,
+    marginTop: 12,
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    borderRadius: theme.borderRadius.input,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: theme.colors.borderSubtle,
-    backgroundColor: "rgba(0,0,0,0.14)",
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.16)",
     paddingVertical: 10,
     paddingHorizontal: 12,
   },
-  primaryTitle: { color: theme.colors.textPrimary, fontWeight: theme.fontWeight.black, fontSize: 12 },
-  primarySub: { marginTop: 4, color: theme.colors.textSecondary, fontWeight: theme.fontWeight.medium, fontSize: 11, lineHeight: 14 },
+  primaryTitle: { color: theme.colors.text, fontWeight: "900", fontSize: 12 },
+  primarySub: { marginTop: 4, color: theme.colors.textSecondary, fontWeight: "800", fontSize: 11, lineHeight: 14 },
 
   infoBar: {
-    borderRadius: theme.borderRadius.input,
+    marginTop: 12,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: theme.colors.borderSubtle,
-    backgroundColor: "rgba(0,0,0,0.14)",
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.18)",
     paddingVertical: 10,
     paddingHorizontal: 12,
   },
-  infoText: { color: theme.colors.textSecondary, fontWeight: theme.fontWeight.medium, fontSize: 12, lineHeight: 16 },
+  infoText: { color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12, lineHeight: 16 },
 
-  label: { marginTop: 2, color: theme.colors.textSecondary, fontWeight: theme.fontWeight.semibold },
+  label: { marginTop: 14, color: theme.colors.textSecondary, fontWeight: "800" },
+
+  notes: {
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: "rgba(0,0,0,0.25)",
+    borderRadius: 12,
+    padding: 12,
+    color: theme.colors.text,
+    minHeight: 84,
+    textAlignVertical: "top",
+    ...(Platform.OS === "ios" ? { paddingTop: 12 } : null),
+  },
 
   leaguePill: {
     marginRight: 10,
@@ -1186,46 +1227,36 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: theme.colors.borderSubtle,
-    backgroundColor: "rgba(255,255,255,0.03)",
-    overflow: "hidden",
+    borderColor: theme.colors.border,
+    backgroundColor: "rgba(0,0,0,0.25)",
   },
-  leaguePillActive: {
-    borderColor: "rgba(87,162,56,0.32)",
-    backgroundColor: "rgba(87,162,56,0.10)",
-  },
-  leaguePillText: { color: theme.colors.textSecondary, fontWeight: theme.fontWeight.black, fontSize: 12 },
-  leaguePillTextActive: { color: theme.colors.textPrimary },
+  leaguePillActive: { borderColor: theme.colors.primary, backgroundColor: "rgba(0,0,0,0.45)" },
+  leaguePillText: { color: theme.colors.textSecondary, fontWeight: "900" },
+  leaguePillTextActive: { color: theme.colors.text },
 
-  fxPress: { borderRadius: theme.borderRadius.sheet },
+  search: {
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: "rgba(0,0,0,0.25)",
+    borderRadius: 12,
+    padding: 12,
+    color: theme.colors.text,
+  },
+
   fxCard: {
-    borderRadius: theme.borderRadius.sheet,
+    marginTop: 10,
+    padding: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: "rgba(0,0,0,0.20)",
   },
-  fxCardSelected: {
-    borderColor: "rgba(87,162,56,0.28)",
-  },
-  fxInner: { padding: 12, gap: 10 },
+  fxCardSelected: { borderColor: "rgba(75,158,57,0.55)", backgroundColor: "rgba(0,0,0,0.35)" },
 
   fxTop: { flexDirection: "row", gap: 12, alignItems: "flex-start" },
   fxLeft: { flex: 1, flexDirection: "row", gap: 12, alignItems: "center" },
-  fxRight: { width: 100, alignItems: "flex-end" },
-
-  crestSm: {
-    width: 28,
-    height: 28,
-    borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.06)",
-    borderWidth: 1,
-    borderColor: theme.colors.borderSubtle,
-  },
-  crestFallbackSm: {
-    width: 28,
-    height: 28,
-    borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.05)",
-    borderWidth: 1,
-    borderColor: theme.colors.borderSubtle,
-  },
+  fxRight: { width: 96, alignItems: "flex-end" },
 
   flag: {
     width: 22,
@@ -1233,38 +1264,48 @@ const styles = StyleSheet.create({
     borderRadius: 3,
     backgroundColor: "rgba(255,255,255,0.06)",
     borderWidth: 1,
-    borderColor: theme.colors.borderSubtle,
+    borderColor: "rgba(255,255,255,0.10)",
   },
-  fxLeague: { marginTop: 6, color: theme.colors.textMuted, fontWeight: theme.fontWeight.black, fontSize: 11, textAlign: "right" },
+  fxLeague: { marginTop: 6, color: theme.colors.textSecondary, fontWeight: "900", fontSize: 11, textAlign: "right" },
 
-  fxTitle: { color: theme.colors.textPrimary, fontWeight: theme.fontWeight.black, fontSize: 15 },
-  fxMeta: { color: theme.colors.textSecondary, marginTop: 5, fontWeight: theme.fontWeight.medium, fontSize: 12 },
-  fxMeta2: { color: theme.colors.textMuted, marginTop: 4, fontWeight: theme.fontWeight.medium, fontSize: 12 },
+  fxTitle: { color: theme.colors.text, fontWeight: "900", fontSize: 15 },
+  fxMeta: { color: theme.colors.textSecondary, marginTop: 5, fontWeight: "800", fontSize: 12 },
+  fxMeta2: { color: theme.colors.textTertiary, marginTop: 4, fontWeight: "800", fontSize: 12 },
 
-  fxBottomRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
-
-  ctaCard: {
-    borderRadius: theme.borderRadius.sheet,
-    overflow: "hidden",
+  fxSelectRow: { marginTop: 10, flexDirection: "row", alignItems: "center" },
+  selectPill: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+    paddingVertical: 7,
+    paddingHorizontal: 12,
   },
-  ctaInner: {
-    padding: 14,
-    flexDirection: "row",
+  selectPillActive: { borderColor: "rgba(75,158,57,0.55)", backgroundColor: "rgba(75,158,57,0.10)" },
+  selectPillText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: 12 },
+  selectPillTextActive: { color: theme.colors.text, fontWeight: "900", fontSize: 12 },
+
+  moreBtn: {
+    marginTop: 12,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
     alignItems: "center",
-    gap: 12,
   },
-  ctaTitle: {
-    color: theme.colors.textPrimary,
-    fontWeight: theme.fontWeight.black,
-    fontSize: 14,
-    letterSpacing: 0.2,
+  moreText: { color: theme.colors.text, fontWeight: "900" },
+
+  saveBtn: {
+    marginTop: 2,
+    paddingVertical: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(75,158,57,0.55)",
+    backgroundColor: "rgba(0,0,0,0.30)",
+    alignItems: "center",
   },
-  ctaSub: {
-    marginTop: 6,
-    color: theme.colors.textSecondary,
-    fontWeight: theme.fontWeight.medium,
-    fontSize: 12,
-    lineHeight: 16,
-  },
-  err: { marginTop: 8, color: "rgba(214,69,69,0.95)", fontWeight: theme.fontWeight.black, fontSize: 12 },
+  saveText: { color: theme.colors.text, fontWeight: "900", fontSize: 15 },
+  saveSub: { marginTop: 6, color: theme.colors.textSecondary, fontWeight: "800", fontSize: 11 },
+
+  err: { marginTop: 10, color: "rgba(255,80,80,0.95)", fontWeight: "900" },
 });
