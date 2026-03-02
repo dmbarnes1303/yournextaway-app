@@ -2,38 +2,64 @@
 import React, { useMemo } from "react";
 import { Platform, StyleProp, StyleSheet, View, ViewStyle } from "react-native";
 import { BlurView } from "expo-blur";
-
 import { theme } from "@/src/constants/theme";
 
 type GlassLevel = "subtle" | "default" | "strong";
 
+/**
+ * V2 intent:
+ * - Matte surfaces by default (premium, modern)
+ * - True blur reserved for overlays / special moments
+ *
+ * Backwards compatibility:
+ * - Existing code may pass intensity
+ * - Existing code may pass level
+ */
 type Props = {
   children?: React.ReactNode;
   style?: StyleProp<ViewStyle>;
 
   /**
-   * Backwards compatible:
-   * Older code uses <GlassCard intensity={26} />
-   * We map intensity -> level + (iOS/web) blur intensity.
+   * Legacy:
+   * Many screens call <GlassCard intensity={26} />
+   * In V2, typical legacy intensities will NOT blur by default.
+   * Blur is only enabled for very high intensities (>= 45) unless forceBlur is true.
    */
   intensity?: number;
 
   /**
-   * Preferred new API:
-   * Explicitly pick glass strength.
+   * Preferred:
+   * "subtle" -> softer matte
+   * "default" -> standard matte card
+   * "strong" -> can use blur if enabled
    */
   level?: GlassLevel;
 
   /**
-   * Optional: override border color.
-   * If omitted, uses theme.glass.border.
+   * Optional border override (rarely needed in V2).
    */
   borderColor?: string;
 
   /**
-   * Optional: disable blur even on iOS/web (debug / readability).
+   * Disable blur even if eligible.
    */
   disableBlur?: boolean;
+
+  /**
+   * Force blur on capable platforms (iOS/web). Use for overlays / sheets only.
+   */
+  forceBlur?: boolean;
+
+  /**
+   * V2 addition:
+   * - "matte" (default): solid premium surfaces
+   * - "glass": translucent + eligible for blur
+   *
+   * If omitted, we infer:
+   * - level="strong" -> glass
+   * - otherwise -> matte
+   */
+  variant?: "matte" | "glass";
 };
 
 function clamp(n: number, min: number, max: number) {
@@ -44,14 +70,17 @@ function levelFromIntensity(intensity?: number): GlassLevel {
   const i = typeof intensity === "number" ? intensity : null;
   if (i == null) return "default";
   if (i < 18) return "subtle";
-  if (i < 28) return "default";
+  if (i < 32) return "default";
   return "strong";
 }
 
-function blurFromLevel(level: GlassLevel) {
-  // expo-blur wants a number; we keep your theme as the source of truth.
-  const t = theme.glass.blur[level];
-  return clamp(t, 1, 100);
+function alpha(hex: string, a: number) {
+  // hex like #RRGGBB
+  const h = hex.replace("#", "");
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  return `rgba(${r},${g},${b},${clamp(a, 0, 1)})`;
 }
 
 export default function GlassCard({
@@ -61,74 +90,113 @@ export default function GlassCard({
   level,
   borderColor,
   disableBlur,
+  forceBlur,
+  variant,
 }: Props) {
   const resolvedLevel: GlassLevel = useMemo(() => {
     if (level) return level;
     return levelFromIntensity(intensity);
   }, [level, intensity]);
 
-  const resolvedBorder = borderColor ?? theme.glass.border;
+  const resolvedVariant: "matte" | "glass" = useMemo(() => {
+    if (variant) return variant;
+    return resolvedLevel === "strong" ? "glass" : "matte";
+  }, [variant, resolvedLevel]);
 
   const isBlurCapable = Platform.OS === "ios" || Platform.OS === "web";
-  const shouldBlur = isBlurCapable && !disableBlur;
 
-  // Background tint differs per platform because Android has no blur.
-  const bg =
-    Platform.OS === "android"
-      ? theme.glass.androidBg[resolvedLevel]
-      : theme.glass.iosBg[resolvedLevel];
+  /**
+   * V2 blur policy:
+   * - Blur is NOT the default look anymore.
+   * - Blur only triggers when:
+   *    - forceBlur is true, OR
+   *    - variant="glass" AND (level="strong" OR intensity>=45)
+   */
+  const legacyIntensity = typeof intensity === "number" ? intensity : null;
+  const eligibleByLegacy = legacyIntensity != null && legacyIntensity >= 45;
 
+  const shouldBlur =
+    isBlurCapable &&
+    !disableBlur &&
+    (forceBlur === true ||
+      (resolvedVariant === "glass" &&
+        (resolvedLevel === "strong" || eligibleByLegacy)));
+
+  // Matte surface backgrounds (primary look)
+  const matteBg =
+    resolvedLevel === "subtle"
+      ? theme.colors.bgSurface
+      : resolvedLevel === "default"
+      ? theme.colors.bgElevated
+      : theme.colors.bgElevated;
+
+  // Glass tint (when variant="glass")
+  const glassBg =
+    resolvedLevel === "subtle"
+      ? alpha(theme.colors.bgSurface, 0.35)
+      : resolvedLevel === "default"
+      ? alpha(theme.colors.bgSurface, 0.28)
+      : alpha(theme.colors.bgSurface, 0.22);
+
+  const bg = resolvedVariant === "glass" ? glassBg : matteBg;
+
+  // Border: V2 is border-light; matte cards usually have no border.
+  const defaultBorder =
+    resolvedVariant === "glass"
+      ? theme.colors.borderSubtle
+      : "transparent";
+
+  const resolvedBorder = borderColor ?? defaultBorder;
+
+  // Blur intensity:
+  // - If legacy intensity is provided AND we're blurring, respect it (clamped).
+  // - Otherwise, map by level.
   const blurIntensity = useMemo(() => {
-    // If legacy "intensity" provided, respect it (but clamp).
-    if (typeof intensity === "number") return clamp(intensity, 1, 100);
-    return blurFromLevel(resolvedLevel);
-  }, [intensity, resolvedLevel]);
+    if (!shouldBlur) return 0;
+    if (legacyIntensity != null) return clamp(legacyIntensity, 1, 100);
+    return resolvedLevel === "subtle" ? 18 : resolvedLevel === "default" ? 26 : 34;
+  }, [shouldBlur, legacyIntensity, resolvedLevel]);
+
+  const baseStyle = [
+    styles.base,
+    resolvedVariant === "glass" ? styles.glassFrame : styles.matteFrame,
+    styles.shadow,
+    { backgroundColor: bg, borderColor: resolvedBorder },
+    style,
+  ];
 
   if (shouldBlur) {
     return (
-      <BlurView
-        tint="dark"
-        intensity={blurIntensity}
-        style={[
-          styles.base,
-          styles.shadow,
-          { borderColor: resolvedBorder, backgroundColor: bg },
-          style,
-        ]}
-      >
+      <BlurView tint="dark" intensity={blurIntensity} style={baseStyle}>
         {children}
       </BlurView>
     );
   }
 
-  // Android + fallback: no blur, just premium tinted glass.
-  return (
-    <View
-      style={[
-        styles.base,
-        styles.shadow,
-        { borderColor: resolvedBorder, backgroundColor: bg },
-        style,
-      ]}
-    >
-      {children}
-    </View>
-  );
+  return <View style={baseStyle}>{children}</View>;
 }
 
 const styles = StyleSheet.create({
   base: {
-    borderWidth: 1,
-    borderRadius: theme.borderRadius.xl,
+    borderRadius: theme.borderRadius.card ?? theme.borderRadius.lg,
     padding: theme.spacing.md,
     overflow: "hidden",
   },
+
+  matteFrame: {
+    borderWidth: 0,
+  },
+
+  glassFrame: {
+    borderWidth: 1,
+  },
+
   shadow: {
-    // Keep it subtle + premium (no neon glow here; that belongs on accents only)
+    // Premium, soft elevation (no harsh "card outline" look)
     shadowColor: "#000",
-    shadowOpacity: 0.35,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.30,
+    shadowRadius: 22,
+    shadowOffset: { width: 0, height: 12 },
     elevation: 10,
   },
 });
