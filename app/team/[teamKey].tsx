@@ -1,5 +1,5 @@
 // app/team/[teamKey].tsx
-import React, { useEffect, useMemo, useState, useCallback } from "react";
+import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   Image,
   Platform,
   Modal,
+  RefreshControl,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -26,14 +27,15 @@ import { formatUkDateTimeMaybe } from "@/src/utils/formatters";
 import { getFixtures, type FixtureListRow } from "@/src/services/apiFootball";
 import { getTeam, leagueForTeam, normalizeTeamKey } from "@/src/data/teams";
 import { hasTeamGuide } from "@/src/data/teamGuides";
+import { getRollingWindowIso } from "@/src/constants/football";
 
 // Remote stadium backgrounds (V1). Use direct JPG/PNG URLs.
 // Keep it curated: only add teams you actively support in product.
 const TEAM_BACKGROUNDS: Record<string, string> = {
   "real-madrid": "https://images.unsplash.com/photo-1548600916-d2d8a0b2b3b6?auto=format&fit=crop&w=1400&q=80",
-  "arsenal": "https://images.unsplash.com/photo-1533106418989-88406c7cc8ca?auto=format&fit=crop&w=1400&q=80",
+  arsenal: "https://images.unsplash.com/photo-1533106418989-88406c7cc8ca?auto=format&fit=crop&w=1400&q=80",
   "bayern-munich": "https://images.unsplash.com/photo-1517927033932-b3d18e61fb3a?auto=format&fit=crop&w=1400&q=80",
-  "inter": "https://images.unsplash.com/photo-1522770179533-24471fcdba45?auto=format&fit=crop&w=1400&q=80",
+  inter: "https://images.unsplash.com/photo-1522770179533-24471fcdba45?auto=format&fit=crop&w=1400&q=80",
   "borussia-dortmund": "https://images.unsplash.com/photo-1521412644187-c49fa049e84d?auto=format&fit=crop&w=1400&q=80",
 };
 
@@ -127,53 +129,100 @@ function splitLinesToBullets(text: string) {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Flags */
+/* Country → ISO2 resolver (flags, consistent with City screen) */
 /* -------------------------------------------------------------------------- */
 
-// Tiny pragmatic fallback: if you only have a country *name* we map it.
-// Add to this as you notice missing flags in your content.
-const COUNTRY_NAME_TO_ISO2: Record<string, string> = {
-  england: "GB",
-  "united kingdom": "GB",
-  scotland: "GB",
-  wales: "GB",
-  "northern ireland": "GB",
-  germany: "DE",
-  spain: "ES",
-  france: "FR",
-  italy: "IT",
-  netherlands: "NL",
-  portugal: "PT",
-  belgium: "BE",
-  austria: "AT",
-  switzerland: "CH",
-  poland: "PL",
-  "czech republic": "CZ",
-  czechia: "CZ",
-  sweden: "SE",
-  norway: "NO",
-  denmark: "DK",
-  finland: "FI",
-  ireland: "IE",
-  turkey: "TR",
-  greece: "GR",
-  croatia: "HR",
-  serbia: "RS",
-  romania: "RO",
-  bulgaria: "BG",
-  ukraine: "UA",
-  russia: "RU",
-};
+function countryToIso2(code?: string, name?: string): string | null {
+  const c = safeStr(code).toUpperCase();
 
-function normalizeCountryNameToIso2(name: string) {
-  const k = safeStr(name).toLowerCase();
-  return k ? COUNTRY_NAME_TO_ISO2[k] : "";
+  if (c.length === 2) return c;
+
+  const iso3Map: Record<string, string> = {
+    FRA: "FR",
+    ESP: "ES",
+    DEU: "DE",
+    GER: "DE",
+    ITA: "IT",
+    PRT: "PT",
+    NLD: "NL",
+    BEL: "BE",
+    AUT: "AT",
+    CHE: "CH",
+    TUR: "TR",
+    GRC: "GR",
+    POL: "PL",
+    CZE: "CZ",
+    DNK: "DK",
+    SWE: "SE",
+    NOR: "NO",
+    FIN: "FI",
+    IRL: "IE",
+    HUN: "HU",
+    ROU: "RO",
+    HRV: "HR",
+    SRB: "RS",
+    SVK: "SK",
+    SVN: "SI",
+    BGR: "BG",
+    UKR: "UA",
+    RUS: "RU",
+    GBR: "GB",
+    ENG: "GB",
+    SCO: "GB",
+    WAL: "GB",
+  };
+
+  if (c.length === 3 && iso3Map[c]) return iso3Map[c];
+
+  const n = safeStr(name).toLowerCase();
+
+  const nameMap: Record<string, string> = {
+    england: "GB",
+    scotland: "GB",
+    wales: "GB",
+    "northern ireland": "GB",
+    "united kingdom": "GB",
+    uk: "GB",
+    britain: "GB",
+    "great britain": "GB",
+
+    germany: "DE",
+    spain: "ES",
+    france: "FR",
+    italy: "IT",
+    netherlands: "NL",
+    portugal: "PT",
+    belgium: "BE",
+    austria: "AT",
+    switzerland: "CH",
+    poland: "PL",
+    "czech republic": "CZ",
+    czechia: "CZ",
+    sweden: "SE",
+    norway: "NO",
+    denmark: "DK",
+    finland: "FI",
+    ireland: "IE",
+    turkey: "TR",
+    greece: "GR",
+    croatia: "HR",
+    serbia: "RS",
+    romania: "RO",
+    bulgaria: "BG",
+    ukraine: "UA",
+    russia: "RU",
+  };
+
+  return nameMap[n] || null;
 }
 
-function FlagMini({ countryCode }: { countryCode?: string }) {
-  const code = safeStr(countryCode).toUpperCase();
-  const url = code ? getFlagImageUrl(code, { size: 64 }) : null;
+function FlagMini({ countryCode, countryName }: { countryCode?: string; countryName?: string }) {
+  const iso2 = countryToIso2(countryCode, countryName);
+  if (!iso2) return null;
+
+  const url = getFlagImageUrl(iso2, { size: 64 });
   if (!url) return null;
+
   return <Image source={{ uri: url }} style={styles.flagMini} resizeMode="cover" />;
 }
 
@@ -197,19 +246,11 @@ function TeamCrestHero({ teamId }: { teamId?: number }) {
 type GuideBlock = { heading?: string; text: string };
 type GuideFull = { title: string; blocks: GuideBlock[] };
 
-function normalizeText(v: any): string {
+function joinParas(v: any): string {
+  if (Array.isArray(v)) return v.map((x) => safeStr(x)).filter(Boolean).join("\n\n");
   return safeStr(v);
 }
 
-function joinParas(v: any): string {
-  if (Array.isArray(v)) return v.filter(Boolean).map((x) => safeStr(x)).filter(Boolean).join("\n\n");
-  return normalizeText(v);
-}
-
-/**
- * Pull guide content without assuming a fixed structure.
- * We create "blocks" that render nicely in a full-screen modal (same behavior as City guide).
- */
 function getTeamGuideFull(teamKey: string): GuideFull | null {
   const key = safeStr(teamKey);
   if (!key) return null;
@@ -229,30 +270,19 @@ function getTeamGuideFull(teamKey: string): GuideFull | null {
     const title = safeStr(guide.title) || safeStr(guide.name) || safeStr(guide.teamName) || "Team guide";
     const blocks: GuideBlock[] = [];
 
-    const overview =
-      normalizeText(guide.overview) ||
-      normalizeText(guide.intro) ||
-      normalizeText(guide.description) ||
-      "";
-
+    const overview = safeStr(guide.overview) || safeStr(guide.intro) || safeStr(guide.description) || "";
     if (overview) blocks.push({ heading: "Overview", text: overview });
 
     if (Array.isArray(guide.sections) && guide.sections.length) {
       for (const s of guide.sections) {
         const heading = safeStr(s?.title) || safeStr(s?.heading) || safeStr(s?.name) || "";
-        const text =
-          normalizeText(s?.body) ||
-          normalizeText(s?.content) ||
-          joinParas(s?.paragraphs) ||
-          normalizeText(s?.text) ||
-          "";
-
+        const text = safeStr(s?.body) || safeStr(s?.content) || joinParas(s?.paragraphs) || safeStr(s?.text) || "";
         if (text) blocks.push({ heading: heading || undefined, text });
       }
     }
 
     if (!blocks.length) {
-      const anyText = normalizeText(guide.content) || normalizeText(guide.text) || "";
+      const anyText = safeStr(guide.content) || safeStr(guide.text) || "";
       if (anyText) blocks.push({ heading: undefined, text: anyText });
     }
 
@@ -265,7 +295,7 @@ function getTeamGuideFull(teamKey: string): GuideFull | null {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Guide Modal (same UX as City guide) */
+/* Guide Modal */
 /* -------------------------------------------------------------------------- */
 
 function GuideAccordionSection({
@@ -422,7 +452,9 @@ function FixtureRow({ row, onPressPlan }: { row: FixtureListRow; onPressPlan: ()
       <View style={styles.matchLine}>
         <View style={styles.teamSideLeft}>
           {homeLogo ? <Image source={{ uri: homeLogo }} style={styles.smallCrestImg} resizeMode="contain" /> : null}
-          <Text style={styles.teamNameLeft}>{homeName}</Text>
+          <Text style={styles.teamNameLeft} numberOfLines={2}>
+            {homeName}
+          </Text>
         </View>
 
         <View style={styles.vsPill}>
@@ -430,7 +462,9 @@ function FixtureRow({ row, onPressPlan }: { row: FixtureListRow; onPressPlan: ()
         </View>
 
         <View style={styles.teamSideRight}>
-          <Text style={styles.teamNameRight}>{awayName}</Text>
+          <Text style={styles.teamNameRight} numberOfLines={2}>
+            {awayName}
+          </Text>
           {awayLogo ? <Image source={{ uri: awayLogo }} style={styles.smallCrestImg} resizeMode="contain" /> : null}
         </View>
       </View>
@@ -467,8 +501,12 @@ export default function TeamScreen() {
   const teamKeyParam = safeStr(params.teamKey);
   const teamKey = useMemo(() => normalizeTeamKey(teamKeyParam), [teamKeyParam]);
 
-  const from = toIsoOrEmpty(params.from);
-  const to = toIsoOrEmpty(params.to);
+  // Enforce consistent default window across all entry paths.
+  const rolling = useMemo(() => getRollingWindowIso(), []);
+  const fromParam = toIsoOrEmpty(params.from);
+  const toParam = toIsoOrEmpty(params.to);
+  const from = fromParam || rolling.from;
+  const to = toParam || rolling.to;
 
   const team = useMemo(() => getTeam(teamKey) ?? getTeam(teamKeyParam), [teamKey, teamKeyParam]);
   const league = useMemo(() => (team ? leagueForTeam(team) : null), [team]);
@@ -479,6 +517,15 @@ export default function TeamScreen() {
   const [error, setError] = useState<string | null>(null);
   const [rows, setRows] = useState<FixtureListRow[]>([]);
   const [guideOpen, setGuideOpen] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const cancelRef = useRef(false);
+  useEffect(() => {
+    cancelRef.current = false;
+    return () => {
+      cancelRef.current = true;
+    };
+  }, []);
 
   const canShowGuide = useMemo(() => (team?.teamKey ? hasTeamGuide(team.teamKey) : false), [team]);
 
@@ -488,80 +535,74 @@ export default function TeamScreen() {
     return getTeamGuideFull(team.teamKey);
   }, [team, canShowGuide]);
 
-  // Compute a best-effort country code that can actually render a flag.
-  // Priority: league.countryCode -> team.countryCode -> league.countryName -> team.countryName
-  const countryCode = useMemo(() => {
-    const leagueCode = safeStr((league as any)?.countryCode);
-    if (leagueCode) return leagueCode;
+  // Best-effort flag inputs.
+  const countryCode = safeStr((league as any)?.countryCode) || safeStr((team as any)?.countryCode) || "";
+  const countryName = safeStr((league as any)?.country) || safeStr((team as any)?.country) || "";
 
-    const teamCode = safeStr((team as any)?.countryCode);
-    if (teamCode) return teamCode;
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    setRows([]);
 
-    const leagueCountryName = safeStr((league as any)?.country);
-    const teamCountryName = safeStr((team as any)?.country);
+    try {
+      if (!team || !league) {
+        setError("Team details unavailable (missing team or league mapping).");
+        return;
+      }
 
-    const mapped = normalizeCountryNameToIso2(leagueCountryName || teamCountryName);
-    return mapped || "";
-  }, [league, team]);
+      const res = await getFixtures({
+        league: league.leagueId,
+        season: league.season,
+        from,
+        to,
+      });
+
+      if (cancelRef.current) return;
+
+      const list = Array.isArray(res) ? (res as FixtureListRow[]) : [];
+
+      // HOME FIXTURES for this team only (by teamId).
+      const filtered = typeof team.teamId === "number" ? list.filter((r) => r?.teams?.home?.id === team.teamId) : [];
+
+      const dedup = new Map<string, FixtureListRow>();
+      for (const r of filtered) {
+        const id = r?.fixture?.id != null ? String(r.fixture.id) : "";
+        if (!id) continue;
+        if (!dedup.has(id)) dedup.set(id, r);
+      }
+
+      const cleaned = Array.from(dedup.values()).sort((a, b) => {
+        const da = a?.fixture?.date ? new Date(a.fixture.date).getTime() : 0;
+        const db = b?.fixture?.date ? new Date(b.fixture.date).getTime() : 0;
+        return da - db;
+      });
+
+      setRows(cleaned);
+    } catch (e: any) {
+      if (cancelRef.current) return;
+      setError(e?.message ?? "Failed to load fixtures.");
+    } finally {
+      if (!cancelRef.current) setLoading(false);
+    }
+  }, [team, league, from, to]);
 
   useEffect(() => {
-    let cancelled = false;
+    load().catch(() => null);
+  }, [load]);
 
-    async function run() {
-      setLoading(true);
-      setError(null);
-      setRows([]);
-
-      try {
-        if (!team || !league) {
-          if (!cancelled) {
-            setRows([]);
-            setLoading(false);
-          }
-          return;
-        }
-
-        const res = await getFixtures({
-          league: league.leagueId,
-          season: league.season,
-          from: from || undefined,
-          to: to || undefined,
-        });
-
-        if (cancelled) return;
-
-        const list = Array.isArray(res) ? (res as FixtureListRow[]) : [];
-
-        // ONLY HOME FIXTURES for this team.
-        const filtered = typeof team.teamId === "number" ? list.filter((r) => r?.teams?.home?.id === team.teamId) : [];
-
-        const cleaned = filtered
-          .filter((r) => r?.fixture?.id != null)
-          .sort((a, b) => {
-            const da = a?.fixture?.date ? new Date(a.fixture.date).getTime() : 0;
-            const db = b?.fixture?.date ? new Date(b.fixture.date).getTime() : 0;
-            return da - db;
-          });
-
-        setRows(cleaned);
-      } catch (e: any) {
-        if (cancelled) return;
-        setError(e?.message ?? "Failed to load fixtures.");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await load();
+    } finally {
+      setRefreshing(false);
     }
-
-    run();
-    return () => {
-      cancelled = true;
-    };
-  }, [team, league, from, to]);
+  }, [load]);
 
   const grouped = useMemo(() => groupByMonth(rows), [rows]);
 
   const title = team?.name ?? (teamKeyParam ? teamKeyParam : "Team");
-  const leagueLabel = safeStr(league?.label);
+  const leagueLabel = safeStr((league as any)?.label);
 
   const browseLeagueLabel = useMemo(() => {
     const l = safeStr(leagueLabel);
@@ -576,10 +617,10 @@ export default function TeamScreen() {
     router.push({
       pathname: "/(tabs)/fixtures",
       params: {
-        leagueId: String(league.leagueId),
-        season: String(league.season),
-        from: from || undefined,
-        to: to || undefined,
+        leagueId: String((league as any).leagueId),
+        season: String((league as any).season),
+        from,
+        to,
       },
     } as any);
   }, [router, league, from, to]);
@@ -589,17 +630,19 @@ export default function TeamScreen() {
   }, [router]);
 
   const goPlanTrip = useCallback(
-    (fixtureId: string) => {
+    (row: FixtureListRow) => {
+      const fixtureId = row?.fixture?.id != null ? String(row.fixture.id) : "";
       if (!fixtureId) return;
+
       router.push({
         pathname: "/trip/build",
         params: {
           global: "1",
           fixtureId,
-          leagueId: league ? String(league.leagueId) : undefined,
-          season: league ? String(league.season) : undefined,
-          from: from || undefined,
-          to: to || undefined,
+          leagueId: league ? String((league as any).leagueId) : undefined,
+          season: league ? String((league as any).season) : undefined,
+          from,
+          to,
         },
       } as any);
     },
@@ -608,23 +651,33 @@ export default function TeamScreen() {
 
   const bgSource = bgUrl ? ({ uri: bgUrl } as any) : getBackground("team");
 
-  // Guide preview mirrors the City screen vibe (first section text, clamped)
+  // Guide preview mirrors City screen vibe.
   const guideBlocks = guideFull?.blocks ?? [];
   const overview = guideBlocks.find((b) => safeStr(b.heading).toLowerCase() === "overview")?.text || guideBlocks[0]?.text || "";
   const guidePreview = guideFull ? clampText(overview, 220) : "";
+
   const guideStats = useMemo(() => {
     if (!guideFull) return "";
     const sections = guideBlocks.length;
-    const hasTop = guideBlocks.some((b) => safeStr(b.heading).toLowerCase().includes("top"));
     const hasHistory = guideBlocks.some((b) => safeStr(b.heading).toLowerCase().includes("history"));
-    const parts = [sections ? `${sections} sections` : "", hasTop ? "key notes" : "", hasHistory ? "history" : ""].filter(Boolean);
+    const hasTravel = guideBlocks.some((b) => safeStr(b.heading).toLowerCase().includes("travel"));
+    const parts = [
+      sections ? `${sections} sections` : "",
+      hasTravel ? "practical travel" : "",
+      hasHistory ? "history" : "",
+    ].filter(Boolean);
     return parts.join(" • ");
   }, [guideFull, guideBlocks]);
 
   return (
     <Background imageSource={bgSource} overlayOpacity={0.7}>
       <SafeAreaView style={styles.container} edges={["top"]}>
-        <ScrollView style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.textSecondary} />}
+        >
           {/* HERO */}
           <GlassCard strength="strong" style={styles.hero} noPadding>
             <View style={styles.heroInner}>
@@ -634,13 +687,12 @@ export default function TeamScreen() {
                 <TeamCrestHero teamId={team?.teamId} />
 
                 <View style={{ flex: 1, minWidth: 0 }}>
-                  {/* Team name + FLAG (flag is visually next to team name) */}
                   <View style={styles.heroNameRow}>
                     <Text style={styles.heroTitle} numberOfLines={2} ellipsizeMode="tail">
                       {title}
                     </Text>
-                    {/* Always attempt to show a flag beside team name */}
-                    {countryCode ? <FlagMini countryCode={countryCode} /> : null}
+
+                    <FlagMini countryCode={countryCode} countryName={countryName} />
                   </View>
 
                   <View style={styles.heroMetaRow}>
@@ -737,7 +789,7 @@ export default function TeamScreen() {
                         {g.rows.map((r, idx) => {
                           const id = r?.fixture?.id != null ? String(r.fixture.id) : "";
                           const stableKey = id ? `fx-${id}` : `fx-${g.key}-${idx}`;
-                          return <FixtureRow key={stableKey} row={r} onPressPlan={() => (id ? goPlanTrip(id) : null)} />;
+                          return <FixtureRow key={stableKey} row={r} onPressPlan={() => goPlanTrip(r)} />;
                         })}
                       </View>
                     </View>
@@ -750,7 +802,7 @@ export default function TeamScreen() {
           <View style={{ height: 14 }} />
         </ScrollView>
 
-        {/* TEAM GUIDE MODAL (same open UX as City guide) */}
+        {/* TEAM GUIDE MODAL */}
         <GuideModal
           visible={guideOpen}
           onClose={() => setGuideOpen(false)}
@@ -794,14 +846,12 @@ const styles = StyleSheet.create({
   },
   heroCrestImg: { width: 46, height: 46, opacity: 0.98 },
 
-  // Team name row with flag visually next to the title
   heroNameRow: { flexDirection: "row", alignItems: "center", gap: 10, flexWrap: "nowrap" },
   heroTitle: { flex: 1, minWidth: 0, color: theme.colors.text, fontSize: 28, lineHeight: 34, fontWeight: theme.fontWeight.black },
 
   heroMetaRow: { marginTop: 6, flexDirection: "row", alignItems: "center", gap: 10, flexWrap: "wrap" },
   heroMetaText: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.black },
 
-  // Flag mini (works for team + any other spots)
   flagMini: { width: 20, height: 14, borderRadius: 3, opacity: 0.9 },
 
   heroRange: { color: theme.colors.textTertiary, fontSize: 13, fontWeight: theme.fontWeight.bold, marginTop: 2 },
@@ -839,7 +889,6 @@ const styles = StyleSheet.create({
 
   month: { color: theme.colors.textTertiary, fontSize: 13, fontWeight: theme.fontWeight.black, letterSpacing: 0.2 },
 
-  // Fixture row
   fxRow: {
     borderRadius: 18,
     borderWidth: 1,
@@ -854,8 +903,8 @@ const styles = StyleSheet.create({
   teamSideLeft: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 8 },
   teamSideRight: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 8 },
 
-  teamNameLeft: { flex: 1, minWidth: 0, color: theme.colors.text, fontSize: 14, fontWeight: theme.fontWeight.black, flexWrap: "wrap" },
-  teamNameRight: { flex: 1, minWidth: 0, textAlign: "right", color: theme.colors.text, fontSize: 14, fontWeight: theme.fontWeight.black, flexWrap: "wrap" },
+  teamNameLeft: { flex: 1, minWidth: 0, color: theme.colors.text, fontSize: 14, fontWeight: theme.fontWeight.black },
+  teamNameRight: { flex: 1, minWidth: 0, textAlign: "right", color: theme.colors.text, fontSize: 14, fontWeight: theme.fontWeight.black },
 
   vsPill: {
     flexShrink: 0,
@@ -887,7 +936,6 @@ const styles = StyleSheet.create({
   },
   planBtnText: { color: theme.colors.text, fontSize: 12, fontWeight: theme.fontWeight.black },
 
-  // Guide modal styles (mirrors City screen)
   modalSafe: { flex: 1, paddingHorizontal: theme.spacing.lg },
   modalTop: { paddingTop: theme.spacing.md, paddingBottom: theme.spacing.md, flexDirection: "row", alignItems: "center", gap: 12 },
   modalKicker: { color: "rgba(79,224,138,0.70)", fontSize: 11, fontWeight: theme.fontWeight.black, letterSpacing: 0.5 },
