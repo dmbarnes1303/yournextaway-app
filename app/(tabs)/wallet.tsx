@@ -9,8 +9,10 @@ import {
   Alert,
   ActivityIndicator,
   Platform,
+  TextInput,
+  Keyboard,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect } from "expo-router";
 
 import * as DocumentPicker from "expo-document-picker";
@@ -51,7 +53,68 @@ const CATEGORIES = [
 type CategoryId = (typeof CATEGORIES)[number]["id"];
 type UploadKind = "camera" | "photo" | "document";
 
+function cleanString(v: unknown) {
+  return typeof v === "string" ? v.trim() : String(v ?? "").trim();
+}
+
+function shortKeyName(key: string) {
+  const parts = String(key || "").split("/").filter(Boolean);
+  return parts[parts.length - 1] || key;
+}
+
+function formatSize(bytes: number) {
+  const b = Number(bytes || 0);
+  if (!Number.isFinite(b) || b <= 0) return "—";
+  const kb = b / 1024;
+  if (kb < 1024) return `${Math.max(1, Math.round(kb))} KB`;
+  return `${(kb / 1024).toFixed(1)} MB`;
+}
+
+function formatDate(uploaded?: string) {
+  if (!uploaded) return null;
+  const d = new Date(uploaded);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+function extractCategoryFromKey(key: string): CategoryId {
+  // wallet/{userId}/{tripId}/{category}/...
+  const parts = String(key || "").split("/").filter(Boolean);
+  const raw = cleanString(parts[3] || "").toLowerCase();
+
+  // tolerate aliases (future-proof)
+  if (raw === "transfer") return "transfers";
+  if (raw === "stay" || raw === "stays") return "hotel";
+
+  const found = CATEGORIES.find((c) => c.id === raw);
+  return (found?.id as CategoryId) || "misc";
+}
+
+function iconForCategory(cat: CategoryId) {
+  switch (cat) {
+    case "tickets":
+      return "🎟️";
+    case "hotel":
+      return "🏨";
+    case "flight":
+      return "✈️";
+    case "insurance":
+      return "🛡️";
+    case "transfers":
+      return "🚕";
+    case "misc":
+    default:
+      return "📎";
+  }
+}
+
+function defer(fn: () => void) {
+  setTimeout(fn, 50);
+}
+
 export default function WalletScreen() {
+  const insets = useSafeAreaInsets();
+
   const [userId, setUserId] = useState<string>("");
   const [tripId] = useState<string>("general"); // wire real trip ids later
   const [category, setCategory] = useState<CategoryId>("all");
@@ -60,15 +123,17 @@ export default function WalletScreen() {
   const [uploading, setUploading] = useState(false);
   const [docs, setDocs] = useState<WalletDoc[]>([]);
 
+  const [query, setQuery] = useState("");
+
   const prefix = useMemo(() => {
-    if (!userId) return walletPrefixForTrip({ userId: "anon", tripId });
-    if (category === "all") return walletPrefixForTrip({ userId, tripId });
-    return walletPrefixForTrip({ userId, tripId, category });
+    const uid = userId || "anon";
+    if (category === "all") return walletPrefixForTrip({ userId: uid, tripId });
+    return walletPrefixForTrip({ userId: uid, tripId, category });
   }, [userId, tripId, category]);
 
   const loadUser = useCallback(async () => {
     const uid = await identity.getWalletUserId();
-    setUserId(uid);
+    setUserId(cleanString(uid));
   }, []);
 
   const loadDocs = useCallback(async () => {
@@ -76,7 +141,8 @@ export default function WalletScreen() {
 
     try {
       setLoading(true);
-      const res = await walletList({ prefix, limit: 200 });
+      const res = await walletList({ prefix, limit: 250 });
+
       const items = (res.items || []).map((i) => ({
         key: i.key,
         size: i.size,
@@ -99,62 +165,59 @@ export default function WalletScreen() {
   }, [loadUser]);
 
   useEffect(() => {
+    if (!userId) return;
     loadDocs().catch(() => null);
-  }, [loadDocs]);
+  }, [userId, loadDocs]);
 
   useFocusEffect(
     useCallback(() => {
+      if (!userId) return;
       loadDocs().catch(() => null);
-    }, [loadDocs])
+    }, [userId, loadDocs])
   );
 
-  function formatSize(bytes: number) {
-    const b = Number(bytes || 0);
-    if (!Number.isFinite(b) || b <= 0) return "—";
-    const kb = b / 1024;
-    if (kb < 1024) return `${Math.max(1, Math.round(kb))} KB`;
-    return `${(kb / 1024).toFixed(1)} MB`;
-  }
+  /* ------------------------------ derived ------------------------------ */
 
-  function formatDate(uploaded?: string) {
-    if (!uploaded) return null;
-    const d = new Date(uploaded);
-    if (Number.isNaN(d.getTime())) return null;
-    // Keep it simple + consistent; you can later add a proper formatter util.
-    return d.toLocaleDateString();
-  }
+  const countsByCategory = useMemo(() => {
+    const base: Record<CategoryId, number> = {
+      all: docs.length,
+      tickets: 0,
+      hotel: 0,
+      flight: 0,
+      insurance: 0,
+      transfers: 0,
+      misc: 0,
+    };
 
-  function extractCategoryFromKey(key: string): CategoryId {
-    // wallet/{userId}/{tripId}/{category}/...
-    const parts = String(key || "").split("/").filter(Boolean);
-    const cat = parts[3] || "";
-    const found = CATEGORIES.find((c) => c.id === cat);
-    return (found?.id as CategoryId) || "misc";
-  }
-
-  function iconForCategory(cat: CategoryId) {
-    switch (cat) {
-      case "tickets":
-        return "🎟️";
-      case "hotel":
-        return "🏨";
-      case "flight":
-        return "✈️";
-      case "insurance":
-        return "🛡️";
-      case "transfers":
-        return "🚕";
-      case "misc":
-      default:
-        return "📎";
+    for (const d of docs) {
+      const cat = extractCategoryFromKey(d.key);
+      base[cat] = (base[cat] || 0) + 1;
     }
-  }
 
-  async function pickAsset(kind: UploadKind): Promise<{
-    uri: string;
-    name: string;
-    mimeType: string;
-  } | null> {
+    base.all = docs.length;
+    return base;
+  }, [docs]);
+
+  const visibleDocs = useMemo(() => {
+    const q = cleanString(query).toLowerCase();
+    if (!q) return docs;
+
+    return docs.filter((d) => {
+      const name = shortKeyName(d.key).toLowerCase();
+      const cat = extractCategoryFromKey(d.key);
+      return name.includes(q) || cat.includes(q);
+    });
+  }, [docs, query]);
+
+  const totalSizeBytes = useMemo(() => {
+    return docs.reduce((sum, d) => sum + (Number(d.size) || 0), 0);
+  }, [docs]);
+
+  const headerSubtitle = "Offline-friendly storage for confirmations, PDFs, and screenshots.";
+
+  /* ------------------------------ upload ------------------------------ */
+
+  async function pickAsset(kind: UploadKind): Promise<{ uri: string; name: string; mimeType: string } | null> {
     if (kind === "document") {
       const picked = await DocumentPicker.getDocumentAsync({
         multiple: false,
@@ -173,7 +236,6 @@ export default function WalletScreen() {
       };
     }
 
-    // Photos (camera or library)
     const needsCamera = kind === "camera";
     if (needsCamera) {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
@@ -218,18 +280,9 @@ export default function WalletScreen() {
 
     Alert.alert("Upload to Travel Wallet", "Choose what you want to upload.", [
       { text: "Cancel", style: "cancel" },
-      {
-        text: "Take photo",
-        onPress: () => pickAndUpload("camera").catch(() => null),
-      },
-      {
-        text: "Choose photo",
-        onPress: () => pickAndUpload("photo").catch(() => null),
-      },
-      {
-        text: "Choose document",
-        onPress: () => pickAndUpload("document").catch(() => null),
-      },
+      { text: "Take photo", onPress: () => pickAndUpload("camera").catch(() => null) },
+      { text: "Choose photo", onPress: () => pickAndUpload("photo").catch(() => null) },
+      { text: "Choose document", onPress: () => pickAndUpload("document").catch(() => null) },
     ]);
   }
 
@@ -262,6 +315,8 @@ export default function WalletScreen() {
     }
   }
 
+  /* ------------------------------ actions ------------------------------ */
+
   async function viewDoc(key: string) {
     try {
       await walletOpenOrShare({ key });
@@ -277,7 +332,6 @@ export default function WalletScreen() {
         text: "Delete",
         style: "destructive",
         onPress: async () => {
-          // Optimistic remove (keeps UI snappy even if list refresh is slow)
           const prev = docs;
           setDocs((d) => d.filter((x) => x.key !== key));
 
@@ -293,15 +347,41 @@ export default function WalletScreen() {
     ]);
   }
 
+  /* ------------------------------ UI bits ------------------------------ */
+
+  function Chip({ id, label }: { id: CategoryId; label: string }) {
+    const active = id === category;
+    const count = countsByCategory[id] ?? 0;
+
+    return (
+      <Pressable
+        onPress={() => {
+          setCategory(id);
+          defer(() => loadDocs().catch(() => null)); // refresh because prefix changes
+        }}
+        style={[styles.chip, active && styles.chipActive]}
+      >
+        <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
+        <View style={[styles.chipCount, active && styles.chipCountActive]}>
+          <Text style={[styles.chipCountText, active && styles.chipCountTextActive]}>{count}</Text>
+        </View>
+      </Pressable>
+    );
+  }
+
   function DocRow({ d }: { d: WalletDoc }) {
-    const filename = d.key.split("/").pop() || d.key;
+    const filename = shortKeyName(d.key);
     const cat = extractCategoryFromKey(d.key);
     const date = formatDate(d.uploaded);
     const size = formatSize(d.size);
 
     return (
       <GlassCard style={styles.docCard}>
-        <View style={styles.docRow}>
+        <Pressable
+          onPress={() => viewDoc(d.key)}
+          style={({ pressed }) => [styles.docRow, pressed && { opacity: 0.92 }]}
+          android_ripple={{ color: "rgba(255,255,255,0.05)" }}
+        >
           <View style={styles.docIconWrap}>
             <Text style={styles.docIcon}>{iconForCategory(cat)}</Text>
           </View>
@@ -310,8 +390,11 @@ export default function WalletScreen() {
             <Text style={styles.docTitle} numberOfLines={1}>
               {filename}
             </Text>
+
             <Text style={styles.docMeta} numberOfLines={1}>
-              {(date ? `${date} • ` : "") + size}
+              {`${CATEGORIES.find((c) => c.id === cat)?.label ?? "Misc"} • ${size}${
+                date ? ` • ${date}` : ""
+              }`}
             </Text>
           </View>
 
@@ -324,54 +407,72 @@ export default function WalletScreen() {
               <Text style={styles.smallBtnText}>Delete</Text>
             </Pressable>
           </View>
-        </View>
+        </Pressable>
       </GlassCard>
     );
   }
 
-  const headerSubtitle = "Store confirmations and documents in one place.";
+  /* -------------------------------- render -------------------------------- */
 
   return (
-    <Background imageSource={getBackground("wallet")} overlayOpacity={0.78}>
+    <Background imageSource={getBackground("wallet")} overlayOpacity={0.80}>
       <SafeAreaView style={styles.safe} edges={["top"]}>
         <ScrollView
           style={styles.scroll}
-          contentContainerStyle={styles.content}
+          contentContainerStyle={[styles.content, { paddingBottom: 120 + insets.bottom }]}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
         >
-          {/* Header */}
-          <View style={styles.headerRow}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.h1}>Travel Wallet</Text>
-              <Text style={styles.h2}>{headerSubtitle}</Text>
+          {/* HERO */}
+          <GlassCard style={styles.hero}>
+            <View style={styles.heroTop}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.kicker}>WALLET</Text>
+                <Text style={styles.h1}>Travel Wallet</Text>
+                <Text style={styles.h2}>{headerSubtitle}</Text>
+              </View>
+
+              <Pressable
+                style={[styles.uploadBtn, (uploading || !userId) && { opacity: 0.6 }]}
+                onPress={chooseUploadSource}
+                disabled={uploading || !userId}
+              >
+                {uploading ? <ActivityIndicator /> : <Text style={styles.uploadText}>Upload</Text>}
+              </Pressable>
             </View>
 
-            <Pressable
-              style={[styles.uploadBtn, (uploading || !userId) && { opacity: 0.6 }]}
-              onPress={chooseUploadSource}
-              disabled={uploading || !userId}
-            >
-              {uploading ? <ActivityIndicator /> : <Text style={styles.uploadText}>Upload</Text>}
-            </Pressable>
-          </View>
+            <View style={styles.metricsRow}>
+              <Metric label="Docs" value={String(docs.length)} />
+              <Metric label="Storage" value={formatSize(totalSizeBytes)} />
+              <Metric label="Trip" value={tripId === "general" ? "General" : tripId} />
+            </View>
 
-          {/* Chips */}
-          <View style={styles.chipsRow}>
-            {CATEGORIES.map((c) => {
-              const active = c.id === category;
-              return (
-                <Pressable
-                  key={c.id}
-                  onPress={() => setCategory(c.id)}
-                  style={[styles.chip, active && styles.chipActive]}
-                >
-                  <Text style={[styles.chipText, active && styles.chipTextActive]}>{c.label}</Text>
+            <View style={styles.searchRow}>
+              <TextInput
+                value={query}
+                onChangeText={setQuery}
+                placeholder="Search documents…"
+                placeholderTextColor={theme.colors.textSecondary}
+                style={styles.searchInput}
+                returnKeyType="search"
+                onSubmitEditing={() => Keyboard.dismiss()}
+              />
+              {query ? (
+                <Pressable onPress={() => setQuery("")} style={styles.clearBtn}>
+                  <Text style={styles.clearBtnText}>Clear</Text>
                 </Pressable>
-              );
-            })}
+              ) : null}
+            </View>
+          </GlassCard>
+
+          {/* CHIPS */}
+          <View style={styles.chipsRow}>
+            {CATEGORIES.map((c) => (
+              <Chip key={c.id} id={c.id} label={c.label} />
+            ))}
           </View>
 
-          {/* Body */}
+          {/* BODY */}
           {!userId ? (
             <GlassCard style={styles.stateCard}>
               <View style={styles.center}>
@@ -386,11 +487,15 @@ export default function WalletScreen() {
                 <Text style={styles.muted}>Loading documents…</Text>
               </View>
             </GlassCard>
-          ) : docs.length === 0 ? (
+          ) : visibleDocs.length === 0 ? (
             <GlassCard style={styles.stateCard}>
               <EmptyState
-                title="No documents yet"
-                message="Upload confirmations, tickets, receipts, or anything you want kept safe for the trip."
+                title={docs.length === 0 ? "No documents yet" : "Nothing matches your search"}
+                message={
+                  docs.length === 0
+                    ? "Upload confirmations, tickets, receipts, or anything you want kept safe."
+                    : "Try a different search term, or clear the filter."
+                }
               />
               <View style={{ height: 10 }} />
               <Pressable style={styles.primaryCta} onPress={chooseUploadSource}>
@@ -399,18 +504,31 @@ export default function WalletScreen() {
             </GlassCard>
           ) : (
             <View style={{ gap: 10 }}>
-              {docs.map((d) => (
+              {visibleDocs.map((d) => (
                 <DocRow key={d.key} d={d} />
               ))}
             </View>
           )}
-
-          <View style={{ height: 18 }} />
         </ScrollView>
       </SafeAreaView>
     </Background>
   );
 }
+
+/* -------------------------------- UI atoms -------------------------------- */
+
+function Metric({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.metric}>
+      <Text style={styles.metricVal} numberOfLines={1}>
+        {value}
+      </Text>
+      <Text style={styles.metricKey}>{label}</Text>
+    </View>
+  );
+}
+
+/* -------------------------------- Styles -------------------------------- */
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },
@@ -419,33 +537,38 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: theme.spacing.lg,
     paddingTop: theme.spacing.lg,
-    paddingBottom: 110,
     gap: theme.spacing.lg,
   },
 
-  headerRow: {
+  hero: { padding: theme.spacing.lg, borderRadius: 24 },
+
+  heroTop: {
     flexDirection: "row",
     alignItems: "flex-start",
     justifyContent: "space-between",
     gap: 12,
   },
 
+  kicker: { color: theme.colors.primary, fontWeight: theme.fontWeight.black, fontSize: 11, letterSpacing: 1.2 },
+
   h1: {
+    marginTop: 6,
     color: theme.colors.text,
-    fontSize: 30,
+    fontSize: 28,
     fontWeight: theme.fontWeight.black,
     letterSpacing: -0.3,
   },
   h2: {
     marginTop: 6,
     color: theme.colors.textSecondary,
-    fontSize: theme.fontSize.sm,
-    fontWeight: "700",
+    fontSize: 13,
+    fontWeight: theme.fontWeight.bold,
+    lineHeight: 18,
   },
 
   uploadBtn: {
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.22)",
+    borderColor: "rgba(255,255,255,0.18)",
     backgroundColor: "rgba(0,0,0,0.22)",
     paddingHorizontal: 14,
     paddingVertical: 10,
@@ -456,8 +579,54 @@ const styles = StyleSheet.create({
   },
   uploadText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.sm },
 
+  metricsRow: { marginTop: 12, flexDirection: "row", gap: 10 },
+
+  metric: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: Platform.OS === "android" ? "rgba(10,12,14,0.18)" : "rgba(10,12,14,0.14)",
+    borderRadius: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    alignItems: "center",
+  },
+  metricVal: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: 14 },
+  metricKey: { marginTop: 3, color: theme.colors.textTertiary, fontWeight: theme.fontWeight.black, fontSize: 11 },
+
+  searchRow: {
+    marginTop: 12,
+    flexDirection: "row",
+    gap: 10,
+    alignItems: "center",
+  },
+  searchInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    backgroundColor: "rgba(0,0,0,0.16)",
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: Platform.OS === "ios" ? 12 : 10,
+    color: theme.colors.text,
+    fontWeight: theme.fontWeight.bold,
+  },
+  clearBtn: {
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    backgroundColor: "rgba(0,0,0,0.16)",
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  clearBtnText: { color: theme.colors.textSecondary, fontWeight: theme.fontWeight.black, fontSize: 12 },
+
   chipsRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+
   chip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.14)",
     backgroundColor: "rgba(0,0,0,0.16)",
@@ -472,23 +641,41 @@ const styles = StyleSheet.create({
   chipText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: 12 },
   chipTextActive: { color: theme.colors.text },
 
-  stateCard: { padding: theme.spacing.lg },
+  chipCount: {
+    minWidth: 22,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    alignItems: "center",
+  },
+  chipCountActive: {
+    backgroundColor: "rgba(0,0,0,0.22)",
+    borderColor: "rgba(255,255,255,0.16)",
+  },
+  chipCountText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: 11 },
+  chipCountTextActive: { color: theme.colors.text, fontWeight: "900" },
+
+  stateCard: { padding: theme.spacing.lg, borderRadius: 24 },
 
   center: { paddingVertical: 10, alignItems: "center", gap: 10 },
   muted: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, fontWeight: "700" },
 
   primaryCta: {
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.22)",
-    backgroundColor: "rgba(0,0,0,0.28)",
+    borderColor: "rgba(255,255,255,0.18)",
+    backgroundColor: "rgba(0,0,0,0.26)",
     paddingVertical: 12,
-    borderRadius: 14,
+    borderRadius: 16,
     alignItems: "center",
   },
   primaryCtaText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.md },
 
-  docCard: { padding: 14 },
-  docRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  docCard: { padding: 0, borderRadius: 18 },
+
+  docRow: { flexDirection: "row", alignItems: "center", gap: 12, padding: 14 },
 
   docIconWrap: {
     width: 44,
@@ -507,6 +694,7 @@ const styles = StyleSheet.create({
   docMeta: { marginTop: 4, color: theme.colors.textSecondary, fontWeight: "700", fontSize: 12 },
 
   docActions: { flexDirection: "column", gap: 8, alignItems: "stretch" },
+
   smallBtn: {
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.14)",
