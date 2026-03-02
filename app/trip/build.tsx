@@ -26,7 +26,16 @@ import { theme } from "@/src/constants/theme";
 import { getFixtures, getFixtureById, getFixturesByRound, type FixtureListRow } from "@/src/services/apiFootball";
 import tripsStore, { type Trip } from "@/src/state/trips";
 
-import { LEAGUES, addDaysIso, clampFromIsoToTomorrow, type LeagueOption } from "@/src/constants/football";
+import {
+  LEAGUES,
+  DEFAULT_SEASON,
+  addDaysIso,
+  clampFromIsoToTomorrow,
+  getRollingWindowIso,
+  normalizeWindowIso,
+  type LeagueOption,
+} from "@/src/constants/football";
+
 import { formatUkDateTimeMaybe } from "@/src/utils/formatters";
 import { computeLikelyPlaceholderTbcIds, isKickoffTbc } from "@/src/utils/kickoffTbc";
 
@@ -35,16 +44,11 @@ import { computeLikelyPlaceholderTbcIds, isKickoffTbc } from "@/src/utils/kickof
 /* -------------------------------------------------------------------------- */
 
 const FREE_TRIP_CAP = 5;
+const FIXTURE_WINDOW_DAYS = 90; // ✅ contract-aligned default
 
 /* -------------------------------------------------------------------------- */
 /* helpers                                                                     */
 /* -------------------------------------------------------------------------- */
-
-function currentFootballSeasonStartYear(now = new Date()): number {
-  const y = now.getFullYear();
-  const m = now.getMonth(); // 0=Jan
-  return m >= 6 ? y : y - 1;
-}
 
 function paramString(v: unknown): string | null {
   if (typeof v === "string") return v.trim() || null;
@@ -167,13 +171,16 @@ function buildTripSnapshot(selectedFixture: FixtureListRow, placeholderTbcIds: S
   };
 }
 
-async function computePlaceholderIdsForFixture(fx: FixtureListRow | null, seasonOverride?: number | null): Promise<Set<string>> {
+async function computePlaceholderIdsForFixture(
+  fx: FixtureListRow | null,
+  seasonOverride?: number | null
+): Promise<Set<string>> {
   if (!fx) return new Set();
 
   const leagueId = fx?.league?.id ?? null;
   const season =
     seasonOverride ??
-    (typeof (fx as any)?.league?.season === "number" ? (fx as any).league.season : currentFootballSeasonStartYear());
+    (typeof (fx as any)?.league?.season === "number" ? (fx as any).league.season : DEFAULT_SEASON);
   const round = cleanText(fx?.league?.round);
 
   if (!leagueId || !season || !round) return new Set();
@@ -221,7 +228,7 @@ export default function TripBuildScreen() {
   const routeFixtureId = useMemo(() => paramString((params as any)?.fixtureId), [params]);
   const routeCityArea = useMemo(() => paramString((params as any)?.cityArea), [params]);
 
-  // --- NEW: optional context params (from Trip Detail / elsewhere) ---
+  // --- optional context params (from Trip Detail / elsewhere) ---
   const routeFrom = useMemo(() => paramString((params as any)?.from), [params]);
   const routeTo = useMemo(() => paramString((params as any)?.to), [params]);
   const routeCity = useMemo(() => paramString((params as any)?.city), [params]);
@@ -243,7 +250,8 @@ export default function TripBuildScreen() {
 
   const [selectedFixture, setSelectedFixture] = useState<FixtureListRow | null>(null);
 
-  // Dates default: tomorrow → +2 nights, but allow route from/to to override
+  // Trip dates (NOT the fixture fetch window)
+  // Default: tomorrow → +2 nights, but allow route from/to to override
   const initialStart = useMemo(() => {
     if (isIsoDateOnly(routeFrom)) return clampFromIsoToTomorrow(routeFrom!);
     return clampFromIsoToTomorrow(new Date().toISOString().slice(0, 10));
@@ -279,6 +287,21 @@ export default function TripBuildScreen() {
   }, []);
 
   /* ------------------------------------------------------------------------ */
+  /* ✅ Fixture fetch window (contract-aligned via football.ts)                */
+  /* ------------------------------------------------------------------------ */
+
+  const fixtureWindow = useMemo(() => {
+    const hasExplicit = isIsoDateOnly(routeFrom) || isIsoDateOnly(routeTo);
+    if (hasExplicit) {
+      return normalizeWindowIso(
+        { from: String(routeFrom ?? "").trim(), to: String(routeTo ?? "").trim() },
+        FIXTURE_WINDOW_DAYS
+      );
+    }
+    return getRollingWindowIso({ days: FIXTURE_WINDOW_DAYS });
+  }, [routeFrom, routeTo]);
+
+  /* ------------------------------------------------------------------------ */
   /* League options                                                            */
   /* ------------------------------------------------------------------------ */
 
@@ -286,7 +309,7 @@ export default function TripBuildScreen() {
     () => ({
       label: "All leagues",
       leagueId: 0,
-      season: LEAGUES[0]?.season ?? currentFootballSeasonStartYear(),
+      season: DEFAULT_SEASON,
       countryCode: "EU",
       key: "all",
     }),
@@ -351,7 +374,7 @@ export default function TripBuildScreen() {
         const primary = cleanText((t as any)?.fixtureIdPrimary) || (mids[0] ? String(mids[0]) : "");
         setExistingPrimaryId(primary || null);
 
-        // Prefer trip dates; if route from/to passed, they override (useful when calling build from other places)
+        // Prefer trip dates; if route from/to passed, they override
         const nextStart = isIsoDateOnly(routeFrom) ? clampFromIsoToTomorrow(routeFrom!) : t.startDate;
         const nextEnd = isIsoDateOnly(routeTo) ? String(routeTo) : t.endDate;
 
@@ -466,13 +489,11 @@ export default function TripBuildScreen() {
       setError(null);
 
       try {
-        // Use passed window if provided (e.g. adding a match to an existing trip),
-        // else default to tomorrow → +30 days.
-        const from = isIsoDateOnly(routeFrom)
-          ? clampFromIsoToTomorrow(routeFrom!)
-          : clampFromIsoToTomorrow(new Date().toISOString().slice(0, 10));
-
-        const to = isIsoDateOnly(routeTo) ? String(routeTo) : addDaysIso(from, 30);
+        // ✅ contract-aligned fixture fetch window:
+        // - if route from/to provided => normalizeWindowIso
+        // - else => getRollingWindowIso (tomorrow onwards), default 90 days
+        const from = fixtureWindow.from;
+        const to = fixtureWindow.to;
 
         let res: FixtureListRow[] = [];
 
@@ -521,7 +542,7 @@ export default function TripBuildScreen() {
     return () => {
       cancelled = true;
     };
-  }, [selectedLeague, isPrefilledFlow, routeFrom, routeTo]);
+  }, [selectedLeague, isPrefilledFlow, fixtureWindow]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -845,16 +866,8 @@ export default function TripBuildScreen() {
 
               <View style={styles.teamRow}>
                 <View style={styles.crestStack}>
-                  {selectedHomeLogo ? (
-                    <Image source={{ uri: selectedHomeLogo }} style={styles.crest} />
-                  ) : (
-                    <View style={styles.crestFallback} />
-                  )}
-                  {selectedAwayLogo ? (
-                    <Image source={{ uri: selectedAwayLogo }} style={[styles.crest, { marginLeft: -10 }]} />
-                  ) : (
-                    <View style={[styles.crestFallback, { marginLeft: -10 }]} />
-                  )}
+                  {selectedHomeLogo ? <Image source={{ uri: selectedHomeLogo }} style={styles.crest} /> : <View style={styles.crestFallback} />}
+                  {selectedAwayLogo ? <Image source={{ uri: selectedAwayLogo }} style={[styles.crest, { marginLeft: -10 }]} /> : <View style={[styles.crestFallback, { marginLeft: -10 }]} />}
                 </View>
 
                 <View style={{ flex: 1 }}>
@@ -894,9 +907,7 @@ export default function TripBuildScreen() {
                 <View style={styles.primaryRow}>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.primaryTitle}>Set as primary match</Text>
-                    <Text style={styles.primarySub}>
-                      Primary match drives kickoff banner + stay guidance + planning defaults.
-                    </Text>
+                    <Text style={styles.primarySub}>Primary match drives kickoff banner + stay guidance + planning defaults.</Text>
                   </View>
                   <Switch value={setAsPrimaryOnSave} onValueChange={setSetAsPrimaryOnSave} />
                 </View>
@@ -905,8 +916,7 @@ export default function TripBuildScreen() {
               {routeCityArea ? (
                 <View style={styles.infoBar}>
                   <Text style={styles.infoText}>
-                    Prefilled stay area:{" "}
-                    <Text style={{ fontWeight: "900", color: theme.colors.text }}>{routeCityArea}</Text>
+                    Prefilled stay area: <Text style={{ fontWeight: "900", color: theme.colors.text }}>{routeCityArea}</Text>
                   </Text>
                 </View>
               ) : null}
@@ -926,9 +936,7 @@ export default function TripBuildScreen() {
           {showPickerMode && !prefillLoading && !error ? (
             <GlassCard level="default">
               <Text style={styles.h1}>{isEditing ? "Add a match" : "Pick a match"}</Text>
-              <Text style={styles.hint}>
-                {isEditing ? "Select another match to add it to this trip." : "Choose a match to start a trip around it."}
-              </Text>
+              <Text style={styles.hint}>{isEditing ? "Select another match to add it to this trip." : "Choose a match to start a trip around it."}</Text>
 
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 12 }}>
                 {leagueOptions.map((l) => {
@@ -989,21 +997,13 @@ export default function TripBuildScreen() {
                         setPlaceholderTbcIds(ids);
                         setError(null);
                       }}
-                      style={({ pressed }) => [
-                        styles.fxCard,
-                        selected && styles.fxCardSelected,
-                        { opacity: pressed ? 0.9 : 1 },
-                      ]}
+                      style={({ pressed }) => [styles.fxCard, selected && styles.fxCardSelected, { opacity: pressed ? 0.9 : 1 }]}
                     >
                       <View style={styles.fxTop}>
                         <View style={styles.fxLeft}>
                           <View style={styles.crestStack}>
                             {homeLogo ? <Image source={{ uri: homeLogo }} style={styles.crest} /> : <View style={styles.crestFallback} />}
-                            {awayLogo ? (
-                              <Image source={{ uri: awayLogo }} style={[styles.crest, { marginLeft: -10 }]} />
-                            ) : (
-                              <View style={[styles.crestFallback, { marginLeft: -10 }]} />
-                            )}
+                            {awayLogo ? <Image source={{ uri: awayLogo }} style={[styles.crest, { marginLeft: -10 }]} /> : <View style={[styles.crestFallback, { marginLeft: -10 }]} />}
                           </View>
 
                           <View style={{ flex: 1 }}>
@@ -1058,9 +1058,7 @@ export default function TripBuildScreen() {
                       <View style={styles.fxSelectRow}>
                         <View style={{ flex: 1 }} />
                         <View style={[styles.selectPill, selected && styles.selectPillActive]}>
-                          <Text style={[styles.selectPillText, selected && styles.selectPillTextActive]}>
-                            {selected ? "Selected" : "Select"}
-                          </Text>
+                          <Text style={[styles.selectPillText, selected && styles.selectPillTextActive]}>{selected ? "Selected" : "Select"}</Text>
                         </View>
                       </View>
                     </Pressable>
