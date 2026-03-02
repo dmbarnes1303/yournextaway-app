@@ -1,18 +1,22 @@
+// src/constants/theme.ts
+
 /**
  * YourNextAway Theme (V2 — Premium Sporty Dark, 2026)
  *
  * Design system rules:
  * - Dark theme only
  * - Strict spacing, radius, and type scales
- * - Surfaces are matte; glass is for overlays only (handled elsewhere)
+ * - Surfaces are matte; blur/glass is for overlays only
  *
- * Palette (locked by Dan):
+ * Palette (locked):
  * - Dark grey: #171A17
  * - Green:     #57A238
  * - Blue:      #0B2555
  * - Gold:      EU flag gold (here: #F2C94C)
  *
- * NOTE: Backwards-compatible aliases are kept to avoid breaking older screens.
+ * NOTE:
+ * We KEEP backwards-compatible aliases to avoid breaking older screens
+ * while we migrate them to V2 primitives.
  */
 
 export const theme = {
@@ -53,7 +57,7 @@ export const theme = {
     error: "#D64545",
 
     // ---------------------------
-    // Lines (keep subtle; avoid borders as layout crutch)
+    // Lines
     // ---------------------------
     borderSubtle: "rgba(231,236,231,0.06)",
     dividerSubtle: "rgba(231,236,231,0.06)",
@@ -66,6 +70,9 @@ export const theme = {
 
     text: "#E7ECE7",
 
+    // Older screens use textTertiary for "muted" helper copy
+    textTertiary: "#6B736B",
+
     primary: "#57A238",
     primaryDark: "rgba(87,162,56,0.78)",
     primaryLight: "rgba(87,162,56,0.95)",
@@ -76,11 +83,28 @@ export const theme = {
     divider: "rgba(231,236,231,0.06)",
   },
 
+  /**
+   * Legacy "glass" tokens.
+   * V2 intent: don’t use these for normal cards. Keep only so old screens don’t crash.
+   */
+  glass: {
+    border: "rgba(231,236,231,0.10)",
+    iosBg: {
+      subtle: "rgba(255,255,255,0.04)",
+      default: "rgba(255,255,255,0.06)",
+      strong: "rgba(255,255,255,0.08)",
+    },
+    androidBg: {
+      subtle: "rgba(0,0,0,0.18)",
+      default: "rgba(0,0,0,0.22)",
+      strong: "rgba(0,0,0,0.26)",
+    },
+  },
+
   // ---------------------------
   // Strict layout scales (V2)
   // ---------------------------
   spacing: {
-    // 4pt base scale
     xxs: 4,
     xs: 8,
     sm: 12,
@@ -92,7 +116,6 @@ export const theme = {
   },
 
   borderRadius: {
-    // Locked radii
     button: 14,
     input: 14,
     card: 18,
@@ -108,7 +131,6 @@ export const theme = {
   },
 
   fontSize: {
-    // Locked type scale
     hero: 30,
     h1: 24,
     h2: 20,
