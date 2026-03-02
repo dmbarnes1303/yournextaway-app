@@ -1,69 +1,68 @@
 // src/components/GlassCard.tsx
 import React, { useMemo } from "react";
-import { Platform, StyleProp, StyleSheet, View, ViewStyle } from "react-native";
+import {
+  Platform,
+  StyleProp,
+  StyleSheet,
+  View,
+  ViewStyle,
+} from "react-native";
 import { BlurView } from "expo-blur";
 import { theme } from "@/src/constants/theme";
 
 type GlassLevel = "subtle" | "default" | "strong";
+type Variant = "matte" | "glass";
 
 /**
- * V2 intent:
- * - Matte surfaces by default (premium, modern)
- * - True blur reserved for overlays / special moments
+ * Legacy compatibility notes:
+ * - Many screens used: <GlassCard strength="subtle" noPadding />
+ * - Some used: <GlassCard intensity={26} />
+ * - Some used: <GlassCard strength="strong" ...> expecting blur-ish overlay
  *
- * Backwards compatibility:
- * - Existing code may pass intensity
- * - Existing code may pass level
+ * V2 intent:
+ * - Matte surfaces by default (premium)
+ * - True blur only for overlays or explicit usage
  */
 type Props = {
   children?: React.ReactNode;
   style?: StyleProp<ViewStyle>;
 
-  /**
-   * Legacy:
-   * Many screens call <GlassCard intensity={26} />
-   * In V2, typical legacy intensities will NOT blur by default.
-   * Blur is only enabled for very high intensities (>= 45) unless forceBlur is true.
-   */
+  // ---------------------------
+  // Legacy props (supported)
+  // ---------------------------
+  strength?: GlassLevel; // legacy naming
+  noPadding?: boolean;
   intensity?: number;
 
-  /**
-   * Preferred:
-   * "subtle" -> softer matte
-   * "default" -> standard matte card
-   * "strong" -> can use blur if enabled
-   */
+  // Some legacy code might pass these; we accept but do not rely on them.
+  androidFallbackColor?: string;
+
+  // ---------------------------
+  // V2 props (preferred)
+  // ---------------------------
   level?: GlassLevel;
+  variant?: Variant;
 
-  /**
-   * Optional border override (rarely needed in V2).
-   */
-  borderColor?: string;
-
-  /**
-   * Disable blur even if eligible.
-   */
   disableBlur?: boolean;
-
-  /**
-   * Force blur on capable platforms (iOS/web). Use for overlays / sheets only.
-   */
   forceBlur?: boolean;
 
   /**
-   * V2 addition:
-   * - "matte" (default): solid premium surfaces
-   * - "glass": translucent + eligible for blur
-   *
-   * If omitted, we infer:
-   * - level="strong" -> glass
-   * - otherwise -> matte
+   * Optional overrides (rare)
    */
-  variant?: "matte" | "glass";
+  borderColor?: string;
+  padding?: number; // if you want explicit padding without noPadding
 };
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
+}
+
+function alpha(hex: string, a: number) {
+  const h = hex.replace("#", "");
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  return `rgba(${r},${g},${b},${clamp(a, 0, 1)})`;
 }
 
 function levelFromIntensity(intensity?: number): GlassLevel {
@@ -74,31 +73,37 @@ function levelFromIntensity(intensity?: number): GlassLevel {
   return "strong";
 }
 
-function alpha(hex: string, a: number) {
-  // hex like #RRGGBB
-  const h = hex.replace("#", "");
-  const r = parseInt(h.slice(0, 2), 16);
-  const g = parseInt(h.slice(2, 4), 16);
-  const b = parseInt(h.slice(4, 6), 16);
-  return `rgba(${r},${g},${b},${clamp(a, 0, 1)})`;
-}
-
 export default function GlassCard({
   children,
   style,
+
+  // legacy
+  strength,
+  noPadding,
   intensity,
+  androidFallbackColor, // accepted for legacy, not required
+
+  // v2
   level,
-  borderColor,
+  variant,
   disableBlur,
   forceBlur,
-  variant,
+
+  // misc
+  borderColor,
+  padding,
 }: Props) {
   const resolvedLevel: GlassLevel = useMemo(() => {
+    // Prefer v2 prop, then legacy strength, then infer from intensity
     if (level) return level;
+    if (strength) return strength;
     return levelFromIntensity(intensity);
-  }, [level, intensity]);
+  }, [level, strength, intensity]);
 
-  const resolvedVariant: "matte" | "glass" = useMemo(() => {
+  const resolvedVariant: Variant = useMemo(() => {
+    // Prefer explicit v2 variant. Otherwise:
+    // - strong level tends to be used for overlays => glass feel
+    // - subtle/default => matte
     if (variant) return variant;
     return resolvedLevel === "strong" ? "glass" : "matte";
   }, [variant, resolvedLevel]);
@@ -106,11 +111,11 @@ export default function GlassCard({
   const isBlurCapable = Platform.OS === "ios" || Platform.OS === "web";
 
   /**
-   * V2 blur policy:
-   * - Blur is NOT the default look anymore.
-   * - Blur only triggers when:
-   *    - forceBlur is true, OR
-   *    - variant="glass" AND (level="strong" OR intensity>=45)
+   * Blur policy (modern):
+   * - By default, we do NOT blur for normal cards.
+   * - Blur only when:
+   *   - forceBlur = true, OR
+   *   - resolvedVariant="glass" AND (resolvedLevel="strong" OR intensity>=45)
    */
   const legacyIntensity = typeof intensity === "number" ? intensity : null;
   const eligibleByLegacy = legacyIntensity != null && legacyIntensity >= 45;
@@ -122,12 +127,10 @@ export default function GlassCard({
       (resolvedVariant === "glass" &&
         (resolvedLevel === "strong" || eligibleByLegacy)));
 
-  // Matte surface backgrounds (primary look)
+  // Matte surfaces (primary look)
   const matteBg =
     resolvedLevel === "subtle"
       ? theme.colors.bgSurface
-      : resolvedLevel === "default"
-      ? theme.colors.bgElevated
       : theme.colors.bgElevated;
 
   // Glass tint (when variant="glass")
@@ -140,28 +143,39 @@ export default function GlassCard({
 
   const bg = resolvedVariant === "glass" ? glassBg : matteBg;
 
-  // Border: V2 is border-light; matte cards usually have no border.
+  // Borders: matte cards typically no border; glass can have subtle border.
   const defaultBorder =
-    resolvedVariant === "glass"
-      ? theme.colors.borderSubtle
-      : "transparent";
+    resolvedVariant === "glass" ? theme.colors.borderSubtle : "transparent";
 
   const resolvedBorder = borderColor ?? defaultBorder;
 
-  // Blur intensity:
-  // - If legacy intensity is provided AND we're blurring, respect it (clamped).
-  // - Otherwise, map by level.
+  // Padding logic:
+  // - legacy noPadding wins
+  // - explicit padding overrides
+  // - otherwise default padding
+  const resolvedPadding =
+    noPadding ? 0 : typeof padding === "number" ? padding : theme.spacing.md;
+
+  // Blur intensity mapping
   const blurIntensity = useMemo(() => {
     if (!shouldBlur) return 0;
     if (legacyIntensity != null) return clamp(legacyIntensity, 1, 100);
     return resolvedLevel === "subtle" ? 18 : resolvedLevel === "default" ? 26 : 34;
   }, [shouldBlur, legacyIntensity, resolvedLevel]);
 
-  const baseStyle = [
+  const baseStyle: any[] = [
     styles.base,
-    resolvedVariant === "glass" ? styles.glassFrame : styles.matteFrame,
+    {
+      padding: resolvedPadding,
+      backgroundColor: bg,
+      borderColor: resolvedBorder,
+      borderWidth: resolvedVariant === "glass" ? 1 : 0,
+    },
     styles.shadow,
-    { backgroundColor: bg, borderColor: resolvedBorder },
+    // if a legacy android fallback color was used, we allow it to override bg on android only
+    Platform.OS === "android" && androidFallbackColor
+      ? { backgroundColor: androidFallbackColor }
+      : null,
     style,
   ];
 
@@ -178,21 +192,12 @@ export default function GlassCard({
 
 const styles = StyleSheet.create({
   base: {
-    borderRadius: theme.borderRadius.card ?? theme.borderRadius.lg,
-    padding: theme.spacing.md,
+    borderRadius: theme.borderRadius.card,
     overflow: "hidden",
   },
 
-  matteFrame: {
-    borderWidth: 0,
-  },
-
-  glassFrame: {
-    borderWidth: 1,
-  },
-
   shadow: {
-    // Premium, soft elevation (no harsh "card outline" look)
+    // Premium, soft elevation
     shadowColor: "#000",
     shadowOpacity: 0.30,
     shadowRadius: 22,
