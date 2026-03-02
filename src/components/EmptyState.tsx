@@ -1,140 +1,214 @@
-// src/components/FixtureCertaintyBadge.tsx
+// src/components/EmptyState.tsx
+
 import React, { useMemo } from "react";
-import { View, Text, StyleSheet, type StyleProp, type ViewStyle } from "react-native";
-import type { FixtureCertaintyState } from "@/src/utils/fixtureCertainty";
+import { View, Text, StyleSheet, Pressable, Platform } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { theme } from "@/src/constants/theme";
+import PressableScale from "@/src/components/PressableScale";
 
-type Props = {
-  state: FixtureCertaintyState;
-  style?: StyleProp<ViewStyle>;
-  variant?: "default" | "compact";
-};
-
-type BadgeCfg = {
+type Action = {
   label: string;
-  fg: string;
-  bg: string;
-  border: string;
-  dot: string;
+  onPress: () => void;
 };
 
-function alpha(hex: string, a: number) {
-  const h = hex.replace("#", "");
-  const r = parseInt(h.slice(0, 2), 16);
-  const g = parseInt(h.slice(2, 4), 16);
-  const b = parseInt(h.slice(4, 6), 16);
-  const clamped = Math.max(0, Math.min(1, a));
-  return `rgba(${r},${g},${b},${clamped})`;
-}
+type EmptyStateProps = {
+  // Backwards compatible (required today)
+  title: string;
+  message: string;
 
-function cfg(state: FixtureCertaintyState): BadgeCfg {
-  switch (state) {
-    case "tbc": {
-      const c = theme.colors.accentGold;
-      return {
-        label: "Kickoff TBC",
-        fg: c,
-        dot: c,
-        bg: alpha(c, 0.12),
-        border: alpha(c, 0.22),
-      };
-    }
+  /**
+   * Optional enhancements (V2)
+   */
+  iconName?: keyof typeof Ionicons.glyphMap; // e.g. "football", "sparkles", "airplane"
+  iconColor?: string;
+  iconSize?: number;
 
-    case "likely_tbc": {
-      const c = theme.colors.accentGold;
-      return {
-        label: "Likely placeholder",
-        fg: alpha(c, 0.92),
-        dot: alpha(c, 0.92),
-        bg: alpha(c, 0.10),
-        border: alpha(c, 0.20),
-      };
-    }
+  /**
+   * Visual density control
+   */
+  variant?: "default" | "compact";
 
-    case "changed": {
-      const c = theme.colors.accentBlue;
-      return {
-        label: "Date changed",
-        fg: alpha(c, 0.95),
-        dot: alpha(c, 0.95),
-        bg: alpha(c, 0.14),
-        border: alpha(c, 0.22),
-      };
-    }
+  /**
+   * Actions (optional)
+   */
+  primaryAction?: Action;
+  secondaryAction?: Action;
 
-    case "confirmed":
-    default: {
-      const c = theme.colors.accentGreen;
-      return {
-        label: "Confirmed",
-        fg: alpha(c, 0.95),
-        dot: alpha(c, 0.95),
-        bg: alpha(c, 0.14),
-        border: alpha(c, 0.22),
-      };
-    }
-  }
-}
+  /**
+   * Optional helper line under message (e.g. "Tip: follow matches to get alerts")
+   */
+  hint?: string;
+};
 
-export default function FixtureCertaintyBadge({ state, style, variant = "default" }: Props) {
-  const c = useMemo(() => cfg(state), [state]);
+export default function EmptyState({
+  title,
+  message,
+  iconName,
+  iconColor,
+  iconSize = 34,
+  variant = "default",
+  primaryAction,
+  secondaryAction,
+  hint,
+}: EmptyStateProps) {
+  const resolvedIconName = useMemo(() => {
+    if (iconName) return iconName;
+    // Sensible default that feels "premium" and not childish
+    return "sparkles";
+  }, [iconName]);
 
-  const compact = variant === "compact";
+  const resolvedIconColor = iconColor ?? theme.colors.textSecondary;
+
+  const isCompact = variant === "compact";
 
   return (
-    <View
-      style={[
-        styles.badge,
-        compact && styles.badgeCompact,
-        { backgroundColor: c.bg, borderColor: c.border },
-        style,
-      ]}
-    >
-      <View style={[styles.dot, compact && styles.dotCompact, { backgroundColor: c.dot }]} />
-      <Text style={[styles.text, compact && styles.textCompact, { color: c.fg }]} numberOfLines={1}>
-        {c.label}
-      </Text>
+    <View style={[styles.container, isCompact && styles.containerCompact]}>
+      <View style={styles.iconWrap}>
+        <View style={styles.iconBadge}>
+          <Ionicons name={resolvedIconName} size={iconSize} color={resolvedIconColor} />
+        </View>
+      </View>
+
+      <Text style={[styles.title, isCompact && styles.titleCompact]}>{title}</Text>
+
+      <Text style={[styles.message, isCompact && styles.messageCompact]}>{message}</Text>
+
+      {!!hint && <Text style={styles.hint}>{hint}</Text>}
+
+      {(!!primaryAction || !!secondaryAction) && (
+        <View style={styles.actions}>
+          {primaryAction ? (
+            <PressableScale onPress={primaryAction.onPress} style={styles.primaryBtnWrap}>
+              <View style={styles.primaryBtn}>
+                <Text style={styles.primaryBtnText}>{primaryAction.label}</Text>
+              </View>
+            </PressableScale>
+          ) : null}
+
+          {secondaryAction ? (
+            <Pressable
+              onPress={secondaryAction.onPress}
+              style={({ pressed }) => [
+                styles.secondaryBtn,
+                pressed && Platform.OS !== "web" ? { opacity: 0.85 } : null,
+              ]}
+              accessibilityRole="button"
+            >
+              <Text style={styles.secondaryBtnText}>{secondaryAction.label}</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  badge: {
-    alignSelf: "flex-start",
-    flexDirection: "row",
+  container: {
+    width: "100%",
+    paddingHorizontal: theme.spacing.xl,
+    paddingVertical: theme.spacing.xxl,
     alignItems: "center",
+  },
+
+  containerCompact: {
+    paddingVertical: theme.spacing.xl,
+  },
+
+  iconWrap: {
+    marginBottom: theme.spacing.md,
+  },
+
+  iconBadge: {
+    width: 64,
+    height: 64,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.04)",
     borderWidth: 1,
-    borderRadius: theme.borderRadius.pill,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    gap: 8,
+    borderColor: theme.colors.borderSubtle,
   },
 
-  badgeCompact: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    gap: 7,
+  title: {
+    color: theme.colors.textPrimary,
+    fontSize: theme.fontSize.h2,
+    fontWeight: theme.fontWeight.semibold,
+    textAlign: "center",
+    letterSpacing: 0.2,
   },
 
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 999,
+  titleCompact: {
+    fontSize: theme.fontSize.body,
   },
 
-  dotCompact: {
-    width: 7,
-    height: 7,
+  message: {
+    marginTop: theme.spacing.sm,
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSize.meta,
+    fontWeight: theme.fontWeight.regular,
+    textAlign: "center",
+    lineHeight: 20,
+    maxWidth: 520,
   },
 
-  text: {
+  messageCompact: {
+    marginTop: theme.spacing.xs,
+  },
+
+  hint: {
+    marginTop: theme.spacing.sm,
+    color: theme.colors.textMuted,
     fontSize: theme.fontSize.tiny,
+    fontWeight: theme.fontWeight.regular,
+    textAlign: "center",
+    lineHeight: 16,
+    maxWidth: 520,
+  },
+
+  actions: {
+    marginTop: theme.spacing.lg,
+    width: "100%",
+    alignItems: "center",
+    gap: theme.spacing.sm,
+  },
+
+  primaryBtnWrap: {
+    width: "100%",
+  },
+
+  primaryBtn: {
+    height: 48,
+    borderRadius: theme.borderRadius.button,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: theme.colors.accentGreen,
+    shadowColor: "#000",
+    shadowOpacity: 0.25,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 8,
+  },
+
+  primaryBtnText: {
+    color: "#FFFFFF",
+    fontSize: theme.fontSize.body,
     fontWeight: theme.fontWeight.semibold,
     letterSpacing: 0.2,
   },
 
-  textCompact: {
-    fontSize: 11,
-    letterSpacing: 0.15,
+  secondaryBtn: {
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    borderRadius: theme.borderRadius.pill,
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderWidth: 1,
+    borderColor: theme.colors.borderSubtle,
+  },
+
+  secondaryBtnText: {
+    color: theme.colors.textPrimary,
+    fontSize: theme.fontSize.meta,
+    fontWeight: theme.fontWeight.medium,
   },
 });
