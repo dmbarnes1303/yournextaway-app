@@ -4,12 +4,18 @@ import { create } from "zustand";
 import { readJson, writeJson } from "@/src/state/persist";
 import { makeId } from "@/src/core/id";
 import type { SavedItem, SavedItemStatus, SavedItemType } from "@/src/core/savedItemTypes";
+import { assertTransition } from "@/src/core/savedItemTypes";
 
 const STORAGE_KEY = "yna_saved_items_v1";
 
+/**
+ * Canonical SavedItemType set.
+ * IMPORTANT: we use "hotel" (NOT "stay") to match SavedItemType in src/core/savedItemTypes.ts
+ * We migrate legacy "stay" -> "hotel" on load.
+ */
 const VALID_TYPES: ReadonlySet<SavedItemType> = new Set([
   "tickets",
-  "stay",
+  "hotel",
   "flight",
   "train",
   "transfer",
@@ -20,7 +26,11 @@ const VALID_TYPES: ReadonlySet<SavedItemType> = new Set([
   "other",
 ]);
 
-const VALID_STATUS: ReadonlySet<SavedItemStatus> = new Set(["saved", "pending", "booked"]);
+/**
+ * Canonical statuses.
+ * IMPORTANT: Trip Workspace uses "archived" so we must support it.
+ */
+const VALID_STATUS: ReadonlySet<SavedItemStatus> = new Set(["saved", "pending", "booked", "archived"]);
 
 function now() {
   return Date.now();
@@ -39,26 +49,34 @@ function cleanOptionalString(v: unknown) {
   return s ? s : undefined;
 }
 
-function cleanOptionalNumber(v: unknown) {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : undefined;
-}
-
 function defaultPriceTextForType(type: SavedItemType): string | undefined {
   // Notes are not “priced”. Everything else shows a consistent CTA-style label.
   if (type === "note") return undefined;
   return "View live price";
 }
 
+/**
+ * Legacy migration:
+ * - stored type "stay" => canonical "hotel"
+ */
+function normalizeType(rawType: any): SavedItemType | null {
+  const t = cleanString(rawType);
+
+  if (t === "stay") return "hotel";
+  if (t === "stays") return "hotel";
+
+  return (t as SavedItemType) || null;
+}
+
 function cleanLoadedItem(raw: any): SavedItem | null {
   if (!isPlainObject(raw)) return null;
 
   const id = cleanString(raw.id);
-  const type = cleanString(raw.type) as SavedItemType;
+  const type = normalizeType(raw.type);
   const status = cleanString(raw.status) as SavedItemStatus;
 
   if (!id) return null;
-  if (!VALID_TYPES.has(type)) return null;
+  if (!type || !VALID_TYPES.has(type)) return null;
   if (!VALID_STATUS.has(status)) return null;
 
   const createdAt =
@@ -75,7 +93,7 @@ function cleanLoadedItem(raw: any): SavedItem | null {
       : defaultPriceTextForType(type);
 
   const item: SavedItem = {
-    // start from raw to preserve unknown metadata fields
+    // preserve unknown metadata fields
     ...(raw as any),
 
     id,
@@ -85,7 +103,6 @@ function cleanLoadedItem(raw: any): SavedItem | null {
     tripId: cleanOptionalString(raw.tripId),
 
     title: cleanString(raw.title),
-    subtitle: cleanOptionalString(raw.subtitle),
 
     partnerId: cleanOptionalString(raw.partnerId),
     partnerUrl: cleanOptionalString(raw.partnerUrl),
@@ -125,7 +142,6 @@ type SavedItemsState = {
     type: SavedItemType;
     status?: SavedItemStatus;
     title: string;
-    subtitle?: string;
 
     partnerId?: string;
     partnerUrl?: string;
@@ -138,12 +154,16 @@ type SavedItemsState = {
 
   update: (id: string, patch: Partial<Omit<SavedItem, "id" | "createdAt">>) => Promise<void>;
 
+  /**
+   * ✅ Required by Trip + partnerClicks.
+   * Enforces allowed transitions via assertTransition().
+   */
+  transitionStatus: (id: string, to: SavedItemStatus) => Promise<void>;
+
   remove: (id: string) => Promise<void>;
 
   clearAll: (opts?: { deleteAttachmentFiles?: boolean }) => Promise<void>;
-
   clearTrip: (tripId: string, opts?: { deleteAttachmentFiles?: boolean }) => Promise<void>;
-
   clearOrphans: (validTripIds: string[], opts?: { deleteAttachmentFiles?: boolean }) => Promise<void>;
 };
 
@@ -161,9 +181,15 @@ const useSavedItemsStore = create<SavedItemsState>((set, get) => ({
       const raw = await readJson<any>(STORAGE_KEY, []);
       const arr = Array.isArray(raw) ? raw : [];
       const cleaned = arr.map(cleanLoadedItem).filter(Boolean) as SavedItem[];
-      const sorted = sortItems(cleaned);
 
+      // If we migrated "stay" -> "hotel", persist the normalised version
+      const sorted = sortItems(cleaned);
       set({ items: sorted, loaded: true });
+
+      // Best-effort persist to seal the migration.
+      try {
+        await persistItems(sorted);
+      } catch {}
     })()
       .catch(() => {
         set({ items: [], loaded: true });
@@ -178,8 +204,8 @@ const useSavedItemsStore = create<SavedItemsState>((set, get) => ({
   add: async (args) => {
     if (!get().loaded) await get().load();
 
-    const type = cleanString(args.type) as SavedItemType;
-    if (!VALID_TYPES.has(type)) throw new Error("Invalid item type");
+    const type = normalizeType(args.type);
+    if (!type || !VALID_TYPES.has(type)) throw new Error("Invalid item type");
 
     const status = (cleanString(args.status ?? "saved") as SavedItemStatus) || "saved";
     if (!VALID_STATUS.has(status)) throw new Error("Invalid item status");
@@ -204,7 +230,6 @@ const useSavedItemsStore = create<SavedItemsState>((set, get) => ({
       status,
 
       title,
-      subtitle: cleanOptionalString(args.subtitle),
 
       partnerId: cleanOptionalString(args.partnerId),
       partnerUrl: cleanOptionalString(args.partnerUrl),
@@ -223,9 +248,7 @@ const useSavedItemsStore = create<SavedItemsState>((set, get) => ({
 
     try {
       await persistItems(next);
-    } catch {
-      // best-effort
-    }
+    } catch {}
 
     return item;
   },
@@ -244,7 +267,6 @@ const useSavedItemsStore = create<SavedItemsState>((set, get) => ({
       if ("tripId" in p) p.tripId = cleanOptionalString(p.tripId);
 
       if ("title" in p) p.title = cleanString(p.title);
-      if ("subtitle" in p) p.subtitle = cleanOptionalString(p.subtitle);
 
       if ("partnerId" in p) p.partnerId = cleanOptionalString(p.partnerId);
       if ("partnerUrl" in p) p.partnerUrl = cleanOptionalString(p.partnerUrl);
@@ -253,8 +275,8 @@ const useSavedItemsStore = create<SavedItemsState>((set, get) => ({
       if ("currency" in p) p.currency = cleanOptionalString(p.currency);
 
       if ("type" in p) {
-        const t = cleanString(p.type) as SavedItemType;
-        if (VALID_TYPES.has(t)) p.type = t;
+        const t = normalizeType(p.type);
+        if (t && VALID_TYPES.has(t)) p.type = t;
         else delete p.type;
       }
 
@@ -268,9 +290,6 @@ const useSavedItemsStore = create<SavedItemsState>((set, get) => ({
         p.metadata = isPlainObject(p.metadata) ? p.metadata : undefined;
       }
 
-      // IMPORTANT:
-      // If priceText was cleared/undefined, we do NOT auto-reinfer here.
-      // Inference is applied on load and on add. Update respects explicit edits.
       return { ...(it as any), ...p, updatedAt: now() } as SavedItem;
     });
 
@@ -279,9 +298,27 @@ const useSavedItemsStore = create<SavedItemsState>((set, get) => ({
 
     try {
       await persistItems(sorted);
-    } catch {
-      // best-effort
-    }
+    } catch {}
+  },
+
+  transitionStatus: async (id, to) => {
+    if (!get().loaded) await get().load();
+
+    const cleanId = cleanString(id);
+    if (!cleanId) return;
+
+    const target = (cleanString(to) as SavedItemStatus) || "saved";
+    if (!VALID_STATUS.has(target)) throw new Error("Invalid target status");
+
+    const cur = get().items.find((x) => x.id === cleanId);
+    if (!cur) return;
+
+    if (cur.status === target) return;
+
+    // Enforce your policy rules
+    assertTransition(cur.status, target);
+
+    await get().update(cleanId, { status: target } as any);
   },
 
   remove: async (id) => {
@@ -335,6 +372,11 @@ const useSavedItemsStore = create<SavedItemsState>((set, get) => ({
 /* Wrapper */
 /* -------------------------------------------------------------------------- */
 
+function cleanOptionalString2(v: unknown) {
+  const s = cleanString(v);
+  return s ? s : undefined;
+}
+
 const savedItemsStore = {
   getState: useSavedItemsStore.getState,
   setState: useSavedItemsStore.setState,
@@ -350,6 +392,10 @@ const savedItemsStore = {
 
   update: async (id: string, patch: Parameters<SavedItemsState["update"]>[1]) => {
     await useSavedItemsStore.getState().update(id, patch);
+  },
+
+  transitionStatus: async (id: string, to: SavedItemStatus) => {
+    await useSavedItemsStore.getState().transitionStatus(id, to);
   },
 
   remove: async (id: string) => {
@@ -369,7 +415,7 @@ const savedItemsStore = {
   },
 
   getByTripId: (tripId?: string) => {
-    const t = cleanOptionalString(tripId);
+    const t = cleanOptionalString2(tripId);
     const s = useSavedItemsStore.getState();
     if (!t) return [];
     return s.items.filter((x) => x.tripId === t);
