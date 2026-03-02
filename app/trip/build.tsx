@@ -26,7 +26,16 @@ import { theme } from "@/src/constants/theme";
 import { getFixtures, getFixtureById, getFixturesByRound, type FixtureListRow } from "@/src/services/apiFootball";
 import tripsStore, { type Trip } from "@/src/state/trips";
 
-import { LEAGUES, addDaysIso, clampFromIsoToTomorrow, type LeagueOption } from "@/src/constants/football";
+import {
+  LEAGUES,
+  DEFAULT_SEASON,
+  getRollingWindowIso,
+  normalizeWindowIso,
+  clampFromIsoToTomorrow,
+  type LeagueOption,
+  type RollingWindowIso,
+} from "@/src/constants/football";
+
 import { formatUkDateTimeMaybe } from "@/src/utils/formatters";
 import { computeLikelyPlaceholderTbcIds, isKickoffTbc } from "@/src/utils/kickoffTbc";
 
@@ -35,16 +44,11 @@ import { computeLikelyPlaceholderTbcIds, isKickoffTbc } from "@/src/utils/kickof
 /* -------------------------------------------------------------------------- */
 
 const FREE_TRIP_CAP = 5;
+const WINDOW_DAYS = 90;
 
 /* -------------------------------------------------------------------------- */
 /* helpers                                                                     */
 /* -------------------------------------------------------------------------- */
-
-function currentFootballSeasonStartYear(now = new Date()): number {
-  const y = now.getFullYear();
-  const m = now.getMonth(); // 0=Jan
-  return m >= 6 ? y : y - 1;
-}
 
 function paramString(v: unknown): string | null {
   if (typeof v === "string") return v.trim() || null;
@@ -57,6 +61,11 @@ function paramNumber(v: unknown): number | null {
   if (!s) return null;
   const n = Number(s);
   return Number.isFinite(n) ? n : null;
+}
+
+function isIsoDateOnly(s?: string | null): boolean {
+  const v = String(s ?? "").trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(v);
 }
 
 function fixtureIdStr(r: any): string {
@@ -101,11 +110,6 @@ function parseIsoToDate(iso?: string | null): Date | null {
   return Number.isFinite(d.getTime()) ? d : null;
 }
 
-function isIsoDateOnly(s?: string | null): boolean {
-  const v = cleanText(s);
-  return /^\d{4}-\d{2}-\d{2}$/.test(v);
-}
-
 function daysBetweenIso(aIso: string, bIso: string) {
   const a = parseIsoToDate(aIso);
   const b = parseIsoToDate(bIso);
@@ -114,12 +118,21 @@ function daysBetweenIso(aIso: string, bIso: string) {
   return d;
 }
 
+function validSeasonOrNull(n: number | null): number | null {
+  if (!n || !Number.isFinite(n)) return null;
+  // basic sanity guard: API-Football seasons are "start year"
+  if (n < 2000) return null;
+  if (n > new Date().getFullYear() + 1) return null;
+  return n;
+}
+
 function findLeagueOptionByLeagueId(leagueId?: number | null, season?: number | null) {
   if (!leagueId) return null;
   const byId = LEAGUES.find((l) => l.leagueId === leagueId) ?? null;
   if (!byId) return null;
+
+  // If season override provided, keep label/country but use requested season
   if (season && typeof byId.season === "number" && byId.season !== season) {
-    // If season override provided, keep label/country but use requested season
     return { ...byId, season } as LeagueOption;
   }
   return byId;
@@ -167,13 +180,17 @@ function buildTripSnapshot(selectedFixture: FixtureListRow, placeholderTbcIds: S
   };
 }
 
-async function computePlaceholderIdsForFixture(fx: FixtureListRow | null, seasonOverride?: number | null): Promise<Set<string>> {
+async function computePlaceholderIdsForFixture(
+  fx: FixtureListRow | null,
+  seasonOverride?: number | null
+): Promise<Set<string>> {
   if (!fx) return new Set();
 
   const leagueId = fx?.league?.id ?? null;
   const season =
     seasonOverride ??
-    (typeof (fx as any)?.league?.season === "number" ? (fx as any).league.season : currentFootballSeasonStartYear());
+    (typeof (fx as any)?.league?.season === "number" ? (fx as any).league.season : DEFAULT_SEASON);
+
   const round = cleanText(fx?.league?.round);
 
   if (!leagueId || !season || !round) return new Set();
@@ -221,12 +238,13 @@ export default function TripBuildScreen() {
   const routeFixtureId = useMemo(() => paramString((params as any)?.fixtureId), [params]);
   const routeCityArea = useMemo(() => paramString((params as any)?.cityArea), [params]);
 
-  // --- NEW: optional context params (from Trip Detail / elsewhere) ---
+  // --- optional context params ---
   const routeFrom = useMemo(() => paramString((params as any)?.from), [params]);
   const routeTo = useMemo(() => paramString((params as any)?.to), [params]);
   const routeCity = useMemo(() => paramString((params as any)?.city), [params]);
   const routeLeagueId = useMemo(() => paramNumber((params as any)?.leagueId), [params]);
-  const routeSeason = useMemo(() => paramNumber((params as any)?.season), [params]);
+  const routeSeasonRaw = useMemo(() => paramNumber((params as any)?.season), [params]);
+  const routeSeason = useMemo(() => validSeasonOrNull(routeSeasonRaw), [routeSeasonRaw]);
 
   const isPrefilledFlow = !!routeFixtureId && !isEditing;
 
@@ -243,19 +261,27 @@ export default function TripBuildScreen() {
 
   const [selectedFixture, setSelectedFixture] = useState<FixtureListRow | null>(null);
 
-  // Dates default: tomorrow → +2 nights, but allow route from/to to override
-  const initialStart = useMemo(() => {
-    if (isIsoDateOnly(routeFrom)) return clampFromIsoToTomorrow(routeFrom!);
-    return clampFromIsoToTomorrow(new Date().toISOString().slice(0, 10));
-  }, [routeFrom]);
+  /* ------------------------------------------------------------------------ */
+  /* Window (football.ts contract)                                             */
+  /* ------------------------------------------------------------------------ */
 
-  const initialEnd = useMemo(() => {
-    if (isIsoDateOnly(routeTo)) return String(routeTo);
-    return addDaysIso(initialStart, 2);
-  }, [routeTo, initialStart]);
+  const defaultWindow = useMemo(() => getRollingWindowIso({ days: WINDOW_DAYS }), []);
 
-  const [startIso, setStartIso] = useState(initialStart);
-  const [endIso, setEndIso] = useState(initialEnd);
+  const routeWindow = useMemo<RollingWindowIso>(() => {
+    // If params are not explicit, behave like the central contract: rolling 90-day window from tomorrow.
+    if (!isIsoDateOnly(routeFrom) && !isIsoDateOnly(routeTo)) return defaultWindow;
+
+    // If either param is missing/invalid, fall back to default window values for that side,
+    // then normalize (clamps to tomorrow and ensures to>=from).
+    const fromSeed = isIsoDateOnly(routeFrom) ? String(routeFrom) : defaultWindow.from;
+    const toSeed = isIsoDateOnly(routeTo) ? String(routeTo) : defaultWindow.to;
+
+    return normalizeWindowIso({ from: fromSeed, to: toSeed }, WINDOW_DAYS);
+  }, [routeFrom, routeTo, defaultWindow]);
+
+  // Dates state (defaults to routeWindow). Prefill flows may override from fixture date later.
+  const [startIso, setStartIso] = useState(routeWindow.from);
+  const [endIso, setEndIso] = useState(routeWindow.to);
   const [notes, setNotes] = useState("");
 
   const [endTouched, setEndTouched] = useState<boolean>(Boolean(isIsoDateOnly(routeTo)));
@@ -266,11 +292,24 @@ export default function TripBuildScreen() {
 
   const [setAsPrimaryOnSave, setSetAsPrimaryOnSave] = useState(false);
 
-  // Keep end auto-following start unless user touched end
+  // Keep end auto-following start unless user touched end.
+  // We keep the existing "2 nights" behaviour only when user is actively selecting a fixture without explicit to.
   useEffect(() => {
+    // If routeTo is explicit, never auto-mutate end.
+    if (isIsoDateOnly(routeTo)) return;
     if (endTouched) return;
-    setEndIso(addDaysIso(startIso, 2));
-  }, [startIso, endTouched]);
+
+    // When in picker UX, you liked "+2 nights" default. Keep it here.
+    // (This does NOT affect fixture-loading window which is routeWindow.)
+    const d = parseIsoToDate(startIso);
+    if (!d) return;
+    const d2 = new Date(d);
+    d2.setDate(d2.getDate() + 2);
+    const y = d2.getFullYear();
+    const m = String(d2.getMonth() + 1).padStart(2, "0");
+    const day = String(d2.getDate()).padStart(2, "0");
+    setEndIso(`${y}-${m}-${day}`);
+  }, [startIso, endTouched, routeTo]);
 
   const setNotesIfEmpty = useCallback((text: string) => {
     const t = cleanText(text);
@@ -286,7 +325,7 @@ export default function TripBuildScreen() {
     () => ({
       label: "All leagues",
       leagueId: 0,
-      season: LEAGUES[0]?.season ?? currentFootballSeasonStartYear(),
+      season: LEAGUES[0]?.season ?? DEFAULT_SEASON,
       countryCode: "EU",
       key: "all",
     }),
@@ -308,6 +347,9 @@ export default function TripBuildScreen() {
     else if (routeLeagueId === 0) setSelectedLeague(ALL_LEAGUES);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [routeLeagueId, routeSeason, isPrefilledFlow]);
+
+  // Effective season: explicit routeSeason wins (and stays stable even when switching leagues)
+  const effectiveSeason = useMemo(() => routeSeason ?? selectedLeague.season ?? DEFAULT_SEASON, [routeSeason, selectedLeague]);
 
   /* ------------------------------------------------------------------------ */
   /* Apply route city to notes (non-destructive)                               */
@@ -351,13 +393,17 @@ export default function TripBuildScreen() {
         const primary = cleanText((t as any)?.fixtureIdPrimary) || (mids[0] ? String(mids[0]) : "");
         setExistingPrimaryId(primary || null);
 
-        // Prefer trip dates; if route from/to passed, they override (useful when calling build from other places)
-        const nextStart = isIsoDateOnly(routeFrom) ? clampFromIsoToTomorrow(routeFrom!) : t.startDate;
-        const nextEnd = isIsoDateOnly(routeTo) ? String(routeTo) : t.endDate;
+        // Prefer trip dates; if route from/to passed, they override (normalized contract)
+        if (isIsoDateOnly(routeFrom) || isIsoDateOnly(routeTo)) {
+          setStartIso(routeWindow.from);
+          setEndIso(routeWindow.to);
+          setEndTouched(true);
+        } else {
+          setStartIso(t.startDate);
+          setEndIso(t.endDate);
+          setEndTouched(true);
+        }
 
-        setStartIso(nextStart);
-        setEndIso(nextEnd);
-        setEndTouched(true);
         setNotes((t as any).notes ?? "");
 
         const loadId = primary || (mids[0] ? String(mids[0]) : "");
@@ -390,7 +436,7 @@ export default function TripBuildScreen() {
     return () => {
       cancelled = true;
     };
-  }, [routeTripId, routeFrom, routeTo, routeSeason]);
+  }, [routeTripId, routeFrom, routeTo, routeSeason, routeWindow]);
 
   /* ------------------------------------------------------------------------ */
   /* Prefill fixture (new trip)                                                */
@@ -415,22 +461,18 @@ export default function TripBuildScreen() {
         const ids = await computePlaceholderIdsForFixture(r, routeSeason);
         if (!cancelled) setPlaceholderTbcIds(ids);
 
-        // If from/to were provided explicitly, keep them.
-        // Otherwise derive trip start from fixture date (clamped) and keep auto end behaviour.
+        // If from/to explicitly provided, use routeWindow.
+        // Otherwise: derive start from fixture date (clamped to tomorrow) and keep auto end behaviour.
         const hasFrom = isIsoDateOnly(routeFrom);
         const hasTo = isIsoDateOnly(routeTo);
 
-        if (hasFrom) {
-          setStartIso(clampFromIsoToTomorrow(routeFrom!));
+        if (hasFrom || hasTo) {
+          setStartIso(routeWindow.from);
+          setEndIso(routeWindow.to);
+          setEndTouched(true);
         } else {
           const d0 = fixtureDateOnly(r);
           if (d0) setStartIso(clampFromIsoToTomorrow(d0));
-        }
-
-        if (hasTo) {
-          setEndIso(String(routeTo));
-          setEndTouched(true);
-        } else {
           setEndTouched(false);
         }
 
@@ -450,7 +492,7 @@ export default function TripBuildScreen() {
     return () => {
       cancelled = true;
     };
-  }, [routeFixtureId, isPrefilledFlow, routeCityArea, setNotesIfEmpty, routeFrom, routeTo, routeSeason]);
+  }, [routeFixtureId, isPrefilledFlow, routeCityArea, setNotesIfEmpty, routeFrom, routeTo, routeSeason, routeWindow]);
 
   /* ------------------------------------------------------------------------ */
   /* Load fixtures (picker mode)                                               */
@@ -466,26 +508,32 @@ export default function TripBuildScreen() {
       setError(null);
 
       try {
-        // Use passed window if provided (e.g. adding a match to an existing trip),
-        // else default to tomorrow → +30 days.
-        const from = isIsoDateOnly(routeFrom)
-          ? clampFromIsoToTomorrow(routeFrom!)
-          : clampFromIsoToTomorrow(new Date().toISOString().slice(0, 10));
-
-        const to = isIsoDateOnly(routeTo) ? String(routeTo) : addDaysIso(from, 30);
+        // CONTRACT:
+        // - if explicit from/to params exist -> normalizeWindowIso
+        // - else -> getRollingWindowIso (already computed as routeWindow/defaultWindow)
+        const from = routeWindow.from;
+        const to = routeWindow.to;
 
         let res: FixtureListRow[] = [];
 
         if (selectedLeague.leagueId === 0) {
+          // All leagues: if routeSeason exists, apply to every batch; else use each league default season
           const batches = await Promise.all(
-            LEAGUES.map((l) => getFixtures({ league: l.leagueId, season: l.season, from, to }))
+            LEAGUES.map((l) =>
+              getFixtures({
+                league: l.leagueId,
+                season: routeSeason ?? l.season,
+                from,
+                to,
+              })
+            )
           );
           res = batches.flat();
         } else {
           res =
             (await getFixtures({
               league: selectedLeague.leagueId,
-              season: selectedLeague.season,
+              season: effectiveSeason,
               from,
               to,
             })) || [];
@@ -521,7 +569,7 @@ export default function TripBuildScreen() {
     return () => {
       cancelled = true;
     };
-  }, [selectedLeague, isPrefilledFlow, routeFrom, routeTo]);
+  }, [selectedLeague, isPrefilledFlow, routeWindow, effectiveSeason, routeSeason]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -542,9 +590,8 @@ export default function TripBuildScreen() {
   useEffect(() => {
     if (!selectedFixture) return;
 
-    // If from/to were explicitly provided, do not auto-overwrite with fixture date.
-    // Otherwise keep your existing behavior (start = fixture day, end auto+2 nights).
-    if (!isIsoDateOnly(routeFrom)) {
+    // If from/to explicitly provided, do not auto-overwrite with fixture date.
+    if (!isIsoDateOnly(routeFrom) && !isIsoDateOnly(routeTo)) {
       const d0 = fixtureDateOnly(selectedFixture);
       if (d0) {
         const start = clampFromIsoToTomorrow(d0);
@@ -554,7 +601,7 @@ export default function TripBuildScreen() {
     }
 
     if (isEditing) setSetAsPrimaryOnSave(false);
-  }, [selectedFixture, isEditing, routeFrom]);
+  }, [selectedFixture, isEditing, routeFrom, routeTo]);
 
   /* ------------------------------------------------------------------------ */
   /* Save                                                                       */
@@ -589,7 +636,7 @@ export default function TripBuildScreen() {
     try {
       if (!tripsStore.getState().loaded) await tripsStore.loadTrips();
 
-      // EDIT: update dates/notes, then add match; optionally set primary + overwrite snapshot
+      // EDIT
       if (isEditing && routeTripId) {
         const basePatch: any = {
           startDate: startIso,

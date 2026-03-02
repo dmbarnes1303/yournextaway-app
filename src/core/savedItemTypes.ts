@@ -3,6 +3,11 @@
 export type TripId = string;
 export type SavedItemId = string;
 
+/**
+ * Canonical types used by the app going forward.
+ * IMPORTANT: keep this list stable. If you rename a type, add a legacy alias
+ * to SavedItemTypeInput + normalizeSavedItemType to preserve old persisted data.
+ */
 export type SavedItemType =
   | "tickets"
   | "hotel"
@@ -15,10 +20,83 @@ export type SavedItemType =
   | "note"
   | "other";
 
+/**
+ * Inputs we may encounter from:
+ * - old persisted storage
+ * - older builds
+ * - sloppy callers
+ *
+ * These MUST normalize into a canonical SavedItemType.
+ */
+export type SavedItemTypeInput = SavedItemType | "stay" | "stays" | "hotels";
+
+/**
+ * Canonical item status.
+ * (archived is used by Trip workspace + Wallet hiding)
+ */
 export type SavedItemStatus = "saved" | "pending" | "booked" | "archived";
 
 /* -------------------------------------------------------------------------- */
-/* Wallet Attachments (Phase 1) */
+/* Constants + guards                                                          */
+/* -------------------------------------------------------------------------- */
+
+export const SAVED_ITEM_TYPES: ReadonlyArray<SavedItemType> = [
+  "tickets",
+  "hotel",
+  "flight",
+  "train",
+  "transfer",
+  "things",
+  "insurance",
+  "claim",
+  "note",
+  "other",
+] as const;
+
+export const SAVED_ITEM_STATUS: ReadonlyArray<SavedItemStatus> = [
+  "saved",
+  "pending",
+  "booked",
+  "archived",
+] as const;
+
+const TYPE_SET = new Set<string>(SAVED_ITEM_TYPES);
+const STATUS_SET = new Set<string>(SAVED_ITEM_STATUS);
+
+export function isSavedItemType(v: unknown): v is SavedItemType {
+  return typeof v === "string" && TYPE_SET.has(v);
+}
+
+export function isSavedItemStatus(v: unknown): v is SavedItemStatus {
+  return typeof v === "string" && STATUS_SET.has(v);
+}
+
+/**
+ * Normalise “type” at the boundary.
+ * This is what prevents “stay” vs “hotel” bugs across Trips/Wallet/Progress strips.
+ */
+export function normalizeSavedItemType(input: unknown): SavedItemType | null {
+  const raw = String(input ?? "").trim().toLowerCase();
+  if (!raw) return null;
+
+  // Legacy / alias mapping
+  if (raw === "stay" || raw === "stays" || raw === "hotels") return "hotel";
+
+  // Canonical pass-through
+  if (TYPE_SET.has(raw)) return raw as SavedItemType;
+
+  return null;
+}
+
+export function normalizeSavedItemStatus(input: unknown): SavedItemStatus | null {
+  const raw = String(input ?? "").trim().toLowerCase();
+  if (!raw) return null;
+  if (STATUS_SET.has(raw)) return raw as SavedItemStatus;
+  return null;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Wallet Attachments (Phase 1)                                                */
 /* -------------------------------------------------------------------------- */
 
 export type WalletAttachmentKind = "pdf" | "image" | "file";
@@ -45,9 +123,19 @@ export type WalletAttachment = {
   createdAt: number;
 };
 
+/**
+ * SavedItem model
+ *
+ * NOTE: tripId is optional at type-level because:
+ * - your store loader explicitly allows missing tripId (legacy/orphan items)
+ * - clearOrphans keeps items with no tripId
+ *
+ * Screens should treat tripId as required *for trip-scoped views*.
+ */
 export type SavedItem = {
   id: SavedItemId;
-  tripId: TripId;
+
+  tripId?: TripId;
 
   type: SavedItemType;
   status: SavedItemStatus;
@@ -105,20 +193,21 @@ export function getSavedItemTypeLabel(type: SavedItemType): string {
   }
 }
 
+/* -------------------------------------------------------------------------- */
+/* Status transitions                                                          */
+/* -------------------------------------------------------------------------- */
+
 /**
- * Status transitions
- *
  * Option B policy:
- * - "pending" means: we opened a partner and we still don't know outcome
- * - If user answers "No", we move pending -> saved (keep it as a saved link/idea, not booked)
- * - If user answers "Not now", we leave it pending
+ * - "pending": opened partner, outcome unknown
+ * - user answers "No": pending -> saved
+ * - user answers "Not now": stays pending
  *
- * IMPORTANT:
  * Users can book later from a Saved shortlist, so allow saved -> booked directly.
  */
 const TRANSITIONS: Record<SavedItemStatus, SavedItemStatus[]> = {
-  saved: ["pending", "booked", "archived"], // ✅ allow saved → booked
-  pending: ["booked", "archived", "saved"], // ✅ allow pending → saved
+  saved: ["pending", "booked", "archived"],
+  pending: ["booked", "archived", "saved"],
   booked: ["archived"],
   archived: ["saved"],
 };

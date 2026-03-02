@@ -1,8 +1,8 @@
 // app/onboarding.tsx
 import React, { useEffect, useMemo, useState, useCallback } from "react";
-import { View, Text, StyleSheet, Image, Pressable, Image as RNImage } from "react-native";
+import { View, Text, StyleSheet, Image, Pressable, Image as RNImage, Platform } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { router } from "expo-router";
+import { Stack, router } from "expo-router";
 
 import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
@@ -17,14 +17,13 @@ const FALLBACK_3 = require("@/src/assets/backgrounds/onboarding-3.png");
 const FALLBACK_4 = require("@/src/assets/backgrounds/onboarding-4.png");
 
 /**
- * Unsplash (RN-safe) sources.
- * These are keyword-based and can change — acceptable for now.
- * When you’re ready to lock it down, we’ll swap these to fixed images.unsplash.com photo IDs.
+ * Stable Unsplash CDN URLs (predictable + cacheable).
+ * If you want, we can later curate “perfect” stadium/city images by specific photo IDs.
  */
-const REMOTE_BG_1 = { uri: "https://source.unsplash.com/1600x2400/?football,stadium,night,floodlights" };
-const REMOTE_BG_2 = { uri: "https://source.unsplash.com/1600x2400/?airport,departure,travel,lounge,modern" }; // cleaner than “airport interior”
-const REMOTE_BG_3 = { uri: "https://source.unsplash.com/1600x2400/?europe,city,night,street,lights" };
-const REMOTE_BG_4 = { uri: "https://source.unsplash.com/1600x2400/?airplane,sunset,sky,travel" };
+const REMOTE_BG_1 = { uri: "https://images.unsplash.com/photo-1521412644187-c49fa049e84d?auto=format&fit=crop&w=1600&q=80" }; // stadium vibe
+const REMOTE_BG_2 = { uri: "https://images.unsplash.com/photo-1529070538774-1843cb3265df?auto=format&fit=crop&w=1600&q=80" }; // travel / terminal
+const REMOTE_BG_3 = { uri: "https://images.unsplash.com/photo-1467269204594-9661b134dd2b?auto=format&fit=crop&w=1600&q=80" }; // europe streets
+const REMOTE_BG_4 = { uri: "https://images.unsplash.com/photo-1436491865332-7a61a109cc05?auto=format&fit=crop&w=1600&q=80" }; // flight / sky
 
 type Step = {
   title: string;
@@ -36,38 +35,68 @@ type Step = {
 
 const STEPS: Step[] = [
   {
-    title: "Start With A Fixture",
-    subtitle: "Pick The Match — We Handle The Rest",
+    title: "Start with a fixture",
+    subtitle: "Pick the match — everything else snaps into place",
     body:
-      "Browse fixtures across Europe’s top leagues, follow the ones you like, and anchor your trip around the best option. If kickoff changes, you’ll be alerted — so you don’t book blind.",
+      "Browse upcoming fixtures across Europe. Follow the ones you like and plan around the best option. If kickoff details change, you’ll get nudged — so you don’t book blind.",
     remoteBg: REMOTE_BG_1,
     fallbackBg: FALLBACK_1,
   },
   {
-    title: "Build The Trip In One Hub",
-    subtitle: "Tickets, Flights, Stays — Organised",
+    title: "Build the trip in one hub",
+    subtitle: "Tickets, flights, stays — organised",
     body:
-      "Save ticket links, compare flights and places to stay, and keep everything in one place. No messy screenshots. No hunting through tabs. Just a clean trip workspace built around the match.",
+      "Save links, compare options, and keep everything in a single trip workspace. No messy screenshots. No hunting through tabs. Just a clean plan built around the match.",
     remoteBg: REMOTE_BG_2,
     fallbackBg: FALLBACK_2,
   },
   {
-    title: "Make The City Break Better",
-    subtitle: "Matchday Planning, Done Properly",
+    title: "Make the city break better",
+    subtitle: "Matchday planning, done properly",
     body:
-      "Use city and team guidance to plan beyond the match — where to base yourself, how to time the day, and what to do around it. Your trip should feel effortless, not improvised.",
+      "Use city and team guidance to plan beyond the 90 minutes — where to base yourself, how to time the day, and what else is worth doing while you’re there.",
     remoteBg: REMOTE_BG_3,
     fallbackBg: FALLBACK_3,
   },
   {
-    title: "Set Your Defaults",
-    subtitle: "So Planning Feels Personal",
+    title: "Set your defaults",
+    subtitle: "So future planning is faster",
     body:
-      "Optional — set your usual departure city, currency, and preferences. You can change this anytime in Profile, but setting it now makes future planning faster.",
+      "Optional — choose basics like your usual departure city and preferences. You can change this anytime in Profile, but setting it now makes planning feel personal.",
     remoteBg: REMOTE_BG_4,
     fallbackBg: FALLBACK_4,
   },
 ];
+
+function Pill({
+  label,
+  onPress,
+  variant,
+  disabled,
+}: {
+  label: string;
+  onPress: () => void;
+  variant: "primary" | "ghost";
+  disabled?: boolean;
+}) {
+  const primary = variant === "primary";
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={!!disabled}
+      style={({ pressed }) => [
+        styles.pillBtn,
+        primary ? styles.pillPrimary : styles.pillGhost,
+        (pressed || disabled) && styles.pressed,
+      ]}
+      android_ripple={{ color: primary ? "rgba(79,224,138,0.14)" : "rgba(255,255,255,0.10)" }}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+    >
+      <Text style={[styles.pillBtnText, primary ? styles.pillPrimaryText : styles.pillGhostText]}>{label}</Text>
+    </Pressable>
+  );
+}
 
 export default function Onboarding() {
   const [stepIndex, setStepIndex] = useState(0);
@@ -90,9 +119,7 @@ export default function Onboarding() {
     (async () => {
       try {
         const ok = await RNImage.prefetch(step.remoteBg.uri);
-        if (!ok && !cancelled) {
-          setFailedRemote((prev) => ({ ...prev, [stepIndex]: true }));
-        }
+        if (!ok && !cancelled) setFailedRemote((prev) => ({ ...prev, [stepIndex]: true }));
       } catch {
         if (!cancelled) setFailedRemote((prev) => ({ ...prev, [stepIndex]: true }));
       }
@@ -104,7 +131,7 @@ export default function Onboarding() {
   }, [stepIndex, step.remoteBg.uri]);
 
   const goHome = useCallback(() => {
-    router.replace("/(tabs)/home");
+    router.replace("/(tabs)/home" as any);
   }, []);
 
   const next = useCallback(() => {
@@ -116,62 +143,74 @@ export default function Onboarding() {
   }, []);
 
   return (
-    <Background imageSource={bgSource} overlayOpacity={0.62}>
-      <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
-        {/* Top controls */}
-        <View style={styles.topRow}>
-          {stepIndex > 0 ? (
-            <Pressable onPress={back} style={styles.pill}>
-              <Text style={styles.pillText}>Back</Text>
+    <>
+      <Stack.Screen options={{ headerShown: false }} />
+
+      <Background imageSource={bgSource} overlayOpacity={0.66}>
+        <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
+          {/* Top controls */}
+          <View style={styles.topRow}>
+            {stepIndex > 0 ? (
+              <Pressable
+                onPress={back}
+                style={({ pressed }) => [styles.topPill, pressed && styles.pressed]}
+                android_ripple={{ color: "rgba(255,255,255,0.10)" }}
+              >
+                <Text style={styles.topPillText}>Back</Text>
+              </Pressable>
+            ) : (
+              <View style={{ width: 90 }} />
+            )}
+
+            <Pressable
+              onPress={goHome}
+              style={({ pressed }) => [styles.topPill, pressed && styles.pressed]}
+              android_ripple={{ color: "rgba(255,255,255,0.10)" }}
+            >
+              <Text style={styles.topPillText}>Skip</Text>
             </Pressable>
-          ) : (
-            <View style={{ width: 86 }} />
-          )}
+          </View>
 
-          <Pressable onPress={goHome} style={styles.pill}>
-            <Text style={styles.pillText}>Skip</Text>
-          </Pressable>
-        </View>
-
-        {/* Brand */}
-        <View style={styles.brand}>
-          <Image source={LOGO} style={styles.logo} resizeMode="contain" />
-          <Text style={styles.motto}>PLAN • FLY • WATCH • REPEAT</Text>
-        </View>
-
-        {/* Content */}
-        <View style={styles.cardWrap}>
-          <GlassCard style={styles.card}>
-            <Text style={styles.kicker}>
-              Step {stepIndex + 1} Of {STEPS.length}
-            </Text>
-
-            <Text style={styles.h1}>{step.title}</Text>
-            <Text style={styles.h2}>{step.subtitle}</Text>
-            <Text style={styles.body}>{step.body}</Text>
-
-            <View style={styles.dots}>
-              {STEPS.map((_, i) => {
-                const active = i === stepIndex;
-                return <View key={`dot-${i}`} style={[styles.dot, active && styles.dotActive]} />;
-              })}
+          {/* Brand */}
+          <View style={styles.brand}>
+            <View style={styles.logoWrap}>
+              <Image source={LOGO} style={styles.logo} resizeMode="contain" />
             </View>
+            <Text style={styles.brandTitle}>YourNextAway</Text>
+            <Text style={styles.brandMotto}>Fixtures • Guides • Trip workspace</Text>
+          </View>
 
-            <View style={styles.actions}>
-              <Pressable onPress={goHome} style={[styles.btn, styles.btnGhost]}>
-                <Text style={styles.btnGhostText}>Skip For Now</Text>
-              </Pressable>
+          {/* Content */}
+          <View style={styles.cardWrap}>
+            <GlassCard style={styles.card} noPadding>
+              <View style={styles.cardInner}>
+                <Text style={styles.kicker}>
+                  Step {stepIndex + 1} of {STEPS.length}
+                </Text>
 
-              <Pressable onPress={isLast ? goHome : next} style={[styles.btn, styles.btnPrimary]}>
-                <Text style={styles.btnPrimaryText}>{isLast ? "Start Exploring" : "Continue"}</Text>
-              </Pressable>
-            </View>
+                <Text style={styles.h1}>{step.title}</Text>
+                <Text style={styles.h2}>{step.subtitle}</Text>
+                <Text style={styles.body}>{step.body}</Text>
 
-            <Text style={styles.micro}>Premium Football Travel, Without The Chaos.</Text>
-          </GlassCard>
-        </View>
-      </SafeAreaView>
-    </Background>
+                <View style={styles.dots}>
+                  {STEPS.map((_, i) => {
+                    const active = i === stepIndex;
+                    return <View key={`dot-${i}`} style={[styles.dot, active && styles.dotActive]} />;
+                  })}
+                </View>
+
+                <View style={styles.actions}>
+                  <Pill label="Not now" onPress={goHome} variant="ghost" />
+                  <Pill label={isLast ? "Start exploring" : "Continue"} onPress={isLast ? goHome : next} variant="primary" />
+                </View>
+
+                <Text style={styles.micro}>Football-first travel planning — without the chaos.</Text>
+              </View>
+            </GlassCard>
+          </View>
+        </SafeAreaView>
+      </Background>
+    </>
   );
 }
 
@@ -182,7 +221,10 @@ const styles = StyleSheet.create({
     paddingTop: theme.spacing.md,
     paddingBottom: theme.spacing.lg,
     justifyContent: "space-between",
+    gap: 14,
   },
+
+  pressed: { opacity: 0.94, transform: [{ scale: 0.995 }] },
 
   topRow: {
     flexDirection: "row",
@@ -191,19 +233,20 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
 
-  pill: {
+  topPill: {
     borderRadius: 999,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.12)",
     backgroundColor: "rgba(0,0,0,0.22)",
     paddingVertical: 10,
     paddingHorizontal: 14,
-    minWidth: 86,
+    minWidth: 90,
     alignItems: "center",
+    overflow: "hidden",
   },
 
-  pillText: {
-    color: "rgba(255,255,255,0.78)",
+  topPillText: {
+    color: "rgba(255,255,255,0.80)",
     fontWeight: theme.fontWeight.black,
     fontSize: 12,
     letterSpacing: 0.2,
@@ -211,24 +254,41 @@ const styles = StyleSheet.create({
 
   brand: {
     alignItems: "center",
-    marginTop: 14,
-    gap: 10,
+    marginTop: 10,
+    gap: 8,
+  },
+
+  logoWrap: {
+    width: 104,
+    height: 104,
+    borderRadius: 32,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
   },
 
   logo: {
-    width: 112,
-    height: 112,
+    width: 84,
+    height: 84,
+    opacity: 0.98,
   },
 
-  motto: {
-    textAlign: "center",
-    color: theme.colors.primary,
-    fontSize: theme.fontSize.xs,
+  brandTitle: {
+    color: theme.colors.text,
+    fontSize: 18,
     fontWeight: theme.fontWeight.black,
-    letterSpacing: 1.0,
-    textShadowColor: "rgba(0,0,0,0.55)",
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 10,
+    letterSpacing: 0.2,
+  },
+
+  brandMotto: {
+    textAlign: "center",
+    color: theme.colors.textTertiary,
+    fontSize: 12,
+    fontWeight: theme.fontWeight.bold,
+    letterSpacing: 0.2,
   },
 
   cardWrap: {
@@ -237,8 +297,12 @@ const styles = StyleSheet.create({
   },
 
   card: {
-    padding: theme.spacing.lg,
     borderRadius: 26,
+    overflow: "hidden",
+  },
+
+  cardInner: {
+    padding: theme.spacing.lg,
     gap: 10,
   },
 
@@ -254,16 +318,16 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     fontWeight: theme.fontWeight.black,
     fontSize: 28,
-    lineHeight: 32,
+    lineHeight: 34,
     letterSpacing: 0.2,
   },
 
   h2: {
-    marginTop: 4,
+    marginTop: 2,
     color: "rgba(255,255,255,0.92)",
     fontWeight: theme.fontWeight.black,
     fontSize: 13,
-    letterSpacing: 0.3,
+    letterSpacing: 0.2,
   },
 
   body: {
@@ -282,8 +346,8 @@ const styles = StyleSheet.create({
   },
 
   dot: {
-    width: 10,
-    height: 10,
+    width: 9,
+    height: 9,
     borderRadius: 999,
     backgroundColor: "rgba(255,255,255,0.14)",
     borderWidth: 1,
@@ -296,50 +360,47 @@ const styles = StyleSheet.create({
   },
 
   actions: {
-    marginTop: 14,
+    marginTop: 12,
     flexDirection: "row",
     gap: 12,
   },
 
-  btn: {
+  pillBtn: {
     flex: 1,
-    borderRadius: 14,
-    paddingVertical: 14,
+    borderRadius: 999,
+    paddingVertical: 13,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
+    overflow: "hidden",
   },
 
-  btnPrimary: {
-    borderColor: "rgba(255,255,255,0.14)",
-    backgroundColor: "rgba(0,0,0,0.30)",
+  pillPrimary: {
+    borderColor: "rgba(79,224,138,0.28)",
+    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
   },
 
-  btnPrimaryText: {
-    color: theme.colors.text,
+  pillGhost: {
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.22)",
+  },
+
+  pillBtnText: {
     fontWeight: theme.fontWeight.black,
-    fontSize: theme.fontSize.md,
+    fontSize: 14,
     letterSpacing: 0.2,
   },
 
-  btnGhost: {
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(255,255,255,0.04)",
-  },
-
-  btnGhostText: {
-    color: "rgba(255,255,255,0.70)",
-    fontWeight: theme.fontWeight.black,
-    fontSize: theme.fontSize.md,
-    letterSpacing: 0.1,
-  },
+  pillPrimaryText: { color: theme.colors.text },
+  pillGhostText: { color: theme.colors.textSecondary },
 
   micro: {
     marginTop: 10,
     textAlign: "center",
     color: theme.colors.textTertiary,
     fontSize: 11,
-    fontWeight: "800",
+    fontWeight: theme.fontWeight.black,
     letterSpacing: 0.2,
+    opacity: 0.92,
   },
 });

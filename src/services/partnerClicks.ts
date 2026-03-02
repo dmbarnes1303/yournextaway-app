@@ -213,10 +213,9 @@ async function openUrlInternal(url: string) {
  * - AppState and browser dismiss can both fire; we de-dupe with returnInFlight + lastReturnHandledAt.
  */
 async function triggerReturnIfPresent(reason: "appstate" | "browser_dismiss", meta?: { openDurationMs?: number }) {
-  // De-dupe gate: if we just handled a return, ignore repeats.
   const t = now();
   if (returnInFlight) return;
-  if (t - lastReturnHandledAt < 1500) return; // 1.5s safety window
+  if (t - lastReturnHandledAt < 1500) return;
 
   returnInFlight = true;
   try {
@@ -230,14 +229,12 @@ async function triggerReturnIfPresent(reason: "appstate" | "browser_dismiss", me
 
     const click = lastClick;
 
-    // Compute duration:
     const explicitDur = Number(meta?.openDurationMs ?? 0);
     const fallbackDur = Math.max(0, t - Number(click.openedAt || 0));
     const dur = explicitDur > 0 ? explicitDur : fallbackDur;
 
     const minOpenMs = 8000;
 
-    // Too brief => no prompt, auto-demote pending -> saved.
     if (dur > 0 && dur < minOpenMs) {
       await persistLastClick(null);
       await tryTransitionPendingToSaved(click.itemId);
@@ -247,11 +244,9 @@ async function triggerReturnIfPresent(reason: "appstate" | "browser_dismiss", me
 
     const handler = onReturnHandler;
     if (!handler) {
-      // Keep lastClick persisted until handler exists.
       return;
     }
 
-    // Consume BEFORE calling handler to guarantee exactly-once semantics.
     await persistLastClick(null);
 
     try {
@@ -272,16 +267,13 @@ export function getPartnerClicksDebugState() {
 }
 
 /**
- * ✅ Root uses this via partnerReturnBootstrap.
- * Idempotent + returns an unsubscribe for safety.
+ * Idempotent watcher.
  */
 export function ensurePartnerReturnWatcher(onReturn: (click: LastPartnerClick) => void | Promise<void>) {
   onReturnHandler = onReturn;
 
   if (subscribed) {
-    // Already subscribed; handler updated above.
     return () => {
-      // only unsubscribe if still subscribed
       try {
         appStateSub?.remove?.();
       } catch {}
@@ -317,9 +309,6 @@ export function ensurePartnerReturnWatcher(onReturn: (click: LastPartnerClick) =
   };
 }
 
-/**
- * Public: open a URL WITHOUT creating a pending item and WITHOUT prompts.
- */
 export async function openUntrackedUrl(url: string) {
   const u = normalizeUrl(url);
   if (!u) throw new Error("url is required");
@@ -463,7 +452,6 @@ export async function beginPartnerClick(args: {
 
     const openedAt = now();
 
-    // Persist click if pending; otherwise don't.
     if (item.status === "pending") {
       await persistLastClick({
         itemId: item.id,
@@ -491,9 +479,7 @@ export async function beginPartnerClick(args: {
       if (createdNew && item) {
         try {
           await savedItemsStore.remove(item.id);
-        } catch {
-          // ignore
-        }
+        } catch {}
       }
       await persistLastClick(null);
       throw e;
@@ -533,8 +519,6 @@ export async function markNotBooked(itemId: string) {
 }
 
 export async function dismissReturnPrompt(itemId?: string) {
-  // "Not now" means: don't prompt again for this click.
-  // Pending item remains pending.
   if (!lastClick) return;
 
   if (!itemId) {
@@ -561,9 +545,7 @@ export function getLastClick(): LastPartnerClick | null {
 export function __unsafeResetPartnerClickStateForDevOnly() {
   try {
     appStateSub?.remove?.();
-  } catch {
-    // ignore
-  }
+  } catch {}
   appStateSub = null;
   subscribed = false;
   onReturnHandler = null;
@@ -572,4 +554,4 @@ export function __unsafeResetPartnerClickStateForDevOnly() {
   lastClickLoaded = false;
   returnInFlight = false;
   lastReturnHandledAt = 0;
-}
+      }

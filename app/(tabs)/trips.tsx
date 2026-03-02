@@ -10,7 +10,7 @@ import {
   Alert,
   Platform,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 
 import Background from "@/src/components/Background";
@@ -20,6 +20,7 @@ import EmptyState from "@/src/components/EmptyState";
 
 import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
+import { parseIsoDateOnly, toIsoDate } from "@/src/constants/football";
 
 import tripsStore, { type Trip } from "@/src/state/trips";
 import savedItemsStore from "@/src/state/savedItems";
@@ -32,22 +33,16 @@ import { formatUkDateOnly } from "@/src/utils/formatters";
 function titleCase(input: string) {
   const s = String(input ?? "").trim();
   if (!s) return "Trip";
-
-  // Handle kebab/snake, preserve accents, clean repeated spaces.
   const cleaned = s.replace(/[-_]+/g, " ").replace(/\s+/g, " ").trim();
-
   return cleaned
     .split(" ")
-    .map((w) => {
-      const lower = w.toLowerCase();
-      // Keep common short words lower unless it's the first word.
-      return lower.charAt(0).toUpperCase() + lower.slice(1);
-    })
+    .filter(Boolean)
+    .map((w) => (w[0] ? w[0].toUpperCase() + w.slice(1) : w))
     .join(" ");
 }
 
 function cityLabel(t: Trip) {
-  const raw = String(t.cityId ?? "").trim();
+  const raw = String((t as any)?.displayCity ?? t.cityId ?? "").trim();
   return titleCase(raw || "Trip");
 }
 
@@ -59,35 +54,65 @@ function tripSummaryLine(t: Trip) {
 }
 
 function isUpcoming(t: Trip) {
-  if (!t.startDate) return false;
-  const d = new Date(`${t.startDate}T00:00:00Z`);
-  if (Number.isNaN(d.getTime())) return false;
+  const start = t.startDate ? parseIsoDateOnly(t.startDate) : null;
+  if (!start) return false;
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return d.getTime() >= today.getTime();
+  const today = parseIsoDateOnly(toIsoDate(new Date()));
+  if (!today) return true;
+
+  return start.getTime() >= today.getTime();
 }
 
-function groupItemsByTrip(items: SavedItem[]) {
-  const map: Record<string, SavedItem[]> = {};
+function buildCountsIndex(items: SavedItem[]) {
+  const byTrip: Record<
+    string,
+    {
+      total: number;
+      pending: number;
+      booked: number;
+      saved: number;
+    }
+  > = {};
+
   for (const it of items) {
-    if (!map[it.tripId]) map[it.tripId] = [];
-    map[it.tripId].push(it);
+    const tid = String(it.tripId ?? "").trim();
+    if (!tid) continue;
+
+    if (!byTrip[tid]) byTrip[tid] = { total: 0, pending: 0, booked: 0, saved: 0 };
+
+    const c = byTrip[tid];
+    c.total += 1;
+    if (it.status === "pending") c.pending += 1;
+    else if (it.status === "booked") c.booked += 1;
+    else if (it.status === "saved") c.saved += 1;
   }
-  return map;
+
+  return byTrip;
 }
 
-function countsFor(items: SavedItem[]) {
-  const total = items.length;
-  const pending = items.filter((x) => x.status === "pending").length;
-  const booked = items.filter((x) => x.status === "booked").length;
-  return { total, pending, booked };
+function badgeLabel(t: Trip, counts?: { pending: number; booked: number }) {
+  const pending = counts?.pending ?? 0;
+  const booked = counts?.booked ?? 0;
+
+  if (pending > 0) return { text: `${pending} pending`, kind: "pending" as const };
+  if (booked > 0) return { text: `${booked} booked`, kind: "booked" as const };
+
+  // Draft heuristic: no items + no dates
+  const noDates = !t.startDate || !t.endDate;
+  if (noDates) return { text: "Draft", kind: "draft" as const };
+
+  return { text: "Ready", kind: "ready" as const };
+}
+
+function clamp2(n: number) {
+  return Math.max(0, Math.min(99, n));
 }
 
 /* -------------------------------- Screen -------------------------------- */
 
 export default function TripsScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   const [loadedTrips, setLoadedTrips] = useState(tripsStore.getState().loaded);
   const [trips, setTrips] = useState<Trip[]>(tripsStore.getState().trips);
@@ -127,17 +152,20 @@ export default function TripsScreen() {
 
   /* ------------------------------ derived ------------------------------ */
 
-  const itemsByTrip = useMemo(() => groupItemsByTrip(items), [items]);
+  const loading = !loadedTrips || !loadedItems;
+
+  const countsIndex = useMemo(() => buildCountsIndex(items), [items]);
 
   const upcoming = useMemo(() => trips.filter(isUpcoming), [trips]);
   const past = useMemo(() => trips.filter((t) => !isUpcoming(t)), [trips]);
 
-  const getCounts = useCallback(
-    (tripId: string) => countsFor(itemsByTrip[tripId] ?? []),
-    [itemsByTrip]
-  );
+  const totals = useMemo(() => {
+    const tripCount = trips.length;
+    const pending = items.filter((x) => x.status === "pending").length;
+    const booked = items.filter((x) => x.status === "booked").length;
+    return { tripCount, pending, booked };
+  }, [trips.length, items]);
 
-  const loading = !loadedTrips || !loadedItems;
   const showEmpty = !loading && trips.length === 0;
 
   /* ------------------------------ actions ------------------------------ */
@@ -151,6 +179,9 @@ export default function TripsScreen() {
     (t: Trip) => router.push({ pathname: "/trip/build", params: { tripId: t.id } } as any),
     [router]
   );
+
+  const goBuild = useCallback(() => router.push("/trip/build"), [router]);
+  const goFixtures = useCallback(() => router.push("/(tabs)/fixtures" as any), [router]);
 
   const actuallyDeleteTrip = useCallback(
     async (t: Trip) => {
@@ -170,7 +201,7 @@ export default function TripsScreen() {
 
   const deleteTrip = useCallback(
     (t: Trip) => {
-      const c = getCounts(t.id);
+      const c = countsIndex[t.id] ?? { total: 0, pending: 0, booked: 0, saved: 0 };
       const name = cityLabel(t);
 
       Alert.alert(
@@ -201,46 +232,65 @@ export default function TripsScreen() {
         ]
       );
     },
-    [getCounts, actuallyDeleteTrip]
+    [countsIndex, actuallyDeleteTrip]
   );
-
-  const goBuild = () => router.push("/trip/build");
-  const goFixtures = () => router.push("/(tabs)/fixtures");
 
   /* -------------------------------- render -------------------------------- */
 
   return (
-    <Background imageSource={getBackground("trips")} overlayOpacity={0.82}>
+    <Background imageSource={getBackground("trips")} overlayOpacity={0.84}>
       <SafeAreaView style={styles.safe} edges={["top"]}>
-        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-          <View style={styles.header}>
-            <Text style={styles.title}>Trips</Text>
-            <Text style={styles.subtitle}>Your travel workspaces</Text>
-          </View>
-
-          {loading ? (
-            <GlassCard style={styles.card} strength="default">
-              <View style={styles.center}>
-                <ActivityIndicator />
-                <Text style={styles.muted}>Loading trips…</Text>
+        <ScrollView
+          contentContainerStyle={[styles.content, { paddingBottom: theme.spacing.xxl + insets.bottom }]}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* HERO */}
+          <GlassCard style={styles.hero} strength="default">
+            <View style={styles.heroTop}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.kicker}>WORKSPACES</Text>
+                <Text style={styles.title}>Trips</Text>
+                <Text style={styles.subtitle}>Everything you’re planning — tickets, travel, notes, Wallet.</Text>
               </View>
-            </GlassCard>
-          ) : null}
 
+              <View style={styles.metricsCol}>
+                <Metric label="Trips" value={String(clamp2(totals.tripCount))} />
+                <Metric label="Pending" value={String(clamp2(totals.pending))} />
+                <Metric label="Booked" value={String(clamp2(totals.booked))} />
+              </View>
+            </View>
+
+            <View style={styles.heroActions}>
+              <Pressable onPress={goBuild} style={[styles.btn, styles.btnPrimary]}>
+                <Text style={styles.btnPrimaryText}>Build a trip</Text>
+                <Text style={styles.btnSub}>Create a new workspace</Text>
+              </Pressable>
+
+              <Pressable onPress={goFixtures} style={[styles.btn, styles.btnSecondary]}>
+                <Text style={styles.btnSecondaryText}>Browse fixtures</Text>
+                <Text style={styles.btnSub}>Start from a match</Text>
+              </Pressable>
+            </View>
+
+            {loading ? (
+              <View style={styles.heroLoadingRow}>
+                <ActivityIndicator />
+                <Text style={styles.muted}>Loading your trips…</Text>
+              </View>
+            ) : null}
+          </GlassCard>
+
+          {/* EMPTY */}
           {showEmpty ? (
             <GlassCard style={styles.card} strength="default">
-              <EmptyState title="No trips yet" message="Start from a fixture and build your trip workspace." />
-              <View style={{ gap: 10 }}>
-                <Pressable onPress={goBuild} style={[styles.btn, styles.btnPrimary]}>
-                  <Text style={styles.btnPrimaryText}>Build trip</Text>
-                </Pressable>
-                <Pressable onPress={goFixtures} style={[styles.btn, styles.btnSecondary]}>
-                  <Text style={styles.btnSecondaryText}>Browse fixtures</Text>
-                </Pressable>
-              </View>
+              <EmptyState
+                title="No trips yet"
+                message="Start from a fixture, then build your trip workspace around tickets + travel."
+              />
             </GlassCard>
           ) : null}
 
+          {/* UPCOMING */}
           {!loading && upcoming.length > 0 ? (
             <View style={styles.section}>
               <SectionHeader title="Upcoming" subtitle={`${upcoming.length}`} />
@@ -249,7 +299,7 @@ export default function TripsScreen() {
                   <TripCard
                     key={t.id}
                     t={t}
-                    getCounts={getCounts}
+                    counts={countsIndex[t.id]}
                     deletingTripId={deletingTripId}
                     onOpen={openTrip}
                     onEdit={editTrip}
@@ -260,6 +310,7 @@ export default function TripsScreen() {
             </View>
           ) : null}
 
+          {/* PAST / DRAFT */}
           {!loading && past.length > 0 ? (
             <View style={styles.section}>
               <SectionHeader title="Past & draft" subtitle={`${past.length}`} />
@@ -268,7 +319,7 @@ export default function TripsScreen() {
                   <TripCard
                     key={t.id}
                     t={t}
-                    getCounts={getCounts}
+                    counts={countsIndex[t.id]}
                     deletingTripId={deletingTripId}
                     onOpen={openTrip}
                     onEdit={editTrip}
@@ -278,11 +329,43 @@ export default function TripsScreen() {
               </View>
             </View>
           ) : null}
-
-          <View style={{ height: 18 }} />
         </ScrollView>
       </SafeAreaView>
     </Background>
+  );
+}
+
+/* ------------------------------ Bits ------------------------------ */
+
+function Metric({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.metric}>
+      <Text style={styles.metricVal}>{value}</Text>
+      <Text style={styles.metricKey}>{label}</Text>
+    </View>
+  );
+}
+
+function StatusChip({
+  kind,
+  text,
+}: {
+  kind: "pending" | "booked" | "draft" | "ready";
+  text: string;
+}) {
+  const style =
+    kind === "pending"
+      ? styles.chipPending
+      : kind === "booked"
+      ? styles.chipBooked
+      : kind === "draft"
+      ? styles.chipDraft
+      : styles.chipReady;
+
+  return (
+    <View style={[styles.chip, style]}>
+      <Text style={styles.chipText}>{text}</Text>
+    </View>
   );
 }
 
@@ -290,21 +373,23 @@ export default function TripsScreen() {
 
 function TripCard({
   t,
-  getCounts,
+  counts,
   deletingTripId,
   onOpen,
   onEdit,
   onDelete,
 }: {
   t: Trip;
-  getCounts: (tripId: string) => { total: number; pending: number; booked: number };
+  counts?: { total: number; pending: number; booked: number; saved: number };
   deletingTripId: string | null;
   onOpen: (t: Trip) => void;
   onEdit: (t: Trip) => void;
   onDelete: (t: Trip) => void;
 }) {
-  const c = getCounts(t.id);
+  const c = counts ?? { total: 0, pending: 0, booked: 0, saved: 0 };
   const isDeleting = deletingTripId === t.id;
+
+  const badge = badgeLabel(t, c);
 
   return (
     <GlassCard style={styles.tripCard} strength="subtle" noPadding>
@@ -312,32 +397,29 @@ function TripCard({
         onPress={() => onOpen(t)}
         disabled={isDeleting}
         style={({ pressed }) => [styles.tripPress, pressed && { opacity: 0.92 }]}
-        android_ripple={{ color: "rgba(255,255,255,0.05)" }}
+        android_ripple={{ color: "rgba(255,255,255,0.06)" }}
       >
         <View style={styles.tripTopRow}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.tripTitle}>{cityLabel(t)}</Text>
-            <Text style={styles.tripMeta}>{tripSummaryLine(t)}</Text>
+            <View style={styles.tripTitleRow}>
+              <Text style={styles.tripTitle} numberOfLines={1}>
+                {cityLabel(t)}
+              </Text>
+              <StatusChip kind={badge.kind} text={badge.text} />
+            </View>
+
+            <Text style={styles.tripMeta} numberOfLines={1}>
+              {tripSummaryLine(t)}
+            </Text>
           </View>
 
           <Text style={styles.chev}>›</Text>
         </View>
 
         <View style={styles.pillRow}>
-          <View style={styles.pill}>
-            <Text style={styles.pillKey}>Items</Text>
-            <Text style={styles.pillVal}>{c.total}</Text>
-          </View>
-
-          <View style={styles.pill}>
-            <Text style={styles.pillKey}>Pending</Text>
-            <Text style={styles.pillVal}>{c.pending}</Text>
-          </View>
-
-          <View style={styles.pill}>
-            <Text style={styles.pillKey}>Booked</Text>
-            <Text style={styles.pillVal}>{c.booked}</Text>
-          </View>
+          <Pill label="Items" value={c.total} />
+          <Pill label="Pending" value={c.pending} />
+          <Pill label="Booked" value={c.booked} />
         </View>
 
         <View style={styles.actionsRow}>
@@ -372,6 +454,15 @@ function TripCard({
   );
 }
 
+function Pill({ label, value }: { label: string; value: number }) {
+  return (
+    <View style={styles.pill}>
+      <Text style={styles.pillKey}>{label}</Text>
+      <Text style={styles.pillVal}>{String(clamp2(value))}</Text>
+    </View>
+  );
+}
+
 /* -------------------------------- Styles -------------------------------- */
 
 const styles = StyleSheet.create({
@@ -380,25 +471,50 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: theme.spacing.lg,
     paddingTop: theme.spacing.lg,
-    paddingBottom: theme.spacing.xxl,
     gap: theme.spacing.lg,
   },
 
-  header: { gap: 6 },
-  title: { color: theme.colors.text, fontSize: 26, fontWeight: theme.fontWeight.black },
-  subtitle: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold },
+  /* HERO */
+  hero: { padding: theme.spacing.lg, borderRadius: 24 },
 
-  section: { gap: 10 },
-  list: { gap: 12 },
+  heroTop: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
 
-  card: { padding: theme.spacing.lg },
+  kicker: { color: theme.colors.primary, fontWeight: theme.fontWeight.black, fontSize: 11, letterSpacing: 1.2 },
 
-  center: { paddingVertical: 12, alignItems: "center", gap: 10 },
+  title: { marginTop: 6, color: theme.colors.text, fontSize: 28, fontWeight: theme.fontWeight.black },
+
+  subtitle: {
+    marginTop: 6,
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.bold,
+    lineHeight: 18,
+  },
+
+  metricsCol: { gap: 8, alignItems: "flex-end" },
+  metric: {
+    minWidth: 78,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: Platform.OS === "android" ? "rgba(10,12,14,0.18)" : "rgba(10,12,14,0.14)",
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    alignItems: "center",
+  },
+  metricVal: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: 16 },
+  metricKey: { marginTop: 3, color: theme.colors.textTertiary, fontWeight: theme.fontWeight.black, fontSize: 11 },
+
+  heroActions: { marginTop: 14, flexDirection: "row", gap: 10 },
+
+  heroLoadingRow: { marginTop: 12, flexDirection: "row", alignItems: "center", gap: 10 },
+
   muted: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold },
 
   btn: {
+    flex: 1,
     paddingVertical: 12,
-    borderRadius: 14,
+    borderRadius: 16,
     alignItems: "center",
     borderWidth: 1,
     overflow: "hidden",
@@ -416,14 +532,34 @@ const styles = StyleSheet.create({
   },
   btnSecondaryText: { color: theme.colors.textSecondary, fontWeight: theme.fontWeight.black, fontSize: 14 },
 
+  btnSub: { marginTop: 4, color: theme.colors.textTertiary, fontWeight: theme.fontWeight.black, fontSize: 11 },
+
+  /* BODY */
+  section: { gap: 10 },
+  list: { gap: 12 },
+
+  card: { padding: theme.spacing.lg, borderRadius: 24 },
+
+  /* TRIP CARD */
   tripCard: { borderRadius: 24 },
   tripPress: { padding: 14 },
 
   tripTopRow: { flexDirection: "row", alignItems: "center", gap: 10 },
-  tripTitle: { color: theme.colors.text, fontSize: 18, fontWeight: theme.fontWeight.black },
-  tripMeta: { marginTop: 4, color: theme.colors.textSecondary, fontSize: 12, fontWeight: theme.fontWeight.bold },
+
+  tripTitleRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  tripTitle: { color: theme.colors.text, fontSize: 18, fontWeight: theme.fontWeight.black, flexShrink: 1 },
+
+  tripMeta: { marginTop: 6, color: theme.colors.textSecondary, fontSize: 12, fontWeight: theme.fontWeight.bold },
 
   chev: { color: theme.colors.textTertiary, fontSize: 26, fontWeight: theme.fontWeight.black, marginTop: -2 },
+
+  chip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5 },
+  chipText: { color: theme.colors.text, fontWeight: theme.fontWeight.black, fontSize: 11 },
+
+  chipPending: { borderColor: "rgba(255,200,80,0.40)", backgroundColor: "rgba(255,200,80,0.10)" },
+  chipBooked: { borderColor: "rgba(120,170,255,0.45)", backgroundColor: "rgba(120,170,255,0.10)" },
+  chipDraft: { borderColor: "rgba(255,255,255,0.16)", backgroundColor: "rgba(255,255,255,0.06)" },
+  chipReady: { borderColor: "rgba(0,255,136,0.35)", backgroundColor: "rgba(0,255,136,0.08)" },
 
   pillRow: { marginTop: 12, flexDirection: "row", gap: 10 },
   pill: {

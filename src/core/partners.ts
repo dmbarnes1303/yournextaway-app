@@ -36,7 +36,7 @@ export const PARTNERS: Partner[] = [
     name: "SportsEvents365",
     category: "tickets",
     affiliate: true,
-    api: true, // set false if you don't actually use an API yet
+    api: true,
     deepLinkBase: "https://www.sportsevents365.com/",
   },
   {
@@ -59,6 +59,16 @@ export const PARTNERS: Partner[] = [
   },
 
   // Stays
+  // IMPORTANT: keep expedia_stays because the app uses it (Trip workspace, partnerLinks resolver, etc.)
+  {
+    id: "expedia_stays",
+    name: "Expedia",
+    category: "stays",
+    affiliate: true,
+    api: false,
+    deepLinkBase: "https://www.expedia.co.uk/",
+  },
+  // Optional legacy alias. Keep only if older saved items already use partnerId="expedia".
   {
     id: "expedia",
     name: "Expedia",
