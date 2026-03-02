@@ -2,6 +2,31 @@
 import React, { useMemo } from "react";
 import { View, Text, StyleSheet } from "react-native";
 import { theme } from "@/src/constants/theme";
+import GlassCard from "@/src/components/GlassCard";
+import Chip from "@/src/components/Chip";
+
+function clampScore(score: number) {
+  const n = Number(score);
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(0, Math.min(100, Math.round(n)));
+}
+
+function tier(pct: number) {
+  if (pct >= 85) return "good" as const;
+  if (pct >= 55) return "ok" as const;
+  return "risk" as const;
+}
+
+function tierCopy(t: "good" | "ok" | "risk") {
+  switch (t) {
+    case "good":
+      return { label: "Ready", chip: "success" as const };
+    case "ok":
+      return { label: "In progress", chip: "primary" as const };
+    default:
+      return { label: "At risk", chip: "default" as const };
+  }
+}
 
 export default function TripHealthScore({
   score,
@@ -14,81 +39,139 @@ export default function TripHealthScore({
   isPro: boolean;
   capHint?: string;
 }) {
-  const pct = useMemo(() => {
-    const n = Number(score);
-    if (!Number.isFinite(n)) return 0;
-    return Math.max(0, Math.min(100, Math.round(n)));
-  }, [score]);
+  const pct = useMemo(() => clampScore(score), [score]);
+  const t = useMemo(() => tier(pct), [pct]);
+  const copy = useMemo(() => tierCopy(t), [t]);
 
-  const barCfg = useMemo(() => {
-    if (pct >= 85) return { border: "rgba(0,255,136,0.45)", fill: "rgba(0,255,136,0.35)" };
-    if (pct >= 55) return { border: "rgba(255,200,80,0.40)", fill: "rgba(255,200,80,0.28)" };
-    return { border: "rgba(255,80,80,0.40)", fill: "rgba(255,80,80,0.24)" };
-  }, [pct]);
+  const missingTop = useMemo(() => {
+    const arr = Array.isArray(missing) ? missing.filter(Boolean).map(String) : [];
+    return arr.slice(0, 3);
+  }, [missing]);
 
-  const missingLine = missing.length ? missing.join(", ") : "Nothing critical missing.";
+  const fillColor = useMemo(() => {
+    // Keep it restrained: green is “success”, gold is “warning”, red is “error”.
+    if (t === "good") return "rgba(87,162,56,0.35)";
+    if (t === "ok") return "rgba(242,201,76,0.30)";
+    return "rgba(214,69,69,0.28)";
+  }, [t]);
+
+  const borderColor = useMemo(() => {
+    if (t === "good") return "rgba(87,162,56,0.28)";
+    if (t === "ok") return "rgba(242,201,76,0.22)";
+    return "rgba(214,69,69,0.20)";
+  }, [t]);
+
+  const primaryLine = useMemo(() => {
+    if (t === "good") return "You’re basically ready to book around this fixture.";
+    if (t === "ok") return "You’re partway there — lock in the big items next.";
+    return "You’re missing key pieces — avoid booking expensive parts yet.";
+  }, [t]);
+
+  const proLine = useMemo(() => {
+    if (!isPro) return "Pro shows what’s missing + adds automation and price tracking.";
+    if (!missingTop.length) return "Nothing critical missing. Add extras if you want.";
+    return `Missing: ${missingTop.join(", ")}${missing.length > 3 ? "…" : ""}`;
+  }, [isPro, missingTop, missing.length]);
 
   return (
-    <View style={styles.wrap}>
-      <View style={styles.topRow}>
-        <Text style={styles.title}>Trip readiness</Text>
-        <Text style={styles.pct}>{pct}%</Text>
-      </View>
+    <GlassCard level="default" variant="matte" style={styles.card} noPadding>
+      <View style={styles.inner}>
+        <View style={styles.topRow}>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={styles.title}>Trip readiness</Text>
+            <Text style={styles.primaryLine} numberOfLines={2}>
+              {primaryLine}
+            </Text>
+          </View>
 
-      <View style={[styles.bar, { borderColor: barCfg.border }]}>
-        <View style={[styles.fill, { width: `${pct}%`, backgroundColor: barCfg.fill }]} />
-      </View>
+          <View style={styles.scoreCol}>
+            <Text style={styles.pct}>{pct}%</Text>
+            <Chip label={copy.label} variant={copy.chip} />
+          </View>
+        </View>
 
-      {isPro ? (
+        <View style={[styles.bar, { borderColor }]}>
+          <View style={[styles.fill, { width: `${pct}%`, backgroundColor: fillColor }]} />
+        </View>
+
         <Text style={styles.detail} numberOfLines={2}>
-          {missing.length ? `Missing: ${missingLine}` : "You’re set. Add extras if you want."}
+          {proLine}
         </Text>
-      ) : (
-        <Text style={styles.detail} numberOfLines={2}>
-          Pro shows exactly what’s missing + adds automation.
-        </Text>
-      )}
 
-      {capHint ? <Text style={styles.capHint}>{capHint}</Text> : null}
-    </View>
+        {capHint ? <Text style={styles.capHint}>{capHint}</Text> : null}
+      </View>
+    </GlassCard>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: {
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.16)",
-    padding: 12,
+  card: {
+    borderRadius: theme.borderRadius.sheet,
+    overflow: "hidden",
   },
 
-  topRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  title: { color: theme.colors.text, fontWeight: "900" },
-  pct: { color: theme.colors.text, fontWeight: "900" },
+  inner: {
+    padding: 14,
+    gap: 10,
+  },
+
+  topRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+
+  title: {
+    color: theme.colors.textPrimary,
+    fontWeight: theme.fontWeight.black,
+    fontSize: 14,
+    letterSpacing: 0.2,
+  },
+
+  primaryLine: {
+    marginTop: 6,
+    color: theme.colors.textSecondary,
+    fontWeight: theme.fontWeight.medium,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+
+  scoreCol: {
+    alignItems: "flex-end",
+    gap: 8,
+  },
+
+  pct: {
+    color: theme.colors.textPrimary,
+    fontWeight: theme.fontWeight.black,
+    fontSize: 20,
+    letterSpacing: 0.2,
+  },
 
   bar: {
-    marginTop: 10,
     height: 10,
     borderRadius: 999,
     borderWidth: 1,
-    backgroundColor: "rgba(0,0,0,0.18)",
+    backgroundColor: "rgba(255,255,255,0.04)",
     overflow: "hidden",
   },
-  fill: { height: "100%", borderRadius: 999 },
+
+  fill: {
+    height: "100%",
+    borderRadius: 999,
+  },
 
   detail: {
-    marginTop: 10,
     color: theme.colors.textSecondary,
-    fontWeight: "900",
+    fontWeight: theme.fontWeight.medium,
     fontSize: 12,
     lineHeight: 16,
   },
 
   capHint: {
-    marginTop: 8,
-    color: theme.colors.textTertiary,
-    fontWeight: "900",
+    color: theme.colors.textMuted,
+    fontWeight: theme.fontWeight.semibold,
     fontSize: 11,
     lineHeight: 14,
   },
