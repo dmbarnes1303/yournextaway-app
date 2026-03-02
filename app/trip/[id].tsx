@@ -27,7 +27,7 @@ import TripHealthScore from "@/src/components/TripHealthScore";
 
 import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
-import { parseIsoDateOnly, toIsoDate } from "@/src/constants/football";
+import { parseIsoDateOnly, toIsoDate, DEFAULT_SEASON } from "@/src/constants/football";
 
 import tripsStore, { type Trip } from "@/src/state/trips";
 import savedItemsStore from "@/src/state/savedItems";
@@ -365,15 +365,7 @@ function partnerUrlFromRegistry(pid: PartnerId, ctx: AffiliateContext): string |
     originIata: ctx.originIata || undefined,
   };
 
-  const fns = [
-    "buildUrl",
-    "buildSearchUrl",
-    "buildLink",
-    "getUrl",
-    "getSearchUrl",
-    "makeUrl",
-    "makeLink",
-  ];
+  const fns = ["buildUrl", "buildSearchUrl", "buildLink", "getUrl", "getSearchUrl", "makeUrl", "makeLink"];
 
   for (const name of fns) {
     const fn = p?.[name];
@@ -388,11 +380,8 @@ function partnerUrlFromRegistry(pid: PartnerId, ctx: AffiliateContext): string |
     }
   }
 
-  // Some registries store a base url or template.
   const raw =
-    String(p?.url ?? "").trim() ||
-    String(p?.baseUrl ?? "").trim() ||
-    String(p?.homepage ?? "").trim();
+    String(p?.url ?? "").trim() || String(p?.baseUrl ?? "").trim() || String(p?.homepage ?? "").trim();
 
   if (raw && /^https?:\/\//i.test(raw)) return raw;
 
@@ -407,19 +396,10 @@ function partnerUrlFromRegistry(pid: PartnerId, ctx: AffiliateContext): string |
 function partnerDomainFallback(pid: PartnerId, ctx: AffiliateContext): string | null {
   const city = encodeURIComponent(ctx.city);
 
-  if (pid === "aviasales") {
-    // fallback to Aviasales landing/search entry
-    return `https://www.aviasales.com/search?destination=${city}`;
-  }
-  if (pid === "expedia_stays") {
-    return `https://www.expedia.com/Hotel-Search?destination=${city}`;
-  }
-  if (pid === "kiwitaxi") {
-    return `https://kiwitaxi.com/en/search?place=${city}`;
-  }
-  if (pid === "getyourguide") {
-    return `https://www.getyourguide.com/s/?q=${city}`;
-  }
+  if (pid === "aviasales") return `https://www.aviasales.com/search?destination=${city}`;
+  if (pid === "expedia_stays") return `https://www.expedia.com/Hotel-Search?destination=${city}`;
+  if (pid === "kiwitaxi") return `https://kiwitaxi.com/en/search?place=${city}`;
+  if (pid === "getyourguide") return `https://www.getyourguide.com/s/?q=${city}`;
   return null;
 }
 
@@ -472,9 +452,7 @@ export default function TripDetailScreen() {
         if (p === "free" || p === "premium" || p === "not_set") setPlan(p);
         else if (p === "Free Plan") setPlan("free");
         else if (p === "Premium Plan") setPlan("premium");
-      } catch {
-        // ignore
-      }
+      } catch {}
     })();
 
     return () => {
@@ -586,9 +564,7 @@ export default function TripDetailScreen() {
           try {
             const r = await getFixtureById(Number(String(id)));
             if (r) map[String(id)] = r;
-          } catch {
-            // best-effort
-          }
+          } catch {}
         }
         if (!cancelled) setFixturesById(map);
       } finally {
@@ -657,7 +633,6 @@ export default function TripDetailScreen() {
 
     const mapsUrl = buildMapsSearchUrl(`${affiliateCtx.city} travel`);
 
-    // If any are missing, we still return the object; UI will guard per-button.
     return { flightsUrl, hotelsUrl, transfersUrl, experiencesUrl, mapsUrl };
   }, [affiliateCtx]);
 
@@ -841,6 +816,7 @@ export default function TripDetailScreen() {
         to: trip.endDate,
         city: cityName,
         leagueId: String(primaryLeagueId ?? ""),
+        season: String(DEFAULT_SEASON), // ✅ NEW
       },
     } as any);
   }
@@ -855,6 +831,7 @@ export default function TripDetailScreen() {
         to: trip.endDate,
         city: cityName,
         leagueId: String(primaryLeagueId ?? ""),
+        season: String(DEFAULT_SEASON), // ✅ NEW
       },
     } as any);
   }

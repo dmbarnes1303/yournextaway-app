@@ -1,14 +1,20 @@
 // src/constants/partners.ts
-// Canonical partner registry + affiliate config for affiliateLinks.ts
+// Canonical affiliate registry WITH TRACKED BUILDERS
+// Used by Trip + Smart Booking
 
 export type PartnerCategory =
   | "tickets"
   | "flights"
   | "stays"
   | "transfers"
-  | "experiences"
-  | "insurance"
-  | "compensation";
+  | "experiences";
+
+export type AffiliateContext = {
+  city: string;
+  startDate?: string | null;
+  endDate?: string | null;
+  originIata?: string | null;
+};
 
 export type Partner = {
   id: string;
@@ -16,64 +22,109 @@ export type Partner = {
   category: PartnerCategory;
   affiliate: boolean;
   api: boolean;
-  deepLinkBase?: string;
+  buildUrl: (ctx: AffiliateContext) => string | null;
 };
 
-/**
- * AffiliateConfig
- * REAL TRACKED VALUES — DO NOT REMOVE
- *
- * Notes:
- * - Aviasales: keep Travelpayouts short link for tracking fallback.
- * - Expedia: expediaToken is the suffix token from your
- *   expedia.com/affiliates/hotel-search-<slug>.<TOKEN> links.
- * - GetYourGuide: partner id used as query param in affiliateLinks.ts.
- */
-export const AffiliateConfig = {
-  // Aviasales
-  aviasalesTracked: "https://aviasales.tpm.lv/VYu40Vnv",
+/* ------------------------------------------------------------------ */
+/* YOUR REAL AFFILIATE IDS                                            */
+/* ------------------------------------------------------------------ */
 
-  // Expedia
+export const AffiliateConfig = {
+  aviasalesMarker: "700937",
+  aviasalesFallback: "https://aviasales.tpm.lv/VYu40Vnv",
+
   expediaToken: "HQeXTbR",
 
-  // KiwiTaxi
   kiwitaxiTracked: "https://kiwitaxi.tpm.lv/oFUnzcw9",
 
-  // SportsEvents365
   sportsevents365Tracked: "https://www.sportsevents365.com/?a_aid=69834e80ec9d3",
 
-  // GetYourGuide (REAL ID)
   getyourguidePartnerId: "MAQJIREP",
-
-  // Optional
-  safetywingTracked: "",
-  airhelpTracked: "",
 } as const;
 
+/* ------------------------------------------------------------------ */
+/* Helpers                                                            */
+/* ------------------------------------------------------------------ */
+
+function enc(v: any) {
+  return encodeURIComponent(String(v ?? "").trim());
+}
+
+function ymd(v?: string | null) {
+  if (!v) return null;
+  return String(v).slice(0, 10);
+}
+
+function slugCity(city: string) {
+  return String(city)
+    .toLowerCase()
+    .replace(/&/g, "and")
+    .replace(/[^a-z0-9\s-]/g, "")
+    .trim()
+    .replace(/\s+/g, "-");
+}
+
+/* ------------------------------------------------------------------ */
+/* BUILDERS                                                           */
+/* ------------------------------------------------------------------ */
+
+function buildAviasales(ctx: AffiliateContext): string {
+  if (!ctx.city) return AffiliateConfig.aviasalesFallback;
+
+  const start = ymd(ctx.startDate);
+  if (!start) return AffiliateConfig.aviasalesFallback;
+
+  // NOTE: We don’t have IATA lookup here — fallback search works fine
+  return `https://www.aviasales.com/search/${enc(ctx.city)}/${start}?marker=${AffiliateConfig.aviasalesMarker}`;
+}
+
+function buildExpedia(ctx: AffiliateContext): string | null {
+  if (!ctx.city) return null;
+
+  const slug = slugCity(ctx.city);
+  const base = `https://expedia.com/affiliates/hotel-search-${slug}.${AffiliateConfig.expediaToken}`;
+
+  const start = ymd(ctx.startDate);
+  const end = ymd(ctx.endDate);
+
+  if (!start || !end) return base;
+
+  return `${base}?startDate=${start}&endDate=${end}`;
+}
+
+function buildKiwitaxi(): string {
+  return AffiliateConfig.kiwitaxiTracked;
+}
+
+function buildGYG(ctx: AffiliateContext): string | null {
+  if (!ctx.city) return null;
+  return `https://www.getyourguide.com/s/?q=${enc(ctx.city)}&partner_id=${AffiliateConfig.getyourguidePartnerId}`;
+}
+
+function buildSE365(): string {
+  return AffiliateConfig.sportsevents365Tracked;
+}
+
+/* ------------------------------------------------------------------ */
+/* REGISTRY                                                           */
+/* ------------------------------------------------------------------ */
+
 export const PARTNERS: Partner[] = [
-  {
-    id: "sportsevents365",
-    name: "SportsEvents365",
-    category: "tickets",
-    affiliate: true,
-    api: true,
-    deepLinkBase: "https://www.sportsevents365.com/",
-  },
   {
     id: "aviasales",
     name: "Aviasales",
     category: "flights",
     affiliate: true,
     api: false,
-    deepLinkBase: "https://www.aviasales.com/",
+    buildUrl: buildAviasales,
   },
   {
-    id: "expedia",
+    id: "expedia_stays",
     name: "Expedia",
     category: "stays",
     affiliate: true,
     api: false,
-    deepLinkBase: "https://www.expedia.com/",
+    buildUrl: buildExpedia,
   },
   {
     id: "kiwitaxi",
@@ -81,7 +132,7 @@ export const PARTNERS: Partner[] = [
     category: "transfers",
     affiliate: true,
     api: false,
-    deepLinkBase: "https://kiwitaxi.com/",
+    buildUrl: buildKiwitaxi,
   },
   {
     id: "getyourguide",
@@ -89,43 +140,37 @@ export const PARTNERS: Partner[] = [
     category: "experiences",
     affiliate: true,
     api: false,
-    deepLinkBase: "https://www.getyourguide.com/",
+    buildUrl: buildGYG,
   },
   {
-    id: "safetywing",
-    name: "SafetyWing",
-    category: "insurance",
+    id: "sportsevents365",
+    name: "SportsEvents365",
+    category: "tickets",
     affiliate: true,
-    api: false,
-    deepLinkBase: "https://safetywing.com/",
-  },
-  {
-    id: "airhelp",
-    name: "AirHelp",
-    category: "compensation",
-    affiliate: true,
-    api: false,
-    deepLinkBase: "https://www.airhelp.com/",
+    api: true,
+    buildUrl: buildSE365,
   },
 ];
 
-// helpers
+/* ------------------------------------------------------------------ */
+/* HELPERS                                                            */
+/* ------------------------------------------------------------------ */
+
 export type PartnerId = (typeof PARTNERS)[number]["id"];
 
-export function getPartnersByCategory(category: PartnerCategory): Partner[] {
-  return PARTNERS.filter((p) => p.category === category);
-}
-
-export function getPartnerOrNull(id: string): Partner | null {
-  return PARTNERS.find((p) => p.id === id) ?? null;
-}
-
-export function getPartner(id: string): Partner {
-  const p = getPartnerOrNull(id);
-  if (!p) throw new Error(`Unknown partner id: ${id}`);
+export function getPartner(id: PartnerId): Partner {
+  const p = PARTNERS.find((x) => x.id === id);
+  if (!p) throw new Error(`Unknown partner ${id}`);
   return p;
 }
 
-export function isPartnerId(id: string): id is PartnerId {
-  return PARTNERS.some((p) => p.id === id);
+export function buildPartnerUrl(
+  id: PartnerId,
+  ctx: AffiliateContext
+): string | null {
+  try {
+    return getPartner(id).buildUrl(ctx);
+  } catch {
+    return null;
+  }
 }

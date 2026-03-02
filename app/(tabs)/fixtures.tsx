@@ -7,7 +7,6 @@ import {
   ScrollView,
   Pressable,
   ActivityIndicator,
-  TextInput,
   Image,
   Alert,
   Modal,
@@ -20,6 +19,8 @@ import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
 import EmptyState from "@/src/components/EmptyState";
 import FixtureCertaintyBadge from "@/src/components/FixtureCertaintyBadge";
+import Input from "@/src/components/Input";
+import Button from "@/src/components/Button";
 
 import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
@@ -210,7 +211,6 @@ function scoreFixture(r: FixtureListRow): number {
     if (hr >= 17 && hr <= 21) s += 8; // evening
   }
 
-  // If kickoff missing -> slight penalty (not reliable)
   const iso = kickoffIsoOrNull(r);
   if (!iso) s -= 8;
 
@@ -295,7 +295,6 @@ function buildMonthGrid(year: number, month0: number) {
   const firstW = firstWeekdayUtc(year, month0);
   const cells: Array<{ iso: string; day: number; inMonth: boolean }> = [];
 
-  // NOTE: This grid assumes Sun=0. We display Mon..Sun labels, which is fine visually.
   for (let i = 0; i < firstW; i++) cells.push({ iso: "", day: 0, inMonth: false });
   for (let day = 1; day <= dim; day++) cells.push({ iso: isoFromUtcParts(year, month0, day), day, inMonth: true });
   while (cells.length % 7 !== 0) cells.push({ iso: "", day: 0, inMonth: false });
@@ -324,7 +323,6 @@ export default function FixturesScreen() {
     return s === "rating" || s === "toppicks" || s === "top_picks" || s === "top-picks";
   }, [routeSort]);
 
-  // If top-picks and no range provided, default to next 14 days.
   const defaultTopFrom = useMemo(() => minIso, [minIso]);
   const defaultTopTo = useMemo(() => addDaysIsoUtc(minIso, 13), [minIso]);
 
@@ -725,22 +723,22 @@ export default function FixturesScreen() {
 
     return (
       <View key={rowKey} style={styles.rowWrap}>
-        <GlassCard noPadding style={styles.rowCard} strength="subtle">
+        <GlassCard style={styles.rowCard} level="default" variant="matte">
           <Pressable
             onPress={() => setExpandedKey(expanded ? null : rowKey)}
-            style={({ pressed }) => [styles.rowMainPress, pressed && { opacity: 0.92 }]}
-            android_ripple={{ color: "rgba(255,255,255,0.05)" }}
+            style={({ pressed }) => [styles.rowMainPress, pressed && { opacity: 0.96 }]}
+            android_ripple={{ color: "rgba(255,255,255,0.04)" }}
           >
             <View style={styles.rowInner}>
               <View style={styles.topRow}>
                 <TeamCrest name={home} logo={r?.teams?.home?.logo} />
 
                 <View style={styles.centerCol}>
-                  <Text style={styles.teamName} numberOfLines={3} ellipsizeMode="clip">
+                  <Text style={styles.teamName} numberOfLines={2}>
                     {home}
                   </Text>
                   <Text style={styles.vs}>vs</Text>
-                  <Text style={styles.teamName} numberOfLines={3} ellipsizeMode="clip">
+                  <Text style={styles.teamName} numberOfLines={2}>
                     {away}
                   </Text>
                 </View>
@@ -751,28 +749,30 @@ export default function FixturesScreen() {
               <View style={styles.metaBlock}>
                 <Text style={styles.metaPrimary}>{kickoff.primary}</Text>
 
-                {venue || city ? <Text style={styles.metaVenue}>{[venue, city].filter(Boolean).join(" • ")}</Text> : null}
+                {venue || city ? (
+                  <Text style={styles.metaVenue}>{[venue, city].filter(Boolean).join(" • ")}</Text>
+                ) : null}
 
                 {kickoff.secondary ? <Text style={styles.metaSecondary}>{kickoff.secondary}</Text> : null}
               </View>
 
               <View style={styles.badgeRow}>
-                <FixtureCertaintyBadge state={certainty} />
+                <FixtureCertaintyBadge state={certainty} variant="compact" />
 
                 <View
                   style={[
-                    styles.badge,
-                    difficulty === "easy" && styles.badgeEasy,
-                    difficulty === "medium" && styles.badgeMedium,
-                    (difficulty === "hard" || difficulty === "very_hard") && styles.badgeHard,
+                    styles.ticketPill,
+                    difficulty === "easy" && styles.ticketEasy,
+                    difficulty === "medium" && styles.ticketMedium,
+                    (difficulty === "hard" || difficulty === "very_hard") && styles.ticketHard,
                   ]}
                 >
                   <Text
                     style={[
-                      styles.badgeText,
-                      difficulty === "easy" && styles.badgeTextEasy,
-                      difficulty === "medium" && styles.badgeTextMedium,
-                      (difficulty === "hard" || difficulty === "very_hard") && styles.badgeTextHard,
+                      styles.ticketText,
+                      difficulty === "easy" && styles.ticketTextEasy,
+                      difficulty === "medium" && styles.ticketTextMedium,
+                      (difficulty === "hard" || difficulty === "very_hard") && styles.ticketTextHard,
                     ]}
                   >
                     Home tickets: {ticketDifficultyLabel(difficulty)}
@@ -780,18 +780,16 @@ export default function FixturesScreen() {
                 </View>
               </View>
 
-              <Pressable
-                onPress={() => onToggleFollowFromRow(r)}
-                style={({ pressed }) => [
-                  styles.followPill,
-                  isFollowed && styles.followPillOn,
-                  { opacity: pressed ? 0.92 : 1 },
-                ]}
-              >
-                <Text style={[styles.followPillText, isFollowed && styles.followPillTextOn]}>
-                  {isFollowed ? "Following" : "Follow"}
-                </Text>
-              </Pressable>
+              <View style={styles.followRow}>
+                <Button
+                  label={isFollowed ? "Following" : "Follow"}
+                  onPress={() => onToggleFollowFromRow(r)}
+                  tone={isFollowed ? "secondary" : "primary"}
+                  size="sm"
+                  glow={!isFollowed}
+                  style={{ flex: 1 }}
+                />
+              </View>
 
               <Text style={styles.tapHint}>Tap for actions</Text>
             </View>
@@ -799,13 +797,21 @@ export default function FixturesScreen() {
 
           {expanded ? (
             <View style={styles.expandArea}>
-              <Pressable onPress={() => goMatch(fixtureId, { leagueId: ctxLeagueId, season: ctxSeason })} style={styles.expandGhost}>
-                <Text style={styles.expandGhostText}>Match</Text>
-              </Pressable>
-
-              <Pressable onPress={() => goTripOrBuild(fixtureId, { leagueId: ctxLeagueId, season: ctxSeason })} style={styles.expandPrimary}>
-                <Text style={styles.expandPrimaryText}>Build trip</Text>
-              </Pressable>
+              <Button
+                label="Match"
+                onPress={() => goMatch(fixtureId, { leagueId: ctxLeagueId, season: ctxSeason })}
+                tone="secondary"
+                size="md"
+                style={{ flex: 1 }}
+              />
+              <Button
+                label="Build trip"
+                onPress={() => goTripOrBuild(fixtureId, { leagueId: ctxLeagueId, season: ctxSeason })}
+                tone="primary"
+                size="md"
+                glow
+                style={{ flex: 1 }}
+              />
             </View>
           ) : null}
         </GlassCard>
@@ -823,8 +829,12 @@ export default function FixturesScreen() {
 
   const titleText = isTopPicksMode ? "Top Picks" : "Fixtures";
 
+  const bg = getBackground("fixtures");
+  const bgProps =
+    typeof bg === "string" ? ({ imageUrl: bg } as const) : ({ imageSource: bg } as const);
+
   return (
-    <Background imageSource={getBackground("fixtures")} overlayOpacity={0.82}>
+    <Background {...bgProps} overlayOpacity={0}>
       <SafeAreaView style={styles.container} edges={["top"]}>
         <View style={styles.header}>
           <View style={styles.headerTopRow}>
@@ -834,22 +844,17 @@ export default function FixturesScreen() {
               <Text style={styles.dateLine}>{headerDateLine}</Text>
             </View>
 
-            <Pressable
-              onPress={openCalendar}
-              style={({ pressed }) => [styles.calendarBtn, pressed && { opacity: 0.92 }]}
-              android_ripple={{ color: "rgba(255,255,255,0.06)" }}
-            >
-              <Text style={styles.calendarIcon}>📅</Text>
-              <Text style={styles.calendarText}>Calendar</Text>
-            </Pressable>
+            <Button label="Calendar" tone="secondary" size="sm" onPress={openCalendar} />
           </View>
 
-          <TextInput
+          <Input
             value={query}
             onChangeText={setQuery}
             placeholder="Search team, city, venue, or league"
-            placeholderTextColor={theme.colors.textTertiary}
-            style={styles.search}
+            leftIcon="search"
+            variant="default"
+            returnKeyType="search"
+            allowClear
           />
 
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 12 }}>
@@ -899,7 +904,7 @@ export default function FixturesScreen() {
         </View>
 
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-          <GlassCard style={styles.card} strength="default">
+          <View style={styles.listWrap}>
             {loading && (
               <View style={styles.center}>
                 <ActivityIndicator />
@@ -907,27 +912,28 @@ export default function FixturesScreen() {
               </View>
             )}
 
-            {!loading && error && <EmptyState title="Error" message={error} />}
+            {!loading && error && <EmptyState title="Error" message={error} iconName="alert-circle" />}
 
             {!loading && !error && filtered.length === 0 && (
-              <EmptyState title="No matches found" message="Try another date, calendar range, or league selection." />
+              <EmptyState
+                title="No matches found"
+                message="Try another date, calendar range, or league selection."
+                iconName="search"
+              />
             )}
 
             {!loading && !error && filtered.map(renderRow)}
-          </GlassCard>
+          </View>
         </ScrollView>
 
-        {/* Calendar modal unchanged */}
         <Modal visible={calendarOpen} animationType="fade" transparent onRequestClose={closeCalendar}>
           <Pressable style={styles.modalBackdrop} onPress={closeCalendar} />
           <View style={styles.modalWrap} pointerEvents="box-none">
-            <GlassCard strength="strong" style={styles.modalSheet} noPadding>
+            <GlassCard level="strong" variant="glass" forceBlur style={styles.modalSheet}>
               <View style={styles.modalInner}>
                 <View style={styles.modalHeader}>
                   <Text style={styles.modalTitle}>Select dates</Text>
-                  <Pressable onPress={closeCalendar} style={styles.modalClose} hitSlop={10}>
-                    <Text style={styles.modalCloseText}>Done</Text>
-                  </Pressable>
+                  <Button label="Close" tone="ghost" size="sm" onPress={closeCalendar} />
                 </View>
 
                 <Text style={styles.modalSub}>
@@ -984,13 +990,8 @@ export default function FixturesScreen() {
                 </View>
 
                 <View style={styles.modalActions}>
-                  <Pressable onPress={clearCalendarRange} style={[styles.modalBtn, styles.modalBtnGhost]}>
-                    <Text style={styles.modalBtnGhostText}>Clear range</Text>
-                  </Pressable>
-
-                  <Pressable onPress={applyCalendar} style={[styles.modalBtn, styles.modalBtnPrimary]}>
-                    <Text style={styles.modalBtnPrimaryText}>Apply</Text>
-                  </Pressable>
+                  <Button label="Clear range" tone="secondary" size="md" onPress={clearCalendarRange} style={{ flex: 1 }} />
+                  <Button label="Apply" tone="primary" size="md" glow onPress={applyCalendar} style={{ flex: 1 }} />
                 </View>
 
                 <Text style={styles.modalFootnote}>
@@ -1013,167 +1014,148 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
 
   header: {
-    padding: theme.spacing.lg,
-    gap: 12,
+    paddingHorizontal: theme.spacing.lg,
+    paddingTop: theme.spacing.lg,
+    paddingBottom: theme.spacing.md,
+    gap: theme.spacing.sm,
   },
 
   headerTopRow: {
     flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 12,
-  },
-
-  title: { color: theme.colors.text, fontSize: 22, fontWeight: theme.fontWeight.black },
-  subtitle: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold, marginTop: 2 },
-  dateLine: { color: theme.colors.textTertiary, fontSize: 12, fontWeight: theme.fontWeight.bold, marginTop: 6 },
-
-  calendarBtn: {
-    flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
-    overflow: "hidden",
+    gap: theme.spacing.sm,
   },
-  calendarIcon: { fontSize: 14, opacity: 0.95 },
-  calendarText: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: theme.fontWeight.black },
+
+  title: {
+    color: theme.colors.textPrimary,
+    fontSize: theme.fontSize.h1,
+    fontWeight: theme.fontWeight.semibold,
+  },
+
+  subtitle: {
+    marginTop: 4,
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSize.meta,
+    fontWeight: theme.fontWeight.medium,
+  },
+
+  dateLine: {
+    marginTop: 6,
+    color: theme.colors.textMuted,
+    fontSize: theme.fontSize.tiny,
+    fontWeight: theme.fontWeight.medium,
+  },
 
   helperLine: {
-    color: theme.colors.textTertiary,
-    fontSize: 12,
-    marginTop: -4,
-    fontWeight: theme.fontWeight.bold,
-  },
-
-  search: {
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: Platform.OS === "ios" ? 12 : 10,
-    color: theme.colors.text,
-    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
-    fontWeight: theme.fontWeight.bold,
+    color: theme.colors.textMuted,
+    fontSize: theme.fontSize.tiny,
+    fontWeight: theme.fontWeight.medium,
+    marginTop: 2,
   },
 
   datePill: {
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    borderRadius: 16,
+    borderColor: theme.colors.borderSubtle,
+    borderRadius: theme.borderRadius.card,
     paddingVertical: 10,
     paddingHorizontal: 12,
     marginRight: 8,
-    backgroundColor: Platform.OS === "android" ? "rgba(10,12,14,0.16)" : "rgba(10,12,14,0.12)",
-    minWidth: 76,
+    backgroundColor: "rgba(255,255,255,0.03)",
+    minWidth: 78,
     alignItems: "center",
     justifyContent: "center",
   },
+
   datePillActive: {
-    borderColor: "rgba(79,224,138,0.34)",
-    backgroundColor: Platform.OS === "android" ? "rgba(79,224,138,0.10)" : "rgba(79,224,138,0.08)",
+    borderColor: "rgba(87,162,56,0.30)",
+    backgroundColor: "rgba(87,162,56,0.10)",
   },
-  dateTop: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: theme.fontWeight.black },
-  dateBottom: { color: theme.colors.text, fontSize: 13, fontWeight: theme.fontWeight.black, marginTop: 2 },
-  dateTopActive: { color: "rgba(79,224,138,0.95)" },
-  dateBottomActive: { color: theme.colors.text },
+
+  dateTop: { color: theme.colors.textSecondary, fontSize: theme.fontSize.tiny, fontWeight: theme.fontWeight.semibold },
+  dateBottom: { color: theme.colors.textPrimary, fontSize: theme.fontSize.meta, fontWeight: theme.fontWeight.semibold, marginTop: 2 },
+  dateTopActive: { color: "rgba(87,162,56,0.95)" },
+  dateBottomActive: { color: theme.colors.textPrimary },
 
   leaguePill: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    borderRadius: 999,
+    borderColor: theme.colors.borderSubtle,
+    borderRadius: theme.borderRadius.pill,
     paddingVertical: 8,
     paddingHorizontal: 12,
     marginRight: 8,
-    backgroundColor: Platform.OS === "android" ? "rgba(10,12,14,0.16)" : "rgba(10,12,14,0.12)",
+    backgroundColor: "rgba(255,255,255,0.03)",
   },
+
   leaguePillActive: {
-    borderColor: "rgba(79,224,138,0.34)",
-    backgroundColor: Platform.OS === "android" ? "rgba(79,224,138,0.10)" : "rgba(79,224,138,0.08)",
+    borderColor: "rgba(87,162,56,0.30)",
+    backgroundColor: "rgba(87,162,56,0.10)",
   },
-  leagueText: { color: theme.colors.textSecondary, fontWeight: theme.fontWeight.black, fontSize: 12 },
-  leagueTextActive: { color: theme.colors.text },
+
+  leagueText: { color: theme.colors.textSecondary, fontWeight: theme.fontWeight.semibold, fontSize: theme.fontSize.tiny },
+  leagueTextActive: { color: theme.colors.textPrimary },
 
   flag: { width: 18, height: 13, borderRadius: 3, opacity: 0.9 },
 
-  content: { padding: theme.spacing.lg, paddingTop: 0 },
-  card: { padding: theme.spacing.md },
+  content: { paddingHorizontal: theme.spacing.lg, paddingBottom: theme.spacing.xl },
+  listWrap: { gap: 12 },
 
-  center: { paddingVertical: 20, alignItems: "center", gap: 10 },
-  muted: { color: theme.colors.textSecondary, fontWeight: theme.fontWeight.bold },
+  center: { paddingVertical: 24, alignItems: "center", gap: 10 },
+  muted: { color: theme.colors.textSecondary, fontWeight: theme.fontWeight.medium },
 
-  rowWrap: { marginBottom: 12 },
-  rowCard: { borderRadius: 24 },
-  rowMainPress: { borderRadius: 24, overflow: "hidden" },
+  rowWrap: { width: "100%" },
+  rowCard: { borderRadius: theme.borderRadius.sheet, padding: 0 },
+  rowMainPress: { borderRadius: theme.borderRadius.sheet, overflow: "hidden" },
 
-  rowInner: {
-    paddingVertical: 16,
-    paddingHorizontal: 14,
-    gap: 12,
-    alignItems: "center",
-  },
+  rowInner: { padding: 16, gap: 12 },
 
-  topRow: {
-    width: "100%",
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 10,
-  },
+  topRow: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
 
   crestWrap: {
     width: 56,
     height: 56,
     borderRadius: 18,
-    backgroundColor: "rgba(255,255,255,0.06)",
+    backgroundColor: "rgba(255,255,255,0.05)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
+    borderColor: theme.colors.borderSubtle,
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
   },
-  crestImg: { width: 36, height: 36, opacity: 0.95 },
-  crestFallback: { color: theme.colors.textSecondary, fontWeight: theme.fontWeight.black },
+  crestImg: { width: 38, height: 38, opacity: 0.95 },
+  crestFallback: { color: theme.colors.textSecondary, fontWeight: theme.fontWeight.semibold },
 
-  centerCol: {
-    flex: 1,
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 2,
-  },
+  centerCol: { flex: 1, alignItems: "center", gap: 6, paddingHorizontal: 2 },
 
   teamName: {
-    color: theme.colors.text,
-    fontSize: 16,
-    lineHeight: 19,
-    fontWeight: theme.fontWeight.black,
+    color: theme.colors.textPrimary,
+    fontSize: theme.fontSize.body,
+    lineHeight: 20,
+    fontWeight: theme.fontWeight.semibold,
     width: "100%",
     textAlign: "center",
   },
 
-  vs: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: theme.fontWeight.bold },
+  vs: { color: theme.colors.textMuted, fontSize: theme.fontSize.tiny, fontWeight: theme.fontWeight.medium },
 
   metaBlock: { width: "100%", alignItems: "center", gap: 4 },
-  metaPrimary: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: theme.fontWeight.bold, textAlign: "center" },
+  metaPrimary: { color: theme.colors.textSecondary, fontSize: theme.fontSize.tiny, fontWeight: theme.fontWeight.semibold, textAlign: "center" },
 
   metaVenue: {
-    color: theme.colors.textSecondary,
-    fontSize: 13,
-    fontWeight: theme.fontWeight.black,
+    color: theme.colors.textPrimary,
+    fontSize: theme.fontSize.meta,
+    fontWeight: theme.fontWeight.semibold,
     textAlign: "center",
-    opacity: 0.9,
+    opacity: 0.95,
   },
 
   metaSecondary: {
-    color: theme.colors.textTertiary,
-    fontSize: 11,
+    color: theme.colors.textMuted,
+    fontSize: theme.fontSize.tiny,
     textAlign: "center",
-    fontWeight: theme.fontWeight.black,
+    fontWeight: theme.fontWeight.medium,
   },
 
   badgeRow: {
@@ -1182,99 +1164,42 @@ const styles = StyleSheet.create({
     gap: 8,
     flexWrap: "wrap",
     justifyContent: "center",
-    paddingTop: 2,
   },
 
-  badge: {
+  ticketPill: {
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.18)",
+    borderColor: theme.colors.borderSubtle,
+    backgroundColor: "rgba(255,255,255,0.03)",
     paddingVertical: 6,
     paddingHorizontal: 10,
-    borderRadius: 999,
+    borderRadius: theme.borderRadius.pill,
   },
 
-  badgeText: { color: theme.colors.textSecondary, fontWeight: theme.fontWeight.black, fontSize: 11 },
+  ticketText: { color: theme.colors.textSecondary, fontWeight: theme.fontWeight.semibold, fontSize: 11 },
 
-  badgeEasy: {
-    borderColor: "rgba(79,224,138,0.35)",
-    backgroundColor: "rgba(79,224,138,0.10)",
-  },
-  badgeTextEasy: { color: "rgba(79,224,138,0.95)" },
+  ticketEasy: { borderColor: "rgba(87,162,56,0.30)", backgroundColor: "rgba(87,162,56,0.10)" },
+  ticketTextEasy: { color: "rgba(87,162,56,0.95)" },
 
-  badgeMedium: {
-    borderColor: "rgba(255,184,77,0.35)",
-    backgroundColor: "rgba(255,184,77,0.10)",
-  },
-  badgeTextMedium: { color: "rgba(255,184,77,0.95)" },
+  ticketMedium: { borderColor: "rgba(242,201,76,0.30)", backgroundColor: "rgba(242,201,76,0.10)" },
+  ticketTextMedium: { color: "rgba(242,201,76,0.95)" },
 
-  badgeHard: {
-    borderColor: "rgba(255,90,90,0.35)",
-    backgroundColor: "rgba(255,90,90,0.10)",
-  },
-  badgeTextHard: { color: "rgba(255,90,90,0.95)" },
+  ticketHard: { borderColor: "rgba(214,69,69,0.30)", backgroundColor: "rgba(214,69,69,0.10)" },
+  ticketTextHard: { color: "rgba(214,69,69,0.95)" },
 
-  followPill: {
-    marginTop: 4,
-    alignSelf: "stretch",
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    backgroundColor: "rgba(0,0,0,0.16)",
-    paddingVertical: 10,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  followPillOn: {
-    borderColor: "rgba(79,224,138,0.35)",
-    backgroundColor: "rgba(79,224,138,0.10)",
-  },
-  followPillText: { color: theme.colors.textSecondary, fontWeight: theme.fontWeight.black, fontSize: 12 },
-  followPillTextOn: { color: "rgba(79,224,138,0.92)" },
+  followRow: { marginTop: 2, flexDirection: "row", gap: 10 },
 
-  tapHint: { marginTop: -2, color: theme.colors.textTertiary, fontSize: 11, fontWeight: theme.fontWeight.bold },
+  tapHint: { marginTop: -2, color: theme.colors.textMuted, fontSize: theme.fontSize.tiny, fontWeight: theme.fontWeight.medium, textAlign: "center" },
 
-  expandArea: { flexDirection: "row", gap: 10, padding: 12, paddingTop: 0 },
-
-  expandGhost: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    borderRadius: 16,
-    paddingVertical: 12,
-    alignItems: "center",
-    backgroundColor: Platform.OS === "android" ? "rgba(10,12,14,0.12)" : "rgba(10,12,14,0.10)",
-  },
-  expandGhostText: { color: theme.colors.textSecondary, fontWeight: theme.fontWeight.black },
-
-  expandPrimary: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: "rgba(79,224,138,0.34)",
-    borderRadius: 16,
-    paddingVertical: 12,
-    alignItems: "center",
-    backgroundColor: Platform.OS === "android" ? "rgba(79,224,138,0.10)" : "rgba(79,224,138,0.08)",
-  },
-  expandPrimaryText: { color: theme.colors.text, fontWeight: theme.fontWeight.black },
+  expandArea: { flexDirection: "row", gap: 10, padding: 16, paddingTop: 0 },
 
   modalBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.58)" },
   modalWrap: { flex: 1, justifyContent: "flex-end" },
-  modalSheet: { borderRadius: 22, marginHorizontal: theme.spacing.lg, marginBottom: theme.spacing.lg, overflow: "hidden" },
+  modalSheet: { borderRadius: 22, marginHorizontal: theme.spacing.lg, marginBottom: theme.spacing.lg },
   modalInner: { padding: 14, gap: 12 },
 
   modalHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
-  modalTitle: { color: theme.colors.text, fontSize: 16, fontWeight: theme.fontWeight.black },
-  modalClose: {
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.18)",
-  },
-  modalCloseText: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: theme.fontWeight.black },
-  modalSub: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: theme.fontWeight.bold },
+  modalTitle: { color: theme.colors.textPrimary, fontSize: theme.fontSize.h2, fontWeight: theme.fontWeight.semibold },
+  modalSub: { color: theme.colors.textSecondary, fontSize: theme.fontSize.meta, fontWeight: theme.fontWeight.medium },
 
   calHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   calNavBtn: {
@@ -1282,57 +1207,33 @@ const styles = StyleSheet.create({
     height: 36,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.18)",
+    borderColor: theme.colors.borderSubtle,
+    backgroundColor: "rgba(255,255,255,0.04)",
     alignItems: "center",
     justifyContent: "center",
   },
-  calNavText: { color: theme.colors.textSecondary, fontSize: 20, fontWeight: theme.fontWeight.black, marginTop: -2 },
-  calMonthText: { color: theme.colors.text, fontSize: 14, fontWeight: theme.fontWeight.black },
+  calNavText: { color: theme.colors.textSecondary, fontSize: 20, fontWeight: theme.fontWeight.semibold, marginTop: -2 },
+  calMonthText: { color: theme.colors.textPrimary, fontSize: theme.fontSize.meta, fontWeight: theme.fontWeight.semibold },
 
   calWeekRow: { flexDirection: "row", justifyContent: "space-between", paddingTop: 4 },
-  calWeekText: {
-    width: "14.285%",
-    textAlign: "center",
-    color: theme.colors.textTertiary,
-    fontSize: 11,
-    fontWeight: theme.fontWeight.black,
-  },
+  calWeekText: { width: "14.285%", textAlign: "center", color: theme.colors.textMuted, fontSize: 11, fontWeight: theme.fontWeight.medium },
 
   calGrid: { flexDirection: "row", flexWrap: "wrap", marginTop: 4 },
   calCell: { width: "14.285%", aspectRatio: 1, padding: 4 },
   calDayBtn: {
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-    backgroundColor: "rgba(0,0,0,0.14)",
+    borderColor: theme.colors.borderSubtle,
+    backgroundColor: "rgba(255,255,255,0.03)",
     alignItems: "center",
     justifyContent: "center",
   },
-  calDayInRange: {
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(79,224,138,0.06)",
-  },
-  calDayEdge: {
-    borderColor: "rgba(79,224,138,0.34)",
-    backgroundColor: "rgba(79,224,138,0.10)",
-  },
-  calDayText: { color: theme.colors.textSecondary, fontWeight: theme.fontWeight.black, fontSize: 12 },
-  calDayTextEdge: { color: theme.colors.text },
+  calDayInRange: { backgroundColor: "rgba(87,162,56,0.06)" },
+  calDayEdge: { borderColor: "rgba(87,162,56,0.30)", backgroundColor: "rgba(87,162,56,0.12)" },
+  calDayText: { color: theme.colors.textSecondary, fontWeight: theme.fontWeight.semibold, fontSize: 12 },
+  calDayTextEdge: { color: theme.colors.textPrimary },
 
   modalActions: { flexDirection: "row", gap: 10, marginTop: 4 },
 
-  modalBtn: { flex: 1, borderRadius: 16, paddingVertical: 12, alignItems: "center", borderWidth: 1, overflow: "hidden" },
-  modalBtnPrimary: {
-    borderColor: "rgba(79,224,138,0.34)",
-    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.default : theme.glass.iosBg.default,
-  },
-  modalBtnPrimaryText: { color: theme.colors.text, fontSize: 14, fontWeight: theme.fontWeight.black },
-  modalBtnGhost: {
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
-  },
-  modalBtnGhostText: { color: theme.colors.textSecondary, fontSize: 14, fontWeight: theme.fontWeight.black },
-
-  modalFootnote: { color: theme.colors.textTertiary, fontSize: 12, fontWeight: theme.fontWeight.bold, lineHeight: 16 },
+  modalFootnote: { color: theme.colors.textMuted, fontSize: theme.fontSize.tiny, fontWeight: theme.fontWeight.medium, lineHeight: 16 },
 });

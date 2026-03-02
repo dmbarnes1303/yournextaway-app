@@ -52,6 +52,13 @@ function paramString(v: unknown): string | null {
   return null;
 }
 
+function paramNumber(v: unknown): number | null {
+  const s = paramString(v);
+  if (!s) return null;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
+}
+
 function fixtureIdStr(r: any): string {
   const id = r?.fixture?.id;
   return id != null ? String(id) : "";
@@ -94,6 +101,11 @@ function parseIsoToDate(iso?: string | null): Date | null {
   return Number.isFinite(d.getTime()) ? d : null;
 }
 
+function isIsoDateOnly(s?: string | null): boolean {
+  const v = cleanText(s);
+  return /^\d{4}-\d{2}-\d{2}$/.test(v);
+}
+
 function daysBetweenIso(aIso: string, bIso: string) {
   const a = parseIsoToDate(aIso);
   const b = parseIsoToDate(bIso);
@@ -102,9 +114,15 @@ function daysBetweenIso(aIso: string, bIso: string) {
   return d;
 }
 
-function findLeagueOptionByLeagueId(leagueId?: number | null) {
+function findLeagueOptionByLeagueId(leagueId?: number | null, season?: number | null) {
   if (!leagueId) return null;
-  return LEAGUES.find((l) => l.leagueId === leagueId) ?? null;
+  const byId = LEAGUES.find((l) => l.leagueId === leagueId) ?? null;
+  if (!byId) return null;
+  if (season && typeof byId.season === "number" && byId.season !== season) {
+    // If season override provided, keep label/country but use requested season
+    return { ...byId, season } as LeagueOption;
+  }
+  return byId;
 }
 
 function buildTripSnapshot(selectedFixture: FixtureListRow, placeholderTbcIds: Set<string>) {
@@ -149,11 +167,13 @@ function buildTripSnapshot(selectedFixture: FixtureListRow, placeholderTbcIds: S
   };
 }
 
-async function computePlaceholderIdsForFixture(fx: FixtureListRow | null): Promise<Set<string>> {
+async function computePlaceholderIdsForFixture(fx: FixtureListRow | null, seasonOverride?: number | null): Promise<Set<string>> {
   if (!fx) return new Set();
 
   const leagueId = fx?.league?.id ?? null;
-  const season = (fx as any)?.league?.season ?? currentFootballSeasonStartYear();
+  const season =
+    seasonOverride ??
+    (typeof (fx as any)?.league?.season === "number" ? (fx as any).league.season : currentFootballSeasonStartYear());
   const round = cleanText(fx?.league?.round);
 
   if (!leagueId || !season || !round) return new Set();
@@ -194,11 +214,19 @@ export default function TripBuildScreen() {
   const params = useLocalSearchParams();
   const insets = useSafeAreaInsets();
 
+  // --- route params we already used ---
   const routeTripId = useMemo(() => paramString((params as any)?.tripId), [params]);
   const isEditing = !!routeTripId;
 
   const routeFixtureId = useMemo(() => paramString((params as any)?.fixtureId), [params]);
   const routeCityArea = useMemo(() => paramString((params as any)?.cityArea), [params]);
+
+  // --- NEW: optional context params (from Trip Detail / elsewhere) ---
+  const routeFrom = useMemo(() => paramString((params as any)?.from), [params]);
+  const routeTo = useMemo(() => paramString((params as any)?.to), [params]);
+  const routeCity = useMemo(() => paramString((params as any)?.city), [params]);
+  const routeLeagueId = useMemo(() => paramNumber((params as any)?.leagueId), [params]);
+  const routeSeason = useMemo(() => paramNumber((params as any)?.season), [params]);
 
   const isPrefilledFlow = !!routeFixtureId && !isEditing;
 
@@ -215,11 +243,22 @@ export default function TripBuildScreen() {
 
   const [selectedFixture, setSelectedFixture] = useState<FixtureListRow | null>(null);
 
-  const [startIso, setStartIso] = useState(clampFromIsoToTomorrow(new Date().toISOString().slice(0, 10)));
-  const [endIso, setEndIso] = useState(addDaysIso(startIso, 2));
+  // Dates default: tomorrow → +2 nights, but allow route from/to to override
+  const initialStart = useMemo(() => {
+    if (isIsoDateOnly(routeFrom)) return clampFromIsoToTomorrow(routeFrom!);
+    return clampFromIsoToTomorrow(new Date().toISOString().slice(0, 10));
+  }, [routeFrom]);
+
+  const initialEnd = useMemo(() => {
+    if (isIsoDateOnly(routeTo)) return String(routeTo);
+    return addDaysIso(initialStart, 2);
+  }, [routeTo, initialStart]);
+
+  const [startIso, setStartIso] = useState(initialStart);
+  const [endIso, setEndIso] = useState(initialEnd);
   const [notes, setNotes] = useState("");
 
-  const [endTouched, setEndTouched] = useState(false);
+  const [endTouched, setEndTouched] = useState<boolean>(Boolean(isIsoDateOnly(routeTo)));
 
   const [editTrip, setEditTrip] = useState<Trip | null>(null);
   const [existingMatchIds, setExistingMatchIds] = useState<string[]>([]);
@@ -227,6 +266,7 @@ export default function TripBuildScreen() {
 
   const [setAsPrimaryOnSave, setSetAsPrimaryOnSave] = useState(false);
 
+  // Keep end auto-following start unless user touched end
   useEffect(() => {
     if (endTouched) return;
     setEndIso(addDaysIso(startIso, 2));
@@ -246,7 +286,7 @@ export default function TripBuildScreen() {
     () => ({
       label: "All leagues",
       leagueId: 0,
-      season: LEAGUES[0].season,
+      season: LEAGUES[0]?.season ?? currentFootballSeasonStartYear(),
       countryCode: "EU",
       key: "all",
     }),
@@ -254,7 +294,28 @@ export default function TripBuildScreen() {
   );
 
   const leagueOptions = useMemo(() => [ALL_LEAGUES, ...LEAGUES], [ALL_LEAGUES]);
-  const [selectedLeague, setSelectedLeague] = useState<LeagueOption>(ALL_LEAGUES);
+
+  const [selectedLeague, setSelectedLeague] = useState<LeagueOption>(() => {
+    const opt = findLeagueOptionByLeagueId(routeLeagueId, routeSeason);
+    return opt ?? ALL_LEAGUES;
+  });
+
+  // If navigation passes a leagueId (and we’re NOT in fixture-prefill flow), apply it once.
+  useEffect(() => {
+    if (isPrefilledFlow) return;
+    const opt = findLeagueOptionByLeagueId(routeLeagueId, routeSeason);
+    if (opt) setSelectedLeague(opt);
+    else if (routeLeagueId === 0) setSelectedLeague(ALL_LEAGUES);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routeLeagueId, routeSeason, isPrefilledFlow]);
+
+  /* ------------------------------------------------------------------------ */
+  /* Apply route city to notes (non-destructive)                               */
+  /* ------------------------------------------------------------------------ */
+
+  useEffect(() => {
+    if (routeCity) setNotesIfEmpty(`City: ${routeCity}`);
+  }, [routeCity, setNotesIfEmpty]);
 
   /* ------------------------------------------------------------------------ */
   /* Load edit trip                                                            */
@@ -290,8 +351,12 @@ export default function TripBuildScreen() {
         const primary = cleanText((t as any)?.fixtureIdPrimary) || (mids[0] ? String(mids[0]) : "");
         setExistingPrimaryId(primary || null);
 
-        setStartIso(t.startDate);
-        setEndIso(t.endDate);
+        // Prefer trip dates; if route from/to passed, they override (useful when calling build from other places)
+        const nextStart = isIsoDateOnly(routeFrom) ? clampFromIsoToTomorrow(routeFrom!) : t.startDate;
+        const nextEnd = isIsoDateOnly(routeTo) ? String(routeTo) : t.endDate;
+
+        setStartIso(nextStart);
+        setEndIso(nextEnd);
         setEndTouched(true);
         setNotes((t as any).notes ?? "");
 
@@ -302,11 +367,11 @@ export default function TripBuildScreen() {
 
           setSelectedFixture(fx);
 
-          const ids = await computePlaceholderIdsForFixture(fx);
+          const ids = await computePlaceholderIdsForFixture(fx, routeSeason);
           if (!cancelled) setPlaceholderTbcIds(ids);
 
           const lid = fx?.league?.id ?? null;
-          const opt = findLeagueOptionByLeagueId(typeof lid === "number" ? lid : null);
+          const opt = findLeagueOptionByLeagueId(typeof lid === "number" ? lid : null, routeSeason);
           if (opt) setSelectedLeague(opt);
         } else {
           setSelectedFixture(null);
@@ -325,7 +390,7 @@ export default function TripBuildScreen() {
     return () => {
       cancelled = true;
     };
-  }, [routeTripId]);
+  }, [routeTripId, routeFrom, routeTo, routeSeason]);
 
   /* ------------------------------------------------------------------------ */
   /* Prefill fixture (new trip)                                                */
@@ -347,20 +412,32 @@ export default function TripBuildScreen() {
 
         setSelectedFixture(r);
 
-        const ids = await computePlaceholderIdsForFixture(r);
+        const ids = await computePlaceholderIdsForFixture(r, routeSeason);
         if (!cancelled) setPlaceholderTbcIds(ids);
 
-        const d0 = fixtureDateOnly(r);
-        if (d0) {
-          const start = clampFromIsoToTomorrow(d0);
-          setStartIso(start);
+        // If from/to were provided explicitly, keep them.
+        // Otherwise derive trip start from fixture date (clamped) and keep auto end behaviour.
+        const hasFrom = isIsoDateOnly(routeFrom);
+        const hasTo = isIsoDateOnly(routeTo);
+
+        if (hasFrom) {
+          setStartIso(clampFromIsoToTomorrow(routeFrom!));
+        } else {
+          const d0 = fixtureDateOnly(r);
+          if (d0) setStartIso(clampFromIsoToTomorrow(d0));
+        }
+
+        if (hasTo) {
+          setEndIso(String(routeTo));
+          setEndTouched(true);
+        } else {
           setEndTouched(false);
         }
 
         if (routeCityArea) setNotesIfEmpty(`Stay area: ${routeCityArea}`);
 
         const lid = r?.league?.id ?? null;
-        const opt = findLeagueOptionByLeagueId(typeof lid === "number" ? lid : null);
+        const opt = findLeagueOptionByLeagueId(typeof lid === "number" ? lid : null, routeSeason);
         if (opt) setSelectedLeague(opt);
       } catch {
         if (!cancelled) setError("Couldn’t load that fixture.");
@@ -373,7 +450,7 @@ export default function TripBuildScreen() {
     return () => {
       cancelled = true;
     };
-  }, [routeFixtureId, isPrefilledFlow, routeCityArea, setNotesIfEmpty]);
+  }, [routeFixtureId, isPrefilledFlow, routeCityArea, setNotesIfEmpty, routeFrom, routeTo, routeSeason]);
 
   /* ------------------------------------------------------------------------ */
   /* Load fixtures (picker mode)                                               */
@@ -389,8 +466,13 @@ export default function TripBuildScreen() {
       setError(null);
 
       try {
-        const from = clampFromIsoToTomorrow(new Date().toISOString().slice(0, 10));
-        const to = addDaysIso(from, 30);
+        // Use passed window if provided (e.g. adding a match to an existing trip),
+        // else default to tomorrow → +30 days.
+        const from = isIsoDateOnly(routeFrom)
+          ? clampFromIsoToTomorrow(routeFrom!)
+          : clampFromIsoToTomorrow(new Date().toISOString().slice(0, 10));
+
+        const to = isIsoDateOnly(routeTo) ? String(routeTo) : addDaysIso(from, 30);
 
         let res: FixtureListRow[] = [];
 
@@ -439,7 +521,7 @@ export default function TripBuildScreen() {
     return () => {
       cancelled = true;
     };
-  }, [selectedLeague, isPrefilledFlow]);
+  }, [selectedLeague, isPrefilledFlow, routeFrom, routeTo]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -460,15 +542,19 @@ export default function TripBuildScreen() {
   useEffect(() => {
     if (!selectedFixture) return;
 
-    const d0 = fixtureDateOnly(selectedFixture);
-    if (d0) {
-      const start = clampFromIsoToTomorrow(d0);
-      setStartIso(start);
-      setEndTouched(false);
+    // If from/to were explicitly provided, do not auto-overwrite with fixture date.
+    // Otherwise keep your existing behavior (start = fixture day, end auto+2 nights).
+    if (!isIsoDateOnly(routeFrom)) {
+      const d0 = fixtureDateOnly(selectedFixture);
+      if (d0) {
+        const start = clampFromIsoToTomorrow(d0);
+        setStartIso(start);
+        setEndTouched(false);
+      }
     }
 
     if (isEditing) setSetAsPrimaryOnSave(false);
-  }, [selectedFixture, isEditing]);
+  }, [selectedFixture, isEditing, routeFrom]);
 
   /* ------------------------------------------------------------------------ */
   /* Save                                                                       */
@@ -759,7 +845,11 @@ export default function TripBuildScreen() {
 
               <View style={styles.teamRow}>
                 <View style={styles.crestStack}>
-                  {selectedHomeLogo ? <Image source={{ uri: selectedHomeLogo }} style={styles.crest} /> : <View style={styles.crestFallback} />}
+                  {selectedHomeLogo ? (
+                    <Image source={{ uri: selectedHomeLogo }} style={styles.crest} />
+                  ) : (
+                    <View style={styles.crestFallback} />
+                  )}
                   {selectedAwayLogo ? (
                     <Image source={{ uri: selectedAwayLogo }} style={[styles.crest, { marginLeft: -10 }]} />
                   ) : (
@@ -895,11 +985,15 @@ export default function TripBuildScreen() {
                       key={id || String(i)}
                       onPress={async () => {
                         setSelectedFixture(r);
-                        const ids = await computePlaceholderIdsForFixture(r);
+                        const ids = await computePlaceholderIdsForFixture(r, routeSeason);
                         setPlaceholderTbcIds(ids);
                         setError(null);
                       }}
-                      style={({ pressed }) => [styles.fxCard, selected && styles.fxCardSelected, { opacity: pressed ? 0.9 : 1 }]}
+                      style={({ pressed }) => [
+                        styles.fxCard,
+                        selected && styles.fxCardSelected,
+                        { opacity: pressed ? 0.9 : 1 },
+                      ]}
                     >
                       <View style={styles.fxTop}>
                         <View style={styles.fxLeft}>

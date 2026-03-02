@@ -1,65 +1,140 @@
 // src/components/FixtureCertaintyBadge.tsx
-import React from "react";
-import { View, Text, StyleSheet } from "react-native";
+import React, { useMemo } from "react";
+import { View, Text, StyleSheet, type StyleProp, type ViewStyle } from "react-native";
 import type { FixtureCertaintyState } from "@/src/utils/fixtureCertainty";
+import { theme } from "@/src/constants/theme";
 
-function cfg(state: FixtureCertaintyState) {
-  if (state === "tbc") {
-    return {
-      label: "Kickoff TBC",
-      border: "rgba(255,200,80,0.40)",
-      bg: "rgba(255,200,80,0.10)",
-      fg: "rgba(255,200,80,1)",
-    };
-  }
+type Props = {
+  state: FixtureCertaintyState;
+  style?: StyleProp<ViewStyle>;
+  variant?: "default" | "compact";
+};
 
-  if (state === "likely_tbc") {
-    return {
-      label: "Likely placeholder",
-      border: "rgba(255,210,77,0.30)",
-      bg: "rgba(255,210,77,0.10)",
-      fg: "rgba(255,210,77,0.95)",
-    };
-  }
+type BadgeCfg = {
+  label: string;
+  fg: string;
+  bg: string;
+  border: string;
+  dot: string;
+};
 
-  if (state === "changed") {
-    return {
-      label: "Date changed",
-      border: "rgba(255,80,80,0.40)",
-      bg: "rgba(255,80,80,0.10)",
-      fg: "rgba(255,120,120,1)",
-    };
-  }
-
-  return {
-    label: "Confirmed",
-    border: "rgba(160,195,255,0.35)",
-    bg: "rgba(160,195,255,0.10)",
-    fg: "rgba(160,195,255,1)",
-  };
+function alpha(hex: string, a: number) {
+  const h = hex.replace("#", "");
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  const clamped = Math.max(0, Math.min(1, a));
+  return `rgba(${r},${g},${b},${clamped})`;
 }
 
-export default function FixtureCertaintyBadge({ state }: { state: FixtureCertaintyState }) {
-  const c = cfg(state);
+function cfg(state: FixtureCertaintyState): BadgeCfg {
+  switch (state) {
+    case "tbc": {
+      const c = theme.colors.accentGold;
+      return {
+        label: "Kickoff TBC",
+        fg: c,
+        dot: c,
+        bg: alpha(c, 0.12),
+        border: alpha(c, 0.22),
+      };
+    }
+
+    case "likely_tbc": {
+      const c = theme.colors.accentGold;
+      return {
+        label: "Likely placeholder",
+        fg: alpha(c, 0.92),
+        dot: alpha(c, 0.92),
+        bg: alpha(c, 0.10),
+        border: alpha(c, 0.20),
+      };
+    }
+
+    case "changed": {
+      const c = theme.colors.accentBlue;
+      return {
+        label: "Date changed",
+        fg: alpha(c, 0.95),
+        dot: alpha(c, 0.95),
+        bg: alpha(c, 0.14),
+        border: alpha(c, 0.22),
+      };
+    }
+
+    case "confirmed":
+    default: {
+      const c = theme.colors.accentGreen;
+      return {
+        label: "Confirmed",
+        fg: alpha(c, 0.95),
+        dot: alpha(c, 0.95),
+        bg: alpha(c, 0.14),
+        border: alpha(c, 0.22),
+      };
+    }
+  }
+}
+
+export default function FixtureCertaintyBadge({ state, style, variant = "default" }: Props) {
+  const c = useMemo(() => cfg(state), [state]);
+
+  const compact = variant === "compact";
 
   return (
-    <View style={[styles.badge, { borderColor: c.border, backgroundColor: c.bg }]}>
-      <Text style={[styles.text, { color: c.fg }]}>{c.label}</Text>
+    <View
+      style={[
+        styles.badge,
+        compact && styles.badgeCompact,
+        { backgroundColor: c.bg, borderColor: c.border },
+        style,
+      ]}
+    >
+      <View style={[styles.dot, compact && styles.dotCompact, { backgroundColor: c.dot }]} />
+      <Text style={[styles.text, compact && styles.textCompact, { color: c.fg }]} numberOfLines={1}>
+        {c.label}
+      </Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   badge: {
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
     alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderRadius: theme.borderRadius.pill,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    gap: 8,
   },
+
+  badgeCompact: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    gap: 7,
+  },
+
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 999,
+  },
+
+  dotCompact: {
+    width: 7,
+    height: 7,
+  },
+
   text: {
-    fontSize: 11,
-    fontWeight: "900",
+    fontSize: theme.fontSize.tiny,
+    fontWeight: theme.fontWeight.semibold,
     letterSpacing: 0.2,
+  },
+
+  textCompact: {
+    fontSize: 11,
+    letterSpacing: 0.15,
   },
 });
