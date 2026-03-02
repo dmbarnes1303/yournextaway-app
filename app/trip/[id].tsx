@@ -35,7 +35,7 @@ import preferencesStore from "@/src/state/preferences";
 
 import type { SavedItem, SavedItemType } from "@/src/core/savedItemTypes";
 import { getSavedItemTypeLabel } from "@/src/core/savedItemTypes";
-import { getPartner, type PartnerId } from "@/src/core/partners";
+import { getPartner, getPartnersByCategory, type PartnerId, type PartnerCategory } from "@/src/core/partners";
 
 import { beginPartnerClick, openUntrackedUrl } from "@/src/services/partnerClicks";
 import { getFixtureById, type FixtureListRow } from "@/src/services/apiFootball";
@@ -45,7 +45,7 @@ import { confirmBookedAndOfferProof } from "@/src/services/bookingProof";
 import { getFixtureCertainty } from "@/src/utils/fixtureCertainty";
 
 // ✅ Tickets builder (SE365 resolver + affiliate wrapping)
-import { buildTicketLink } from "@/src/services/partnerLinks";
+import { buildTicketLink, resolveAffiliateUrl as resolveAffiliateUrlFromService } from "@/src/services/partnerLinks";
 
 // dev-only IATA detection
 import { getIataCityCodeForCity, debugCityKey } from "@/src/data/iataCityCodes";
@@ -332,79 +332,29 @@ function clampIso(iso?: string | null): string | null {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Affiliate URL resolving (partner-first, NO GOOGLE)                          */
+/* partner category -> saved item type                                         */
 /* -------------------------------------------------------------------------- */
 
-type AffiliateContext = {
-  city: string;
-  startDate?: string | null;
-  endDate?: string | null;
-  originIata?: string | null;
-};
-
-function safeGetPartner(pid: PartnerId) {
-  try {
-    return getPartner(pid);
-  } catch {
-    return null;
+function savedItemTypeForPartnerCategory(cat: PartnerCategory): SavedItemType {
+  switch (cat) {
+    case "tickets":
+      return "tickets";
+    case "flights":
+      return "flight";
+    case "stays":
+      return "hotel";
+    case "transfers":
+      return "transfer";
+    case "experiences":
+      return "things";
+    case "insurance":
+      return "insurance";
+    case "compensation":
+      return "claim";
+    case "utility":
+    default:
+      return "other";
   }
-}
-
-/**
- * We try to use partner-provided builders first (so your affiliate tags apply).
- * Duck-typed to avoid depending on a specific interface.
- */
-function partnerUrlFromRegistry(pid: PartnerId, ctx: AffiliateContext): string | null {
-  const p: any = safeGetPartner(pid);
-  if (!p) return null;
-
-  const args = {
-    city: ctx.city,
-    startDate: ctx.startDate || undefined,
-    endDate: ctx.endDate || undefined,
-    originIata: ctx.originIata || undefined,
-  };
-
-  const fns = ["buildUrl", "buildSearchUrl", "buildLink", "getUrl", "getSearchUrl", "makeUrl", "makeLink"];
-
-  for (const name of fns) {
-    const fn = p?.[name];
-    if (typeof fn === "function") {
-      try {
-        const out = fn(args);
-        const s = String(out ?? "").trim();
-        if (s && /^https?:\/\//i.test(s)) return s;
-      } catch {
-        // ignore
-      }
-    }
-  }
-
-  const raw =
-    String(p?.url ?? "").trim() || String(p?.baseUrl ?? "").trim() || String(p?.homepage ?? "").trim();
-
-  if (raw && /^https?:\/\//i.test(raw)) return raw;
-
-  return null;
-}
-
-/**
- * LAST RESORT fallback: partner-domain search pages (NOT google).
- * This keeps user on the correct partner domain even if registry lacks builders.
- * If your affiliate attribution relies on tags, you MUST implement builders in partners.
- */
-function partnerDomainFallback(pid: PartnerId, ctx: AffiliateContext): string | null {
-  const city = encodeURIComponent(ctx.city);
-
-  if (pid === "aviasales") return `https://www.aviasales.com/search?destination=${city}`;
-  if (pid === "expedia_stays") return `https://www.expedia.com/Hotel-Search?destination=${city}`;
-  if (pid === "kiwitaxi") return `https://kiwitaxi.com/en/search?place=${city}`;
-  if (pid === "getyourguide") return `https://www.getyourguide.com/s/?q=${city}`;
-  return null;
-}
-
-function resolveAffiliateUrl(pid: PartnerId, ctx: AffiliateContext): string | null {
-  return partnerUrlFromRegistry(pid, ctx) || partnerDomainFallback(pid, ctx) || null;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -608,28 +558,30 @@ export default function TripDetailScreen() {
     return typeof fromTrip === "number" ? fromTrip : undefined;
   }, [primaryFixture, trip]);
 
-  /* ---------------- affiliate urls (partner-first) ---------------- */
+  /* ---------------- affiliate urls (canonical resolver) ---------------- */
 
-  const affiliateCtx = useMemo<AffiliateContext | null>(() => {
+  const affiliateCtx = useMemo(() => {
     if (!trip) return null;
     const city = String(cityName ?? "").trim();
     if (!city || city === "Trip") return null;
 
     return {
       city,
-      startDate: trip.startDate || null,
-      endDate: trip.endDate || null,
+      startDate: trip.startDate ?? null,
+      endDate: trip.endDate ?? null,
       originIata: cleanUpper3(originIata, "LON"),
+      passengers: null,
+      cabinClass: null,
     };
   }, [trip, cityName, originIata]);
 
   const affiliateUrls = useMemo(() => {
     if (!affiliateCtx) return null;
 
-    const flightsUrl = resolveAffiliateUrl("aviasales", affiliateCtx);
-    const hotelsUrl = resolveAffiliateUrl("expedia_stays", affiliateCtx);
-    const transfersUrl = resolveAffiliateUrl("kiwitaxi", affiliateCtx);
-    const experiencesUrl = resolveAffiliateUrl("getyourguide", affiliateCtx);
+    const flightsUrl = resolveAffiliateUrlFromService("aviasales", affiliateCtx);
+    const hotelsUrl = resolveAffiliateUrlFromService("expedia_stays", affiliateCtx);
+    const transfersUrl = resolveAffiliateUrlFromService("kiwitaxi", affiliateCtx);
+    const experiencesUrl = resolveAffiliateUrlFromService("getyourguide", affiliateCtx);
 
     const mapsUrl = buildMapsSearchUrl(`${affiliateCtx.city} travel`);
 
@@ -816,7 +768,7 @@ export default function TripDetailScreen() {
         to: trip.endDate,
         city: cityName,
         leagueId: String(primaryLeagueId ?? ""),
-        season: String(DEFAULT_SEASON), // ✅ NEW
+        season: String(DEFAULT_SEASON),
       },
     } as any);
   }
@@ -831,7 +783,7 @@ export default function TripDetailScreen() {
         to: trip.endDate,
         city: cityName,
         leagueId: String(primaryLeagueId ?? ""),
-        season: String(DEFAULT_SEASON), // ✅ NEW
+        season: String(DEFAULT_SEASON),
       },
     } as any);
   }
@@ -931,7 +883,7 @@ export default function TripDetailScreen() {
 
   async function archiveItem(item: SavedItem) {
     try {
-      await savedItemsStore.transitionStatus(item.id, "archived");
+      await (savedItemsStore as any).transitionStatus(item.id, "archived");
     } catch {
       Alert.alert("Couldn’t archive", "That item can’t be archived right now.");
     }
@@ -939,7 +891,7 @@ export default function TripDetailScreen() {
 
   async function moveToPending(item: SavedItem) {
     try {
-      await savedItemsStore.transitionStatus(item.id, "pending");
+      await (savedItemsStore as any).transitionStatus(item.id, "pending");
     } catch {
       Alert.alert("Couldn’t move", "That item can’t be moved right now.");
     }
@@ -947,7 +899,7 @@ export default function TripDetailScreen() {
 
   async function markBookedSmart(item: SavedItem) {
     try {
-      await savedItemsStore.transitionStatus(item.id, "booked");
+      await (savedItemsStore as any).transitionStatus(item.id, "booked");
       defer(() => {
         confirmBookedAndOfferProof(item.id).catch(() => null);
       });
@@ -1193,7 +1145,7 @@ export default function TripDetailScreen() {
         leagueId,
         se365EventId:
           typeof (trip as any)?.sportsevents365EventId === "number" ? (trip as any).sportsevents365EventId : undefined,
-      });
+      } as any);
     } catch {
       url = null;
     }
@@ -1219,6 +1171,7 @@ export default function TripDetailScreen() {
         homeName,
         awayName,
         priceMode: "live",
+        city: cityName,
       },
     });
   }
@@ -1288,7 +1241,7 @@ export default function TripDetailScreen() {
       const url = affiliateUrls?.hotelsUrl;
       if (!url) return Alert.alert("Not ready", "We need a city + dates saved to build booking links.");
       return openTrackedPartner({
-        partnerId: "expedia_stays",
+        partnerId: "expedia_stays" as any,
         url,
         savedItemType: "hotel",
         title: `Hotels in ${cityName}`,
@@ -1300,7 +1253,7 @@ export default function TripDetailScreen() {
       const url = affiliateUrls?.flightsUrl;
       if (!url) return Alert.alert("Not ready", "We need a city + dates saved to build booking links.");
       return openTrackedPartner({
-        partnerId: "aviasales",
+        partnerId: "aviasales" as any,
         url,
         savedItemType: "flight",
         title: `Flights to ${cityName}`,
@@ -1312,7 +1265,7 @@ export default function TripDetailScreen() {
       const url = affiliateUrls?.transfersUrl;
       if (!url) return Alert.alert("Not ready", "We need a city + dates saved to build booking links.");
       return openTrackedPartner({
-        partnerId: "kiwitaxi",
+        partnerId: "kiwitaxi" as any,
         url,
         savedItemType: "transfer",
         title: `Transfers in ${cityName}`,
@@ -1324,7 +1277,7 @@ export default function TripDetailScreen() {
       const url = affiliateUrls?.experiencesUrl;
       if (!url) return Alert.alert("Not ready", "We need a city saved to build booking links.");
       return openTrackedPartner({
-        partnerId: "getyourguide",
+        partnerId: "getyourguide" as any,
         url,
         savedItemType: "things",
         title: `Experiences in ${cityName}`,
@@ -1368,7 +1321,7 @@ export default function TripDetailScreen() {
       const url = affiliateUrls?.flightsUrl;
       if (!url) return Alert.alert("Not ready", "We need a city + dates saved to build booking links.");
       return openTrackedPartner({
-        partnerId: "aviasales",
+        partnerId: "aviasales" as any,
         url,
         savedItemType: "flight",
         title: `Flights to ${cityName}`,
@@ -1380,7 +1333,7 @@ export default function TripDetailScreen() {
       const url = affiliateUrls?.hotelsUrl;
       if (!url) return Alert.alert("Not ready", "We need a city + dates saved to build booking links.");
       return openTrackedPartner({
-        partnerId: "expedia_stays",
+        partnerId: "expedia_stays" as any,
         url,
         savedItemType: "hotel",
         title: `Hotels in ${cityName}`,
@@ -1462,7 +1415,7 @@ export default function TripDetailScreen() {
     const openHotels = () => {
       if (!affiliateUrls.hotelsUrl) return Alert.alert("Not ready", "Hotels link couldn’t be built.");
       return openTrackedPartner({
-        partnerId: "expedia_stays",
+        partnerId: "expedia_stays" as any,
         url: affiliateUrls.hotelsUrl,
         savedItemType: "hotel",
         title: `Hotels in ${cityName}`,
@@ -1473,7 +1426,7 @@ export default function TripDetailScreen() {
     const openFlights = () => {
       if (!affiliateUrls.flightsUrl) return Alert.alert("Not ready", "Flights link couldn’t be built.");
       return openTrackedPartner({
-        partnerId: "aviasales",
+        partnerId: "aviasales" as any,
         url: affiliateUrls.flightsUrl,
         savedItemType: "flight",
         title: `Flights to ${cityName}`,
@@ -1484,7 +1437,7 @@ export default function TripDetailScreen() {
     const openTransfers = () => {
       if (!affiliateUrls.transfersUrl) return Alert.alert("Not ready", "Transfers link couldn’t be built.");
       return openTrackedPartner({
-        partnerId: "kiwitaxi",
+        partnerId: "kiwitaxi" as any,
         url: affiliateUrls.transfersUrl,
         savedItemType: "transfer",
         title: `Transfers in ${cityName}`,
@@ -1495,7 +1448,7 @@ export default function TripDetailScreen() {
     const openThings = () => {
       if (!affiliateUrls.experiencesUrl) return Alert.alert("Not ready", "Activities link couldn’t be built.");
       return openTrackedPartner({
-        partnerId: "getyourguide",
+        partnerId: "getyourguide" as any,
         url: affiliateUrls.experiencesUrl,
         savedItemType: "things",
         title: `Experiences in ${cityName}`,
@@ -1535,6 +1488,86 @@ export default function TripDetailScreen() {
     presentByType.hasThings,
     primaryTicketItem,
   ]);
+
+  /* ------------------------------------------------------------------------ */
+  /* ALL AFFILIATES (show every partner, no loss of detail)                    */
+  /* ------------------------------------------------------------------------ */
+
+  const allAffiliateSections = useMemo(() => {
+    const sections: Array<{
+      key: PartnerCategory;
+      title: string;
+      subtitle: string;
+      partners: ReturnType<typeof getPartnersByCategory>;
+    }> = [
+      { key: "tickets", title: "Tickets", subtitle: "Live listings (tracked)", partners: getPartnersByCategory("tickets") },
+      { key: "flights", title: "Flights", subtitle: "Live price on partners", partners: getPartnersByCategory("flights") },
+      { key: "stays", title: "Hotels & stays", subtitle: "Live availability", partners: getPartnersByCategory("stays") },
+      { key: "transfers", title: "Transfers", subtitle: "Airport ↔ city ↔ stadium areas", partners: getPartnersByCategory("transfers") },
+      { key: "experiences", title: "Experiences", subtitle: "Things to do in the city", partners: getPartnersByCategory("experiences") },
+      { key: "insurance", title: "Protect yourself", subtitle: "Insurance options", partners: getPartnersByCategory("insurance") },
+      { key: "compensation", title: "Claims & compensation", subtitle: "Delay / cancellation help", partners: getPartnersByCategory("compensation") },
+      { key: "utility", title: "Utility", subtitle: "Non-monetised tools", partners: getPartnersByCategory("utility") },
+    ];
+
+    // Only show sections that have partners.
+    return sections.filter((s) => (s.partners?.length ?? 0) > 0);
+  }, [savedItemsLoadedKey(savedLoaded)]);
+
+  function savedItemsLoadedKey(v: boolean) {
+    // just a stable dependency helper without adding more deps; value is enough
+    return v ? "1" : "0";
+  }
+
+  async function openPartnerFromRegistry(pid: PartnerId) {
+    if (!trip || !affiliateCtx) {
+      Alert.alert("Not ready", "We need a city (and ideally dates) saved to build partner links.");
+      return;
+    }
+
+    const partner = getPartner(pid);
+    const cat = partner.category;
+    const type = savedItemTypeForPartnerCategory(cat);
+
+    // Tickets are match-specific: keep your existing logic.
+    if (cat === "tickets") {
+      if (!primaryMatchId) return Alert.alert("Add a match first", "Add a match to unlock tickets + match planning.");
+      return openTicketsForMatch(primaryMatchId);
+    }
+
+    // Utility: open raw link, no tracking/pending.
+    if (cat === "utility") {
+      if (pid === "googlemaps") {
+        const url = buildMapsSearchUrl(`${affiliateCtx.city} travel`);
+        return openUntracked(url);
+      }
+      const url = String(partner.deepLinkBase ?? "").trim();
+      if (!url) return Alert.alert("Unavailable", "No utility link configured.");
+      return openUntracked(url);
+    }
+
+    const url = resolveAffiliateUrlFromService(pid, affiliateCtx as any);
+    if (!url) {
+      Alert.alert("Unavailable", "Link not available for this trip.");
+      return;
+    }
+
+    const title = `${getSavedItemTypeLabel(type)}: ${partner.name}`;
+
+    return openTrackedPartner({
+      partnerId: pid,
+      url,
+      title,
+      savedItemType: type,
+      metadata: {
+        city: affiliateCtx.city,
+        startDate: trip.startDate ?? null,
+        endDate: trip.endDate ?? null,
+        originIata: affiliateCtx.originIata ?? null,
+        priceMode: "live",
+      },
+    });
+  }
 
   /* ------------------------------------------------------------------------ */
   /* render                                                                    */
@@ -1681,6 +1714,47 @@ export default function TripDetailScreen() {
                   </Pressable>
                 </GlassCard>
               ) : null}
+
+              {/* ALL AFFILIATES (every partner, grouped) */}
+              <GlassCard style={styles.card}>
+                <View style={styles.sectionTitleRow}>
+                  <Text style={styles.sectionTitle}>All partners</Text>
+                  <Text style={styles.sectionSub}>Every affiliate we support</Text>
+                </View>
+
+                {!affiliateCtx ? (
+                  <EmptyState
+                    title="Add trip details to unlock partner links"
+                    message="Save a city (and dates) so we can build tracked partner links."
+                  />
+                ) : (
+                  <View style={{ gap: 12 }}>
+                    {allAffiliateSections.map((sec) => (
+                      <View key={sec.key} style={styles.partnerSection}>
+                        <View style={styles.partnerSectionTop}>
+                          <Text style={styles.partnerSectionTitle}>{sec.title}</Text>
+                          <Text style={styles.partnerSectionSub}>{sec.subtitle}</Text>
+                        </View>
+
+                        <View style={styles.partnerGrid}>
+                          {sec.partners.map((p) => (
+                            <Pressable
+                              key={p.id}
+                              style={styles.partnerCard}
+                              onPress={() => openPartnerFromRegistry(p.id as any)}
+                            >
+                              <Text style={styles.partnerName}>{p.name}</Text>
+                              <Text style={styles.partnerMini}>
+                                {p.affiliate ? "Affiliate" : "Info"} • {p.api ? "API" : "Link"}
+                              </Text>
+                            </Pressable>
+                          ))}
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </GlassCard>
 
               {/* MATCHES */}
               <GlassCard style={styles.card}>
@@ -2387,6 +2461,30 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     fontSize: 12,
   },
+
+  partnerSection: {
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    borderRadius: 14,
+    backgroundColor: "rgba(0,0,0,0.14)",
+    padding: 12,
+  },
+  partnerSectionTop: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", gap: 10 },
+  partnerSectionTitle: { color: theme.colors.text, fontWeight: "900" },
+  partnerSectionSub: { color: theme.colors.textTertiary, fontWeight: "900", fontSize: 12 },
+
+  partnerGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 10 },
+  partnerCard: {
+    width: "48%",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: "rgba(0,0,0,0.16)",
+  },
+  partnerName: { color: theme.colors.text, fontWeight: "900" },
+  partnerMini: { marginTop: 4, color: theme.colors.textSecondary, fontWeight: "800", fontSize: 11 },
 
   matchRowWrap: { gap: 8 },
 
