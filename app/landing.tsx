@@ -1,6 +1,6 @@
 // app/landing.tsx
-import React, { useCallback } from "react";
-import { View, Text, StyleSheet, Pressable, Image } from "react-native";
+import React, { useCallback, useMemo } from "react";
+import { View, Text, StyleSheet, Pressable, Image, Platform } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Stack, useRouter } from "expo-router";
 
@@ -10,57 +10,104 @@ import { theme } from "@/src/constants/theme";
 
 const LOGO = require("@/src/yna-logo.png");
 
-// Remote Unsplash (stable URL). RN will follow redirects.
-const LANDING_BG = { uri: "https://unsplash.com/photos/5IS7UghgoMA/download?force=true" };
+// IMPORTANT: Unsplash "download?force=true" links can be temperamental.
+// Use images.unsplash.com (direct JPG) for stability + caching.
+const LANDING_BG = {
+  uri: "https://images.unsplash.com/photo-1508098682722-e99c43a406b2?auto=format&fit=crop&w=1600&q=80",
+};
+
+function PillButton({
+  label,
+  onPress,
+  variant,
+}: {
+  label: string;
+  onPress: () => void;
+  variant: "primary" | "ghost";
+}) {
+  const primary = variant === "primary";
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.btn,
+        primary ? styles.btnPrimary : styles.btnGhost,
+        pressed && styles.pressed,
+      ]}
+      android_ripple={{ color: primary ? "rgba(79,224,138,0.14)" : "rgba(255,255,255,0.10)" }}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+    >
+      <Text style={[styles.btnText, primary ? styles.btnPrimaryText : styles.btnGhostText]}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
 
 export default function Landing() {
   const router = useRouter();
 
   const handleStart = useCallback(() => {
-    router.push("/onboarding");
+    router.push("/onboarding" as any);
   }, [router]);
 
   const handleSkip = useCallback(() => {
-    router.replace("/(tabs)/home");
+    router.replace("/(tabs)/home" as any);
   }, [router]);
+
+  const motto = useMemo(() => {
+    // Your original motto is a bit “2018 sports poster”.
+    // This keeps the vibe but reads more premium.
+    return "Fixtures • City guides • Trip workspace";
+  }, []);
 
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
 
-      <Background imageSource={LANDING_BG} overlayOpacity={0.56}>
+      <Background imageSource={LANDING_BG} overlayOpacity={0.66}>
         <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
           <View style={styles.screen}>
             {/* Brand */}
             <View style={styles.brand}>
-              <Image source={LOGO} style={styles.logo} resizeMode="contain" />
-              <Text style={styles.motto}>PLAN • FLY • WATCH • REPEAT</Text>
+              <View style={styles.logoWrap}>
+                <Image source={LOGO} style={styles.logo} resizeMode="contain" />
+              </View>
+
+              <Text style={styles.brandTitle}>YourNextAway</Text>
+              <Text style={styles.brandMotto}>{motto}</Text>
             </View>
 
-            {/* Main CTA card */}
+            {/* Main card */}
             <View style={styles.center}>
-              <GlassCard style={styles.card}>
-                <Text style={styles.h1}>European Football Trips, Perfectly Planned</Text>
+              <GlassCard style={styles.card} noPadding>
+                <View style={styles.cardInner}>
+                  <Text style={styles.kicker}>FOOTBALL-FIRST TRAVEL PLANNING</Text>
 
-                <Text style={styles.body}>
-                  Build the whole trip in one place — fixtures, tickets, flights, stays, and the plan for matchday.
-                </Text>
+                  <Text style={styles.h1}>
+                    Pick a match.
+                    {"\n"}Build the trip around it.
+                  </Text>
 
-                <View style={styles.actions}>
-                  <Pressable onPress={handleStart} style={[styles.btn, styles.btnPrimary]}>
-                    <Text style={styles.btnPrimaryText}>Get Started</Text>
-                  </Pressable>
+                  <Text style={styles.body}>
+                    Browse upcoming fixtures across Europe, then organise the whole city break in one place — with guides
+                    made for match weekends.
+                  </Text>
 
-                  <Pressable onPress={handleSkip} style={[styles.btn, styles.btnGhost]}>
-                    <Text style={styles.btnGhostText}>Skip for now</Text>
-                  </Pressable>
+                  <View style={styles.actions}>
+                    <PillButton label="Get started" onPress={handleStart} variant="primary" />
+                    <PillButton label="Skip for now" onPress={handleSkip} variant="ghost" />
+                  </View>
+
+                  <Text style={styles.note}>
+                    You can disable this landing screen later in Profile.
+                  </Text>
                 </View>
-
-                <Text style={styles.note}>You can turn this off on future openings in your Profile.</Text>
               </GlassCard>
             </View>
 
-            <View style={{ height: 18 }} />
+            <View style={styles.footerSpacer} />
           </View>
         </SafeAreaView>
       </Background>
@@ -77,27 +124,38 @@ const styles = StyleSheet.create({
     paddingTop: theme.spacing.lg,
     paddingBottom: theme.spacing.lg,
     justifyContent: "space-between",
-  },
-
-  brand: {
-    alignItems: "center",
     gap: 14,
   },
 
-  logo: {
-    width: 156,
-    height: 156,
-  },
+  pressed: { opacity: 0.94, transform: [{ scale: 0.995 }] },
 
-  motto: {
-    textAlign: "center",
-    color: theme.colors.primary,
-    fontSize: theme.fontSize.xs,
+  brand: { alignItems: "center", gap: 10 },
+
+  logoWrap: {
+    width: 112,
+    height: 112,
+    borderRadius: 34,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+  logo: { width: 92, height: 92, opacity: 0.98 },
+
+  brandTitle: {
+    color: theme.colors.text,
+    fontSize: 18,
     fontWeight: theme.fontWeight.black,
-    letterSpacing: 1.1,
-    textShadowColor: "rgba(0,0,0,0.55)",
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 10,
+    letterSpacing: 0.2,
+  },
+  brandMotto: {
+    textAlign: "center",
+    color: theme.colors.textTertiary,
+    fontSize: 12,
+    fontWeight: theme.fontWeight.bold,
+    letterSpacing: 0.2,
   },
 
   center: {
@@ -107,16 +165,27 @@ const styles = StyleSheet.create({
   },
 
   card: {
-    padding: theme.spacing.lg,
     borderRadius: 26,
+    overflow: "hidden",
+  },
+  cardInner: {
+    padding: theme.spacing.lg,
     gap: 12,
+  },
+
+  kicker: {
+    alignSelf: "center",
+    color: "rgba(79,224,138,0.74)",
+    fontSize: 11,
+    fontWeight: theme.fontWeight.black,
+    letterSpacing: 0.9,
   },
 
   h1: {
     color: theme.colors.text,
     fontWeight: theme.fontWeight.black,
-    fontSize: 26,
-    lineHeight: 32,
+    fontSize: 28,
+    lineHeight: 34,
     textAlign: "center",
     letterSpacing: 0.2,
   },
@@ -124,55 +193,52 @@ const styles = StyleSheet.create({
   body: {
     color: theme.colors.textSecondary,
     fontWeight: theme.fontWeight.bold,
-    fontSize: theme.fontSize.md,
-    lineHeight: 22,
+    fontSize: 14,
+    lineHeight: 20,
     textAlign: "center",
   },
 
   actions: {
-    marginTop: 4,
+    marginTop: 6,
     flexDirection: "row",
     gap: 12,
   },
 
   btn: {
     flex: 1,
-    borderRadius: 14,
-    paddingVertical: 14,
+    borderRadius: 999,
+    paddingVertical: 13,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
+    overflow: "hidden",
   },
 
   btnPrimary: {
-    borderColor: "rgba(255,255,255,0.14)",
-    backgroundColor: "rgba(0,0,0,0.28)",
+    borderColor: "rgba(79,224,138,0.28)",
+    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
+  },
+  btnGhost: {
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.22)",
   },
 
-  btnPrimaryText: {
-    color: theme.colors.text,
+  btnText: {
     fontWeight: theme.fontWeight.black,
-    fontSize: theme.fontSize.md,
+    fontSize: 14,
     letterSpacing: 0.2,
   },
-
-  btnGhost: {
-    borderColor: "rgba(255,255,255,0.08)",
-    backgroundColor: "rgba(255,255,255,0.04)",
-  },
-
-  btnGhostText: {
-    color: "rgba(255,255,255,0.68)",
-    fontWeight: theme.fontWeight.black,
-    fontSize: theme.fontSize.md,
-    letterSpacing: 0.1,
-  },
+  btnPrimaryText: { color: theme.colors.text },
+  btnGhostText: { color: theme.colors.textSecondary },
 
   note: {
-    marginTop: 4,
+    marginTop: 2,
     textAlign: "center",
     color: theme.colors.textTertiary,
     fontSize: 12,
     fontWeight: theme.fontWeight.bold,
+    lineHeight: 16,
   },
+
+  footerSpacer: { height: 12 },
 });
