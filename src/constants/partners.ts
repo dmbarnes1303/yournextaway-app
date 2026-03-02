@@ -36,8 +36,7 @@ export const AffiliateConfig = {
   // Aviasales — tracking fallback (Travelpayouts short link)
   aviasalesTracked: "https://aviasales.tpm.lv/VYu40Vnv",
 
-  // Aviasales — marker for prefilled search URL (set if you want full prefill + tracking)
-  // If you're unsure, leave blank and we'll fall back to aviasalesTracked.
+  // Aviasales — marker for prefilled search URL (prefill + tracking)
   aviasalesMarker: "700937",
 
   // Expedia Creator Program token extracted from your link
@@ -49,7 +48,8 @@ export const AffiliateConfig = {
   kiwitaxiTracked: "https://kiwitaxi.tpm.lv/oFUnzcw9",
 
   // Tickets (SportsEvents365)
-  sportsevents365Tracked: "https://www.sportsevents365.com/?a_aid=69834e80ec9d3",
+  sportsevents365Tracked:
+    "https://www.sportsevents365.com/?a_aid=69834e80ec9d3",
 
   // GetYourGuide (REAL partner ID)
   getyourguidePartnerId: "MAQJIREP",
