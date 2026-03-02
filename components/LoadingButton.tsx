@@ -1,34 +1,12 @@
-/**
- * Loading Button Component Template
- *
- * A button that shows a loading indicator when processing.
- * Commonly used for API calls, form submissions, etc.
- *
- * Features:
- * - Shows loading spinner when loading=true
- * - Disables interaction when loading
- * - Customizable styles
- * - Works with Pressable for better touch feedback
- *
- * Usage:
- * ```tsx
- * <LoadingButton
- *   loading={isSubmitting}
- *   onPress={handleSubmit}
- *   title="Submit"
- * />
- * ```
- */
-
+// components/LoadingButton.tsx
 import React from "react";
-import {
-  Pressable,
-  Text,
-  ActivityIndicator,
-  StyleSheet,
-  ViewStyle,
-  TextStyle,
-} from "react-native";
+import type { TextStyle, ViewStyle } from "react-native";
+import Button from "@/src/components/Button";
+
+/**
+ * Legacy template adapter.
+ * Keeps the old API but routes visuals through v2 Button.
+ */
 
 interface LoadingButtonProps {
   onPress: () => void;
@@ -38,7 +16,7 @@ interface LoadingButtonProps {
   variant?: "primary" | "secondary" | "outline";
   style?: ViewStyle;
   textStyle?: TextStyle;
-  loadingColor?: string;
+  loadingColor?: string; // kept for compatibility; ignored (v2 handles this)
 }
 
 export function LoadingButton({
@@ -49,77 +27,20 @@ export function LoadingButton({
   variant = "primary",
   style,
   textStyle,
-  loadingColor,
 }: LoadingButtonProps) {
-  const isDisabled = disabled || loading;
+  const tone = variant === "primary" ? "primary" : "secondary";
 
   return (
-    <Pressable
+    <Button
       onPress={onPress}
-      disabled={isDisabled}
-      style={({ pressed }) => [
-        styles.button,
-        styles[variant],
-        pressed && !isDisabled && styles.pressed,
-        isDisabled && styles.disabled,
-        style,
-      ]}
-    >
-      {loading ? (
-        <ActivityIndicator
-          color={loadingColor || (variant === "outline" ? "#007AFF" : "#fff")}
-        />
-      ) : (
-        <Text
-          style={[
-            styles.text,
-            styles[`${variant}Text` as keyof typeof styles],
-            textStyle,
-          ]}
-        >
-          {title}
-        </Text>
-      )}
-    </Pressable>
+      label={title}
+      loading={loading}
+      disabled={disabled}
+      tone={tone}
+      size="md"
+      style={style}
+      textStyle={textStyle}
+      glow={variant === "primary"}
+    />
   );
 }
-
-const styles = StyleSheet.create({
-  button: {
-    height: 50,
-    borderRadius: 8,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: 24,
-  },
-  primary: {
-    backgroundColor: "#007AFF",
-  },
-  secondary: {
-    backgroundColor: "#5856D6",
-  },
-  outline: {
-    backgroundColor: "transparent",
-    borderWidth: 1,
-    borderColor: "#007AFF",
-  },
-  pressed: {
-    opacity: 0.8,
-  },
-  disabled: {
-    opacity: 0.5,
-  },
-  text: {
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  primaryText: {
-    color: "#fff",
-  },
-  secondaryText: {
-    color: "#fff",
-  },
-  outlineText: {
-    color: "#007AFF",
-  },
-});
