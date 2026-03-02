@@ -1,5 +1,4 @@
 // app/match/[id].tsx
-
 import React, { useCallback, useMemo, useState } from "react";
 import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -8,6 +7,11 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
 import EmptyState from "@/src/components/EmptyState";
+import FixtureCertaintyBadge from "@/src/components/FixtureCertaintyBadge";
+import Button from "@/src/components/Button";
+import Chip from "@/src/components/Chip";
+
+import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
 
 import { useFixture } from "@/src/hooks/useFixtures";
@@ -37,9 +41,29 @@ function formatKickoffLocal(kickoffIso?: string | null): string {
   if (!raw) return "TBC";
   const d = new Date(raw);
   if (Number.isNaN(d.getTime())) return "TBC";
-  const date = d.toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" });
+  const date = d.toLocaleDateString("en-GB", { weekday: "short", day: "2-digit", month: "short", year: "numeric" });
   const time = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
-  return `${date}, ${time}`;
+  return `${date} • ${time}`;
+}
+
+function initials(name: string) {
+  const clean = String(name ?? "").trim();
+  if (!clean) return "—";
+  const parts = clean.split(/\s+/g).filter(Boolean);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+}
+
+function Crest({ name, uri }: { name: string; uri?: string | null }) {
+  return (
+    <View style={styles.crestWrap}>
+      {uri ? (
+        <Image source={{ uri }} style={styles.crestImg} resizeMode="contain" />
+      ) : (
+        <Text style={styles.crestFallback}>{initials(name)}</Text>
+      )}
+    </View>
+  );
 }
 
 /* -------------------------------------------------------------------------- */
@@ -50,8 +74,8 @@ export default function MatchScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
 
-  const fixtureId = String(params.id ?? "").trim();
-  const tripId = String(params.tripId ?? "").trim();
+  const fixtureId = String((params as any)?.id ?? "").trim();
+  const tripId = String((params as any)?.tripId ?? "").trim();
 
   const { fixture, loading } = useFixture(fixtureId);
 
@@ -61,40 +85,61 @@ export default function MatchScreen() {
 
   const [openingTickets, setOpeningTickets] = useState(false);
 
+  const homeName = useMemo(
+    () => String((trip as any)?.homeName ?? (fixture as any)?.teams?.home?.name ?? "").trim(),
+    [trip, fixture]
+  );
+  const awayName = useMemo(
+    () => String((trip as any)?.awayName ?? (fixture as any)?.teams?.away?.name ?? "").trim(),
+    [trip, fixture]
+  );
+
   const title = useMemo(() => {
-    const h = trip?.homeName ?? (fixture as any)?.teams?.home?.name;
-    const a = trip?.awayName ?? (fixture as any)?.teams?.away?.name;
-    return h && a ? `${h} vs ${a}` : "Match";
-  }, [trip?.homeName, trip?.awayName, (fixture as any)?.teams?.home?.name, (fixture as any)?.teams?.away?.name]);
+    if (homeName && awayName) return `${homeName} vs ${awayName}`;
+    return "Match";
+  }, [homeName, awayName]);
 
   const kickoffIso = useMemo(() => {
-    const k = String(trip?.kickoffIso ?? (fixture as any)?.fixture?.date ?? "").trim();
+    const k = String((trip as any)?.kickoffIso ?? (fixture as any)?.fixture?.date ?? "").trim();
     return k || null;
-  }, [trip?.kickoffIso, (fixture as any)?.fixture?.date]);
+  }, [trip, fixture]);
 
-  const kickoffText = useMemo(() => (kickoffIso ? formatKickoffLocal(kickoffIso) : "Kickoff TBD"), [kickoffIso]);
+  const kickoffText = useMemo(() => (kickoffIso ? formatKickoffLocal(kickoffIso) : "Kickoff TBC"), [kickoffIso]);
+
+  const venueName = useMemo(
+    () => String((trip as any)?.venueName ?? (fixture as any)?.fixture?.venue?.name ?? "").trim(),
+    [trip, fixture]
+  );
+  const venueCity = useMemo(
+    () => String((trip as any)?.venueCity ?? (fixture as any)?.fixture?.venue?.city ?? "").trim(),
+    [trip, fixture]
+  );
 
   const venueText = useMemo(() => {
-    const venueName = (trip as any)?.venueName ?? (fixture as any)?.fixture?.venue?.name;
-    const venueCity = (trip as any)?.venueCity ?? (fixture as any)?.fixture?.venue?.city;
-    if (!venueName && !venueCity) return "Venue TBD";
+    if (!venueName && !venueCity) return "Venue TBC";
     return [venueName, venueCity].filter(Boolean).join(" • ");
-  }, [(trip as any)?.venueName, (trip as any)?.venueCity, (fixture as any)?.fixture?.venue?.name, (fixture as any)?.fixture?.venue?.city]);
+  }, [venueName, venueCity]);
 
-  const crestHome = (trip as any)?.homeTeamId
-    ? `https://media.api-sports.io/football/teams/${(trip as any).homeTeamId}.png`
-    : (fixture as any)?.teams?.home?.logo;
+  const crestHome = useMemo(() => {
+    const id = (trip as any)?.homeTeamId;
+    if (typeof id === "number" && id > 0) return `https://media.api-sports.io/football/teams/${id}.png`;
+    return (fixture as any)?.teams?.home?.logo ?? null;
+  }, [trip, fixture]);
 
-  const crestAway = (trip as any)?.awayTeamId
-    ? `https://media.api-sports.io/football/teams/${(trip as any).awayTeamId}.png`
-    : (fixture as any)?.teams?.away?.logo;
+  const crestAway = useMemo(() => {
+    const id = (trip as any)?.awayTeamId;
+    if (typeof id === "number" && id > 0) return `https://media.api-sports.io/football/teams/${id}.png`;
+    return (fixture as any)?.teams?.away?.logo ?? null;
+  }, [trip, fixture]);
 
   const leagueId =
     (typeof (trip as any)?.leagueId === "number" ? (trip as any).leagueId : undefined) ??
     (typeof (fixture as any)?.league?.id === "number" ? (fixture as any).league.id : undefined);
 
-  const homeName = String((trip as any)?.homeName ?? (fixture as any)?.teams?.home?.name ?? "").trim();
-  const awayName = String((trip as any)?.awayName ?? (fixture as any)?.teams?.away?.name ?? "").trim();
+  const leagueName = useMemo(
+    () => String((trip as any)?.leagueName ?? (fixture as any)?.league?.name ?? "").trim() || null,
+    [trip, fixture]
+  );
 
   const dateIso = useMemo(() => {
     return (
@@ -103,9 +148,16 @@ export default function MatchScreen() {
       isoDateOnlyFromKickoffIso((fixture as any)?.fixture?.date) ||
       null
     );
-  }, [(trip as any)?.startDate, (trip as any)?.kickoffIso, (fixture as any)?.fixture?.date]);
+  }, [trip, fixture]);
 
-  const goBackToTrip = useCallback(() => {
+  const certaintyState = useMemo(() => {
+    // Honest: if we don't have a kickoff timestamp, it’s TBC.
+    if (!kickoffIso) return "tbc" as const;
+    if ((trip as any)?.kickoffTbc) return "tbc" as const;
+    return "confirmed" as const;
+  }, [kickoffIso, trip]);
+
+  const goBack = useCallback(() => {
     if (tripId) {
       router.push({ pathname: "/trip/[id]", params: { id: tripId } } as any);
       return;
@@ -113,16 +165,26 @@ export default function MatchScreen() {
     router.back();
   }, [router, tripId]);
 
+  const openDirections = useCallback(async () => {
+    const q = encodeURIComponent([venueName, venueCity].filter(Boolean).join(" ") || venueText);
+    const url = `https://www.google.com/maps/search/?api=1&query=${q}`;
+    try {
+      await openUntrackedUrl(url);
+    } catch {
+      Alert.alert("Couldn’t open maps");
+    }
+  }, [venueName, venueCity, venueText]);
+
   async function openTickets() {
     if (openingTickets) return;
 
     if (!tripId) {
-      Alert.alert("Open from a trip", "Open this match from a Trip Workspace so we can save it into Wallet.");
+      Alert.alert("Open from a trip", "Open this match from a Trip Workspace so ticket clicks can be saved into Wallet.");
       return;
     }
 
     if (!homeName || !awayName || !kickoffIso) {
-      Alert.alert("Tickets not available", "Missing match details (teams/kickoff). Try again after the match loads.");
+      Alert.alert("Tickets not ready", "Missing match details (teams/kickoff). Try again after the match loads.");
       return;
     }
 
@@ -134,7 +196,7 @@ export default function MatchScreen() {
         away: awayName,
         kickoffIso,
         leagueId,
-        leagueName: (trip as any)?.leagueName ?? (fixture as any)?.league?.name,
+        leagueName,
         se365EventId: typeof (trip as any)?.sportsevents365EventId === "number" ? (trip as any).sportsevents365EventId : undefined,
         se365EventUrl: (fixture as any)?.se365EventUrl ?? null,
       });
@@ -144,10 +206,6 @@ export default function MatchScreen() {
         return;
       }
 
-      // LIVE-WIRING: partner click pipeline owns:
-      // - creating Pending saved item
-      // - opening partner
-      // - handling return prompts / booking proof
       await beginPartnerClick({
         tripId,
         partnerId: "sportsevents365",
@@ -157,7 +215,7 @@ export default function MatchScreen() {
         metadata: { fixtureId, leagueId, dateIso, kickoffIso, priceMode: "live" },
       });
     } catch {
-      Alert.alert("Couldn't open tickets");
+      Alert.alert("Couldn’t open tickets");
     } finally {
       setOpeningTickets(false);
     }
@@ -183,108 +241,111 @@ export default function MatchScreen() {
     }
   }, [homeName, awayName]);
 
-  const openDirections = useCallback(async () => {
-    const venueName = (trip as any)?.venueName ?? (fixture as any)?.fixture?.venue?.name;
-    const venueCity = (trip as any)?.venueCity ?? (fixture as any)?.fixture?.venue?.city;
-    const q = encodeURIComponent([venueName, venueCity].filter(Boolean).join(" ") || venueText);
-    const url = `https://www.google.com/maps/search/?api=1&query=${q}`;
-    try {
-      await openUntrackedUrl(url);
-    } catch {
-      Alert.alert("Couldn’t open maps");
-    }
-  }, [(trip as any)?.venueName, (trip as any)?.venueCity, (fixture as any)?.fixture?.venue?.name, (fixture as any)?.fixture?.venue?.city, venueText]);
-
   if (!fixtureId) {
     return (
-      <Background>
+      <Background imageSource={typeof getBackground("match") === "string" ? undefined : (getBackground("match") as any)} imageUrl={typeof getBackground("match") === "string" ? (getBackground("match") as string) : null}>
         <SafeAreaView style={styles.safe}>
-          <EmptyState
-            title="Match not found"
-            subtitle="Missing fixture ID."
-            actionText="Go back"
-            onAction={() => router.back()}
-          />
+          <EmptyState title="Match not found" subtitle="Missing fixture ID." actionText="Go back" onAction={() => router.back()} />
         </SafeAreaView>
       </Background>
     );
   }
 
+  const bg = getBackground("match");
+  const imageUrl = typeof bg === "string" ? bg : null;
+  const imageSource = typeof bg === "string" ? null : (bg as any);
+
   return (
-    <Background>
-      <SafeAreaView style={styles.safe}>
-        <View style={styles.headerRow}>
-          <Pressable onPress={() => router.back()} style={styles.backBtn}>
-            <Text style={styles.backText}>←</Text>
-          </Pressable>
-          <Text style={styles.headerTitle}>Tickets + logistics</Text>
-          <View style={{ width: 36 }} />
+    <Background imageUrl={imageUrl} imageSource={imageSource} overlayOpacity={0.10}>
+      <SafeAreaView style={styles.safe} edges={["top"]}>
+        {/* Header */}
+        <View style={styles.header}>
+          <Button label="Back" tone="secondary" size="sm" onPress={goBack} />
+          <View style={{ flex: 1 }} />
         </View>
 
-        <ScrollView contentContainerStyle={styles.content}>
-          <GlassCard style={styles.matchCard}>
-            <Text style={styles.smallLabel}>MATCH</Text>
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+          {/* Hero card */}
+          <GlassCard level="default" variant="matte" style={styles.heroCard} noPadding>
+            <View style={styles.heroInner}>
+              <Text style={styles.heroKicker}>MATCH</Text>
 
-            <View style={styles.teamRow}>
-              <View style={styles.teamCol}>
-                {!!crestHome && <Image source={{ uri: crestHome }} style={styles.crest} />}
-              </View>
+              <View style={styles.heroTopRow}>
+                <Crest name={homeName || "Home"} uri={crestHome} />
 
-              <View style={styles.teamMid}>
-                <Text style={styles.matchTitle} numberOfLines={2}>
-                  {title}
-                </Text>
-                <View style={styles.badgeRow}>
-                  <View style={styles.badge}>
-                    <Text style={styles.badgeText}>{(trip as any)?.kickoffTbc ? "TBC" : "Confirmed"}</Text>
+                <View style={styles.heroCenter}>
+                  <Text style={styles.heroTitle} numberOfLines={2}>
+                    {title}
+                  </Text>
+
+                  <View style={styles.heroMetaRow}>
+                    <FixtureCertaintyBadge state={certaintyState} variant="compact" />
+                    {leagueName ? <Chip label={leagueName} variant="default" /> : null}
                   </View>
                 </View>
+
+                <Crest name={awayName || "Away"} uri={crestAway} />
               </View>
 
-              <View style={styles.teamCol}>
-                {!!crestAway && <Image source={{ uri: crestAway }} style={styles.crest} />}
+              <View style={styles.heroMetaBlock}>
+                <Text style={styles.metaLine}>{kickoffText}</Text>
+                <Text style={styles.metaLineMuted}>{venueText}</Text>
+              </View>
+
+              <View style={styles.heroHints}>
+                <Chip label="Tickets: live price" variant="primary" />
+                <Chip label="Hotels: live price" variant="default" />
+                <Chip label="Travel: friction soon" variant="default" />
               </View>
             </View>
-
-            <Text style={styles.metaText}>Kickoff: {kickoffText}</Text>
-            <Text style={styles.metaText}>Venue: {venueText}</Text>
-
-            <Pressable onPress={goBackToTrip} style={styles.primaryBtn}>
-              <Text style={styles.primaryBtnText}>Back to trip</Text>
-            </Pressable>
           </GlassCard>
 
-          <GlassCard style={styles.actionsCard}>
+          {/* Tickets */}
+          <GlassCard level="default" variant="matte" style={styles.sectionCard}>
             <Text style={styles.sectionTitle}>Tickets</Text>
-
-            <View style={styles.grid}>
-              <Pressable onPress={openTickets} style={[styles.gridBtn, openingTickets && styles.gridBtnDisabled]}>
-                <Text style={styles.gridTitle}>{openingTickets ? "Opening…" : "Tickets"}</Text>
-                <Text style={styles.gridSub}>SportsEvents365</Text>
-              </Pressable>
-
-              <Pressable onPress={openOfficialClub} style={styles.gridBtn}>
-                <Text style={styles.gridTitle}>Official club</Text>
-                <Text style={styles.gridSub}>Search</Text>
-              </Pressable>
-
-              <Pressable onPress={openGoogleTicketsSearch} style={styles.gridBtn}>
-                <Text style={styles.gridTitle}>Search tickets</Text>
-                <Text style={styles.gridSub}>Google</Text>
-              </Pressable>
-
-              <Pressable onPress={openDirections} style={styles.gridBtn}>
-                <Text style={styles.gridTitle}>Directions</Text>
-                <Text style={styles.gridSub}>Google Maps</Text>
-              </Pressable>
-            </View>
-
-            <Text style={styles.hintText}>
-              Ticket links opened from here go through the Partner pipeline: Pending → (you return) → Booked → Wallet.
+            <Text style={styles.sectionSub}>
+              Use the partner flow so clicks can be tracked and saved (Pending → Booked → Wallet).
             </Text>
 
-            {loading ? <View style={{ height: 20 }} /> : null}
+            <View style={styles.actions}>
+              <Button
+                label={openingTickets ? "Opening…" : "Open tickets"}
+                tone="primary"
+                loading={openingTickets}
+                onPress={openTickets}
+                glow
+              />
+              <Button label="Official club (search)" tone="secondary" onPress={openOfficialClub} />
+              <Button label="Google tickets search" tone="secondary" onPress={openGoogleTicketsSearch} />
+            </View>
           </GlassCard>
+
+          {/* Logistics */}
+          <GlassCard level="default" variant="matte" style={styles.sectionCard}>
+            <Text style={styles.sectionTitle}>Logistics</Text>
+            <Text style={styles.sectionSub}>
+              Keep it simple and useful: venue directions now; transport/areas/distances come in the Trip Workspace later.
+            </Text>
+
+            <View style={styles.actions}>
+              <Button label="Directions to stadium" tone="secondary" onPress={openDirections} />
+            </View>
+
+            <View style={styles.miniInfo}>
+              <Text style={styles.miniInfoLabel}>What we’ll add next</Text>
+              <Text style={styles.miniInfoText}>
+                Stadium distance to hotel areas, travel time to airport/station, “easy/awkward” late transport, and a
+                quick “safe-to-book” signal based on kickoff certainty.
+              </Text>
+            </View>
+          </GlassCard>
+
+          {/* Loading hint */}
+          {loading ? (
+            <View style={{ paddingTop: 2 }}>
+              <Text style={styles.loadingText}>Loading match details…</Text>
+            </View>
+          ) : null}
         </ScrollView>
       </SafeAreaView>
     </Background>
@@ -293,100 +354,168 @@ export default function MatchScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },
-  headerRow: {
+
+  header: {
+    paddingHorizontal: theme.spacing.lg,
+    paddingTop: theme.spacing.sm,
+    paddingBottom: theme.spacing.sm,
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 14,
-    paddingTop: 8,
-    paddingBottom: 6,
-  },
-  backBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  backText: {
-    color: theme.colors.text,
-    fontSize: 18,
-  },
-  headerTitle: {
-    flex: 1,
-    textAlign: "center",
-    color: theme.colors.text,
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  content: {
-    padding: 14,
-    paddingBottom: 24,
     gap: 12,
   },
-  matchCard: { padding: 14 },
-  smallLabel: {
+
+  content: {
+    paddingHorizontal: theme.spacing.lg,
+    paddingBottom: theme.spacing.xxl,
+    gap: 12,
+  },
+
+  heroCard: {
+    borderRadius: theme.borderRadius.sheet,
+  },
+
+  heroInner: {
+    padding: 14,
+    gap: 12,
+  },
+
+  heroKicker: {
     color: theme.colors.textSecondary,
     fontSize: 12,
-    letterSpacing: 0.4,
-    marginBottom: 10,
-    fontWeight: "900",
+    fontWeight: theme.fontWeight.black,
+    letterSpacing: 0.6,
   },
-  teamRow: {
+
+  heroTopRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    marginBottom: 10,
+    gap: 12,
   },
-  teamCol: { width: 54, alignItems: "center" },
-  teamMid: { flex: 1, alignItems: "center" },
-  crest: { width: 44, height: 44, borderRadius: 22 },
-  matchTitle: {
-    color: theme.colors.text,
-    fontSize: 18,
-    fontWeight: "900",
+
+  heroCenter: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: "center",
+    gap: 10,
+  },
+
+  heroTitle: {
+    color: theme.colors.textPrimary,
+    fontSize: 20,
+    lineHeight: 24,
+    fontWeight: theme.fontWeight.black,
     textAlign: "center",
   },
-  badgeRow: { flexDirection: "row", marginTop: 8 },
-  badge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.10)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-  },
-  badgeText: { color: theme.colors.text, fontSize: 12, fontWeight: "900" },
-  metaText: { color: theme.colors.textSecondary, fontSize: 13, marginTop: 4, textAlign: "center", fontWeight: "800" },
-  primaryBtn: {
-    marginTop: 12,
-    height: 44,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "rgba(75,158,57,0.35)",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(0,0,0,0.18)",
-  },
-  primaryBtnText: { color: theme.colors.text, fontSize: 14, fontWeight: "900" },
-  actionsCard: { padding: 14 },
-  sectionTitle: { color: theme.colors.text, fontSize: 14, fontWeight: "900", marginBottom: 10 },
-  grid: {
+
+  heroMetaRow: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 10,
-  },
-  gridBtn: {
-    width: "48%",
-    minHeight: 64,
-    borderRadius: 14,
-    padding: 12,
-    backgroundColor: "rgba(255,255,255,0.06)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
+    gap: 8,
     justifyContent: "center",
   },
-  gridBtnDisabled: { opacity: 0.5 },
-  gridTitle: { color: theme.colors.text, fontSize: 14, fontWeight: "900" },
-  gridSub: { color: theme.colors.textSecondary, fontSize: 12, marginTop: 4, fontWeight: "800" },
-  hintText: { color: theme.colors.textSecondary, fontSize: 12, marginTop: 10, lineHeight: 16, fontWeight: "800" },
+
+  heroMetaBlock: {
+    alignItems: "center",
+    gap: 4,
+    paddingTop: 2,
+  },
+
+  metaLine: {
+    color: theme.colors.textPrimary,
+    fontSize: 14,
+    fontWeight: theme.fontWeight.semibold,
+    textAlign: "center",
+  },
+
+  metaLineMuted: {
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.medium,
+    textAlign: "center",
+  },
+
+  heroHints: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    justifyContent: "center",
+    paddingTop: 2,
+  },
+
+  crestWrap: {
+    width: 58,
+    height: 58,
+    borderRadius: 18,
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderWidth: 1,
+    borderColor: theme.colors.borderSubtle,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+
+  crestImg: { width: 40, height: 40, opacity: 0.96 },
+
+  crestFallback: {
+    color: theme.colors.textSecondary,
+    fontWeight: theme.fontWeight.black,
+    fontSize: 14,
+  },
+
+  sectionCard: {
+    padding: 14,
+    borderRadius: theme.borderRadius.sheet,
+  },
+
+  sectionTitle: {
+    color: theme.colors.textPrimary,
+    fontSize: 16,
+    fontWeight: theme.fontWeight.black,
+    letterSpacing: 0.2,
+  },
+
+  sectionSub: {
+    marginTop: 6,
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: theme.fontWeight.medium,
+  },
+
+  actions: {
+    marginTop: 12,
+    gap: 10,
+  },
+
+  miniInfo: {
+    marginTop: 12,
+    padding: 12,
+    borderRadius: theme.borderRadius.input,
+    borderWidth: 1,
+    borderColor: theme.colors.borderSubtle,
+    backgroundColor: "rgba(255,255,255,0.03)",
+  },
+
+  miniInfoLabel: {
+    color: theme.colors.textPrimary,
+    fontSize: 12,
+    fontWeight: theme.fontWeight.black,
+    letterSpacing: 0.5,
+    marginBottom: 6,
+  },
+
+  miniInfoText: {
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: theme.fontWeight.medium,
+  },
+
+  loadingText: {
+    color: theme.colors.textMuted,
+    fontSize: 12,
+    fontWeight: theme.fontWeight.semibold,
+    textAlign: "center",
+    paddingTop: 8,
+  },
 });
