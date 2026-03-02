@@ -1,75 +1,45 @@
+// src/components/GlowButton.tsx
+import React from "react";
+import type { TextStyle, ViewStyle } from "react-native";
+import Button from "@/src/components/Button";
 
-import React from 'react';
-import { TouchableOpacity, Text, StyleSheet, ViewStyle, TextStyle } from 'react-native';
-import { theme } from '@/src/constants/theme';
-
+/**
+ * V2: GlowButton is just a convenience wrapper.
+ * - primary => v2 primary with controlled glow
+ * - secondary => v2 secondary (outline-like)
+ */
 interface GlowButtonProps {
   title: string;
   onPress: () => void;
   style?: ViewStyle;
   textStyle?: TextStyle;
-  variant?: 'primary' | 'secondary';
+  variant?: "primary" | "secondary";
+  disabled?: boolean;
+  loading?: boolean;
 }
 
-export default function GlowButton({ 
-  title, 
-  onPress, 
-  style, 
+export default function GlowButton({
+  title,
+  onPress,
+  style,
   textStyle,
-  variant = 'primary' 
+  variant = "primary",
+  disabled,
+  loading,
 }: GlowButtonProps) {
-  const isPrimary = variant === 'primary';
-  
+  const tone = variant === "primary" ? "primary" : "secondary";
+  const glow = variant === "primary";
+
   return (
-    <TouchableOpacity
-      style={[
-        styles.button,
-        isPrimary ? styles.buttonPrimary : styles.buttonSecondary,
-        style,
-      ]}
+    <Button
+      label={title}
       onPress={onPress}
-      activeOpacity={0.8}
-    >
-      <Text style={[
-        styles.text,
-        isPrimary ? styles.textPrimary : styles.textSecondary,
-        textStyle,
-      ]}>
-        {title}
-      </Text>
-    </TouchableOpacity>
+      tone={tone}
+      glow={glow}
+      disabled={disabled}
+      loading={loading}
+      style={style}
+      textStyle={textStyle}
+    />
   );
 }
-
-const styles = StyleSheet.create({
-  button: {
-    paddingVertical: theme.spacing.md,
-    paddingHorizontal: theme.spacing.xl,
-    borderRadius: theme.borderRadius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  buttonPrimary: {
-    backgroundColor: theme.colors.primary,
-    shadowColor: theme.colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.5,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  buttonSecondary: {
-    backgroundColor: 'transparent',
-    borderWidth: 2,
-    borderColor: theme.colors.primary,
-  },
-  text: {
-    fontSize: theme.fontSize.md,
-    fontWeight: theme.fontWeight.bold,
-  },
-  textPrimary: {
-    color: theme.colors.background,
-  },
-  textSecondary: {
-    color: theme.colors.primary,
-  },
-});
