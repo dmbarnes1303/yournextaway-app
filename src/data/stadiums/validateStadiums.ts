@@ -1,31 +1,39 @@
 import { teams } from "@/src/data/teams";
-import { stadiums } from "./index";
+import { stadiums } from "@/src/data/stadiums";
 
-/**
- * Dev-time validation to ensure every team.stadiumKey
- * points to a real stadium record.
- *
- * Run this once on app start in development.
- */
-export function validateTeamStadiumLinks(): void {
-  const errors: string[] = [];
+export function validateTeamStadiumLinks() {
+  const teamErrors: string[] = [];
+  const stadiumErrors: string[] = [];
 
+  // Validate team → stadium
   Object.values(teams).forEach((team) => {
     if (!team.stadiumKey) return;
 
-    const stadium = stadiums[team.stadiumKey];
-
-    if (!stadium) {
-      errors.push(
-        `Missing stadium: team "${team.teamKey}" references "${team.stadiumKey}"`
+    if (!stadiums[team.stadiumKey]) {
+      teamErrors.push(
+        `Team "${team.teamKey}" references missing stadium "${team.stadiumKey}"`
       );
     }
   });
 
-  if (errors.length > 0) {
-    console.warn("Stadium validation errors:");
-    errors.forEach((e) => console.warn(e));
-  } else {
-    console.log("Stadium validation passed ✓");
+  // Validate stadium → team
+  Object.values(stadiums).forEach((stadium) => {
+    stadium.teamKeys.forEach((teamKey) => {
+      if (!teams[teamKey]) {
+        stadiumErrors.push(
+          `Stadium "${stadium.stadiumKey}" references missing team "${teamKey}"`
+        );
+      }
+    });
+  });
+
+  if (teamErrors.length === 0 && stadiumErrors.length === 0) {
+    console.log("✅ Stadium / Team schema validated");
+    return;
   }
+
+  console.error("❌ Stadium validation errors detected");
+
+  teamErrors.forEach((err) => console.error(err));
+  stadiumErrors.forEach((err) => console.error(err));
 }
