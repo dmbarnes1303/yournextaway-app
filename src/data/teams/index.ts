@@ -10,6 +10,7 @@ import primeiraLigaTeams from "./primeiraLiga";
 import eredivisieTeams from "./eredivisie";
 import scottishPremiershipTeams from "./scottishPremiership";
 import superLigTeams from "./superLig";
+import proLeagueTeams from "./proLeague";
 
 /**
  * V1 Team Registry (single source of truth)
@@ -102,6 +103,7 @@ export const teams: Record<string, TeamRecord> = {
   ...eredivisieTeams,
   ...scottishPremiershipTeams,
   ...superLigTeams,
+  ...proLeagueTeams,
 
     
   
@@ -121,152 +123,7 @@ export const teams: Record<string, TeamRecord> = {
  
 
  
-  // -------------------------
-// Belgium Pro League (16 teams)
-// -------------------------
-"anderlecht": {
-  teamKey: "anderlecht",
-  name: "Anderlecht",
-  country: "Belgium",
-  city: "Brussels",
-  leagueId: 144,
-  aliases: ["rsc anderlecht"],
-},
-
-"club-brugge": {
-  teamKey: "club-brugge",
-  name: "Club Brugge",
-  country: "Belgium",
-  city: "Bruges",
-  leagueId: 144,
-  aliases: ["club brugge kv"],
-},
-
-"union-saint-gilloise": {
-  teamKey: "union-saint-gilloise",
-  name: "Union Saint-Gilloise",
-  country: "Belgium",
-  city: "Brussels",
-  leagueId: 144,
-  aliases: ["union sg", "usg"],
-},
-
-"antwerp": {
-  teamKey: "antwerp",
-  name: "Royal Antwerp",
-  country: "Belgium",
-  city: "Antwerp",
-  leagueId: 144,
-  aliases: ["antwerp fc", "royal antwerp"],
-},
-
-"gent": {
-  teamKey: "gent",
-  name: "Gent",
-  country: "Belgium",
-  city: "Ghent",
-  leagueId: 144,
-  aliases: ["k aa gent"],
-},
-
-"genk": {
-  teamKey: "genk",
-  name: "Genk",
-  country: "Belgium",
-  city: "Genk",
-  leagueId: 144,
-  aliases: ["krc genk"],
-},
-
-"standard-liege": {
-  teamKey: "standard-liege",
-  name: "Standard Liège",
-  country: "Belgium",
-  city: "Liège",
-  leagueId: 144,
-  aliases: ["standard liege", "standard de liege"],
-},
-
-"charleroi": {
-  teamKey: "charleroi",
-  name: "Charleroi",
-  country: "Belgium",
-  city: "Charleroi",
-  leagueId: 144,
-  aliases: ["sporting charleroi"],
-},
-
-"mechelen": {
-  teamKey: "mechelen",
-  name: "KV Mechelen",
-  country: "Belgium",
-  city: "Mechelen",
-  leagueId: 144,
-  aliases: ["mechelen", "yellow red kv mechelen"],
-},
-
-"leuven": {
-  teamKey: "leuven",
-  name: "OH Leuven",
-  country: "Belgium",
-  city: "Leuven",
-  leagueId: 144,
-  aliases: ["oud-heverlee leuven"],
-},
-
-"st-truiden": {
-  teamKey: "st-truiden",
-  name: "Sint-Truiden",
-  country: "Belgium",
-  city: "Sint-Truiden",
-  leagueId: 144,
-  aliases: ["stvv", "sint truiden"],
-},
-
-"kortrijk": {
-  teamKey: "kortrijk",
-  name: "Kortrijk",
-  country: "Belgium",
-  city: "Kortrijk",
-  leagueId: 144,
-  aliases: ["kv kortrijk"],
-},
-
-"cercle-brugge": {
-  teamKey: "cercle-brugge",
-  name: "Cercle Brugge",
-  country: "Belgium",
-  city: "Bruges",
-  leagueId: 144,
-  aliases: ["cercle"],
-},
-
-"westerlo": {
-  teamKey: "westerlo",
-  name: "Westerlo",
-  country: "Belgium",
-  city: "Westerlo",
-  leagueId: 144,
-  aliases: ["kvc westerlo"],
-},
-
-"dender": {
-  teamKey: "dender",
-  name: "Dender",
-  country: "Belgium",
-  city: "Denderleeuw",
-  leagueId: 144,
-  aliases: ["fc dender"],
-},
-
-"beerschot": {
-  teamKey: "beerschot",
-  name: "Beerschot",
-  country: "Belgium",
-  city: "Antwerp",
-  leagueId: 144,
-  aliases: ["beerschot va"],
-},
+  
 
   // -------------------------
 // Austrian Bundesliga (12 teams)
