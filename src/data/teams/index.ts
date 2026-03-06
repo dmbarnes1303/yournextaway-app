@@ -14,6 +14,7 @@ import proLeagueTeams from "./proLeague";
 import superLeagueGreeceTeams from "./superLeagueGreece";
 import austrianBundesligaTeams from "./austrianBundesliga";
 import superligaDenmarkTeams from "./superligaDenmark";
+import swissSuperLeagueTeams from "./swissSuperLeague";
 
 /**
  * V1 Team Registry (single source of truth)
@@ -110,6 +111,7 @@ export const teams: Record<string, TeamRecord> = {
   ...superLeagueGreeceTeams,
   ...austrianBundesligaTeams,
   ...superligaDenmarkTeams,
+  ...swissSuperLeagueTeams,
 
     
   
@@ -132,122 +134,7 @@ export const teams: Record<string, TeamRecord> = {
   
 
  
-  // -------------------------
-// Swiss Super League (12 teams)
-// -------------------------
-"young-boys": {
-  teamKey: "young-boys",
-  name: "Young Boys",
-  country: "Switzerland",
-  city: "Bern",
-  leagueId: 207,
-  aliases: ["bsc young boys"],
-},
-
-"basel": {
-  teamKey: "basel",
-  name: "Basel",
-  country: "Switzerland",
-  city: "Basel",
-  leagueId: 207,
-  aliases: ["fc basel"],
-},
-
-"zurich": {
-  teamKey: "zurich",
-  name: "FC Zürich",
-  country: "Switzerland",
-  city: "Zurich",
-  leagueId: 207,
-  aliases: ["fc zurich", "zurich fc"],
-},
-
-"grasshoppers": {
-  teamKey: "grasshoppers",
-  name: "Grasshoppers",
-  country: "Switzerland",
-  city: "Zurich",
-  leagueId: 207,
-  aliases: ["grasshopper club", "gc zurich"],
-},
-
-"servette": {
-  teamKey: "servette",
-  name: "Servette",
-  country: "Switzerland",
-  city: "Geneva",
-  leagueId: 207,
-  aliases: ["servette fc"],
-},
-
-"lugano": {
-  teamKey: "lugano",
-  name: "Lugano",
-  country: "Switzerland",
-  city: "Lugano",
-  leagueId: 207,
-  aliases: ["fc lugano"],
-},
-
-"st-gallen": {
-  teamKey: "st-gallen",
-  name: "St. Gallen",
-  country: "Switzerland",
-  city: "St. Gallen",
-  leagueId: 207,
-  aliases: ["fc st gallen"],
-},
-
-"winterthur": {
-  teamKey: "winterthur",
-  name: "Winterthur",
-  country: "Switzerland",
-  city: "Winterthur",
-  leagueId: 207,
-  aliases: ["fc winterthur"],
-},
-
-"lausanne": {
-  teamKey: "lausanne",
-  name: "Lausanne-Sport",
-  country: "Switzerland",
-  city: "Lausanne",
-  leagueId: 207,
-  aliases: ["lausanne sport", "ls"],
-},
-
-"sion": {
-  teamKey: "sion",
-  name: "Sion",
-  country: "Switzerland",
-  city: "Sion",
-  leagueId: 207,
-  aliases: ["fc sion"],
-},
-
-"yverdon": {
-  teamKey: "yverdon",
-  name: "Yverdon Sport",
-  country: "Switzerland",
-  city: "Yverdon",
-  leagueId: 207,
-  aliases: ["yverdon sport fc"],
-},
-
-"lucerne": {
-  teamKey: "lucerne",
-  name: "Lucerne",
-  country: "Switzerland",
-  city: "Lucerne",
-  leagueId: 207,
-  aliases: ["fc luzern", "luzern"],
-},
-
- 
-
- 
-
-  // -------------------------
+ ------------------
 // Chance Liga (16 teams)
 // -------------------------
 "sparta-prague": {
