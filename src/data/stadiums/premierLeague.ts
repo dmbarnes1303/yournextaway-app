@@ -203,3 +203,5 @@ export const premierLeagueStadiums: Record<string, StadiumRecord> = {
   },
 
 };
+
+export default premierLeagueStadiums;
