@@ -1,0 +1,172 @@
+/**
+ * Season league membership registry
+ * This controls which teams belong to each league in this season.
+ * 
+ * IMPORTANT:
+ * Teams themselves are defined in /teams
+ * This file ONLY defines league membership.
+ */
+
+export const LEAGUE_TEAM_KEYS_2025_26: Record<number, string[]> = {
+
+  // Premier League
+  39: [
+    "arsenal",
+    "aston-villa",
+    "bournemouth",
+    "brentford",
+    "brighton-hove-albion",
+    "burnley",
+    "chelsea",
+    "crystal-palace",
+    "everton",
+    "fulham",
+    "leeds-united",
+    "liverpool",
+    "manchester-city",
+    "manchester-united",
+    "newcastle-united",
+    "nottingham-forest",
+    "sunderland",
+    "tottenham-hotspur",
+    "west-ham-united",
+    "wolves",
+  ],
+
+  // La Liga
+  140: [
+    "athletic-club",
+    "atletico-madrid",
+    "barcelona",
+    "celta-vigo",
+    "deportivo-alaves",
+    "elche",
+    "espanyol",
+    "getafe",
+    "girona",
+    "levante",
+    "mallorca",
+    "osasuna",
+    "rayo-vallecano",
+    "real-betis",
+    "real-madrid",
+    "real-oviedo",
+    "real-sociedad",
+    "sevilla",
+    "valencia",
+    "villarreal",
+  ],
+
+  // Serie A
+  135: [
+    "ac-milan",
+    "atalanta",
+    "as-roma",
+    "bologna",
+    "cagliari",
+    "como-1907",
+    "cremonese",
+    "fiorentina",
+    "genoa",
+    "hellas-verona",
+    "inter",
+    "juventus",
+    "lazio",
+    "lecce",
+    "napoli",
+    "parma",
+    "pisa",
+    "sassuolo",
+    "torino",
+    "udinese",
+  ],
+
+  // Bundesliga
+  78: [
+    "augsburg",
+    "bayer-leverkusen",
+    "bayern-munich",
+    "borussia-dortmund",
+    "borussia-mgladbach",
+    "eintracht-frankfurt",
+    "fc-cologne",
+    "fc-heidenheim",
+    "freiburg",
+    "hamburger-sv",
+    "hoffenheim",
+    "mainz-05",
+    "rb-leipzig",
+    "st-pauli",
+    "union-berlin",
+    "vfb-stuttgart",
+    "werder-bremen",
+    "wolfsburg",
+  ],
+
+  // Ligue 1
+  61: [
+    "angers",
+    "as-monaco",
+    "auxerre",
+    "brest",
+    "le-havre",
+    "lens",
+    "lille",
+    "lorient",
+    "lyon",
+    "marseille",
+    "metz",
+    "nantes",
+    "nice",
+    "paris-fc",
+    "paris-saint-germain",
+    "rennes",
+    "strasbourg",
+    "toulouse",
+  ],
+
+  // Primeira Liga
+  94: [
+    "benfica",
+    "porto",
+    "sporting-cp",
+    "braga",
+    "vitoria-guimaraes",
+    "boavista",
+    "famalicao",
+    "moreirense",
+    "gil-vicente",
+    "rio-ave",
+    "estoril",
+    "casa-pia",
+    "arouca",
+    "farense",
+    "nacional",
+    "santa-clara",
+    "estrela-amadora",
+    "avs",
+  ],
+
+  // Turkish Super Lig
+  203: [
+    "galatasaray",
+    "fenerbahce",
+    "besiktas",
+    "trabzonspor",
+    "istanbul-basaksehir",
+    "konyaspor",
+    "sivasspor",
+    "kayserispor",
+    "gaziantep",
+    "antalya",
+    "adana-demirspor",
+    "hatayspor",
+    "alanyaspor",
+    "samsunspor",
+    "rizespor",
+    "ankaragucu",
+    "kasimpasa",
+    "pendikspor",
+  ],
+
+};
