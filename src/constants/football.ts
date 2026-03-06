@@ -5,13 +5,11 @@ export type LeagueBrowseRegion = "featured-europe" | "central-eastern-europe" | 
 export type LeagueOption = {
   /**
    * Stable internal slug for routing / config lookups.
-   * Example: "eredivisie", "primeira-liga", "super-lig"
    */
   slug: string;
 
   /**
    * Short UI label.
-   * Example: "Eredivisie", "Primeira Liga", "Super Lig"
    */
   label: string;
 
@@ -22,8 +20,6 @@ export type LeagueOption = {
 
   /**
    * API-Football season.
-   * - Most European leagues use the season start year (e.g. 2025 => 2025/26)
-   * - Calendar-year leagues (e.g. Iceland / Norway / Sweden / Finland) use the current year
    */
   season: number;
 
@@ -40,27 +36,34 @@ export type LeagueOption = {
   countryCode: string;
 
   /**
-   * Region used by the new Fixtures country → league browse UI.
+   * Region used by country → league browse UI.
    * Big-5 leagues are featured separately, so this can be null for them.
    */
   browseRegion: LeagueBrowseRegion | null;
 
   /**
-   * Whether this league should appear in the top featured leagues row.
+   * Whether this league should appear in the featured leagues row.
    */
   featured: boolean;
 
   /**
    * Whether this league should be surfaced on Home.
-   * Keep this curated to avoid bloat.
    */
   homeVisible: boolean;
 
   /**
    * Canonical team keys for country cards / featured context.
-   * These keys should resolve via src/data/teams/index.ts.
    */
   featuredClubKeys: string[];
+};
+
+type CountryLeagueSeed = Omit<LeagueOption, "country" | "countryCode" | "browseRegion">;
+
+export type CountryFootballConfig = {
+  country: string;
+  countryCode: string;
+  browseRegion: LeagueBrowseRegion | null;
+  leagues: CountryLeagueSeed[];
 };
 
 /**
@@ -73,13 +76,22 @@ export const LEAGUE_BROWSE_REGION_LABELS: Record<LeagueBrowseRegion, string> = {
 };
 
 /**
+ * Stable region ordering for browse UI.
+ */
+export const LEAGUE_BROWSE_REGION_ORDER: LeagueBrowseRegion[] = [
+  "featured-europe",
+  "central-eastern-europe",
+  "nordics",
+];
+
+/**
  * European football seasons generally start in July/August.
  * API-Football uses the season "start year" (e.g. 2025 means 2025/26).
  */
 export function currentFootballSeasonStartYear(now = new Date()): number {
   const y = now.getFullYear();
   const m = now.getMonth(); // 0=Jan
-  return m >= 6 ? y : y - 1; // July(6) onward = new season start year
+  return m >= 6 ? y : y - 1; // July onward = new season start year
 }
 
 /**
@@ -101,371 +113,506 @@ export const DEFAULT_SEASON = currentFootballSeasonStartYear();
 export const DEFAULT_CALENDAR_YEAR_SEASON = currentCalendarYear();
 
 /**
- * Single source of truth for all top leagues used in the app.
+ * Primary source of truth.
  *
- * Notes:
- * - Big 5 stay featured and Home-visible.
- * - New European leagues are grouped into browse regions.
- * - Display labels use current public-facing branding where practical.
- * - API ids remain the source of truth for fixture fetching.
+ * Architecture locked:
+ * Europe
+ *   -> Country
+ *     -> League
+ *
+ * LEAGUES is derived from this grouped structure.
  */
-export const LEAGUES: LeagueOption[] = [
-  // -------------------------
-  // Featured / Big 5
-  // -------------------------
-  {
-    slug: "premier-league",
-    label: "Premier League",
-    leagueId: 39,
-    season: DEFAULT_SEASON,
+export const FOOTBALL_BY_COUNTRY: Record<string, CountryFootballConfig> = {
+  england: {
     country: "England",
     countryCode: "ENG",
     browseRegion: null,
-    featured: true,
-    homeVisible: true,
-    featuredClubKeys: ["manchester-united", "liverpool", "arsenal"],
+    leagues: [
+      {
+        slug: "premier-league",
+        label: "Premier League",
+        leagueId: 39,
+        season: DEFAULT_SEASON,
+        featured: true,
+        homeVisible: true,
+        featuredClubKeys: ["manchester-united", "liverpool", "arsenal"],
+      },
+    ],
   },
-  {
-    slug: "la-liga",
-    label: "La Liga",
-    leagueId: 140,
-    season: DEFAULT_SEASON,
+
+  spain: {
     country: "Spain",
     countryCode: "ES",
     browseRegion: null,
-    featured: true,
-    homeVisible: true,
-    featuredClubKeys: ["real-madrid", "barcelona", "atletico-madrid"],
+    leagues: [
+      {
+        slug: "la-liga",
+        label: "La Liga",
+        leagueId: 140,
+        season: DEFAULT_SEASON,
+        featured: true,
+        homeVisible: true,
+        featuredClubKeys: ["real-madrid", "barcelona", "atletico-madrid"],
+      },
+    ],
   },
-  {
-    slug: "serie-a",
-    label: "Serie A",
-    leagueId: 135,
-    season: DEFAULT_SEASON,
+
+  italy: {
     country: "Italy",
     countryCode: "IT",
     browseRegion: null,
-    featured: true,
-    homeVisible: true,
-    featuredClubKeys: ["inter", "juventus", "napoli"],
+    leagues: [
+      {
+        slug: "serie-a",
+        label: "Serie A",
+        leagueId: 135,
+        season: DEFAULT_SEASON,
+        featured: true,
+        homeVisible: true,
+        featuredClubKeys: ["inter", "juventus", "napoli"],
+      },
+    ],
   },
-  {
-    slug: "bundesliga",
-    label: "Bundesliga",
-    leagueId: 78,
-    season: DEFAULT_SEASON,
+
+  germany: {
     country: "Germany",
     countryCode: "DE",
     browseRegion: null,
-    featured: true,
-    homeVisible: true,
-    featuredClubKeys: ["bayern-munich", "borussia-dortmund", "rb-leipzig"],
+    leagues: [
+      {
+        slug: "bundesliga",
+        label: "Bundesliga",
+        leagueId: 78,
+        season: DEFAULT_SEASON,
+        featured: true,
+        homeVisible: true,
+        featuredClubKeys: ["bayern-munich", "borussia-dortmund", "rb-leipzig"],
+      },
+    ],
   },
-  {
-    slug: "ligue-1",
-    label: "Ligue 1",
-    leagueId: 61,
-    season: DEFAULT_SEASON,
+
+  france: {
     country: "France",
     countryCode: "FR",
     browseRegion: null,
-    featured: true,
-    homeVisible: true,
-    featuredClubKeys: ["paris-saint-germain", "marseille", "lyon"],
+    leagues: [
+      {
+        slug: "ligue-1",
+        label: "Ligue 1",
+        leagueId: 61,
+        season: DEFAULT_SEASON,
+        featured: true,
+        homeVisible: true,
+        featuredClubKeys: ["paris-saint-germain", "marseille", "lyon"],
+      },
+    ],
   },
 
-  // -------------------------
-  // Featured Europe
-  // -------------------------
-  {
-    slug: "eredivisie",
-    label: "Eredivisie",
-    leagueId: 88,
-    season: DEFAULT_SEASON,
+  netherlands: {
     country: "Netherlands",
     countryCode: "NL",
     browseRegion: "featured-europe",
-    featured: true,
-    homeVisible: true,
-    featuredClubKeys: ["ajax", "psv", "feyenoord"],
+    leagues: [
+      {
+        slug: "eredivisie",
+        label: "Eredivisie",
+        leagueId: 88,
+        season: DEFAULT_SEASON,
+        featured: true,
+        homeVisible: true,
+        featuredClubKeys: ["ajax", "psv", "feyenoord"],
+      },
+    ],
   },
-  {
-    slug: "primeira-liga",
-    label: "Primeira Liga",
-    leagueId: 94,
-    season: DEFAULT_SEASON,
+
+  portugal: {
     country: "Portugal",
     countryCode: "PT",
     browseRegion: "featured-europe",
-    featured: true,
-    homeVisible: true,
-    featuredClubKeys: ["benfica", "porto", "sporting-cp"],
+    leagues: [
+      {
+        slug: "primeira-liga",
+        label: "Primeira Liga",
+        leagueId: 94,
+        season: DEFAULT_SEASON,
+        featured: true,
+        homeVisible: true,
+        featuredClubKeys: ["benfica", "porto", "sporting-cp"],
+      },
+    ],
   },
-  {
-    slug: "premiership",
-    label: "Premiership",
-    leagueId: 179,
-    season: DEFAULT_SEASON,
+
+  scotland: {
     country: "Scotland",
     countryCode: "SCO",
     browseRegion: "featured-europe",
-    featured: true,
-    homeVisible: true,
-    featuredClubKeys: ["celtic", "rangers"],
+    leagues: [
+      {
+        slug: "premiership",
+        label: "Premiership",
+        leagueId: 179,
+        season: DEFAULT_SEASON,
+        featured: true,
+        homeVisible: true,
+        featuredClubKeys: ["celtic", "rangers"],
+      },
+    ],
   },
-  {
-    slug: "super-lig",
-    label: "Super Lig",
-    leagueId: 203,
-    season: DEFAULT_SEASON,
+
+  turkey: {
     country: "Turkey",
     countryCode: "TR",
     browseRegion: "featured-europe",
-    featured: true,
-    homeVisible: true,
-    featuredClubKeys: ["galatasaray", "fenerbahce", "besiktas"],
+    leagues: [
+      {
+        slug: "super-lig",
+        label: "Super Lig",
+        leagueId: 203,
+        season: DEFAULT_SEASON,
+        featured: true,
+        homeVisible: true,
+        featuredClubKeys: ["galatasaray", "fenerbahce", "besiktas"],
+      },
+    ],
   },
-  {
-    slug: "pro-league",
-    label: "Pro League",
-    leagueId: 144,
-    season: DEFAULT_SEASON,
+
+  belgium: {
     country: "Belgium",
     countryCode: "BE",
     browseRegion: "featured-europe",
-    featured: false,
-    homeVisible: false,
-    featuredClubKeys: ["club-brugge", "anderlecht"],
+    leagues: [
+      {
+        slug: "pro-league",
+        label: "Pro League",
+        leagueId: 144,
+        season: DEFAULT_SEASON,
+        featured: false,
+        homeVisible: false,
+        featuredClubKeys: ["club-brugge", "anderlecht"],
+      },
+    ],
   },
-  {
-    slug: "austrian-bundesliga",
-    label: "Bundesliga",
-    leagueId: 218,
-    season: DEFAULT_SEASON,
+
+  austria: {
     country: "Austria",
     countryCode: "AT",
     browseRegion: "featured-europe",
-    featured: false,
-    homeVisible: false,
-    featuredClubKeys: ["red-bull-salzburg", "rapid-vienna"],
+    leagues: [
+      {
+        slug: "austrian-bundesliga",
+        label: "Bundesliga",
+        leagueId: 218,
+        season: DEFAULT_SEASON,
+        featured: false,
+        homeVisible: false,
+        featuredClubKeys: ["salzburg", "rapid-vienna"],
+      },
+    ],
   },
-  {
-    slug: "swiss-super-league",
-    label: "Super League",
-    leagueId: 207,
-    season: DEFAULT_SEASON,
+
+  switzerland: {
     country: "Switzerland",
     countryCode: "CH",
     browseRegion: "featured-europe",
-    featured: false,
-    homeVisible: false,
-    featuredClubKeys: ["young-boys", "basel"],
+    leagues: [
+      {
+        slug: "swiss-super-league",
+        label: "Super League",
+        leagueId: 207,
+        season: DEFAULT_SEASON,
+        featured: false,
+        homeVisible: false,
+        featuredClubKeys: ["young-boys", "basel"],
+      },
+    ],
   },
-  {
-    slug: "super-league-greece",
-    label: "Super League",
-    leagueId: 197,
-    season: DEFAULT_SEASON,
+
+  greece: {
     country: "Greece",
     countryCode: "GR",
     browseRegion: "featured-europe",
-    featured: false,
-    homeVisible: false,
-    featuredClubKeys: ["olympiacos", "panathinaikos"],
+    leagues: [
+      {
+        slug: "super-league-greece",
+        label: "Super League",
+        leagueId: 197,
+        season: DEFAULT_SEASON,
+        featured: false,
+        homeVisible: false,
+        featuredClubKeys: ["olympiacos", "panathinaikos"],
+      },
+    ],
   },
 
-  // -------------------------
-  // Central & Eastern Europe
-  // -------------------------
-  {
-    slug: "danish-superliga",
-    label: "Superliga",
-    leagueId: 119,
-    season: DEFAULT_SEASON,
+  denmark: {
     country: "Denmark",
     countryCode: "DK",
     browseRegion: "nordics",
-    featured: false,
-    homeVisible: false,
-    featuredClubKeys: ["fc-copenhagen", "brondby"],
+    leagues: [
+      {
+        slug: "danish-superliga",
+        label: "Superliga",
+        leagueId: 119,
+        season: DEFAULT_SEASON,
+        featured: false,
+        homeVisible: false,
+        featuredClubKeys: ["copenhagen", "brondby"],
+      },
+    ],
   },
-  {
-    slug: "chance-liga",
-    label: "Chance Liga",
-    leagueId: 345,
-    season: DEFAULT_SEASON,
+
+  czechRepublic: {
     country: "Czech Republic",
     countryCode: "CZ",
     browseRegion: "central-eastern-europe",
-    featured: false,
-    homeVisible: false,
-    featuredClubKeys: ["sparta-prague", "slavia-prague"],
+    leagues: [
+      {
+        slug: "chance-liga",
+        label: "Chance Liga",
+        leagueId: 345,
+        season: DEFAULT_SEASON,
+        featured: false,
+        homeVisible: false,
+        featuredClubKeys: ["sparta-prague", "slavia-prague"],
+      },
+    ],
   },
-  {
-    slug: "ekstraklasa",
-    label: "Ekstraklasa",
-    leagueId: 106,
-    season: DEFAULT_SEASON,
+
+  poland: {
     country: "Poland",
     countryCode: "PL",
     browseRegion: "central-eastern-europe",
-    featured: false,
-    homeVisible: false,
-    featuredClubKeys: ["legia-warsaw", "lech-poznan"],
+    leagues: [
+      {
+        slug: "ekstraklasa",
+        label: "Ekstraklasa",
+        leagueId: 106,
+        season: DEFAULT_SEASON,
+        featured: false,
+        homeVisible: false,
+        featuredClubKeys: ["legia-warsaw", "lech-poznan"],
+      },
+    ],
   },
-  {
-    slug: "hnl",
-    label: "HNL",
-    leagueId: 210,
-    season: DEFAULT_SEASON,
+
+  croatia: {
     country: "Croatia",
     countryCode: "HR",
     browseRegion: "central-eastern-europe",
-    featured: false,
-    homeVisible: false,
-    featuredClubKeys: ["dinamo-zagreb", "hajduk-split"],
+    leagues: [
+      {
+        slug: "hnl",
+        label: "HNL",
+        leagueId: 210,
+        season: DEFAULT_SEASON,
+        featured: false,
+        homeVisible: false,
+        featuredClubKeys: ["dinamo-zagreb", "hajduk-split"],
+      },
+    ],
   },
-  {
-    slug: "superliga-serbia",
-    label: "SuperLiga",
-    leagueId: 286,
-    season: DEFAULT_SEASON,
+
+  serbia: {
     country: "Serbia",
     countryCode: "RS",
     browseRegion: "central-eastern-europe",
-    featured: false,
-    homeVisible: false,
-    featuredClubKeys: ["red-star-belgrade", "partizan-belgrade"],
+    leagues: [
+      {
+        slug: "superliga-serbia",
+        label: "SuperLiga",
+        leagueId: 286,
+        season: DEFAULT_SEASON,
+        featured: false,
+        homeVisible: false,
+        featuredClubKeys: ["red-star-belgrade", "partizan"],
+      },
+    ],
   },
-  {
-    slug: "nb-i",
-    label: "NB I",
-    leagueId: 271,
-    season: DEFAULT_SEASON,
+
+  hungary: {
     country: "Hungary",
     countryCode: "HU",
     browseRegion: "central-eastern-europe",
-    featured: false,
-    homeVisible: false,
-    featuredClubKeys: ["ferencvaros", "fehervar"],
+    leagues: [
+      {
+        slug: "nb-i",
+        label: "NB I",
+        leagueId: 271,
+        season: DEFAULT_SEASON,
+        featured: false,
+        homeVisible: false,
+        featuredClubKeys: ["ferencvaros", "ujpest"],
+      },
+    ],
   },
-  {
-    slug: "superliga-romania",
-    label: "SuperLiga",
-    leagueId: 283,
-    season: DEFAULT_SEASON,
+
+  romania: {
     country: "Romania",
     countryCode: "RO",
     browseRegion: "central-eastern-europe",
-    featured: false,
-    homeVisible: false,
-    featuredClubKeys: ["fcsb", "cfr-cluj"],
+    leagues: [
+      {
+        slug: "superliga-romania",
+        label: "SuperLiga",
+        leagueId: 283,
+        season: DEFAULT_SEASON,
+        featured: false,
+        homeVisible: false,
+        featuredClubKeys: ["fcsb", "cfr-cluj"],
+      },
+    ],
   },
-  {
-    slug: "super-liga-slovakia",
-    label: "Super Liga",
-    leagueId: 332,
-    season: DEFAULT_SEASON,
+
+  slovakia: {
     country: "Slovakia",
     countryCode: "SK",
     browseRegion: "central-eastern-europe",
-    featured: false,
-    homeVisible: false,
-    featuredClubKeys: ["slovan-bratislava", "spartak-trnava"],
+    leagues: [
+      {
+        slug: "super-liga-slovakia",
+        label: "Super Liga",
+        leagueId: 332,
+        season: DEFAULT_SEASON,
+        featured: false,
+        homeVisible: false,
+        featuredClubKeys: ["slovan-bratislava", "spartak-trnava"],
+      },
+    ],
   },
-  {
-    slug: "prvaliga",
-    label: "PrvaLiga",
-    leagueId: 373,
-    season: DEFAULT_SEASON,
+
+  slovenia: {
     country: "Slovenia",
     countryCode: "SI",
     browseRegion: "central-eastern-europe",
-    featured: false,
-    homeVisible: false,
-    featuredClubKeys: ["maribor", "olimpija-ljubljana"],
+    leagues: [
+      {
+        slug: "prvaliga",
+        label: "PrvaLiga",
+        leagueId: 373,
+        season: DEFAULT_SEASON,
+        featured: false,
+        homeVisible: false,
+        featuredClubKeys: ["maribor", "olimpija-ljubljana"],
+      },
+    ],
   },
-  {
-    slug: "first-league-bulgaria",
-    label: "First League",
-    leagueId: 172,
-    season: DEFAULT_SEASON,
+
+  bulgaria: {
     country: "Bulgaria",
     countryCode: "BG",
     browseRegion: "central-eastern-europe",
-    featured: false,
-    homeVisible: false,
-    featuredClubKeys: ["ludogorets", "cska-sofia"],
+    leagues: [
+      {
+        slug: "first-league-bulgaria",
+        label: "First League",
+        leagueId: 172,
+        season: DEFAULT_SEASON,
+        featured: false,
+        homeVisible: false,
+        featuredClubKeys: ["ludogorets", "levski-sofia"],
+      },
+    ],
   },
-  {
-    slug: "first-division-cyprus",
-    label: "First Division",
-    leagueId: 318,
-    season: DEFAULT_SEASON,
+
+  cyprus: {
     country: "Cyprus",
     countryCode: "CY",
     browseRegion: "central-eastern-europe",
-    featured: false,
-    homeVisible: false,
-    featuredClubKeys: ["apoel", "omonia"],
+    leagues: [
+      {
+        slug: "first-division-cyprus",
+        label: "First Division",
+        leagueId: 318,
+        season: DEFAULT_SEASON,
+        featured: false,
+        homeVisible: false,
+        featuredClubKeys: ["apoel", "omonia-nicosia"],
+      },
+    ],
   },
 
-  // -------------------------
-  // Nordics / calendar-year leagues
-  // -------------------------
-  {
-    slug: "allsvenskan",
-    label: "Allsvenskan",
-    leagueId: 113,
-    season: DEFAULT_CALENDAR_YEAR_SEASON,
+  sweden: {
     country: "Sweden",
     countryCode: "SE",
     browseRegion: "nordics",
-    featured: false,
-    homeVisible: false,
-    featuredClubKeys: ["malmo", "aik"],
+    leagues: [
+      {
+        slug: "allsvenskan",
+        label: "Allsvenskan",
+        leagueId: 113,
+        season: DEFAULT_CALENDAR_YEAR_SEASON,
+        featured: false,
+        homeVisible: false,
+        featuredClubKeys: ["malmo", "aik"],
+      },
+    ],
   },
-  {
-    slug: "eliteserien",
-    label: "Eliteserien",
-    leagueId: 103,
-    season: DEFAULT_CALENDAR_YEAR_SEASON,
+
+  norway: {
     country: "Norway",
     countryCode: "NO",
     browseRegion: "nordics",
-    featured: false,
-    homeVisible: false,
-    featuredClubKeys: ["bodo-glimt", "rosenborg"],
+    leagues: [
+      {
+        slug: "eliteserien",
+        label: "Eliteserien",
+        leagueId: 103,
+        season: DEFAULT_CALENDAR_YEAR_SEASON,
+        featured: false,
+        homeVisible: false,
+        featuredClubKeys: ["bodo-glimt", "rosenborg"],
+      },
+    ],
   },
-  {
-    slug: "veikkausliiga",
-    label: "Veikkausliiga",
-    leagueId: 244,
-    season: DEFAULT_CALENDAR_YEAR_SEASON,
+
+  finland: {
     country: "Finland",
     countryCode: "FI",
     browseRegion: "nordics",
-    featured: false,
-    homeVisible: false,
-    featuredClubKeys: ["hjk", "kups"],
+    leagues: [
+      {
+        slug: "veikkausliiga",
+        label: "Veikkausliiga",
+        leagueId: 244,
+        season: DEFAULT_CALENDAR_YEAR_SEASON,
+        featured: false,
+        homeVisible: false,
+        featuredClubKeys: ["hjk", "kups"],
+      },
+    ],
   },
-  {
-    slug: "besta-deild",
-    label: "Besta Deild",
-    leagueId: 164,
-    season: DEFAULT_CALENDAR_YEAR_SEASON,
+
+  iceland: {
     country: "Iceland",
     countryCode: "IS",
     browseRegion: "nordics",
-    featured: false,
-    homeVisible: false,
-    featuredClubKeys: ["kr-reykjavik", "valur"],
+    leagues: [
+      {
+        slug: "besta-deild",
+        label: "Besta Deild",
+        leagueId: 164,
+        season: DEFAULT_CALENDAR_YEAR_SEASON,
+        featured: false,
+        homeVisible: false,
+        featuredClubKeys: ["kr-reykjavik", "valur"],
+      },
+    ],
   },
-];
+};
 
 /**
- * Convenience exports for UI layers.
+ * Derived flat helpers.
+ * Keep these exports because the rest of the app already consumes them.
  */
+export const LEAGUES: LeagueOption[] = Object.values(FOOTBALL_BY_COUNTRY).flatMap((countryConfig) =>
+  countryConfig.leagues.map((league) => ({
+    ...league,
+    country: countryConfig.country,
+    countryCode: countryConfig.countryCode,
+    browseRegion: countryConfig.browseRegion,
+  }))
+);
+
 export const FEATURED_LEAGUES = LEAGUES.filter((l) => l.featured);
 export const HOME_LEAGUES = LEAGUES.filter((l) => l.homeVisible);
 export const BROWSEABLE_LEAGUES = LEAGUES.filter((l) => l.browseRegion !== null);
@@ -483,14 +630,10 @@ export function getLeaguesForBrowseRegion(region: LeagueBrowseRegion): LeagueOpt
   return LEAGUES.filter((l) => l.browseRegion === region);
 }
 
-/**
- * Stable region ordering for browse UI.
- */
-export const LEAGUE_BROWSE_REGION_ORDER: LeagueBrowseRegion[] = [
-  "featured-europe",
-  "central-eastern-europe",
-  "nordics",
-];
+export function getCountryFootballConfig(countryKey: string): CountryFootballConfig | null {
+  const key = String(countryKey ?? "").trim();
+  return FOOTBALL_BY_COUNTRY[key] ?? null;
+}
 
 // --------------------
 // League slot rules (kickoff-likely heuristics)
@@ -503,8 +646,8 @@ export const LEAGUE_BROWSE_REGION_ORDER: LeagueBrowseRegion[] = [
  */
 export type LeagueSlotRule = {
   leagueId: number;
-  primarySlot: string; // display text e.g. "Sat 15:00"
-  typicalSlots: string[]; // optional: used later for UI
+  primarySlot: string;
+  typicalSlots: string[];
 };
 
 export const LEAGUE_SLOT_RULES: LeagueSlotRule[] = [
@@ -516,18 +659,7 @@ export const LEAGUE_SLOT_RULES: LeagueSlotRule[] = [
   {
     leagueId: 140,
     primarySlot: "Sat 18:30",
-    typicalSlots: [
-      "Fri 21:00",
-      "Sat 14:00",
-      "Sat 16:15",
-      "Sat 18:30",
-      "Sat 21:00",
-      "Sun 14:00",
-      "Sun 16:15",
-      "Sun 18:30",
-      "Sun 21:00",
-      "Mon 21:00",
-    ],
+    typicalSlots: ["Fri 21:00", "Sat 14:00", "Sat 16:15", "Sat 18:30", "Sat 21:00", "Sun 14:00", "Sun 16:15", "Sun 18:30", "Sun 21:00", "Mon 21:00"],
   },
   {
     leagueId: 135,
@@ -544,8 +676,6 @@ export const LEAGUE_SLOT_RULES: LeagueSlotRule[] = [
     primarySlot: "Sat 21:00",
     typicalSlots: ["Fri 21:00", "Sat 17:00", "Sat 19:00", "Sat 21:00", "Sun 13:00", "Sun 15:00", "Sun 17:00", "Sun 20:45"],
   },
-
-  // New leagues
   {
     leagueId: 88,
     primarySlot: "Sun 14:30",
@@ -675,7 +805,7 @@ export function getLeagueSlotRule(leagueId: number): LeagueSlotRule | null {
  * CONTRACT (locked):
  * - from/to are ISO date-only "YYYY-MM-DD"
  * - from is clamped to TOMORROW (never includes today/past)
- * - to is INCLUSIVE (the final date included in the window)
+ * - to is INCLUSIVE
  * - days means "number of included days" (days=1 => from==to)
  */
 
@@ -687,7 +817,7 @@ export function toIsoDate(date: Date): string {
 }
 
 /**
- * Parse "YYYY-MM-DD" as a local-midnight Date (safe for date-only comparisons).
+ * Parse "YYYY-MM-DD" as a local-midnight Date.
  */
 export function parseIsoDateOnly(iso: string): Date | null {
   if (!iso) return null;
@@ -720,7 +850,6 @@ export function tomorrowIso(): string {
 
 /**
  * Enforce "tomorrow onwards" (excludes past + today).
- * If input is invalid, returns tomorrow.
  */
 export function clampFromIsoToTomorrow(fromIso: string): string {
   const tmr = tomorrowIso();
@@ -735,9 +864,7 @@ function isIsoDateOnly(s?: string): boolean {
 }
 
 /**
- * Normalise a window so it is always valid and never includes past/today:
- * - clamps `from` to tomorrow
- * - ensures `to >= from` (if not, sets `to = from + (daysIfInvalidTo-1)`)
+ * Normalise a window so it is always valid and never includes past/today.
  */
 export function normalizeWindowIso(input: { from: string; to: string }, daysIfInvalidTo = 90): RollingWindowIso {
   const from = clampFromIsoToTomorrow(String(input.from ?? "").trim());
@@ -766,8 +893,7 @@ export function normalizeWindowIso(input: { from: string; to: string }, daysIfIn
 
 /**
  * Central fixture date window (rolling).
- * IMPORTANT: Defaults to TOMORROW onwards (excludes past + today).
- * days is inclusive length. Default is 90 days.
+ * Defaults to TOMORROW onwards.
  */
 export function getRollingWindowIso(opts?: { days?: number; start?: Date }): RollingWindowIso {
   const days = Math.max(1, Number(opts?.days ?? 90) || 90);
@@ -791,7 +917,6 @@ export function windowFromTomorrowIso(days: number): RollingWindowIso {
 
 /**
  * Helper: next weekend (Sat–Sun) from tomorrow onwards.
- * Returns an inclusive window: { from: Saturday, to: Sunday }.
  */
 export function nextWeekendWindowIso(): RollingWindowIso {
   const d = tomorrowLocal();
@@ -810,4 +935,4 @@ export function nextWeekendWindowIso(): RollingWindowIso {
   const to = toIsoDate(sun);
 
   return normalizeWindowIso({ from, to }, 2);
-}
+  }
