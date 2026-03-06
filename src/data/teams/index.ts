@@ -12,6 +12,7 @@ import scottishPremiershipTeams from "./scottishPremiership";
 import superLigTeams from "./superLig";
 import proLeagueTeams from "./proLeague";
 import superLeagueGreeceTeams from "./superLeagueGreece";
+import austrianBundesligaTeams from "./austrianBundesliga";
 
 /**
  * V1 Team Registry (single source of truth)
@@ -106,6 +107,7 @@ export const teams: Record<string, TeamRecord> = {
   ...superLigTeams,
   ...proLeagueTeams,
   ...superLeagueGreeceTeams,
+  ...austrianBundesligaTeams,
 
     
   
@@ -127,117 +129,7 @@ export const teams: Record<string, TeamRecord> = {
  
   
 
-  // -------------------------
-// Austrian Bundesliga (12 teams)
-// -------------------------
-"salzburg": {
-  teamKey: "salzburg",
-  name: "RB Salzburg",
-  country: "Austria",
-  city: "Salzburg",
-  leagueId: 218,
-  aliases: ["red bull salzburg", "fc salzburg"],
-},
-
-"rapid-vienna": {
-  teamKey: "rapid-vienna",
-  name: "Rapid Vienna",
-  country: "Austria",
-  city: "Vienna",
-  leagueId: 218,
-  aliases: ["rapid wien", "sk rapid wien"],
-},
-
-"austria-vienna": {
-  teamKey: "austria-vienna",
-  name: "Austria Vienna",
-  country: "Austria",
-  city: "Vienna",
-  leagueId: 218,
-  aliases: ["fk austria wien"],
-},
-
-"sturm-graz": {
-  teamKey: "sturm-graz",
-  name: "Sturm Graz",
-  country: "Austria",
-  city: "Graz",
-  leagueId: 218,
-  aliases: ["sk sturm graz"],
-},
-
-"lask": {
-  teamKey: "lask",
-  name: "LASK",
-  country: "Austria",
-  city: "Linz",
-  leagueId: 218,
-  aliases: ["lask linz"],
-},
-
-"hartberg": {
-  teamKey: "hartberg",
-  name: "Hartberg",
-  country: "Austria",
-  city: "Hartberg",
-  leagueId: 218,
-  aliases: ["tsv hartberg"],
-},
-
-"altach": {
-  teamKey: "altach",
-  name: "Altach",
-  country: "Austria",
-  city: "Altach",
-  leagueId: 218,
-  aliases: ["rheindorf altach"],
-},
-
-"austria-klagenfurt": {
-  teamKey: "austria-klagenfurt",
-  name: "Austria Klagenfurt",
-  country: "Austria",
-  city: "Klagenfurt",
-  leagueId: 218,
-  aliases: ["sk austria klagenfurt"],
-},
-
-"bw-linz": {
-  teamKey: "bw-linz",
-  name: "Blau-Weiß Linz",
-  country: "Austria",
-  city: "Linz",
-  leagueId: 218,
-  aliases: ["blau weiss linz"],
-},
-
-"wsg-tirol": {
-  teamKey: "wsg-tirol",
-  name: "WSG Tirol",
-  country: "Austria",
-  city: "Wattens",
-  leagueId: 218,
-  aliases: ["wsg swarovski tirol"],
-},
-
-"grazer-ak": {
-  teamKey: "grazer-ak",
-  name: "Grazer AK",
-  country: "Austria",
-  city: "Graz",
-  leagueId: 218,
-  aliases: ["gak"],
-},
-
-"wolfsberger-ac": {
-  teamKey: "wolfsberger-ac",
-  name: "Wolfsberger AC",
-  country: "Austria",
-  city: "Wolfsberg",
-  leagueId: 218,
-  aliases: ["wac"],
-},
-
+ 
   // -------------------------
 // Swiss Super League (12 teams)
 // -------------------------
