@@ -9,6 +9,8 @@ const primeiraLigaStadiums: Record<string, StadiumRecord> = {
     country: "Portugal",
     capacity: 64642,
     opened: 2003,
+    airport: "Lisbon Humberto Delgado Airport (LIS)",
+    distanceFromAirportKm: 6,
     teamKeys: ["benfica"],
     tips: [
       "One of the largest stadiums in Europe and regularly sold out",
@@ -31,6 +33,8 @@ const primeiraLigaStadiums: Record<string, StadiumRecord> = {
     country: "Portugal",
     capacity: 50033,
     opened: 2003,
+    airport: "Porto Airport (OPO)",
+    distanceFromAirportKm: 18,
     teamKeys: ["porto"],
     tips: [
       "Metro station sits directly outside the stadium",
@@ -53,6 +57,8 @@ const primeiraLigaStadiums: Record<string, StadiumRecord> = {
     country: "Portugal",
     capacity: 50095,
     opened: 2003,
+    airport: "Lisbon Humberto Delgado Airport (LIS)",
+    distanceFromAirportKm: 4,
     teamKeys: ["sporting-cp"],
     tips: [
       "Modern stadium next to large shopping centre and metro hub",
@@ -74,6 +80,8 @@ const primeiraLigaStadiums: Record<string, StadiumRecord> = {
     country: "Portugal",
     capacity: 30286,
     opened: 2003,
+    airport: "Porto Airport (OPO)",
+    distanceFromAirportKm: 55,
     teamKeys: ["braga"],
     tips: [
       "Unique stadium carved into a quarry cliff",
@@ -94,6 +102,8 @@ const primeiraLigaStadiums: Record<string, StadiumRecord> = {
     country: "Portugal",
     capacity: 30165,
     opened: 1965,
+    airport: "Porto Airport (OPO)",
+    distanceFromAirportKm: 53,
     teamKeys: ["vitoria-guimaraes"],
     tips: [
       "One of the best atmospheres in Portuguese football",
@@ -113,6 +123,8 @@ const primeiraLigaStadiums: Record<string, StadiumRecord> = {
     country: "Portugal",
     capacity: 28263,
     opened: 2003,
+    airport: "Porto Airport (OPO)",
+    distanceFromAirportKm: 12,
     teamKeys: ["boavista"],
   },
 
@@ -123,6 +135,8 @@ const primeiraLigaStadiums: Record<string, StadiumRecord> = {
     country: "Portugal",
     capacity: 5300,
     opened: 1952,
+    airport: "Porto Airport (OPO)",
+    distanceFromAirportKm: 30,
     teamKeys: ["famalicao"],
   },
 
@@ -133,6 +147,8 @@ const primeiraLigaStadiums: Record<string, StadiumRecord> = {
     country: "Portugal",
     capacity: 6153,
     opened: 2002,
+    airport: "Porto Airport (OPO)",
+    distanceFromAirportKm: 45,
     teamKeys: ["moreirense"],
   },
 
@@ -143,6 +159,8 @@ const primeiraLigaStadiums: Record<string, StadiumRecord> = {
     country: "Portugal",
     capacity: 12400,
     opened: 2004,
+    airport: "Porto Airport (OPO)",
+    distanceFromAirportKm: 45,
     teamKeys: ["gil-vicente"],
   },
 
@@ -153,6 +171,8 @@ const primeiraLigaStadiums: Record<string, StadiumRecord> = {
     country: "Portugal",
     capacity: 12815,
     opened: 1984,
+    airport: "Porto Airport (OPO)",
+    distanceFromAirportKm: 20,
     teamKeys: ["rio-ave"],
   },
 
@@ -163,6 +183,8 @@ const primeiraLigaStadiums: Record<string, StadiumRecord> = {
     country: "Portugal",
     capacity: 8000,
     opened: 1939,
+    airport: "Lisbon Humberto Delgado Airport (LIS)",
+    distanceFromAirportKm: 30,
     teamKeys: ["estoril"],
   },
 
@@ -173,6 +195,8 @@ const primeiraLigaStadiums: Record<string, StadiumRecord> = {
     country: "Portugal",
     capacity: 2500,
     opened: 1937,
+    airport: "Lisbon Humberto Delgado Airport (LIS)",
+    distanceFromAirportKm: 9,
     teamKeys: ["casa-pia"],
   },
 
@@ -183,6 +207,8 @@ const primeiraLigaStadiums: Record<string, StadiumRecord> = {
     country: "Portugal",
     capacity: 5600,
     opened: 2006,
+    airport: "Porto Airport (OPO)",
+    distanceFromAirportKm: 60,
     teamKeys: ["arouca"],
   },
 
@@ -193,6 +219,8 @@ const primeiraLigaStadiums: Record<string, StadiumRecord> = {
     country: "Portugal",
     capacity: 7000,
     opened: 1923,
+    airport: "Faro Airport (FAO)",
+    distanceFromAirportKm: 6,
     teamKeys: ["farense"],
   },
 
@@ -203,6 +231,8 @@ const primeiraLigaStadiums: Record<string, StadiumRecord> = {
     country: "Portugal",
     capacity: 5200,
     opened: 1998,
+    airport: "Madeira Airport (FNC)",
+    distanceFromAirportKm: 20,
     teamKeys: ["nacional"],
   },
 
@@ -213,6 +243,8 @@ const primeiraLigaStadiums: Record<string, StadiumRecord> = {
     country: "Portugal",
     capacity: 13000,
     opened: 1930,
+    airport: "Ponta Delgada Airport (PDL)",
+    distanceFromAirportKm: 4,
     teamKeys: ["santa-clara"],
   },
 
@@ -223,6 +255,8 @@ const primeiraLigaStadiums: Record<string, StadiumRecord> = {
     country: "Portugal",
     capacity: 9288,
     opened: 1932,
+    airport: "Lisbon Humberto Delgado Airport (LIS)",
+    distanceFromAirportKm: 12,
     teamKeys: ["estrela-amadora"],
   },
 
@@ -233,6 +267,8 @@ const primeiraLigaStadiums: Record<string, StadiumRecord> = {
     country: "Portugal",
     capacity: 8500,
     opened: 1981,
+    airport: "Porto Airport (OPO)",
+    distanceFromAirportKm: 30,
     teamKeys: ["avs"],
   }
 
