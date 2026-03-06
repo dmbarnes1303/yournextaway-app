@@ -11,6 +11,7 @@ import eredivisieTeams from "./eredivisie";
 import scottishPremiershipTeams from "./scottishPremiership";
 import superLigTeams from "./superLig";
 import proLeagueTeams from "./proLeague";
+import superLeagueGreeceTeams from "./superLeagueGreece";
 
 /**
  * V1 Team Registry (single source of truth)
@@ -104,6 +105,7 @@ export const teams: Record<string, TeamRecord> = {
   ...scottishPremiershipTeams,
   ...superLigTeams,
   ...proLeagueTeams,
+  ...superLeagueGreeceTeams,
 
     
   
@@ -347,134 +349,7 @@ export const teams: Record<string, TeamRecord> = {
   aliases: ["fc luzern", "luzern"],
 },
 
-  // -------------------------
-// Greek Super League (14 teams)
-// -------------------------
-"olympiacos": {
-  teamKey: "olympiacos",
-  name: "Olympiacos",
-  country: "Greece",
-  city: "Piraeus",
-  leagueId: 197,
-  aliases: ["olympiacos fc"],
-},
-
-"panathinaikos": {
-  teamKey: "panathinaikos",
-  name: "Panathinaikos",
-  country: "Greece",
-  city: "Athens",
-  leagueId: 197,
-  aliases: ["pao", "panathinaikos fc"],
-},
-
-"aek-athens": {
-  teamKey: "aek-athens",
-  name: "AEK Athens",
-  country: "Greece",
-  city: "Athens",
-  leagueId: 197,
-  aliases: ["aek"],
-},
-
-"paok": {
-  teamKey: "paok",
-  name: "PAOK",
-  country: "Greece",
-  city: "Thessaloniki",
-  leagueId: 197,
-  aliases: ["paok fc"],
-},
-
-"aris": {
-  teamKey: "aris",
-  name: "Aris",
-  country: "Greece",
-  city: "Thessaloniki",
-  leagueId: 197,
-  aliases: ["aris fc"],
-},
-
-"asteras-tripolis": {
-  teamKey: "asteras-tripolis",
-  name: "Asteras Tripolis",
-  country: "Greece",
-  city: "Tripoli",
-  leagueId: 197,
-  aliases: ["asteras"],
-},
-
-"atromitos": {
-  teamKey: "atromitos",
-  name: "Atromitos",
-  country: "Greece",
-  city: "Athens",
-  leagueId: 197,
-  aliases: ["atromitos fc"],
-},
-
-"ofi": {
-  teamKey: "ofi",
-  name: "OFI Crete",
-  country: "Greece",
-  city: "Heraklion",
-  leagueId: 197,
-  aliases: ["ofi"],
-},
-
-"panetolikos": {
-  teamKey: "panetolikos",
-  name: "Panetolikos",
-  country: "Greece",
-  city: "Agrinio",
-  leagueId: 197,
-  aliases: ["panetolikos fc"],
-},
-
-"lamia": {
-  teamKey: "lamia",
-  name: "Lamia",
-  country: "Greece",
-  city: "Lamia",
-  leagueId: 197,
-  aliases: ["pas lamia"],
-},
-
-"volos": {
-  teamKey: "volos",
-  name: "Volos",
-  country: "Greece",
-  city: "Volos",
-  leagueId: 197,
-  aliases: ["volos nfc"],
-},
-
-"kallithea": {
-  teamKey: "kallithea",
-  name: "Athens Kallithea",
-  country: "Greece",
-  city: "Athens",
-  leagueId: 197,
-  aliases: ["kallithea fc"],
-},
-
-"levadiakos": {
-  teamKey: "levadiakos",
-  name: "Levadiakos",
-  country: "Greece",
-  city: "Livadeia",
-  leagueId: 197,
-  aliases: ["levadiakos fc"],
-},
-
-"panserraikos": {
-  teamKey: "panserraikos",
-  name: "Panserraikos",
-  country: "Greece",
-  city: "Serres",
-  leagueId: 197,
-  aliases: ["panserraikos fc"],
-},
+ 
 
   // -------------------------
 // Danish Superliga (12 teams)
