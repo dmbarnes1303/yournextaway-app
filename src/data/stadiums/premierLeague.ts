@@ -10,6 +10,8 @@ export const premierLeagueStadiums: Record<string, StadiumRecord> = {
     capacity: 74310,
     opened: 1910,
     teamKeys: ["manchester-united"],
+    airport: "Manchester Airport (MAN)",
+distanceFromAirportKm: 14,
   },
 
   "tottenham-hotspur-stadium": {
@@ -20,6 +22,8 @@ export const premierLeagueStadiums: Record<string, StadiumRecord> = {
     capacity: 62850,
     opened: 2019,
     teamKeys: ["tottenham-hotspur"],
+    airport: "London Stansted (STN)",
+distanceFromAirportKm: 46,
   },
 
   "london-stadium": {
@@ -30,6 +34,8 @@ export const premierLeagueStadiums: Record<string, StadiumRecord> = {
     capacity: 62500,
     opened: 2012,
     teamKeys: ["west-ham-united"],
+    airport: "London City Airport (LCY)",
+distanceFromAirportKm: 6,
   },
 
   "anfield": {
@@ -40,6 +46,8 @@ export const premierLeagueStadiums: Record<string, StadiumRecord> = {
     capacity: 61276,
     opened: 1884,
     teamKeys: ["liverpool"],
+    airport: "Liverpool John Lennon Airport (LPL)",
+distanceFromAirportKm: 14,
   },
 
   "emirates-stadium": {
@@ -50,6 +58,8 @@ export const premierLeagueStadiums: Record<string, StadiumRecord> = {
     capacity: 60704,
     opened: 2006,
     teamKeys: ["arsenal"],
+    airport: "London Heathrow (LHR)",
+distanceFromAirportKm: 30,
   },
 
   "etihad-stadium": {
@@ -60,6 +70,8 @@ export const premierLeagueStadiums: Record<string, StadiumRecord> = {
     capacity: 52900,
     opened: 2003,
     teamKeys: ["manchester-city"],
+    airport: "Manchester Airport (MAN)",
+distanceFromAirportKm: 16,
   },
 
   "hill-dickinson-stadium": {
@@ -70,6 +82,8 @@ export const premierLeagueStadiums: Record<string, StadiumRecord> = {
     capacity: 52769,
     opened: 2025,
     teamKeys: ["everton"],
+    airport: "Liverpool John Lennon Airport (LPL)",
+distanceFromAirportKm: 15,
   },
 
   "st-james-park": {
@@ -80,6 +94,8 @@ export const premierLeagueStadiums: Record<string, StadiumRecord> = {
     capacity: 52258,
     opened: 1892,
     teamKeys: ["newcastle-united"],
+    airport: "Newcastle International Airport (NCL)",
+distanceFromAirportKm: 12,
   },
 
   "stadium-of-light": {
@@ -90,6 +106,8 @@ export const premierLeagueStadiums: Record<string, StadiumRecord> = {
     capacity: 48707,
     opened: 1997,
     teamKeys: ["sunderland"],
+    airport: "Newcastle International Airport (NCL)",
+distanceFromAirportKm: 34,
   },
 
   "villa-park": {
@@ -100,6 +118,8 @@ export const premierLeagueStadiums: Record<string, StadiumRecord> = {
     capacity: 42918,
     opened: 1897,
     teamKeys: ["aston-villa"],
+    airport: "Birmingham Airport (BHX)",
+distanceFromAirportKm: 16,
   },
 
   "stamford-bridge": {
@@ -110,6 +130,8 @@ export const premierLeagueStadiums: Record<string, StadiumRecord> = {
     capacity: 40341,
     opened: 1877,
     teamKeys: ["chelsea"],
+    airport: "London Heathrow (LHR)",
+distanceFromAirportKm: 23,
   },
 
   "elland-road": {
@@ -120,6 +142,8 @@ export const premierLeagueStadiums: Record<string, StadiumRecord> = {
     capacity: 37890,
     opened: 1897,
     teamKeys: ["leeds-united"],
+    airport: "Leeds Bradford Airport (LBA)",
+distanceFromAirportKm: 13,
   },
 
   "city-ground": {
@@ -130,6 +154,8 @@ export const premierLeagueStadiums: Record<string, StadiumRecord> = {
     capacity: 30445,
     opened: 1898,
     teamKeys: ["nottingham-forest"],
+    airport: "East Midlands Airport (EMA)",
+distanceFromAirportKm: 24,
   },
 
   "amex-stadium": {
@@ -140,6 +166,8 @@ export const premierLeagueStadiums: Record<string, StadiumRecord> = {
     capacity: 31876,
     opened: 2011,
     teamKeys: ["brighton-hove-albion"],
+    airport: "London Gatwick (LGW)",
+distanceFromAirportKm: 46,
   },
 
   "molineux": {
@@ -150,6 +178,8 @@ export const premierLeagueStadiums: Record<string, StadiumRecord> = {
     capacity: 31750,
     opened: 1889,
     teamKeys: ["wolves"],
+    airport: "Birmingham Airport (BHX)",
+distanceFromAirportKm: 40,
   },
 
   "selhurst-park": {
@@ -160,6 +190,8 @@ export const premierLeagueStadiums: Record<string, StadiumRecord> = {
     capacity: 25486,
     opened: 1924,
     teamKeys: ["crystal-palace"],
+    airport: "London Gatwick (LGW)",
+distanceFromAirportKm: 26,
   },
 
   "craven-cottage": {
@@ -170,6 +202,8 @@ export const premierLeagueStadiums: Record<string, StadiumRecord> = {
     capacity: 29589,
     opened: 1896,
     teamKeys: ["fulham"],
+    airport: "London Heathrow (LHR)",
+distanceFromAirportKm: 21,
   },
 
   "gtech-community-stadium": {
@@ -180,6 +214,8 @@ export const premierLeagueStadiums: Record<string, StadiumRecord> = {
     capacity: 17250,
     opened: 2020,
     teamKeys: ["brentford"],
+    airport: "London Heathrow (LHR)",
+distanceFromAirportKm: 11,
   },
 
   "vitality-stadium": {
@@ -190,6 +226,8 @@ export const premierLeagueStadiums: Record<string, StadiumRecord> = {
     capacity: 11307,
     opened: 1910,
     teamKeys: ["afc-bournemouth"],
+    airport: "Bournemouth Airport (BOH)",
+distanceFromAirportKm: 10,
   },
 
   "turf-moor": {
@@ -200,6 +238,8 @@ export const premierLeagueStadiums: Record<string, StadiumRecord> = {
     capacity: 21944,
     opened: 1883,
     teamKeys: ["burnley"],
+    airport: "Manchester Airport (MAN)",
+distanceFromAirportKm: 55,
   },
 
 };
