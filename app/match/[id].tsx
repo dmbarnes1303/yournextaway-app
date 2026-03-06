@@ -20,7 +20,7 @@ import { useTripsStore } from "@/src/state/trips";
 import { buildTicketLink } from "@/src/services/partnerLinks";
 import { beginPartnerClick, openUntrackedUrl } from "@/src/services/partnerClicks";
 
-import { getStadium, stadiums } from "@/src/data/stadiums";
+import { getStadium, stadiums } from "@/src/data/stadiums/index";
 
 /* -------------------------------------------------------------------------- */
 /* Helpers                                                                    */
