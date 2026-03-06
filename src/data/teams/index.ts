@@ -15,6 +15,7 @@ import superLeagueGreeceTeams from "./superLeagueGreece";
 import austrianBundesligaTeams from "./austrianBundesliga";
 import superligaDenmarkTeams from "./superligaDenmark";
 import swissSuperLeagueTeams from "./swissSuperLeague";
+import czechFirstLeagueTeams from "./czechFirstLeague";
 
 /**
  * V1 Team Registry (single source of truth)
@@ -112,6 +113,7 @@ export const teams: Record<string, TeamRecord> = {
   ...austrianBundesligaTeams,
   ...superligaDenmarkTeams,
   ...swissSuperLeagueTeams,
+  ...czechFirstLeagueTeams,
 
     
   
@@ -134,154 +136,7 @@ export const teams: Record<string, TeamRecord> = {
   
 
  
- ------------------
-// Chance Liga (16 teams)
-// -------------------------
-"sparta-prague": {
-  teamKey: "sparta-prague",
-  name: "Sparta Prague",
-  country: "Czech Republic",
-  city: "Prague",
-  leagueId: 345,
-  aliases: ["ac sparta prague", "sparta"],
-},
-
-"slavia-prague": {
-  teamKey: "slavia-prague",
-  name: "Slavia Prague",
-  country: "Czech Republic",
-  city: "Prague",
-  leagueId: 345,
-  aliases: ["sk slavia prague", "slavia"],
-},
-
-"viktoria-plzen": {
-  teamKey: "viktoria-plzen",
-  name: "Viktoria Plzeň",
-  country: "Czech Republic",
-  city: "Plzeň",
-  leagueId: 345,
-  aliases: ["plzen", "fc viktoria plzen"],
-},
-
-"banik-ostrava": {
-  teamKey: "banik-ostrava",
-  name: "Banik Ostrava",
-  country: "Czech Republic",
-  city: "Ostrava",
-  leagueId: 345,
-  aliases: ["fc banik ostrava"],
-},
-
-"slovan-liberec": {
-  teamKey: "slovan-liberec",
-  name: "Slovan Liberec",
-  country: "Czech Republic",
-  city: "Liberec",
-  leagueId: 345,
-  aliases: ["fc slovan liberec"],
-},
-
-"sigma-olomouc": {
-  teamKey: "sigma-olomouc",
-  name: "Sigma Olomouc",
-  country: "Czech Republic",
-  city: "Olomouc",
-  leagueId: 345,
-  aliases: ["sk sigma olomouc"],
-},
-
-"mlada-boleslav": {
-  teamKey: "mlada-boleslav",
-  name: "Mladá Boleslav",
-  country: "Czech Republic",
-  city: "Mladá Boleslav",
-  leagueId: 345,
-  aliases: ["fk mlada boleslav"],
-},
-
-"ceske-budejovice": {
-  teamKey: "ceske-budejovice",
-  name: "České Budějovice",
-  country: "Czech Republic",
-  city: "České Budějovice",
-  leagueId: 345,
-  aliases: ["dynamo ceske budejovice"],
-},
-
-"hradec-kralove": {
-  teamKey: "hradec-kralove",
-  name: "Hradec Králové",
-  country: "Czech Republic",
-  city: "Hradec Králové",
-  leagueId: 345,
-  aliases: ["fc hradec kralove"],
-},
-
-"bohemians-1905": {
-  teamKey: "bohemians-1905",
-  name: "Bohemians 1905",
-  country: "Czech Republic",
-  city: "Prague",
-  leagueId: 345,
-  aliases: ["bohemians"],
-},
-
-"pardubice": {
-  teamKey: "pardubice",
-  name: "Pardubice",
-  country: "Czech Republic",
-  city: "Pardubice",
-  leagueId: 345,
-  aliases: ["fk pardubice"],
-},
-
-"karvina": {
-  teamKey: "karvina",
-  name: "Karviná",
-  country: "Czech Republic",
-  city: "Karviná",
-  leagueId: 345,
-  aliases: ["mfc karvina"],
-},
-
-"jablonec": {
-  teamKey: "jablonec",
-  name: "Jablonec",
-  country: "Czech Republic",
-  city: "Jablonec",
-  leagueId: 345,
-  aliases: ["fk jablonec"],
-},
-
-"teplice": {
-  teamKey: "teplice",
-  name: "Teplice",
-  country: "Czech Republic",
-  city: "Teplice",
-  leagueId: 345,
-  aliases: ["fk teplice"],
-},
-
-"zlin": {
-  teamKey: "zlin",
-  name: "Zlín",
-  country: "Czech Republic",
-  city: "Zlín",
-  leagueId: 345,
-  aliases: ["fc zlin"],
-},
-
-"dukla-prague": {
-  teamKey: "dukla-prague",
-  name: "Dukla Prague",
-  country: "Czech Republic",
-  city: "Prague",
-  leagueId: 345,
-  aliases: ["dukla"],
-},
-
-  // -------------------------
+ / -------------------------
 // Ekstraklasa (18 teams)
 // -------------------------
 "legia-warsaw": {
