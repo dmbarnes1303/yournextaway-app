@@ -37,6 +37,15 @@ export type TeamRecord = {
   /** Season context (defaults to matching league season) */
   season?: number;
 
+  /** Linked stadium registry key */
+  stadiumKey?: string;
+
+  /** Club foundation year */
+  founded?: number;
+
+  /** Primary club colours for lightweight UI use */
+  clubColors?: string[];
+
   /** Search aliases: abbreviations, nicknames, alternate spellings */
   aliases?: string[];
 };
