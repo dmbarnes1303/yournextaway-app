@@ -1,6 +1,7 @@
 // src/data/teams/index.ts
 import { LEAGUES, type LeagueOption } from "@/src/constants/football";
 import type { TeamRecord } from "./types";
+import premierLeagueTeams from "./premierLeague";
 
 /**
  * V1 Team Registry (single source of truth)
@@ -83,6 +84,7 @@ export function normalizeTeamKey(input: string): string {
  * - leagueId set for routing + filtering
  */
 export const teams: Record<string, TeamRecord> = {
+  ...premierLeagueTeams,
 
     // -------------------------
 // Premier League (20 teams)
