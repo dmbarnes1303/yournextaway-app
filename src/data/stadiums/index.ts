@@ -51,5 +51,11 @@ export function getStadiumsByCity(city: string): StadiumRecord[] {
 }
 
 export type { StadiumRecord } from "./types";
-export { premierLeagueStadiums } from "./premierLeague";
+export {
+  premierLeagueStadiums,
+  laLigaStadiums,
+  serieAStadiums,
+  bundesligaStadiums,
+  ligue1Stadiums,
+};
 export default stadiums;
