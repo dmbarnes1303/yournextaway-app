@@ -8,6 +8,7 @@ import serieAStadiums from "./serieA";
 import bundesligaStadiums from "./bundesliga";
 import ligue1Stadiums from "./ligue1";
 import primeiraLigaStadiums from "./primeiraLiga";
+import eredivisieStadiums from "./eredivisie";
 
 export const stadiums: Record<string, StadiumRecord> = {
   ...premierLeagueStadiums,
@@ -16,6 +17,7 @@ export const stadiums: Record<string, StadiumRecord> = {
   ...bundesligaStadiums,
   ...ligue1Stadiums,
   ...primeiraLigaStadiums,
+  ...eredivisieStadiums,
 };
 
 export function getStadium(stadiumKey: string): StadiumRecord | null {
