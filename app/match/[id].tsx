@@ -20,7 +20,8 @@ import { useTripsStore } from "@/src/state/trips";
 import { buildTicketLink } from "@/src/services/partnerLinks";
 import { beginPartnerClick, openUntrackedUrl } from "@/src/services/partnerClicks";
 
-import { getStadium, stadiums } from "@/src/data/stadiums/index";
+import { stadiums } from "@/src/data/stadiums/index";
+import type { StadiumRecord } from "@/src/data/stadiums/index";
 
 /* -------------------------------------------------------------------------- */
 /* Helpers                                                                    */
@@ -95,21 +96,30 @@ function normalizeVenueKey(input: string): string {
     .replace(/^-|-$/g, "");
 }
 
-function resolveStadiumFromVenue(venueName?: string | null) {
+function resolveStadiumFromVenue(venueName?: string | null): StadiumRecord | null {
   const raw = String(venueName ?? "").trim();
   if (!raw) return null;
 
-  const direct = getStadium(raw);
-  if (direct) return direct;
+  const normalizedVenue = normalizeVenueKey(raw);
 
-  const key = normalizeVenueKey(raw);
-  const byKey = getStadium(key);
-  if (byKey) return byKey;
+  const all = Object.values(stadiums);
 
-  return (
-    Object.values(stadiums).find((s) => normalizeVenueKey(s.name) === key || normalizeVenueKey(s.stadiumKey) === key) ??
-    null
-  );
+  const exactKeyMatch =
+    all.find((s) => normalizeVenueKey(s.stadiumKey) === normalizedVenue) ?? null;
+  if (exactKeyMatch) return exactKeyMatch;
+
+  const exactNameMatch =
+    all.find((s) => normalizeVenueKey(s.name) === normalizedVenue) ?? null;
+  if (exactNameMatch) return exactNameMatch;
+
+  const looseNameMatch =
+    all.find((s) => {
+      const stadiumName = normalizeVenueKey(s.name);
+      return stadiumName.includes(normalizedVenue) || normalizedVenue.includes(stadiumName);
+    }) ?? null;
+  if (looseNameMatch) return looseNameMatch;
+
+  return null;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -323,14 +333,12 @@ export default function MatchScreen() {
   return (
     <Background imageUrl={imageUrl} imageSource={imageSource} overlayOpacity={0.1}>
       <SafeAreaView style={styles.safe} edges={["top"]}>
-        {/* Header */}
         <View style={styles.header}>
           <Button label="Back" tone="secondary" size="sm" onPress={goBack} />
           <View style={{ flex: 1 }} />
         </View>
 
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-          {/* Hero card */}
           <GlassCard level="default" variant="matte" style={styles.heroCard} noPadding>
             <View style={styles.heroInner}>
               <Text style={styles.heroKicker}>MATCH</Text>
@@ -365,7 +373,6 @@ export default function MatchScreen() {
             </View>
           </GlassCard>
 
-          {/* Tickets */}
           <GlassCard level="default" variant="matte" style={styles.sectionCard}>
             <Text style={styles.sectionTitle}>Tickets</Text>
             <Text style={styles.sectionSub}>
@@ -385,7 +392,6 @@ export default function MatchScreen() {
             </View>
           </GlassCard>
 
-          {/* Logistics */}
           <GlassCard level="default" variant="matte" style={styles.sectionCard}>
             <Text style={styles.sectionTitle}>Logistics</Text>
             <Text style={styles.sectionSub}>
@@ -458,7 +464,6 @@ export default function MatchScreen() {
             )}
           </GlassCard>
 
-          {/* Loading hint */}
           {loading ? (
             <View style={{ paddingTop: 2 }}>
               <Text style={styles.loadingText}>Loading match details…</Text>
