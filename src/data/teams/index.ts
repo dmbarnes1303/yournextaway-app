@@ -16,6 +16,7 @@ import austrianBundesligaTeams from "./austrianBundesliga";
 import superligaDenmarkTeams from "./superligaDenmark";
 import swissSuperLeagueTeams from "./swissSuperLeague";
 import czechFirstLeagueTeams from "./czechFirstLeague";
+import ekstraklasaTeams from "./ekstraklasa";
 
 /**
  * V1 Team Registry (single source of truth)
@@ -114,6 +115,7 @@ export const teams: Record<string, TeamRecord> = {
   ...superligaDenmarkTeams,
   ...swissSuperLeagueTeams,
   ...czechFirstLeagueTeams,
+  ...ekstraklasaTeams,
 
     
   
@@ -136,170 +138,6 @@ export const teams: Record<string, TeamRecord> = {
   
 
  
- / -------------------------
-// Ekstraklasa (18 teams)
-// -------------------------
-"legia-warsaw": {
-  teamKey: "legia-warsaw",
-  name: "Legia Warsaw",
-  country: "Poland",
-  city: "Warsaw",
-  leagueId: 106,
-  aliases: ["legia", "legia warszawa"],
-},
-
-"lech-poznan": {
-  teamKey: "lech-poznan",
-  name: "Lech Poznań",
-  country: "Poland",
-  city: "Poznań",
-  leagueId: 106,
-  aliases: ["lech", "kks lech poznan"],
-},
-
-"rakow": {
-  teamKey: "rakow",
-  name: "Raków Częstochowa",
-  country: "Poland",
-  city: "Częstochowa",
-  leagueId: 106,
-  aliases: ["rakow czestochowa"],
-},
-
-"pogon-szczecin": {
-  teamKey: "pogon-szczecin",
-  name: "Pogoń Szczecin",
-  country: "Poland",
-  city: "Szczecin",
-  leagueId: 106,
-  aliases: ["pogon"],
-},
-
-"jagiellonia": {
-  teamKey: "jagiellonia",
-  name: "Jagiellonia Białystok",
-  country: "Poland",
-  city: "Białystok",
-  leagueId: 106,
-  aliases: ["jagiellonia bialystok"],
-},
-
-"lechia-gdansk": {
-  teamKey: "lechia-gdansk",
-  name: "Lechia Gdańsk",
-  country: "Poland",
-  city: "Gdańsk",
-  leagueId: 106,
-  aliases: ["lechia"],
-},
-
-"piast-gliwice": {
-  teamKey: "piast-gliwice",
-  name: "Piast Gliwice",
-  country: "Poland",
-  city: "Gliwice",
-  leagueId: 106,
-  aliases: ["piast"],
-},
-
-"gornik-zabrze": {
-  teamKey: "gornik-zabrze",
-  name: "Górnik Zabrze",
-  country: "Poland",
-  city: "Zabrze",
-  leagueId: 106,
-  aliases: ["gornik"],
-},
-
-"widzew-lodz": {
-  teamKey: "widzew-lodz",
-  name: "Widzew Łódź",
-  country: "Poland",
-  city: "Łódź",
-  leagueId: 106,
-  aliases: ["widzew"],
-},
-
-"cracovia": {
-  teamKey: "cracovia",
-  name: "Cracovia",
-  country: "Poland",
-  city: "Kraków",
-  leagueId: 106,
-  aliases: ["ks cracovia"],
-},
-
-"korona-kielce": {
-  teamKey: "korona-kielce",
-  name: "Korona Kielce",
-  country: "Poland",
-  city: "Kielce",
-  leagueId: 106,
-  aliases: ["korona"],
-},
-
-"stal-mielec": {
-  teamKey: "stal-mielec",
-  name: "Stal Mielec",
-  country: "Poland",
-  city: "Mielec",
-  leagueId: 106,
-  aliases: ["fks stal mielec"],
-},
-
-"radomiak": {
-  teamKey: "radomiak",
-  name: "Radomiak Radom",
-  country: "Poland",
-  city: "Radom",
-  leagueId: 106,
-  aliases: ["radomiak radom"],
-},
-
-"motor-lublin": {
-  teamKey: "motor-lublin",
-  name: "Motor Lublin",
-  country: "Poland",
-  city: "Lublin",
-  leagueId: 106,
-  aliases: ["motor"],
-},
-
-"puszcza-niepolomice": {
-  teamKey: "puszcza-niepolomice",
-  name: "Puszcza Niepołomice",
-  country: "Poland",
-  city: "Niepołomice",
-  leagueId: 106,
-  aliases: ["puszcza"],
-},
-
-"slask-wroclaw": {
-  teamKey: "slask-wroclaw",
-  name: "Śląsk Wrocław",
-  country: "Poland",
-  city: "Wrocław",
-  leagueId: 106,
-  aliases: ["slask"],
-},
-
-"zaglebie-lubin": {
-  teamKey: "zaglebie-lubin",
-  name: "Zagłębie Lubin",
-  country: "Poland",
-  city: "Lubin",
-  leagueId: 106,
-  aliases: ["zaglebie"],
-},
-
-"katowice": {
-  teamKey: "katowice",
-  name: "GKS Katowice",
-  country: "Poland",
-  city: "Katowice",
-  leagueId: 106,
-  aliases: ["gks katowice"],
-},
 
   // -------------------------
 // Allsvenskan (16 teams)
