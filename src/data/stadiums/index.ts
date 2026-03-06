@@ -1,10 +1,19 @@
 // src/data/stadiums/index.ts
 
 import type { StadiumRecord } from "./types";
-import { premierLeagueStadiums } from "./premierLeague";
+
+import premierLeagueStadiums from "./premierLeague";
+import laLigaStadiums from "./laLiga";
+import serieAStadiums from "./serieA";
+import bundesligaStadiums from "./bundesliga";
+import ligue1Stadiums from "./ligue1";
 
 export const stadiums: Record<string, StadiumRecord> = {
   ...premierLeagueStadiums,
+  ...laLigaStadiums,
+  ...serieAStadiums,
+  ...bundesligaStadiums,
+  ...ligue1Stadiums,
 };
 
 export function getStadium(stadiumKey: string): StadiumRecord | null {
