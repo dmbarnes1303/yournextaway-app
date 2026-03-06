@@ -8,6 +8,7 @@ import bundesligaTeams from "./bundesliga";
 import ligue1Teams from "./ligue1";
 import primeiraLigaTeams from "./primeiraLiga";
 import eredivisieTeams from "./eredivisie";
+import scottishPremiershipTeams from "./scottishPremiership";
 
 /**
  * V1 Team Registry (single source of truth)
@@ -98,6 +99,7 @@ export const teams: Record<string, TeamRecord> = {
   ...ligue1Teams,
   ...primeiraLigaTeams,
   ...eredivisieTeams,
+  ...scottishPremiershipTeams,
 
     
   
@@ -114,116 +116,7 @@ export const teams: Record<string, TeamRecord> = {
 
   
 
-  // -------------------------
-// Scottish Premiership (12 teams)
-// -------------------------
-"celtic": {
-  teamKey: "celtic",
-  name: "Celtic",
-  country: "Scotland",
-  city: "Glasgow",
-  leagueId: 179,
-  aliases: ["celtic fc", "the bhoys"],
-},
-
-"rangers": {
-  teamKey: "rangers",
-  name: "Rangers",
-  country: "Scotland",
-  city: "Glasgow",
-  leagueId: 179,
-  aliases: ["rangers fc", "glasgow rangers"],
-},
-
-"aberdeen": {
-  teamKey: "aberdeen",
-  name: "Aberdeen",
-  country: "Scotland",
-  city: "Aberdeen",
-  leagueId: 179,
-  aliases: ["aberdeen fc", "the dons"],
-},
-
-"hearts": {
-  teamKey: "hearts",
-  name: "Hearts",
-  country: "Scotland",
-  city: "Edinburgh",
-  leagueId: 179,
-  aliases: ["heart of midlothian", "hearts fc"],
-},
-
-"hibernian": {
-  teamKey: "hibernian",
-  name: "Hibernian",
-  country: "Scotland",
-  city: "Edinburgh",
-  leagueId: 179,
-  aliases: ["hibs", "hibernian fc"],
-},
-
-"dundee-united": {
-  teamKey: "dundee-united",
-  name: "Dundee United",
-  country: "Scotland",
-  city: "Dundee",
-  leagueId: 179,
-  aliases: ["dundee utd"],
-},
-
-"dundee": {
-  teamKey: "dundee",
-  name: "Dundee",
-  country: "Scotland",
-  city: "Dundee",
-  leagueId: 179,
-  aliases: ["dundee fc"],
-},
-
-"st-mirren": {
-  teamKey: "st-mirren",
-  name: "St Mirren",
-  country: "Scotland",
-  city: "Paisley",
-  leagueId: 179,
-  aliases: ["st mirren fc"],
-},
-
-"motherwell": {
-  teamKey: "motherwell",
-  name: "Motherwell",
-  country: "Scotland",
-  city: "Motherwell",
-  leagueId: 179,
-  aliases: ["motherwell fc"],
-},
-
-"kilmarnock": {
-  teamKey: "kilmarnock",
-  name: "Kilmarnock",
-  country: "Scotland",
-  city: "Kilmarnock",
-  leagueId: 179,
-  aliases: ["killie"],
-},
-
-"ross-county": {
-  teamKey: "ross-county",
-  name: "Ross County",
-  country: "Scotland",
-  city: "Dingwall",
-  leagueId: 179,
-  aliases: ["ross county fc"],
-},
-
-"livingston": {
-  teamKey: "livingston",
-  name: "Livingston",
-  country: "Scotland",
-  city: "Livingston",
-  leagueId: 179,
-  aliases: ["livingston fc", "livi"],
-},
+ 
 
   // -------------------------
 // Süper Lig (20 teams)
