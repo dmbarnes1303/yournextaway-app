@@ -10,6 +10,8 @@ export const laLigaStadiums: Record<string, StadiumRecord> = {
     capacity: 53332,
     opened: 2013,
     teamKeys: ["athletic-club"],
+    airport: "Bilbao Airport (BIO)",
+distanceFromAirportKm: 12,
   },
 
   "metropolitano": {
@@ -20,6 +22,8 @@ export const laLigaStadiums: Record<string, StadiumRecord> = {
     capacity: 70460,
     opened: 2017,
     teamKeys: ["atletico-madrid"],
+    airport: "Madrid Barajas (MAD)",
+distanceFromAirportKm: 8,
   },
 
   "camp-nou": {
@@ -30,6 +34,8 @@ export const laLigaStadiums: Record<string, StadiumRecord> = {
     capacity: 99354,
     opened: 1957,
     teamKeys: ["barcelona"],
+    airport: "Barcelona El Prat (BCN)",
+distanceFromAirportKm: 13,
   },
 
   "balaidos": {
@@ -40,6 +46,8 @@ export const laLigaStadiums: Record<string, StadiumRecord> = {
     capacity: 29000,
     opened: 1928,
     teamKeys: ["celta-vigo"],
+    airport: "Vigo Airport (VGO)",
+distanceFromAirportKm: 11,
   },
 
   "mendizorrotza": {
@@ -50,6 +58,8 @@ export const laLigaStadiums: Record<string, StadiumRecord> = {
     capacity: 19840,
     opened: 1924,
     teamKeys: ["deportivo-alaves"],
+    airport: "Bilbao Airport (BIO)",
+distanceFromAirportKm: 75,
   },
 
   "martinez-valero": {
@@ -60,6 +70,8 @@ export const laLigaStadiums: Record<string, StadiumRecord> = {
     capacity: 31388,
     opened: 1976,
     teamKeys: ["elche"],
+    airport: "Alicante Airport (ALC)",
+distanceFromAirportKm: 14,
   },
 
   "rcde-stadium": {
@@ -70,6 +82,8 @@ export const laLigaStadiums: Record<string, StadiumRecord> = {
     capacity: 40500,
     opened: 2009,
     teamKeys: ["espanyol"],
+    airport: "Barcelona El Prat (BCN)",
+distanceFromAirportKm: 8,
   },
 
   "coliseum": {
@@ -80,6 +94,8 @@ export const laLigaStadiums: Record<string, StadiumRecord> = {
     capacity: 17393,
     opened: 1998,
     teamKeys: ["getafe"],
+    airport: "Madrid Barajas (MAD)",
+distanceFromAirportKm: 26,
   },
 
   "montilivi": {
@@ -90,6 +106,8 @@ export const laLigaStadiums: Record<string, StadiumRecord> = {
     capacity: 14500,
     opened: 1970,
     teamKeys: ["girona"],
+    airport: "Girona Costa Brava (GRO)",
+distanceFromAirportKm: 14,
   },
 
   "ciutat-de-valencia": {
@@ -100,6 +118,8 @@ export const laLigaStadiums: Record<string, StadiumRecord> = {
     capacity: 26354,
     opened: 1969,
     teamKeys: ["levante"],
+    airport: "Valencia Airport (VLC)",
+distanceFromAirportKm: 12,
   },
 
   "son-moix": {
@@ -110,6 +130,8 @@ export const laLigaStadiums: Record<string, StadiumRecord> = {
     capacity: 23142,
     opened: 1999,
     teamKeys: ["mallorca"],
+    airport: "Palma de Mallorca Airport (PMI)",
+distanceFromAirportKm: 11,
   },
 
   "el-sadar": {
@@ -120,6 +142,8 @@ export const laLigaStadiums: Record<string, StadiumRecord> = {
     capacity: 23576,
     opened: 1967,
     teamKeys: ["osasuna"],
+    airport: "Pamplona Airport (PNA)",
+distanceFromAirportKm: 7,
   },
 
   "campo-de-vallecas": {
@@ -130,6 +154,8 @@ export const laLigaStadiums: Record<string, StadiumRecord> = {
     capacity: 14708,
     opened: 1976,
     teamKeys: ["rayo-vallecano"],
+    airport: "Madrid Barajas (MAD)",
+distanceFromAirportKm: 20,
   },
 
   "benito-villamarin": {
@@ -140,6 +166,8 @@ export const laLigaStadiums: Record<string, StadiumRecord> = {
     capacity: 60721,
     opened: 1929,
     teamKeys: ["real-betis"],
+    airport: "Seville Airport (SVQ)",
+distanceFromAirportKm: 12,
   },
 
   "santiago-bernabeu": {
@@ -150,6 +178,8 @@ export const laLigaStadiums: Record<string, StadiumRecord> = {
     capacity: 81044,
     opened: 1947,
     teamKeys: ["real-madrid"],
+    airport: "Madrid Barajas (MAD)",
+distanceFromAirportKm: 14,
   },
 
   "carlos-tartiere": {
@@ -160,6 +190,8 @@ export const laLigaStadiums: Record<string, StadiumRecord> = {
     capacity: 30500,
     opened: 2000,
     teamKeys: ["real-oviedo"],
+    airport: "Asturias Airport (OVD)",
+distanceFromAirportKm: 47,
   },
 
   "reale-arena": {
@@ -170,6 +202,8 @@ export const laLigaStadiums: Record<string, StadiumRecord> = {
     capacity: 39500,
     opened: 1993,
     teamKeys: ["real-sociedad"],
+    airport: "San Sebastián Airport (EAS)",
+distanceFromAirportKm: 22,
   },
 
   "ramon-sanchez-pizjuan": {
@@ -180,6 +214,8 @@ export const laLigaStadiums: Record<string, StadiumRecord> = {
     capacity: 43883,
     opened: 1958,
     teamKeys: ["sevilla"],
+    airport: "Seville Airport (SVQ)",
+distanceFromAirportKm: 10,
   },
 
   "mestalla": {
@@ -190,6 +226,8 @@ export const laLigaStadiums: Record<string, StadiumRecord> = {
     capacity: 49430,
     opened: 1923,
     teamKeys: ["valencia"],
+    airport: "Valencia Airport (VLC)",
+distanceFromAirportKm: 11,
   },
 
   "ceramica": {
@@ -200,6 +238,8 @@ export const laLigaStadiums: Record<string, StadiumRecord> = {
     capacity: 23500,
     opened: 1923,
     teamKeys: ["villarreal"],
+    airport: "Valencia Airport (VLC)",
+distanceFromAirportKm: 80,
   },
 
 };
