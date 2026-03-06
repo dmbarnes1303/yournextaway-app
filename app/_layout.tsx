@@ -1,7 +1,5 @@
 // app/_layout.tsx
-import { stadiums } from "@/src/data/stadiums";
 
-console.log("Total stadiums loaded:", Object.keys(stadiums).length);
 import "@/src/utils/errorLogger";
 import React, { useEffect, useRef, useState } from "react";
 import { Stack } from "expo-router";
