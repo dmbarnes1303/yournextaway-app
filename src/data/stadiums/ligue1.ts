@@ -9,6 +9,8 @@ export const ligue1Stadiums: Record<string, StadiumRecord> = {
     country: "France",
     capacity: 19000,
     opened: 1912,
+    airport: "Nantes Atlantique Airport (NTE)",
+    distanceFromAirportKm: 100,
     teamKeys: ["angers"],
   },
 
@@ -19,6 +21,8 @@ export const ligue1Stadiums: Record<string, StadiumRecord> = {
     country: "France",
     capacity: 18523,
     opened: 1985,
+    airport: "Nice Côte d'Azur Airport (NCE)",
+    distanceFromAirportKm: 30,
     teamKeys: ["as-monaco"],
   },
 
@@ -29,6 +33,8 @@ export const ligue1Stadiums: Record<string, StadiumRecord> = {
     country: "France",
     capacity: 23467,
     opened: 1918,
+    airport: "Paris Orly Airport (ORY)",
+    distanceFromAirportKm: 170,
     teamKeys: ["auxerre"],
   },
 
@@ -39,6 +45,8 @@ export const ligue1Stadiums: Record<string, StadiumRecord> = {
     country: "France",
     capacity: 15000,
     opened: 1922,
+    airport: "Brest Bretagne Airport (BES)",
+    distanceFromAirportKm: 11,
     teamKeys: ["brest"],
   },
 
@@ -49,6 +57,8 @@ export const ligue1Stadiums: Record<string, StadiumRecord> = {
     country: "France",
     capacity: 25178,
     opened: 2012,
+    airport: "Paris Charles de Gaulle (CDG)",
+    distanceFromAirportKm: 200,
     teamKeys: ["le-havre"],
   },
 
@@ -59,6 +69,8 @@ export const ligue1Stadiums: Record<string, StadiumRecord> = {
     country: "France",
     capacity: 38223,
     opened: 1933,
+    airport: "Lille Airport (LIL)",
+    distanceFromAirportKm: 35,
     teamKeys: ["lens"],
   },
 
@@ -69,6 +81,8 @@ export const ligue1Stadiums: Record<string, StadiumRecord> = {
     country: "France",
     capacity: 50083,
     opened: 2012,
+    airport: "Lille Airport (LIL)",
+    distanceFromAirportKm: 7,
     teamKeys: ["lille"],
   },
 
@@ -79,6 +93,8 @@ export const ligue1Stadiums: Record<string, StadiumRecord> = {
     country: "France",
     capacity: 18000,
     opened: 1959,
+    airport: "Lorient South Brittany Airport (LRT)",
+    distanceFromAirportKm: 7,
     teamKeys: ["lorient"],
   },
 
@@ -89,6 +105,8 @@ export const ligue1Stadiums: Record<string, StadiumRecord> = {
     country: "France",
     capacity: 59186,
     opened: 2016,
+    airport: "Lyon Saint-Exupéry Airport (LYS)",
+    distanceFromAirportKm: 10,
     teamKeys: ["lyon"],
   },
 
@@ -99,6 +117,8 @@ export const ligue1Stadiums: Record<string, StadiumRecord> = {
     country: "France",
     capacity: 67394,
     opened: 1937,
+    airport: "Marseille Provence Airport (MRS)",
+    distanceFromAirportKm: 30,
     teamKeys: ["marseille"],
   },
 
@@ -109,6 +129,8 @@ export const ligue1Stadiums: Record<string, StadiumRecord> = {
     country: "France",
     capacity: 30000,
     opened: 1923,
+    airport: "Luxembourg Airport (LUX)",
+    distanceFromAirportKm: 70,
     teamKeys: ["metz"],
   },
 
@@ -119,6 +141,8 @@ export const ligue1Stadiums: Record<string, StadiumRecord> = {
     country: "France",
     capacity: 35322,
     opened: 1984,
+    airport: "Nantes Atlantique Airport (NTE)",
+    distanceFromAirportKm: 15,
     teamKeys: ["nantes"],
   },
 
@@ -129,6 +153,8 @@ export const ligue1Stadiums: Record<string, StadiumRecord> = {
     country: "France",
     capacity: 35624,
     opened: 2013,
+    airport: "Nice Côte d'Azur Airport (NCE)",
+    distanceFromAirportKm: 7,
     teamKeys: ["nice"],
   },
 
@@ -139,6 +165,8 @@ export const ligue1Stadiums: Record<string, StadiumRecord> = {
     country: "France",
     capacity: 20000,
     opened: 1939,
+    airport: "Paris Orly Airport (ORY)",
+    distanceFromAirportKm: 12,
     teamKeys: ["paris-fc"],
   },
 
@@ -149,6 +177,8 @@ export const ligue1Stadiums: Record<string, StadiumRecord> = {
     country: "France",
     capacity: 47929,
     opened: 1972,
+    airport: "Paris Orly Airport (ORY)",
+    distanceFromAirportKm: 18,
     teamKeys: ["paris-saint-germain"],
   },
 
@@ -159,6 +189,8 @@ export const ligue1Stadiums: Record<string, StadiumRecord> = {
     country: "France",
     capacity: 29778,
     opened: 1912,
+    airport: "Rennes Airport (RNS)",
+    distanceFromAirportKm: 8,
     teamKeys: ["rennes"],
   },
 
@@ -169,6 +201,8 @@ export const ligue1Stadiums: Record<string, StadiumRecord> = {
     country: "France",
     capacity: 26109,
     opened: 1914,
+    airport: "Strasbourg Airport (SXB)",
+    distanceFromAirportKm: 18,
     teamKeys: ["strasbourg"],
   },
 
@@ -179,6 +213,8 @@ export const ligue1Stadiums: Record<string, StadiumRecord> = {
     country: "France",
     capacity: 33150,
     opened: 1937,
+    airport: "Toulouse Blagnac Airport (TLS)",
+    distanceFromAirportKm: 10,
     teamKeys: ["toulouse"],
   },
 

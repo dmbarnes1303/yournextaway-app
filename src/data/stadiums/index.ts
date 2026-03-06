@@ -7,6 +7,17 @@ import laLigaStadiums from "./laLiga";
 import serieAStadiums from "./serieA";
 import bundesligaStadiums from "./bundesliga";
 import ligue1Stadiums from "./ligue1";
+import primeiraLigaStadiums from "./primeiraLiga";
+import eredivisieStadiums from "./eredivisie";
+import scottishPremiershipStadiums from "./scottishPremiership";
+import superLigStadiums from "./superLig";
+import proLeagueStadiums from "./proLeague";
+import superLeagueGreeceStadiums from "./superLeagueGreece";
+import austrianBundesligaStadiums from "./austrianBundesliga";
+import superligaDenmarkStadiums from "./superligaDenmark";
+import swissSuperLeagueStadiums from "./swissSuperLeague";
+import czechFirstLeagueStadiums from "./czechFirstLeague";
+import ekstraklasaStadiums from "./ekstraklasa";
 
 export const stadiums: Record<string, StadiumRecord> = {
   ...premierLeagueStadiums,
@@ -14,6 +25,17 @@ export const stadiums: Record<string, StadiumRecord> = {
   ...serieAStadiums,
   ...bundesligaStadiums,
   ...ligue1Stadiums,
+  ...primeiraLigaStadiums,
+  ...eredivisieStadiums,
+  ...scottishPremiershipStadiums,
+  ...superLigStadiums,
+  ...proLeagueStadiums,
+  ...superLeagueGreeceStadiums,
+  ...austrianBundesligaStadiums,
+  ...superligaDenmarkStadiums,
+  ...swissSuperLeagueStadiums,
+  ...czechFirstLeagueStadiums,
+  ...ekstraklasaStadiums,
 };
 
 export function getStadium(stadiumKey: string): StadiumRecord | null {

@@ -10,6 +10,8 @@ export const bundesligaStadiums: Record<string, StadiumRecord> = {
     capacity: 30660,
     opened: 2009,
     teamKeys: ["augsburg"],
+    airport: "Munich Airport (MUC)",
+distanceFromAirportKm: 85,
   },
 
   "bayarena": {
@@ -20,6 +22,8 @@ export const bundesligaStadiums: Record<string, StadiumRecord> = {
     capacity: 30210,
     opened: 1958,
     teamKeys: ["bayer-leverkusen"],
+    airport: "Cologne Bonn Airport (CGN)",
+distanceFromAirportKm: 26,
   },
 
   "allianz-arena": {
@@ -30,6 +34,8 @@ export const bundesligaStadiums: Record<string, StadiumRecord> = {
     capacity: 75024,
     opened: 2005,
     teamKeys: ["bayern-munich"],
+    airport: "Munich Airport (MUC)",
+distanceFromAirportKm: 26,
   },
 
   "signal-iduna-park": {
@@ -40,6 +46,8 @@ export const bundesligaStadiums: Record<string, StadiumRecord> = {
     capacity: 81365,
     opened: 1974,
     teamKeys: ["borussia-dortmund"],
+    airport: "Dortmund Airport (DTM)",
+distanceFromAirportKm: 13,
   },
 
   "borussia-park": {
@@ -50,6 +58,8 @@ export const bundesligaStadiums: Record<string, StadiumRecord> = {
     capacity: 54057,
     opened: 2004,
     teamKeys: ["borussia-mgladbach"],
+    airport: "Düsseldorf Airport (DUS)",
+distanceFromAirportKm: 33,
   },
 
   "deutsche-bank-park": {
@@ -60,6 +70,8 @@ export const bundesligaStadiums: Record<string, StadiumRecord> = {
     capacity: 58000,
     opened: 1925,
     teamKeys: ["eintracht-frankfurt"],
+    airport: "Frankfurt Airport (FRA)",
+distanceFromAirportKm: 9,
   },
 
   "rhein-energie-stadion": {
@@ -70,6 +82,8 @@ export const bundesligaStadiums: Record<string, StadiumRecord> = {
     capacity: 50000,
     opened: 2004,
     teamKeys: ["fc-cologne"],
+    airport: "Cologne Bonn Airport (CGN)",
+distanceFromAirportKm: 25,
   },
 
   "voith-arena": {
@@ -80,6 +94,8 @@ export const bundesligaStadiums: Record<string, StadiumRecord> = {
     capacity: 15000,
     opened: 1972,
     teamKeys: ["fc-heidenheim"],
+    airport: "Stuttgart Airport (STR)",
+distanceFromAirportKm: 85,
   },
 
   "europa-park-stadion": {
@@ -90,6 +106,8 @@ export const bundesligaStadiums: Record<string, StadiumRecord> = {
     capacity: 34700,
     opened: 2021,
     teamKeys: ["freiburg"],
+    airport: "Basel EuroAirport (BSL)",
+distanceFromAirportKm: 70,
   },
 
   "volksparkstadion": {
@@ -100,6 +118,8 @@ export const bundesligaStadiums: Record<string, StadiumRecord> = {
     capacity: 57000,
     opened: 1953,
     teamKeys: ["hamburger-sv"],
+    airport: "Hamburg Airport (HAM)",
+distanceFromAirportKm: 11,
   },
 
   "prezero-arena": {
@@ -110,6 +130,8 @@ export const bundesligaStadiums: Record<string, StadiumRecord> = {
     capacity: 30150,
     opened: 2009,
     teamKeys: ["hoffenheim"],
+    airport: "Stuttgart Airport (STR)",
+distanceFromAirportKm: 90,
   },
 
   "meva-arena": {
@@ -120,6 +142,8 @@ export const bundesligaStadiums: Record<string, StadiumRecord> = {
     capacity: 34000,
     opened: 2011,
     teamKeys: ["mainz-05"],
+    airport: "Frankfurt Airport (FRA)",
+distanceFromAirportKm: 32,
   },
 
   "red-bull-arena-leipzig": {
@@ -130,6 +154,8 @@ export const bundesligaStadiums: Record<string, StadiumRecord> = {
     capacity: 47069,
     opened: 2004,
     teamKeys: ["rb-leipzig"],
+    airport: "Leipzig/Halle Airport (LEJ)",
+distanceFromAirportKm: 16,
   },
 
   "millerntor-stadion": {
@@ -140,6 +166,8 @@ export const bundesligaStadiums: Record<string, StadiumRecord> = {
     capacity: 29546,
     opened: 1963,
     teamKeys: ["st-pauli"],
+    airport: "Hamburg Airport (HAM)",
+distanceFromAirportKm: 12,
   },
 
   "alte-foersterei": {
@@ -150,6 +178,8 @@ export const bundesligaStadiums: Record<string, StadiumRecord> = {
     capacity: 22012,
     opened: 1920,
     teamKeys: ["union-berlin"],
+    airport: "Berlin Brandenburg Airport (BER)",
+distanceFromAirportKm: 18,
   },
 
   "mhp-arena": {
@@ -160,6 +190,8 @@ export const bundesligaStadiums: Record<string, StadiumRecord> = {
     capacity: 60449,
     opened: 1933,
     teamKeys: ["vfb-stuttgart"],
+    airport: "Stuttgart Airport (STR)",
+distanceFromAirportKm: 15,
   },
 
   "wohninvest-weser-stadion": {
@@ -170,6 +202,8 @@ export const bundesligaStadiums: Record<string, StadiumRecord> = {
     capacity: 42100,
     opened: 1947,
     teamKeys: ["werder-bremen"],
+    airport: "Bremen Airport (BRE)",
+distanceFromAirportKm: 5,
   },
 
   "volkswagen-arena": {
@@ -180,6 +214,8 @@ export const bundesligaStadiums: Record<string, StadiumRecord> = {
     capacity: 30000,
     opened: 2002,
     teamKeys: ["wolfsburg"],
+    airport: "Hannover Airport (HAJ)",
+distanceFromAirportKm: 90,
   },
 
 };

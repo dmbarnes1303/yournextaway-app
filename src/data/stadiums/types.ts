@@ -44,6 +44,12 @@ export type StadiumRecord = {
   /** Optional opening year */
   opened?: number;
 
+  /** Nearest airport (use common name users recognise) */
+  airport?: string;
+
+  /** Distance from airport to stadium in km */
+  distanceFromAirportKm?: number;
+
   /** Optional quick travel / matchday notes */
   tips?: string[];
 

@@ -10,6 +10,8 @@ export const serieAStadiums: Record<string, StadiumRecord> = {
     capacity: 75817,
     opened: 1926,
     teamKeys: ["ac-milan", "inter"],
+    airport: "Milan Malpensa (MXP)",
+distanceFromAirportKm: 48,
   },
 
   "gewiss-stadium": {
@@ -20,6 +22,8 @@ export const serieAStadiums: Record<string, StadiumRecord> = {
     capacity: 24000,
     opened: 1928,
     teamKeys: ["atalanta"],
+    airport: "Milan Bergamo (BGY)",
+distanceFromAirportKm: 6,
   },
 
   "stadio-olimpico": {
@@ -30,6 +34,8 @@ export const serieAStadiums: Record<string, StadiumRecord> = {
     capacity: 70634,
     opened: 1937,
     teamKeys: ["as-roma", "lazio"],
+    airport: "Rome Fiumicino (FCO)",
+distanceFromAirportKm: 32,
   },
 
   "stadio-dallara": {
@@ -40,6 +46,8 @@ export const serieAStadiums: Record<string, StadiumRecord> = {
     capacity: 36462,
     opened: 1927,
     teamKeys: ["bologna"],
+    airport: "Bologna Airport (BLQ)",
+distanceFromAirportKm: 7,
   },
 
   "unipol-domus": {
@@ -50,6 +58,8 @@ export const serieAStadiums: Record<string, StadiumRecord> = {
     capacity: 16416,
     opened: 2017,
     teamKeys: ["cagliari"],
+    airport: "Cagliari Elmas (CAG)",
+distanceFromAirportKm: 9,
   },
 
   "stadio-sinigaglia": {
@@ -60,6 +70,8 @@ export const serieAStadiums: Record<string, StadiumRecord> = {
     capacity: 13602,
     opened: 1927,
     teamKeys: ["como-1907"],
+    airport: "Milan Malpensa (MXP)",
+distanceFromAirportKm: 52,
   },
 
   "stadio-zini": {
@@ -70,6 +82,8 @@ export const serieAStadiums: Record<string, StadiumRecord> = {
     capacity: 20500,
     opened: 1919,
     teamKeys: ["cremonese"],
+    airport: "Milan Linate (LIN)",
+distanceFromAirportKm: 90,
   },
 
   "stadio-franchi": {
@@ -80,6 +94,8 @@ export const serieAStadiums: Record<string, StadiumRecord> = {
     capacity: 43147,
     opened: 1931,
     teamKeys: ["fiorentina"],
+    airport: "Florence Airport (FLR)",
+distanceFromAirportKm: 8,
   },
 
   "luigi-ferraris": {
@@ -90,6 +106,8 @@ export const serieAStadiums: Record<string, StadiumRecord> = {
     capacity: 36603,
     opened: 1911,
     teamKeys: ["genoa"],
+    airport: "Genoa Airport (GOA)",
+distanceFromAirportKm: 10,
   },
 
   "stadio-bentegodi": {
@@ -100,6 +118,8 @@ export const serieAStadiums: Record<string, StadiumRecord> = {
     capacity: 39211,
     opened: 1963,
     teamKeys: ["hellas-verona"],
+    airport: "Verona Airport (VRN)",
+distanceFromAirportKm: 12,
   },
 
   "allianz-stadium-turin": {
@@ -110,6 +130,8 @@ export const serieAStadiums: Record<string, StadiumRecord> = {
     capacity: 41507,
     opened: 2011,
     teamKeys: ["juventus"],
+    airport: "Turin Airport (TRN)",
+distanceFromAirportKm: 16,
   },
 
   "via-del-mare": {
@@ -120,6 +142,8 @@ export const serieAStadiums: Record<string, StadiumRecord> = {
     capacity: 33876,
     opened: 1966,
     teamKeys: ["lecce"],
+    airport: "Brindisi Airport (BDS)",
+distanceFromAirportKm: 45,
   },
 
   "diego-armando-maradona": {
@@ -130,6 +154,8 @@ export const serieAStadiums: Record<string, StadiumRecord> = {
     capacity: 54726,
     opened: 1959,
     teamKeys: ["napoli"],
+    airport: "Naples Airport (NAP)",
+distanceFromAirportKm: 11,
   },
 
   "stadio-tardini": {
@@ -140,6 +166,8 @@ export const serieAStadiums: Record<string, StadiumRecord> = {
     capacity: 27906,
     opened: 1923,
     teamKeys: ["parma"],
+    airport: "Bologna Airport (BLQ)",
+distanceFromAirportKm: 95,
   },
 
   "arena-garibaldi": {
@@ -150,6 +178,8 @@ export const serieAStadiums: Record<string, StadiumRecord> = {
     capacity: 14869,
     opened: 1919,
     teamKeys: ["pisa"],
+    airport: "Pisa Airport (PSA)",
+distanceFromAirportKm: 4,
   },
 
   "mapei-stadium": {
@@ -160,6 +190,8 @@ export const serieAStadiums: Record<string, StadiumRecord> = {
     capacity: 21525,
     opened: 1995,
     teamKeys: ["sassuolo"],
+    airport: "Bologna Airport (BLQ)",
+distanceFromAirportKm: 60,
   },
 
   "stadio-olimpico-grande-torino": {
@@ -170,6 +202,8 @@ export const serieAStadiums: Record<string, StadiumRecord> = {
     capacity: 27958,
     opened: 1933,
     teamKeys: ["torino"],
+    airport: "Turin Airport (TRN)",
+distanceFromAirportKm: 22,
   },
 
   "stadio-friuli": {
@@ -180,6 +214,8 @@ export const serieAStadiums: Record<string, StadiumRecord> = {
     capacity: 25144,
     opened: 1976,
     teamKeys: ["udinese"],
+    airport: "Trieste Airport (TRS)",
+distanceFromAirportKm: 43,
   },
 
 };
