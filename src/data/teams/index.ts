@@ -1,5 +1,6 @@
 // src/data/teams/index.ts
 import { LEAGUES, type LeagueOption } from "@/src/constants/football";
+import type { TeamRecord } from "./types";
 
 /**
  * V1 Team Registry (single source of truth)
@@ -15,40 +16,6 @@ import { LEAGUES, type LeagueOption } from "@/src/constants/football";
  * - Add aliases for common user inputs + API-Football variants (diacritics, prefixes, punctuation).
  */
 
-export type TeamRecord = {
-  /** Stable key used in routes and teamGuides lookups (e.g. "arsenal", "real-madrid") */
-  teamKey: string;
-
-  /** API-Football team id (number) if you have it; optional in V1 */
-  teamId?: number;
-
-  /** Display name */
-  name: string;
-
-  /** Country (for search + UX) */
-  country?: string;
-
-  /** City (optional, useful for trip context) */
-  city?: string;
-
-  /** Primary league this team belongs to in your app (leagueId from LEAGUES) */
-  leagueId?: number;
-
-  /** Season context (defaults to matching league season) */
-  season?: number;
-
-  /** Linked stadium registry key */
-  stadiumKey?: string;
-
-  /** Club foundation year */
-  founded?: number;
-
-  /** Primary club colours for lightweight UI use */
-  clubColors?: string[];
-
-  /** Search aliases: abbreviations, nicknames, alternate spellings */
-  aliases?: string[];
-};
 
 // League IDs (API-Football conventional IDs used throughout the project)
 const EPL = 39;
