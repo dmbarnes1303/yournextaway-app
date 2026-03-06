@@ -10,7 +10,6 @@ import {
   Image,
   Alert,
   Modal,
-  Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -26,7 +25,14 @@ import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
 import { getFixtures, type FixtureListRow } from "@/src/services/apiFootball";
 
-import { LEAGUES, type LeagueOption } from "@/src/constants/football";
+import {
+  LEAGUES,
+  FEATURED_LEAGUES,
+  LEAGUE_BROWSE_REGION_ORDER,
+  LEAGUE_BROWSE_REGION_LABELS,
+  type LeagueOption,
+  type LeagueBrowseRegion,
+} from "@/src/constants/football";
 import { formatUkDateTimeMaybe } from "@/src/utils/formatters";
 import { getFlagImageUrl } from "@/src/utils/flagImages";
 
@@ -38,7 +44,7 @@ import { getFixtureCertainty } from "@/src/utils/fixtureCertainty";
 
 import { getTicketDifficultyBadge } from "@/src/data/ticketGuides";
 import type { TicketDifficulty } from "@/src/data/ticketGuides/types";
-import { POPULAR_TEAM_IDS } from "@/src/data/teams";
+import { POPULAR_TEAM_IDS, getTeam } from "@/src/data/teams";
 
 /* -------------------------------------------------------------------------- */
 /* Constants */
@@ -185,6 +191,10 @@ function leagueWeight(leagueId: number | null): number {
   if (leagueId === 135) return 100;
   if (leagueId === 78) return 95;
   if (leagueId === 61) return 90;
+  if (leagueId === 88) return 82;
+  if (leagueId === 94) return 80;
+  if (leagueId === 203) return 78;
+  if (leagueId === 179) return 75;
   return 60;
 }
 
@@ -218,13 +228,13 @@ function scoreFixture(r: FixtureListRow): number {
 }
 
 /* -------------------------------------------------------------------------- */
-/* League UI helpers
+/* League / country browse helpers
  * -------------------------------------------------------------------------- */
 
-function LeagueFlag({ code }: { code: string }) {
+function LeagueFlag({ code, size = "sm" }: { code: string; size?: "sm" | "md" }) {
   const url = getFlagImageUrl(code);
   if (!url) return null;
-  return <Image source={{ uri: url }} style={styles.flag} />;
+  return <Image source={{ uri: url }} style={size === "md" ? styles.flagMd : styles.flag} />;
 }
 
 function initials(name: string) {
@@ -245,6 +255,39 @@ function TeamCrest({ name, logo }: { name: string; logo?: string | null }) {
       )}
     </View>
   );
+}
+
+function prettifyKey(input: string) {
+  return String(input ?? "")
+    .trim()
+    .split("-")
+    .filter(Boolean)
+    .map((part) => {
+      if (part.toLowerCase() === "fc") return "FC";
+      if (part.toLowerCase() === "if") return "IF";
+      return part.charAt(0).toUpperCase() + part.slice(1);
+    })
+    .join(" ");
+}
+
+function featuredClubLine(league: LeagueOption): string {
+  const parts = (league.featuredClubKeys ?? []).slice(0, 2).map((key) => {
+    const team = getTeam(key);
+    if (team?.name && team?.city) return `${team.name} (${team.city})`;
+    if (team?.name) return team.name;
+    return prettifyKey(key);
+  });
+
+  return parts.join(" • ");
+}
+
+function leagueScopeSubtitle(selectedLeagues: LeagueOption[]) {
+  if (selectedLeagues.length === 0) return "Featured leagues";
+  if (selectedLeagues.length === 1) {
+    const one = selectedLeagues[0];
+    return `${one.label} • ${one.country}`;
+  }
+  return `${selectedLeagues.length} leagues selected`;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -374,20 +417,39 @@ export default function FixturesScreen() {
     return [];
   });
 
-  const leagueSubtitle = useMemo(() => {
-    if (selectedLeagueIds.length === 0) return "All leagues";
-    if (selectedLeagueIds.length === 1) {
-      const one = LEAGUES.find((l) => l.leagueId === selectedLeagueIds[0]);
-      return one?.label ?? "1 league selected";
-    }
-    return `${selectedLeagueIds.length} leagues selected`;
-  }, [selectedLeagueIds]);
-
-  const selectedLeagues: LeagueOption[] = useMemo(() => {
-    if (selectedLeagueIds.length === 0) return LEAGUES;
+  const selectedLeagues = useMemo(() => {
+    if (selectedLeagueIds.length === 0) return [] as LeagueOption[];
     const set = new Set(selectedLeagueIds);
     return LEAGUES.filter((l) => set.has(l.leagueId));
   }, [selectedLeagueIds]);
+
+  const fetchLeagues = useMemo(() => {
+    if (selectedLeagues.length > 0) return selectedLeagues;
+    return FEATURED_LEAGUES;
+  }, [selectedLeagues]);
+
+  const leagueSubtitle = useMemo(() => leagueScopeSubtitle(selectedLeagues), [selectedLeagues]);
+
+  const [activeRegion, setActiveRegion] = useState<LeagueBrowseRegion>("featured-europe");
+
+  const leaguesByRegion = useMemo(() => {
+    const out: Record<LeagueBrowseRegion, LeagueOption[]> = {
+      "featured-europe": [],
+      "central-eastern-europe": [],
+      nordics: [],
+    };
+
+    LEAGUES.forEach((league) => {
+      if (!league.browseRegion) return;
+      out[league.browseRegion].push(league);
+    });
+
+    LEAGUE_BROWSE_REGION_ORDER.forEach((region) => {
+      out[region].sort((a, b) => a.country.localeCompare(b.country) || a.label.localeCompare(b.label));
+    });
+
+    return out;
+  }, []);
 
   const toggleLeague = useCallback((leagueId: number) => {
     setSelectedLeagueIds((prev) => {
@@ -403,7 +465,11 @@ export default function FixturesScreen() {
     });
   }, []);
 
-  const setAllLeagues = useCallback(() => {
+  const selectSingleLeague = useCallback((leagueId: number) => {
+    setSelectedLeagueIds([leagueId]);
+  }, []);
+
+  const resetToFeatured = useCallback(() => {
     setSelectedLeagueIds([]);
   }, []);
 
@@ -442,7 +508,7 @@ export default function FixturesScreen() {
       setExpandedKey(null);
 
       try {
-        const batches = await mapLimit(selectedLeagues, 4, async (l) => {
+        const batches = await mapLimit(fetchLeagues, 4, async (l) => {
           const res = await getFixtures({
             league: l.leagueId,
             season: l.season,
@@ -486,7 +552,7 @@ export default function FixturesScreen() {
     return () => {
       cancelled = true;
     };
-  }, [selectedLeagues, fetchFrom, fetchTo, isTopPicksMode]);
+  }, [fetchLeagues, fetchFrom, fetchTo, isTopPicksMode]);
 
   const filtered = useMemo(() => {
     const base = rows;
@@ -730,6 +796,11 @@ export default function FixturesScreen() {
             android_ripple={{ color: "rgba(255,255,255,0.04)" }}
           >
             <View style={styles.rowInner}>
+              <View style={styles.fixtureLeagueLine}>
+                <LeagueFlag code={String(r?.league?.flag ? "" : "")} />
+                <Text style={styles.fixtureLeagueText}>{String(r?.league?.name ?? "")}</Text>
+              </View>
+
               <View style={styles.topRow}>
                 <TeamCrest name={home} logo={r?.teams?.home?.logo} />
 
@@ -874,31 +945,108 @@ export default function FixturesScreen() {
             })}
           </ScrollView>
 
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 12 }}>
-            <Pressable onPress={setAllLeagues} style={[styles.leaguePill, selectedLeagueIds.length === 0 && styles.leaguePillActive]}>
-              <Text style={[styles.leagueText, selectedLeagueIds.length === 0 && styles.leagueTextActive]}>
-                All leagues
-              </Text>
-            </Pressable>
+          <View style={styles.scopeRow}>
+            <Text style={styles.sectionLabel}>Featured leagues</Text>
+            {selectedLeagueIds.length > 0 ? (
+              <Button label="Reset to featured" tone="ghost" size="sm" onPress={resetToFeatured} />
+            ) : null}
+          </View>
 
-            {LEAGUES.map((l) => {
-              const selected = selectedLeagueIds.length === 0 ? false : selectedLeagueIds.includes(l.leagueId);
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 12 }}>
+            {FEATURED_LEAGUES.map((league) => {
+              const active =
+                selectedLeagueIds.length === 0
+                  ? false
+                  : selectedLeagueIds.length === 1 && selectedLeagueIds[0] === league.leagueId;
+
               return (
                 <Pressable
-                  key={`league-${l.leagueId}`}
-                  onPress={() => toggleLeague(l.leagueId)}
-                  style={[styles.leaguePill, selected && styles.leaguePillActive]}
+                  key={`featured-${league.leagueId}`}
+                  onPress={() => selectSingleLeague(league.leagueId)}
+                  style={[styles.featuredLeagueCard, active && styles.featuredLeagueCardActive]}
                 >
-                  <Text style={[styles.leagueText, selected && styles.leagueTextActive]}>{l.label}</Text>
-                  <LeagueFlag code={l.countryCode} />
+                  <View style={styles.featuredLeagueTop}>
+                    <LeagueFlag code={league.countryCode} size="md" />
+                    <Text style={[styles.featuredLeagueText, active && styles.featuredLeagueTextActive]}>{league.label}</Text>
+                  </View>
+                  <Text style={styles.featuredLeagueCountry}>{league.country}</Text>
                 </Pressable>
               );
             })}
           </ScrollView>
 
+          <View style={styles.scopeRow}>
+            <Text style={styles.sectionLabel}>Browse by region</Text>
+          </View>
+
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 12 }}>
+            {LEAGUE_BROWSE_REGION_ORDER.map((region) => {
+              const active = region === activeRegion;
+              return (
+                <Pressable
+                  key={region}
+                  onPress={() => setActiveRegion(region)}
+                  style={[styles.regionPill, active && styles.regionPillActive]}
+                >
+                  <Text style={[styles.regionPillText, active && styles.regionPillTextActive]}>
+                    {LEAGUE_BROWSE_REGION_LABELS[region]}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+
+          <View style={styles.countryGrid}>
+            {leaguesByRegion[activeRegion].map((league) => {
+              const active = selectedLeagueIds.includes(league.leagueId);
+              return (
+                <Pressable
+                  key={`country-card-${league.leagueId}`}
+                  onPress={() => selectSingleLeague(league.leagueId)}
+                  onLongPress={() => toggleLeague(league.leagueId)}
+                  style={[styles.countryCardWrap, active && styles.countryCardWrapActive]}
+                >
+                  <GlassCard style={styles.countryCard} level="default" variant="matte">
+                    <View style={styles.countryCardHeader}>
+                      <LeagueFlag code={league.countryCode} size="md" />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.countryCardCountry}>{league.country}</Text>
+                        <Text style={styles.countryCardLeague}>{league.label}</Text>
+                      </View>
+                    </View>
+
+                    <Text style={styles.countryCardClubs} numberOfLines={2}>
+                      {featuredClubLine(league)}
+                    </Text>
+
+                    <View style={styles.countryCardFooter}>
+                      <Text style={styles.countryCardHint}>Tap to view</Text>
+                      <Text style={styles.countryCardHint}>Hold to multi-select</Text>
+                    </View>
+                  </GlassCard>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          {selectedLeagueIds.length > 0 ? (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 12 }}>
+              {selectedLeagues.map((league) => (
+                <Pressable
+                  key={`selected-${league.leagueId}`}
+                  onPress={() => toggleLeague(league.leagueId)}
+                  style={[styles.leaguePill, styles.leaguePillActive]}
+                >
+                  <Text style={[styles.leagueText, styles.leagueTextActive]}>{league.label}</Text>
+                  <LeagueFlag code={league.countryCode} />
+                </Pressable>
+              ))}
+            </ScrollView>
+          ) : null}
+
           <Text style={styles.helperLine}>
             {isRange ? `Range • ${effectiveRange.from} → ${effectiveRange.to}` : `Day • ${effectiveRange.from}`}
-            {selectedLeagueIds.length ? ` • ${selectedLeagueIds.length}/${MAX_MULTI_LEAGUES} leagues` : ""}
+            {selectedLeagueIds.length > 0 ? ` • ${selectedLeagueIds.length}/${MAX_MULTI_LEAGUES} leagues` : " • Featured scope"}
             {isTopPicksMode ? " • Sorted by rating" : ""}
           </Text>
         </View>
@@ -912,12 +1060,18 @@ export default function FixturesScreen() {
               </View>
             )}
 
+            {!loading && !error && filtered.length > 0 ? (
+              <Text style={styles.resultsLine}>
+                {filtered.length} match{filtered.length === 1 ? "" : "es"} found
+              </Text>
+            ) : null}
+
             {!loading && error && <EmptyState title="Error" message={error} iconName="alert-circle" />}
 
             {!loading && !error && filtered.length === 0 && (
               <EmptyState
                 title="No matches found"
-                message="Try another date, calendar range, or league selection."
+                message="Try another date, another region, or a different league selection."
                 iconName="search"
               />
             )}
@@ -1053,6 +1207,20 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
 
+  sectionLabel: {
+    color: theme.colors.textPrimary,
+    fontSize: theme.fontSize.meta,
+    fontWeight: theme.fontWeight.semibold,
+  },
+
+  scopeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: theme.spacing.sm,
+    marginTop: 2,
+  },
+
   datePill: {
     borderWidth: 1,
     borderColor: theme.colors.borderSubtle,
@@ -1076,6 +1244,132 @@ const styles = StyleSheet.create({
   dateTopActive: { color: "rgba(87,162,56,0.95)" },
   dateBottomActive: { color: theme.colors.textPrimary },
 
+  featuredLeagueCard: {
+    width: 160,
+    borderWidth: 1,
+    borderColor: theme.colors.borderSubtle,
+    borderRadius: theme.borderRadius.card,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    marginRight: 10,
+    backgroundColor: "rgba(255,255,255,0.03)",
+    gap: 8,
+  },
+
+  featuredLeagueCardActive: {
+    borderColor: "rgba(87,162,56,0.30)",
+    backgroundColor: "rgba(87,162,56,0.10)",
+  },
+
+  featuredLeagueTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+
+  featuredLeagueText: {
+    color: theme.colors.textPrimary,
+    fontWeight: theme.fontWeight.semibold,
+    fontSize: theme.fontSize.meta,
+    flex: 1,
+  },
+
+  featuredLeagueTextActive: {
+    color: theme.colors.textPrimary,
+  },
+
+  featuredLeagueCountry: {
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSize.tiny,
+    fontWeight: theme.fontWeight.medium,
+  },
+
+  regionPill: {
+    borderWidth: 1,
+    borderColor: theme.colors.borderSubtle,
+    borderRadius: theme.borderRadius.pill,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    marginRight: 8,
+    backgroundColor: "rgba(255,255,255,0.03)",
+  },
+
+  regionPillActive: {
+    borderColor: "rgba(87,162,56,0.30)",
+    backgroundColor: "rgba(87,162,56,0.10)",
+  },
+
+  regionPillText: {
+    color: theme.colors.textSecondary,
+    fontWeight: theme.fontWeight.semibold,
+    fontSize: theme.fontSize.tiny,
+  },
+
+  regionPillTextActive: {
+    color: theme.colors.textPrimary,
+  },
+
+  countryGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+
+  countryCardWrap: {
+    width: "48.2%",
+  },
+
+  countryCardWrapActive: {
+    transform: [{ scale: 0.99 }],
+  },
+
+  countryCard: {
+    minHeight: 138,
+    borderRadius: theme.borderRadius.sheet,
+    padding: 14,
+    justifyContent: "space-between",
+    borderWidth: 1,
+    borderColor: theme.colors.borderSubtle,
+  },
+
+  countryCardHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+
+  countryCardCountry: {
+    color: theme.colors.textPrimary,
+    fontSize: theme.fontSize.meta,
+    fontWeight: theme.fontWeight.semibold,
+  },
+
+  countryCardLeague: {
+    marginTop: 2,
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSize.tiny,
+    fontWeight: theme.fontWeight.medium,
+  },
+
+  countryCardClubs: {
+    color: theme.colors.textPrimary,
+    fontSize: theme.fontSize.tiny,
+    lineHeight: 18,
+    fontWeight: theme.fontWeight.medium,
+    opacity: 0.96,
+  },
+
+  countryCardFooter: {
+    gap: 2,
+  },
+
+  countryCardHint: {
+    color: theme.colors.textMuted,
+    fontSize: 11,
+    fontWeight: theme.fontWeight.medium,
+  },
+
   leaguePill: {
     flexDirection: "row",
     alignItems: "center",
@@ -1098,9 +1392,16 @@ const styles = StyleSheet.create({
   leagueTextActive: { color: theme.colors.textPrimary },
 
   flag: { width: 18, height: 13, borderRadius: 3, opacity: 0.9 },
+  flagMd: { width: 22, height: 16, borderRadius: 4, opacity: 0.95 },
 
   content: { paddingHorizontal: theme.spacing.lg, paddingBottom: theme.spacing.xl },
   listWrap: { gap: 12 },
+
+  resultsLine: {
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSize.tiny,
+    fontWeight: theme.fontWeight.medium,
+  },
 
   center: { paddingVertical: 24, alignItems: "center", gap: 10 },
   muted: { color: theme.colors.textSecondary, fontWeight: theme.fontWeight.medium },
@@ -1110,6 +1411,19 @@ const styles = StyleSheet.create({
   rowMainPress: { borderRadius: theme.borderRadius.sheet, overflow: "hidden" },
 
   rowInner: { padding: 16, gap: 12 },
+
+  fixtureLeagueLine: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+  },
+
+  fixtureLeagueText: {
+    color: theme.colors.textMuted,
+    fontSize: theme.fontSize.tiny,
+    fontWeight: theme.fontWeight.medium,
+  },
 
   topRow: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
 

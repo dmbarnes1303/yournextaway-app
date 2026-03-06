@@ -1,6 +1,6 @@
 // src/services/searchIndex.ts
 import { normalizeSearchText, tokenizeQuery, expandQueryTokens } from "@/src/constants/search";
-import type { LeagueOption } from "@/src/constants/football";
+import { LEAGUES, type LeagueOption } from "@/src/constants/football";
 import cityGuidesRegistry from "@/src/data/cityGuides";
 import teamGuidesRegistry from "@/src/data/teamGuides";
 import teamsRegistry, { normalizeTeamKey } from "@/src/data/teams";
@@ -8,12 +8,10 @@ import { normalizeCityKey } from "@/src/utils/city";
 import { getFixtures, type FixtureListRow } from "@/src/services/apiFootball";
 
 /**
- * V1 Search Index
+ * Search Index
  * - Deterministic + in-memory
  * - Safe with partial data (never crash)
- * - Home uses:
- *    buildSearchIndex({ from, to, leagues })
- *    querySearchIndex(index, query, { limit })
+ * - Uses league config as source of truth for league/country search
  */
 
 export type SearchEntityType = "team" | "city" | "venue" | "country" | "league";
@@ -205,14 +203,11 @@ function buildCityGuideEntries(map: Map<string, IndexEntry>) {
   });
 }
 
-function buildCountriesFromGuides(map: Map<string, IndexEntry>) {
-  const countries = uniq(
-    Object.values(cityGuidesRegistry as any)
-      .map((g: any) => safeStr(g?.country))
-      .filter(Boolean)
-  );
+function buildCountriesFromLeagues(map: Map<string, IndexEntry>, leagues: LeagueOption[]) {
+  leagues.forEach((league) => {
+    const country = safeStr(league.country);
+    if (!country) return;
 
-  countries.forEach((country) => {
     const cKey = normalizeSearchText(country).replace(/\s+/g, "-");
     if (!cKey) return;
 
@@ -220,9 +215,21 @@ function buildCountriesFromGuides(map: Map<string, IndexEntry>) {
       type: "country",
       key: `country:${cKey}`,
       title: country,
-      subtitle: "Country",
-      tokens: toEntryTokens([country, cKey]),
-      payload: { kind: "country", country, leagueId: 0, season: 0 },
+      subtitle: league.label,
+      tokens: toEntryTokens([
+        country,
+        cKey,
+        league.label,
+        league.slug,
+        league.countryCode,
+        ...(league.featuredClubKeys ?? []),
+      ]),
+      payload: {
+        kind: "country",
+        country,
+        leagueId: league.leagueId,
+        season: Number(league.season) || 0,
+      },
     });
   });
 }
@@ -276,50 +283,24 @@ function buildLeagueEntries(map: Map<string, IndexEntry>, leagues: LeagueOption[
     if (!title) return;
 
     const season = Number(l?.season) || 0;
+    const country = safeStr(l?.country);
 
     upsertEntry(map, {
       type: "league",
       key: `league:${String(l.leagueId)}:${String(season)}`,
       title,
-      subtitle: season ? `Season ${season}` : undefined,
-      tokens: toEntryTokens([title, String(l.leagueId), String(season)]),
+      subtitle: country ? `${country}${season ? ` • ${season}` : ""}` : season ? `Season ${season}` : undefined,
+      tokens: toEntryTokens([
+        title,
+        l.slug,
+        country,
+        l.countryCode,
+        String(l.leagueId),
+        String(season),
+        ...(l.featuredClubKeys ?? []),
+      ]),
       payload: { kind: "league", leagueId: l.leagueId, season },
     });
-  });
-}
-
-function patchCountryPayloads(entries: IndexEntry[], leagues: LeagueOption[]): IndexEntry[] {
-  const leagueList = Array.isArray(leagues) ? leagues : [];
-  const fallback = leagueList[0];
-
-  const pickLeagueForCountry = (country: string): LeagueOption | undefined => {
-    const cn = normalizeSearchText(country);
-
-    const match =
-      leagueList.find((l) => normalizeSearchText(l.label).includes(cn)) ??
-      leagueList.find((l) => {
-        const label = normalizeSearchText(l.label);
-        if (cn.includes("england") || cn.includes("uk") || cn.includes("britain")) return label.includes("premier");
-        if (cn.includes("spain")) return label.includes("la liga") || label.includes("laliga");
-        if (cn.includes("italy")) return label.includes("serie a") || label.includes("seriea");
-        if (cn.includes("germany")) return label.includes("bundesliga");
-        if (cn.includes("france")) return label.includes("ligue 1") || label.includes("ligue1");
-        if (cn.includes("austria")) return label.includes("austrian") || label.includes("bundesliga");
-        return false;
-      }) ?? fallback;
-
-    return match;
-  };
-
-  return entries.map((e) => {
-    if (e.type !== "country") return e;
-    if (e.payload.kind !== "country") return e;
-
-    const chosen = pickLeagueForCountry(e.payload.country);
-    const leagueId = chosen?.leagueId ?? 0;
-    const season = Number(chosen?.season) || 0;
-
-    return { ...e, payload: { kind: "country", country: e.payload.country, leagueId, season } };
   });
 }
 
@@ -421,10 +402,10 @@ async function buildFixtureDerivedEntries(args: {
   return rows.length;
 }
 
-export async function buildSearchIndex(args: { from: string; to: string; leagues: LeagueOption[] }): Promise<SearchIndex> {
+export async function buildSearchIndex(args: { from: string; to: string; leagues?: LeagueOption[] }): Promise<SearchIndex> {
   const from = safeStr(args?.from);
   const to = safeStr(args?.to);
-  const leagues = Array.isArray(args?.leagues) ? args.leagues : [];
+  const leagues = Array.isArray(args?.leagues) && args.leagues.length > 0 ? args.leagues : LEAGUES;
 
   const map = new Map<string, IndexEntry>();
   const debugEnabled = isDebugEnabled();
@@ -432,7 +413,7 @@ export async function buildSearchIndex(args: { from: string; to: string; leagues
 
   // Deterministic base
   buildCityGuideEntries(map);
-  buildCountriesFromGuides(map);
+  buildCountriesFromLeagues(map, leagues);
   buildTeamsRegistryEntries(map);
   buildTeamGuideEntries(map);
   buildLeagueEntries(map, leagues);
@@ -445,8 +426,7 @@ export async function buildSearchIndex(args: { from: string; to: string; leagues
     // offline-safe
   }
 
-  let entries = Array.from(map.values());
-  entries = patchCountryPayloads(entries, leagues);
+  const entries = Array.from(map.values());
 
   if (!debugEnabled) {
     return { builtAt: Date.now(), from, to, leagues, entries };
@@ -500,4 +480,4 @@ export function querySearchIndex(index: SearchIndex, query: string, opts?: { lim
     .sort((a, b) => b.score - a.score);
 
   return scored.slice(0, limit);
-}
+          }
