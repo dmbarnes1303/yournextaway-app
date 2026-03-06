@@ -1,6 +1,6 @@
 // app/match/[id].tsx
 import React, { useCallback, useMemo, useState } from "react";
-import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Image, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
@@ -19,6 +19,8 @@ import { useTripsStore } from "@/src/state/trips";
 
 import { buildTicketLink } from "@/src/services/partnerLinks";
 import { beginPartnerClick, openUntrackedUrl } from "@/src/services/partnerClicks";
+
+import { getStadium, stadiums } from "@/src/data/stadiums";
 
 /* -------------------------------------------------------------------------- */
 /* Helpers                                                                    */
@@ -41,8 +43,16 @@ function formatKickoffLocal(kickoffIso?: string | null): string {
   if (!raw) return "TBC";
   const d = new Date(raw);
   if (Number.isNaN(d.getTime())) return "TBC";
-  const date = d.toLocaleDateString("en-GB", { weekday: "short", day: "2-digit", month: "short", year: "numeric" });
-  const time = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  const date = d.toLocaleDateString("en-GB", {
+    weekday: "short",
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+  const time = d.toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
   return `${date} • ${time}`;
 }
 
@@ -63,6 +73,42 @@ function Crest({ name, uri }: { name: string; uri?: string | null }) {
         <Text style={styles.crestFallback}>{initials(name)}</Text>
       )}
     </View>
+  );
+}
+
+function stripDiacritics(input: string): string {
+  try {
+    return input.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  } catch {
+    return input;
+  }
+}
+
+function normalizeVenueKey(input: string): string {
+  return stripDiacritics(String(input ?? ""))
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, "and")
+    .replace(/['’]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+function resolveStadiumFromVenue(venueName?: string | null) {
+  const raw = String(venueName ?? "").trim();
+  if (!raw) return null;
+
+  const direct = getStadium(raw);
+  if (direct) return direct;
+
+  const key = normalizeVenueKey(raw);
+  const byKey = getStadium(key);
+  if (byKey) return byKey;
+
+  return (
+    Object.values(stadiums).find((s) => normalizeVenueKey(s.name) === key || normalizeVenueKey(s.stadiumKey) === key) ??
+    null
   );
 }
 
@@ -120,6 +166,8 @@ export default function MatchScreen() {
     return [venueName, venueCity].filter(Boolean).join(" • ");
   }, [venueName, venueCity]);
 
+  const resolvedStadium = useMemo(() => resolveStadiumFromVenue(venueName), [venueName]);
+
   const crestHome = useMemo(() => {
     const id = (trip as any)?.homeTeamId;
     if (typeof id === "number" && id > 0) return `https://media.api-sports.io/football/teams/${id}.png`;
@@ -151,11 +199,22 @@ export default function MatchScreen() {
   }, [trip, fixture]);
 
   const certaintyState = useMemo(() => {
-    // Honest: if we don't have a kickoff timestamp, it’s TBC.
     if (!kickoffIso) return "tbc" as const;
     if ((trip as any)?.kickoffTbc) return "tbc" as const;
     return "confirmed" as const;
   }, [kickoffIso, trip]);
+
+  const airportLine = useMemo(() => {
+    if (!resolvedStadium?.airport) return null;
+    if (typeof resolvedStadium.distanceFromAirportKm === "number") {
+      return `${resolvedStadium.airport} • ${resolvedStadium.distanceFromAirportKm} km`;
+    }
+    return resolvedStadium.airport;
+  }, [resolvedStadium]);
+
+  const transitItems = useMemo(() => resolvedStadium?.transit ?? [], [resolvedStadium]);
+  const stayItems = useMemo(() => resolvedStadium?.stayAreas ?? [], [resolvedStadium]);
+  const tipItems = useMemo(() => resolvedStadium?.tips ?? [], [resolvedStadium]);
 
   const goBack = useCallback(() => {
     if (tripId) {
@@ -197,7 +256,10 @@ export default function MatchScreen() {
         kickoffIso,
         leagueId,
         leagueName,
-        se365EventId: typeof (trip as any)?.sportsevents365EventId === "number" ? (trip as any).sportsevents365EventId : undefined,
+        se365EventId:
+          typeof (trip as any)?.sportsevents365EventId === "number"
+            ? (trip as any).sportsevents365EventId
+            : undefined,
         se365EventUrl: (fixture as any)?.se365EventUrl ?? null,
       });
 
@@ -243,7 +305,10 @@ export default function MatchScreen() {
 
   if (!fixtureId) {
     return (
-      <Background imageSource={typeof getBackground("match") === "string" ? undefined : (getBackground("match") as any)} imageUrl={typeof getBackground("match") === "string" ? (getBackground("match") as string) : null}>
+      <Background
+        imageSource={typeof getBackground("match") === "string" ? undefined : (getBackground("match") as any)}
+        imageUrl={typeof getBackground("match") === "string" ? (getBackground("match") as string) : null}
+      >
         <SafeAreaView style={styles.safe}>
           <EmptyState title="Match not found" subtitle="Missing fixture ID." actionText="Go back" onAction={() => router.back()} />
         </SafeAreaView>
@@ -256,7 +321,7 @@ export default function MatchScreen() {
   const imageSource = typeof bg === "string" ? null : (bg as any);
 
   return (
-    <Background imageUrl={imageUrl} imageSource={imageSource} overlayOpacity={0.10}>
+    <Background imageUrl={imageUrl} imageSource={imageSource} overlayOpacity={0.1}>
       <SafeAreaView style={styles.safe} edges={["top"]}>
         {/* Header */}
         <View style={styles.header}>
@@ -295,7 +360,7 @@ export default function MatchScreen() {
               <View style={styles.heroHints}>
                 <Chip label="Tickets: live price" variant="primary" />
                 <Chip label="Hotels: live price" variant="default" />
-                <Chip label="Travel: friction soon" variant="default" />
+                <Chip label={resolvedStadium ? "Travel: mapped" : "Travel: friction soon"} variant="default" />
               </View>
             </View>
           </GlassCard>
@@ -324,20 +389,73 @@ export default function MatchScreen() {
           <GlassCard level="default" variant="matte" style={styles.sectionCard}>
             <Text style={styles.sectionTitle}>Logistics</Text>
             <Text style={styles.sectionSub}>
-              Keep it simple and useful: venue directions now; transport/areas/distances come in the Trip Workspace later.
+              Match travel intelligence powered by your stadium data: airport, transport, stay areas and matchday tips.
             </Text>
 
             <View style={styles.actions}>
               <Button label="Directions to stadium" tone="secondary" onPress={openDirections} />
             </View>
 
-            <View style={styles.miniInfo}>
-              <Text style={styles.miniInfoLabel}>What we’ll add next</Text>
-              <Text style={styles.miniInfoText}>
-                Stadium distance to hotel areas, travel time to airport/station, “easy/awkward” late transport, and a
-                quick “safe-to-book” signal based on kickoff certainty.
-              </Text>
-            </View>
+            {resolvedStadium ? (
+              <View style={styles.miniInfo}>
+                <Text style={styles.miniInfoLabel}>Travel intelligence</Text>
+
+                {airportLine ? <Text style={styles.miniInfoText}>✈ {airportLine}</Text> : null}
+
+                {transitItems.length > 0 ? (
+                  <>
+                    <Text style={styles.subBlockLabel}>Best transport</Text>
+                    {transitItems.map((item, index) => {
+                      const suffix = typeof item.minutes === "number" ? ` • ${item.minutes} min walk` : "";
+                      const note = item.note ? ` • ${item.note}` : "";
+                      return (
+                        <Text key={`${item.label}-${index}`} style={styles.miniInfoText}>
+                          🚇 {item.label}
+                          {suffix}
+                          {note}
+                        </Text>
+                      );
+                    })}
+                  </>
+                ) : null}
+
+                {stayItems.length > 0 ? (
+                  <>
+                    <Text style={styles.subBlockLabel}>Best areas to stay</Text>
+                    {stayItems.map((item, index) => (
+                      <Text key={`${item.area}-${index}`} style={styles.miniInfoText}>
+                        🏨 {item.area} — {item.why}
+                      </Text>
+                    ))}
+                  </>
+                ) : null}
+
+                {tipItems.length > 0 ? (
+                  <>
+                    <Text style={styles.subBlockLabel}>Matchday tips</Text>
+                    {tipItems.map((tip, index) => (
+                      <Text key={`tip-${index}`} style={styles.miniInfoText}>
+                        ⚽ {tip}
+                      </Text>
+                    ))}
+                  </>
+                ) : null}
+
+                {!airportLine && transitItems.length === 0 && stayItems.length === 0 && tipItems.length === 0 ? (
+                  <Text style={styles.miniInfoText}>
+                    Stadium matched, but rich travel detail has not been added yet.
+                  </Text>
+                ) : null}
+              </View>
+            ) : (
+              <View style={styles.miniInfo}>
+                <Text style={styles.miniInfoLabel}>Travel intelligence</Text>
+                <Text style={styles.miniInfoText}>
+                  Stadium travel intelligence is not mapped yet for this venue. Directions still work, but airport,
+                  transit and stay-area guidance are not available yet.
+                </Text>
+              </View>
+            )}
           </GlassCard>
 
           {/* Loading hint */}
@@ -502,6 +620,15 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeight.black,
     letterSpacing: 0.5,
     marginBottom: 6,
+  },
+
+  subBlockLabel: {
+    color: theme.colors.textPrimary,
+    fontSize: 12,
+    fontWeight: theme.fontWeight.black,
+    letterSpacing: 0.4,
+    marginTop: 10,
+    marginBottom: 4,
   },
 
   miniInfoText: {
