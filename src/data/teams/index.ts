@@ -9,6 +9,7 @@ import ligue1Teams from "./ligue1";
 import primeiraLigaTeams from "./primeiraLiga";
 import eredivisieTeams from "./eredivisie";
 import scottishPremiershipTeams from "./scottishPremiership";
+import superLigTeams from "./superLig";
 
 /**
  * V1 Team Registry (single source of truth)
@@ -100,6 +101,7 @@ export const teams: Record<string, TeamRecord> = {
   ...primeiraLigaTeams,
   ...eredivisieTeams,
   ...scottishPremiershipTeams,
+  ...superLigTeams,
 
     
   
@@ -118,189 +120,7 @@ export const teams: Record<string, TeamRecord> = {
 
  
 
-  // -------------------------
-// Süper Lig (20 teams)
-// -------------------------
-"galatasaray": {
-  teamKey: "galatasaray",
-  name: "Galatasaray",
-  country: "Turkey",
-  city: "Istanbul",
-  leagueId: 203,
-  aliases: ["galatasaray sk", "gala"],
-},
-
-"fenerbahce": {
-  teamKey: "fenerbahce",
-  name: "Fenerbahçe",
-  country: "Turkey",
-  city: "Istanbul",
-  leagueId: 203,
-  aliases: ["fenerbahce sk", "fener"],
-},
-
-"besiktas": {
-  teamKey: "besiktas",
-  name: "Beşiktaş",
-  country: "Turkey",
-  city: "Istanbul",
-  leagueId: 203,
-  aliases: ["besiktas jk", "bjk"],
-},
-
-"trabzonspor": {
-  teamKey: "trabzonspor",
-  name: "Trabzonspor",
-  country: "Turkey",
-  city: "Trabzon",
-  leagueId: 203,
-  aliases: ["trabzon"],
-},
-
-"istanbul-basaksehir": {
-  teamKey: "istanbul-basaksehir",
-  name: "İstanbul Başakşehir",
-  country: "Turkey",
-  city: "Istanbul",
-  leagueId: 203,
-  aliases: ["basaksehir", "basaksehir fk"],
-},
-
-"adana-demirspor": {
-  teamKey: "adana-demirspor",
-  name: "Adana Demirspor",
-  country: "Turkey",
-  city: "Adana",
-  leagueId: 203,
-  aliases: ["demirspor"],
-},
-
-"sivasspor": {
-  teamKey: "sivasspor",
-  name: "Sivasspor",
-  country: "Turkey",
-  city: "Sivas",
-  leagueId: 203,
-  aliases: ["sivasspor fk"],
-},
-
-"konyaspor": {
-  teamKey: "konyaspor",
-  name: "Konyaspor",
-  country: "Turkey",
-  city: "Konya",
-  leagueId: 203,
-  aliases: ["konyaspor fk"],
-},
-
-"antalyaspor": {
-  teamKey: "antalyaspor",
-  name: "Antalyaspor",
-  country: "Turkey",
-  city: "Antalya",
-  leagueId: 203,
-  aliases: ["antalya"],
-},
-
-"gaziantep": {
-  teamKey: "gaziantep",
-  name: "Gaziantep FK",
-  country: "Turkey",
-  city: "Gaziantep",
-  leagueId: 203,
-  aliases: ["gaziantep fk"],
-},
-
-"kasimpasa": {
-  teamKey: "kasimpasa",
-  name: "Kasımpaşa",
-  country: "Turkey",
-  city: "Istanbul",
-  leagueId: 203,
-  aliases: ["kasimpasa sk"],
-},
-
-"alanyaspor": {
-  teamKey: "alanyaspor",
-  name: "Alanyaspor",
-  country: "Turkey",
-  city: "Alanya",
-  leagueId: 203,
-  aliases: ["alanya"],
-},
-
-"hatayspor": {
-  teamKey: "hatayspor",
-  name: "Hatayspor",
-  country: "Turkey",
-  city: "Hatay",
-  leagueId: 203,
-  aliases: ["hatay"],
-},
-
-"rizespor": {
-  teamKey: "rizespor",
-  name: "Çaykur Rizespor",
-  country: "Turkey",
-  city: "Rize",
-  leagueId: 203,
-  aliases: ["rize", "rizespor fk"],
-},
-
-"samsunspor": {
-  teamKey: "samsunspor",
-  name: "Samsunspor",
-  country: "Turkey",
-  city: "Samsun",
-  leagueId: 203,
-  aliases: ["samsunspor fk"],
-},
-
-"kayserispor": {
-  teamKey: "kayserispor",
-  name: "Kayserispor",
-  country: "Turkey",
-  city: "Kayseri",
-  leagueId: 203,
-  aliases: ["kayseri"],
-},
-
-"ankaragucu": {
-  teamKey: "ankaragucu",
-  name: "Ankaragücü",
-  country: "Turkey",
-  city: "Ankara",
-  leagueId: 203,
-  aliases: ["mke ankaragucu"],
-},
-
-"pendikspor": {
-  teamKey: "pendikspor",
-  name: "Pendikspor",
-  country: "Turkey",
-  city: "Istanbul",
-  leagueId: 203,
-  aliases: ["pendik"],
-},
-
-"bodrumspor": {
-  teamKey: "bodrumspor",
-  name: "Bodrumspor",
-  country: "Turkey",
-  city: "Bodrum",
-  leagueId: 203,
-  aliases: ["bodrum fk"],
-},
-
-"goztepe": {
-  teamKey: "goztepe",
-  name: "Göztepe",
-  country: "Turkey",
-  city: "Izmir",
-  leagueId: 203,
-  aliases: ["goztepe sk"],
-},
-
+ 
   // -------------------------
 // Belgium Pro League (16 teams)
 // -------------------------
