@@ -6,6 +6,7 @@ import laLigaTeams from "./laLiga";
 import serieATeams from "./serieA";
 import bundesligaTeams from "./bundesliga";
 import ligue1Teams from "./ligue1";
+import primeiraLigaTeams from "./primeiraLiga";
 
 /**
  * V1 Team Registry (single source of truth)
@@ -94,6 +95,7 @@ export const teams: Record<string, TeamRecord> = {
   ...serieATeams,
   ...bundesligaTeams,
   ...ligue1Teams,
+  ...primeiraLigaTeams,
 
     
   
