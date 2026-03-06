@@ -16,6 +16,7 @@ import superLeagueGreeceStadiums from "./superLeagueGreece";
 import austrianBundesligaStadiums from "./austrianBundesliga";
 import superligaDenmarkStadiums from "./superligaDenmark";
 import swissSuperLeagueStadiums from "./swissSuperLeague";
+import czechFirstLeagueStadiums from "./czechFirstLeague";
 
 export const stadiums: Record<string, StadiumRecord> = {
   ...premierLeagueStadiums,
@@ -32,6 +33,7 @@ export const stadiums: Record<string, StadiumRecord> = {
   ...austrianBundesligaStadiums,
   ...superligaDenmarkStadiums,
   ...swissSuperLeagueStadiums,
+  ...czechFirstLeagueStadiums,
 };
 
 export function getStadium(stadiumKey: string): StadiumRecord | null {
