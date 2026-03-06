@@ -13,6 +13,7 @@ import superLigTeams from "./superLig";
 import proLeagueTeams from "./proLeague";
 import superLeagueGreeceTeams from "./superLeagueGreece";
 import austrianBundesligaTeams from "./austrianBundesliga";
+import superligaDenmarkTeams from "./superligaDenmark";
 
 /**
  * V1 Team Registry (single source of truth)
@@ -108,6 +109,7 @@ export const teams: Record<string, TeamRecord> = {
   ...proLeagueTeams,
   ...superLeagueGreeceTeams,
   ...austrianBundesligaTeams,
+  ...superligaDenmarkTeams,
 
     
   
@@ -243,116 +245,7 @@ export const teams: Record<string, TeamRecord> = {
 
  
 
-  // -------------------------
-// Danish Superliga (12 teams)
-// -------------------------
-"copenhagen": {
-  teamKey: "copenhagen",
-  name: "FC Copenhagen",
-  country: "Denmark",
-  city: "Copenhagen",
-  leagueId: 119,
-  aliases: ["fc copenhagen", "fck"],
-},
-
-"brondby": {
-  teamKey: "brondby",
-  name: "Brøndby",
-  country: "Denmark",
-  city: "Brøndby",
-  leagueId: 119,
-  aliases: ["brondby if"],
-},
-
-"midtjylland": {
-  teamKey: "midtjylland",
-  name: "Midtjylland",
-  country: "Denmark",
-  city: "Herning",
-  leagueId: 119,
-  aliases: ["fc midtjylland"],
-},
-
-"aarhus": {
-  teamKey: "aarhus",
-  name: "Aarhus",
-  country: "Denmark",
-  city: "Aarhus",
-  leagueId: 119,
-  aliases: ["agf", "aarhus gf"],
-},
-
-"nordsjaelland": {
-  teamKey: "nordsjaelland",
-  name: "Nordsjælland",
-  country: "Denmark",
-  city: "Farum",
-  leagueId: 119,
-  aliases: ["fc nordsjaelland"],
-},
-
-"silkeborg": {
-  teamKey: "silkeborg",
-  name: "Silkeborg",
-  country: "Denmark",
-  city: "Silkeborg",
-  leagueId: 119,
-  aliases: ["silkeborg if"],
-},
-
-"viborg": {
-  teamKey: "viborg",
-  name: "Viborg",
-  country: "Denmark",
-  city: "Viborg",
-  leagueId: 119,
-  aliases: ["viborg ff"],
-},
-
-"odense": {
-  teamKey: "odense",
-  name: "Odense",
-  country: "Denmark",
-  city: "Odense",
-  leagueId: 119,
-  aliases: ["ob", "odense bk"],
-},
-
-"randers": {
-  teamKey: "randers",
-  name: "Randers",
-  country: "Denmark",
-  city: "Randers",
-  leagueId: 119,
-  aliases: ["randers fc"],
-},
-
-"lyngby": {
-  teamKey: "lyngby",
-  name: "Lyngby",
-  country: "Denmark",
-  city: "Lyngby",
-  leagueId: 119,
-  aliases: ["lyngby bk"],
-},
-
-"vejle": {
-  teamKey: "vejle",
-  name: "Vejle",
-  country: "Denmark",
-  city: "Vejle",
-  leagueId: 119,
-  aliases: ["vejle bk"],
-},
-
-"sonderjyske": {
-  teamKey: "sonderjyske",
-  name: "Sønderjyske",
-  country: "Denmark",
-  city: "Haderslev",
-  leagueId: 119,
-  aliases: ["sonderjyske fc"],
-},
+ 
 
   // -------------------------
 // Chance Liga (16 teams)
