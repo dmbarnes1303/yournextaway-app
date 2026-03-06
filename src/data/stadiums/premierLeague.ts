@@ -1,4 +1,4 @@
-import { StadiumRecord } from "./index";
+import { StadiumRecord } from "./types";
 
 export const premierLeagueStadiums: Record<string, StadiumRecord> = {
 
