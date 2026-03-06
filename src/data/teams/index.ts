@@ -7,6 +7,7 @@ import serieATeams from "./serieA";
 import bundesligaTeams from "./bundesliga";
 import ligue1Teams from "./ligue1";
 import primeiraLigaTeams from "./primeiraLiga";
+import eredivisieTeams from "./eredivisie";
 
 /**
  * V1 Team Registry (single source of truth)
@@ -96,6 +97,7 @@ export const teams: Record<string, TeamRecord> = {
   ...bundesligaTeams,
   ...ligue1Teams,
   ...primeiraLigaTeams,
+  ...eredivisieTeams,
 
     
   
@@ -108,170 +110,7 @@ export const teams: Record<string, TeamRecord> = {
      
 
   
-// -------------------------
-// Eredivisie (18 teams)
-// -------------------------
-"ajax": {
-  teamKey: "ajax",
-  name: "Ajax",
-  country: "Netherlands",
-  city: "Amsterdam",
-  leagueId: 88,
-  aliases: ["ajax amsterdam", "afc ajax"],
-},
 
-"psv": {
-  teamKey: "psv",
-  name: "PSV",
-  country: "Netherlands",
-  city: "Eindhoven",
-  leagueId: 88,
-  aliases: ["psv eindhoven", "psv fc"],
-},
-
-"feyenoord": {
-  teamKey: "feyenoord",
-  name: "Feyenoord",
-  country: "Netherlands",
-  city: "Rotterdam",
-  leagueId: 88,
-  aliases: ["feyenoord rotterdam"],
-},
-
-"az": {
-  teamKey: "az",
-  name: "AZ Alkmaar",
-  country: "Netherlands",
-  city: "Alkmaar",
-  leagueId: 88,
-  aliases: ["az alkmaar", "az67"],
-},
-
-"twente": {
-  teamKey: "twente",
-  name: "FC Twente",
-  country: "Netherlands",
-  city: "Enschede",
-  leagueId: 88,
-  aliases: ["twente", "fc twente"],
-},
-
-"utrecht": {
-  teamKey: "utrecht",
-  name: "FC Utrecht",
-  country: "Netherlands",
-  city: "Utrecht",
-  leagueId: 88,
-  aliases: ["utrecht", "fc utrecht"],
-},
-
-"sparta-rotterdam": {
-  teamKey: "sparta-rotterdam",
-  name: "Sparta Rotterdam",
-  country: "Netherlands",
-  city: "Rotterdam",
-  leagueId: 88,
-  aliases: ["sparta", "sparta rotterdam"],
-},
-
-"nec": {
-  teamKey: "nec",
-  name: "NEC Nijmegen",
-  country: "Netherlands",
-  city: "Nijmegen",
-  leagueId: 88,
-  aliases: ["nec", "nec nijmegen"],
-},
-
-"go-ahead-eagles": {
-  teamKey: "go-ahead-eagles",
-  name: "Go Ahead Eagles",
-  country: "Netherlands",
-  city: "Deventer",
-  leagueId: 88,
-  aliases: ["go ahead", "gae"],
-},
-
-"pec-zwolle": {
-  teamKey: "pec-zwolle",
-  name: "PEC Zwolle",
-  country: "Netherlands",
-  city: "Zwolle",
-  leagueId: 88,
-  aliases: ["zwolle"],
-},
-
-"heracles": {
-  teamKey: "heracles",
-  name: "Heracles Almelo",
-  country: "Netherlands",
-  city: "Almelo",
-  leagueId: 88,
-  aliases: ["heracles", "heracles almelo"],
-},
-
-"heerenveen": {
-  teamKey: "heerenveen",
-  name: "Heerenveen",
-  country: "Netherlands",
-  city: "Heerenveen",
-  leagueId: 88,
-  aliases: ["sc heerenveen"],
-},
-
-"fortuna-sittard": {
-  teamKey: "fortuna-sittard",
-  name: "Fortuna Sittard",
-  country: "Netherlands",
-  city: "Sittard",
-  leagueId: 88,
-  aliases: ["fortuna"],
-},
-
-"nac-breda": {
-  teamKey: "nac-breda",
-  name: "NAC Breda",
-  country: "Netherlands",
-  city: "Breda",
-  leagueId: 88,
-  aliases: ["nac", "breda"],
-},
-
-"willem-ii": {
-  teamKey: "willem-ii",
-  name: "Willem II",
-  country: "Netherlands",
-  city: "Tilburg",
-  leagueId: 88,
-  aliases: ["willem ii", "willem 2"],
-},
-
-"groningen": {
-  teamKey: "groningen",
-  name: "Groningen",
-  country: "Netherlands",
-  city: "Groningen",
-  leagueId: 88,
-  aliases: ["fc groningen"],
-},
-
-"rkc-waalwijk": {
-  teamKey: "rkc-waalwijk",
-  name: "RKC Waalwijk",
-  country: "Netherlands",
-  city: "Waalwijk",
-  leagueId: 88,
-  aliases: ["rkc"],
-},
-
-"almere-city": {
-  teamKey: "almere-city",
-  name: "Almere City",
-  country: "Netherlands",
-  city: "Almere",
-  leagueId: 88,
-  aliases: ["almere city fc"],
-},
 
   
 
