@@ -41,10 +41,11 @@ import { hasTeamGuide } from "@/src/data/teamGuides";
 import { getCityGuide } from "@/src/data/cityGuides";
 import { getFlagImageUrl } from "@/src/utils/flagImages";
 import { getPopularTeams, POPULAR_TEAM_IDS } from "@/src/data/teams";
+import { getCityImageUrl } from "@/src/data/cityImages";
 
 import rankTrips from "@/src/features/tripFinder/rankTrips";
 import groupTripsByWeekend from "@/src/features/tripFinder/groupTripsByWeekend";
-import type { RankedTrip, WeekendBucket, TravelDifficulty } from "@/src/features/tripFinder/types";
+import type { RankedTrip, WeekendBucket } from "@/src/features/tripFinder/types";
 
 const API_SPORTS_TEAM_LOGO = (teamId: number) => `https://media.api-sports.io/football/teams/${teamId}.png`;
 
@@ -59,31 +60,30 @@ const POPULAR_CITIES: CityChip[] = [
   { name: "Lisbon", countryCode: "PT" },
 ];
 
-// Curated Home leagues only (keeps Home sane)
 const HOME_TOP_LEAGUE_IDS = new Set<number>([
-  39, // Premier League
-  140, // La Liga
-  135, // Serie A
-  78, // Bundesliga
-  61, // Ligue 1
-  88, // Eredivisie
-  94, // Primeira Liga
+  39,
+  140,
+  135,
+  78,
+  61,
+  88,
+  94,
 ]);
 
 const HOME_TRIP_FINDER_LEAGUE_IDS = new Set<number>([
-  39, // Premier League
-  140, // La Liga
-  135, // Serie A
-  78, // Bundesliga
-  61, // Ligue 1
-  88, // Eredivisie
-  94, // Primeira Liga
-  203, // Turkish Super Lig
-  197, // Greek Super League
-  179, // Scottish Premiership
-  207, // Swiss Super League
-  218, // Austrian Bundesliga
-  119, // Danish Superliga
+  39,
+  140,
+  135,
+  78,
+  61,
+  88,
+  94,
+  203,
+  197,
+  179,
+  207,
+  218,
+  119,
 ]);
 
 type DiscoverWindowKey = "wknd" | "d7" | "d14" | "d30";
@@ -218,9 +218,9 @@ function scoreFixture(r: FixtureListRow): number {
   const dt = r?.fixture?.date ? new Date(r.fixture.date) : null;
   if (dt && !Number.isNaN(dt.getTime())) {
     const day = dt.getDay();
-    if (day === 5 || day === 6 || day === 0) s += 12; // Fri/Sat/Sun
+    if (day === 5 || day === 6 || day === 0) s += 12;
     const hr = dt.getHours();
-    if (hr >= 17 && hr <= 21) s += 8; // evening
+    if (hr >= 17 && hr <= 21) s += 8;
   }
 
   return s;
@@ -261,8 +261,17 @@ function pickRandom<T>(arr: T[]): T | null {
   return arr[Math.floor(Math.random() * arr.length)] ?? null;
 }
 
-function CityChipPremium({ name, countryCode, onPress }: { name: string; countryCode: string; onPress: () => void }) {
+function CityChipPremium({
+  name,
+  countryCode,
+  onPress,
+}: {
+  name: string;
+  countryCode: string;
+  onPress: () => void;
+}) {
   const flagUrl = getFlagImageUrl(countryCode, { size: 48 });
+  const cityImage = getCityImageUrl(name);
 
   return (
     <Pressable
@@ -270,8 +279,11 @@ function CityChipPremium({ name, countryCode, onPress }: { name: string; country
       style={({ pressed }) => [styles.cityPill, pressed && styles.pressedPill]}
       android_ripple={{ color: "rgba(255,255,255,0.08)" }}
     >
-      {flagUrl ? <Image source={{ uri: flagUrl }} style={styles.cityFlagIcon} resizeMode="cover" /> : null}
-      <Text style={styles.pillText}>{name}</Text>
+      <Image source={{ uri: cityImage }} style={styles.cityThumb} resizeMode="cover" />
+      <View style={{ gap: 4 }}>
+        <Text style={styles.pillText}>{name}</Text>
+        {flagUrl ? <Image source={{ uri: flagUrl }} style={styles.cityFlagInline} resizeMode="cover" /> : null}
+      </View>
     </Pressable>
   );
 }
@@ -285,7 +297,7 @@ function useDebouncedValue<T>(value: T, delayMs: number) {
   return debounced;
 }
 
-function difficultyLabel(v: TravelDifficulty) {
+function difficultyLabel(v: RankedTrip["breakdown"]["travelDifficulty"]) {
   if (v === "easy") return "Easy";
   if (v === "moderate") return "Moderate";
   if (v === "hard") return "Hard";
@@ -342,7 +354,6 @@ export default function HomeScreen() {
   const upcomingWindow = useMemo(() => windowFromTomorrowIso(14), []);
   const weekendWindow = useMemo(() => nextWeekendWindowIso(), []);
 
-  // Trips
   const [loadedTrips, setLoadedTrips] = useState(tripsStore.getState().loaded);
   const [trips, setTrips] = useState<Trip[]>(tripsStore.getState().trips);
 
@@ -371,7 +382,6 @@ export default function HomeScreen() {
 
   const nextTrip = useMemo(() => upcomingTrips[0] ?? null, [upcomingTrips]);
 
-  // Fixtures preview
   const [fxLoading, setFxLoading] = useState(false);
   const [fxError, setFxError] = useState<string | null>(null);
   const [fxRows, setFxRows] = useState<FixtureListRow[]>([]);
@@ -419,7 +429,6 @@ export default function HomeScreen() {
   const featured = useMemo(() => fxOrdered[0] ?? null, [fxOrdered]);
   const list = useMemo(() => fxOrdered.slice(1, 4), [fxOrdered]);
 
-  // Weekend trip finder preview
   const [tfLoading, setTfLoading] = useState(false);
   const [tfError, setTfError] = useState<string | null>(null);
   const [tfRows, setTfRows] = useState<FixtureListRow[]>([]);
@@ -455,7 +464,6 @@ export default function HomeScreen() {
     }
 
     run();
-
     return () => {
       cancelled = true;
     };
@@ -475,7 +483,6 @@ export default function HomeScreen() {
   const bestWeekendTrip = useMemo(() => bestWeekendBucket?.trips?.[0] ?? null, [bestWeekendBucket]);
   const nextWeekendTrips = useMemo(() => bestWeekendBucket?.trips?.slice(1, 3) ?? [], [bestWeekendBucket]);
 
-  // Search (LAZY BUILD)
   const [q, setQ] = useState("");
   const qNorm = useMemo(() => q.trim(), [q]);
   const qDebounced = useDebouncedValue(qNorm, 140);
@@ -523,7 +530,6 @@ export default function HomeScreen() {
     if (!idx) return [];
     if (!qDebounced) return [];
     return querySearchIndex(idx, qDebounced, { limit: 16 });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [qDebounced, searchBuiltAt]);
 
   const buckets = useMemo(() => splitSearchBuckets(rawSearchResults), [rawSearchResults]);
@@ -677,7 +683,6 @@ export default function HomeScreen() {
         Keyboard.dismiss();
         setQ("");
         goFixtures({ window: { from: fromIso, to: toIso }, leagueId: Number(p.leagueId), season: Number(p.season) });
-        return;
       }
     },
     [router, fromIso, toIso, goCityKey, goFixtures]
@@ -694,7 +699,6 @@ export default function HomeScreen() {
   const cities = useMemo(() => dedupeBy(POPULAR_CITIES, (c) => toKey(c.name)).slice(0, 5), []);
   const popularTeams = useMemo(() => getPopularTeams().filter((t) => typeof (t as any)?.teamId === "number").slice(0, 5), []);
 
-  // Discover prefs
   const [discoverOpen, setDiscoverOpen] = useState(false);
   const [discoverWindowKey, setDiscoverWindowKey] = useState<DiscoverWindowKey>("wknd");
   const [discoverTripLength, setDiscoverTripLength] = useState<DiscoverTripLength>("2");
@@ -763,10 +767,7 @@ export default function HomeScreen() {
         };
 
         const picked = await pickFixtureFromLeagues(w, filter);
-
-        if (!picked) {
-          return;
-        }
+        if (!picked) return;
 
         router.push({
           pathname: "/trip/build",
@@ -839,7 +840,6 @@ export default function HomeScreen() {
     [goFixtures, goPlanTrip, goTripFinder, goFootballCalendar]
   );
 
-  // Trips display assets
   const nextTripCityTitle = useMemo(() => {
     if (!nextTrip) return "";
     const raw = (nextTrip as any).cityName || (nextTrip as any).city || nextTrip.cityId || "Trip";
@@ -874,6 +874,22 @@ export default function HomeScreen() {
     return Number.isFinite(n) ? n : null;
   }, [nextTrip]);
 
+  const nextTripCityImage = useMemo(() => {
+    if (!nextTrip) return getCityImageUrl("london");
+    const raw = (nextTrip as any).cityName || (nextTrip as any).city || nextTrip.cityId || nextTripCityTitle || "Trip";
+    return getCityImageUrl(String(raw));
+  }, [nextTrip, nextTripCityTitle]);
+
+  const featuredCityImage = useMemo(() => {
+    const city = String(featured?.fixture?.venue?.city ?? "").trim();
+    return getCityImageUrl(city || "london");
+  }, [featured]);
+
+  const bestWeekendTripImage = useMemo(() => {
+    const city = String(bestWeekendTrip?.city ?? "").trim();
+    return getCityImageUrl(city || "london");
+  }, [bestWeekendTrip]);
+
   const bestWeekendTone = useMemo(() => {
     return bestWeekendBucket ? bucketStrengthTone(bestWeekendBucket) : "decent";
   }, [bestWeekendBucket]);
@@ -887,7 +903,6 @@ export default function HomeScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* HERO */}
           <GlassCard strength="strong" style={styles.hero} noPadding>
             <View style={styles.heroInner}>
               <Text style={styles.heroKicker}>YOURNEXTAWAY</Text>
@@ -927,7 +942,6 @@ export default function HomeScreen() {
                 </View>
               ) : null}
 
-              {/* SEARCH RESULTS */}
               {showSearchResults ? (
                 <View style={styles.searchResults}>
                   {searchBuilding ? (
@@ -968,7 +982,6 @@ export default function HomeScreen() {
                 </View>
               ) : null}
 
-              {/* POPULAR */}
               {!showSearchResults ? (
                 <View style={styles.popularBlock}>
                   <Text style={styles.sectionKicker}>Popular cities</Text>
@@ -1028,15 +1041,11 @@ export default function HomeScreen() {
             </View>
           </GlassCard>
 
-          {/* BEST TRIPS THIS WEEKEND */}
           {!showSearchResults ? (
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>Best trips this weekend</Text>
-                <Pressable
-                  onPress={goTripFinder}
-                  style={({ pressed }) => [styles.miniPill, pressed && { opacity: 0.9 }]}
-                >
+                <Pressable onPress={goTripFinder} style={({ pressed }) => [styles.miniPill, pressed && { opacity: 0.9 }]}>
                   <Text style={styles.miniPillText}>Open Trip Finder</Text>
                 </Pressable>
               </View>
@@ -1050,9 +1059,7 @@ export default function HomeScreen() {
                     </View>
                   ) : null}
 
-                  {!tfLoading && tfError ? (
-                    <EmptyState title="Trip Finder unavailable" message={tfError} />
-                  ) : null}
+                  {!tfLoading && tfError ? <EmptyState title="Trip Finder unavailable" message={tfError} /> : null}
 
                   {!tfLoading && !tfError && !bestWeekendTrip ? (
                     <EmptyState
@@ -1073,73 +1080,78 @@ export default function HomeScreen() {
                           bestWeekendTone === "good" && styles.weekendHeroCardGood,
                         ]}
                       >
-                        <View style={styles.weekendHeroTop}>
-                          <View
-                            style={[
-                              styles.weekendScoreBadge,
-                              bestWeekendTone === "elite" && styles.weekendScoreBadgeElite,
-                              bestWeekendTone === "strong" && styles.weekendScoreBadgeStrong,
-                              bestWeekendTone === "good" && styles.weekendScoreBadgeGood,
-                            ]}
-                          >
-                            <Text style={styles.weekendScoreBadgeText}>
-                              {bestWeekendTrip.breakdown.combinedScore}
-                            </Text>
+                        <Image source={{ uri: bestWeekendTripImage }} style={styles.weekendHeroImage} resizeMode="cover" />
+                        <View style={styles.weekendHeroImageOverlay} />
+
+                        <View style={styles.weekendHeroContent}>
+                          <View style={styles.weekendHeroTop}>
+                            <View
+                              style={[
+                                styles.weekendScoreBadge,
+                                bestWeekendTone === "elite" && styles.weekendScoreBadgeElite,
+                                bestWeekendTone === "strong" && styles.weekendScoreBadgeStrong,
+                                bestWeekendTone === "good" && styles.weekendScoreBadgeGood,
+                              ]}
+                            >
+                              <Text style={styles.weekendScoreBadgeText}>
+                                {bestWeekendTrip.breakdown.combinedScore}
+                              </Text>
+                            </View>
+
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.weekendHeroTitle} numberOfLines={1}>
+                                {String(bestWeekendTrip.fixture?.teams?.home?.name ?? "Home")} vs{" "}
+                                {String(bestWeekendTrip.fixture?.teams?.away?.name ?? "Away")}
+                              </Text>
+                              <Text style={styles.weekendHeroMeta} numberOfLines={1}>
+                                {formatUkDateTimeMaybe(bestWeekendTrip.kickoffIso)}
+                              </Text>
+                              <Text style={styles.weekendHeroMeta} numberOfLines={1}>
+                                {[bestWeekendTrip.city, bestWeekendTrip.stadiumName].filter(Boolean).join(" • ")}
+                              </Text>
+                            </View>
                           </View>
 
-                          <View style={{ flex: 1 }}>
-                            <Text style={styles.weekendHeroTitle} numberOfLines={1}>
-                              {String(bestWeekendTrip.fixture?.teams?.home?.name ?? "Home")} vs{" "}
-                              {String(bestWeekendTrip.fixture?.teams?.away?.name ?? "Away")}
-                            </Text>
-                            <Text style={styles.weekendHeroMeta} numberOfLines={1}>
-                              {formatUkDateTimeMaybe(bestWeekendTrip.kickoffIso)}
-                            </Text>
-                            <Text style={styles.weekendHeroMeta} numberOfLines={1}>
-                              {[bestWeekendTrip.city, bestWeekendTrip.stadiumName].filter(Boolean).join(" • ")}
-                            </Text>
+                          <View style={styles.weekendInfoRow}>
+                            <View style={styles.weekendInfoPill}>
+                              <Text style={styles.weekendInfoLabel}>Weekend</Text>
+                              <Text style={styles.weekendInfoValue}>{bestWeekendBucket.label}</Text>
+                            </View>
+                            <View style={styles.weekendInfoPill}>
+                              <Text style={styles.weekendInfoLabel}>Strength</Text>
+                              <Text style={styles.weekendInfoValue}>{bucketStrengthLabel(bestWeekendBucket)}</Text>
+                            </View>
+                            <View style={styles.weekendInfoPill}>
+                              <Text style={styles.weekendInfoLabel}>Travel</Text>
+                              <Text style={styles.weekendInfoValue}>{difficultyLabel(bestWeekendTrip.breakdown.travelDifficulty)}</Text>
+                            </View>
                           </View>
-                        </View>
 
-                        <View style={styles.weekendInfoRow}>
-                          <View style={styles.weekendInfoPill}>
-                            <Text style={styles.weekendInfoLabel}>Weekend</Text>
-                            <Text style={styles.weekendInfoValue}>{bestWeekendBucket.label}</Text>
+                          <View style={styles.weekendReasonBox}>
+                            {bestWeekendTrip.breakdown.reasonLines.slice(0, 3).map((line, idx) => (
+                              <Text key={`${line}-${idx}`} style={styles.weekendReasonText}>
+                                • {line}
+                              </Text>
+                            ))}
                           </View>
-                          <View style={styles.weekendInfoPill}>
-                            <Text style={styles.weekendInfoLabel}>Strength</Text>
-                            <Text style={styles.weekendInfoValue}>{bucketStrengthLabel(bestWeekendBucket)}</Text>
+
+                          <View style={styles.blockActions}>
+                            <Pressable
+                              onPress={() => goWeekendTripMatch(bestWeekendTrip, bestWeekendBucket)}
+                              style={({ pressed }) => [styles.btn, styles.btnGhost, pressed && styles.pressed]}
+                              android_ripple={{ color: "rgba(255,255,255,0.08)" }}
+                            >
+                              <Text style={styles.btnGhostText}>View match</Text>
+                            </Pressable>
+
+                            <Pressable
+                              onPress={() => goWeekendTripBuild(bestWeekendTrip, bestWeekendBucket)}
+                              style={({ pressed }) => [styles.btn, styles.btnPrimary, pressed && styles.pressed]}
+                              android_ripple={{ color: "rgba(79,224,138,0.10)" }}
+                            >
+                              <Text style={styles.btnPrimaryText}>Build trip</Text>
+                            </Pressable>
                           </View>
-                          <View style={styles.weekendInfoPill}>
-                            <Text style={styles.weekendInfoLabel}>Travel</Text>
-                            <Text style={styles.weekendInfoValue}>{difficultyLabel(bestWeekendTrip.breakdown.travelDifficulty)}</Text>
-                          </View>
-                        </View>
-
-                        <View style={styles.weekendReasonBox}>
-                          {bestWeekendTrip.breakdown.reasonLines.slice(0, 3).map((line, idx) => (
-                            <Text key={`${line}-${idx}`} style={styles.weekendReasonText}>
-                              • {line}
-                            </Text>
-                          ))}
-                        </View>
-
-                        <View style={styles.blockActions}>
-                          <Pressable
-                            onPress={() => goWeekendTripMatch(bestWeekendTrip, bestWeekendBucket)}
-                            style={({ pressed }) => [styles.btn, styles.btnGhost, pressed && styles.pressed]}
-                            android_ripple={{ color: "rgba(255,255,255,0.08)" }}
-                          >
-                            <Text style={styles.btnGhostText}>View match</Text>
-                          </Pressable>
-
-                          <Pressable
-                            onPress={() => goWeekendTripBuild(bestWeekendTrip, bestWeekendBucket)}
-                            style={({ pressed }) => [styles.btn, styles.btnPrimary, pressed && styles.pressed]}
-                            android_ripple={{ color: "rgba(79,224,138,0.10)" }}
-                          >
-                            <Text style={styles.btnPrimaryText}>Build trip</Text>
-                          </Pressable>
                         </View>
                       </View>
 
@@ -1201,7 +1213,6 @@ export default function HomeScreen() {
             </View>
           ) : null}
 
-          {/* UPCOMING MATCHES */}
           {!showSearchResults ? (
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
@@ -1247,9 +1258,7 @@ export default function HomeScreen() {
 
                   {!fxLoading && fxError ? <EmptyState title="Fixtures unavailable" message={fxError} /> : null}
 
-                  {!fxLoading && !fxError && !featured ? (
-                    <EmptyState title="No fixtures found" message="Try another league." />
-                  ) : null}
+                  {!fxLoading && !fxError && !featured ? <EmptyState title="No fixtures found" message="Try another league." /> : null}
 
                   {!fxLoading && !fxError && featured ? (
                     <>
@@ -1260,6 +1269,9 @@ export default function HomeScreen() {
                         style={({ pressed }) => [styles.featured, pressed && styles.pressedRow]}
                         android_ripple={{ color: "rgba(79,224,138,0.08)" }}
                       >
+                        <Image source={{ uri: featuredCityImage }} style={styles.featuredImage} resizeMode="cover" />
+                        <View style={styles.featuredImageOverlay} />
+
                         <View style={styles.featuredTop}>
                           <CrestSquare row={featured} />
                           <View style={{ flex: 1 }}>
@@ -1332,15 +1344,11 @@ export default function HomeScreen() {
             </View>
           ) : null}
 
-          {/* TRIPS */}
           {!showSearchResults ? (
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>Trips</Text>
-                <Pressable
-                  onPress={() => router.push("/(tabs)/trips")}
-                  style={({ pressed }) => [styles.miniPill, pressed && { opacity: 0.9 }]}
-                >
+                <Pressable onPress={() => router.push("/(tabs)/trips")} style={({ pressed }) => [styles.miniPill, pressed && { opacity: 0.9 }]}>
                   <Text style={styles.miniPillText}>Open</Text>
                 </Pressable>
               </View>
@@ -1390,19 +1398,24 @@ export default function HomeScreen() {
                         style={({ pressed }) => [styles.nextTripCard, pressed && styles.pressedRow]}
                         android_ripple={{ color: "rgba(255,255,255,0.06)" }}
                       >
-                        <Text style={styles.nextTripKicker}>Next up</Text>
+                        <Image source={{ uri: nextTripCityImage }} style={styles.nextTripImage} resizeMode="cover" />
+                        <View style={styles.nextTripImageOverlay} />
 
-                        <View style={styles.nextTripTitleRow}>
-                          {nextTripFlagUrl ? <Image source={{ uri: nextTripFlagUrl }} style={styles.nextTripFlag} /> : null}
-                          {typeof nextTripTeamId === "number" ? (
-                            <View style={styles.nextTripCrestDot}>
-                              <TeamCrest teamId={nextTripTeamId} size={16} />
-                            </View>
-                          ) : null}
-                          <Text style={styles.nextTripTitle}>{nextTripCityTitle || "Trip"}</Text>
+                        <View style={styles.nextTripContent}>
+                          <Text style={styles.nextTripKicker}>Next up</Text>
+
+                          <View style={styles.nextTripTitleRow}>
+                            {nextTripFlagUrl ? <Image source={{ uri: nextTripFlagUrl }} style={styles.nextTripFlag} /> : null}
+                            {typeof nextTripTeamId === "number" ? (
+                              <View style={styles.nextTripCrestDot}>
+                                <TeamCrest teamId={nextTripTeamId} size={16} />
+                              </View>
+                            ) : null}
+                            <Text style={styles.nextTripTitle}>{nextTripCityTitle || "Trip"}</Text>
+                          </View>
+
+                          <Text style={styles.nextTripMeta}>{tripSummaryLine(nextTrip)}</Text>
                         </View>
-
-                        <Text style={styles.nextTripMeta}>{tripSummaryLine(nextTrip)}</Text>
                       </Pressable>
 
                       <View style={styles.blockActions}>
@@ -1428,7 +1441,6 @@ export default function HomeScreen() {
             </View>
           ) : null}
 
-          {/* QUICK SHORTCUTS */}
           {!showSearchResults ? (
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
@@ -1462,7 +1474,6 @@ export default function HomeScreen() {
             </View>
           ) : null}
 
-          {/* DISCOVER */}
           {!showSearchResults ? (
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
@@ -1521,7 +1532,6 @@ export default function HomeScreen() {
           ) : null}
         </ScrollView>
 
-        {/* DISCOVER PREFS */}
         <Modal visible={discoverOpen} animationType="fade" transparent onRequestClose={() => setDiscoverOpen(false)}>
           <Pressable style={styles.modalBackdrop} onPress={() => setDiscoverOpen(false)} />
           <View style={styles.modalSheetWrap} pointerEvents="box-none">
@@ -1633,8 +1643,6 @@ export default function HomeScreen() {
   );
 }
 
-/* -------------------------------- Styles -------------------------------- */
-
 const styles = StyleSheet.create({
   container: { flex: 1 },
   scroll: { flex: 1 },
@@ -1720,19 +1728,21 @@ const styles = StyleSheet.create({
   popularRow: { gap: 10, paddingRight: theme.spacing.lg, paddingVertical: 4 },
 
   cityPill: {
-    borderRadius: 999,
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
     backgroundColor: Platform.OS === "android" ? "rgba(18,20,24,0.32)" : "rgba(18,20,24,0.26)",
-    paddingVertical: 10,
-    paddingHorizontal: 14,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
     overflow: "hidden",
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
   },
+  cityThumb: { width: 42, height: 42, borderRadius: 12 },
+  cityFlagInline: { width: 16, height: 12, borderRadius: 2, opacity: 0.9 },
   cityFlagIcon: { width: 18, height: 13, borderRadius: 3, opacity: 0.9 },
-  pillText: { color: "rgba(242,244,246,0.78)", fontSize: 13, fontWeight: theme.fontWeight.black },
+  pillText: { color: "rgba(242,244,246,0.86)", fontSize: 13, fontWeight: theme.fontWeight.black },
 
   teamPill: {
     borderRadius: 999,
@@ -1803,18 +1813,29 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.08)",
     backgroundColor: Platform.OS === "android" ? "rgba(12,14,16,0.22)" : "rgba(12,14,16,0.18)",
     overflow: "hidden",
+    position: "relative",
+    minHeight: 92,
+  },
+  featuredImage: {
+    ...StyleSheet.absoluteFillObject,
+    width: "100%",
+    height: "100%",
+  },
+  featuredImageOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(6,8,10,0.58)",
   },
   featuredTop: { paddingVertical: 12, paddingHorizontal: 12, flexDirection: "row", alignItems: "center", gap: 12 },
   featuredTitle: { color: theme.colors.text, fontSize: 15, fontWeight: theme.fontWeight.black },
-  featuredMeta: { marginTop: 4, color: theme.colors.textSecondary, fontSize: 12, fontWeight: theme.fontWeight.bold },
+  featuredMeta: { marginTop: 4, color: "rgba(242,244,246,0.84)", fontSize: 12, fontWeight: theme.fontWeight.bold },
 
   crestWrap: {
     width: 44,
     height: 44,
     borderRadius: 14,
-    backgroundColor: "rgba(255,255,255,0.05)",
+    backgroundColor: "rgba(255,255,255,0.07)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
+    borderColor: "rgba(255,255,255,0.08)",
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
@@ -1886,9 +1907,20 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
     backgroundColor: Platform.OS === "android" ? "rgba(10,12,14,0.18)" : "rgba(10,12,14,0.14)",
-    paddingVertical: 12,
-    paddingHorizontal: 12,
+    overflow: "hidden",
+    position: "relative",
+    minHeight: 124,
   },
+  nextTripImage: {
+    ...StyleSheet.absoluteFillObject,
+    width: "100%",
+    height: "100%",
+  },
+  nextTripImageOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(6,8,10,0.62)",
+  },
+  nextTripContent: { paddingVertical: 12, paddingHorizontal: 12 },
   nextTripKicker: { color: theme.colors.textTertiary, fontSize: 12, fontWeight: theme.fontWeight.black },
   nextTripTitleRow: { marginTop: 6, flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
   nextTripFlag: { width: 18, height: 13, borderRadius: 3, opacity: 0.9 },
@@ -1904,7 +1936,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   nextTripTitle: { color: theme.colors.text, fontSize: 18, fontWeight: theme.fontWeight.black },
-  nextTripMeta: { marginTop: 6, color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold, lineHeight: 18 },
+  nextTripMeta: { marginTop: 6, color: "rgba(242,244,246,0.84)", fontSize: 13, fontWeight: theme.fontWeight.bold, lineHeight: 18 },
 
   grid2: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   tilePress: { width: "48.5%", borderRadius: 18, overflow: "hidden" },
@@ -1927,23 +1959,30 @@ const styles = StyleSheet.create({
   },
   tileBadgeText: { fontSize: 16, opacity: 0.95 },
 
-  // Weekend trip section
   weekendHeroCard: {
     borderRadius: 18,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
     backgroundColor: Platform.OS === "android" ? "rgba(12,14,16,0.22)" : "rgba(12,14,16,0.18)",
+    overflow: "hidden",
+    position: "relative",
+    minHeight: 236,
+  },
+  weekendHeroCardElite: { borderColor: "rgba(79,224,138,0.24)" },
+  weekendHeroCardStrong: { borderColor: "rgba(255,210,90,0.18)" },
+  weekendHeroCardGood: { borderColor: "rgba(110,170,255,0.18)" },
+  weekendHeroImage: {
+    ...StyleSheet.absoluteFillObject,
+    width: "100%",
+    height: "100%",
+  },
+  weekendHeroImageOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(6,8,10,0.60)",
+  },
+  weekendHeroContent: {
     padding: 12,
     gap: 12,
-  },
-  weekendHeroCardElite: {
-    borderColor: "rgba(79,224,138,0.24)",
-  },
-  weekendHeroCardStrong: {
-    borderColor: "rgba(255,210,90,0.18)",
-  },
-  weekendHeroCardGood: {
-    borderColor: "rgba(110,170,255,0.18)",
   },
   weekendHeroTop: {
     flexDirection: "row",
@@ -1984,7 +2023,7 @@ const styles = StyleSheet.create({
   },
   weekendHeroMeta: {
     marginTop: 4,
-    color: theme.colors.textSecondary,
+    color: "rgba(242,244,246,0.84)",
     fontSize: 12,
     fontWeight: theme.fontWeight.bold,
   },
@@ -2000,7 +2039,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
-    backgroundColor: "rgba(10,12,14,0.14)",
+    backgroundColor: "rgba(10,12,14,0.24)",
   },
   weekendInfoLabel: {
     color: theme.colors.textTertiary,
@@ -2018,7 +2057,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.06)",
-    backgroundColor: "rgba(10,12,14,0.14)",
+    backgroundColor: "rgba(10,12,14,0.22)",
     padding: 10,
     gap: 5,
   },
