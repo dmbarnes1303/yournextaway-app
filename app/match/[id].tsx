@@ -20,7 +20,10 @@ import { useTripsStore } from "@/src/state/trips";
 import { buildTicketLink } from "@/src/services/partnerLinks";
 import { beginPartnerClick, openUntrackedUrl } from "@/src/services/partnerClicks";
 
-import { stadiums } from "@/src/data/stadiums/index";
+import stadiumRegistry, {
+  getAllStadiums,
+  getStadiumByTeamFromRegistry,
+} from "@/src/data/stadiumRegistry";
 import type { StadiumRecord } from "@/src/data/stadiums/types";
 import { normalizeTeamKey } from "@/src/data/teams";
 
@@ -98,7 +101,7 @@ function normalizeValue(input: string): string {
 }
 
 const VENUE_ALIASES: Record<string, string[]> = {
-  "estadio-do-sport-lisboa-e-benfica": ["estadio-da-luz", "estadio-da-luz-benfica"],
+  "estadio-do-sport-lisboa-e-benfica": ["estadio-da-luz"],
   "estadio-do-fc-porto": ["estadio-do-dragao"],
   "estadio-jose-alvalade-xxi": ["estadio-jose-alvalade"],
   "allianz-arena-munchen": ["allianz-arena"],
@@ -129,7 +132,7 @@ function resolveStadiumFromVenueOrTeam(args: {
   const rawVenue = String(args.venueName ?? "").trim();
   const rawHome = String(args.homeTeamName ?? "").trim();
 
-  const all = stadiums && typeof stadiums === "object" ? (Object.values(stadiums) as StadiumRecord[]) : [];
+  const all = getAllStadiums();
   const venueKey = normalizeValue(rawVenue);
   const homeTeamKey = normalizeTeamKey(rawHome);
 
@@ -196,12 +199,7 @@ function resolveStadiumFromVenueOrTeam(args: {
   }
 
   if (rawHome) {
-    teamHit =
-      all.find((s) =>
-        Array.isArray(s.teamKeys) &&
-        s.teamKeys.some((team) => normalizeTeamKey(String(team ?? "")) === homeTeamKey)
-      ) ?? null;
-
+    teamHit = getStadiumByTeamFromRegistry(homeTeamKey);
     if (teamHit) {
       return {
         stadium: teamHit,

@@ -1,4 +1,4 @@
-// src/data/stadiums.ts
+// src/data/stadiumLookup.ts
 // Runtime-safe stadium lookup helpers (RN-safe).
 // Primary source: matchdayLogistics (human-curated)
 // Optional enrichment: stadiumCoords (lat/lng) when available.
