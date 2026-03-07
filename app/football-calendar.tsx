@@ -196,7 +196,9 @@ export default function FootballCalendarScreen() {
   const topWeekend = weekendBuckets[0] ?? null;
   const otherWeekends = weekendBuckets.slice(1);
 
-  const topWeekendImage = useMemo(() => cityImageForTrip(topWeekend?.trips?.[0] ?? null), [topWeekend]);
+  const topWeekendImage = useMemo(() => {
+    return cityImageForTrip(topWeekend?.trips?.[0] ?? null);
+  }, [topWeekend]);
 
   const goMatch = useCallback(
     (trip: RankedTrip, bucket?: WeekendBucket) => {
@@ -243,11 +245,15 @@ export default function FootballCalendarScreen() {
     [router, range.from, range.to]
   );
 
+  // Trip Finder only supports wknd | d14 | d30.
+  // So d60/d90 must map intentionally instead of silently falling back.
   const goTripFinder = useCallback(() => {
+    const finderWindow = rangeKey === "d30" ? "d30" : "d14";
+
     router.push({
       pathname: "/trip-finder",
       params: {
-        window: rangeKey,
+        window: finderWindow,
         mode: "all",
       },
     } as any);
@@ -370,7 +376,7 @@ export default function FootballCalendarScreen() {
                       const fixtureId =
                         trip?.fixture?.fixture?.id != null
                           ? String(trip.fixture.fixture.id)
-                          : "";
+                          : `${trip.city}-${trip.kickoffIso}`;
 
                       return (
                         <Pressable
@@ -473,7 +479,7 @@ export default function FootballCalendarScreen() {
                             const fixtureId =
                               trip?.fixture?.fixture?.id != null
                                 ? String(trip.fixture.fixture.id)
-                                : "";
+                                : `${trip.city}-${trip.kickoffIso}`;
 
                             return (
                               <Pressable
