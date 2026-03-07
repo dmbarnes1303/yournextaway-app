@@ -108,53 +108,130 @@ const VENUE_ALIASES: Record<string, string[]> = {
   "san-siro": ["giuseppe-meazza", "san-siro"],
 };
 
+type ResolveResult = {
+  stadium: StadiumRecord | null;
+  debug: {
+    stadiumCount: number;
+    normalizedVenue: string;
+    normalizedHomeTeam: string;
+    exactKeyHit: string | null;
+    exactNameHit: string | null;
+    aliasHit: string | null;
+    teamHit: string | null;
+    sampleKeys: string[];
+  };
+};
+
 function resolveStadiumFromVenueOrTeam(args: {
   venueName?: string | null;
   homeTeamName?: string | null;
-}): StadiumRecord | null {
+}): ResolveResult {
   const rawVenue = String(args.venueName ?? "").trim();
   const rawHome = String(args.homeTeamName ?? "").trim();
 
   const all = stadiums && typeof stadiums === "object" ? (Object.values(stadiums) as StadiumRecord[]) : [];
-  if (all.length === 0) return null;
+  const venueKey = normalizeValue(rawVenue);
+  const homeTeamKey = normalizeTeamKey(rawHome);
+
+  let exactKeyHit: StadiumRecord | null = null;
+  let exactNameHit: StadiumRecord | null = null;
+  let aliasHit: StadiumRecord | null = null;
+  let teamHit: StadiumRecord | null = null;
 
   if (rawVenue) {
-    const venueKey = normalizeValue(rawVenue);
+    exactKeyHit = all.find((s) => normalizeValue(s.stadiumKey) === venueKey) ?? null;
+    if (exactKeyHit) {
+      return {
+        stadium: exactKeyHit,
+        debug: {
+          stadiumCount: all.length,
+          normalizedVenue: venueKey,
+          normalizedHomeTeam: homeTeamKey,
+          exactKeyHit: exactKeyHit.stadiumKey,
+          exactNameHit: null,
+          aliasHit: null,
+          teamHit: null,
+          sampleKeys: all.slice(0, 8).map((s) => s.stadiumKey),
+        },
+      };
+    }
 
-    const exactKey = all.find((s) => normalizeValue(s.stadiumKey) === venueKey) ?? null;
-    if (exactKey) return exactKey;
-
-    const exactName = all.find((s) => normalizeValue(s.name) === venueKey) ?? null;
-    if (exactName) return exactName;
+    exactNameHit = all.find((s) => normalizeValue(s.name) === venueKey) ?? null;
+    if (exactNameHit) {
+      return {
+        stadium: exactNameHit,
+        debug: {
+          stadiumCount: all.length,
+          normalizedVenue: venueKey,
+          normalizedHomeTeam: homeTeamKey,
+          exactKeyHit: null,
+          exactNameHit: exactNameHit.stadiumKey,
+          aliasHit: null,
+          teamHit: null,
+          sampleKeys: all.slice(0, 8).map((s) => s.stadiumKey),
+        },
+      };
+    }
 
     const aliases = VENUE_ALIASES[venueKey] ?? [];
     if (aliases.length > 0) {
-      const aliasMatch =
+      aliasHit =
         all.find((s) => aliases.some((alias) => normalizeValue(s.stadiumKey) === normalizeValue(alias))) ?? null;
-      if (aliasMatch) return aliasMatch;
+      if (aliasHit) {
+        return {
+          stadium: aliasHit,
+          debug: {
+            stadiumCount: all.length,
+            normalizedVenue: venueKey,
+            normalizedHomeTeam: homeTeamKey,
+            exactKeyHit: null,
+            exactNameHit: null,
+            aliasHit: aliasHit.stadiumKey,
+            teamHit: null,
+            sampleKeys: all.slice(0, 8).map((s) => s.stadiumKey),
+          },
+        };
+      }
     }
-
-    const looseName =
-      all.find((s) => {
-        const stadiumName = normalizeValue(s.name);
-        return stadiumName.includes(venueKey) || venueKey.includes(stadiumName);
-      }) ?? null;
-    if (looseName) return looseName;
   }
 
   if (rawHome) {
-    const teamKey = normalizeTeamKey(rawHome);
-
-    const byTeam =
+    teamHit =
       all.find((s) =>
         Array.isArray(s.teamKeys) &&
-        s.teamKeys.some((team) => normalizeTeamKey(String(team ?? "")) === teamKey)
+        s.teamKeys.some((team) => normalizeTeamKey(String(team ?? "")) === homeTeamKey)
       ) ?? null;
 
-    if (byTeam) return byTeam;
+    if (teamHit) {
+      return {
+        stadium: teamHit,
+        debug: {
+          stadiumCount: all.length,
+          normalizedVenue: venueKey,
+          normalizedHomeTeam: homeTeamKey,
+          exactKeyHit: null,
+          exactNameHit: null,
+          aliasHit: null,
+          teamHit: teamHit.stadiumKey,
+          sampleKeys: all.slice(0, 8).map((s) => s.stadiumKey),
+        },
+      };
+    }
   }
 
-  return null;
+  return {
+    stadium: null,
+    debug: {
+      stadiumCount: all.length,
+      normalizedVenue: venueKey,
+      normalizedHomeTeam: homeTeamKey,
+      exactKeyHit: null,
+      exactNameHit: null,
+      aliasHit: null,
+      teamHit: null,
+      sampleKeys: all.slice(0, 8).map((s) => s.stadiumKey),
+    },
+  };
 }
 
 /* -------------------------------------------------------------------------- */
@@ -211,7 +288,7 @@ export default function MatchScreen() {
     return [venueName, venueCity].filter(Boolean).join(" • ");
   }, [venueName, venueCity]);
 
-  const resolvedStadium = useMemo(
+  const stadiumResolution = useMemo(
     () =>
       resolveStadiumFromVenueOrTeam({
         venueName,
@@ -219,6 +296,9 @@ export default function MatchScreen() {
       }),
     [venueName, homeName]
   );
+
+  const resolvedStadium = stadiumResolution.stadium;
+  const resolutionDebug = stadiumResolution.debug;
 
   const crestHome = useMemo(() => {
     const id = (trip as any)?.homeTeamId;
@@ -507,6 +587,20 @@ export default function MatchScreen() {
                   Stadium travel intelligence is not mapped yet for this venue. Directions still work, but airport,
                   transit and stay-area guidance are not available yet.
                 </Text>
+
+                <View style={styles.debugBox}>
+                  <Text style={styles.debugTitle}>Debug</Text>
+                  <Text style={styles.debugText}>stadiumCount: {resolutionDebug.stadiumCount}</Text>
+                  <Text style={styles.debugText}>normalizedVenue: {resolutionDebug.normalizedVenue || "—"}</Text>
+                  <Text style={styles.debugText}>normalizedHomeTeam: {resolutionDebug.normalizedHomeTeam || "—"}</Text>
+                  <Text style={styles.debugText}>exactKeyHit: {resolutionDebug.exactKeyHit || "—"}</Text>
+                  <Text style={styles.debugText}>exactNameHit: {resolutionDebug.exactNameHit || "—"}</Text>
+                  <Text style={styles.debugText}>aliasHit: {resolutionDebug.aliasHit || "—"}</Text>
+                  <Text style={styles.debugText}>teamHit: {resolutionDebug.teamHit || "—"}</Text>
+                  <Text style={styles.debugText}>
+                    sampleKeys: {resolutionDebug.sampleKeys.length > 0 ? resolutionDebug.sampleKeys.join(", ") : "—"}
+                  </Text>
+                </View>
               </View>
             )}
           </GlassCard>
@@ -687,6 +781,28 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
     fontSize: 13,
     lineHeight: 18,
+    fontWeight: theme.fontWeight.medium,
+  },
+
+  debugBox: {
+    marginTop: 12,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.borderSubtle,
+    gap: 4,
+  },
+
+  debugTitle: {
+    color: theme.colors.textPrimary,
+    fontSize: 12,
+    fontWeight: theme.fontWeight.black,
+    letterSpacing: 0.4,
+  },
+
+  debugText: {
+    color: theme.colors.textMuted,
+    fontSize: 11,
+    lineHeight: 15,
     fontWeight: theme.fontWeight.medium,
   },
 
