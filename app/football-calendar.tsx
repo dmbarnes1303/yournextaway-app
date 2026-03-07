@@ -7,6 +7,7 @@ import {
   ScrollView,
   Pressable,
   ActivityIndicator,
+  Image,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -26,6 +27,8 @@ import { formatUkDateTimeMaybe } from "@/src/utils/formatters";
 import rankTrips from "@/src/features/tripFinder/rankTrips";
 import groupTripsByWeekend from "@/src/features/tripFinder/groupTripsByWeekend";
 import type { RankedTrip, WeekendBucket } from "@/src/features/tripFinder/types";
+
+import { getCityImageUrl } from "@/src/data/cityImages";
 
 const CURATED_LEAGUE_IDS = new Set<number>([
   39, // Premier League
@@ -64,18 +67,31 @@ function bucketStrengthLabel(bucket: WeekendBucket) {
   return "Decent weekend";
 }
 
-function bucketStrengthTone(bucket: WeekendBucket) {
-  if (bucket.avgScore >= 84 || bucket.topScore >= 90) return styles.strengthElite;
-  if (bucket.avgScore >= 74 || bucket.topScore >= 84) return styles.strengthStrong;
-  if (bucket.avgScore >= 64 || bucket.topScore >= 74) return styles.strengthGood;
-  return styles.strengthDecent;
-}
-
 function difficultyShortLabel(v: RankedTrip["breakdown"]["travelDifficulty"]) {
   if (v === "easy") return "Easy";
   if (v === "moderate") return "Moderate";
   if (v === "hard") return "Hard";
   return "Complex";
+}
+
+function bucketToneKey(bucket: WeekendBucket): "elite" | "strong" | "good" | "decent" {
+  if (bucket.avgScore >= 84 || bucket.topScore >= 90) return "elite";
+  if (bucket.avgScore >= 74 || bucket.topScore >= 84) return "strong";
+  if (bucket.avgScore >= 64 || bucket.topScore >= 74) return "good";
+  return "decent";
+}
+
+function bucketToneStyle(bucket: WeekendBucket) {
+  const tone = bucketToneKey(bucket);
+  if (tone === "elite") return styles.strengthElite;
+  if (tone === "strong") return styles.strengthStrong;
+  if (tone === "good") return styles.strengthGood;
+  return styles.strengthDecent;
+}
+
+function cityImageForTrip(trip?: RankedTrip | null) {
+  const city = String(trip?.city ?? "").trim();
+  return getCityImageUrl(city || "london");
 }
 
 async function mapLimit<T, R>(
@@ -180,6 +196,10 @@ export default function FootballCalendarScreen() {
   const topWeekend = weekendBuckets[0] ?? null;
   const otherWeekends = weekendBuckets.slice(1);
 
+  const topWeekendImage = useMemo(() => {
+    return cityImageForTrip(topWeekend?.trips?.[0] ?? null);
+  }, [topWeekend]);
+
   const goMatch = useCallback(
     (trip: RankedTrip, bucket?: WeekendBucket) => {
       const fixtureId =
@@ -225,11 +245,15 @@ export default function FootballCalendarScreen() {
     [router, range.from, range.to]
   );
 
+  // Trip Finder only supports wknd | d14 | d30.
+  // So d60/d90 must map intentionally instead of silently falling back.
   const goTripFinder = useCallback(() => {
+    const finderWindow = rangeKey === "d30" ? "d30" : "d14";
+
     router.push({
       pathname: "/trip-finder",
       params: {
-        window: rangeKey,
+        window: finderWindow,
         mode: "all",
       },
     } as any);
@@ -326,84 +350,89 @@ export default function FootballCalendarScreen() {
               </View>
 
               <GlassCard strength="strong" style={styles.featuredCard} noPadding>
-                <View style={styles.featuredCardInner}>
-                  <View style={styles.featuredTop}>
-                    <View style={[styles.strengthBadge, bucketStrengthTone(topWeekend)]}>
-                      <Text style={styles.strengthBadgeText}>{topWeekend.topScore}</Text>
-                    </View>
+                <View style={styles.featuredImageWrap}>
+                  <Image source={{ uri: topWeekendImage }} style={styles.featuredImage} resizeMode="cover" />
+                  <View style={styles.featuredImageOverlay} />
 
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.featuredTitle}>{topWeekend.label}</Text>
-                      <Text style={styles.featuredMeta}>
-                        {bucketStrengthLabel(topWeekend)} • Avg {topWeekend.avgScore}
-                      </Text>
-                      <Text style={styles.featuredMeta}>
-                        {topWeekend.trips.length} standout trip
-                        {topWeekend.trips.length === 1 ? "" : "s"}
-                      </Text>
-                    </View>
-                  </View>
+                  <View style={styles.featuredCardInner}>
+                    <View style={styles.featuredTop}>
+                      <View style={[styles.strengthBadge, bucketToneStyle(topWeekend)]}>
+                        <Text style={styles.strengthBadgeText}>{topWeekend.topScore}</Text>
+                      </View>
 
-                  {topWeekend.trips.slice(0, 3).map((trip) => {
-                    const fixtureId =
-                      trip?.fixture?.fixture?.id != null
-                        ? String(trip.fixture.fixture.id)
-                        : "";
-
-                    return (
-                      <Pressable
-                        key={`top-${fixtureId}`}
-                        onPress={() => goMatch(trip, topWeekend)}
-                        style={({ pressed }) => [
-                          styles.topWeekendTripRow,
-                          pressed && { opacity: 0.95 },
-                        ]}
-                      >
-                        <View style={styles.tripMiniScore}>
-                          <Text style={styles.tripMiniScoreText}>
-                            {trip.breakdown.combinedScore}
-                          </Text>
-                        </View>
-
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.tripMiniTitle} numberOfLines={1}>
-                            {String(trip.fixture?.teams?.home?.name ?? "Home")} vs{" "}
-                            {String(trip.fixture?.teams?.away?.name ?? "Away")}
-                          </Text>
-                          <Text style={styles.tripMiniMeta} numberOfLines={1}>
-                            {formatUkDateTimeMaybe(trip.kickoffIso)}
-                          </Text>
-                          <Text style={styles.tripMiniMeta} numberOfLines={1}>
-                            {[trip.city, trip.stadiumName].filter(Boolean).join(" • ")}
-                          </Text>
-                        </View>
-
-                        <Text style={styles.tripMiniDifficulty}>
-                          {difficultyShortLabel(trip.breakdown.travelDifficulty)}
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.featuredTitle}>{topWeekend.label}</Text>
+                        <Text style={styles.featuredMeta}>
+                          {bucketStrengthLabel(topWeekend)} • Avg {topWeekend.avgScore}
                         </Text>
-                      </Pressable>
-                    );
-                  })}
-
-                  {topWeekend.trips[0] ? (
-                    <View style={styles.actions}>
-                      <Button
-                        label="View best match"
-                        tone="secondary"
-                        size="md"
-                        onPress={() => goMatch(topWeekend.trips[0], topWeekend)}
-                        style={{ flex: 1 }}
-                      />
-                      <Button
-                        label="Build trip"
-                        tone="primary"
-                        size="md"
-                        glow
-                        onPress={() => goBuildTrip(topWeekend.trips[0], topWeekend)}
-                        style={{ flex: 1 }}
-                      />
+                        <Text style={styles.featuredMeta}>
+                          {topWeekend.trips.length} standout trip
+                          {topWeekend.trips.length === 1 ? "" : "s"}
+                        </Text>
+                      </View>
                     </View>
-                  ) : null}
+
+                    {topWeekend.trips.slice(0, 3).map((trip) => {
+                      const fixtureId =
+                        trip?.fixture?.fixture?.id != null
+                          ? String(trip.fixture.fixture.id)
+                          : `${trip.city}-${trip.kickoffIso}`;
+
+                      return (
+                        <Pressable
+                          key={`top-${fixtureId}`}
+                          onPress={() => goMatch(trip, topWeekend)}
+                          style={({ pressed }) => [
+                            styles.topWeekendTripRow,
+                            pressed && { opacity: 0.95 },
+                          ]}
+                        >
+                          <View style={styles.tripMiniScore}>
+                            <Text style={styles.tripMiniScoreText}>
+                              {trip.breakdown.combinedScore}
+                            </Text>
+                          </View>
+
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.tripMiniTitle} numberOfLines={1}>
+                              {String(trip.fixture?.teams?.home?.name ?? "Home")} vs{" "}
+                              {String(trip.fixture?.teams?.away?.name ?? "Away")}
+                            </Text>
+                            <Text style={styles.tripMiniMeta} numberOfLines={1}>
+                              {formatUkDateTimeMaybe(trip.kickoffIso)}
+                            </Text>
+                            <Text style={styles.tripMiniMeta} numberOfLines={1}>
+                              {[trip.city, trip.stadiumName].filter(Boolean).join(" • ")}
+                            </Text>
+                          </View>
+
+                          <Text style={styles.tripMiniDifficulty}>
+                            {difficultyShortLabel(trip.breakdown.travelDifficulty)}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+
+                    {topWeekend.trips[0] ? (
+                      <View style={styles.actions}>
+                        <Button
+                          label="View best match"
+                          tone="secondary"
+                          size="md"
+                          onPress={() => goMatch(topWeekend.trips[0], topWeekend)}
+                          style={{ flex: 1 }}
+                        />
+                        <Button
+                          label="Build trip"
+                          tone="primary"
+                          size="md"
+                          glow
+                          onPress={() => goBuildTrip(topWeekend.trips[0], topWeekend)}
+                          style={{ flex: 1 }}
+                        />
+                      </View>
+                    ) : null}
+                  </View>
                 </View>
               </GlassCard>
 
@@ -415,6 +444,7 @@ export default function FootballCalendarScreen() {
               <View style={styles.weekendList}>
                 {otherWeekends.map((bucket) => {
                   const bestTrip = bucket.trips[0] ?? null;
+                  const bucketImage = cityImageForTrip(bestTrip);
 
                   return (
                     <GlassCard
@@ -423,82 +453,87 @@ export default function FootballCalendarScreen() {
                       style={styles.weekendCard}
                       noPadding
                     >
-                      <View style={styles.weekendCardInner}>
-                        <View style={styles.weekendHeaderRow}>
-                          <View
-                            style={[styles.weekendStrengthPill, bucketStrengthTone(bucket)]}
-                          >
-                            <Text style={styles.weekendStrengthPillText}>
-                              {bucket.topScore}
-                            </Text>
-                          </View>
+                      <View style={styles.weekendCardImageWrap}>
+                        <Image source={{ uri: bucketImage }} style={styles.weekendCardImage} resizeMode="cover" />
+                        <View style={styles.weekendCardImageOverlay} />
 
-                          <View style={{ flex: 1 }}>
-                            <Text style={styles.weekendTitle}>{bucket.label}</Text>
-                            <Text style={styles.weekendMeta}>
-                              {bucketStrengthLabel(bucket)} • Avg {bucket.avgScore}
-                            </Text>
-                          </View>
-                        </View>
-
-                        {bucket.trips.slice(0, 3).map((trip) => {
-                          const fixtureId =
-                            trip?.fixture?.fixture?.id != null
-                              ? String(trip.fixture.fixture.id)
-                              : "";
-
-                          return (
-                            <Pressable
-                              key={`${bucket.key}-${fixtureId}`}
-                              onPress={() => goMatch(trip, bucket)}
-                              style={({ pressed }) => [
-                                styles.weekendTripRow,
-                                pressed && { opacity: 0.95 },
-                              ]}
+                        <View style={styles.weekendCardInner}>
+                          <View style={styles.weekendHeaderRow}>
+                            <View
+                              style={[styles.weekendStrengthPill, bucketToneStyle(bucket)]}
                             >
-                              <View style={styles.weekendTripScore}>
-                                <Text style={styles.weekendTripScoreText}>
-                                  {trip.breakdown.combinedScore}
-                                </Text>
-                              </View>
+                              <Text style={styles.weekendStrengthPillText}>
+                                {bucket.topScore}
+                              </Text>
+                            </View>
 
-                              <View style={{ flex: 1 }}>
-                                <Text style={styles.weekendTripTitle} numberOfLines={1}>
-                                  {String(trip.fixture?.teams?.home?.name ?? "Home")} vs{" "}
-                                  {String(trip.fixture?.teams?.away?.name ?? "Away")}
-                                </Text>
-                                <Text style={styles.weekendTripMeta} numberOfLines={1}>
-                                  {[
-                                    trip.city,
-                                    difficultyShortLabel(trip.breakdown.travelDifficulty),
-                                  ]
-                                    .filter(Boolean)
-                                    .join(" • ")}
-                                </Text>
-                              </View>
-                            </Pressable>
-                          );
-                        })}
-
-                        {bestTrip ? (
-                          <View style={styles.weekendActions}>
-                            <Button
-                              label="Best match"
-                              tone="secondary"
-                              size="sm"
-                              onPress={() => goMatch(bestTrip, bucket)}
-                              style={{ flex: 1 }}
-                            />
-                            <Button
-                              label="Trip"
-                              tone="primary"
-                              size="sm"
-                              glow
-                              onPress={() => goBuildTrip(bestTrip, bucket)}
-                              style={{ flex: 1 }}
-                            />
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.weekendTitle}>{bucket.label}</Text>
+                              <Text style={styles.weekendMeta}>
+                                {bucketStrengthLabel(bucket)} • Avg {bucket.avgScore}
+                              </Text>
+                            </View>
                           </View>
-                        ) : null}
+
+                          {bucket.trips.slice(0, 3).map((trip) => {
+                            const fixtureId =
+                              trip?.fixture?.fixture?.id != null
+                                ? String(trip.fixture.fixture.id)
+                                : `${trip.city}-${trip.kickoffIso}`;
+
+                            return (
+                              <Pressable
+                                key={`${bucket.key}-${fixtureId}`}
+                                onPress={() => goMatch(trip, bucket)}
+                                style={({ pressed }) => [
+                                  styles.weekendTripRow,
+                                  pressed && { opacity: 0.95 },
+                                ]}
+                              >
+                                <View style={styles.weekendTripScore}>
+                                  <Text style={styles.weekendTripScoreText}>
+                                    {trip.breakdown.combinedScore}
+                                  </Text>
+                                </View>
+
+                                <View style={{ flex: 1 }}>
+                                  <Text style={styles.weekendTripTitle} numberOfLines={1}>
+                                    {String(trip.fixture?.teams?.home?.name ?? "Home")} vs{" "}
+                                    {String(trip.fixture?.teams?.away?.name ?? "Away")}
+                                  </Text>
+                                  <Text style={styles.weekendTripMeta} numberOfLines={1}>
+                                    {[
+                                      trip.city,
+                                      difficultyShortLabel(trip.breakdown.travelDifficulty),
+                                    ]
+                                      .filter(Boolean)
+                                      .join(" • ")}
+                                  </Text>
+                                </View>
+                              </Pressable>
+                            );
+                          })}
+
+                          {bestTrip ? (
+                            <View style={styles.weekendActions}>
+                              <Button
+                                label="Best match"
+                                tone="secondary"
+                                size="sm"
+                                onPress={() => goMatch(bestTrip, bucket)}
+                                style={{ flex: 1 }}
+                              />
+                              <Button
+                                label="Trip"
+                                tone="primary"
+                                size="sm"
+                                glow
+                                onPress={() => goBuildTrip(bestTrip, bucket)}
+                                style={{ flex: 1 }}
+                              />
+                            </View>
+                          ) : null}
+                        </View>
                       </View>
                     </GlassCard>
                   );
@@ -642,6 +677,23 @@ const styles = StyleSheet.create({
 
   featuredCard: {
     borderRadius: 22,
+    overflow: "hidden",
+  },
+
+  featuredImageWrap: {
+    position: "relative",
+    minHeight: 320,
+  },
+
+  featuredImage: {
+    ...StyleSheet.absoluteFillObject,
+    width: "100%",
+    height: "100%",
+  },
+
+  featuredImageOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(7,9,11,0.62)",
   },
 
   featuredCardInner: {
@@ -699,7 +751,7 @@ const styles = StyleSheet.create({
 
   featuredMeta: {
     marginTop: 4,
-    color: theme.colors.textSecondary,
+    color: "rgba(242,244,246,0.82)",
     fontSize: 13,
     fontWeight: theme.fontWeight.bold,
   },
@@ -713,7 +765,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.07)",
-    backgroundColor: "rgba(12,14,16,0.15)",
+    backgroundColor: "rgba(12,14,16,0.22)",
   },
 
   tripMiniScore: {
@@ -741,7 +793,7 @@ const styles = StyleSheet.create({
 
   tripMiniMeta: {
     marginTop: 3,
-    color: theme.colors.textSecondary,
+    color: "rgba(242,244,246,0.80)",
     fontSize: 12,
     fontWeight: theme.fontWeight.bold,
   },
@@ -764,6 +816,23 @@ const styles = StyleSheet.create({
 
   weekendCard: {
     borderRadius: 18,
+    overflow: "hidden",
+  },
+
+  weekendCardImageWrap: {
+    position: "relative",
+    minHeight: 220,
+  },
+
+  weekendCardImage: {
+    ...StyleSheet.absoluteFillObject,
+    width: "100%",
+    height: "100%",
+  },
+
+  weekendCardImageOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(7,9,11,0.64)",
   },
 
   weekendCardInner: {
@@ -801,7 +870,7 @@ const styles = StyleSheet.create({
 
   weekendMeta: {
     marginTop: 4,
-    color: theme.colors.textSecondary,
+    color: "rgba(242,244,246,0.80)",
     fontSize: 12,
     fontWeight: theme.fontWeight.bold,
   },
@@ -813,7 +882,7 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
     paddingHorizontal: 10,
     borderRadius: 14,
-    backgroundColor: "rgba(10,12,14,0.12)",
+    backgroundColor: "rgba(10,12,14,0.18)",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.06)",
   },
@@ -843,7 +912,7 @@ const styles = StyleSheet.create({
 
   weekendTripMeta: {
     marginTop: 4,
-    color: theme.colors.textSecondary,
+    color: "rgba(242,244,246,0.80)",
     fontSize: 12,
     fontWeight: theme.fontWeight.bold,
   },

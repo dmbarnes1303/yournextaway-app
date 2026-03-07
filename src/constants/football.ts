@@ -19,6 +19,11 @@ export type LeagueOption = {
   leagueId: number;
 
   /**
+   * API-Football league logo.
+   */
+  logo: string;
+
+  /**
    * API-Football season.
    */
   season: number;
@@ -65,6 +70,10 @@ export type CountryFootballConfig = {
   browseRegion: LeagueBrowseRegion | null;
   leagues: CountryLeagueSeed[];
 };
+
+function leagueLogo(leagueId: number): string {
+  return `https://media.api-sports.io/football/leagues/${leagueId}.png`;
+}
 
 /**
  * Region labels for UI.
@@ -132,6 +141,7 @@ export const FOOTBALL_BY_COUNTRY: Record<string, CountryFootballConfig> = {
         slug: "premier-league",
         label: "Premier League",
         leagueId: 39,
+        logo: leagueLogo(39),
         season: DEFAULT_SEASON,
         featured: true,
         homeVisible: true,
@@ -149,6 +159,7 @@ export const FOOTBALL_BY_COUNTRY: Record<string, CountryFootballConfig> = {
         slug: "la-liga",
         label: "La Liga",
         leagueId: 140,
+        logo: leagueLogo(140),
         season: DEFAULT_SEASON,
         featured: true,
         homeVisible: true,
@@ -166,6 +177,7 @@ export const FOOTBALL_BY_COUNTRY: Record<string, CountryFootballConfig> = {
         slug: "serie-a",
         label: "Serie A",
         leagueId: 135,
+        logo: leagueLogo(135),
         season: DEFAULT_SEASON,
         featured: true,
         homeVisible: true,
@@ -183,6 +195,7 @@ export const FOOTBALL_BY_COUNTRY: Record<string, CountryFootballConfig> = {
         slug: "bundesliga",
         label: "Bundesliga",
         leagueId: 78,
+        logo: leagueLogo(78),
         season: DEFAULT_SEASON,
         featured: true,
         homeVisible: true,
@@ -200,6 +213,7 @@ export const FOOTBALL_BY_COUNTRY: Record<string, CountryFootballConfig> = {
         slug: "ligue-1",
         label: "Ligue 1",
         leagueId: 61,
+        logo: leagueLogo(61),
         season: DEFAULT_SEASON,
         featured: true,
         homeVisible: true,
@@ -217,6 +231,7 @@ export const FOOTBALL_BY_COUNTRY: Record<string, CountryFootballConfig> = {
         slug: "eredivisie",
         label: "Eredivisie",
         leagueId: 88,
+        logo: leagueLogo(88),
         season: DEFAULT_SEASON,
         featured: true,
         homeVisible: true,
@@ -234,6 +249,7 @@ export const FOOTBALL_BY_COUNTRY: Record<string, CountryFootballConfig> = {
         slug: "primeira-liga",
         label: "Primeira Liga",
         leagueId: 94,
+        logo: leagueLogo(94),
         season: DEFAULT_SEASON,
         featured: true,
         homeVisible: true,
@@ -251,6 +267,7 @@ export const FOOTBALL_BY_COUNTRY: Record<string, CountryFootballConfig> = {
         slug: "premiership",
         label: "Premiership",
         leagueId: 179,
+        logo: leagueLogo(179),
         season: DEFAULT_SEASON,
         featured: true,
         homeVisible: true,
@@ -268,6 +285,7 @@ export const FOOTBALL_BY_COUNTRY: Record<string, CountryFootballConfig> = {
         slug: "super-lig",
         label: "Super Lig",
         leagueId: 203,
+        logo: leagueLogo(203),
         season: DEFAULT_SEASON,
         featured: true,
         homeVisible: true,
@@ -285,6 +303,7 @@ export const FOOTBALL_BY_COUNTRY: Record<string, CountryFootballConfig> = {
         slug: "pro-league",
         label: "Pro League",
         leagueId: 144,
+        logo: leagueLogo(144),
         season: DEFAULT_SEASON,
         featured: false,
         homeVisible: false,
@@ -302,6 +321,7 @@ export const FOOTBALL_BY_COUNTRY: Record<string, CountryFootballConfig> = {
         slug: "austrian-bundesliga",
         label: "Bundesliga",
         leagueId: 218,
+        logo: leagueLogo(218),
         season: DEFAULT_SEASON,
         featured: false,
         homeVisible: false,
@@ -319,6 +339,7 @@ export const FOOTBALL_BY_COUNTRY: Record<string, CountryFootballConfig> = {
         slug: "swiss-super-league",
         label: "Super League",
         leagueId: 207,
+        logo: leagueLogo(207),
         season: DEFAULT_SEASON,
         featured: false,
         homeVisible: false,
@@ -336,6 +357,7 @@ export const FOOTBALL_BY_COUNTRY: Record<string, CountryFootballConfig> = {
         slug: "super-league-greece",
         label: "Super League",
         leagueId: 197,
+        logo: leagueLogo(197),
         season: DEFAULT_SEASON,
         featured: false,
         homeVisible: false,
@@ -353,6 +375,7 @@ export const FOOTBALL_BY_COUNTRY: Record<string, CountryFootballConfig> = {
         slug: "danish-superliga",
         label: "Superliga",
         leagueId: 119,
+        logo: leagueLogo(119),
         season: DEFAULT_SEASON,
         featured: false,
         homeVisible: false,
@@ -370,6 +393,7 @@ export const FOOTBALL_BY_COUNTRY: Record<string, CountryFootballConfig> = {
         slug: "chance-liga",
         label: "Chance Liga",
         leagueId: 345,
+        logo: leagueLogo(345),
         season: DEFAULT_SEASON,
         featured: false,
         homeVisible: false,
@@ -387,6 +411,7 @@ export const FOOTBALL_BY_COUNTRY: Record<string, CountryFootballConfig> = {
         slug: "ekstraklasa",
         label: "Ekstraklasa",
         leagueId: 106,
+        logo: leagueLogo(106),
         season: DEFAULT_SEASON,
         featured: false,
         homeVisible: false,
@@ -404,6 +429,7 @@ export const FOOTBALL_BY_COUNTRY: Record<string, CountryFootballConfig> = {
         slug: "hnl",
         label: "HNL",
         leagueId: 210,
+        logo: leagueLogo(210),
         season: DEFAULT_SEASON,
         featured: false,
         homeVisible: false,
@@ -421,6 +447,7 @@ export const FOOTBALL_BY_COUNTRY: Record<string, CountryFootballConfig> = {
         slug: "superliga-serbia",
         label: "SuperLiga",
         leagueId: 286,
+        logo: leagueLogo(286),
         season: DEFAULT_SEASON,
         featured: false,
         homeVisible: false,
@@ -438,6 +465,7 @@ export const FOOTBALL_BY_COUNTRY: Record<string, CountryFootballConfig> = {
         slug: "nb-i",
         label: "NB I",
         leagueId: 271,
+        logo: leagueLogo(271),
         season: DEFAULT_SEASON,
         featured: false,
         homeVisible: false,
@@ -455,6 +483,7 @@ export const FOOTBALL_BY_COUNTRY: Record<string, CountryFootballConfig> = {
         slug: "superliga-romania",
         label: "SuperLiga",
         leagueId: 283,
+        logo: leagueLogo(283),
         season: DEFAULT_SEASON,
         featured: false,
         homeVisible: false,
@@ -472,6 +501,7 @@ export const FOOTBALL_BY_COUNTRY: Record<string, CountryFootballConfig> = {
         slug: "super-liga-slovakia",
         label: "Super Liga",
         leagueId: 332,
+        logo: leagueLogo(332),
         season: DEFAULT_SEASON,
         featured: false,
         homeVisible: false,
@@ -489,6 +519,7 @@ export const FOOTBALL_BY_COUNTRY: Record<string, CountryFootballConfig> = {
         slug: "prvaliga",
         label: "PrvaLiga",
         leagueId: 373,
+        logo: leagueLogo(373),
         season: DEFAULT_SEASON,
         featured: false,
         homeVisible: false,
@@ -506,6 +537,7 @@ export const FOOTBALL_BY_COUNTRY: Record<string, CountryFootballConfig> = {
         slug: "first-league-bulgaria",
         label: "First League",
         leagueId: 172,
+        logo: leagueLogo(172),
         season: DEFAULT_SEASON,
         featured: false,
         homeVisible: false,
@@ -523,6 +555,7 @@ export const FOOTBALL_BY_COUNTRY: Record<string, CountryFootballConfig> = {
         slug: "first-division-cyprus",
         label: "First Division",
         leagueId: 318,
+        logo: leagueLogo(318),
         season: DEFAULT_SEASON,
         featured: false,
         homeVisible: false,
@@ -540,6 +573,7 @@ export const FOOTBALL_BY_COUNTRY: Record<string, CountryFootballConfig> = {
         slug: "allsvenskan",
         label: "Allsvenskan",
         leagueId: 113,
+        logo: leagueLogo(113),
         season: DEFAULT_CALENDAR_YEAR_SEASON,
         featured: false,
         homeVisible: false,
@@ -557,6 +591,7 @@ export const FOOTBALL_BY_COUNTRY: Record<string, CountryFootballConfig> = {
         slug: "eliteserien",
         label: "Eliteserien",
         leagueId: 103,
+        logo: leagueLogo(103),
         season: DEFAULT_CALENDAR_YEAR_SEASON,
         featured: false,
         homeVisible: false,
@@ -574,6 +609,7 @@ export const FOOTBALL_BY_COUNTRY: Record<string, CountryFootballConfig> = {
         slug: "veikkausliiga",
         label: "Veikkausliiga",
         leagueId: 244,
+        logo: leagueLogo(244),
         season: DEFAULT_CALENDAR_YEAR_SEASON,
         featured: false,
         homeVisible: false,
@@ -591,6 +627,7 @@ export const FOOTBALL_BY_COUNTRY: Record<string, CountryFootballConfig> = {
         slug: "besta-deild",
         label: "Besta Deild",
         leagueId: 164,
+        logo: leagueLogo(164),
         season: DEFAULT_CALENDAR_YEAR_SEASON,
         featured: false,
         homeVisible: false,
@@ -604,13 +641,14 @@ export const FOOTBALL_BY_COUNTRY: Record<string, CountryFootballConfig> = {
  * Derived flat helpers.
  * Keep these exports because the rest of the app already consumes them.
  */
-export const LEAGUES: LeagueOption[] = Object.values(FOOTBALL_BY_COUNTRY).flatMap((countryConfig) =>
-  countryConfig.leagues.map((league) => ({
-    ...league,
-    country: countryConfig.country,
-    countryCode: countryConfig.countryCode,
-    browseRegion: countryConfig.browseRegion,
-  }))
+export const LEAGUES: LeagueOption[] = Object.values(FOOTBALL_BY_COUNTRY).flatMap(
+  (countryConfig) =>
+    countryConfig.leagues.map((league) => ({
+      ...league,
+      country: countryConfig.country,
+      countryCode: countryConfig.countryCode,
+      browseRegion: countryConfig.browseRegion,
+    }))
 );
 
 export const FEATURED_LEAGUES = LEAGUES.filter((l) => l.featured);
@@ -866,7 +904,10 @@ function isIsoDateOnly(s?: string): boolean {
 /**
  * Normalise a window so it is always valid and never includes past/today.
  */
-export function normalizeWindowIso(input: { from: string; to: string }, daysIfInvalidTo = 90): RollingWindowIso {
+export function normalizeWindowIso(
+  input: { from: string; to: string },
+  daysIfInvalidTo = 90
+): RollingWindowIso {
   const from = clampFromIsoToTomorrow(String(input.from ?? "").trim());
 
   const fromDate = parseIsoDateOnly(from);
@@ -935,4 +976,4 @@ export function nextWeekendWindowIso(): RollingWindowIso {
   const to = toIsoDate(sun);
 
   return normalizeWindowIso({ from, to }, 2);
-  }
+      }

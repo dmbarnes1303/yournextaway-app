@@ -7,6 +7,7 @@ import {
   ScrollView,
   Pressable,
   ActivityIndicator,
+  Image,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -29,6 +30,8 @@ import { formatUkDateTimeMaybe } from "@/src/utils/formatters";
 
 import rankTrips from "@/src/features/tripFinder/rankTrips";
 import type { RankedTrip, TravelDifficulty } from "@/src/features/tripFinder/types";
+
+import { getCityImageUrl } from "@/src/data/cityImages";
 
 type WindowKey = "wknd" | "d14" | "d30";
 type FinderMode = "all" | "easy" | "big" | "hidden";
@@ -99,6 +102,18 @@ function scoreTone(score: number) {
   if (score >= 74) return "Strong";
   if (score >= 62) return "Good";
   return "Decent";
+}
+
+function scoreToneKey(score: number): "elite" | "strong" | "good" | "decent" {
+  if (score >= 85) return "elite";
+  if (score >= 74) return "strong";
+  if (score >= 62) return "good";
+  return "decent";
+}
+
+function cityImageForTrip(trip?: RankedTrip | null) {
+  const city = String(trip?.city ?? "").trim();
+  return getCityImageUrl(city || "london");
 }
 
 async function mapLimit<T, R>(
@@ -236,6 +251,7 @@ export default function TripFinderScreen() {
 
   const topTrip = filteredTrips[0] ?? null;
   const nextTrips = filteredTrips.slice(1, 12);
+  const topTripImage = useMemo(() => cityImageForTrip(topTrip), [topTrip]);
 
   const goMatch = useCallback(
     (trip: RankedTrip) => {
@@ -404,83 +420,95 @@ export default function TripFinderScreen() {
               </View>
 
               <GlassCard strength="strong" style={styles.topCard} noPadding>
-                <View style={styles.topCardInner}>
-                  <View style={styles.scoreRow}>
-                    <View style={styles.scoreBadge}>
-                      <Text style={styles.scoreBadgeText}>
-                        {topTrip.breakdown.combinedScore}
-                      </Text>
+                <View style={styles.topImageWrap}>
+                  <Image source={{ uri: topTripImage }} style={styles.topImage} resizeMode="cover" />
+                  <View style={styles.topImageOverlay} />
+
+                  <View style={styles.topCardInner}>
+                    <View style={styles.scoreRow}>
+                      <View
+                        style={[
+                          styles.scoreBadge,
+                          scoreToneKey(topTrip.breakdown.combinedScore) === "elite" && styles.scoreBadgeElite,
+                          scoreToneKey(topTrip.breakdown.combinedScore) === "strong" && styles.scoreBadgeStrong,
+                          scoreToneKey(topTrip.breakdown.combinedScore) === "good" && styles.scoreBadgeGood,
+                        ]}
+                      >
+                        <Text style={styles.scoreBadgeText}>
+                          {topTrip.breakdown.combinedScore}
+                        </Text>
+                      </View>
+
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.topTitle}>
+                          {String(topTrip.fixture?.teams?.home?.name ?? "Home")} vs{" "}
+                          {String(topTrip.fixture?.teams?.away?.name ?? "Away")}
+                        </Text>
+
+                        <Text style={styles.topMeta}>
+                          {formatUkDateTimeMaybe(topTrip.kickoffIso)} •{" "}
+                          {topTrip.stadiumName || "Venue TBC"}
+                        </Text>
+
+                        <Text style={styles.topMeta}>
+                          {[topTrip.city, topTrip.country].filter(Boolean).join(", ") ||
+                            "Location TBC"}
+                        </Text>
+                      </View>
                     </View>
 
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.topTitle}>
-                        {String(topTrip.fixture?.teams?.home?.name ?? "Home")} vs{" "}
-                        {String(topTrip.fixture?.teams?.away?.name ?? "Away")}
-                      </Text>
+                    <View style={styles.metricRow}>
+                      <View style={styles.metricPill}>
+                        <Text style={styles.metricLabel}>Trip</Text>
+                        <Text style={styles.metricValue}>
+                          {topTrip.breakdown.weekendTripScore}
+                        </Text>
+                      </View>
 
-                      <Text style={styles.topMeta}>
-                        {formatUkDateTimeMaybe(topTrip.kickoffIso)} •{" "}
-                        {topTrip.stadiumName || "Venue TBC"}
-                      </Text>
+                      <View style={styles.metricPill}>
+                        <Text style={styles.metricLabel}>Atmosphere</Text>
+                        <Text style={styles.metricValue}>
+                          {topTrip.breakdown.atmosphereScore}
+                        </Text>
+                      </View>
 
-                      <Text style={styles.topMeta}>
-                        {[topTrip.city, topTrip.country].filter(Boolean).join(", ") ||
-                          "Location TBC"}
-                      </Text>
-                    </View>
-                  </View>
-
-                  <View style={styles.metricRow}>
-                    <View style={styles.metricPill}>
-                      <Text style={styles.metricLabel}>Trip</Text>
-                      <Text style={styles.metricValue}>
-                        {topTrip.breakdown.weekendTripScore}
-                      </Text>
+                      <View style={styles.metricPill}>
+                        <Text style={styles.metricLabel}>Travel</Text>
+                        <Text style={styles.metricValue}>
+                          {difficultyLabel(topTrip.breakdown.travelDifficulty)}
+                        </Text>
+                      </View>
                     </View>
 
-                    <View style={styles.metricPill}>
-                      <Text style={styles.metricLabel}>Atmosphere</Text>
-                      <Text style={styles.metricValue}>
-                        {topTrip.breakdown.atmosphereScore}
+                    <View style={styles.reasonBlock}>
+                      <Text style={styles.reasonHeading}>
+                        {scoreTone(topTrip.breakdown.combinedScore)} pick
                       </Text>
+
+                      {topTrip.breakdown.reasonLines.map((line, idx) => (
+                        <Text key={`${line}-${idx}`} style={styles.reasonText}>
+                          • {line}
+                        </Text>
+                      ))}
                     </View>
 
-                    <View style={styles.metricPill}>
-                      <Text style={styles.metricLabel}>Travel</Text>
-                      <Text style={styles.metricValue}>
-                        {difficultyLabel(topTrip.breakdown.travelDifficulty)}
-                      </Text>
+                    <View style={styles.actions}>
+                      <Button
+                        label="View match"
+                        tone="secondary"
+                        size="md"
+                        onPress={() => goMatch(topTrip)}
+                        style={{ flex: 1 }}
+                      />
+                      <Button
+                        label="Build trip"
+                        tone="primary"
+                        size="md"
+                        glow
+                        onPress={() => goBuildTrip(topTrip)}
+                        style={{ flex: 1 }}
+                      />
                     </View>
-                  </View>
-
-                  <View style={styles.reasonBlock}>
-                    <Text style={styles.reasonHeading}>
-                      {scoreTone(topTrip.breakdown.combinedScore)} pick
-                    </Text>
-
-                    {topTrip.breakdown.reasonLines.map((line, idx) => (
-                      <Text key={`${line}-${idx}`} style={styles.reasonText}>
-                        • {line}
-                      </Text>
-                    ))}
-                  </View>
-
-                  <View style={styles.actions}>
-                    <Button
-                      label="View match"
-                      tone="secondary"
-                      size="md"
-                      onPress={() => goMatch(topTrip)}
-                      style={{ flex: 1 }}
-                    />
-                    <Button
-                      label="Build trip"
-                      tone="primary"
-                      size="md"
-                      glow
-                      onPress={() => goBuildTrip(topTrip)}
-                      style={{ flex: 1 }}
-                    />
                   </View>
                 </View>
               </GlassCard>
@@ -496,6 +524,7 @@ export default function TripFinderScreen() {
                     trip?.fixture?.fixture?.id != null
                       ? String(trip.fixture.fixture.id)
                       : "";
+                  const tripImage = cityImageForTrip(trip);
 
                   return (
                     <GlassCard
@@ -504,70 +533,75 @@ export default function TripFinderScreen() {
                       style={styles.tripCard}
                       noPadding
                     >
-                      <Pressable
-                        onPress={() => goMatch(trip)}
-                        style={({ pressed }) => [
-                          styles.tripCardInner,
-                          pressed && { opacity: 0.95 },
-                        ]}
-                      >
-                        <View style={styles.tripTopRow}>
-                          <View style={styles.tripScoreMini}>
-                            <Text style={styles.tripScoreMiniText}>
-                              {trip.breakdown.combinedScore}
+                      <View style={styles.tripCardImageWrap}>
+                        <Image source={{ uri: tripImage }} style={styles.tripCardImage} resizeMode="cover" />
+                        <View style={styles.tripCardImageOverlay} />
+
+                        <Pressable
+                          onPress={() => goMatch(trip)}
+                          style={({ pressed }) => [
+                            styles.tripCardInner,
+                            pressed && { opacity: 0.95 },
+                          ]}
+                        >
+                          <View style={styles.tripTopRow}>
+                            <View style={styles.tripScoreMini}>
+                              <Text style={styles.tripScoreMiniText}>
+                                {trip.breakdown.combinedScore}
+                              </Text>
+                            </View>
+
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.tripTitle} numberOfLines={1}>
+                                {String(trip.fixture?.teams?.home?.name ?? "Home")} vs{" "}
+                                {String(trip.fixture?.teams?.away?.name ?? "Away")}
+                              </Text>
+
+                              <Text style={styles.tripMeta} numberOfLines={1}>
+                                {formatUkDateTimeMaybe(trip.kickoffIso)}
+                              </Text>
+
+                              <Text style={styles.tripMeta} numberOfLines={1}>
+                                {[trip.city, trip.stadiumName].filter(Boolean).join(" • ")}
+                              </Text>
+                            </View>
+                          </View>
+
+                          <View style={styles.tripSubMetrics}>
+                            <Text style={styles.tripSubMetric}>
+                              Trip {trip.breakdown.weekendTripScore}
+                            </Text>
+                            <Text style={styles.tripSubMetric}>
+                              Atmosphere {trip.breakdown.atmosphereScore}
+                            </Text>
+                            <Text style={styles.tripSubMetric}>
+                              {difficultyLabel(trip.breakdown.travelDifficulty)}
                             </Text>
                           </View>
 
-                          <View style={{ flex: 1 }}>
-                            <Text style={styles.tripTitle} numberOfLines={1}>
-                              {String(trip.fixture?.teams?.home?.name ?? "Home")} vs{" "}
-                              {String(trip.fixture?.teams?.away?.name ?? "Away")}
-                            </Text>
+                          <Text style={styles.tripReason} numberOfLines={2}>
+                            {trip.breakdown.reasonLines.join(" • ")}
+                          </Text>
 
-                            <Text style={styles.tripMeta} numberOfLines={1}>
-                              {formatUkDateTimeMaybe(trip.kickoffIso)}
-                            </Text>
-
-                            <Text style={styles.tripMeta} numberOfLines={1}>
-                              {[trip.city, trip.stadiumName].filter(Boolean).join(" • ")}
-                            </Text>
+                          <View style={styles.tripActions}>
+                            <Button
+                              label="Match"
+                              tone="secondary"
+                              size="sm"
+                              onPress={() => goMatch(trip)}
+                              style={{ flex: 1 }}
+                            />
+                            <Button
+                              label="Trip"
+                              tone="primary"
+                              size="sm"
+                              glow
+                              onPress={() => goBuildTrip(trip)}
+                              style={{ flex: 1 }}
+                            />
                           </View>
-                        </View>
-
-                        <View style={styles.tripSubMetrics}>
-                          <Text style={styles.tripSubMetric}>
-                            Trip {trip.breakdown.weekendTripScore}
-                          </Text>
-                          <Text style={styles.tripSubMetric}>
-                            Atmosphere {trip.breakdown.atmosphereScore}
-                          </Text>
-                          <Text style={styles.tripSubMetric}>
-                            {difficultyLabel(trip.breakdown.travelDifficulty)}
-                          </Text>
-                        </View>
-
-                        <Text style={styles.tripReason} numberOfLines={2}>
-                          {trip.breakdown.reasonLines.join(" • ")}
-                        </Text>
-
-                        <View style={styles.tripActions}>
-                          <Button
-                            label="Match"
-                            tone="secondary"
-                            size="sm"
-                            onPress={() => goMatch(trip)}
-                            style={{ flex: 1 }}
-                          />
-                          <Button
-                            label="Trip"
-                            tone="primary"
-                            size="sm"
-                            glow
-                            onPress={() => goBuildTrip(trip)}
-                            style={{ flex: 1 }}
-                          />
-                        </View>
-                      </Pressable>
+                        </Pressable>
+                      </View>
                     </GlassCard>
                   );
                 })}
@@ -710,6 +744,23 @@ const styles = StyleSheet.create({
 
   topCard: {
     borderRadius: 22,
+    overflow: "hidden",
+  },
+
+  topImageWrap: {
+    position: "relative",
+    minHeight: 320,
+  },
+
+  topImage: {
+    ...StyleSheet.absoluteFillObject,
+    width: "100%",
+    height: "100%",
+  },
+
+  topImageOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(7,9,11,0.62)",
   },
 
   topCardInner: {
@@ -734,6 +785,21 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(79,224,138,0.10)",
   },
 
+  scoreBadgeElite: {
+    borderColor: "rgba(79,224,138,0.26)",
+    backgroundColor: "rgba(79,224,138,0.10)",
+  },
+
+  scoreBadgeStrong: {
+    borderColor: "rgba(255,210,90,0.24)",
+    backgroundColor: "rgba(255,210,90,0.10)",
+  },
+
+  scoreBadgeGood: {
+    borderColor: "rgba(110,170,255,0.24)",
+    backgroundColor: "rgba(110,170,255,0.10)",
+  },
+
   scoreBadgeText: {
     color: theme.colors.text,
     fontSize: 20,
@@ -749,7 +815,7 @@ const styles = StyleSheet.create({
 
   topMeta: {
     marginTop: 4,
-    color: theme.colors.textSecondary,
+    color: "rgba(242,244,246,0.82)",
     fontSize: 13,
     fontWeight: theme.fontWeight.bold,
     lineHeight: 18,
@@ -767,7 +833,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
-    backgroundColor: "rgba(12,14,16,0.16)",
+    backgroundColor: "rgba(12,14,16,0.18)",
     minWidth: 88,
   },
 
@@ -789,7 +855,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
-    backgroundColor: "rgba(10,12,14,0.14)",
+    backgroundColor: "rgba(10,12,14,0.18)",
     padding: 12,
     gap: 6,
   },
@@ -801,7 +867,7 @@ const styles = StyleSheet.create({
   },
 
   reasonText: {
-    color: theme.colors.textSecondary,
+    color: "rgba(242,244,246,0.82)",
     fontSize: 13,
     lineHeight: 18,
     fontWeight: theme.fontWeight.bold,
@@ -818,6 +884,23 @@ const styles = StyleSheet.create({
 
   tripCard: {
     borderRadius: 18,
+    overflow: "hidden",
+  },
+
+  tripCardImageWrap: {
+    position: "relative",
+    minHeight: 220,
+  },
+
+  tripCardImage: {
+    ...StyleSheet.absoluteFillObject,
+    width: "100%",
+    height: "100%",
+  },
+
+  tripCardImageOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(7,9,11,0.64)",
   },
 
   tripCardInner: {
@@ -839,7 +922,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
-    backgroundColor: "rgba(255,255,255,0.05)",
+    backgroundColor: "rgba(255,255,255,0.06)",
   },
 
   tripScoreMiniText: {
@@ -856,7 +939,7 @@ const styles = StyleSheet.create({
 
   tripMeta: {
     marginTop: 4,
-    color: theme.colors.textSecondary,
+    color: "rgba(242,244,246,0.82)",
     fontSize: 12,
     fontWeight: theme.fontWeight.bold,
   },
@@ -874,7 +957,7 @@ const styles = StyleSheet.create({
   },
 
   tripReason: {
-    color: theme.colors.textSecondary,
+    color: "rgba(242,244,246,0.82)",
     fontSize: 13,
     lineHeight: 18,
     fontWeight: theme.fontWeight.bold,
