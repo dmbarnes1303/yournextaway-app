@@ -20,9 +20,9 @@ import { useTripsStore } from "@/src/state/trips";
 import { buildTicketLink } from "@/src/services/partnerLinks";
 import { beginPartnerClick, openUntrackedUrl } from "@/src/services/partnerClicks";
 
-import { stadiums, getStadiumByTeam } from "@/src/data/stadiums/index";
-import type { StadiumRecord } from "@/src/data/stadiums/index";
+import * as stadiumRegistry from "@/src/data/stadiums/index";
 import { normalizeTeamKey } from "@/src/data/teams";
+import type { StadiumRecord } from "@/src/data/stadiums/types";
 
 /* -------------------------------------------------------------------------- */
 /* Helpers                                                                    */
@@ -97,6 +97,22 @@ function normalizeVenueKey(input: string): string {
     .replace(/^-|-$/g, "");
 }
 
+function getAllStadiumsSafe(): StadiumRecord[] {
+  const map = (stadiumRegistry as any)?.stadiums;
+  if (!map || typeof map !== "object") return [];
+  return Object.values(map) as StadiumRecord[];
+}
+
+function getStadiumByTeamSafe(teamKey?: string | null): StadiumRecord | null {
+  const fn = (stadiumRegistry as any)?.getStadiumByTeam;
+  if (typeof fn !== "function") return null;
+  try {
+    return fn(teamKey ?? "") ?? null;
+  } catch {
+    return null;
+  }
+}
+
 function resolveStadiumFromVenueOrTeam(args: {
   venueName?: string | null;
   homeTeamName?: string | null;
@@ -104,9 +120,9 @@ function resolveStadiumFromVenueOrTeam(args: {
   const rawVenue = String(args.venueName ?? "").trim();
   const rawHome = String(args.homeTeamName ?? "").trim();
 
-  const all = Object.values(stadiums);
+  const all = getAllStadiumsSafe();
 
-  if (rawVenue) {
+  if (rawVenue && all.length > 0) {
     const normalizedVenue = normalizeVenueKey(rawVenue);
 
     const exactKeyMatch =
@@ -127,7 +143,7 @@ function resolveStadiumFromVenueOrTeam(args: {
 
   if (rawHome) {
     const teamKey = normalizeTeamKey(rawHome);
-    const byTeam = getStadiumByTeam(teamKey);
+    const byTeam = getStadiumByTeamSafe(teamKey);
     if (byTeam) return byTeam;
   }
 
