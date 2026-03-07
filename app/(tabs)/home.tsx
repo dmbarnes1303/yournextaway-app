@@ -1,4 +1,3 @@
-// app/(tabs)/home.tsx
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
@@ -47,7 +46,8 @@ import rankTrips from "@/src/features/tripFinder/rankTrips";
 import groupTripsByWeekend from "@/src/features/tripFinder/groupTripsByWeekend";
 import type { RankedTrip, WeekendBucket } from "@/src/features/tripFinder/types";
 
-const API_SPORTS_TEAM_LOGO = (teamId: number) => `https://media.api-sports.io/football/teams/${teamId}.png`;
+const API_SPORTS_TEAM_LOGO = (teamId: number) =>
+  `https://media.api-sports.io/football/teams/${teamId}.png`;
 
 type ShortcutWindow = { from: string; to: string };
 type CityChip = { name: string; countryCode: string };
@@ -60,30 +60,10 @@ const POPULAR_CITIES: CityChip[] = [
   { name: "Lisbon", countryCode: "PT" },
 ];
 
-const HOME_TOP_LEAGUE_IDS = new Set<number>([
-  39,
-  140,
-  135,
-  78,
-  61,
-  88,
-  94,
-]);
+const HOME_TOP_LEAGUE_IDS = new Set<number>([39, 140, 135, 78, 61, 88, 94]);
 
 const HOME_TRIP_FINDER_LEAGUE_IDS = new Set<number>([
-  39,
-  140,
-  135,
-  78,
-  61,
-  88,
-  94,
-  203,
-  197,
-  179,
-  207,
-  218,
-  119,
+  39, 140, 135, 78, 61, 88, 94, 203, 197, 179, 207, 218, 119,
 ]);
 
 type DiscoverWindowKey = "wknd" | "d7" | "d14" | "d30";
@@ -107,8 +87,7 @@ function dedupeBy<T>(arr: T[], keyFn: (t: T) => string): T[] {
   const out: T[] = [];
   for (const item of arr) {
     const k = keyFn(item);
-    if (!k) continue;
-    if (seen.has(k)) continue;
+    if (!k || seen.has(k)) continue;
     seen.add(k);
     out.push(item);
   }
@@ -179,17 +158,60 @@ function TeamCrest({ teamId, size = 16 }: { teamId: number; size?: number }) {
   return <Image source={{ uri }} style={{ width: size, height: size, opacity: 0.95 }} resizeMode="contain" />;
 }
 
-function CrestSquare({ row }: { row: FixtureListRow }) {
-  const homeName = row?.teams?.home?.name ?? "";
-  const logo = row?.teams?.home?.logo;
-
+function CrestBadge({
+  logo,
+  name,
+  size = 36,
+  innerSize = 24,
+}: {
+  logo?: string | null;
+  name: string;
+  size?: number;
+  innerSize?: number;
+}) {
   return (
-    <View style={styles.crestWrap}>
+    <View
+      style={[
+        styles.crestBadge,
+        {
+          width: size,
+          height: size,
+          borderRadius: Math.round(size / 2),
+        },
+      ]}
+    >
       {logo ? (
-        <Image source={{ uri: logo }} style={styles.crestImg} resizeMode="contain" />
+        <Image source={{ uri: logo }} style={{ width: innerSize, height: innerSize, opacity: 0.96 }} resizeMode="contain" />
       ) : (
-        <Text style={styles.crestFallback}>{initials(homeName)}</Text>
+        <Text style={styles.crestFallback}>{initials(name)}</Text>
       )}
+    </View>
+  );
+}
+
+function CrestPair({
+  homeName,
+  awayName,
+  homeLogo,
+  awayLogo,
+  size = 42,
+  innerSize = 28,
+}: {
+  homeName: string;
+  awayName: string;
+  homeLogo?: string | null;
+  awayLogo?: string | null;
+  size?: number;
+  innerSize?: number;
+}) {
+  return (
+    <View style={styles.crestPairWrap}>
+      <View style={styles.crestPairInner}>
+        <CrestBadge name={homeName} logo={homeLogo} size={size} innerSize={innerSize} />
+        <View style={[styles.crestPairOverlap, { marginLeft: -Math.round(size * 0.22) }]}>
+          <CrestBadge name={awayName} logo={awayLogo} size={size} innerSize={innerSize} />
+        </View>
+      </View>
     </View>
   );
 }
@@ -527,8 +549,7 @@ export default function HomeScreen() {
 
   const rawSearchResults = useMemo(() => {
     const idx = indexRef.current;
-    if (!idx) return [];
-    if (!qDebounced) return [];
+    if (!idx || !qDebounced) return [];
     return querySearchIndex(idx, qDebounced, { limit: 16 });
   }, [qDebounced, searchBuiltAt]);
 
@@ -662,7 +683,10 @@ export default function HomeScreen() {
       if (p?.kind === "team") {
         Keyboard.dismiss();
         setQ("");
-        router.push({ pathname: "/team/[teamKey]", params: { teamKey: p.slug, from: fromIso, to: toIso } } as any);
+        router.push({
+          pathname: "/team/[teamKey]",
+          params: { teamKey: p.slug, from: fromIso, to: toIso },
+        } as any);
         return;
       }
 
@@ -682,7 +706,11 @@ export default function HomeScreen() {
       if (p?.kind === "country" || p?.kind === "league") {
         Keyboard.dismiss();
         setQ("");
-        goFixtures({ window: { from: fromIso, to: toIso }, leagueId: Number(p.leagueId), season: Number(p.season) });
+        goFixtures({
+          window: { from: fromIso, to: toIso },
+          leagueId: Number(p.leagueId),
+          season: Number(p.season),
+        });
       }
     },
     [router, fromIso, toIso, goCityKey, goFixtures]
@@ -690,7 +718,6 @@ export default function HomeScreen() {
 
   const resultMeta = useCallback((r: SearchResult): string => {
     const p: any = r.payload;
-
     if (r.type === "team" && p?.kind === "team") return hasTeamGuide(p.slug) ? "Team guide available" : "Team guide coming soon";
     if (r.type === "city" && p?.kind === "city") return getCityGuide(p.slug) ? "City guide available" : "City guide coming soon";
     return r.subtitle ?? "";
@@ -732,7 +759,13 @@ export default function HomeScreen() {
 
       tried.add(next.leagueId);
 
-      const res = await getFixtures({ league: next.leagueId, season: next.season, from: w.from, to: w.to });
+      const res = await getFixtures({
+        league: next.leagueId,
+        season: next.season,
+        from: w.from,
+        to: w.to,
+      });
+
       const list = Array.isArray(res) ? (res as FixtureListRow[]) : [];
       const valid = list.filter((r) => r?.fixture?.id != null).filter(filter);
 
@@ -1084,7 +1117,35 @@ export default function HomeScreen() {
                         <View style={styles.weekendHeroImageOverlay} />
 
                         <View style={styles.weekendHeroContent}>
+                          <View style={styles.editorialKickerRow}>
+                            <Text style={styles.editorialKickerText}>{bestWeekendBucket.label}</Text>
+                            <View style={styles.editorialDot} />
+                            <Text style={styles.editorialKickerText}>{bucketStrengthLabel(bestWeekendBucket)}</Text>
+                          </View>
+
                           <View style={styles.weekendHeroTop}>
+                            <CrestPair
+                              homeName={String(bestWeekendTrip.fixture?.teams?.home?.name ?? "Home")}
+                              awayName={String(bestWeekendTrip.fixture?.teams?.away?.name ?? "Away")}
+                              homeLogo={bestWeekendTrip.fixture?.teams?.home?.logo}
+                              awayLogo={bestWeekendTrip.fixture?.teams?.away?.logo}
+                              size={44}
+                              innerSize={28}
+                            />
+
+                            <View style={styles.heroMatchTextWrap}>
+                              <Text style={styles.weekendHeroTitle} numberOfLines={2}>
+                                {String(bestWeekendTrip.fixture?.teams?.home?.name ?? "Home")} vs{" "}
+                                {String(bestWeekendTrip.fixture?.teams?.away?.name ?? "Away")}
+                              </Text>
+                              <Text style={styles.weekendHeroMeta} numberOfLines={1}>
+                                {formatUkDateTimeMaybe(bestWeekendTrip.kickoffIso)}
+                              </Text>
+                              <Text style={styles.weekendHeroMeta} numberOfLines={1}>
+                                {[bestWeekendTrip.city, bestWeekendTrip.stadiumName].filter(Boolean).join(" • ")}
+                              </Text>
+                            </View>
+
                             <View
                               style={[
                                 styles.weekendScoreBadge,
@@ -1097,33 +1158,26 @@ export default function HomeScreen() {
                                 {bestWeekendTrip.breakdown.combinedScore}
                               </Text>
                             </View>
-
-                            <View style={{ flex: 1 }}>
-                              <Text style={styles.weekendHeroTitle} numberOfLines={1}>
-                                {String(bestWeekendTrip.fixture?.teams?.home?.name ?? "Home")} vs{" "}
-                                {String(bestWeekendTrip.fixture?.teams?.away?.name ?? "Away")}
-                              </Text>
-                              <Text style={styles.weekendHeroMeta} numberOfLines={1}>
-                                {formatUkDateTimeMaybe(bestWeekendTrip.kickoffIso)}
-                              </Text>
-                              <Text style={styles.weekendHeroMeta} numberOfLines={1}>
-                                {[bestWeekendTrip.city, bestWeekendTrip.stadiumName].filter(Boolean).join(" • ")}
-                              </Text>
-                            </View>
                           </View>
 
                           <View style={styles.weekendInfoRow}>
                             <View style={styles.weekendInfoPill}>
-                              <Text style={styles.weekendInfoLabel}>Weekend</Text>
-                              <Text style={styles.weekendInfoValue}>{bestWeekendBucket.label}</Text>
-                            </View>
-                            <View style={styles.weekendInfoPill}>
-                              <Text style={styles.weekendInfoLabel}>Strength</Text>
-                              <Text style={styles.weekendInfoValue}>{bucketStrengthLabel(bestWeekendBucket)}</Text>
-                            </View>
-                            <View style={styles.weekendInfoPill}>
                               <Text style={styles.weekendInfoLabel}>Travel</Text>
-                              <Text style={styles.weekendInfoValue}>{difficultyLabel(bestWeekendTrip.breakdown.travelDifficulty)}</Text>
+                              <Text style={styles.weekendInfoValue}>
+                                {difficultyLabel(bestWeekendTrip.breakdown.travelDifficulty)}
+                              </Text>
+                            </View>
+                            <View style={styles.weekendInfoPill}>
+                              <Text style={styles.weekendInfoLabel}>Atmosphere</Text>
+                              <Text style={styles.weekendInfoValue}>
+                                {bestWeekendTrip.breakdown.atmosphereScore}
+                              </Text>
+                            </View>
+                            <View style={styles.weekendInfoPill}>
+                              <Text style={styles.weekendInfoLabel}>Trip score</Text>
+                              <Text style={styles.weekendInfoValue}>
+                                {bestWeekendTrip.breakdown.weekendTripScore}
+                              </Text>
                             </View>
                           </View>
 
@@ -1169,14 +1223,23 @@ export default function HomeScreen() {
                                 android_ripple={{ color: "rgba(255,255,255,0.06)" }}
                               >
                                 <View style={styles.listRowTop}>
-                                  <View style={styles.tripMiniScoreWrap}>
-                                    <Text style={styles.tripMiniScoreText}>{trip.breakdown.combinedScore}</Text>
-                                  </View>
+                                  <CrestPair
+                                    homeName={String(trip.fixture?.teams?.home?.name ?? "Home")}
+                                    awayName={String(trip.fixture?.teams?.away?.name ?? "Away")}
+                                    homeLogo={trip.fixture?.teams?.home?.logo}
+                                    awayLogo={trip.fixture?.teams?.away?.logo}
+                                    size={26}
+                                    innerSize={16}
+                                  />
 
                                   <Text style={styles.listTitle} numberOfLines={1} ellipsizeMode="tail">
                                     {String(trip.fixture?.teams?.home?.name ?? "Home")} vs{" "}
                                     {String(trip.fixture?.teams?.away?.name ?? "Away")}
                                   </Text>
+
+                                  <View style={styles.tripMiniScoreWrap}>
+                                    <Text style={styles.tripMiniScoreText}>{trip.breakdown.combinedScore}</Text>
+                                  </View>
                                 </View>
 
                                 <Text style={styles.listMeta} numberOfLines={1} ellipsizeMode="tail">
@@ -1258,7 +1321,9 @@ export default function HomeScreen() {
 
                   {!fxLoading && fxError ? <EmptyState title="Fixtures unavailable" message={fxError} /> : null}
 
-                  {!fxLoading && !fxError && !featured ? <EmptyState title="No fixtures found" message="Try another league." /> : null}
+                  {!fxLoading && !fxError && !featured ? (
+                    <EmptyState title="No fixtures found" message="Try another league." />
+                  ) : null}
 
                   {!fxLoading && !fxError && featured ? (
                     <>
@@ -1273,7 +1338,15 @@ export default function HomeScreen() {
                         <View style={styles.featuredImageOverlay} />
 
                         <View style={styles.featuredTop}>
-                          <CrestSquare row={featured} />
+                          <CrestPair
+                            homeName={String(featured.teams?.home?.name ?? "Home")}
+                            awayName={String(featured.teams?.away?.name ?? "Away")}
+                            homeLogo={featured.teams?.home?.logo}
+                            awayLogo={featured.teams?.away?.logo}
+                            size={38}
+                            innerSize={24}
+                          />
+
                           <View style={{ flex: 1 }}>
                             <Text style={styles.featuredTitle} numberOfLines={1} ellipsizeMode="tail">
                               {fixtureLine(featured).title}
@@ -1282,6 +1355,7 @@ export default function HomeScreen() {
                               {fixtureLine(featured).meta}
                             </Text>
                           </View>
+
                           <Text style={styles.chev}>›</Text>
                         </View>
                       </Pressable>
@@ -1292,8 +1366,6 @@ export default function HomeScreen() {
                         {list.map((r, idx) => {
                           const id = r?.fixture?.id ? String(r.fixture.id) : null;
                           const line = fixtureLine(r);
-                          const homeLogo = r?.teams?.home?.logo;
-                          const awayLogo = r?.teams?.away?.logo;
 
                           return (
                             <Pressable
@@ -1304,18 +1376,14 @@ export default function HomeScreen() {
                               android_ripple={{ color: "rgba(255,255,255,0.06)" }}
                             >
                               <View style={styles.listRowTop}>
-                                <View style={styles.smallCrests}>
-                                  <View style={styles.smallCrest}>
-                                    {homeLogo ? (
-                                      <Image source={{ uri: homeLogo }} style={styles.smallCrestImg} resizeMode="contain" />
-                                    ) : null}
-                                  </View>
-                                  <View style={styles.smallCrest}>
-                                    {awayLogo ? (
-                                      <Image source={{ uri: awayLogo }} style={styles.smallCrestImg} resizeMode="contain" />
-                                    ) : null}
-                                  </View>
-                                </View>
+                                <CrestPair
+                                  homeName={String(r.teams?.home?.name ?? "Home")}
+                                  awayName={String(r.teams?.away?.name ?? "Away")}
+                                  homeLogo={r.teams?.home?.logo}
+                                  awayLogo={r.teams?.away?.logo}
+                                  size={26}
+                                  innerSize={16}
+                                />
 
                                 <Text style={styles.listTitle} numberOfLines={1} ellipsizeMode="tail">
                                   {line.title}
@@ -1741,7 +1809,6 @@ const styles = StyleSheet.create({
   },
   cityThumb: { width: 42, height: 42, borderRadius: 12 },
   cityFlagInline: { width: 16, height: 12, borderRadius: 2, opacity: 0.9 },
-  cityFlagIcon: { width: 18, height: 13, borderRadius: 3, opacity: 0.9 },
   pillText: { color: "rgba(242,244,246,0.86)", fontSize: 13, fontWeight: theme.fontWeight.black },
 
   teamPill: {
@@ -1807,6 +1874,51 @@ const styles = StyleSheet.create({
   blockInner: { padding: 14, gap: 12 },
   blockKicker: { color: theme.colors.textTertiary, fontSize: 12, fontWeight: theme.fontWeight.black, letterSpacing: 0.3 },
 
+  editorialKickerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  editorialKickerText: {
+    color: "rgba(242,244,246,0.74)",
+    fontSize: 11,
+    fontWeight: theme.fontWeight.black,
+    letterSpacing: 0.7,
+    textTransform: "uppercase",
+  },
+  editorialDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.45)",
+  },
+
+  crestPairWrap: {
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  crestPairInner: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  crestPairOverlap: {
+    zIndex: 2,
+  },
+  crestBadge: {
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+  crestFallback: {
+    color: theme.colors.textSecondary,
+    fontSize: 11,
+    fontWeight: theme.fontWeight.black,
+    letterSpacing: 0.3,
+  },
+
   featured: {
     borderRadius: 18,
     borderWidth: 1,
@@ -1814,7 +1926,7 @@ const styles = StyleSheet.create({
     backgroundColor: Platform.OS === "android" ? "rgba(12,14,16,0.22)" : "rgba(12,14,16,0.18)",
     overflow: "hidden",
     position: "relative",
-    minHeight: 92,
+    minHeight: 104,
   },
   featuredImage: {
     ...StyleSheet.absoluteFillObject,
@@ -1825,23 +1937,15 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(6,8,10,0.58)",
   },
-  featuredTop: { paddingVertical: 12, paddingHorizontal: 12, flexDirection: "row", alignItems: "center", gap: 12 },
+  featuredTop: {
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
   featuredTitle: { color: theme.colors.text, fontSize: 15, fontWeight: theme.fontWeight.black },
   featuredMeta: { marginTop: 4, color: "rgba(242,244,246,0.84)", fontSize: 12, fontWeight: theme.fontWeight.bold },
-
-  crestWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    backgroundColor: "rgba(255,255,255,0.07)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-    alignItems: "center",
-    justifyContent: "center",
-    overflow: "hidden",
-  },
-  crestImg: { width: 28, height: 28, opacity: 0.95 },
-  crestFallback: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: theme.fontWeight.black, letterSpacing: 0.4 },
 
   divider: { height: 1, backgroundColor: "rgba(255,255,255,0.06)", marginTop: 2 },
 
@@ -1855,20 +1959,6 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.06)",
   },
   listRowTop: { flexDirection: "row", alignItems: "center", gap: 10 },
-  smallCrests: { flexDirection: "row", gap: 6, alignItems: "center" },
-  smallCrest: {
-    width: 18,
-    height: 18,
-    borderRadius: 6,
-    backgroundColor: "rgba(0,0,0,0.18)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
-    alignItems: "center",
-    justifyContent: "center",
-    overflow: "hidden",
-  },
-  smallCrestImg: { width: 14, height: 14, opacity: 0.95 },
-
   listTitle: { flex: 1, color: theme.colors.text, fontSize: 13, fontWeight: theme.fontWeight.black },
   listMeta: { marginTop: 4, color: theme.colors.textSecondary, fontSize: 12, fontWeight: theme.fontWeight.bold },
 
@@ -1966,7 +2056,7 @@ const styles = StyleSheet.create({
     backgroundColor: Platform.OS === "android" ? "rgba(12,14,16,0.22)" : "rgba(12,14,16,0.18)",
     overflow: "hidden",
     position: "relative",
-    minHeight: 236,
+    minHeight: 252,
   },
   weekendHeroCardElite: { borderColor: "rgba(79,224,138,0.24)" },
   weekendHeroCardStrong: { borderColor: "rgba(255,210,90,0.18)" },
@@ -1988,6 +2078,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 12,
+  },
+  heroMatchTextWrap: {
+    flex: 1,
+    paddingTop: 2,
   },
   weekendScoreBadge: {
     width: 52,
@@ -2018,7 +2112,8 @@ const styles = StyleSheet.create({
   },
   weekendHeroTitle: {
     color: theme.colors.text,
-    fontSize: 16,
+    fontSize: 18,
+    lineHeight: 22,
     fontWeight: theme.fontWeight.black,
   },
   weekendHeroMeta: {
