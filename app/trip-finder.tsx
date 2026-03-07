@@ -8,6 +8,7 @@ import {
   Pressable,
   ActivityIndicator,
   Image,
+  Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -37,19 +38,19 @@ type WindowKey = "wknd" | "d14" | "d30";
 type FinderMode = "all" | "easy" | "big" | "hidden";
 
 const CURATED_LEAGUE_IDS = new Set<number>([
-  39, // Premier League
-  140, // La Liga
-  135, // Serie A
-  78, // Bundesliga
-  61, // Ligue 1
-  88, // Eredivisie
-  94, // Primeira Liga
-  203, // Turkish Super Lig
-  197, // Greek Super League
-  179, // Scottish Premiership
-  207, // Swiss Super League
-  218, // Austrian Bundesliga
-  119, // Danish Superliga
+  39,
+  140,
+  135,
+  78,
+  61,
+  88,
+  94,
+  203,
+  197,
+  179,
+  207,
+  218,
+  119,
 ]);
 
 const HIDDEN_GEM_CITY_KEYS = new Set<string>([
@@ -170,6 +171,52 @@ function filterTripsByMode(trips: RankedTrip[], mode: FinderMode) {
       t.breakdown.combinedScore >= 68
     );
   });
+}
+
+function LeagueCrestStrip({
+  activeLeagueIds,
+}: {
+  activeLeagueIds: number[];
+}) {
+  const leagues = useMemo(() => {
+    const filtered = LEAGUES.filter((l) => CURATED_LEAGUE_IDS.has(l.leagueId));
+    return filtered.slice(0, 13);
+  }, []);
+
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.leagueStripRow}
+    >
+      {leagues.map((league) => {
+        const active = activeLeagueIds.includes(league.leagueId);
+        const logo = (league as any)?.logo ? String((league as any).logo) : "";
+
+        return (
+          <View
+            key={league.leagueId}
+            style={[
+              styles.leagueStripItem,
+              active && styles.leagueStripItemActive,
+            ]}
+          >
+            {logo ? (
+              <Image
+                source={{ uri: logo }}
+                style={styles.leagueStripLogo}
+                resizeMode="contain"
+              />
+            ) : (
+              <Text style={styles.leagueStripFallback}>
+                {league.label.slice(0, 2).toUpperCase()}
+              </Text>
+            )}
+          </View>
+        );
+      })}
+    </ScrollView>
+  );
 }
 
 export default function TripFinderScreen() {
@@ -308,7 +355,12 @@ export default function TripFinderScreen() {
     <Background {...bgProps} overlayOpacity={0.68}>
       <SafeAreaView style={styles.container} edges={["top"]}>
         <View style={styles.header}>
-          <Button label="Back" tone="secondary" size="sm" onPress={() => router.back()} />
+          <Button
+            label="Back"
+            tone="secondary"
+            size="sm"
+            onPress={() => router.back()}
+          />
           <View style={{ flex: 1 }} />
         </View>
 
@@ -319,11 +371,17 @@ export default function TripFinderScreen() {
         >
           <GlassCard strength="strong" style={styles.hero} noPadding>
             <View style={styles.heroInner}>
-              <Text style={styles.heroKicker}>AWAY TRIP FINDER</Text>
+              <Text style={styles.heroBrand}>YOURNEXTAWAY</Text>
+              <Text style={styles.heroKicker}>TRIP FINDER</Text>
               <Text style={styles.heroTitle}>Find the best football trips</Text>
               <Text style={styles.heroSub}>
-                Ranked by weekend quality, match atmosphere, travel ease and overall trip value.
+                Ranked by weekend quality, match atmosphere, travel ease and
+                overall trip value.
               </Text>
+
+              <LeagueCrestStrip
+                activeLeagueIds={fetchLeagues.map((l) => l.leagueId)}
+              />
 
               <View style={styles.filterBlock}>
                 <Text style={styles.filterLabel}>Date window</Text>
@@ -338,7 +396,10 @@ export default function TripFinderScreen() {
                       <Pressable
                         key={k}
                         onPress={() => setWindowKey(k)}
-                        style={[styles.filterPill, active && styles.filterPillActive]}
+                        style={[
+                          styles.filterPill,
+                          active && styles.filterPillActive,
+                        ]}
                       >
                         <Text
                           style={[
@@ -370,7 +431,10 @@ export default function TripFinderScreen() {
                       <Pressable
                         key={k}
                         onPress={() => setMode(k)}
-                        style={[styles.filterPill, active && styles.filterPillActive]}
+                        style={[
+                          styles.filterPill,
+                          active && styles.filterPillActive,
+                        ]}
                       >
                         <Text
                           style={[
@@ -416,12 +480,18 @@ export default function TripFinderScreen() {
             <>
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>Top ranked trip</Text>
-                <Text style={styles.sectionMeta}>{filteredTrips.length} ranked results</Text>
+                <Text style={styles.sectionMeta}>
+                  {filteredTrips.length} ranked results
+                </Text>
               </View>
 
               <GlassCard strength="strong" style={styles.topCard} noPadding>
                 <View style={styles.topImageWrap}>
-                  <Image source={{ uri: topTripImage }} style={styles.topImage} resizeMode="cover" />
+                  <Image
+                    source={{ uri: topTripImage }}
+                    style={styles.topImage}
+                    resizeMode="cover"
+                  />
                   <View style={styles.topImageOverlay} />
 
                   <View style={styles.topCardInner}>
@@ -429,9 +499,12 @@ export default function TripFinderScreen() {
                       <View
                         style={[
                           styles.scoreBadge,
-                          scoreToneKey(topTrip.breakdown.combinedScore) === "elite" && styles.scoreBadgeElite,
-                          scoreToneKey(topTrip.breakdown.combinedScore) === "strong" && styles.scoreBadgeStrong,
-                          scoreToneKey(topTrip.breakdown.combinedScore) === "good" && styles.scoreBadgeGood,
+                          scoreToneKey(topTrip.breakdown.combinedScore) === "elite" &&
+                            styles.scoreBadgeElite,
+                          scoreToneKey(topTrip.breakdown.combinedScore) === "strong" &&
+                            styles.scoreBadgeStrong,
+                          scoreToneKey(topTrip.breakdown.combinedScore) === "good" &&
+                            styles.scoreBadgeGood,
                         ]}
                       >
                         <Text style={styles.scoreBadgeText}>
@@ -528,13 +601,20 @@ export default function TripFinderScreen() {
 
                   return (
                     <GlassCard
-                      key={fixtureId || `${trip.city}-${trip.stadiumName}-${trip.kickoffIso}`}
+                      key={
+                        fixtureId ||
+                        `${trip.city}-${trip.stadiumName}-${trip.kickoffIso}`
+                      }
                       strength="default"
                       style={styles.tripCard}
                       noPadding
                     >
                       <View style={styles.tripCardImageWrap}>
-                        <Image source={{ uri: tripImage }} style={styles.tripCardImage} resizeMode="cover" />
+                        <Image
+                          source={{ uri: tripImage }}
+                          style={styles.tripCardImage}
+                          resizeMode="cover"
+                        />
                         <View style={styles.tripCardImageOverlay} />
 
                         <Pressable
@@ -643,6 +723,13 @@ const styles = StyleSheet.create({
     gap: 10,
   },
 
+  heroBrand: {
+    color: theme.colors.textSecondary,
+    fontSize: 11,
+    fontWeight: theme.fontWeight.black,
+    letterSpacing: 1.2,
+  },
+
   heroKicker: {
     color: theme.colors.primary,
     fontSize: 11,
@@ -662,6 +749,47 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
     fontWeight: theme.fontWeight.bold,
+  },
+
+  leagueStripRow: {
+    gap: 10,
+    paddingRight: 12,
+    paddingVertical: 2,
+  },
+
+  leagueStripItem: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor:
+      Platform.OS === "android"
+        ? theme.glass.androidBg.subtle
+        : theme.glass.iosBg.subtle,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+
+  leagueStripItemActive: {
+    borderColor: "rgba(79,224,138,0.26)",
+    backgroundColor:
+      Platform.OS === "android"
+        ? theme.glass.androidBg.default
+        : theme.glass.iosBg.default,
+  },
+
+  leagueStripLogo: {
+    width: 30,
+    height: 30,
+    opacity: 0.98,
+  },
+
+  leagueStripFallback: {
+    color: theme.colors.text,
+    fontSize: 11,
+    fontWeight: theme.fontWeight.black,
   },
 
   filterBlock: {
