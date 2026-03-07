@@ -1,6 +1,9 @@
 import type { FixtureListRow } from "@/src/services/apiFootball";
 import type { StadiumRecord } from "@/src/data/stadiums/types";
-import stadiums from "@/src/data/stadiums";
+import {
+  getAllStadiums,
+  getStadiumByTeamFromRegistry,
+} from "@/src/data/stadiumRegistry";
 import { normalizeTeamKey } from "@/src/data/teams";
 import { getTripFinderBreakdown } from "./scoring";
 import type { RankedTrip } from "./types";
@@ -24,28 +27,56 @@ function normalizeValue(input: string): string {
     .replace(/^-|-$/g, "");
 }
 
+const VENUE_ALIASES: Record<string, string[]> = {
+  "estadio-do-sport-lisboa-e-benfica": ["estadio-da-luz"],
+  "estadio-do-fc-porto": ["estadio-do-dragao"],
+  "estadio-jose-alvalade-xxi": ["estadio-jose-alvalade"],
+  "allianz-arena-munchen": ["allianz-arena"],
+  "signal-iduna-park-dortmund": ["signal-iduna-park"],
+  "parc-des-princes-paris": ["parc-des-princes"],
+  "stade-velodrome-marseille": ["velodrome"],
+  "san-siro": ["san-siro"],
+};
+
 function resolveStadium(row: FixtureListRow): StadiumRecord | null {
+  const all = getAllStadiums();
+
   const homeName = String(row?.teams?.home?.name ?? "").trim();
   const venueName = String(row?.fixture?.venue?.name ?? "").trim();
 
-  const all = Object.values(stadiums);
-
   if (homeName) {
     const teamKey = normalizeTeamKey(homeName);
-    const byTeam =
-      all.find((s) => s.teamKeys.some((k) => normalizeValue(k) === normalizeValue(teamKey))) ?? null;
+    const byTeam = getStadiumByTeamFromRegistry(teamKey);
     if (byTeam) return byTeam;
   }
 
-  if (venueName) {
-    const venueKey = normalizeValue(venueName);
+  if (!venueName) return null;
 
-    const byKey = all.find((s) => normalizeValue(s.stadiumKey) === venueKey) ?? null;
-    if (byKey) return byKey;
+  const venueKey = normalizeValue(venueName);
 
-    const byName = all.find((s) => normalizeValue(s.name) === venueKey) ?? null;
-    if (byName) return byName;
+  const exactKeyHit =
+    all.find((s) => normalizeValue(s.stadiumKey) === venueKey) ?? null;
+  if (exactKeyHit) return exactKeyHit;
+
+  const exactNameHit =
+    all.find((s) => normalizeValue(s.name) === venueKey) ?? null;
+  if (exactNameHit) return exactNameHit;
+
+  const aliases = VENUE_ALIASES[venueKey] ?? [];
+  if (aliases.length > 0) {
+    const aliasHit =
+      all.find((s) =>
+        aliases.some((alias) => normalizeValue(s.stadiumKey) === normalizeValue(alias))
+      ) ?? null;
+    if (aliasHit) return aliasHit;
   }
+
+  const looseNameHit =
+    all.find((s) => {
+      const stadiumName = normalizeValue(s.name);
+      return stadiumName.includes(venueKey) || venueKey.includes(stadiumName);
+    }) ?? null;
+  if (looseNameHit) return looseNameHit;
 
   return null;
 }
@@ -55,10 +86,12 @@ export function rankTrips(rows: FixtureListRow[]): RankedTrip[] {
     .filter((row) => row?.fixture?.id != null)
     .map((row) => {
       const stadium = resolveStadium(row);
+
       const city = String(stadium?.city ?? row?.fixture?.venue?.city ?? "").trim();
       const country = String(stadium?.country ?? "").trim();
       const stadiumName = String(stadium?.name ?? row?.fixture?.venue?.name ?? "").trim();
       const kickoffIso = String(row?.fixture?.date ?? "").trim() || null;
+
       const breakdown = getTripFinderBreakdown(row, stadium);
 
       return {
