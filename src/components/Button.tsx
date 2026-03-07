@@ -16,8 +16,8 @@ type Tone = "primary" | "secondary" | "ghost" | "danger";
 type Size = "sm" | "md" | "lg";
 
 type Props = {
-  label?: string; // convenience
-  children?: React.ReactNode; // or custom node content
+  label?: string;
+  children?: React.ReactNode;
   onPress?: () => void;
 
   tone?: Tone;
@@ -32,10 +32,6 @@ type Props = {
   style?: StyleProp<ViewStyle>;
   textStyle?: StyleProp<TextStyle>;
 
-  /**
-   * Optional: more "sporty premium" CTA pop
-   * Use sparingly (e.g. 1 primary CTA per screen)
-   */
   glow?: boolean;
 };
 
@@ -57,13 +53,15 @@ function getToneStyles(tone: Tone) {
         text: "#FFFFFF",
         spinner: "#FFFFFF",
       };
+
     case "secondary":
       return {
-        bg: "rgba(255,255,255,0.04)",
+        bg: "rgba(255,255,255,0.05)",
         border: theme.colors.borderSubtle,
         text: theme.colors.textPrimary,
         spinner: theme.colors.textPrimary,
       };
+
     case "ghost":
       return {
         bg: "transparent",
@@ -71,6 +69,7 @@ function getToneStyles(tone: Tone) {
         text: theme.colors.textPrimary,
         spinner: theme.colors.textPrimary,
       };
+
     case "danger":
     default:
       return {
@@ -85,12 +84,29 @@ function getToneStyles(tone: Tone) {
 function sizeCfg(size: Size) {
   switch (size) {
     case "sm":
-      return { h: 40, px: 14, font: theme.fontSize.meta };
+      return {
+        minHeight: 40,
+        px: 14,
+        fontSize: 13,
+        slot: 24,
+      };
+
     case "lg":
-      return { h: 54, px: 20, font: theme.fontSize.h2 };
+      return {
+        minHeight: 54,
+        px: 18,
+        fontSize: 17,
+        slot: 30,
+      };
+
     case "md":
     default:
-      return { h: 48, px: 18, font: theme.fontSize.body };
+      return {
+        minHeight: 48,
+        px: 16,
+        fontSize: 15,
+        slot: 28,
+      };
   }
 }
 
@@ -113,22 +129,34 @@ export default function Button({
 
   const isDisabled = disabled || loading || !onPress;
 
-  const content = children ?? (
-    <Text style={[styles.text, { color: cfg.text, fontSize: s.font }, textStyle]}>
-      {label ?? "Continue"}
-    </Text>
-  );
-
   const glowStyle =
     glow && tone === "primary"
       ? {
           shadowColor: theme.colors.accentGreen,
-          shadowOpacity: 0.28,
-          shadowRadius: 24,
-          shadowOffset: { width: 0, height: 12 },
-          elevation: 10,
+          shadowOpacity: 0.24,
+          shadowRadius: 20,
+          shadowOffset: { width: 0, height: 10 },
+          elevation: 8,
         }
       : null;
+
+  const content =
+    children ?? (
+      <Text
+        numberOfLines={1}
+        ellipsizeMode="tail"
+        style={[
+          styles.text,
+          {
+            color: cfg.text,
+            fontSize: s.fontSize,
+          },
+          textStyle,
+        ]}
+      >
+        {label ?? "Continue"}
+      </Text>
+    );
 
   return (
     <Pressable
@@ -138,15 +166,17 @@ export default function Button({
       style={({ pressed }) => [
         styles.base,
         {
-          height: s.h,
-          paddingHorizontal: s.px,
+          minHeight: s.minHeight,
+          paddingHorizontal: tone === "ghost" ? 0 : s.px,
           backgroundColor: cfg.bg,
           borderColor: cfg.border,
+          borderWidth: tone === "ghost" ? 0 : 1,
           opacity: isDisabled ? 0.55 : 1,
           transform: pressed && !isDisabled ? [{ scale: 0.985 }] : [{ scale: 1 }],
         },
+        tone === "primary" && styles.primarySurface,
+        tone === "secondary" && styles.secondarySurface,
         glowStyle,
-        tone === "ghost" ? styles.ghost : null,
         style,
       ]}
     >
@@ -154,9 +184,15 @@ export default function Button({
         <ActivityIndicator color={cfg.spinner} />
       ) : (
         <View style={styles.row}>
-          {leftSlot ? <View style={styles.slot}>{leftSlot}</View> : null}
+          <View style={[styles.slot, { width: s.slot }]}>
+            {leftSlot ?? null}
+          </View>
+
           <View style={styles.center}>{content}</View>
-          {rightSlot ? <View style={styles.slot}>{rightSlot}</View> : <View style={styles.slot} />}
+
+          <View style={[styles.slot, { width: s.slot }]}>
+            {rightSlot ?? null}
+          </View>
         </View>
       )}
     </Pressable>
@@ -166,29 +202,32 @@ export default function Button({
 const styles = StyleSheet.create({
   base: {
     borderRadius: theme.borderRadius.button,
-    borderWidth: 1,
     justifyContent: "center",
     overflow: "hidden",
   },
 
-  ghost: {
-    borderWidth: 0,
-    paddingHorizontal: 0,
+  primarySurface: {
+    backgroundColor: theme.colors.accentGreen,
+  },
+
+  secondarySurface: {
+    backgroundColor: "rgba(255,255,255,0.05)",
   },
 
   row: {
     flexDirection: "row",
     alignItems: "center",
+    minWidth: 0,
   },
 
   slot: {
-    width: 28,
     alignItems: "center",
     justifyContent: "center",
   },
 
   center: {
     flex: 1,
+    minWidth: 0,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -196,5 +235,6 @@ const styles = StyleSheet.create({
   text: {
     fontWeight: theme.fontWeight.semibold,
     letterSpacing: 0.2,
+    textAlign: "center",
   },
 });
