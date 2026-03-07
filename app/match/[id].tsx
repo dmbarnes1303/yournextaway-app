@@ -32,8 +32,10 @@ function isoDateOnlyFromKickoffIso(kickoffIso?: string | null): string | null {
   const raw = String(kickoffIso ?? "").trim();
   if (!raw) return null;
   if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+
   const d = new Date(raw);
   if (Number.isNaN(d.getTime())) return null;
+
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
@@ -43,18 +45,22 @@ function isoDateOnlyFromKickoffIso(kickoffIso?: string | null): string | null {
 function formatKickoffLocal(kickoffIso?: string | null): string {
   const raw = String(kickoffIso ?? "").trim();
   if (!raw) return "TBC";
+
   const d = new Date(raw);
   if (Number.isNaN(d.getTime())) return "TBC";
+
   const date = d.toLocaleDateString("en-GB", {
     weekday: "short",
     day: "2-digit",
     month: "short",
     year: "numeric",
   });
+
   const time = d.toLocaleTimeString("en-GB", {
     hour: "2-digit",
     minute: "2-digit",
   });
+
   return `${date} • ${time}`;
 }
 
@@ -66,11 +72,42 @@ function initials(name: string) {
   return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
 }
 
-function Crest({ name, uri }: { name: string; uri?: string | null }) {
+function Crest({
+  name,
+  uri,
+  size = "md",
+  emphasize = false,
+}: {
+  name: string;
+  uri?: string | null;
+  size?: "sm" | "md" | "lg";
+  emphasize?: boolean;
+}) {
+  const dimensions =
+    size === "lg"
+      ? { outer: 84, inner: 58, radius: 24 }
+      : size === "sm"
+      ? { outer: 52, inner: 34, radius: 16 }
+      : { outer: 64, inner: 44, radius: 20 };
+
   return (
-    <View style={styles.crestWrap}>
+    <View
+      style={[
+        styles.crestWrap,
+        {
+          width: dimensions.outer,
+          height: dimensions.outer,
+          borderRadius: dimensions.radius,
+        },
+        emphasize && styles.crestWrapPrimary,
+      ]}
+    >
       {uri ? (
-        <Image source={{ uri }} style={styles.crestImg} resizeMode="contain" />
+        <Image
+          source={{ uri }}
+          style={{ width: dimensions.inner, height: dimensions.inner, opacity: 0.97 }}
+          resizeMode="contain"
+        />
       ) : (
         <Text style={styles.crestFallback}>{initials(name)}</Text>
       )}
@@ -160,7 +197,10 @@ export default function MatchScreen() {
   const { fixture, loading } = useFixture(fixtureId);
 
   const trip = useTripsStore(
-    useCallback((s) => (tripId ? s.trips.find((t) => t.id === tripId) ?? null : null), [tripId])
+    useCallback(
+      (s) => (tripId ? s.trips.find((t) => t.id === tripId) ?? null : null),
+      [tripId]
+    )
   );
 
   const [openingTickets, setOpeningTickets] = useState(false);
@@ -169,6 +209,7 @@ export default function MatchScreen() {
     () => String((trip as any)?.homeName ?? (fixture as any)?.teams?.home?.name ?? "").trim(),
     [trip, fixture]
   );
+
   const awayName = useMemo(
     () => String((trip as any)?.awayName ?? (fixture as any)?.teams?.away?.name ?? "").trim(),
     [trip, fixture]
@@ -193,6 +234,7 @@ export default function MatchScreen() {
     () => String((trip as any)?.venueName ?? (fixture as any)?.fixture?.venue?.name ?? "").trim(),
     [trip, fixture]
   );
+
   const venueCity = useMemo(
     () => String((trip as any)?.venueCity ?? (fixture as any)?.fixture?.venue?.city ?? "").trim(),
     [trip, fixture]
@@ -264,6 +306,11 @@ export default function MatchScreen() {
   const stayItems = useMemo(() => resolvedStadium?.stayAreas ?? [], [resolvedStadium]);
   const tipItems = useMemo(() => resolvedStadium?.tips ?? [], [resolvedStadium]);
 
+  const homeSupportNote = useMemo(() => {
+    if (!homeName) return "Plan the match around the host city and home club.";
+    return `This trip is built around ${homeName} at home — host city, host stadium, home-side planning.`;
+  }, [homeName]);
+
   const goBack = useCallback(() => {
     if (tripId) {
       router.push({ pathname: "/trip/[id]", params: { id: tripId } } as any);
@@ -302,6 +349,7 @@ export default function MatchScreen() {
     }
 
     setOpeningTickets(true);
+
     try {
       const url = await buildTicketLink({
         fixtureId,
@@ -380,7 +428,7 @@ export default function MatchScreen() {
   const imageSource = typeof bg === "string" ? null : (bg as any);
 
   return (
-    <Background imageUrl={imageUrl} imageSource={imageSource} overlayOpacity={0.1}>
+    <Background imageUrl={imageUrl} imageSource={imageSource} overlayOpacity={0.12}>
       <SafeAreaView style={styles.safe} edges={["top"]}>
         <View style={styles.header}>
           <Button label="Back" tone="secondary" size="sm" onPress={goBack} />
@@ -390,23 +438,32 @@ export default function MatchScreen() {
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           <GlassCard level="default" variant="matte" style={styles.heroCard} noPadding>
             <View style={styles.heroInner}>
-              <Text style={styles.heroKicker}>MATCH</Text>
+              <View style={styles.heroLabelRow}>
+                <Text style={styles.heroKicker}>MATCH DAY</Text>
+                {leagueName ? <Chip label={leagueName} variant="default" /> : null}
+              </View>
 
-              <View style={styles.heroTopRow}>
-                <Crest name={homeName || "Home"} uri={crestHome} />
+              <View style={styles.heroCrestsRow}>
+                <View style={styles.homeClubCol}>
+                  <Crest name={homeName || "Home"} uri={crestHome} size="lg" emphasize />
+                  <Text style={styles.homeClubTag}>Host club</Text>
+                </View>
 
                 <View style={styles.heroCenter}>
-                  <Text style={styles.heroTitle} numberOfLines={2}>
+                  <Text style={styles.heroTitle} numberOfLines={3}>
                     {title}
                   </Text>
 
                   <View style={styles.heroMetaRow}>
                     <FixtureCertaintyBadge state={certaintyState} variant="compact" />
-                    {leagueName ? <Chip label={leagueName} variant="default" /> : null}
+                    <Chip label="Home-side trip" variant="primary" />
                   </View>
                 </View>
 
-                <Crest name={awayName || "Away"} uri={crestAway} />
+                <View style={styles.awayClubCol}>
+                  <Crest name={awayName || "Away"} uri={crestAway} size="sm" />
+                  <Text style={styles.awayClubTag}>Visitors</Text>
+                </View>
               </View>
 
               <View style={styles.heroMetaBlock}>
@@ -414,10 +471,18 @@ export default function MatchScreen() {
                 <Text style={styles.metaLineMuted}>{venueText}</Text>
               </View>
 
+              <View style={styles.homeFocusBox}>
+                <Text style={styles.homeFocusLabel}>Home focus</Text>
+                <Text style={styles.homeFocusText}>{homeSupportNote}</Text>
+              </View>
+
               <View style={styles.heroHints}>
                 <Chip label="Tickets: live price" variant="primary" />
                 <Chip label="Hotels: live price" variant="default" />
-                <Chip label={resolvedStadium ? "Travel: mapped" : "Travel: friction soon"} variant="default" />
+                <Chip
+                  label={resolvedStadium ? "Travel: mapped" : "Travel: limited"}
+                  variant="default"
+                />
               </View>
             </View>
           </GlassCard>
@@ -425,10 +490,10 @@ export default function MatchScreen() {
           <GlassCard level="default" variant="matte" style={styles.sectionCard}>
             <Text style={styles.sectionTitle}>Tickets</Text>
             <Text style={styles.sectionSub}>
-              Use the partner flow so clicks can be tracked and saved (Pending → Booked → Wallet).
+              Use the tracked partner flow so the click can move through Pending, Booked and into Wallet.
             </Text>
 
-            <View style={styles.actions}>
+            <View style={styles.primaryActionWrap}>
               <Button
                 label={openingTickets ? "Opening…" : "Open tickets"}
                 tone="primary"
@@ -436,89 +501,113 @@ export default function MatchScreen() {
                 onPress={openTickets}
                 glow
               />
+            </View>
+
+            <View style={styles.actions}>
               <Button label="Official club (search)" tone="secondary" onPress={openOfficialClub} />
               <Button label="Google tickets search" tone="secondary" onPress={openGoogleTicketsSearch} />
             </View>
           </GlassCard>
 
           <GlassCard level="default" variant="matte" style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>Logistics</Text>
+            <Text style={styles.sectionTitle}>Stadium & logistics</Text>
             <Text style={styles.sectionSub}>
-              Match travel intelligence powered by your stadium data: airport, transport, stay areas and matchday tips.
+              Host-stadium intelligence: airport, transport, stay areas and matchday tips.
             </Text>
 
-            <View style={styles.actions}>
+            <View style={styles.primaryActionWrap}>
               <Button label="Directions to stadium" tone="secondary" onPress={openDirections} />
             </View>
 
             {resolvedStadium ? (
-              <View style={styles.miniInfo}>
-                <Text style={styles.miniInfoLabel}>Travel intelligence</Text>
+              <View style={styles.infoGrid}>
+                <View style={styles.infoBlock}>
+                  <Text style={styles.infoBlockLabel}>Airport</Text>
+                  <Text style={styles.infoBlockText}>
+                    {airportLine ?? "Airport detail not added yet"}
+                  </Text>
+                </View>
 
-                {airportLine ? <Text style={styles.miniInfoText}>✈ {airportLine}</Text> : null}
-
-                {transitItems.length > 0 ? (
-                  <>
-                    <Text style={styles.subBlockLabel}>Best transport</Text>
-                    {transitItems.map((item, index) => {
+                <View style={styles.infoBlock}>
+                  <Text style={styles.infoBlockLabel}>Transport</Text>
+                  {transitItems.length > 0 ? (
+                    transitItems.map((item, index) => {
                       const suffix =
                         typeof item.minutes === "number" ? ` • ${item.minutes} min walk` : "";
                       const note = item.note ? ` • ${item.note}` : "";
                       return (
-                        <Text key={`${item.label}-${index}`} style={styles.miniInfoText}>
-                          🚇 {item.label}
+                        <Text key={`${item.label}-${index}`} style={styles.infoBlockText}>
+                          {item.label}
                           {suffix}
                           {note}
                         </Text>
                       );
-                    })}
-                  </>
-                ) : null}
+                    })
+                  ) : (
+                    <Text style={styles.infoBlockText}>Transport guidance not added yet.</Text>
+                  )}
+                </View>
 
-                {stayItems.length > 0 ? (
-                  <>
-                    <Text style={styles.subBlockLabel}>Best areas to stay</Text>
-                    {stayItems.map((item, index) => (
-                      <Text key={`${item.area}-${index}`} style={styles.miniInfoText}>
-                        🏨 {item.area} — {item.why}
+                <View style={styles.infoBlock}>
+                  <Text style={styles.infoBlockLabel}>Best areas to stay</Text>
+                  {stayItems.length > 0 ? (
+                    stayItems.map((item, index) => (
+                      <Text key={`${item.area}-${index}`} style={styles.infoBlockText}>
+                        {item.area} — {item.why}
                       </Text>
-                    ))}
-                  </>
-                ) : null}
+                    ))
+                  ) : (
+                    <Text style={styles.infoBlockText}>Stay-area guidance not added yet.</Text>
+                  )}
+                </View>
 
-                {tipItems.length > 0 ? (
-                  <>
-                    <Text style={styles.subBlockLabel}>Matchday tips</Text>
-                    {tipItems.map((tip, index) => (
-                      <Text key={`tip-${index}`} style={styles.miniInfoText}>
-                        ⚽ {tip}
+                <View style={styles.infoBlock}>
+                  <Text style={styles.infoBlockLabel}>Matchday tips</Text>
+                  {tipItems.length > 0 ? (
+                    tipItems.map((tip, index) => (
+                      <Text key={`tip-${index}`} style={styles.infoBlockText}>
+                        {tip}
                       </Text>
-                    ))}
-                  </>
-                ) : null}
-
-                {!airportLine &&
-                transitItems.length === 0 &&
-                stayItems.length === 0 &&
-                tipItems.length === 0 ? (
-                  <Text style={styles.miniInfoText}>
-                    Stadium matched, but rich travel detail has not been added yet.
-                  </Text>
-                ) : null}
+                    ))
+                  ) : (
+                    <Text style={styles.infoBlockText}>Matchday tips not added yet.</Text>
+                  )}
+                </View>
               </View>
             ) : (
-              <View style={styles.miniInfo}>
-                <Text style={styles.miniInfoLabel}>Travel intelligence</Text>
-                <Text style={styles.miniInfoText}>
-                  Stadium travel intelligence is not mapped yet for this venue. Directions still work, but airport,
-                  transit and stay-area guidance are not available yet.
+              <View style={styles.emptyInfoCard}>
+                <Text style={styles.emptyInfoLabel}>Travel intelligence</Text>
+                <Text style={styles.emptyInfoText}>
+                  This venue is not mapped yet. Directions still work, but airport, transport and stay-area guidance are not available yet.
                 </Text>
               </View>
             )}
           </GlassCard>
 
+          <GlassCard level="default" variant="matte" style={styles.sectionCard}>
+            <Text style={styles.sectionTitle}>Next best action</Text>
+            <Text style={styles.sectionSub}>
+              Don’t overcomplicate it. Lock the match first, then move into the trip workspace and fill the rest around it.
+            </Text>
+
+            <View style={styles.nextStepsList}>
+              <View style={styles.nextStepRow}>
+                <Text style={styles.nextStepNumber}>1</Text>
+                <Text style={styles.nextStepText}>Open tracked tickets</Text>
+              </View>
+              <View style={styles.nextStepRow}>
+                <Text style={styles.nextStepNumber}>2</Text>
+                <Text style={styles.nextStepText}>Check stadium logistics</Text>
+              </View>
+              <View style={styles.nextStepRow}>
+                <Text style={styles.nextStepNumber}>3</Text>
+                <Text style={styles.nextStepText}>Return to your trip workspace and build around this match</Text>
+              </View>
+            </View>
+          </GlassCard>
+
           {loading ? (
-            <View style={{ paddingTop: 2 }}>
+            <View style={styles.loadingWrap}>
               <Text style={styles.loadingText}>Loading match details…</Text>
             </View>
           ) : null}
@@ -552,20 +641,51 @@ const styles = StyleSheet.create({
 
   heroInner: {
     padding: 14,
-    gap: 12,
+    gap: 14,
+  },
+
+  heroLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
   },
 
   heroKicker: {
     color: theme.colors.textSecondary,
     fontSize: 12,
     fontWeight: theme.fontWeight.black,
-    letterSpacing: 0.6,
+    letterSpacing: 0.7,
   },
 
-  heroTopRow: {
+  heroCrestsRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
+  },
+
+  homeClubCol: {
+    alignItems: "center",
+    gap: 8,
+  },
+
+  awayClubCol: {
+    alignItems: "center",
+    gap: 8,
+  },
+
+  homeClubTag: {
+    color: theme.colors.primary,
+    fontSize: 11,
+    fontWeight: theme.fontWeight.black,
+    letterSpacing: 0.3,
+  },
+
+  awayClubTag: {
+    color: theme.colors.textMuted,
+    fontSize: 11,
+    fontWeight: theme.fontWeight.black,
+    letterSpacing: 0.3,
   },
 
   heroCenter: {
@@ -577,8 +697,8 @@ const styles = StyleSheet.create({
 
   heroTitle: {
     color: theme.colors.textPrimary,
-    fontSize: 20,
-    lineHeight: 24,
+    fontSize: 22,
+    lineHeight: 27,
     fontWeight: theme.fontWeight.black,
     textAlign: "center",
   },
@@ -593,7 +713,6 @@ const styles = StyleSheet.create({
   heroMetaBlock: {
     alignItems: "center",
     gap: 4,
-    paddingTop: 2,
   },
 
   metaLine: {
@@ -610,18 +729,36 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
 
+  homeFocusBox: {
+    padding: 12,
+    borderRadius: theme.borderRadius.input,
+    borderWidth: 1,
+    borderColor: "rgba(87,162,56,0.18)",
+    backgroundColor: "rgba(87,162,56,0.08)",
+    gap: 4,
+  },
+
+  homeFocusLabel: {
+    color: theme.colors.primary,
+    fontSize: 11,
+    fontWeight: theme.fontWeight.black,
+    letterSpacing: 0.5,
+  },
+
+  homeFocusText: {
+    color: theme.colors.textPrimary,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: theme.fontWeight.medium,
+  },
+
   heroHints: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8,
-    justifyContent: "center",
-    paddingTop: 2,
   },
 
   crestWrap: {
-    width: 58,
-    height: 58,
-    borderRadius: 18,
     backgroundColor: "rgba(255,255,255,0.04)",
     borderWidth: 1,
     borderColor: theme.colors.borderSubtle,
@@ -630,7 +767,10 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
 
-  crestImg: { width: 40, height: 40, opacity: 0.96 },
+  crestWrapPrimary: {
+    borderColor: "rgba(87,162,56,0.22)",
+    backgroundColor: "rgba(87,162,56,0.08)",
+  },
 
   crestFallback: {
     color: theme.colors.textSecondary,
@@ -658,13 +798,76 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeight.medium,
   },
 
+  primaryActionWrap: {
+    marginTop: 12,
+  },
+
   actions: {
+    marginTop: 10,
+    gap: 10,
+  },
+
+  infoGrid: {
     marginTop: 12,
     gap: 10,
   },
 
-  miniInfo: {
+  infoBlock: {
+    padding: 12,
+    borderRadius: theme.borderRadius.input,
+    borderWidth: 1,
+    borderColor: theme.colors.borderSubtle,
+    backgroundColor: "rgba(255,255,255,0.03)",
+    gap: 5,
+  },
+
+  infoBlockLabel: {
+    color: theme.colors.textPrimary,
+    fontSize: 12,
+    fontWeight: theme.fontWeight.black,
+    letterSpacing: 0.4,
+  },
+
+  infoBlockText: {
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: theme.fontWeight.medium,
+  },
+
+  emptyInfoCard: {
     marginTop: 12,
+    padding: 12,
+    borderRadius: theme.borderRadius.input,
+    borderWidth: 1,
+    borderColor: theme.colors.borderSubtle,
+    backgroundColor: "rgba(255,255,255,0.03)",
+    gap: 6,
+  },
+
+  emptyInfoLabel: {
+    color: theme.colors.textPrimary,
+    fontSize: 12,
+    fontWeight: theme.fontWeight.black,
+    letterSpacing: 0.4,
+  },
+
+  emptyInfoText: {
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: theme.fontWeight.medium,
+  },
+
+  nextStepsList: {
+    marginTop: 12,
+    gap: 10,
+  },
+
+  nextStepRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
     padding: 12,
     borderRadius: theme.borderRadius.input,
     borderWidth: 1,
@@ -672,28 +875,24 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.03)",
   },
 
-  miniInfoLabel: {
-    color: theme.colors.textPrimary,
-    fontSize: 12,
+  nextStepNumber: {
+    width: 22,
+    color: theme.colors.primary,
+    fontSize: 14,
     fontWeight: theme.fontWeight.black,
-    letterSpacing: 0.5,
-    marginBottom: 6,
+    textAlign: "center",
   },
 
-  subBlockLabel: {
+  nextStepText: {
+    flex: 1,
     color: theme.colors.textPrimary,
-    fontSize: 12,
-    fontWeight: theme.fontWeight.black,
-    letterSpacing: 0.4,
-    marginTop: 10,
-    marginBottom: 4,
-  },
-
-  miniInfoText: {
-    color: theme.colors.textSecondary,
     fontSize: 13,
     lineHeight: 18,
     fontWeight: theme.fontWeight.medium,
+  },
+
+  loadingWrap: {
+    paddingTop: 2,
   },
 
   loadingText: {
