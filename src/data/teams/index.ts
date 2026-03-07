@@ -277,8 +277,8 @@ export const teams: Record<string, TeamRecord> = {
   aliases: ["vasteras sk"],
 },
 
-"ga is": {
-  teamKey: "ga is",
+"gais": {
+  teamKey: "gais",
   name: "GAIS",
   country: "Sweden",
   city: "Gothenburg",
