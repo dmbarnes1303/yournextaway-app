@@ -18,8 +18,6 @@ import { useRouter } from "expo-router";
 import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
 import EmptyState from "@/src/components/EmptyState";
-import LeagueStrip from "@/src/components/home/LeagueStrip";
-
 import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
 
@@ -48,8 +46,7 @@ import rankTrips from "@/src/features/tripFinder/rankTrips";
 import groupTripsByWeekend from "@/src/features/tripFinder/groupTripsByWeekend";
 import type { RankedTrip, WeekendBucket } from "@/src/features/tripFinder/types";
 
-const API_SPORTS_TEAM_LOGO = (teamId: number) =>
-  `https://media.api-sports.io/football/teams/${teamId}.png`;
+const API_SPORTS_TEAM_LOGO = (teamId: number) => `https://media.api-sports.io/football/teams/${teamId}.png`;
 
 type ShortcutWindow = { from: string; to: string };
 type CityChip = { name: string; countryCode: string };
@@ -126,7 +123,6 @@ function fixtureLine(r: FixtureListRow) {
   const venue = r?.fixture?.venue?.name ?? "";
   const city = r?.fixture?.venue?.city ?? "";
   const extra = [venue, city].filter(Boolean).join(" • ");
-
   return {
     title: `${home} vs ${away}`,
     meta: extra ? `${kickoff} • ${extra}` : kickoff,
@@ -151,6 +147,12 @@ function splitSearchBuckets(results: SearchResult[]) {
   return { teams, cities, venues, countries, leagues };
 }
 
+function LeagueFlag({ code }: { code: string }) {
+  const url = getFlagImageUrl(code);
+  if (!url) return null;
+  return <Image source={{ uri: url }} style={styles.flag} />;
+}
+
 function TeamCrest({ teamId, size = 16 }: { teamId: number; size?: number }) {
   const uri = API_SPORTS_TEAM_LOGO(teamId);
   return <Image source={{ uri }} style={{ width: size, height: size, opacity: 0.95 }} resizeMode="contain" />;
@@ -168,6 +170,43 @@ function CrestSquare({ row }: { row: FixtureListRow }) {
         <Text style={styles.crestFallback}>{initials(homeName)}</Text>
       )}
     </View>
+  );
+}
+
+function LeagueStrip({
+  leagues,
+  activeLeagueId,
+  onSelect,
+}: {
+  leagues: LeagueOption[];
+  activeLeagueId: number;
+  onSelect: (league: LeagueOption) => void;
+}) {
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.leagueStripRow}
+    >
+      {leagues.map((league) => {
+        const active = league.leagueId === activeLeagueId;
+
+        return (
+          <Pressable
+            key={league.leagueId}
+            onPress={() => onSelect(league)}
+            style={({ pressed }) => [
+              styles.leagueStripItem,
+              active && styles.leagueStripItemActive,
+              pressed && styles.pressedPill,
+            ]}
+            android_ripple={{ color: "rgba(255,255,255,0.08)" }}
+          >
+            <Image source={{ uri: league.logo }} style={styles.leagueStripLogo} resizeMode="contain" />
+          </Pressable>
+        );
+      })}
+    </ScrollView>
   );
 }
 
@@ -267,12 +306,10 @@ function CityChipPremium({
 
 function useDebouncedValue<T>(value: T, delayMs: number) {
   const [debounced, setDebounced] = useState(value);
-
   useEffect(() => {
     const t = setTimeout(() => setDebounced(value), delayMs);
     return () => clearTimeout(t);
   }, [value, delayMs]);
-
   return debounced;
 }
 
@@ -641,10 +678,7 @@ export default function HomeScreen() {
       if (p?.kind === "team") {
         Keyboard.dismiss();
         setQ("");
-        router.push({
-          pathname: "/team/[teamKey]",
-          params: { teamKey: p.slug, from: fromIso, to: toIso },
-        } as any);
+        router.push({ pathname: "/team/[teamKey]", params: { teamKey: p.slug, from: fromIso, to: toIso } } as any);
         return;
       }
 
@@ -664,11 +698,7 @@ export default function HomeScreen() {
       if (p?.kind === "country" || p?.kind === "league") {
         Keyboard.dismiss();
         setQ("");
-        goFixtures({
-          window: { from: fromIso, to: toIso },
-          leagueId: Number(p.leagueId),
-          season: Number(p.season),
-        });
+        goFixtures({ window: { from: fromIso, to: toIso }, leagueId: Number(p.leagueId), season: Number(p.season) });
       }
     },
     [router, fromIso, toIso, goCityKey, goFixtures]
@@ -676,12 +706,8 @@ export default function HomeScreen() {
 
   const resultMeta = useCallback((r: SearchResult): string => {
     const p: any = r.payload;
-    if (r.type === "team" && p?.kind === "team") {
-      return hasTeamGuide(p.slug) ? "Team guide available" : "Team guide coming soon";
-    }
-    if (r.type === "city" && p?.kind === "city") {
-      return getCityGuide(p.slug) ? "City guide available" : "City guide coming soon";
-    }
+    if (r.type === "team" && p?.kind === "team") return hasTeamGuide(p.slug) ? "Team guide available" : "Team guide coming soon";
+    if (r.type === "city" && p?.kind === "city") return getCityGuide(p.slug) ? "City guide available" : "City guide coming soon";
     return r.subtitle ?? "";
   }, []);
 
@@ -721,13 +747,7 @@ export default function HomeScreen() {
 
       tried.add(next.leagueId);
 
-      const res = await getFixtures({
-        league: next.leagueId,
-        season: next.season,
-        from: w.from,
-        to: w.to,
-      });
-
+      const res = await getFixtures({ league: next.leagueId, season: next.season, from: w.from, to: w.to });
       const list = Array.isArray(res) ? (res as FixtureListRow[]) : [];
       const valid = list.filter((r) => r?.fixture?.id != null).filter(filter);
 
@@ -871,12 +891,7 @@ export default function HomeScreen() {
 
   const nextTripCityImage = useMemo(() => {
     if (!nextTrip) return getCityImageUrl("london");
-    const raw =
-      (nextTrip as any).cityName ||
-      (nextTrip as any).city ||
-      nextTrip.cityId ||
-      nextTripCityTitle ||
-      "Trip";
+    const raw = (nextTrip as any).cityName || (nextTrip as any).city || nextTrip.cityId || nextTripCityTitle || "Trip";
     return getCityImageUrl(String(raw));
   }, [nextTrip, nextTripCityTitle]);
 
@@ -951,9 +966,7 @@ export default function HomeScreen() {
                     </View>
                   ) : null}
 
-                  {!searchBuilding && searchError ? (
-                    <EmptyState title="Search unavailable" message={searchError} />
-                  ) : null}
+                  {!searchBuilding && searchError ? <EmptyState title="Search unavailable" message={searchError} /> : null}
 
                   {!searchBuilding && !searchError ? (
                     <>
@@ -1061,9 +1074,7 @@ export default function HomeScreen() {
                     </View>
                   ) : null}
 
-                  {!tfLoading && tfError ? (
-                    <EmptyState title="Trip Finder unavailable" message={tfError} />
-                  ) : null}
+                  {!tfLoading && tfError ? <EmptyState title="Trip Finder unavailable" message={tfError} /> : null}
 
                   {!tfLoading && !tfError && !bestWeekendTrip ? (
                     <EmptyState
@@ -1223,13 +1234,7 @@ export default function HomeScreen() {
                 <Text style={styles.sectionTitle}>Upcoming matches</Text>
 
                 <Pressable
-                  onPress={() =>
-                    goFixtures({
-                      window: upcomingWindow,
-                      leagueId: league.leagueId,
-                      season: league.season,
-                    })
-                  }
+                  onPress={() => goFixtures({ window: upcomingWindow, leagueId: league.leagueId, season: league.season })}
                   style={({ pressed }) => [styles.miniPill, pressed && { opacity: 0.9 }]}
                 >
                   <Text style={styles.miniPillText}>View all</Text>
@@ -1238,8 +1243,8 @@ export default function HomeScreen() {
 
               <LeagueStrip
                 leagues={homeTopLeagues}
-                selectedLeagueId={league.leagueId}
-                onSelect={(selected: LeagueOption) => setLeague(selected)}
+                activeLeagueId={league.leagueId}
+                onSelect={setLeague}
               />
 
               <GlassCard strength="default" style={styles.block} noPadding>
@@ -1251,13 +1256,9 @@ export default function HomeScreen() {
                     </View>
                   ) : null}
 
-                  {!fxLoading && fxError ? (
-                    <EmptyState title="Fixtures unavailable" message={fxError} />
-                  ) : null}
+                  {!fxLoading && fxError ? <EmptyState title="Fixtures unavailable" message={fxError} /> : null}
 
-                  {!fxLoading && !fxError && !featured ? (
-                    <EmptyState title="No fixtures found" message="Try another league." />
-                  ) : null}
+                  {!fxLoading && !fxError && !featured ? <EmptyState title="No fixtures found" message="Try another league." /> : null}
 
                   {!fxLoading && !fxError && featured ? (
                     <>
@@ -1568,9 +1569,7 @@ export default function HomeScreen() {
                         style={({ pressed }) => [styles.modalChip, active && styles.modalChipActive, pressed && { opacity: 0.94 }]}
                         android_ripple={{ color: "rgba(255,255,255,0.06)" }}
                       >
-                        <Text style={[styles.modalChipText, active && styles.modalChipTextActive]}>
-                          {labelForKey(k)}
-                        </Text>
+                        <Text style={[styles.modalChipText, active && styles.modalChipTextActive]}>{labelForKey(k)}</Text>
                       </Pressable>
                     );
                   })}
@@ -1587,9 +1586,7 @@ export default function HomeScreen() {
                         style={({ pressed }) => [styles.modalChip, active && styles.modalChipActive, pressed && { opacity: 0.94 }]}
                         android_ripple={{ color: "rgba(255,255,255,0.06)" }}
                       >
-                        <Text style={[styles.modalChipText, active && styles.modalChipTextActive]}>
-                          {labelForTripLength(k)}
-                        </Text>
+                        <Text style={[styles.modalChipText, active && styles.modalChipTextActive]}>{labelForTripLength(k)}</Text>
                       </Pressable>
                     );
                   })}
@@ -1606,9 +1603,7 @@ export default function HomeScreen() {
                         style={({ pressed }) => [styles.modalChip, active && styles.modalChipActive, pressed && { opacity: 0.94 }]}
                         android_ripple={{ color: "rgba(255,255,255,0.06)" }}
                       >
-                        <Text style={[styles.modalChipText, active && styles.modalChipTextActive]}>
-                          {labelForVibe(v)}
-                        </Text>
+                        <Text style={[styles.modalChipText, active && styles.modalChipTextActive]}>{labelForVibe(v)}</Text>
                       </Pressable>
                     );
                   })}
@@ -1638,9 +1633,7 @@ export default function HomeScreen() {
                   </Pressable>
                 </View>
 
-                <Text style={styles.modalFootnote}>
-                  Pricing appears later when booking partners are connected.
-                </Text>
+                <Text style={styles.modalFootnote}>Pricing appears later when booking partners are connected.</Text>
               </View>
             </GlassCard>
           </View>
@@ -1789,6 +1782,34 @@ const styles = StyleSheet.create({
   },
   miniPillText: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: theme.fontWeight.black },
 
+  flag: { width: 18, height: 13, borderRadius: 3, opacity: 0.9 },
+
+  leagueStripRow: {
+    gap: 12,
+    paddingRight: theme.spacing.lg,
+    marginTop: 2,
+  },
+  leagueStripItem: {
+    width: 58,
+    height: 58,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+  leagueStripItemActive: {
+    borderColor: "rgba(79,224,138,0.26)",
+    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.default : theme.glass.iosBg.default,
+  },
+  leagueStripLogo: {
+    width: 34,
+    height: 34,
+    opacity: 0.98,
+  },
+
   block: { borderRadius: 24 },
   blockInner: { padding: 14, gap: 12 },
   blockKicker: { color: theme.colors.textTertiary, fontSize: 12, fontWeight: theme.fontWeight.black, letterSpacing: 0.3 },
@@ -1854,6 +1875,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   smallCrestImg: { width: 14, height: 14, opacity: 0.95 },
+
   listTitle: { flex: 1, color: theme.colors.text, fontSize: 13, fontWeight: theme.fontWeight.black },
   listMeta: { marginTop: 4, color: theme.colors.textSecondary, fontSize: 12, fontWeight: theme.fontWeight.bold },
 
