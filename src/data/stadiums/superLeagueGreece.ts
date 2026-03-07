@@ -1,7 +1,6 @@
 import type { StadiumRecord } from "./types";
 
 const superLeagueGreeceStadiums: Record<string, StadiumRecord> = {
-
   "karaiskakis-stadium": {
     stadiumKey: "karaiskakis-stadium",
     name: "Karaiskakis Stadium",
@@ -9,7 +8,21 @@ const superLeagueGreeceStadiums: Record<string, StadiumRecord> = {
     country: "Greece",
     capacity: 32115,
     opened: 1895,
+    airport: "Athens International Airport (ATH)",
+    distanceFromAirportKm: 45,
     teamKeys: ["olympiacos"],
+    transit: [
+      { label: "Faliro", minutes: 5 },
+      { label: "Piraeus", minutes: 15, note: "best wider ferry and rail hub" },
+    ],
+    stayAreas: [
+      { area: "Athens Centre", why: "Best overall city-break base" },
+      { area: "Piraeus / Marina Zeas", why: "Best if combining football with port or island travel" },
+    ],
+    tips: [
+      "One of Greece’s strongest atmosphere-led football trips",
+      "Most visitors should stay in central Athens or Piraeus rather than right by the ground",
+    ],
   },
 
   "apostolos-nikolaidis": {
@@ -19,7 +32,21 @@ const superLeagueGreeceStadiums: Record<string, StadiumRecord> = {
     country: "Greece",
     capacity: 16000,
     opened: 1922,
+    airport: "Athens International Airport (ATH)",
+    distanceFromAirportKm: 32,
     teamKeys: ["panathinaikos"],
+    transit: [
+      { label: "Ambelokipi", minutes: 8 },
+      { label: "Syntagma", minutes: 15, note: "best wider central Athens hub" },
+    ],
+    stayAreas: [
+      { area: "Syntagma / Plaka", why: "Best classic Athens base" },
+      { area: "Kolonaki", why: "Best polished central stay with easy local access" },
+    ],
+    tips: [
+      "More intimate and traditional-feeling than larger bowl stadiums",
+      "Central Athens is the right base and makes this a very easy city football trip",
+    ],
   },
 
   "agia-sofia-stadium": {
@@ -29,7 +56,21 @@ const superLeagueGreeceStadiums: Record<string, StadiumRecord> = {
     country: "Greece",
     capacity: 32500,
     opened: 2022,
+    airport: "Athens International Airport (ATH)",
+    distanceFromAirportKm: 28,
     teamKeys: ["aek-athens"],
+    transit: [
+      { label: "Perissos", minutes: 15 },
+      { label: "Omonia / Monastiraki", minutes: 20, note: "best wider central base" },
+    ],
+    stayAreas: [
+      { area: "Syntagma / Plaka", why: "Best all-round Athens city-break base" },
+      { area: "Psyrri / Monastiraki", why: "Best bars, nightlife and local atmosphere" },
+    ],
+    tips: [
+      "One of the strongest modern matchday experiences in Greece",
+      "Better as a central Athens trip than a stay in the immediate stadium district",
+    ],
   },
 
   "toumba-stadium": {
@@ -39,7 +80,21 @@ const superLeagueGreeceStadiums: Record<string, StadiumRecord> = {
     country: "Greece",
     capacity: 28703,
     opened: 1959,
+    airport: "Thessaloniki Airport (SKG)",
+    distanceFromAirportKm: 14,
     teamKeys: ["paok"],
+    transit: [
+      { label: "Thessaloniki Centre", minutes: 20 },
+      { label: "Aristotelous / seafront", minutes: 20, note: "best visitor base" },
+    ],
+    stayAreas: [
+      { area: "Ladadika", why: "Best food, bars and nightlife" },
+      { area: "Seafront / White Tower", why: "Best scenic central base" },
+    ],
+    tips: [
+      "One of the best atmosphere trips in southeastern Europe",
+      "Thessaloniki is strong enough to make this a proper long-weekend football trip",
+    ],
   },
 
   "kleanthis-vikelidis-stadium": {
@@ -49,7 +104,21 @@ const superLeagueGreeceStadiums: Record<string, StadiumRecord> = {
     country: "Greece",
     capacity: 22800,
     opened: 1951,
+    airport: "Thessaloniki Airport (SKG)",
+    distanceFromAirportKm: 13,
     teamKeys: ["aris"],
+    transit: [
+      { label: "Thessaloniki Centre", minutes: 20 },
+      { label: "White Tower / centre", minutes: 20, note: "best practical base" },
+    ],
+    stayAreas: [
+      { area: "Ladadika", why: "Best nightlife and restaurant base" },
+      { area: "Seafront", why: "Best scenic central option" },
+    ],
+    tips: [
+      "Another strong Thessaloniki-based football trip with a more local-feel edge",
+      "Stay central and treat the ground as a short local journey",
+    ],
   },
 
   "theodoros-kolokotronis": {
@@ -59,7 +128,21 @@ const superLeagueGreeceStadiums: Record<string, StadiumRecord> = {
     country: "Greece",
     capacity: 7442,
     opened: 1953,
+    airport: "Athens International Airport (ATH)",
+    distanceFromAirportKm: 180,
     teamKeys: ["asteras-tripolis"],
+    transit: [
+      { label: "Tripoli Centre", minutes: 15 },
+      { label: "Bus station", minutes: 15, note: "best practical arrival point" },
+    ],
+    stayAreas: [
+      { area: "Tripoli Centre", why: "Most practical local base" },
+      { area: "Athens", why: "Better wider base if not staying purely for the match" },
+    ],
+    tips: [
+      "Much more of a football stop than a glamour city-break destination",
+      "Best approached as part of a wider Peloponnese or Athens-based trip",
+    ],
   },
 
   "peristeri-stadium": {
@@ -69,7 +152,21 @@ const superLeagueGreeceStadiums: Record<string, StadiumRecord> = {
     country: "Greece",
     capacity: 10050,
     opened: 1947,
+    airport: "Athens International Airport (ATH)",
+    distanceFromAirportKm: 35,
     teamKeys: ["atromitos"],
+    transit: [
+      { label: "Anthoupoli / Peristeri", minutes: 15 },
+      { label: "Syntagma", minutes: 20, note: "best central Athens hub" },
+    ],
+    stayAreas: [
+      { area: "Syntagma / Plaka", why: "Best central Athens base" },
+      { area: "Monastiraki / Psyrri", why: "Best atmosphere and nightlife" },
+    ],
+    tips: [
+      "This is an Athens football trip first, local club trip second",
+      "Central Athens remains the right base for almost everyone",
+    ],
   },
 
   "lamia-municipal-stadium": {
@@ -79,7 +176,21 @@ const superLeagueGreeceStadiums: Record<string, StadiumRecord> = {
     country: "Greece",
     capacity: 5500,
     opened: 1952,
+    airport: "Athens International Airport (ATH)",
+    distanceFromAirportKm: 220,
     teamKeys: ["lamia"],
+    transit: [
+      { label: "Lamia centre", minutes: 10 },
+      { label: "Bus / rail area", minutes: 15, note: "best practical arrival point" },
+    ],
+    stayAreas: [
+      { area: "Lamia Centre", why: "Most practical local option" },
+      { area: "Athens", why: "Stronger wider base if logistics allow" },
+    ],
+    tips: [
+      "A functional football stop rather than a major destination weekend",
+      "Useful for league coverage, but not one of the app’s headline trip products",
+    ],
   },
 
   "theodoros-vardinogiannis": {
@@ -89,7 +200,21 @@ const superLeagueGreeceStadiums: Record<string, StadiumRecord> = {
     country: "Greece",
     capacity: 9000,
     opened: 1951,
+    airport: "Heraklion Airport (HER)",
+    distanceFromAirportKm: 5,
     teamKeys: ["ofi"],
+    transit: [
+      { label: "Heraklion Centre", minutes: 15 },
+      { label: "Port / old centre", minutes: 15, note: "best visitor base" },
+    ],
+    stayAreas: [
+      { area: "Heraklion Centre", why: "Best practical city base" },
+      { area: "Port / old town", why: "Best atmosphere and easiest visitor stay" },
+    ],
+    tips: [
+      "Very good football-and-island trip because Crete adds real leisure value",
+      "This is stronger as a wider Crete weekend than as a pure football stop",
+    ],
   },
 
   "panthessaliko-stadium": {
@@ -99,9 +224,22 @@ const superLeagueGreeceStadiums: Record<string, StadiumRecord> = {
     country: "Greece",
     capacity: 22189,
     opened: 2004,
+    airport: "Nea Anchialos National Airport (VOL)",
+    distanceFromAirportKm: 25,
     teamKeys: ["volos"],
+    transit: [
+      { label: "Volos Centre", minutes: 20 },
+      { label: "Waterfront", minutes: 20, note: "best local visitor base" },
+    ],
+    stayAreas: [
+      { area: "Waterfront / Centre", why: "Best practical and atmospheric local base" },
+      { area: "Near port", why: "Best for a simple overnight with restaurants nearby" },
+    ],
+    tips: [
+      "A more underrated coastal football stop than many people expect",
+      "Works best as a one- or two-night trip rather than a rushed same-day outing",
+    ],
   },
-
 };
 
 export default superLeagueGreeceStadiums;
