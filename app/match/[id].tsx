@@ -20,9 +20,9 @@ import { useTripsStore } from "@/src/state/trips";
 import { buildTicketLink } from "@/src/services/partnerLinks";
 import { beginPartnerClick, openUntrackedUrl } from "@/src/services/partnerClicks";
 
-import * as stadiumRegistry from "@/src/data/stadiums/index";
-import { normalizeTeamKey } from "@/src/data/teams";
+import { stadiums } from "@/src/data/stadiums/index";
 import type { StadiumRecord } from "@/src/data/stadiums/types";
+import { normalizeTeamKey } from "@/src/data/teams";
 
 /* -------------------------------------------------------------------------- */
 /* Helpers                                                                    */
@@ -86,7 +86,7 @@ function stripDiacritics(input: string): string {
   }
 }
 
-function normalizeVenueKey(input: string): string {
+function normalizeValue(input: string): string {
   return stripDiacritics(String(input ?? ""))
     .trim()
     .toLowerCase()
@@ -97,35 +97,15 @@ function normalizeVenueKey(input: string): string {
     .replace(/^-|-$/g, "");
 }
 
-function getAllStadiumsSafe(): StadiumRecord[] {
-  const map = (stadiumRegistry as any)?.stadiums;
-  if (!map || typeof map !== "object") return [];
-  return Object.values(map) as StadiumRecord[];
-}
-
-function getStadiumByTeamSafe(teamKey?: string | null): StadiumRecord | null {
-  const fn = (stadiumRegistry as any)?.getStadiumByTeam;
-  if (typeof fn !== "function") return null;
-  try {
-    return fn(teamKey ?? "") ?? null;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Venue aliases from API / formal names -> known stadium keys
- * Keep growing this over time when you spot mismatches.
- */
-const VENUE_ALIASES: Record<string, string> = {
-  "estadio-do-sport-lisboa-e-benfica": "estadio-da-luz",
-  "estadio-do-fc-porto": "estadio-do-dragao",
-  "estadio-jose-alvalade-xxi": "estadio-jose-alvalade",
-  "allianz-arena-munchen": "allianz-arena",
-  "signal-iduna-park-dortmund": "signal-iduna-park",
-  "parc-des-princes-paris": "parc-des-princes",
-  "stade-velodrome-marseille": "velodrome",
-  "san-siro": "giuseppe-meazza",
+const VENUE_ALIASES: Record<string, string[]> = {
+  "estadio-do-sport-lisboa-e-benfica": ["estadio-da-luz", "estadio-da-luz-benfica"],
+  "estadio-do-fc-porto": ["estadio-do-dragao"],
+  "estadio-jose-alvalade-xxi": ["estadio-jose-alvalade"],
+  "allianz-arena-munchen": ["allianz-arena"],
+  "signal-iduna-park-dortmund": ["signal-iduna-park"],
+  "parc-des-princes-paris": ["parc-des-princes"],
+  "stade-velodrome-marseille": ["velodrome"],
+  "san-siro": ["giuseppe-meazza", "san-siro"],
 };
 
 function resolveStadiumFromVenueOrTeam(args: {
@@ -135,37 +115,42 @@ function resolveStadiumFromVenueOrTeam(args: {
   const rawVenue = String(args.venueName ?? "").trim();
   const rawHome = String(args.homeTeamName ?? "").trim();
 
-  const all = getAllStadiumsSafe();
+  const all = stadiums && typeof stadiums === "object" ? (Object.values(stadiums) as StadiumRecord[]) : [];
+  if (all.length === 0) return null;
 
-  if (rawVenue && all.length > 0) {
-    const normalizedVenue = normalizeVenueKey(rawVenue);
+  if (rawVenue) {
+    const venueKey = normalizeValue(rawVenue);
 
-    const exactKeyMatch =
-      all.find((s) => normalizeVenueKey(s.stadiumKey) === normalizedVenue) ?? null;
-    if (exactKeyMatch) return exactKeyMatch;
+    const exactKey = all.find((s) => normalizeValue(s.stadiumKey) === venueKey) ?? null;
+    if (exactKey) return exactKey;
 
-    const exactNameMatch =
-      all.find((s) => normalizeVenueKey(s.name) === normalizedVenue) ?? null;
-    if (exactNameMatch) return exactNameMatch;
+    const exactName = all.find((s) => normalizeValue(s.name) === venueKey) ?? null;
+    if (exactName) return exactName;
 
-    const aliasKey = VENUE_ALIASES[normalizedVenue];
-    if (aliasKey) {
+    const aliases = VENUE_ALIASES[venueKey] ?? [];
+    if (aliases.length > 0) {
       const aliasMatch =
-        all.find((s) => normalizeVenueKey(s.stadiumKey) === normalizeVenueKey(aliasKey)) ?? null;
+        all.find((s) => aliases.some((alias) => normalizeValue(s.stadiumKey) === normalizeValue(alias))) ?? null;
       if (aliasMatch) return aliasMatch;
     }
 
-    const looseNameMatch =
+    const looseName =
       all.find((s) => {
-        const stadiumName = normalizeVenueKey(s.name);
-        return stadiumName.includes(normalizedVenue) || normalizedVenue.includes(stadiumName);
+        const stadiumName = normalizeValue(s.name);
+        return stadiumName.includes(venueKey) || venueKey.includes(stadiumName);
       }) ?? null;
-    if (looseNameMatch) return looseNameMatch;
+    if (looseName) return looseName;
   }
 
   if (rawHome) {
     const teamKey = normalizeTeamKey(rawHome);
-    const byTeam = getStadiumByTeamSafe(teamKey);
+
+    const byTeam =
+      all.find((s) =>
+        Array.isArray(s.teamKeys) &&
+        s.teamKeys.some((team) => normalizeTeamKey(String(team ?? "")) === teamKey)
+      ) ?? null;
+
     if (byTeam) return byTeam;
   }
 
