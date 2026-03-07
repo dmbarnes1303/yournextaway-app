@@ -51,6 +51,9 @@ import { getMatchdayLogistics, buildLogisticsSnippet } from "@/src/data/matchday
 
 import storage from "@/src/services/storage";
 
+import rankTrips from "@/src/features/tripFinder/rankTrips";
+import type { RankedTrip, TravelDifficulty } from "@/src/features/tripFinder/types";
+
 /* -------------------------------------------------------------------------- */
 /* small helpers                                                              */
 /* -------------------------------------------------------------------------- */
@@ -320,6 +323,25 @@ function safeUri(u: unknown): string | null {
   return s;
 }
 
+function difficultyLabel(value?: TravelDifficulty | null): string | null {
+  if (!value) return null;
+  if (value === "easy") return "Easy travel";
+  if (value === "medium") return "Moderate travel";
+  if (value === "hard") return "Harder travel";
+  return null;
+}
+
+function confidenceLabel(value?: number | null): string | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  const pct = Math.max(0, Math.min(100, Math.round(value * 100)));
+  return `${pct}% fit`;
+}
+
+function rankReasonsText(trip: RankedTrip | null): string | null {
+  if (!trip || !Array.isArray(trip.reasons) || trip.reasons.length === 0) return null;
+  return trip.reasons.slice(0, 2).join(" • ");
+}
+
 /* -------------------------------------------------------------------------- */
 /* SavedItemType mapping for partner categories                                */
 /* -------------------------------------------------------------------------- */
@@ -566,7 +588,7 @@ export default function TripDetailScreen() {
     if (!affiliateCtx) return null;
 
     const flightsUrl = resolveAffiliateUrl("aviasales", affiliateCtx);
-    const hotelsUrl = resolveAffiliateUrl("expedia", affiliateCtx); // supports expedia / expedia_stays in resolver
+    const hotelsUrl = resolveAffiliateUrl("expedia", affiliateCtx);
     const transfersUrl = resolveAffiliateUrl("kiwitaxi", affiliateCtx);
     const experiencesUrl = resolveAffiliateUrl("getyourguide", affiliateCtx);
 
@@ -682,6 +704,44 @@ export default function TripDetailScreen() {
     return "";
   }, [primaryLogistics, primaryKickoffIso]);
 
+  /* ---------------- trip finder power-up ---------------- */
+
+  const rankedTrip = useMemo<RankedTrip | null>(() => {
+    if (!trip || !primaryFixture) return null;
+
+    try {
+      const ranked = rankTrips([
+        {
+          tripId: String(trip.id),
+          fixture: primaryFixture,
+          cityName,
+          originIata: cleanUpper3(originIata, "LON"),
+          startDate: trip.startDate,
+          endDate: trip.endDate,
+          kickoffIso: primaryKickoffIso ?? undefined,
+        } as any,
+      ]);
+
+      return Array.isArray(ranked) && ranked.length > 0 ? ranked[0] : null;
+    } catch {
+      return null;
+    }
+  }, [trip, primaryFixture, cityName, originIata, primaryKickoffIso]);
+
+  const tripFinderSummary = useMemo(() => {
+    if (!rankedTrip) return null;
+
+    return {
+      difficulty: difficultyLabel((rankedTrip as any)?.travelDifficulty ?? null),
+      confidence: confidenceLabel((rankedTrip as any)?.confidence ?? null),
+      reasons: rankReasonsText(rankedTrip),
+      score:
+        typeof (rankedTrip as any)?.score === "number" && Number.isFinite((rankedTrip as any)?.score)
+          ? Math.round((rankedTrip as any).score)
+          : null,
+    };
+  }, [rankedTrip]);
+
   /* ---------------- tickets: per-match state ---------------- */
 
   function getTicketItemForFixture(matchId: string): SavedItem | null {
@@ -707,7 +767,6 @@ export default function TripDetailScreen() {
       map[String(mid)] = getTicketItemForFixture(String(mid));
     }
     return map;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [numericMatchIds, savedItems]);
 
   const primaryTicketItem = useMemo(() => {
@@ -984,7 +1043,7 @@ export default function TripDetailScreen() {
   }
 
   /* ------------------------------------------------------------------------ */
-  /* matches: set primary + remove                                              */
+  /* matches: set primary + remove                                             */
   /* ------------------------------------------------------------------------ */
 
   async function setPrimaryMatch(matchId: string) {
@@ -1023,18 +1082,14 @@ export default function TripDetailScreen() {
 
       await tripsStore.updateTrip(trip.id, {
         fixtureIdPrimary: mid,
-
         homeName,
         awayName,
         leagueName,
         leagueId,
-
         kickoffIso,
         kickoffTbc,
-
         venueName,
         venueCity,
-
         displayCity: venueCity || (trip as any)?.displayCity,
       } as any);
     } catch {
@@ -1086,7 +1141,7 @@ export default function TripDetailScreen() {
   }
 
   /* ------------------------------------------------------------------------ */
-  /* tickets: smart open (SE365 resolver + affiliate wrapping)                  */
+  /* tickets: smart open                                                       */
   /* ------------------------------------------------------------------------ */
 
   async function openTicketsForMatch(matchId: string) {
@@ -1121,7 +1176,6 @@ export default function TripDetailScreen() {
 
     const dateIso = trip?.startDate || isoDateOnlyFromKickoffIso(kickoffIso) || undefined;
 
-    // Resolve SE365 listing URL (event-specific where possible)
     const resolved = await getSe365EventUrl({
       fixtureId: mid,
       home: homeName,
@@ -1161,7 +1215,7 @@ export default function TripDetailScreen() {
   }
 
   /* ------------------------------------------------------------------------ */
-  /* partner directory: show EVERY partner                                      */
+  /* partner directory                                                         */
   /* ------------------------------------------------------------------------ */
 
   async function openPartnerFromDirectory(partnerId: PartnerId) {
@@ -1201,7 +1255,7 @@ export default function TripDetailScreen() {
   }
 
   /* ------------------------------------------------------------------------ */
-  /* powerups: progress + next action + health                                  */
+  /* powerups                                                                  */
   /* ------------------------------------------------------------------------ */
 
   const tripCount = useMemo(() => (tripsStore.getState().trips?.length ?? 0) as number, [tripsLoaded]);
@@ -1522,7 +1576,6 @@ export default function TripDetailScreen() {
 
   const loadingMatchDetails = fxLoading;
 
-  // Partner directory groups (show EVERY affiliate)
   const partnerGroups = useMemo(() => {
     const groups: Array<{ title: string; category: PartnerCategory }> = [
       { title: "Match tickets", category: "tickets" },
@@ -1582,7 +1635,6 @@ export default function TripDetailScreen() {
 
           {trip ? (
             <>
-              {/* HERO */}
               <GlassCard style={styles.hero}>
                 <Text style={styles.kicker}>TRIP WORKSPACE</Text>
                 <Text style={styles.cityTitle}>{cityName}</Text>
@@ -1627,6 +1679,32 @@ export default function TripDetailScreen() {
                   </View>
                 ) : null}
 
+                {tripFinderSummary ? (
+                  <View style={styles.tripFinderBox}>
+                    <Text style={styles.tripFinderTitle}>Trip Finder read</Text>
+                    <View style={styles.tripFinderBadges}>
+                      {tripFinderSummary.difficulty ? (
+                        <View style={styles.tripFinderBadge}>
+                          <Text style={styles.tripFinderBadgeText}>{tripFinderSummary.difficulty}</Text>
+                        </View>
+                      ) : null}
+                      {tripFinderSummary.confidence ? (
+                        <View style={styles.tripFinderBadge}>
+                          <Text style={styles.tripFinderBadgeText}>{tripFinderSummary.confidence}</Text>
+                        </View>
+                      ) : null}
+                      {tripFinderSummary.score != null ? (
+                        <View style={styles.tripFinderBadge}>
+                          <Text style={styles.tripFinderBadgeText}>Score {tripFinderSummary.score}</Text>
+                        </View>
+                      ) : null}
+                    </View>
+                    {tripFinderSummary.reasons ? (
+                      <Text style={styles.tripFinderReasons}>{tripFinderSummary.reasons}</Text>
+                    ) : null}
+                  </View>
+                ) : null}
+
                 <View style={styles.heroActions}>
                   <Pressable onPress={onEditTrip} style={[styles.btn, styles.btnPrimary]}>
                     <Text style={styles.btnPrimaryText}>Edit trip</Text>
@@ -1641,7 +1719,6 @@ export default function TripDetailScreen() {
 
                 {!originLoaded ? <Text style={styles.mutedInline}>Loading departure preference…</Text> : null}
 
-                {/* POWERUPS */}
                 <View style={{ marginTop: 14, gap: 10 }}>
                   <TripProgressStrip items={progressItems} />
                   <NextBestActionCard action={nextAction} isPro={isPro} onUpgradePress={onUpgradePress} />
@@ -1654,7 +1731,6 @@ export default function TripDetailScreen() {
                 </View>
               </GlassCard>
 
-              {/* SMART BOOK */}
               {affiliateUrls ? (
                 <GlassCard style={styles.card}>
                   <View style={styles.sectionTitleRow}>
@@ -1681,7 +1757,6 @@ export default function TripDetailScreen() {
                 </GlassCard>
               ) : null}
 
-              {/* ALL PARTNERS (EVERY AFFILIATE) */}
               <GlassCard style={styles.card}>
                 <View style={styles.sectionTitleRow}>
                   <Text style={styles.sectionTitle}>All partners</Text>
@@ -1725,7 +1800,6 @@ export default function TripDetailScreen() {
                 )}
               </GlassCard>
 
-              {/* MATCHES */}
               <GlassCard style={styles.card}>
                 <View style={styles.sectionTitleRow}>
                   <Text style={styles.sectionTitle}>Matches</Text>
@@ -1867,7 +1941,6 @@ export default function TripDetailScreen() {
                 {fxLoading ? <Text style={styles.mutedInline}>Loading match details…</Text> : null}
               </GlassCard>
 
-              {/* STAY */}
               <GlassCard style={styles.card}>
                 <Text style={styles.sectionTitle}>Stay guidance (stadium + best areas)</Text>
 
@@ -2031,7 +2104,6 @@ export default function TripDetailScreen() {
                 )}
               </GlassCard>
 
-              {/* PENDING */}
               <GlassCard style={styles.card}>
                 <Text style={styles.sectionTitle}>Pending</Text>
                 {pending.length === 0 ? (
@@ -2079,7 +2151,6 @@ export default function TripDetailScreen() {
                 )}
               </GlassCard>
 
-              {/* BOOKED */}
               <GlassCard style={styles.card}>
                 <Text style={styles.sectionTitle}>Booked (in Wallet)</Text>
                 {booked.length === 0 ? (
@@ -2125,7 +2196,6 @@ export default function TripDetailScreen() {
                 )}
               </GlassCard>
 
-              {/* SAVED */}
               <GlassCard style={styles.card}>
                 <Text style={styles.sectionTitle}>Saved</Text>
                 {saved.length === 0 ? (
@@ -2178,7 +2248,6 @@ export default function TripDetailScreen() {
                 )}
               </GlassCard>
 
-              {/* NOTES */}
               <GlassCard style={styles.card}>
                 <Text style={styles.sectionTitle}>Notes</Text>
 
@@ -2352,6 +2421,45 @@ const styles = StyleSheet.create({
   bookedText: {
     color: "rgba(160,195,255,1)",
     fontWeight: "900",
+  },
+
+  tripFinderBox: {
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    borderRadius: 14,
+    backgroundColor: "rgba(0,0,0,0.18)",
+    padding: 12,
+    gap: 8,
+  },
+  tripFinderTitle: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 12,
+  },
+  tripFinderBadges: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  tripFinderBadge: {
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    backgroundColor: "rgba(255,255,255,0.04)",
+  },
+  tripFinderBadgeText: {
+    color: theme.colors.textSecondary,
+    fontWeight: "900",
+    fontSize: 11,
+  },
+  tripFinderReasons: {
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
+    fontSize: 12,
+    lineHeight: 16,
   },
 
   heroActions: { marginTop: 12, flexDirection: "row", gap: 10 },

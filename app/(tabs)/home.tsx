@@ -42,6 +42,10 @@ import { getCityGuide } from "@/src/data/cityGuides";
 import { getFlagImageUrl } from "@/src/utils/flagImages";
 import { getPopularTeams, POPULAR_TEAM_IDS } from "@/src/data/teams";
 
+import rankTrips from "@/src/features/tripFinder/rankTrips";
+import groupTripsByWeekend from "@/src/features/tripFinder/groupTripsByWeekend";
+import type { RankedTrip, WeekendBucket, TravelDifficulty } from "@/src/features/tripFinder/types";
+
 const API_SPORTS_TEAM_LOGO = (teamId: number) => `https://media.api-sports.io/football/teams/${teamId}.png`;
 
 type ShortcutWindow = { from: string; to: string };
@@ -64,6 +68,22 @@ const HOME_TOP_LEAGUE_IDS = new Set<number>([
   61, // Ligue 1
   88, // Eredivisie
   94, // Primeira Liga
+]);
+
+const HOME_TRIP_FINDER_LEAGUE_IDS = new Set<number>([
+  39, // Premier League
+  140, // La Liga
+  135, // Serie A
+  78, // Bundesliga
+  61, // Ligue 1
+  88, // Eredivisie
+  94, // Primeira Liga
+  203, // Turkish Super Lig
+  197, // Greek Super League
+  179, // Scottish Premiership
+  207, // Swiss Super League
+  218, // Austrian Bundesliga
+  119, // Danish Superliga
 ]);
 
 type DiscoverWindowKey = "wknd" | "d7" | "d14" | "d30";
@@ -265,6 +285,43 @@ function useDebouncedValue<T>(value: T, delayMs: number) {
   return debounced;
 }
 
+function difficultyLabel(v: TravelDifficulty) {
+  if (v === "easy") return "Easy";
+  if (v === "moderate") return "Moderate";
+  if (v === "hard") return "Hard";
+  return "Complex";
+}
+
+function bucketStrengthLabel(bucket: WeekendBucket) {
+  if (bucket.avgScore >= 84 || bucket.topScore >= 90) return "Elite weekend";
+  if (bucket.avgScore >= 74 || bucket.topScore >= 84) return "Strong weekend";
+  if (bucket.avgScore >= 64 || bucket.topScore >= 74) return "Good weekend";
+  return "Decent weekend";
+}
+
+function bucketStrengthTone(bucket: WeekendBucket) {
+  if (bucket.avgScore >= 84 || bucket.topScore >= 90) return "elite";
+  if (bucket.avgScore >= 74 || bucket.topScore >= 84) return "strong";
+  if (bucket.avgScore >= 64 || bucket.topScore >= 74) return "good";
+  return "decent";
+}
+
+async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const results: R[] = new Array(items.length) as R[];
+  let nextIndex = 0;
+
+  async function worker() {
+    while (nextIndex < items.length) {
+      const current = nextIndex++;
+      results[current] = await fn(items[current]);
+    }
+  }
+
+  const workers = Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, () => worker());
+  await Promise.all(workers);
+  return results;
+}
+
 export default function HomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -274,10 +331,16 @@ export default function HomeScreen() {
     return list.length ? list : LEAGUES.slice(0, 6);
   }, []);
 
+  const tripFinderLeagues = useMemo(() => {
+    const list = LEAGUES.filter((l) => HOME_TRIP_FINDER_LEAGUE_IDS.has(l.leagueId));
+    return list.length ? list : LEAGUES.slice(0, 10);
+  }, []);
+
   const [league, setLeague] = useState<LeagueOption>(homeTopLeagues[0] ?? LEAGUES[0]);
 
   const { from: fromIso, to: toIso } = useMemo(() => getRollingWindowIso(), []);
   const upcomingWindow = useMemo(() => windowFromTomorrowIso(14), []);
+  const weekendWindow = useMemo(() => nextWeekendWindowIso(), []);
 
   // Trips
   const [loadedTrips, setLoadedTrips] = useState(tripsStore.getState().loaded);
@@ -355,6 +418,62 @@ export default function HomeScreen() {
 
   const featured = useMemo(() => fxOrdered[0] ?? null, [fxOrdered]);
   const list = useMemo(() => fxOrdered.slice(1, 4), [fxOrdered]);
+
+  // Weekend trip finder preview
+  const [tfLoading, setTfLoading] = useState(false);
+  const [tfError, setTfError] = useState<string | null>(null);
+  const [tfRows, setTfRows] = useState<FixtureListRow[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function run() {
+      setTfLoading(true);
+      setTfError(null);
+      setTfRows([]);
+
+      try {
+        const batches = await mapLimit(tripFinderLeagues, 4, async (l) => {
+          const res = await getFixtures({
+            league: l.leagueId,
+            season: l.season,
+            from: weekendWindow.from,
+            to: weekendWindow.to,
+          });
+          return Array.isArray(res) ? res : [];
+        });
+
+        if (cancelled) return;
+        setTfRows(batches.flat().filter((r) => r?.fixture?.id != null));
+      } catch (e: any) {
+        if (cancelled) return;
+        setTfError(e?.message ?? "Failed to load best trips.");
+        setTfRows([]);
+      } finally {
+        if (!cancelled) setTfLoading(false);
+      }
+    }
+
+    run();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [tripFinderLeagues, weekendWindow.from, weekendWindow.to]);
+
+  const rankedWeekendTrips = useMemo(() => rankTrips(tfRows), [tfRows]);
+  const weekendBuckets = useMemo(() => groupTripsByWeekend(rankedWeekendTrips), [rankedWeekendTrips]);
+
+  const bestWeekendBucket = useMemo(() => {
+    return [...weekendBuckets].sort((a, b) => {
+      if (b.topScore !== a.topScore) return b.topScore - a.topScore;
+      if (b.avgScore !== a.avgScore) return b.avgScore - a.avgScore;
+      return a.from.localeCompare(b.from);
+    })[0] ?? null;
+  }, [weekendBuckets]);
+
+  const bestWeekendTrip = useMemo(() => bestWeekendBucket?.trips?.[0] ?? null, [bestWeekendBucket]);
+  const nextWeekendTrips = useMemo(() => bestWeekendBucket?.trips?.slice(1, 3) ?? [], [bestWeekendBucket]);
 
   // Search (LAZY BUILD)
   const [q, setQ] = useState("");
@@ -453,6 +572,59 @@ export default function HomeScreen() {
     },
     [router, league.leagueId, league.season, fromIso, toIso]
   );
+
+  const goWeekendTripMatch = useCallback(
+    (trip: RankedTrip, bucket?: WeekendBucket | null) => {
+      const fixtureId = trip?.fixture?.fixture?.id != null ? String(trip.fixture.fixture.id) : "";
+      if (!fixtureId) return;
+
+      router.push({
+        pathname: "/match/[id]",
+        params: {
+          id: fixtureId,
+          from: bucket?.from ?? weekendWindow.from,
+          to: bucket?.to ?? weekendWindow.to,
+        },
+      } as any);
+    },
+    [router, weekendWindow.from, weekendWindow.to]
+  );
+
+  const goWeekendTripBuild = useCallback(
+    (trip: RankedTrip, bucket?: WeekendBucket | null) => {
+      const fixtureId = trip?.fixture?.fixture?.id != null ? String(trip.fixture.fixture.id) : "";
+      const leagueId = trip?.fixture?.league?.id != null ? String(trip.fixture.league.id) : "";
+      const season =
+        (trip?.fixture as any)?.league?.season != null
+          ? String((trip.fixture as any).league.season)
+          : "";
+
+      if (!fixtureId) return;
+
+      router.push({
+        pathname: "/trip/build",
+        params: {
+          fixtureId,
+          ...(leagueId ? { leagueId } : {}),
+          ...(season ? { season } : {}),
+          from: bucket?.from ?? weekendWindow.from,
+          to: bucket?.to ?? weekendWindow.to,
+        },
+      } as any);
+    },
+    [router, weekendWindow.from, weekendWindow.to]
+  );
+
+  const goTripFinder = useCallback(() => {
+    router.push({
+      pathname: "/trip-finder",
+      params: { window: "wknd", mode: "all" },
+    } as any);
+  }, [router]);
+
+  const goFootballCalendar = useCallback(() => {
+    router.push("/football-calendar" as any);
+  }, [router]);
 
   const goCityKey = useCallback(
     (cityKey: string) => {
@@ -593,7 +765,6 @@ export default function HomeScreen() {
         const picked = await pickFixtureFromLeagues(w, filter);
 
         if (!picked) {
-          // keep it blunt; this is a heuristic tool
           return;
         }
 
@@ -650,8 +821,22 @@ export default function HomeScreen() {
         icon: "⭐",
         onPress: () => goPlanTrip(),
       },
+      {
+        key: "tripFinder",
+        title: "Trip Finder",
+        sub: "Ranked football trips",
+        icon: "🎯",
+        onPress: () => goTripFinder(),
+      },
+      {
+        key: "calendar",
+        title: "Football Calendar",
+        sub: "Best upcoming weekends",
+        icon: "🗓️",
+        onPress: () => goFootballCalendar(),
+      },
     ],
-    [goFixtures, goPlanTrip]
+    [goFixtures, goPlanTrip, goTripFinder, goFootballCalendar]
   );
 
   // Trips display assets
@@ -688,6 +873,10 @@ export default function HomeScreen() {
     const n = Number(raw);
     return Number.isFinite(n) ? n : null;
   }, [nextTrip]);
+
+  const bestWeekendTone = useMemo(() => {
+    return bestWeekendBucket ? bucketStrengthTone(bestWeekendBucket) : "decent";
+  }, [bestWeekendBucket]);
 
   return (
     <Background imageSource={getBackground("home")} overlayOpacity={0.64}>
@@ -838,6 +1027,179 @@ export default function HomeScreen() {
               ) : null}
             </View>
           </GlassCard>
+
+          {/* BEST TRIPS THIS WEEKEND */}
+          {!showSearchResults ? (
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>Best trips this weekend</Text>
+                <Pressable
+                  onPress={goTripFinder}
+                  style={({ pressed }) => [styles.miniPill, pressed && { opacity: 0.9 }]}
+                >
+                  <Text style={styles.miniPillText}>Open Trip Finder</Text>
+                </Pressable>
+              </View>
+
+              <GlassCard strength="default" style={styles.block} noPadding>
+                <View style={styles.blockInner}>
+                  {tfLoading ? (
+                    <View style={styles.center}>
+                      <ActivityIndicator />
+                      <Text style={styles.muted}>Ranking weekend trips…</Text>
+                    </View>
+                  ) : null}
+
+                  {!tfLoading && tfError ? (
+                    <EmptyState title="Trip Finder unavailable" message={tfError} />
+                  ) : null}
+
+                  {!tfLoading && !tfError && !bestWeekendTrip ? (
+                    <EmptyState
+                      title="No standout trips found"
+                      message="Try opening Trip Finder or Football Calendar for a wider view."
+                    />
+                  ) : null}
+
+                  {!tfLoading && !tfError && bestWeekendTrip && bestWeekendBucket ? (
+                    <>
+                      <Text style={styles.blockKicker}>Ranked preview</Text>
+
+                      <View
+                        style={[
+                          styles.weekendHeroCard,
+                          bestWeekendTone === "elite" && styles.weekendHeroCardElite,
+                          bestWeekendTone === "strong" && styles.weekendHeroCardStrong,
+                          bestWeekendTone === "good" && styles.weekendHeroCardGood,
+                        ]}
+                      >
+                        <View style={styles.weekendHeroTop}>
+                          <View
+                            style={[
+                              styles.weekendScoreBadge,
+                              bestWeekendTone === "elite" && styles.weekendScoreBadgeElite,
+                              bestWeekendTone === "strong" && styles.weekendScoreBadgeStrong,
+                              bestWeekendTone === "good" && styles.weekendScoreBadgeGood,
+                            ]}
+                          >
+                            <Text style={styles.weekendScoreBadgeText}>
+                              {bestWeekendTrip.breakdown.combinedScore}
+                            </Text>
+                          </View>
+
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.weekendHeroTitle} numberOfLines={1}>
+                              {String(bestWeekendTrip.fixture?.teams?.home?.name ?? "Home")} vs{" "}
+                              {String(bestWeekendTrip.fixture?.teams?.away?.name ?? "Away")}
+                            </Text>
+                            <Text style={styles.weekendHeroMeta} numberOfLines={1}>
+                              {formatUkDateTimeMaybe(bestWeekendTrip.kickoffIso)}
+                            </Text>
+                            <Text style={styles.weekendHeroMeta} numberOfLines={1}>
+                              {[bestWeekendTrip.city, bestWeekendTrip.stadiumName].filter(Boolean).join(" • ")}
+                            </Text>
+                          </View>
+                        </View>
+
+                        <View style={styles.weekendInfoRow}>
+                          <View style={styles.weekendInfoPill}>
+                            <Text style={styles.weekendInfoLabel}>Weekend</Text>
+                            <Text style={styles.weekendInfoValue}>{bestWeekendBucket.label}</Text>
+                          </View>
+                          <View style={styles.weekendInfoPill}>
+                            <Text style={styles.weekendInfoLabel}>Strength</Text>
+                            <Text style={styles.weekendInfoValue}>{bucketStrengthLabel(bestWeekendBucket)}</Text>
+                          </View>
+                          <View style={styles.weekendInfoPill}>
+                            <Text style={styles.weekendInfoLabel}>Travel</Text>
+                            <Text style={styles.weekendInfoValue}>{difficultyLabel(bestWeekendTrip.breakdown.travelDifficulty)}</Text>
+                          </View>
+                        </View>
+
+                        <View style={styles.weekendReasonBox}>
+                          {bestWeekendTrip.breakdown.reasonLines.slice(0, 3).map((line, idx) => (
+                            <Text key={`${line}-${idx}`} style={styles.weekendReasonText}>
+                              • {line}
+                            </Text>
+                          ))}
+                        </View>
+
+                        <View style={styles.blockActions}>
+                          <Pressable
+                            onPress={() => goWeekendTripMatch(bestWeekendTrip, bestWeekendBucket)}
+                            style={({ pressed }) => [styles.btn, styles.btnGhost, pressed && styles.pressed]}
+                            android_ripple={{ color: "rgba(255,255,255,0.08)" }}
+                          >
+                            <Text style={styles.btnGhostText}>View match</Text>
+                          </Pressable>
+
+                          <Pressable
+                            onPress={() => goWeekendTripBuild(bestWeekendTrip, bestWeekendBucket)}
+                            style={({ pressed }) => [styles.btn, styles.btnPrimary, pressed && styles.pressed]}
+                            android_ripple={{ color: "rgba(79,224,138,0.10)" }}
+                          >
+                            <Text style={styles.btnPrimaryText}>Build trip</Text>
+                          </Pressable>
+                        </View>
+                      </View>
+
+                      {nextWeekendTrips.length > 0 ? <View style={styles.divider} /> : null}
+
+                      {nextWeekendTrips.length > 0 ? (
+                        <View style={styles.list}>
+                          {nextWeekendTrips.map((trip, idx) => {
+                            const fixtureId = trip?.fixture?.fixture?.id != null ? String(trip.fixture.fixture.id) : `w-${idx}`;
+                            return (
+                              <Pressable
+                                key={fixtureId}
+                                onPress={() => goWeekendTripMatch(trip, bestWeekendBucket)}
+                                style={({ pressed }) => [styles.listRow, pressed && styles.pressedRow]}
+                                android_ripple={{ color: "rgba(255,255,255,0.06)" }}
+                              >
+                                <View style={styles.listRowTop}>
+                                  <View style={styles.tripMiniScoreWrap}>
+                                    <Text style={styles.tripMiniScoreText}>{trip.breakdown.combinedScore}</Text>
+                                  </View>
+
+                                  <Text style={styles.listTitle} numberOfLines={1} ellipsizeMode="tail">
+                                    {String(trip.fixture?.teams?.home?.name ?? "Home")} vs{" "}
+                                    {String(trip.fixture?.teams?.away?.name ?? "Away")}
+                                  </Text>
+                                </View>
+
+                                <Text style={styles.listMeta} numberOfLines={1} ellipsizeMode="tail">
+                                  {[formatUkDateTimeMaybe(trip.kickoffIso), trip.city, difficultyLabel(trip.breakdown.travelDifficulty)]
+                                    .filter(Boolean)
+                                    .join(" • ")}
+                                </Text>
+                              </Pressable>
+                            );
+                          })}
+                        </View>
+                      ) : null}
+
+                      <View style={styles.blockActions}>
+                        <Pressable
+                          onPress={goTripFinder}
+                          style={({ pressed }) => [styles.btn, styles.btnGhost, pressed && styles.pressed]}
+                          android_ripple={{ color: "rgba(255,255,255,0.08)" }}
+                        >
+                          <Text style={styles.btnGhostText}>Open Trip Finder</Text>
+                        </Pressable>
+                        <Pressable
+                          onPress={goFootballCalendar}
+                          style={({ pressed }) => [styles.btn, styles.btnGhost, pressed && styles.pressed]}
+                          android_ripple={{ color: "rgba(255,255,255,0.08)" }}
+                        >
+                          <Text style={styles.btnGhostText}>Football Calendar</Text>
+                        </Pressable>
+                      </View>
+                    </>
+                  ) : null}
+                </View>
+              </GlassCard>
+            </View>
+          ) : null}
 
           {/* UPCOMING MATCHES */}
           {!showSearchResults ? (
@@ -1564,6 +1926,123 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.18)",
   },
   tileBadgeText: { fontSize: 16, opacity: 0.95 },
+
+  // Weekend trip section
+  weekendHeroCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    backgroundColor: Platform.OS === "android" ? "rgba(12,14,16,0.22)" : "rgba(12,14,16,0.18)",
+    padding: 12,
+    gap: 12,
+  },
+  weekendHeroCardElite: {
+    borderColor: "rgba(79,224,138,0.24)",
+  },
+  weekendHeroCardStrong: {
+    borderColor: "rgba(255,210,90,0.18)",
+  },
+  weekendHeroCardGood: {
+    borderColor: "rgba(110,170,255,0.18)",
+  },
+  weekendHeroTop: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+  },
+  weekendScoreBadge: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(255,255,255,0.05)",
+  },
+  weekendScoreBadgeElite: {
+    borderColor: "rgba(79,224,138,0.26)",
+    backgroundColor: "rgba(79,224,138,0.10)",
+  },
+  weekendScoreBadgeStrong: {
+    borderColor: "rgba(255,210,90,0.22)",
+    backgroundColor: "rgba(255,210,90,0.08)",
+  },
+  weekendScoreBadgeGood: {
+    borderColor: "rgba(110,170,255,0.22)",
+    backgroundColor: "rgba(110,170,255,0.08)",
+  },
+  weekendScoreBadgeText: {
+    color: theme.colors.text,
+    fontSize: 18,
+    fontWeight: theme.fontWeight.black,
+  },
+  weekendHeroTitle: {
+    color: theme.colors.text,
+    fontSize: 16,
+    fontWeight: theme.fontWeight.black,
+  },
+  weekendHeroMeta: {
+    marginTop: 4,
+    color: theme.colors.textSecondary,
+    fontSize: 12,
+    fontWeight: theme.fontWeight.bold,
+  },
+  weekendInfoRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  weekendInfoPill: {
+    minWidth: 96,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    backgroundColor: "rgba(10,12,14,0.14)",
+  },
+  weekendInfoLabel: {
+    color: theme.colors.textTertiary,
+    fontSize: 11,
+    fontWeight: theme.fontWeight.black,
+    letterSpacing: 0.2,
+  },
+  weekendInfoValue: {
+    marginTop: 3,
+    color: theme.colors.text,
+    fontSize: 12,
+    fontWeight: theme.fontWeight.black,
+  },
+  weekendReasonBox: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+    backgroundColor: "rgba(10,12,14,0.14)",
+    padding: 10,
+    gap: 5,
+  },
+  weekendReasonText: {
+    color: theme.colors.textSecondary,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: theme.fontWeight.bold,
+  },
+  tripMiniScoreWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.05)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+  },
+  tripMiniScoreText: {
+    color: theme.colors.text,
+    fontSize: 11,
+    fontWeight: theme.fontWeight.black,
+  },
 
   modalBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.58)" },
   modalSheetWrap: { flex: 1, justifyContent: "flex-end" },
