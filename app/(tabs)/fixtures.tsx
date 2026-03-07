@@ -10,6 +10,7 @@ import {
   Image,
   Alert,
   Modal,
+  FlatList,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -47,7 +48,7 @@ import type { TicketDifficulty } from "@/src/data/ticketGuides/types";
 import { POPULAR_TEAM_IDS, getTeam } from "@/src/data/teams";
 
 /* -------------------------------------------------------------------------- */
-/* Constants */
+/* Constants                                                                  */
 /* -------------------------------------------------------------------------- */
 
 const DAYS_AHEAD = 365;
@@ -55,8 +56,8 @@ const MAX_MULTI_LEAGUES = 10;
 const STRIP_DAYS = 7;
 
 /* -------------------------------------------------------------------------- */
-/* Param helpers
- * -------------------------------------------------------------------------- */
+/* Param helpers                                                              */
+/* -------------------------------------------------------------------------- */
 
 function coerceString(v: any): string | null {
   const s = String(v ?? "").trim();
@@ -69,8 +70,8 @@ function coerceNumber(v: any): number | null {
 }
 
 /* -------------------------------------------------------------------------- */
-/* UTC-safe date helpers (prevents DST duplication)
- * -------------------------------------------------------------------------- */
+/* UTC-safe date helpers                                                      */
+/* -------------------------------------------------------------------------- */
 
 function isoFromUtcParts(y: number, m0: number, d: number) {
   const ms = Date.UTC(y, m0, d, 0, 0, 0, 0);
@@ -113,8 +114,8 @@ function isValidIsoDateOnly(s: string) {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Ticket badge helpers
- * -------------------------------------------------------------------------- */
+/* Ticket helpers                                                             */
+/* -------------------------------------------------------------------------- */
 
 function ticketDifficultyLabel(d: TicketDifficulty | "unknown") {
   switch (d) {
@@ -132,8 +133,8 @@ function ticketDifficultyLabel(d: TicketDifficulty | "unknown") {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Fixture helpers
- * -------------------------------------------------------------------------- */
+/* Fixture helpers                                                            */
+/* -------------------------------------------------------------------------- */
 
 function norm(s: unknown) {
   return String(s ?? "").trim().toLowerCase();
@@ -172,7 +173,11 @@ function kickoffPresentation(r: FixtureListRow, placeholderIds?: Set<string>) {
     };
   }
 
-  return { primary: formatted, secondary: null as string | null, certainty };
+  return {
+    primary: formatted,
+    secondary: null as string | null,
+    certainty,
+  };
 }
 
 function resolveTripForFixture(fixtureId: string): string | null {
@@ -182,8 +187,8 @@ function resolveTripForFixture(fixtureId: string): string | null {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Top-picks scoring (lightweight, honest)
- * -------------------------------------------------------------------------- */
+/* Top picks scoring                                                          */
+/* -------------------------------------------------------------------------- */
 
 function leagueWeight(leagueId: number | null): number {
   if (leagueId === 39) return 120;
@@ -216,9 +221,9 @@ function scoreFixture(r: FixtureListRow): number {
   const dt = r?.fixture?.date ? new Date(r.fixture.date) : null;
   if (dt && !Number.isNaN(dt.getTime())) {
     const day = dt.getDay();
-    if (day === 5 || day === 6 || day === 0) s += 12; // Fri/Sat/Sun
+    if (day === 5 || day === 6 || day === 0) s += 12;
     const hr = dt.getHours();
-    if (hr >= 17 && hr <= 21) s += 8; // evening
+    if (hr >= 17 && hr <= 21) s += 8;
   }
 
   const iso = kickoffIsoOrNull(r);
@@ -228,8 +233,8 @@ function scoreFixture(r: FixtureListRow): number {
 }
 
 /* -------------------------------------------------------------------------- */
-/* League / country browse helpers
- * -------------------------------------------------------------------------- */
+/* League / country browse helpers                                            */
+/* -------------------------------------------------------------------------- */
 
 function LeagueFlag({ code, size = "sm" }: { code: string; size?: "sm" | "md" }) {
   const url = getFlagImageUrl(code);
@@ -291,10 +296,14 @@ function leagueScopeSubtitle(selectedLeagues: LeagueOption[]) {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Concurrency-limited fetch (protects perf + rate limits)
- * -------------------------------------------------------------------------- */
+/* Concurrency-limited fetch                                                  */
+/* -------------------------------------------------------------------------- */
 
-async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+async function mapLimit<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<R>
+): Promise<R[]> {
   const results: R[] = new Array(items.length) as any;
   let i = 0;
 
@@ -311,15 +320,16 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promis
 }
 
 /* -------------------------------------------------------------------------- */
-/* Calendar (simple, built-in, range capable)
- * -------------------------------------------------------------------------- */
+/* Calendar helpers                                                           */
+/* -------------------------------------------------------------------------- */
 
 function daysInMonthUtc(year: number, month0: number) {
   return new Date(Date.UTC(year, month0 + 1, 0)).getUTCDate();
 }
 
 function firstWeekdayUtc(year: number, month0: number) {
-  return new Date(Date.UTC(year, month0, 1)).getUTCDay();
+  const sundayBased = new Date(Date.UTC(year, month0, 1)).getUTCDay();
+  return (sundayBased + 6) % 7;
 }
 
 function monthLabel(year: number, month0: number) {
@@ -339,15 +349,17 @@ function buildMonthGrid(year: number, month0: number) {
   const cells: Array<{ iso: string; day: number; inMonth: boolean }> = [];
 
   for (let i = 0; i < firstW; i++) cells.push({ iso: "", day: 0, inMonth: false });
-  for (let day = 1; day <= dim; day++) cells.push({ iso: isoFromUtcParts(year, month0, day), day, inMonth: true });
+  for (let day = 1; day <= dim; day++) {
+    cells.push({ iso: isoFromUtcParts(year, month0, day), day, inMonth: true });
+  }
   while (cells.length % 7 !== 0) cells.push({ iso: "", day: 0, inMonth: false });
 
   return cells;
 }
 
 /* -------------------------------------------------------------------------- */
-/* Screen
- * -------------------------------------------------------------------------- */
+/* Screen                                                                     */
+/* -------------------------------------------------------------------------- */
 
 export default function FixturesScreen() {
   const router = useRouter();
@@ -360,7 +372,11 @@ export default function FixturesScreen() {
   const routeFrom = useMemo(() => coerceString((params as any)?.from), [params]);
   const routeTo = useMemo(() => coerceString((params as any)?.to), [params]);
 
-  const routeSort = useMemo(() => coerceString((params as any)?.sort) ?? coerceString((params as any)?.mode), [params]);
+  const routeSort = useMemo(
+    () => coerceString((params as any)?.sort) ?? coerceString((params as any)?.mode),
+    [params]
+  );
+
   const isTopPicksMode = useMemo(() => {
     const s = String(routeSort ?? "").toLowerCase();
     return s === "rating" || s === "toppicks" || s === "top_picks" || s === "top-picks";
@@ -368,6 +384,11 @@ export default function FixturesScreen() {
 
   const defaultTopFrom = useMemo(() => minIso, [minIso]);
   const defaultTopTo = useMemo(() => addDaysIsoUtc(minIso, 13), [minIso]);
+
+  const defaultBrowseRange = useMemo(
+    () => ({ from: minIso, to: addDaysIsoUtc(minIso, STRIP_DAYS - 1) }),
+    [minIso]
+  );
 
   const initialDay = useMemo(() => {
     const base =
@@ -380,15 +401,23 @@ export default function FixturesScreen() {
   }, [routeFrom, isTopPicksMode, defaultTopFrom, minIso, maxIso]);
 
   const initialRange = useMemo(() => {
-    const a = routeFrom && isValidIsoDateOnly(routeFrom) ? clampIsoToWindow(routeFrom, minIso, maxIso) : null;
-    const b = routeTo && isValidIsoDateOnly(routeTo) ? clampIsoToWindow(routeTo, minIso, maxIso) : null;
+    const a =
+      routeFrom && isValidIsoDateOnly(routeFrom)
+        ? clampIsoToWindow(routeFrom, minIso, maxIso)
+        : null;
+    const b =
+      routeTo && isValidIsoDateOnly(routeTo)
+        ? clampIsoToWindow(routeTo, minIso, maxIso)
+        : null;
 
     if (a && b && a !== b) return normalizeRange(a, b);
 
     if (isTopPicksMode && !a && !b) return { from: defaultTopFrom, to: defaultTopTo };
 
+    if (!isTopPicksMode && !a && !b) return defaultBrowseRange;
+
     return null;
-  }, [routeFrom, routeTo, isTopPicksMode, defaultTopFrom, defaultTopTo, minIso, maxIso]);
+  }, [routeFrom, routeTo, isTopPicksMode, defaultTopFrom, defaultTopTo, defaultBrowseRange, minIso, maxIso]);
 
   const [selectedDay, setSelectedDay] = useState<string>(initialDay);
   const [range, setRange] = useState<{ from: string; to: string } | null>(initialRange);
@@ -397,7 +426,10 @@ export default function FixturesScreen() {
     return range ? normalizeRange(range.from, range.to) : { from: selectedDay, to: selectedDay };
   }, [range, selectedDay]);
 
-  const isRange = useMemo(() => effectiveRange.from !== effectiveRange.to, [effectiveRange]);
+  const isRange = useMemo(
+    () => effectiveRange.from !== effectiveRange.to,
+    [effectiveRange]
+  );
 
   const stripDays = useMemo(() => {
     const start = clampIsoToWindow(selectedDay, minIso, maxIso);
@@ -428,7 +460,10 @@ export default function FixturesScreen() {
     return FEATURED_LEAGUES;
   }, [selectedLeagues]);
 
-  const leagueSubtitle = useMemo(() => leagueScopeSubtitle(selectedLeagues), [selectedLeagues]);
+  const leagueSubtitle = useMemo(
+    () => leagueScopeSubtitle(selectedLeagues),
+    [selectedLeagues]
+  );
 
   const [activeRegion, setActiveRegion] = useState<LeagueBrowseRegion>("featured-europe");
 
@@ -445,7 +480,9 @@ export default function FixturesScreen() {
     });
 
     LEAGUE_BROWSE_REGION_ORDER.forEach((region) => {
-      out[region].sort((a, b) => a.country.localeCompare(b.country) || a.label.localeCompare(b.label));
+      out[region].sort(
+        (a, b) => a.country.localeCompare(b.country) || a.label.localeCompare(b.label)
+      );
     });
 
     return out;
@@ -520,7 +557,9 @@ export default function FixturesScreen() {
 
         if (cancelled) return;
 
-        const flat = batches.flat();
+        const flat = batches
+          .flat()
+          .filter((r) => r?.fixture?.id != null);
 
         if (isTopPicksMode) {
           flat.sort((a, b) => {
@@ -556,7 +595,10 @@ export default function FixturesScreen() {
 
   const filtered = useMemo(() => {
     const base = rows;
-    const dayFiltered = !isRange ? base.filter((r) => fixtureIsoDateOnly(r) === effectiveRange.from) : base;
+
+    const dayFiltered = !isRange
+      ? base.filter((r) => fixtureIsoDateOnly(r) === effectiveRange.from)
+      : base;
 
     if (!qNorm) return dayFiltered;
 
@@ -571,44 +613,50 @@ export default function FixturesScreen() {
     });
   }, [rows, isRange, effectiveRange.from, qNorm]);
 
-  function goMatch(id: string, ctx?: { leagueId?: number | null; season?: number | null }) {
-    const fid = String(id ?? "").trim();
-    if (!fid) return;
+  const goMatch = useCallback(
+    (id: string, ctx?: { leagueId?: number | null; season?: number | null }) => {
+      const fid = String(id ?? "").trim();
+      if (!fid) return;
 
-    router.push({
-      pathname: "/match/[id]",
-      params: {
-        id: fid,
-        from: effectiveRange.from,
-        to: effectiveRange.to,
-        ...(ctx?.leagueId ? { leagueId: String(ctx.leagueId) } : {}),
-        ...(ctx?.season ? { season: String(ctx.season) } : {}),
-      },
-    } as any);
-  }
+      router.push({
+        pathname: "/match/[id]",
+        params: {
+          id: fid,
+          from: effectiveRange.from,
+          to: effectiveRange.to,
+          ...(ctx?.leagueId ? { leagueId: String(ctx.leagueId) } : {}),
+          ...(ctx?.season ? { season: String(ctx.season) } : {}),
+        },
+      } as any);
+    },
+    [router, effectiveRange.from, effectiveRange.to]
+  );
 
-  function goTripOrBuild(fixtureId: string, ctx?: { leagueId?: number | null; season?: number | null }) {
-    const fid = String(fixtureId ?? "").trim();
-    if (!fid) return;
+  const goTripOrBuild = useCallback(
+    (fixtureId: string, ctx?: { leagueId?: number | null; season?: number | null }) => {
+      const fid = String(fixtureId ?? "").trim();
+      if (!fid) return;
 
-    const existingTripId = resolveTripForFixture(fid);
+      const existingTripId = resolveTripForFixture(fid);
 
-    if (existingTripId) {
-      router.push({ pathname: "/trip/[id]", params: { id: existingTripId } } as any);
-      return;
-    }
+      if (existingTripId) {
+        router.push({ pathname: "/trip/[id]", params: { id: existingTripId } } as any);
+        return;
+      }
 
-    router.push({
-      pathname: "/trip/build",
-      params: {
-        fixtureId: fid,
-        from: effectiveRange.from,
-        to: effectiveRange.to,
-        ...(ctx?.leagueId ? { leagueId: String(ctx.leagueId) } : {}),
-        ...(ctx?.season ? { season: String(ctx.season) } : {}),
-      },
-    } as any);
-  }
+      router.push({
+        pathname: "/trip/build",
+        params: {
+          fixtureId: fid,
+          from: effectiveRange.from,
+          to: effectiveRange.to,
+          ...(ctx?.leagueId ? { leagueId: String(ctx.leagueId) } : {}),
+          ...(ctx?.season ? { season: String(ctx.season) } : {}),
+        },
+      } as any);
+    },
+    [router, effectiveRange.from, effectiveRange.to]
+  );
 
   const onToggleFollowFromRow = useCallback(
     (r: FixtureListRow) => {
@@ -624,7 +672,6 @@ export default function FixturesScreen() {
       const homeName = r?.teams?.home?.name != null ? String(r.teams.home.name) : null;
       const awayName = r?.teams?.away?.name != null ? String(r.teams.away.name) : null;
       const leagueName = r?.league?.name != null ? String(r.league.name) : null;
-
       const round = r?.league?.round != null ? String(r.league.round) : null;
 
       toggleFollow({
@@ -650,7 +697,9 @@ export default function FixturesScreen() {
   const [calendarOpen, setCalendarOpen] = useState(false);
 
   const [calMonthYear, setCalMonthYear] = useState(() => {
-    const base = parseIsoToUtcParts(selectedDay) ?? parseIsoToUtcParts(minIso) ?? { y: 2026, m0: 0, d: 1 };
+    const base =
+      parseIsoToUtcParts(selectedDay) ??
+      parseIsoToUtcParts(minIso) ?? { y: 2026, m0: 0, d: 1 };
     return { y: base.y, m0: base.m0 };
   });
 
@@ -677,7 +726,10 @@ export default function FixturesScreen() {
 
   const closeCalendar = useCallback(() => setCalendarOpen(false), []);
 
-  const calGrid = useMemo(() => buildMonthGrid(calMonthYear.y, calMonthYear.m0), [calMonthYear]);
+  const calGrid = useMemo(
+    () => buildMonthGrid(calMonthYear.y, calMonthYear.m0),
+    [calMonthYear]
+  );
 
   const calPrevMonth = useCallback(() => {
     setCalMonthYear((prev) => {
@@ -760,140 +812,159 @@ export default function FixturesScreen() {
     [minIso, maxIso]
   );
 
-  /* ----------------------------- Row rendering ---------------------------- */
+  /* ----------------------------- Row rendering ----------------------------- */
 
-  const renderRow = (r: FixtureListRow) => {
-    const fixtureId = r?.fixture?.id != null ? String(r.fixture.id) : "";
-    if (!fixtureId) return null;
+  const renderRow = useCallback(
+    ({ item }: { item: FixtureListRow }) => {
+      const r = item;
+      const fixtureId = r?.fixture?.id != null ? String(r.fixture.id) : "";
+      if (!fixtureId) return null;
 
-    const leagueIdStr = r?.league?.id != null ? String(r.league.id) : "L";
-    const rowKey = `${leagueIdStr}-${fixtureId}`;
-    const expanded = expandedKey === rowKey;
+      const rowKey = `${String(r?.league?.id ?? "L")}-${fixtureId}`;
+      const expanded = expandedKey === rowKey;
 
-    const home = String(r?.teams?.home?.name ?? "Home");
-    const away = String(r?.teams?.away?.name ?? "Away");
+      const home = String(r?.teams?.home?.name ?? "Home");
+      const away = String(r?.teams?.away?.name ?? "Away");
 
-    const venue = String(r?.fixture?.venue?.name ?? "").trim();
-    const city = String(r?.fixture?.venue?.city ?? "").trim();
+      const venue = String(r?.fixture?.venue?.name ?? "").trim();
+      const city = String(r?.fixture?.venue?.city ?? "").trim();
 
-    const kickoff = kickoffPresentation(r, placeholderIds);
-    const certainty = kickoff.certainty;
+      const kickoff = kickoffPresentation(r, placeholderIds);
+      const certainty = kickoff.certainty;
+      const isFollowed = followedIdSet.has(fixtureId);
 
-    const isFollowed = followedIdSet.has(fixtureId);
+      const ctxLeagueId = r?.league?.id != null ? Number(r.league.id) : null;
+      const ctxSeason =
+        (r as any)?.league?.season != null ? Number((r as any).league.season) : null;
 
-    const ctxLeagueId = r?.league?.id != null ? Number(r.league.id) : null;
-    const ctxSeason = (r as any)?.league?.season != null ? Number((r as any).league.season) : null;
+      const rawDifficulty = home ? getTicketDifficultyBadge(home) : null;
+      const difficulty: TicketDifficulty | "unknown" = rawDifficulty ?? "unknown";
 
-    const rawDifficulty = home ? getTicketDifficultyBadge(home) : null;
-    const difficulty: TicketDifficulty | "unknown" = rawDifficulty ?? "unknown";
+      const leagueCode =
+        String(r?.league?.country ?? "").trim() ||
+        LEAGUES.find((l) => l.leagueId === ctxLeagueId)?.countryCode ||
+        "";
 
-    return (
-      <View key={rowKey} style={styles.rowWrap}>
-        <GlassCard style={styles.rowCard} level="default" variant="matte">
-          <Pressable
-            onPress={() => setExpandedKey(expanded ? null : rowKey)}
-            style={({ pressed }) => [styles.rowMainPress, pressed && { opacity: 0.96 }]}
-            android_ripple={{ color: "rgba(255,255,255,0.04)" }}
-          >
-            <View style={styles.rowInner}>
-              <View style={styles.fixtureLeagueLine}>
-                <LeagueFlag code={String(r?.league?.flag ? "" : "")} />
-                <Text style={styles.fixtureLeagueText}>{String(r?.league?.name ?? "")}</Text>
-              </View>
-
-              <View style={styles.topRow}>
-                <TeamCrest name={home} logo={r?.teams?.home?.logo} />
-
-                <View style={styles.centerCol}>
-                  <Text style={styles.teamName} numberOfLines={2}>
-                    {home}
-                  </Text>
-                  <Text style={styles.vs}>vs</Text>
-                  <Text style={styles.teamName} numberOfLines={2}>
-                    {away}
-                  </Text>
+      return (
+        <View style={styles.rowWrap}>
+          <GlassCard style={styles.rowCard} level="default" variant="matte">
+            <Pressable
+              onPress={() => setExpandedKey(expanded ? null : rowKey)}
+              style={({ pressed }) => [styles.rowMainPress, pressed && { opacity: 0.96 }]}
+              android_ripple={{ color: "rgba(255,255,255,0.04)" }}
+            >
+              <View style={styles.rowInner}>
+                <View style={styles.fixtureLeagueLine}>
+                  {leagueCode ? <LeagueFlag code={leagueCode} /> : null}
+                  <Text style={styles.fixtureLeagueText}>{String(r?.league?.name ?? "")}</Text>
                 </View>
 
-                <TeamCrest name={away} logo={r?.teams?.away?.logo} />
-              </View>
+                <View style={styles.topRow}>
+                  <TeamCrest name={home} logo={r?.teams?.home?.logo} />
 
-              <View style={styles.metaBlock}>
-                <Text style={styles.metaPrimary}>{kickoff.primary}</Text>
+                  <View style={styles.centerCol}>
+                    <Text style={styles.teamName} numberOfLines={2}>
+                      {home}
+                    </Text>
+                    <Text style={styles.vs}>vs</Text>
+                    <Text style={styles.teamName} numberOfLines={2}>
+                      {away}
+                    </Text>
+                  </View>
 
-                {venue || city ? (
-                  <Text style={styles.metaVenue}>{[venue, city].filter(Boolean).join(" • ")}</Text>
-                ) : null}
+                  <TeamCrest name={away} logo={r?.teams?.away?.logo} />
+                </View>
 
-                {kickoff.secondary ? <Text style={styles.metaSecondary}>{kickoff.secondary}</Text> : null}
-              </View>
+                <View style={styles.metaBlock}>
+                  <Text style={styles.metaPrimary}>{kickoff.primary}</Text>
 
-              <View style={styles.badgeRow}>
-                <FixtureCertaintyBadge state={certainty} variant="compact" />
+                  {venue || city ? (
+                    <Text style={styles.metaVenue}>
+                      {[venue, city].filter(Boolean).join(" • ")}
+                    </Text>
+                  ) : null}
 
-                <View
-                  style={[
-                    styles.ticketPill,
-                    difficulty === "easy" && styles.ticketEasy,
-                    difficulty === "medium" && styles.ticketMedium,
-                    (difficulty === "hard" || difficulty === "very_hard") && styles.ticketHard,
-                  ]}
-                >
-                  <Text
+                  {kickoff.secondary ? (
+                    <Text style={styles.metaSecondary}>{kickoff.secondary}</Text>
+                  ) : null}
+                </View>
+
+                <View style={styles.badgeRow}>
+                  <FixtureCertaintyBadge state={certainty} variant="compact" />
+
+                  <View
                     style={[
-                      styles.ticketText,
-                      difficulty === "easy" && styles.ticketTextEasy,
-                      difficulty === "medium" && styles.ticketTextMedium,
-                      (difficulty === "hard" || difficulty === "very_hard") && styles.ticketTextHard,
+                      styles.ticketPill,
+                      difficulty === "easy" && styles.ticketEasy,
+                      difficulty === "medium" && styles.ticketMedium,
+                      (difficulty === "hard" || difficulty === "very_hard") && styles.ticketHard,
                     ]}
                   >
-                    Home tickets: {ticketDifficultyLabel(difficulty)}
-                  </Text>
+                    <Text
+                      style={[
+                        styles.ticketText,
+                        difficulty === "easy" && styles.ticketTextEasy,
+                        difficulty === "medium" && styles.ticketTextMedium,
+                        (difficulty === "hard" || difficulty === "very_hard") && styles.ticketTextHard,
+                      ]}
+                    >
+                      Home tickets: {ticketDifficultyLabel(difficulty)}
+                    </Text>
+                  </View>
                 </View>
-              </View>
 
-              <View style={styles.followRow}>
+                <View style={styles.followRow}>
+                  <Button
+                    label={isFollowed ? "Following" : "Follow"}
+                    onPress={() => onToggleFollowFromRow(r)}
+                    tone={isFollowed ? "secondary" : "primary"}
+                    size="sm"
+                    glow={!isFollowed}
+                    style={{ flex: 1 }}
+                  />
+                </View>
+
+                <Text style={styles.tapHint}>Tap for actions</Text>
+              </View>
+            </Pressable>
+
+            {expanded ? (
+              <View style={styles.expandArea}>
                 <Button
-                  label={isFollowed ? "Following" : "Follow"}
-                  onPress={() => onToggleFollowFromRow(r)}
-                  tone={isFollowed ? "secondary" : "primary"}
-                  size="sm"
-                  glow={!isFollowed}
+                  label="Match"
+                  onPress={() => goMatch(fixtureId, { leagueId: ctxLeagueId, season: ctxSeason })}
+                  tone="secondary"
+                  size="md"
+                  style={{ flex: 1 }}
+                />
+                <Button
+                  label="Build trip"
+                  onPress={() =>
+                    goTripOrBuild(fixtureId, { leagueId: ctxLeagueId, season: ctxSeason })
+                  }
+                  tone="primary"
+                  size="md"
+                  glow
                   style={{ flex: 1 }}
                 />
               </View>
-
-              <Text style={styles.tapHint}>Tap for actions</Text>
-            </View>
-          </Pressable>
-
-          {expanded ? (
-            <View style={styles.expandArea}>
-              <Button
-                label="Match"
-                onPress={() => goMatch(fixtureId, { leagueId: ctxLeagueId, season: ctxSeason })}
-                tone="secondary"
-                size="md"
-                style={{ flex: 1 }}
-              />
-              <Button
-                label="Build trip"
-                onPress={() => goTripOrBuild(fixtureId, { leagueId: ctxLeagueId, season: ctxSeason })}
-                tone="primary"
-                size="md"
-                glow
-                style={{ flex: 1 }}
-              />
-            </View>
-          ) : null}
-        </GlassCard>
-      </View>
-    );
-  };
+            ) : null}
+          </GlassCard>
+        </View>
+      );
+    },
+    [expandedKey, followedIdSet, goMatch, goTripOrBuild, onToggleFollowFromRow, placeholderIds]
+  );
 
   const headerDateLine = useMemo(() => {
     if (!isRange) {
       const d = new Date(`${effectiveRange.from}T00:00:00.000Z`);
-      return d.toLocaleDateString("en-GB", { weekday: "short", day: "2-digit", month: "short", year: "numeric" });
+      return d.toLocaleDateString("en-GB", {
+        weekday: "short",
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      });
     }
     return `${effectiveRange.from} → ${effectiveRange.to}`;
   }, [isRange, effectiveRange]);
@@ -904,181 +975,230 @@ export default function FixturesScreen() {
   const bgProps =
     typeof bg === "string" ? ({ imageUrl: bg } as const) : ({ imageSource: bg } as const);
 
+  const headerComponent = (
+    <View style={styles.headerListWrap}>
+      <View style={styles.header}>
+        <View style={styles.headerTopRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.title}>{titleText}</Text>
+            <Text style={styles.subtitle}>{leagueSubtitle}</Text>
+            <Text style={styles.dateLine}>{headerDateLine}</Text>
+          </View>
+
+          <Button label="Calendar" tone="secondary" size="sm" onPress={openCalendar} />
+        </View>
+
+        <Input
+          value={query}
+          onChangeText={setQuery}
+          placeholder="Search team, city, venue, or league"
+          leftIcon="search"
+          variant="default"
+          returnKeyType="search"
+          allowClear
+        />
+
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ paddingRight: 12 }}
+        >
+          {stripDays.map((d, i) => {
+            const active = !isRange && d.iso === selectedDay;
+
+            return (
+              <Pressable
+                key={`${d.iso}-${i}`}
+                onPress={() => onTapStripDate(d.iso)}
+                style={[styles.datePill, active && styles.datePillActive]}
+              >
+                <Text style={[styles.dateTop, active && styles.dateTopActive]}>{d.top}</Text>
+                <Text style={[styles.dateBottom, active && styles.dateBottomActive]}>{d.bottom}</Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+
+        <View style={styles.scopeRow}>
+          <Text style={styles.sectionLabel}>Featured leagues</Text>
+          {selectedLeagueIds.length > 0 ? (
+            <Button label="Reset to featured" tone="ghost" size="sm" onPress={resetToFeatured} />
+          ) : null}
+        </View>
+
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ paddingRight: 12 }}
+        >
+          {FEATURED_LEAGUES.map((league) => {
+            const active =
+              selectedLeagueIds.length > 0 &&
+              selectedLeagueIds.length === 1 &&
+              selectedLeagueIds[0] === league.leagueId;
+
+            return (
+              <Pressable
+                key={`featured-${league.leagueId}`}
+                onPress={() => selectSingleLeague(league.leagueId)}
+                style={[styles.featuredLeagueCard, active && styles.featuredLeagueCardActive]}
+              >
+                <View style={styles.featuredLeagueTop}>
+                  <LeagueFlag code={league.countryCode} size="md" />
+                  <Text
+                    style={[
+                      styles.featuredLeagueText,
+                      active && styles.featuredLeagueTextActive,
+                    ]}
+                  >
+                    {league.label}
+                  </Text>
+                </View>
+                <Text style={styles.featuredLeagueCountry}>{league.country}</Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+
+        <View style={styles.scopeRow}>
+          <Text style={styles.sectionLabel}>Browse by region</Text>
+        </View>
+
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ paddingRight: 12 }}
+        >
+          {LEAGUE_BROWSE_REGION_ORDER.map((region) => {
+            const active = region === activeRegion;
+            return (
+              <Pressable
+                key={region}
+                onPress={() => setActiveRegion(region)}
+                style={[styles.regionPill, active && styles.regionPillActive]}
+              >
+                <Text style={[styles.regionPillText, active && styles.regionPillTextActive]}>
+                  {LEAGUE_BROWSE_REGION_LABELS[region]}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+
+        <View style={styles.countryGrid}>
+          {leaguesByRegion[activeRegion].map((league) => {
+            const active = selectedLeagueIds.includes(league.leagueId);
+            return (
+              <Pressable
+                key={`country-card-${league.leagueId}`}
+                onPress={() => selectSingleLeague(league.leagueId)}
+                onLongPress={() => toggleLeague(league.leagueId)}
+                style={[styles.countryCardWrap, active && styles.countryCardWrapActive]}
+              >
+                <GlassCard style={styles.countryCard} level="default" variant="matte">
+                  <View style={styles.countryCardHeader}>
+                    <LeagueFlag code={league.countryCode} size="md" />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.countryCardCountry}>{league.country}</Text>
+                      <Text style={styles.countryCardLeague}>{league.label}</Text>
+                    </View>
+                  </View>
+
+                  <Text style={styles.countryCardClubs} numberOfLines={2}>
+                    {featuredClubLine(league)}
+                  </Text>
+
+                  <View style={styles.countryCardFooter}>
+                    <Text style={styles.countryCardHint}>Tap to view</Text>
+                    <Text style={styles.countryCardHint}>Hold to multi-select</Text>
+                  </View>
+                </GlassCard>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        {selectedLeagueIds.length > 0 ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ paddingRight: 12 }}
+          >
+            {selectedLeagues.map((league) => (
+              <Pressable
+                key={`selected-${league.leagueId}`}
+                onPress={() => toggleLeague(league.leagueId)}
+                style={[styles.leaguePill, styles.leaguePillActive]}
+              >
+                <Text style={[styles.leagueText, styles.leagueTextActive]}>{league.label}</Text>
+                <LeagueFlag code={league.countryCode} />
+              </Pressable>
+            ))}
+          </ScrollView>
+        ) : null}
+
+        <Text style={styles.helperLine}>
+          {isRange
+            ? `Range • ${effectiveRange.from} → ${effectiveRange.to}`
+            : `Day • ${effectiveRange.from}`}
+          {selectedLeagueIds.length > 0
+            ? ` • ${selectedLeagueIds.length}/${MAX_MULTI_LEAGUES} leagues`
+            : " • Featured scope"}
+          {isTopPicksMode ? " • Sorted by rating" : ""}
+        </Text>
+      </View>
+
+      <View style={styles.content}>
+        <View style={styles.listWrap}>
+          {!loading && !error && filtered.length > 0 ? (
+            <Text style={styles.resultsLine}>
+              {filtered.length} match{filtered.length === 1 ? "" : "es"} found
+            </Text>
+          ) : null}
+        </View>
+      </View>
+    </View>
+  );
+
   return (
     <Background {...bgProps} overlayOpacity={0}>
       <SafeAreaView style={styles.container} edges={["top"]}>
-        <View style={styles.header}>
-          <View style={styles.headerTopRow}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.title}>{titleText}</Text>
-              <Text style={styles.subtitle}>{leagueSubtitle}</Text>
-              <Text style={styles.dateLine}>{headerDateLine}</Text>
+        <FlatList
+          data={loading || error ? [] : filtered}
+          keyExtractor={(item, index) => {
+            const fid = item?.fixture?.id != null ? String(item.fixture.id) : `row-${index}`;
+            const lid = item?.league?.id != null ? String(item.league.id) : "L";
+            return `${lid}-${fid}`;
+          }}
+          renderItem={renderRow}
+          ListHeaderComponent={headerComponent}
+          ListEmptyComponent={
+            <View style={[styles.content, styles.listWrap]}>
+              {loading ? (
+                <View style={styles.center}>
+                  <ActivityIndicator />
+                  <Text style={styles.muted}>Loading fixtures…</Text>
+                </View>
+              ) : null}
+
+              {!loading && error ? (
+                <EmptyState title="Error" message={error} iconName="alert-circle" />
+              ) : null}
+
+              {!loading && !error ? (
+                <EmptyState
+                  title="No matches found"
+                  message="Try another date, another region, or a different league selection."
+                  iconName="search"
+                />
+              ) : null}
             </View>
-
-            <Button label="Calendar" tone="secondary" size="sm" onPress={openCalendar} />
-          </View>
-
-          <Input
-            value={query}
-            onChangeText={setQuery}
-            placeholder="Search team, city, venue, or league"
-            leftIcon="search"
-            variant="default"
-            returnKeyType="search"
-            allowClear
-          />
-
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 12 }}>
-            {stripDays.map((d, i) => {
-              const active = !isRange && d.iso === selectedDay;
-
-              return (
-                <Pressable
-                  key={`${d.iso}-${i}`}
-                  onPress={() => onTapStripDate(d.iso)}
-                  style={[styles.datePill, active && styles.datePillActive]}
-                >
-                  <Text style={[styles.dateTop, active && styles.dateTopActive]}>{d.top}</Text>
-                  <Text style={[styles.dateBottom, active && styles.dateBottomActive]}>{d.bottom}</Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-
-          <View style={styles.scopeRow}>
-            <Text style={styles.sectionLabel}>Featured leagues</Text>
-            {selectedLeagueIds.length > 0 ? (
-              <Button label="Reset to featured" tone="ghost" size="sm" onPress={resetToFeatured} />
-            ) : null}
-          </View>
-
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 12 }}>
-            {FEATURED_LEAGUES.map((league) => {
-              const active =
-                selectedLeagueIds.length === 0
-                  ? false
-                  : selectedLeagueIds.length === 1 && selectedLeagueIds[0] === league.leagueId;
-
-              return (
-                <Pressable
-                  key={`featured-${league.leagueId}`}
-                  onPress={() => selectSingleLeague(league.leagueId)}
-                  style={[styles.featuredLeagueCard, active && styles.featuredLeagueCardActive]}
-                >
-                  <View style={styles.featuredLeagueTop}>
-                    <LeagueFlag code={league.countryCode} size="md" />
-                    <Text style={[styles.featuredLeagueText, active && styles.featuredLeagueTextActive]}>{league.label}</Text>
-                  </View>
-                  <Text style={styles.featuredLeagueCountry}>{league.country}</Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-
-          <View style={styles.scopeRow}>
-            <Text style={styles.sectionLabel}>Browse by region</Text>
-          </View>
-
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 12 }}>
-            {LEAGUE_BROWSE_REGION_ORDER.map((region) => {
-              const active = region === activeRegion;
-              return (
-                <Pressable
-                  key={region}
-                  onPress={() => setActiveRegion(region)}
-                  style={[styles.regionPill, active && styles.regionPillActive]}
-                >
-                  <Text style={[styles.regionPillText, active && styles.regionPillTextActive]}>
-                    {LEAGUE_BROWSE_REGION_LABELS[region]}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-
-          <View style={styles.countryGrid}>
-            {leaguesByRegion[activeRegion].map((league) => {
-              const active = selectedLeagueIds.includes(league.leagueId);
-              return (
-                <Pressable
-                  key={`country-card-${league.leagueId}`}
-                  onPress={() => selectSingleLeague(league.leagueId)}
-                  onLongPress={() => toggleLeague(league.leagueId)}
-                  style={[styles.countryCardWrap, active && styles.countryCardWrapActive]}
-                >
-                  <GlassCard style={styles.countryCard} level="default" variant="matte">
-                    <View style={styles.countryCardHeader}>
-                      <LeagueFlag code={league.countryCode} size="md" />
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.countryCardCountry}>{league.country}</Text>
-                        <Text style={styles.countryCardLeague}>{league.label}</Text>
-                      </View>
-                    </View>
-
-                    <Text style={styles.countryCardClubs} numberOfLines={2}>
-                      {featuredClubLine(league)}
-                    </Text>
-
-                    <View style={styles.countryCardFooter}>
-                      <Text style={styles.countryCardHint}>Tap to view</Text>
-                      <Text style={styles.countryCardHint}>Hold to multi-select</Text>
-                    </View>
-                  </GlassCard>
-                </Pressable>
-              );
-            })}
-          </View>
-
-          {selectedLeagueIds.length > 0 ? (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 12 }}>
-              {selectedLeagues.map((league) => (
-                <Pressable
-                  key={`selected-${league.leagueId}`}
-                  onPress={() => toggleLeague(league.leagueId)}
-                  style={[styles.leaguePill, styles.leaguePillActive]}
-                >
-                  <Text style={[styles.leagueText, styles.leagueTextActive]}>{league.label}</Text>
-                  <LeagueFlag code={league.countryCode} />
-                </Pressable>
-              ))}
-            </ScrollView>
-          ) : null}
-
-          <Text style={styles.helperLine}>
-            {isRange ? `Range • ${effectiveRange.from} → ${effectiveRange.to}` : `Day • ${effectiveRange.from}`}
-            {selectedLeagueIds.length > 0 ? ` • ${selectedLeagueIds.length}/${MAX_MULTI_LEAGUES} leagues` : " • Featured scope"}
-            {isTopPicksMode ? " • Sorted by rating" : ""}
-          </Text>
-        </View>
-
-        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-          <View style={styles.listWrap}>
-            {loading && (
-              <View style={styles.center}>
-                <ActivityIndicator />
-                <Text style={styles.muted}>Loading fixtures…</Text>
-              </View>
-            )}
-
-            {!loading && !error && filtered.length > 0 ? (
-              <Text style={styles.resultsLine}>
-                {filtered.length} match{filtered.length === 1 ? "" : "es"} found
-              </Text>
-            ) : null}
-
-            {!loading && error && <EmptyState title="Error" message={error} iconName="alert-circle" />}
-
-            {!loading && !error && filtered.length === 0 && (
-              <EmptyState
-                title="No matches found"
-                message="Try another date, another region, or a different league selection."
-                iconName="search"
-              />
-            )}
-
-            {!loading && !error && filtered.map(renderRow)}
-          </View>
-        </ScrollView>
+          }
+          contentContainerStyle={styles.flatListContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          removeClippedSubviews={false}
+        />
 
         <Modal visible={calendarOpen} animationType="fade" transparent onRequestClose={closeCalendar}>
           <Pressable style={styles.modalBackdrop} onPress={closeCalendar} />
@@ -1099,7 +1219,9 @@ export default function FixturesScreen() {
                     <Text style={styles.calNavText}>‹</Text>
                   </Pressable>
 
-                  <Text style={styles.calMonthText}>{monthLabel(calMonthYear.y, calMonthYear.m0)}</Text>
+                  <Text style={styles.calMonthText}>
+                    {monthLabel(calMonthYear.y, calMonthYear.m0)}
+                  </Text>
 
                   <Pressable onPress={calNextMonth} style={styles.calNavBtn} hitSlop={10}>
                     <Text style={styles.calNavText}>›</Text>
@@ -1120,7 +1242,6 @@ export default function FixturesScreen() {
 
                     const iso = c.iso;
                     const disabled = iso < minIso || iso > maxIso;
-
                     const inSel = !disabled && calInRange(iso);
                     const edge = !disabled && calIsEdge(iso);
 
@@ -1137,19 +1258,34 @@ export default function FixturesScreen() {
                           disabled && { opacity: 0.35 },
                         ]}
                       >
-                        <Text style={[styles.calDayText, edge && styles.calDayTextEdge]}>{c.day}</Text>
+                        <Text style={[styles.calDayText, edge && styles.calDayTextEdge]}>
+                          {c.day}
+                        </Text>
                       </Pressable>
                     );
                   })}
                 </View>
 
                 <View style={styles.modalActions}>
-                  <Button label="Clear range" tone="secondary" size="md" onPress={clearCalendarRange} style={{ flex: 1 }} />
-                  <Button label="Apply" tone="primary" size="md" glow onPress={applyCalendar} style={{ flex: 1 }} />
+                  <Button
+                    label="Clear range"
+                    tone="secondary"
+                    size="md"
+                    onPress={clearCalendarRange}
+                    style={{ flex: 1 }}
+                  />
+                  <Button
+                    label="Apply"
+                    tone="primary"
+                    size="md"
+                    glow
+                    onPress={applyCalendar}
+                    style={{ flex: 1 }}
+                  />
                 </View>
 
                 <Text style={styles.modalFootnote}>
-                  Tip: Tap two different days to set a range. Tap again to reset back to a single day.
+                  Tip: tap two different days to set a range. Tap again to reset back to a single day.
                 </Text>
               </View>
             </GlassCard>
@@ -1161,11 +1297,19 @@ export default function FixturesScreen() {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Styles
- * -------------------------------------------------------------------------- */
+/* Styles                                                                     */
+/* -------------------------------------------------------------------------- */
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+
+  flatListContent: {
+    paddingBottom: theme.spacing.xl,
+  },
+
+  headerListWrap: {
+    width: "100%",
+  },
 
   header: {
     paddingHorizontal: theme.spacing.lg,
@@ -1239,8 +1383,19 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(87,162,56,0.10)",
   },
 
-  dateTop: { color: theme.colors.textSecondary, fontSize: theme.fontSize.tiny, fontWeight: theme.fontWeight.semibold },
-  dateBottom: { color: theme.colors.textPrimary, fontSize: theme.fontSize.meta, fontWeight: theme.fontWeight.semibold, marginTop: 2 },
+  dateTop: {
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSize.tiny,
+    fontWeight: theme.fontWeight.semibold,
+  },
+
+  dateBottom: {
+    color: theme.colors.textPrimary,
+    fontSize: theme.fontSize.meta,
+    fontWeight: theme.fontWeight.semibold,
+    marginTop: 2,
+  },
+
   dateTopActive: { color: "rgba(87,162,56,0.95)" },
   dateBottomActive: { color: theme.colors.textPrimary },
 
@@ -1388,14 +1543,24 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(87,162,56,0.10)",
   },
 
-  leagueText: { color: theme.colors.textSecondary, fontWeight: theme.fontWeight.semibold, fontSize: theme.fontSize.tiny },
+  leagueText: {
+    color: theme.colors.textSecondary,
+    fontWeight: theme.fontWeight.semibold,
+    fontSize: theme.fontSize.tiny,
+  },
+
   leagueTextActive: { color: theme.colors.textPrimary },
 
   flag: { width: 18, height: 13, borderRadius: 3, opacity: 0.9 },
   flagMd: { width: 22, height: 16, borderRadius: 4, opacity: 0.95 },
 
-  content: { paddingHorizontal: theme.spacing.lg, paddingBottom: theme.spacing.xl },
-  listWrap: { gap: 12 },
+  content: {
+    paddingHorizontal: theme.spacing.lg,
+  },
+
+  listWrap: {
+    gap: 12,
+  },
 
   resultsLine: {
     color: theme.colors.textSecondary,
@@ -1403,14 +1568,37 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeight.medium,
   },
 
-  center: { paddingVertical: 24, alignItems: "center", gap: 10 },
-  muted: { color: theme.colors.textSecondary, fontWeight: theme.fontWeight.medium },
+  center: {
+    paddingVertical: 24,
+    alignItems: "center",
+    gap: 10,
+  },
 
-  rowWrap: { width: "100%" },
-  rowCard: { borderRadius: theme.borderRadius.sheet, padding: 0 },
-  rowMainPress: { borderRadius: theme.borderRadius.sheet, overflow: "hidden" },
+  muted: {
+    color: theme.colors.textSecondary,
+    fontWeight: theme.fontWeight.medium,
+  },
 
-  rowInner: { padding: 16, gap: 12 },
+  rowWrap: {
+    width: "100%",
+    paddingHorizontal: theme.spacing.lg,
+    marginBottom: 12,
+  },
+
+  rowCard: {
+    borderRadius: theme.borderRadius.sheet,
+    padding: 0,
+  },
+
+  rowMainPress: {
+    borderRadius: theme.borderRadius.sheet,
+    overflow: "hidden",
+  },
+
+  rowInner: {
+    padding: 16,
+    gap: 12,
+  },
 
   fixtureLeagueLine: {
     flexDirection: "row",
@@ -1425,7 +1613,11 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeight.medium,
   },
 
-  topRow: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
+  topRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+  },
 
   crestWrap: {
     width: 56,
@@ -1438,10 +1630,24 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     overflow: "hidden",
   },
-  crestImg: { width: 38, height: 38, opacity: 0.95 },
-  crestFallback: { color: theme.colors.textSecondary, fontWeight: theme.fontWeight.semibold },
 
-  centerCol: { flex: 1, alignItems: "center", gap: 6, paddingHorizontal: 2 },
+  crestImg: {
+    width: 38,
+    height: 38,
+    opacity: 0.95,
+  },
+
+  crestFallback: {
+    color: theme.colors.textSecondary,
+    fontWeight: theme.fontWeight.semibold,
+  },
+
+  centerCol: {
+    flex: 1,
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 2,
+  },
 
   teamName: {
     color: theme.colors.textPrimary,
@@ -1452,10 +1658,24 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
 
-  vs: { color: theme.colors.textMuted, fontSize: theme.fontSize.tiny, fontWeight: theme.fontWeight.medium },
+  vs: {
+    color: theme.colors.textMuted,
+    fontSize: theme.fontSize.tiny,
+    fontWeight: theme.fontWeight.medium,
+  },
 
-  metaBlock: { width: "100%", alignItems: "center", gap: 4 },
-  metaPrimary: { color: theme.colors.textSecondary, fontSize: theme.fontSize.tiny, fontWeight: theme.fontWeight.semibold, textAlign: "center" },
+  metaBlock: {
+    width: "100%",
+    alignItems: "center",
+    gap: 4,
+  },
+
+  metaPrimary: {
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSize.tiny,
+    fontWeight: theme.fontWeight.semibold,
+    textAlign: "center",
+  },
 
   metaVenue: {
     color: theme.colors.textPrimary,
@@ -1489,33 +1709,106 @@ const styles = StyleSheet.create({
     borderRadius: theme.borderRadius.pill,
   },
 
-  ticketText: { color: theme.colors.textSecondary, fontWeight: theme.fontWeight.semibold, fontSize: 11 },
+  ticketText: {
+    color: theme.colors.textSecondary,
+    fontWeight: theme.fontWeight.semibold,
+    fontSize: 11,
+  },
 
-  ticketEasy: { borderColor: "rgba(87,162,56,0.30)", backgroundColor: "rgba(87,162,56,0.10)" },
-  ticketTextEasy: { color: "rgba(87,162,56,0.95)" },
+  ticketEasy: {
+    borderColor: "rgba(87,162,56,0.30)",
+    backgroundColor: "rgba(87,162,56,0.10)",
+  },
 
-  ticketMedium: { borderColor: "rgba(242,201,76,0.30)", backgroundColor: "rgba(242,201,76,0.10)" },
-  ticketTextMedium: { color: "rgba(242,201,76,0.95)" },
+  ticketTextEasy: {
+    color: "rgba(87,162,56,0.95)",
+  },
 
-  ticketHard: { borderColor: "rgba(214,69,69,0.30)", backgroundColor: "rgba(214,69,69,0.10)" },
-  ticketTextHard: { color: "rgba(214,69,69,0.95)" },
+  ticketMedium: {
+    borderColor: "rgba(242,201,76,0.30)",
+    backgroundColor: "rgba(242,201,76,0.10)",
+  },
 
-  followRow: { marginTop: 2, flexDirection: "row", gap: 10 },
+  ticketTextMedium: {
+    color: "rgba(242,201,76,0.95)",
+  },
 
-  tapHint: { marginTop: -2, color: theme.colors.textMuted, fontSize: theme.fontSize.tiny, fontWeight: theme.fontWeight.medium, textAlign: "center" },
+  ticketHard: {
+    borderColor: "rgba(214,69,69,0.30)",
+    backgroundColor: "rgba(214,69,69,0.10)",
+  },
 
-  expandArea: { flexDirection: "row", gap: 10, padding: 16, paddingTop: 0 },
+  ticketTextHard: {
+    color: "rgba(214,69,69,0.95)",
+  },
 
-  modalBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.58)" },
-  modalWrap: { flex: 1, justifyContent: "flex-end" },
-  modalSheet: { borderRadius: 22, marginHorizontal: theme.spacing.lg, marginBottom: theme.spacing.lg },
-  modalInner: { padding: 14, gap: 12 },
+  followRow: {
+    marginTop: 2,
+    flexDirection: "row",
+    gap: 10,
+  },
 
-  modalHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
-  modalTitle: { color: theme.colors.textPrimary, fontSize: theme.fontSize.h2, fontWeight: theme.fontWeight.semibold },
-  modalSub: { color: theme.colors.textSecondary, fontSize: theme.fontSize.meta, fontWeight: theme.fontWeight.medium },
+  tapHint: {
+    marginTop: -2,
+    color: theme.colors.textMuted,
+    fontSize: theme.fontSize.tiny,
+    fontWeight: theme.fontWeight.medium,
+    textAlign: "center",
+  },
 
-  calHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  expandArea: {
+    flexDirection: "row",
+    gap: 10,
+    padding: 16,
+    paddingTop: 0,
+  },
+
+  modalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.58)",
+  },
+
+  modalWrap: {
+    flex: 1,
+    justifyContent: "flex-end",
+  },
+
+  modalSheet: {
+    borderRadius: 22,
+    marginHorizontal: theme.spacing.lg,
+    marginBottom: theme.spacing.lg,
+  },
+
+  modalInner: {
+    padding: 14,
+    gap: 12,
+  },
+
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+
+  modalTitle: {
+    color: theme.colors.textPrimary,
+    fontSize: theme.fontSize.h2,
+    fontWeight: theme.fontWeight.semibold,
+  },
+
+  modalSub: {
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSize.meta,
+    fontWeight: theme.fontWeight.medium,
+  },
+
+  calHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+
   calNavBtn: {
     width: 36,
     height: 36,
@@ -1526,14 +1819,46 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  calNavText: { color: theme.colors.textSecondary, fontSize: 20, fontWeight: theme.fontWeight.semibold, marginTop: -2 },
-  calMonthText: { color: theme.colors.textPrimary, fontSize: theme.fontSize.meta, fontWeight: theme.fontWeight.semibold },
 
-  calWeekRow: { flexDirection: "row", justifyContent: "space-between", paddingTop: 4 },
-  calWeekText: { width: "14.285%", textAlign: "center", color: theme.colors.textMuted, fontSize: 11, fontWeight: theme.fontWeight.medium },
+  calNavText: {
+    color: theme.colors.textSecondary,
+    fontSize: 20,
+    fontWeight: theme.fontWeight.semibold,
+    marginTop: -2,
+  },
 
-  calGrid: { flexDirection: "row", flexWrap: "wrap", marginTop: 4 },
-  calCell: { width: "14.285%", aspectRatio: 1, padding: 4 },
+  calMonthText: {
+    color: theme.colors.textPrimary,
+    fontSize: theme.fontSize.meta,
+    fontWeight: theme.fontWeight.semibold,
+  },
+
+  calWeekRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingTop: 4,
+  },
+
+  calWeekText: {
+    width: "14.285%",
+    textAlign: "center",
+    color: theme.colors.textMuted,
+    fontSize: 11,
+    fontWeight: theme.fontWeight.medium,
+  },
+
+  calGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginTop: 4,
+  },
+
+  calCell: {
+    width: "14.285%",
+    aspectRatio: 1,
+    padding: 4,
+  },
+
   calDayBtn: {
     borderRadius: 14,
     borderWidth: 1,
@@ -1542,12 +1867,36 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  calDayInRange: { backgroundColor: "rgba(87,162,56,0.06)" },
-  calDayEdge: { borderColor: "rgba(87,162,56,0.30)", backgroundColor: "rgba(87,162,56,0.12)" },
-  calDayText: { color: theme.colors.textSecondary, fontWeight: theme.fontWeight.semibold, fontSize: 12 },
-  calDayTextEdge: { color: theme.colors.textPrimary },
 
-  modalActions: { flexDirection: "row", gap: 10, marginTop: 4 },
+  calDayInRange: {
+    backgroundColor: "rgba(87,162,56,0.06)",
+  },
 
-  modalFootnote: { color: theme.colors.textMuted, fontSize: theme.fontSize.tiny, fontWeight: theme.fontWeight.medium, lineHeight: 16 },
+  calDayEdge: {
+    borderColor: "rgba(87,162,56,0.30)",
+    backgroundColor: "rgba(87,162,56,0.12)",
+  },
+
+  calDayText: {
+    color: theme.colors.textSecondary,
+    fontWeight: theme.fontWeight.semibold,
+    fontSize: 12,
+  },
+
+  calDayTextEdge: {
+    color: theme.colors.textPrimary,
+  },
+
+  modalActions: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 4,
+  },
+
+  modalFootnote: {
+    color: theme.colors.textMuted,
+    fontSize: theme.fontSize.tiny,
+    fontWeight: theme.fontWeight.medium,
+    lineHeight: 16,
+  },
 });
