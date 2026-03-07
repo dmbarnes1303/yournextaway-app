@@ -20,10 +20,7 @@ import { useTripsStore } from "@/src/state/trips";
 import { buildTicketLink } from "@/src/services/partnerLinks";
 import { beginPartnerClick, openUntrackedUrl } from "@/src/services/partnerClicks";
 
-import stadiumRegistry, {
-  getAllStadiums,
-  getStadiumByTeamFromRegistry,
-} from "@/src/data/stadiumRegistry";
+import { getAllStadiums, getStadiumByTeamFromRegistry } from "@/src/data/stadiumRegistry";
 import type { StadiumRecord } from "@/src/data/stadiums/types";
 import { normalizeTeamKey } from "@/src/data/teams";
 
@@ -111,24 +108,10 @@ const VENUE_ALIASES: Record<string, string[]> = {
   "san-siro": ["giuseppe-meazza", "san-siro"],
 };
 
-type ResolveResult = {
-  stadium: StadiumRecord | null;
-  debug: {
-    stadiumCount: number;
-    normalizedVenue: string;
-    normalizedHomeTeam: string;
-    exactKeyHit: string | null;
-    exactNameHit: string | null;
-    aliasHit: string | null;
-    teamHit: string | null;
-    sampleKeys: string[];
-  };
-};
-
 function resolveStadiumFromVenueOrTeam(args: {
   venueName?: string | null;
   homeTeamName?: string | null;
-}): ResolveResult {
+}): StadiumRecord | null {
   const rawVenue = String(args.venueName ?? "").trim();
   const rawHome = String(args.homeTeamName ?? "").trim();
 
@@ -136,100 +119,31 @@ function resolveStadiumFromVenueOrTeam(args: {
   const venueKey = normalizeValue(rawVenue);
   const homeTeamKey = normalizeTeamKey(rawHome);
 
-  let exactKeyHit: StadiumRecord | null = null;
-  let exactNameHit: StadiumRecord | null = null;
-  let aliasHit: StadiumRecord | null = null;
-  let teamHit: StadiumRecord | null = null;
-
   if (rawVenue) {
-    exactKeyHit = all.find((s) => normalizeValue(s.stadiumKey) === venueKey) ?? null;
-    if (exactKeyHit) {
-      return {
-        stadium: exactKeyHit,
-        debug: {
-          stadiumCount: all.length,
-          normalizedVenue: venueKey,
-          normalizedHomeTeam: homeTeamKey,
-          exactKeyHit: exactKeyHit.stadiumKey,
-          exactNameHit: null,
-          aliasHit: null,
-          teamHit: null,
-          sampleKeys: all.slice(0, 8).map((s) => s.stadiumKey),
-        },
-      };
-    }
+    const exactKeyHit =
+      all.find((s) => normalizeValue(s.stadiumKey) === venueKey) ?? null;
+    if (exactKeyHit) return exactKeyHit;
 
-    exactNameHit = all.find((s) => normalizeValue(s.name) === venueKey) ?? null;
-    if (exactNameHit) {
-      return {
-        stadium: exactNameHit,
-        debug: {
-          stadiumCount: all.length,
-          normalizedVenue: venueKey,
-          normalizedHomeTeam: homeTeamKey,
-          exactKeyHit: null,
-          exactNameHit: exactNameHit.stadiumKey,
-          aliasHit: null,
-          teamHit: null,
-          sampleKeys: all.slice(0, 8).map((s) => s.stadiumKey),
-        },
-      };
-    }
+    const exactNameHit =
+      all.find((s) => normalizeValue(s.name) === venueKey) ?? null;
+    if (exactNameHit) return exactNameHit;
 
     const aliases = VENUE_ALIASES[venueKey] ?? [];
     if (aliases.length > 0) {
-      aliasHit =
-        all.find((s) => aliases.some((alias) => normalizeValue(s.stadiumKey) === normalizeValue(alias))) ?? null;
-      if (aliasHit) {
-        return {
-          stadium: aliasHit,
-          debug: {
-            stadiumCount: all.length,
-            normalizedVenue: venueKey,
-            normalizedHomeTeam: homeTeamKey,
-            exactKeyHit: null,
-            exactNameHit: null,
-            aliasHit: aliasHit.stadiumKey,
-            teamHit: null,
-            sampleKeys: all.slice(0, 8).map((s) => s.stadiumKey),
-          },
-        };
-      }
+      const aliasHit =
+        all.find((s) =>
+          aliases.some((alias) => normalizeValue(s.stadiumKey) === normalizeValue(alias))
+        ) ?? null;
+      if (aliasHit) return aliasHit;
     }
   }
 
   if (rawHome) {
-    teamHit = getStadiumByTeamFromRegistry(homeTeamKey);
-    if (teamHit) {
-      return {
-        stadium: teamHit,
-        debug: {
-          stadiumCount: all.length,
-          normalizedVenue: venueKey,
-          normalizedHomeTeam: homeTeamKey,
-          exactKeyHit: null,
-          exactNameHit: null,
-          aliasHit: null,
-          teamHit: teamHit.stadiumKey,
-          sampleKeys: all.slice(0, 8).map((s) => s.stadiumKey),
-        },
-      };
-    }
+    const teamHit = getStadiumByTeamFromRegistry(homeTeamKey);
+    if (teamHit) return teamHit;
   }
 
-  return {
-    stadium: null,
-    debug: {
-      stadiumCount: all.length,
-      normalizedVenue: venueKey,
-      normalizedHomeTeam: homeTeamKey,
-      exactKeyHit: null,
-      exactNameHit: null,
-      aliasHit: null,
-      teamHit: null,
-      sampleKeys: all.slice(0, 8).map((s) => s.stadiumKey),
-    },
-  };
+  return null;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -270,7 +184,10 @@ export default function MatchScreen() {
     return k || null;
   }, [trip, fixture]);
 
-  const kickoffText = useMemo(() => (kickoffIso ? formatKickoffLocal(kickoffIso) : "Kickoff TBC"), [kickoffIso]);
+  const kickoffText = useMemo(
+    () => (kickoffIso ? formatKickoffLocal(kickoffIso) : "Kickoff TBC"),
+    [kickoffIso]
+  );
 
   const venueName = useMemo(
     () => String((trip as any)?.venueName ?? (fixture as any)?.fixture?.venue?.name ?? "").trim(),
@@ -286,7 +203,7 @@ export default function MatchScreen() {
     return [venueName, venueCity].filter(Boolean).join(" • ");
   }, [venueName, venueCity]);
 
-  const stadiumResolution = useMemo(
+  const resolvedStadium = useMemo(
     () =>
       resolveStadiumFromVenueOrTeam({
         venueName,
@@ -295,18 +212,19 @@ export default function MatchScreen() {
     [venueName, homeName]
   );
 
-  const resolvedStadium = stadiumResolution.stadium;
-  const resolutionDebug = stadiumResolution.debug;
-
   const crestHome = useMemo(() => {
     const id = (trip as any)?.homeTeamId;
-    if (typeof id === "number" && id > 0) return `https://media.api-sports.io/football/teams/${id}.png`;
+    if (typeof id === "number" && id > 0) {
+      return `https://media.api-sports.io/football/teams/${id}.png`;
+    }
     return (fixture as any)?.teams?.home?.logo ?? null;
   }, [trip, fixture]);
 
   const crestAway = useMemo(() => {
     const id = (trip as any)?.awayTeamId;
-    if (typeof id === "number" && id > 0) return `https://media.api-sports.io/football/teams/${id}.png`;
+    if (typeof id === "number" && id > 0) {
+      return `https://media.api-sports.io/football/teams/${id}.png`;
+    }
     return (fixture as any)?.teams?.away?.logo ?? null;
   }, [trip, fixture]);
 
@@ -368,12 +286,18 @@ export default function MatchScreen() {
     if (openingTickets) return;
 
     if (!tripId) {
-      Alert.alert("Open from a trip", "Open this match from a Trip Workspace so ticket clicks can be saved into Wallet.");
+      Alert.alert(
+        "Open from a trip",
+        "Open this match from a Trip Workspace so ticket clicks can be saved into Wallet."
+      );
       return;
     }
 
     if (!homeName || !awayName || !kickoffIso) {
-      Alert.alert("Tickets not ready", "Missing match details (teams/kickoff). Try again after the match loads.");
+      Alert.alert(
+        "Tickets not ready",
+        "Missing match details (teams/kickoff). Try again after the match loads."
+      );
       return;
     }
 
@@ -537,7 +461,8 @@ export default function MatchScreen() {
                   <>
                     <Text style={styles.subBlockLabel}>Best transport</Text>
                     {transitItems.map((item, index) => {
-                      const suffix = typeof item.minutes === "number" ? ` • ${item.minutes} min walk` : "";
+                      const suffix =
+                        typeof item.minutes === "number" ? ` • ${item.minutes} min walk` : "";
                       const note = item.note ? ` • ${item.note}` : "";
                       return (
                         <Text key={`${item.label}-${index}`} style={styles.miniInfoText}>
@@ -572,7 +497,10 @@ export default function MatchScreen() {
                   </>
                 ) : null}
 
-                {!airportLine && transitItems.length === 0 && stayItems.length === 0 && tipItems.length === 0 ? (
+                {!airportLine &&
+                transitItems.length === 0 &&
+                stayItems.length === 0 &&
+                tipItems.length === 0 ? (
                   <Text style={styles.miniInfoText}>
                     Stadium matched, but rich travel detail has not been added yet.
                   </Text>
@@ -585,20 +513,6 @@ export default function MatchScreen() {
                   Stadium travel intelligence is not mapped yet for this venue. Directions still work, but airport,
                   transit and stay-area guidance are not available yet.
                 </Text>
-
-                <View style={styles.debugBox}>
-                  <Text style={styles.debugTitle}>Debug</Text>
-                  <Text style={styles.debugText}>stadiumCount: {resolutionDebug.stadiumCount}</Text>
-                  <Text style={styles.debugText}>normalizedVenue: {resolutionDebug.normalizedVenue || "—"}</Text>
-                  <Text style={styles.debugText}>normalizedHomeTeam: {resolutionDebug.normalizedHomeTeam || "—"}</Text>
-                  <Text style={styles.debugText}>exactKeyHit: {resolutionDebug.exactKeyHit || "—"}</Text>
-                  <Text style={styles.debugText}>exactNameHit: {resolutionDebug.exactNameHit || "—"}</Text>
-                  <Text style={styles.debugText}>aliasHit: {resolutionDebug.aliasHit || "—"}</Text>
-                  <Text style={styles.debugText}>teamHit: {resolutionDebug.teamHit || "—"}</Text>
-                  <Text style={styles.debugText}>
-                    sampleKeys: {resolutionDebug.sampleKeys.length > 0 ? resolutionDebug.sampleKeys.join(", ") : "—"}
-                  </Text>
-                </View>
               </View>
             )}
           </GlassCard>
@@ -779,28 +693,6 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
     fontSize: 13,
     lineHeight: 18,
-    fontWeight: theme.fontWeight.medium,
-  },
-
-  debugBox: {
-    marginTop: 12,
-    paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.borderSubtle,
-    gap: 4,
-  },
-
-  debugTitle: {
-    color: theme.colors.textPrimary,
-    fontSize: 12,
-    fontWeight: theme.fontWeight.black,
-    letterSpacing: 0.4,
-  },
-
-  debugText: {
-    color: theme.colors.textMuted,
-    fontSize: 11,
-    lineHeight: 15,
     fontWeight: theme.fontWeight.medium,
   },
 
