@@ -113,6 +113,21 @@ function getStadiumByTeamSafe(teamKey?: string | null): StadiumRecord | null {
   }
 }
 
+/**
+ * Venue aliases from API / formal names -> known stadium keys
+ * Keep growing this over time when you spot mismatches.
+ */
+const VENUE_ALIASES: Record<string, string> = {
+  "estadio-do-sport-lisboa-e-benfica": "estadio-da-luz",
+  "estadio-do-fc-porto": "estadio-do-dragao",
+  "estadio-jose-alvalade-xxi": "estadio-jose-alvalade",
+  "allianz-arena-munchen": "allianz-arena",
+  "signal-iduna-park-dortmund": "signal-iduna-park",
+  "parc-des-princes-paris": "parc-des-princes",
+  "stade-velodrome-marseille": "velodrome",
+  "san-siro": "giuseppe-meazza",
+};
+
 function resolveStadiumFromVenueOrTeam(args: {
   venueName?: string | null;
   homeTeamName?: string | null;
@@ -132,6 +147,13 @@ function resolveStadiumFromVenueOrTeam(args: {
     const exactNameMatch =
       all.find((s) => normalizeVenueKey(s.name) === normalizedVenue) ?? null;
     if (exactNameMatch) return exactNameMatch;
+
+    const aliasKey = VENUE_ALIASES[normalizedVenue];
+    if (aliasKey) {
+      const aliasMatch =
+        all.find((s) => normalizeVenueKey(s.stadiumKey) === normalizeVenueKey(aliasKey)) ?? null;
+      if (aliasMatch) return aliasMatch;
+    }
 
     const looseNameMatch =
       all.find((s) => {
