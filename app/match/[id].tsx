@@ -157,12 +157,10 @@ function resolveStadiumFromVenueOrTeam(args: {
   const homeTeamKey = normalizeTeamKey(rawHome);
 
   if (rawVenue) {
-    const exactKeyHit =
-      all.find((s) => normalizeValue(s.stadiumKey) === venueKey) ?? null;
+    const exactKeyHit = all.find((s) => normalizeValue(s.stadiumKey) === venueKey) ?? null;
     if (exactKeyHit) return exactKeyHit;
 
-    const exactNameHit =
-      all.find((s) => normalizeValue(s.name) === venueKey) ?? null;
+    const exactNameHit = all.find((s) => normalizeValue(s.name) === venueKey) ?? null;
     if (exactNameHit) return exactNameHit;
 
     const aliases = VENUE_ALIASES[venueKey] ?? [];
@@ -322,6 +320,7 @@ export default function MatchScreen() {
   const openDirections = useCallback(async () => {
     const q = encodeURIComponent([venueName, venueCity].filter(Boolean).join(" ") || venueText);
     const url = `https://www.google.com/maps/search/?api=1&query=${q}`;
+
     try {
       await openUntrackedUrl(url);
     } catch {
@@ -388,6 +387,7 @@ export default function MatchScreen() {
   const openOfficialClub = useCallback(async () => {
     const q = encodeURIComponent(`${homeName} vs ${awayName} official tickets`);
     const url = `https://www.google.com/search?q=${q}`;
+
     try {
       await openUntrackedUrl(url);
     } catch {
@@ -398,6 +398,7 @@ export default function MatchScreen() {
   const openGoogleTicketsSearch = useCallback(async () => {
     const q = encodeURIComponent(`${homeName} vs ${awayName} tickets`);
     const url = `https://www.google.com/search?q=${q}`;
+
     try {
       await openUntrackedUrl(url);
     } catch {
@@ -479,10 +480,7 @@ export default function MatchScreen() {
               <View style={styles.heroHints}>
                 <Chip label="Tickets: live price" variant="primary" />
                 <Chip label="Hotels: live price" variant="default" />
-                <Chip
-                  label={resolvedStadium ? "Travel: mapped" : "Travel: limited"}
-                  variant="default"
-                />
+                <Chip label={resolvedStadium ? "Travel: mapped" : "Travel: limited"} variant="default" />
               </View>
             </View>
           </GlassCard>
@@ -601,7 +599,9 @@ export default function MatchScreen() {
               </View>
               <View style={styles.nextStepRow}>
                 <Text style={styles.nextStepNumber}>3</Text>
-                <Text style={styles.nextStepText}>Return to your trip workspace and build around this match</Text>
+                <Text style={styles.nextStepText}>
+                  Return to your trip workspace and build around this match
+                </Text>
               </View>
             </View>
           </GlassCard>
