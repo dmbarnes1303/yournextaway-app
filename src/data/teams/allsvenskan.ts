@@ -1,4 +1,3 @@
-// src/data/teams/allsvenskan.ts
 import type { TeamRecord } from "./types";
 
 const ALLSVENSKAN = 113;
@@ -11,6 +10,7 @@ export const allsvenskanTeams: Record<string, TeamRecord> = {
     country: SWEDEN,
     city: "Stockholm",
     leagueId: ALLSVENSKAN,
+    stadiumKey: "strawberry-arena",
     aliases: ["aik stockholm"],
   },
 
@@ -20,6 +20,7 @@ export const allsvenskanTeams: Record<string, TeamRecord> = {
     country: SWEDEN,
     city: "Degerfors",
     leagueId: ALLSVENSKAN,
+    stadiumKey: "stora-valla",
     aliases: ["degersfors if"],
   },
 
@@ -29,6 +30,7 @@ export const allsvenskanTeams: Record<string, TeamRecord> = {
     country: SWEDEN,
     city: "Stockholm",
     leagueId: ALLSVENSKAN,
+    stadiumKey: "3arena",
     aliases: ["djurgarden", "djurgardens if", "dif"],
   },
 
@@ -38,6 +40,7 @@ export const allsvenskanTeams: Record<string, TeamRecord> = {
     country: SWEDEN,
     city: "Borås",
     leagueId: ALLSVENSKAN,
+    stadiumKey: "boras-arena",
     aliases: ["elfsborg", "if elfsborg"],
   },
 
@@ -47,6 +50,7 @@ export const allsvenskanTeams: Record<string, TeamRecord> = {
     country: SWEDEN,
     city: "Gothenburg",
     leagueId: ALLSVENSKAN,
+    stadiumKey: "gamla-ullevi",
     aliases: ["gais gothenburg"],
   },
 
@@ -56,6 +60,7 @@ export const allsvenskanTeams: Record<string, TeamRecord> = {
     country: SWEDEN,
     city: "Gothenburg",
     leagueId: ALLSVENSKAN,
+    stadiumKey: "gamla-ullevi",
     aliases: ["goteborg", "ifk goteborg", "göteborg"],
   },
 
@@ -65,6 +70,7 @@ export const allsvenskanTeams: Record<string, TeamRecord> = {
     country: SWEDEN,
     city: "Gothenburg",
     leagueId: ALLSVENSKAN,
+    stadiumKey: "nordic-wellness-arena",
     aliases: ["hacken", "bk hacken", "häcken"],
   },
 
@@ -74,6 +80,7 @@ export const allsvenskanTeams: Record<string, TeamRecord> = {
     country: SWEDEN,
     city: "Halmstad",
     leagueId: ALLSVENSKAN,
+    stadiumKey: "orjans-vall",
     aliases: ["halmstads bk", "halmstad bk"],
   },
 
@@ -83,6 +90,7 @@ export const allsvenskanTeams: Record<string, TeamRecord> = {
     country: SWEDEN,
     city: "Stockholm",
     leagueId: ALLSVENSKAN,
+    stadiumKey: "3arena",
     aliases: ["hammarby if"],
   },
 
@@ -92,6 +100,7 @@ export const allsvenskanTeams: Record<string, TeamRecord> = {
     country: SWEDEN,
     city: "Kalmar",
     leagueId: ALLSVENSKAN,
+    stadiumKey: "guldfageln-arena",
     aliases: ["kalmar", "kalmar ff"],
   },
 
@@ -101,6 +110,7 @@ export const allsvenskanTeams: Record<string, TeamRecord> = {
     country: SWEDEN,
     city: "Malmö",
     leagueId: ALLSVENSKAN,
+    stadiumKey: "eleda-stadion",
     aliases: ["malmo", "malmo ff", "malmö ff"],
   },
 
@@ -110,6 +120,7 @@ export const allsvenskanTeams: Record<string, TeamRecord> = {
     country: SWEDEN,
     city: "Hällevik",
     leagueId: ALLSVENSKAN,
+    stadiumKey: "strandvallen",
     aliases: ["mjalby", "mjallby", "mjalby aif", "mjallby aif"],
   },
 
@@ -119,6 +130,7 @@ export const allsvenskanTeams: Record<string, TeamRecord> = {
     country: SWEDEN,
     city: "Gothenburg",
     leagueId: ALLSVENSKAN,
+    stadiumKey: "gamla-ullevi",
     aliases: ["ois goteborg", "öis", "orgryte", "örgryte", "orgryte is", "örgryte is"],
   },
 
@@ -128,6 +140,7 @@ export const allsvenskanTeams: Record<string, TeamRecord> = {
     country: SWEDEN,
     city: "Uppsala",
     leagueId: ALLSVENSKAN,
+    stadiumKey: "studenternas-ip",
     aliases: ["ik sirius", "sirius uppsala"],
   },
 
@@ -137,6 +150,7 @@ export const allsvenskanTeams: Record<string, TeamRecord> = {
     country: SWEDEN,
     city: "Västerås",
     leagueId: ALLSVENSKAN,
+    stadiumKey: "hitachi-energy-arena",
     aliases: ["vasteras", "vasteras sk", "västerås", "västerås sk"],
   },
 
@@ -146,6 +160,7 @@ export const allsvenskanTeams: Record<string, TeamRecord> = {
     country: SWEDEN,
     city: "Stockholm",
     leagueId: ALLSVENSKAN,
+    stadiumKey: "grimsta-ip",
     aliases: ["brommapojkarna", "if brommapojkarna", "bp"],
   },
 };
