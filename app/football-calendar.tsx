@@ -28,13 +28,13 @@ import groupTripsByWeekend from "@/src/features/tripFinder/groupTripsByWeekend";
 import type { RankedTrip, WeekendBucket } from "@/src/features/tripFinder/types";
 
 const CURATED_LEAGUE_IDS = new Set<number>([
-  39,  // Premier League
+  39, // Premier League
   140, // La Liga
   135, // Serie A
-  78,  // Bundesliga
-  61,  // Ligue 1
-  88,  // Eredivisie
-  94,  // Primeira Liga
+  78, // Bundesliga
+  61, // Ligue 1
+  88, // Eredivisie
+  94, // Primeira Liga
   203, // Turkish Super Lig
   197, // Greek Super League
   179, // Scottish Premiership
@@ -78,8 +78,12 @@ function difficultyShortLabel(v: RankedTrip["breakdown"]["travelDifficulty"]) {
   return "Complex";
 }
 
-async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
-  const results: R[] = new Array(items.length) as R[];
+async function mapLimit<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<R>
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
   let nextIndex = 0;
 
   async function worker() {
@@ -89,7 +93,11 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promis
     }
   }
 
-  const workers = Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, () => worker());
+  const workers = Array.from(
+    { length: Math.max(1, Math.min(limit, items.length)) },
+    () => worker()
+  );
+
   await Promise.all(workers);
   return results;
 }
@@ -102,7 +110,9 @@ export default function FootballCalendarScreen() {
   const [error, setError] = useState<string | null>(null);
   const [rows, setRows] = useState<FixtureListRow[]>([]);
 
-  const range = useMemo(() => windowFromTomorrowIso(daysForRange(rangeKey)), [rangeKey]);
+  const range = useMemo(() => {
+    return windowFromTomorrowIso(daysForRange(rangeKey));
+  }, [rangeKey]);
 
   const fetchLeagues = useMemo(() => {
     const list = LEAGUES.filter((l) => CURATED_LEAGUE_IDS.has(l.leagueId));
@@ -147,7 +157,9 @@ export default function FootballCalendarScreen() {
     };
   }, [fetchLeagues, range.from, range.to]);
 
-  const rankedTrips = useMemo(() => rankTrips(rows), [rows]);
+  const rankedTrips = useMemo(() => {
+    return rankTrips(rows);
+  }, [rows]);
 
   const weekendBuckets = useMemo(() => {
     const grouped = groupTripsByWeekend(rankedTrips);
@@ -170,7 +182,8 @@ export default function FootballCalendarScreen() {
 
   const goMatch = useCallback(
     (trip: RankedTrip, bucket?: WeekendBucket) => {
-      const fixtureId = trip?.fixture?.fixture?.id != null ? String(trip.fixture.fixture.id) : "";
+      const fixtureId =
+        trip?.fixture?.fixture?.id != null ? String(trip.fixture.fixture.id) : "";
       if (!fixtureId) return;
 
       router.push({
@@ -187,8 +200,10 @@ export default function FootballCalendarScreen() {
 
   const goBuildTrip = useCallback(
     (trip: RankedTrip, bucket?: WeekendBucket) => {
-      const fixtureId = trip?.fixture?.fixture?.id != null ? String(trip.fixture.fixture.id) : "";
-      const leagueId = trip?.fixture?.league?.id != null ? String(trip.fixture.league.id) : "";
+      const fixtureId =
+        trip?.fixture?.fixture?.id != null ? String(trip.fixture.fixture.id) : "";
+      const leagueId =
+        trip?.fixture?.league?.id != null ? String(trip.fixture.league.id) : "";
       const season =
         (trip?.fixture as any)?.league?.season != null
           ? String((trip.fixture as any).league.season)
@@ -213,13 +228,18 @@ export default function FootballCalendarScreen() {
   const goTripFinder = useCallback(() => {
     router.push({
       pathname: "/trip-finder",
-      params: { window: rangeKey === "d30" ? "d30" : "d30", mode: "all" },
+      params: {
+        window: rangeKey,
+        mode: "all",
+      },
     } as any);
   }, [router, rangeKey]);
 
   const bg = getBackground("home");
   const bgProps =
-    typeof bg === "string" ? ({ imageUrl: bg } as const) : ({ imageSource: bg } as const);
+    typeof bg === "string"
+      ? ({ imageUrl: bg } as const)
+      : ({ imageSource: bg } as const);
 
   return (
     <Background {...bgProps} overlayOpacity={0.68}>
@@ -245,7 +265,11 @@ export default function FootballCalendarScreen() {
 
               <View style={styles.filterBlock}>
                 <Text style={styles.filterLabel}>Calendar window</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.filterRow}
+                >
                   {(["d30", "d60", "d90"] as RangeKey[]).map((key) => {
                     const active = rangeKey === key;
                     return (
@@ -254,7 +278,12 @@ export default function FootballCalendarScreen() {
                         onPress={() => setRangeKey(key)}
                         style={[styles.filterPill, active && styles.filterPillActive]}
                       >
-                        <Text style={[styles.filterPillText, active && styles.filterPillTextActive]}>
+                        <Text
+                          style={[
+                            styles.filterPillText,
+                            active && styles.filterPillTextActive,
+                          ]}
+                        >
                           {labelForRange(key)}
                         </Text>
                       </Pressable>
@@ -309,23 +338,31 @@ export default function FootballCalendarScreen() {
                         {bucketStrengthLabel(topWeekend)} • Avg {topWeekend.avgScore}
                       </Text>
                       <Text style={styles.featuredMeta}>
-                        {topWeekend.trips.length} standout trip{topWeekend.trips.length === 1 ? "" : "s"}
+                        {topWeekend.trips.length} standout trip
+                        {topWeekend.trips.length === 1 ? "" : "s"}
                       </Text>
                     </View>
                   </View>
 
                   {topWeekend.trips.slice(0, 3).map((trip) => {
                     const fixtureId =
-                      trip?.fixture?.fixture?.id != null ? String(trip.fixture.fixture.id) : "";
+                      trip?.fixture?.fixture?.id != null
+                        ? String(trip.fixture.fixture.id)
+                        : "";
 
                     return (
                       <Pressable
                         key={`top-${fixtureId}`}
                         onPress={() => goMatch(trip, topWeekend)}
-                        style={({ pressed }) => [styles.topWeekendTripRow, pressed && { opacity: 0.95 }]}
+                        style={({ pressed }) => [
+                          styles.topWeekendTripRow,
+                          pressed && { opacity: 0.95 },
+                        ]}
                       >
                         <View style={styles.tripMiniScore}>
-                          <Text style={styles.tripMiniScoreText}>{trip.breakdown.combinedScore}</Text>
+                          <Text style={styles.tripMiniScoreText}>
+                            {trip.breakdown.combinedScore}
+                          </Text>
                         </View>
 
                         <View style={{ flex: 1 }}>
@@ -377,14 +414,23 @@ export default function FootballCalendarScreen() {
 
               <View style={styles.weekendList}>
                 {otherWeekends.map((bucket) => {
-                  const topTrip = bucket.trips[0] ?? null;
+                  const bestTrip = bucket.trips[0] ?? null;
 
                   return (
-                    <GlassCard key={bucket.key} strength="default" style={styles.weekendCard} noPadding>
+                    <GlassCard
+                      key={bucket.key}
+                      strength="default"
+                      style={styles.weekendCard}
+                      noPadding
+                    >
                       <View style={styles.weekendCardInner}>
                         <View style={styles.weekendHeaderRow}>
-                          <View style={[styles.weekendStrengthPill, bucketStrengthTone(bucket)]}>
-                            <Text style={styles.weekendStrengthPillText}>{bucket.topScore}</Text>
+                          <View
+                            style={[styles.weekendStrengthPill, bucketStrengthTone(bucket)]}
+                          >
+                            <Text style={styles.weekendStrengthPillText}>
+                              {bucket.topScore}
+                            </Text>
                           </View>
 
                           <View style={{ flex: 1 }}>
@@ -397,16 +443,23 @@ export default function FootballCalendarScreen() {
 
                         {bucket.trips.slice(0, 3).map((trip) => {
                           const fixtureId =
-                            trip?.fixture?.fixture?.id != null ? String(trip.fixture.fixture.id) : "";
+                            trip?.fixture?.fixture?.id != null
+                              ? String(trip.fixture.fixture.id)
+                              : "";
 
                           return (
                             <Pressable
                               key={`${bucket.key}-${fixtureId}`}
                               onPress={() => goMatch(trip, bucket)}
-                              style={({ pressed }) => [styles.weekendTripRow, pressed && { opacity: 0.95 }]}
+                              style={({ pressed }) => [
+                                styles.weekendTripRow,
+                                pressed && { opacity: 0.95 },
+                              ]}
                             >
                               <View style={styles.weekendTripScore}>
-                                <Text style={styles.weekendTripScoreText}>{trip.breakdown.combinedScore}</Text>
+                                <Text style={styles.weekendTripScoreText}>
+                                  {trip.breakdown.combinedScore}
+                                </Text>
                               </View>
 
                               <View style={{ flex: 1 }}>
@@ -415,20 +468,25 @@ export default function FootballCalendarScreen() {
                                   {String(trip.fixture?.teams?.away?.name ?? "Away")}
                                 </Text>
                                 <Text style={styles.weekendTripMeta} numberOfLines={1}>
-                                  {[trip.city, difficultyShortLabel(trip.breakdown.travelDifficulty)].filter(Boolean).join(" • ")}
+                                  {[
+                                    trip.city,
+                                    difficultyShortLabel(trip.breakdown.travelDifficulty),
+                                  ]
+                                    .filter(Boolean)
+                                    .join(" • ")}
                                 </Text>
                               </View>
                             </Pressable>
                           );
                         })}
 
-                        {topTrip ? (
+                        {bestTrip ? (
                           <View style={styles.weekendActions}>
                             <Button
                               label="Best match"
                               tone="secondary"
                               size="sm"
-                              onPress={() => goMatch(topTrip, bucket)}
+                              onPress={() => goMatch(bestTrip, bucket)}
                               style={{ flex: 1 }}
                             />
                             <Button
@@ -436,7 +494,7 @@ export default function FootballCalendarScreen() {
                               tone="primary"
                               size="sm"
                               glow
-                              onPress={() => goBuildTrip(topTrip, bucket)}
+                              onPress={() => goBuildTrip(bestTrip, bucket)}
                               style={{ flex: 1 }}
                             />
                           </View>
@@ -447,7 +505,7 @@ export default function FootballCalendarScreen() {
                 })}
               </View>
             </>
-          )}
+          ) : null}
         </ScrollView>
       </SafeAreaView>
     </Background>
@@ -457,6 +515,7 @@ export default function FootballCalendarScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   scroll: { flex: 1 },
+
   content: {
     paddingHorizontal: theme.spacing.lg,
     paddingBottom: theme.spacing.xxl,
