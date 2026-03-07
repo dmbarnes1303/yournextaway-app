@@ -39,6 +39,9 @@ import {
 import { formatUkDateTimeMaybe } from "@/src/utils/formatters";
 import { computeLikelyPlaceholderTbcIds, isKickoffTbc } from "@/src/utils/kickoffTbc";
 
+import rankTrips from "@/src/features/tripFinder/rankTrips";
+import type { RankedTrip, TravelDifficulty } from "@/src/features/tripFinder/types";
+
 /* -------------------------------------------------------------------------- */
 /* config                                                                      */
 /* -------------------------------------------------------------------------- */
@@ -120,7 +123,6 @@ function daysBetweenIso(aIso: string, bIso: string) {
 
 function validSeasonOrNull(n: number | null): number | null {
   if (!n || !Number.isFinite(n)) return null;
-  // basic sanity guard: API-Football seasons are "start year"
   if (n < 2000) return null;
   if (n > new Date().getFullYear() + 1) return null;
   return n;
@@ -131,7 +133,6 @@ function findLeagueOptionByLeagueId(leagueId?: number | null, season?: number | 
   const byId = LEAGUES.find((l) => l.leagueId === leagueId) ?? null;
   if (!byId) return null;
 
-  // If season override provided, keep label/country but use requested season
   if (season && typeof byId.season === "number" && byId.season !== season) {
     return { ...byId, season } as LeagueOption;
   }
@@ -222,6 +223,40 @@ function findExistingTripIdForFixture(fixtureId: string): string | null {
   return tripsStore.getTripIdByMatchId(String(fixtureId).trim());
 }
 
+function difficultyLabel(v?: TravelDifficulty | null) {
+  if (v === "easy") return "Easy";
+  if (v === "moderate") return "Moderate";
+  if (v === "hard") return "Hard";
+  if (v === "complex") return "Complex";
+  return "Unknown";
+}
+
+function prefWindowLabel(v?: string | null) {
+  if (v === "wknd") return "This Weekend";
+  if (v === "d7") return "Next 7 Days";
+  if (v === "d14") return "Next 14 Days";
+  if (v === "d30") return "Next 30 Days";
+  return null;
+}
+
+function prefLengthLabel(v?: string | null) {
+  if (v === "day") return "Day Trip";
+  if (v === "1") return "1 Night";
+  if (v === "2") return "2 Nights";
+  if (v === "3") return "3 Nights";
+  return null;
+}
+
+function prefVibeLabel(v: string) {
+  if (v === "easy") return "Easy Travel";
+  if (v === "big") return "Big Match";
+  if (v === "hidden") return "Different";
+  if (v === "nightlife") return "Nightlife";
+  if (v === "culture") return "Culture";
+  if (v === "warm") return "Warm-ish";
+  return v;
+}
+
 /* -------------------------------------------------------------------------- */
 /* screen                                                                      */
 /* -------------------------------------------------------------------------- */
@@ -231,20 +266,33 @@ export default function TripBuildScreen() {
   const params = useLocalSearchParams();
   const insets = useSafeAreaInsets();
 
-  // --- route params we already used ---
   const routeTripId = useMemo(() => paramString((params as any)?.tripId), [params]);
   const isEditing = !!routeTripId;
 
   const routeFixtureId = useMemo(() => paramString((params as any)?.fixtureId), [params]);
   const routeCityArea = useMemo(() => paramString((params as any)?.cityArea), [params]);
 
-  // --- optional context params ---
   const routeFrom = useMemo(() => paramString((params as any)?.from), [params]);
   const routeTo = useMemo(() => paramString((params as any)?.to), [params]);
   const routeCity = useMemo(() => paramString((params as any)?.city), [params]);
   const routeLeagueId = useMemo(() => paramNumber((params as any)?.leagueId), [params]);
   const routeSeasonRaw = useMemo(() => paramNumber((params as any)?.season), [params]);
   const routeSeason = useMemo(() => validSeasonOrNull(routeSeasonRaw), [routeSeasonRaw]);
+
+  const prefMode = useMemo(() => paramString((params as any)?.prefMode), [params]);
+  const prefFrom = useMemo(() => paramString((params as any)?.prefFrom), [params]);
+  const prefWindow = useMemo(() => paramString((params as any)?.prefWindow), [params]);
+  const prefLength = useMemo(() => paramString((params as any)?.prefLength), [params]);
+  const prefVibesRaw = useMemo(() => paramString((params as any)?.prefVibes), [params]);
+
+  const prefVibes = useMemo(
+    () =>
+      String(prefVibesRaw ?? "")
+        .split(",")
+        .map((x) => x.trim())
+        .filter(Boolean),
+    [prefVibesRaw]
+  );
 
   const isPrefilledFlow = !!routeFixtureId && !isEditing;
 
@@ -268,18 +316,14 @@ export default function TripBuildScreen() {
   const defaultWindow = useMemo(() => getRollingWindowIso({ days: WINDOW_DAYS }), []);
 
   const routeWindow = useMemo<RollingWindowIso>(() => {
-    // If params are not explicit, behave like the central contract: rolling 90-day window from tomorrow.
     if (!isIsoDateOnly(routeFrom) && !isIsoDateOnly(routeTo)) return defaultWindow;
 
-    // If either param is missing/invalid, fall back to default window values for that side,
-    // then normalize (clamps to tomorrow and ensures to>=from).
     const fromSeed = isIsoDateOnly(routeFrom) ? String(routeFrom) : defaultWindow.from;
     const toSeed = isIsoDateOnly(routeTo) ? String(routeTo) : defaultWindow.to;
 
     return normalizeWindowIso({ from: fromSeed, to: toSeed }, WINDOW_DAYS);
   }, [routeFrom, routeTo, defaultWindow]);
 
-  // Dates state (defaults to routeWindow). Prefill flows may override from fixture date later.
   const [startIso, setStartIso] = useState(routeWindow.from);
   const [endIso, setEndIso] = useState(routeWindow.to);
   const [notes, setNotes] = useState("");
@@ -292,15 +336,10 @@ export default function TripBuildScreen() {
 
   const [setAsPrimaryOnSave, setSetAsPrimaryOnSave] = useState(false);
 
-  // Keep end auto-following start unless user touched end.
-  // We keep the existing "2 nights" behaviour only when user is actively selecting a fixture without explicit to.
   useEffect(() => {
-    // If routeTo is explicit, never auto-mutate end.
     if (isIsoDateOnly(routeTo)) return;
     if (endTouched) return;
 
-    // When in picker UX, you liked "+2 nights" default. Keep it here.
-    // (This does NOT affect fixture-loading window which is routeWindow.)
     const d = parseIsoToDate(startIso);
     if (!d) return;
     const d2 = new Date(d);
@@ -339,20 +378,17 @@ export default function TripBuildScreen() {
     return opt ?? ALL_LEAGUES;
   });
 
-  // If navigation passes a leagueId (and we’re NOT in fixture-prefill flow), apply it once.
   useEffect(() => {
     if (isPrefilledFlow) return;
     const opt = findLeagueOptionByLeagueId(routeLeagueId, routeSeason);
     if (opt) setSelectedLeague(opt);
     else if (routeLeagueId === 0) setSelectedLeague(ALL_LEAGUES);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [routeLeagueId, routeSeason, isPrefilledFlow]);
+  }, [routeLeagueId, routeSeason, isPrefilledFlow, ALL_LEAGUES]);
 
-  // Effective season: explicit routeSeason wins (and stays stable even when switching leagues)
   const effectiveSeason = useMemo(() => routeSeason ?? selectedLeague.season ?? DEFAULT_SEASON, [routeSeason, selectedLeague]);
 
   /* ------------------------------------------------------------------------ */
-  /* Apply route city to notes (non-destructive)                               */
+  /* Apply route city to notes                                                 */
   /* ------------------------------------------------------------------------ */
 
   useEffect(() => {
@@ -393,7 +429,6 @@ export default function TripBuildScreen() {
         const primary = cleanText((t as any)?.fixtureIdPrimary) || (mids[0] ? String(mids[0]) : "");
         setExistingPrimaryId(primary || null);
 
-        // Prefer trip dates; if route from/to passed, they override (normalized contract)
         if (isIsoDateOnly(routeFrom) || isIsoDateOnly(routeTo)) {
           setStartIso(routeWindow.from);
           setEndIso(routeWindow.to);
@@ -461,8 +496,6 @@ export default function TripBuildScreen() {
         const ids = await computePlaceholderIdsForFixture(r, routeSeason);
         if (!cancelled) setPlaceholderTbcIds(ids);
 
-        // If from/to explicitly provided, use routeWindow.
-        // Otherwise: derive start from fixture date (clamped to tomorrow) and keep auto end behaviour.
         const hasFrom = isIsoDateOnly(routeFrom);
         const hasTo = isIsoDateOnly(routeTo);
 
@@ -508,16 +541,12 @@ export default function TripBuildScreen() {
       setError(null);
 
       try {
-        // CONTRACT:
-        // - if explicit from/to params exist -> normalizeWindowIso
-        // - else -> getRollingWindowIso (already computed as routeWindow/defaultWindow)
         const from = routeWindow.from;
         const to = routeWindow.to;
 
         let res: FixtureListRow[] = [];
 
         if (selectedLeague.leagueId === 0) {
-          // All leagues: if routeSeason exists, apply to every batch; else use each league default season
           const batches = await Promise.all(
             LEAGUES.map((l) =>
               getFixtures({
@@ -590,7 +619,6 @@ export default function TripBuildScreen() {
   useEffect(() => {
     if (!selectedFixture) return;
 
-    // If from/to explicitly provided, do not auto-overwrite with fixture date.
     if (!isIsoDateOnly(routeFrom) && !isIsoDateOnly(routeTo)) {
       const d0 = fixtureDateOnly(selectedFixture);
       if (d0) {
@@ -604,7 +632,43 @@ export default function TripBuildScreen() {
   }, [selectedFixture, isEditing, routeFrom, routeTo]);
 
   /* ------------------------------------------------------------------------ */
-  /* Save                                                                       */
+  /* Trip intelligence                                                         */
+  /* ------------------------------------------------------------------------ */
+
+  const selectedRankedTrip = useMemo<RankedTrip | null>(() => {
+    if (!selectedFixture) return null;
+    const ranked = rankTrips([selectedFixture]);
+    return ranked[0] ?? null;
+  }, [selectedFixture]);
+
+  const visibleRankMap = useMemo(() => {
+    const ranked = rankTrips(visibleRows);
+    return new Map<string, RankedTrip>(ranked.map((trip) => [fixtureIdStr(trip.fixture), trip]));
+  }, [visibleRows]);
+
+  const discoverSummary = useMemo(() => {
+    const parts: string[] = [];
+
+    if (prefMode === "surprise") parts.push("Surprise me");
+    if (prefMode === "hidden") parts.push("Hidden gems");
+
+    const w = prefWindowLabel(prefWindow);
+    if (w) parts.push(w);
+
+    const l = prefLengthLabel(prefLength);
+    if (l) parts.push(l);
+
+    if (prefFrom) parts.push(`From ${prefFrom}`);
+
+    if (prefVibes.length) {
+      parts.push(prefVibes.map(prefVibeLabel).join(" • "));
+    }
+
+    return parts;
+  }, [prefMode, prefWindow, prefLength, prefFrom, prefVibes]);
+
+  /* ------------------------------------------------------------------------ */
+  /* Save                                                                      */
   /* ------------------------------------------------------------------------ */
 
   const validateDateOrder = useCallback((): string | null => {
@@ -636,7 +700,6 @@ export default function TripBuildScreen() {
     try {
       if (!tripsStore.getState().loaded) await tripsStore.loadTrips();
 
-      // EDIT
       if (isEditing && routeTripId) {
         const basePatch: any = {
           startDate: startIso,
@@ -649,30 +712,21 @@ export default function TripBuildScreen() {
         }
 
         await tripsStore.updateTrip(routeTripId, basePatch);
-
-        // Add the match (dedupe handled by store)
         await tripsStore.addMatchToTrip(routeTripId, fixtureId, { setPrimary: !!setAsPrimaryOnSave });
 
-        // If set as primary, update trip-level snapshot fields to match new primary
         if (setAsPrimaryOnSave) {
           const primaryPatch: any = {
             cityId: snap.cityId,
             displayCity: snap.displayCity,
-
             fixtureIdPrimary: fixtureId,
-
             homeTeamId: snap.homeTeamId,
             awayTeamId: snap.awayTeamId,
-
             homeName: snap.homeName,
             awayName: snap.awayName,
-
             leagueId: snap.leagueId,
             leagueName: snap.leagueName,
-
             kickoffIso: snap.kickoffIso,
             kickoffTbc: snap.kickoffTbc,
-
             venueName: snap.venueName,
             venueCity: snap.venueCity,
           };
@@ -684,7 +738,6 @@ export default function TripBuildScreen() {
         return;
       }
 
-      // NEW: dedupe by fixture
       const existingId = findExistingTripIdForFixture(fixtureId);
       if (existingId) {
         Alert.alert("Trip already exists", "You already have a trip for this match — opening it now.");
@@ -864,6 +917,13 @@ export default function TripBuildScreen() {
               </View>
             </View>
 
+            {discoverSummary.length > 0 ? (
+              <View style={styles.prefBar}>
+                <Text style={styles.prefBarLabel}>Discover brief</Text>
+                <Text style={styles.prefBarText}>{discoverSummary.join(" • ")}</Text>
+              </View>
+            ) : null}
+
             {!isEditing ? (
               <View style={styles.capBar}>
                 <Text style={styles.capText}>Free plan: up to {FREE_TRIP_CAP} saved trips.</Text>
@@ -936,6 +996,55 @@ export default function TripBuildScreen() {
                   </View>
                 ) : null}
               </View>
+
+              {selectedRankedTrip ? (
+                <View style={styles.intelCard}>
+                  <View style={styles.intelTopRow}>
+                    <View style={styles.intelScoreBox}>
+                      <Text style={styles.intelScoreValue}>{selectedRankedTrip.breakdown.combinedScore}</Text>
+                      <Text style={styles.intelScoreLabel}>Trip score</Text>
+                    </View>
+
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.intelTitle}>Trip intelligence</Text>
+                      <Text style={styles.intelSub}>
+                        {difficultyLabel(selectedRankedTrip.breakdown.travelDifficulty)} travel •{" "}
+                        {selectedRankedTrip.city || cleanText(selectedFixture?.fixture?.venue?.city) || "City pending"}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.intelPillRow}>
+                    <View style={styles.intelPill}>
+                      <Text style={styles.intelPillKicker}>Atmosphere</Text>
+                      <Text style={styles.intelPillValue}>{selectedRankedTrip.breakdown.atmosphereScore}</Text>
+                    </View>
+                    <View style={styles.intelPill}>
+                      <Text style={styles.intelPillKicker}>Match</Text>
+                      <Text style={styles.intelPillValue}>{selectedRankedTrip.breakdown.matchInterestScore}</Text>
+                    </View>
+                    <View style={styles.intelPill}>
+                      <Text style={styles.intelPillKicker}>Travel</Text>
+                      <Text style={styles.intelPillValue}>{selectedRankedTrip.breakdown.travelScore}</Text>
+                    </View>
+                    <View style={styles.intelPill}>
+                      <Text style={styles.intelPillKicker}>Difficulty</Text>
+                      <Text style={styles.intelPillValue}>{difficultyLabel(selectedRankedTrip.breakdown.travelDifficulty)}</Text>
+                    </View>
+                  </View>
+
+                  {selectedRankedTrip.breakdown.reasonLines?.length ? (
+                    <View style={styles.reasonBox}>
+                      <Text style={styles.reasonTitle}>Why this trip ranks like this</Text>
+                      {selectedRankedTrip.breakdown.reasonLines.slice(0, 4).map((line, idx) => (
+                        <Text key={`${line}-${idx}`} style={styles.reasonText}>
+                          • {line}
+                        </Text>
+                      ))}
+                    </View>
+                  ) : null}
+                </View>
+              ) : null}
 
               {isEditing ? (
                 <View style={styles.primaryRow}>
@@ -1010,6 +1119,7 @@ export default function TripBuildScreen() {
                 {visibleRows.map((r, i) => {
                   const id = fixtureIdStr(r);
                   const selected = fixtureIdStr(selectedFixture) === id;
+                  const ranked = visibleRankMap.get(id) ?? null;
 
                   const home = cleanText(r?.teams?.home?.name) || "Home";
                   const away = cleanText(r?.teams?.away?.name) || "Away";
@@ -1071,6 +1181,11 @@ export default function TripBuildScreen() {
                         </View>
 
                         <View style={styles.fxRight}>
+                          {ranked ? (
+                            <View style={styles.rowScoreBox}>
+                              <Text style={styles.rowScoreValue}>{ranked.breakdown.combinedScore}</Text>
+                            </View>
+                          ) : null}
                           {leagueFlag ? <Image source={{ uri: leagueFlag }} style={styles.flag} /> : null}
                           <Text style={styles.fxLeague} numberOfLines={1}>
                             {leagueName || "League"}
@@ -1095,12 +1210,26 @@ export default function TripBuildScreen() {
                           </View>
                         ) : null}
 
+                        {ranked ? (
+                          <View style={styles.badge}>
+                            <Text style={styles.badgeText}>{difficultyLabel(ranked.breakdown.travelDifficulty)} travel</Text>
+                          </View>
+                        ) : null}
+
                         {isEditing && existingMatchIds.includes(String(id).trim()) ? (
                           <View style={styles.badge}>
                             <Text style={styles.badgeText}>Already in trip</Text>
                           </View>
                         ) : null}
                       </View>
+
+                      {ranked?.breakdown?.reasonLines?.length ? (
+                        <View style={styles.rowReasonBox}>
+                          <Text style={styles.rowReasonText} numberOfLines={2}>
+                            {ranked.breakdown.reasonLines.slice(0, 2).join(" • ")}
+                          </Text>
+                        </View>
+                      ) : null}
 
                       <View style={styles.fxSelectRow}>
                         <View style={{ flex: 1 }} />
@@ -1170,6 +1299,18 @@ const styles = StyleSheet.create({
   chipKicker: { color: theme.colors.textTertiary, fontWeight: "900", fontSize: 11 },
   chipValue: { marginTop: 4, color: theme.colors.text, fontWeight: "900", fontSize: 12 },
 
+  prefBar: {
+    marginTop: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.16)",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  prefBarLabel: { color: theme.colors.textTertiary, fontWeight: "900", fontSize: 11 },
+  prefBarText: { marginTop: 4, color: theme.colors.textSecondary, fontWeight: "900", fontSize: 12, lineHeight: 16 },
+
   capBar: {
     marginTop: 12,
     borderRadius: 12,
@@ -1226,6 +1367,75 @@ const styles = StyleSheet.create({
 
   badgeConfirmed: { borderColor: "rgba(75,158,57,0.35)", backgroundColor: "rgba(75,158,57,0.10)" },
   badgeTextConfirmed: { color: "rgba(140,255,190,0.92)" },
+
+  intelCard: {
+    marginTop: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+    padding: 12,
+  },
+  intelTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  intelScoreBox: {
+    width: 72,
+    height: 72,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "rgba(75,158,57,0.35)",
+    backgroundColor: "rgba(75,158,57,0.10)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  intelScoreValue: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 24,
+    lineHeight: 28,
+  },
+  intelScoreLabel: {
+    marginTop: 2,
+    color: theme.colors.textSecondary,
+    fontWeight: "900",
+    fontSize: 10,
+  },
+  intelTitle: { color: theme.colors.text, fontWeight: "900", fontSize: 15 },
+  intelSub: { marginTop: 6, color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12 },
+
+  intelPillRow: {
+    marginTop: 12,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  intelPill: {
+    minWidth: 88,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.16)",
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+  },
+  intelPillKicker: { color: theme.colors.textTertiary, fontWeight: "900", fontSize: 10 },
+  intelPillValue: { marginTop: 4, color: theme.colors.text, fontWeight: "900", fontSize: 12 },
+
+  reasonBox: {
+    marginTop: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    backgroundColor: "rgba(0,0,0,0.14)",
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    gap: 6,
+  },
+  reasonTitle: { color: theme.colors.text, fontWeight: "900", fontSize: 12 },
+  reasonText: { color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12, lineHeight: 16 },
 
   primaryRow: {
     marginTop: 12,
@@ -1312,12 +1522,36 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.06)",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
+    marginTop: 6,
   },
   fxLeague: { marginTop: 6, color: theme.colors.textSecondary, fontWeight: "900", fontSize: 11, textAlign: "right" },
+
+  rowScoreBox: {
+    minWidth: 34,
+    height: 28,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "rgba(75,158,57,0.35)",
+    backgroundColor: "rgba(75,158,57,0.10)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  rowScoreValue: { color: theme.colors.text, fontWeight: "900", fontSize: 12 },
 
   fxTitle: { color: theme.colors.text, fontWeight: "900", fontSize: 15 },
   fxMeta: { color: theme.colors.textSecondary, marginTop: 5, fontWeight: "800", fontSize: 12 },
   fxMeta2: { color: theme.colors.textTertiary, marginTop: 4, fontWeight: "800", fontSize: 12 },
+
+  rowReasonBox: {
+    marginTop: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+    backgroundColor: "rgba(0,0,0,0.14)",
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+  },
+  rowReasonText: { color: theme.colors.textSecondary, fontWeight: "800", fontSize: 11, lineHeight: 15 },
 
   fxSelectRow: { marginTop: 10, flexDirection: "row", alignItems: "center" },
   selectPill: {
