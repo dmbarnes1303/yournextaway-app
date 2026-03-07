@@ -20,8 +20,9 @@ import { useTripsStore } from "@/src/state/trips";
 import { buildTicketLink } from "@/src/services/partnerLinks";
 import { beginPartnerClick, openUntrackedUrl } from "@/src/services/partnerClicks";
 
-import { stadiums } from "@/src/data/stadiums/index";
+import { stadiums, getStadiumByTeam } from "@/src/data/stadiums/index";
 import type { StadiumRecord } from "@/src/data/stadiums/index";
+import { normalizeTeamKey } from "@/src/data/teams";
 
 /* -------------------------------------------------------------------------- */
 /* Helpers                                                                    */
@@ -96,28 +97,39 @@ function normalizeVenueKey(input: string): string {
     .replace(/^-|-$/g, "");
 }
 
-function resolveStadiumFromVenue(venueName?: string | null): StadiumRecord | null {
-  const raw = String(venueName ?? "").trim();
-  if (!raw) return null;
-
-  const normalizedVenue = normalizeVenueKey(raw);
+function resolveStadiumFromVenueOrTeam(args: {
+  venueName?: string | null;
+  homeTeamName?: string | null;
+}): StadiumRecord | null {
+  const rawVenue = String(args.venueName ?? "").trim();
+  const rawHome = String(args.homeTeamName ?? "").trim();
 
   const all = Object.values(stadiums);
 
-  const exactKeyMatch =
-    all.find((s) => normalizeVenueKey(s.stadiumKey) === normalizedVenue) ?? null;
-  if (exactKeyMatch) return exactKeyMatch;
+  if (rawVenue) {
+    const normalizedVenue = normalizeVenueKey(rawVenue);
 
-  const exactNameMatch =
-    all.find((s) => normalizeVenueKey(s.name) === normalizedVenue) ?? null;
-  if (exactNameMatch) return exactNameMatch;
+    const exactKeyMatch =
+      all.find((s) => normalizeVenueKey(s.stadiumKey) === normalizedVenue) ?? null;
+    if (exactKeyMatch) return exactKeyMatch;
 
-  const looseNameMatch =
-    all.find((s) => {
-      const stadiumName = normalizeVenueKey(s.name);
-      return stadiumName.includes(normalizedVenue) || normalizedVenue.includes(stadiumName);
-    }) ?? null;
-  if (looseNameMatch) return looseNameMatch;
+    const exactNameMatch =
+      all.find((s) => normalizeVenueKey(s.name) === normalizedVenue) ?? null;
+    if (exactNameMatch) return exactNameMatch;
+
+    const looseNameMatch =
+      all.find((s) => {
+        const stadiumName = normalizeVenueKey(s.name);
+        return stadiumName.includes(normalizedVenue) || normalizedVenue.includes(stadiumName);
+      }) ?? null;
+    if (looseNameMatch) return looseNameMatch;
+  }
+
+  if (rawHome) {
+    const teamKey = normalizeTeamKey(rawHome);
+    const byTeam = getStadiumByTeam(teamKey);
+    if (byTeam) return byTeam;
+  }
 
   return null;
 }
@@ -176,7 +188,14 @@ export default function MatchScreen() {
     return [venueName, venueCity].filter(Boolean).join(" • ");
   }, [venueName, venueCity]);
 
-  const resolvedStadium = useMemo(() => resolveStadiumFromVenue(venueName), [venueName]);
+  const resolvedStadium = useMemo(
+    () =>
+      resolveStadiumFromVenueOrTeam({
+        venueName,
+        homeTeamName: homeName,
+      }),
+    [venueName, homeName]
+  );
 
   const crestHome = useMemo(() => {
     const id = (trip as any)?.homeTeamId;
@@ -320,7 +339,12 @@ export default function MatchScreen() {
         imageUrl={typeof getBackground("match") === "string" ? (getBackground("match") as string) : null}
       >
         <SafeAreaView style={styles.safe}>
-          <EmptyState title="Match not found" subtitle="Missing fixture ID." actionText="Go back" onAction={() => router.back()} />
+          <EmptyState
+            title="Match not found"
+            subtitle="Missing fixture ID."
+            actionText="Go back"
+            onAction={() => router.back()}
+          />
         </SafeAreaView>
       </Background>
     );
