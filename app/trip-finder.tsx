@@ -34,13 +34,13 @@ type WindowKey = "wknd" | "d14" | "d30";
 type FinderMode = "all" | "easy" | "big" | "hidden";
 
 const CURATED_LEAGUE_IDS = new Set<number>([
-  39,  // Premier League
+  39, // Premier League
   140, // La Liga
   135, // Serie A
-  78,  // Bundesliga
-  61,  // Ligue 1
-  88,  // Eredivisie
-  94,  // Primeira Liga
+  78, // Bundesliga
+  61, // Ligue 1
+  88, // Eredivisie
+  94, // Primeira Liga
   203, // Turkish Super Lig
   197, // Greek Super League
   179, // Scottish Premiership
@@ -101,8 +101,12 @@ function scoreTone(score: number) {
   return "Decent";
 }
 
-async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
-  const results: R[] = new Array(items.length) as R[];
+async function mapLimit<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<R>
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
   let nextIndex = 0;
 
   async function worker() {
@@ -112,7 +116,11 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promis
     }
   }
 
-  const workers = Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, () => worker());
+  const workers = Array.from(
+    { length: Math.max(1, Math.min(limit, items.length)) },
+    () => worker()
+  );
+
   await Promise.all(workers);
   return results;
 }
@@ -121,7 +129,11 @@ function filterTripsByMode(trips: RankedTrip[], mode: FinderMode) {
   if (mode === "all") return trips;
 
   if (mode === "easy") {
-    return trips.filter((t) => t.breakdown.travelDifficulty === "easy" || t.breakdown.travelDifficulty === "moderate");
+    return trips.filter(
+      (t) =>
+        t.breakdown.travelDifficulty === "easy" ||
+        t.breakdown.travelDifficulty === "moderate"
+    );
   }
 
   if (mode === "big") {
@@ -136,7 +148,12 @@ function filterTripsByMode(trips: RankedTrip[], mode: FinderMode) {
     const city = toKey(t.city);
     if (!city) return false;
     if (HIDDEN_GEM_CITY_KEYS.has(city)) return true;
-    return t.breakdown.weekendTripScore >= 70 && t.breakdown.atmosphereScore >= 60 && t.breakdown.combinedScore >= 68;
+
+    return (
+      t.breakdown.weekendTripScore >= 70 &&
+      t.breakdown.atmosphereScore >= 60 &&
+      t.breakdown.combinedScore >= 68
+    );
   });
 }
 
@@ -152,7 +169,10 @@ export default function TripFinderScreen() {
 
   const routeMode = String((params as any)?.mode ?? "").trim().toLowerCase();
   const initialMode: FinderMode =
-    routeMode === "easy" || routeMode === "big" || routeMode === "hidden" || routeMode === "all"
+    routeMode === "easy" ||
+    routeMode === "big" ||
+    routeMode === "hidden" ||
+    routeMode === "all"
       ? (routeMode as FinderMode)
       : "all";
 
@@ -219,7 +239,8 @@ export default function TripFinderScreen() {
 
   const goMatch = useCallback(
     (trip: RankedTrip) => {
-      const fixtureId = trip?.fixture?.fixture?.id != null ? String(trip.fixture.fixture.id) : "";
+      const fixtureId =
+        trip?.fixture?.fixture?.id != null ? String(trip.fixture.fixture.id) : "";
       if (!fixtureId) return;
 
       router.push({
@@ -236,8 +257,10 @@ export default function TripFinderScreen() {
 
   const goBuildTrip = useCallback(
     (trip: RankedTrip) => {
-      const fixtureId = trip?.fixture?.fixture?.id != null ? String(trip.fixture.fixture.id) : "";
-      const leagueId = trip?.fixture?.league?.id != null ? String(trip.fixture.league.id) : "";
+      const fixtureId =
+        trip?.fixture?.fixture?.id != null ? String(trip.fixture.fixture.id) : "";
+      const leagueId =
+        trip?.fixture?.league?.id != null ? String(trip.fixture.league.id) : "";
       const season =
         (trip?.fixture as any)?.league?.season != null
           ? String((trip.fixture as any).league.season)
@@ -261,7 +284,9 @@ export default function TripFinderScreen() {
 
   const bg = getBackground("home");
   const bgProps =
-    typeof bg === "string" ? ({ imageUrl: bg } as const) : ({ imageSource: bg } as const);
+    typeof bg === "string"
+      ? ({ imageUrl: bg } as const)
+      : ({ imageSource: bg } as const);
 
   return (
     <Background {...bgProps} overlayOpacity={0.68}>
@@ -286,7 +311,11 @@ export default function TripFinderScreen() {
 
               <View style={styles.filterBlock}>
                 <Text style={styles.filterLabel}>Date window</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.filterRow}
+                >
                   {(["wknd", "d14", "d30"] as WindowKey[]).map((k) => {
                     const active = windowKey === k;
                     return (
@@ -295,7 +324,12 @@ export default function TripFinderScreen() {
                         onPress={() => setWindowKey(k)}
                         style={[styles.filterPill, active && styles.filterPillActive]}
                       >
-                        <Text style={[styles.filterPillText, active && styles.filterPillTextActive]}>
+                        <Text
+                          style={[
+                            styles.filterPillText,
+                            active && styles.filterPillTextActive,
+                          ]}
+                        >
                           {labelForWindow(k)}
                         </Text>
                       </Pressable>
@@ -304,7 +338,11 @@ export default function TripFinderScreen() {
                 </ScrollView>
 
                 <Text style={[styles.filterLabel, { marginTop: 4 }]}>Mode</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.filterRow}
+                >
                   {([
                     ["all", "All Trips"],
                     ["easy", "Easy Travel"],
@@ -318,7 +356,12 @@ export default function TripFinderScreen() {
                         onPress={() => setMode(k)}
                         style={[styles.filterPill, active && styles.filterPillActive]}
                       >
-                        <Text style={[styles.filterPillText, active && styles.filterPillTextActive]}>
+                        <Text
+                          style={[
+                            styles.filterPillText,
+                            active && styles.filterPillTextActive,
+                          ]}
+                        >
                           {label}
                         </Text>
                       </Pressable>
@@ -364,18 +407,25 @@ export default function TripFinderScreen() {
                 <View style={styles.topCardInner}>
                   <View style={styles.scoreRow}>
                     <View style={styles.scoreBadge}>
-                      <Text style={styles.scoreBadgeText}>{topTrip.breakdown.combinedScore}</Text>
+                      <Text style={styles.scoreBadgeText}>
+                        {topTrip.breakdown.combinedScore}
+                      </Text>
                     </View>
+
                     <View style={{ flex: 1 }}>
                       <Text style={styles.topTitle}>
                         {String(topTrip.fixture?.teams?.home?.name ?? "Home")} vs{" "}
                         {String(topTrip.fixture?.teams?.away?.name ?? "Away")}
                       </Text>
+
                       <Text style={styles.topMeta}>
-                        {formatUkDateTimeMaybe(topTrip.kickoffIso)} • {topTrip.stadiumName || "Venue TBC"}
+                        {formatUkDateTimeMaybe(topTrip.kickoffIso)} •{" "}
+                        {topTrip.stadiumName || "Venue TBC"}
                       </Text>
+
                       <Text style={styles.topMeta}>
-                        {[topTrip.city, topTrip.country].filter(Boolean).join(", ") || "Location TBC"}
+                        {[topTrip.city, topTrip.country].filter(Boolean).join(", ") ||
+                          "Location TBC"}
                       </Text>
                     </View>
                   </View>
@@ -383,20 +433,31 @@ export default function TripFinderScreen() {
                   <View style={styles.metricRow}>
                     <View style={styles.metricPill}>
                       <Text style={styles.metricLabel}>Trip</Text>
-                      <Text style={styles.metricValue}>{topTrip.breakdown.weekendTripScore}</Text>
+                      <Text style={styles.metricValue}>
+                        {topTrip.breakdown.weekendTripScore}
+                      </Text>
                     </View>
+
                     <View style={styles.metricPill}>
                       <Text style={styles.metricLabel}>Atmosphere</Text>
-                      <Text style={styles.metricValue}>{topTrip.breakdown.atmosphereScore}</Text>
+                      <Text style={styles.metricValue}>
+                        {topTrip.breakdown.atmosphereScore}
+                      </Text>
                     </View>
+
                     <View style={styles.metricPill}>
                       <Text style={styles.metricLabel}>Travel</Text>
-                      <Text style={styles.metricValue}>{difficultyLabel(topTrip.breakdown.travelDifficulty)}</Text>
+                      <Text style={styles.metricValue}>
+                        {difficultyLabel(topTrip.breakdown.travelDifficulty)}
+                      </Text>
                     </View>
                   </View>
 
                   <View style={styles.reasonBlock}>
-                    <Text style={styles.reasonHeading}>{scoreTone(topTrip.breakdown.combinedScore)} pick</Text>
+                    <Text style={styles.reasonHeading}>
+                      {scoreTone(topTrip.breakdown.combinedScore)} pick
+                    </Text>
+
                     {topTrip.breakdown.reasonLines.map((line, idx) => (
                       <Text key={`${line}-${idx}`} style={styles.reasonText}>
                         • {line}
@@ -432,17 +493,29 @@ export default function TripFinderScreen() {
               <View style={styles.list}>
                 {nextTrips.map((trip) => {
                   const fixtureId =
-                    trip?.fixture?.fixture?.id != null ? String(trip.fixture.fixture.id) : "";
+                    trip?.fixture?.fixture?.id != null
+                      ? String(trip.fixture.fixture.id)
+                      : "";
 
                   return (
-                    <GlassCard key={fixtureId} strength="default" style={styles.tripCard} noPadding>
+                    <GlassCard
+                      key={fixtureId || `${trip.city}-${trip.stadiumName}-${trip.kickoffIso}`}
+                      strength="default"
+                      style={styles.tripCard}
+                      noPadding
+                    >
                       <Pressable
                         onPress={() => goMatch(trip)}
-                        style={({ pressed }) => [styles.tripCardInner, pressed && { opacity: 0.95 }]}
+                        style={({ pressed }) => [
+                          styles.tripCardInner,
+                          pressed && { opacity: 0.95 },
+                        ]}
                       >
                         <View style={styles.tripTopRow}>
                           <View style={styles.tripScoreMini}>
-                            <Text style={styles.tripScoreMiniText}>{trip.breakdown.combinedScore}</Text>
+                            <Text style={styles.tripScoreMiniText}>
+                              {trip.breakdown.combinedScore}
+                            </Text>
                           </View>
 
                           <View style={{ flex: 1 }}>
@@ -450,9 +523,11 @@ export default function TripFinderScreen() {
                               {String(trip.fixture?.teams?.home?.name ?? "Home")} vs{" "}
                               {String(trip.fixture?.teams?.away?.name ?? "Away")}
                             </Text>
+
                             <Text style={styles.tripMeta} numberOfLines={1}>
                               {formatUkDateTimeMaybe(trip.kickoffIso)}
                             </Text>
+
                             <Text style={styles.tripMeta} numberOfLines={1}>
                               {[trip.city, trip.stadiumName].filter(Boolean).join(" • ")}
                             </Text>
@@ -498,7 +573,7 @@ export default function TripFinderScreen() {
                 })}
               </View>
             </>
-          )}
+          ) : null}
         </ScrollView>
       </SafeAreaView>
     </Background>
@@ -508,6 +583,7 @@ export default function TripFinderScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   scroll: { flex: 1 },
+
   content: {
     paddingHorizontal: theme.spacing.lg,
     paddingBottom: theme.spacing.xxl,
