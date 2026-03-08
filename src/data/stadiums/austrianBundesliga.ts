@@ -242,28 +242,29 @@ const austrianBundesligaStadiums: Record<string, StadiumRecord> = {
   },
 
   "worthersee-stadion": {
-    stadiumKey: "worthersee-stadion",
-    name: "Wörthersee Stadion",
-    city: "Klagenfurt",
-    country: "Austria",
-    capacity: 30000,
-    opened: 2007,
-    airport: "Klagenfurt Airport (KLU)",
-    distanceFromAirportKm: 5,
-    teamKeys: ["austria-klagenfurt"],
-    tips: [
-      "Easy stadium trip because airport and city are both close",
-      "Lake Wörthersee area makes this a better leisure trip than many expect",
-    ],
-    transit: [
-      { label: "Klagenfurt Hbf", minutes: 20 },
-      { label: "City centre", minutes: 18 },
-    ],
-    stayAreas: [
-      { area: "Klagenfurt Centre", why: "Best practical base for food, bars and transport" },
-      { area: "Lakeside / Wörthersee", why: "Best scenic stay if making a proper weekend of it" },
-    ],
-  },
+  "josko-arena": {
+  stadiumKey: "josko-arena",
+  name: "Josko Arena",
+  city: "Ried im Innkreis",
+  country: "Austria",
+  capacity: 7680,
+  opened: 2003,
+  airport: "Linz Airport (LNZ)",
+  distanceFromAirportKm: 62,
+  teamKeys: ["ried"],
+  tips: [
+    "Compact provincial football stop rather than a major city-break destination",
+    "Best done as a simple overnight or as part of a wider Upper Austria route",
+  ],
+  transit: [
+    { label: "Ried im Innkreis station", minutes: 20 },
+    { label: "Town centre", minutes: 15, note: "best practical local base" },
+  ],
+  stayAreas: [
+    { area: "Ried im Innkreis Centre", why: "Most practical local base" },
+    { area: "Linz", why: "Better wider base if combining football with a larger city stay" },
+  ],
+},
 };
 
 export default austrianBundesligaStadiums;
