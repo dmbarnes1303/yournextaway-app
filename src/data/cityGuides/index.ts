@@ -10,6 +10,7 @@ import primeiraLigaCityGuides from "./primeiraLiga";
 import eredivisieCityGuides from "./eredivisie";
 import scottishPremiershipCityGuides from "./scottishPremiership";
 import superLigCityGuides from "./superLig";
+import superLeagueGreeceCityGuides from "./superLeagueGreece";
 
 export type TripTopThingsBundle = {
   cityKey: string;
@@ -29,6 +30,7 @@ export const cityGuides: Record<string, CityGuide> = {
   ...eredivisieCityGuides,
   ...scottishPremiershipCityGuides,
   ...superLigCityGuides,
+  ...superLeagueGreeceCityGuides,
 };
 
 export function getCityGuide(cityInput: string): CityGuide | null {
