@@ -21,6 +21,7 @@ import ekstraklasaTeams from "./ekstraklasa";
 import allsvenskanTeams from "./allsvenskan";
 import eliteserienTeams from "./eliteserien";
 import veikkausliigaTeams from "./veikkausliiga";
+import bestaDeildTeams from "./bestaDeild";
 
 /**
  * V1 Team Registry (single source of truth)
@@ -86,6 +87,7 @@ export const teams: Record<string, TeamRecord> = {
   ...allsvenskanTeams,
   ...eliteserienTeams,
   ...veikkausliigaTeams,
+  ...bestaDeildTeams,
 };
 
 export const POPULAR_TEAM_IDS = new Set<number>(
