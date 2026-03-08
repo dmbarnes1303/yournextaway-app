@@ -12,6 +12,7 @@ import laLigaGuides from "./laLiga";
 import ligue1Guides from "./ligue1";
 import premierLeagueGuides from "./premierLeague";
 import serieAGuides from "./serieA";
+import primeiraLigaGuides from "./primeiraLiga";
 
 // Legacy fallback (if it contains arrays/records)
 import * as legacy from "./teamGuides";
@@ -83,6 +84,7 @@ const SOURCES: Record<string, TeamGuide[]> = {
   ligue1: extractGuides(ligue1Guides),
   premierLeague: extractGuides(premierLeagueGuides),
   serieA: extractGuides(serieAGuides),
+  primeiraLiga: extractGuides(primeiraLigaGuides),
   legacy: extractGuides(legacy),
 };
 
