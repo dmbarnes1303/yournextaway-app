@@ -3,7 +3,7 @@ import type { TeamRecord } from "./types";
 const SUPER_LIGA = 286;
 const SERBIA = "Serbia";
 
-export const superLigaTeams: Record<string, TeamRecord> = {
+export const superLigaSerbiaTeams: Record<string, TeamRecord> = {
   "red-star-belgrade": {
     teamKey: "red-star-belgrade",
     name: "Red Star Belgrade",
