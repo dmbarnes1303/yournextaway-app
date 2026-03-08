@@ -1,15 +1,17 @@
 import type { TeamRecord } from "./types";
 
 const SLOVAKIA = "Slovakia";
+const SUPER_LIGA = 332;
 
 export const superLigaSlovakiaTeams: Record<string, TeamRecord> = {
-
   "slovan-bratislava": {
     teamKey: "slovan-bratislava",
     name: "Slovan Bratislava",
     city: "Bratislava",
     country: SLOVAKIA,
+    leagueId: SUPER_LIGA,
     stadiumKey: "tehelne-pole",
+    aliases: ["sk slovan bratislava", "slovan", "slovan bratislava"],
   },
 
   "dunajska-streda": {
@@ -17,7 +19,9 @@ export const superLigaSlovakiaTeams: Record<string, TeamRecord> = {
     name: "DAC Dunajská Streda",
     city: "Dunajská Streda",
     country: SLOVAKIA,
+    leagueId: SUPER_LIGA,
     stadiumKey: "mol-arena",
+    aliases: ["dac", "dac 1904", "dac dunajska streda", "dunajska streda"],
   },
 
   "zilina": {
@@ -25,7 +29,9 @@ export const superLigaSlovakiaTeams: Record<string, TeamRecord> = {
     name: "MŠK Žilina",
     city: "Žilina",
     country: SLOVAKIA,
+    leagueId: SUPER_LIGA,
     stadiumKey: "stadion-pod-dubnom",
+    aliases: ["zilina", "msk zilina"],
   },
 
   "spartak-trnava": {
@@ -33,7 +39,9 @@ export const superLigaSlovakiaTeams: Record<string, TeamRecord> = {
     name: "Spartak Trnava",
     city: "Trnava",
     country: SLOVAKIA,
+    leagueId: SUPER_LIGA,
     stadiumKey: "anton-malatinseho-stadium",
+    aliases: ["fc spartak trnava", "spartak", "spartak trnava"],
   },
 
   "podbrezova": {
@@ -41,7 +49,9 @@ export const superLigaSlovakiaTeams: Record<string, TeamRecord> = {
     name: "FK Železiarne Podbrezová",
     city: "Podbrezová",
     country: SLOVAKIA,
+    leagueId: SUPER_LIGA,
     stadiumKey: "zelpo-arena",
+    aliases: ["podbrezova", "fk zeleziarne podbrezova"],
   },
 
   "michalovce": {
@@ -49,7 +59,9 @@ export const superLigaSlovakiaTeams: Record<string, TeamRecord> = {
     name: "MFK Zemplín Michalovce",
     city: "Michalovce",
     country: SLOVAKIA,
+    leagueId: SUPER_LIGA,
     stadiumKey: "mestsky-futbalovy-stadion-michalovce",
+    aliases: ["michalovce", "zemplin michalovce", "mfk zemplin michalovce"],
   },
 
   "fc-kosice": {
@@ -57,7 +69,9 @@ export const superLigaSlovakiaTeams: Record<string, TeamRecord> = {
     name: "FC Košice",
     city: "Košice",
     country: SLOVAKIA,
+    leagueId: SUPER_LIGA,
     stadiumKey: "kosicka-futbalova-arena",
+    aliases: ["kosice", "fc kosice"],
   },
 
   "komarno": {
@@ -65,7 +79,9 @@ export const superLigaSlovakiaTeams: Record<string, TeamRecord> = {
     name: "KFC Komárno",
     city: "Komárno",
     country: SLOVAKIA,
+    leagueId: SUPER_LIGA,
     stadiumKey: "vion-arena",
+    aliases: ["komarno", "kfc komarno"],
   },
 
   "ruzomberok": {
@@ -73,7 +89,9 @@ export const superLigaSlovakiaTeams: Record<string, TeamRecord> = {
     name: "MFK Ružomberok",
     city: "Ružomberok",
     country: SLOVAKIA,
+    leagueId: SUPER_LIGA,
     stadiumKey: "stadion-mfk-ruzomberok",
+    aliases: ["ruzomberok", "mfk ruzomberok"],
   },
 
   "trencin": {
@@ -81,7 +99,9 @@ export const superLigaSlovakiaTeams: Record<string, TeamRecord> = {
     name: "AS Trenčín",
     city: "Trenčín",
     country: SLOVAKIA,
+    leagueId: SUPER_LIGA,
     stadiumKey: "sihoť-stadium",
+    aliases: ["trencin", "as trencin"],
   },
 
   "tatran-presov": {
@@ -89,7 +109,9 @@ export const superLigaSlovakiaTeams: Record<string, TeamRecord> = {
     name: "Tatran Prešov",
     city: "Prešov",
     country: SLOVAKIA,
+    leagueId: SUPER_LIGA,
     stadiumKey: "futbal-tatran-arena",
+    aliases: ["presov", "tatran presov", "1 fc tatran presov"],
   },
 
   "skalica": {
@@ -97,9 +119,10 @@ export const superLigaSlovakiaTeams: Record<string, TeamRecord> = {
     name: "MFK Skalica",
     city: "Skalica",
     country: SLOVAKIA,
+    leagueId: SUPER_LIGA,
     stadiumKey: "mestsky-stadion-skalica",
+    aliases: ["skalica", "mfk skalica"],
   },
-
 };
 
 export default superLigaSlovakiaTeams;
