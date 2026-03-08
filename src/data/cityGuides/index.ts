@@ -13,6 +13,7 @@ import superLigCityGuides from "./superLig";
 import proLeagueCityGuides from "./proLeague";
 import superLeagueGreeceCityGuides from "./superLeagueGreece";
 import austrianBundesligaCityGuides from "./austrianBundesliga";
+import swissSuperLeagueCityGuides from "./swissSuperLeague";
 
 export type TripTopThingsBundle = {
   cityKey: string;
@@ -35,6 +36,7 @@ export const cityGuides: Record<string, CityGuide> = {
   ...proLeagueCityGuides,
   ...superLeagueGreeceCityGuides,
   ...austrianBundesligaCityGuides,
+  ...swissSuperLeagueCityGuides,
 };
 
 export function getCityGuide(cityInput: string): CityGuide | null {
