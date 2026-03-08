@@ -1,11 +1,13 @@
 import type { StadiumRecord } from "./types";
 
+const TURKEY = "Turkey";
+
 const superLigStadiums: Record<string, StadiumRecord> = {
   "ram-park": {
     stadiumKey: "ram-park",
     name: "RAMS Park",
     city: "Istanbul",
-    country: "Turkey",
+    country: TURKEY,
     capacity: 52600,
     opened: 2011,
     airport: "Istanbul Airport (IST)",
@@ -29,7 +31,7 @@ const superLigStadiums: Record<string, StadiumRecord> = {
     stadiumKey: "sukru-saracoglu",
     name: "Şükrü Saracoğlu Stadium",
     city: "Istanbul",
-    country: "Turkey",
+    country: TURKEY,
     capacity: 47544,
     opened: 1908,
     airport: "Sabiha Gökçen Airport (SAW)",
@@ -53,7 +55,7 @@ const superLigStadiums: Record<string, StadiumRecord> = {
     stadiumKey: "vodafone-park",
     name: "Vodafone Park",
     city: "Istanbul",
-    country: "Turkey",
+    country: TURKEY,
     capacity: 42590,
     opened: 2016,
     airport: "Istanbul Airport (IST)",
@@ -77,7 +79,7 @@ const superLigStadiums: Record<string, StadiumRecord> = {
     stadiumKey: "papara-park",
     name: "Papara Park",
     city: "Trabzon",
-    country: "Turkey",
+    country: TURKEY,
     capacity: 40782,
     opened: 2016,
     airport: "Trabzon Airport (TZX)",
@@ -101,7 +103,7 @@ const superLigStadiums: Record<string, StadiumRecord> = {
     stadiumKey: "basaksehir-fatih-terim-stadium",
     name: "Başakşehir Fatih Terim Stadium",
     city: "Istanbul",
-    country: "Turkey",
+    country: TURKEY,
     capacity: 17156,
     opened: 2014,
     airport: "Istanbul Airport (IST)",
@@ -121,195 +123,27 @@ const superLigStadiums: Record<string, StadiumRecord> = {
     ],
   },
 
-  "konya-buyuksehir-stadium": {
-    stadiumKey: "konya-buyuksehir-stadium",
-    name: "Konya Büyükşehir Stadium",
-    city: "Konya",
-    country: "Turkey",
-    capacity: 42276,
-    opened: 2014,
-    airport: "Konya Airport (KYA)",
+  "gursel-aksel-stadium": {
+    stadiumKey: "gursel-aksel-stadium",
+    name: "Gürsel Aksel Stadium",
+    city: "Izmir",
+    country: TURKEY,
+    capacity: 20035,
+    opened: 2020,
+    airport: "Izmir Adnan Menderes Airport (ADB)",
     distanceFromAirportKm: 18,
-    teamKeys: ["konyaspor"],
+    teamKeys: ["goztepe"],
     transit: [
-      { label: "Konya city centre", minutes: 25 },
-      { label: "Mevlana area", minutes: 25, note: "best visitor base" },
+      { label: "Konak", minutes: 15 },
+      { label: "Alsancak", minutes: 20, note: "best wider city-break base" },
     ],
     stayAreas: [
-      { area: "City Centre", why: "Best practical local base" },
-      { area: "Mevlana / Alaaddin", why: "Best for sightseeing and restaurants" },
+      { area: "Alsancak", why: "Best food, bars and easiest all-round visitor base" },
+      { area: "Konak", why: "Best practical central base for short stays" },
     ],
     tips: [
-      "A useful football stop if you want to combine the match with a more cultural Turkish city trip",
-      "Better as a one- or two-night stay than a long luxury weekend",
-    ],
-  },
-
-  "sivas-4-eylul-stadium": {
-    stadiumKey: "sivas-4-eylul-stadium",
-    name: "Sivas 4 Eylül Stadium",
-    city: "Sivas",
-    country: "Turkey",
-    capacity: 27532,
-    opened: 2016,
-    airport: "Sivas Airport (VAS)",
-    distanceFromAirportKm: 25,
-    teamKeys: ["sivasspor"],
-    transit: [
-      { label: "Sivas centre", minutes: 20 },
-      { label: "Main station / central area", minutes: 20, note: "best practical base" },
-    ],
-    stayAreas: [
-      { area: "City Centre", why: "Most practical local option" },
-      { area: "Around central square", why: "Best simple overnight base" },
-    ],
-    tips: [
-      "More of a committed football stop than a mainstream city-break destination",
-      "Useful for coverage depth, but not one of the glamour trip products",
-    ],
-  },
-
-  "kadir-has-stadium": {
-    stadiumKey: "kadir-has-stadium",
-    name: "Kadir Has Stadium",
-    city: "Kayseri",
-    country: "Turkey",
-    capacity: 32864,
-    opened: 2009,
-    airport: "Kayseri Airport (ASR)",
-    distanceFromAirportKm: 8,
-    teamKeys: ["kayserispor"],
-    transit: [
-      { label: "Kayseri centre", minutes: 20 },
-      { label: "Cumhuriyet Meydanı", minutes: 20, note: "best visitor base" },
-    ],
-    stayAreas: [
-      { area: "City Centre", why: "Best practical local stay" },
-      { area: "Around Cumhuriyet Meydanı", why: "Best food and hotel concentration" },
-    ],
-    tips: [
-      "Works well if paired with wider Cappadocia-style regional travel",
-      "More of a strategic football stop than a luxury football weekend",
-    ],
-  },
-
-  "kalyon-stadium": {
-    stadiumKey: "kalyon-stadium",
-    name: "Kalyon Stadium",
-    city: "Gaziantep",
-    country: "Turkey",
-    capacity: 35000,
-    opened: 2017,
-    airport: "Gaziantep Airport (GZT)",
-    distanceFromAirportKm: 22,
-    teamKeys: ["gaziantep"],
-    transit: [
-      { label: "Gaziantep centre", minutes: 25 },
-      { label: "Old city / Bakırcılar area", minutes: 25, note: "best visitor base" },
-    ],
-    stayAreas: [
-      { area: "Şahinbey / Centre", why: "Best practical city base" },
-      { area: "Old City", why: "Best food and local atmosphere" },
-    ],
-    tips: [
-      "Strong food-led city with more off-pitch value than many expect",
-      "Good if you want a football trip with proper regional character",
-    ],
-  },
-
-  "antalya-stadium": {
-    stadiumKey: "antalya-stadium",
-    name: "Antalya Stadium",
-    city: "Antalya",
-    country: "Turkey",
-    capacity: 32539,
-    opened: 2015,
-    airport: "Antalya Airport (AYT)",
-    distanceFromAirportKm: 16,
-    teamKeys: ["antalya"],
-    transit: [
-      { label: "Antalya centre", minutes: 20 },
-      { label: "Kaleiçi", minutes: 20, note: "best visitor base" },
-    ],
-    stayAreas: [
-      { area: "Kaleiçi", why: "Best atmosphere and old-town stay" },
-      { area: "Konyaaltı", why: "Best beach-plus-city option" },
-    ],
-    tips: [
-      "One of the best football-and-sun city-break combinations in the league",
-      "Very easy to turn into a leisure-heavy weekend rather than just a match trip",
-    ],
-  },
-
-  "yeni-adana-stadium": {
-    stadiumKey: "yeni-adana-stadium",
-    name: "Yeni Adana Stadium",
-    city: "Adana",
-    country: "Turkey",
-    capacity: 33543,
-    opened: 2021,
-    airport: "Adana Şakirpaşa Airport (ADA)",
-    distanceFromAirportKm: 8,
-    teamKeys: ["adana-demirspor"],
-    transit: [
-      { label: "Adana centre", minutes: 20 },
-      { label: "Seyhan", minutes: 20, note: "best practical base" },
-    ],
-    stayAreas: [
-      { area: "Seyhan / Centre", why: "Best local practical option" },
-      { area: "Riverfront area", why: "Best if you want the tidier central stay" },
-    ],
-    tips: [
-      "Strong atmosphere potential and a more characterful football stop than some might expect",
-      "Better as a shorter football-focused break than a polished luxury weekend",
-    ],
-  },
-
-  "hatay-stadium": {
-    stadiumKey: "hatay-stadium",
-    name: "Hatay Stadium",
-    city: "Antakya",
-    country: "Turkey",
-    capacity: 25500,
-    opened: 2018,
-    airport: "Hatay Airport (HTY)",
-    distanceFromAirportKm: 25,
-    teamKeys: ["hatayspor"],
-    transit: [
-      { label: "Antakya centre", minutes: 20 },
-      { label: "Main central area", minutes: 20, note: "best practical local base" },
-    ],
-    stayAreas: [
-      { area: "Antakya Centre", why: "Most practical local option" },
-      { area: "Near main roads", why: "Best for simple overnight logistics" },
-    ],
-    tips: [
-      "More of a functional football trip than a mainstream city-break product",
-      "Useful for coverage depth, but not one of the headline weekend destinations",
-    ],
-  },
-
-  "bahcesehir-okullari-stadium": {
-    stadiumKey: "bahcesehir-okullari-stadium",
-    name: "Bahçeşehir Okulları Stadium",
-    city: "Alanya",
-    country: "Turkey",
-    capacity: 10000,
-    opened: 2011,
-    airport: "Gazipaşa-Alanya Airport (GZP)",
-    distanceFromAirportKm: 40,
-    teamKeys: ["alanyaspor"],
-    transit: [
-      { label: "Alanya centre", minutes: 15 },
-      { label: "Beach / harbour", minutes: 15, note: "best visitor base" },
-    ],
-    stayAreas: [
-      { area: "Alanya Centre", why: "Best practical all-round base" },
-      { area: "Beachfront", why: "Best sun-and-leisure stay option" },
-    ],
-    tips: [
-      "Very strong football-plus-holiday angle because the destination itself is the sell",
-      "Best as a warm-weather weekend rather than just a football stop",
+      "Very strong big-city Turkish football trip without Istanbul scale or chaos",
+      "One of the better options for combining football with a relaxed coastal-city weekend",
     ],
   },
 
@@ -317,7 +151,7 @@ const superLigStadiums: Record<string, StadiumRecord> = {
     stadiumKey: "samsun-19-mayis-stadium",
     name: "Samsun 19 Mayıs Stadium",
     city: "Samsun",
-    country: "Turkey",
+    country: TURKEY,
     capacity: 33919,
     opened: 2017,
     airport: "Samsun Çarşamba Airport (SZF)",
@@ -341,7 +175,7 @@ const superLigStadiums: Record<string, StadiumRecord> = {
     stadiumKey: "caykur-didi-stadium",
     name: "Çaykur Didi Stadium",
     city: "Rize",
-    country: "Turkey",
+    country: TURKEY,
     capacity: 15532,
     opened: 2009,
     airport: "Trabzon Airport (TZX)",
@@ -361,27 +195,171 @@ const superLigStadiums: Record<string, StadiumRecord> = {
     ],
   },
 
-  "eryaman-stadium": {
-    stadiumKey: "eryaman-stadium",
-    name: "Eryaman Stadium",
-    city: "Ankara",
-    country: "Turkey",
-    capacity: 22000,
-    opened: 2019,
-    airport: "Ankara Esenboğa Airport (ESB)",
-    distanceFromAirportKm: 45,
-    teamKeys: ["ankaragucu"],
+  "yildiz-entegre-kocaeli-stadium": {
+    stadiumKey: "yildiz-entegre-kocaeli-stadium",
+    name: "Yıldız Entegre Kocaeli Stadium",
+    city: "Izmit",
+    country: TURKEY,
+    capacity: 34157,
+    opened: 2018,
+    airport: "Sabiha Gökçen Airport (SAW)",
+    distanceFromAirportKm: 70,
+    teamKeys: ["kocaelispor"],
     transit: [
-      { label: "Eryaman", minutes: 15 },
-      { label: "Kızılay", minutes: 30, note: "best wider central Ankara base" },
+      { label: "Izmit centre", minutes: 20 },
+      { label: "Yahya Kaptan / central business area", minutes: 20, note: "best practical base" },
+    ],
+    stayAreas: [
+      { area: "Izmit Centre", why: "Best practical local stay option" },
+      { area: "Yahya Kaptan", why: "Best cleaner modern hotel base" },
+    ],
+    tips: [
+      "A proper football-first trip rather than a mainstream leisure destination",
+      "Works best as an overnight or as part of a wider Marmara-region route",
+    ],
+  },
+
+  "kalyon-stadium": {
+    stadiumKey: "kalyon-stadium",
+    name: "Kalyon Stadium",
+    city: "Gaziantep",
+    country: TURKEY,
+    capacity: 35000,
+    opened: 2017,
+    airport: "Gaziantep Airport (GZT)",
+    distanceFromAirportKm: 22,
+    teamKeys: ["gaziantep"],
+    transit: [
+      { label: "Gaziantep centre", minutes: 25 },
+      { label: "Old city / Bakırcılar area", minutes: 25, note: "best visitor base" },
+    ],
+    stayAreas: [
+      { area: "Şahinbey / Centre", why: "Best practical city base" },
+      { area: "Old City", why: "Best food and local atmosphere" },
+    ],
+    tips: [
+      "Strong food-led city with more off-pitch value than many expect",
+      "Good if you want a football trip with proper regional character",
+    ],
+  },
+
+  "bahcesehir-okullari-stadium": {
+    stadiumKey: "bahcesehir-okullari-stadium",
+    name: "Bahçeşehir Okulları Stadium",
+    city: "Alanya",
+    country: TURKEY,
+    capacity: 10000,
+    opened: 2011,
+    airport: "Gazipaşa-Alanya Airport (GZP)",
+    distanceFromAirportKm: 40,
+    teamKeys: ["alanyaspor"],
+    transit: [
+      { label: "Alanya centre", minutes: 15 },
+      { label: "Beach / harbour", minutes: 15, note: "best visitor base" },
+    ],
+    stayAreas: [
+      { area: "Alanya Centre", why: "Best practical all-round base" },
+      { area: "Beachfront", why: "Best sun-and-leisure stay option" },
+    ],
+    tips: [
+      "Very strong football-plus-holiday angle because the destination itself is the sell",
+      "Best as a warm-weather weekend rather than just a football stop",
+    ],
+  },
+
+  "ankara-19-mayis-stadium": {
+    stadiumKey: "ankara-19-mayis-stadium",
+    name: "Ankara 19 Mayıs Stadium",
+    city: "Ankara",
+    country: TURKEY,
+    capacity: 20250,
+    opened: 1936,
+    airport: "Ankara Esenboğa Airport (ESB)",
+    distanceFromAirportKm: 30,
+    teamKeys: ["genclerbirligi"],
+    transit: [
+      { label: "Ulus", minutes: 10 },
+      { label: "Kızılay", minutes: 20, note: "best wider central Ankara base" },
     ],
     stayAreas: [
       { area: "Kızılay", why: "Best practical central Ankara base" },
       { area: "Çankaya", why: "Better restaurants and more polished city stay" },
     ],
     tips: [
-      "A solid capital-city football stop, even if not as naturally compelling as Istanbul",
-      "Best as a tidy one- or two-night city trip rather than a glamour football break",
+      "Classic capital-city football stop rather than a glamour football weekend",
+      "Best done as a clean one- or two-night city trip",
+    ],
+  },
+
+  "konya-buyuksehir-stadium": {
+    stadiumKey: "konya-buyuksehir-stadium",
+    name: "Konya Büyükşehir Stadium",
+    city: "Konya",
+    country: TURKEY,
+    capacity: 42276,
+    opened: 2014,
+    airport: "Konya Airport (KYA)",
+    distanceFromAirportKm: 18,
+    teamKeys: ["konyaspor"],
+    transit: [
+      { label: "Konya city centre", minutes: 25 },
+      { label: "Mevlana area", minutes: 25, note: "best visitor base" },
+    ],
+    stayAreas: [
+      { area: "City Centre", why: "Best practical local base" },
+      { area: "Mevlana / Alaaddin", why: "Best for sightseeing and restaurants" },
+    ],
+    tips: [
+      "A useful football stop if you want to combine the match with a more cultural Turkish city trip",
+      "Better as a one- or two-night stay than a long luxury weekend",
+    ],
+  },
+
+  "antalya-stadium": {
+    stadiumKey: "antalya-stadium",
+    name: "Antalya Stadium",
+    city: "Antalya",
+    country: TURKEY,
+    capacity: 32539,
+    opened: 2015,
+    airport: "Antalya Airport (AYT)",
+    distanceFromAirportKm: 16,
+    teamKeys: ["antalya"],
+    transit: [
+      { label: "Antalya centre", minutes: 20 },
+      { label: "Kaleiçi", minutes: 20, note: "best visitor base" },
+    ],
+    stayAreas: [
+      { area: "Kaleiçi", why: "Best atmosphere and old-town stay" },
+      { area: "Konyaaltı", why: "Best beach-plus-city option" },
+    ],
+    tips: [
+      "One of the best football-and-sun city-break combinations in the league",
+      "Very easy to turn into a leisure-heavy weekend rather than just a match trip",
+    ],
+  },
+
+  "eyup-stadium": {
+    stadiumKey: "eyup-stadium",
+    name: "Eyüp Stadium",
+    city: "Istanbul",
+    country: TURKEY,
+    capacity: 2500,
+    opened: 1978,
+    airport: "Istanbul Airport (IST)",
+    distanceFromAirportKm: 35,
+    teamKeys: ["eyupspor"],
+    transit: [
+      { label: "Eyüp", minutes: 10 },
+      { label: "Taksim / Beyoğlu", minutes: 20, note: "best wider central stay base" },
+    ],
+    stayAreas: [
+      { area: "Beyoğlu / Taksim", why: "Best nightlife and overall city-break base" },
+      { area: "Balat / Fener", why: "Best if you want a more characterful historic-city stay" },
+    ],
+    tips: [
+      "This is another Istanbul trip first, club trip second",
+      "Best treated as part of a wider Istanbul weekend rather than a stand-alone stadium-led break",
     ],
   },
 
@@ -389,7 +367,7 @@ const superLigStadiums: Record<string, StadiumRecord> = {
     stadiumKey: "recep-tayyip-erdogan-stadium",
     name: "Recep Tayyip Erdoğan Stadium",
     city: "Istanbul",
-    country: "Turkey",
+    country: TURKEY,
     capacity: 14234,
     opened: 2005,
     airport: "Istanbul Airport (IST)",
@@ -409,27 +387,51 @@ const superLigStadiums: Record<string, StadiumRecord> = {
     ],
   },
 
-  "pendik-stadium": {
-    stadiumKey: "pendik-stadium",
-    name: "Pendik Stadium",
-    city: "Istanbul",
-    country: "Turkey",
-    capacity: 2500,
-    opened: 1991,
-    airport: "Sabiha Gökçen Airport (SAW)",
-    distanceFromAirportKm: 12,
-    teamKeys: ["pendikspor"],
+  "kadir-has-stadium": {
+    stadiumKey: "kadir-has-stadium",
+    name: "Kadir Has Stadium",
+    city: "Kayseri",
+    country: TURKEY,
+    capacity: 32864,
+    opened: 2009,
+    airport: "Kayseri Airport (ASR)",
+    distanceFromAirportKm: 8,
+    teamKeys: ["kayserispor"],
     transit: [
-      { label: "Pendik", minutes: 15 },
-      { label: "Kadıköy", minutes: 35, note: "best wider Asian-side base" },
+      { label: "Kayseri centre", minutes: 20 },
+      { label: "Cumhuriyet Meydanı", minutes: 20, note: "best visitor base" },
     ],
     stayAreas: [
-      { area: "Kadıköy", why: "Best overall base if doing an Istanbul trip on the Asian side" },
-      { area: "Pendik", why: "Most practical local option if staying very close" },
+      { area: "City Centre", why: "Best practical local stay" },
+      { area: "Around Cumhuriyet Meydanı", why: "Best food and hotel concentration" },
     ],
     tips: [
-      "Small-ground trip with airport convenience rather than major club glamour",
-      "Usually better folded into a wider Istanbul itinerary",
+      "Works well if paired with wider Cappadocia-style regional travel",
+      "More of a strategic football stop than a luxury football weekend",
+    ],
+  },
+
+  "ataturk-olimpiyat-stadium": {
+    stadiumKey: "ataturk-olimpiyat-stadium",
+    name: "Atatürk Olympic Stadium",
+    city: "Istanbul",
+    country: TURKEY,
+    capacity: 76092,
+    opened: 2002,
+    airport: "Istanbul Airport (IST)",
+    distanceFromAirportKm: 30,
+    teamKeys: ["fatih-karagumruk"],
+    transit: [
+      { label: "Başakşehir / İkitelli", minutes: 20 },
+      { label: "Taksim / Şişli", minutes: 40, note: "best wider central stay base" },
+    ],
+    stayAreas: [
+      { area: "Şişli", why: "Best practical central Istanbul base" },
+      { area: "Taksim / Beyoğlu", why: "Best nightlife and general city-break value" },
+    ],
+    tips: [
+      "Massive stadium and not a neighbourhood-intimacy experience",
+      "Best handled as part of a wider Istanbul trip, not a stadium-adjacent stay",
     ],
   },
 };
