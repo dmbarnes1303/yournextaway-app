@@ -2,7 +2,7 @@ import type { StadiumRecord } from "./types";
 
 const SERBIA = "Serbia";
 
-export const superLigaStadiums: Record<string, StadiumRecord> = {
+export const superLigaSerbiaStadiums: Record<string, StadiumRecord> = {
   "rajko-mitic-stadium": {
     stadiumKey: "rajko-mitic-stadium",
     name: "Rajko Mitić Stadium",
