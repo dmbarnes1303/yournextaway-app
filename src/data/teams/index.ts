@@ -28,6 +28,7 @@ import hnlTeams from "./hnl";
 import superLigaSerbiaTeams from "./superLigaSerbia";
 import superLigaSlovakiaTeams from "./superLigaSlovakia";
 import prvaLigaSloveniaTeams from "./prvaLigaSlovenia";
+import firstLeagueBulgariaTeams from "./firstLeagueBulgaria";
 
 /**
  * V1 Team Registry (single source of truth)
@@ -100,6 +101,7 @@ export const teams: Record<string, TeamRecord> = {
   ...superLigaSerbiaTeams,
   ...superLigaSlovakiaTeams,
 ...prvaLigaSloveniaTeams,
+  ...firstLeagueBulgariaTeams,
   
 };
 
