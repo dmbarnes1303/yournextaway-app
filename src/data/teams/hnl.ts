@@ -57,7 +57,7 @@ export const hnlTeams: Record<string, TeamRecord> = {
     name: "NK Lokomotiva",
     city: "Zagreb",
     country: CROATIA,
-    stadiumKey: "stadion-kinoradnik",
+    stadiumKey: "maksimir-stadium",
   },
 
   "hnk-gorica": {
