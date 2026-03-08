@@ -23,6 +23,7 @@ import veikkausliigaStadiums from "./veikkausliiga";
 import bestaDeildStadiums from "./bestaDeild";
 import nbIStadiums from "./nbI";
 import superLigaStadiums from "./superLiga";
+import hnlStadiums from "./hnl";
 
 export const stadiums: Record<string, StadiumRecord> = {
   ...premierLeagueStadiums,
@@ -47,6 +48,7 @@ export const stadiums: Record<string, StadiumRecord> = {
   ...bestaDeildStadiums,
   ...nbIStadiums,
   ...superLigaStadiums,
+  ...hnlStadiums,
 };
 
 export function getStadium(stadiumKey: string): StadiumRecord | null {
