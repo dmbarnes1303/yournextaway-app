@@ -165,4 +165,4 @@ export const superLigaTeams: Record<string, TeamRecord> = {
   },
 };
 
-export default superLigaTeams;
+export default superLigaSerbiaTeams;
