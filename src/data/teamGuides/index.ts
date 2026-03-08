@@ -17,6 +17,22 @@ import superLeagueGreeceGuides from "./superLeagueGreece";
 import austrianBundesligaGuides from "./austrianBundesliga";
 import swissSuperLeagueGuides from "./swissSuperLeague";
 import superligaDenmarkGuides from "./superligaDenmark";
+import czechFirstLeagueGuides from "./czechFirstLeague";
+import ekstraklasaGuides from "./ekstraklasa";
+import hnlGuides from "./hnl";
+import superLigaGuides from "./superLiga";
+import firstLeagueBulgariaGuides from "./firstLeagueBulgaria";
+import firstDivisionCyprusGuides from "./firstDivisionCyprus";
+import superLigaSerbiaGuides from "./superLigaSerbia";
+import superLigaSlovakiaGuides from "./superLigaSlovakia";
+import prvaLigaSloveniaGuides from "./prvaLigaSlovenia";
+import nbIGuides from "./nbI";
+import allsvenskanGuides from "./allsvenskan";
+import eliteserienGuides from "./eliteserien";
+import veikkausliigaGuides from "./veikkausliiga";
+import bestaDeildGuides from "./bestaDeild";
+import premierLeagueBosniaGuides from "./premierLeagueBosnia";
+import leagueOfIrelandPremierGuides from "./leagueOfIrelandPremier";
 
 import * as legacy from "./teamGuides";
 
@@ -79,6 +95,22 @@ const SOURCES: Record<string, TeamGuide[]> = {
   austrianBundesliga: extractGuides(austrianBundesligaGuides),
   swissSuperLeague: extractGuides(swissSuperLeagueGuides),
   superligaDenmark: extractGuides(superligaDenmarkGuides),
+  czechFirstLeague: extractGuides(czechFirstLeagueGuides),
+  ekstraklasa: extractGuides(ekstraklasaGuides),
+  hnl: extractGuides(hnlGuides),
+  superLiga: extractGuides(superLigaGuides),
+  firstLeagueBulgaria: extractGuides(firstLeagueBulgariaGuides),
+  firstDivisionCyprus: extractGuides(firstDivisionCyprusGuides),
+  superLigaSerbia: extractGuides(superLigaSerbiaGuides),
+  superLigaSlovakia: extractGuides(superLigaSlovakiaGuides),
+  prvaLigaSlovenia: extractGuides(prvaLigaSloveniaGuides),
+  nbI: extractGuides(nbIGuides),
+  allsvenskan: extractGuides(allsvenskanGuides),
+  eliteserien: extractGuides(eliteserienGuides),
+  veikkausliiga: extractGuides(veikkausliigaGuides),
+  bestaDeild: extractGuides(bestaDeildGuides),
+  premierLeagueBosnia: extractGuides(premierLeagueBosniaGuides),
+  leagueOfIrelandPremier: extractGuides(leagueOfIrelandPremierGuides),
   legacy: extractGuides(legacy),
 };
 
