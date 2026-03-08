@@ -15,6 +15,22 @@ import superLeagueGreeceCityGuides from "./superLeagueGreece";
 import austrianBundesligaCityGuides from "./austrianBundesliga";
 import swissSuperLeagueCityGuides from "./swissSuperLeague";
 import superligaDenmarkCityGuides from "./superligaDenmark";
+import czechFirstLeagueCityGuides from "./czechFirstLeague";
+import ekstraklasaCityGuides from "./ekstraklasa";
+import hnlCityGuides from "./hnl";
+import superLigaCityGuides from "./superLiga";
+import firstLeagueBulgariaCityGuides from "./firstLeagueBulgaria";
+import firstDivisionCyprusCityGuides from "./firstDivisionCyprus";
+import superLigaSerbiaCityGuides from "./superLigaSerbia";
+import superLigaSlovakiaCityGuides from "./superLigaSlovakia";
+import prvaLigaSloveniaCityGuides from "./prvaLigaSlovenia";
+import nbICityGuides from "./nbI";
+import allsvenskanCityGuides from "./allsvenskan";
+import eliteserienCityGuides from "./eliteserien";
+import veikkausliigaCityGuides from "./veikkausliiga";
+import bestaDeildCityGuides from "./bestaDeild";
+import premierLeagueBosniaCityGuides from "./premierLeagueBosnia";
+import leagueOfIrelandPremierCityGuides from "./leagueOfIrelandPremier";
 
 export type TripTopThingsBundle = {
   cityKey: string;
@@ -39,6 +55,22 @@ export const cityGuides: Record<string, CityGuide> = {
   ...austrianBundesligaCityGuides,
   ...swissSuperLeagueCityGuides,
   ...superligaDenmarkCityGuides,
+  ...czechFirstLeagueCityGuides,
+  ...ekstraklasaCityGuides,
+  ...hnlCityGuides,
+  ...superLigaCityGuides,
+  ...firstLeagueBulgariaCityGuides,
+  ...firstDivisionCyprusCityGuides,
+  ...superLigaSerbiaCityGuides,
+  ...superLigaSlovakiaCityGuides,
+  ...prvaLigaSloveniaCityGuides,
+  ...nbICityGuides,
+  ...allsvenskanCityGuides,
+  ...eliteserienCityGuides,
+  ...veikkausliigaCityGuides,
+  ...bestaDeildCityGuides,
+  ...premierLeagueBosniaCityGuides,
+  ...leagueOfIrelandPremierCityGuides,
 };
 
 export function getCityGuide(cityInput: string): CityGuide | null {
