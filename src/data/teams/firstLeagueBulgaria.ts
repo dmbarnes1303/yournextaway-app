@@ -1,7 +1,7 @@
 import type { TeamRecord } from "./types";
 
 const BULGARIA = "Bulgaria";
-const FIRST_LEAGUE = 215;
+const FIRST_LEAGUE = 172;
 
 export const firstLeagueBulgariaTeams: Record<string, TeamRecord> = {
 
