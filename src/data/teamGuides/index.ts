@@ -1,10 +1,8 @@
 import type { TeamGuide } from "./types";
 import { teams } from "@/src/data/teams";
 
-// Helpers
 import { normalizeTeamKey, titleFromKey } from "./utils";
 
-// League guide modules
 import bundesligaGuides from "./bundesliga";
 import laLigaGuides from "./laLiga";
 import ligue1Guides from "./ligue1";
@@ -12,18 +10,10 @@ import premierLeagueGuides from "./premierLeague";
 import serieAGuides from "./serieA";
 import primeiraLigaGuides from "./primeiraLiga";
 import eredivisieGuides from "./eredivisie";
+import proLeagueGuides from "./proLeague";
 
-// Legacy fallback (if it contains arrays/records)
 import * as legacy from "./teamGuides";
 
-/**
- * Convert any supported export shape into TeamGuide[]
- *
- * Supports:
- * - TeamGuide[] (direct or default)
- * - Record<string, TeamGuide> (direct or default)
- * - Module with named exports containing either of the above
- */
 function toGuides(value: any): TeamGuide[] {
   if (!value) return [];
 
@@ -42,11 +32,6 @@ function toGuides(value: any): TeamGuide[] {
   return [];
 }
 
-/**
- * Extract guides from a module:
- * - If module.default exists, include it
- * - Also scan named exports
- */
 function extractGuides(mod: any): TeamGuide[] {
   if (!mod) return [];
 
@@ -59,7 +44,6 @@ function extractGuides(mod: any): TeamGuide[] {
     out.push(...toGuides(v));
   }
 
-  // De-dupe by teamKey while preserving first occurrence
   const seen = new Set<string>();
   const deduped: TeamGuide[] = [];
 
@@ -74,9 +58,6 @@ function extractGuides(mod: any): TeamGuide[] {
   return deduped;
 }
 
-/**
- * Build sources map
- */
 const SOURCES: Record<string, TeamGuide[]> = {
   bundesliga: extractGuides(bundesligaGuides),
   laLiga: extractGuides(laLigaGuides),
@@ -85,13 +66,10 @@ const SOURCES: Record<string, TeamGuide[]> = {
   serieA: extractGuides(serieAGuides),
   primeiraLiga: extractGuides(primeiraLigaGuides),
   eredivisie: extractGuides(eredivisieGuides),
+  proLeague: extractGuides(proLeagueGuides),
   legacy: extractGuides(legacy),
 };
 
-/**
- * Build registry: Record<teamKey, TeamGuide>
- * Track duplicates for debugging
- */
 const registry: Record<string, TeamGuide> = {};
 const duplicates: Record<string, number> = {};
 
@@ -114,9 +92,6 @@ for (const [sourceName, guides] of Object.entries(SOURCES)) {
   }
 }
 
-/**
- * Identify missing team guides by comparing against teams registry
- */
 const missing = Object.values(teams)
   .filter((t) => !registry[t.teamKey])
   .map((t) => ({
@@ -125,10 +100,6 @@ const missing = Object.values(teams)
     leagueId: t.leagueId,
     season: t.season,
   }));
-
-// -------------------------
-// Public API
-// -------------------------
 
 export function hasTeamGuide(teamKey: string): boolean {
   return !!registry[teamKey];
