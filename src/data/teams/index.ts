@@ -23,6 +23,7 @@ import eliteserienTeams from "./eliteserien";
 import veikkausliigaTeams from "./veikkausliiga";
 import bestaDeildTeams from "./bestaDeild";
 import nbITeams from "./nbI";
+export { default as superLigaTeams } from "./superLiga";
 
 /**
  * V1 Team Registry (single source of truth)
@@ -90,6 +91,7 @@ export const teams: Record<string, TeamRecord> = {
   ...veikkausliigaTeams,
   ...bestaDeildTeams,
   ...nbITeams,
+  ...superLigaTeams,
 };
 
 export const POPULAR_TEAM_IDS = new Set<number>(
