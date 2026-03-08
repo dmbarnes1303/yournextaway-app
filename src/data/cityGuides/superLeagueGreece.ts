@@ -1,4 +1,3 @@
-// src/data/cityGuides/superLeagueGreece.ts
 import type { CityGuide } from "./types";
 
 /**
@@ -25,7 +24,7 @@ export const superLeagueGreeceCityGuides: Record<string, CityGuide> = {
     thingsToDoUrl: GYG.athens,
 
     overview:
-      "Athens is one of the best football-and-city-break combinations in Europe if you plan it properly. The winning formula is simple: stay central, treat the football as one anchor point in a wider city weekend, and don’t waste time zig-zagging across the city without purpose. Athens rewards neighbourhood-based planning far more than attraction-collecting chaos.",
+      "Athens is one of the best football-and-city-break combinations in Europe if you plan it properly. The winning formula is simple: stay central, treat the football as one anchor point in a wider city weekend, and do not waste time zig-zagging across the city without purpose. Athens rewards neighbourhood-based planning far more than attraction-collecting chaos.",
 
     topThings: [
       {
@@ -62,7 +61,7 @@ export const superLeagueGreeceCityGuides: Record<string, CityGuide> = {
       },
       {
         title: "Piraeus add-on",
-        tip: "Worth it if you are doing Olympiacos or port-side dining, otherwise don’t force it.",
+        tip: "Worth it if you are doing Olympiacos or port-side dining, otherwise do not force it.",
       },
       {
         title: "Neighbourhood taverna dinner",
@@ -82,7 +81,7 @@ export const superLeagueGreeceCityGuides: Record<string, CityGuide> = {
       "Classic taverna dinners in Plaka or just outside it",
       "Modern Greek small plates in central Athens",
       "Rooftop dinner with Acropolis view if you want one polished evening",
-      "Street-food gyros, but don’t make every meal a shortcut meal",
+      "Street-food gyros, but do not make every meal a shortcut meal",
       "Psyrri and Monastiraki for casual evening food clusters",
     ],
 
@@ -90,7 +89,7 @@ export const superLeagueGreeceCityGuides: Record<string, CityGuide> = {
       "Athens is manageable if you stay central. Metro covers the key visitor zones and makes most football movement straightforward. Taxis can be useful, but central traffic can waste time fast. Walking between Syntagma, Plaka, Monastiraki, Psyrri and parts of Kolonaki is often the smartest move.",
 
     accommodation:
-      "Syntagma is the best all-round base. Plaka is ideal if you want classic postcard Athens. Monastiraki and Psyrri are strongest for nightlife and food. Kolonaki is better for a more polished, quieter stay. Unless your entire trip is football-only, don’t stay out by the stadium districts.",
+      "Syntagma is the best all-round base. Plaka is ideal if you want classic postcard Athens. Monastiraki and Psyrri are strongest for nightlife and food. Kolonaki is better for a more polished, quieter stay. Unless your entire trip is football-only, do not stay out by the stadium districts.",
   },
 
   piraeus: {
@@ -202,7 +201,7 @@ export const superLeagueGreeceCityGuides: Record<string, CityGuide> = {
         tip: "Useful as a central reference point, not as a full activity block.",
       },
       {
-        title: "Toumba or Aris matchday build-up",
+        title: "PAOK or Aris matchday build-up",
         tip: "Football culture matters here. Arrive early and let the atmosphere do the work.",
       },
       {
@@ -269,7 +268,7 @@ export const superLeagueGreeceCityGuides: Record<string, CityGuide> = {
       },
       {
         title: "Evening taverna meal",
-        tip: "Low-key and local usually beats trying to force a polished ‘city-break’ evening.",
+        tip: "Low-key and local usually beats trying to force a polished city-break evening.",
       },
       {
         title: "Town-centre wander",
@@ -313,79 +312,6 @@ export const superLeagueGreeceCityGuides: Record<string, CityGuide> = {
 
     accommodation:
       "Town centre is the obvious move. There is no serious upside in overcomplicating the stay here.",
-  },
-
-  lamia: {
-    cityId: "lamia",
-    name: "Lamia",
-    country: "Greece",
-
-    overview:
-      "Lamia is a functional football location rather than a premium football-weekend destination. That does not make it useless. It makes it a specialist stop: good for league coverage, good for a practical overnight, and good if you understand it is a route stop rather than a showcase city. Get that framing right and it does the job.",
-
-    topThings: [
-      {
-        title: "Town-centre walk",
-        tip: "Enough for basic orientation and an easy couple of hours.",
-      },
-      {
-        title: "Castle viewpoint area",
-        tip: "Useful if you want one simple elevated look at the town.",
-      },
-      {
-        title: "Central café stop",
-        tip: "The sort of place where slowing down works better than chasing activities.",
-      },
-      {
-        title: "Local taverna dinner",
-        tip: "Keep it simple and practical rather than hunting for a ‘special occasion’ scene.",
-      },
-      {
-        title: "Lamia matchday block",
-        tip: "The football is the point here.",
-      },
-      {
-        title: "Road or rail stopover",
-        tip: "Best used as a connector in a wider trip rather than a destination centerpiece.",
-      },
-      {
-        title: "Short overnight break",
-        tip: "Treat it as a clean stop, not a deep urban experience.",
-      },
-      {
-        title: "Regional route planning",
-        tip: "The city’s usefulness is logistical more than cultural.",
-      },
-      {
-        title: "Neighbourhood stroll",
-        tip: "Good for low-effort decompression, not bucket-list tourism.",
-      },
-      {
-        title: "Pre-match town-centre meal",
-        tip: "One decent meal and one night is often enough here.",
-      },
-    ],
-
-    tips: [
-      "Useful, practical, not glamorous.",
-      "Works best as a football stop or wider-route sleepover.",
-      "Do not oversell it and do not overbuild the itinerary.",
-      "Town-centre stay is the obvious choice.",
-      "One night is usually enough unless the wider trip dictates otherwise.",
-    ],
-
-    food: [
-      "Simple tavernas",
-      "Local grills",
-      "Cafés around the centre",
-      "Low-key Greek comfort food",
-    ],
-
-    transport:
-      "Lamia is a logistics-first stop. Once there, keep the stay compact and central.",
-
-    accommodation:
-      "Stay centrally and do not overthink it. This is about practicality.",
   },
 
   heraklion: {
@@ -535,6 +461,298 @@ export const superLeagueGreeceCityGuides: Record<string, CityGuide> = {
 
     accommodation:
       "Waterfront / centre is the obvious base. It gives the trip nearly all of its upside immediately.",
+  },
+
+  livadeia: {
+    cityId: "livadeia",
+    name: "Livadeia",
+    country: "Greece",
+
+    overview:
+      "Livadeia is not a glamour football weekend and there is no value in pretending it is one. Its strength is that it is compact, practical, and useful for serious league coverage. If you frame it as a tidy one-night football stop with low wasted movement, it works. If you try to sell it like Athens-lite, it falls apart immediately.",
+
+    topThings: [
+      {
+        title: "Old-town centre walk",
+        tip: "Enough for a relaxed orientation block, not a full-day sightseeing mission.",
+      },
+      {
+        title: "Erkina river area",
+        tip: "One of the nicer local walking sections if you want a calm, low-effort route.",
+      },
+      {
+        title: "Castle hill viewpoint",
+        tip: "Worth it for a simple elevated look over the town, but do not overhype it.",
+      },
+      {
+        title: "Levadiakos matchday block",
+        tip: "The football is the anchor here. Build the day around that reality.",
+      },
+      {
+        title: "Central square coffee stop",
+        tip: "Useful because the city suits slower pacing more than checklist tourism.",
+      },
+      {
+        title: "Short local taverna dinner",
+        tip: "Keep it honest and simple. That is the right way to use the place.",
+      },
+      {
+        title: "Rail or road stopover logic",
+        tip: "Livadeia makes more sense when it fits into a wider Greece route.",
+      },
+      {
+        title: "Neighbourhood evening stroll",
+        tip: "Better for decompression than for ‘must-do’ value.",
+      },
+      {
+        title: "Pre-match lunch in town",
+        tip: "A clean easy win before heading to the ground.",
+      },
+      {
+        title: "One-night football stop",
+        tip: "That is the correct product framing for most travellers.",
+      },
+    ],
+
+    tips: [
+      "This is a football stop, not a premium city-break product.",
+      "One night is usually enough.",
+      "Use the town centre and keep everything compact.",
+      "Best for league coverage or wider route-building.",
+      "Do not try to force a big itinerary onto a small place.",
+    ],
+
+    food: [
+      "Traditional town-centre tavernas",
+      "Simple grills",
+      "Cafés around the square",
+      "Low-key Greek comfort food",
+    ],
+
+    transport:
+      "Livadeia works best as a practical stop. Keep your stay central and movement short. The city improves when you treat it efficiently.",
+
+    accommodation:
+      "Town-centre stay is the obvious answer. There is no upside in complicating this one.",
+  },
+
+  agrinio: {
+    cityId: "agrinio",
+    name: "Agrinio",
+    country: "Greece",
+
+    overview:
+      "Agrinio is a committed domestic-football stop rather than a marquee Greek weekend. That sounds harsh, but it is accurate. The point here is a proper local-feel football base, a manageable central stay, and a city that does the basics well enough if you stop pretending it should be a giant tourism product.",
+
+    topThings: [
+      {
+        title: "Central square walk",
+        tip: "Good for orientation and an easy first loop, not for hours of forced wandering.",
+      },
+      {
+        title: "Panetolikos matchday block",
+        tip: "This is the main reason most people will be here, so anchor the trip around it.",
+      },
+      {
+        title: "Town-centre café session",
+        tip: "Agrinio works better when you accept its slower rhythm.",
+      },
+      {
+        title: "Local market streets",
+        tip: "Useful for a bit of everyday-city texture, not for headline attractions.",
+      },
+      {
+        title: "Simple evening taverna dinner",
+        tip: "Best kept local and unfussy.",
+      },
+      {
+        title: "Neighbourhood wander",
+        tip: "Enough for an hour or so, then move on with your day.",
+      },
+      {
+        title: "Regional route stop",
+        tip: "Works better if you are building a broader western Greece itinerary.",
+      },
+      {
+        title: "Pre-match central lunch",
+        tip: "Easy, practical and usually the smartest use of the day.",
+      },
+      {
+        title: "Relaxed overnight stop",
+        tip: "Agrinio is strongest when used cleanly rather than overworked.",
+      },
+      {
+        title: "One-night football coverage trip",
+        tip: "That is the right scale for most visitors.",
+      },
+    ],
+
+    tips: [
+      "Better as a football-first stop than as a pure tourism weekend.",
+      "Keep the stay central and practical.",
+      "One night is enough for most users.",
+      "Works best within a wider Greece route.",
+      "Do not oversell the city and the trip becomes cleaner immediately.",
+    ],
+
+    food: [
+      "Central tavernas",
+      "Simple grills",
+      "Casual cafés",
+      "Straightforward Greek home-style food",
+    ],
+
+    transport:
+      "Agrinio is easiest when treated as a compact overnight stop. Keep everything near the centre and avoid unnecessary movement.",
+
+    accommodation:
+      "Town centre is the right base. This is a practicality-first stay.",
+  },
+
+  larissa: {
+    cityId: "larissa",
+    name: "Larissa",
+    country: "Greece",
+
+    overview:
+      "Larissa is stronger than the lower-hype Greek cities because it feels like a real, functioning regional city rather than just a football stop with a few cafés stuck to it. It is still not Athens or Thessaloniki, but it can absolutely work as a neat one- or two-night football trip if you build it around the centre, food, and the club rather than around fake sightseeing fluff.",
+
+    topThings: [
+      {
+        title: "Central square and shopping streets",
+        tip: "Best place to orient yourself quickly and keep the stay practical.",
+      },
+      {
+        title: "Ancient theatre area",
+        tip: "Worth including because it gives the city a bit more substance than some comparable stops.",
+      },
+      {
+        title: "Pineios river walk",
+        tip: "Good if you want a calm reset block without trying too hard.",
+      },
+      {
+        title: "AEL matchday block",
+        tip: "This is the football anchor, so build the day around it properly.",
+      },
+      {
+        title: "Evening food in the centre",
+        tip: "Larissa does straightforward city dining better than some of the smaller stops.",
+      },
+      {
+        title: "Coffee culture stop",
+        tip: "Useful because the city has enough everyday life to carry a relaxed few hours.",
+      },
+      {
+        title: "Neighbourhood evening loop",
+        tip: "Good for atmosphere, not for turning into a major attraction hunt.",
+      },
+      {
+        title: "One polished dinner",
+        tip: "A smart move if you are staying two nights rather than one.",
+      },
+      {
+        title: "Regional rail or road break",
+        tip: "Larissa also works well as a practical connector city.",
+      },
+      {
+        title: "Short city-football weekend",
+        tip: "This is the cleanest way to pitch it.",
+      },
+    ],
+
+    tips: [
+      "Larissa is one of the better non-glamour Greek football bases.",
+      "Town centre is the obvious place to stay.",
+      "One or two nights works well here.",
+      "AEL plus central-city stay is the core product.",
+      "Do not overcomplicate the trip; Larissa works because it is simple.",
+    ],
+
+    food: [
+      "Town-centre tavernas",
+      "Modern Greek casual dining",
+      "Good local cafés",
+      "Straightforward late dinners in the centre",
+    ],
+
+    transport:
+      "Larissa is best used from a central stay. Once you are in the middle of the city, most of the useful trip becomes easy to manage.",
+
+    accommodation:
+      "Stay central. It gives you the best balance of food, walkability and matchday practicality.",
+  },
+
+  serres: {
+    cityId: "serres",
+    name: "Serres",
+    country: "Greece",
+
+    overview:
+      "Serres is not a polished showcase destination, but it is a useful northern Greece football stop with a proper local feel. It works best when you sell it honestly: central stay, football-first, one-night practicality, and maybe part of a wider regional trip rather than a standalone luxury weekend.",
+
+    topThings: [
+      {
+        title: "Town-centre walk",
+        tip: "Enough for orientation and a decent local feel, not for a giant sightseeing day.",
+      },
+      {
+        title: "Serres matchday block",
+        tip: "The football is the main reason to be here, so do not pretend otherwise.",
+      },
+      {
+        title: "Central café stop",
+        tip: "Useful because the city suits slower pacing more than hard itinerary stacking.",
+      },
+      {
+        title: "Local taverna dinner",
+        tip: "Better kept simple and local than overplanned.",
+      },
+      {
+        title: "Neighbourhood evening stroll",
+        tip: "Good for atmosphere and decompression rather than attraction value.",
+      },
+      {
+        title: "Regional stopover logic",
+        tip: "Serres improves when used as part of a broader northern Greece route.",
+      },
+      {
+        title: "Short central-market wander",
+        tip: "Useful for everyday texture, not for headline tourism.",
+      },
+      {
+        title: "Pre-match lunch in town",
+        tip: "Easy win before heading to the ground.",
+      },
+      {
+        title: "One-night football stop",
+        tip: "That is the right product scale for most visitors.",
+      },
+      {
+        title: "Northern Greece add-on base",
+        tip: "Better when tied into a larger itinerary than when forced into a premium city-break frame.",
+      },
+    ],
+
+    tips: [
+      "This is a football-coverage stop, not a glamour product.",
+      "Keep the stay central and low-friction.",
+      "One night is enough for most users.",
+      "Works best in a wider northern Greece route.",
+      "Do not oversell the city and the trip becomes more useful immediately.",
+    ],
+
+    food: [
+      "Simple town-centre tavernas",
+      "Local grills",
+      "Cafés and bakeries",
+      "Low-key Greek comfort food",
+    ],
+
+    transport:
+      "Serres works best when you keep everything central and practical. It is not a city that rewards overcomplication.",
+
+    accommodation:
+      "Town centre is the correct base. This is a clean overnight football stop.",
   },
 };
 
