@@ -1,18 +1,16 @@
-// src/data/teams/premierLeagueBosnia.ts
 import type { TeamRecord } from "./types";
 
 const BOSNIA = "Bosnia and Herzegovina";
-const PREMIER_LEAGUE = 321;
+const PREMIER_LEAGUE = 315;
 
 export const premierLeagueBosniaTeams: Record<string, TeamRecord> = {
-
   "borac-banja-luka": {
     teamKey: "borac-banja-luka",
     name: "Borac Banja Luka",
     country: BOSNIA,
     city: "Banja Luka",
     leagueId: PREMIER_LEAGUE,
-    aliases: ["borac", "fk borac"]
+    aliases: ["borac", "fk borac", "borac banja luka"],
   },
 
   "zrinjski": {
@@ -21,7 +19,7 @@ export const premierLeagueBosniaTeams: Record<string, TeamRecord> = {
     country: BOSNIA,
     city: "Mostar",
     leagueId: PREMIER_LEAGUE,
-    aliases: ["zrinjski", "hsk zrinjski"]
+    aliases: ["zrinjski", "hsk zrinjski", "zrinjski mostar"],
   },
 
   "sarajevo": {
@@ -30,7 +28,7 @@ export const premierLeagueBosniaTeams: Record<string, TeamRecord> = {
     country: BOSNIA,
     city: "Sarajevo",
     leagueId: PREMIER_LEAGUE,
-    aliases: ["sarajevo", "fk sarajevo"]
+    aliases: ["sarajevo", "fk sarajevo"],
   },
 
   "velez": {
@@ -39,7 +37,7 @@ export const premierLeagueBosniaTeams: Record<string, TeamRecord> = {
     country: BOSNIA,
     city: "Mostar",
     leagueId: PREMIER_LEAGUE,
-    aliases: ["velez", "fk velez"]
+    aliases: ["velez", "fk velez", "velez mostar"],
   },
 
   "siroki-brijeg": {
@@ -48,7 +46,7 @@ export const premierLeagueBosniaTeams: Record<string, TeamRecord> = {
     country: BOSNIA,
     city: "Široki Brijeg",
     leagueId: PREMIER_LEAGUE,
-    aliases: ["siroki", "nk siroki brijeg"]
+    aliases: ["siroki", "nk siroki brijeg", "siroki brijeg"],
   },
 
   "zeljeznicar": {
@@ -57,7 +55,7 @@ export const premierLeagueBosniaTeams: Record<string, TeamRecord> = {
     country: BOSNIA,
     city: "Sarajevo",
     leagueId: PREMIER_LEAGUE,
-    aliases: ["zeljeznicar", "fk zeljeznicar"]
+    aliases: ["zeljeznicar", "fk zeljeznicar", "zeljeznicar sarajevo"],
   },
 
   "radnik-bijeljina": {
@@ -66,7 +64,7 @@ export const premierLeagueBosniaTeams: Record<string, TeamRecord> = {
     country: BOSNIA,
     city: "Bijeljina",
     leagueId: PREMIER_LEAGUE,
-    aliases: ["radnik"]
+    aliases: ["radnik", "radnik bijeljina"],
   },
 
   "posusje": {
@@ -75,7 +73,7 @@ export const premierLeagueBosniaTeams: Record<string, TeamRecord> = {
     country: BOSNIA,
     city: "Posušje",
     leagueId: PREMIER_LEAGUE,
-    aliases: ["nk posusje"]
+    aliases: ["nk posusje", "posusje"],
   },
 
   "rudar-prijedor": {
@@ -84,7 +82,7 @@ export const premierLeagueBosniaTeams: Record<string, TeamRecord> = {
     country: BOSNIA,
     city: "Prijedor",
     leagueId: PREMIER_LEAGUE,
-    aliases: ["rudar"]
+    aliases: ["rudar", "rudar prijedor"],
   },
 
   "sloga-doboj": {
@@ -93,9 +91,8 @@ export const premierLeagueBosniaTeams: Record<string, TeamRecord> = {
     country: BOSNIA,
     city: "Doboj",
     leagueId: PREMIER_LEAGUE,
-    aliases: ["sloga"]
-  }
-
+    aliases: ["sloga", "sloga doboj"],
+  },
 };
 
 export default premierLeagueBosniaTeams;
