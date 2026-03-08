@@ -1,4 +1,3 @@
-// src/data/cityGuides/index.ts
 import type { CityGuide, CityTopThing } from "./types";
 import { normalizeCityKey } from "@/src/utils/city";
 
@@ -8,6 +7,7 @@ import bundesligaCityGuides from "./bundesliga";
 import serieACityGuides from "./serieA";
 import ligue1CityGuides from "./ligue1";
 import primeiraLigaCityGuides from "./primeiraLiga";
+import eredivisieCityGuides from "./eredivisie";
 
 export type TripTopThingsBundle = {
   cityKey: string;
@@ -34,6 +34,7 @@ export const cityGuides: Record<string, CityGuide> = {
   ...serieACityGuides,
   ...ligue1CityGuides,
   ...primeiraLigaCityGuides,
+  ...eredivisieCityGuides,
 };
 
 /**
