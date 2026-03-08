@@ -564,6 +564,42 @@ export const FOOTBALL_BY_COUNTRY: Record<string, CountryFootballConfig> = {
     ],
   },
 
+  bosniaAndHerzegovina: {
+    country: "Bosnia and Herzegovina",
+    countryCode: "BA",
+    browseRegion: "central-eastern-europe",
+    leagues: [
+      {
+        slug: "premier-league-bosnia",
+        label: "Premier League",
+        leagueId: 315,
+        logo: leagueLogo(315),
+        season: DEFAULT_SEASON,
+        featured: false,
+        homeVisible: false,
+        featuredClubKeys: ["borac-banja-luka", "zrinjski"],
+      },
+    ],
+  },
+
+  ireland: {
+    country: "Ireland",
+    countryCode: "IE",
+    browseRegion: "featured-europe",
+    leagues: [
+      {
+        slug: "league-of-ireland-premier-division",
+        label: "Premier Division",
+        leagueId: 357,
+        logo: leagueLogo(357),
+        season: DEFAULT_CALENDAR_YEAR_SEASON,
+        featured: false,
+        homeVisible: false,
+        featuredClubKeys: ["shamrock-rovers", "bohemians"],
+      },
+    ],
+  },
+
   sweden: {
     country: "Sweden",
     countryCode: "SE",
@@ -820,6 +856,11 @@ export const LEAGUE_SLOT_RULES: LeagueSlotRule[] = [
     typicalSlots: ["Fri 18:00", "Sat 17:00", "Sat 19:00", "Sun 16:00", "Sun 18:00", "Mon 19:00"],
   },
   {
+    leagueId: 315,
+    primarySlot: "Sun 17:00",
+    typicalSlots: ["Fri 18:00", "Sat 13:00", "Sat 16:00", "Sun 13:00", "Sun 17:00"],
+  },
+  {
     leagueId: 244,
     primarySlot: "Sat 15:00",
     typicalSlots: ["Fri 17:00", "Sat 15:00", "Sat 17:00", "Sun 14:00", "Sun 16:00"],
@@ -828,6 +869,11 @@ export const LEAGUE_SLOT_RULES: LeagueSlotRule[] = [
     leagueId: 164,
     primarySlot: "Mon 20:15",
     typicalSlots: ["Mon 20:15", "Tue 20:15", "Wed 20:15", "Thu 20:15", "Sun 19:15"],
+  },
+  {
+    leagueId: 357,
+    primarySlot: "Fri 19:45",
+    typicalSlots: ["Fri 19:45", "Sat 19:45", "Mon 19:45"],
   },
 ];
 
@@ -976,4 +1022,4 @@ export function nextWeekendWindowIso(): RollingWindowIso {
   const to = toIsoDate(sun);
 
   return normalizeWindowIso({ from, to }, 2);
-      }
+        }

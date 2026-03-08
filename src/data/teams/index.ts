@@ -24,6 +24,14 @@ import veikkausliigaTeams from "./veikkausliiga";
 import bestaDeildTeams from "./bestaDeild";
 import nbITeams from "./nbI";
 import superLigaTeams from "./superLiga";
+import hnlTeams from "./hnl";
+import superLigaSerbiaTeams from "./superLigaSerbia";
+import superLigaSlovakiaTeams from "./superLigaSlovakia";
+import prvaLigaSloveniaTeams from "./prvaLigaSlovenia";
+import firstLeagueBulgariaTeams from "./firstLeagueBulgaria";
+import firstDivisionCyprusTeams from "./firstDivisionCyprus";
+import premierLeagueBosniaTeams from "./premierLeagueBosnia";
+import leagueOfIrelandPremierTeams from "./leagueOfIrelandPremier";
 
 /**
  * V1 Team Registry (single source of truth)
@@ -92,6 +100,15 @@ export const teams: Record<string, TeamRecord> = {
   ...bestaDeildTeams,
   ...nbITeams,
   ...superLigaTeams,
+  ...hnlTeams,
+  ...superLigaSerbiaTeams,
+  ...superLigaSlovakiaTeams,
+...prvaLigaSloveniaTeams,
+  ...firstLeagueBulgariaTeams,
+  ...firstDivisionCyprusTeams,
+  ...premierLeagueBosniaTeams,
+  ...leagueOfIrelandPremierTeams,
+  
 };
 
 export const POPULAR_TEAM_IDS = new Set<number>(

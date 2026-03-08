@@ -23,6 +23,14 @@ import veikkausliigaStadiums from "./veikkausliiga";
 import bestaDeildStadiums from "./bestaDeild";
 import nbIStadiums from "./nbI";
 import superLigaStadiums from "./superLiga";
+import hnlStadiums from "./hnl";
+import superLigaSerbiaStadiums from "./superLigaSerbia";
+import superLigaSlovakiaStadiums from "./superLigaSlovakia";
+import prvaLigaSloveniaStadiums from "./prvaLigaSlovenia";
+import firstLeagueBulgariaStadiums from "./firstLeagueBulgaria";
+import firstDivisionCyprusStadiums from "./firstDivisionCyprus";
+import premierLeagueBosniaStadiums from "./premierLeagueBosnia";
+import leagueOfIrelandPremierStadiums from "./leagueOfIrelandPremier";
 
 export const stadiums: Record<string, StadiumRecord> = {
   ...premierLeagueStadiums,
@@ -47,6 +55,14 @@ export const stadiums: Record<string, StadiumRecord> = {
   ...bestaDeildStadiums,
   ...nbIStadiums,
   ...superLigaStadiums,
+  ...hnlStadiums,
+  ...superLigaSerbiaStadiums,
+  ...superLigaSlovakiaStadiums,
+  ...prvaLigaSloveniaStadiums,
+  ...firstLeagueBulgariaStadiums,
+  ...firstDivisionCyprusStadiums,
+  ...premierLeagueBosniaStadiums,
+  ...leagueOfIrelandPremierStadiums,
 };
 
 export function getStadium(stadiumKey: string): StadiumRecord | null {
