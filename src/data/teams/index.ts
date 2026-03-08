@@ -27,6 +27,7 @@ import superLigaTeams from "./superLiga";
 import hnlTeams from "./hnl";
 import superLigaSerbiaTeams from "./superLigaSerbia";
 import superLigaSlovakiaTeams from "./superLigaSlovakia";
+import prvaLigaSloveniaTeams from "./prvaLigaSlovenia";
 
 /**
  * V1 Team Registry (single source of truth)
@@ -98,6 +99,8 @@ export const teams: Record<string, TeamRecord> = {
   ...hnlTeams,
   ...superLigaSerbiaTeams,
   ...superLigaSlovakiaTeams,
+...prvaLigaSloveniaTeams,
+  
 };
 
 export const POPULAR_TEAM_IDS = new Set<number>(
