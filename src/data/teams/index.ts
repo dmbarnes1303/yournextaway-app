@@ -23,7 +23,7 @@ import eliteserienTeams from "./eliteserien";
 import veikkausliigaTeams from "./veikkausliiga";
 import bestaDeildTeams from "./bestaDeild";
 import nbITeams from "./nbI";
-export { default as superLigaTeams } from "./superLiga";
+import superLigaTeams from "./superLiga";
 
 /**
  * V1 Team Registry (single source of truth)
