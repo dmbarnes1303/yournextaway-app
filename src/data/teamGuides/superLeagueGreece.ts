@@ -1,4 +1,3 @@
-// src/data/teamGuides/superLeagueGreece.ts
 import type { TeamGuide } from "./types";
 
 export const superLeagueGreeceTeamGuides: Record<string, TeamGuide> = {
@@ -33,7 +32,7 @@ export const superLeagueGreeceTeamGuides: Record<string, TeamGuide> = {
       {
         title: "Stadium & Matchday Feel",
         body:
-          "Karaiskakis is one of the strongest atmosphere venues in Greece when the stakes are right. The stadium sits in a practical football location for a Piraeus-based or Athens-based trip, and the crowd can be aggressive in tone without the venue feeling anonymous or over-commercial.\n\nThis is not a ‘nice little football afternoon’. Big games feel heavy. Even routine matches still carry expectation and noise spikes when the team is on top.",
+          "Karaiskakis is one of the strongest atmosphere venues in Greece when the stakes are right. The stadium sits in a practical football location for a Piraeus-based or Athens-based trip, and the crowd can be aggressive in tone without the venue feeling anonymous or over-commercial.\n\nThis is not a nice little football afternoon. Big games feel heavy. Even routine matches still carry expectation and noise spikes when the team is on top.",
       },
       {
         title: "Supporter Culture",
@@ -43,7 +42,7 @@ export const superLeagueGreeceTeamGuides: Record<string, TeamGuide> = {
       {
         title: "Rivalries",
         body:
-          "Panathinaikos is the defining rivalry. AEK also carries major weight. PAOK adds another layer of high-level hostility and competitive significance.\n\nThese fixtures are not just ‘big games’; they shape the emotional hierarchy of the club.",
+          "Panathinaikos is the defining rivalry. AEK also carries major weight. PAOK adds another layer of high-level hostility and competitive significance.\n\nThese fixtures are not just big games; they shape the emotional hierarchy of the club.",
       },
       {
         title: "Trip Strategy",
@@ -164,7 +163,7 @@ export const superLeagueGreeceTeamGuides: Record<string, TeamGuide> = {
       {
         title: "Trip Strategy",
         body:
-          "Use central Athens as the base. This is another case where trying to stay ‘near the stadium’ is usually the wrong move. Build the city break normally, then treat the match as one major block.\n\nBest product angle: premium Athens football weekend with one marquee night.",
+          "Use central Athens as the base. This is another case where trying to stay near the stadium is usually the wrong move. Build the city break normally, then treat the match as one major block.\n\nBest product angle: premium Athens football weekend with one marquee night.",
       },
       {
         title: "Neutral Visitor Notes",
@@ -207,7 +206,7 @@ export const superLeagueGreeceTeamGuides: Record<string, TeamGuide> = {
       {
         title: "Stadium & Matchday Feel",
         body:
-          "Toumba is one of the strongest matchday venues in this project. The atmosphere reputation is deserved. Big games here carry real energy, and even lower-profile fixtures still benefit from the club’s heavy emotional baseline.\n\nIf you are building a ‘serious football atmosphere’ shortlist, PAOK belongs on it immediately.",
+          "Toumba is one of the strongest matchday venues in this project. The atmosphere reputation is deserved. Big games here carry real energy, and even lower-profile fixtures still benefit from the club’s heavy emotional baseline.\n\nIf you are building a serious football atmosphere shortlist, PAOK belongs on it immediately.",
       },
       {
         title: "Supporter Culture",
@@ -346,7 +345,7 @@ export const superLeagueGreeceTeamGuides: Record<string, TeamGuide> = {
           "• Best for serious league coverage rather than casual one-club tourism.\n• One- or two-night stop maximum for most travellers.\n• Better in a wider regional itinerary.\n• Keep expectations aligned and it works fine.",
       },
     ],
-    links: [{ label: "Official site", url: "https://www.asterastripolis.gr/" }],
+    links: [{ label: "Official site", url: "https://asterastripolisfc.gr/" }],
     updatedAt: "2026-03-08",
   },
 
@@ -405,64 +404,6 @@ export const superLeagueGreeceTeamGuides: Record<string, TeamGuide> = {
       },
     ],
     links: [{ label: "Official site", url: "https://www.atromitosfc.gr/" }],
-    updatedAt: "2026-03-08",
-  },
-
-  "lamia": {
-    teamKey: "lamia",
-    name: "Lamia",
-    cityKey: "lamia",
-    city: "Lamia",
-    country: "Greece",
-    stadium: "Lamia Municipal Stadium",
-    sections: [
-      {
-        title: "Club Overview",
-        body:
-          "Lamia are exactly the kind of club where bad writing ruins the product. They are not a glamour experience and should not be dressed up as one. Their value is functional: league depth, practical overnight potential, and honest football coverage.\n\nThat sounds less exciting, but it is far more useful than fake hype.",
-      },
-      {
-        title: "History & Legacy",
-        body:
-          "Lamia’s place in the Greek football landscape is defined more by competitive persistence and top-flight participation than by giant institutional weight. That puts them firmly in the ‘coverage depth matters’ category rather than the ‘must-see super-club’ category.",
-      },
-      {
-        title: "Recent Seasons",
-        body:
-          "The primary lens is usually simple: can the club stay competitive and stay alive at the level? That creates a different kind of tension from title-chasing clubs, but it still matters for a serious league-wide app product.",
-      },
-      {
-        title: "Playing Style",
-        body:
-          "Clubs in Lamia’s bracket are usually judged more on organisation, discipline and game management than on whether they dominate the aesthetic of the match. The football is often about getting enough out of limited margins.",
-      },
-      {
-        title: "Stadium & Matchday Feel",
-        body:
-          "Smaller, more functional, and less theatrical than the elite venues. That is the reality. The product is about practicality and authenticity, not scale.",
-      },
-      {
-        title: "Supporter Culture",
-        body:
-          "The support base is local and direct rather than grandly symbolic. For neutrals, that means a lower-profile but more specialist football stop.",
-      },
-      {
-        title: "Rivalries",
-        body:
-          "No rivalry here sits in the same category as the major national derbies. The value lies in league completeness and regional coverage.",
-      },
-      {
-        title: "Trip Strategy",
-        body:
-          "Treat Lamia as a clean stop, not a showcase city. One night, central stay, one good meal, matchday, move on.\n\nThat is the correct version of this product.",
-      },
-      {
-        title: "Neutral Visitor Notes",
-        body:
-          "• Practical football stop rather than destination weekend.\n• Best for broader Greek league coverage.\n• Keep expectations realistic.\n• Useful in the app, not a flagship seller.",
-      },
-    ],
-    links: [{ label: "Official site", url: "https://www.lamia1964.gr/" }],
     updatedAt: "2026-03-08",
   },
 
@@ -579,6 +520,296 @@ export const superLeagueGreeceTeamGuides: Record<string, TeamGuide> = {
       },
     ],
     links: [{ label: "Official site", url: "https://www.volosfc.com/" }],
+    updatedAt: "2026-03-08",
+  },
+
+  "levadiakos": {
+    teamKey: "levadiakos",
+    name: "Levadiakos",
+    cityKey: "livadeia",
+    city: "Livadeia",
+    country: "Greece",
+    stadium: "Levadia Municipal Stadium",
+    sections: [
+      {
+        title: "Club Overview",
+        body:
+          "Levadiakos are exactly the sort of club that exposes whether a football-travel app is serious or just chasing glamour badges. This is not a flagship leisure product. It is a proper league-depth football stop: practical, smaller-scale, and useful if you are building broad Greek coverage rather than only cherry-picking the giants.\n\nThat is not a weakness. It is a positioning reality.",
+      },
+      {
+        title: "History & Legacy",
+        body:
+          "Levadiakos sit in the category of long-running domestic clubs whose relevance comes from recurring participation and local identity rather than national-scale mythology. Their place in the league matters more to the texture of Greek football than to its global marketing layer.\n\nFor a serious app, that means they belong in full, not as an afterthought.",
+      },
+      {
+        title: "Recent Seasons",
+        body:
+          "The club’s recent seasons are usually judged through survival, competitiveness, and whether they can stay clear of getting swallowed by the bottom end of the table. The pressure environment is completely different from the Athens and Thessaloniki giants, but it is still meaningful in football terms because the margins are tighter and the consequences more immediate.",
+      },
+      {
+        title: "Playing Style",
+        body:
+          "Levadiakos generally fit the practical side of the league: organised, compact, and usually more concerned with competitive efficiency than stylistic exhibition. For neutrals, that means the value of the trip is not about beautiful football promises. It is about seeing a club fight within its level honestly.",
+      },
+      {
+        title: "Stadium & Matchday Feel",
+        body:
+          "Levadia Municipal Stadium is a smaller, grounded local football venue. That gives the trip an intimate, direct feel rather than the scale and theatre of the headline clubs.\n\nYou are here for a committed football stop, not a giant event product.",
+      },
+      {
+        title: "Supporter Culture",
+        body:
+          "Supporter culture is local, compact and less nationally amplified than the elite clubs. The atmosphere is therefore more town-based and less symbolic on the national stage, but that is part of its authenticity.",
+      },
+      {
+        title: "Rivalries",
+        body:
+          "There is no single rivalry here with the oversized symbolic weight of Greece’s best-known derbies. The product value lies in completeness, local character, and properly covering the league’s less glamorous layer.",
+      },
+      {
+        title: "Trip Strategy",
+        body:
+          "Treat Levadiakos as a clean one-night football stop. Stay central in Livadeia, keep logistics tight, and do not try to inflate the trip into something it is not.\n\nUsed honestly, it works.",
+      },
+      {
+        title: "Neutral Visitor Notes",
+        body:
+          "• Best for full-league travellers rather than casual one-club tourism.\n• Practical, compact and football-first.\n• One night is usually enough.\n• Good depth product, not a headline Greek seller.",
+      },
+    ],
+    links: [{ label: "Official site", url: "https://www.levadiakosfc.gr/" }],
+    updatedAt: "2026-03-08",
+  },
+
+  "kifisia": {
+    teamKey: "kifisia",
+    name: "Kifisia",
+    cityKey: "athens",
+    city: "Athens",
+    country: "Greece",
+    stadium: "Zirineio Stadium",
+    sections: [
+      {
+        title: "Club Overview",
+        body:
+          "Kifisia are not a traditional giant and should never be written as one. Their value is much more specific: they represent the newer, smaller-scale side of the Athens-area football ecosystem, where the city does most of the destination heavy lifting and the club provides a more niche, localised football angle.\n\nFor neutrals, that means this is an Athens product first and a smaller-club matchday product second.",
+      },
+      {
+        title: "History & Legacy",
+        body:
+          "Kifisia do not carry the century-long national weight of Panathinaikos, AEK or Olympiacos. Their relevance is much more modern and much more contingent on current competition level. That does not make them worthless. It makes them a different kind of football-travel product: contemporary, local, and less myth-driven.",
+      },
+      {
+        title: "Recent Seasons",
+        body:
+          "The club’s recent importance is tied to whether they can sustain top-flight relevance and avoid slipping back into obscurity. That creates a very different pressure environment from the national heavyweights. The football here is about staying visible and credible rather than enforcing permanent elite expectation.",
+      },
+      {
+        title: "Playing Style",
+        body:
+          "At this level of club profile, style is usually interpreted through competitiveness and structure rather than through a grand identity thesis. The neutral value is not in assuming Kifisia should dominate. It is in seeing how a smaller Athens-area club tries to hold ground in a brutal domestic environment.",
+      },
+      {
+        title: "Stadium & Matchday Feel",
+        body:
+          "Zirineio is a much smaller-scale venue than the main flagship Greek stadiums. That gives the experience a local, lower-profile feel. It is not a giant football theatre. It is a niche Athens-area stop for people who want another layer of the city’s football map.",
+      },
+      {
+        title: "Supporter Culture",
+        body:
+          "Supporter culture is more limited in scale and visibility than the traditional major clubs. That is obvious. The point is not to oversell it. The point is that Kifisia offers a different kind of matchday: smaller, more local, and less burdened by national symbolism.",
+      },
+      {
+        title: "Rivalries",
+        body:
+          "There is no rivalry here that carries the same emotional or historical load as the major Athens derbies. This is a niche product, not a rivalry-led headline product.",
+      },
+      {
+        title: "Trip Strategy",
+        body:
+          "Base yourself in central Athens or, if you specifically want a calmer northern-side feel, use a more polished Athens district and treat the match as one contained football block. There is no sense building the entire trip around only the local stadium district.\n\nKifisia works when folded into a wider Athens weekend.",
+      },
+      {
+        title: "Neutral Visitor Notes",
+        body:
+          "• Best for travellers who want deeper Athens football coverage.\n• Not a flagship atmosphere product.\n• More niche, more local, and more context-dependent.\n• Works best as an add-on within a broader Athens trip.",
+      },
+    ],
+    links: [{ label: "Official site", url: "https://aekifisiafc.gr/" }],
+    updatedAt: "2026-03-08",
+  },
+
+  "panetolikos": {
+    teamKey: "panetolikos",
+    name: "Panetolikos",
+    cityKey: "agrinio",
+    city: "Agrinio",
+    country: "Greece",
+    stadium: "Panetolikos Stadium",
+    sections: [
+      {
+        title: "Club Overview",
+        body:
+          "Panetolikos are exactly the kind of club that matters in a full-league app: not because they sell the biggest weekends, but because they give the competition its real national texture. This is a local, football-first, practical stop rather than a glamorous urban break.\n\nThat honesty is the product.",
+      },
+      {
+        title: "History & Legacy",
+        body:
+          "Panetolikos sit in the category of established regional clubs whose importance is rooted in local identity and repeated domestic relevance rather than giant-club mythology. Their legacy matters most within the Greek football landscape itself, which is precisely why they should be covered properly rather than lazily.",
+      },
+      {
+        title: "Recent Seasons",
+        body:
+          "The club’s recent seasons are usually framed through stability, competitiveness and whether they can avoid becoming one of the league’s easy casualties. That creates a sharper week-to-week survival logic than you get with the title contenders, and that often makes the football feel more practical and more result-driven.",
+      },
+      {
+        title: "Playing Style",
+        body:
+          "Panetolikos generally sit in the structure-first side of the league. The football value is rarely about huge dominance or glamorous control. It is about organisation, work rate, and trying to squeeze enough from tight margins. For neutrals, that makes this a committed domestic stop rather than a style-driven showcase.",
+      },
+      {
+        title: "Stadium & Matchday Feel",
+        body:
+          "Panetolikos Stadium is a grounded, traditional-feel local venue. It is not sold on size. It is sold on directness and town-club connection.\n\nThat gives the trip a more honest lower-profile feel than the headline Greek clubs.",
+      },
+      {
+        title: "Supporter Culture",
+        body:
+          "Supporter culture is local, proud and proportionate to the club’s place in the football hierarchy. You are not walking into one of Europe’s great pressure cauldrons. You are walking into a real local football environment, which is still valuable when positioned properly.",
+      },
+      {
+        title: "Rivalries",
+        body:
+          "There is no single rivalry here that dominates the league narrative in the way Greece’s giant derbies do. The value is regional identity and broader league completeness.",
+      },
+      {
+        title: "Trip Strategy",
+        body:
+          "Use Agrinio as a simple central base, keep the trip compact, and treat Panetolikos as a one-night or football-first stop. This is not a place to over-engineer.\n\nThe cleaner the trip, the better it works.",
+      },
+      {
+        title: "Neutral Visitor Notes",
+        body:
+          "• Useful for serious Greek league coverage.\n• Football-first, low-friction, practical.\n• Not a luxury city-break product.\n• Stronger for committed football travellers than casual tourism shoppers.",
+      },
+    ],
+    links: [{ label: "Official site", url: "https://panetolikos.gr/" }],
+    updatedAt: "2026-03-08",
+  },
+
+  "ael": {
+    teamKey: "ael",
+    name: "AEL",
+    cityKey: "larissa",
+    city: "Larissa",
+    country: "Greece",
+    stadium: "Alkazar Stadium",
+    sections: [
+      {
+        title: "Club Overview",
+        body:
+          "AEL are stronger as a football-travel product than a casual glance might suggest because they combine a recognisable traditional-club feel with a regional city that is actually usable for a short football stay. This is not one of the giant Greek prestige brands, but it is definitely more than random filler.\n\nFor neutrals, AEL work as a proper city-club overnight rather than a nameless small-town stop.",
+      },
+      {
+        title: "History & Legacy",
+        body:
+          "AEL’s standing in Greek football is rooted in regional importance, tradition and the sense of being a proper historic club rather than a temporary competition extra. They do not sit in the same tier as the most globally recognisable Greek clubs, but they do carry more identity weight than many lower-hierarchy sides.",
+      },
+      {
+        title: "Recent Seasons",
+        body:
+          "Recent relevance has often been judged by whether the club can restore and maintain status consistent with its self-image. That creates a useful pressure environment: not giant-club hysteria, but definitely more than simple anonymity.",
+      },
+      {
+        title: "Playing Style",
+        body:
+          "At this level, the club’s football value is mostly about competitiveness, structure and whether the team carries itself like a serious institution rather than a soft lower-table placeholder. For neutrals, that can make the matchday feel more meaningful than pure table position might imply.",
+      },
+      {
+        title: "Stadium & Matchday Feel",
+        body:
+          "Alkazar gives AEL a traditional-feel home rather than a glossy anonymous arena. That matters because the whole product works better when the club feels rooted in its city rather than detached from it.",
+      },
+      {
+        title: "Supporter Culture",
+        body:
+          "Supporter culture is regionally proud and more historically grounded than some of the smaller recent-era clubs. That gives the trip more identity weight and helps AEL avoid feeling disposable.",
+      },
+      {
+        title: "Rivalries",
+        body:
+          "The club’s emotional context is driven more by regional pride and its own historical self-image than by one universally dominant rivalry in the way the elite clubs are.",
+      },
+      {
+        title: "Trip Strategy",
+        body:
+          "Larissa centre is the obvious base. Build a clean one- or two-night trip, use the city properly, and let the football be the anchor rather than the entire reason for every hour.\n\nAEL work best when sold as a traditional-club regional city product.",
+      },
+      {
+        title: "Neutral Visitor Notes",
+        body:
+          "• Better than a throwaway lower-profile label suggests.\n• Good for traditional-club travellers.\n• Larissa makes the trip more usable than some comparable stops.\n• Worth covering properly, not lazily.",
+      },
+    ],
+    links: [{ label: "Official site", url: "https://www.aelole.gr/" }],
+    updatedAt: "2026-03-08",
+  },
+
+  "panserraikos": {
+    teamKey: "panserraikos",
+    name: "Panserraikos",
+    cityKey: "serres",
+    city: "Serres",
+    country: "Greece",
+    stadium: "Serres Municipal Stadium",
+    sections: [
+      {
+        title: "Club Overview",
+        body:
+          "Panserraikos are a serious league-depth inclusion rather than a headline tourism club. That is the right framing. The trip value comes from local identity, northern Greece coverage, and a football stop that works cleanly if you do not try to turn it into something flashy.\n\nThis is exactly the sort of club that separates broad-but-shallow coverage from actual completeness.",
+      },
+      {
+        title: "History & Legacy",
+        body:
+          "Panserraikos belong to the traditional regional-club layer of Greek football. Their importance comes from long-term local significance and their role in the wider domestic fabric rather than from giant national trophy mythology.\n\nThat still matters. It just matters differently.",
+      },
+      {
+        title: "Recent Seasons",
+        body:
+          "The recent story is usually about whether the club can stay relevant and competitive at the level rather than drift out of view. That creates a practical football environment where every season tends to be read through survival, stability, and legitimacy.",
+      },
+      {
+        title: "Playing Style",
+        body:
+          "Clubs in this bracket are rarely sold through stylistic glamour. The neutral value is more about competitive honesty, local context, and seeing how the club tries to live within its means while staying hard to brush aside.",
+      },
+      {
+        title: "Stadium & Matchday Feel",
+        body:
+          "Serres Municipal Stadium is a functional local football venue. The product is smaller-scale and more regional than the heavyweights, but that is part of the appeal for people who want broad and real league coverage.",
+      },
+      {
+        title: "Supporter Culture",
+        body:
+          "Support is local, direct and tied to city identity rather than national spectacle. That makes the matchday less theatrical than the best-known Greek clubs, but still valid as a football-travel product if positioned honestly.",
+      },
+      {
+        title: "Rivalries",
+        body:
+          "No rivalry here sits on the same national pedestal as the giant Greek derbies. The appeal is local club identity and proper northern Greece football coverage.",
+      },
+      {
+        title: "Trip Strategy",
+        body:
+          "Use Serres as a one-night, central, practical stop. It also works better when tied into a broader northern Greece route than when sold as a standalone polished city-break product.\n\nKeep it compact and you get the best version of it.",
+      },
+      {
+        title: "Neutral Visitor Notes",
+        body:
+          "• Best for committed football travellers rather than casual city-break users.\n• Practical, local and football-first.\n• Stronger within a wider northern Greece itinerary.\n• Good depth product when treated honestly.",
+      },
+    ],
+    links: [{ label: "Official site", url: "https://panserraikosfc.gr/" }],
     updatedAt: "2026-03-08",
   },
 };
