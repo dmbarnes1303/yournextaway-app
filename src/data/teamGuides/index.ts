@@ -12,7 +12,9 @@ import primeiraLigaGuides from "./primeiraLiga";
 import eredivisieGuides from "./eredivisie";
 import scottishPremiershipGuides from "./scottishPremiership";
 import superLigGuides from "./superLig";
+import proLeagueGuides from "./proLeague";
 import superLeagueGreeceGuides from "./superLeagueGreece";
+import austrianBundesligaGuides from "./austrianBundesliga";
 
 import * as legacy from "./teamGuides";
 
@@ -70,7 +72,9 @@ const SOURCES: Record<string, TeamGuide[]> = {
   eredivisie: extractGuides(eredivisieGuides),
   scottishPremiership: extractGuides(scottishPremiershipGuides),
   superLig: extractGuides(superLigGuides),
+  proLeague: extractGuides(proLeagueGuides),
   superLeagueGreece: extractGuides(superLeagueGreeceGuides),
+  austrianBundesliga: extractGuides(austrianBundesligaGuides),
   legacy: extractGuides(legacy),
 };
 
