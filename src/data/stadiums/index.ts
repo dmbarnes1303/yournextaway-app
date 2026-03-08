@@ -28,6 +28,7 @@ import superLigaSerbiaStadiums from "./superLigaSerbia";
 import superLigaSlovakiaStadiums from "./superLigaSlovakia";
 import prvaLigaSloveniaStadiums from "./prvaLigaSlovenia";
 import firstLeagueBulgariaStadiums from "./firstLeagueBulgaria";
+import firstDivisionCyprusStadiums from "./firstDivisionCyprus";
 
 export const stadiums: Record<string, StadiumRecord> = {
   ...premierLeagueStadiums,
@@ -57,6 +58,7 @@ export const stadiums: Record<string, StadiumRecord> = {
   ...superLigaSlovakiaStadiums,
   ...prvaLigaSloveniaStadiums,
   ...firstLeagueBulgariaStadiums,
+  ...firstDivisionCyprusStadiums,
 };
 
 export function getStadium(stadiumKey: string): StadiumRecord | null {
