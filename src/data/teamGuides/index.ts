@@ -15,6 +15,7 @@ import superLigGuides from "./superLig";
 import proLeagueGuides from "./proLeague";
 import superLeagueGreeceGuides from "./superLeagueGreece";
 import austrianBundesligaGuides from "./austrianBundesliga";
+import swissSuperLeagueGuides from "./swissSuperLeague";
 
 import * as legacy from "./teamGuides";
 
@@ -75,6 +76,7 @@ const SOURCES: Record<string, TeamGuide[]> = {
   proLeague: extractGuides(proLeagueGuides),
   superLeagueGreece: extractGuides(superLeagueGreeceGuides),
   austrianBundesliga: extractGuides(austrianBundesligaGuides),
+  swissSuperLeague: extractGuides(swissSuperLeagueGuides),
   legacy: extractGuides(legacy),
 };
 
