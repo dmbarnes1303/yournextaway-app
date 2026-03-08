@@ -8,25 +8,16 @@ import serieACityGuides from "./serieA";
 import ligue1CityGuides from "./ligue1";
 import primeiraLigaCityGuides from "./primeiraLiga";
 import eredivisieCityGuides from "./eredivisie";
+import proLeagueCityGuides from "./proLeague";
 
 export type TripTopThingsBundle = {
   cityKey: string;
   hasGuide: boolean;
-
-  /**
-   * Monetised link: GetYourGuide affiliate city/search landing page.
-   * If a guide has no link yet, callers should fall back to buildAffiliateLinks().experiencesUrl
-   * rather than showing TripAdvisor.
-   */
   thingsToDoUrl?: string;
-
   items: { title: string; description?: string }[];
   quickTips: string[];
 };
 
-/**
- * Unified registry (single source of truth for city guide lookups)
- */
 export const cityGuides: Record<string, CityGuide> = {
   ...premierLeagueCityGuides,
   ...laLigaCityGuides,
@@ -35,24 +26,14 @@ export const cityGuides: Record<string, CityGuide> = {
   ...ligue1CityGuides,
   ...primeiraLigaCityGuides,
   ...eredivisieCityGuides,
+  ...proLeagueCityGuides,
 };
 
-/**
- * Find a city guide by any user input
- */
 export function getCityGuide(cityInput: string): CityGuide | null {
   const key = normalizeCityKey(cityInput);
   return cityGuides[key] ?? null;
 }
 
-/**
- * Used in Trip Build + Trip Hub
- *
- * Policy:
- * - We never return TripAdvisor URLs anymore.
- * - If the guide doesn't have a monetised link yet, return undefined and let UI fall back to
- *   buildAffiliateLinks({ city }).experiencesUrl.
- */
 export function getTopThingsToDoForTrip(cityInput: string): TripTopThingsBundle {
   const cityKey = normalizeCityKey(cityInput);
   const guide = cityGuides[cityKey];
