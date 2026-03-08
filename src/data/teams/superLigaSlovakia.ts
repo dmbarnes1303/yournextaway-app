@@ -65,7 +65,7 @@ export const superLigaSlovakiaTeams: Record<string, TeamRecord> = {
     name: "KFC Komárno",
     city: "Komárno",
     country: SLOVAKIA,
-    stadiumKey: "stadion-komarno",
+    stadiumKey: "vion-arena",
   },
 
   "ruzomberok": {
