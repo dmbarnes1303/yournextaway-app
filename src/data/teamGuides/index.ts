@@ -1,5 +1,3 @@
-// src/data/teamGuides/index.ts
-
 import type { TeamGuide } from "./types";
 import { teams } from "@/src/data/teams";
 
@@ -13,6 +11,7 @@ import ligue1Guides from "./ligue1";
 import premierLeagueGuides from "./premierLeague";
 import serieAGuides from "./serieA";
 import primeiraLigaGuides from "./primeiraLiga";
+import eredivisieGuides from "./eredivisie";
 
 // Legacy fallback (if it contains arrays/records)
 import * as legacy from "./teamGuides";
@@ -85,6 +84,7 @@ const SOURCES: Record<string, TeamGuide[]> = {
   premierLeague: extractGuides(premierLeagueGuides),
   serieA: extractGuides(serieAGuides),
   primeiraLiga: extractGuides(primeiraLigaGuides),
+  eredivisie: extractGuides(eredivisieGuides),
   legacy: extractGuides(legacy),
 };
 
@@ -160,8 +160,6 @@ export function getTeamGuidesDebugSnapshot() {
   };
 }
 
-// ✅ export the helpers you’re trying to import in screens
 export { normalizeTeamKey, titleFromKey };
 
-// default export stays the registry
 export default registry;
