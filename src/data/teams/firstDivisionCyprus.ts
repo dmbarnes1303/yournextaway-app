@@ -1,17 +1,17 @@
-// src/data/teams/firstDivisionCyprus.ts
 import type { TeamRecord } from "./types";
 
 const CYPRUS = "Cyprus";
 const FIRST_DIVISION = 318;
 
 export const firstDivisionCyprusTeams: Record<string, TeamRecord> = {
-  "omonoia-nicosia": {
-    teamKey: "omonoia-nicosia",
-    name: "Omonoia",
+  "omonia-nicosia": {
+    teamKey: "omonia-nicosia",
+    name: "Omonia",
     country: CYPRUS,
     city: "Nicosia",
     leagueId: FIRST_DIVISION,
-    aliases: ["omonoia nicosia", "ac omonia", "ac omonia nicosia"],
+    stadiumKey: "gsp-stadium",
+    aliases: ["omonia", "omonia nicosia", "omonoia", "omonoia nicosia", "ac omonia", "ac omonia nicosia"],
   },
 
   "apollon-limassol": {
@@ -20,7 +20,8 @@ export const firstDivisionCyprusTeams: Record<string, TeamRecord> = {
     country: CYPRUS,
     city: "Limassol",
     leagueId: FIRST_DIVISION,
-    aliases: ["apollon limassol", "apollon fc"],
+    stadiumKey: "alphamega-stadium",
+    aliases: ["apollon limassol", "apollon fc", "apollon"],
   },
 
   "aek-larnaca": {
@@ -29,25 +30,28 @@ export const firstDivisionCyprusTeams: Record<string, TeamRecord> = {
     country: CYPRUS,
     city: "Larnaca",
     leagueId: FIRST_DIVISION,
-    aliases: ["aek", "aek larnaka"],
+    stadiumKey: "aek-arena",
+    aliases: ["aek", "aek larnaka", "aek larnaca"],
   },
 
-  "pafos": {
+  pafos: {
     teamKey: "pafos",
     name: "Pafos",
     country: CYPRUS,
     city: "Paphos",
     leagueId: FIRST_DIVISION,
-    aliases: ["pafos fc"],
+    stadiumKey: "stelios-kyriakides-stadium",
+    aliases: ["pafos fc", "pafos"],
   },
 
-  "apoel": {
+  apoel: {
     teamKey: "apoel",
     name: "APOEL",
     country: CYPRUS,
     city: "Nicosia",
     leagueId: FIRST_DIVISION,
-    aliases: ["apoel nicosia"],
+    stadiumKey: "gsp-stadium",
+    aliases: ["apoel nicosia", "apoel"],
   },
 
   "aris-limassol": {
@@ -56,7 +60,8 @@ export const firstDivisionCyprusTeams: Record<string, TeamRecord> = {
     country: CYPRUS,
     city: "Limassol",
     leagueId: FIRST_DIVISION,
-    aliases: ["aris", "aris limasol"],
+    stadiumKey: "alphamega-stadium",
+    aliases: ["aris", "aris limasol", "aris limassol"],
   },
 
   "ael-limassol": {
@@ -65,7 +70,8 @@ export const firstDivisionCyprusTeams: Record<string, TeamRecord> = {
     country: CYPRUS,
     city: "Limassol",
     leagueId: FIRST_DIVISION,
-    aliases: ["ael limassol", "ael limasol"],
+    stadiumKey: "alphamega-stadium",
+    aliases: ["ael", "ael limassol", "ael limasol"],
   },
 
   "omonia-aradippou": {
@@ -74,16 +80,18 @@ export const firstDivisionCyprusTeams: Record<string, TeamRecord> = {
     country: CYPRUS,
     city: "Aradippou",
     leagueId: FIRST_DIVISION,
-    aliases: ["omonia aradipou", "omonia aradippou fc"],
+    stadiumKey: "antonis-papadopoulos-stadium",
+    aliases: ["omonia aradipou", "omonia aradippou fc", "omonia aradippou"],
   },
 
-  "anorthosis": {
+  anorthosis: {
     teamKey: "anorthosis",
     name: "Anorthosis",
     country: CYPRUS,
     city: "Larnaca",
     leagueId: FIRST_DIVISION,
-    aliases: ["anorthosis famagusta", "anorthosis ammochostou"],
+    stadiumKey: "antonis-papadopoulos-stadium",
+    aliases: ["anorthosis famagusta", "anorthosis ammochostou", "anorthosis"],
   },
 
   "olympiakos-nicosia": {
@@ -92,7 +100,8 @@ export const firstDivisionCyprusTeams: Record<string, TeamRecord> = {
     country: CYPRUS,
     city: "Nicosia",
     leagueId: FIRST_DIVISION,
-    aliases: ["olympiakos nicosia"],
+    stadiumKey: "makario-stadium",
+    aliases: ["olympiakos nicosia", "olympiakos"],
   },
 
   "akritas-chlorakas": {
@@ -101,7 +110,8 @@ export const firstDivisionCyprusTeams: Record<string, TeamRecord> = {
     country: CYPRUS,
     city: "Chloraka",
     leagueId: FIRST_DIVISION,
-    aliases: ["akritas", "akritas chloraka"],
+    stadiumKey: "stelios-kyriakides-stadium",
+    aliases: ["akritas", "akritas chloraka", "akritas chlorakas"],
   },
 
   "digenis-ypsonas": {
@@ -110,7 +120,8 @@ export const firstDivisionCyprusTeams: Record<string, TeamRecord> = {
     country: CYPRUS,
     city: "Ypsonas",
     leagueId: FIRST_DIVISION,
-    aliases: ["digenis", "digenis ipsonas"],
+    stadiumKey: "ammochostos-stadium",
+    aliases: ["digenis", "digenis ipsonas", "digenis ypsonas"],
   },
 
   "ethnikos-achna": {
@@ -119,7 +130,8 @@ export const firstDivisionCyprusTeams: Record<string, TeamRecord> = {
     country: CYPRUS,
     city: "Achna",
     leagueId: FIRST_DIVISION,
-    aliases: ["ethnikos", "ethnikos achnas"],
+    stadiumKey: "dasaki-stadium",
+    aliases: ["ethnikos", "ethnikos achnas", "ethnikos achna"],
   },
 
   "enosis-paralimni": {
@@ -128,7 +140,8 @@ export const firstDivisionCyprusTeams: Record<string, TeamRecord> = {
     country: CYPRUS,
     city: "Paralimni",
     leagueId: FIRST_DIVISION,
-    aliases: ["enosis paralimni", "enosis neon paralimni"],
+    stadiumKey: "tasos-markou-stadium",
+    aliases: ["enosis paralimni", "enosis neon paralimni", "paralimni", "enp"],
   },
 };
 
