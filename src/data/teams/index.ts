@@ -25,6 +25,7 @@ import bestaDeildTeams from "./bestaDeild";
 import nbITeams from "./nbI";
 import superLigaTeams from "./superLiga";
 import hnlTeams from "./hnl";
+import superLigaSerbiaTeams from "./superLigaSerbia";
 
 /**
  * V1 Team Registry (single source of truth)
@@ -94,6 +95,7 @@ export const teams: Record<string, TeamRecord> = {
   ...nbITeams,
   ...superLigaTeams,
   ...hnlTeams,
+  ...superLigaSerbiaTeams,
 };
 
 export const POPULAR_TEAM_IDS = new Set<number>(
