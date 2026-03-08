@@ -1,5 +1,3 @@
-// src/constants/football.ts
-
 export type LeagueBrowseRegion = "featured-europe" | "central-eastern-europe" | "nordics";
 
 export type LeagueOption = {
@@ -104,7 +102,7 @@ export function currentFootballSeasonStartYear(now = new Date()): number {
 }
 
 /**
- * Calendar-year leagues (e.g. Iceland / Norway / Sweden / Finland)
+ * Calendar-year leagues (e.g. Iceland / Norway / Sweden / Finland / Ireland)
  * use the current year as the season.
  */
 export function currentCalendarYear(now = new Date()): number {
@@ -677,14 +675,13 @@ export const FOOTBALL_BY_COUNTRY: Record<string, CountryFootballConfig> = {
  * Derived flat helpers.
  * Keep these exports because the rest of the app already consumes them.
  */
-export const LEAGUES: LeagueOption[] = Object.values(FOOTBALL_BY_COUNTRY).flatMap(
-  (countryConfig) =>
-    countryConfig.leagues.map((league) => ({
-      ...league,
-      country: countryConfig.country,
-      countryCode: countryConfig.countryCode,
-      browseRegion: countryConfig.browseRegion,
-    }))
+export const LEAGUES: LeagueOption[] = Object.values(FOOTBALL_BY_COUNTRY).flatMap((countryConfig) =>
+  countryConfig.leagues.map((league) => ({
+    ...league,
+    country: countryConfig.country,
+    countryCode: countryConfig.countryCode,
+    browseRegion: countryConfig.browseRegion,
+  }))
 );
 
 export const FEATURED_LEAGUES = LEAGUES.filter((l) => l.featured);
@@ -1022,4 +1019,4 @@ export function nextWeekendWindowIso(): RollingWindowIso {
   const to = toIsoDate(sun);
 
   return normalizeWindowIso({ from, to }, 2);
-        }
+    }
