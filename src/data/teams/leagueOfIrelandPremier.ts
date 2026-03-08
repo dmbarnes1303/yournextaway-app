@@ -1,15 +1,17 @@
 import type { TeamRecord } from "./types";
 
 const IRELAND = "Ireland";
+const PREMIER_DIVISION = 357;
 
 export const leagueOfIrelandPremierTeams: Record<string, TeamRecord> = {
-
   "bohemians": {
     teamKey: "bohemians",
     name: "Bohemians",
     country: IRELAND,
     city: "Dublin",
-    stadiumKey: "dalymount-park"
+    leagueId: PREMIER_DIVISION,
+    stadiumKey: "dalymount-park",
+    aliases: ["bohs", "bohemian fc"],
   },
 
   "st-patricks-athletic": {
@@ -17,7 +19,9 @@ export const leagueOfIrelandPremierTeams: Record<string, TeamRecord> = {
     name: "St Patrick's Athletic",
     country: IRELAND,
     city: "Dublin",
-    stadiumKey: "richmond-park"
+    leagueId: PREMIER_DIVISION,
+    stadiumKey: "richmond-park",
+    aliases: ["st pats", "st patricks", "saint patricks athletic"],
   },
 
   "shamrock-rovers": {
@@ -25,7 +29,9 @@ export const leagueOfIrelandPremierTeams: Record<string, TeamRecord> = {
     name: "Shamrock Rovers",
     country: IRELAND,
     city: "Dublin",
-    stadiumKey: "tallaght-stadium"
+    leagueId: PREMIER_DIVISION,
+    stadiumKey: "tallaght-stadium",
+    aliases: ["rovers", "shamrock"],
   },
 
   "derry-city": {
@@ -33,7 +39,9 @@ export const leagueOfIrelandPremierTeams: Record<string, TeamRecord> = {
     name: "Derry City",
     country: IRELAND,
     city: "Derry",
-    stadiumKey: "brandywell-stadium"
+    leagueId: PREMIER_DIVISION,
+    stadiumKey: "brandywell-stadium",
+    aliases: ["derry"],
   },
 
   "drogheda-united": {
@@ -41,7 +49,9 @@ export const leagueOfIrelandPremierTeams: Record<string, TeamRecord> = {
     name: "Drogheda United",
     country: IRELAND,
     city: "Drogheda",
-    stadiumKey: "weavers-park"
+    leagueId: PREMIER_DIVISION,
+    stadiumKey: "weavers-park",
+    aliases: ["drogheda"],
   },
 
   "shelbourne": {
@@ -49,7 +59,9 @@ export const leagueOfIrelandPremierTeams: Record<string, TeamRecord> = {
     name: "Shelbourne",
     country: IRELAND,
     city: "Dublin",
-    stadiumKey: "tolka-park"
+    leagueId: PREMIER_DIVISION,
+    stadiumKey: "tolka-park",
+    aliases: ["shels"],
   },
 
   "galway-united": {
@@ -57,7 +69,9 @@ export const leagueOfIrelandPremierTeams: Record<string, TeamRecord> = {
     name: "Galway United",
     country: IRELAND,
     city: "Galway",
-    stadiumKey: "eamonn-deacy-park"
+    leagueId: PREMIER_DIVISION,
+    stadiumKey: "eamonn-deacy-park",
+    aliases: ["galway"],
   },
 
   "dundalk": {
@@ -65,7 +79,9 @@ export const leagueOfIrelandPremierTeams: Record<string, TeamRecord> = {
     name: "Dundalk",
     country: IRELAND,
     city: "Dundalk",
-    stadiumKey: "oriel-park"
+    leagueId: PREMIER_DIVISION,
+    stadiumKey: "oriel-park",
+    aliases: ["dundalk fc"],
   },
 
   "sligo-rovers": {
@@ -73,7 +89,9 @@ export const leagueOfIrelandPremierTeams: Record<string, TeamRecord> = {
     name: "Sligo Rovers",
     country: IRELAND,
     city: "Sligo",
-    stadiumKey: "showgrounds-sligo"
+    leagueId: PREMIER_DIVISION,
+    stadiumKey: "showgrounds-sligo",
+    aliases: ["sligo"],
   },
 
   "waterford": {
@@ -81,9 +99,10 @@ export const leagueOfIrelandPremierTeams: Record<string, TeamRecord> = {
     name: "Waterford",
     country: IRELAND,
     city: "Waterford",
-    stadiumKey: "regional-sports-centre"
-  }
-
+    leagueId: PREMIER_DIVISION,
+    stadiumKey: "regional-sports-centre",
+    aliases: ["waterford fc"],
+  },
 };
 
 export default leagueOfIrelandPremierTeams;
