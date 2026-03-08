@@ -1,3 +1,4 @@
+// src/data/stadiums/index.ts
 import type { StadiumRecord } from "./types";
 
 import premierLeagueStadiums from "./premierLeague";
@@ -18,6 +19,7 @@ import czechFirstLeagueStadiums from "./czechFirstLeague";
 import ekstraklasaStadiums from "./ekstraklasa";
 import allsvenskanStadiums from "./allsvenskan";
 import eliteserienStadiums from "./eliteserien";
+import veikkausliigaStadiums from "./veikkausliiga";
 
 export const stadiums: Record<string, StadiumRecord> = {
   ...premierLeagueStadiums,
@@ -38,6 +40,7 @@ export const stadiums: Record<string, StadiumRecord> = {
   ...ekstraklasaStadiums,
   ...allsvenskanStadiums,
   ...eliteserienStadiums,
+  ...veikkausliigaStadiums,
 };
 
 export function getStadium(stadiumKey: string): StadiumRecord | null {
