@@ -1,4 +1,3 @@
-// src/data/teams/index.ts
 import { LEAGUES, type LeagueOption } from "@/src/constants/football";
 import type { TeamRecord } from "./types";
 
@@ -19,19 +18,7 @@ import swissSuperLeagueTeams from "./swissSuperLeague";
 import czechFirstLeagueTeams from "./czechFirstLeague";
 import ekstraklasaTeams from "./ekstraklasa";
 import allsvenskanTeams from "./allsvenskan";
-
-/**
- * V1 Team Registry (single source of truth)
- *
- * Why this exists:
- * - Home search must be able to find teams even when fixtures API results don't include them yet.
- * - Team guides will be keyed by a stable `teamKey`.
- *
- * Notes:
- * - Keep this registry accurate and deterministic.
- * - Avoid turning this file into a raw-data landfill.
- * - League-specific data belongs in league-specific files.
- */
+import eliteserienTeams from "./eliteserien";
 
 export const POPULAR_TEAM_KEYS = [
   "real-madrid",
@@ -82,6 +69,7 @@ export const teams: Record<string, TeamRecord> = {
   ...czechFirstLeagueTeams,
   ...ekstraklasaTeams,
   ...allsvenskanTeams,
+  ...eliteserienTeams,
 };
 
 export const POPULAR_TEAM_IDS = new Set<number>(

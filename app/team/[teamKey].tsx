@@ -26,11 +26,11 @@ import { formatUkDateTimeMaybe } from "@/src/utils/formatters";
 
 import { getFixtures, type FixtureListRow } from "@/src/services/apiFootball";
 import { getTeam, leagueForTeam, normalizeTeamKey } from "@/src/data/teams";
+import { getStadium, getStadiumByTeam, type StadiumRecord } from "@/src/data/stadiums";
 import { hasTeamGuide } from "@/src/data/teamGuides";
 import { getRollingWindowIso } from "@/src/constants/football";
 
 // Remote stadium backgrounds (V1). Use direct JPG/PNG URLs.
-// Keep it curated: only add teams you actively support in product.
 const TEAM_BACKGROUNDS: Record<string, string> = {
   "real-madrid": "https://images.unsplash.com/photo-1548600916-d2d8a0b2b3b6?auto=format&fit=crop&w=1400&q=80",
   arsenal: "https://images.unsplash.com/photo-1533106418989-88406c7cc8ca?auto=format&fit=crop&w=1400&q=80",
@@ -39,7 +39,8 @@ const TEAM_BACKGROUNDS: Record<string, string> = {
   "borussia-dortmund": "https://images.unsplash.com/photo-1521412644187-c49fa049e84d?auto=format&fit=crop&w=1400&q=80",
 };
 
-const API_SPORTS_TEAM_LOGO = (teamId: number) => `https://media.api-sports.io/football/teams/${teamId}.png`;
+const API_SPORTS_TEAM_LOGO = (teamId: number) =>
+  `https://media.api-sports.io/football/teams/${teamId}.png`;
 
 /* -------------------------------------------------------------------------- */
 /* Utils */
@@ -128,8 +129,37 @@ function splitLinesToBullets(text: string) {
   return { bullets, paragraph: "" };
 }
 
+function normalizeNameForFixtureMatch(input: string) {
+  return normalizeTeamKey(input)
+    .replace(/\bifk\b/g, "")
+    .replace(/\bif\b/g, "")
+    .replace(/\bfc\b/g, "")
+    .replace(/\bbk\b/g, "")
+    .replace(/\bff\b/g, "")
+    .replace(/\baif\b/g, "")
+    .replace(/\bis\b/g, "")
+    .replace(/\bsk\b/g, "")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+function namesLikelyMatch(a: string, b: string) {
+  const na = normalizeNameForFixtureMatch(a);
+  const nb = normalizeNameForFixtureMatch(b);
+
+  if (!na || !nb) return false;
+  if (na === nb) return true;
+  if (na.includes(nb) || nb.includes(na)) return true;
+  return false;
+}
+
+function formatCapacity(capacity?: number) {
+  if (typeof capacity !== "number" || !Number.isFinite(capacity)) return null;
+  return capacity.toLocaleString("en-GB");
+}
+
 /* -------------------------------------------------------------------------- */
-/* Country → ISO2 resolver (flags, consistent with City screen) */
+/* Country → ISO2 resolver */
 /* -------------------------------------------------------------------------- */
 
 function countryToIso2(code?: string, name?: string): string | null {
@@ -185,7 +215,6 @@ function countryToIso2(code?: string, name?: string): string | null {
     uk: "GB",
     britain: "GB",
     "great britain": "GB",
-
     germany: "DE",
     spain: "ES",
     france: "FR",
@@ -240,7 +269,7 @@ function TeamCrestHero({ teamId }: { teamId?: number }) {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Guide loader (safe) */
+/* Guide loader */
 /* -------------------------------------------------------------------------- */
 
 type GuideBlock = { heading?: string; text: string };
@@ -260,7 +289,11 @@ function getTeamGuideFull(teamKey: string): GuideFull | null {
     const mod: any = require("@/src/data/teamGuides");
 
     const getter =
-      typeof mod.getTeamGuide === "function" ? mod.getTeamGuide : typeof mod.getGuide === "function" ? mod.getGuide : null;
+      typeof mod.getTeamGuide === "function"
+        ? mod.getTeamGuide
+        : typeof mod.getGuide === "function"
+          ? mod.getGuide
+          : null;
 
     if (!getter) return null;
 
@@ -276,7 +309,12 @@ function getTeamGuideFull(teamKey: string): GuideFull | null {
     if (Array.isArray(guide.sections) && guide.sections.length) {
       for (const s of guide.sections) {
         const heading = safeStr(s?.title) || safeStr(s?.heading) || safeStr(s?.name) || "";
-        const text = safeStr(s?.body) || safeStr(s?.content) || joinParas(s?.paragraphs) || safeStr(s?.text) || "";
+        const text =
+          safeStr(s?.body) ||
+          safeStr(s?.content) ||
+          joinParas(s?.paragraphs) ||
+          safeStr(s?.text) ||
+          "";
         if (text) blocks.push({ heading: heading || undefined, text });
       }
     }
@@ -491,6 +529,88 @@ function FixtureRow({ row, onPressPlan }: { row: FixtureListRow; onPressPlan: ()
 }
 
 /* -------------------------------------------------------------------------- */
+/* Stadium card */
+/* -------------------------------------------------------------------------- */
+
+function StadiumInfoCard({ stadium }: { stadium: StadiumRecord }) {
+  const capacityText = formatCapacity(stadium.capacity);
+  const airportLine =
+    stadium.airport && typeof stadium.distanceFromAirportKm === "number"
+      ? `${stadium.airport} • ${stadium.distanceFromAirportKm} km`
+      : stadium.airport || null;
+
+  return (
+    <GlassCard strength="default" style={styles.block} noPadding>
+      <View style={styles.blockInner}>
+        <Text style={styles.blockTitle}>Stadium</Text>
+
+        <View style={styles.stadiumTop}>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={styles.stadiumName}>{stadium.name}</Text>
+            <Text style={styles.stadiumMeta}>
+              {[stadium.city, stadium.country].filter(Boolean).join(" • ")}
+            </Text>
+          </View>
+
+          {capacityText ? (
+            <View style={styles.capacityPill}>
+              <Text style={styles.capacityPillLabel}>Capacity</Text>
+              <Text style={styles.capacityPillValue}>{capacityText}</Text>
+            </View>
+          ) : null}
+        </View>
+
+        {airportLine ? (
+          <View style={styles.infoPanel}>
+            <Text style={styles.infoPanelLabel}>Airport</Text>
+            <Text style={styles.infoPanelText}>{airportLine}</Text>
+          </View>
+        ) : null}
+
+        {stadium.transit?.length ? (
+          <View style={styles.infoPanel}>
+            <Text style={styles.infoPanelLabel}>Transport</Text>
+            {stadium.transit.map((item, idx) => {
+              const mins = typeof item.minutes === "number" ? ` • ${item.minutes} min` : "";
+              const note = item.note ? ` • ${item.note}` : "";
+              return (
+                <Text key={`transit-${idx}`} style={styles.infoPanelText}>
+                  {item.label}
+                  {mins}
+                  {note}
+                </Text>
+              );
+            })}
+          </View>
+        ) : null}
+
+        {stadium.stayAreas?.length ? (
+          <View style={styles.infoPanel}>
+            <Text style={styles.infoPanelLabel}>Best areas to stay</Text>
+            {stadium.stayAreas.map((item, idx) => (
+              <Text key={`stay-${idx}`} style={styles.infoPanelText}>
+                {item.area} — {item.why}
+              </Text>
+            ))}
+          </View>
+        ) : null}
+
+        {stadium.tips?.length ? (
+          <View style={styles.infoPanel}>
+            <Text style={styles.infoPanelLabel}>Matchday tips</Text>
+            {stadium.tips.map((tip, idx) => (
+              <Text key={`tip-${idx}`} style={styles.infoPanelText}>
+                {tip}
+              </Text>
+            ))}
+          </View>
+        ) : null}
+      </View>
+    </GlassCard>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
 /* Screen */
 /* -------------------------------------------------------------------------- */
 
@@ -501,7 +621,6 @@ export default function TeamScreen() {
   const teamKeyParam = safeStr(params.teamKey);
   const teamKey = useMemo(() => normalizeTeamKey(teamKeyParam), [teamKeyParam]);
 
-  // Enforce consistent default window across all entry paths.
   const rolling = useMemo(() => getRollingWindowIso(), []);
   const fromParam = toIsoOrEmpty(params.from);
   const toParam = toIsoOrEmpty(params.to);
@@ -510,6 +629,15 @@ export default function TeamScreen() {
 
   const team = useMemo(() => getTeam(teamKey) ?? getTeam(teamKeyParam), [teamKey, teamKeyParam]);
   const league = useMemo(() => (team ? leagueForTeam(team) : null), [team]);
+
+  const resolvedStadium = useMemo(() => {
+    if (!team) return null;
+    if (team.stadiumKey) {
+      const direct = getStadium(team.stadiumKey);
+      if (direct) return direct;
+    }
+    return getStadiumByTeam(team.teamKey);
+  }, [team]);
 
   const bgUrl = useMemo(() => TEAM_BACKGROUNDS[team?.teamKey ?? teamKey] ?? "", [team, teamKey]);
 
@@ -535,7 +663,6 @@ export default function TeamScreen() {
     return getTeamGuideFull(team.teamKey);
   }, [team, canShowGuide]);
 
-  // Best-effort flag inputs.
   const countryCode = safeStr((league as any)?.countryCode) || safeStr((team as any)?.countryCode) || "";
   const countryName = safeStr((league as any)?.country) || safeStr((team as any)?.country) || "";
 
@@ -561,8 +688,21 @@ export default function TeamScreen() {
 
       const list = Array.isArray(res) ? (res as FixtureListRow[]) : [];
 
-      // HOME FIXTURES for this team only (by teamId).
-      const filtered = typeof team.teamId === "number" ? list.filter((r) => r?.teams?.home?.id === team.teamId) : [];
+      const filtered = list.filter((r) => {
+        const homeId = r?.teams?.home?.id;
+        const homeName = safeStr(r?.teams?.home?.name);
+
+        if (typeof team.teamId === "number" && typeof homeId === "number") {
+          return homeId === team.teamId;
+        }
+
+        if (homeName && team.name) {
+          if (namesLikelyMatch(homeName, team.name)) return true;
+          return (team.aliases ?? []).some((alias) => namesLikelyMatch(homeName, alias));
+        }
+
+        return false;
+      });
 
       const dedup = new Map<string, FixtureListRow>();
       for (const r of filtered) {
@@ -614,6 +754,7 @@ export default function TeamScreen() {
       router.push("/(tabs)/fixtures" as any);
       return;
     }
+
     router.push({
       pathname: "/(tabs)/fixtures",
       params: {
@@ -651,9 +792,11 @@ export default function TeamScreen() {
 
   const bgSource = bgUrl ? ({ uri: bgUrl } as any) : getBackground("team");
 
-  // Guide preview mirrors City screen vibe.
   const guideBlocks = guideFull?.blocks ?? [];
-  const overview = guideBlocks.find((b) => safeStr(b.heading).toLowerCase() === "overview")?.text || guideBlocks[0]?.text || "";
+  const overview =
+    guideBlocks.find((b) => safeStr(b.heading).toLowerCase() === "overview")?.text ||
+    guideBlocks[0]?.text ||
+    "";
   const guidePreview = guideFull ? clampText(overview, 220) : "";
 
   const guideStats = useMemo(() => {
@@ -676,9 +819,14 @@ export default function TeamScreen() {
           style={styles.scroll}
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.textSecondary} />}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={theme.colors.textSecondary}
+            />
+          }
         >
-          {/* HERO */}
           <GlassCard strength="strong" style={styles.hero} noPadding>
             <View style={styles.heroInner}>
               <Text style={styles.kicker}>TEAM</Text>
@@ -691,7 +839,6 @@ export default function TeamScreen() {
                     <Text style={styles.heroTitle} numberOfLines={2} ellipsizeMode="tail">
                       {title}
                     </Text>
-
                     <FlagMini countryCode={countryCode} countryName={countryName} />
                   </View>
 
@@ -729,14 +876,15 @@ export default function TeamScreen() {
             </View>
           </GlassCard>
 
-          {/* TEAM GUIDE */}
           <GlassCard strength="default" style={styles.block} noPadding>
             <View style={styles.blockInner}>
               <View style={styles.guideTopRow}>
                 <View style={{ flex: 1, minWidth: 0 }}>
                   <Text style={styles.blockTitle}>Team guide</Text>
                   <Text style={styles.guideSub} numberOfLines={1}>
-                    {guideFull ? guideStats || "Practical, trip-planning notes." : "Guide content unavailable for this team yet."}
+                    {guideFull
+                      ? guideStats || "Practical, trip-planning notes."
+                      : "Guide content unavailable for this team yet."}
                   </Text>
                 </View>
 
@@ -756,12 +904,15 @@ export default function TeamScreen() {
               {guideFull && guidePreview ? (
                 <Text style={styles.blockNote}>{guidePreview}</Text>
               ) : !guideFull ? (
-                <Text style={styles.blockNote}>We’ll add this team soon. For now, use the fixtures below to anchor your trip.</Text>
+                <Text style={styles.blockNote}>
+                  We’ll add this team soon. For now, use the fixtures and stadium info below to anchor your trip.
+                </Text>
               ) : null}
             </View>
           </GlassCard>
 
-          {/* FIXTURES (HOME ONLY) */}
+          {resolvedStadium ? <StadiumInfoCard stadium={resolvedStadium} /> : null}
+
           <GlassCard strength="default" style={styles.block} noPadding>
             <View style={styles.blockInner}>
               <Text style={styles.blockTitle}>Home fixtures</Text>
@@ -802,7 +953,6 @@ export default function TeamScreen() {
           <View style={{ height: 14 }} />
         </ScrollView>
 
-        {/* TEAM GUIDE MODAL */}
         <GuideModal
           visible={guideOpen}
           onClose={() => setGuideOpen(false)}
@@ -829,7 +979,12 @@ const styles = StyleSheet.create({
   hero: { marginTop: theme.spacing.lg, borderRadius: 26 },
   heroInner: { padding: theme.spacing.lg, gap: 10 },
 
-  kicker: { color: "rgba(79,224,138,0.70)", fontSize: 12, fontWeight: theme.fontWeight.black, letterSpacing: 0.4 },
+  kicker: {
+    color: "rgba(79,224,138,0.70)",
+    fontSize: 12,
+    fontWeight: theme.fontWeight.black,
+    letterSpacing: 0.4,
+  },
 
   heroTitleRow: { flexDirection: "row", alignItems: "center", gap: 12 },
 
@@ -847,7 +1002,14 @@ const styles = StyleSheet.create({
   heroCrestImg: { width: 46, height: 46, opacity: 0.98 },
 
   heroNameRow: { flexDirection: "row", alignItems: "center", gap: 10, flexWrap: "nowrap" },
-  heroTitle: { flex: 1, minWidth: 0, color: theme.colors.text, fontSize: 28, lineHeight: 34, fontWeight: theme.fontWeight.black },
+  heroTitle: {
+    flex: 1,
+    minWidth: 0,
+    color: theme.colors.text,
+    fontSize: 28,
+    lineHeight: 34,
+    fontWeight: theme.fontWeight.black,
+  },
 
   heroMetaRow: { marginTop: 6, flexDirection: "row", alignItems: "center", gap: 10, flexWrap: "wrap" },
   heroMetaText: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.black },
@@ -858,7 +1020,14 @@ const styles = StyleSheet.create({
 
   heroActions: { flexDirection: "row", gap: 10, marginTop: 6 },
 
-  btn: { flex: 1, borderRadius: 16, paddingVertical: 12, alignItems: "center", borderWidth: 1, overflow: "hidden" },
+  btn: {
+    flex: 1,
+    borderRadius: 16,
+    paddingVertical: 12,
+    alignItems: "center",
+    borderWidth: 1,
+    overflow: "hidden",
+  },
   btnGhost: {
     borderColor: "rgba(255,255,255,0.10)",
     backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
@@ -884,6 +1053,66 @@ const styles = StyleSheet.create({
   },
   miniPrimaryPillText: { color: theme.colors.text, fontSize: 12, fontWeight: theme.fontWeight.black },
 
+  stadiumTop: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  stadiumName: {
+    color: theme.colors.text,
+    fontSize: 18,
+    lineHeight: 22,
+    fontWeight: theme.fontWeight.black,
+  },
+  stadiumMeta: {
+    marginTop: 4,
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.bold,
+  },
+  capacityPill: {
+    minWidth: 92,
+    borderRadius: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: "rgba(79,224,138,0.18)",
+    backgroundColor: "rgba(79,224,138,0.08)",
+    alignItems: "center",
+  },
+  capacityPillLabel: {
+    color: theme.colors.textTertiary,
+    fontSize: 11,
+    fontWeight: theme.fontWeight.black,
+  },
+  capacityPillValue: {
+    marginTop: 3,
+    color: theme.colors.text,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.black,
+  },
+  infoPanel: {
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    backgroundColor: Platform.OS === "android" ? "rgba(10,12,14,0.18)" : "rgba(10,12,14,0.14)",
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    gap: 6,
+  },
+  infoPanelLabel: {
+    color: theme.colors.text,
+    fontSize: 12,
+    fontWeight: theme.fontWeight.black,
+    letterSpacing: 0.2,
+  },
+  infoPanelText: {
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: theme.fontWeight.bold,
+  },
+
   center: { paddingVertical: 14, alignItems: "center", gap: 10 },
   muted: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold },
 
@@ -904,7 +1133,14 @@ const styles = StyleSheet.create({
   teamSideRight: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 8 },
 
   teamNameLeft: { flex: 1, minWidth: 0, color: theme.colors.text, fontSize: 14, fontWeight: theme.fontWeight.black },
-  teamNameRight: { flex: 1, minWidth: 0, textAlign: "right", color: theme.colors.text, fontSize: 14, fontWeight: theme.fontWeight.black },
+  teamNameRight: {
+    flex: 1,
+    minWidth: 0,
+    textAlign: "right",
+    color: theme.colors.text,
+    fontSize: 14,
+    fontWeight: theme.fontWeight.black,
+  },
 
   vsPill: {
     flexShrink: 0,
@@ -937,8 +1173,19 @@ const styles = StyleSheet.create({
   planBtnText: { color: theme.colors.text, fontSize: 12, fontWeight: theme.fontWeight.black },
 
   modalSafe: { flex: 1, paddingHorizontal: theme.spacing.lg },
-  modalTop: { paddingTop: theme.spacing.md, paddingBottom: theme.spacing.md, flexDirection: "row", alignItems: "center", gap: 12 },
-  modalKicker: { color: "rgba(79,224,138,0.70)", fontSize: 11, fontWeight: theme.fontWeight.black, letterSpacing: 0.5 },
+  modalTop: {
+    paddingTop: theme.spacing.md,
+    paddingBottom: theme.spacing.md,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  modalKicker: {
+    color: "rgba(79,224,138,0.70)",
+    fontSize: 11,
+    fontWeight: theme.fontWeight.black,
+    letterSpacing: 0.5,
+  },
   modalTitle: { marginTop: 4, color: theme.colors.text, fontSize: 20, fontWeight: theme.fontWeight.black },
   closePill: {
     borderRadius: 999,
@@ -951,11 +1198,23 @@ const styles = StyleSheet.create({
     alignItems: "center",
     overflow: "hidden",
   },
-  closePillText: { color: "rgba(255,255,255,0.78)", fontWeight: theme.fontWeight.black, fontSize: 12, letterSpacing: 0.2 },
+  closePillText: {
+    color: "rgba(255,255,255,0.78)",
+    fontWeight: theme.fontWeight.black,
+    fontSize: 12,
+    letterSpacing: 0.2,
+  },
   modalContent: { paddingBottom: theme.spacing.xxl, gap: 12 },
 
   guideSecCard: { borderRadius: 22 },
-  guideSecHeader: { paddingHorizontal: 14, paddingVertical: 14, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
+  guideSecHeader: {
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
   guideSecHeading: { color: theme.colors.text, fontSize: 15, fontWeight: theme.fontWeight.black },
   guideSecChevron: { color: theme.colors.textSecondary, fontSize: 18, fontWeight: "900", marginTop: -2 },
   guideSecBody: { paddingHorizontal: 14, paddingBottom: 14, gap: 10 },
