@@ -1176,7 +1176,7 @@ export const primeiraLigaTeamGuides: Record<string, TeamGuide> = {
           "• Best treated as part of a wider Lisbon football itinerary rather than a stand-alone prestige trip.\n• Expect a smaller, more local stadium experience than at Portugal’s major clubs.\n• Good option if you want to see a different layer of Portuguese top-flight football.\n• Matchday is more community-focused than tourist-facing.\n• Works well for travellers who value authenticity and contrast over scale.",
       },
     ],
-    links: [],
+    links: [{ label: "Official site", url: "https://fcalverca.pt/" }],
     updatedAt: "2026-03-09",
   },
 
@@ -1238,7 +1238,7 @@ export const primeiraLigaTeamGuides: Record<string, TeamGuide> = {
           "• This is a small-town football trip, not a giant Portuguese city weekend.\n• Best for travellers who want authentic club identity rather than headline-club spectacle.\n• Expect a compact stadium and a local crowd rather than heavy tourist presence.\n• Matchday works best if you embrace the football-first nature of the trip.\n• Good addition for users who want to see a deeper, less obvious layer of Portuguese football culture.",
       },
     ],
-    links: [],
+    links: [{ label: "Official site", url: "https://www.cdtondela.pt/" }],
     updatedAt: "2026-03-09",
   },
 };
