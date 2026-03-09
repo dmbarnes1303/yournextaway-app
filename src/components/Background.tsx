@@ -11,11 +11,12 @@ type Props = {
    * Backwards compatibility:
    * - Some screens pass imageSource (ImageSourcePropType)
    * - Some screens pass imageUrl (string)
+   * - Some screens now pass getBackground(...) directly, which can be string or RN source
    *
    * Prefer imageUrl going forward (remote, crisp).
    */
-  imageSource?: ImageSourcePropType | { uri: string } | null;
-  imageUrl?: string | null;
+  imageSource?: ImageSourcePropType | { uri: string } | string | null;
+  imageUrl?: string | ImageSourcePropType | { uri: string } | null;
 
   /**
    * Extra dimming layer (kept for legacy usage).
@@ -27,7 +28,7 @@ type Props = {
    * Fine control: top and bottom gradient strength.
    * Defaults match the v2 spec: readable without blur.
    */
-  topShadeOpacity?: number;    // e.g. 0.70
+  topShadeOpacity?: number; // e.g. 0.70
   bottomShadeOpacity?: number; // e.g. 0.85
 };
 
@@ -40,8 +41,12 @@ export default function Background({
   bottomShadeOpacity = 0.85,
 }: Props) {
   const resolvedSource = useMemo<ImageSourcePropType | { uri: string } | null>(() => {
-    if (imageUrl && typeof imageUrl === "string") return { uri: imageUrl };
+    if (typeof imageUrl === "string" && imageUrl.trim()) return { uri: imageUrl };
+    if (imageUrl && typeof imageUrl === "object") return imageUrl;
+
+    if (typeof imageSource === "string" && imageSource.trim()) return { uri: imageSource };
     if (imageSource) return imageSource;
+
     return null;
   }, [imageSource, imageUrl]);
 
@@ -57,31 +62,22 @@ export default function Background({
   return (
     <View style={styles.root}>
       <ImageBackground source={resolvedSource} resizeMode="cover" style={styles.image}>
-        {/* Top shade */}
         <LinearGradient
           pointerEvents="none"
-          colors={[
-            `rgba(0,0,0,${topShadeOpacity})`,
-            "rgba(0,0,0,0)",
-          ]}
+          colors={[`rgba(0,0,0,${topShadeOpacity})`, "rgba(0,0,0,0)"]}
           start={{ x: 0.5, y: 0 }}
           end={{ x: 0.5, y: 1 }}
           style={styles.topShade}
         />
 
-        {/* Bottom shade */}
         <LinearGradient
           pointerEvents="none"
-          colors={[
-            "rgba(0,0,0,0)",
-            `rgba(0,0,0,${bottomShadeOpacity})`,
-          ]}
+          colors={["rgba(0,0,0,0)", `rgba(0,0,0,${bottomShadeOpacity})`]}
           start={{ x: 0.5, y: 0 }}
           end={{ x: 0.5, y: 1 }}
           style={styles.bottomShade}
         />
 
-        {/* Optional uniform overlay (legacy knob) */}
         {overlayOpacity > 0 ? (
           <View
             pointerEvents="none"
