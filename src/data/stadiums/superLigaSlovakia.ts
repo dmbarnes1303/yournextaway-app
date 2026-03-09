@@ -118,8 +118,8 @@ export const superLigaSlovakiaStadiums: Record<string, StadiumRecord> = {
     ]
   },
 
-  "michalovce-stadium": {
-    stadiumKey: "michalovce-stadium",
+  "mestsky-futbalovy-stadion-michalovce": {
+    stadiumKey: "mestsky-futbalovy-stadion-michalovce",
     name: "Mestský futbalový štadión Michalovce",
     city: "Michalovce",
     country: SLOVAKIA,
@@ -139,8 +139,8 @@ export const superLigaSlovakiaStadiums: Record<string, StadiumRecord> = {
     ]
   },
 
-  "kosice-arena": {
-    stadiumKey: "kosice-arena",
+  "kosicka-futbalova-arena": {
+    stadiumKey: "kosicka-futbalova-arena",
     name: "Košická Futbalová Aréna",
     city: "Košice",
     country: SLOVAKIA,
@@ -181,8 +181,8 @@ export const superLigaSlovakiaStadiums: Record<string, StadiumRecord> = {
     ]
   },
 
-  "ruzomberok-stadium": {
-    stadiumKey: "ruzomberok-stadium",
+  "stadion-mfk-ruzomberok": {
+    stadiumKey: "stadion-mfk-ruzomberok",
     name: "Štadión pod Čebraťom",
     city: "Ružomberok",
     country: SLOVAKIA,
@@ -201,8 +201,8 @@ export const superLigaSlovakiaStadiums: Record<string, StadiumRecord> = {
     ]
   },
 
-  "sihot-stadium": {
-    stadiumKey: "sihot-stadium",
+  "sihoť-stadium": {
+    stadiumKey: "sihoť-stadium",
     name: "Štadión Sihoť",
     city: "Trenčín",
     country: SLOVAKIA,
@@ -241,8 +241,8 @@ export const superLigaSlovakiaStadiums: Record<string, StadiumRecord> = {
     ]
   },
 
-  "skalica-stadium": {
-    stadiumKey: "skalica-stadium",
+  "mestsky-stadion-skalica": {
+    stadiumKey: "mestsky-stadion-skalica",
     name: "Mestský štadión Skalica",
     city: "Skalica",
     country: SLOVAKIA,

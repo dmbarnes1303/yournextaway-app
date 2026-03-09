@@ -125,28 +125,28 @@ export const scottishPremiershipTeams: Record<string, TeamRecord> = {
     aliases: ["killie"],
   },
 
-  "ross-county": {
-    teamKey: "ross-county",
-    name: "Ross County",
+  "falkirk": {
+    teamKey: "falkirk",
+    name: "Falkirk",
     country: SCOTLAND,
-    city: "Dingwall",
+    city: "Falkirk",
     leagueId: SCOTTISH_PREMIERSHIP,
-    stadiumKey: "victoria-park-dingwall",
-    founded: 1929,
-    clubColors: ["blue", "red"],
-    aliases: ["ross county fc"],
+    stadiumKey: "falkirk-stadium",
+    founded: 1876,
+    clubColors: ["navy", "red"],
+    aliases: ["falkirk fc"],
   },
 
-  "st-johnstone": {
-    teamKey: "st-johnstone",
-    name: "St Johnstone",
+  "livingston": {
+    teamKey: "livingston",
+    name: "Livingston",
     country: SCOTLAND,
-    city: "Perth",
+    city: "Livingston",
     leagueId: SCOTTISH_PREMIERSHIP,
-    stadiumKey: "mcdiarmid-park",
-    founded: 1884,
-    clubColors: ["blue", "white"],
-    aliases: ["st johnstone fc"],
+    stadiumKey: "almondvale",
+    founded: 1943,
+    clubColors: ["black", "gold"],
+    aliases: ["livingston fc", "livi"],
   }
 
 };

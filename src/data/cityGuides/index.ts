@@ -1,4 +1,3 @@
-// src/data/cityGuides/index.ts
 import type { CityGuide, CityTopThing } from "./types";
 import { normalizeCityKey } from "@/src/utils/city";
 
@@ -7,49 +6,78 @@ import laLigaCityGuides from "./laLiga";
 import bundesligaCityGuides from "./bundesliga";
 import serieACityGuides from "./serieA";
 import ligue1CityGuides from "./ligue1";
+import primeiraLigaCityGuides from "./primeiraLiga";
+import eredivisieCityGuides from "./eredivisie";
+import scottishPremiershipCityGuides from "./scottishPremiership";
+import superLigCityGuides from "./superLig";
+import proLeagueCityGuides from "./proLeague";
+import superLeagueGreeceCityGuides from "./superLeagueGreece";
+import austrianBundesligaCityGuides from "./austrianBundesliga";
+import swissSuperLeagueCityGuides from "./swissSuperLeague";
+import superligaDenmarkCityGuides from "./superligaDenmark";
+import czechFirstLeagueCityGuides from "./czechFirstLeague";
+import ekstraklasaCityGuides from "./ekstraklasa";
+import hnlCityGuides from "./hnl";
+import superLigaCityGuides from "./superLiga";
+import firstLeagueBulgariaCityGuides from "./firstLeagueBulgaria";
+import firstDivisionCyprusCityGuides from "./firstDivisionCyprus";
+import superLigaSerbiaCityGuides from "./superLigaSerbia";
+import superLigaSlovakiaCityGuides from "./superLigaSlovakia";
+import prvaLigaSloveniaCityGuides from "./prvaLigaSlovenia";
+import nbICityGuides from "./nbI";
+import allsvenskanCityGuides from "./allsvenskan";
+import eliteserienCityGuides from "./eliteserien";
+import veikkausliigaCityGuides from "./veikkausliiga";
+import bestaDeildCityGuides from "./bestaDeild";
+import premierLeagueBosniaCityGuides from "./premierLeagueBosnia";
+import leagueOfIrelandPremierCityGuides from "./leagueOfIrelandPremier";
 
 export type TripTopThingsBundle = {
   cityKey: string;
   hasGuide: boolean;
-
-  /**
-   * Monetised link: GetYourGuide affiliate city/search landing page.
-   * If a guide has no link yet, callers should fall back to buildAffiliateLinks().experiencesUrl
-   * rather than showing TripAdvisor.
-   */
   thingsToDoUrl?: string;
-
   items: { title: string; description?: string }[];
   quickTips: string[];
 };
 
-/**
- * Unified registry (single source of truth for city guide lookups)
- */
 export const cityGuides: Record<string, CityGuide> = {
   ...premierLeagueCityGuides,
   ...laLigaCityGuides,
   ...bundesligaCityGuides,
   ...serieACityGuides,
   ...ligue1CityGuides,
+  ...primeiraLigaCityGuides,
+  ...eredivisieCityGuides,
+  ...scottishPremiershipCityGuides,
+  ...superLigCityGuides,
+  ...proLeagueCityGuides,
+  ...superLeagueGreeceCityGuides,
+  ...austrianBundesligaCityGuides,
+  ...swissSuperLeagueCityGuides,
+  ...superligaDenmarkCityGuides,
+  ...czechFirstLeagueCityGuides,
+  ...ekstraklasaCityGuides,
+  ...hnlCityGuides,
+  ...superLigaCityGuides,
+  ...firstLeagueBulgariaCityGuides,
+  ...firstDivisionCyprusCityGuides,
+  ...superLigaSerbiaCityGuides,
+  ...superLigaSlovakiaCityGuides,
+  ...prvaLigaSloveniaCityGuides,
+  ...nbICityGuides,
+  ...allsvenskanCityGuides,
+  ...eliteserienCityGuides,
+  ...veikkausliigaCityGuides,
+  ...bestaDeildCityGuides,
+  ...premierLeagueBosniaCityGuides,
+  ...leagueOfIrelandPremierCityGuides,
 };
 
-/**
- * Find a city guide by any user input
- */
 export function getCityGuide(cityInput: string): CityGuide | null {
   const key = normalizeCityKey(cityInput);
   return cityGuides[key] ?? null;
 }
 
-/**
- * Used in Trip Build + Trip Hub
- *
- * Policy:
- * - We never return TripAdvisor URLs anymore.
- * - If the guide doesn't have a monetised link yet, return undefined and let UI fall back to
- *   buildAffiliateLinks({ city }).experiencesUrl.
- */
 export function getTopThingsToDoForTrip(cityInput: string): TripTopThingsBundle {
   const cityKey = normalizeCityKey(cityInput);
   const guide = cityGuides[cityKey];

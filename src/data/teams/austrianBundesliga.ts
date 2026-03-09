@@ -136,17 +136,17 @@ export const austrianBundesligaTeams: Record<string, TeamRecord> = {
     aliases: ["gak", "grazer ak 1902"],
   },
 
-  "austria-klagenfurt": {
-    teamKey: "austria-klagenfurt",
-    name: "Austria Klagenfurt",
-    country: AUSTRIA,
-    city: "Klagenfurt",
-    leagueId: AUSTRIAN_BUNDESLIGA,
-    stadiumKey: "worthersee-stadion",
-    founded: 2007,
-    clubColors: ["violet", "white"],
-    aliases: ["sk austria klagenfurt"],
-  },
+  "ried": {
+  teamKey: "ried",
+  name: "SV Ried",
+  country: AUSTRIA,
+  city: "Ried im Innkreis",
+  leagueId: AUSTRIAN_BUNDESLIGA,
+  stadiumKey: "josko-arena",
+  founded: 1912,
+  clubColors: ["green", "black"],
+  aliases: ["sv ried"],
+},
 };
 
 export default austrianBundesligaTeams;

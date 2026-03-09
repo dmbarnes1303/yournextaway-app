@@ -169,30 +169,6 @@ const superLeagueGreeceStadiums: Record<string, StadiumRecord> = {
     ],
   },
 
-  "lamia-municipal-stadium": {
-    stadiumKey: "lamia-municipal-stadium",
-    name: "Lamia Municipal Stadium",
-    city: "Lamia",
-    country: "Greece",
-    capacity: 5500,
-    opened: 1952,
-    airport: "Athens International Airport (ATH)",
-    distanceFromAirportKm: 220,
-    teamKeys: ["lamia"],
-    transit: [
-      { label: "Lamia centre", minutes: 10 },
-      { label: "Bus / rail area", minutes: 15, note: "best practical arrival point" },
-    ],
-    stayAreas: [
-      { area: "Lamia Centre", why: "Most practical local option" },
-      { area: "Athens", why: "Stronger wider base if logistics allow" },
-    ],
-    tips: [
-      "A functional football stop rather than a major destination weekend",
-      "Useful for league coverage, but not one of the app’s headline trip products",
-    ],
-  },
-
   "theodoros-vardinogiannis": {
     stadiumKey: "theodoros-vardinogiannis",
     name: "Theodoros Vardinogiannis Stadium",
@@ -238,6 +214,126 @@ const superLeagueGreeceStadiums: Record<string, StadiumRecord> = {
     tips: [
       "A more underrated coastal football stop than many people expect",
       "Works best as a one- or two-night trip rather than a rushed same-day outing",
+    ],
+  },
+
+  "levadia-municipal-stadium": {
+    stadiumKey: "levadia-municipal-stadium",
+    name: "Levadia Municipal Stadium",
+    city: "Livadeia",
+    country: "Greece",
+    capacity: 5915,
+    opened: 1952,
+    airport: "Athens International Airport (ATH)",
+    distanceFromAirportKm: 135,
+    teamKeys: ["levadiakos"],
+    transit: [
+      { label: "Livadeia Centre", minutes: 10 },
+      { label: "Rail station", minutes: 15, note: "best arrival point" },
+    ],
+    stayAreas: [
+      { area: "Livadeia Centre", why: "Most practical local base" },
+      { area: "Athens", why: "Better wider base if not making this a dedicated overnight" },
+    ],
+    tips: [
+      "This is a football stop rather than a premium city-break destination",
+      "Best handled as a short practical trip or part of a wider Greece route",
+    ],
+  },
+
+  "zirineio-stadium": {
+    stadiumKey: "zirineio-stadium",
+    name: "Zirineio Stadium",
+    city: "Athens",
+    country: "Greece",
+    capacity: 3500,
+    opened: 1950,
+    airport: "Athens International Airport (ATH)",
+    distanceFromAirportKm: 30,
+    teamKeys: ["kifisia"],
+    transit: [
+      { label: "Kifisia", minutes: 10 },
+      { label: "Syntagma", minutes: 30, note: "best wider central Athens base" },
+    ],
+    stayAreas: [
+      { area: "Kifisia", why: "Best if you want an upmarket northern Athens stay" },
+      { area: "Syntagma / Kolonaki", why: "Best overall Athens city-break base" },
+    ],
+    tips: [
+      "A smaller-ground Athens-area trip rather than a headline Greek football weekend",
+      "Central Athens still makes the most sense for most visitors",
+    ],
+  },
+
+  "panetolikos-stadium": {
+    stadiumKey: "panetolikos-stadium",
+    name: "Panetolikos Stadium",
+    city: "Agrinio",
+    country: "Greece",
+    capacity: 7000,
+    opened: 1930,
+    airport: "Araxos Airport (GPA)",
+    distanceFromAirportKm: 95,
+    teamKeys: ["panetolikos"],
+    transit: [
+      { label: "Agrinio Centre", minutes: 10 },
+      { label: "Bus station", minutes: 10, note: "best practical arrival point" },
+    ],
+    stayAreas: [
+      { area: "Agrinio Centre", why: "Most practical local stay option" },
+      { area: "Patras", why: "Better wider regional base if combining destinations" },
+    ],
+    tips: [
+      "A committed domestic-football stop rather than a major international city-break product",
+      "Best as a one-night football-led trip",
+    ],
+  },
+
+  "alkazar-stadium": {
+    stadiumKey: "alkazar-stadium",
+    name: "Alkazar Stadium",
+    city: "Larissa",
+    country: "Greece",
+    capacity: 13000,
+    opened: 1965,
+    airport: "Thessaloniki Airport (SKG)",
+    distanceFromAirportKm: 160,
+    teamKeys: ["ael"],
+    transit: [
+      { label: "Larissa Centre", minutes: 10 },
+      { label: "Rail station", minutes: 15, note: "best arrival point" },
+    ],
+    stayAreas: [
+      { area: "Larissa Centre", why: "Best practical local base" },
+      { area: "Near central square", why: "Best restaurants and easy walkability" },
+    ],
+    tips: [
+      "A strong traditional-club stop but not one of the flashier Greek football weekends",
+      "Works best as a tidy overnight football trip",
+    ],
+  },
+
+  "serres-municipal-stadium": {
+    stadiumKey: "serres-municipal-stadium",
+    name: "Serres Municipal Stadium",
+    city: "Serres",
+    country: "Greece",
+    capacity: 9500,
+    opened: 1926,
+    airport: "Thessaloniki Airport (SKG)",
+    distanceFromAirportKm: 105,
+    teamKeys: ["panserraikos"],
+    transit: [
+      { label: "Serres Centre", minutes: 10 },
+      { label: "Bus station", minutes: 10, note: "best practical arrival point" },
+    ],
+    stayAreas: [
+      { area: "Serres Centre", why: "Most practical local base" },
+      { area: "Thessaloniki", why: "Better wider regional base if combining multiple matches" },
+    ],
+    tips: [
+      "More of a football-coverage stop than a polished city-break product",
+      "Often makes more sense as part of a wider northern Greece itinerary",
     ],
   },
 };

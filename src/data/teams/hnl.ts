@@ -11,6 +11,8 @@ export const hnlTeams: Record<string, TeamRecord> = {
     country: CROATIA,
     leagueId: HNL,
     stadiumKey: "maksimir-stadium",
+    founded: 1911,
+    clubColors: ["blue", "white"],
     aliases: ["gnk dinamo zagreb", "dinamo", "dinamo zagreb"],
   },
 
@@ -20,17 +22,21 @@ export const hnlTeams: Record<string, TeamRecord> = {
     city: "Split",
     country: CROATIA,
     leagueId: HNL,
-    stadiumKey: "poljud-stadium",
+    stadiumKey: "stadion-poljud",
+    founded: 1911,
+    clubColors: ["white", "blue"],
     aliases: ["hnk hajduk split", "hajduk", "hajduk split"],
   },
 
-  "rijeka": {
+  rijeka: {
     teamKey: "rijeka",
     name: "HNK Rijeka",
     city: "Rijeka",
     country: CROATIA,
     leagueId: HNL,
     stadiumKey: "stadion-rujevica",
+    founded: 1906,
+    clubColors: ["white", "light-blue"],
     aliases: ["rijeka", "hnk rijeka"],
   },
 
@@ -41,17 +47,21 @@ export const hnlTeams: Record<string, TeamRecord> = {
     country: CROATIA,
     leagueId: HNL,
     stadiumKey: "gradski-stadion-koprivnica",
+    founded: 1907,
+    clubColors: ["blue"],
     aliases: ["nk slaven belupo", "slaven", "slaven belupo"],
   },
 
-  "varazdin": {
+  varazdin: {
     teamKey: "varazdin",
     name: "NK Varaždin",
     city: "Varaždin",
     country: CROATIA,
     leagueId: HNL,
-    stadiumKey: "stadion-varazdin",
-    aliases: ["varazdin", "nk varazdin"],
+    stadiumKey: "stadion-varteks",
+    founded: 2012,
+    clubColors: ["orange", "blue"],
+    aliases: ["varazdin", "nk varazdin", "nk varaždin"],
   },
 
   "istra-1961": {
@@ -60,7 +70,9 @@ export const hnlTeams: Record<string, TeamRecord> = {
     city: "Pula",
     country: CROATIA,
     leagueId: HNL,
-    stadiumKey: "stadion-aldodrosina",
+    stadiumKey: "stadion-aldo-drosina",
+    founded: 2011,
+    clubColors: ["green", "yellow"],
     aliases: ["istra", "istra 1961", "nk istra 1961"],
   },
 
@@ -70,7 +82,9 @@ export const hnlTeams: Record<string, TeamRecord> = {
     city: "Zagreb",
     country: CROATIA,
     leagueId: HNL,
-    stadiumKey: "maksimir-stadium",
+    stadiumKey: "kajzerica-stadium",
+    founded: 1914,
+    clubColors: ["blue", "white"],
     aliases: ["lokomotiva", "nk lokomotiva", "lokomotiva zagreb"],
   },
 
@@ -81,16 +95,20 @@ export const hnlTeams: Record<string, TeamRecord> = {
     country: CROATIA,
     leagueId: HNL,
     stadiumKey: "stadion-radnik",
+    founded: 2008,
+    clubColors: ["red", "black"],
     aliases: ["gorica", "hnk gorica", "gorica velika gorica"],
   },
 
-  "osijek": {
+  osijek: {
     teamKey: "osijek",
     name: "NK Osijek",
     city: "Osijek",
     country: CROATIA,
     leagueId: HNL,
     stadiumKey: "opus-arena",
+    founded: 1947,
+    clubColors: ["blue", "white"],
     aliases: ["osijek", "nk osijek"],
   },
 
@@ -100,7 +118,9 @@ export const hnlTeams: Record<string, TeamRecord> = {
     city: "Vukovar",
     country: CROATIA,
     leagueId: HNL,
-    stadiumKey: "stadion-vukovar",
+    stadiumKey: "stadion-borovo-naselje",
+    founded: 2012,
+    clubColors: ["blue", "white"],
     aliases: ["vukovar", "vukovar 1991", "hnk vukovar 1991"],
   },
 };

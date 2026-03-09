@@ -37,7 +37,7 @@ export const proLeagueTeams: Record<string, TeamRecord> = {
     stadiumKey: "joseph-mariat-stadium",
     founded: 1897,
     clubColors: ["yellow", "blue"],
-    aliases: ["union sg", "usg"],
+    aliases: ["union sg", "usg", "royale union saint-gilloise"],
   },
 
   "antwerp": {
@@ -97,7 +97,7 @@ export const proLeagueTeams: Record<string, TeamRecord> = {
     stadiumKey: "stade-du-pays-de-charleroi",
     founded: 1904,
     clubColors: ["black", "white"],
-    aliases: ["sporting charleroi"],
+    aliases: ["sporting charleroi", "royal charleroi sc"],
   },
 
   "mechelen": {
@@ -109,7 +109,7 @@ export const proLeagueTeams: Record<string, TeamRecord> = {
     stadiumKey: "afas-stadion-mechelen",
     founded: 1904,
     clubColors: ["yellow", "red"],
-    aliases: ["kv mechelen"],
+    aliases: ["kv mechelen", "yellow red kv mechelen"],
   },
 
   "cercle-brugge": {
@@ -121,19 +121,7 @@ export const proLeagueTeams: Record<string, TeamRecord> = {
     stadiumKey: "jan-breydelstadion",
     founded: 1899,
     clubColors: ["green", "black"],
-    aliases: ["cercle brugge"],
-  },
-
-  "kortrijk": {
-    teamKey: "kortrijk",
-    name: "Kortrijk",
-    country: BELGIUM,
-    city: "Kortrijk",
-    leagueId: PRO_LEAGUE,
-    stadiumKey: "guldensporenstadion",
-    founded: 1901,
-    clubColors: ["red", "white"],
-    aliases: ["kv kortrijk"],
+    aliases: ["cercle brugge", "cercle brugge ksv"],
   },
 
   "ohl": {
@@ -145,7 +133,7 @@ export const proLeagueTeams: Record<string, TeamRecord> = {
     stadiumKey: "den-dreef",
     founded: 2002,
     clubColors: ["white", "black", "green"],
-    aliases: ["oud-heverlee leuven", "leuven"],
+    aliases: ["oud-heverlee leuven", "leuven", "ohl leuven"],
   },
 
   "st-truiden": {
@@ -157,7 +145,7 @@ export const proLeagueTeams: Record<string, TeamRecord> = {
     stadiumKey: "stayen",
     founded: 1924,
     clubColors: ["yellow", "blue"],
-    aliases: ["stvv", "sint-truiden"],
+    aliases: ["stvv", "sint-truiden", "sint truiden"],
   },
 
   "dender": {
@@ -169,7 +157,7 @@ export const proLeagueTeams: Record<string, TeamRecord> = {
     stadiumKey: "dender-football-complex",
     founded: 1935,
     clubColors: ["red", "black"],
-    aliases: ["fcv dender"],
+    aliases: ["fcv dender", "dender eh", "fcv dender eh"],
   },
 
   "westerlo": {
@@ -194,6 +182,18 @@ export const proLeagueTeams: Record<string, TeamRecord> = {
     founded: 2001,
     clubColors: ["green", "red"],
     aliases: ["essevee", "sv zulte waregem"],
+  },
+
+  "raal-la-louviere": {
+    teamKey: "raal-la-louviere",
+    name: "RAAL La Louvière",
+    country: BELGIUM,
+    city: "La Louvière",
+    leagueId: PRO_LEAGUE,
+    stadiumKey: "stade-du-tivoli",
+    founded: 2017,
+    clubColors: ["green", "white"],
+    aliases: ["raal", "la louviere", "raal la louviere"],
   },
 };
 

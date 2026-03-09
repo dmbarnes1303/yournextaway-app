@@ -4,14 +4,14 @@ const SLOVENIA = "Slovenia";
 const PRVA_LIGA = 213;
 
 export const prvaLigaSloveniaTeams: Record<string, TeamRecord> = {
-
   "celje": {
     teamKey: "celje",
     name: "NK Celje",
     country: SLOVENIA,
     city: "Celje",
     leagueId: PRVA_LIGA,
-    aliases: ["celje", "nk celje"]
+    stadiumKey: "stadion-zdezele",
+    aliases: ["celje", "nk celje"],
   },
 
   "maribor": {
@@ -20,7 +20,8 @@ export const prvaLigaSloveniaTeams: Record<string, TeamRecord> = {
     country: SLOVENIA,
     city: "Maribor",
     leagueId: PRVA_LIGA,
-    aliases: ["maribor", "nk maribor"]
+    stadiumKey: "ljudski-vrt",
+    aliases: ["maribor", "nk maribor"],
   },
 
   "koper": {
@@ -29,7 +30,8 @@ export const prvaLigaSloveniaTeams: Record<string, TeamRecord> = {
     country: SLOVENIA,
     city: "Koper",
     leagueId: PRVA_LIGA,
-    aliases: ["koper", "fc koper"]
+    stadiumKey: "bonifika",
+    aliases: ["koper", "fc koper"],
   },
 
   "olimpija-ljubljana": {
@@ -38,7 +40,8 @@ export const prvaLigaSloveniaTeams: Record<string, TeamRecord> = {
     country: SLOVENIA,
     city: "Ljubljana",
     leagueId: PRVA_LIGA,
-    aliases: ["olimpija", "olimpija ljubljana"]
+    stadiumKey: "stozice-stadium",
+    aliases: ["olimpija", "olimpija ljubljana"],
   },
 
   "bravo": {
@@ -47,7 +50,8 @@ export const prvaLigaSloveniaTeams: Record<string, TeamRecord> = {
     country: SLOVENIA,
     city: "Ljubljana",
     leagueId: PRVA_LIGA,
-    aliases: ["bravo", "nk bravo"]
+    stadiumKey: "stozice-stadium",
+    aliases: ["bravo", "nk bravo"],
   },
 
   "radomlje": {
@@ -56,7 +60,8 @@ export const prvaLigaSloveniaTeams: Record<string, TeamRecord> = {
     country: SLOVENIA,
     city: "Radomlje",
     leagueId: PRVA_LIGA,
-    aliases: ["radomlje", "nk radomlje"]
+    stadiumKey: "sportni-park-radomlje",
+    aliases: ["radomlje", "nk radomlje"],
   },
 
   "aluminij": {
@@ -65,7 +70,8 @@ export const prvaLigaSloveniaTeams: Record<string, TeamRecord> = {
     country: SLOVENIA,
     city: "Kidričevo",
     leagueId: PRVA_LIGA,
-    aliases: ["aluminij", "nk aluminij"]
+    stadiumKey: "sportni-park-aluminij",
+    aliases: ["aluminij", "nk aluminij"],
   },
 
   "mura": {
@@ -74,7 +80,8 @@ export const prvaLigaSloveniaTeams: Record<string, TeamRecord> = {
     country: SLOVENIA,
     city: "Murska Sobota",
     leagueId: PRVA_LIGA,
-    aliases: ["mura", "ns mura"]
+    stadiumKey: "fazanerija",
+    aliases: ["mura", "ns mura"],
   },
 
   "primorje": {
@@ -83,7 +90,8 @@ export const prvaLigaSloveniaTeams: Record<string, TeamRecord> = {
     country: SLOVENIA,
     city: "Ajdovščina",
     leagueId: PRVA_LIGA,
-    aliases: ["primorje", "nk primorje"]
+    stadiumKey: "mestni-stadion-ajdovscina",
+    aliases: ["primorje", "nk primorje"],
   },
 
   "domzale": {
@@ -92,9 +100,9 @@ export const prvaLigaSloveniaTeams: Record<string, TeamRecord> = {
     country: SLOVENIA,
     city: "Domžale",
     leagueId: PRVA_LIGA,
-    aliases: ["domzale", "nk domzale"]
-  }
-
+    stadiumKey: "sportni-park-domzale",
+    aliases: ["domzale", "nk domzale"],
+  },
 };
 
 export default prvaLigaSloveniaTeams;

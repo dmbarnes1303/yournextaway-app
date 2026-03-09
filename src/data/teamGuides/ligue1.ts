@@ -4,6 +4,7 @@ export const ligue1TeamGuides: Record<string, TeamGuide> = {
   angers: {
     teamKey: "angers",
     name: "Angers SCO",
+    cityKey: "angers",
     city: "Angers",
     country: "France",
     stadium: "Stade Raymond-Kopa",
@@ -11,81 +12,62 @@ export const ligue1TeamGuides: Record<string, TeamGuide> = {
       {
         title: "Club Overview",
         body:
-          "Angers are a classic Ligue 1 “smart operator”: a club built on organisation, squad cohesion, and living comfortably inside tight margins. They’re at their best when matches stay controlled — compact without the ball, efficient in moments, and hard to pull into chaos.\n\nFor neutral travellers, Angers is a proper smaller-city French football trip: walkable centre, easy logistics, and a stadium that feels genuinely local rather than tourist-facing.",
+          "Angers are one of those clubs that make sense only if you stop expecting fake glamour. This is not a giant French institution pretending to dominate the league every year. It is a disciplined, practical, smaller-market club that usually survives and competes through structure, organisation, and emotional control rather than star power.\n\nFor neutral travellers, Angers is a very clean smaller-city Ligue 1 trip: manageable logistics, walkable core, a proper local stadium, and a matchday that feels grounded rather than commercialised.",
       },
       {
-        title: "Stadium: Stade Raymond-Kopa",
+        title: "History & Identity",
         body:
-          "Raymond-Kopa is a compact, modernised ground with good sightlines and a clear, no-fuss matchday flow. It suits Angers’ identity: football-first, practical, and connected to the local crowd rather than built for spectacle.",
+          "Angers SCO have a long domestic history, but their modern image is built less on major-honour status and more on being a credible, well-run provincial club. They are usually discussed in terms of efficiency, squad discipline, and whether they can stay above the trapdoor rather than whether they can force their way into the elite.\n\nThat matters for the guide because the right framing is not 'sleeping giant'. It is 'serious local club that works through margins'.",
+      },
+      {
+        title: "Playing Style",
+        body:
+          "Angers tend to look best when matches stay controlled. Their stronger versions are compact without the ball, tidy in shape, and willing to attack in measured bursts rather than constant end-to-end chaos.\n\nAgainst stronger sides, they usually need the game to remain structurally tight. Against fellow lower- or mid-table teams, they are more comfortable trying to own territory in practical rather than flashy ways.",
+      },
+      {
+        title: "Stadium Profile",
+        body:
+          "Stade Raymond-Kopa is a compact, modernised ground that fits the club well. It is not an oversized arena trying to look more important than it is. It feels football-first, local, and proportionate to the city.\n\nSightlines are generally clean, the ground is easy enough to navigate, and the overall product is stronger in person than it looks if you judge it only by TV aesthetics.",
+      },
+      {
+        title: "Atmosphere & Matchday Feel",
+        body:
+          "The atmosphere is more engaged than explosive. This is not Marseille or Lens. The energy rises with the match state: defensive stands, late pressure, tight scorelines, and moments where points feel vital.\n\nThat does not make it weak. It makes it honest. You are getting a proper provincial Ligue 1 matchday, not choreographed theatre.",
       },
       {
         title: "Best Areas to Sit",
         body:
-          "For the cleanest view, aim for central seats along the long sides (mid-height is ideal). Behind-goal areas are usually louder and more reactive to momentum swings. If you’re neutral and want comfort + clarity, pick a central block in the main stand rather than an extreme corner.",
+          "If you want the clearest tactical view, sit centrally along a long side, ideally mid-height. If you want a more emotional feel, go closer to the ends where crowd reactions travel faster.\n\nFor neutrals, the best balance is still a central long-side block. Smaller grounds can make corners feel more restrictive than you expect.",
       },
       {
-        title: "Getting to Raymond-Kopa",
+        title: "Getting to the Stadium",
         body:
-          "Angers is easy to navigate from the centre. If you’re based near the main station or central riverside area, local buses/trams and short taxi rides are the simplest matchday options. If you drive, plan to park early and walk the final stretch — local matchday traffic can bottleneck near the stadium.",
+          "Angers is not a difficult city. That is part of the appeal. If you stay central or near the station, local transport, walking plus a short ride, or a straightforward taxi plan all work.\n\nDo not overcomplicate it. Angers is a city where simplicity wins.",
       },
       {
-        title: "Matchday Timing",
+        title: "Pre-Match Strategy",
         body:
-          "Arrive 60–90 minutes before kickoff if you want a calm entry, time for a drink, and a proper sense of build-up. If you turn up in the final 20 minutes, you’ll still get in — but you’ll miss the best part of a smaller-ground matchday: the slow rise in tension.",
-      },
-      {
-        title: "Food & Drink Around the Stadium",
-        body:
-          "Expect classic French matchday basics plus standard stadium options once inside. For better value and atmosphere, eat and drink in the centre first, then travel out for the match.",
-      },
-      {
-        title: "Pre-Match Areas in Angers",
-        body:
-          "Stick to the city centre for pre-match: the riverside and historic core have the best concentration of casual bars and brasseries. Angers is more “relaxed” than “rowdy” — good if you want a clean, easy build-up without intensity spilling over.",
-      },
-      {
-        title: "Neighbourhood Guide",
-        body:
-          "Angers’ centre is compact and comfortable: you’ll spend most of your time between the station, old town streets, and the river area. It’s an easy city to base yourself in for a one- or two-night football break.",
+          "The smart move is centre first, stadium later. Eat and drink in the old town or central riverside areas, then travel out with enough time to enter calmly.\n\nTrying to make the immediate stadium area the whole pre-match plan is a downgrade in both atmosphere and value.",
       },
       {
         title: "Where to Stay",
         body:
-          "Base yourself near the main station or in the central core so you can walk to food/drink and keep matchday transport simple. Angers works best when you’re not relying on long cross-city journeys.",
+          "Stay near the main station or in the historic centre. That gives you the easiest all-round flow for food, drinks, and matchday movement.\n\nAngers is best as a one- or two-night football city break where everything stays low-friction.",
       },
       {
-        title: "Things to Do (Non-Football)",
+        title: "Neutral Visitor Notes",
         body:
-          "Angers is a good “slow travel” city: historic streets, easy cafés, and a calmer rhythm than France’s mega-tourist hubs. It’s a good reset weekend with a match as the anchor.",
-      },
-      {
-        title: "Typical Atmosphere",
-        body:
-          "It’s engaged rather than explosive: noise rises with match state, tackles, and late-game pressure. In tight games, you’ll feel the crowd’s nerves and urgency — that’s the real charm here.",
-      },
-      {
-        title: "Rivalries",
-        body:
-          "Angers’ edge tends to be regional: nearby opponents and table-neighbour fixtures are where tension is highest.",
-      },
-      {
-        title: "Club Identity & Colours",
-        body:
-          "Angers are traditionally black and white. The club identity is grounded: work rate, structure, and staying competitive without pretending to be something they’re not.",
-      },
-      {
-        title: "Practical Tips",
-        body:
-          "Keep matchday plans simple: centre first, stadium later. Smaller grounds can feel deceptively quick to enter — but late surges still create queues. If you want a stress-free exit, wait 10–15 minutes after full-time before heading straight for transport.",
+          "• Good choice if you want a smaller-city French football weekend.\n• Better for authenticity and ease than for spectacle.\n• Best with a calm, simple itinerary rather than overplanning.\n• Stronger as a proper local football stop than many people assume.",
       },
     ],
     links: [{ label: "Official site", url: "https://www.angers-sco.fr/" }],
-    updatedAt: "2026-02-27",
+    updatedAt: "2026-03-08",
   },
 
   auxerre: {
     teamKey: "auxerre",
     name: "AJ Auxerre",
+    cityKey: "auxerre",
     city: "Auxerre",
     country: "France",
     stadium: "Stade de l’Abbé-Deschamps",
@@ -93,81 +75,62 @@ export const ligue1TeamGuides: Record<string, TeamGuide> = {
       {
         title: "Club Overview",
         body:
-          "Auxerre are one of France’s most recognisable “proper club” institutions: smaller market, big identity, serious football culture. They’re respected because the club has historically represented a model of coherence — structure, development, and a sense that the club knows what it is.\n\nFor neutral travellers, Auxerre offers an authentic Ligue 1 day out: compact ground, real local intensity, and a matchday that feels rooted in French domestic football rather than big-event gloss.",
+          "Auxerre are one of the most recognisable 'proper club' institutions in French football. They do not need mega-city scale to feel legitimate. Their identity has long been tied to coherence, academy logic, and a sense that the club understands itself better than bigger but more unstable organisations.\n\nFor neutral travellers, Auxerre is a very good traditional-feel Ligue 1 stop: local intensity, a recognisable ground, and a city that feels smaller, calmer, and more football-rooted than the obvious high-profile destinations.",
       },
       {
-        title: "Stadium: Stade de l’Abbé-Deschamps",
+        title: "History & Identity",
         body:
-          "Abbé-Deschamps is a classic-feeling French stadium: close to the pitch, tight sightlines, and a crowd that can turn small momentum swings into big reactions. It’s a “you’re in it” venue, not a distant bowl.",
+          "Auxerre’s modern reputation was built through intelligence rather than brute scale. Their long-term image is that of a club that can punch above its market size through structure, patience, and footballing seriousness.\n\nThat reputation still matters. Even when league status fluctuates, Auxerre do not feel disposable. They feel like a club people in France still understand as important.",
+      },
+      {
+        title: "Playing Style",
+        body:
+          "Auxerre’s better sides usually look well drilled, compact enough to stay alive in games, and capable of producing disciplined performances rather than emotional self-destruction. The football tends to make more sense when they are organised first and expansive second.\n\nThat usually suits the stadium experience too: you are watching a side that often lives on shape, discipline, and moments rather than volume of chaos.",
+      },
+      {
+        title: "Stadium Profile",
+        body:
+          "Stade de l’Abbé-Deschamps is one of the better old-school-feel Ligue 1 venues. It has real domestic-football texture: close enough to the pitch to feel connected, established enough to feel meaningful, and small enough for mood swings to travel through the ground quickly.",
+      },
+      {
+        title: "Atmosphere & Matchday Feel",
+        body:
+          "The atmosphere can become properly sharp when the match tightens. Auxerre is not built around empty spectacle. The noise is usually most meaningful when the crowd senses jeopardy or opportunity.\n\nThat gives the place a serious football feel rather than an event feel.",
       },
       {
         title: "Best Areas to Sit",
         body:
-          "If you want the cleanest view, sit centrally on a long side. If you want the match to feel more visceral, go behind the goals where reactions are sharper and the crowd tends to be more vocal. Avoid extreme corner seats if you care about depth perception and overall pattern of play.",
+          "Central long-side seats remain the best neutral option. If you want a more visceral, emotional matchday angle, behind the goals is better, but the tactical watch gets weaker.\n\nAvoid extreme corners if you actually care about reading the match well.",
       },
       {
-        title: "Getting to Abbé-Deschamps",
+        title: "Getting to the Stadium",
         body:
-          "Auxerre is manageable at walking scale once you’re in town. Local transport and short taxi rides cover most needs. If you’re driving, arrive early — smaller-city matchday parking can become an annoying time sink if you leave it late.",
+          "Auxerre is manageable because the whole trip can stay compact. Stay central, keep your transport simple, and do not invent complexity. Walking plus short rides covers most needs.\n\nIf driving, get in earlier than you think. Small-city parking bottlenecks waste time fast.",
       },
       {
-        title: "Matchday Timing",
+        title: "Pre-Match Strategy",
         body:
-          "Aim for 60–90 minutes pre-kickoff: it’s the difference between feeling the place warm up versus arriving straight into the rush. This is a stadium where build-up matters — crowd mood is part of the experience.",
-      },
-      {
-        title: "Food & Drink Around the Stadium",
-        body:
-          "Inside is standard stadium fare; outside, you’ll do better in town first. Auxerre works best as a ‘centre → stadium’ flow: eat well, then go to football.",
-      },
-      {
-        title: "Pre-Match Areas in Auxerre",
-        body:
-          "Keep it central: small bars and brasseries near the core are the easiest choice. The vibe is more local and football-focused than nightlife-driven.",
-      },
-      {
-        title: "Neighbourhood Guide",
-        body:
-          "Auxerre’s charm is compact: historic streets, a calm pace, and an unmistakably provincial French feel. Ideal if you want a match trip that doesn’t feel like a generic city break.",
+          "Eat in town first. That is the right move. Use the centre, have a proper meal, then move toward the ground with time to spare.\n\nThis is not a club where the best version of the trip is built around stadium-adjacent convenience food.",
       },
       {
         title: "Where to Stay",
         body:
-          "Stay centrally so your day stays walkable. Auxerre is at its best when you can move between food, drinks, and matchday without heavy planning.",
+          "Stay centrally and keep the whole trip walkable. Auxerre is strongest as a slower, calmer 24–48 hour football break where the city and match blend cleanly.",
       },
       {
-        title: "Things to Do (Non-Football)",
+        title: "Neutral Visitor Notes",
         body:
-          "This is a ‘slow’ destination: scenic streets, relaxed food, and a match as the headline. Great for a simple 24–48 hour football break.",
-      },
-      {
-        title: "Typical Atmosphere",
-        body:
-          "Serious, engaged, and reactive. When the game becomes tight, the crowd leans in — defensive stands and late pressure get properly loud.",
-      },
-      {
-        title: "Rivalries",
-        body:
-          "Rivalry energy tends to be opponent-dependent — regional tension and status fixtures bring the sharpest edge.",
-      },
-      {
-        title: "Club Identity & Colours",
-        body:
-          "Auxerre’s identity is traditional and structure-led. Blue and white define the visual culture; discipline and organisation define the football feel.",
-      },
-      {
-        title: "Practical Tips",
-        body:
-          "If you want comfort, prioritise central seats and arrive early. Smaller grounds can have narrower concourses; moving at half-time is slower than you expect.",
+          "• Very good option for a traditional-feel French football stop.\n• Better for authenticity than luxury.\n• Strong if you like clubs with real identity and recognisable domestic weight.\n• One of the better smaller-market Ligue 1 trips.",
       },
     ],
     links: [{ label: "Official site", url: "https://www.aja.fr/" }],
-    updatedAt: "2026-02-27",
+    updatedAt: "2026-03-08",
   },
 
   brest: {
     teamKey: "brest",
     name: "Stade Brestois 29",
+    cityKey: "brest",
     city: "Brest",
     country: "France",
     stadium: "Stade Francis-Le Blé",
@@ -175,81 +138,62 @@ export const ligue1TeamGuides: Record<string, TeamGuide> = {
       {
         title: "Club Overview",
         body:
-          "Brest are Ligue 1 at the edge of the map: a far-western port city club with a tough, local character and a survival-smart approach. They’re not selling glamour — they’re selling authenticity, effort, and a matchday that feels properly French and properly local.\n\nFor travellers, Brest is ideal if you want to get off the standard circuit and experience a club whose national relevance is earned every season rather than assumed.",
+          "Brest are Ligue 1 at the far western edge: a club with a local, maritime, hard-earned identity rather than a polished national brand. They are appealing precisely because they do not feel overproduced. This is football with a coastal-city accent and a lot of emotional honesty.\n\nFor neutral travellers, Brest is ideal if you want to get off the standard French football circuit and experience something that feels more regional, more grounded, and less tourist-packaged.",
       },
       {
-        title: "Stadium: Stade Francis-Le Blé",
+        title: "History & Identity",
         body:
-          "Francis-Le Blé is compact and football-first. It’s not a polished mega-venue — it’s a ground where proximity does the work: tackles feel louder, chances feel closer, and momentum swings travel fast.",
+          "Brest’s place in French football is built less on giant-club mythology and more on durability, regional presence, and recurring battles to stay relevant at the top level. They feel like a club that has to earn its position rather than assume it.\n\nThat usually makes the fan culture sharper and the home matchdays more honest.",
+      },
+      {
+        title: "Playing Style",
+        body:
+          "Brest often look best when they play with intensity, directness in the right moments, and enough structural discipline to stop matches from becoming self-inflicted chaos. Their stronger versions are not passive. They try to make home fixtures feel difficult for visitors.",
+      },
+      {
+        title: "Stadium Profile",
+        body:
+          "Francis-Le Blé is compact, football-first, and stronger in feel than in visual glamour. It keeps you close to the game. That matters.\n\nThis is not a stadium you admire for shiny design. You value it because it keeps the match intimate and the reactions immediate.",
+      },
+      {
+        title: "Atmosphere & Matchday Feel",
+        body:
+          "Brest’s atmosphere is honest and properly local. The scale is smaller than the giant French venues, but the emotional connection is real. Tight games, defensive efforts, and late attacking waves can make the place feel louder than its size suggests.",
       },
       {
         title: "Best Areas to Sit",
         body:
-          "Go central on a long side for the best overall view. Behind the goals is usually more vocal and more emotional. If weather looks rough, prioritise covered seating — coastal conditions can change quickly.",
+          "Long-side central seats are still the smartest neutral choice. If you want more raw emotion, sit nearer the ends. Given the coastal conditions, covered seating is worth prioritising if the weather looks remotely unstable.",
       },
       {
-        title: "Getting to Francis-Le Blé",
+        title: "Getting to the Stadium",
         body:
-          "Brest’s matchday logistics are straightforward with local transport and short rides from central areas. Build a buffer into your plan — the city’s geography funnels movement, and late arrivals can feel more stressful than in bigger metro systems.",
+          "Keep the trip simple. Base centrally, use local transport or short rides, and do not leave everything until the final 15 minutes.\n\nBrest works because it is a straightforward football weekend if you let it be one.",
       },
       {
-        title: "Matchday Timing",
+        title: "Pre-Match Strategy",
         body:
-          "Arrive 60–90 minutes before kickoff. Brest is a ‘feel the place’ trip — don’t reduce it to a turnstile sprint.",
-      },
-      {
-        title: "Food & Drink Around the Stadium",
-        body:
-          "Do your proper meal in the city first, then use the stadium for simple matchday snacks and drinks. That’s the best value + best vibe combination here.",
-      },
-      {
-        title: "Pre-Match Areas in Brest",
-        body:
-          "Start in the centre/harbour areas for the best concentration of bars and places to eat. Brest pre-match feels like a local routine — calm early, sharper as kickoff approaches.",
-      },
-      {
-        title: "Neighbourhood Guide",
-        body:
-          "Brest is defined by maritime identity and practical urban layout. You’re here for a different France — less postcard, more real-life working city.",
+          "Use the centre or harbour areas before the game. That gives you the better food, the better drinking options, and a more complete sense of the city.\n\nThen move toward the stadium with enough time to feel the build-up rather than rush it.",
       },
       {
         title: "Where to Stay",
         body:
-          "Stay central so you can keep the trip walkable and simple. Brest is best experienced with minimal transport complexity.",
+          "Stay central. Brest is one of those places where a central base makes the entire trip cleaner, calmer, and more enjoyable.",
       },
       {
-        title: "Things to Do (Non-Football)",
+        title: "Neutral Visitor Notes",
         body:
-          "Lean into the port-city feel: waterfront walks, seafood, and a slower coastal rhythm. It’s a strong weekend if you want something different from the usual Ligue 1 destinations.",
-      },
-      {
-        title: "Typical Atmosphere",
-        body:
-          "Honest and reactive. Defensive effort gets celebrated; late pressure can make the stadium feel bigger than it is.",
-      },
-      {
-        title: "Rivalries",
-        body:
-          "Regional fixtures carry extra edge — when Brest play nearby rivals or direct table competitors, the atmosphere lifts noticeably.",
-      },
-      {
-        title: "Club Identity & Colours",
-        body:
-          "Red and white are the core colours. The identity is resilient: compete hard, stay organised, and make the home game count.",
-      },
-      {
-        title: "Practical Tips",
-        body:
-          "Coastal weather is real — bring layers. If you want the easiest exit, let the first crowd wave clear before heading for transport.",
+          "• Great pick if you want something less generic.\n• Better for authenticity than luxury.\n• Coastal weather matters, so plan accordingly.\n• Stronger than it looks on paper if you value local football texture.",
       },
     ],
     links: [{ label: "Official site", url: "https://www.sb29.bzh/" }],
-    updatedAt: "2026-02-27",
+    updatedAt: "2026-03-08",
   },
 
   "le-havre": {
     teamKey: "le-havre",
     name: "Le Havre AC",
+    cityKey: "le-havre",
     city: "Le Havre",
     country: "France",
     stadium: "Stade Océane",
@@ -257,81 +201,62 @@ export const ligue1TeamGuides: Record<string, TeamGuide> = {
       {
         title: "Club Overview",
         body:
-          "Le Havre are French football’s “academy identity” club: historically respected for development, patience, and structural discipline. The matchday experience reflects that — calmer, more composed, more about the football than theatre.\n\nFor neutral travellers, Le Havre is a strong pick if you value authenticity and a club that feels rooted in long-term principles rather than hype cycles.",
+          "Le Havre are one of French football’s most respected development clubs. Their identity is not built on trying to cosplay as a domestic superpower. It is built on academy credibility, patience, structure, and an old-fashioned seriousness about how to build a club.\n\nFor neutral travellers, Le Havre is a very clean choice if you value authenticity, football logic, and a calmer port-city weekend rather than raw spectacle.",
       },
       {
-        title: "Stadium: Stade Océane",
+        title: "History & Identity",
         body:
-          "Stade Océane is a modern, comfortable venue that prioritises sightlines and practicality. It’s a clean matchday experience — easy entry, clear concourses, and a family-friendly feel compared with France’s most intense grounds.",
+          "Le Havre’s reputation in France is bigger than their trophy glamour would suggest because they are associated with development and serious footballing work. They are one of those clubs people refer to with respect, even when they are not occupying the glamorous end of the table.",
+      },
+      {
+        title: "Playing Style",
+        body:
+          "Le Havre’s stronger versions tend to look disciplined, measured, and structurally aware. This is often a club that survives and competes through shape and timing rather than constant attacking risk.\n\nThat makes them appealing to neutrals who actually like reading matches rather than only chasing noise.",
+      },
+      {
+        title: "Stadium Profile",
+        body:
+          "Stade Océane is modern, spacious, and comfortable without feeling soulless. It is a cleaner event-flow experience than many traditional grounds, with good sightlines and easier movement.\n\nYou trade some of the old-ground edge for better logistics and a more composed overall matchday.",
+      },
+      {
+        title: "Atmosphere & Matchday Feel",
+        body:
+          "The atmosphere is steadier than the most intense Ligue 1 venues, but there is still real engagement. The crowd generally responds more to discipline, momentum, and points pressure than to permanent noise-making.",
       },
       {
         title: "Best Areas to Sit",
         body:
-          "Central long-side seats give the clearest view of spacing and structure — ideal for a club where organisation matters. Behind-goal areas are usually more animated, but the main benefit here is still proximity and comfort.",
+          "This is a strong stadium for central long-side viewing. If you want to watch the game properly, that is the move. Behind-goal areas add some emotional lift, but Le Havre is a club where the football-watch side of the trip matters.",
       },
       {
-        title: "Getting to Stade Océane",
+        title: "Getting to the Stadium",
         body:
-          "The stadium is not a tiny inner-city ground, so plan transport rather than assuming a casual walk from anywhere. Use local transport or short rides, and arrive early to avoid pre-kick congestion.",
+          "Do not assume it is a pure walk-from-anywhere setup. Plan it as a simple city-to-stadium transit move, leave enough time, and you will have no problem.\n\nLike a lot of modern stadium trips, it works best when you are not late.",
       },
       {
-        title: "Matchday Timing",
+        title: "Pre-Match Strategy",
         body:
-          "Arrive 60–90 minutes early if you want a calm, modern ‘event flow’ rather than rushing the last-minute queues.",
-      },
-      {
-        title: "Food & Drink Around the Stadium",
-        body:
-          "Inside is standard stadium fare. For better food, eat in town first — the city is the best part of the trip’s food/drink experience.",
-      },
-      {
-        title: "Pre-Match Areas in Le Havre",
-        body:
-          "Use the central areas for pre-match. Le Havre’s build-up is typically steady rather than manic — the crowd grows into the game rather than exploding from minute one.",
-      },
-      {
-        title: "Neighbourhood Guide",
-        body:
-          "Le Havre is a port city with a different feel from postcard France — more practical, more maritime, more real-life. That’s a plus if you want variety in your football travel.",
+          "Eat in the centre first. Le Havre’s city food and port atmosphere are more useful to the trip than trying to make the immediate stadium area the main event.",
       },
       {
         title: "Where to Stay",
         body:
-          "Stay central for convenience: easier food, easier evening options, and simpler transport planning to the stadium.",
+          "Stay central. That gives you the best food, easiest evening options, and simplest matchday movement. Le Havre is strongest as a calm, coherent football weekend.",
       },
       {
-        title: "Things to Do (Non-Football)",
+        title: "Neutral Visitor Notes",
         body:
-          "Build your trip around food, waterfront walks, and the port-city atmosphere. It’s a good ‘quiet weekend + match’ destination.",
-      },
-      {
-        title: "Typical Atmosphere",
-        body:
-          "Composed rather than ferocious: vocal pockets, bigger reactions when the match becomes tense, and a crowd that values discipline.",
-      },
-      {
-        title: "Rivalries",
-        body:
-          "The sharpest edge comes from regional opponents and fixtures with clear table pressure.",
-      },
-      {
-        title: "Club Identity & Colours",
-        body:
-          "Le Havre are traditionally blue and navy tones. Identity is development-led: structure, patience, and doing the basics well.",
-      },
-      {
-        title: "Practical Tips",
-        body:
-          "Treat this as a ‘good football watch’ trip. If you want intensity-first, pick Lens or Marseille; if you want calm + quality, Le Havre fits.",
+          "• Good choice if you value club identity and development reputation.\n• Better for a composed football weekend than for a high-voltage atmosphere chase.\n• Strong fit for a quiet city-break-plus-match trip.\n• One of the more underappreciated Ligue 1 stops.",
       },
     ],
     links: [{ label: "Official site", url: "https://www.hac-foot.com/" }],
-    updatedAt: "2026-02-27",
+    updatedAt: "2026-03-08",
   },
 
   lens: {
     teamKey: "lens",
     name: "RC Lens",
+    cityKey: "lens",
     city: "Lens",
     country: "France",
     stadium: "Stade Bollaert-Delelis",
@@ -339,81 +264,62 @@ export const ligue1TeamGuides: Record<string, TeamGuide> = {
       {
         title: "Club Overview",
         body:
-          "Lens are France’s “crowd as a weapon” club: a working-class identity, deep community attachment, and one of the most reliable atmospheres in the league. The football matters, but the real product is emotional intensity — Lens matchdays feel like collective participation, not passive watching.\n\nFor neutral travellers: if you want the safest bet for a memorable Ligue 1 atmosphere, Lens is near the top of the list.",
+          "Lens are one of the clearest atmosphere clubs in France. This is not marketing fluff. Lens matchdays are driven by collective identity, working-class pride, and a crowd that treats the game as something shared rather than consumed.\n\nFor neutral travellers, Lens is near the top of the Ligue 1 list if the main objective is simple: feel a stadium properly.",
       },
       {
-        title: "Stadium: Stade Bollaert-Delelis",
+        title: "History & Identity",
         body:
-          "Bollaert-Delelis is iconic in French football culture: steep, tight, and built to amplify noise. It’s a stadium where the crowd feels close to the pitch and momentum feels contagious.",
+          "Lens carry a domestic significance that exceeds their market size. Their reputation comes from supporter culture, emotional force, and the ability to make home football feel like communal identity rather than background entertainment.\n\nThey are one of the clubs in France where 'big' is more about feeling and social weight than only budgets.",
+      },
+      {
+        title: "Playing Style",
+        body:
+          "Lens’ better sides usually look front-foot, intense, and physically committed, especially at home. The football tends to suit the atmosphere: pressure, tempo changes, and moments that invite crowd participation.\n\nThat is a big part of why the whole product works so well.",
+      },
+      {
+        title: "Stadium Profile",
+        body:
+          "Bollaert-Delelis is one of the most iconic French football venues. It feels steep, connected, and capable of turning crowd energy into a real part of the game.\n\nThis is not a stadium you visit for architecture alone. You visit it because of what happens when it fills.",
+      },
+      {
+        title: "Atmosphere & Matchday Feel",
+        body:
+          "Top tier by Ligue 1 standards. Sustained noise, collective engagement, and a real sense that the crowd is emotionally invested in every phase that matters.\n\nEven less glamorous fixtures can feel like occasions here. That is rare.",
       },
       {
         title: "Best Areas to Sit",
         body:
-          "For atmosphere, the ends (especially near the most vocal sections) deliver the full ‘Lens’ experience. For the best tactical view, go central on a long side. If you can, avoid far corners — at Bollaert the best feeling is being in the thick of it.",
+          "If atmosphere is the mission, sit near the louder ends. If you want the best tactical watch while still feeling the place, go central but stay low enough to remain connected.\n\nCorners are a downgrade here unless ticket availability forces your hand.",
       },
       {
-        title: "Getting to Bollaert-Delelis",
+        title: "Getting to the Stadium",
         body:
-          "Lens is easy to approach via the regional network, and matchday movement tends to funnel toward the ground. Arrive early so you can walk in with the crowd and feel the build-up rather than fighting last-minute logistics.",
+          "The correct move is to arrive early and move with the matchday rhythm. Lens is one of those clubs where turning up just before kickoff is stupid because you are throwing away one of the best parts of the whole trip.",
       },
       {
-        title: "Matchday Timing",
+        title: "Pre-Match Strategy",
         body:
-          "Arrive 90 minutes early if possible. Lens is one of those clubs where pre-kick energy is part of the ticket — you want to feel the place rise before the whistle.",
-      },
-      {
-        title: "Food & Drink Around the Stadium",
-        body:
-          "Expect a heavy local pre-match rhythm: simple food, beer, and routines repeated weekly. Inside is standard stadium fare. The best value is usually in local bars/cafés before entry.",
-      },
-      {
-        title: "Pre-Match Areas in Lens",
-        body:
-          "Follow the crowd: local spots near the stadium and in town fill with matchday purpose. The vibe is communal and identity-driven — you’ll feel the ‘this matters to us’ energy fast.",
-      },
-      {
-        title: "Neighbourhood Guide",
-        body:
-          "Lens is not a tourist city in the typical sense — it’s a football city on matchday. That’s the appeal: the trip is about the match, the crowd, and the atmosphere.",
+          "Follow the crowd, use local bars and simple food stops, and let the build-up happen. This is a football-first destination. Do not try to over-curate it into a polished city-break script.",
       },
       {
         title: "Where to Stay",
         body:
-          "If you’re doing a pure match trip, base yourself for transport convenience (either in Lens or a nearby larger city) and plan a simple in/out flow. The best Lens experience is matchday-focused.",
+          "Keep it practical. Whether you stay in Lens or use a nearby larger base, the point is to make the trip easy and get to the ground early enough to absorb the pre-match environment.",
       },
       {
-        title: "Things to Do (Non-Football)",
+        title: "Neutral Visitor Notes",
         body:
-          "Lens works best as a football-first weekend: eat, drink, match, repeat. Add museums or nearby city visits if you want a fuller itinerary, but the stadium is the headline.",
-      },
-      {
-        title: "Typical Atmosphere",
-        body:
-          "Top-tier. Sustained noise, strong crowd unity, and big reactions to every swing of momentum. Even routine fixtures can feel like occasions.",
-      },
-      {
-        title: "Rivalries",
-        body:
-          "The Derby du Nord vs Lille is the headline. Any high-stakes regional fixture brings extra tension.",
-      },
-      {
-        title: "Club Identity & Colours",
-        body:
-          "Lens are red and yellow. Identity is solidarity, pride, and collective intensity.",
-      },
-      {
-        title: "Practical Tips",
-        body:
-          "If you want the full hit, arrive early and don’t rush your exit. Let the crowd clear after full-time if you want easier transport and less stress.",
+          "• One of the safest atmosphere picks in France.\n• If your priority is crowd energy, Lens belongs near the top.\n• Arrive early or you are wasting the trip.\n• Excellent for football-first travellers.",
       },
     ],
     links: [{ label: "Official site", url: "https://www.rclens.fr/" }],
-    updatedAt: "2026-02-27",
+    updatedAt: "2026-03-08",
   },
 
   lille: {
     teamKey: "lille",
     name: "LOSC Lille",
+    cityKey: "lille",
     city: "Lille",
     country: "France",
     stadium: "Stade Pierre-Mauroy",
@@ -421,81 +327,62 @@ export const ligue1TeamGuides: Record<string, TeamGuide> = {
       {
         title: "Club Overview",
         body:
-          "Lille are one of France’s best modern operators: intelligent recruitment, strong development pathways, and a consistent ability to compete near the top end without behaving like a pure money club. Their matches often feel structured and high-level — less chaos, more control.\n\nFor travellers, Lille is a strong “quality + city break” pairing: a proper football city with great food, easy pre-match build-up, and a modern stadium setup.",
+          "Lille are one of France’s strongest modern operators: smart recruitment, high-level coaching cycles, and repeated proof that they can compete near the top end without behaving like a reckless vanity project. They often look like a serious club because they are one.\n\nFor neutral travellers, Lille is one of the easiest high-value trips in Ligue 1: proper city, proper food scene, strong football standard, and a modern stadium setup.",
       },
       {
-        title: "Stadium: Stade Pierre-Mauroy",
+        title: "History & Identity",
         body:
-          "Pierre-Mauroy is a modern, large-scale venue built for comfort and event flow: clear access routes, good sightlines, and a matchday environment that feels organised rather than raw.",
+          "Lille’s modern reputation is built on competence. That sounds dry, but it matters. They are respected because they repeatedly build serious teams, sell well, rebuild, and stay relevant.\n\nThey do not rely on fake giant-club myth. Their status comes from actually operating well.",
+      },
+      {
+        title: "Playing Style",
+        body:
+          "Lille’s better sides usually look tactically coherent, physically sharp, and structurally capable of controlling phases rather than living in chaos. They are often a good neutral watch because the team shape tends to make sense.",
+      },
+      {
+        title: "Stadium Profile",
+        body:
+          "Pierre-Mauroy is a modern, large-scale stadium with strong sightlines and event-level organisation. It is more polished than raw, but it is still a very good place to watch football.",
+      },
+      {
+        title: "Atmosphere & Matchday Feel",
+        body:
+          "Big games lift the place properly. Routine league fixtures can feel calmer, but the combination of city energy and a club with real standards keeps the overall product strong.\n\nThe Derby du Nord, obviously, is where the emotional temperature jumps.",
       },
       {
         title: "Best Areas to Sit",
         body:
-          "Central long-side seats are best for seeing Lille’s structure and rhythm. If you want more atmosphere, choose the ends closer to the most vocal sections. The stadium’s modern design generally means you’ll still get a good view from most areas.",
+          "Central long-side seating is ideal if you want the best football view. More vocal ends help if you prioritise atmosphere. Because the stadium is well designed, there are fewer genuinely bad views than at many older grounds.",
       },
       {
-        title: "Getting to Pierre-Mauroy",
+        title: "Getting to the Stadium",
         body:
-          "Lille’s transport setup makes stadium access straightforward if you plan ahead. Start in the centre for food/drinks, then travel out with time to spare. Don’t cut it fine — modern stadiums can process crowds well, but last-minute surges still create queues.",
+          "Start in the centre, then transit out with time to spare. This is a modern stadium trip, so treat it as a planned move rather than a last-minute scramble.\n\nIf you are late, that is on you, not the city.",
       },
       {
-        title: "Matchday Timing",
+        title: "Pre-Match Strategy",
         body:
-          "Arrive 75–90 minutes before kickoff if you want a relaxed entry and time to settle. Big fixtures warrant more buffer.",
-      },
-      {
-        title: "Food & Drink Around the Stadium",
-        body:
-          "Inside is standard event catering. Lille’s real food advantage is the city centre: eat well there, then use the stadium for simple matchday top-ups.",
-      },
-      {
-        title: "Pre-Match Areas in Lille",
-        body:
-          "Central Lille is built for pre-match: bars, brasseries, and an easy walking vibe. The city’s energy is a big part of the trip — don’t skip it.",
-      },
-      {
-        title: "Neighbourhood Guide",
-        body:
-          "Lille’s centre is lively and compact. It’s an easy city to ‘do properly’ in a short trip: dinner, drinks, match, and still feel like you’ve had a weekend.",
+          "Use central Lille properly. Eat and drink there. That is one of the strongest parts of the trip. Then head out for the match once you have done the city part right.",
       },
       {
         title: "Where to Stay",
         body:
-          "Stay central for the best overall experience. You’ll get the city atmosphere and keep stadium travel simple.",
+          "Stay central. Lille is one of the better Ligue 1 destinations for a full weekend feel, and you lose value if you base yourself too functionally and ignore the city.",
       },
       {
-        title: "Things to Do (Non-Football)",
+        title: "Neutral Visitor Notes",
         body:
-          "Lille is excellent for food, café culture, and a relaxed city break. It’s one of the easiest Ligue 1 destinations to pair with non-football plans.",
-      },
-      {
-        title: "Typical Atmosphere",
-        body:
-          "Strong in big games, steady in routine fixtures. It’s more structured event energy than constant cauldron — but derby matches lift it significantly.",
-      },
-      {
-        title: "Rivalries",
-        body:
-          "Lens is the headline (Derby du Nord). Those fixtures are the peak atmosphere moments.",
-      },
-      {
-        title: "Club Identity & Colours",
-        body:
-          "Lille are red. Identity is modern competence: smart squad building, structural strength, and professional standards.",
-      },
-      {
-        title: "Practical Tips",
-        body:
-          "Treat Lille as a city-break-first trip with football as the anchor: central base, early travel, and you’ll have an easy, high-quality weekend.",
+          "• One of the strongest all-round Ligue 1 trips.\n• Better balance of city + football than most clubs in the division.\n• Strong standard of football.\n• Derby and high-stakes fixtures give the best version of the experience.",
       },
     ],
     links: [{ label: "Official site", url: "https://www.losc.fr/" }],
-    updatedAt: "2026-02-27",
+    updatedAt: "2026-03-08",
   },
 
   lorient: {
     teamKey: "lorient",
     name: "FC Lorient",
+    cityKey: "lorient",
     city: "Lorient",
     country: "France",
     stadium: "Stade du Moustoir",
@@ -503,81 +390,62 @@ export const ligue1TeamGuides: Record<string, TeamGuide> = {
       {
         title: "Club Overview",
         body:
-          "Lorient are a classic process-led French club: development minded, tactically pragmatic, and comfortable living inside the league’s middle-to-survival band depending on the cycle. They’re at their best when they stay compact, pick moments to accelerate, and turn games into controlled contests.\n\nFor neutral travellers, Lorient offers a genuine local matchday: smaller ground, coastal city feel, and a low-tourism football experience.",
+          "Lorient are a process-led French club with a clear smaller-market logic: development, tactical pragmatism, and trying to stay coherent in a league that punishes chaos. They are not here to cosplay as a giant. They are here to survive, compete, and keep their identity intact.\n\nFor neutral travellers, Lorient is a lower-profile but honest coastal football stop.",
       },
       {
-        title: "Stadium: Stade du Moustoir",
+        title: "History & Identity",
         body:
-          "Le Moustoir is a traditional-feeling stadium with a close-to-the-pitch vibe. It’s functional rather than flashy — but that’s the point: it feels like real domestic football rather than a packaged spectacle.",
+          "Lorient’s reputation is tied more to football intelligence and recurring resilience than to giant historical force. That actually helps the trip, because you know exactly what you are buying: local football, not fake grandeur.",
+      },
+      {
+        title: "Playing Style",
+        body:
+          "Lorient’s better sides generally make sense when they remain compact, pick the right moments to play forward, and avoid getting dragged into messy end-to-end nonsense. They often look more useful than glamorous.",
+      },
+      {
+        title: "Stadium Profile",
+        body:
+          "Stade du Moustoir has a traditional-feel domestic football quality. It is not spectacular, but it is connected, practical, and close enough to the action to keep the match feeling immediate.",
+      },
+      {
+        title: "Atmosphere & Matchday Feel",
+        body:
+          "The atmosphere is local and genuine rather than overwhelming. It builds most when points feel tight. That makes Lorient stronger as a smaller, real football trip than as a glamour weekend.",
       },
       {
         title: "Best Areas to Sit",
         body:
-          "Central seats on the long sides give the clearest view. Behind-goal sections are where you’ll feel the matchday emotion most directly. If weather is uncertain, prioritise covered seating.",
+          "Long-side central seating is best for the neutral experience. Ends add more local emotion. Prioritise weather protection if conditions look bad, because exposed smaller grounds become less fun quickly.",
       },
       {
-        title: "Getting to Le Moustoir",
+        title: "Getting to the Stadium",
         body:
-          "Because the stadium sits close to town life, it’s easy to build a simple pre-match plan: eat/drink in town, then move toward the ground with time to spare. Keep it straightforward — that’s where Lorient trips work best.",
+          "Lorient works best when you keep the day simple: central base, meal in town, short movement to the ground. The city rewards low-friction planning, not complexity.",
       },
       {
-        title: "Matchday Timing",
+        title: "Pre-Match Strategy",
         body:
-          "Arrive 60–90 minutes early if you want to feel the place fill. Smaller grounds can be deceptively quick until they’re not — late arrivals create avoidable stress.",
-      },
-      {
-        title: "Food & Drink Around the Stadium",
-        body:
-          "Do your proper food in the city, then keep stadium purchases simple. Lorient is better as a ‘town first’ matchday rather than stadium-area dining.",
-      },
-      {
-        title: "Pre-Match Areas in Lorient",
-        body:
-          "Stick to central bars and casual places — the vibe is coastal, local, and relaxed before turning more focused closer to kickoff.",
-      },
-      {
-        title: "Neighbourhood Guide",
-        body:
-          "Lorient is a coastal city with a practical rhythm. It’s not about grand tourist landmarks — it’s about a calm weekend anchored by football.",
+          "Use the centre first. Food and drink are better there. Then move to the stadium with time in hand.\n\nThis is the right way to make the most of a lower-profile trip.",
       },
       {
         title: "Where to Stay",
         body:
-          "Stay central so your day stays walkable and you can avoid overplanning transport.",
+          "Stay central and keep it walkable. Lorient is a calm, practical football weekend, not a city where you should be spending half the day in transit.",
       },
       {
-        title: "Things to Do (Non-Football)",
+        title: "Neutral Visitor Notes",
         body:
-          "Coastal walks, seafood, and a slower pace. Lorient is a good ‘reset’ weekend with a match as the highlight.",
-      },
-      {
-        title: "Typical Atmosphere",
-        body:
-          "Modest scale but genuine. Noise rises with match tension; the crowd becomes most engaged when points feel close.",
-      },
-      {
-        title: "Rivalries",
-        body:
-          "Regional fixtures (especially nearby Brittany opponents) bring the sharpest edge.",
-      },
-      {
-        title: "Club Identity & Colours",
-        body:
-          "Orange and black define Lorient. Identity is pragmatic and development-led: compete smart, rebuild well, stay coherent.",
-      },
-      {
-        title: "Practical Tips",
-        body:
-          "If you want intensity-first, pick Lens/Marseille. If you want a calmer, local French matchday, Lorient is a solid choice.",
+          "• Better for a quieter local football trip than for stadium spectacle.\n• Strong if you like lower-profile, authentic destinations.\n• Regional fixtures increase the edge.\n• Good one- or two-night stop.",
       },
     ],
     links: [{ label: "Official site", url: "https://www.fclorient.bzh/" }],
-    updatedAt: "2026-02-27",
+    updatedAt: "2026-03-08",
   },
 
   lyon: {
     teamKey: "lyon",
     name: "Olympique Lyonnais",
+    cityKey: "lyon",
     city: "Lyon",
     country: "France",
     stadium: "Groupama Stadium",
@@ -585,81 +453,62 @@ export const ligue1TeamGuides: Record<string, TeamGuide> = {
       {
         title: "Club Overview",
         body:
-          "Lyon are a genuine French heavyweight by modern institutional standards: big-city club, strong historic identity, and an expectation of operating near the European places when the structure is right. Lyon trips work because the city is excellent and the football ecosystem is serious.\n\nFor neutral travellers, Lyon is a high-quality ‘football + proper weekend’ destination — great food, real nightlife, and a modern stadium event.",
+          "Lyon are one of France’s genuine heavyweights: big-city club, serious football history, elite-period legacy, and a support base that expects the club to matter. They are not judged like a survival club. They are judged against European-level ambition and domestic relevance.\n\nFor neutral travellers, Lyon is one of the best all-round Ligue 1 products because the city is excellent and the club still carries genuine football weight.",
       },
       {
-        title: "Stadium: Groupama Stadium",
+        title: "History & Identity",
         body:
-          "Groupama Stadium is a modern arena built for scale and comfort: clean sightlines, clear concourses, and a matchday flow that feels like a major event. It’s not an old-ground cauldron — it’s big-club infrastructure.",
+          "Lyon’s defining modern identity comes from their era of domestic dominance and the sense that they should operate as a serious power, not just a respectable top-half side. Even when results wobble, the expectation framework stays big.",
+      },
+      {
+        title: "Playing Style",
+        body:
+          "Lyon’s better versions tend to lean technical, front-foot, and ambitious, even if modern inconsistency means the execution level varies. The important bit for the guide is that this is not supposed to be a low-expectation club. The football is meant to look like it belongs near the top of the league.",
+      },
+      {
+        title: "Stadium Profile",
+        body:
+          "Groupama Stadium is big-club infrastructure: modern, organised, and built to host major-event football. It is not an old cauldron, but it is a very good venue for scale, comfort, and sightlines.",
+      },
+      {
+        title: "Atmosphere & Matchday Feel",
+        body:
+          "High-stakes nights and bigger opponents give the best version of Lyon. Routine fixtures can feel more measured. The city’s overall quality does a lot of work around the match, which is why the trip remains strong even when the stadium atmosphere is not at absolute maximum.",
       },
       {
         title: "Best Areas to Sit",
         body:
-          "Central long-side seats are best for seeing Lyon’s technical intent and spacing. Ends deliver more atmosphere. If you want the best balance, choose a mid-height seat near halfway rather than high extremes.",
+          "If your priority is football view, central long-side seating is the obvious choice. Ends provide more atmosphere. Because of the stadium scale, avoiding extreme height or awkward angles is worth it if you can.",
       },
       {
-        title: "Getting to Groupama Stadium",
+        title: "Getting to the Stadium",
         body:
-          "Treat this as a planned transit trip rather than a casual walk. Start in the centre for pre-match, then move early using the established matchday transport routes. Big crowds make last-minute timing a mistake.",
+          "Treat it as a scheduled transit move from the centre. This is not a stadium you casually stumble into from most useful visitor districts.\n\nLeave time. Late movement is self-inflicted pain.",
       },
       {
-        title: "Matchday Timing",
+        title: "Pre-Match Strategy",
         body:
-          "Arrive 90 minutes early for big fixtures; 60–75 minutes is fine for routine matches if you’re organised.",
-      },
-      {
-        title: "Food & Drink Around the Stadium",
-        body:
-          "The best food is in Lyon’s city core. Eat properly there, then treat stadium purchases as convenience rather than the main event.",
-      },
-      {
-        title: "Pre-Match Areas in Lyon",
-        body:
-          "Lyon is one of France’s best food and drink cities — use it. Choose a neighbourhood base, eat well, then travel to the stadium with buffer time.",
-      },
-      {
-        title: "Neighbourhood Guide",
-        body:
-          "Lyon is a proper city-break location: distinct districts, great dining, and enough to do without forcing an itinerary. Perfect if your app positioning is ‘match as anchor, city as the trip.’",
+          "Use Lyon properly before the match. Eat in the city, have a drink, enjoy the neighbourhood rhythm, then head out in time. Lyon is one of the last clubs where it would be stupid not to use the city as part of the product.",
       },
       {
         title: "Where to Stay",
         body:
-          "Stay central for the best weekend feel. It keeps your non-football plans easy and your matchday transport predictable.",
+          "Stay central. Lyon is a real city-break destination. If you base badly and reduce the trip to pure stadium logistics, you are wasting one of Ligue 1’s best city assets.",
       },
       {
-        title: "Things to Do (Non-Football)",
+        title: "Neutral Visitor Notes",
         body:
-          "Lyon is a top-tier ‘things to do’ city: food culture, riverside walks, and neighbourhood exploration. It’s one of the strongest Ligue 1 cities for a complete weekend itinerary.",
-      },
-      {
-        title: "Typical Atmosphere",
-        body:
-          "Varies with fixture size. Big nights lift the volume; routine league games can feel calmer. The stadium is more ‘event’ than ‘pressure cooker.’",
-      },
-      {
-        title: "Rivalries",
-        body:
-          "Saint-Étienne is the historic rivalry when relevant; big-name visits create the biggest matchday edge.",
-      },
-      {
-        title: "Club Identity & Colours",
-        body:
-          "Lyon are traditionally white with red/blue accents. Identity is technical ambition and big-club expectation.",
-      },
-      {
-        title: "Practical Tips",
-        body:
-          "Build your day around Lyon the city, then treat stadium transit as a scheduled move. Do not wing it late.",
+          "• One of the strongest city + football combinations in France.\n• Better with at least two nights.\n• Best when the fixture has actual stakes.\n• A high-quality all-round Ligue 1 trip.",
       },
     ],
     links: [{ label: "Official site", url: "https://www.ol.fr/" }],
-    updatedAt: "2026-02-27",
+    updatedAt: "2026-03-08",
   },
 
   marseille: {
     teamKey: "marseille",
     name: "Olympique de Marseille",
+    cityKey: "marseille",
     city: "Marseille",
     country: "France",
     stadium: "Orange Vélodrome",
@@ -667,81 +516,62 @@ export const ligue1TeamGuides: Record<string, TeamGuide> = {
       {
         title: "Club Overview",
         body:
-          "Marseille is France’s peak emotion club: football as civic identity, not just entertainment. The intensity is real — the city’s relationship with OM is personal, volatile, and high-expectation.\n\nFor neutral travellers, this is one of Europe’s best ‘feel it physically’ stadium experiences: huge ground, loud crowd, and a matchday that can make routine fixtures feel like occasions.",
+          "Marseille are France’s emotion club. That is the starting point. The relationship between OM and the city is intense, personal, impatient, and deeply public. This is not a quiet football destination. It is one of the few in France where even neutrals immediately feel that the club matters beyond sport.\n\nFor neutral travellers, Marseille is one of the division’s flagship experiences because the city and club both bring real weight.",
       },
       {
-        title: "Stadium: Orange Vélodrome",
+        title: "History & Identity",
         body:
-          "The Vélodrome is steep, loud, and built for pressure. It’s a major venue that amplifies noise and emotion. When Marseille are pushing, it can feel like the stadium is pulling the ball toward the goal.",
+          "Marseille’s domestic and European stature gives them giant-club credibility in the French context. But the deeper identity point is civic intensity. OM are not just supported; they are argued over, lived through, and emotionally enforced by the city around them.",
+      },
+      {
+        title: "Playing Style",
+        body:
+          "The expectation at Marseille is not passive football. The crowd wants force, intent, pressure, and visible ambition. Better OM sides usually look front-foot and emotionally aligned with the stadium. Sloppy or timid football gets judged hard.",
+      },
+      {
+        title: "Stadium Profile",
+        body:
+          "The Vélodrome is one of the most serious stadiums in European football when it is on. Steep, loud, dramatic, and big enough to make the whole thing feel major without losing pitch connection.\n\nThis is a genuine flagship venue.",
+      },
+      {
+        title: "Atmosphere & Matchday Feel",
+        body:
+          "Elite by French standards. The pre-match matters. The surges matter. The crowd can drive the whole feeling of the game.\n\nIf you are picking one Ligue 1 atmosphere-first trip, Marseille belongs near the very top of the shortlist.",
       },
       {
         title: "Best Areas to Sit",
         body:
-          "Ends deliver maximum atmosphere; central long-side seats give the best view. If you want a neutral-friendly balance, pick a central section with a clear view but close enough to feel the crowd’s surges.",
+          "If you want atmosphere, lean toward the ends. If you want the cleanest neutral watch while still feeling the stadium properly, choose central long-side seating.\n\nDo not sit too far away from the action if you can avoid it. The whole point is to feel the Vélodrome.",
       },
       {
-        title: "Getting to the Vélodrome",
+        title: "Getting to the Stadium",
         body:
-          "Marseille is a big-city matchday: use public transport where possible, and give yourself buffer time. Big crowds mean late arrivals become chaotic fast.",
+          "Use public transport and plan the move. Marseille is not the place to improvise late and hope for a smooth ride.\n\nYou want time on your side here.",
       },
       {
-        title: "Matchday Timing",
+        title: "Pre-Match Strategy",
         body:
-          "Arrive 90 minutes early if you want to feel the build-up. Marseille is not a ‘turn up late’ club — the pre-match energy is part of why you’re there.",
-      },
-      {
-        title: "Food & Drink Around the Stadium",
-        body:
-          "Eat properly in the city, then keep stadium purchases simple. Marseille’s food scene is a trip feature — don’t waste it on average stadium options unless you have to.",
-      },
-      {
-        title: "Pre-Match Areas in Marseille",
-        body:
-          "Pick a central base area for food/drinks, then move toward the stadium early. The build-up can be intense in places — if you want calmer pre-match, choose a more relaxed dining spot before heading out.",
-      },
-      {
-        title: "Neighbourhood Guide",
-        body:
-          "Marseille is diverse and energetic. Your experience depends on where you base: choose areas that suit your vibe (food-first, nightlife-first, or calm/comfortable).",
+          "Eat in the city, choose your pre-match area carefully, and then head to the stadium with proper buffer time. You can make this trip excellent or annoying depending on whether you respect the scale of the occasion.",
       },
       {
         title: "Where to Stay",
         body:
-          "Stay somewhere with easy transport access so you’re not relying on complicated late-night routes after full-time.",
+          "Stay in a part of Marseille that suits your overall weekend plan and gives you a workable transport route. This is not a trip where 'closest to the ground' is automatically smartest.",
       },
       {
-        title: "Things to Do (Non-Football)",
+        title: "Neutral Visitor Notes",
         body:
-          "Marseille is a strong weekend city: food, waterfront, and a distinct identity compared with northern French destinations. It pairs well with your app’s “mini-break anchored by a match” concept.",
-      },
-      {
-        title: "Typical Atmosphere",
-        body:
-          "Elite intensity. Loud early, louder when Marseille push, and restless if the team drops intensity. The crowd participates in the match.",
-      },
-      {
-        title: "Rivalries",
-        body:
-          "PSG is the headline rivalry. Big-name visits and high-stakes fixtures are peak Vélodrome nights.",
-      },
-      {
-        title: "Club Identity & Colours",
-        body:
-          "Marseille are traditionally white with sky blue accents. Identity is pride, expectation, and emotion.",
-      },
-      {
-        title: "Practical Tips",
-        body:
-          "Treat Marseille as a high-energy matchday. Arrive early, plan transport, and keep your post-match exit calm by waiting out the first crowd wave.",
+          "• One of the best big-emotion football trips in France.\n• Better when the fixture matters.\n• Plan transport and timing properly.\n• If you want intensity, Marseille absolutely delivers.",
       },
     ],
     links: [{ label: "Official site", url: "https://www.om.fr/" }],
-    updatedAt: "2026-02-27",
+    updatedAt: "2026-03-08",
   },
 
   "as-monaco": {
     teamKey: "as-monaco",
     name: "AS Monaco",
+    cityKey: "monaco",
     city: "Monaco",
     country: "France",
     stadium: "Stade Louis II",
@@ -749,81 +579,62 @@ export const ligue1TeamGuides: Record<string, TeamGuide> = {
       {
         title: "Club Overview",
         body:
-          "Monaco are a unique Ligue 1 institution: small territory, big footballing relevance. The club is defined by recruitment cycles, youth development, and recurring peaks where the squad’s ceiling explodes into title or European contention.\n\nFor neutral travellers, Monaco is a different kind of trip: high-level football in a polished setting, but with a calmer matchday feel than France’s most intense stadiums.",
+          "Monaco are one of Ligue 1’s strangest and most effective institutions: small territory, high-level football relevance, repeated smart recruitment cycles, and a capacity to re-emerge as a serious force when the squad clicks. They are not a fake glamour side. They are a genuinely clever football club in an unusually polished setting.\n\nFor neutral travellers, Monaco is less about raw supporter intensity and more about setting, quality, and the oddness of top-flight football in such a compact, high-end place.",
       },
       {
-        title: "Stadium: Stade Louis II",
+        title: "History & Identity",
         body:
-          "Louis II is compact and clean, built into Monaco’s urban landscape. It feels more continental and composed than traditional French ‘cauldron’ venues.",
+          "Monaco’s status comes from repeated relevance at the top end of French football and their reputation for development, resale, and clever team-building. They are one of the clubs in France that can build a high ceiling quickly when the cycle is right.",
+      },
+      {
+        title: "Playing Style",
+        body:
+          "Monaco’s better teams usually look technical, dynamic, and transition-capable, with enough quality to dominate weaker domestic opponents but enough speed and intelligence to trouble stronger ones too.\n\nThat makes them a good neutral watch even when the atmosphere is not the main draw.",
+      },
+      {
+        title: "Stadium Profile",
+        body:
+          "Stade Louis II is unusual, compact, and very recognisable. It feels more composed and continental than many traditional domestic grounds. It is not trying to be an intimidating cauldron.",
+      },
+      {
+        title: "Atmosphere & Matchday Feel",
+        body:
+          "This is not the Ligue 1 trip you choose for maximum noise. It is calmer, more polished, and more about watching the football in a unique setting.\n\nBig rivalry games, especially against Nice, lift it, but the baseline is still more measured than Marseille, Lens, or Strasbourg.",
       },
       {
         title: "Best Areas to Sit",
         body:
-          "Central long-side seats give the best view. Because the stadium is relatively compact, most seating provides decent proximity. If you want the ‘football watch’ experience rather than pure noise, Monaco suits you.",
+          "Central long-side seating is the obvious move. Monaco suits people who want to watch the match properly. The compactness of the ground means you still feel reasonably close from most decent seats.",
       },
       {
-        title: "Getting to Louis II",
+        title: "Getting to the Stadium",
         body:
-          "Monaco logistics are generally straightforward if you plan around city movement. Give yourself buffer time — Monaco can feel deceptively quick until traffic/flows tighten.",
+          "Plan around Monaco movement properly and it is simple enough. The city can feel tiny until transport flows, hills, or local congestion remind you that small does not always mean frictionless.",
       },
       {
-        title: "Matchday Timing",
+        title: "Pre-Match Strategy",
         body:
-          "Arrive 60–75 minutes early. Monaco isn’t the most chaotic entry experience, but it’s still smarter to settle in early.",
-      },
-      {
-        title: "Food & Drink Around the Stadium",
-        body:
-          "You’re in Monaco/Riviera territory — eat well before the match. Stadium purchases should be convenience, not the plan.",
-      },
-      {
-        title: "Pre-Match Areas in Monaco",
-        body:
-          "Pre-match is more relaxed and cosmopolitan. Choose a spot that fits your budget and vibe, then head to the stadium calmly.",
-      },
-      {
-        title: "Neighbourhood Guide",
-        body:
-          "Monaco is compact and distinctive. The setting is a major part of the trip — it’s one of Ligue 1’s most unusual matchday backdrops.",
+          "Treat this as a polished Riviera football plan: eat well, walk the area, then head to the match without rushing. Monaco is at its best when it feels like a full small-scale luxury weekend, not a smash-and-grab fixture run.",
       },
       {
         title: "Where to Stay",
         body:
-          "If staying in Monaco is expensive, base nearby and travel in. The area is well-connected and works for short-stay match trips.",
+          "If Monaco itself is too expensive, base nearby and travel in. That is often the smarter move. The wider area gives you flexibility without losing the trip.",
       },
       {
-        title: "Things to Do (Non-Football)",
+        title: "Neutral Visitor Notes",
         body:
-          "Monaco is a destination in itself: views, walks, and a polished city-break feel. This is a ‘match + scenery’ trip more than a ‘football culture immersion’ trip.",
-      },
-      {
-        title: "Typical Atmosphere",
-        body:
-          "Calmer than most Ligue 1 grounds. Noise rises for big matches and derbies, but Monaco is more ‘watch the quality’ than ‘live inside chaos.’",
-      },
-      {
-        title: "Rivalries",
-        body:
-          "Nice is the key local rivalry (Côte d’Azur derby).",
-      },
-      {
-        title: "Club Identity & Colours",
-        body:
-          "Monaco’s red and white identity is tied to development cycles and elite recruitment. It’s a ‘smart build, peak, rebuild’ club.",
-      },
-      {
-        title: "Practical Tips",
-        body:
-          "If your priority is atmosphere, pick Marseille/Lens. If your priority is setting + top-level football, Monaco is ideal.",
+          "• Best for setting + football quality rather than atmosphere-first travel.\n• Good if you want a Riviera trip with a Ligue 1 anchor.\n• Nice derby is the premium fixture.\n• One of the most distinctive trips in the league.",
       },
     ],
     links: [{ label: "Official site", url: "https://www.asmonaco.com/" }],
-    updatedAt: "2026-02-27",
+    updatedAt: "2026-03-08",
   },
 
   nantes: {
     teamKey: "nantes",
     name: "FC Nantes",
+    cityKey: "nantes",
     city: "Nantes",
     country: "France",
     stadium: "Stade de la Beaujoire",
@@ -831,81 +642,62 @@ export const ligue1TeamGuides: Record<string, TeamGuide> = {
       {
         title: "Club Overview",
         body:
-          "Nantes are one of France’s historically important clubs, still culturally tied to the idea of a footballing philosophy — even when modern reality demands pragmatism. The club’s identity is heavy with tradition, expectation, and a fanbase that cares about how the team represents itself.\n\nFor neutral travellers, Nantes is a proper ‘big traditional club’ matchday without mega-club commercialisation.",
+          "Nantes are one of France’s historically meaningful clubs, and that still shapes the way they are talked about. Even when modern reality is messier than the mythology, there remains a strong expectation that Nantes should feel like a proper football institution, not a forgettable mid-table body.\n\nFor neutral travellers, Nantes is a very good 'traditional major club without mega-club nonsense' Ligue 1 trip.",
       },
       {
-        title: "Stadium: Stade de la Beaujoire",
+        title: "History & Identity",
         body:
-          "La Beaujoire is a classic large French stadium: spacious, traditional, and capable of serious atmosphere when stakes rise. It’s not a new bowl — it feels like an established domestic football venue.",
+          "Nantes’ legacy is deeply tied to the idea of a footballing philosophy and a club identity that should be recognisable, structured, and stylistically coherent. That ideal still colours supporter expectations now, even when results fluctuate.",
+      },
+      {
+        title: "Playing Style",
+        body:
+          "The tension around Nantes is often between what the club historically wants to represent and what modern survival or mid-table football sometimes demands. Better Nantes sides look organised, brave enough on the ball, and emotionally connected to the crowd.",
+      },
+      {
+        title: "Stadium Profile",
+        body:
+          "La Beaujoire is a classic large French stadium with a strong domestic-football feel. It is not a new entertainment bowl. It looks and feels like a venue built for league football culture.",
+      },
+      {
+        title: "Atmosphere & Matchday Feel",
+        body:
+          "The atmosphere can rise properly when the fixture carries weight. Rivalries, pressure games, and high-stakes nights produce the strongest version of Nantes.\n\nRoutine games can be calmer, but the place still carries a sense of club history and seriousness.",
       },
       {
         title: "Best Areas to Sit",
         body:
-          "Central long-side seats are best for view and comfort. Behind the goals is where atmosphere concentrates. If you want the crowd’s emotions up close, choose an end; if you want a clean watch, choose the main stand.",
+          "Main stand central seating is best for the pure watch. Ends are better if you want crowd emotion. The stadium scale means placement matters a bit more than at smaller grounds, so avoid poor angles if you have the choice.",
       },
       {
-        title: "Getting to La Beaujoire",
+        title: "Getting to the Stadium",
         body:
-          "Use city transport routes and give yourself buffer time. Larger grounds mean bigger flows — last-minute entry is always a bad plan.",
+          "Use city transport properly and leave yourself enough time. Big older domestic venues are not the place for late lazy planning.",
       },
       {
-        title: "Matchday Timing",
+        title: "Pre-Match Strategy",
         body:
-          "Arrive 60–90 minutes early depending on fixture size. Derby-style games justify the full early arrival.",
-      },
-      {
-        title: "Food & Drink Around the Stadium",
-        body:
-          "Do your meal in the centre, then head to the stadium. It’s the best value and gives you a better pre-match atmosphere.",
-      },
-      {
-        title: "Pre-Match Areas in Nantes",
-        body:
-          "Nantes has a strong city-break feel: plenty of places to eat and drink centrally, then a straightforward stadium move.",
-      },
-      {
-        title: "Neighbourhood Guide",
-        body:
-          "Nantes is an easy weekend: walkable centre, food and bars, and a match as the anchor. That aligns perfectly with your app’s ‘neutral traveller’ framing.",
+          "Base the pre-match in central Nantes. It is a city that supports a proper weekend flow: food, drinks, then the match.\n\nThat is where the product value really comes from.",
       },
       {
         title: "Where to Stay",
         body:
-          "Stay central to keep the weekend enjoyable and the matchday route simple.",
+          "Stay central. Nantes is strong as a two-night football break, and the city side of the trip matters enough that you should not ignore it.",
       },
       {
-        title: "Things to Do (Non-Football)",
+        title: "Neutral Visitor Notes",
         body:
-          "Nantes supports a real itinerary beyond football — ideal for a two-night match trip rather than a quick in/out.",
-      },
-      {
-        title: "Typical Atmosphere",
-        body:
-          "Varies with match context. High-stakes games and rivalry fixtures bring the loudest, most intense version of Nantes.",
-      },
-      {
-        title: "Rivalries",
-        body:
-          "Rennes is the key rivalry fixture for extra edge.",
-      },
-      {
-        title: "Club Identity & Colours",
-        body:
-          "Nantes are yellow and green. Identity is tradition, expectation, and cultural attachment to a ‘right way’ of playing.",
-      },
-      {
-        title: "Practical Tips",
-        body:
-          "If you want the best Nantes atmosphere, pick a fixture with clear stakes — derby, table pressure, or big-name visitors.",
+          "• Strong traditional-club option in Ligue 1.\n• Rennes fixture is the clear rivalry peak.\n• Better than average city-break value.\n• Good mix of club identity and usable weekend city.",
       },
     ],
     links: [{ label: "Official site", url: "https://www.fcnantes.com/" }],
-    updatedAt: "2026-02-27",
+    updatedAt: "2026-03-08",
   },
 
   nice: {
     teamKey: "nice",
     name: "OGC Nice",
+    cityKey: "nice",
     city: "Nice",
     country: "France",
     stadium: "Allianz Riviera",
@@ -913,81 +705,62 @@ export const ligue1TeamGuides: Record<string, TeamGuide> = {
       {
         title: "Club Overview",
         body:
-          "Nice are a historically significant club with modern ambition: a Riviera-based team aiming to be a consistent top-half force, with Europe as the aspirational baseline in strong cycles. The club’s identity blends tradition with a more project-led modern structure.\n\nFor neutral travellers, Nice is a strong ‘match + holiday city’ combination: great setting, modern stadium, and a comfortable matchday experience.",
+          "Nice are one of the stronger 'city trip plus football' products in Ligue 1. The club have real history, modern ambition, and enough competitive relevance to matter, but the setting does a huge amount of the heavy lifting too.\n\nFor neutral travellers, Nice is ideal if you want a Riviera weekend with top-flight football built in.",
       },
       {
-        title: "Stadium: Allianz Riviera",
+        title: "History & Identity",
         body:
-          "Allianz Riviera is modern and spacious with good sightlines. It’s built for comfort and event flow rather than old-ground intensity.",
+          "Nice are not a fake modern project. They have domestic history and a recognisable place in French football. What changes from era to era is whether they look like a genuine European-push side or a club still trying to bridge ambition and consistency.",
+      },
+      {
+        title: "Playing Style",
+        body:
+          "Nice’s better teams usually combine technical control with enough pace and structure to look like a proper upper-tier domestic side. The football can be good, but the bigger travel sell is still the total package: city, climate, and match together.",
+      },
+      {
+        title: "Stadium Profile",
+        body:
+          "Allianz Riviera is modern, comfortable, and built for event flow more than old-school intimidation. It is a good place to watch football, but not a famous pressure cauldron.",
+      },
+      {
+        title: "Atmosphere & Matchday Feel",
+        body:
+          "Moderate overall, better for bigger fixtures and the Monaco derby. This is not the league’s most intense stadium product, but it is one of its easiest premium-travel products.",
       },
       {
         title: "Best Areas to Sit",
         body:
-          "Central long-side seats for the best view; behind-goal areas for more atmosphere. The stadium layout generally keeps viewing quality strong across most sections.",
+          "Central long-side seating is best if you care about watching the match properly. Ends improve the emotional feel, but Nice is not primarily an atmosphere-first destination anyway.",
       },
       {
-        title: "Getting to Allianz Riviera",
+        title: "Getting to the Stadium",
         body:
-          "Plan this as a transport move rather than a casual walk from anywhere. Start in the city for pre-match, then head out early using the normal matchday routes.",
+          "Plan it as a transit move from the city. Nice is too good a place to waste by hanging around the stadium district all day. Use the city first, then head out for the game.",
       },
       {
-        title: "Matchday Timing",
+        title: "Pre-Match Strategy",
         body:
-          "Arrive 60–90 minutes early, especially for derbies or big-name visitors.",
-      },
-      {
-        title: "Food & Drink Around the Stadium",
-        body:
-          "Nice is a food destination — eat in town, then use the stadium for convenience. Don’t reverse it.",
-      },
-      {
-        title: "Pre-Match Areas in Nice",
-        body:
-          "The centre is ideal for pre-match: plenty of relaxed options. Nice matchdays can feel calmer than the league’s hottest atmospheres, which suits travellers who want comfort.",
-      },
-      {
-        title: "Neighbourhood Guide",
-        body:
-          "Nice is built for a weekend: waterfront, neighbourhood wandering, and strong day-time plans. The match becomes the anchor rather than the whole trip.",
+          "This is simple: enjoy Nice properly, then go to football. If you reverse that and build the whole day around stadium convenience, you are missing the point.",
       },
       {
         title: "Where to Stay",
         body:
-          "Stay central to keep food, nightlife, and day plans easy — then treat the stadium as a scheduled trip.",
+          "Stay central or in a location that suits your wider Nice weekend. The city is the base. The match is the anchor, not the entirety.",
       },
       {
-        title: "Things to Do (Non-Football)",
+        title: "Neutral Visitor Notes",
         body:
-          "This is one of Ligue 1’s best cities for ‘things to do’ outside football. It fits your app framing perfectly.",
-      },
-      {
-        title: "Typical Atmosphere",
-        body:
-          "Moderate overall, higher for derbies and big fixtures. Expect a modern-stadium feel rather than a constant cauldron.",
-      },
-      {
-        title: "Rivalries",
-        body:
-          "Monaco is the key local rivalry (Côte d’Azur derby).",
-      },
-      {
-        title: "Club Identity & Colours",
-        body:
-          "Nice are red and black. Identity blends Mediterranean football culture with modern ambition.",
-      },
-      {
-        title: "Practical Tips",
-        body:
-          "Treat Nice as a ‘city trip with football’ not ‘football trip with city.’ You’ll enjoy it more.",
+          "• One of the best city-break Ligue 1 options.\n• Better for setting and convenience than for maximum atmosphere.\n• Monaco derby is the standout fixture.\n• Excellent 'match plus mini-break' trip.",
       },
     ],
     links: [{ label: "Official site", url: "https://www.ogcnice.com/" }],
-    updatedAt: "2026-02-27",
+    updatedAt: "2026-03-08",
   },
 
   metz: {
     teamKey: "metz",
     name: "FC Metz",
+    cityKey: "metz",
     city: "Metz",
     country: "France",
     stadium: "Stade Saint-Symphorien",
@@ -995,81 +768,62 @@ export const ligue1TeamGuides: Record<string, TeamGuide> = {
       {
         title: "Club Overview",
         body:
-          "Metz are a classic resilience club: regional pride, tight margins, and a survival-smart mentality in Ligue 1 cycles. They’re known for competing through organisation and a strong sense of identity rather than glamour.\n\nFor neutral travellers, Metz offers a traditional provincial French matchday with real stakes — a club where every point feels meaningful.",
+          "Metz are a resilience club: regional pride, structural practicality, and a long-standing sense that survival and competitiveness are things to be earned rather than assumed. This is not a fancy Ligue 1 trip. It is a proper one.\n\nFor neutral travellers, Metz works best as an honest provincial football stop where every point tends to matter.",
       },
       {
-        title: "Stadium: Stade Saint-Symphorien",
+        title: "History & Identity",
         body:
-          "Saint-Symphorien has a distinctive local feel and a proper football atmosphere when matches tighten. It’s a ground where the crowd’s engagement grows directly with the game’s tension.",
+          "Metz carry more domestic identity than an outsider might expect. They are one of those clubs that do not need giant international visibility to feel culturally rooted inside French football.",
+      },
+      {
+        title: "Playing Style",
+        body:
+          "Metz generally make more sense when organised first and expansive second. Their better performances usually come from staying in the game, managing moments, and using tension rather than trying to out-glamour teams with bigger ceilings.",
+      },
+      {
+        title: "Stadium Profile",
+        body:
+          "Saint-Symphorien is established, local, and capable of carrying tension well. It is not the biggest venue in the division, but it often feels more emotionally connected than smoother modern stadiums.",
+      },
+      {
+        title: "Atmosphere & Matchday Feel",
+        body:
+          "The atmosphere gets best when the fixture feels tight, pressured, or regionally meaningful. Supporters respond strongly to moments that look like hard-earned points rather than casual entertainment.",
       },
       {
         title: "Best Areas to Sit",
         body:
-          "Central long-side seats for the best view; behind goals for more emotion and noise. If you want the ‘Metz under pressure’ experience, choose the more vocal end sections.",
+          "Central long-side seating remains the best neutral choice. If you want the more emotional version of the trip, sit closer to the louder ends, especially for higher-stakes fixtures.",
       },
       {
-        title: "Getting to Saint-Symphorien",
+        title: "Getting to the Stadium",
         body:
-          "Metz is manageable if you keep plans simple: base centrally, use local transport/short rides, arrive early, and avoid last-minute stress.",
+          "Keep the plan central and simple. Metz is not a city where overcomplicated matchday routing adds anything. Stay central, move with time, and let the football be the point.",
       },
       {
-        title: "Matchday Timing",
+        title: "Pre-Match Strategy",
         body:
-          "Arrive 60–90 minutes early if you want to feel the build-up and keep entry calm.",
-      },
-      {
-        title: "Food & Drink Around the Stadium",
-        body:
-          "Do your main food in town, then keep stadium food as matchday convenience.",
-      },
-      {
-        title: "Pre-Match Areas in Metz",
-        body:
-          "Metz pre-match is best in the centre: bars, casual places, and a straightforward local routine.",
-      },
-      {
-        title: "Neighbourhood Guide",
-        body:
-          "Metz is compact and easy. It’s a good ‘one-night match break’ city where you can keep the whole trip efficient.",
+          "Eat and drink in the centre, then head out. This is not a trip where the stadium zone should dominate the whole day.",
       },
       {
         title: "Where to Stay",
         body:
-          "Stay central for simplicity — you’ll reduce transport friction and keep evening plans easy.",
+          "Stay central. Metz is strongest as a one-night or short two-night football break with minimal transport friction.",
       },
       {
-        title: "Things to Do (Non-Football)",
+        title: "Neutral Visitor Notes",
         body:
-          "Metz supports a calm weekend: food, walking, and a match. It’s not a mega-tourist city, which is exactly why it works as a football break.",
-      },
-      {
-        title: "Typical Atmosphere",
-        body:
-          "Steady, local, and reactive. Tight matches create real tension — the crowd gets loud when the game becomes a fight.",
-      },
-      {
-        title: "Rivalries",
-        body:
-          "Nancy is the defining derby rivalry when applicable. Regional fixtures bring the sharpest edge.",
-      },
-      {
-        title: "Club Identity & Colours",
-        body:
-          "Metz are traditionally maroon. Identity is regional pride and survival-smart competition.",
-      },
-      {
-        title: "Practical Tips",
-        body:
-          "If you want the best Metz matchday, choose a fixture with table context — relegation pressure or direct rivals — that’s when the ground feels most alive.",
+          "• Good for traditional provincial French football feel.\n• Nancy rivalry is the emotional peak when relevant.\n• Better for realism than glamour.\n• Solid if you want a lower-flash but serious Ligue 1 stop.",
       },
     ],
     links: [{ label: "Official site", url: "https://www.fcmetz.com/" }],
-    updatedAt: "2026-02-27",
+    updatedAt: "2026-03-08",
   },
 
   "paris-fc": {
     teamKey: "paris-fc",
     name: "Paris FC",
+    cityKey: "paris",
     city: "Paris",
     country: "France",
     stadium: "Stade Jean-Bouin",
@@ -1077,81 +831,62 @@ export const ligue1TeamGuides: Record<string, TeamGuide> = {
       {
         title: "Club Overview",
         body:
-          "Paris FC are the capital’s alternative top-flight project: smaller profile, more community feel, and a matchday that’s significantly less commercial than PSG. Their Ligue 1 presence is about building sustainable relevance rather than instant superstardom.\n\nFor neutral travellers, Paris FC is a rare offer: top-flight football in Paris without the mega-club price tag or high-production spectacle.",
+          "Paris FC are the capital’s alternative top-flight offer: smaller scale, less polished, less globally packaged, and therefore in some ways more interesting for neutrals who want Paris plus football without PSG-style commercial overload.\n\nThis is not the glamorous Paris brand. It is the 'other Paris club' product, which is exactly why it has value.",
       },
       {
-        title: "Stadium: Stade Jean-Bouin",
+        title: "History & Identity",
         body:
-          "Paris FC are set to play at Stade Jean-Bouin from the 2025/26 season. Jean-Bouin is a modern, compact venue that suits a “city football” experience: straightforward to access, comfortable to watch in, and integrated into Paris rather than sitting as a remote out-of-town arena.",
+          "Paris FC do not carry the giant symbolic weight of PSG, but their relevance comes from providing a different way into football in the capital: more community, lower-profile, and more grounded in the simple appeal of watching top-flight football in Paris without the superclub framing.",
+      },
+      {
+        title: "Playing Style",
+        body:
+          "Because the club is structurally smaller, the football identity is more about sustainable top-flight presence and competitiveness than about dominating the division. The appeal here is not star-chasing. It is access and contrast.",
+      },
+      {
+        title: "Stadium Profile",
+        body:
+          "Jean-Bouin is a modern, compact, urban venue that suits Paris FC well. It gives the club a city-integrated matchday rather than a detached outskirts feel. That is a big asset.",
+      },
+      {
+        title: "Atmosphere & Matchday Feel",
+        body:
+          "Calmer and more community-flavoured than PSG. That is the point. If you want a more relaxed Paris football experience, this is the better fit.",
       },
       {
         title: "Best Areas to Sit",
         body:
-          "For the best view, aim for central long-side seats. If you want more atmosphere and crowd identity, look toward the areas closer to the most vocal support. Because the stadium is compact, you’ll get decent proximity from most blocks.",
+          "Central long-side seating is still the right neutral move. The compactness of the venue means you will not feel miles away from the game in most sensible blocks.",
       },
       {
-        title: "Getting to Jean-Bouin",
+        title: "Getting to the Stadium",
         body:
-          "This is one of the easiest Ligue 1 matchdays logistically: you’re in Paris with strong public transport. Plan to arrive early and treat it as a proper city evening — dinner, short transit, match, post-match drink.",
+          "This is one of the easiest Ligue 1 trips logistically because it is Paris. But do not let that make you lazy. Paris can still punish bad timing if you leave late.",
       },
       {
-        title: "Matchday Timing",
+        title: "Pre-Match Strategy",
         body:
-          "Arrive 60–75 minutes before kickoff. It’s a smaller event than PSG, so entry is usually calmer, but Paris travel time can still surprise you if you cut it fine.",
-      },
-      {
-        title: "Food & Drink Around the Stadium",
-        body:
-          "You’re in Paris — eat and drink properly before the match. Stadium food is convenience only.",
-      },
-      {
-        title: "Pre-Match Areas in Paris",
-        body:
-          "Pick your vibe: neighbourhood dining, casual bars, or a quick café stop. Paris FC matchdays work best when you build a simple “city plan” and let the match be the anchor.",
-      },
-      {
-        title: "Neighbourhood Guide",
-        body:
-          "Paris is obviously endless — but that’s your advantage. Paris FC is ideal for travellers who want a Ligue 1 match inside a full city break rather than dedicating the whole trip to stadium culture.",
+          "Use Paris properly. Eat, walk, have a drink, then head to the match as one clean evening block. That is the whole travel logic here.",
       },
       {
         title: "Where to Stay",
         body:
-          "Anywhere central with easy transport works. The entire benefit of Paris FC is that you can build your trip around the city first.",
+          "Anywhere central with good transport works. The whole point of Paris FC is that the city itself is the main base and the match fits into it easily.",
       },
       {
-        title: "Things to Do (Non-Football)",
+        title: "Neutral Visitor Notes",
         body:
-          "This is the easiest ‘match + everything else’ destination in the league: museums, food, neighbourhood wandering, shopping — you’re not short on options.",
-      },
-      {
-        title: "Typical Atmosphere",
-        body:
-          "More relaxed than PSG: smaller crowd, more community feel, and less constant intensity. The atmosphere is best in tight games where points feel close.",
-      },
-      {
-        title: "Rivalries",
-        body:
-          "No giant traditional rivalry at PSG scale, but any Paris narrative fixture carries added interest.",
-      },
-      {
-        title: "Club Identity & Colours",
-        body:
-          "Paris FC are typically blue. Identity is growth, sustainability, and being the capital’s alternative top-flight experience.",
-      },
-      {
-        title: "Practical Tips",
-        body:
-          "If you want “Paris + Ligue 1” without mega-club chaos, Paris FC is the cleanest option. Keep the plan city-first, match-second, and you’ll have a great weekend.",
+          "• Best if you want Paris plus Ligue 1 without PSG-level circus.\n• More relaxed than Paris Saint-Germain.\n• Strong value alternative for a football-in-the-capital trip.\n• City-first, match-second is the right framing.",
       },
     ],
     links: [{ label: "Official site", url: "https://parisfc.fr/" }],
-    updatedAt: "2026-02-27",
+    updatedAt: "2026-03-08",
   },
 
   "paris-saint-germain": {
     teamKey: "paris-saint-germain",
     name: "Paris Saint-Germain",
+    cityKey: "paris",
     city: "Paris",
     country: "France",
     stadium: "Parc des Princes",
@@ -1159,69 +894,65 @@ export const ligue1TeamGuides: Record<string, TeamGuide> = {
       {
         title: "Club Overview",
         body:
-          "Paris Saint-Germain are France’s modern superpower: built for domestic dominance, European relevance, and global visibility. In Ligue 1, PSG aren’t judged by whether they win trophies — they’re judged by how inevitable it looks. In Europe, they’re judged by whether they meet the highest benchmark.\n\nFor neutral travellers, PSG are the cleanest ‘major capital club’ experience in France: iconic city, high-production matchday, elite-level players, and a stadium that feels intense and close to the pitch even by European standards.",
+          "PSG are France’s modern superclub. Domestically, they are judged by dominance. Internationally, they are judged by whether dominance scales. That is the reality. They are not in the same expectation category as the rest of the league.\n\nFor neutral travellers, PSG are the biggest 'global-club-in-a-capital-city' Ligue 1 product: famous city, famous venue, elite player quality, and a matchday that still feels intense enough to matter.",
       },
       {
-        title: "History & Legacy",
+        title: "History & Identity",
         body:
-          "PSG are young by European heavyweight standards, founded in 1970, but their story is acceleration rather than slow build. Their modern era is defined by the 2010s onward: resources increased, expectations reset, and PSG became the domestic reference point.\n\n(If you’re going to claim specific European milestones like “first Champions League title in 2025”, you need to web-verify it before hard-coding it — otherwise you’re baking potentially wrong ‘facts’ into the app.)",
+          "PSG are younger than many European heavyweights, but their modern identity is obvious: resources, star power, and an assumption that the league should bend around them. That creates both attraction and resistance. They are the club many neutrals want to see and many rivals most enjoy targeting.",
       },
       {
         title: "Playing Style",
         body:
-          "PSG’s default is territorial football: control in the opponent’s half, repeated entries into the final third, and superior individual quality to turn pressure into goals.\n\nTypical traits:\n• High possession with intent.\n• Aggressive counter-pressing.\n• Width to stretch opponents, then central combinations to finish.\n\nIn bigger European games, PSG are usually more pragmatic about game state: they still want control, but choose moments to accelerate rather than playing at full tempo constantly.",
+          "PSG’s domestic identity is territorial control, repeated pressure, and enough individual quality to break teams down even when the flow is imperfect. The stronger versions of PSG are not just talented. They are oppressive by Ligue 1 standards.",
       },
       {
-        title: "Stadium: Parc des Princes",
+        title: "Stadium Profile",
         body:
-          "Parc des Princes is one of Europe’s most recognisable football stadiums: steep stands, a compact bowl, and strong acoustics. It plays bigger than the capacity because the crowd is close to the pitch and the noise carries.",
+          "Parc des Princes remains one of the best major-club urban stadiums in Europe: steep, recognisable, close to the pitch, and capable of feeling much louder than its size would suggest compared with some giant modern bowls.",
       },
       {
         title: "Atmosphere & Matchday Feel",
         body:
-          "The Parc can be genuinely loud when the stakes are real.\n\nPatterns:\n• Big matches: sustained intensity and sharper edge.\n• Routine league fixtures: still good, but energy often mirrors the game — it rises when PSG are forcing breakthroughs.",
+          "Big nights and high-stakes fixtures bring the best version of the Parc. Routine domestic matches can still be strong, but the emotional lift is biggest when the opposition or stakes justify it.\n\nIt is still a far better in-person stadium than lazy stereotypes suggest.",
       },
       {
         title: "Best Areas to Sit",
         body:
-          "For viewing quality: central sideline seats (lower or mid-tier) are best.\n\nBehind-goal areas concentrate organised singing and ‘end’ energy, but the view is more atmosphere-first than tactics-first.",
+          "For the best viewing experience, central long-side seating wins. For an atmosphere-heavy experience, target areas closer to the louder ends.\n\nParc is a stadium where proximity matters, so do not go too extreme in angle or height unless availability forces it.",
       },
       {
-        title: "Getting There",
+        title: "Getting to the Stadium",
         body:
-          "Public transport is the move. Build in extra time near kickoff — queues and crowd density increase sharply close to match time.",
+          "Public transport is the right move. Build in real time. The stupidity with PSG is always the same: people assume big-city transport means no need to plan. Wrong.",
       },
       {
-        title: "Pre-Match in Paris",
+        title: "Pre-Match Strategy",
         body:
-          "Do Paris properly: eat/drink in the city, then metro out with time to spare. The main mistake is leaving the move too late because you’re enjoying the city.",
+          "Do Paris properly before the game, then move early enough to avoid turning the whole evening into a queue story. That is the cleanest way to enjoy PSG.",
       },
       {
-        title: "Rivalries",
+        title: "Where to Stay",
         body:
-          "Marseille is the defining rivalry (Le Classique). PSG also carry ‘superclub friction’ across the league — many opponents treat PSG at home as a statement match.",
+          "Stay where it makes sense for your wider Paris weekend. PSG is one part of a major-city trip, not the entire thing unless you deliberately make it so.",
       },
       {
         title: "Neutral Visitor Notes",
         body:
-          "• If you want star power and a major-capital matchday, PSG is the Ligue 1 pick.\n• For maximum atmosphere, target high-stakes fixtures.\n• Arrive early — the experience improves massively when you’re not rushing.",
-      },
-      {
-        title: "Practical Tips",
-        body:
-          "Expect security checks and controlled entry. Post-match metro can be crowded; waiting 10–15 minutes often makes the exit calmer.",
+          "• Biggest-star-power Ligue 1 trip.\n• Better in person than lazy anti-PSG clichés suggest.\n• High-stakes fixtures give the best version of the Parc.\n• If you want capital-city superclub football, this is the obvious pick.",
       },
     ],
     links: [
       { label: "Official site", url: "https://www.psg.fr/" },
       { label: "Tickets", url: "https://billetterie.psg.fr/" },
     ],
-    updatedAt: "2026-02-27",
+    updatedAt: "2026-03-08",
   },
 
   rennes: {
     teamKey: "rennes",
     name: "Stade Rennais FC",
+    cityKey: "rennes",
     city: "Rennes",
     country: "France",
     stadium: "Roazhon Park",
@@ -1229,46 +960,62 @@ export const ligue1TeamGuides: Record<string, TeamGuide> = {
       {
         title: "Club Overview",
         body:
-          "Rennes are one of Ligue 1’s most consistently well-run modern clubs: development-minded, competitive, and usually strong at home. They’re often a good neutral watch because the football tends to have intent — not pure chaos, but not sterile either.\n\nFor travellers, Rennes is a clean match-trip city: walkable, good food, and a stadium that can generate real atmosphere in the right fixtures.",
+          "Rennes are one of France’s better modern clubs to watch because they usually try to look like a serious football side rather than a survival machine. Good development, strong recruitment phases, and a home ground that can generate proper energy make them a strong all-round Ligue 1 trip.\n\nFor neutral travellers, Rennes is one of the cleaner city-plus-football products outside the very biggest names.",
       },
       {
-        title: "Stadium: Roazhon Park",
+        title: "History & Identity",
         body:
-          "Roazhon Park is compact and loud when Rennes are on it. It’s a good ‘proper football ground’ rather than a corporate bowl, and crowd noise carries well in tight games.",
+          "Rennes’ modern identity is tied to smart club-building and the sense that they should be competitive at the right end of the table more often than not. They are not a giant, but they are not small-fry either.",
+      },
+      {
+        title: "Playing Style",
+        body:
+          "Rennes’ better teams usually look proactive, technically competent, and capable of giving neutrals a decent football watch. That matters because the trip is stronger when the city and the football both hold up.",
+      },
+      {
+        title: "Stadium Profile",
+        body:
+          "Roazhon Park is a strong domestic stadium: compact enough to keep atmosphere tight, established enough to feel like a proper football venue, and more interesting than a bland bowl.",
+      },
+      {
+        title: "Atmosphere & Matchday Feel",
+        body:
+          "The place lifts well when the match matters. Rivalries and high-stakes fixtures give the best version of Rennes. The baseline atmosphere is decent; the upper end is properly good.",
       },
       {
         title: "Best Areas to Sit",
         body:
-          "Central long-side seats give the best view. Ends provide more atmosphere. If you’re neutral, choose a central block to enjoy the full pattern of play — Rennes games often reward that.",
+          "Central long-side seats are the best all-round option. If you want more emotional charge, lean toward the ends. Roazhon is a stadium where you can get a good experience without obsessing over every block.",
       },
       {
-        title: "Getting to Roazhon Park",
+        title: "Getting to the Stadium",
         body:
-          "Rennes matchdays are generally straightforward if you base centrally. Use local transport or short rides and avoid leaving it to the final minutes.",
+          "Rennes is straightforward if you stay central and do not overcomplicate the plan. That is a recurring theme with the better medium-sized Ligue 1 cities.",
       },
       {
-        title: "Matchday Timing",
+        title: "Pre-Match Strategy",
         body:
-          "Arrive 60–90 minutes early. Rennes has a good ‘build-up’ feel when fixtures matter.",
+          "Use the centre. Eat, drink, then head to the match. Rennes supports that rhythm well, which is why it works so nicely as a short football break.",
       },
       {
-        title: "Food & Drink Around the Stadium",
+        title: "Where to Stay",
         body:
-          "Eat in the centre first. Stadium-area food is secondary; the city delivers better value and atmosphere.",
+          "Stay central and keep the trip walkable where possible. Rennes is more enjoyable when the city side of the weekend remains frictionless.",
       },
       {
-        title: "Rivalries",
+        title: "Neutral Visitor Notes",
         body:
-          "Nantes is the key rivalry fixture for extra edge.",
+          "• Good balance of city, football quality, and atmosphere.\n• Nantes fixture is the rivalry peak.\n• Strong choice for a clean two-night Ligue 1 weekend.\n• One of the better non-superclub trips in France.",
       },
     ],
     links: [{ label: "Official site", url: "https://www.staderennais.com/" }],
-    updatedAt: "2026-02-27",
+    updatedAt: "2026-03-08",
   },
 
   strasbourg: {
     teamKey: "strasbourg",
     name: "RC Strasbourg Alsace",
+    cityKey: "strasbourg",
     city: "Strasbourg",
     country: "France",
     stadium: "Stade de la Meinau",
@@ -1276,26 +1023,62 @@ export const ligue1TeamGuides: Record<string, TeamGuide> = {
       {
         title: "Club Overview",
         body:
-          "Strasbourg are one of Ligue 1’s best atmosphere picks: identity-heavy, locally intense, and emotionally tied to Alsace regional pride. The club’s matchdays can feel old-school in the best way — loud, tight, and properly engaged.\n\nFor neutral travellers, Strasbourg is a top-tier option if you want a stadium experience that feels ‘real’ rather than polished.",
+          "Strasbourg are one of the strongest atmosphere-led clubs in Ligue 1 outside the obvious giants. This is a club with genuine regional identity, a recognisable old-school football feel, and a home environment that can get properly intense.\n\nFor neutral travellers, Strasbourg is a top-tier pick if you want a stadium that feels alive rather than merely modern.",
       },
       {
-        title: "Stadium: Stade de la Meinau",
+        title: "History & Identity",
         body:
-          "La Meinau is compact and intense: close stands, strong acoustics, and an environment where crowd energy can shape the match. It’s one of France’s best traditional-feel venues.",
+          "Strasbourg’s place in French football is bound up with Alsatian identity and a supporter base that gives the club a cultural weight beyond simple table position. They feel like a real football institution, not just another badge in the division.",
       },
       {
-        title: "Rivalries",
+        title: "Playing Style",
         body:
-          "Metz is the key rivalry for added edge.",
+          "The football quality can vary by cycle, but the important thing for the trip is that Strasbourg home matches usually feel emotionally charged enough to stay interesting. The crowd gives the place lift.",
+      },
+      {
+        title: "Stadium Profile",
+        body:
+          "La Meinau is one of the best traditional-feel venues in the division: compact, close, loud enough, and genuinely connected to what happens on the pitch. It is exactly the sort of stadium neutrals remember.",
+      },
+      {
+        title: "Atmosphere & Matchday Feel",
+        body:
+          "Strong. Not theoretical strong. Actually strong. Tight games feel tense, big moments carry, and the crowd does a lot more than politely observe.\n\nIf atmosphere matters to you, Strasbourg should be high on your list.",
+      },
+      {
+        title: "Best Areas to Sit",
+        body:
+          "For the pure football view, choose central long-side seats. If you want the fullest hit of the atmosphere, lean toward the more vocal end sections. This is one of those grounds where emotional placement really does change the feel of the trip.",
+      },
+      {
+        title: "Getting to the Stadium",
+        body:
+          "Stay central, keep the movement simple, and arrive with enough time. Strasbourg is a very usable football weekend city. There is no reason to make it difficult.",
+      },
+      {
+        title: "Pre-Match Strategy",
+        body:
+          "Do the city properly first, then go to the ground. Strasbourg is too good a place to reduce to pure transport logic, but the stadium is too good to treat casually either. Balance it properly.",
+      },
+      {
+        title: "Where to Stay",
+        body:
+          "Stay central. Strasbourg works beautifully as a city-break-plus-football trip, and the central base is part of why.",
+      },
+      {
+        title: "Neutral Visitor Notes",
+        body:
+          "• One of the best atmosphere trips in Ligue 1.\n• Strong city-break quality too.\n• Metz rivalry adds extra edge.\n• Excellent pick for neutrals who want a more traditional stadium feel.",
       },
     ],
     links: [{ label: "Official site", url: "https://www.rcstrasbourgalsace.fr/" }],
-    updatedAt: "2026-02-27",
+    updatedAt: "2026-03-08",
   },
 
   toulouse: {
     teamKey: "toulouse",
     name: "Toulouse FC",
+    cityKey: "toulouse",
     city: "Toulouse",
     country: "France",
     stadium: "Stadium de Toulouse",
@@ -1303,16 +1086,56 @@ export const ligue1TeamGuides: Record<string, TeamGuide> = {
       {
         title: "Club Overview",
         body:
-          "Toulouse are a modern, process-led club: development-minded, structurally coherent, and comfortable building competitiveness through smart recruitment and tactical clarity rather than pure spending.\n\nFor neutral travellers, Toulouse is a strong southern-city match trip: good weather potential, a real city-break vibe, and a matchday that’s more welcoming than hostile.",
+          "Toulouse are one of the cleaner modern French club projects: development-minded, recruitment-smart, and usually more coherent than their market power alone would predict. They are not a giant, but they are often a useful neutral watch and a good football-weekend fit.\n\nFor travellers, Toulouse is strong because the city has enough life and warmth to make the whole weekend work even before the match begins.",
       },
       {
-        title: "Stadium: Stadium de Toulouse",
+        title: "History & Identity",
         body:
-          "The Stadium de Toulouse is a large, established venue with good sightlines and a clear ‘big city match’ feel. It’s not the league’s most intimidating ground, but it can lift for bigger fixtures.",
+          "Toulouse’s modern identity is less about giant historical dominance and more about functioning intelligently in the contemporary league. They make sense as a club. That is worth more than empty history-posturing.",
+      },
+      {
+        title: "Playing Style",
+        body:
+          "Toulouse’s better sides usually look development-led, tactically sensible, and willing to play with structure rather than fear. They can be a better neutral watch than bigger but more confused clubs.",
+      },
+      {
+        title: "Stadium Profile",
+        body:
+          "The Stadium de Toulouse is a substantial, established venue with decent sightlines and a proper big-city domestic match feel. It is not the league’s most iconic ground, but it works well enough for a strong overall product.",
+      },
+      {
+        title: "Atmosphere & Matchday Feel",
+        body:
+          "The atmosphere tends to improve with fixture size and stakes. The city itself does a lot of work around the game, which is why Toulouse remains a very good football-weekend destination even when the stadium atmosphere is not permanently elite.",
+      },
+      {
+        title: "Best Areas to Sit",
+        body:
+          "Central long-side blocks are still the smartest neutral seats. Ends add more noise. Because the stadium is larger, seat choice matters a bit more than at smaller Ligue 1 grounds.",
+      },
+      {
+        title: "Getting to the Stadium",
+        body:
+          "This is another city where the right move is simple: use the city first, then transit to the match with enough time. Leave it too late and you create avoidable hassle.",
+      },
+      {
+        title: "Pre-Match Strategy",
+        body:
+          "Eat and drink in Toulouse properly. The city has enough quality that you should not reduce the trip to a stadium-only plan.",
+      },
+      {
+        title: "Where to Stay",
+        body:
+          "Stay central and let the city carry the weekend. Toulouse is a much better trip when the football is the anchor rather than the entire script.",
+      },
+      {
+        title: "Neutral Visitor Notes",
+        body:
+          "• Strong southern France football weekend.\n• Better all-round city break than some bigger football brands.\n• Good fit for neutral travellers who want a balance of city and match.\n• One of the more usable Ligue 1 weekend products.",
       },
     ],
     links: [{ label: "Official site", url: "https://www.toulousefc.com/" }],
-    updatedAt: "2026-02-27",
+    updatedAt: "2026-03-08",
   },
 };
 

@@ -4,7 +4,6 @@ const SUPER_LIG = 203;
 const TURKEY = "Turkey";
 
 export const superLigTeams: Record<string, TeamRecord> = {
-
   "galatasaray": {
     teamKey: "galatasaray",
     name: "Galatasaray",
@@ -29,18 +28,6 @@ export const superLigTeams: Record<string, TeamRecord> = {
     aliases: ["fenerbahce sk"],
   },
 
-  "besiktas": {
-    teamKey: "besiktas",
-    name: "Beşiktaş",
-    country: TURKEY,
-    city: "Istanbul",
-    leagueId: SUPER_LIG,
-    stadiumKey: "vodafone-park",
-    founded: 1903,
-    clubColors: ["black", "white"],
-    aliases: ["besiktas jk"],
-  },
-
   "trabzonspor": {
     teamKey: "trabzonspor",
     name: "Trabzonspor",
@@ -53,6 +40,18 @@ export const superLigTeams: Record<string, TeamRecord> = {
     aliases: ["trabzonspor kulubu"],
   },
 
+  "besiktas": {
+    teamKey: "besiktas",
+    name: "Beşiktaş",
+    country: TURKEY,
+    city: "Istanbul",
+    leagueId: SUPER_LIG,
+    stadiumKey: "vodafone-park",
+    founded: 1903,
+    clubColors: ["black", "white"],
+    aliases: ["besiktas jk"],
+  },
+
   "istanbul-basaksehir": {
     teamKey: "istanbul-basaksehir",
     name: "Istanbul Basaksehir",
@@ -62,103 +61,19 @@ export const superLigTeams: Record<string, TeamRecord> = {
     stadiumKey: "basaksehir-fatih-terim-stadium",
     founded: 1990,
     clubColors: ["orange", "navy"],
-    aliases: ["basaksehir"],
+    aliases: ["basaksehir", "istanbul basaksehir fk"],
   },
 
-  "konyaspor": {
-    teamKey: "konyaspor",
-    name: "Konyaspor",
+  "goztepe": {
+    teamKey: "goztepe",
+    name: "Göztepe",
     country: TURKEY,
-    city: "Konya",
+    city: "Izmir",
     leagueId: SUPER_LIG,
-    stadiumKey: "konya-buyuksehir-stadium",
-    founded: 1922,
-    clubColors: ["green", "white"],
-    aliases: ["atiker konyaspor"],
-  },
-
-  "sivasspor": {
-    teamKey: "sivasspor",
-    name: "Sivasspor",
-    country: TURKEY,
-    city: "Sivas",
-    leagueId: SUPER_LIG,
-    stadiumKey: "sivas-4-eylul-stadium",
-    founded: 1967,
-    clubColors: ["red", "white"],
-    aliases: ["demir grup sivasspor"],
-  },
-
-  "kayserispor": {
-    teamKey: "kayserispor",
-    name: "Kayserispor",
-    country: TURKEY,
-    city: "Kayseri",
-    leagueId: SUPER_LIG,
-    stadiumKey: "kadir-has-stadium",
-    founded: 1966,
+    stadiumKey: "gursel-aksel-stadium",
+    founded: 1925,
     clubColors: ["yellow", "red"],
-    aliases: ["hes kablo kayserispor"],
-  },
-
-  "gaziantep": {
-    teamKey: "gaziantep",
-    name: "Gaziantep FK",
-    country: TURKEY,
-    city: "Gaziantep",
-    leagueId: SUPER_LIG,
-    stadiumKey: "kalyon-stadium",
-    founded: 1988,
-    clubColors: ["red", "black"],
-    aliases: ["gaziantep fk"],
-  },
-
-  "antalya": {
-    teamKey: "antalya",
-    name: "Antalyaspor",
-    country: TURKEY,
-    city: "Antalya",
-    leagueId: SUPER_LIG,
-    stadiumKey: "antalya-stadium",
-    founded: 1966,
-    clubColors: ["red", "white"],
-    aliases: ["antalyaspor"],
-  },
-
-  "adana-demirspor": {
-    teamKey: "adana-demirspor",
-    name: "Adana Demirspor",
-    country: TURKEY,
-    city: "Adana",
-    leagueId: SUPER_LIG,
-    stadiumKey: "yeni-adana-stadium",
-    founded: 1940,
-    clubColors: ["blue"],
-    aliases: ["demirspor"],
-  },
-
-  "hatayspor": {
-    teamKey: "hatayspor",
-    name: "Hatayspor",
-    country: TURKEY,
-    city: "Antakya",
-    leagueId: SUPER_LIG,
-    stadiumKey: "hatay-stadium",
-    founded: 1967,
-    clubColors: ["claret", "white"],
-    aliases: ["atakas hatayspor"],
-  },
-
-  "alanyaspor": {
-    teamKey: "alanyaspor",
-    name: "Alanyaspor",
-    country: TURKEY,
-    city: "Alanya",
-    leagueId: SUPER_LIG,
-    stadiumKey: "bahcesehir-okullari-stadium",
-    founded: 1948,
-    clubColors: ["orange", "green"],
-    aliases: ["alanyaspor"],
+    aliases: ["goztepe sk", "göztepe sk"],
   },
 
   "samsunspor": {
@@ -185,16 +100,88 @@ export const superLigTeams: Record<string, TeamRecord> = {
     aliases: ["caykur rizespor"],
   },
 
-  "ankaragucu": {
-    teamKey: "ankaragucu",
-    name: "Ankaragucu",
+  "kocaelispor": {
+    teamKey: "kocaelispor",
+    name: "Kocaelispor",
+    country: TURKEY,
+    city: "Izmit",
+    leagueId: SUPER_LIG,
+    stadiumKey: "yildiz-entegre-kocaeli-stadium",
+    founded: 1966,
+    clubColors: ["green", "black"],
+    aliases: ["kocaelispor"],
+  },
+
+  "gaziantep": {
+    teamKey: "gaziantep",
+    name: "Gaziantep FK",
+    country: TURKEY,
+    city: "Gaziantep",
+    leagueId: SUPER_LIG,
+    stadiumKey: "kalyon-stadium",
+    founded: 1988,
+    clubColors: ["red", "black"],
+    aliases: ["gaziantep fk"],
+  },
+
+  "alanyaspor": {
+    teamKey: "alanyaspor",
+    name: "Alanyaspor",
+    country: TURKEY,
+    city: "Alanya",
+    leagueId: SUPER_LIG,
+    stadiumKey: "bahcesehir-okullari-stadium",
+    founded: 1948,
+    clubColors: ["orange", "green"],
+    aliases: ["alanyaspor"],
+  },
+
+  "genclerbirligi": {
+    teamKey: "genclerbirligi",
+    name: "Gençlerbirliği",
     country: TURKEY,
     city: "Ankara",
     leagueId: SUPER_LIG,
     stadiumKey: "eryaman-stadium",
-    founded: 1910,
-    clubColors: ["yellow", "navy"],
-    aliases: ["mke ankaragucu"],
+    founded: 1923,
+    clubColors: ["red", "black"],
+    aliases: ["genclerbirligi", "gençlerbirliği sk"],
+  },
+
+  "konyaspor": {
+    teamKey: "konyaspor",
+    name: "Konyaspor",
+    country: TURKEY,
+    city: "Konya",
+    leagueId: SUPER_LIG,
+    stadiumKey: "konya-buyuksehir-stadium",
+    founded: 1922,
+    clubColors: ["green", "white"],
+    aliases: ["atiker konyaspor", "tümosan konyaspor"],
+  },
+
+  "antalya": {
+    teamKey: "antalya",
+    name: "Antalyaspor",
+    country: TURKEY,
+    city: "Antalya",
+    leagueId: SUPER_LIG,
+    stadiumKey: "antalya-stadium",
+    founded: 1966,
+    clubColors: ["red", "white"],
+    aliases: ["antalyaspor"],
+  },
+
+  "eyupspor": {
+    teamKey: "eyupspor",
+    name: "Eyüpspor",
+    country: TURKEY,
+    city: "Istanbul",
+    leagueId: SUPER_LIG,
+    stadiumKey: "eyup-stadium",
+    founded: 1919,
+    clubColors: ["purple", "yellow"],
+    aliases: ["eyupspor", "eyüpspor"],
   },
 
   "kasimpasa": {
@@ -206,21 +193,32 @@ export const superLigTeams: Record<string, TeamRecord> = {
     stadiumKey: "recep-tayyip-erdogan-stadium",
     founded: 1921,
     clubColors: ["blue", "white"],
-    aliases: ["kasimpasa sk"],
+    aliases: ["kasimpasa sk", "kasımpaşa"],
   },
 
-  "pendikspor": {
-    teamKey: "pendikspor",
-    name: "Pendikspor",
+  "kayserispor": {
+    teamKey: "kayserispor",
+    name: "Kayserispor",
+    country: TURKEY,
+    city: "Kayseri",
+    leagueId: SUPER_LIG,
+    stadiumKey: "kadir-has-stadium",
+    founded: 1966,
+    clubColors: ["yellow", "red"],
+    aliases: ["kayserispor", "mondihome kayserispor"],
+  },
+
+  "fatih-karagumruk": {
+    teamKey: "fatih-karagumruk",
+    name: "Fatih Karagümrük",
     country: TURKEY,
     city: "Istanbul",
     leagueId: SUPER_LIG,
-    stadiumKey: "pendik-stadium",
-    founded: 1950,
-    clubColors: ["red", "white"],
-    aliases: ["pendikspor"],
-  }
-
+    stadiumKey: "ataturk-olimpiyat-stadium",
+    founded: 1926,
+    clubColors: ["black", "red"],
+    aliases: ["fatih karagumruk", "fatih karagümrük sk"],
+  },
 };
 
 export default superLigTeams;

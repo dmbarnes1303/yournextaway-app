@@ -4,7 +4,6 @@ const SUPER_LEAGUE_GREECE = 197;
 const GREECE = "Greece";
 
 export const superLeagueGreeceTeams: Record<string, TeamRecord> = {
-
   "olympiacos": {
     teamKey: "olympiacos",
     name: "Olympiacos",
@@ -14,7 +13,7 @@ export const superLeagueGreeceTeams: Record<string, TeamRecord> = {
     stadiumKey: "karaiskakis-stadium",
     founded: 1925,
     clubColors: ["red", "white"],
-    aliases: ["olympiacos fc"],
+    aliases: ["olympiacos fc", "olympiakos"],
   },
 
   "panathinaikos": {
@@ -38,7 +37,7 @@ export const superLeagueGreeceTeams: Record<string, TeamRecord> = {
     stadiumKey: "agia-sofia-stadium",
     founded: 1924,
     clubColors: ["yellow", "black"],
-    aliases: ["aek"],
+    aliases: ["aek", "aek fc"],
   },
 
   "paok": {
@@ -62,7 +61,7 @@ export const superLeagueGreeceTeams: Record<string, TeamRecord> = {
     stadiumKey: "kleanthis-vikelidis-stadium",
     founded: 1914,
     clubColors: ["yellow", "black"],
-    aliases: ["aris fc"],
+    aliases: ["aris fc", "aris thessaloniki fc"],
   },
 
   "asteras-tripolis": {
@@ -74,7 +73,7 @@ export const superLeagueGreeceTeams: Record<string, TeamRecord> = {
     stadiumKey: "theodoros-kolokotronis",
     founded: 1931,
     clubColors: ["yellow", "blue"],
-    aliases: ["asteras"],
+    aliases: ["asteras", "asteras aktor", "asteras tripolis fc"],
   },
 
   "atromitos": {
@@ -89,18 +88,6 @@ export const superLeagueGreeceTeams: Record<string, TeamRecord> = {
     aliases: ["atromitos fc"],
   },
 
-  "lamia": {
-    teamKey: "lamia",
-    name: "Lamia",
-    country: GREECE,
-    city: "Lamia",
-    leagueId: SUPER_LEAGUE_GREECE,
-    stadiumKey: "lamia-municipal-stadium",
-    founded: 1964,
-    clubColors: ["blue", "white"],
-    aliases: ["pas lamia"],
-  },
-
   "ofi": {
     teamKey: "ofi",
     name: "OFI Crete",
@@ -110,7 +97,7 @@ export const superLeagueGreeceTeams: Record<string, TeamRecord> = {
     stadiumKey: "theodoros-vardinogiannis",
     founded: 1925,
     clubColors: ["black", "white"],
-    aliases: ["ofi fc"],
+    aliases: ["ofi fc", "ofi"],
   },
 
   "volos": {
@@ -122,9 +109,68 @@ export const superLeagueGreeceTeams: Record<string, TeamRecord> = {
     stadiumKey: "panthessaliko-stadium",
     founded: 2017,
     clubColors: ["red", "blue"],
-    aliases: ["volos nfc"],
+    aliases: ["volos nfc", "volos fc"],
   },
 
+  "levadiakos": {
+    teamKey: "levadiakos",
+    name: "Levadiakos",
+    country: GREECE,
+    city: "Livadeia",
+    leagueId: SUPER_LEAGUE_GREECE,
+    stadiumKey: "levadia-municipal-stadium",
+    founded: 1961,
+    clubColors: ["green", "blue"],
+    aliases: ["levadiakos fc"],
+  },
+
+  "kifisia": {
+    teamKey: "kifisia",
+    name: "Kifisia",
+    country: GREECE,
+    city: "Athens",
+    leagueId: SUPER_LEAGUE_GREECE,
+    stadiumKey: "zirineio-stadium",
+    founded: 2012,
+    clubColors: ["white", "blue"],
+    aliases: ["ae kifisia", "kifisia fc"],
+  },
+
+  "panetolikos": {
+    teamKey: "panetolikos",
+    name: "Panetolikos",
+    country: GREECE,
+    city: "Agrinio",
+    leagueId: SUPER_LEAGUE_GREECE,
+    stadiumKey: "panetolikos-stadium",
+    founded: 1926,
+    clubColors: ["yellow", "blue"],
+    aliases: ["panaitolikos", "panetolikos fc"],
+  },
+
+  "ael": {
+    teamKey: "ael",
+    name: "AEL",
+    country: GREECE,
+    city: "Larissa",
+    leagueId: SUPER_LEAGUE_GREECE,
+    stadiumKey: "alkazar-stadium",
+    founded: 1964,
+    clubColors: ["crimson", "white"],
+    aliases: ["ael larissa", "larissa"],
+  },
+
+  "panserraikos": {
+    teamKey: "panserraikos",
+    name: "Panserraikos",
+    country: GREECE,
+    city: "Serres",
+    leagueId: SUPER_LEAGUE_GREECE,
+    stadiumKey: "serres-municipal-stadium",
+    founded: 1964,
+    clubColors: ["red", "white"],
+    aliases: ["panserraikos fc"],
+  },
 };
 
 export default superLeagueGreeceTeams;
