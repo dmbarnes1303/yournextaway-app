@@ -93,10 +93,17 @@ export type FollowSnapshot = {
 
 type FollowPayload = Omit<
   FollowedMatch,
-  "createdAt" | "lastSeenAt" | "alerts" | "kickoffLikelyTbc" | "lastNotifiedKickoffIso" | "lastNotifiedAt"
+  | "createdAt"
+  | "lastSeenAt"
+  | "alerts"
+  | "kickoffLikelyTbc"
+  | "lastNotifiedKickoffIso"
+  | "lastNotifiedAt"
+  | "sportsevents365EventId"
 > & {
   alerts?: Partial<FollowAlertPrefs>;
   kickoffLikelyTbc?: boolean | null;
+  sportsevents365EventId?: number | null;
 };
 
 export type ApplyFixtureUpdateResult = {
@@ -185,7 +192,6 @@ function cleanMaybeNumber(v: unknown): number | null {
   const n = Number(v);
   if (!Number.isFinite(n)) return null;
   if (n <= 0) return null;
-  // event ids should be integers; but don’t break if they send numeric string
   return Math.trunc(n);
 }
 
@@ -214,8 +220,8 @@ function inferLikelyTbc(opts: {
   round: string | null;
   allFollowed: FollowedMatch[];
   now?: Date;
-  daysConfirmedCutoff?: number; // default 21
-  clusterThreshold?: number; // default 7
+  daysConfirmedCutoff?: number;
+  clusterThreshold?: number;
 }): boolean | null {
   const {
     fixtureKickoffIso,
@@ -318,7 +324,7 @@ const useFollowStore = create<FollowState>()(
             venue: m.venue ?? null,
             city: m.city ?? null,
 
-            sportsevents365EventId: cleanMaybeNumber((m as any)?.sportsevents365EventId) ?? null,
+            sportsevents365EventId: cleanMaybeNumber(m.sportsevents365EventId) ?? null,
 
             alerts,
 
@@ -461,18 +467,13 @@ const useFollowStore = create<FollowState>()(
               });
 
         const kickoffChanged = prevKickoffIso !== nextKickoffIso;
-
-        // “became confirmed” = previously TBC-ish (or null) → now likely confirmed
         const becameConfirmed = (prevLikelyTbc === true || prevKickoffIso === null) && nextLikelyTbc === false;
 
         const lastNotifiedKickoffIso = existing.lastNotifiedKickoffIso ?? null;
-
-        // Anti-spam: only notify if we haven't already notified for THIS next kickoff value.
         const nextIsNewForNotify = nextKickoffIso != null && nextKickoffIso !== lastNotifiedKickoffIso;
 
         const shouldNotifyKickoff = !!existing.alerts?.kickoffConfirmed && kickoffChanged && nextIsNewForNotify;
 
-        // Apply snapshot (single write)
         get().upsertLatestSnapshot(id, {
           ...patch,
           kickoffIso: nextKickoffIso,
@@ -480,7 +481,6 @@ const useFollowStore = create<FollowState>()(
           season: nextSeason,
           round: nextRound,
           kickoffLikelyTbc: nextLikelyTbc ?? null,
-          // sportsevents365EventId will be handled by upsertLatestSnapshot if included
         });
 
         return {
@@ -573,7 +573,7 @@ const useFollowStore = create<FollowState>()(
     }),
     {
       name: "followedMatches",
-      version: 9, // bumped: adds sportsevents365EventId persistence
+      version: 9,
       storage: createJSONStorage(() => followPersistStorage),
       partialize: (state) => ({ followed: state.followed, defaultAlerts: state.defaultAlerts }),
 
