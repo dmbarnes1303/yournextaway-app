@@ -4,14 +4,14 @@ const BULGARIA = "Bulgaria";
 const FIRST_LEAGUE = 172;
 
 export const firstLeagueBulgariaTeams: Record<string, TeamRecord> = {
-
   "levski-sofia": {
     teamKey: "levski-sofia",
     name: "Levski Sofia",
     country: BULGARIA,
     city: "Sofia",
     leagueId: FIRST_LEAGUE,
-    aliases: ["levski", "levski sofia"]
+    stadiumKey: "georgi-asparuhov",
+    aliases: ["levski", "levski sofia"],
   },
 
   "cska-1948": {
@@ -20,7 +20,8 @@ export const firstLeagueBulgariaTeams: Record<string, TeamRecord> = {
     country: BULGARIA,
     city: "Sofia",
     leagueId: FIRST_LEAGUE,
-    aliases: ["cska 1948"]
+    stadiumKey: "bistritsa-stadium",
+    aliases: ["cska 1948"],
   },
 
   "ludogorets": {
@@ -29,7 +30,8 @@ export const firstLeagueBulgariaTeams: Record<string, TeamRecord> = {
     country: BULGARIA,
     city: "Razgrad",
     leagueId: FIRST_LEAGUE,
-    aliases: ["ludogorets"]
+    stadiumKey: "huvepharma-arena",
+    aliases: ["ludogorets"],
   },
 
   "cska-sofia": {
@@ -38,7 +40,8 @@ export const firstLeagueBulgariaTeams: Record<string, TeamRecord> = {
     country: BULGARIA,
     city: "Sofia",
     leagueId: FIRST_LEAGUE,
-    aliases: ["cska", "cska sofia"]
+    stadiumKey: "botevgrad-army-stadium",
+    aliases: ["cska", "cska sofia"],
   },
 
   "cherno-more": {
@@ -47,7 +50,8 @@ export const firstLeagueBulgariaTeams: Record<string, TeamRecord> = {
     country: BULGARIA,
     city: "Varna",
     leagueId: FIRST_LEAGUE,
-    aliases: ["cherno more"]
+    stadiumKey: "ticha-stadium",
+    aliases: ["cherno more"],
   },
 
   "lokomotiv-plovdiv": {
@@ -56,7 +60,8 @@ export const firstLeagueBulgariaTeams: Record<string, TeamRecord> = {
     country: BULGARIA,
     city: "Plovdiv",
     leagueId: FIRST_LEAGUE,
-    aliases: ["loko plovdiv"]
+    stadiumKey: "lokomotiv-stadium-plovdiv",
+    aliases: ["loko plovdiv"],
   },
 
   "slavia-sofia": {
@@ -65,7 +70,8 @@ export const firstLeagueBulgariaTeams: Record<string, TeamRecord> = {
     country: BULGARIA,
     city: "Sofia",
     leagueId: FIRST_LEAGUE,
-    aliases: ["slavia"]
+    stadiumKey: "aleksandar-shalamanov",
+    aliases: ["slavia"],
   },
 
   "arda": {
@@ -74,7 +80,8 @@ export const firstLeagueBulgariaTeams: Record<string, TeamRecord> = {
     country: BULGARIA,
     city: "Kardzhali",
     leagueId: FIRST_LEAGUE,
-    aliases: ["arda"]
+    stadiumKey: "arena-arda",
+    aliases: ["arda"],
   },
 
   "botev-vratsa": {
@@ -83,7 +90,8 @@ export const firstLeagueBulgariaTeams: Record<string, TeamRecord> = {
     country: BULGARIA,
     city: "Vratsa",
     leagueId: FIRST_LEAGUE,
-    aliases: ["botev vratsa"]
+    stadiumKey: "hristo-botev-stadium-vratsa",
+    aliases: ["botev vratsa"],
   },
 
   "lokomotiv-sofia": {
@@ -92,7 +100,8 @@ export const firstLeagueBulgariaTeams: Record<string, TeamRecord> = {
     country: BULGARIA,
     city: "Sofia",
     leagueId: FIRST_LEAGUE,
-    aliases: ["loko sofia"]
+    stadiumKey: "lokomotiv-stadium-sofia",
+    aliases: ["loko sofia"],
   },
 
   "botev-plovdiv": {
@@ -101,7 +110,8 @@ export const firstLeagueBulgariaTeams: Record<string, TeamRecord> = {
     country: BULGARIA,
     city: "Plovdiv",
     leagueId: FIRST_LEAGUE,
-    aliases: ["botev"]
+    stadiumKey: "hristo-botev-stadium-plovdiv",
+    aliases: ["botev"],
   },
 
   "dobrudzha": {
@@ -110,7 +120,8 @@ export const firstLeagueBulgariaTeams: Record<string, TeamRecord> = {
     country: BULGARIA,
     city: "Dobrich",
     leagueId: FIRST_LEAGUE,
-    aliases: ["dobrudzha"]
+    stadiumKey: "druzhba-stadium",
+    aliases: ["dobrudzha"],
   },
 
   "spartak-varna": {
@@ -119,7 +130,8 @@ export const firstLeagueBulgariaTeams: Record<string, TeamRecord> = {
     country: BULGARIA,
     city: "Varna",
     leagueId: FIRST_LEAGUE,
-    aliases: ["spartak varna"]
+    stadiumKey: "spartak-stadium-varna",
+    aliases: ["spartak varna"],
   },
 
   "septemvri-sofia": {
@@ -128,7 +140,8 @@ export const firstLeagueBulgariaTeams: Record<string, TeamRecord> = {
     country: BULGARIA,
     city: "Sofia",
     leagueId: FIRST_LEAGUE,
-    aliases: ["septemvri"]
+    stadiumKey: "dragalevtsi-stadium",
+    aliases: ["septemvri"],
   },
 
   "beroe": {
@@ -137,7 +150,8 @@ export const firstLeagueBulgariaTeams: Record<string, TeamRecord> = {
     country: BULGARIA,
     city: "Stara Zagora",
     leagueId: FIRST_LEAGUE,
-    aliases: ["beroe"]
+    stadiumKey: "beroe-stadium",
+    aliases: ["beroe"],
   },
 
   "montana": {
@@ -146,9 +160,9 @@ export const firstLeagueBulgariaTeams: Record<string, TeamRecord> = {
     country: BULGARIA,
     city: "Montana",
     leagueId: FIRST_LEAGUE,
-    aliases: ["montana"]
-  }
-
+    stadiumKey: "ogosta-stadium",
+    aliases: ["montana"],
+  },
 };
 
 export default firstLeagueBulgariaTeams;
