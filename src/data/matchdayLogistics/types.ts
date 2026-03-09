@@ -1,7 +1,16 @@
 // src/data/matchdayLogistics/types.ts
 
-export type StayArea = { area: string; notes?: string };
-export type LogisticsStop = { name: string; notes?: string };
+export type StayArea = {
+  area: string;
+  notes?: string;
+  budgetFriendly?: boolean;
+};
+
+export type LogisticsStop = {
+  name: string;
+  notes?: string;
+  type?: string;
+};
 
 export type MatchdayLogistics = {
   // identity
