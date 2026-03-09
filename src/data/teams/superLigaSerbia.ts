@@ -14,7 +14,7 @@ export const superLigaSerbiaTeams: Record<string, TeamRecord> = {
     aliases: ["crvena zvezda", "fk crvena zvezda", "red star", "zvezda"],
   },
 
-  "partizan": {
+  partizan: {
     teamKey: "partizan",
     name: "Partizan",
     country: SERBIA,
@@ -24,7 +24,7 @@ export const superLigaSerbiaTeams: Record<string, TeamRecord> = {
     aliases: ["fk partizan", "partizan belgrade"],
   },
 
-  "vojvodina": {
+  vojvodina: {
     teamKey: "vojvodina",
     name: "Vojvodina Novi Sad",
     country: SERBIA,
@@ -64,7 +64,7 @@ export const superLigaSerbiaTeams: Record<string, TeamRecord> = {
     aliases: ["radnik", "fk radnik surdulica", "radnik surdulica"],
   },
 
-  "cukaricki": {
+  cukaricki: {
     teamKey: "cukaricki",
     name: "Čukarički",
     country: SERBIA,
@@ -85,13 +85,13 @@ export const superLigaSerbiaTeams: Record<string, TeamRecord> = {
   },
 
   "ofk-beograd": {
-  teamKey: "ofk-beograd",
-  name: "OFK Beograd",
-  country: SERBIA,
-  city: "Belgrade",
-  leagueId: SUPER_LIGA,
-  stadiumKey: "omladinski-stadium",
-  aliases: ["ofk beograd", "ofk belgrade"],
+    teamKey: "ofk-beograd",
+    name: "OFK Beograd",
+    country: SERBIA,
+    city: "Belgrade",
+    leagueId: SUPER_LIGA,
+    stadiumKey: "kraljevica-stadium",
+    aliases: ["ofk beograd", "ofk belgrade"],
   },
 
   "radnicki-1923": {
@@ -114,7 +114,7 @@ export const superLigaSerbiaTeams: Record<string, TeamRecord> = {
     aliases: ["tsc", "backa topola", "tsc backa topola"],
   },
 
-  "imt": {
+  imt: {
     teamKey: "imt",
     name: "IMT",
     country: SERBIA,
@@ -124,7 +124,7 @@ export const superLigaSerbiaTeams: Record<string, TeamRecord> = {
     aliases: ["imt belgrade", "imt novi beograd", "fk imt"],
   },
 
-  "javor": {
+  javor: {
     teamKey: "javor",
     name: "Javor-Matis",
     country: SERBIA,
@@ -154,7 +154,7 @@ export const superLigaSerbiaTeams: Record<string, TeamRecord> = {
     aliases: ["spartak", "fk spartak subotica", "spartak zlatibor voda"],
   },
 
-  "napredak": {
+  napredak: {
     teamKey: "napredak",
     name: "Napredak Kruševac",
     country: SERBIA,
