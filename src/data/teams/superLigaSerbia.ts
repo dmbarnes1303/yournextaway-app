@@ -85,13 +85,13 @@ export const superLigaSerbiaTeams: Record<string, TeamRecord> = {
   },
 
   "ofk-beograd": {
-    teamKey: "ofk-beograd",
-    name: "OFK Beograd",
-    country: SERBIA,
-    city: "Belgrade",
-    leagueId: SUPER_LIGA,
-    stadiumKey: "kraljevica-stadium",
-    aliases: ["ofk beograd", "ofk belgrade"],
+  teamKey: "ofk-beograd",
+  name: "OFK Beograd",
+  country: SERBIA,
+  city: "Belgrade",
+  leagueId: SUPER_LIGA,
+  stadiumKey: "omladinski-stadium",
+  aliases: ["ofk beograd", "ofk belgrade"],
   },
 
   "radnicki-1923": {
