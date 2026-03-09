@@ -77,7 +77,7 @@ export const superLigaSerbiaStadiums: Record<string, StadiumRecord> = {
 
   "sc-mladost-stadium": {
     stadiumKey: "sc-mladost-stadium",
-    name: "SC Mladost Stadium",
+    name: "SC Mladost",
     city: "Pančevo",
     country: SERBIA,
     capacity: 2300,
@@ -101,7 +101,7 @@ export const superLigaSerbiaStadiums: Record<string, StadiumRecord> = {
 
   "novi-pazar-city-stadium": {
     stadiumKey: "novi-pazar-city-stadium",
-    name: "Novi Pazar City Stadium",
+    name: "Gradski stadion",
     city: "Novi Pazar",
     country: SERBIA,
     capacity: 10000,
@@ -123,7 +123,7 @@ export const superLigaSerbiaStadiums: Record<string, StadiumRecord> = {
 
   "surdulica-city-stadium": {
     stadiumKey: "surdulica-city-stadium",
-    name: "Surdulica City Stadium",
+    name: "Gradski stadion",
     city: "Surdulica",
     country: SERBIA,
     capacity: 3312,
@@ -147,7 +147,7 @@ export const superLigaSerbiaStadiums: Record<string, StadiumRecord> = {
 
   "cukaricki-stadium": {
     stadiumKey: "cukaricki-stadium",
-    name: "Čukarički Stadium",
+    name: "Stadion FK Čukarički",
     city: "Belgrade",
     country: SERBIA,
     capacity: 4070,
@@ -171,7 +171,7 @@ export const superLigaSerbiaStadiums: Record<string, StadiumRecord> = {
 
   "cair-stadium": {
     stadiumKey: "cair-stadium",
-    name: "Čair Stadium",
+    name: "Gradski stadion Čair",
     city: "Niš",
     country: SERBIA,
     capacity: 18151,
@@ -194,7 +194,7 @@ export const superLigaSerbiaStadiums: Record<string, StadiumRecord> = {
 
   "kraljevica-stadium": {
     stadiumKey: "kraljevica-stadium",
-    name: "Kraljevica Stadium",
+    name: "Gradski stadion pod Kraljevicom",
     city: "Zaječar",
     country: SERBIA,
     capacity: 8168,
@@ -210,14 +210,14 @@ export const superLigaSerbiaStadiums: Record<string, StadiumRecord> = {
       { area: "Belgrade", why: "Only better if you are building a wider trip and can handle the travel" },
     ],
     tips: [
-      "OFK Beograd are listed as using Kraljevica temporarily this season",
-      "Do not assume a normal Belgrade home setup here",
+      "OFK Beograd are currently listed at this venue for 2025/26 fixtures",
+      "Do not assume a normal Belgrade home setup right now",
     ],
   },
 
   "cika-daca-stadium": {
     stadiumKey: "cika-daca-stadium",
-    name: "Čika Dača Stadium",
+    name: "Stadion Čika Dača",
     city: "Kragujevac",
     country: SERBIA,
     capacity: 15100,
@@ -263,7 +263,7 @@ export const superLigaSerbiaStadiums: Record<string, StadiumRecord> = {
 
   "lagator-stadium": {
     stadiumKey: "lagator-stadium",
-    name: "Lagator Stadium",
+    name: "Gradski stadion Lagator",
     city: "Loznica",
     country: SERBIA,
     capacity: 8030,
@@ -278,14 +278,14 @@ export const superLigaSerbiaStadiums: Record<string, StadiumRecord> = {
       { area: "Loznica Centre", why: "Best practical base if doing the trip simply" },
     ],
     tips: [
-      "IMT are listed as using Lagator Stadium this season",
+      "IMT are currently listed at Lagator for 2025/26 fixtures",
       "Check home venue carefully before travel because temporary arrangements can change faster than normal",
     ],
   },
 
   "stadion-kraj-moravice": {
     stadiumKey: "stadion-kraj-moravice",
-    name: "Stadion kraj Moravice",
+    name: "Stadion Kraj Moravice",
     city: "Ivanjica",
     country: SERBIA,
     capacity: 5000,
@@ -309,7 +309,7 @@ export const superLigaSerbiaStadiums: Record<string, StadiumRecord> = {
 
   "src-mr-rados-milovanovic": {
     stadiumKey: "src-mr-rados-milovanovic",
-    name: "SRC Mladost MR Radoš Milovanović",
+    name: "SRC Mr Radoš Milovanović",
     city: "Lučani",
     country: SERBIA,
     capacity: 3600,
@@ -333,7 +333,7 @@ export const superLigaSerbiaStadiums: Record<string, StadiumRecord> = {
 
   "subotica-city-stadium": {
     stadiumKey: "subotica-city-stadium",
-    name: "Subotica City Stadium",
+    name: "Gradski stadion",
     city: "Subotica",
     country: SERBIA,
     capacity: 13000,
@@ -356,7 +356,7 @@ export const superLigaSerbiaStadiums: Record<string, StadiumRecord> = {
 
   "mladost-stadium-krusevac": {
     stadiumKey: "mladost-stadium-krusevac",
-    name: "Mladost Stadium",
+    name: "Stadion Mladost",
     city: "Kruševac",
     country: SERBIA,
     capacity: 10331,
