@@ -919,7 +919,7 @@ export const ekstraklasaTeamGuides: Record<string, TeamGuide> = {
       {
         title: "Atmosphere & Matchday Feel",
         body:
-          "Radomiak’s atmosphere is local, direct, and tied closely to whether the team looks like it is fighting properly.\n\nTypical patterns:\n• Stronger engagement in tighter, more emotionally tense matches.\n• Crowd response driven by effort and edge rather than by pure aesthetic appreciation.\n"• A more grounded domestic environment than many larger-city stadiums.\n\nFor a neutral visitor, Radomiak games can feel raw and authentic rather than polished spectacle. The energy is driven by local investment rather than tourism appeal.",
+          "Radomiak’s atmosphere is local, direct, and tied closely to whether the team looks like it is fighting properly.\n\nTypical patterns:\n• Stronger engagement in tighter, more emotionally tense matches.\n• Crowd response driven by effort and edge rather than by pure aesthetic appreciation.\n• A more grounded domestic environment than many larger-city stadiums.\n\nFor a neutral visitor, Radomiak games can feel raw and authentic rather than polished spectacle. The energy is driven by local investment rather than tourism appeal.",
       },
       {
         title: "Rivalries",
