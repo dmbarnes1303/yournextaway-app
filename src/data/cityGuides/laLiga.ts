@@ -613,6 +613,51 @@ export const laLigaCityGuides: Record<string, CityGuide> = {
     accommodation:
       "Stay near Old Town or Plaza del Fontán for the best atmosphere + easiest evenings.",
   },
+
+  vallecas: {
+    cityId: "vallecas",
+    name: "Vallecas",
+    country: "Spain",
+
+    overview:
+      "Vallecas is not a traditional tourist destination — and that’s exactly the point. This working-class Madrid district is one of the most authentic football neighbourhoods in Spain, built around strong local identity, community pride, and a rebellious culture that defines Rayo Vallecano. A trip to Vallecas is less about sightseeing and more about experiencing raw, local football atmosphere inside a dense urban neighbourhood where the club genuinely belongs to its people.",
+
+    topThings: [
+      { title: "Estadio de Vallecas exterior walk", tip: "Arrive early and walk around the stadium area — matchday build-up is part of the experience." },
+      { title: "Vallecas neighbourhood bars", tip: "Choose busy local bars rather than searching for tourist-friendly venues." },
+      { title: "Matchday fan build-up", tip: "Supporters gather early in surrounding streets — soak in the atmosphere before kickoff." },
+      { title: "Avenida de la Albufera walk", tip: "Main spine of the district with everyday Madrid life on display." },
+      { title: "Local tapas stops", tip: "Keep it simple: beer + tapas in smaller neighbourhood bars works best." },
+      { title: "Street art and murals", tip: "Vallecas has strong political and cultural street art — keep your eyes open walking around." },
+      { title: "Neighbourhood cafés", tip: "Morning coffee spots feel local and relaxed compared to central Madrid." },
+      { title: "Plaza Roja area", tip: "A gathering point for supporters and local community life." },
+      { title: "Post-match walk", tip: "Leave the stadium slowly and experience the neighbourhood dispersing." },
+      { title: "Madrid evening afterwards", tip: "Most visitors head back into central Madrid after the match for wider nightlife options." },
+    ],
+
+    tips: [
+      "Treat Vallecas as a football district rather than a sightseeing destination.",
+      "Arrive early — the pre-match street atmosphere is one of the best parts of the experience.",
+      "Expect a raw, authentic matchday environment rather than polished tourist infrastructure.",
+      "Use Madrid as your main accommodation base.",
+      "Metro is the easiest way to reach the stadium area.",
+      "The neighbourhood has strong political identity — respect local culture and atmosphere.",
+    ],
+
+    food: [
+      "Simple tapas bars",
+      "Spanish tortillas",
+      "Local grilled meats",
+      "Neighbourhood bakeries",
+      "Beer and small plates",
+    ],
+
+    transport:
+      "Vallecas is easily reached from central Madrid via the Madrid Metro network. Most visitors travel in and out on matchday using metro lines connecting the district to the city centre. Walking around the neighbourhood near the stadium is straightforward once you arrive.",
+
+    accommodation:
+      "Most travellers stay in central Madrid (Sol, Gran Vía, Malasaña or La Latina) and travel to Vallecas for the match. Accommodation inside Vallecas itself is limited and usually chosen only for proximity to the stadium.",
+  },
 };
 
 export default laLigaCityGuides;
