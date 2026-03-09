@@ -1,10 +1,10 @@
+// src/data/teams/eredivisie.ts
 import type { TeamRecord } from "./types";
 
 const EREDIVISIE = 88;
 const NETHERLANDS = "Netherlands";
 
 export const eredivisieTeams: Record<string, TeamRecord> = {
-
   "ajax": {
     teamKey: "ajax",
     name: "Ajax",
@@ -77,40 +77,28 @@ export const eredivisieTeams: Record<string, TeamRecord> = {
     aliases: ["fc utrecht"],
   },
 
-  "vitesse": {
-    teamKey: "vitesse",
-    name: "Vitesse",
-    country: NETHERLANDS,
-    city: "Arnhem",
-    leagueId: EREDIVISIE,
-    stadiumKey: "gelredome",
-    founded: 1892,
-    clubColors: ["yellow", "black"],
-    aliases: ["sbv vitesse"],
-  },
-
   "groningen": {
     teamKey: "groningen",
-    name: "Groningen",
+    name: "FC Groningen",
     country: NETHERLANDS,
     city: "Groningen",
     leagueId: EREDIVISIE,
     stadiumKey: "euroborg",
     founded: 1971,
     clubColors: ["green", "white"],
-    aliases: ["fc groningen"],
+    aliases: ["groningen", "fc groningen"],
   },
 
   "heerenveen": {
     teamKey: "heerenveen",
-    name: "Heerenveen",
+    name: "SC Heerenveen",
     country: NETHERLANDS,
     city: "Heerenveen",
     leagueId: EREDIVISIE,
     stadiumKey: "abe-lenstra-stadion",
     founded: 1920,
     clubColors: ["blue", "white"],
-    aliases: ["sc heerenveen"],
+    aliases: ["heerenveen", "sc heerenveen"],
   },
 
   "nec-nijmegen": {
@@ -122,7 +110,7 @@ export const eredivisieTeams: Record<string, TeamRecord> = {
     stadiumKey: "goffertstadion",
     founded: 1900,
     clubColors: ["red", "green", "black"],
-    aliases: ["nec"],
+    aliases: ["nec", "nec nijmegen"],
   },
 
   "pec-zwolle": {
@@ -134,7 +122,7 @@ export const eredivisieTeams: Record<string, TeamRecord> = {
     stadiumKey: "mac3park-stadion",
     founded: 1910,
     clubColors: ["blue", "white"],
-    aliases: ["zwolle"],
+    aliases: ["pec", "pec zwolle", "zwolle"],
   },
 
   "heracles": {
@@ -146,7 +134,7 @@ export const eredivisieTeams: Record<string, TeamRecord> = {
     stadiumKey: "erve-asito",
     founded: 1903,
     clubColors: ["black", "white"],
-    aliases: ["heracles almelo"],
+    aliases: ["heracles", "heracles almelo"],
   },
 
   "go-ahead-eagles": {
@@ -158,7 +146,7 @@ export const eredivisieTeams: Record<string, TeamRecord> = {
     stadiumKey: "de-adelaarshorst",
     founded: 1902,
     clubColors: ["red", "yellow"],
-    aliases: ["gae"],
+    aliases: ["go ahead eagles", "gae"],
   },
 
   "sparta-rotterdam": {
@@ -170,7 +158,7 @@ export const eredivisieTeams: Record<string, TeamRecord> = {
     stadiumKey: "spangen",
     founded: 1888,
     clubColors: ["red", "white"],
-    aliases: ["sparta"],
+    aliases: ["sparta", "sparta rotterdam"],
   },
 
   "fortuna-sittard": {
@@ -182,45 +170,56 @@ export const eredivisieTeams: Record<string, TeamRecord> = {
     stadiumKey: "fortuna-sittard-stadion",
     founded: 1968,
     clubColors: ["yellow", "green"],
-    aliases: ["fortuna"],
-  },
-
-  "rkc-waalwijk": {
-    teamKey: "rkc-waalwijk",
-    name: "RKC Waalwijk",
-    country: NETHERLANDS,
-    city: "Waalwijk",
-    leagueId: EREDIVISIE,
-    stadiumKey: "mandemakers-stadion",
-    founded: 1940,
-    clubColors: ["yellow", "blue"],
-    aliases: ["rkc"],
+    aliases: ["fortuna", "fortuna sittard"],
   },
 
   "volendam": {
     teamKey: "volendam",
-    name: "Volendam",
+    name: "FC Volendam",
     country: NETHERLANDS,
     city: "Volendam",
     leagueId: EREDIVISIE,
     stadiumKey: "kras-stadion",
     founded: 1920,
     clubColors: ["orange", "black"],
-    aliases: ["fc volendam"],
+    aliases: ["volendam", "fc volendam"],
   },
 
-  "almere-city": {
-    teamKey: "almere-city",
-    name: "Almere City",
+  "nac-breda": {
+    teamKey: "nac-breda",
+    name: "NAC Breda",
     country: NETHERLANDS,
-    city: "Almere",
+    city: "Breda",
     leagueId: EREDIVISIE,
-    stadiumKey: "yanmar-stadion",
-    founded: 2001,
-    clubColors: ["red", "black"],
-    aliases: ["almere"],
-  }
+    stadiumKey: "rat-verlegh-stadion",
+    founded: 1912,
+    clubColors: ["yellow", "black"],
+    aliases: ["nac", "nac breda", "noad advendo combinatie"],
+  },
 
+  "excelsior": {
+    teamKey: "excelsior",
+    name: "Excelsior",
+    country: NETHERLANDS,
+    city: "Rotterdam",
+    leagueId: EREDIVISIE,
+    stadiumKey: "van-donge-de-roo-stadion",
+    founded: 1902,
+    clubColors: ["red", "black"],
+    aliases: ["excelsior rotterdam", "sbv excelsior"],
+  },
+
+  "telstar": {
+    teamKey: "telstar",
+    name: "Telstar",
+    country: NETHERLANDS,
+    city: "Velsen-Zuid",
+    leagueId: EREDIVISIE,
+    stadiumKey: "711-stadion",
+    founded: 1963,
+    clubColors: ["white", "red", "blue"],
+    aliases: ["sc telstar", "telstar ijmuiden", "witte leeuwen"],
+  },
 };
 
 export default eredivisieTeams;
