@@ -539,11 +539,6 @@ export const superLigaCityGuides: Record<string, CityGuide> = {
       "Central Slobozia is the only sensible answer if you are staying. Anything else just adds friction without adding value.",
   },
 
-  arad_placeholder_remove: undefined as never,
-  botosani_placeholder_remove: undefined as never,
-};
 
-delete (superLigaCityGuides as any).arad_placeholder_remove;
-delete (superLigaCityGuides as any).botosani_placeholder_remove;
 
 export default superLigaCityGuides;
