@@ -365,7 +365,7 @@ export const proLeagueCityGuides: Record<string, CityGuide> = {
       "Central Leuven is the obvious play. Prioritise being able to walk the evening and morning without transport friction.",
   },
 
-  sint-truiden: {
+  "sint-truiden": {
     cityId: "sint-truiden",
     name: "Sint-Truiden",
     country: "Belgium",
@@ -497,7 +497,7 @@ export const proLeagueCityGuides: Record<string, CityGuide> = {
       "Stay only where the matchday and onward route make sense. This is an efficiency trip.",
   },
 
-  la-louviere: {
+  "la-louviere": {
     cityId: "la-louviere",
     name: "La Louvière",
     country: "Belgium",

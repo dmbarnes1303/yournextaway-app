@@ -541,6 +541,43 @@ export const primeiraLigaCityGuides: Record<string, CityGuide> = {
     accommodation:
       "Only stay here if you actively want the local feel. Otherwise use Guimarães, Braga or Porto.",
   },
+
+  "faro": {
+    cityId: "faro",
+    name: "Faro",
+    country: "Portugal",
+    overview:
+      "Faro is the gateway to the Algarve and one of the easiest football trips in southern Portugal if you want sun, food and relaxed pacing around a match. The city itself is smaller than people expect, but the combination of old town charm, coastline access and airport convenience makes it a strong football-weekend base.",
+    topThings: [
+      { title: "Faro Old Town (Cidade Velha)", tip: "Best explored slowly with coffee stops rather than rushed sightseeing." },
+      { title: "Marina walk", tip: "Simple evening activity before dinner." },
+      { title: "Ria Formosa lagoon views", tip: "One of the natural highlights of the region." },
+      { title: "Faro Cathedral tower", tip: "Good quick viewpoint if you want context over the old city." },
+      { title: "Island beaches", tip: "Boat access to Ilha Deserta or Ilha do Farol is worth it if you have time." },
+      { title: "Local seafood restaurants", tip: "Use the Algarve properly — seafood is the obvious play." },
+      { title: "Market stop", tip: "Good daytime rhythm check." },
+      { title: "Evening marina drinks", tip: "One of Faro’s easiest wins." },
+      { title: "Short coastal excursion", tip: "Tavira or Lagos work if extending the trip." },
+      { title: "Matchday town circuit", tip: "Eat in the centre before heading to the stadium area." },
+    ],
+    tips: [
+      "Faro is smaller than Lisbon or Porto — build the trip around the region as well.",
+      "Airport proximity makes short football weekends easy.",
+      "Seafood is usually the safest menu choice.",
+      "Summer heat can change sightseeing pacing.",
+      "The Algarve rewards relaxed planning.",
+    ],
+    food: [
+      "Cataplana seafood stew",
+      "Grilled sardines",
+      "Fresh shellfish",
+      "Algarve pastries",
+    ],
+    transport:
+      "The city centre is walkable. Taxis and Bolt/Uber handle most longer trips, while regional trains connect other Algarve towns.",
+    accommodation:
+      "Staying inside or just outside the old town keeps the trip simple and walkable.",
+  },
 };
 
 export default primeiraLigaCityGuides;

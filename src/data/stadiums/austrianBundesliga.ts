@@ -241,30 +241,29 @@ const austrianBundesligaStadiums: Record<string, StadiumRecord> = {
     ],
   },
 
-  "worthersee-stadion": {
   "josko-arena": {
-  stadiumKey: "josko-arena",
-  name: "Josko Arena",
-  city: "Ried im Innkreis",
-  country: "Austria",
-  capacity: 7680,
-  opened: 2003,
-  airport: "Linz Airport (LNZ)",
-  distanceFromAirportKm: 62,
-  teamKeys: ["ried"],
-  tips: [
-    "Compact provincial football stop rather than a major city-break destination",
-    "Best done as a simple overnight or as part of a wider Upper Austria route",
-  ],
-  transit: [
-    { label: "Ried im Innkreis station", minutes: 20 },
-    { label: "Town centre", minutes: 15, note: "best practical local base" },
-  ],
-  stayAreas: [
-    { area: "Ried im Innkreis Centre", why: "Most practical local base" },
-    { area: "Linz", why: "Better wider base if combining football with a larger city stay" },
-  ],
-},
+    stadiumKey: "josko-arena",
+    name: "Josko Arena",
+    city: "Ried im Innkreis",
+    country: "Austria",
+    capacity: 7680,
+    opened: 2003,
+    airport: "Linz Airport (LNZ)",
+    distanceFromAirportKm: 62,
+    teamKeys: ["ried"],
+    tips: [
+      "Compact provincial football stop rather than a major city-break destination",
+      "Best done as a simple overnight or as part of a wider Upper Austria route",
+    ],
+    transit: [
+      { label: "Ried im Innkreis station", minutes: 20 },
+      { label: "Town centre", minutes: 15, note: "best practical local base" },
+    ],
+    stayAreas: [
+      { area: "Ried im Innkreis Centre", why: "Most practical local base" },
+      { area: "Linz", why: "Better wider base if combining football with a larger city stay" },
+    ],
+  },
 };
 
 export default austrianBundesligaStadiums;
