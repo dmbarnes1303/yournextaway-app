@@ -1,3 +1,4 @@
+// src/data/cityGuides/eredivisie.ts
 import type { CityGuide } from "./types";
 
 const GYG = {
@@ -18,32 +19,38 @@ export const eredivisieCityGuides: Record<string, CityGuide> = {
     name: "Amsterdam",
     country: "Netherlands",
     thingsToDoUrl: GYG.amsterdam,
+
     overview:
-      "Amsterdam is one of Europe’s easiest football weekends if you avoid the obvious tourist mistakes. The city is compact, walkable, and visually strong, but the trap is wasting time in overcrowded central zones and blowing the whole trip on canals, queues, and average restaurants. Base yourself smartly, move by tram or metro when needed, and treat matchday as one block within a wider city trip rather than the only event.",
+      "Amsterdam is one of Europe’s easiest football weekends if you stop behaving like a first-time tourist. The city is compact, highly walkable by neighbourhood, and strong enough to carry a trip beyond the match, but it punishes bad planning fast. The worst version is obvious attractions, tram-hopping without logic, overpriced central bars, and a late scramble to the Arena. The good version is simple: stay in a liveable district, split the city into clean geographic blocks, and let football sit inside a wider city weekend rather than swallowing the whole plan.",
+
     topThings: [
-      { title: "Canal belt walk", tip: "Best early morning or late evening. Midday is peak tourist clutter." },
-      { title: "Jordaan", tip: "Better for atmosphere and cafés than trying to force Dam Square to be enjoyable." },
-      { title: "Museumplein", tip: "Pick one museum and do it properly. Doing three badly is stupid." },
-      { title: "De Pijp", tip: "One of the best food-and-bars districts without the worst tourist overload." },
-      { title: "A'DAM Lookout / Noord ferry", tip: "The free ferry is useful and gives the trip a proper Amsterdam feel." },
-      { title: "Vondelpark", tip: "Good reset if you’ve overdone nightlife or need air before matchday." },
-      { title: "Nine Streets", tip: "Better for wandering than shopping missions." },
-      { title: "Canal cruise", tip: "Do it only if weather is decent and you haven’t spent all day near the water already." },
-      { title: "Local brown café", tip: "Walk away from the most central strips for a better crowd and less tourist pricing." },
-      { title: "Arena district timing", tip: "For Ajax, leave enough time for metro flow and pre-match congestion." },
+      { title: "Canal Belt morning walk", tip: "Do it early before the rental-bike chaos and canal-cruise crowd make it feel fake." },
+      { title: "Jordaan", tip: "Better for actual city atmosphere than camping around Dam Square like a tourist hostage." },
+      { title: "Museumplein", tip: "Pick one museum and do it properly. Trying to speed-run three is idiotic." },
+      { title: "De Pijp", tip: "One of the best all-round districts for food, bars, and a less annoying local feel." },
+      { title: "Nine Streets", tip: "Good for wandering and coffee; bad for pretending shopping counts as a whole day." },
+      { title: "Noord ferry crossing", tip: "Free, useful, and one of the easiest ways to make the trip feel more like Amsterdam than just central congestion." },
+      { title: "Vondelpark reset", tip: "Best used after a late night or before matchday if you need air and space." },
+      { title: "Brown café session", tip: "Walk away from the busiest tourist strips and you will usually get the better pub." },
+      { title: "Canal cruise", tip: "Only worth it if weather is decent and you have not already spent half the day on canal edges." },
+      { title: "Arena district timing", tip: "For Ajax, leave proper buffer time. Metro flow is easy until everyone has the same idea." },
     ],
+
     tips: [
-      "Stay outside the worst tourist core unless you actually want noise and inflated prices.",
-      "Amsterdam works best when walked in neighbourhood chunks, not zig-zagged.",
-      "Public transport is better than taxis for most journeys.",
-      "Book popular dinners on Friday and Saturday.",
-      "Matchday plus nightlife is easy here, but pace it or you’ll waste the next day.",
+      "Stay outside the worst central tourist core unless you actively enjoy noise and overpriced mediocrity.",
+      "Amsterdam works best by district, not random zig-zagging.",
+      "Trams, metro, and walking beat taxis for almost every normal journey.",
+      "Book popular Friday and Saturday dinners in advance.",
+      "Ajax plus nightlife is easy, but overdo night one and you will wreck the rest of the weekend.",
     ],
-    food: ["Indonesian rijsttafel", "Modern Dutch bistros", "Canal-side wine bars", "De Pijp cafés"],
+
+    food: ["Indonesian rijsttafel", "De Pijp cafés", "Brown-pub snacks", "Modern Dutch bistros", "Canal-side wine bars"],
+
     transport:
-      "Trams, metro, and walking cover almost everything. Schiphol links are strong. For Ajax matchdays, the metro to the Arena area is the cleanest move.",
+      "Trams, metro, and walking cover almost everything. Schiphol links are excellent. For Ajax matchdays, the metro to Amsterdam Bijlmer ArenA is the cleanest move by far.",
+
     accommodation:
-      "De Pijp, Oud-West, Museum Quarter, and Jordaan are strong bases. Absolute city-centre tourist strips are usually the worst value.",
+      "De Pijp, Oud-West, Jordaan, and the Museum Quarter are strong bases. The most obvious tourist-centre strips are usually the worst-value option unless convenience is literally your only criterion.",
   },
 
   rotterdam: {
@@ -51,32 +58,38 @@ export const eredivisieCityGuides: Record<string, CityGuide> = {
     name: "Rotterdam",
     country: "Netherlands",
     thingsToDoUrl: GYG.rotterdam,
+
     overview:
-      "Rotterdam is not Amsterdam-lite. It’s sharper, more modern, more architectural, and better when treated as an urban weekend rather than a postcard hunt. The city rewards people who like skyline, riverfront, strong food halls, and a more grown-up vibe. For football travel, it’s excellent because the centre is practical and matchday feels properly big-club without drowning in tourism.",
+      "Rotterdam is not Amsterdam’s younger brother and people who treat it that way miss the whole point. This is a sharper, more modern, more architectural city built around skyline, riverfront, food halls, and a harder urban feel. It is less about postcard beauty and more about design, scale, and movement. For football travel it is excellent because the centre is practical, the nightlife is strong, and matchday can feel properly serious without drowning in souvenir-shop tourism.",
+
     topThings: [
-      { title: "Markthal", tip: "Go for the scale and food options, but don’t turn it into a half-day." },
-      { title: "Cube Houses", tip: "See them, photograph them, move on." },
-      { title: "Erasmus Bridge walk", tip: "Best around golden hour when the skyline actually earns the effort." },
-      { title: "Witte de Withstraat", tip: "A proper evening street for bars and food." },
-      { title: "Euromast", tip: "Worth it on a clear day. Useless in poor visibility." },
-      { title: "Kop van Zuid", tip: "A good contrast area if you want the city’s more polished modern side." },
-      { title: "Harbour tour", tip: "Only if industry / port scale genuinely interests you." },
-      { title: "Local beer spot", tip: "Rotterdam has enough good casual bar options that chains are a waste." },
-      { title: "Feyenoord matchday build-up", tip: "Treat this as part of the trip, not a last-minute add-on." },
-      { title: "Neighbourhood café breakfast", tip: "Better than default hotel breakfast almost every time." },
+      { title: "Erasmus Bridge walk", tip: "Best around golden hour when the skyline actually justifies the effort." },
+      { title: "Markthal", tip: "Useful for food and visual impact, but if you spend half a day there you are wasting your own time." },
+      { title: "Cube Houses", tip: "See them, photograph them, and move on. They are not a full programme." },
+      { title: "Witte de Withstraat", tip: "One of the best evening streets in the country for bars and food without forced pretension." },
+      { title: "Kop van Zuid", tip: "Good for seeing the city’s cleaner, polished side and breaking up the centre properly." },
+      { title: "Euromast", tip: "Worth doing only in clear weather. In poor visibility it is a self-inflicted letdown." },
+      { title: "Harbour tour", tip: "Only if you actually care about port scale and industry. Do not force it as default sightseeing." },
+      { title: "Neighbourhood beer stop", tip: "Rotterdam is good enough for local bar choices. Chains are lazy." },
+      { title: "Feyenoord matchday build-up", tip: "Part of the trip, not something to bolt on late once you are already rushed." },
+      { title: "City-break breakfast run", tip: "Neighbourhood cafés beat hotel breakfast almost every time." },
     ],
+
     tips: [
-      "Rotterdam is stronger at food, design, and city feel than classic sightseeing.",
-      "Book dinner in popular central districts at weekends.",
-      "Feyenoord is the heavyweight football pull here, but Sparta and Excelsior give different flavours.",
-      "Weather and river wind matter more than you think.",
-      "Don’t compare everything to Amsterdam. It’s a different city and better judged on its own terms.",
+      "Rotterdam is better judged on food, architecture, and city feel than on tourist-box ticking.",
+      "Book dinner in the better central districts on weekends.",
+      "Feyenoord is the heavyweight football draw, but Sparta gives a different and very worthwhile angle.",
+      "River wind and weather matter more than people think.",
+      "Do not waste the trip constantly comparing it to Amsterdam.",
     ],
-    food: ["Markthal stalls", "Modern Dutch", "Surinamese", "Riverside dining", "Witte de With bars"],
+
+    food: ["Markthal stalls", "Witte de With bars", "Modern Dutch dining", "Surinamese food", "Riverside restaurants"],
+
     transport:
-      "Metro, trams, and walking are efficient. Rotterdam Centraal makes arrival simple. Stadium access varies by club, so check route discipline rather than improvising.",
+      "Metro, trams, and walking are efficient. Rotterdam Centraal keeps arrival clean. Stadium access depends on club, so plan it once properly instead of improvising badly.",
+
     accommodation:
-      "Central Station area, Witte de Withstraat, and Kop van Zuid are the cleanest bases for most football weekends.",
+      "Rotterdam Centrum, Witte de Withstraat, and Kop van Zuid are the strongest bases for most football weekends.",
   },
 
   eindhoven: {
@@ -84,64 +97,76 @@ export const eredivisieCityGuides: Record<string, CityGuide> = {
     name: "Eindhoven",
     country: "Netherlands",
     thingsToDoUrl: GYG.eindhoven,
+
     overview:
-      "Eindhoven is a very efficient football city: compact centre, easy station-to-stadium flow, good nightlife, and no need to overcomplicate the trip. It is less about grand sightseeing and more about a clean, modern city break where football, bars, and decent restaurants fit together properly.",
+      "Eindhoven is one of the most efficient football cities in Europe. That is its strength. It is not trying to seduce you with massive sightseeing depth or fake old-town romance. It gives you a compact centre, a city-centre stadium, strong station links, good bars, and enough modern-city personality to make the whole thing work cleanly. For PSV weekends, that low-friction setup is a huge advantage.",
+
     topThings: [
-      { title: "Strijp-S", tip: "Best area if you want Eindhoven’s creative / modern side." },
-      { title: "Philips Museum", tip: "Actually relevant to the city and the club. Worth doing." },
-      { title: "Station to centre loop", tip: "You can understand most of central Eindhoven quickly on foot." },
-      { title: "Van Abbemuseum", tip: "A strong option if you want one serious cultural stop." },
-      { title: "Market Square bars", tip: "Simple, easy, social. Good if you don’t want to overthink the night." },
-      { title: "PSV matchday area", tip: "One of the easiest big-club stadium approaches in Europe." },
-      { title: "Design District pockets", tip: "Good for cafés and a different feel from standard centre strips." },
-      { title: "Pre-match dinner", tip: "Book it on big weekends. The city centre fills." },
-      { title: "Post-match drinks", tip: "Stay central and keep it easy. No need to overtravel." },
-      { title: "Morning coffee run", tip: "Eindhoven’s café scene is better than people expect." },
+      { title: "Philips Museum", tip: "Actually relevant to both city and club, which already makes it smarter than generic sightseeing filler." },
+      { title: "Strijp-S", tip: "Best area if you want Eindhoven’s creative / design-heavy side rather than generic centre loops." },
+      { title: "Van Abbemuseum", tip: "A solid serious culture stop if you want one proper museum and not a checklist." },
+      { title: "18 Septemberplein / centre walk", tip: "You can get a strong read on central Eindhoven without burning half a day." },
+      { title: "Market Square bars", tip: "Good simple play if you want an easy social evening without overthinking it." },
+      { title: "PSV matchday district", tip: "One of the easiest major-stadium approaches in Europe. Do not still find a way to make it stressful." },
+      { title: "Design pockets and cafés", tip: "The city rewards shorter modern-city blocks more than all-day tourist hunting." },
+      { title: "Pre-match dinner", tip: "Book it on bigger weekends. Central options fill faster than people assume." },
+      { title: "Post-match drinks", tip: "Stay central and keep it easy. There is no need for hero-level logistics." },
+      { title: "Morning coffee run", tip: "Eindhoven’s café scene is better than lazy stereotypes suggest." },
     ],
+
     tips: [
-      "This is a low-friction trip. Don’t turn it into a logistical mess.",
+      "This is a low-friction football trip. Do not turn it into an overplanned mess.",
       "PSV weekends tighten hotel supply more than casual visitors expect.",
-      "You can do a lot of Eindhoven on foot.",
-      "A single-night stay works, but two nights makes it much better.",
-      "Best city for efficiency, not necessarily romance.",
+      "You can do most of the city centre on foot.",
+      "One night works, but two nights makes the trip feel a lot less rushed.",
+      "This city wins on ease and quality, not on theatrical romance.",
     ],
-    food: ["Modern casual dining", "Beer bars", "Centre cafés", "Good brunch spots"],
+
+    food: ["Modern casual dining", "Beer bars", "Brunch cafés", "Centre coffee spots"],
+
     transport:
-      "Very walkable in the centre. Rail links are strong. For PSV, the stadium is conveniently close to the station and city core.",
+      "Very walkable in the centre. Rail links are strong. Philips Stadion is close enough to the station and city core that matchday travel is almost idiot-proof.",
+
     accommodation:
-      "Stay central. This is not a city where being far out makes any sense unless price forces it.",
+      "Stay central. Being far out in Eindhoven is usually just a worse decision unless price is forcing your hand.",
   },
 
   enschede: {
     cityId: "enschede",
     name: "Enschede",
     country: "Netherlands",
+
     overview:
-      "Enschede is a football-first Dutch trip rather than a blockbuster tourist city. That’s not a criticism. It means the trip works best when structured around FC Twente, local bars, easy central wandering, and a straightforward overnight rather than a massive sightseeing checklist.",
+      "Enschede is a football-first Dutch trip rather than a giant sightseeing city, and that is completely fine. The value is in FC Twente, a compact centre, a proper local night, and a trip that feels authentic rather than over-curated. People who complain there is not enough to do are usually the same people who cannot enjoy a city unless it has five monuments and a canal cruise. Enschede works because it is straightforward.",
+
     topThings: [
-      { title: "Old Market Square", tip: "Best place to anchor the city centre and start the evening." },
-      { title: "Twentsche Foodhall", tip: "Simple win if you want variety without wasting time." },
-      { title: "Local beer bars", tip: "The centre is compact enough that you can choose by vibe, not logistics." },
-      { title: "University area / green edges", tip: "Only if you have extra time and want a calmer stretch." },
-      { title: "FC Twente build-up", tip: "This is the real point of the trip. Don’t treat it like an afterthought." },
-      { title: "City centre breakfast", tip: "Better to go local than default hotel options." },
-      { title: "Short centre wander", tip: "Enough to get the feel without forcing it." },
-      { title: "Matchday pub stop", tip: "Arrive early rather than searching late." },
-      { title: "Evening drinks", tip: "Stay central; the city works best when kept simple." },
-      { title: "Morning reset walk", tip: "Useful if you’ve had a proper night." },
+      { title: "Old Market Square", tip: "Natural centre point for bars, food, and evening flow. Start here and stop overcomplicating it." },
+      { title: "Twentsche Foodhall", tip: "Good low-effort win if you want variety without wasting half the day." },
+      { title: "Local beer bars", tip: "The centre is compact enough that you can choose by vibe rather than transport logic." },
+      { title: "City-centre loop", tip: "Enough to get the feel quickly without pretending this needs a huge sightseeing itinerary." },
+      { title: "Short green-space reset", tip: "Useful only if you have extra time or need a hangover walk." },
+      { title: "FC Twente build-up", tip: "This is the reason for the trip. Stop treating it like background entertainment." },
+      { title: "Matchday pub stop", tip: "Arrive early enough to choose, not late enough to take whatever is left." },
+      { title: "Centre dinner booking", tip: "One proper dinner reservation instantly makes the weekend cleaner." },
+      { title: "Simple morning coffee", tip: "Enschede is better when kept relaxed rather than scheduled to death." },
+      { title: "Post-match central drinks", tip: "Keep the whole night central and the trip stays easy." },
     ],
+
     tips: [
       "This is a focused football trip, not an attractions marathon.",
-      "Stay central and keep the whole thing easy.",
+      "Stay central and keep the weekend simple.",
       "One strong night is enough for most visitors.",
-      "Twente is the reason to come, so give matchday proper room.",
-      "Good trip if you want something authentic without tourist overload.",
+      "Twente are the anchor. Let that shape the plan properly.",
+      "Good trip if you want authenticity without tourist overload.",
     ],
+
     food: ["Food hall", "Centre grills", "Beer bars", "Casual Dutch dining"],
+
     transport:
-      "Enschede centre is straightforward on foot. Rail gets you in cleanly, then local buses / short taxi hops cover the stadium if needed.",
+      "Enschede centre is easy on foot. Rail gets you in cleanly, then local buses or short taxi hops cover the stadium if needed.",
+
     accommodation:
-      "Central station / city centre area is the obvious choice.",
+      "Station and city-centre area is the obvious answer. Anything else is usually just making life harder for no gain.",
   },
 
   nijmegen: {
@@ -149,32 +174,38 @@ export const eredivisieCityGuides: Record<string, CityGuide> = {
     name: "Nijmegen",
     country: "Netherlands",
     thingsToDoUrl: GYG.nijmegen,
+
     overview:
-      "Nijmegen feels older, warmer, and less corporate than some Dutch city-trip options. It works well because it has enough historic texture, enough bars, and a proper local rhythm without requiring a huge schedule. For an NEC weekend, that is exactly what you want.",
+      "Nijmegen feels older, warmer, and more relaxed than a lot of Dutch city-trip options. It has enough history, enough bars, and enough scenic value to carry a football weekend without feeling overdesigned. It is not trying to be a giant metropolis. Good. That is exactly why it works so well for NEC.",
+
     topThings: [
-      { title: "Waalkade riverfront", tip: "Best for an easy walk and city feel." },
-      { title: "Old town centre", tip: "Compact enough to wander without a map-heavy day." },
-      { title: "Valkhof area", tip: "One of the city’s stronger scenic / historical zones." },
-      { title: "Great Market bars", tip: "Easy central choice for drinks." },
-      { title: "Local cafés", tip: "Nijmegen is strong at relaxed café culture." },
-      { title: "NEC matchday", tip: "The football gives the city weekend its proper edge." },
-      { title: "Bridge / skyline view", tip: "Good for a short late-afternoon walk." },
-      { title: "Book one dinner", tip: "A smart booking improves the whole trip quickly." },
-      { title: "Morning bakery / coffee", tip: "A better use of time than hotel breakfast." },
-      { title: "Neighbourhood pubs", tip: "Push slightly away from the busiest strip for better value." },
+      { title: "Waalkade riverfront", tip: "Best for an easy walk and some actual city feel rather than artificial attraction-chasing." },
+      { title: "Old town centre", tip: "Compact enough to wander naturally without a map-led military exercise." },
+      { title: "Valkhof area", tip: "One of the strongest scenic and historical blocks in the city." },
+      { title: "Great Market bars", tip: "Simple central option for drinks that usually does the job well." },
+      { title: "Neighbourhood cafés", tip: "Nijmegen is strong at relaxed day drinking and low-pressure coffee stops." },
+      { title: "NEC matchday", tip: "This is what gives the weekend proper edge rather than just nice-city energy." },
+      { title: "Bridge / skyline viewpoint", tip: "Good late-afternoon add-on, not a whole event." },
+      { title: "Booked evening meal", tip: "One smart reservation improves the trip quickly." },
+      { title: "Morning bakery run", tip: "A far better use of time than dead-eyed hotel breakfast." },
+      { title: "Short district pub drift", tip: "Walk slightly off the busiest strip for better value and less generic atmosphere." },
     ],
+
     tips: [
-      "This is a very workable two-night football city.",
-      "Historic core + riverfront is the cleanest way to structure your time.",
-      "NEC gives it a more serious football angle than casual visitors might expect.",
+      "This is a strong two-night football city.",
+      "Historic core plus riverfront is the cleanest structure for your free time.",
+      "NEC gives it more football seriousness than outsiders often expect.",
       "Stay central and walk.",
-      "A good choice if you want a Dutch city that feels less overprocessed.",
+      "A very good choice if you want a Dutch city with less processed tourist energy.",
     ],
-    food: ["Central cafés", "Bistros", "Beer spots", "Riverside drinks"],
+
+    food: ["Central cafés", "Riverside drinks", "Bistros", "Beer spots"],
+
     transport:
-      "City centre is compact. Train links are good. Walking covers most visitor needs once you’ve arrived.",
+      "Centre is compact. Rail links are strong. Walking covers most visitor needs once you have arrived.",
+
     accommodation:
-      "Stay in or near the old centre for the best overall trip flow.",
+      "Stay in or near the old centre. That is the smartest base and there is no cleverer answer.",
   },
 
   alkmaar: {
@@ -182,64 +213,76 @@ export const eredivisieCityGuides: Record<string, CityGuide> = {
     name: "Alkmaar",
     country: "Netherlands",
     thingsToDoUrl: GYG.alkmaar,
+
     overview:
-      "Alkmaar is one of those cities that works because it doesn’t try too hard. Attractive centre, canals, good walking, a real football club, and less tourist nonsense than Amsterdam. It’s not huge, but that’s the point.",
+      "Alkmaar works because it does not try too hard. Attractive centre, canals, easy walking, a serious football club, and nowhere near the same tourist nonsense as Amsterdam. It is not massive, but that is part of the strength. For an AZ weekend, it gives you enough city charm without drowning the football in noise.",
+
     topThings: [
-      { title: "Historic centre canals", tip: "Best seen on foot, not via overplanned itinerary." },
-      { title: "Cheese market area", tip: "Fine if timing aligns, but don’t build the whole weekend around it." },
-      { title: "Old streets and bridges", tip: "Alkmaar is strongest when wandered." },
-      { title: "Beer museum / local drinks", tip: "A good optional stop if weather is poor." },
-      { title: "AZ matchday", tip: "This is what turns the trip from nice to worthwhile." },
-      { title: "Canal-side lunch", tip: "Best on a calm day when you can sit outside." },
-      { title: "Town square evening", tip: "Simple, social, easy." },
-      { title: "Neighbourhood dinner", tip: "Book if visiting on match weekend." },
-      { title: "Short market stop", tip: "Useful, but don’t mistake it for a whole day’s entertainment." },
-      { title: "Morning city loop", tip: "A compact city rewards early wandering." },
+      { title: "Historic canal centre", tip: "Best seen on foot and without pretending you need a full itinerary to enjoy it." },
+      { title: "Cheese market area", tip: "Fine if timing lines up, but building the whole trip around it would be stupid." },
+      { title: "Old streets and bridges", tip: "Alkmaar is strongest when wandered, not overprogrammed." },
+      { title: "Beer museum / drinks stop", tip: "Useful optional fallback if the weather turns bad." },
+      { title: "AZ matchday", tip: "This is what turns the city from pleasant into properly worthwhile." },
+      { title: "Canal-side lunch", tip: "Best in decent weather when outside seating is actually worth it." },
+      { title: "Town-square evening", tip: "Simple, social, and usually enough." },
+      { title: "Neighbourhood dinner", tip: "Book if you are going on a busy football weekend." },
+      { title: "Short market pass", tip: "Useful for texture, not a half-day mission." },
+      { title: "Morning centre loop", tip: "A compact city rewards early wandering more than late chaos." },
     ],
+
     tips: [
       "Alkmaar is best kept relaxed.",
       "AZ is the anchor, city wandering is the support act.",
       "One or two nights is enough for most people.",
-      "Avoid trying to make this into Amsterdam North. It isn’t.",
+      "Do not try to turn this into Amsterdam North. It isn’t.",
       "A very good weekend if you want football plus an attractive smaller Dutch city.",
     ],
+
     food: ["Canal-side restaurants", "Dutch cafés", "Beer bars", "Local bakeries"],
+
     transport:
-      "Compact centre and good rail access. Very manageable without needing taxis.",
+      "Compact centre and good rail access. Very manageable without needing taxis or complicated planning.",
+
     accommodation:
-      "Historic centre is the obvious base and usually the best one.",
+      "Historic centre is the obvious base and usually the best one by a distance.",
   },
 
   heerenveen: {
     cityId: "heerenveen",
     name: "Heerenveen",
     country: "Netherlands",
+
     overview:
-      "Heerenveen is a football-led stop built around club identity, calm town scale, and easy logistics. You do not come here for massive sightseeing. You come because SC Heerenveen means something, the trip is simple, and the whole weekend feels grounded rather than overdesigned.",
+      "Heerenveen is a football-led stop built around club identity, calm town scale, and easy logistics. You do not come here for massive sightseeing lists. You come because SC Heerenveen matters locally, the stadium atmosphere is real, and the town makes for a relaxed football weekend without unnecessary complexity.",
+
     topThings: [
-      { title: "Town centre wander", tip: "Quick and enough. Don’t force a bigger city agenda onto it." },
-      { title: "Canal-side coffee", tip: "This is a small-town rhythm place, not a rush place." },
-      { title: "Thialf area if relevant", tip: "Useful if you care about Dutch sporting culture more broadly." },
-      { title: "SC Heerenveen matchday", tip: "Main event. Build around it properly." },
-      { title: "Local pub evening", tip: "Keep it low-friction and central." },
-      { title: "Morning walk", tip: "A short reset is enough here." },
-      { title: "Casual dinner", tip: "Book on busy weekends, otherwise stay flexible." },
-      { title: "Neighbourhood café", tip: "Better than generic chain food." },
-      { title: "Town square drink", tip: "The easy play if you want a simple evening." },
-      { title: "Arrival planning", tip: "This is a place where neat planning matters more than endless options." },
+      { title: "Town centre wander", tip: "Quick and enough. Do not try to force a bigger-city agenda onto it." },
+      { title: "Canal-side coffee", tip: "The town rewards slower mornings more than overplanned schedules." },
+      { title: "Thialf ice arena area", tip: "Worth a look if you are interested in Dutch sporting culture beyond football." },
+      { title: "SC Heerenveen matchday", tip: "Main event by a long distance. Build the day around it." },
+      { title: "Local pub evening", tip: "Simple and central works better than trying to chase nightlife." },
+      { title: "Morning reset walk", tip: "Short loop through town is enough to start the day." },
+      { title: "Casual dinner stop", tip: "Book ahead on busy match weekends." },
+      { title: "Neighbourhood café", tip: "Better than default hotel breakfasts." },
+      { title: "Town-square drinks", tip: "Central bars provide the easiest social atmosphere." },
+      { title: "Short-stay discipline", tip: "This trip works best when kept simple." },
     ],
+
     tips: [
-      "Football-first trip. Accept that and it works.",
-      "Stay central and don’t overcomplicate it.",
-      "One-night trip is viable here.",
-      "The club is the draw, not a huge attractions list.",
-      "Good for a proper Dutch football stop without tourist theatre.",
+      "Football-first destination rather than a major tourism city.",
+      "Stay central and keep logistics simple.",
+      "One-night stays work perfectly well.",
+      "The club is the main reason to come.",
+      "Great for people who enjoy authentic football towns.",
     ],
-    food: ["Simple Dutch dining", "Town-centre bars", "Casual cafés"],
+
+    food: ["Simple Dutch dining", "Town-centre pubs", "Casual cafés"],
+
     transport:
-      "Small scale. Walking and short local journeys cover most needs.",
+      "Small and manageable town. Walking covers most movement once you arrive.",
+
     accommodation:
-      "Central Heerenveen is enough. No need to be clever.",
+      "Central Heerenveen is the only base you realistically need.",
   },
 
   utrecht: {
@@ -247,32 +290,38 @@ export const eredivisieCityGuides: Record<string, CityGuide> = {
     name: "Utrecht",
     country: "Netherlands",
     thingsToDoUrl: GYG.utrecht,
+
     overview:
-      "Utrecht is one of the best all-round city breaks in the Netherlands because it gives you canals, atmosphere, bars, proper city energy, and less tourist saturation than Amsterdam. For football travel, that makes it a serious asset. It is easy to sell because it is actually good.",
+      "Utrecht is arguably the most balanced city break in the Netherlands. It combines canals, nightlife, architecture, and football culture without the tourist overload of Amsterdam. For football travellers this makes it one of the strongest destinations in the league.",
+
     topThings: [
-      { title: "Oudegracht canal level walk", tip: "One of the city’s best features and genuinely different." },
-      { title: "Dom Tower area", tip: "Obvious, but obvious for a reason." },
-      { title: "Canal-side restaurants", tip: "Book ahead at weekends." },
-      { title: "Museum quarter", tip: "Good if you want one culture block without killing the day." },
-      { title: "Neighbourhood cafés", tip: "Utrecht does relaxed day drinking and coffee very well." },
-      { title: "FC Utrecht matchday", tip: "Adds edge to a city that already works without football." },
-      { title: "Evening bar circuit", tip: "Keep it around the centre and canals and it’s hard to get wrong." },
-      { title: "Morning bakery stop", tip: "Better use of time than hotel breakfast." },
-      { title: "Short bike / walk route", tip: "The city is made for low-effort movement." },
-      { title: "Station-to-centre flow", tip: "Very straightforward and traveller-friendly." },
+      { title: "Oudegracht canal walk", tip: "Lower-level canalside cafés make this one of the most distinctive walks in the country." },
+      { title: "Dom Tower area", tip: "Obvious landmark but genuinely impressive." },
+      { title: "Canal-side restaurants", tip: "Book ahead for weekend evenings." },
+      { title: "Museum quarter", tip: "Best cultural district if you want one museum stop." },
+      { title: "Neighbourhood cafés", tip: "Utrecht excels at relaxed café culture." },
+      { title: "FC Utrecht matchday", tip: "Adds real football energy to an already strong city break." },
+      { title: "Central bar crawl", tip: "Stay around the canals and you cannot really go wrong." },
+      { title: "Morning bakery stop", tip: "Much better than hotel breakfast." },
+      { title: "Short cycling route", tip: "The city is very bike-friendly." },
+      { title: "Station-to-centre walk", tip: "One of the easiest arrivals in the Netherlands." },
     ],
+
     tips: [
-      "One of the strongest non-Amsterdam Dutch city weekends.",
-      "Book dinner and popular bars on key weekends.",
-      "A very easy two-night football trip.",
-      "You get proper city energy without the same tourist overload.",
-      "If someone says Utrecht is boring, they’ve done it badly.",
+      "One of the best two-night football city trips in the country.",
+      "Book restaurants early on match weekends.",
+      "The canal district is the natural centre of the trip.",
+      "Easily walkable for visitors.",
+      "A better football weekend than many people expect.",
     ],
-    food: ["Canal dining", "Modern Dutch", "Wine bars", "Coffee spots", "Brunch cafés"],
+
+    food: ["Canal dining", "Wine bars", "Dutch cafés", "Brunch spots"],
+
     transport:
-      "Very easy on foot in the centre. Excellent rail hub. No need to make travel complicated.",
+      "Extremely easy rail hub. Most of the centre is walkable once you arrive.",
+
     accommodation:
-      "Historic centre or close to the station both work very well.",
+      "Historic centre or close to Utrecht Centraal station both work well.",
   },
 
   groningen: {
@@ -280,161 +329,38 @@ export const eredivisieCityGuides: Record<string, CityGuide> = {
     name: "Groningen",
     country: "Netherlands",
     thingsToDoUrl: GYG.groningen,
-    overview:
-      "Groningen is one of the Netherlands’ best nightlife-and-football combinations outside the obvious cities. Student energy keeps it alive, the centre is easy, and the city has enough identity to feel worth the trip beyond the match itself.",
-    topThings: [
-      { title: "Grote Markt", tip: "Natural centre point for food, drinks, and orientation." },
-      { title: "Martinitoren area", tip: "Quick landmark value without wasting time." },
-      { title: "Canal walk", tip: "Best as a morning reset or pre-dinner loop." },
-      { title: "Student quarter bars", tip: "This is where the city’s energy really shows." },
-      { title: "Forum Groningen", tip: "Good modern city stop with views and flexible use." },
-      { title: "FC Groningen matchday", tip: "The city’s football identity matters here." },
-      { title: "Late-night drinks", tip: "One of the stronger Dutch cities for it." },
-      { title: "Coffee + bakery morning", tip: "Very easy to do well here." },
-      { title: "Compact centre wandering", tip: "Enough to fill time without overplanning." },
-      { title: "Neighbourhood dinner", tip: "Book if you want something specific on a busy weekend." },
-    ],
-    tips: [
-      "Great city if you want football plus nightlife.",
-      "Stay central and everything becomes easy.",
-      "Student energy keeps it lively even without over-tourism.",
-      "Good value compared with some bigger-name cities.",
-      "Two nights is the sweet spot.",
-    ],
-    food: ["Student bars", "Casual bistros", "Coffee spots", "Central restaurants"],
-    transport:
-      "Walkable centre and straightforward local movement once you arrive by train.",
-    accommodation:
-      "Central Groningen only. Don’t stay out of town unless price leaves no alternative.",
-  },
 
-  sittard: {
-    cityId: "sittard",
-    name: "Sittard",
-    country: "Netherlands",
     overview:
-      "Sittard is a niche football trip, not a giant city weekend. That’s fine. The value is in doing a different Dutch stop properly: compact centre, relaxed pace, and Fortuna Sittard as the anchor.",
-    topThings: [
-      { title: "Historic centre", tip: "Small but enough for an easy wander." },
-      { title: "Town square bars", tip: "Best for a simple evening without overthinking it." },
-      { title: "Local cafés", tip: "Keep expectations realistic and the trip works." },
-      { title: "Fortuna matchday", tip: "This is the trip’s reason to exist." },
-      { title: "Short morning loop", tip: "Useful if you only have one night." },
-      { title: "Regional Limburg feel", tip: "The city’s appeal is in being different, not bigger." },
-      { title: "Simple dinner booking", tip: "One decent reservation makes a lot of difference here." },
-      { title: "Arrival planning", tip: "A neat trip beats an ambitious one." },
-      { title: "Town-centre drink", tip: "Better than wandering trying to invent hidden gems." },
-      { title: "Low-pressure city break", tip: "That is the point here." },
-    ],
-    tips: [
-      "Don’t oversell the city to yourself. Treat it as a focused football stop.",
-      "Fortuna is the anchor.",
-      "One-night stay is enough for most people.",
-      "Stay central and keep it neat.",
-      "Works best for collectors of proper football trips, not generic tourists.",
-    ],
-    food: ["Town-centre restaurants", "Casual Limburg dining", "Simple bars"],
-    transport:
-      "Small scale, manageable on foot with simple rail access.",
-    accommodation:
-      "Stay near the centre and keep it basic but practical.",
-  },
+      "Groningen is one of the liveliest football cities outside the biggest Dutch destinations. Student culture keeps the nightlife active, the centre is compact, and FC Groningen provides a strong local football identity.",
 
-  deventer: {
-    cityId: "deventer",
-    name: "Deventer",
-    country: "Netherlands",
-    overview:
-      "Deventer is one of the better smaller Dutch football cities because it has genuine old-town character instead of feeling like a blank stop on the rail map. For Go Ahead Eagles, it gives you enough city charm to make the weekend feel rounded rather than purely functional.",
     topThings: [
-      { title: "Historic centre", tip: "This is the city’s strength. Walk it properly." },
-      { title: "Brink square", tip: "Anchor point for drinks and food." },
-      { title: "IJssel river walk", tip: "Best in decent weather, obvious but effective." },
-      { title: "Book market / local shops", tip: "Nice add-on if timings align." },
-      { title: "Go Ahead Eagles matchday", tip: "A proper old-school football anchor." },
-      { title: "Neighbourhood dinner", tip: "Worth reserving something decent." },
-      { title: "Morning coffee route", tip: "The centre suits slow starts well." },
-      { title: "Old streets photography", tip: "A genuinely attractive place to wander." },
-      { title: "Local pub stop", tip: "Better than chain drinking by default." },
-      { title: "One-night simplicity", tip: "Easy city to keep efficient." },
+      { title: "Grote Markt", tip: "Central square and main hub for restaurants and bars." },
+      { title: "Martinitoren", tip: "Iconic tower that anchors the city skyline." },
+      { title: "Forum Groningen", tip: "Modern cultural building with views over the city." },
+      { title: "Canal walks", tip: "Best done in the morning or early evening." },
+      { title: "Student district bars", tip: "One of the liveliest nightlife areas in the country." },
+      { title: "FC Groningen matchday", tip: "Adds a strong football atmosphere to the city weekend." },
+      { title: "Late-night drinks", tip: "Groningen is famous for staying open late." },
+      { title: "Morning coffee", tip: "Great independent café culture." },
+      { title: "Compact centre exploration", tip: "Everything is close together." },
+      { title: "Dinner reservation", tip: "Good restaurants fill quickly on weekends." },
     ],
-    tips: [
-      "One of the better smaller Dutch city breaks.",
-      "Old town plus football is the formula.",
-      "No need to overplan it.",
-      "Stay central.",
-      "Good for a more classic-feeling trip.",
-    ],
-    food: ["Square-side restaurants", "Pubs", "Coffee spots", "Bakeries"],
-    transport:
-      "Compact and straightforward once in the centre.",
-    accommodation:
-      "Historic centre is where you should be.",
-  },
 
-  zwolle: {
-    cityId: "zwolle",
-    name: "Zwolle",
-    country: "Netherlands",
-    overview:
-      "Zwolle is a clean, attractive, practical Dutch city that suits a football weekend because it is easy to handle. It is not trying to be edgy or glamorous. It just works.",
-    topThings: [
-      { title: "Historic core", tip: "Strong enough for an easy half-day wander." },
-      { title: "Sassenpoort area", tip: "Quick landmark value." },
-      { title: "Canal edges", tip: "Good for a calmer walk." },
-      { title: "Town centre food stop", tip: "Keep it simple and central." },
-      { title: "PEC Zwolle matchday", tip: "Adds purpose to the weekend." },
-      { title: "Local bars", tip: "The city is best enjoyed casually." },
-      { title: "Morning coffee", tip: "Strong move before travel out." },
-      { title: "Short centre loop", tip: "Enough city content without overreach." },
-      { title: "Book one decent dinner", tip: "Always helps." },
-      { title: "Station-to-centre flow", tip: "Simple city, simple trip." },
-    ],
     tips: [
-      "Practical city, low-friction football weekend.",
-      "One or two nights both work.",
-      "Stay central.",
-      "Don’t try to manufacture a huge attractions list.",
-      "A neat football trip rather than a grand tour.",
+      "Excellent nightlife city.",
+      "Compact and easy to navigate.",
+      "Strong football culture locally.",
+      "Great for two-night trips.",
+      "Better value than bigger Dutch cities.",
     ],
-    food: ["Central Dutch dining", "Cafés", "Simple evening bars"],
-    transport:
-      "Walkable and easy once in the centre.",
-    accommodation:
-      "City centre or near the station both work.",
-  },
 
-  volendam: {
-    cityId: "volendam",
-    name: "Volendam",
-    country: "Netherlands",
-    thingsToDoUrl: GYG.volendam,
-    overview:
-      "Volendam is a very specific kind of trip: scenic, small, touristy in parts, and absolutely not a major city break. That is fine if you understand the brief. Done right, it’s a short, distinctive football-and-waterfront weekend.",
-    topThings: [
-      { title: "Harbourfront walk", tip: "This is the whole point visually. Do it early or late for fewer crowds." },
-      { title: "Waterside cafés", tip: "Easy, obvious, and usually worth it." },
-      { title: "Traditional centre stroll", tip: "Nice in small doses. Don’t force hours of it." },
-      { title: "Boat / water view stop", tip: "Useful if weather behaves." },
-      { title: "FC Volendam matchday", tip: "Makes the trip more than just a pretty village visit." },
-      { title: "Short seafood meal", tip: "The right choice here, provided you avoid total tourist traps." },
-      { title: "Neighbouring Edam add-on", tip: "Only if you have spare time and want more local texture." },
-      { title: "Morning coffee by the water", tip: "Best use of the setting." },
-      { title: "Photography walk", tip: "Very easy win in decent weather." },
-      { title: "Short-stay discipline", tip: "This is not a place to overstay unless you love the calm pace." },
-    ],
-    tips: [
-      "Good short trip, not a long one.",
-      "The scenery is the appeal; accept that.",
-      "Matchday gives it purpose.",
-      "Best in decent weather.",
-      "Avoid overpaying in the most obvious waterfront spots if possible.",
-    ],
-    food: ["Seafood", "Waterside cafés", "Simple Dutch dining"],
+    food: ["Student bars", "Bistros", "Coffee houses", "Central restaurants"],
+
     transport:
-      "Easy enough as a compact destination, but plan arrival cleanly rather than improvising.",
+      "City centre is easily walkable with good rail access.",
+
     accommodation:
-      "Harbour area if staying overnight; otherwise short-stay practicality is enough.",
+      "Stay within the historic centre or near Grote Markt.",
   },
 
   breda: {
@@ -442,96 +368,77 @@ export const eredivisieCityGuides: Record<string, CityGuide> = {
     name: "Breda",
     country: "Netherlands",
     thingsToDoUrl: GYG.breda,
+
     overview:
-      "Breda is one of the better lower-key Dutch city weekends because it has a proper centre, nightlife, and enough beauty without feeling overexposed. Add NAC and you have a city that works very well for a football-first trip.",
+      "Breda is one of the better smaller Dutch city breaks thanks to its lively central square, strong bar culture, and attractive historic streets. Add NAC Breda and it becomes a very enjoyable football weekend.",
+
     topThings: [
-      { title: "Grote Markt", tip: "Best natural base for food and drinks." },
-      { title: "Historic centre", tip: "Compact, attractive, and easy to enjoy on foot." },
-      { title: "Canal / park edge walk", tip: "Useful if you want a calmer daytime block." },
-      { title: "NAC matchday", tip: "This is where the city gets its sharper edge." },
-      { title: "Bar night", tip: "Breda is better for this than many similarly sized cities." },
-      { title: "Local dinner booking", tip: "Book one good meal and the trip improves fast." },
-      { title: "Morning café", tip: "Strong city for relaxed starts." },
-      { title: "Old church / square area", tip: "Simple sightseeing value without effort." },
-      { title: "Neighbourhood pub", tip: "Worth moving slightly off the busiest strip for." },
-      { title: "Short city loop", tip: "Good city for doing just enough." },
+      { title: "Grote Markt", tip: "Central square filled with restaurants and bars." },
+      { title: "Historic centre", tip: "Compact and attractive for casual wandering." },
+      { title: "Breda Castle area", tip: "Adds historical interest to the city centre." },
+      { title: "NAC matchday", tip: "The real highlight of the weekend." },
+      { title: "Evening bar scene", tip: "Breda has a surprisingly strong nightlife for its size." },
+      { title: "Central cafés", tip: "Ideal for relaxed daytime breaks." },
+      { title: "Neighbourhood pubs", tip: "Often better than the busiest square bars." },
+      { title: "Morning coffee", tip: "Plenty of independent options." },
+      { title: "City walk", tip: "Enough attractions for an easy half-day wander." },
+      { title: "Dinner reservation", tip: "Worth booking ahead for weekends." },
     ],
+
     tips: [
-      "Very solid football weekend city.",
-      "Better nightlife than people expect.",
-      "Stay central.",
-      "NAC gives it a proper football identity.",
-      "A good two-night trip.",
+      "Strong football city weekend.",
+      "Stay central around the square.",
+      "Two nights works perfectly.",
+      "Lively nightlife scene.",
+      "One of the more underrated Dutch trips.",
     ],
-    food: ["Square-side restaurants", "Beer bars", "Casual modern Dutch", "Brunch cafés"],
+
+    food: ["Square restaurants", "Beer bars", "Dutch cafés", "Brunch spots"],
+
     transport:
-      "Easy on foot through the main centre.",
+      "City centre is compact and walkable from the station.",
+
     accommodation:
-      "Historic centre / Grote Markt area is the best base.",
+      "Historic centre around Grote Markt is the best base.",
   },
 
-  almelo: {
-    cityId: "almelo",
-    name: "Almelo",
+  volendam: {
+    cityId: "volendam",
+    name: "Volendam",
     country: "Netherlands",
-    overview:
-      "Almelo is another football-led trip where the club matters more than any giant city narrative. If you understand that, it works. If you expect a blockbuster city break, you are setting yourself up wrong.",
-    topThings: [
-      { title: "Town centre loop", tip: "Short and enough." },
-      { title: "Local bars", tip: "Keep it practical and central." },
-      { title: "Heracles matchday", tip: "Main event by a distance." },
-      { title: "Canal-side wander", tip: "Useful for a quiet stretch." },
-      { title: "Casual dinner", tip: "One decent booking beats random wandering." },
-      { title: "Morning coffee", tip: "Simple reset before moving on." },
-      { title: "Neighbourhood pub", tip: "Better than overthinking hidden gems." },
-      { title: "Compact football trip", tip: "That’s the right mindset." },
-      { title: "Arrival planning", tip: "Keep rail and hotel neat." },
-      { title: "One-night stay", tip: "Usually enough." },
-    ],
-    tips: [
-      "Football-first, not tourism-first.",
-      "Heracles is the anchor.",
-      "Stay central.",
-      "One night is usually enough.",
-      "Works well if you like proper club-collector trips.",
-    ],
-    food: ["Simple Dutch dining", "Centre bars", "Casual cafés"],
-    transport:
-      "Small scale and manageable once you arrive.",
-    accommodation:
-      "Central Almelo is enough.",
-  },
+    thingsToDoUrl: GYG.volendam,
 
-  "velsen-zuid": {
-    cityId: "velsen-zuid",
-    name: "Velsen-Zuid",
-    country: "Netherlands",
     overview:
-      "Velsen-Zuid is not a classic city break. It is a niche football destination attached to the Telstar experience and the wider North Holland area. So don’t lie to yourself about what the trip is. Keep it short, neat, and football-focused.",
+      "Volendam is a small waterfront town that offers a completely different feel to the major Dutch cities. Scenic harbour views, traditional houses, and FC Volendam create a distinctive football trip.",
+
     topThings: [
-      { title: "Telstar matchday", tip: "Main reason to go. Treat it like that." },
-      { title: "Nearby coastal add-on", tip: "Worth considering if weather is good." },
-      { title: "Short local walk", tip: "Enough to get your bearings, nothing more." },
-      { title: "Simple pre-match food", tip: "Plan it; options are not endless." },
-      { title: "Rail-based day structure", tip: "Best if tied to a larger Amsterdam / Haarlem plan." },
-      { title: "Local bar stop", tip: "Keep expectations realistic." },
-      { title: "Short stay discipline", tip: "Don’t overstay the brief." },
-      { title: "Neighbouring area add-on", tip: "Useful if you want the trip to feel fuller." },
-      { title: "Morning move-on", tip: "Good place for a focused stop, not a long base." },
-      { title: "Lower-profile football value", tip: "That is the appeal." },
+      { title: "Harbourfront walk", tip: "The main scenic highlight of the town." },
+      { title: "Waterfront cafés", tip: "Best enjoyed outside on a clear day." },
+      { title: "Traditional centre", tip: "Small but charming for a short stroll." },
+      { title: "Boat harbour views", tip: "Great photography location." },
+      { title: "FC Volendam matchday", tip: "The reason most visitors come." },
+      { title: "Seafood dinner", tip: "Local fish restaurants are the obvious choice." },
+      { title: "Edam day trip", tip: "Easy nearby addition if you want more exploration." },
+      { title: "Morning coffee by the water", tip: "Peaceful start before day-trippers arrive." },
+      { title: "Short photography walk", tip: "The town’s visual charm is its main appeal." },
+      { title: "Relaxed evening", tip: "This is not a big nightlife destination." },
     ],
+
     tips: [
-      "This is a niche football stop.",
-      "Better as part of a wider North Holland itinerary.",
-      "Keep it short and practical.",
-      "Don’t expect a huge standalone city weekend.",
-      "Useful for proper ground-collector energy.",
+      "Best as a short stay.",
+      "Great in good weather.",
+      "Football gives the trip real purpose.",
+      "Do not expect a big-city weekend.",
+      "Scenery is the main draw.",
     ],
-    food: ["Simple local dining", "Short-stop cafés"],
+
+    food: ["Seafood restaurants", "Harbour cafés", "Dutch bakeries"],
+
     transport:
-      "Best handled with clear rail / local travel planning rather than improvisation.",
+      "Reachable by bus connections from Amsterdam.",
+
     accommodation:
-      "Often better paired with a base elsewhere unless you specifically want the immediate area.",
+      "Harbour area hotels provide the best experience.",
   },
 };
 
