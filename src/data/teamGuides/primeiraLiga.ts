@@ -1117,6 +1117,130 @@ export const primeiraLigaTeamGuides: Record<string, TeamGuide> = {
     links: [{ label: "Official site", url: "https://avs-sad.pt/" }],
     updatedAt: "2026-03-09",
   },
+
+  "alverca": {
+    teamKey: "alverca",
+    name: "Alverca",
+    city: "Alverca do Ribatejo",
+    country: "Portugal",
+    stadium: "Complexo Desportivo do FC Alverca",
+    sections: [
+      {
+        title: "Club Overview",
+        body:
+          "Alverca are one of Portuguese football’s more interesting revival stories: a club from the Lisbon outer belt whose modern identity is built around re-emergence, rebuilding, and proving they belong back on a bigger stage after long years outside the top flight.\n\nUnlike the giant Lisbon institutions, Alverca do not carry the weight of national expectation or mass global support. Their profile is more regional and practical. The club represents a working, commuter-belt town on the north-eastern side of metropolitan Lisbon, and that shapes the entire football experience: smaller scale, tighter local attachment, and less spectacle-driven matchdays.\n\nFor neutral travellers, Alverca offer a useful contrast within Portuguese football. This is not a super-club occasion or a historic national heavyweight. It is a grounded, community-linked top-flight stop that works best as part of a wider Lisbon football trip, especially for visitors who want to see a different layer of the Portuguese game beyond the obvious names.",
+      },
+      {
+        title: "History & Legacy",
+        body:
+          "Alverca’s most memorable historic period came in the late 1990s and early 2000s, when the club climbed into the Primeira Liga and briefly established itself among Portugal’s elite. That spell remains central to the club’s modern self-image because it proved Alverca could compete above the level traditionally associated with a town of this size.\n\nThe club never built the kind of multi-generational national mythology attached to Benfica, Porto, or Sporting, and that is important context. Alverca’s legacy is not about trophy cabinets or deep continental history. It is about episodic emergence, resilience, and the ability to return after long periods outside the spotlight.\n\nThat makes Alverca culturally different from fallen giants. They are not trying to restore some enormous lost empire. They are trying to re-establish themselves as a credible, sustainable top-flight club with regional relevance and renewed momentum.",
+      },
+      {
+        title: "Recent Seasons",
+        body:
+          "Alverca’s recent seasons have been framed by upward movement, reorganisation, and the attempt to turn momentum into stability.\n\nPatterns:\n• Promotion-driven energy rather than long-established top-flight routine.\n• A squad built with practicality in mind rather than star-heavy reputation.\n• Matches often judged through competitiveness and consolidation rather than lofty finishing targets.\n\nFor a club like Alverca, the first objective in the modern top-flight context is credibility: showing they can stay in the division, take points consistently, and avoid looking structurally underpowered.\n\nThat means recent seasons are best understood through the lens of establishment rather than glamour. Good runs create optimism quickly because the club’s baseline narrative is still one of return and rebuilding rather than entitlement.",
+      },
+      {
+        title: "Playing Style",
+        body:
+          "Alverca’s football tends to reflect the profile of a newly re-established top-flight side: pragmatic in structure, direct when needed, and more concerned with effectiveness than aesthetic vanity.\n\nCommon traits:\n• Organised shape out of possession.\n• Willingness to play forward quickly rather than forcing sterile build-up.\n• Strong emphasis on collective work rate and compact distances.\n• Preference for keeping matches manageable rather than turning them into open technical contests.\n\nAgainst stronger opponents, Alverca are more likely to prioritise discipline and territorial awareness than prolonged possession. Against teams around their level, the balance can shift toward a more front-foot version, especially when momentum and crowd energy grow.\n\nFor neutrals, the appeal is not elaborate tactical theatre. It is seeing a team play with urgency, realism, and the kind of edge common to clubs trying to secure their place at a higher level.",
+      },
+      {
+        title: "Stadium Profile",
+        body:
+          "Complexo Desportivo do FC Alverca is a smaller-scale ground that fits the club’s identity.\n\nApproximate capacity: modest by Primeira Liga standards.\n\nThe stadium does not try to project giant-club grandeur. It feels functional, intimate, and local. Sightlines are generally straightforward, and the reduced scale means matches can feel closer to the pitch than in Portugal’s larger arenas.\n\nCompared with the monumental venues of Lisbon and Porto, Alverca’s home is more about accessibility and immediacy than spectacle. That smaller setting helps define the matchday tone: less eventised, more community-focused, and easier to read as a local football afternoon rather than a national showpiece.",
+      },
+      {
+        title: "Atmosphere & Matchday Feel",
+        body:
+          "Atmosphere at Alverca is intimate rather than overwhelming.\n\nTypical patterns:\n• Stronger local feel than tourist pull.\n• Noise tied closely to match flow rather than constant large-stand volume.\n• More pressure and edge in fixtures that carry relegation or regional significance.\n\nBecause the stadium is smaller, crowd reactions can travel quickly even without massive numbers. The atmosphere is usually driven by proximity and shared tension rather than choreographed spectacle.\n\nFor neutral visitors, this means the experience feels honest and grounded. It lacks the theatrical scale of the big Portuguese clubs, but it compensates with immediacy and the sense that everyone present is there primarily for the football rather than the occasion branding.",
+      },
+      {
+        title: "Rivalries",
+        body:
+          "Alverca do not possess a single rivalry on the scale of Portugal’s most famous derbies, but their geographic position naturally gives extra edge to matches involving Lisbon-area clubs and regional neighbours from the wider metropolitan corridor.\n\nFixtures against bigger Lisbon sides carry obvious symbolic importance, even if the rivalry is unequal in scale. For supporters, those games offer the chance to test themselves against the clubs that dominate the national conversation.\n\nIn practical terms, the sharper emotional energy is likely to come from proximity, league context, and survival pressure rather than one all-defining historic enemy.",
+      },
+      {
+        title: "Legends",
+        body:
+          "Alverca’s legend culture is more modern and niche than that of Portugal’s traditional powers.\n\nThe club’s most resonant figures are generally linked to promotion cycles, top-flight breakthrough eras, and players or coaches associated with making Alverca feel relevant beyond their expected level.\n\nBecause the club’s major historical moments are concentrated into shorter peaks, legend status is often tied less to trophy accumulation and more to symbolic importance: people who helped push Alverca into the national frame or restore belief during return periods.\n\nThat gives the club a more living, recent-memory version of legend culture than institutions whose mythology is spread across a century of elite success.",
+      },
+      {
+        title: "Supporter Culture",
+        body:
+          "Alverca’s supporter culture is local, practical, and rooted in community identity rather than giant-club scale.\n\nKey traits:\n• Strong attachment to the town and club as a local symbol.\n• Pride in competing above what outsiders might expect.\n• Lower tolerance for passive or timid football than the club’s size might suggest.\n\nThis is not a fanbase built on global branding or mass tourism. The atmosphere and conversations around the club are more likely to revolve around realism, progress, and local relevance than abstract national prestige.\n\nFor neutrals, that usually produces a matchday culture that feels grounded and readable: less polished, less performative, and more obviously tied to the town itself.",
+      },
+      {
+        title: "Neutral Visitor Notes",
+        body:
+          "• Best treated as part of a wider Lisbon football itinerary rather than a stand-alone prestige trip.\n• Expect a smaller, more local stadium experience than at Portugal’s major clubs.\n• Good option if you want to see a different layer of Portuguese top-flight football.\n• Matchday is more community-focused than tourist-facing.\n• Works well for travellers who value authenticity and contrast over scale.",
+      },
+    ],
+    links: [],
+    updatedAt: "2026-03-09",
+  },
+
+  "tondela": {
+    teamKey: "tondela",
+    name: "Tondela",
+    city: "Tondela",
+    country: "Portugal",
+    stadium: "Estádio João Cardoso",
+    sections: [
+      {
+        title: "Club Overview",
+        body:
+          "Tondela are one of the clearest examples in Portuguese football of a small-town club punching above demographic and financial weight. Their identity is built around regional pride, survival mentality, and the idea that organisation and collective discipline can keep a non-metropolitan club relevant in a league shaped heavily by larger urban institutions.\n\nThe club represents Tondela and the wider inland central-Portuguese area rather than a major national football capital. That matters because it gives them a very different cultural position from the Lisbon, Porto, and Braga-based clubs. Tondela are not built on large-scale expectation. They are built on proving that a smaller place can still sustain top-flight football.\n\nFor neutral travellers, Tondela offer a football-first trip with genuine small-town texture. This is not a glamour destination. It is a grounded Portuguese football stop where the club, the town, and the matchday identity are tightly connected.",
+      },
+      {
+        title: "History & Legacy",
+        body:
+          "For much of their history, Tondela existed outside the upper elite of Portuguese football. The club’s defining modern achievement was climbing into the Primeira Liga and showing that a relatively small inland club could survive and compete at that level.\n\nThat rise reshaped the club’s historical profile. Tondela are not defined by national-title eras or a giant support base. Their modern legacy rests instead on progression, overachievement, and repeated defiance of what outsiders assumed their ceiling would be.\n\nIn cultural terms, that makes their history feel more recent and more developmental. Their legacy is not about old imperial status. It is about proving belonging through persistence, smart management, and resilience in a league that naturally favours bigger clubs and larger markets.",
+      },
+      {
+        title: "Recent Seasons",
+        body:
+          "Tondela’s recent seasons have usually been interpreted through the lens of competitiveness, sustainability, and whether the club can remain structurally credible at a high level.\n\nPatterns:\n• Seasons shaped by survival pressure or promotion ambition rather than European expectation.\n• Heavy emphasis on consistency and organisation.\n• Squad construction focused more on function than star profile.\n\nFor a club of this size, stability itself is a serious achievement. Strong runs are meaningful because they create breathing room and prove the team can compete without needing ideal conditions every week.\n\nWhen Tondela are performing well, the conversation is usually about collective coherence and practical effectiveness. When they struggle, the margins are small enough that a handful of poor weeks can shift the whole tone of a season quickly.",
+      },
+      {
+        title: "Playing Style",
+        body:
+          "Tondela’s playing style is usually pragmatic, energetic, and shaped by the realities of being a smaller club in a demanding division.\n\nCommon traits:\n• Compact defensive organisation.\n• Quick forward progression when space opens.\n• Strong emphasis on work rate and second-ball competitiveness.\n• Preference for team structure over individual showmanship.\n\nThey are rarely at their best when forced into long periods of sterile possession. Tondela generally look stronger when matches are played with edge, tempo changes, and clear tactical purpose.\n\nAgainst stronger opponents, they are more likely to value compactness and transition threat. Against fellow smaller clubs, they can take a more assertive stance, but the football still tends to be rooted in efficiency rather than aesthetic self-indulgence.\n\nFor neutrals, the appeal is the honesty of it: a team playing with the awareness that every point matters.",
+      },
+      {
+        title: "Stadium Profile",
+        body:
+          "Estádio João Cardoso is a compact ground that matches the scale and identity of the club.\n\nApproximate capacity: small by top-flight Portuguese standards.\n\nThe venue feels practical, direct, and local. It does not offer giant-arena spectacle, but it does provide proximity and a clearer sense of community ownership than many larger modern bowls.\n\nThis is a stadium where the football remains the centre of attention rather than the infrastructure. That helps define Tondela as a travel experience: less about wow-factor architecture, more about a club and ground that feel properly embedded in their setting.",
+      },
+      {
+        title: "Atmosphere & Matchday Feel",
+        body:
+          "Atmosphere at Tondela is compact, local, and heavily tied to match tension.\n\nTypical patterns:\n• Support driven by commitment rather than large numbers.\n• Stronger edge in close or high-stakes matches.\n• Crowd reactions shaped by effort, duels, and visible work rate.\n\nThe stadium does not generate constant giant-club volume, but the smaller scale means emotional swings are easy to feel. When the match matters, the ground can feel sharper and tighter than its size suggests.\n\nFor visitors, the matchday feel is distinctly football-first. There is less pageantry and less tourist framing than at Portugal’s headline clubs. The experience is more about local investment, practical support, and the kind of pressure that comes when every result carries weight.",
+      },
+      {
+        title: "Rivalries",
+        body:
+          "Tondela do not have a single nationally dominant rivalry comparable to Portugal’s biggest derby culture, but regional fixtures and matches against clubs of similar scale carry extra significance.\n\nGeographic and competitive context matter more here than one all-consuming historic feud. Encounters with nearby central and northern clubs can carry greater local meaning, while games against larger institutions often produce a defiant underdog edge.\n\nIn practice, Tondela’s rivalry profile is more situational than mythological: league status, regional identity, and the fight for points tend to generate the strongest emotional charge.",
+      },
+      {
+        title: "Legends",
+        body:
+          "Tondela’s legend culture is naturally tied to promotion eras, survival campaigns, and figures who helped elevate the club beyond what many thought possible.\n\nAt a club like this, legendary status is not mainly built through huge medal counts. It is built through symbolic importance: promotion heroes, long-serving players, and coaches associated with the club’s most credible top-flight spells.\n\nThat gives Tondela a more modern, achievement-specific type of memory culture. The names that matter most are usually those linked to making the club feel stable, brave, and relevant at a level where it could easily have been dismissed.",
+      },
+      {
+        title: "Supporter Culture",
+        body:
+          "Tondela’s supporter culture is proudly local and defined by identification with the town and wider region.\n\nKey traits:\n• Strong appreciation for effort and discipline.\n• Pride in competing with clubs from much larger cities.\n• Realistic expectations, but not passive ones.\n\nThe fanbase understands the structural limits of the club, but that does not translate into indifference. If anything, it sharpens appreciation for organisation, smart football, and visible commitment.\n\nFor neutral visitors, the culture feels sincere and community-based. This is not a club built on corporate scale or international tourism. The support reflects a place that values having a top-level representative and expects that representative to fight for every result.",
+      },
+      {
+        title: "Neutral Visitor Notes",
+        body:
+          "• This is a small-town football trip, not a giant Portuguese city weekend.\n• Best for travellers who want authentic club identity rather than headline-club spectacle.\n• Expect a compact stadium and a local crowd rather than heavy tourist presence.\n• Matchday works best if you embrace the football-first nature of the trip.\n• Good addition for users who want to see a deeper, less obvious layer of Portuguese football culture.",
+      },
+    ],
+    links: [],
+    updatedAt: "2026-03-09",
+  },
 };
 
 export default primeiraLigaTeamGuides;
