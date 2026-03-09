@@ -5,12 +5,12 @@ const CROATIA = "Croatia";
 export const hnlStadiums: Record<string, StadiumRecord> = {
   "maksimir-stadium": {
     stadiumKey: "maksimir-stadium",
-    name: "Maksimir Stadium",
+    name: "Stadion Maksimir",
     city: "Zagreb",
     country: CROATIA,
     capacity: 25074,
     opened: 1912,
-    teamKeys: ["dinamo-zagreb", "nk-lokomotiva"],
+    teamKeys: ["dinamo-zagreb"],
     airport: "Zagreb Franjo Tuđman Airport (ZAG)",
     distanceFromAirportKm: 16,
     transit: [
@@ -22,14 +22,14 @@ export const hnlStadiums: Record<string, StadiumRecord> = {
       { area: "Maksimir", why: "Closest practical stay if stadium proximity matters most" },
     ],
     tips: [
-      "Shared stadium for Dinamo Zagreb and NK Lokomotiva in the current setup",
+      "Dinamo’s historic home and one of Croatian football’s most recognisable venues",
       "Central Zagreb is usually the smarter overnight base than staying by the ground",
     ],
   },
 
   "stadion-poljud": {
     stadiumKey: "stadion-poljud",
-    name: "Stadion Poljud",
+    name: "Gradski stadion Poljud",
     city: "Split",
     country: CROATIA,
     capacity: 33987,
@@ -53,7 +53,7 @@ export const hnlStadiums: Record<string, StadiumRecord> = {
 
   "stadion-rujevica": {
     stadiumKey: "stadion-rujevica",
-    name: "Stadion Rujevica",
+    name: "HNK Rijeka Stadium",
     city: "Rijeka",
     country: CROATIA,
     capacity: 8279,
@@ -77,7 +77,7 @@ export const hnlStadiums: Record<string, StadiumRecord> = {
 
   "gradski-stadion-koprivnica": {
     stadiumKey: "gradski-stadion-koprivnica",
-    name: "Gradski stadion Ivan Kušek Apaš",
+    name: 'Gradski stadion "Ivan Kušek Apaš"',
     city: "Koprivnica",
     country: CROATIA,
     capacity: 3134,
@@ -125,7 +125,7 @@ export const hnlStadiums: Record<string, StadiumRecord> = {
 
   "stadion-aldo-drosina": {
     stadiumKey: "stadion-aldo-drosina",
-    name: "Stadion Aldo Drosina",
+    name: "Aldo Drosina",
     city: "Pula",
     country: CROATIA,
     capacity: 9000,
@@ -147,9 +147,33 @@ export const hnlStadiums: Record<string, StadiumRecord> = {
     ],
   },
 
+  "kajzerica-stadium": {
+    stadiumKey: "kajzerica-stadium",
+    name: "Kajzerica",
+    city: "Zagreb",
+    country: CROATIA,
+    capacity: 5350,
+    opened: 1953,
+    teamKeys: ["nk-lokomotiva"],
+    airport: "Zagreb Franjo Tuđman Airport (ZAG)",
+    distanceFromAirportKm: 11,
+    transit: [
+      { label: "Zagreb Main Station", minutes: 20, note: "best wider city hub" },
+      { label: "New Zagreb / Kajzerica", minutes: 10, note: "closest practical zone" },
+    ],
+    stayAreas: [
+      { area: "Lower Town", why: "Best all-round option for nightlife, hotels and easier city-break value" },
+      { area: "New Zagreb", why: "Closer practical stay if you care more about stadium access than atmosphere" },
+    ],
+    tips: [
+      "Lokomotiva’s listed HNS home is Kajzerica, not Maksimir",
+      "Most visitors will still have a better overall trip staying centrally in Zagreb",
+    ],
+  },
+
   "stadion-radnik": {
     stadiumKey: "stadion-radnik",
-    name: "Stadion Radnik",
+    name: "Gradski stadion",
     city: "Velika Gorica",
     country: CROATIA,
     capacity: 8000,
@@ -197,7 +221,7 @@ export const hnlStadiums: Record<string, StadiumRecord> = {
 
   "stadion-borovo-naselje": {
     stadiumKey: "stadion-borovo-naselje",
-    name: "Gradski stadion u Borovu naselju",
+    name: "Stadion Borovo naselje",
     city: "Vukovar",
     country: CROATIA,
     capacity: 6000,
