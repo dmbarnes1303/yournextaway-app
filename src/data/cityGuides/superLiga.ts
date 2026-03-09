@@ -538,7 +538,6 @@ export const superLigaCityGuides: Record<string, CityGuide> = {
     accommodation:
       "Central Slobozia is the only sensible answer if you are staying. Anything else just adds friction without adding value.",
   },
-
-
+};
 
 export default superLigaCityGuides;
