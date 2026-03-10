@@ -1,13 +1,11 @@
-// src/data/stadiums/types.ts
-
 export type StadiumTransit = {
   /** Display label, e.g. "Kings Cross" or "Arsenal Station" */
   label: string;
 
-  /** Approx walk time in minutes from the stadium */
+  /** Approximate travel or walk time in minutes */
   minutes?: number;
 
-  /** Optional note, e.g. "best for quick exit" */
+  /** Short practical note */
   note?: string;
 };
 
@@ -15,21 +13,35 @@ export type StadiumStayArea = {
   /** Area / neighbourhood name */
   area: string;
 
-  /** Short reason why it is good */
+  /** Why this area is useful */
   why: string;
 };
 
+export type StadiumParking = {
+  /** Short parking guidance summary */
+  summary?: string;
+
+  /** Practical parking tips */
+  tips?: string[];
+
+  /** Optional named parking locations */
+  options?: Array<{
+    name: string;
+    note?: string;
+  }>;
+};
+
 export type StadiumRecord = {
-  /** Stable key used across routes / lookups */
+  /** Stable registry key */
   stadiumKey: string;
 
-  /** Stadium display name */
+  /** Display name */
   name: string;
 
-  /** City the stadium is in */
+  /** City display name */
   city: string;
 
-  /** Country the stadium is in */
+  /** Country display name */
   country: string;
 
   /** Team keys that use this stadium */
@@ -38,27 +50,32 @@ export type StadiumRecord = {
   /** Optional address */
   address?: string;
 
-  /** Optional stadium capacity */
+  /** Optional capacity */
   capacity?: number;
 
   /** Optional opening year */
   opened?: number;
 
-  /** Nearest airport (use common name users recognise) */
+  /** Nearest airport */
   airport?: string;
 
-  /** Distance from airport to stadium in km */
+  /** Distance from airport in km */
   distanceFromAirportKm?: number;
 
-  /** Optional quick travel / matchday notes */
+  /** Quick practical notes */
   tips?: string[];
 
-  /** Optional primary transport anchors */
+  /** Main transport anchors */
   transit?: StadiumTransit[];
 
-  /** Optional suggested areas to stay nearby / conveniently */
+  /** Useful places to stay */
   stayAreas?: StadiumStayArea[];
+
+  /** Optional parking guidance */
+  parking?: StadiumParking;
 
   /** Optional official info page */
   officialInfoUrl?: string;
 };
+
+export type StadiumRegistry = Record<string, StadiumRecord>;
