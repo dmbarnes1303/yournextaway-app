@@ -17,6 +17,7 @@ export type MatchdayLogistics = {
   homeTeamName?: string; // optional - helps matching
   clubName?: string; // optional - helps matching
   league?: string;
+  country?: string;
 
   // stadium context
   stadium?: string;
