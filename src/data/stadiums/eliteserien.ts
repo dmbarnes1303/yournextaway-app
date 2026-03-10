@@ -99,7 +99,7 @@ export const eliteserienStadiums: Record<string, StadiumRecord> = {
 
   "briskeby-arena": {
     stadiumKey: "briskeby-arena",
-    name: "Briskeby Arena",
+    name: "Briskeby Stadion",
     city: "Hamar",
     country: NORWAY,
     capacity: 8068,
@@ -334,10 +334,10 @@ export const eliteserienStadiums: Record<string, StadiumRecord> = {
 
   "sor-arena": {
     stadiumKey: "sor-arena",
-    name: "Sør Arena",
+    name: "Sparebanken Norge Arena Kristiansand",
     city: "Kristiansand",
     country: NORWAY,
-    capacity: 14563,
+    capacity: 14448,
     opened: 2007,
     teamKeys: ["start"],
     airport: "Kristiansand Airport, Kjevik (KRS)",
@@ -357,7 +357,7 @@ export const eliteserienStadiums: Record<string, StadiumRecord> = {
 
   "sr-bank-arena": {
     stadiumKey: "sr-bank-arena",
-    name: "SR-Bank Arena",
+    name: "Lyse Arena",
     city: "Stavanger",
     country: NORWAY,
     capacity: 16300,
@@ -374,7 +374,7 @@ export const eliteserienStadiums: Record<string, StadiumRecord> = {
       { area: "Old Stavanger", why: "Stronger character stay if you want more atmosphere" },
     ],
     tips: [
-      "Stavanger is one of the better all-round away-trip cities in Norway",
+      "Stavanger is one of the better all-round football-trip cities in Norway",
       "Stay central rather than by the ground unless price is exceptional",
     ],
   },
