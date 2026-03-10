@@ -1,4 +1,3 @@
-// src/data/cityGuides/bundesliga.ts
 import type { CityGuide } from "./types";
 
 /**
@@ -19,8 +18,6 @@ const GYG = {
     "https://www.getyourguide.com/en-gb/frankfurt-l53/?partner_id=MAQJREP&utm_medium=online_publisher",
   leipzig:
     "https://www.getyourguide.com/en-gb/leipzig-l24/?partner_id=MAQJREP&utm_medium=online_publisher",
-  stuttgart:
-    "https://www.getyourguide.com/en-gb/stuttgart-l27/?partner_id=MAQJREP&utm_medium=online_publisher",
 } as const;
 
 export const bundesligaCityGuides: Record<string, CityGuide> = {
@@ -31,588 +28,42 @@ export const bundesligaCityGuides: Record<string, CityGuide> = {
     thingsToDoUrl: GYG.munich,
 
     overview:
-      "Munich is one of Europe’s cleanest football-city weekend combinations because it gives you elite football, a beautiful historic centre, major museums, beer-hall culture, and transport that makes the whole trip feel frictionless. Bayern Munich matchdays add scale and event feel, but the city is strong enough that the football never has to carry the weekend alone. The right Munich trip is simple: stay central, split the city into clean day-blocks, and treat Allianz Arena as one major event inside a wider high-quality break rather than the whole reason you came.",
+      "Munich is one of Europe’s easiest premium football weekends: clean transport, beautiful central districts, serious beer-hall culture, and one of the world’s most recognisable stadiums. The key is not to overdo it. Pick one strong cultural block, one strong food-and-beer block, and keep Allianz Arena travel simple.",
 
     topThings: [
-      {
-        title: "Marienplatz and Old Town loop",
-        tip: "Best first block in the city. Do Marienplatz, Frauenkirche, Viktualienmarkt and the surrounding lanes in one walk instead of wasting time zig-zagging.",
-      },
-      {
-        title: "Viktualienmarkt",
-        tip: "Ideal for a football-weekend lunch because you can eat quickly without sinking half the day into a formal sit-down meal.",
-      },
-      {
-        title: "English Garden",
-        tip: "One of the easiest high-value resets in the city. Good for a slower morning or a pre-dinner walk.",
-      },
-      {
-        title: "Nymphenburg Palace",
-        tip: "Worth doing properly if you have the time, but do not cram it into the same day as a tightly timed evening match.",
-      },
-      {
-        title: "BMW Welt and Museum",
-        tip: "Excellent if you want one big non-football block. Better as a focused half-day than as a rushed add-on.",
-      },
-      {
-        title: "Olympiapark",
-        tip: "Good skyline and open-space option if you want something lower-pressure than museums and palace interiors.",
-      },
-      {
-        title: "Beer hall night",
-        tip: "Pick one strong beer hall and do it well. Trying to collect three in one evening is tourist-brain nonsense.",
-      },
-      {
-        title: "Day trip to Dachau Memorial",
-        tip: "Serious and worthwhile, but only do it if you actually want the depth. It changes the tone of the day completely.",
-      },
-      {
-        title: "Lake day trip (Tegernsee or Starnberger See)",
-        tip: "Only if you have an extra day. Great upgrade if you want football plus Bavaria rather than football plus urban overkill.",
-      },
-      {
-        title: "Bayern Munich matchday",
-        tip: "Use central Munich as your base, then travel out properly. Arrive early and treat the Allianz Arena exterior and approach as part of the event.",
-      },
+      { title: "Marienplatz → Viktualienmarkt loop", tip: "Best first move. You get the core old-city feel fast without wasting half the day." },
+      { title: "English Garden", tip: "Use it as a reset block rather than trying to 'cover' the whole park." },
+      { title: "Beer hall session", tip: "Do one properly instead of bouncing between famous names for the sake of it." },
+      { title: "BMW Welt / Museum", tip: "Strong half-day choice if you want one standout modern attraction." },
+      { title: "Nymphenburg Palace", tip: "Worth it if you want one grand sightseeing anchor beyond the centre." },
+      { title: "Olympiapark", tip: "Good add-on if you're already doing BMW or want skyline views without much effort." },
+      { title: "Schwabing cafés", tip: "A better slower-paced district block than endlessly circling the main square." },
+      { title: "Allianz Arena matchday", tip: "Arrive early. The exterior and scale are part of the point, not just the 90 minutes." },
+      { title: "One proper Bavarian meal", tip: "Book it. Munich punishes lazy walk-in planning on football weekends." },
+      { title: "Lake day trip (optional)", tip: "Only if you have a real extra day. Don’t wreck the football trip chasing scenery just because Bavaria exists." },
     ],
 
     tips: [
-      "Munich centre is very walkable, but the U-Bahn saves serious time if you stop pretending every detour is scenic.",
-      "Book accommodation early on Bayern home weekends because prices move quickly.",
-      "Stay central rather than near the stadium. There is no upside in sleeping out there.",
-      "Beer halls are communal by default. Shared tables are normal, not a problem.",
-      "Sunday closures still catch lazy planners out, so buy essentials beforehand.",
+      "Stay central Munich, not near the stadium.",
+      "U-Bahn beats taxis almost every time.",
+      "Book accommodation early on Bayern home weekends.",
+      "Beer halls are better with a fixed plan than random queue-hopping.",
+      "For Allianz travel, keep it boring: U6 and enough buffer time.",
     ],
 
     food: [
       "Weisswurst breakfast",
       "Roast pork with dumplings",
       "Pretzels and Obatzda",
-      "Schnitzel",
-      "Beer-hall classics",
+      "Beer hall classics",
+      "Proper coffee-and-cake stop",
     ],
 
     transport:
-      "Munich is one of the easiest big-city systems in Europe to use well. U-Bahn, S-Bahn, trams and buses all work cleanly, and Allianz Arena access via the U6 is simple if you leave proper time.",
+      "Munich public transport is excellent. U-Bahn, S-Bahn, trams and buses cover the city cleanly, and Allianz Arena access is straightforward if you stay central and stop improvising last minute.",
 
     accommodation:
-      "Altstadt / Marienplatz is the best classic base. Hauptbahnhof is stronger for pure practicality. Schwabing works well if you want more bars, cafés and a slightly less tourist-heavy feel.",
-  },
-
-  dortmund: {
-    cityId: "dortmund",
-    name: "Dortmund",
-    country: "Germany",
-
-    overview:
-      "Dortmund is one of the clearest football-first cities in Europe. You are not coming for polished grand-tour sightseeing. You are coming for Borussia Dortmund, Signal Iduna Park, and a matchday atmosphere that can justify the whole trip on its own. The city outside football is functional rather than beautiful, but that does not matter much because the football payoff is massive. This is a trip that works when you lean into football, beer, and simple pre- and post-match structure rather than pretending Dortmund needs to compete with Berlin or Munich on culture-weekend terms.",
-
-    topThings: [
-      {
-        title: "Signal Iduna Park stadium tour",
-        tip: "Best done the day before the match, not on it. Matchday should stay focused on atmosphere, not admin.",
-      },
-      {
-        title: "German Football Museum",
-        tip: "One of the strongest football-adjacent attractions in Germany and an easy high-value stop by the station.",
-      },
-      {
-        title: "Alter Markt",
-        tip: "Good central pub and beer anchor rather than a major attraction in itself.",
-      },
-      {
-        title: "Westfalenpark",
-        tip: "Useful if you want one calmer daylight block to stop the trip becoming 100 percent concrete and lager.",
-      },
-      {
-        title: "Phoenix See",
-        tip: "Better as a relaxed side block than as a headline destination.",
-      },
-      {
-        title: "Local brewery stop",
-        tip: "Worth doing because Dortmund still has proper brewing identity, but keep it simple and local.",
-      },
-      {
-        title: "Fan-walk atmosphere",
-        tip: "If you want the full Dortmund feel, do not teleport to the stadium late. Walk with the crowd and let the build-up happen.",
-      },
-      {
-        title: "Signal Iduna Park matchday",
-        tip: "This is the reason the city matters. Arrive early enough that the approach, exterior and rising crowd noise all register properly.",
-      },
-      {
-        title: "Post-match beer near the ground",
-        tip: "One of the smartest moves here because it lets you avoid the worst transport crush and extends the atmosphere.",
-      },
-      {
-        title: "One simple central evening",
-        tip: "Dortmund does not need over-designed nightlife plans. A few good pubs and a good match is enough.",
-      },
-    ],
-
-    tips: [
-      "Do not judge Dortmund like a classic city-break destination. Judge it by football quality and trip efficiency.",
-      "Hotels near the station move fast on big fixtures, so book early.",
-      "Stadium transport works, but the better experience is often walking in with supporters.",
-      "One non-football block is enough. More than that and you are forcing the city.",
-      "This is one of the few trips where football can genuinely carry the whole weekend.",
-    ],
-
-    food: [
-      "Currywurst",
-      "Bratwurst",
-      "Schnitzel",
-      "German pub food",
-      "Local lager",
-    ],
-
-    transport:
-      "Regional trains and local transit are easy enough, and the stadium is reachable by rail or on foot from the centre. The bigger issue is crowd volume, not system quality.",
-
-    accommodation:
-      "Stay in the city centre or near Hauptbahnhof for the cleanest short-break plan. Keep it simple.",
-  },
-
-  sinsheim: {
-    cityId: "sinsheim",
-    name: "Sinsheim",
-    country: "Germany",
-
-    overview:
-      "Sinsheim is not a classic city break and pretending it is would be bullshit. It works as a football-focused stop because Hoffenheim give it Bundesliga relevance and because the Technik Museum and Therme Sinsheim make the surrounding trip more useful than the town itself would otherwise be. This is a smart logistics destination, not a romantic one. The right move is usually to pair it with Heidelberg or Mannheim if you want a fuller weekend, or keep it brutally simple and use it as a football-plus-one-attraction stop.",
-
-    topThings: [
-      {
-        title: "Hoffenheim matchday",
-        tip: "The main football reason to come. Keep the day focused and efficient.",
-      },
-      {
-        title: "Technik Museum Sinsheim",
-        tip: "The strongest non-football reason to be here and genuinely worth serious time.",
-      },
-      {
-        title: "Therme Sinsheim",
-        tip: "A very good recovery-day or pre-travel block if you are staying overnight.",
-      },
-      {
-        title: "Simple town-centre stroll",
-        tip: "Enough to orient yourself, not enough to build a fake sightseeing day around.",
-      },
-      {
-        title: "Day trip to Heidelberg",
-        tip: "The obvious quality upgrade if you want beauty, old-town atmosphere and better food options.",
-      },
-      {
-        title: "Day trip to Mannheim",
-        tip: "Useful if you want a bigger city and more nightlife without much effort.",
-      },
-      {
-        title: "Countryside add-on",
-        tip: "Only if weather is good and you genuinely want a quieter scenic block.",
-      },
-      {
-        title: "Pre-match local beer",
-        tip: "Fine, but do not expect giant-city density or variety.",
-      },
-      {
-        title: "Stadium shop visit",
-        tip: "Easy and low-friction if you want merch without the chaos of bigger clubs.",
-      },
-      {
-        title: "Post-match museum or spa logic",
-        tip: "A smart way to stop the trip ending in a rushed station-platform anticlimax.",
-      },
-    ],
-
-    tips: [
-      "Treat Sinsheim as football plus attraction hub, not a broad sightseeing city.",
-      "If you want a richer overnight base, Heidelberg is usually the better answer.",
-      "Food options thin out late, so stop assuming you can improvise dinner.",
-      "This is a clean, practical trip. Lean into that rather than fighting it.",
-      "Good for efficient travel, weaker for atmosphere outside matchday.",
-    ],
-
-    food: [
-      "German bakery breakfast",
-      "Schnitzel",
-      "Bratwurst",
-      "Beer-hall basics",
-    ],
-
-    transport:
-      "Regional rail links are the key. Once you understand that Sinsheim is a branch trip rather than a major hub, the travel side becomes easy.",
-
-    accommodation:
-      "Stay near the station or stadium for simplicity, or use Heidelberg if you want a much stronger overall city-break base.",
-  },
-
-  leipzig: {
-    cityId: "leipzig",
-    name: "Leipzig",
-    country: "Germany",
-    thingsToDoUrl: GYG.leipzig,
-
-    overview:
-      "Leipzig is one of Germany’s strongest modern football-city weekends because it combines a compact centre, strong food and bar options, a clear city identity, and a football product that is easy to integrate into the trip. It does not rely on one huge landmark. It works because the whole city is manageable, lively and coherent. For YourNextAway purposes, Leipzig is elite because it behaves well as a football-first trip without becoming one-dimensional. You can do architecture, cafés, bars, galleries and the match without ever feeling like you are spending the weekend in transit.",
-
-    topThings: [
-      {
-        title: "Old Town loop",
-        tip: "Best first-day move because it gives you the city shape quickly and efficiently.",
-      },
-      {
-        title: "Arcades and passages",
-        tip: "One of Leipzig’s best little differentiators. Great in bad weather and good for a slower central block.",
-      },
-      {
-        title: "Thomaskirche and Bach footprint",
-        tip: "Worth doing properly if you want one real cultural anchor rather than surface-level sightseeing.",
-      },
-      {
-        title: "Monument to the Battle of the Nations",
-        tip: "Big visual payoff, but only worth it if you give it real time instead of cramming it into a packed matchday.",
-      },
-      {
-        title: "Spinnerei",
-        tip: "A good call if you want Leipzig’s creative side, but check opening times and do not build the day on assumptions.",
-      },
-      {
-        title: "Plagwitz and canal walk",
-        tip: "One of the best evening zones if you want the trip to feel modern, local and less obvious than the centre.",
-      },
-      {
-        title: "Red Bull Arena matchday",
-        tip: "Very easy to do logistically, which is one of Leipzig’s biggest strengths as a football weekend.",
-      },
-      {
-        title: "Zoo or family block",
-        tip: "Only if you genuinely have the time. Do not let it crowd out the city and football core.",
-      },
-      {
-        title: "Augustusplatz",
-        tip: "Good central connective stop, not a whole plan in itself.",
-      },
-      {
-        title: "One strong dinner booking",
-        tip: "Leipzig is good enough that lazy walk-in decisions are unnecessary and usually worse.",
-      },
-    ],
-
-    tips: [
-      "Leipzig works best when split into two clean loops: centre and Plagwitz/outer culture.",
-      "Stay central rather than near the stadium. There is zero reason to sacrifice the city.",
-      "Walk as much as possible because the centre rewards it.",
-      "Book food properly on weekends; the city is popular and good places fill fast.",
-      "A football weekend here should feel modern and easy, not overly curated.",
-    ],
-
-    food: [
-      "Coffee and pastries in the centre",
-      "German pub food",
-      "Modern bistro dining",
-      "Beer gardens in season",
-    ],
-
-    transport:
-      "Leipzig is very easy: strong trams, strong station, and a centre compact enough that walking beats overthinking.",
-
-    accommodation:
-      "Stay in the Innenstadt for the cleanest overall trip. Plagwitz works if you want more local creative energy.",
-  },
-
-  stuttgart: {
-    cityId: "stuttgart",
-    name: "Stuttgart",
-    country: "Germany",
-    thingsToDoUrl: GYG.stuttgart,
-
-    overview:
-      "Stuttgart is one of the better Bundesliga city-break combinations for travellers who want football plus quality rather than football plus chaos. VfB Stuttgart give you a proper major-club matchday, while the city itself adds two world-class automotive museums, strong food, local wine culture and an efficient transport network. It is not as instantly charming as Munich or as obviously wild as Hamburg, but it is a very strong all-rounder. The trip works best when you plan it as centre plus one major attraction plus matchday, rather than trying to collect everything in one rushed weekend.",
-
-    topThings: [
-      {
-        title: "Mercedes-Benz Museum",
-        tip: "One of the strongest single attractions in the whole league set. Give it real time.",
-      },
-      {
-        title: "Porsche Museum",
-        tip: "Strong second museum option, but split it from Mercedes unless you enjoy total museum overload.",
-      },
-      {
-        title: "Schlossplatz and city-centre loop",
-        tip: "Best central orientation block and a good first-day move.",
-      },
-      {
-        title: "TV Tower",
-        tip: "Good only if weather is clear. Treat it as flexible, not mandatory.",
-      },
-      {
-        title: "Wine walk or wine tavern evening",
-        tip: "This is one of Stuttgart’s better differentiators, so use it instead of defaulting to generic bars.",
-      },
-      {
-        title: "Wilhelma",
-        tip: "Worth it if you have spare time, but do not pretend it belongs in a tight one-night football trip.",
-      },
-      {
-        title: "Killesberg Park",
-        tip: "Good calmer block if you want green space without leaving the city.",
-      },
-      {
-        title: "VfB Stuttgart matchday",
-        tip: "Neckarpark is easy to do, but still plan your entry and exit rather than improvising like an idiot.",
-      },
-      {
-        title: "Festival grounds if dates align",
-        tip: "Can massively improve the trip if your weekend happens to land right.",
-      },
-      {
-        title: "One strong Swabian meal",
-        tip: "Do it properly. Stuttgart is good enough that a lazy chain dinner is a waste.",
-      },
-    ],
-
-    tips: [
-      "Plan the city in blocks because Stuttgart is hillier and more spread than people assume.",
-      "If doing both big car museums, split them or you will blunt both.",
-      "Stay central unless stadium proximity is your only concern.",
-      "Local wine is part of the city identity, so use it.",
-      "This is a quality trip, not a frantic one.",
-    ],
-
-    food: [
-      "Maultaschen",
-      "Spätzle",
-      "Swabian comfort food",
-      "Local wine taverns",
-    ],
-
-    transport:
-      "Excellent U-Bahn and S-Bahn coverage, plus strong airport links. Matchday travel is easy if you leave enough margin.",
-
-    accommodation:
-      "Stuttgart-Mitte is the best overall base. Hauptbahnhof works for practicality. Only stay near Neckarpark if logistics matter more than city quality.",
-  },
-
-  leverkusen: {
-    cityId: "leverkusen",
-    name: "Leverkusen",
-    country: "Germany",
-
-    overview:
-      "Leverkusen is one of the clearest examples of a city you should not treat as a standalone glamour break. The football is high level, BayArena is excellent, and the real trip value comes from using Cologne or Düsseldorf as your base and treating Leverkusen as the matchday centrepiece. That is the smart move. Try to force Leverkusen into carrying the whole weekend and the trip gets thinner fast. Use it as part of a wider Rhine-Ruhr football plan and it becomes genuinely strong.",
-
-    topThings: [
-      {
-        title: "BayArena matchday",
-        tip: "This is the main event and the whole reason the stop belongs in the app.",
-      },
-      {
-        title: "Cologne-based trip strategy",
-        tip: "Usually the smartest answer if you want the best overall weekend quality.",
-      },
-      {
-        title: "Düsseldorf-based alternative",
-        tip: "A stronger option if you want a slicker, more nightlife-heavy base.",
-      },
-      {
-        title: "Japanischer Garten",
-        tip: "Pleasant low-effort local block if you are actually spending time in Leverkusen itself.",
-      },
-      {
-        title: "Rhine-side walk",
-        tip: "Good as a calmer football-day reset rather than a major sightseeing plan.",
-      },
-      {
-        title: "Cologne Cathedral add-on",
-        tip: "Obvious and worth it if Cologne is your base.",
-      },
-      {
-        title: "Altstadt evening in Cologne or Düsseldorf",
-        tip: "This is how you upgrade the trip from efficient to genuinely good.",
-      },
-      {
-        title: "Kölsch versus Altbier choice",
-        tip: "Tiny detail, but it makes the weekend feel deliberate rather than generic.",
-      },
-      {
-        title: "Pre-match proper meal outside Leverkusen",
-        tip: "Leverkusen is not where you chase standout dining if you have Cologne or Düsseldorf available.",
-      },
-      {
-        title: "Post-match decompression",
-        tip: "Far better than sprinting for crowded trains and ending the day annoyed.",
-      },
-    ],
-
-    tips: [
-      "Base in Cologne or Düsseldorf unless simplicity matters more than everything else.",
-      "BayArena is compact and strong, so the football payoff is real.",
-      "This is a smart logistics trip, not a romantic city break.",
-      "If doing multiple Ruhr/Rhine matches, Leverkusen fits perfectly.",
-      "Do not oversell the city. Oversell the regional weekend instead.",
-    ],
-
-    food: [
-      "Cologne pub meals",
-      "Düsseldorf bars and Japanese food scene",
-      "Simple matchday food",
-      "German bakery breakfast",
-    ],
-
-    transport:
-      "Rail does the work here. Cologne, Düsseldorf and Leverkusen connect cleanly, which is the whole point of the trip logic.",
-
-    accommodation:
-      "Stay in Cologne or Düsseldorf for the best overall experience. Leverkusen only wins if you want maximum simplicity and a quieter stay.",
-  },
-
-  freiburg: {
-    cityId: "freiburg",
-    name: "Freiburg im Breisgau",
-    country: "Germany",
-
-    overview:
-      "Freiburg is one of the best smaller Bundesliga weekend cities because it gives you a beautiful old town, a genuinely good football stop, and access to Black Forest scenery without making the trip feel complicated. It is relaxed, compact and very easy to like. This is not a maximalist city. That is exactly why it works. If you want football plus a slower, cleaner, more scenic break than the industrial heavyweights, Freiburg is one of the smartest picks in the whole German set.",
-
-    topThings: [
-      {
-        title: "Old Town walk",
-        tip: "The centre is compact enough that slow wandering beats overplanning every time.",
-      },
-      {
-        title: "Freiburg Minster",
-        tip: "Worth doing properly because it gives the city immediate weight and shape.",
-      },
-      {
-        title: "Schlossberg viewpoint",
-        tip: "One of the best payoff blocks in the city, especially late in the day.",
-      },
-      {
-        title: "Augustiner Museum",
-        tip: "Good if you want one cultural anchor without swallowing half the trip.",
-      },
-      {
-        title: "Black Forest half-day",
-        tip: "Excellent upgrade if you have the time, but do not wreck the football weekend by cramming too much.",
-      },
-      {
-        title: "Vauban district",
-        tip: "Useful if you want a more modern local contrast to the old centre.",
-      },
-      {
-        title: "University quarter evening",
-        tip: "Best if you want the city to feel alive without forcing a huge nightlife plan.",
-      },
-      {
-        title: "SC Freiburg matchday",
-        tip: "A strong community-feel Bundesliga stop that fits the city’s wider pace well.",
-      },
-      {
-        title: "Wine tavern evening",
-        tip: "A much better move here than trying to copy a beer-city template.",
-      },
-      {
-        title: "Münsterplatz market",
-        tip: "High-value daytime food stop if your timing works.",
-      },
-    ],
-
-    tips: [
-      "Freiburg improves when you slow down. Stop trying to turn it into Berlin.",
-      "Stay central because the whole appeal is walkability and atmosphere.",
-      "Book restaurants on match weekends because the city is small and good tables disappear quickly.",
-      "Weather matters more here because outdoor walking is such a big part of the trip.",
-      "One scenic block plus one football block is usually enough for a very strong day.",
-    ],
-
-    food: [
-      "Flammkuchen",
-      "Badischer dishes",
-      "Local white wines",
-      "Market food and cafés",
-    ],
-
-    transport:
-      "Very walkable centre with good trams for the wider city. Matchday transport is straightforward and not overly stressful by Bundesliga standards.",
-
-    accommodation:
-      "Altstadt is the best overall stay. Near the main station works if you want easier rail handling without losing much quality.",
-  },
-
-  frankfurt: {
-    cityId: "frankfurt",
-    name: "Frankfurt",
-    country: "Germany",
-    thingsToDoUrl: GYG.frankfurt,
-
-    overview:
-      "Frankfurt is one of Germany’s most useful football cities because it combines major-hub convenience with an excellent football culture and enough city depth to support a full weekend. Eintracht Frankfurt give the trip real atmosphere and edge, while the city adds skyline views, a reconstructed old centre, strong food options and easy Rhine-region branching. It is also one of the easiest places to build a short trip around because the airport, city and stadium all link cleanly. For football travellers, that matters more than postcard perfection.",
-
-    topThings: [
-      {
-        title: "Römerberg and Old Town",
-        tip: "Best starting block because it gives you immediate city shape without much effort.",
-      },
-      {
-        title: "Main Tower",
-        tip: "Strong skyline play if weather is good. Better late afternoon than dead midday.",
-      },
-      {
-        title: "Main river promenade",
-        tip: "Simple, low-effort, high-value city block.",
-      },
-      {
-        title: "Museumsufer",
-        tip: "Pick one museum. Trying to do several is just bad pacing.",
-      },
-      {
-        title: "Sachsenhausen apple-wine evening",
-        tip: "One of the better ways to make Frankfurt feel like Frankfurt rather than just another station city.",
-      },
-      {
-        title: "Eintracht Frankfurt matchday",
-        tip: "One of Germany’s stronger atmosphere trips, so respect the build-up and do not arrive late.",
-      },
-      {
-        title: "Mainz or Wiesbaden day trip",
-        tip: "Very good add-on if you have another day and want Rhine-city contrast.",
-      },
-      {
-        title: "Skyline Plaza alternative viewpoint",
-        tip: "Useful if you do not care enough to pay for the tower.",
-      },
-      {
-        title: "Palmengarten",
-        tip: "Good quieter block if you want green space and lower intensity.",
-      },
-      {
-        title: "One proper dinner booking",
-        tip: "Frankfurt is strong enough that lazy evening planning is unnecessary.",
-      },
-    ],
-
-    tips: [
-      "Do not judge Frankfurt by the station district alone. That is amateur-hour thinking.",
-      "This is a top short-break city because of airport and stadium convenience.",
-      "Matchday transport is good, but crowds are still crowds, so leave margin.",
-      "Sachsenhausen is one of the better evening bases.",
-      "If flying in and out quickly, Frankfurt is one of the smartest football weekend picks in Europe.",
-    ],
-
-    food: [
-      "Grüne Soße",
-      "Frankfurter sausages",
-      "Apfelwein",
-      "Schnitzel",
-      "Modern international dining",
-    ],
-
-    transport:
-      "Excellent S-Bahn, U-Bahn and trams. Airport access is strong and stadium connections are easy on matchdays.",
-
-    accommodation:
-      "Innenstadt or Römerberg for sightseeing. Sachsenhausen for atmosphere. Avoid leaning too hard into the roughest station-area streets unless price is your only concern.",
+      "Altstadt / Marienplatz is the premium classic base. Hauptbahnhof is more practical for rail and airport links. Schwabing gives you a stronger café-and-bars feel without losing easy city access.",
   },
 
   berlin: {
@@ -622,364 +73,42 @@ export const bundesligaCityGuides: Record<string, CityGuide> = {
     thingsToDoUrl: GYG.berlin,
 
     overview:
-      "Berlin is not a city you ‘complete’ in one football weekend, so stop thinking like that. It works when you pick neighbourhoods, choose one or two serious cultural blocks, then build the football around that. For YourNextAway, Berlin is elite because it offers multiple club identities, world-class history, nightlife that actually matters, and enough scale that you can tailor the weekend around what you want. The trap is trying to see everything. The smart play is to choose your Berlin version and let the match anchor it.",
+      "Berlin is not a neat weekend city unless you treat it properly. It is huge, layered, and neighbourhood-driven. The winning formula is simple: stop trying to 'do Berlin' and build the trip by area. One football anchor, one history block, one nightlife block, and one slower daytime district is enough for a very good trip.",
 
     topThings: [
-      {
-        title: "Brandenburg Gate and central core",
-        tip: "Do this early when the city is calmer and the photos are cleaner.",
-      },
-      {
-        title: "Reichstag dome",
-        tip: "Book ahead or do not bother pretending it will just work.",
-      },
-      {
-        title: "Berlin Wall Memorial",
-        tip: "One of the strongest history stops in the city and worth actual time.",
-      },
-      {
-        title: "East Side Gallery",
-        tip: "Worth seeing, but do not let it eat half the day.",
-      },
-      {
-        title: "Museum Island",
-        tip: "Pick one museum and move on. Do not build a museum marathon.",
-      },
-      {
-        title: "Kreuzberg and Neukölln food zones",
-        tip: "Great for evenings that feel actually urban rather than over-touristed.",
-      },
-      {
-        title: "Tempelhofer Feld",
-        tip: "A good reset block if the trip needs air and space.",
-      },
-      {
-        title: "Hertha BSC matchday",
-        tip: "The big-stadium version of Berlin football and worth it for scale and history.",
-      },
-      {
-        title: "Union Berlin matchday",
-        tip: "One of the strongest atmosphere experiences in Europe if you can get it right.",
-      },
-      {
-        title: "Prenzlauer Berg calmer evening",
-        tip: "Better if you want Berlin without going full nightlife chaos.",
-      },
+      { title: "Brandenburg Gate → Reichstag → Tiergarten loop", tip: "Best central-history block if it’s your first Berlin trip." },
+      { title: "Berlin Wall Memorial", tip: "Better than speed-running random Cold War stops with no context." },
+      { title: "Museum Island (pick one)", tip: "Choose one museum only. Berlin punishes cultural greed." },
+      { title: "East Side Gallery", tip: "Worth doing once, then move on. Don’t let it eat the whole day." },
+      { title: "Kreuzberg food block", tip: "Good for casual eating and evening drift without needing formal plans." },
+      { title: "Prenzlauer Berg cafés", tip: "A strong slower-paced daytime district if you need a reset from heavy sightseeing." },
+      { title: "Tempelhofer Feld", tip: "One of the easiest ‘Berlin feels different’ moments with very little effort." },
+      { title: "Union Berlin matchday", tip: "The best football-culture pick in the city. Arrive early and treat the build-up seriously." },
+      { title: "Hertha matchday at Olympiastadion", tip: "More scale and history, less intimacy. Stronger for major-event feel than local intensity." },
+      { title: "Neighbourhood bar night", tip: "Berlin nightlife works better when you pick an area than when you chase famous names across town." },
     ],
 
     tips: [
-      "Plan by neighbourhood. Anyone who plans Berlin as one giant loop is wasting time.",
-      "Book key attractions in advance.",
-      "Union needs careful planning because demand and logistics are tighter.",
-      "Nightlife starts late, so do not schedule yourself like a countryside B&B guest.",
-      "Berlin is best when you accept that one weekend only gives you one slice.",
+      "Plan by neighbourhood, not by attractions list.",
+      "Berlin is too big for random zig-zagging.",
+      "Public transport is the answer; taxis are often a waste.",
+      "Union needs more planning than Hertha because of demand and logistics.",
+      "One history block per day is enough unless you enjoy being mentally dead by dinner.",
     ],
 
     food: [
+      "Proper döner",
       "Currywurst",
-      "Döner",
-      "International street food",
-      "Modern German dining",
+      "Casual modern German",
+      "Kreuzberg / Neukölln small plates",
+      "Late-night street food",
     ],
 
     transport:
-      "Outstanding U-Bahn, S-Bahn, trams and buses. The city is huge, but the network is good enough that you should never need to rely on taxis.",
+      "Berlin’s U-Bahn, S-Bahn, trams and buses are excellent. The city is too large to wing it on foot alone, so build simple day-zones and let public transport do the heavy lifting.",
 
     accommodation:
-      "Mitte for first-time practicality, Friedrichshain or Kreuzberg for more nightlife, Prenzlauer Berg for a calmer stay.",
-  },
-
-  cologne: {
-    cityId: "cologne",
-    name: "Cologne",
-    country: "Germany",
-    thingsToDoUrl: GYG.cologne,
-
-    overview:
-      "Cologne is one of Germany’s best football weekends because it feels social, loud, relaxed and easy. The cathedral gives it instant visual identity, the old town and Rhinefront make it easy to wander, and 1. FC Köln add one of the country’s strongest local supporter cultures. This is not a city that needs over-curating. It works because you can walk, drink Kölsch, eat well enough, and let matchday merge naturally into the rest of the weekend.",
-
-    topThings: [
-      {
-        title: "Cathedral",
-        tip: "Obvious and worth it. Do not skip the one thing the city is actually famous for.",
-      },
-      {
-        title: "Altstadt and Rhine walk",
-        tip: "Best core city block and the easiest way to make the trip feel like Cologne quickly.",
-      },
-      {
-        title: "Hohenzollern Bridge",
-        tip: "Fast, easy, good visual stop. Do it as part of a wider river loop, not a standalone mission.",
-      },
-      {
-        title: "Belgian Quarter",
-        tip: "Best area for better bars, shops and evening energy beyond the obvious tourist zone.",
-      },
-      {
-        title: "Chocolate Museum",
-        tip: "Fine if you want an easy indoor block, but not essential unless it actually appeals.",
-      },
-      {
-        title: "Museum Ludwig",
-        tip: "Good pick if you want one proper art stop.",
-      },
-      {
-        title: "1. FC Köln matchday",
-        tip: "One of the strongest crowd-led football experiences in Germany if you actually give yourself time to do it properly.",
-      },
-      {
-        title: "Kölsch beer hall session",
-        tip: "Do it the local way and stop overcomplicating it.",
-      },
-      {
-        title: "Short Rhine cruise",
-        tip: "Useful relaxed add-on if weather is good and you have time.",
-      },
-      {
-        title: "Day trip to Bonn or Düsseldorf",
-        tip: "Easy enough, but Cologne is strong enough to carry its own full weekend.",
-      },
-    ],
-
-    tips: [
-      "Cologne is casual, social and easy. Dress for comfort, not theatre.",
-      "Stay central because the city works best on foot plus tram.",
-      "Book big-match weekends early.",
-      "Kölsch is part of the trip, not just a drink choice.",
-      "Excellent city for bar-hopping without needing a rigid plan.",
-    ],
-
-    food: [
-      "Kölsch beer",
-      "Schnitzel",
-      "Bratwurst",
-      "Hearty pub food",
-    ],
-
-    transport:
-      "Strong trams and U-Bahn with easy stadium access. Cologne is one of the easier big football weekends to navigate well.",
-
-    accommodation:
-      "Altstadt and Belgisches Viertel are the strongest bases. Ehrenfeld works for nightlife and value.",
-  },
-
-  monchengladbach: {
-    cityId: "monchengladbach",
-    name: "Mönchengladbach",
-    country: "Germany",
-
-    overview:
-      "Mönchengladbach is a football-first destination and should be sold honestly as that. It is not a giant sightseeing city. It matters because Borussia Mönchengladbach matter, because Borussia-Park is a serious Bundesliga stop, and because the wider Rhine-Ruhr region makes it easy to fold into a broader football route. If you want a fuller lifestyle weekend, use Düsseldorf or Cologne as the base. If you want straightforward football focus, stay locally and keep it simple.",
-
-    topThings: [
-      {
-        title: "Borussia-Park stadium tour",
-        tip: "Worth doing if available because the club history carries more weight than the city itself.",
-      },
-      {
-        title: "Borussia Mönchengladbach matchday",
-        tip: "The reason the stop belongs in the route.",
-      },
-      {
-        title: "Abteiberg Museum",
-        tip: "A decent culture filler if you want one non-football block.",
-      },
-      {
-        title: "Bunter Garten",
-        tip: "Useful green-space reset, not a major attraction.",
-      },
-      {
-        title: "Alter Markt and evening strip",
-        tip: "Best local nightlife pocket if staying overnight.",
-      },
-      {
-        title: "Schloss Rheydt",
-        tip: "Good if you want a short local-history contrast to the football focus.",
-      },
-      {
-        title: "Cologne day-trip option",
-        tip: "Often a better wider base if you want more city around the football.",
-      },
-      {
-        title: "Düsseldorf day-trip option",
-        tip: "Good if you want better nightlife and an easier premium-feel stay.",
-      },
-      {
-        title: "Pre-match supporter pubs",
-        tip: "Better than hiding in a hotel bar pretending the football starts at kickoff.",
-      },
-      {
-        title: "Simple football-led overnight",
-        tip: "This is the right mindset here.",
-      },
-    ],
-
-    tips: [
-      "This is a football-driven trip, not a sightseeing one.",
-      "Use Düsseldorf or Cologne if you want to upgrade the broader weekend.",
-      "Stay local if the match is the main point and nothing else matters.",
-      "Good for regional football routing.",
-      "Do not overstate the city. Overstate the football logic.",
-    ],
-
-    food: [
-      "German pub plates",
-      "Schnitzel",
-      "Bratwurst",
-      "Local beers",
-    ],
-
-    transport:
-      "Regional rail makes the city easy enough to integrate into wider travel. Matchday buses and shuttles do the rest.",
-
-    accommodation:
-      "Stay in Mönchengladbach for simple football focus. Stay in Düsseldorf or Cologne for better all-round trip quality.",
-  },
-
-  wolfsburg: {
-    cityId: "wolfsburg",
-    name: "Wolfsburg",
-    country: "Germany",
-
-    overview:
-      "Wolfsburg is one of the easiest cities in the league to understand: it is modern, corporate, efficient and football-relevant because of VfL Wolfsburg and the Volkswagen ecosystem around it. This is not a romance trip. It is a clean, functional football stop with an obvious automotive side. If that sounds dull, fine — then do not go. If that sounds useful, it works well because the city is easy, the stadium is easy, and Autostadt gives the weekend enough substance to justify the stop.",
-
-    topThings: [
-      {
-        title: "Autostadt",
-        tip: "The strongest non-football attraction by miles and the clear thing to pair with matchday.",
-      },
-      {
-        title: "Volkswagen Arena matchday",
-        tip: "Very easy to do because the city and complex were basically built for organised movement.",
-      },
-      {
-        title: "Phaeno",
-        tip: "Good if you want one extra modern indoor block.",
-      },
-      {
-        title: "Allerpark",
-        tip: "Useful if you want open space and a calmer hour.",
-      },
-      {
-        title: "Wolfsburg Castle",
-        tip: "Short local-history contrast if you want to avoid making the whole weekend pure automotive branding.",
-      },
-      {
-        title: "Designer outlets",
-        tip: "Only if it genuinely helps the trip. Do not waste football-weekend time fake-shopping.",
-      },
-      {
-        title: "Simple city-centre loop",
-        tip: "Enough to orient yourself, not enough to build your ego around.",
-      },
-      {
-        title: "Braunschweig add-on",
-        tip: "The better option if you want a more traditional city layer around the trip.",
-      },
-      {
-        title: "Pre-match local food",
-        tip: "Keep it practical. This is not a gourmet pilgrimage.",
-      },
-      {
-        title: "One efficient overnight",
-        tip: "That is where Wolfsburg usually makes the most sense.",
-      },
-    ],
-
-    tips: [
-      "Wolfsburg is efficient rather than atmospheric. Accept that and it works better.",
-      "Autostadt plus football is the obvious pairing.",
-      "If you want nightlife, use Braunschweig or Hannover instead.",
-      "One night is often enough.",
-      "Good for practical routing, weaker for romance.",
-    ],
-
-    food: [
-      "Casual modern German dining",
-      "Bakeries and cafés",
-      "Simple pre-match meals",
-      "International chains if needed",
-    ],
-
-    transport:
-      "Excellent rail simplicity and easy stadium access from the station. One of the least stressful matchday transport setups in the league.",
-
-    accommodation:
-      "Stay near the station or central area for maximum efficiency. Use Braunschweig if you want more city character.",
-  },
-
-  augsburg: {
-    cityId: "augsburg",
-    name: "Augsburg",
-    country: "Germany",
-
-    overview:
-      "Augsburg is one of the better value Bundesliga city trips because it gives you a genuinely attractive historic centre, enough food and beer culture for a proper weekend, and a football stop that fits neatly into the city rather than dominating it. It is calmer and cheaper than Munich, but not dead. That is the sweet spot. The city works best as a relaxed football break where you walk, eat, do one or two historic blocks, then head to the stadium without trying to force a giant itinerary.",
-
-    topThings: [
-      {
-        title: "Fuggerei",
-        tip: "A genuinely distinctive stop and one of the best reasons the city is more than just a match location.",
-      },
-      {
-        title: "Rathausplatz and Old Town loop",
-        tip: "Best central orientation move and enough to make the city land quickly.",
-      },
-      {
-        title: "Town Hall and Golden Hall",
-        tip: "Worth it if open. Better than it sounds.",
-      },
-      {
-        title: "Lechviertel canals walk",
-        tip: "One of the city’s best atmosphere blocks and good for slower pacing.",
-      },
-      {
-        title: "Cathedral",
-        tip: "Useful if you want one calmer historic stop without overcommitting.",
-      },
-      {
-        title: "Schaezlerpalais",
-        tip: "Good rainy-day or culture add-on if you want one more substantial non-football block.",
-      },
-      {
-        title: "FC Augsburg matchday",
-        tip: "The football is solid, but the trip works best when city and match feel balanced.",
-      },
-      {
-        title: "Botanical Garden",
-        tip: "Good in season, non-essential otherwise.",
-      },
-      {
-        title: "Traditional beer hall evening",
-        tip: "The obvious and correct move here.",
-      },
-      {
-        title: "Munich day-trip option",
-        tip: "Only if you really need the bigger-city hit. Augsburg can easily hold its own for a weekend.",
-      },
-    ],
-
-    tips: [
-      "Walk the city in loops rather than overusing transport.",
-      "Augsburg is calmer than Munich. That is a benefit, not a flaw.",
-      "Stay central, then tram out to the stadium.",
-      "One slower evening and one football block is enough for a very good trip.",
-      "Good value by southern Germany standards.",
-    ],
-
-    food: [
-      "Bavarian-Swabian dishes",
-      "Schnitzel",
-      "Beer-hall meals",
-      "Café stops around Rathausplatz",
-    ],
-
-    transport:
-      "Compact centre plus useful trams. Matchday travel is easy enough if you do not leave everything too late.",
-
-    accommodation:
-      "Old Town / Rathausplatz is the strongest stay base. Tram-line value options just outside the core also work well.",
+      "Mitte is the easiest first-trip base. Friedrichshain and Kreuzberg are stronger if nightlife matters more. Prenzlauer Berg is calmer and cleaner for a slower weekend.",
   },
 
   hamburg: {
@@ -989,71 +118,221 @@ export const bundesligaCityGuides: Record<string, CityGuide> = {
     thingsToDoUrl: GYG.hamburg,
 
     overview:
-      "Hamburg is one of Europe’s elite football-weekend cities because it gives you proper city scale, two distinct football identities, nightlife that actually matters, and a waterfront setting that makes the whole trip feel bigger than a basic stadium break. St. Pauli is culture-heavy and embedded in the city. HSV is bigger-club, bigger-stadium and more event-led. Both work because Hamburg itself is strong enough that the football plugs into a real weekend rather than carrying it alone.",
+      "Hamburg is one of the best football weekends in Europe because the city itself is elite before you even get to the match. Waterfront walks, proper nightlife, strong food, and two very different football experiences make it easy to build a trip with real shape. The only mistake is staying too far out and treating the stadium as the whole weekend.",
 
     topThings: [
-      {
-        title: "Harbour and Landungsbrücken walk",
-        tip: "Best first-day move because it gives Hamburg’s identity to you immediately.",
-      },
-      {
-        title: "Miniatur Wunderland",
-        tip: "Book if possible. This gets too busy to just wing it comfortably.",
-      },
-      {
-        title: "Speicherstadt and HafenCity",
-        tip: "One of the best visual city blocks in Germany and worth doing slowly.",
-      },
-      {
-        title: "Elbphilharmonie Plaza",
-        tip: "High payoff if booked or timed well, annoying if you leave it to chance.",
-      },
-      {
-        title: "Reeperbahn and St. Pauli district",
-        tip: "Better when treated as an area to branch through than a single strip to tick off.",
-      },
-      {
-        title: "St. Pauli daytime district walk",
-        tip: "Do it in daylight too. Otherwise you only see half the place.",
-      },
-      {
-        title: "St. Pauli matchday",
-        tip: "One of Europe’s best football-culture experiences if you let the district and stadium merge properly.",
-      },
-      {
-        title: "HSV matchday",
-        tip: "A bigger, more classic giant-club day that needs slightly more logistics planning.",
-      },
-      {
-        title: "Alster Lakes",
-        tip: "Excellent calmer block to balance the port and nightlife intensity.",
-      },
-      {
-        title: "Fish Market if timing works",
-        tip: "Only if you genuinely want the chaos. This is not compulsory.",
-      },
+      { title: "Landungsbrücken → harbour walk", tip: "Best first move if you want Hamburg to make sense quickly." },
+      { title: "Speicherstadt & HafenCity", tip: "A clean sightseeing loop that actually looks like Hamburg, not generic Germany." },
+      { title: "Elbphilharmonie Plaza", tip: "Do it for the view, then move on. Don’t overcommit time." },
+      { title: "Miniatur Wunderland", tip: "Book ahead if you care. Otherwise skip the queue drama." },
+      { title: "Alster walk", tip: "Good calmer block if you need air after heavier nightlife or stadium energy." },
+      { title: "St. Pauli district daytime wander", tip: "Do it before dark once, not only as a nightlife zone." },
+      { title: "St. Pauli matchday", tip: "One of the best culture-heavy football experiences in Europe. Build the whole day around it." },
+      { title: "HSV matchday", tip: "Bigger-club scale and a more traditional major-stadium feel." },
+      { title: "One proper seafood stop", tip: "Worth doing here more than in most inland Bundesliga cities." },
+      { title: "Reeperbahn / side-street night", tip: "Use the area intelligently. Going only to the obvious strip is lazy and usually worse." },
     ],
 
     tips: [
-      "Pick your Hamburg base properly. St. Pauli and central are not interchangeable experiences.",
-      "Nightlife runs late, so stop planning 8 a.m. hero starts if you know you are going out.",
-      "For football weekends, the city is stronger when you treat the match as part of district life, not a detached event.",
-      "Weather around the water changes quickly, so dress properly.",
-      "One of the best all-round football weekends in Europe, full stop.",
+      "Stay central Hamburg, not near the stadiums.",
+      "St. Pauli is best for vibe; central/Hbf is best for transport.",
+      "Book Miniatur Wunderland if you actually want to do it.",
+      "Hamburg nights run late, so stop planning 8am starts after bar-heavy evenings.",
+      "For both clubs, build in pre-match time rather than arriving flat and rushed.",
     ],
 
     food: [
-      "Fish sandwiches",
+      "Fischbrötchen",
+      "Port-area seafood",
       "German pub food",
-      "Late-night street food",
-      "Neighbourhood café breakfasts",
+      "St. Pauli late-night eats",
+      "Strong café breakfasts",
     ],
 
     transport:
-      "Strong U-Bahn and S-Bahn network. The city is big but easy if you base well and know your lines.",
+      "Hamburg’s U-Bahn and S-Bahn are excellent. The city is large but very manageable if you stay central and use rail properly rather than bouncing around in taxis.",
 
     accommodation:
-      "St. Pauli for maximum vibe, central near the station for practical movement, HafenCity for cleaner modern stays.",
+      "St. Pauli and Schanzenviertel are strongest for atmosphere. St. Georg / Hbf is best for practical arrivals and wider movement. HafenCity is cleaner and more polished, but less lively at night.",
+  },
+
+  cologne: {
+    cityId: "cologne",
+    name: "Cologne",
+    country: "Germany",
+    thingsToDoUrl: GYG.cologne,
+
+    overview:
+      "Cologne is one of Germany’s best all-round football weekends because it gets the basics right: compact centre, huge cathedral, strong pub culture, easy stadium transport, and a supporter base that turns ordinary fixtures into proper occasions. It’s not subtle, and that’s exactly why it works.",
+
+    topThings: [
+      { title: "Cathedral + station-front start", tip: "The obvious first move and still worth doing properly." },
+      { title: "Altstadt riverside wander", tip: "Good low-effort route for pubs, views and easy city rhythm." },
+      { title: "Hohenzollern Bridge walk", tip: "Fast, iconic, and easy to combine with the riverfront." },
+      { title: "Belgisches Viertel", tip: "Best district if you want a more local bar-and-food block than the tourist-heavy centre." },
+      { title: "Chocolate Museum (optional)", tip: "Fine if it fits naturally. Not worth hijacking the trip for." },
+      { title: "Museum Ludwig", tip: "One smart culture pick if weather turns or you want an art stop." },
+      { title: "FC Cologne matchday", tip: "Arrive early. Cologne are a noise-and-beer culture club, not a turn-up-10-minutes-before side." },
+      { title: "Kölsch beer hall session", tip: "Do this properly once and lean into the local ritual." },
+      { title: "Rhine evening walk", tip: "Simple but very effective after dinner or post-match." },
+      { title: "Leverkusen add-on", tip: "Easy if you’re building a wider Rhine football weekend." },
+    ],
+
+    tips: [
+      "Cologne is ideal for bar-hopping without overplanning.",
+      "Stay central and use trams for stadium travel.",
+      "Book accommodation early for major fixtures and carnival-style busy weekends.",
+      "Kölsch is small-glass drinking; if you don’t stop it, it keeps coming.",
+      "Belgisches Viertel is usually the smarter evening base than only doing Altstadt.",
+    ],
+
+    food: [
+      "Kölsch beer hall food",
+      "Schnitzel",
+      "Bratwurst",
+      "Modern bistro dinners",
+      "Post-match pub plates",
+    ],
+
+    transport:
+      "Cologne’s tram and rail network is strong and easy to use. RheinEnergieStadion access is simple from the centre, so there is no good reason to stay out by the ground.",
+
+    accommodation:
+      "Altstadt is the easiest first-trip base. Belgisches Viertel is better for bars and food. Ehrenfeld works if you want a slightly more local feel with good nightlife.",
+  },
+
+  frankfurt: {
+    cityId: "frankfurt",
+    name: "Frankfurt",
+    country: "Germany",
+    thingsToDoUrl: GYG.frankfurt,
+
+    overview:
+      "Frankfurt is one of the easiest high-value football trips in Germany because it combines big-hub convenience with a very strong matchday, a compact old-town core, and quick access to the Rhine-Main region. The airport makes it brutally efficient. The trick is not wasting the trip hiding around the station area and pretending that’s the whole city.",
+
+    topThings: [
+      { title: "Römerberg & reconstructed old town", tip: "Compact and easy. Good first block after arrival." },
+      { title: "Main river walk", tip: "A very easy way to make Frankfurt feel less like a business hub and more like a city break." },
+      { title: "Main Tower viewpoint", tip: "Best skyline view if weather is clear. Time it properly." },
+      { title: "Sachsenhausen evening", tip: "Best for apple wine, food, and a stronger local feel than the business core." },
+      { title: "Städel Museum", tip: "Strong single-museum choice if you want one cultural anchor." },
+      { title: "Palmengarten", tip: "Useful calmer block if you want green space without leaving the city." },
+      { title: "Eintracht Frankfurt matchday", tip: "One of Germany’s best atmospheres. Treat it seriously and arrive early." },
+      { title: "Skyline + old-town split", tip: "This is the correct way to understand Frankfurt fast: one modern block, one historic block." },
+      { title: "Mainz or Wiesbaden add-on", tip: "Very easy if you have an extra day and want a softer Rhine-side contrast." },
+      { title: "One proper dinner booking", tip: "Worth it here because the city has stronger food than the lazy 'finance city' stereotype suggests." },
+    ],
+
+    tips: [
+      "Frankfurt airport convenience makes this a strong short-break city.",
+      "Don’t judge the whole city by the immediate station zone.",
+      "Sachsenhausen is the better evening play than staying only in the business core.",
+      "Eintracht matchdays need buffer time — the atmosphere is worth arriving for.",
+      "Use Frankfurt as a base if you want easy wider-region movement.",
+    ],
+
+    food: [
+      "Apfelwein taverns",
+      "Schnitzel with green sauce",
+      "Modern Innenstadt dining",
+      "Bakery breakfasts",
+      "Casual riverfront meals",
+    ],
+
+    transport:
+      "Frankfurt’s S-Bahn, U-Bahn, trams and regional rail are excellent. The stadium is easy on matchdays, the airport is close, and wider-region day trips are very simple if you base yourself centrally.",
+
+    accommodation:
+      "Innenstadt and Römer area are best for first trips. Sachsenhausen is stronger for atmosphere. Hauptbahnhof is practical but rougher, so only choose it if you value logistics over feel.",
+  },
+
+  leipzig: {
+    cityId: "leipzig",
+    name: "Leipzig",
+    country: "Germany",
+    thingsToDoUrl: GYG.leipzig,
+
+    overview:
+      "Leipzig is one of Germany’s best-value football weekends: compact, energetic, creative, and easy to navigate without much wasted movement. It’s a very good city for people who want one modern football anchor and a weekend that still feels like a proper city break rather than just stadium logistics.",
+
+    topThings: [
+      { title: "Old Town loop", tip: "Do Marktplatz, Thomaskirche and the centre in one clean block." },
+      { title: "Arcades and passages", tip: "One of the quickest ways to get the Leipzig feel without forcing sightseeing." },
+      { title: "St. Thomas Church area", tip: "A stronger culture stop than random museum-hopping." },
+      { title: "Monument to the Battle of the Nations", tip: "Worth it if you want one bigger landmark away from the core." },
+      { title: "Plagwitz & Karl-Heine-Kanal", tip: "Best alternative district block for bars, walks and a more creative feel." },
+      { title: "Spinnerei", tip: "Only if you genuinely like galleries and art spaces. Otherwise skip." },
+      { title: "RB Leipzig matchday", tip: "The city makes this trip stronger than the club alone would." },
+      { title: "Augustusplatz", tip: "Useful quick stop, not a long commitment." },
+      { title: "One proper dinner in the centre or Plagwitz", tip: "Leipzig is good enough that lazy food choices are a waste." },
+      { title: "Canal-side evening drinks", tip: "A clean way to make the weekend feel modern and relaxed." },
+    ],
+
+    tips: [
+      "Leipzig is very easy to overplan. Don’t.",
+      "Split your time between centre and one second district.",
+      "Stay central rather than near the stadium.",
+      "It’s one of the better Bundesliga cities for a straightforward two-night break.",
+      "The city itself does a lot of the work here — use it.",
+    ],
+
+    food: [
+      "Pastry and coffee in the centre",
+      "Modern German dining",
+      "Casual canalside bars",
+      "Beer hall / brewery stops",
+      "Good brunch cafés",
+    ],
+
+    transport:
+      "Leipzig is easy. The centre is walkable, trams fill the gaps, and stadium access is clean if you keep the base central.",
+
+    accommodation:
+      "Innenstadt is the obvious best base. Plagwitz works if you want a more creative district feel. Around the Hauptbahnhof is practical but less interesting at night.",
+  },
+
+  stuttgart: {
+    cityId: "stuttgart",
+    name: "Stuttgart",
+    country: "Germany",
+
+    overview:
+      "Stuttgart is a smarter football weekend than people expect: a serious club, a big stadium, elite car museums, and a city that works best when you build the trip around one or two strong anchors rather than trying to 'do everything'. It is less charming than Freiburg and less instantly exciting than Hamburg, but very good if you want structure and substance.",
+
+    topThings: [
+      { title: "Mercedes-Benz Museum", tip: "One of the strongest non-football attractions in the whole Bundesliga set. Give it proper time." },
+      { title: "Porsche Museum", tip: "Best if you want a second automotive block, but don’t cram both in badly." },
+      { title: "Schlossplatz loop", tip: "The obvious city-centre orientation block." },
+      { title: "TV Tower / viewpoint", tip: "Worth it on a clear day. Skip it in poor visibility." },
+      { title: "Wine tavern evening", tip: "A much better Stuttgart move than generic chain dining." },
+      { title: "Killesberg / park reset", tip: "Useful if you want a lighter daytime block." },
+      { title: "VfB Stuttgart matchday", tip: "Big-club feel and strong emotional crowd energy. Arrive with time." },
+      { title: "Bad Cannstatt area", tip: "Worth understanding because it shapes the matchday more than staying only in the centre." },
+      { title: "One proper Swabian meal", tip: "Do it once properly instead of defaulting to generic pub food." },
+      { title: "Ludwigsburg add-on", tip: "Only if you have the extra day. Don’t force it into a tight match trip." },
+    ],
+
+    tips: [
+      "Stuttgart is best done in blocks, not constant movement.",
+      "Pick one or two major attractions only.",
+      "Stay central unless matchday convenience is your only priority.",
+      "Restaurant bookings matter more here than people assume.",
+      "If you do both car museums plus football in one weekend, pace yourself properly.",
+    ],
+
+    food: [
+      "Maultaschen",
+      "Spätzle",
+      "Swabian tavern food",
+      "Wine-bar dinners",
+      "Bakery breakfasts",
+    ],
+
+    transport:
+      "Stuttgart’s public transport is strong, but the city is hillier and more spread than it first looks. Use rail and trams intelligently instead of assuming all walks are easy.",
+
+    accommodation:
+      "Stuttgart-Mitte is the best overall base. Hauptbahnhof area is practical. Bad Cannstatt only makes sense if you want shorter stadium access and are willing to sacrifice broader city feel.",
   },
 
   bremen: {
@@ -1062,71 +341,86 @@ export const bundesligaCityGuides: Record<string, CityGuide> = {
     country: "Germany",
 
     overview:
-      "Bremen is one of the best smaller football weekends in Germany because it is compact, attractive and very easy to do well. The old town has enough charm to carry the non-football side, the river gives the city space and atmosphere, and Werder Bremen make the football feel tied to the place rather than detached from it. This is not a giant nightlife city, but it is an excellent football-plus-historic-centre weekend that does not waste your time.",
+      "Bremen is one of the cleanest short football weekends in Germany: small enough to stay easy, historic enough to feel worthwhile, and home to one of the best stadium settings in the league. If you want a proper city break without heavy logistics, Bremen is a very strong pick.",
 
     topThings: [
-      {
-        title: "Marktplatz and Town Hall",
-        tip: "The obvious centrepiece and worth doing properly because it gives the city instant visual value.",
-      },
-      {
-        title: "Roland Statue",
-        tip: "Fast central stop that naturally comes with the square.",
-      },
-      {
-        title: "Schnoor Quarter",
-        tip: "One of the most atmospheric small old-town quarters in the Bundesliga set. Walk it slowly.",
-      },
-      {
-        title: "Böttcherstraße",
-        tip: "Short, distinctive and easy to fold into the old-town route.",
-      },
-      {
-        title: "Weser riverside walk",
-        tip: "Important because it links the city and football feel together.",
-      },
-      {
-        title: "Werder Bremen matchday",
-        tip: "Approach on foot if you can. The riverside/stadium blend is part of the appeal.",
-      },
-      {
-        title: "Bürgerpark",
-        tip: "Good calmer block if you want green space without leaving the city rhythm entirely.",
-      },
-      {
-        title: "Übersee-Museum",
-        tip: "Solid rainy-day filler and enough substance for a short indoor block.",
-      },
-      {
-        title: "Simple pub evening",
-        tip: "Bremen works better when you keep it local and unforced.",
-      },
-      {
-        title: "Hamburg day-trip option",
-        tip: "Possible, but Bremen is strong enough that you do not need to flee to a bigger city to justify the weekend.",
-      },
+      { title: "Marktplatz & Town Hall", tip: "The obvious centrepiece and worth doing properly." },
+      { title: "Schnoor Quarter", tip: "Best area for a slower wander and the strongest 'old Bremen' feel." },
+      { title: "Böttcherstraße", tip: "Quick, high-impact stop. Don’t overstay it." },
+      { title: "Weser riverside walk", tip: "A very good football-weekend route because it naturally links city and stadium feel." },
+      { title: "Weserstadion matchday", tip: "One of the best-located stadium experiences in Germany. Approach on foot if you can." },
+      { title: "Bürgerpark", tip: "Good calm reset if you have time beyond football and city centre." },
+      { title: "Übersee-Museum", tip: "Solid indoor option if weather turns ugly." },
+      { title: "One proper local pub session", tip: "Bremen works better with one good simple evening than overcomplicated nightlife chasing." },
+      { title: "Harbour / river evening", tip: "A low-effort way to make the trip feel fuller." },
+      { title: "Hamburg add-on", tip: "Possible, but Bremen is strong enough to stand alone for a football weekend." },
     ],
 
     tips: [
-      "Bremen is compact, so walk more and plan less.",
-      "The city plus stadium setting is the real value here.",
-      "Good choice if you want a calmer German football weekend.",
-      "One or two nights is enough for a very strong trip.",
-      "Stay central and let the city work for you.",
+      "Bremen is compact. Walking is the default.",
+      "The stadium setting is one of the city’s biggest strengths.",
+      "Stay central and let the whole trip stay easy.",
+      "Bremen is stronger for charm than nightlife chaos.",
+      "Good value compared with bigger Bundesliga cities.",
     ],
 
     food: [
-      "German pub dishes",
-      "Local beers",
-      "Café stops in the old town",
-      "Simple riverside dining",
+      "German pub classics",
+      "Riverfront meals",
+      "Café stops in Schnoor",
+      "Simple beer-hall dinners",
+      "Post-match local bars",
     ],
 
     transport:
-      "Very manageable city with useful trams, but central walking covers most of what matters for a short football break.",
+      "Bremen is very manageable. Trams help, but a central base makes most of the key trip walkable, including a very pleasant stadium approach if you pace it right.",
 
     accommodation:
-      "Stay near the Old Town or central core for the best blend of charm and easy stadium access.",
+      "Old Town is the strongest base. Viertel is better if you want slightly more bars and local feel. Stay central and don’t overthink it.",
+  },
+
+  freiburg: {
+    cityId: "freiburg",
+    name: "Freiburg im Breisgau",
+    country: "Germany",
+
+    overview:
+      "Freiburg is one of the best smaller football city breaks in Germany because it combines a very likeable old town, strong café and wine culture, and a club that feels rooted rather than manufactured. This is not a loud macho football trip. It’s a smarter, calmer, very good one.",
+
+    topThings: [
+      { title: "Altstadt loop", tip: "The city centre is the point. Walk it properly rather than chasing too many add-ons." },
+      { title: "Freiburg Minster", tip: "Worth doing once properly, especially with the square and market around it." },
+      { title: "Schlossberg viewpoint", tip: "One of the best low-effort scenic payoffs in the Bundesliga set." },
+      { title: "Münsterplatz market", tip: "Great for a simple lunch or snack without planning too much." },
+      { title: "Black Forest add-on", tip: "Only if you have real extra time. Don’t sabotage the city weekend trying to overachieve." },
+      { title: "Vauban district", tip: "A good contrast if you want one non-old-town block." },
+      { title: "SC Freiburg matchday", tip: "A calmer, more grounded Bundesliga experience than the giant-club cities." },
+      { title: "Wine tavern evening", tip: "A better Freiburg move than only doing standard beer halls." },
+      { title: "University quarter bars", tip: "Good for a relaxed evening that still has life." },
+      { title: "One slower morning", tip: "Freiburg is better when you stop trying to sprint through it." },
+    ],
+
+    tips: [
+      "Freiburg is best at a slower pace.",
+      "Stay central and keep the whole weekend walkable.",
+      "The city rewards one or two strong blocks, not overstuffed planning.",
+      "Good weather massively upgrades the trip, so lean into outdoors when you can.",
+      "It’s one of the best football-plus-scenery options in Germany.",
+    ],
+
+    food: [
+      "Flammkuchen",
+      "Regional wine",
+      "Market-square snacks",
+      "Traditional Baden meals",
+      "Strong café breakfasts",
+    ],
+
+    transport:
+      "Freiburg is easy. The centre is very walkable, trams are useful, and stadium movement is straightforward if you stay in or near the old town.",
+
+    accommodation:
+      "Altstadt is the clear best base. Near the station is more practical for rail trips, but slightly weaker in feel. Central wins here.",
   },
 
   mainz: {
@@ -1135,71 +429,260 @@ export const bundesligaCityGuides: Record<string, CityGuide> = {
     country: "Germany",
 
     overview:
-      "Mainz is one of the smartest football-weekend cities in Germany because it gives you a compact old town, Rhine atmosphere, wine culture and an easy matchday without the heaviness of a giant city. It is calmer than Frankfurt and more obviously pleasant to wander. For YourNextAway purposes, that makes it a very good football-first but still proper city-break stop. The key is not to overcomplicate it. Mainz works when you stay central, walk the old town, do one river block, one wine-led evening and the match.",
+      "Mainz is one of Germany’s smartest football weekend picks because it gives you old-town charm, Rhine-side atmosphere, strong wine culture, and a very manageable matchday without the overhead of a giant city. It works especially well for people who want football plus a proper mini-break rather than football plus urban chaos.",
 
     topThings: [
-      {
-        title: "Old Town wander",
-        tip: "The city is best done slowly and centrally, not as a checklist sprint.",
-      },
-      {
-        title: "Mainz Cathedral",
-        tip: "Good historic anchor and the obvious place to orient the trip.",
-      },
-      {
-        title: "Rhine promenade",
-        tip: "Simple, high-value city block and a good reset before or after football.",
-      },
-      {
-        title: "Gutenberg angle",
-        tip: "Worth using if available because it gives the city more substance than just squares and wine.",
-      },
-      {
-        title: "Augustinerstraße area",
-        tip: "One of the better atmospheric central lanes and a good food/drink zone.",
-      },
-      {
-        title: "Wine tavern evening",
-        tip: "This is one of Mainz’s biggest differentiators, so use it properly.",
-      },
-      {
-        title: "Mainz 05 matchday",
-        tip: "Approachable and low-stress by Bundesliga standards, which is part of the appeal.",
-      },
-      {
-        title: "Rhine day trip",
-        tip: "Excellent if you have another day and want more scenery without much complexity.",
-      },
-      {
-        title: "Frankfurt add-on",
-        tip: "Useful if you want big-city contrast, but Mainz itself is usually enough for a football weekend.",
-      },
-      {
-        title: "Slow coffee-and-pastry morning",
-        tip: "Exactly the kind of city where this improves the trip rather than wasting time.",
-      },
+      { title: "Altstadt wander", tip: "This is the city’s best asset. Don’t over-route it — just let the centre work." },
+      { title: "Mainz Cathedral area", tip: "Best anchor point for getting the city shape fast." },
+      { title: "Rhine promenade walk", tip: "An easy daytime or post-dinner block that makes the city land properly." },
+      { title: "Wine tavern evening", tip: "Mainz is better when you lean into wine, not just default beer hall mode." },
+      { title: "Augustinerstraße", tip: "A very good old-town street for casual bars and city feel." },
+      { title: "Gutenberg connection", tip: "Worth a museum/history stop if it fits, but don’t force it." },
+      { title: "Mainz 05 matchday", tip: "A very good club if you like intensity and a real local feel." },
+      { title: "Mainz + Frankfurt split", tip: "A smart wider-weekend option if you want one calmer city and one bigger-city block." },
+      { title: "Rhine town add-on", tip: "Only if you’ve got the spare day and want a softer scenic extension." },
+      { title: "One café-and-bakery morning", tip: "Mainz suits slower starts very well." },
     ],
 
     tips: [
-      "Do not rush Mainz. That ruins the point of it.",
-      "Stay around the old town or cathedral zone.",
-      "Use wine culture as a real part of the trip, not a side note.",
-      "Good value and very manageable for 24–48 hours.",
-      "One of the better understated Bundesliga city weekends.",
+      "Mainz is better when you keep it relaxed.",
+      "Stay near the old town if you can.",
+      "Wine is part of the city’s identity, so use it.",
+      "Very strong for a one- or two-night football trip.",
+      "Frankfurt is an easy add-on, but Mainz does not need it to justify itself.",
     ],
 
     food: [
-      "Wine-tavern meals",
-      "Regional white wines",
-      "German pub dishes",
-      "Cafés and bakery breakfasts",
+      "Wine tavern plates",
+      "Regional white wine",
+      "Hearty pub food",
+      "Old-town café stops",
+      "Simple riverfront meals",
     ],
 
     transport:
-      "Very walkable centre with easy local public transport and strong rail links into Frankfurt and the Rhine corridor.",
+      "Mainz is walkable in the centre and easy on public transport beyond that. Matchday access is straightforward, and wider Rhine-Main rail links make add-ons very easy.",
 
     accommodation:
-      "Old Town is the strongest stay base. Just outside the core also works if you stay close to tram or bus links.",
+      "Altstadt is the best overall base. Near Mainz Hbf is better for rail practicality. The centre wins if you want the trip to feel like more than a transit stop.",
+  },
+
+  augsburg: {
+    cityId: "augsburg",
+    name: "Augsburg",
+    country: "Germany",
+
+    overview:
+      "Augsburg is a very good football weekend for people who want a calmer, cheaper, lower-friction alternative to Munich. It has enough history and old-town charm to feel worthwhile, but not so much scale that the trip becomes work. FC Augsburg fits that same logic: straightforward, local, and easy to build into a clean weekend.",
+
+    topThings: [
+      { title: "Fuggerei", tip: "The city’s most distinctive non-football stop. Worth doing properly once." },
+      { title: "Rathausplatz & old-town loop", tip: "Best way to orient the weekend quickly." },
+      { title: "Golden Hall / Town Hall", tip: "A good short cultural anchor if open." },
+      { title: "Lechviertel canal walk", tip: "One of the best 'Augsburg feels different' blocks." },
+      { title: "Cathedral stop", tip: "Good calmer morning block if you want one historic anchor." },
+      { title: "FC Augsburg matchday", tip: "A straightforward Bundesliga experience with far less friction than the giant clubs." },
+      { title: "Traditional beer hall meal", tip: "The right move here is simple and local, not trendy." },
+      { title: "Botanical Garden (optional)", tip: "Only if you have extra time and good weather." },
+      { title: "Old-town evening", tip: "Worth doing twice — day and night feel different enough." },
+      { title: "Munich add-on", tip: "Possible, but Augsburg stands up fine on its own for a football weekend." },
+    ],
+
+    tips: [
+      "Augsburg is better when you walk it than when you over-transport it.",
+      "A very good value alternative to Munich.",
+      "Stay central and keep the trip easy.",
+      "Nightlife is lighter than Munich, so set expectations properly.",
+      "Good for a cleaner, more relaxed Bundesliga break.",
+    ],
+
+    food: [
+      "Traditional Bavarian / Swabian dishes",
+      "Beer hall dinners",
+      "Café stops near Rathausplatz",
+      "Hearty pub meals",
+      "Simple breakfast bakeries",
+    ],
+
+    transport:
+      "Central Augsburg is walkable. Trams are useful for stadium travel and outer-city movement. If you stay in the core, the weekend stays very low-friction.",
+
+    accommodation:
+      "Old Town / Rathausplatz is the best overall base. Near the Hauptbahnhof works if you care more about rail practicality. Central is still the better football-weekend answer.",
+  },
+
+  leverkusen: {
+    cityId: "leverkusen",
+    name: "Leverkusen",
+    country: "Germany",
+
+    overview:
+      "Leverkusen is not the city you stay in because it has the best nightlife or prettiest old town. It’s the city you use intelligently because Bayer Leverkusen are a serious football product and the Rhine region around them is excellent. The smart move is usually Cologne or Düsseldorf as the wider base, then Leverkusen as the matchday centrepiece.",
+
+    topThings: [
+      { title: "BayArena matchday", tip: "The main reason you’re here. Build the day around it properly." },
+      { title: "Cologne-based football weekend", tip: "Usually the strongest trip structure if you want nightlife and a fuller city feel." },
+      { title: "Düsseldorf-based football weekend", tip: "A slicker alternative if you want a slightly more polished wider base." },
+      { title: "Japanese Garden", tip: "A decent calmer stop if you actually have time in Leverkusen itself." },
+      { title: "Rhine-side walking block", tip: "Good for a pre-match reset, but don’t pretend Leverkusen is the star attraction over Cologne." },
+      { title: "One practical local meal", tip: "Fine, but most standout dining should happen in your wider base city." },
+      { title: "Cologne Cathedral add-on", tip: "Easy if you’re basing there, and worth it." },
+      { title: "Düsseldorf Altstadt night", tip: "A strong play if you want post-match nightlife beyond Leverkusen itself." },
+      { title: "Kölsch vs Altbier choice", tip: "Lean into the region rather than making the trip feel generic." },
+      { title: "Post-match decompression", tip: "Often smarter than charging straight into packed regional trains." },
+    ],
+
+    tips: [
+      "Leverkusen is usually best as a matchday city, not a full weekend base.",
+      "Cologne is the default best wider base.",
+      "Düsseldorf is a good alternative if you want cleaner upscale city energy.",
+      "BayArena logistics are easier than many bigger Bundesliga grounds.",
+      "This trip improves massively when you stop forcing Leverkusen to be more than it is.",
+    ],
+
+    food: [
+      "Regional pub food",
+      "Cologne Kölsch halls",
+      "Düsseldorf Altbier pubs",
+      "Simple matchday food in Leverkusen",
+      "Stronger dinners in your base city",
+    ],
+
+    transport:
+      "The Rhine region is made for rail-based football travel. Regional trains between Cologne, Düsseldorf and Leverkusen are frequent, so the key is choosing the right base and not overcomplicating the movement.",
+
+    accommodation:
+      "Cologne is usually the strongest answer. Düsseldorf is the slicker alternative. Stay in Leverkusen only if maximum matchday simplicity matters more than wider trip quality.",
+  },
+
+  monchengladbach: {
+    cityId: "monchengladbach",
+    name: "Mönchengladbach",
+    country: "Germany",
+
+    overview:
+      "Mönchengladbach is a football-first stop. The city itself is functional rather than destination-led, but Borussia give it real value. This is the kind of trip that works best when you’re honest about it: strong stadium, strong club, and often better as part of a wider western Germany football weekend.",
+
+    topThings: [
+      { title: "Borussia matchday", tip: "The main reason to come. Give it proper time and don’t treat it like a throw-in stop." },
+      { title: "Borussia-Park tour", tip: "Worth doing if it fits the schedule." },
+      { title: "Alter Markt / old-town bar area", tip: "Best place to anchor the local evening if staying over." },
+      { title: "Abteiberg Museum", tip: "A decent short culture block if you want more than football." },
+      { title: "Bunter Garten", tip: "Useful calmer green-space reset." },
+      { title: "Schloss Rheydt", tip: "Only if you actually have extra time and want one non-football historical stop." },
+      { title: "Cologne add-on", tip: "A very sensible base choice if you want more city value." },
+      { title: "Düsseldorf add-on", tip: "Often the smarter nightlife option." },
+      { title: "Pre-match local pubs", tip: "Worth doing once because it helps the trip feel less generic." },
+      { title: "Post-match regional travel plan", tip: "Know it before kickoff. Don’t improvise under crowd pressure." },
+    ],
+
+    tips: [
+      "This is a football-led trip, not a blockbuster city break.",
+      "Works very well inside a Rhine-Ruhr football route.",
+      "Düsseldorf or Cologne may be the better sleep base.",
+      "Gladbach itself is simplest if you want maximum matchday ease.",
+      "Be honest about what the trip is and it works better.",
+    ],
+
+    food: [
+      "Traditional German pub meals",
+      "Pre-match beers and sausage",
+      "Simple bar food in the old town",
+      "Better higher-end dining in Düsseldorf / Cologne",
+    ],
+
+    transport:
+      "Regional rail links are good, but the trip works best when you already know whether you’re sleeping local or returning to a stronger nearby city. Stadium access is straightforward if you plan it early.",
+
+    accommodation:
+      "Mönchengladbach centre is simplest. Düsseldorf is stronger for nightlife and overall trip quality. Cologne works too if you want to stack multiple football stops.",
+  },
+
+  wolfsburg: {
+    cityId: "wolfsburg",
+    name: "Wolfsburg",
+    country: "Germany",
+
+    overview:
+      "Wolfsburg is a functional football stop, not a romantic city break. The city works because everything is easy, modern, and predictable, and because the football and Volkswagen identity are tightly linked. If you want charm, pick somewhere else. If you want a very efficient Bundesliga trip, Wolfsburg does the job well.",
+
+    topThings: [
+      { title: "Volkswagen Arena matchday", tip: "The football anchor and the obvious reason to come." },
+      { title: "Autostadt", tip: "The strongest non-football reason to be here and worth doing properly." },
+      { title: "Phaeno Science Center", tip: "A good add-on if you want one more structured attraction." },
+      { title: "Allerpark lakeside area", tip: "Useful as a calmer walk-and-reset block." },
+      { title: "Wolfsburg Castle", tip: "A decent historic counterpoint to the otherwise modern city." },
+      { title: "Designer outlets", tip: "Only if you actually want shopping. Don’t pretend it’s culture." },
+      { title: "Autostadt + matchday split", tip: "That’s the smartest one-day version of Wolfsburg." },
+      { title: "Braunschweig add-on", tip: "A stronger nearby city if you want a bit more character." },
+      { title: "One practical dinner", tip: "This city is about clean logistics, not food discovery." },
+      { title: "No-fuss overnight", tip: "That is where Wolfsburg is strongest." },
+    ],
+
+    tips: [
+      "Wolfsburg is efficient rather than atmospheric.",
+      "Autostadt is the main non-football value driver.",
+      "Good for a practical one-night football stop.",
+      "Braunschweig is worth considering if you want more character.",
+      "Stop expecting organic city-break magic here — it’s not that kind of place.",
+    ],
+
+    food: [
+      "Modern casual dining",
+      "German pub standards",
+      "Simple pre-match meals",
+      "Cafés near the centre / station",
+    ],
+
+    transport:
+      "Wolfsburg is one of the easiest Bundesliga cities to handle because the station, city core and stadium logic are so straightforward. That simplicity is the main appeal.",
+
+    accommodation:
+      "Near the station or city centre is the cleanest choice. Braunschweig only makes sense if you want a stronger wider-city feel and don’t mind commuting.",
+  },
+
+  sinsheim: {
+    cityId: "sinsheim",
+    name: "Sinsheim",
+    country: "Germany",
+
+    overview:
+      "Sinsheim is not a city-break heavyweight, but it works well as a football-and-attractions stop if you frame it correctly. Hoffenheim gives it Bundesliga relevance, and the museum/spa pairing makes it much better than a random small-town football pin. The smart play is often Heidelberg as the wider base.",
+
+    topThings: [
+      { title: "Hoffenheim matchday", tip: "The football reason to come, and the day’s anchor." },
+      { title: "Auto & Technik Museum", tip: "A genuinely strong attraction and a big part of why this stop works." },
+      { title: "Therme Sinsheim", tip: "A very good recovery-day or post-travel play if that’s your thing." },
+      { title: "Simple town-centre loop", tip: "Enough to orient yourself. Don’t force it into more." },
+      { title: "Heidelberg add-on", tip: "Usually the best move if you want the trip to feel richer than pure logistics." },
+      { title: "Mannheim add-on", tip: "Good if you want a bigger city feel without going too far." },
+      { title: "Museum + matchday split", tip: "That’s the cleanest way to structure a one-night trip." },
+      { title: "Neckar countryside feel", tip: "Nice if weather behaves and you have margin." },
+      { title: "Practical dinner plan", tip: "Food options get thin late, so stop winging it." },
+      { title: "Post-match stay instead of instant escape", tip: "Often smarter if you want to avoid dead travel stress." },
+    ],
+
+    tips: [
+      "This is football + attraction logic, not classic city-break logic.",
+      "Heidelberg is often the better base.",
+      "The museum is not filler — it’s one of the stop’s main strengths.",
+      "Plan dinner and late transport properly.",
+      "A smart practical trip if you use the surrounding region well.",
+    ],
+
+    food: [
+      "German bakery breakfast",
+      "Schnitzel",
+      "Beer garden meals",
+      "Practical local dining",
+      "Stronger food in Heidelberg if basing there",
+    ],
+
+    transport:
+      "Regional rail connections are fine, but the trip improves a lot when you decide up front whether you are doing Sinsheim local or Sinsheim from Heidelberg. Don’t leave that decision too late.",
+
+    accommodation:
+      "Sinsheim is fine for a simple football stop. Heidelberg is the stronger base if you want a better overall weekend and are happy to commute.",
   },
 
   heidenheim: {
@@ -1208,71 +691,41 @@ export const bundesligaCityGuides: Record<string, CityGuide> = {
     country: "Germany",
 
     overview:
-      "Heidenheim is a football-first trip with a countryside edge, not a classic city break. That is exactly why it can work. The club gives you a rarer Bundesliga stop, the setting gives you quieter regional Germany, and the smaller scale means lower stress, lower prices and a more local-feeling weekend. This is for people who actually like football travel, not just landmark collection. Pair it with one scenic block and one strong matchday and it becomes much better than people expect.",
+      "Heidenheim is a football-first small-city stop where the value comes from the club, the intimacy, and the fact it feels different from the giant Bundesliga names. You are not here for metropolitan energy. You are here for a proper local top-flight experience and, if you’re smart, a calmer countryside-tinged weekend around it.",
 
     topThings: [
-      {
-        title: "Heidenheim matchday",
-        tip: "The club is the point of the stop, so build the day around it properly.",
-      },
-      {
-        title: "Schloss Hellenstein",
-        tip: "Best local viewpoint and the one clear high-value non-football move.",
-      },
-      {
-        title: "Central Heidenheim walk",
-        tip: "Enough to get a feel for the place, not enough to justify inflated expectations.",
-      },
-      {
-        title: "Scenic Swabian Jura block",
-        tip: "A smart upgrade if you have a spare morning and want the trip to feel fuller.",
-      },
-      {
-        title: "Ulm add-on",
-        tip: "The better nearby city option if you want stronger architecture and atmosphere.",
-      },
-      {
-        title: "Stuttgart add-on",
-        tip: "Useful if transport runs that way and you want one bigger-city contrast day.",
-      },
-      {
-        title: "Simple regional pub dinner",
-        tip: "Keep this honest and local. That is the whole point.",
-      },
-      {
-        title: "Pre-match and post-match pacing",
-        tip: "Smaller-city football works best when you actually use the calmer pace instead of rushing anyway.",
-      },
-      {
-        title: "One quiet morning reset",
-        tip: "Important because this is more mini-break than mega-event.",
-      },
-      {
-        title: "Regional identity angle",
-        tip: "Good if you want the trip to feel meaningfully different from the bigger football cities.",
-      },
+      { title: "FC Heidenheim matchday", tip: "The reason the stop matters and the thing to build around properly." },
+      { title: "Hellenstein Castle viewpoint", tip: "Best non-football payoff in the city and worth doing." },
+      { title: "Small-city centre loop", tip: "Enough to get the feel without forcing a fake tourism agenda." },
+      { title: "Swabian Jura edge / countryside block", tip: "A good add-on if you want the trip to feel fuller than just matchday." },
+      { title: "Ulm add-on", tip: "Strongest nearby city if you want one broader non-football block." },
+      { title: "Stuttgart add-on", tip: "More useful as a transport / bigger-city extension than a same-day rush." },
+      { title: "Simple local dining", tip: "Heidenheim is best when you keep food plans straightforward." },
+      { title: "Pre-match local rhythm", tip: "Smaller-city football stops reward arriving with time." },
+      { title: "Slow morning coffee block", tip: "A good way to stop the whole trip feeling transactional." },
+      { title: "One-night football logic", tip: "Usually exactly the right scale here." },
     ],
 
     tips: [
-      "Do not expect big-city sightseeing. That is not what this stop is for.",
-      "One scenic block massively improves the weekend.",
-      "Book early because accommodation supply is smaller.",
-      "Good for committed football travellers and league-depth coverage.",
-      "Better sold as football plus countryside than football plus city.",
+      "This is a smaller-scale football weekend. Embrace that.",
+      "One scenic/non-football block improves the trip a lot.",
+      "Book early — smaller cities have thinner hotel supply.",
+      "Good for groundhoppers and people who actually like local football texture.",
+      "Don’t compare it to Dortmund or Munich. Wrong lens entirely.",
     ],
 
     food: [
-      "Hearty German staples",
-      "Regional beer",
-      "Simple pre-match meals",
-      "Local pub dining",
+      "Hearty German meals",
+      "Simple local pubs",
+      "Pre-match town-centre food",
+      "Bakery breakfasts",
     ],
 
     transport:
-      "Planning matters more here because you are not in a giant hub. Once you accept that, the trip becomes easy enough.",
+      "Heidenheim is easy enough once you’re there, but it rewards pre-planning because it is not a major hub. Build in buffer and keep the trip simple.",
 
     accommodation:
-      "Stay central for simplicity or slightly outside if you want more countryside feel. Pair with Ulm or Stuttgart only if that genuinely improves the route.",
+      "Stay centrally for a football-first stop. Slightly out of town works if you want a quieter countryside feel, but central is simpler for a short weekend.",
   },
 };
 
