@@ -1,6 +1,8 @@
 // src/data/cityGuides/index.ts
 import type { CityGuide, CityTopThing } from "./types";
 import { normalizeCityKey } from "@/src/utils/city";
+import { teams } from "@/src/data/teams";
+import { stadiums } from "@/src/data/stadiums";
 
 import premierLeagueCityGuides from "./premierLeague";
 import laLigaCityGuides from "./laLiga";
@@ -43,6 +45,32 @@ export type TripTopThingsBundle = {
 
 type CityGuideMap = Record<string, CityGuide>;
 
+type SimpleCityAuditRow = {
+  cityKey: string;
+  name?: string;
+  country?: string;
+};
+
+type TeamCityAuditRow = {
+  teamKey: string;
+  teamName: string;
+  cityKey: string;
+  teamCity?: string;
+  teamCountry?: string;
+  guideName?: string;
+  guideCountry?: string;
+};
+
+type StadiumCityAuditRow = {
+  stadiumKey: string;
+  stadiumName: string;
+  cityKey: string;
+  stadiumCity?: string;
+  stadiumCountry?: string;
+  guideName?: string;
+  guideCountry?: string;
+};
+
 function cleanStr(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
   const v = value.trim();
@@ -56,7 +84,11 @@ function cleanStringArray(value: unknown): string[] | undefined {
     .map((x) => cleanStr(x))
     .filter((x): x is string => !!x);
 
-  return out.length ? out : undefined;
+  return out.length ? Array.from(new Set(out)) : undefined;
+}
+
+function normalizeLoose(value: unknown): string {
+  return String(value ?? "").trim().toLowerCase();
 }
 
 function isCityGuide(value: unknown): value is CityGuide {
@@ -294,6 +326,177 @@ export function getCityGuidesDebugSnapshot() {
       overviewLength: guide.overview?.trim().length ?? 0,
     }));
 
+  const teamCityKeysReferenced = new Set(
+    Object.values(teams)
+      .map((team) => normalizeCityKey(team.cityKey || team.city || ""))
+      .filter(Boolean)
+  );
+
+  const stadiumCityKeysReferenced = new Set(
+    Object.values(stadiums)
+      .map((stadium) => normalizeCityKey(stadium.city))
+      .filter(Boolean)
+  );
+
+  const guideKeys = new Set(Object.keys(cityGuides));
+
+  const teamsMissingCityGuide: TeamCityAuditRow[] = Object.values(teams)
+    .map((team) => {
+      const cityKey = normalizeCityKey(team.cityKey || team.city || "");
+      const guide = cityKey ? cityGuides[cityKey] : undefined;
+
+      return {
+        teamKey: team.teamKey,
+        teamName: team.name,
+        cityKey,
+        teamCity: team.city,
+        teamCountry: team.country,
+        guideName: guide?.name,
+        guideCountry: guide?.country,
+      };
+    })
+    .filter((row) => row.cityKey && !cityGuides[row.cityKey])
+    .sort((a, b) => a.teamName.localeCompare(b.teamName));
+
+  const stadiumsMissingCityGuide: StadiumCityAuditRow[] = Object.values(stadiums)
+    .map((stadium) => {
+      const cityKey = normalizeCityKey(stadium.city);
+      const guide = cityKey ? cityGuides[cityKey] : undefined;
+
+      return {
+        stadiumKey: stadium.stadiumKey,
+        stadiumName: stadium.name,
+        cityKey,
+        stadiumCity: stadium.city,
+        stadiumCountry: stadium.country,
+        guideName: guide?.name,
+        guideCountry: guide?.country,
+      };
+    })
+    .filter((row) => row.cityKey && !cityGuides[row.cityKey])
+    .sort((a, b) => a.stadiumName.localeCompare(b.stadiumName));
+
+  const teamGuideNameMismatches: TeamCityAuditRow[] = Object.values(teams)
+    .map((team) => {
+      const cityKey = normalizeCityKey(team.cityKey || team.city || "");
+      const guide = cityKey ? cityGuides[cityKey] : undefined;
+
+      return {
+        teamKey: team.teamKey,
+        teamName: team.name,
+        cityKey,
+        teamCity: team.city,
+        teamCountry: team.country,
+        guideName: guide?.name,
+        guideCountry: guide?.country,
+      };
+    })
+    .filter(
+      (row) =>
+        !!row.cityKey &&
+        !!row.guideName &&
+        !!row.teamCity &&
+        normalizeLoose(row.teamCity) !== normalizeLoose(row.guideName)
+    )
+    .sort((a, b) => a.teamName.localeCompare(b.teamName));
+
+  const teamGuideCountryMismatches: TeamCityAuditRow[] = Object.values(teams)
+    .map((team) => {
+      const cityKey = normalizeCityKey(team.cityKey || team.city || "");
+      const guide = cityKey ? cityGuides[cityKey] : undefined;
+
+      return {
+        teamKey: team.teamKey,
+        teamName: team.name,
+        cityKey,
+        teamCity: team.city,
+        teamCountry: team.country,
+        guideName: guide?.name,
+        guideCountry: guide?.country,
+      };
+    })
+    .filter(
+      (row) =>
+        !!row.cityKey &&
+        !!row.guideCountry &&
+        !!row.teamCountry &&
+        normalizeLoose(row.teamCountry) !== normalizeLoose(row.guideCountry)
+    )
+    .sort((a, b) => a.teamName.localeCompare(b.teamName));
+
+  const stadiumGuideNameMismatches: StadiumCityAuditRow[] = Object.values(stadiums)
+    .map((stadium) => {
+      const cityKey = normalizeCityKey(stadium.city);
+      const guide = cityKey ? cityGuides[cityKey] : undefined;
+
+      return {
+        stadiumKey: stadium.stadiumKey,
+        stadiumName: stadium.name,
+        cityKey,
+        stadiumCity: stadium.city,
+        stadiumCountry: stadium.country,
+        guideName: guide?.name,
+        guideCountry: guide?.country,
+      };
+    })
+    .filter(
+      (row) =>
+        !!row.cityKey &&
+        !!row.guideName &&
+        !!row.stadiumCity &&
+        normalizeLoose(row.stadiumCity) !== normalizeLoose(row.guideName)
+    )
+    .sort((a, b) => a.stadiumName.localeCompare(b.stadiumName));
+
+  const stadiumGuideCountryMismatches: StadiumCityAuditRow[] = Object.values(stadiums)
+    .map((stadium) => {
+      const cityKey = normalizeCityKey(stadium.city);
+      const guide = cityKey ? cityGuides[cityKey] : undefined;
+
+      return {
+        stadiumKey: stadium.stadiumKey,
+        stadiumName: stadium.name,
+        cityKey,
+        stadiumCity: stadium.city,
+        stadiumCountry: stadium.country,
+        guideName: guide?.name,
+        guideCountry: guide?.country,
+      };
+    })
+    .filter(
+      (row) =>
+        !!row.cityKey &&
+        !!row.guideCountry &&
+        !!row.stadiumCountry &&
+        normalizeLoose(row.stadiumCountry) !== normalizeLoose(row.guideCountry)
+    )
+    .sort((a, b) => a.stadiumName.localeCompare(b.stadiumName));
+
+  const guideKeysUnusedByTeams: SimpleCityAuditRow[] = Object.values(cityGuides)
+    .filter((guide) => !teamCityKeysReferenced.has(guide.cityId))
+    .map((guide) => ({
+      cityKey: guide.cityId,
+      name: guide.name,
+      country: guide.country,
+    }))
+    .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+
+  const guideKeysUnusedByStadiums: SimpleCityAuditRow[] = Object.values(cityGuides)
+    .filter((guide) => !stadiumCityKeysReferenced.has(guide.cityId))
+    .map((guide) => ({
+      cityKey: guide.cityId,
+      name: guide.name,
+      country: guide.country,
+    }))
+    .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+
+  const referencedCityKeysMissingGuide: SimpleCityAuditRow[] = Array.from(
+    new Set([...teamCityKeysReferenced, ...stadiumCityKeysReferenced])
+  )
+    .filter((cityKey) => cityKey && !guideKeys.has(cityKey))
+    .map((cityKey) => ({ cityKey }))
+    .sort((a, b) => a.cityKey.localeCompare(b.cityKey));
+
   return {
     count: all.length,
     bySource,
@@ -310,6 +513,17 @@ export function getCityGuidesDebugSnapshot() {
     missingTransport,
     missingAccommodation,
     weakOverview,
+    audits: {
+      teamsMissingCityGuide,
+      stadiumsMissingCityGuide,
+      teamGuideNameMismatches,
+      teamGuideCountryMismatches,
+      stadiumGuideNameMismatches,
+      stadiumGuideCountryMismatches,
+      guideKeysUnusedByTeams,
+      guideKeysUnusedByStadiums,
+      referencedCityKeysMissingGuide,
+    },
   };
 }
 
