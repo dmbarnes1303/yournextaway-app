@@ -1,3 +1,5 @@
+// src/data/teams/types.ts
+
 export type TeamRecord = {
   /** Stable lookup key, e.g. "arsenal", "real-madrid" */
   teamKey: string;
@@ -36,4 +38,10 @@ export type TeamRecord = {
   aliases?: string[];
 };
 
+/**
+ * Canonical team registry shape.
+ * Key must match `teamKey`.
+ */
 export type TeamRegistry = Record<string, TeamRecord>;
+
+export default TeamRecord;
