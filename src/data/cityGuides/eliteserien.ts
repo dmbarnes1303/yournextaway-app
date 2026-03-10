@@ -3,12 +3,15 @@ import type { CityGuide } from "./types";
 const GYG = {
   oslo: "https://www.getyourguide.com/en-gb/oslo-l38/?partner_id=MAQJREP&utm_medium=online_publisher",
   bergen: "https://www.getyourguide.com/en-gb/bergen-l1132/?partner_id=MAQJREP&utm_medium=online_publisher",
-  trondheim: "https://www.getyourguide.com/en-gb/trondheim-l32375/?partner_id=MAQJREP&utm_medium=online_publisher",
-  stavanger: "https://www.getyourguide.com/en-gb/stavanger-l4561/?partner_id=MAQJREP&utm_medium=online_publisher",
+  trondheim:
+    "https://www.getyourguide.com/en-gb/trondheim-l32375/?partner_id=MAQJREP&utm_medium=online_publisher",
+  stavanger:
+    "https://www.getyourguide.com/en-gb/stavanger-l4561/?partner_id=MAQJREP&utm_medium=online_publisher",
   tromso: "https://www.getyourguide.com/en-gb/tromso-l32375/?partner_id=MAQJREP&utm_medium=online_publisher",
   alesund: "https://www.getyourguide.com/en-gb/alesund-l4559/?partner_id=MAQJREP&utm_medium=online_publisher",
   bodo: "https://www.getyourguide.com/en-gb/bodo-l32374/?partner_id=MAQJREP&utm_medium=online_publisher",
-  kristiansand: "https://www.getyourguide.com/en-gb/kristiansand-l32378/?partner_id=MAQJREP&utm_medium=online_publisher",
+  kristiansand:
+    "https://www.getyourguide.com/en-gb/kristiansand-l32378/?partner_id=MAQJREP&utm_medium=online_publisher",
 } as const;
 
 export const eliteserienCityGuides: Record<string, CityGuide> = {
@@ -18,42 +21,42 @@ export const eliteserienCityGuides: Record<string, CityGuide> = {
     country: "Norway",
     thingsToDoUrl: GYG.oslo,
     overview:
-      "Oslo is one of the easiest football weekends in the app because it gives you scale without chaos. You get a proper capital city, reliable transport, strong hotel stock, and two very different football experiences in Vålerenga and KFUM. The trick is not overcomplicating it: stay central, keep your day grouped by area, and treat stadium travel as a short transport move rather than a relocation exercise.",
+      "Oslo is one of the easiest and strongest football weekends in the Norway section because it gives you scale, transport quality, and enough neighbourhood variation to shape a proper trip rather than a basic match stop. The key is not to overcomplicate the dual-club aspect. Vålerenga is the flagship football experience in the city; KFUM is the more niche, small-scale alternative. That means the city itself should be the anchor, not whichever ground you are visiting. Stay central, move by metro or tram, and let the football sit inside a wider capital-city weekend rather than trying to build the entire break around stadium proximity.",
 
     topThings: [
-      { title: "Aker Brygge and waterfront", tip: "Best early-evening area if you want clean visuals and easy food options." },
-      { title: "Opera House roof", tip: "Worth doing once; quick payoff, no need to overthink it." },
-      { title: "Bjørvika walk", tip: "Good modern-city reset before bars or football." },
-      { title: "Grønland food stop", tip: "Better value and more character than default tourist strips." },
-      { title: "Karl Johans gate loop", tip: "Useful for orientation, not where you spend your whole day." },
-      { title: "Vigeland Park", tip: "Good if the weather is decent and you want a longer daytime block." },
-      { title: "Munch Museum option", tip: "Pick it if you actually care; do not force museum time for the sake of it." },
-      { title: "Pre-match central pub session", tip: "Much smarter than trying to build the whole day around the ground area." },
-      { title: "Post-match city-centre reset", tip: "Head back central; Oslo rewards keeping the night moving." },
-      { title: "Harbour sunrise or late walk", tip: "A good final-hour move if you stayed over." },
+      { title: "Aker Brygge and waterfront", tip: "Best for a polished early-evening block with easy food and drink choices." },
+      { title: "Opera House roof", tip: "Quick payoff, strong visuals, and worth doing once without dragging it out." },
+      { title: "Bjørvika walk", tip: "Good modern-city reset before dinner, drinks, or the stadium move." },
+      { title: "Grønland food stop", tip: "Better value and more character than default tourist-centre choices." },
+      { title: "Karl Johans gate loop", tip: "Useful orientation route, but not where you spend the whole day." },
+      { title: "Vigeland Park", tip: "Worth doing if weather is decent and you want a longer daytime block." },
+      { title: "Munch Museum option", tip: "Choose it deliberately, not just because it is on a checklist." },
+      { title: "Pre-match central pub session", tip: "Smarter than killing hours around the ground unless you know exactly why you are doing that." },
+      { title: "Post-match city-centre reset", tip: "Head back central; Oslo rewards keeping the night moving after full-time." },
+      { title: "Harbour sunrise or late-night walk", tip: "A strong final-hour move if you stayed overnight and want the city to land properly." },
     ],
 
     tips: [
-      "Stay central or in Bjørvika/Grønland rather than near the stadiums.",
-      "Vålerenga is the bigger football experience; KFUM is the niche contrast option.",
-      "Public transport is strong enough that taxis are often unnecessary.",
-      "Oslo is expensive, so be deliberate with food and hotel choices.",
-      "A full football weekend works better than a rushed one-night hit-and-run.",
+      "Stay central or in Bjørvika/Grønland rather than near either ground.",
+      "Vålerenga is the main Oslo football trip; KFUM is the specialist contrast option.",
+      "Public transport is strong enough that taxis are often pointless.",
+      "Oslo is expensive, so random lazy food and hotel decisions get punished fast.",
+      "A full football weekend works better than a frantic one-night smash-and-grab.",
     ],
 
     food: [
-      "Grønland for better-value and broader food options",
+      "Grønland for broader food choice and better-value eating",
       "Waterfront dining if you want a cleaner polished evening",
-      "Burgers and casual pre-match food centrally",
+      "Central burgers and casual pre-match food",
       "Coffee and bakery stops across the central core",
       "Late drinks and small plates in the city centre",
     ],
 
     transport:
-      "Oslo’s public transport is excellent by football-trip standards. Intility Arena is simple from the centre, while KFUM Arena is best treated as an Oslo trip first and a smaller local-ground move second. Oslo Central remains the obvious anchor point for almost everything.",
+      "Oslo’s public transport is excellent by football-trip standards. Intility Arena is an easy city move from the centre, while KFUM Arena should be treated as a smaller secondary football journey inside a wider Oslo stay. Oslo Central remains the obvious anchor point for almost everything, and that is the whole point: solve the city once, then let the football fit inside it.",
 
     accommodation:
-      "City centre, Bjørvika, or Grønland are the strongest bases. You get transport, nightlife, and easy onward movement without sacrificing the wider city-break feel. There is very little logic in staying hyper-close to either ground unless the hotel deal is exceptional.",
+      "City centre, Bjørvika, or Grønland are the strongest bases. You get transport, nightlife, and easy onward movement without sacrificing the wider city-break feel. There is almost no logic in staying hyper-close to either stadium unless the hotel deal is genuinely exceptional.",
   },
 
   bodo: {
@@ -72,8 +75,8 @@ export const eliteserienCityGuides: Record<string, CityGuide> = {
       { title: "Pre-match central meal", tip: "Eat in town and keep the whole day low-friction." },
       { title: "Weather-aware coffee stop", tip: "Useful because conditions matter here more than in most league cities." },
       { title: "Post-match central reset", tip: "Head back into the centre rather than ending the night at the ground." },
-      { title: "Morning coastal air walk", tip: "Good final block if you stayed over and the weather behaves." },
-      { title: "Airport-to-city efficiency", tip: "A rare place where travel logistics are genuinely easy if you stay disciplined." },
+      { title: "Morning coastal-air walk", tip: "Good final block if you stayed over and the weather behaves." },
+      { title: "Airport-to-city efficiency", tip: "A rare place where logistics are genuinely easy if you stay disciplined." },
       { title: "Football-first northern-city rhythm", tip: "The destination works best when you stop trying to overfill it." },
     ],
 
