@@ -1,43 +1,43 @@
-// src/data/cityGuides/types.ts
-
 export type CityTopThing = {
   title: string;
   tip: string;
 };
 
 export interface CityGuide {
-  /** Slug key used for routing + lookup (e.g. "london") */
+  /** Stable slug key used for routing + lookup, e.g. "london" */
   cityId: string;
 
+  /** Display name */
   name: string;
+
+  /** Country display name */
   country: string;
 
-  /** Short intro paragraph */
+  /** Intro paragraph */
   overview: string;
 
   /**
-   * Monetised "things to do" deep link.
-   * Primary use: GetYourGuide affiliate landing page for the city.
+   * Primary monetised experiences link.
+   * Usually a GetYourGuide city landing page.
    */
   thingsToDoUrl?: string;
 
   /**
-   * Legacy link (TripAdvisor) - DEPRECATED.
-   * Kept only so older guide files don't break at compile time.
-   * Do not show this in UI. Do not create new values for it.
+   * Deprecated legacy field kept only for backward compatibility.
+   * Do not create new values for this.
    */
   tripAdvisorTopThingsUrl?: string;
 
-  /** Top 10 things to do (with a practical tip for each) */
+  /** Core visitor recommendations */
   topThings: CityTopThing[];
 
-  /** Local tips (short, punchy, useful) */
+  /** Practical city tips */
   tips: string[];
 
-  /** Optional “nice to have” blocks */
+  /** Optional supporting sections */
   food?: string[];
   transport?: string;
   accommodation?: string;
 }
 
-export default CityGuide;
+export type CityGuideRegistry = Record<string, CityGuide>;
