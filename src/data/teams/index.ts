@@ -90,31 +90,21 @@ function cleanNum(value: unknown): number | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 
+function normalizeStringArray(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+
+  const out = value
+    .map((x) => cleanStr(x))
+    .filter((x): x is string => !!x);
+
+  return out.length ? Array.from(new Set(out)) : undefined;
+}
+
 function isTeamRecord(value: unknown): value is TeamRecord {
   if (!value || typeof value !== "object") return false;
 
   const v = value as Partial<TeamRecord>;
   return typeof v.teamKey === "string" && typeof v.name === "string";
-}
-
-function normalizeAliases(value: unknown): string[] | undefined {
-  if (!Array.isArray(value)) return undefined;
-
-  const out = value
-    .map((x) => cleanStr(x))
-    .filter((x): x is string => !!x);
-
-  return out.length ? Array.from(new Set(out)) : undefined;
-}
-
-function normalizeClubColors(value: unknown): string[] | undefined {
-  if (!Array.isArray(value)) return undefined;
-
-  const out = value
-    .map((x) => cleanStr(x))
-    .filter((x): x is string => !!x);
-
-  return out.length ? Array.from(new Set(out)) : undefined;
 }
 
 function normalizeTeam(inputKey: string, team: TeamRecord): TeamRecord {
@@ -138,60 +128,86 @@ function normalizeTeam(inputKey: string, team: TeamRecord): TeamRecord {
     season: cleanNum(team.season),
     stadiumKey: cleanStr(team.stadiumKey),
     founded: cleanNum(team.founded),
-    clubColors: normalizeClubColors(team.clubColors),
-    aliases: normalizeAliases(team.aliases),
+    clubColors: normalizeStringArray(team.clubColors),
+    aliases: normalizeStringArray(team.aliases),
   };
 }
 
-function mergeTeamSources(...sources: TeamMap[]): TeamMap {
-  const merged: TeamMap = {};
+const SOURCE_MAP: Record<string, TeamMap> = {
+  premierLeague: premierLeagueTeams,
+  laLiga: laLigaTeams,
+  serieA: serieATeams,
+  bundesliga: bundesligaTeams,
+  ligue1: ligue1Teams,
+  primeiraLiga: primeiraLigaTeams,
+  eredivisie: eredivisieTeams,
+  scottishPremiership: scottishPremiershipTeams,
+  superLig: superLigTeams,
+  proLeague: proLeagueTeams,
+  superLeagueGreece: superLeagueGreeceTeams,
+  austrianBundesliga: austrianBundesligaTeams,
+  superligaDenmark: superligaDenmarkTeams,
+  swissSuperLeague: swissSuperLeagueTeams,
+  czechFirstLeague: czechFirstLeagueTeams,
+  ekstraklasa: ekstraklasaTeams,
+  allsvenskan: allsvenskanTeams,
+  eliteserien: eliteserienTeams,
+  veikkausliiga: veikkausliigaTeams,
+  bestaDeild: bestaDeildTeams,
+  nbI: nbITeams,
+  superLiga: superLigaTeams,
+  hnl: hnlTeams,
+  superLigaSerbia: superLigaSerbiaTeams,
+  superLigaSlovakia: superLigaSlovakiaTeams,
+  prvaLigaSlovenia: prvaLigaSloveniaTeams,
+  firstLeagueBulgaria: firstLeagueBulgariaTeams,
+  firstDivisionCyprus: firstDivisionCyprusTeams,
+  premierLeagueBosnia: premierLeagueBosniaTeams,
+  leagueOfIrelandPremier: leagueOfIrelandPremierTeams,
+};
 
-  for (const source of sources) {
+const duplicateTeamKeys: Record<string, string[]> = {};
+const invalidEntries: { source: string; rawKey: string }[] = {};
+
+function buildTeamRegistry() {
+  const merged: TeamMap = {};
+  const bySource: Record<string, number> = {};
+
+  for (const [sourceName, source] of Object.entries(SOURCE_MAP)) {
+    bySource[sourceName] = 0;
+
     for (const [rawKey, rawValue] of Object.entries(source)) {
-      if (!isTeamRecord(rawValue)) continue;
+      if (!isTeamRecord(rawValue)) {
+        invalidEntries.push({ source: sourceName, rawKey });
+        continue;
+      }
 
       const normalized = normalizeTeam(rawKey, rawValue);
-      if (!normalized.teamKey) continue;
+      if (!normalized.teamKey) {
+        invalidEntries.push({ source: sourceName, rawKey });
+        continue;
+      }
+
+      if (merged[normalized.teamKey]) {
+        if (!duplicateTeamKeys[normalized.teamKey]) {
+          duplicateTeamKeys[normalized.teamKey] = [sourceName];
+        } else {
+          duplicateTeamKeys[normalized.teamKey].push(sourceName);
+        }
+        continue;
+      }
 
       merged[normalized.teamKey] = normalized;
+      bySource[sourceName] += 1;
     }
   }
 
-  return merged;
+  return { merged, bySource };
 }
 
-export const teams: TeamMap = mergeTeamSources(
-  premierLeagueTeams,
-  laLigaTeams,
-  serieATeams,
-  bundesligaTeams,
-  ligue1Teams,
-  primeiraLigaTeams,
-  eredivisieTeams,
-  scottishPremiershipTeams,
-  superLigTeams,
-  proLeagueTeams,
-  superLeagueGreeceTeams,
-  austrianBundesligaTeams,
-  superligaDenmarkTeams,
-  swissSuperLeagueTeams,
-  czechFirstLeagueTeams,
-  ekstraklasaTeams,
-  allsvenskanTeams,
-  eliteserienTeams,
-  veikkausliigaTeams,
-  bestaDeildTeams,
-  nbITeams,
-  superLigaTeams,
-  hnlTeams,
-  superLigaSerbiaTeams,
-  superLigaSlovakiaTeams,
-  prvaLigaSloveniaTeams,
-  firstLeagueBulgariaTeams,
-  firstDivisionCyprusTeams,
-  premierLeagueBosniaTeams,
-  leagueOfIrelandPremierTeams
-);
+const { merged, bySource } = buildTeamRegistry();
+
+export const teams: TeamMap = merged;
 
 export const POPULAR_TEAM_IDS = new Set<number>(
   POPULAR_TEAM_KEYS.map((k) => teams[k]?.teamId).filter(
@@ -325,11 +341,22 @@ export function getTeamsByCityKey(cityKey: string): TeamRecord[] {
   );
 }
 
+export function getAllTeams(): TeamRecord[] {
+  return Object.values(teams);
+}
+
 export function getTeamsDebugSnapshot() {
   const all = Object.values(teams);
 
   return {
     count: all.length,
+    bySource,
+    duplicates: Object.entries(duplicateTeamKeys).map(([teamKey, sources]) => ({
+      teamKey,
+      duplicateSources: sources,
+      count: sources.length + 1,
+    })),
+    invalidEntries,
     missingTeamId: all
       .filter((team) => team.teamId == null)
       .map((team) => ({
@@ -379,6 +406,14 @@ export function getTeamsDebugSnapshot() {
         name: team.name,
         city: team.city,
         cityKey: team.cityKey,
+      })),
+    missingAliases: all
+      .filter((team) => !team.aliases || team.aliases.length === 0)
+      .map((team) => ({
+        teamKey: team.teamKey,
+        name: team.name,
+        city: team.city,
+        country: team.country,
       })),
   };
 }
