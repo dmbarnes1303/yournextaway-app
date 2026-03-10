@@ -1,6 +1,4 @@
-import type { TeamGuide } from "./types";
-import { teams } from "@/src/data/teams";
-
+import type { TeamGuide, TeamGuideRegistry } from "./types";
 import { normalizeTeamKey, titleFromKey } from "./utils";
 
 import bundesligaGuides from "./bundesliga";
@@ -34,47 +32,59 @@ import bestaDeildGuides from "./bestaDeild";
 import premierLeagueBosniaGuides from "./premierLeagueBosnia";
 import leagueOfIrelandPremierGuides from "./leagueOfIrelandPremier";
 
-import * as legacy from "./teamGuides";
+function isGuide(value: unknown): value is TeamGuide {
+  if (!value || typeof value !== "object") return false;
 
-function toGuides(value: any): TeamGuide[] {
+  const v = value as Partial<TeamGuide>;
+  return (
+    typeof v.teamKey === "string" &&
+    typeof v.name === "string" &&
+    Array.isArray(v.sections)
+  );
+}
+
+function toGuides(value: unknown): TeamGuide[] {
   if (!value) return [];
 
-  if (Array.isArray(value)) return value.filter(Boolean);
+  if (Array.isArray(value)) {
+    return value.filter(isGuide);
+  }
 
   if (typeof value === "object") {
-    const vals = Object.values(value);
-    if (
-      vals.length &&
-      vals.every((v) => v && typeof v === "object" && "teamKey" in (v as any))
-    ) {
-      return (vals as TeamGuide[]).filter(Boolean);
+    const vals = Object.values(value as Record<string, unknown>);
+    if (vals.length > 0 && vals.every(isGuide)) {
+      return vals as TeamGuide[];
     }
   }
 
   return [];
 }
 
-function extractGuides(mod: any): TeamGuide[] {
-  if (!mod) return [];
+function extractGuides(mod: unknown): TeamGuide[] {
+  if (!mod || typeof mod !== "object") return [];
 
   const out: TeamGuide[] = [];
+  const moduleObj = mod as Record<string, unknown>;
 
-  if (mod.default) out.push(...toGuides(mod.default));
-  out.push(...toGuides(mod));
+  out.push(...toGuides(moduleObj.default));
+  out.push(...toGuides(moduleObj));
 
-  for (const v of Object.values(mod)) {
-    out.push(...toGuides(v));
+  for (const value of Object.values(moduleObj)) {
+    out.push(...toGuides(value));
   }
 
   const seen = new Set<string>();
   const deduped: TeamGuide[] = [];
 
-  for (const g of out) {
-    const k = g?.teamKey;
-    if (!k) continue;
-    if (seen.has(k)) continue;
-    seen.add(k);
-    deduped.push(g);
+  for (const guide of out) {
+    const key = normalizeTeamKey(guide.teamKey);
+    if (!key || seen.has(key)) continue;
+
+    seen.add(key);
+    deduped.push({
+      ...guide,
+      teamKey: key,
+    });
   }
 
   return deduped;
@@ -111,46 +121,40 @@ const SOURCES: Record<string, TeamGuide[]> = {
   bestaDeild: extractGuides(bestaDeildGuides),
   premierLeagueBosnia: extractGuides(premierLeagueBosniaGuides),
   leagueOfIrelandPremier: extractGuides(leagueOfIrelandPremierGuides),
-  legacy: extractGuides(legacy),
 };
 
-const registry: Record<string, TeamGuide> = {};
-const duplicates: Record<string, number> = {};
+const registry: TeamGuideRegistry = {};
+const duplicates: Record<string, string[]> = {};
 
 for (const [sourceName, guides] of Object.entries(SOURCES)) {
   for (const guide of guides) {
-    const key = guide?.teamKey;
+    const key = normalizeTeamKey(guide.teamKey);
 
-    if (!key) {
-      console.log(`[teamGuides] Skipping guide without teamKey from ${sourceName}`);
-      continue;
-    }
+    if (!key) continue;
 
     if (registry[key]) {
-      duplicates[key] = (duplicates[key] || 1) + 1;
-      console.log(`[teamGuides] Duplicate teamKey detected: ${key} (source: ${sourceName})`);
+      if (!duplicates[key]) {
+        duplicates[key] = [sourceName];
+      } else {
+        duplicates[key].push(sourceName);
+      }
       continue;
     }
 
-    registry[key] = guide;
+    registry[key] = {
+      ...guide,
+      teamKey: key,
+    };
   }
 }
 
-const missing = Object.values(teams)
-  .filter((t) => !registry[t.teamKey])
-  .map((t) => ({
-    expectedGuideKey: t.teamKey,
-    name: t.name,
-    leagueId: t.leagueId,
-    season: t.season,
-  }));
-
 export function hasTeamGuide(teamKey: string): boolean {
-  return !!registry[teamKey];
+  return !!registry[normalizeTeamKey(teamKey)];
 }
 
 export function getTeamGuide(teamKey: string): TeamGuide | null {
-  return registry[teamKey] || null;
+  const key = normalizeTeamKey(teamKey);
+  return key ? registry[key] ?? null : null;
 }
 
 export type MissingTeamGuide = {
@@ -161,17 +165,20 @@ export type MissingTeamGuide = {
 };
 
 export function getMissingTeamGuides(): MissingTeamGuide[] {
-  return missing;
+  return [];
 }
 
 export function getTeamGuidesDebugSnapshot() {
   return {
     guidesCount: Object.keys(registry).length,
-    registryTeamsCount: Object.keys(teams).length,
-    missingCount: missing.length,
-    missing,
-    duplicates: Object.entries(duplicates).map(([k, v]) => ({ teamKey: k, count: v })),
-    bySource: Object.fromEntries(Object.entries(SOURCES).map(([k, v]) => [k, v.length])),
+    duplicates: Object.entries(duplicates).map(([teamKey, sources]) => ({
+      teamKey,
+      count: sources.length + 1,
+      duplicateSources: sources,
+    })),
+    bySource: Object.fromEntries(
+      Object.entries(SOURCES).map(([key, value]) => [key, value.length])
+    ),
   };
 }
 
