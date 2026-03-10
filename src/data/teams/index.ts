@@ -33,18 +33,7 @@ import firstDivisionCyprusTeams from "./firstDivisionCyprus";
 import premierLeagueBosniaTeams from "./premierLeagueBosnia";
 import leagueOfIrelandPremierTeams from "./leagueOfIrelandPremier";
 
-/**
- * V1 Team Registry (single source of truth)
- *
- * Why this exists:
- * - Home search must be able to find teams even when fixtures API results don't include them yet.
- * - Team guides will be keyed by a stable `teamKey`.
- *
- * Notes:
- * - Keep this registry accurate and deterministic.
- * - Avoid turning this file into a raw-data landfill.
- * - League-specific data belongs in league-specific files.
- */
+type TeamMap = Record<string, TeamRecord>;
 
 export const POPULAR_TEAM_KEYS = [
   "real-madrid",
@@ -77,39 +66,105 @@ export function normalizeTeamKey(input: string): string {
     .replace(/^-|-$/g, "");
 }
 
-export const teams: Record<string, TeamRecord> = {
-  ...premierLeagueTeams,
-  ...laLigaTeams,
-  ...serieATeams,
-  ...bundesligaTeams,
-  ...ligue1Teams,
-  ...primeiraLigaTeams,
-  ...eredivisieTeams,
-  ...scottishPremiershipTeams,
-  ...superLigTeams,
-  ...proLeagueTeams,
-  ...superLeagueGreeceTeams,
-  ...austrianBundesligaTeams,
-  ...superligaDenmarkTeams,
-  ...swissSuperLeagueTeams,
-  ...czechFirstLeagueTeams,
-  ...ekstraklasaTeams,
-  ...allsvenskanTeams,
-  ...eliteserienTeams,
-  ...veikkausliigaTeams,
-  ...bestaDeildTeams,
-  ...nbITeams,
-  ...superLigaTeams,
-  ...hnlTeams,
-  ...superLigaSerbiaTeams,
-  ...superLigaSlovakiaTeams,
-...prvaLigaSloveniaTeams,
-  ...firstLeagueBulgariaTeams,
-  ...firstDivisionCyprusTeams,
-  ...premierLeagueBosniaTeams,
-  ...leagueOfIrelandPremierTeams,
-  
-};
+function cleanStr(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const v = value.trim();
+  return v || undefined;
+}
+
+function cleanNum(value: unknown): number | undefined {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+function isTeamRecord(value: unknown): value is TeamRecord {
+  if (!value || typeof value !== "object") return false;
+
+  const v = value as Partial<TeamRecord>;
+  return typeof v.teamKey === "string" && typeof v.name === "string";
+}
+
+function normalizeAliases(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+
+  const out = value
+    .map((x) => cleanStr(x))
+    .filter((x): x is string => !!x);
+
+  return out.length ? Array.from(new Set(out)) : undefined;
+}
+
+function normalizeTeam(inputKey: string, team: TeamRecord): TeamRecord {
+  const teamKey = normalizeTeamKey(team.teamKey || inputKey);
+
+  return {
+    teamKey,
+    teamId: cleanNum(team.teamId),
+    name: cleanStr(team.name) ?? teamKey,
+    country: cleanStr(team.country),
+    city: cleanStr(team.city),
+    leagueId: cleanNum(team.leagueId),
+    season: cleanNum(team.season),
+    stadiumKey: cleanStr(team.stadiumKey),
+    founded: cleanNum(team.founded),
+    clubColors: Array.isArray(team.clubColors)
+      ? team.clubColors
+          .map((x) => cleanStr(x))
+          .filter((x): x is string => !!x)
+      : undefined,
+    aliases: normalizeAliases(team.aliases),
+  };
+}
+
+function mergeTeamSources(...sources: TeamMap[]): TeamMap {
+  const merged: TeamMap = {};
+
+  for (const source of sources) {
+    for (const [rawKey, rawValue] of Object.entries(source)) {
+      if (!isTeamRecord(rawValue)) continue;
+
+      const normalized = normalizeTeam(rawKey, rawValue);
+      if (!normalized.teamKey) continue;
+
+      merged[normalized.teamKey] = normalized;
+    }
+  }
+
+  return merged;
+}
+
+export const teams: TeamMap = mergeTeamSources(
+  premierLeagueTeams,
+  laLigaTeams,
+  serieATeams,
+  bundesligaTeams,
+  ligue1Teams,
+  primeiraLigaTeams,
+  eredivisieTeams,
+  scottishPremiershipTeams,
+  superLigTeams,
+  proLeagueTeams,
+  superLeagueGreeceTeams,
+  austrianBundesligaTeams,
+  superligaDenmarkTeams,
+  swissSuperLeagueTeams,
+  czechFirstLeagueTeams,
+  ekstraklasaTeams,
+  allsvenskanTeams,
+  eliteserienTeams,
+  veikkausliigaTeams,
+  bestaDeildTeams,
+  nbITeams,
+  superLigaTeams,
+  hnlTeams,
+  superLigaSerbiaTeams,
+  superLigaSlovakiaTeams,
+  prvaLigaSloveniaTeams,
+  firstLeagueBulgariaTeams,
+  firstDivisionCyprusTeams,
+  premierLeagueBosniaTeams,
+  leagueOfIrelandPremierTeams
+);
 
 export const POPULAR_TEAM_IDS = new Set<number>(
   POPULAR_TEAM_KEYS.map((k) => teams[k]?.teamId).filter(
@@ -157,6 +212,10 @@ export function getTeam(teamInput: string): TeamRecord | null {
   return teams[key] ?? null;
 }
 
+export function hasTeam(teamInput: string): boolean {
+  return !!getTeam(teamInput);
+}
+
 export function searchTeams(query: string, limit = 10): TeamRecord[] {
   const q = String(query ?? "").trim().toLowerCase();
   if (!q) return [];
@@ -165,6 +224,8 @@ export function searchTeams(query: string, limit = 10): TeamRecord[] {
     .map((team) => {
       const name = team.name.toLowerCase();
       const aliases = (team.aliases ?? []).map((a) => a.toLowerCase());
+      const city = (team.city ?? "").toLowerCase();
+      const country = (team.country ?? "").toLowerCase();
 
       let score = 0;
 
@@ -177,12 +238,18 @@ export function searchTeams(query: string, limit = 10): TeamRecord[] {
       if (name.includes(q)) score += 35;
       if (aliases.some((a) => a.includes(q))) score += 25;
 
+      if (city === q) score += 18;
+      if (city.includes(q)) score += 10;
+
+      if (country === q) score += 6;
+
       if (team.leagueId) score += 5;
+      if (team.teamId) score += 2;
 
       return { team, score };
     })
     .filter((x) => x.score > 0)
-    .sort((a, b) => b.score - a.score)
+    .sort((a, b) => b.score - a.score || a.team.name.localeCompare(b.team.name))
     .slice(0, Math.max(1, limit))
     .map((x) => x.team);
 }
@@ -196,5 +263,78 @@ export function leagueForTeam(team: TeamRecord): LeagueOption | null {
   const season = typeof team.season === "number" ? team.season : match.season;
   return { ...match, season };
 }
+
+export function getTeamsByLeague(leagueId: number): TeamRecord[] {
+  const id = cleanNum(leagueId);
+  if (!id) return [];
+
+  return Object.values(teams).filter((team) => team.leagueId === id);
+}
+
+export function getTeamsByCountry(country: string): TeamRecord[] {
+  const value = String(country ?? "").trim().toLowerCase();
+  if (!value) return [];
+
+  return Object.values(teams).filter(
+    (team) => String(team.country ?? "").trim().toLowerCase() === value
+  );
+}
+
+export function getTeamsByCity(city: string): TeamRecord[] {
+  const value = String(city ?? "").trim().toLowerCase();
+  if (!value) return [];
+
+  return Object.values(teams).filter(
+    (team) => String(team.city ?? "").trim().toLowerCase() === value
+  );
+}
+
+export function getTeamsDebugSnapshot() {
+  const all = Object.values(teams);
+
+  return {
+    count: all.length,
+    missingTeamId: all
+      .filter((team) => team.teamId == null)
+      .map((team) => ({
+        teamKey: team.teamKey,
+        name: team.name,
+        country: team.country,
+        city: team.city,
+      })),
+    missingLeagueId: all
+      .filter((team) => team.leagueId == null)
+      .map((team) => ({
+        teamKey: team.teamKey,
+        name: team.name,
+        country: team.country,
+        city: team.city,
+      })),
+    missingStadiumKey: all
+      .filter((team) => !team.stadiumKey)
+      .map((team) => ({
+        teamKey: team.teamKey,
+        name: team.name,
+        country: team.country,
+        city: team.city,
+      })),
+    missingCity: all
+      .filter((team) => !team.city)
+      .map((team) => ({
+        teamKey: team.teamKey,
+        name: team.name,
+        country: team.country,
+      })),
+    missingCountry: all
+      .filter((team) => !team.country)
+      .map((team) => ({
+        teamKey: team.teamKey,
+        name: team.name,
+        city: team.city,
+      })),
+  };
+}
+
+export type { TeamRecord } from "./types";
 
 export default teams;
