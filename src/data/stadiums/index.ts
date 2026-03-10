@@ -1,5 +1,8 @@
 // src/data/stadiums/index.ts
 import type { StadiumRecord, StadiumStayArea, StadiumTransit } from "./types";
+import { teams } from "@/src/data/teams";
+import { cityGuides } from "@/src/data/cityGuides";
+import { normalizeCityKey } from "@/src/utils/city";
 
 import premierLeagueStadiums from "./premierLeague";
 import laLigaStadiums from "./laLiga";
@@ -33,6 +36,21 @@ import premierLeagueBosniaStadiums from "./premierLeagueBosnia";
 import leagueOfIrelandPremierStadiums from "./leagueOfIrelandPremier";
 
 type StadiumMap = Record<string, StadiumRecord>;
+
+type SimpleAuditRow = {
+  stadiumKey: string;
+  name: string;
+  city: string;
+  country: string;
+};
+
+type TeamLinkAuditRow = {
+  stadiumKey: string;
+  stadiumName: string;
+  teamKey: string;
+  expected?: string;
+  value?: string;
+};
 
 function cleanStr(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
@@ -82,7 +100,7 @@ function normalizeStringArray(value: unknown): string[] | undefined {
     .map((x) => cleanStr(x))
     .filter((x): x is string => !!x);
 
-  return out.length ? out : undefined;
+  return out.length ? Array.from(new Set(out)) : undefined;
 }
 
 function isStadiumRecord(value: unknown): value is StadiumRecord {
@@ -170,7 +188,7 @@ const SOURCE_MAP: Record<string, StadiumMap> = {
 };
 
 const duplicateStadiumKeys: Record<string, string[]> = {};
-const invalidEntries: { source: string; rawKey: string }[] = {};
+const invalidEntries: { source: string; rawKey: string }[] = [];
 
 function buildStadiumRegistry() {
   const merged: StadiumMap = {};
@@ -258,6 +276,114 @@ export function getAllStadiums(): StadiumRecord[] {
 export function getStadiumsDebugSnapshot() {
   const all = Object.values(stadiums);
 
+  const teamKeysReferencedByStadiums = new Set(
+    all.flatMap((stadium) => stadium.teamKeys.map((teamKey) => normalizeKey(teamKey)))
+  );
+
+  const stadiumKeysReferencedByTeams = new Set(
+    Object.values(teams)
+      .map((team) => normalizeKey(team.stadiumKey))
+      .filter(Boolean)
+  );
+
+  const orphanTeamKeysOnStadiums: TeamLinkAuditRow[] = [];
+  const teamsMissingStadiumRecord = Object.values(teams)
+    .filter((team) => team.stadiumKey && !stadiums[normalizeKey(team.stadiumKey)])
+    .map((team) => ({
+      teamKey: team.teamKey,
+      name: team.name,
+      city: team.city ?? "",
+      country: team.country ?? "",
+      stadiumKey: team.stadiumKey ?? "",
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  const stadiumCityMismatches: TeamLinkAuditRow[] = [];
+  const stadiumCountryMismatches: TeamLinkAuditRow[] = [];
+  const stadiumsWithNoMatchingTeamRefs: SimpleAuditRow[] = [];
+  const stadiumCitiesMissingGuide: SimpleAuditRow[] = [];
+
+  for (const stadium of all) {
+    let matchedAnyTeam = false;
+
+    for (const teamKey of stadium.teamKeys) {
+      const team = teams[normalizeKey(teamKey)];
+      if (!team) {
+        orphanTeamKeysOnStadiums.push({
+          stadiumKey: stadium.stadiumKey,
+          stadiumName: stadium.name,
+          teamKey,
+        });
+        continue;
+      }
+
+      matchedAnyTeam = true;
+
+      const teamCity = cleanStr(team.city);
+      const teamCountry = cleanStr(team.country);
+
+      if (teamCity && stadium.city && teamCity !== stadium.city) {
+        stadiumCityMismatches.push({
+          stadiumKey: stadium.stadiumKey,
+          stadiumName: stadium.name,
+          teamKey: team.teamKey,
+          value: stadium.city,
+          expected: teamCity,
+        });
+      }
+
+      if (teamCountry && stadium.country && teamCountry !== stadium.country) {
+        stadiumCountryMismatches.push({
+          stadiumKey: stadium.stadiumKey,
+          stadiumName: stadium.name,
+          teamKey: team.teamKey,
+          value: stadium.country,
+          expected: teamCountry,
+        });
+      }
+    }
+
+    if (!matchedAnyTeam && stadium.teamKeys.length > 0) {
+      stadiumsWithNoMatchingTeamRefs.push({
+        stadiumKey: stadium.stadiumKey,
+        name: stadium.name,
+        city: stadium.city,
+        country: stadium.country,
+      });
+    }
+
+    const cityKey = normalizeCityKey(stadium.city);
+    if (cityKey && !cityGuides[cityKey]) {
+      stadiumCitiesMissingGuide.push({
+        stadiumKey: stadium.stadiumKey,
+        name: stadium.name,
+        city: stadium.city,
+        country: stadium.country,
+      });
+    }
+  }
+
+  const stadiumsNotReferencedByAnyTeam = all
+    .filter((stadium) => !stadiumKeysReferencedByTeams.has(normalizeKey(stadium.stadiumKey)))
+    .map((stadium) => ({
+      stadiumKey: stadium.stadiumKey,
+      name: stadium.name,
+      city: stadium.city,
+      country: stadium.country,
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  const teamsNotReferencedInsideStadiums = Object.values(teams)
+    .filter((team) => !teamKeysReferencedByStadiums.has(normalizeKey(team.teamKey)))
+    .map((team) => ({
+      teamKey: team.teamKey,
+      name: team.name,
+      city: team.city ?? "",
+      country: team.country ?? "",
+      stadiumKey: team.stadiumKey ?? "",
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
   return {
     count: all.length,
     bySource,
@@ -292,7 +418,10 @@ export function getStadiumsDebugSnapshot() {
         country: stadium.country,
       })),
     weakTransit: all
-      .filter((stadium) => (stadium.transit?.length ?? 0) > 0 && (stadium.transit?.length ?? 0) < 2)
+      .filter(
+        (stadium) =>
+          (stadium.transit?.length ?? 0) > 0 && (stadium.transit?.length ?? 0) < 2
+      )
       .map((stadium) => ({
         stadiumKey: stadium.stadiumKey,
         name: stadium.name,
@@ -309,7 +438,10 @@ export function getStadiumsDebugSnapshot() {
         country: stadium.country,
       })),
     weakStayAreas: all
-      .filter((stadium) => (stadium.stayAreas?.length ?? 0) > 0 && (stadium.stayAreas?.length ?? 0) < 2)
+      .filter(
+        (stadium) =>
+          (stadium.stayAreas?.length ?? 0) > 0 && (stadium.stayAreas?.length ?? 0) < 2
+      )
       .map((stadium) => ({
         stadiumKey: stadium.stadiumKey,
         name: stadium.name,
@@ -349,6 +481,16 @@ export function getStadiumsDebugSnapshot() {
         city: stadium.city,
         country: stadium.country,
       })),
+    audits: {
+      orphanTeamKeysOnStadiums,
+      teamsMissingStadiumRecord,
+      stadiumCityMismatches,
+      stadiumCountryMismatches,
+      stadiumsWithNoMatchingTeamRefs,
+      stadiumsNotReferencedByAnyTeam,
+      teamsNotReferencedInsideStadiums,
+      stadiumCitiesMissingGuide,
+    },
   };
 }
 
