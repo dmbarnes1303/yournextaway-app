@@ -12,19 +12,19 @@ export const allsvenskanStadiums: Record<string, StadiumRecord> = {
     opened: 2012,
     teamKeys: ["aik"],
     airport: "Stockholm Arlanda Airport (ARN)",
-    distanceFromAirportKm: 36,
+    distanceFromAirportKm: 34,
     transit: [
-      { label: "Solna Station", minutes: 8, note: "best direct rail option" },
-      { label: "Stockholm Odenplan", minutes: 15, note: "strong city transfer point" },
-      { label: "Stockholm Central", minutes: 20, note: "best mainline hub" },
+      { label: "Solna Station", minutes: 8, note: "best rail-linked matchday anchor" },
+      { label: "Stockholm Central Station", minutes: 15, note: "best mainline visitor base" },
     ],
     stayAreas: [
-      { area: "Norrmalm / Central Stockholm", why: "Best all-round base for hotels, nightlife and transport" },
-      { area: "Solna", why: "Closest practical stay if stadium convenience matters most" },
+      { area: "Central Stockholm", why: "Best overall base for hotels, nightlife and easy onward rail links" },
+      { area: "Solna", why: "Best pure convenience option if the AIK match is your main focus" },
     ],
     tips: [
-      "Huge national-arena setup, so give yourself extra time for entry and exit on major matchdays",
-      "Central Stockholm is usually the smarter overnight base unless you want pure ground proximity",
+      "This is the biggest arena trip in the league, so build in a bit more time for entry and exit flow.",
+      "Central Stockholm is usually the smarter overnight base unless you only care about being close to AIK.",
+      "Treat the ground as a transport move from the city rather than a reason to relocate your whole weekend.",
     ],
   },
 
@@ -39,17 +39,17 @@ export const allsvenskanStadiums: Record<string, StadiumRecord> = {
     airport: "Stockholm Arlanda Airport (ARN)",
     distanceFromAirportKm: 43,
     transit: [
-      { label: "Globen", minutes: 6, note: "closest simple metro access" },
-      { label: "Gullmarsplan", minutes: 10, note: "best wider metro interchange" },
-      { label: "Stockholm Central", minutes: 15, note: "best mainline rail base" },
+      { label: "Gullmarsplan", minutes: 10, note: "best metro-linked approach point" },
+      { label: "Stockholm Central Station", minutes: 18, note: "best mainline base for most visitors" },
     ],
     stayAreas: [
-      { area: "Södermalm", why: "Best nightlife-heavy base and very convenient for the arena" },
-      { area: "Norrmalm / Central Stockholm", why: "Best all-round hotel and transport choice" },
+      { area: "Södermalm", why: "Best football-weekend base for bars, food and easy 3Arena access" },
+      { area: "Central Stockholm", why: "Best all-round base if you want cleaner rail links and broader hotel choice" },
     ],
     tips: [
-      "Shared major arena, so event-style security and entry flow can feel bigger than a typical club ground",
-      "Södermalm is the strongest football-weekend base if you want bars and easy pre/post-match movement",
+      "Shared major arena, so event-style entry flow can feel bigger and slower than a normal club ground.",
+      "Södermalm is the strongest base if you want atmosphere before and after Djurgården or Hammarby games.",
+      "Do not stay near the arena just for convenience unless the deal is unusually good.",
     ],
   },
 
@@ -68,12 +68,13 @@ export const allsvenskanStadiums: Record<string, StadiumRecord> = {
       { label: "Ullevi / Scandinavium tram stops", minutes: 6, note: "easiest local public transport access" },
     ],
     stayAreas: [
-      { area: "Central Gothenburg", why: "Best all-round base for bars, restaurants and transport" },
-      { area: "Avenyn", why: "Best for nightlife and a stronger weekend-break feel" },
+      { area: "Central Gothenburg", why: "Best all-round base for bars, restaurants and matchday simplicity" },
+      { area: "Avenyn", why: "Best for nightlife and a stronger full-weekend feel" },
     ],
     tips: [
-      "Excellent city-break stadium because central Gothenburg works better than trying to stay by the ground",
-      "Shared use means the venue is very easy to pair with wider city plans",
+      "One of the easiest stadiums in the entire project because the city centre and the ground fit together so well.",
+      "Shared use means the venue works perfectly as part of a wider Gothenburg weekend rather than a football-only stop.",
+      "Stay central and walk or tram in; there is almost no reason to complicate this one.",
     ],
   },
 
@@ -89,15 +90,16 @@ export const allsvenskanStadiums: Record<string, StadiumRecord> = {
     distanceFromAirportKm: 29,
     transit: [
       { label: "Hjalmar Brantingsplatsen", minutes: 15, note: "best wider public transport interchange on Hisingen" },
-      { label: "Central Gothenburg", minutes: 20, note: "best visitor base for hotels and nightlife" },
+      { label: "Central Gothenburg", minutes: 20, note: "best visitor base for hotels, bars and nightlife" },
     ],
     stayAreas: [
       { area: "Central Gothenburg", why: "Best choice for hotels, food, nightlife and simple match travel" },
-      { area: "Lindholmen", why: "Closer west-side option if you want a quieter stay" },
+      { area: "Lindholmen", why: "Closer west-side option if you want a quieter stay without sacrificing access" },
     ],
     tips: [
-      "Do not build your stay around the immediate stadium area unless price is exceptional",
-      "Central Gothenburg gives you a much stronger trip overall than staying out on Hisingen",
+      "Do not build your whole stay around the immediate stadium area unless the price difference is huge.",
+      "Central Gothenburg gives you a far better overall trip than staying out on Hisingen for convenience alone.",
+      "This is best treated as a Gothenburg trip first and a Häcken ground move second.",
     ],
   },
 
@@ -112,16 +114,17 @@ export const allsvenskanStadiums: Record<string, StadiumRecord> = {
     airport: "Halmstad Airport (HAD)",
     distanceFromAirportKm: 3,
     transit: [
-      { label: "Halmstad Central Station", minutes: 25, note: "best rail hub then bus/taxi onward" },
+      { label: "Halmstad Central Station", minutes: 25, note: "best rail hub before the final local leg" },
       { label: "Halmstad city centre", minutes: 15, note: "best practical visitor base" },
     ],
     stayAreas: [
-      { area: "Halmstad City Centre", why: "Best practical base for hotels, food and onward transport" },
-      { area: "West Bay / seafront area", why: "Better if you want more of a summer city-break feel" },
+      { area: "Halmstad City Centre", why: "Best practical base for hotels, food and easy onward transport" },
+      { area: "Seafront / beach area", why: "Best if you want more of a coastal overnight feel in good weather" },
     ],
     tips: [
-      "Classic older ground with a more local feel than the big-city arenas",
-      "Very easy one to combine with a simple coastal overnight rather than overcomplicate the trip",
+      "Classic older ground with more character than many newer mid-sized replacements.",
+      "Very easy one to combine with a relaxed coastal overnight rather than a rushed in-and-out trip.",
+      "If weather is decent, the city adds more to the weekend than people expect.",
     ],
   },
 
@@ -137,15 +140,16 @@ export const allsvenskanStadiums: Record<string, StadiumRecord> = {
     distanceFromAirportKm: 36,
     transit: [
       { label: "Brommaplan", minutes: 15, note: "best metro-linked starting point" },
-      { label: "Stockholm Central", minutes: 25, note: "best mainline base" },
+      { label: "Stockholm Central Station", minutes: 25, note: "best mainline base" },
     ],
     stayAreas: [
-      { area: "Central Stockholm", why: "Best all-round visitor base for transport and nightlife" },
+      { area: "Central Stockholm", why: "Best all-round visitor base for transport, nightlife and food" },
       { area: "Bromma", why: "Closest simple option if convenience matters more than atmosphere" },
     ],
     tips: [
-      "Small-scale ground, so treat this as a Stockholm trip first and a stadium stop second",
-      "Central Stockholm is usually the right answer for staying overnight",
+      "Small-scale ground, so treat this as a Stockholm trip first and a stadium stop second.",
+      "Central Stockholm is usually the right answer for staying overnight.",
+      "This is a niche-capital-club experience, not a giant arena day out.",
     ],
   },
 
@@ -161,15 +165,16 @@ export const allsvenskanStadiums: Record<string, StadiumRecord> = {
     distanceFromAirportKm: 40,
     transit: [
       { label: "Borås Central Station", minutes: 20, note: "best rail entry point" },
-      { label: "Borås city centre", minutes: 15, note: "best practical base" },
+      { label: "Borås city centre", minutes: 15, note: "best practical overnight base" },
     ],
     stayAreas: [
-      { area: "Borås City Centre", why: "Best practical option for station access and short walks" },
+      { area: "Borås City Centre", why: "Best practical option for station access and short matchday movement" },
       { area: "Central Gothenburg", why: "Better if you want stronger nightlife and are happy to travel in" },
     ],
     tips: [
-      "Borås works as a simple football stop, but Gothenburg is often the stronger overnight city-break base",
-      "Good option if you want a straightforward matchday without major-city hassle",
+      "Borås works as a simple football stop, but Gothenburg is often the stronger overnight city-break base.",
+      "Good option if you want a straightforward matchday without major-city hassle.",
+      "Plan the post-match return early if you are not staying over.",
     ],
   },
 
@@ -188,12 +193,13 @@ export const allsvenskanStadiums: Record<string, StadiumRecord> = {
       { label: "Uppsala city centre", minutes: 12, note: "easy walkable visitor base" },
     ],
     stayAreas: [
-      { area: "Uppsala City Centre", why: "Best overall base for a compact, walkable football trip" },
+      { area: "Uppsala City Centre", why: "Best overall base for a compact walkable football trip" },
       { area: "Around the station", why: "Best if rail convenience matters most" },
     ],
     tips: [
-      "Very manageable trip because Uppsala is compact and easy to do without overplanning",
-      "Best treated as a clean one-night football city break rather than a pure day trip if you have time",
+      "Very manageable trip because Uppsala is compact and easy to handle without overplanning.",
+      "Best treated as a clean one-night football city break rather than a same-day dash if you have the time.",
+      "The city-to-stadium move is easy enough that central accommodation is the obvious choice.",
     ],
   },
 
@@ -213,11 +219,12 @@ export const allsvenskanStadiums: Record<string, StadiumRecord> = {
     ],
     stayAreas: [
       { area: "Kalmar City Centre", why: "Best for restaurants, hotels and simple onward transport" },
-      { area: "Near Kvarnholmen", why: "Best visitor-friendly historic centre feel" },
+      { area: "Kvarnholmen", why: "Best if you want a more visitor-friendly historic-centre feel" },
     ],
     tips: [
-      "Easy stadium to pair with a relaxed short city break",
-      "Staying centrally works much better than trying to stay near the ground itself",
+      "Easy stadium to pair with a relaxed short city break.",
+      "Staying centrally works much better than trying to stay near the ground itself.",
+      "Kalmar is calm rather than high-intensity, so build the weekend around that.",
     ],
   },
 
@@ -240,8 +247,9 @@ export const allsvenskanStadiums: Record<string, StadiumRecord> = {
       { area: "Lilla Torg", why: "Best nightlife-heavy central stay area" },
     ],
     tips: [
-      "One of the best Scandinavian football-weekend bases because the city adds a lot beyond the match",
-      "Buy early for big games because domestic sell-outs are common",
+      "One of the best Scandinavian football-weekend bases because the city adds a lot beyond the match.",
+      "Buy early for bigger Malmö games because domestic demand can jump quickly.",
+      "The stadium is easy enough from central Malmö that there is no need to stay out near the ground.",
     ],
   },
 
@@ -256,16 +264,17 @@ export const allsvenskanStadiums: Record<string, StadiumRecord> = {
     airport: "Ronneby Airport (RNB)",
     distanceFromAirportKm: 45,
     transit: [
-      { label: "Sölvesborg", minutes: 20, note: "best nearby transport anchor before final leg" },
-      { label: "Hällevik centre", minutes: 10, note: "small local base close to the ground" },
+      { label: "Sölvesborg", minutes: 20, note: "best nearby transport anchor before the final leg" },
+      { label: "Hällevik centre", minutes: 10, note: "closest local anchor to the ground" },
     ],
     stayAreas: [
-      { area: "Hällevik", why: "Closest possible base for a pure football stop" },
-      { area: "Sölvesborg", why: "Best practical nearby stay with more options" },
+      { area: "Hällevik", why: "Closest possible base for a pure football-place stop" },
+      { area: "Sölvesborg", why: "Best practical nearby stay with more hotel and transport options" },
     ],
     tips: [
-      "Unique small-ground setting and one of the most distinctive trips in Sweden",
-      "Treat this as a niche football pilgrimage rather than a polished city-break destination",
+      "Unique small-ground setting and one of the most distinctive trips in Sweden.",
+      "Treat this as a niche football pilgrimage rather than a polished city-break destination.",
+      "The surrounding village and coastline are part of what make the trip worth doing.",
     ],
   },
 
@@ -284,12 +293,13 @@ export const allsvenskanStadiums: Record<string, StadiumRecord> = {
       { label: "Karlskoga", minutes: 20, note: "best nearby larger base" },
     ],
     stayAreas: [
-      { area: "Degerfors", why: "Best for pure match convenience" },
+      { area: "Degerfors", why: "Best for pure match convenience and football-place immersion" },
       { area: "Karlskoga", why: "Better for hotel choice and a more practical overnight stop" },
     ],
     tips: [
-      "Very old-school football stop with limited frills",
-      "This is a football-first trip, not a glamour city break",
+      "Very old-school football stop with limited frills, which is exactly why some people will love it.",
+      "This is a football-first trip, not a glamour city break.",
+      "Plan food and transport early because small-town margin for improvisation is low.",
     ],
   },
 
@@ -309,11 +319,12 @@ export const allsvenskanStadiums: Record<string, StadiumRecord> = {
     ],
     stayAreas: [
       { area: "Västerås City Centre", why: "Best for hotels, food and onward transport" },
-      { area: "Near central station", why: "Best if train convenience matters most" },
+      { area: "Near Central Station", why: "Best if train convenience matters most" },
     ],
     tips: [
-      "Simple, practical football stop rather than a huge arena experience",
-      "City-centre Västerås is the right base unless you only care about ground proximity",
+      "Simple practical football stop rather than a giant arena experience.",
+      "City-centre Västerås is the right base unless you only care about ground proximity.",
+      "Works well for one overnight if you keep expectations realistic and the plan tidy.",
     ],
   },
 };
