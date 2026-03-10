@@ -66,6 +66,19 @@ export function normalizeTeamKey(input: string): string {
     .replace(/^-|-$/g, "");
 }
 
+function normalizeCityKey(input: string): string {
+  const s = stripDiacritics(String(input ?? ""))
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, "and")
+    .replace(/['’]/g, "");
+
+  return s
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
 function cleanStr(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
   const v = value.trim();
@@ -94,24 +107,38 @@ function normalizeAliases(value: unknown): string[] | undefined {
   return out.length ? Array.from(new Set(out)) : undefined;
 }
 
+function normalizeClubColors(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+
+  const out = value
+    .map((x) => cleanStr(x))
+    .filter((x): x is string => !!x);
+
+  return out.length ? Array.from(new Set(out)) : undefined;
+}
+
 function normalizeTeam(inputKey: string, team: TeamRecord): TeamRecord {
   const teamKey = normalizeTeamKey(team.teamKey || inputKey);
+  const city = cleanStr(team.city);
+  const explicitCityKey = cleanStr(team.cityKey);
+  const cityKey = explicitCityKey
+    ? normalizeCityKey(explicitCityKey)
+    : city
+      ? normalizeCityKey(city)
+      : undefined;
 
   return {
     teamKey,
     teamId: cleanNum(team.teamId),
     name: cleanStr(team.name) ?? teamKey,
     country: cleanStr(team.country),
-    city: cleanStr(team.city),
+    city,
+    cityKey,
     leagueId: cleanNum(team.leagueId),
     season: cleanNum(team.season),
     stadiumKey: cleanStr(team.stadiumKey),
     founded: cleanNum(team.founded),
-    clubColors: Array.isArray(team.clubColors)
-      ? team.clubColors
-          .map((x) => cleanStr(x))
-          .filter((x): x is string => !!x)
-      : undefined,
+    clubColors: normalizeClubColors(team.clubColors),
     aliases: normalizeAliases(team.aliases),
   };
 }
@@ -289,6 +316,15 @@ export function getTeamsByCity(city: string): TeamRecord[] {
   );
 }
 
+export function getTeamsByCityKey(cityKey: string): TeamRecord[] {
+  const key = normalizeCityKey(cityKey);
+  if (!key) return [];
+
+  return Object.values(teams).filter(
+    (team) => normalizeCityKey(team.cityKey ?? "") === key
+  );
+}
+
 export function getTeamsDebugSnapshot() {
   const all = Object.values(teams);
 
@@ -301,6 +337,7 @@ export function getTeamsDebugSnapshot() {
         name: team.name,
         country: team.country,
         city: team.city,
+        cityKey: team.cityKey,
       })),
     missingLeagueId: all
       .filter((team) => team.leagueId == null)
@@ -309,6 +346,7 @@ export function getTeamsDebugSnapshot() {
         name: team.name,
         country: team.country,
         city: team.city,
+        cityKey: team.cityKey,
       })),
     missingStadiumKey: all
       .filter((team) => !team.stadiumKey)
@@ -317,6 +355,7 @@ export function getTeamsDebugSnapshot() {
         name: team.name,
         country: team.country,
         city: team.city,
+        cityKey: team.cityKey,
       })),
     missingCity: all
       .filter((team) => !team.city)
@@ -325,12 +364,21 @@ export function getTeamsDebugSnapshot() {
         name: team.name,
         country: team.country,
       })),
+    missingCityKey: all
+      .filter((team) => !team.cityKey)
+      .map((team) => ({
+        teamKey: team.teamKey,
+        name: team.name,
+        country: team.country,
+        city: team.city,
+      })),
     missingCountry: all
       .filter((team) => !team.country)
       .map((team) => ({
         teamKey: team.teamKey,
         name: team.name,
         city: team.city,
+        cityKey: team.cityKey,
       })),
   };
 }
