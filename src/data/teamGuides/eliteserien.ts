@@ -1,7 +1,7 @@
 import type { TeamGuide } from "./types";
 
 export const eliteserienTeamGuides: Record<string, TeamGuide> = {
-  "aalesund": {
+  aalesund: {
     teamKey: "aalesund",
     name: "Aalesund",
     cityKey: "alesund",
@@ -373,7 +373,7 @@ export const eliteserienTeamGuides: Record<string, TeamGuide> = {
     updatedAt: "2026-03-09",
   },
 
-  kristiansand: {
+  kristiansund: {
     teamKey: "kristiansund",
     name: "Kristiansund",
     cityKey: "kristiansund",
