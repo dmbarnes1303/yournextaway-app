@@ -3,15 +3,13 @@ import type { CityGuide } from "./types";
 const GYG = {
   oslo: "https://www.getyourguide.com/en-gb/oslo-l38/?partner_id=MAQJREP&utm_medium=online_publisher",
   bergen: "https://www.getyourguide.com/en-gb/bergen-l1132/?partner_id=MAQJREP&utm_medium=online_publisher",
-  trondheim:
-    "https://www.getyourguide.com/en-gb/trondheim-l32375/?partner_id=MAQJREP&utm_medium=online_publisher",
-  stavanger:
-    "https://www.getyourguide.com/en-gb/stavanger-l4561/?partner_id=MAQJREP&utm_medium=online_publisher",
+  trondheim: "https://www.getyourguide.com/en-gb/trondheim-l32375/?partner_id=MAQJREP&utm_medium=online_publisher",
+  stavanger: "https://www.getyourguide.com/en-gb/stavanger-l4561/?partner_id=MAQJREP&utm_medium=online_publisher",
   tromso: "https://www.getyourguide.com/en-gb/tromso-l32375/?partner_id=MAQJREP&utm_medium=online_publisher",
   alesund: "https://www.getyourguide.com/en-gb/alesund-l4559/?partner_id=MAQJREP&utm_medium=online_publisher",
   bodo: "https://www.getyourguide.com/en-gb/bodo-l32374/?partner_id=MAQJREP&utm_medium=online_publisher",
-  kristiansand:
-    "https://www.getyourguide.com/en-gb/kristiansand-l32378/?partner_id=MAQJREP&utm_medium=online_publisher",
+  kristiansand: "https://www.getyourguide.com/en-gb/kristiansand-l32378/?partner_id=MAQJREP&utm_medium=online_publisher",
+  molde: "https://www.getyourguide.com/en-gb/molde-l151204/?partner_id=MAQJREP&utm_medium=online_publisher",
 } as const;
 
 export const eliteserienCityGuides: Record<string, CityGuide> = {
@@ -368,9 +366,10 @@ export const eliteserienCityGuides: Record<string, CityGuide> = {
   },
 
   molde: {
-    cityId: "molde",
-    name: "Molde",
-    country: "Norway",
+  cityId: "molde",
+  name: "Molde",
+  country: "Norway",
+  thingsToDoUrl: GYG.molde,
     overview:
       "Molde is a compact, very manageable football city that benefits from both scenery and low-friction logistics. It is not a huge nightlife machine, but it works extremely well for a football-first overnight because the city, stadium, and practical travel pieces line up cleanly. The smart move is staying central and keeping the whole trip simple.",
 
