@@ -55,6 +55,49 @@ export const eliteserienCityGuides: Record<string, CityGuide> = {
       "City centre, Bjørvika, or Grønland are the strongest bases. You get transport, nightlife, and easy onward movement without sacrificing the wider city-break feel. There is very little logic in staying hyper-close to either ground unless the hotel deal is exceptional.",
   },
 
+  bodo: {
+    cityId: "bodo",
+    name: "Bodø",
+    country: "Norway",
+    overview:
+      "Bodø is one of the most distinctive football destinations in the entire app because the city and club are inseparable from the wider northern setting. This is not a generic weekend break with a stadium bolted on. The geography, weather, light, and the fact that Bodø/Glimt have become a serious football force all combine to make the trip feel sharper and more memorable than the city’s raw size might suggest. The smart approach is simple: stay central, respect the conditions, and let the destination itself do half the work.",
+
+    topThings: [
+      { title: "Harbourfront walk", tip: "Best simple first move after arrival to understand the city’s setting." },
+      { title: "Seafront and mountain views", tip: "The visual payoff is the point, so do this when conditions are clear." },
+      { title: "Central Bodø loop", tip: "Compact and practical. Enough to give the trip shape without forcing fake sightseeing." },
+      { title: "Aspmyra approach", tip: "One of the easiest stadium moves in the whole project, which is part of the appeal." },
+      { title: "Pre-match central meal", tip: "Eat in town and keep the whole day low-friction." },
+      { title: "Weather-aware coffee stop", tip: "Useful because conditions matter here more than in most league cities." },
+      { title: "Post-match central reset", tip: "Head back into the centre rather than ending the night at the ground." },
+      { title: "Morning coastal air walk", tip: "Good final block if you stayed over and the weather behaves." },
+      { title: "Airport-to-city efficiency", tip: "A rare place where travel logistics are genuinely easy if you stay disciplined." },
+      { title: "Football-first northern-city rhythm", tip: "The destination works best when you stop trying to overfill it." },
+    ],
+
+    tips: [
+      "Bodø is one of the easiest airport-to-stadium cities in the whole app.",
+      "Weather is not a footnote here, so plan properly.",
+      "Stay central and keep everything simple.",
+      "Bodø/Glimt make this one of the strongest pure football trips in Norway.",
+      "This works better as a clean overnight than as a rushed same-day dash.",
+    ],
+
+    food: [
+      "Simple central dinners",
+      "Seafood if you want the most location-specific option",
+      "Warm café stops in poor weather",
+      "Straightforward pre-match meals in the centre",
+      "Coffee and bakery stops around the core",
+    ],
+
+    transport:
+      "Bodø is unusually easy by football-trip standards. The airport is extremely close, the city is compact, and Aspmyra is simple from a central base. The real variable is not complexity; it is whether you respect timing and conditions properly.",
+
+    accommodation:
+      "Stay in central Bodø. That gives you the best combination of airport ease, walkable city movement, food options, and straightforward matchday access. There is very little logic in staying anywhere else unless price forces the issue.",
+  },
+
   bergen: {
     cityId: "bergen",
     name: "Bergen",
