@@ -11,76 +11,56 @@ const bundesligaTeamGuides: Record<string, TeamGuide> = {
       {
         title: "Club Overview",
         body:
-          "FC Augsburg are an established Bundesliga club based in the Bavarian city of Augsburg, roughly one hour northwest of Munich. Since stabilising themselves in Germany’s top flight in the 2010s, Augsburg have developed a reputation as a compact, hard-working side that regularly competes above expectations. The club represents a mid-sized historic city with a relaxed atmosphere, making it a good choice for travellers wanting a calmer German football experience outside the major tourist hubs.",
+          "FC Augsburg are one of the Bundesliga’s more grounded survival-era success stories: a club without giant-club mythology, but with enough structural competence, realism, and resilience to establish themselves as a credible long-term top-flight presence. Augsburg do not sell glamour. They sell stubbornness, discipline, and the ability to make life awkward for clubs with more money and bigger names.\n\nFor neutral travellers, Augsburg offer a calmer German football stop than Munich, Dortmund, or Hamburg. The club feel local, the city is attractive without being overwhelming, and the matchday experience is straightforward rather than overproduced.",
       },
       {
-        title: "Stadium: WWK Arena",
+        title: "History & Legacy",
         body:
-          "WWK Arena is a modern 30,000-capacity stadium located in the southern outskirts of Augsburg. Opened in 2009, it offers excellent sightlines, a steep lower tier close to the pitch, and efficient concourses. Facilities are modern, queues move quickly, and mobile ticket scanning is standard. Covered seating protects most areas from bad weather.",
+          "Augsburg’s football history is not built on long eras of national dominance. Their modern significance comes from building and protecting Bundesliga status through smart management rather than grand historic entitlement.\n\nThat matters because not every meaningful football club is a former giant. Augsburg’s legacy is increasingly about proving that a well-run mid-sized city club can survive in Germany’s top tier without pretending to be something it is not.\n\nTheir importance in the modern Bundesliga is tied to continuity and overachievement rather than silverware.",
       },
       {
-        title: "Best Areas to Sit",
+        title: "Recent Seasons",
         body:
-          "The main stand (Westtribüne) provides central views and the best overall perspective. East Stand seating offers good value and balanced angles. Behind-goal sections are cheaper and louder, while upper tiers provide a broader tactical view. For neutral visitors, central lower-tier seats in either sideline stand offer the best blend of atmosphere and comfort.",
+          "Recent Augsburg seasons have usually been judged through one main lens: survival with dignity, not collapse.\n\nPatterns:\n• frequent lower-midtable or survival-focused campaigns\n• strong reliance on home results and emotional momentum\n• success measured by staying in the league and looking competitive rather than drifting passively toward relegation\n\nAugsburg are rarely expected to chase Europe seriously. Their real benchmark is remaining hard to kill and credible within Bundesliga reality.",
       },
       {
-        title: "Getting to WWK Arena",
+        title: "Playing Style",
         body:
-          'From Augsburg Hauptbahnhof (main station), take Tram Line 3 towards Inninger Straße and exit at "Stadion" stop. The journey takes around 15 minutes, followed by a short walk. On matchdays, additional services usually operate. Driving is possible, but public transport is strongly recommended due to limited parking.',
+          "Augsburg are generally strongest when the football is direct, combative, and built around effort rather than over-elaboration.\n\nCommon traits:\n• compact shape without the ball\n• direct progression and willingness to go forward early\n• emphasis on physical duels and second balls\n• greater effectiveness when the match becomes uncomfortable rather than elegant\n\nWhen Augsburg are good, they make better-resourced teams hate the game. That is part of the club’s value.",
       },
       {
-        title: "Matchday Timing",
+        title: "Stadium Profile",
         body:
-          "Arriving at the stadium area 60–90 minutes before kickoff is ideal. This allows time for security checks, food and drinks, and exploring the fan zone areas. Gates typically open around 90 minutes before kickoff.",
+          "WWK Arena is a modern, functional Bundesliga stadium.\n\nApproximate capacity: 30,000+.\n\nIt is clean, easy to navigate, and built more for efficiency than theatrical grandeur. Sightlines are strong, the lower tiers feel close enough to the pitch, and the venue suits Augsburg’s identity: practical, serious, and not interested in fake glamour.",
       },
       {
-        title: "Food & Drink Around the Stadium",
+        title: "Atmosphere & Matchday Feel",
         body:
-          "Classic German stadium food is widely available: bratwurst, currywurst, pretzels, fries, and local beer. Prices are reasonable by Bundesliga standards. For better dining, eat in the city centre before travelling out to the stadium.",
-      },
-      {
-        title: "Pre-Match Areas in Augsburg",
-        body:
-          "Augsburg city centre around Maximilianstraße and Rathausplatz has numerous pubs, cafés, and restaurants. Popular pre-match choices include traditional Bavarian beer halls and casual bars near Königsplatz. The city centre has a relaxed, walkable feel.",
-      },
-      {
-        title: "Neighbourhood Guide",
-        body:
-          "Augsburg’s Old Town (Altstadt) features historic canals, colourful buildings, and small squares. The Fugger district and Rathausplatz area are good bases for visitors. Most nightlife and dining is concentrated in and around the historic core.",
-      },
-      {
-        title: "Where to Stay",
-        body:
-          "Staying near Augsburg Hauptbahnhof or in the Altstadt offers the best access to transport, dining, and nightlife. Hotels near Königsplatz provide easy tram connections to the stadium and the wider city.",
-      },
-      {
-        title: "Things to Do (Non-Football)",
-        body:
-          "Visit the Fuggerei (world’s oldest social housing complex), Augsburg Cathedral, and the Renaissance-style Town Hall. The city’s canal system is a UNESCO World Heritage Site. Day trips to Munich are easy by train.",
-      },
-      {
-        title: "Typical Atmosphere",
-        body:
-          "Crowds are loyal, vocal, and family-friendly. Expect coordinated chanting, flags, and steady noise rather than constant ultras-led displays. The atmosphere is authentic and welcoming for visiting neutrals.",
+          "Augsburg’s atmosphere is more authentic than spectacular.\n\nTypical patterns:\n• steady local support rather than giant visual showmanship\n• stronger volume in close games and against bigger opponents\n• a matchday feel driven by competitive edge and local identity more than by tourism or spectacle\n\nFor neutrals, the appeal is that it feels like a proper Bundesliga home game without becoming overwhelming or performative.",
       },
       {
         title: "Rivalries",
         body:
-          "Regional tension exists with Bayern Munich, though it is not a classic derby in competitive balance. Matches against nearby Bavarian clubs carry added edge.",
+          "Bayern Munich carry the most obvious Bavarian tension, even if the balance of power makes it a symbolic rivalry more than an equal-feeling one.\n\nRegional and southern-Germany fixtures tend to matter most because they sharpen Augsburg’s sense of place within the league hierarchy.",
       },
       {
-        title: "Club Identity & Colours",
+        title: "Legends",
         body:
-          "Augsburg traditionally play in red, green, and white. The club identity centres on resilience, community roots, and overachievement within Bundesliga constraints.",
+          "Augsburg’s modern legends are more likely to be defined by service, stability, and helping the club belong at Bundesliga level than by global fame. That fits the club.\n\nLegend culture here is about contribution to establishment and survival rather than dynasty-building.",
       },
       {
-        title: "Practical Tips",
+        title: "Supporter Culture",
         body:
-          "Cashless payment is standard inside the stadium. Bring a light jacket in winter months as Augsburg can be cold. Trams after matches can be busy; waiting 15–20 minutes often makes boarding easier.",
+          "Augsburg support is local, realistic, and grounded.\n\nKey traits:\n• appreciation for effort and structure\n• little patience for soft, passive performances\n• a clear sense that the club should remain hard to beat even when outgunned\n\nThis is not a fanbase built on fantasy. It is built on realism, pride, and stubbornness.",
+      },
+      {
+        title: "Neutral Visitor Notes",
+        body:
+          "• Good choice if you want a calmer Bundesliga trip with a proper local feel.\n• Better as a city-and-football weekend than as a stadium-only bucket-list stop.\n• The city itself improves the trip a lot.\n• Strong option for travellers who value authenticity over mega-club scale.",
       },
     ],
-    links: [{ label: "Official Website", url: "https://www.fcaugsburg.de" }],
-    updatedAt: "2026-01-27",
+    links: [{ label: "Official site", url: "https://www.fcaugsburg.de" }],
+    updatedAt: "2026-03-10",
   },
 
   "bayern-munich": {
@@ -93,56 +73,56 @@ const bundesligaTeamGuides: Record<string, TeamGuide> = {
       {
         title: "Club Overview",
         body:
-          "Bayern Munich are Germany’s reference institution: the club everyone measures themselves against, and the club that has normalised domestic dominance to the point where merely winning trophies isn’t a story anymore — how they win is.\n\nBayern’s identity is built on relentless competitiveness, elite squad depth, and a culture that treats pressure as oxygen. They operate less like a traditional ‘big club’ and more like a high-performance machine: constant standards, constant expectation, constant correction when anything slips.\n\nFor neutral travellers, Bayern are the cleanest version of the ‘elite European night’ experience in Germany: a world-famous stadium, a massive global presence, and a matchday operation that feels slick, modern, and major-event from the moment you arrive.",
+          "Bayern Munich are Germany’s reference institution: the club every other German side is measured against, and the club that has normalised domestic dominance to the point where merely winning is not enough. Bayern are judged on scale, style, authority, and whether they still look like Bayern.\n\nTheir identity is built on standards. They do not really live in the same emotional ecosystem as clubs whose ambitions revolve around survival or occasional qualification. Bayern operate like a permanent elite operation: constant squad quality, constant pressure, and constant expectation.\n\nFor neutral travellers, Bayern offer the cleanest major-club German football experience: iconic stadium, enormous scale, world-class infrastructure, and a matchday that feels like a genuine European heavyweight event.",
       },
       {
         title: "History & Legacy",
         body:
-          "Bayern’s rise from a strong domestic club into a global superpower is one of European football’s defining stories.\n\nThey are not just successful — they are structurally successful. Bayern built a model where elite players inside Germany often see them as the natural final step, and where the club’s governance and planning tend to outlast individual managers, cycles, or squads.\n\nTheir legacy includes repeated European Cup/Champions League triumphs and a long sequence of domestic titles that has shaped German football itself. In cultural terms, Bayern are both admired and resented: admired for standards and competence, resented because their dominance can feel inevitable.\n\nBayern’s identity is also tied to Munich: prosperous, organised, confident — and unapologetically ambitious.",
+          "Bayern’s transformation from strong domestic force into global superclub is one of the defining stories of European football. Their legacy is not just based on trophies. It is based on institutional control, strategic competence, and the ability to keep resetting at elite level without falling into prolonged collapse.\n\nTheir domestic success shaped the Bundesliga itself. Their European Cup and Champions League wins gave them global legitimacy. Their ability to sign, develop, and retain elite players turned them into the natural apex of German football.\n\nBayern are admired for excellence and resented for inevitability. Both reactions are part of their legacy.",
       },
       {
         title: "Recent Seasons",
         body:
-          "Bayern’s recent seasons are still defined by expectation management rather than underdog narrative.\n\nPatterns:\n• Title races judged as ‘normal’, not exceptional.\n• Squad refresh cycles while maintaining elite baseline.\n• European performance treated as the true benchmark.\n\nEven when Bayern look imperfect, their floor remains high because of depth and institutional momentum. Supporter frustration is often triggered not by losing occasionally, but by any hint of drift: lack of intensity, lack of control, or a sense that standards are slipping.\n\nFor travellers, this means Bayern fixtures usually feel important — the club’s matches carry the weight of assumption: Bayern are here to impose themselves.",
+          "Recent Bayern seasons still live under the same brutal standard: win the league, go deep in Europe, and look like the strongest team in the country while doing it.\n\nPatterns:\n• domestic titles treated as expected rather than extraordinary\n• squad refreshes without a meaningful lowering of standards\n• European performance functioning as the real measuring stick\n\nWhat matters most is not whether Bayern compete. It is whether they impose themselves convincingly enough to satisfy a club that views excellence as routine.",
       },
       {
         title: "Playing Style",
         body:
-          "Bayern’s football is built around territorial dominance and constant pressure.\n\nCommon traits:\n• High possession with purpose — not sterile recycling.\n• Aggressive counter-pressing after losing the ball.\n• Wide threats combined with central runners.\n• A constant desire to turn sustained pressure into repeated high-quality chances.\n\nBayern often force opponents into long defensive phases. Matches can feel like a slow tightening: the opponent survives early waves, then the space collapses as Bayern increase tempo and intensity.\n\nIn big matches, Bayern are comfortable playing at a higher tactical level: managing risk, selecting moments to accelerate, and using elite individuals to tilt the outcome.",
+          "Bayern’s football is built around control, pressure, and attacking intent.\n\nCommon traits:\n• territorial dominance\n• aggressive counter-pressing\n• wide overloads and central runners\n• a refusal to let opponents settle for long\n\nAt their best, Bayern do not merely possess the ball. They squeeze games until opponents break. Their football often feels like staged pressure: the game narrows, the chances increase, and the opponent gradually loses room to breathe.",
       },
       {
         title: "Stadium Profile",
         body:
-          "Allianz Arena is one of the most recognisable stadiums in world football.\n\nApproximate capacity: 75,000+.\n\nIt’s a modern bowl with steep tiers and excellent sightlines, built for scale and spectacle. The visual identity is unmatched — even for neutrals, it feels iconic.\n\nLogistically, it’s a major-event venue: wide concourses, clear flows, and a matchday operation designed to move huge crowds efficiently.",
+          "Allianz Arena is one of the most recognisable stadiums in world football.\n\nApproximate capacity: 75,000+.\n\nThe exterior alone gives the ground bucket-list status, but the practical side is just as strong: steep tiers, excellent sightlines, efficient concourses, and a matchday operation designed for huge crowds. It is one of Europe’s clearest examples of a major modern football venue done properly.",
       },
       {
         title: "Atmosphere & Matchday Feel",
         body:
-          "The Allianz delivers a big, polished matchday atmosphere rather than a chaotic, old-ground pressure cooker.\n\nTypical patterns:\n• Strong volume during big matches and European nights.\n• Steady support in routine league fixtures, with intensity rising as the game tightens.\n• Distinct organised singing sections that can drive momentum.\n\nBecause Bayern often dominate territory, noise tends to spike around breakthrough moments, sustained pressure phases, and big chances. When the game carries stakes — title-defining, derby edge, knockout tension — the stadium feels properly electric.",
+          "Bayern’s atmosphere is large-scale, organised, and context-sensitive.\n\nTypical patterns:\n• strong volume in big domestic games and European nights\n• more measured tone in routine fixtures where superiority is assumed\n• noise spikes around pressure phases, breakthroughs, and high-stakes moments\n\nThis is not the most raw or chaotic atmosphere in Germany, but it is one of the cleanest elite-level matchday experiences in Europe.",
       },
       {
         title: "Rivalries",
         body:
-          "Borussia Dortmund – the defining modern sporting rivalry inside Germany.\n\n1860 Munich – historic city rivalry (less frequent at top level).\n\nBayern also attract a ‘superclub’ dynamic: many clubs treat matches against them as statement fixtures, which creates extra edge even without formal derby status.",
+          "Borussia Dortmund remain Bayern’s defining modern sporting rival.\n\n1860 Munich hold the historical city-rival position, though the balance of current status makes that less central in top-flight reality.\n\nMore broadly, Bayern are the club everyone wants to beat, which gives many fixtures extra emotional weight even without formal derby status.",
       },
       {
         title: "Legends",
         body:
-          "Bayern’s legend culture is stacked with era-defining names.\n\nCommonly referenced icons include:\n• Franz Beckenbauer\n• Gerd Müller\n• Oliver Kahn\n• Philipp Lahm\n• Bastian Schweinsteiger\n• Thomas Müller\n\nWhat these figures represent is not just skill, but Bayern’s core value: standards under pressure.",
+          "Bayern’s legend culture is absurdly strong because the club’s success across eras is so deep.\n\nCommonly referenced icons include:\n• Franz Beckenbauer\n• Gerd Müller\n• Oliver Kahn\n• Philipp Lahm\n• Bastian Schweinsteiger\n• Thomas Müller\n\nThese names represent not just greatness, but the Bayern demand for standards under pressure.",
       },
       {
         title: "Supporter Culture",
         body:
-          "Bayern support blends a massive local base with one of Europe’s largest global followings.\n\nKey traits:\n• Expectation of control and dominance.\n• High appreciation for intensity and professionalism.\n• Low tolerance for complacency.\n\nIt’s not a fanbase built around romantic struggle — it’s built around entitlement to excellence. That can feel harsh, but it’s also what keeps Bayern’s internal standards so high.",
+          "Bayern support combines an enormous local base with one of Europe’s biggest global followings.\n\nKey traits:\n• expectation of excellence rather than mere competitiveness\n• appreciation for professionalism, control, and authority\n• impatience with complacency or drift\n\nThis is not a supporter culture built on romance and suffering. It is built on entitlement to seriousness and elite performance.",
       },
       {
         title: "Neutral Visitor Notes",
         body:
-          "• If you want a ‘big European club’ experience in Germany, Bayern are the cleanest option.\n• Allianz Arena is a genuine bucket-list stadium — arrive early to take it in.\n• Atmosphere peaks for Dortmund, major European ties, and title-relevant fixtures.\n• Expect a slick, organised matchday with huge crowds and clear logistics.",
+          "• Best pick in Germany if you want an elite superclub experience.\n• Allianz Arena is a genuine must-see stadium.\n• Big matches and European nights offer the strongest atmosphere payoff.\n• Stay central Munich and treat the stadium as a major event leg, not your overnight base.",
       },
     ],
     links: [{ label: "Official site", url: "https://fcbayern.com/" }],
-    updatedAt: "2026-01-27",
+    updatedAt: "2026-03-10",
   },
 
   "bayer-leverkusen": {
@@ -155,56 +135,56 @@ const bundesligaTeamGuides: Record<string, TeamGuide> = {
       {
         title: "Club Overview",
         body:
-          "Bayer Leverkusen are one of Germany’s most consistently high-performing clubs outside the traditional ‘always dominant’ frame. They’ve spent long stretches living in the Champions League conversation, producing elite-level football and talent — but with a reputation shaped as much by near-misses as by silverware.\n\nLeverkusen’s identity is modern, technical, and system-led. They often feel like a club built for contemporary football: good recruitment, clear style, and a willingness to play brave, proactive football against anyone.\n\nFor neutral travellers, Leverkusen are an underrated Bundesliga experience: a compact, modern stadium, strong football quality, and a club that frequently serves up matches with tactical clarity and real pace.",
+          "Bayer Leverkusen are one of Germany’s most consistently high-level clubs outside the traditional giant frame: modern, technical, ambitious, and almost always relevant near the top end. They have long lived in the space between admired football and the frustration of near-misses, though that modern narrative shifts sharply whenever they do convert quality into silverware.\n\nLeverkusen feel like a contemporary football institution: strong recruitment, clear tactical direction, and a modern matchday product. They do not carry the folkloric weight of Dortmund or Cologne, but they are one of the Bundesliga’s most reliably serious football clubs.\n\nFor neutral travellers, Leverkusen are a very strong football-quality trip: compact stadium, high technical level, and low-friction matchday logistics.",
       },
       {
         title: "History & Legacy",
         body:
-          "Leverkusen’s legacy is unusual in German football: they are a top-level club with long-term consistency but without the historic trophy haul that matches their regular performance level.\n\nThey became a permanent Bundesliga presence through sustained organisation and development, building an identity around technical football and producing or showcasing high-level players.\n\nThe club’s mythology includes the idea of being perennially close — competing deep into title races and cups, often just falling short. That narrative can be lazy if you reduce them to it, but it also explains why Leverkusen are frequently treated as a ‘serious club’ even when they’re not being talked about as champions.\n\nIn modern eras where Leverkusen do convert performance into trophies, it lands as a cultural reset: proof that the club’s quality isn’t just aesthetic, it can be decisive.",
+          "Leverkusen’s identity is rooted in sustained competitiveness rather than historic-era dominance. Their legacy comes from behaving like a Champions League-level club often enough that nobody sees them as accidental.\n\nThey are associated with high-quality players, strong European relevance, and the long-running sense that they were often close to becoming more decorated than they were. That near-miss image can be lazy if overused, but it does explain why Leverkusen are culturally treated as a club whose football level frequently outstripped its honours haul.\n\nWhen Leverkusen do win major honours, it lands heavily because it feels like a correction, not a miracle.",
       },
       {
         title: "Recent Seasons",
         body:
-          "Leverkusen’s recent seasons are defined by high ceiling, tactical ambition, and the sense that they can look elite when everything clicks.\n\nPatterns:\n• Champions League qualification pushes as the baseline ambition.\n• Strong runs when squad balance is right.\n• Frequent emergence of high-value players who attract bigger-club attention.\n\nLeverkusen often operate in the ‘dangerous outsider’ bracket: not assumed champions every year, but absolutely capable of beating anyone and sustaining elite phases across a season.\n\nFor a neutral traveller, the key point is reliability of quality — Leverkusen games tend to feel like top-level football rather than random mid-table chaos.",
+          "Recent Leverkusen seasons have reinforced their place among Germany’s elite competitive clubs.\n\nPatterns:\n• regular Champions League or upper-table expectations\n• a very high tactical ceiling when structure and personnel align\n• a squad model built around development, resale value, and maintained competitiveness\n\nLeverkusen are no longer judged as an outsider hoping to surprise. They are judged as a side expected to matter.",
       },
       {
         title: "Playing Style",
         body:
-          "Leverkusen are typically proactive, progressive, and transition-sharp.\n\nCommon traits:\n• Fast vertical progression when space opens.\n• Wide players used to stretch and isolate defenders.\n• Midfield structure designed to move the ball forward quickly, not just circulate.\n• Aggressive counter-pressing to keep opponents pinned.\n\nLeverkusen matches can feel dynamic: they’re comfortable accelerating the game and turning possession into repeated high-quality attacks.\n\nWhen they’re at full strength, they can look ruthless — not just ‘nice to watch,’ but hard to contain.",
+          "Leverkusen are usually associated with proactive, progressive football.\n\nCommon traits:\n• fast vertical progression\n• technical central combinations\n• wide players stretching the game aggressively\n• pressing and counter-pressing used to sustain attacking control\n\nWhen they are flowing, Leverkusen games have pace and clarity. They rarely look interested in merely containing. The goal is to impose tempo and create repeated dangerous phases rather than live passively inside matches.",
       },
       {
         title: "Stadium Profile",
         body:
-          "BayArena is a modern, compact stadium known for good sightlines and a clean matchday setup.\n\nApproximate capacity: 30,000+.\n\nBecause it’s smaller than the Bundesliga’s biggest arenas, it feels tight and close to the pitch. You’re near the action almost anywhere, which helps the match feel immediate rather than distant.",
+          "BayArena is one of the Bundesliga’s most compact high-level stadiums.\n\nApproximate capacity: 30,000+.\n\nIt is modern, tightly configured, and offers excellent sightlines. What it lacks in giant-club scale, it makes up for with proximity and clarity: you feel close to the game almost everywhere.",
       },
       {
         title: "Atmosphere & Matchday Feel",
         body:
-          "The BayArena atmosphere is focused and engaged rather than overwhelmingly loud.\n\nTypical patterns:\n• Strong noise during big matches and late-game pushes.\n• More measured feel in routine fixtures.\n• A ‘watch the football’ culture where quality phases still trigger real reactions.\n\nLeverkusen can feel less theatrical than Dortmund or Frankfurt, but it’s not flat — it’s a stadium where the football itself often becomes the emotional driver.",
+          "BayArena atmosphere is focused more on football quality than on theatre.\n\nTypical patterns:\n• strong engagement in big games and title-relevant fixtures\n• less overwhelming noise than at Germany’s most mythologised grounds\n• crowd energy rising with the quality and importance of the football itself\n\nThat makes Leverkusen a very good neutral watch. The matchday is clean, modern and serious without becoming sterile.",
       },
       {
         title: "Rivalries",
         body:
-          "FC Köln – the local Rhine derby, the defining rivalry.\n\nThis fixture carries the strongest emotional edge. Beyond that, Leverkusen also sit in a broader competitive tension with Germany’s biggest clubs because of their regular top-four ambitions.",
+          "FC Köln remains Leverkusen’s defining rivalry due to local geography and contrasting football identities.\n\nBeyond that, their biggest emotionally charged fixtures often come from clashes with Germany’s other top-end clubs, because their football ambitions place them directly in that company.",
       },
       {
         title: "Legends",
         body:
-          "Leverkusen’s legend culture includes both long-term club icons and players who became global stars after passing through.\n\nCommonly referenced figures include:\n• Ulf Kirsten\n• Michael Ballack\n\nLeverkusen legends are often framed around quality and influence rather than sheer trophy count.",
+          "Leverkusen’s legend culture leans toward elite players and era-defining contributors rather than sheer trophy accumulation.\n\nCommonly referenced names include:\n• Ulf Kirsten\n• Michael Ballack\n\nThe club’s memory is built on quality, influence, and long-term top-level relevance.",
       },
       {
         title: "Supporter Culture",
         body:
-          "Leverkusen support is loyal and football-focused.\n\nKey traits:\n• Appreciation for proactive football.\n• Expectation of competing near the top end of the table.\n• Pride in being a consistently ‘serious’ Bundesliga club.\n\nThe fanbase isn’t built on permanent chaos — it’s built on a belief that Leverkusen should play well, compete well, and operate smartly.",
+          "Leverkusen support is loyal, football-focused, and shaped by expectation of serious competition.\n\nKey traits:\n• appreciation for technical, proactive football\n• pride in the club’s place near the Bundesliga summit\n• less romantic chaos than many traditional heavyweights, more emphasis on competence and quality\n\nThe fanbase expects Leverkusen to behave like a smart, ambitious club.",
       },
       {
         title: "Neutral Visitor Notes",
         body:
-          "• Great choice if you want high-quality football without mega-stadium crowds.\n• BayArena offers close-to-pitch viewing and clean logistics.\n• Best atmosphere for Köln and high-stakes top-table matches.\n• Leverkusen often deliver watchable, fast matches — a strong neutral pick.",
+          "• Excellent choice if your priority is football quality over raw mythology.\n• BayArena is one of Germany’s easiest strong-level stadium experiences.\n• Better as part of a Cologne- or Rhine-based weekend than as a Leverkusen-only city break.\n• Strong pick for watching serious top-end Bundesliga football at close range.",
       },
     ],
     links: [{ label: "Official site", url: "https://www.bayer04.de/" }],
-    updatedAt: "2026-01-27",
+    updatedAt: "2026-03-10",
   },
 
   "borussia-dortmund": {
@@ -217,56 +197,56 @@ const bundesligaTeamGuides: Record<string, TeamGuide> = {
       {
         title: "Club Overview",
         body:
-          "Borussia Dortmund are Germany’s great counterweight to Bayern Munich: a club defined by mass support, emotional intensity, and a strong sense of identity rooted in working-class culture.\n\nDortmund’s modern existence sits between challenger and nearly-there giant. They are big enough to expect title races, but operate in a league structure where Bayern’s financial and institutional advantage is constant.\n\nUnlike Bayern’s corporate efficiency, Dortmund’s identity is emotional, youth-driven, and crowd-powered.\n\nFor neutral travellers, Dortmund represent one of world football’s iconic experiences: colossal crowd, famous stand, and an atmosphere that feels alive from warm-up to final whistle.",
+          "Borussia Dortmund are Germany’s great emotional giant: a club defined by crowd power, working-class identity, and the constant sense that football here matters in a deeper, louder way than it does in most places. If Bayern represent institutional dominance, Dortmund represent belief, pressure, and the possibility of upheaval.\n\nDortmund’s appeal is not just that they are big. It is that they feel alive. The club’s best eras are tied to high-energy football, youth development, and a crowd that turns the stadium into part of the team.\n\nFor neutral travellers, Dortmund are one of the world’s essential football experiences. This is not hype. It is one of the few stadium trips where the atmosphere alone can justify the journey.",
       },
       {
         title: "History & Legacy",
         body:
-          "Founded in 1909, Dortmund established themselves as a major force in German football through multiple domestic successes and European triumphs.\n\nTheir modern legacy is shaped by two defining eras:\n• The Champions League-winning side of the late 1990s.\n• The high-pressing, high-tempo team that broke Bayern’s dominance in the early 2010s.\n\nDortmund’s legacy is tied to rebellion against inevitability. They are the club Germans look to when they want Bayern to be genuinely challenged.",
+          "Founded in 1909, Dortmund became one of Germany’s defining football institutions through domestic titles, European success, and repeated reassertions of themselves against stronger financial structures.\n\nTheir mythology is built around challenge and rebellion. Dortmund are often cast as the club that stands opposite Bayern, and that dynamic shaped much of their modern identity.\n\nThe Champions League-winning side of the 1990s and the title-winning, high-intensity teams of the early 2010s remain central to the club’s self-image. Dortmund’s history is not just successful. It is emotionally charged, and supporters carry that memory actively.",
       },
       {
         title: "Recent Seasons",
         body:
-          "Dortmund’s recent seasons show consistent competitiveness with periodic frustration.\n\nPatterns:\n• Regular Champions League qualification.\n• Strong league finishes.\n• Occasional title pushes that fall just short.\n\nThey remain structurally healthy but continue to search for the final step from contender to champion.",
+          "Recent Dortmund seasons have usually sat in the same tension: clearly elite by Bundesliga standards, but often just short of total domestic authority.\n\nPatterns:\n• regular Champions League qualification\n• periods of explosive football and title pressure\n• frustration when consistency drops at the wrong moment\n\nDortmund are judged more harshly than most clubs because their support and stature demand more than ‘good seasons’. They want a side that feels like a real challenger, not an entertaining runner-up forever.",
       },
       {
         title: "Playing Style",
         body:
-          "Dortmund traditionally favour fast, vertical attacking football.\n\nCommon traits:\n• Quick transitions.\n• High pressing.\n• Heavy use of wide attackers.\n\nThey aim to turn matches into momentum-driven contests rather than slow control battles.\n\nWhen Dortmund are confident, games feel explosive and emotionally charged.",
+          "Dortmund’s identity is traditionally tied to verticality, pace, and emotional tempo.\n\nCommon traits:\n• rapid attacking transitions\n• aggressive pressing phases\n• wide attackers driving games forward\n• a willingness to turn matches into momentum battles rather than sterile control contests\n\nWhen Dortmund are good, games feel urgent. The football and the crowd feed each other. That feedback loop is one of the club’s biggest strengths.",
       },
       {
         title: "Stadium Profile",
         body:
-          "Signal Iduna Park is Germany’s largest stadium.\n\nApproximate capacity: 81,000+.\n\nThe Südtribüne (South Stand) is Europe’s largest standing terrace and the symbolic heart of the club.",
+          "Signal Iduna Park is Germany’s largest stadium.\n\nApproximate capacity: 81,000+.\n\nIts defining feature is the Südtribüne, Europe’s biggest standing terrace and one of the most iconic supporter structures in football. The scale of the stadium is huge, but what matters more is how concentrated the atmosphere feels inside it.",
       },
       {
         title: "Atmosphere & Matchday Feel",
         body:
-          "Atmosphere is elite-level and continuous.\n\nTypical patterns:\n• Constant chanting.\n• Huge visual displays.\n• Massive noise spikes after goals.\n\nThis is one of Europe’s loudest and most intimidating environments.",
+          "This is one of the elite atmosphere stadiums in world football.\n\nTypical patterns:\n• sustained high-volume chanting\n• giant visual displays and organised supporter choreography\n• massive surges of noise around goals, pressure spells, and emotional swings\n\nA Dortmund home game does not feel like an event added to a city break. It feels like the whole trip has been leading to this.",
       },
       {
         title: "Rivalries",
         body:
-          "Schalke – Revierderby (historic and emotional).\n\nBayern Munich – modern competitive rivalry.",
+          "Schalke is the defining historical rivalry through the Revierderby, even when league alignment changes its frequency.\n\nBayern Munich are the defining modern sporting rival because they sit on the opposite end of the German power structure Dortmund keep trying to disrupt.",
       },
       {
         title: "Legends",
         body:
-          "• Michael Zorc\n• Matthias Sammer\n• Marco Reus\n• Roman Weidenfeller",
+          "Dortmund’s legend culture mixes title-era heroes, crowd icons and era-defining personalities.\n\nCommonly referenced names include:\n• Michael Zorc\n• Matthias Sammer\n• Marco Reus\n• Roman Weidenfeller\n\nThe club’s memory is built around those who embodied quality, loyalty, and emotional connection to the crowd.",
       },
       {
         title: "Supporter Culture",
         body:
-          "Dortmund support is famous for unity and volume.\n\nKey traits:\n• Collective identity.\n• Pride in youth development.\n• Emotional investment regardless of opponent.",
+          "Dortmund support is one of the club’s greatest strengths.\n\nKey traits:\n• extraordinary volume and collective participation\n• pride in youth, intensity, and supporter identity\n• a sense that the crowd are not decoration, but part of the club’s force\n\nThis is not passive support. It is one of the clearest examples in European football of a crowd behaving like a living part of the institution.",
       },
       {
         title: "Neutral Visitor Notes",
         body:
-          "• One of the best stadium experiences in world football.\n• Südtribüne is iconic but any seat delivers atmosphere.\n• Expect full commitment from crowd.\n• Ideal if atmosphere is your top priority.",
+          "• One of the best football stadium trips on earth.\n• Signal Iduna Park should be treated as a premium experience, not a casual add-on.\n• Arrive early. The approach, build-up and atmosphere are a huge part of the value.\n• If atmosphere is your priority, Dortmund is one of Germany’s strongest possible choices.",
       },
     ],
     links: [{ label: "Official site", url: "https://www.bvb.de/" }],
-    updatedAt: "2026-01-27",
+    updatedAt: "2026-03-10",
   },
 
   "borussia-mgladbach": {
@@ -279,56 +259,56 @@ const bundesligaTeamGuides: Record<string, TeamGuide> = {
       {
         title: "Club Overview",
         body:
-          "Borussia Mönchengladbach are one of German football’s classic names: a club with a historic reputation, a strong supporter culture, and an identity tied to playing with ambition rather than merely surviving. They sit in the category of Bundesliga clubs where expectations are meaningful — fans want a team that looks like it belongs in the upper half.\n\nFor travellers, Gladbach is a strong matchday choice: large modern stadium, engaged support, and a club whose games often carry real tempo.",
+          "Borussia Mönchengladbach are one of the Bundesliga’s great traditional names: a club with real historical weight, a serious supporter base, and an identity that still expects relevance rather than mere participation. Gladbach are not treated like a small provincial side, even when their modern league position fluctuates. Their history is too big for that.\n\nThe club’s appeal comes from this blend of old status and modern volatility. When Gladbach are functioning well, they look like a proper upper-tier German club. When they are not, the frustration is sharp because the expectations never fully shrink.\n\nFor neutral travellers, Gladbach offer a very strong ‘proper Bundesliga club’ trip: large modern stadium, high football literacy in the crowd, and a fanbase that still measures itself against historic standards.",
       },
       {
         title: "History & Legacy",
         body:
-          "Gladbach’s legacy is built on being one of the Bundesliga’s historically significant clubs, with eras where they were a genuine national power.\n\nThat history feeds modern expectations: the club sees itself as a major German institution, not a small-market participant.",
+          "Gladbach’s legacy is massive in German football terms. Their golden-era prominence made them one of the clubs most closely associated with the Bundesliga’s formative mythology.\n\nThat matters because the club’s self-image still draws from those years. Gladbach are not a side whose identity begins in the 2000s or even the 1990s. Their importance is older and heavier than that.\n\nTheir historic status feeds a permanent sense that the club should be more than merely stable. They should matter.",
       },
       {
         title: "Recent Seasons",
         body:
-          "Recent seasons are often defined by inconsistency management — balancing ambition with the realities of squad cycles.\n\nCommon patterns:\n• Runs of strong form where Gladbach look like European contenders.\n• Transitional phases where turnover forces resets.\n• Home games as the key platform for momentum.",
+          "Recent Gladbach seasons have usually been about inconsistency and identity maintenance.\n\nPatterns:\n• stretches where the club look European-level and dangerous\n• periods of drift where structure and confidence weaken\n• a constant question of whether the squad really reflects the scale of the badge\n\nGladbach are not judged like a survival club. They are judged like a club that should be looking upward, even if the table says otherwise.",
       },
       {
         title: "Playing Style",
         body:
-          "Gladbach typically aim to play proactive football.\n\nExpect:\n• Intent to progress quickly through midfield.\n• Willingness to attack with numbers when confidence is high.\n• Games that can become open and high-tempo, especially against similarly ambitious opponents.",
+          "Gladbach are usually strongest when they play on the front foot and with enough bravery to justify their self-image.\n\nCommon traits:\n• intent to move the ball through midfield rather than bypass it completely\n• willingness to attack space quickly when confidence is high\n• games that can become open and momentum-driven against similar-level opponents\n• a preference for looking like a serious football side rather than a purely reactive one\n\nWhen good, Gladbach are watchable because they try to carry themselves like a big club.",
       },
       {
         title: "Stadium Profile",
         body:
-          "BORUSSIA-PARK is a modern, spacious stadium with strong sightlines.\n\nIt has the scale of a major Bundesliga venue and can feel imposing when the crowd is up for it.",
+          "BORUSSIA-PARK is a major modern Bundesliga stadium.\n\nApproximate capacity: 54,000+.\n\nIt feels spacious, purpose-built, and properly substantial. The venue gives Gladbach the scale expected of a serious German club, with strong sightlines and a clear sense of event on bigger days.",
       },
       {
         title: "Atmosphere & Matchday Feel",
         body:
-          "Atmosphere is strongest in big fixtures and high-stakes moments.\n\nExpect steady noise with big spikes around goals, pressure waves, and late pushes — a proper German stadium feel rather than a quiet ‘event’ crowd.",
+          "Gladbach’s atmosphere is strongest when the fixture or the football itself gives the crowd something to seize.\n\nTypical patterns:\n• good volume in major matches and rivalry games\n• a proper German stadium feel rather than a soft entertainment-event tone\n• strong reaction to pressure phases, goals, and late pushes\n\nThe ground does not need to be one of Germany’s absolute loudest to feel important. The main point is that it feels like a real club with real expectations.",
       },
       {
         title: "Rivalries",
         body:
-          "Regional rivalries in western Germany add edge, especially in fixtures where geography and pride matter as much as points.",
+          "Regional western-Germany rivalries matter heavily, especially where local pride and status overlap.\n\nFC Köln is one of the clearest emotional reference fixtures because of proximity, tradition, and mutual supporter consciousness.",
       },
       {
         title: "Legends",
         body:
-          "Gladbach’s legends are closely tied to the club’s historic peak eras and the identity of being a serious Bundesliga power.\n\nLegend culture emphasises major contribution and club status.",
+          "Gladbach’s legend culture is anchored in the club’s great historical eras and in the idea of the club as a genuine Bundesliga power.\n\nTheir icons are tied to periods when Gladbach were not just relevant, but central to the German football story.",
       },
       {
         title: "Supporter Culture",
         body:
-          "Supporters are proud and expectation-heavy. They want intensity and ambition, and they respond strongly when the team plays with courage rather than caution.",
+          "Gladbach support is proud, standards-driven, and historically aware.\n\nKey traits:\n• expectation of ambition rather than passive survival football\n• strong emotional investment in whether the team ‘looks like Gladbach’\n• a supporter culture shaped by the memory of bigger days and the belief they should not remain permanently in the past\n\nThis is a fanbase that still thinks in serious terms.",
       },
       {
         title: "Neutral Visitor Notes",
         body:
-          "• Excellent Bundesliga stadium experience.\n• Best in fixtures with rivalry edge or European-chase context.\n• Expect a proper ‘big German ground’ matchday.",
+          "• Very good choice if you want a big traditional Bundesliga club without the heaviest tourist pull.\n• Best experienced in fixtures with rivalry edge or clear table stakes.\n• Better as part of a wider Rhine-Ruhr football route than as a pure sightseeing trip.\n• Strong for travellers who value club history and proper stadium scale.",
       },
     ],
     links: [{ label: "Official site", url: "https://www.borussia.de/" }],
-    updatedAt: "2026-01-28",
+    updatedAt: "2026-03-10",
   },
 
   "eintracht-frankfurt": {
@@ -341,56 +321,56 @@ const bundesligaTeamGuides: Record<string, TeamGuide> = {
       {
         title: "Club Overview",
         body:
-          "Eintracht Frankfurt are one of Germany’s most emotionally driven major clubs: defined by intense support, strong cup traditions, and a reputation for thriving in big-match environments.\n\nFrankfurt are not built around sustained domestic dominance. Instead, their identity is rooted in competitiveness, defiance, and the belief that they can beat anyone on their day.\n\nThey operate comfortably as a club that lives between upper-midtable Bundesliga force and European threat.\n\nFor neutral travellers, Frankfurt offer a raw, high-energy matchday experience with a strong sense of spectacle.",
+          "Eintracht Frankfurt are one of Germany’s most emotionally explosive major clubs: a side whose matchday identity is built around noise, intensity, and a real sense that big occasions still belong to them. Frankfurt are not a domestic superpower in the Bayern sense, but they are one of the Bundesliga clubs most capable of making games feel huge.\n\nTheir appeal comes from tension and belief. Frankfurt live in the zone between upper-tier domestic force and dangerous European problem. They do not need to dominate the league to feel significant.\n\nFor neutral travellers, Frankfurt are one of Germany’s strongest atmosphere-led trips: major city, major transport hub, and a club whose best nights feel genuinely volatile and alive.",
       },
       {
         title: "History & Legacy",
         body:
-          "Founded in 1899, Eintracht Frankfurt have a long history as a respected German club.\n\nTheir legacy is heavily shaped by cup success and European nights rather than league title counts.\n\nThey are widely associated with dramatic knockout runs and passionate travelling support.\n\nFrankfurt’s mythology is built around being a club that rises in big moments.",
+          "Founded in 1899, Eintracht Frankfurt carry long-term German football stature, but their mythology is shaped less by league-title accumulation and more by cups, European nights, and dramatic, emotionally loaded runs.\n\nFrankfurt’s history is full of moments where they looked like a club built for knockout football: dangerous, energised, and elevated by crowd intensity. That image still sticks.\n\nThey are one of those clubs whose legacy lives in memory and atmosphere as much as in silverware tables.",
       },
       {
         title: "Recent Seasons",
         body:
-          "Frankfurt’s recent seasons have been defined by European involvement and league stability.\n\nPatterns:\n• Regular top-half finishes.\n• Frequent European qualification.\n• Strong home form.\n\nThey are seen as a dangerous opponent in both domestic and continental competition.",
+          "Recent Frankfurt seasons have reinforced the club’s reputation as a side that can live credibly in the upper half while still carrying a dangerous knockout identity.\n\nPatterns:\n• regular European qualification pushes\n• strong home momentum as a defining asset\n• league campaigns that tend to be shaped by intensity and emotional rhythm rather than calm consistency\n\nFrankfurt are not just judged on final position. They are judged on whether they still feel like a club built for nights that matter.",
       },
       {
         title: "Playing Style",
         body:
-          "Frankfurt favour transitional, vertical football.\n\nCommon traits:\n• Quick counter-attacks.\n• Direct progression through midfield.\n• Willingness to concede possession.\n\nThey aim to exploit space rather than control territory.",
+          "Frankfurt usually thrive when the football is vertical, aggressive, and transition-friendly.\n\nCommon traits:\n• quick attacks after regains\n• willingness to play directly into dangerous spaces\n• comfort without monopoly possession\n• a preference for making matches emotionally fast rather than overly controlled\n\nTheir best games often feel like pressure and release: survive, break, strike, roar.",
       },
       {
         title: "Stadium Profile",
         body:
-          "Deutsche Bank Park is a large modern stadium.\n\nApproximate capacity: 51,000+.\n\nSteep stands and strong acoustics.",
+          "Deutsche Bank Park is a large, steep-sided modern stadium.\n\nApproximate capacity: 50,000+.\n\nThe venue is big enough for spectacle and strong enough acoustically that it can feel genuinely intimidating when Frankfurt are up and running. It is one of Germany’s better major-city football settings.",
       },
       {
         title: "Atmosphere & Matchday Feel",
         body:
-          "Atmosphere is intense and passionate.\n\nTypical patterns:\n• Loud ultras presence.\n• Sustained chanting.\n• Strong pyrotechnic culture (where permitted).\n\nEuropean nights are especially explosive.",
+          "Frankfurt’s atmosphere is one of the club’s great selling points.\n\nTypical patterns:\n• sustained ultras-led support\n• very strong noise in big domestic and European fixtures\n• a crowd that can turn the emotional temperature of the game upward fast\n\nThis is not a polite major-city crowd. At peak, Frankfurt feel combustible in the best football sense.",
       },
       {
         title: "Rivalries",
         body:
-          "Mainz – regional rivalry.\n\nDarmstadt – regional rivalry.",
+          "Mainz and Darmstadt carry the strongest regional rivalry edge.\n\nMore broadly, Frankfurt fixtures against Germany’s bigger names often feel charged because the club’s supporter culture thrives on proving itself in those atmospheres.",
       },
       {
         title: "Legends",
         body:
-          "• Bernd Hölzenbein\n• Karl-Heinz Körbel",
+          "Frankfurt’s legend culture is tied strongly to players and figures who embody big-match stature and deep club connection.\n\nCommonly referenced icons include:\n• Bernd Hölzenbein\n• Karl-Heinz Körbel\n\nThe club’s memory is built around those who made Frankfurt feel dangerous and emotionally significant.",
       },
       {
         title: "Supporter Culture",
         body:
-          "Frankfurt fans are known for volume and loyalty.\n\nKey traits:\n• Strong travelling support.\n• Emotional investment.\n• Pride in European performances.",
+          "Frankfurt support is among the strongest in Germany.\n\nKey traits:\n• heavy travelling support culture\n• high emotional intensity\n• strong identification with the club’s European and cup identity\n\nThis is a supporter culture that thrives on nights, journeys, and big moments. The crowd do not want safety. They want significance.",
       },
       {
         title: "Neutral Visitor Notes",
         body:
-          "• Excellent for atmosphere lovers.\n• European fixtures are peak experiences.\n• Expect intense crowd engagement.",
+          "• One of Germany’s best trips if atmosphere is a major priority.\n• European nights and big domestic fixtures are peak-value experiences.\n• Frankfurt is also a superb practical city because airport, station and stadium all connect well.\n• Strong pick if you want serious supporter culture inside a major-city break.",
       },
     ],
     links: [{ label: "Official site", url: "https://www.eintracht.de/" }],
-    updatedAt: "2026-01-27",
+    updatedAt: "2026-03-10",
   },
 
   "fc-cologne": {
@@ -403,56 +383,56 @@ const bundesligaTeamGuides: Record<string, TeamGuide> = {
       {
         title: "Club Overview",
         body:
-          "FC Cologne are one of Germany’s most culturally significant traditional clubs: large support, deep regional identity, and an emotional relationship between city and team that defines the club’s existence.\n\nCologne are not framed internally as a small club, even when league position suggests otherwise. They see themselves as part of German football’s core establishment — a club that belongs in the Bundesliga and expects to live there long-term.\n\nThe club’s modern reality is cyclical: promotion, consolidation, relegation threat, rebuild, repeat. But the cultural weight never diminishes.\n\nFor neutral travellers, FC Cologne offer a classic German football experience: big local crowd, expressive supporters, strong beer-and-song culture, and a stadium that feels alive regardless of league position.",
+          "FC Cologne are one of Germany’s most culturally significant traditional clubs: large support, deep city identity, and a relationship between club and place that feels permanent regardless of league position. Köln do not think of themselves as a small or temporary Bundesliga side. They think of themselves as one of German football’s real institutions.\n\nThat is why modern volatility hits so hard. Relegation danger, rebuilds, and uneven squad quality do not reduce the emotional scale of the club. They only sharpen it.\n\nFor neutral travellers, Cologne offer one of the clearest ‘traditional big local club’ experiences in Germany: beer, singing, huge emotional buy-in, and a fanbase that treats the team as part of the city’s cultural fabric.",
       },
       {
         title: "History & Legacy",
         body:
-          "Founded in 1948 through a merger of Cologne clubs, FC Cologne quickly became one of West Germany’s early powerhouses.\n\nThey were the first-ever Bundesliga champions in 1963–64 and went on to become one of Germany’s most successful clubs of the 20th century.\n\nCologne’s historic legacy is rooted in:\n• Early Bundesliga leadership.\n• Long-term top-flight presence.\n• Producing and attracting high-level German talent.\n\nWhile modern decades have lacked sustained elite success, Cologne are still widely viewed as a ‘big traditional club’ whose stature exceeds their recent league finishes.",
+          "Founded in 1948 through merger, FC Cologne became one of West Germany’s early major clubs and were the first champions of the Bundesliga era.\n\nTheir history gave them lasting status. They are not a club whose identity is built on a single modern peak. They are a club whose older stature still shapes everything about how they are seen.\n\nThat is why Köln remain culturally ‘big’ even in seasons where the football falls short. Their legacy in German football is too embedded for anything else.",
       },
       {
         title: "Recent Seasons",
         body:
-          "Recent seasons have been defined by volatility.\n\nPatterns:\n• Relegation battles and occasional drops.\n• Immediate promotion pushes.\n• Squads constantly rebuilt under financial constraint.\n\nCologne frequently oscillate between survival mode and cautious optimism.\n\nSupporters judge seasons primarily on:\n• Bundesliga survival.\n• Visible fight.\n• Squad cohesion.\n\nEuropean qualification is treated as exceptional rather than expected in the modern era.",
+          "Recent Cologne seasons have been shaped by instability and repetition.\n\nPatterns:\n• relegation pressure or actual relegation cycles\n• immediate expectations of recovery and reassertion\n• heavy reliance on spirit, cohesion and crowd energy during difficult runs\n\nWhat matters most to supporters is not abstract process. It is whether the club are visibly fighting to remain where they believe they belong.",
       },
       {
         title: "Playing Style",
         body:
-          "Cologne typically favour direct, energetic football.\n\nCommon traits:\n• High work rate.\n• Early forward passes.\n• Frequent crossing.\n• Physical central play.\n\nThey are rarely a slow-possession team.\n\nAt home, Cologne often push tempo early to ignite crowd energy.\n\nWhen functioning well:\n• They overwhelm with intensity.\n• They force mistakes through pressure.\n\nWhen struggling:\n• Build-up quality becomes inconsistent.\n• Defensive transitions can be exposed.",
+          "Cologne are usually strongest when the football is energetic, direct, and emotionally connected to the crowd.\n\nCommon traits:\n• high work rate\n• early forward play and crossing volume\n• a preference for intensity over elegance\n• games that feel livelier when the crowd is feeding the momentum\n\nThey are rarely at their best as a soft possession side. Köln work when the football looks urgent and committed.",
       },
       {
         title: "Stadium Profile",
         body:
-          "RheinEnergieStadion is a modern, open-bowl stadium.\n\nApproximate capacity: 50,000+.\n\nIt is symmetrical, steep-sided, and designed for strong acoustics.\n\nSightlines are excellent and the stadium fills visually even when not sold out.",
+          "RheinEnergieStadion is a major, modern Bundesliga ground.\n\nApproximate capacity: 50,000+.\n\nIt is open-bowl in structure but steep enough to hold noise well, with very good sightlines and the scale expected of a serious German club. It feels like a proper big-club venue rather than a neutral event shell.",
       },
       {
         title: "Atmosphere & Matchday Feel",
         body:
-          "Cologne are famous for volume and colour.\n\nTypical patterns:\n• Loud singing from kickoff.\n• Continuous chants rather than burst-based noise.\n• Strong visual displays.\n\nThe atmosphere is festive but intense — loud without being hostile.\n\nCologne crowds remain vocal even during difficult seasons.",
+          "Cologne are famous for singing culture, colour, and local emotional commitment.\n\nTypical patterns:\n• strong volume from kickoff\n• a festive but serious matchday feel\n• crowd energy that persists even when league position is poor\n\nThe stadium often feels celebratory and intense at the same time. That combination is one of Cologne’s biggest strengths as a travel experience.",
       },
       {
         title: "Rivalries",
         body:
-          "Borussia Mönchengladbach – primary rivalry.\n\nBayer Leverkusen – regional rivalry.\n\nBoth fixtures carry strong emotional weight.",
+          "Borussia Mönchengladbach remains Köln’s defining rivalry.\n\nBayer Leverkusen also carry strong regional edge because of geography and contrasting club identity.",
       },
       {
         title: "Legends",
         body:
-          "• Lukas Podolski\n• Wolfgang Overath\n• Harald Schumacher\n\nPodolski remains the modern emotional icon — a hometown hero.",
+          "Köln’s legends are a mix of historical greatness and modern emotional icons.\n\nCommonly referenced names include:\n• Lukas Podolski\n• Wolfgang Overath\n• Harald Schumacher\n\nPodolski in particular remains central to modern fan identity because he represents hometown connection and club feeling rather than only performance.",
       },
       {
         title: "Supporter Culture",
         body:
-          "Cologne supporters are expressive, loyal, and identity-driven.\n\nKey traits:\n• Singing culture.\n• Carnival-influenced humour and colour.\n• Fierce loyalty during bad seasons.\n\nThe club is treated as a cultural institution, not entertainment.",
+          "Cologne support is one of the most expressive in Germany.\n\nKey traits:\n• heavy singing culture\n• strong city-club identity\n• fierce loyalty through weak and strong eras alike\n\nThis is a fanbase that does not treat the club like entertainment. They treat it like part of Cologne itself.",
       },
       {
         title: "Neutral Visitor Notes",
         body:
-          "• Excellent atmosphere regardless of table position.\n• Expect singing for most of the match.\n• Easy city for beer, food, and pre-match build-up.\n• Strong choice if you want classic German supporter culture.",
+          "• One of the best supporter-culture trips in Germany.\n• Very strong choice if you want city break plus football in one easy package.\n• The atmosphere rarely feels flat, even when the football quality varies.\n• Excellent pick for travellers who value local identity over polished superclub spectacle.",
       },
     ],
     links: [{ label: "Official site", url: "https://fc.de/" }],
-    updatedAt: "2026-01-27",
+    updatedAt: "2026-03-10",
   },
 
   "fc-heidenheim": {
@@ -465,56 +445,56 @@ const bundesligaTeamGuides: Record<string, TeamGuide> = {
       {
         title: "Club Overview",
         body:
-          "FC Heidenheim represent one of modern German football’s most remarkable growth stories. A small-town club that climbed methodically through the divisions, Heidenheim operate with a clear identity built around continuity, stability, and intelligent squad building.\n\nUnlike many fast-rising clubs, Heidenheim did not explode upward through reckless spending. Their rise has been gradual, controlled, and structurally coherent.\n\nThey enter Bundesliga seasons with a survival-first mindset, but internally see themselves as capable of establishing permanent top-flight status.\n\nFor neutral travellers, Heidenheim offer an authentic, community-focused Bundesliga experience — intimate, intense, and refreshingly unpolished.",
+          "FC Heidenheim are one of modern German football’s clearest long-game success stories: a smaller-town club that rose through patience, managerial continuity, and structural discipline rather than money-fuelled chaos. In a league full of bigger badges, Heidenheim represent how far coherence can still take you.\n\nThis is not a glamour club and does not need to be. The value lies in honesty: compact city, compact stadium, and a team built around organisation and belief.\n\nFor neutral travellers, Heidenheim are one of the Bundesliga’s more authentic small-scale stops: less spectacle, more closeness, and a much stronger sense of community than many bigger venues provide.",
       },
       {
         title: "History & Legacy",
         body:
-          "Founded in 1846 as a multi-sport club, FC Heidenheim’s football rise accelerated in the 21st century.\n\nThe defining figure is long-serving coach Frank Schmidt, who guided the club from regional football to the Bundesliga over many years — one of Europe’s most unusual long-term managerial projects.\n\nHeidenheim’s legacy is not trophy-based. It is story-based: evidence that patient development and institutional stability can still succeed in modern football.",
+          "The club’s modern identity is inseparable from its rise under Frank Schmidt, one of European football’s most unusual long-term managerial stories. Heidenheim did not burst upward. They climbed.\n\nThat matters because the club’s legacy is being built through process rather than trophies. Their story is about proving that a stable football culture can compete in a top-flight ecosystem usually tilted toward bigger cities and deeper budgets.\n\nHeidenheim’s importance comes from what they represent inside modern football: continuity still matters.",
       },
       {
         title: "Recent Seasons",
         body:
-          "Heidenheim’s recent seasons have centred on overachievement relative to resources.\n\nPatterns:\n• Strong promotion pushes.\n• Competitive survival campaigns.\n• Compact league positioning.\n\nThey rarely collapse even when outmatched on paper.\n\nSurvival is celebrated as success. Mid-table finishes are treated as exceptional.",
+          "Recent seasons have been judged through overachievement logic.\n\nPatterns:\n• promotion and then top-flight credibility beyond what many expected\n• constant reliance on structure, effort and marginal gains\n• survival framed as meaningful success rather than something too small to celebrate\n\nHeidenheim’s challenge is not becoming a glamour name. It is proving that the club can remain serious and stable at this level.",
       },
       {
         title: "Playing Style",
         body:
-          "Heidenheim favour organised, disciplined football.\n\nCommon traits:\n• Compact defensive block.\n• Fast vertical transitions.\n• Set-piece emphasis.\n• High physical output.\n\nThey are comfortable without the ball.\n\nWhen leading, Heidenheim are pragmatic and difficult to break down.\n\nWhen chasing, they increase crossing volume and aerial pressure rather than intricate possession play.",
+          "Heidenheim’s football is usually disciplined, practical, and physically honest.\n\nCommon traits:\n• compact defensive work\n• quick, vertical transitions\n• set-piece emphasis\n• a willingness to make the game uncomfortable rather than pretty\n\nThe football often feels like it belongs to the club’s size and mentality. That is a strength, not a weakness.",
       },
       {
         title: "Stadium Profile",
         body:
-          "Voith-Arena is compact and intimate.\n\nApproximate capacity: 15,000.\n\nSteep stands and close proximity to the pitch create a surprisingly intense feel for a small stadium.",
+          "Voith-Arena is intimate by Bundesliga standards.\n\nApproximate capacity: 15,000.\n\nThe scale is small, but the steepness and closeness to the pitch help create a more immediate feel than some larger stadiums with softer atmosphere. It suits the club’s community-driven identity perfectly.",
       },
       {
         title: "Atmosphere & Matchday Feel",
         body:
-          "Atmosphere is driven by proximity rather than size.\n\nTypical patterns:\n• Loud home sections.\n• Strong reaction to defensive actions.\n• High emotional engagement.\n\nMatches feel personal and urgent.",
+          "Heidenheim atmosphere is driven by proximity and emotional stake rather than sheer scale.\n\nTypical patterns:\n• loud local sections relative to the size of the ground\n• strong reaction to duels, defensive work and momentum swings\n• a matchday feel that is more personal and urgent than polished\n\nFor neutrals, it is one of the Bundesliga’s better small-ground experiences if you value intimacy over grandeur.",
       },
       {
         title: "Rivalries",
         body:
-          "No major national rivalries.\n\nRegional competitive tensions exist with southern German clubs.",
+          "Heidenheim do not carry one giant national blood-feud. Their emotional edge is more regional and competitive than iconic.\n\nThat fits the club. Their modern relevance is built on proving they belong, not on living inside a giant derby mythology.",
       },
       {
         title: "Legends",
         body:
-          "• Frank Schmidt (coach)\n• Marc Schnatterer\n\nLongevity figures dominate legend status.",
+          "Heidenheim legend culture is dominated by long-term builders rather than superstars.\n\nCommonly referenced icons include:\n• Frank Schmidt\n• Marc Schnatterer\n\nThat says everything about the club: loyalty, continuity, and construction matter more than glamour.",
       },
       {
         title: "Supporter Culture",
         body:
-          "Supporter culture is community-rooted.\n\nKey traits:\n• High loyalty.\n• Pride in the club’s rise.\n• Realistic expectations.",
+          "Supporter culture is local, realistic, and deeply proud of the club’s rise.\n\nKey traits:\n• strong appreciation for work rate and organisation\n• realistic understanding of scale without inferiority\n• pride in the club’s ability to compete honestly against far bigger names\n\nThis is a support base built around collective achievement rather than entitlement.",
       },
       {
         title: "Neutral Visitor Notes",
         body:
-          "• Good choice for intimate Bundesliga experience.\n• Expect physical football.\n• Easy-going, friendly environment.",
+          "• Strong pick if you like smaller-scale football trips with genuine local identity.\n• Better for serious football travellers than for mainstream stadium-tourism seekers.\n• Pairing the match with a calm regional or countryside break improves the trip a lot.\n• A very good example of why not every memorable football weekend needs a giant club.",
       },
     ],
     links: [{ label: "Official site", url: "https://www.fc-heidenheim.de/" }],
-    updatedAt: "2026-01-27",
+    updatedAt: "2026-03-10",
   },
 
   "freiburg": {
@@ -527,56 +507,56 @@ const bundesligaTeamGuides: Record<string, TeamGuide> = {
       {
         title: "Club Overview",
         body:
-          "SC Freiburg are one of the Bundesliga’s most respected model clubs, built on stability, long-term thinking, and coherent football identity. Freiburg are rarely spectacular in the global sense, but they are consistently well-run, competitive, and tactically disciplined.\n\nThe club’s reputation is that of a ‘smart operator’ — doing more with less, maintaining Bundesliga status without abandoning principles.\n\nFor neutral travellers, Freiburg represent German football at its healthiest: organised, community-driven, and technically competent.",
+          "SC Freiburg are one of the Bundesliga’s most respected model clubs: stable, coherent, tactically disciplined, and almost always more competitive than their budget should allow. Freiburg do not need chaos to feel alive. Their strength is that the club knows exactly what it is.\n\nThey are widely admired because they represent the healthier side of modern football: continuity, player development, sensible expectations, and a football identity that survives managerial and squad change better than most.\n\nFor neutral travellers, Freiburg are a very strong football-plus-city trip. The club are good, the city is excellent, and the whole weekend feels calmer and smarter than many louder Bundesliga stops.",
       },
       {
         title: "History & Legacy",
         body:
-          "Founded in 1904, Freiburg spent much of their early history in lower divisions.\n\nTheir modern legacy is closely tied to long-serving coach Christian Streich, who transformed Freiburg into a stable Bundesliga club with clear identity.\n\nFreiburg’s legacy is not built on silverware, but on continuity, youth development, and institutional coherence.",
+          "Freiburg spent long periods outside Germany’s top tier, so their legacy is not built on giant trophy counts or historic dominance. It is built on becoming one of the Bundesliga’s most credible overachievers through structure and self-knowledge.\n\nThe Christian Streich era in particular became central to the club’s modern mythology, but the bigger legacy is broader than one person: Freiburg are the club many people cite when they want proof that stable, sensible football still has a place in elite competition.\n\nThat gives them unusual respect across Germany.",
       },
       {
         title: "Recent Seasons",
         body:
-          "Freiburg’s recent seasons have been among the strongest in club history.\n\nPatterns:\n• Regular top-half finishes.\n• Periodic European qualification.\n• Strong cup runs.\n\nThey consistently outperform budget expectations.\n\nEuropean qualification is viewed as a bonus rather than entitlement.",
+          "Recent Freiburg seasons have been among the strongest in their history.\n\nPatterns:\n• regular upper-half competitiveness\n• European qualification pushes or actual qualification\n• cup runs that reinforce the club’s ability to punch above weight\n\nFreiburg are not judged by title standards, but they are absolutely judged by whether they remain recognisably Freiburg: organised, competitive, and serious.",
       },
       {
         title: "Playing Style",
         body:
-          "Freiburg play structured, efficient football.\n\nCommon traits:\n• Compact defensive shape.\n• Well-drilled pressing triggers.\n• Dangerous set-piece routines.\n• Quick vertical combinations.\n\nThey rarely dominate possession but frequently control match rhythm through organisation.",
+          "Freiburg’s football is usually efficient, disciplined, and system-led.\n\nCommon traits:\n• compact defensive organisation\n• intelligent pressing rather than reckless pressing\n• strong set-piece work\n• quick, purposeful combinations when moving forward\n\nThey rarely need to dominate the ball to dominate the terms of the game. That is one of the reasons the club are so respected tactically.",
       },
       {
         title: "Stadium Profile",
         body:
-          "Europa-Park Stadion is modern and functional.\n\nApproximate capacity: 34,700.\n\nSteep stands and roof coverage help retain noise.",
+          "Europa-Park Stadion is a modern, clean Bundesliga venue.\n\nApproximate capacity: 34,000+.\n\nIt does not rely on giant scale or historic romance. Instead, it works through good sightlines, compactness, and a matchday environment that fits the club’s identity: organised, pleasant, and football-first.",
       },
       {
         title: "Atmosphere & Matchday Feel",
         body:
-          "Atmosphere is steady rather than explosive.\n\nTypical patterns:\n• Continuous singing.\n• Strong family presence.\n• Appreciation for tactical discipline.\n\nFeels friendly but focused.",
+          "Freiburg atmosphere is steady and community-rooted rather than explosive.\n\nTypical patterns:\n• reliable vocal support\n• a family and local-club feel without softness\n• a crowd that clearly appreciates discipline, work and football intelligence\n\nIt is not the wildest matchday in Germany, but it is one of the more likable and coherent ones.",
       },
       {
         title: "Rivalries",
         body:
-          "Regional Baden-Württemberg tensions exist, but no singular dominant national rivalry.",
+          "Freiburg’s rivalry structure is more regional and cultural than defined by one giant national feud.\n\nBaden-Württemberg fixtures naturally carry greater edge because they sharpen regional football identity, but the club’s broader story is not derby-dependent.",
       },
       {
         title: "Legends",
         body:
-          "• Christian Streich (coach)\n• Nils Petersen\n\nClub icons are strongly linked to loyalty and service.",
+          "Freiburg’s legend culture heavily values loyalty, service, and long-term identification with the club’s values.\n\nCommonly referenced icons include:\n• Christian Streich\n• Nils Petersen\n\nThat tells you exactly what Freiburg honour most: contribution and fit, not only fame.",
       },
       {
         title: "Supporter Culture",
         body:
-          "Supporters value stability and identity.\n\nKey traits:\n• Low tolerance for chaos.\n• High appreciation of work rate.\n• Pride in club values.",
+          "Freiburg support is thoughtful, proud, and identity-conscious.\n\nKey traits:\n• appreciation for stability and competence\n• low tolerance for needless chaos\n• pride in being a smart, values-led football club rather than a noisy caricature\n\nThis is a supporter culture that values substance over show.",
       },
       {
         title: "Neutral Visitor Notes",
         body:
-          "• Good option for relaxed Bundesliga trip.\n• Expect tactical, organised football.\n• Friendly crowd environment.",
+          "• One of the best Bundesliga choices if you want football plus a genuinely lovely city.\n• Better for travellers who appreciate quality and coherence than for those only chasing the loudest stadium.\n• Great option for a slower, more scenic German football weekend.\n• Freiburg is one of the league’s most complete city-and-club packages.",
       },
     ],
     links: [{ label: "Official site", url: "https://www.scfreiburg.com/" }],
-    updatedAt: "2026-01-27",
+    updatedAt: "2026-03-10",
   },
 
   "hamburger-sv": {
@@ -589,56 +569,56 @@ const bundesligaTeamGuides: Record<string, TeamGuide> = {
       {
         title: "Club Overview",
         body:
-          "Hamburger SV are one of Germany’s true traditional giants, carrying enormous historical weight, national recognition, and a supporter base that still views the club as a permanent member of the Bundesliga elite — regardless of recent reality.\n\nHSV’s modern existence is defined by the tension between historic self-image and contemporary struggle. They are not treated like a small club by anyone: not supporters, not media, not opponents.\n\nFor neutral travellers, HSV represent a fallen heavyweight with big-stadium scale, massive support, and emotionally charged matchdays.",
+          "Hamburger SV are one of Germany’s true traditional giants: a club whose historical stature remains enormous even when modern results fail to match it. HSV are not experienced emotionally as a modest or rebuilding club. They are experienced as a heavyweight trying to reassert where they believe they belong.\n\nThat tension between old status and modern instability has defined much of the club’s recent life. It makes the atmosphere around HSV intense even in ordinary fixtures, because every season feels connected to a larger story about identity, recovery, and expectation.\n\nFor neutral travellers, HSV offer a big-club experience with genuine emotional edge: large stadium, large crowd, and a fanbase that still behaves like they are attached to one of Germany’s major institutions.",
       },
       {
         title: "History & Legacy",
         body:
-          "Founded in 1887, Hamburger SV were for decades one of Germany’s most successful clubs.\n\nThey won multiple Bundesliga titles and the European Cup, and were famously the last club to be ever-present in the Bundesliga before eventual relegation.\n\nHSV’s legacy is rooted in prolonged top-level relevance rather than isolated peaks.\n\nTheir historic status ensures they remain culturally a giant even outside sustained elite performance.",
+          "Hamburger SV carry major historical weight. Their domestic success, European pedigree, and once-unbroken Bundesliga presence made them one of Germany’s most recognisable clubs.\n\nThat legacy did not vanish when the football deteriorated. If anything, it became more emotionally visible. HSV’s importance in German football culture comes from the fact that the club’s fall felt too big to be ordinary.\n\nThis is why they remain treated as a giant even when league position says otherwise.",
       },
       {
         title: "Recent Seasons",
         body:
-          "HSV’s recent seasons have been dominated by promotion battles and near-misses.\n\nPatterns:\n• Frequent top-half finishes in the second tier or lower Bundesliga positions.\n• Playoff heartbreaks and missed promotion opportunities.\n• Heavy squad turnover.\n\nEvery season is framed internally as ‘the return’ season.",
+          "Recent HSV seasons have been framed almost entirely around return, restoration, and the pressure of proving that the club are still too big to remain outside their natural level.\n\nPatterns:\n• promotion races or recovery-driven seasons\n• intense scrutiny on any sign of weakness or drift\n• massive supporter involvement regardless of division or form\n\nFew clubs in Germany turn ordinary league campaigns into identity struggles as intensely as Hamburg do.",
       },
       {
         title: "Playing Style",
         body:
-          "HSV generally attempt proactive football.\n\nCommon traits:\n• Preference for controlling possession.\n• Use of width and crossing.\n• Willingness to press high in phases.\n\nExecution has often been inconsistent, but ambition to play rather than survive remains.",
+          "HSV generally want to play like a large club, even when the execution does not always justify the ambition.\n\nCommon traits:\n• willingness to control possession where possible\n• use of width and crossing to sustain pressure\n• phases of proactive football that reflect the club’s self-image\n• inconsistency when structure and confidence fail to align\n\nThey rarely want to look small. That matters to the supporter base.",
       },
       {
         title: "Stadium Profile",
         body:
-          "Volksparkstadion is one of Germany’s largest stadiums.\n\nApproximate capacity: 57,000.\n\nModernised bowl, excellent sightlines, and strong acoustics.",
+          "Volksparkstadion is one of Germany’s major football venues.\n\nApproximate capacity: 57,000+.\n\nIt is large, modernised, and visually substantial enough to reinforce the giant-club feel. It may not have the intimacy of St. Pauli or Union, but it absolutely carries scale and event energy.",
       },
       {
         title: "Atmosphere & Matchday Feel",
         body:
-          "Atmosphere is big-club scale.\n\nTypical patterns:\n• Large, vocal crowd.\n• Strong choreographies.\n• Emotional swings based on performance.\n\nHope and anxiety coexist strongly.",
+          "HSV atmosphere is driven by expectation as much as by celebration.\n\nTypical patterns:\n• large, vocal home support\n• very visible emotional swings tied to performance\n• strong noise and choreography in the biggest games\n\nThe feeling is often not calm. It is hopeful, tense, proud, and occasionally anxious. That mix makes the matchday memorable.",
       },
       {
         title: "Rivalries",
         body:
-          "Werder Bremen – Nordderby.\n\nSt. Pauli – Hamburg city derby.\n\nBoth are culturally significant.",
+          "Werder Bremen remains the defining historical rival through the Nordderby.\n\nSt. Pauli is the defining city-rival fixture because of local identity, class and cultural contrast inside Hamburg football.",
       },
       {
         title: "Legends",
         body:
-          "• Uwe Seeler\n• Felix Magath\n\nIcons of HSV’s golden eras.",
+          "HSV’s legend culture is heavyweight and historic.\n\nCommonly referenced names include:\n• Uwe Seeler\n• Felix Magath\n\nThese are not just club icons. They are names central to the club’s enduring belief that HSV are part of Germany’s upper football class.",
       },
       {
         title: "Supporter Culture",
         body:
-          "Supporters are loyal and long-suffering.\n\nKey traits:\n• Massive attendance regardless of league.\n• Strong nostalgia for elite status.\n• Heavy emotional investment.",
+          "HSV support is loyal, nostalgic, demanding, and large-scale.\n\nKey traits:\n• huge attendance power\n• deep attachment to past status\n• emotional intensity around every sign of progress or failure\n\nThis is a supporter culture that still thinks like a giant, even when modern football has repeatedly tested that self-image.",
       },
       {
         title: "Neutral Visitor Notes",
         body:
-          "• Big stadium, big crowd.\n• Strong tradition.\n• Matches feel significant even in ordinary fixtures.",
+          "• Strong pick if you want a big traditional German club with real emotional texture.\n• Better for heavyweight atmosphere and club scale than for intimacy.\n• Hamburg as a city massively upgrades the wider trip.\n• Very good choice if you want a large-club matchday without superclub polish.",
       },
     ],
     links: [{ label: "Official site", url: "https://www.hsv.de/" }],
-    updatedAt: "2026-01-27",
+    updatedAt: "2026-03-10",
   },
 
   "hoffenheim": {
@@ -651,56 +631,56 @@ const bundesligaTeamGuides: Record<string, TeamGuide> = {
       {
         title: "Club Overview",
         body:
-          "TSG Hoffenheim are one of German football’s most unusual Bundesliga institutions: a club whose top-flight status is rooted in modern transformation rather than historical pedigree.\n\nHoffenheim are widely viewed as a project club — built through investment, infrastructure, and planning rather than organic century-long growth.\n\nThey operate with the expectation of Bundesliga permanence but without the cultural entitlement seen at traditional giants.\n\nFor neutral travellers, Hoffenheim offer a clean, modern Bundesliga experience with high-level football and a lower-pressure environment.",
+          "TSG Hoffenheim are one of the Bundesliga’s most modern and least traditional clubs: a top-flight institution built through infrastructure, investment, and system-led development rather than old-club mythology. That makes them controversial to some and interesting to others.\n\nHoffenheim do not sell history and emotion in the way Dortmund, Köln or Bremen do. Their identity is more contemporary: football quality, squad building, and competitiveness in a cleaner, lower-chaos environment.\n\nFor neutral travellers, Hoffenheim work best if you are honest about what the trip is: a modern football stop with decent quality and simple logistics, often improved by using Heidelberg rather than Sinsheim as your wider base.",
       },
       {
         title: "History & Legacy",
         body:
-          "Founded in 1899, Hoffenheim spent most of their existence in amateur and regional divisions.\n\nTheir dramatic rise in the 2000s culminated in Bundesliga promotion and immediate competitiveness.\n\nHoffenheim’s legacy is defined almost entirely by their modern era transformation.\n\nThey are one of the clearest examples of a village club becoming a top-flight regular.",
+          "The club’s significance is almost entirely modern. Hoffenheim’s rise from lower-level football into the Bundesliga happened quickly enough that their identity still feels like a current-era football story rather than inherited legacy.\n\nThat rise matters because it changed the national conversation around what kinds of clubs could reach and remain at the top level. Hoffenheim are part of the structural-modernisation story of German football, whether people like that story or not.\n\nTheir legacy is therefore one of transformation, not tradition.",
       },
       {
         title: "Recent Seasons",
         body:
-          "Hoffenheim’s recent seasons have been characterised by mid-table volatility.\n\nPatterns:\n• Top-half pushes followed by drop-offs.\n• European qualification in strong cycles.\n• Regular squad churn.\n\nThey fluctuate between European outsider and lower-mid-table safety.",
+          "Recent Hoffenheim seasons have usually lived in the mid-to-upper-table volatility zone.\n\nPatterns:\n• occasional pushes toward European spots\n• periods of drop-off when squad coherence weakens\n• regular attempts to reassert a more ambitious top-half identity\n\nThey are rarely treated like a giant, but they are also not judged like a tiny club. The expectation is competence and competitive relevance.",
       },
       {
         title: "Playing Style",
         body:
-          "Hoffenheim favour attacking, transition-oriented football.\n\nCommon traits:\n• Vertical passing.\n• High defensive line.\n• Emphasis on quick combinations.\n\nMatches often feature space and chances at both ends.",
+          "Hoffenheim often lean toward positive, transition-friendly football.\n\nCommon traits:\n• vertical passing\n• a willingness to play open games\n• quicker combinations rather than slow domination\n• periods where the football becomes high-event at both ends\n\nThis can make them useful for neutral viewing, even if the matchday culture is less emotionally loaded than at more traditional Bundesliga grounds.",
       },
       {
         title: "Stadium Profile",
         body:
-          "PreZero Arena is a modern compact stadium.\n\nApproximate capacity: 30,000.\n\nOpen corners, good sightlines, and contemporary design.",
+          "PreZero Arena is a modern, efficient football venue.\n\nApproximate capacity: 30,000+.\n\nIt is clean, comfortable and straightforward, with good sightlines and a lower-pressure feel than many bigger traditional German grounds. The stadium works better as a functional football environment than as a myth-heavy destination.",
       },
       {
         title: "Atmosphere & Matchday Feel",
         body:
-          "Atmosphere is moderate.\n\nTypical patterns:\n• Organised support sections.\n• Less intimidating than traditional grounds.\n• Comfortable viewing experience.",
+          "Atmosphere at Hoffenheim is moderate by Bundesliga standards.\n\nTypical patterns:\n• organised support sections without overwhelming density\n• stronger energy when the football quality is high or the opponent is major\n• a viewing experience that feels more comfortable than hostile\n\nFor neutrals, this can be a plus if the priority is clear views and easy matchday flow rather than ultra intensity.",
       },
       {
         title: "Rivalries",
         body:
-          "No major historic rivalries.\n\nFixtures vs Stuttgart and Karlsruhe carry mild regional edge.",
+          "Hoffenheim’s rivalry profile is lighter than most traditional clubs. Regional fixtures with Stuttgart or Karlsruhe carry some edge, but the club’s identity is not primarily rivalry-driven.\n\nThe more relevant tension is often ideological: Hoffenheim versus traditional supporter ideas of what a club should be.",
       },
       {
         title: "Legends",
         body:
-          "• Sejad Salihović\n• Andrej Kramarić\n\nKey figures of the Bundesliga era.",
+          "Hoffenheim legend culture is modern and Bundesliga-era focused.\n\nCommonly referenced names include:\n• Sejad Salihović\n• Andrej Kramarić\n\nThe memory culture is less about old romanticism and more about who defined the club’s rise and best top-flight years.",
       },
       {
         title: "Supporter Culture",
         body:
-          "Support is relatively small but organised.\n\nKey traits:\n• Project-oriented identity.\n• Focus on football quality rather than tradition.",
+          "Hoffenheim support is smaller-scale, more modern, and less historically loaded than most Bundesliga clubs.\n\nKey traits:\n• appreciation for football quality and competitiveness\n• less tradition-driven identity than legacy clubs\n• a supporter culture shaped more by the current-era club than by century-old mythology\n\nIt is a different kind of Bundesliga experience, not necessarily a lesser one.",
       },
       {
         title: "Neutral Visitor Notes",
         body:
-          "• Easy ticket availability.\n• Modern stadium.\n• Relaxed Bundesliga environment.",
+          "• Good if you prioritise football convenience and a modern stadium over tradition-heavy atmosphere.\n• Better used as a Heidelberg-based football branch than a pure Sinsheim city break.\n• Easy, low-friction matchday.\n• Better for football-quality travellers than for heritage hunters.",
       },
     ],
     links: [{ label: "Official site", url: "https://www.tsg-hoffenheim.de/" }],
-    updatedAt: "2026-01-27",
+    updatedAt: "2026-03-10",
   },
 
   "rb-leipzig": {
@@ -713,56 +693,56 @@ const bundesligaTeamGuides: Record<string, TeamGuide> = {
       {
         title: "Club Overview",
         body:
-          "RB Leipzig represent the most radical structural shift in modern German top-flight football: a club built rapidly through corporate-backed infrastructure, elite recruitment systems, and long-term performance planning rather than traditional historical growth.\n\nUnlike legacy clubs whose identity is anchored in decades of folklore, Leipzig’s identity is rooted in performance culture, development pipelines, and competitive efficiency. The club exists to compete at the top end of German football and qualify regularly for European competition. Finishing outside Champions League positions is widely viewed internally as underachievement.\n\nFor neutral travellers, Leipzig offer a modern football experience: high-quality football, strong tactical organisation, a large contemporary stadium, and a club that feels very much like a present-and-future institution rather than a museum of the past.",
+          "RB Leipzig are one of the most significant modern disruptors in German football: a club built through corporate-backed planning, elite recruitment, and performance culture rather than traditional, gradual historical growth. That makes them controversial in parts of German football and completely unavoidable in the sporting hierarchy.\n\nLeipzig’s identity is modern, high-output, and results-driven. They are not trying to behave like a historic romance club. They are trying to behave like a permanent Champions League-level operation.\n\nFor neutral travellers, Leipzig offer high-level modern football in one of Germany’s best-value city-break destinations. If you care more about current quality than old folklore, the trip works very well.",
       },
       {
         title: "History & Legacy",
         body:
-          "RB Leipzig were founded in 2009 and rose rapidly through the German league system, reaching the Bundesliga in just seven seasons.\n\nTheir ascent triggered heavy controversy within German football due to ownership structures and departure from traditional member-controlled club models. As a result, Leipzig are often positioned as outsiders within German supporter culture.\n\nDespite this, Leipzig have quickly established tangible sporting legacy:\n• Regular Champions League qualification.\n• Multiple domestic cup successes.\n• Consistent top-four finishes.\n\nLeipzig’s legacy is still being written, but it is already defined by rapid normalisation at elite level rather than novelty.",
+          "Founded in 2009, Leipzig rose rapidly and deliberately into the Bundesliga, which immediately set them apart from almost every other major German club. Their ascent triggered major criticism because of how heavily it departed from German traditional club culture.\n\nThat tension is part of the club’s history now. Leipzig’s legacy cannot be told without the controversy. But it also cannot be told without the football: repeated Champions League qualification, sustained top-four presence, and domestic cup relevance.\n\nTheir legacy is therefore not romantic, but it is undeniably important.",
       },
       {
         title: "Recent Seasons",
         body:
-          "RB Leipzig’s recent seasons confirm their position as a permanent Bundesliga top-four contender.\n\nPatterns:\n• Regular Champions League qualification.\n• Strong domestic cup performances.\n• Squad evolution driven by player trading model.\n\nLeipzig rarely collapse across entire seasons. Even during transitional years, they remain competitive against Germany’s biggest clubs.\n\nThe club is judged by whether it remains inside the Champions League places and continues to challenge Bayern and Dortmund for domestic honours.",
+          "Recent Leipzig seasons have confirmed that the club are not a temporary project-phase success. They are a permanent upper-tier Bundesliga force.\n\nPatterns:\n• top-four expectations rather than hopeful top-six ambitions\n• strong domestic cup competitiveness\n• squad models based on development, trading, and fast replacement of talent\n\nLeipzig are judged by whether they remain elite-adjacent every year. That is now the standard.",
       },
       {
         title: "Playing Style",
         body:
-          "RB Leipzig play high-intensity, vertical, transition-focused football.\n\nCore traits:\n• Aggressive pressing.\n• Fast regains.\n• Direct forward progression.\n• Heavy use of pace in attacking areas.\n\nLeipzig aim to win the ball high and attack quickly before opponents reset shape.\n\nIn settled possession:\n• They still look to progress vertically rather than circulate slowly.\n• Midfielders are encouraged to drive forward.\n\nDefensively:\n• Leipzig press in coordinated waves.\n• High defensive line when confident.\n\nMatches often feel fast, athletic, and momentum-driven rather than slow and tactical.",
+          "Leipzig’s football is generally high-intensity, vertical, and transition-heavy.\n\nCommon traits:\n• pressing in coordinated waves\n• quick regains and direct attacks\n• strong athletic profile across the pitch\n• a willingness to attack space aggressively rather than overvalue slow control\n\nWhen Leipzig are good, games move fast. They often look like one of Germany’s most modern, physically and tactically tuned teams.",
       },
       {
         title: "Stadium Profile",
         body:
-          "Red Bull Arena is a modern multi-purpose stadium.\n\nApproximate capacity: 47,000+.\n\nKey characteristics:\n• Continuous bowl design.\n• Strong sightlines.\n• Modern concourses and facilities.\n\nThe stadium feels spacious and contemporary rather than historic.",
+          "Red Bull Arena is a large contemporary stadium.\n\nApproximate capacity: 47,000+.\n\nIt offers strong sightlines, an easy matchday layout, and enough size to feel major without becoming cumbersome. It is a modern event venue more than a folklore venue, which suits the club perfectly.",
       },
       {
         title: "Atmosphere & Matchday Feel",
         body:
-          "Atmosphere is solid but more restrained than at many traditional German clubs.\n\nTypical patterns:\n• Organised ultras section providing rhythmic support.\n• Steady volume rather than overwhelming noise.\n• Big matches produce noticeable uplift.\n\nCrowd engagement is more performance-driven than culturally constant.",
+          "Leipzig’s atmosphere is organised but more restrained than many traditional Bundesliga clubs.\n\nTypical patterns:\n• organised support sections setting rhythm\n• stronger volume in bigger matches and decisive moments\n• a crowd more responsive to the football’s quality and importance than driven by old inherited matchday myth\n\nIt is not one of Germany’s most iconic atmospheres, but it is still a solid major-club environment.",
       },
       {
         title: "Rivalries",
         body:
-          "Borussia Dortmund – competitive rivalry based on overlapping ambitions.\n\nBayern Munich – performance rivalry.\n\nTraditional local derbies are limited due to Leipzig’s modern status.",
+          "Leipzig’s rivalry structure is more modern and status-based than deeply historical.\n\nBorussia Dortmund and Bayern Munich matter because they sit closest in sporting ambition. Union Berlin and other traditional clubs can carry ideological edge because of how Leipzig are perceived within German football culture.",
       },
       {
         title: "Legends",
         body:
-          "Leipzig’s legend culture is modern and performance-based:\n\n• Timo Werner\n• Emil Forsberg\n• Yussuf Poulsen\n\nThese players represent the club’s rise into the Bundesliga elite.",
+          "Leipzig legend culture is entirely modern-era and performance-driven.\n\nCommonly referenced names include:\n• Timo Werner\n• Emil Forsberg\n• Yussuf Poulsen\n\nThese players matter because they helped define the club’s early top-flight identity and normalised Leipzig as an elite-level competitor.",
       },
       {
         title: "Supporter Culture",
         body:
-          "Leipzig support is younger and more modern compared to traditional German clubs.\n\nKey traits:\n• Less historical baggage.\n• More family-friendly matchday feel.\n• Pride in competitiveness rather than heritage.\n\nThe club remains polarising within German football culture.",
+          "Leipzig support is younger, more modern, and less burdened by inherited mythology than most Bundesliga clubs.\n\nKey traits:\n• a supporter base shaped by current success rather than deep historic struggle\n• more family-friendly and performance-oriented matchday identity\n• pride in modern relevance more than romance\n\nThis is one of the clearest cases in Germany where the club and support feel present-tense rather than memory-driven.",
       },
       {
         title: "Neutral Visitor Notes",
         body:
-          "• Good choice for watching high-tempo modern football.\n• Comfortable stadium with excellent sightlines.\n• Atmosphere is organised rather than explosive.\n• Ideal if you prioritise football quality over historic romance.",
+          "• Excellent option if you care about current football quality and easy city-break logistics.\n• Better for modern-football travellers than for traditionalist nostalgia seekers.\n• Leipzig as a city is a huge asset and improves the trip significantly.\n• Strong pick for a polished, efficient Bundesliga weekend.",
       },
     ],
     links: [{ label: "Official site", url: "https://rbleipzig.com/" }],
-    updatedAt: "2026-01-27",
+    updatedAt: "2026-03-10",
   },
 
   "st-pauli": {
@@ -775,56 +755,56 @@ const bundesligaTeamGuides: Record<string, TeamGuide> = {
       {
         title: "Club Overview",
         body:
-          "FC St. Pauli are one of world football’s most culturally distinctive clubs. Their identity is defined far more by ideology, community values, and counterculture than by trophy counts or sustained elite success.\n\nSt. Pauli operate as a Bundesliga club whose global profile is driven by symbolism as much as sport. The skull-and-crossbones imagery, anti-establishment reputation, and strong political identity make St. Pauli a cultural movement as much as a football institution.\n\nFor neutral travellers, St. Pauli offer something genuinely unique: a top-flight football match embedded inside a neighbourhood with its own subculture, traditions, and global recognition that goes far beyond results.",
+          "FC St. Pauli are one of world football’s most culturally distinctive clubs: not because of sustained elite success, but because the club’s political identity, community values, and neighbourhood connection have made them globally recognisable far beyond their trophy record. St. Pauli are not just watched. They are read as a statement.\n\nThat does not make the football secondary. It just means the football exists inside a club culture that is unusually defined by ideology, place, and self-awareness.\n\nFor neutral travellers, St. Pauli offer one of the most unique football trips in Europe: city district, stadium, politics, music, bars and club identity all welded together into one experience.",
       },
       {
         title: "History & Legacy",
         body:
-          "Founded in 1910, St. Pauli spent most of their history outside German football’s elite.\n\nTheir legacy does not revolve around titles. Instead, it is built around the 1980s and 1990s, when the club became associated with left-wing politics, anti-racism, inclusivity, and supporter-driven culture.\n\nSt. Pauli developed a global following despite limited sporting success — a rare phenomenon.\n\nPromotion to the Bundesliga is always treated as a cultural moment rather than just a sporting one.",
+          "Founded in 1910, St. Pauli spent much of their history away from the very top of German football. Their global importance comes not from sustained domination, but from the way the club became a symbol in the 1980s and 1990s of anti-racism, anti-fascism, inclusivity, and countercultural football identity.\n\nThat transformation gave the club a kind of cultural legacy most football institutions never achieve. St. Pauli matter because they became bigger than their results without becoming fake.\n\nTheir promotions and top-flight campaigns therefore land differently: not just as sporting events, but as reappearances of a very specific football culture on a major stage.",
       },
       {
         title: "Recent Seasons",
         body:
-          "Recent seasons have been about consolidation and competitive respectability.\n\nPatterns:\n• Promotion-driven momentum.\n• Squad built around cohesion rather than star power.\n• Focus on avoiding immediate relegation.\n\nSt. Pauli are judged less harshly on league position than most Bundesliga clubs. Survival itself is considered success.",
+          "Recent St. Pauli seasons have usually been judged through survival, progression, and authenticity rather than giant-club expectation.\n\nPatterns:\n• promotion-driven momentum or consolidation logic\n• heavy reliance on squad cohesion and commitment rather than star culture\n• a clear sense that survival and credibility at this level count as genuine success\n\nThe standard is not to become Bayern or Dortmund. It is to remain recognisably St. Pauli while competing properly.",
       },
       {
         title: "Playing Style",
         body:
-          "St. Pauli generally aim to play proactive, energetic football.\n\nCommon traits:\n• High work rate.\n• Aggressive pressing in spells.\n• Direct attacking transitions.\n\nThey are not possession-dominant. Their best performances come when games are fast and emotionally charged rather than slow and controlled.",
+          "St. Pauli are usually strongest when the football is energetic, collective, and emotionally live.\n\nCommon traits:\n• high work rate\n• pressing phases rather than full-match passive containment\n• direct attacks and quick transitions\n• a preference for games that feel active rather than dead\n\nThey are not a luxury-possession side. The football works when it looks honest, urgent and connected to the crowd.",
       },
       {
         title: "Stadium Profile",
         body:
-          "Millerntor-Stadion is a compact urban stadium in Hamburg’s St. Pauli district.\n\nApproximate capacity: 29,000+.\n\nKey characteristics:\n• Tight stands close to the pitch.\n• Standing sections.\n• Strong visual identity throughout the ground.\n\nIt feels raw, dense, and alive.",
+          "Millerntor-Stadion is a compact urban ground embedded in the St. Pauli district.\n\nApproximate capacity: 29,000+.\n\nWhat makes it special is not just the capacity. It is the location, the standing culture, and the fact that the ground feels inseparable from the neighbourhood around it. This is one of Europe’s clearest examples of stadium and district functioning as one combined football environment.",
       },
       {
         title: "Atmosphere & Matchday Feel",
         body:
-          "Atmosphere is one of St. Pauli’s defining strengths.\n\nTypical patterns:\n• Constant chanting.\n• Strong ultras presence.\n• Politically charged banners and displays.\n\nNoise levels remain high regardless of league position.",
+          "St. Pauli atmosphere is one of the club’s defining strengths.\n\nTypical patterns:\n• constant chanting and organised support\n• political banners and strong visual identity\n• a crowd that feels like it belongs to the place rather than to a manufactured event\n\nThe matchday is not just loud. It is distinct. Few clubs in Europe feel this specifically themselves.",
       },
       {
         title: "Rivalries",
         body:
-          "Hamburger SV – Hamburg derby.\n\nThis is the defining rivalry and carries huge cultural and emotional weight.",
+          "Hamburger SV is the defining rivalry and one of Germany’s most culturally loaded derby pairings.\n\nThe fixture matters because it is not just footballing. It is about two different versions of Hamburg, club culture, and football identity.",
       },
       {
         title: "Legends",
         body:
-          "St. Pauli legends are often cultural icons rather than superstars.\n\n• Fabian Boll\n• Timo Schultz\n\nPlayers associated with loyalty and embodiment of club values are revered.",
+          "St. Pauli legends are often defined as much by symbolic fit and loyalty as by raw football superstardom.\n\nCommonly referenced figures include:\n• Fabian Boll\n• Timo Schultz\n\nThis tells you what the club values: embodiment, not celebrity.",
       },
       {
         title: "Supporter Culture",
         body:
-          "St. Pauli supporters are famously ideological.\n\nKey traits:\n• Anti-racist.\n• Anti-fascist.\n• Pro-inclusivity.\n\nMatchday feels closer to a social movement than a typical football crowd.",
+          "St. Pauli support is one of the most ideologically recognisable supporter cultures in football.\n\nKey traits:\n• anti-racist and anti-fascist identity\n• strong support for inclusion and social causes\n• an atmosphere where banners, values, and community feel inseparable from the matchday itself\n\nThis is not a support base that sees football as isolated from the rest of life.",
       },
       {
         title: "Neutral Visitor Notes",
         body:
-          "• One of Europe’s most unique football experiences.\n• Expect heavy standing culture.\n• Arrive early and explore the surrounding district.\n• Ideal if culture matters as much as football quality.",
+          "• One of the best culture-heavy football trips in Europe.\n• The district matters as much as the stadium, so arrive early and build the wider area into the day.\n• Great for travellers who care about club identity, atmosphere and place, not just football quality.\n• A genuinely distinctive stop, not a generic big-city football ticket.",
       },
     ],
     links: [{ label: "Official site", url: "https://www.fcstpauli.com/" }],
-    updatedAt: "2026-01-27",
+    updatedAt: "2026-03-10",
   },
 
   "union-berlin": {
@@ -837,56 +817,56 @@ const bundesligaTeamGuides: Record<string, TeamGuide> = {
       {
         title: "Club Overview",
         body:
-          "Union Berlin are one of German football’s most identity-driven modern success stories: a club whose rise has been powered by cohesion, stadium culture, and collective belief rather than elite budgets.\n\nUnion’s reputation is built on authenticity. They present themselves as a club of the people — grounded, stubborn, and resistant to the corporate gloss that dominates modern football. This self-image isn’t marketing fluff; it’s embedded in matchday behaviour and the way supporters talk about the club.\n\nFor neutral travellers, Union offer a Bundesliga experience that feels close to old-school football: intense crowd, compact stadium, and a team whose performances are built on effort, organisation, and emotional connection.",
+          "Union Berlin are one of Germany’s most identity-driven modern success stories: a club whose rise has been powered by supporter culture, collective cohesion, and a very clear idea of who they are. Union’s reputation is built on authenticity. They feel like a club that still belongs to its people, even while operating in increasingly elite football environments.\n\nThat is a huge part of their appeal. Union are not just another Bundesliga badge in a big city. They are a living football culture with a ground, district feel, and supporter ethos that make the whole experience unusually strong.\n\nFor neutral travellers, Union offer one of Germany’s best atmosphere-and-identity trips: intense, local, and much more emotionally textured than many bigger stadium experiences.",
       },
       {
         title: "History & Legacy",
         body:
-          "Founded in 1966 (with roots in earlier local football structures), Union spent much of their existence outside the German top flight.\n\nTheir legacy is deeply tied to East Berlin identity and the role the club played as a community outlet during and after the GDR era.\n\nA defining part of Union’s modern mythology is the supporter-led rebuilding and preservation of Stadion An der Alten Försterei. That story cemented Union as a symbol of fan ownership in spirit if not literal legal structure.\n\nUnion’s rise to the Bundesliga and subsequent European nights are now treated as historic landmarks — not normal milestones — because they represent a club outperforming its expected ceiling.",
+          "Union’s deeper roots run through East Berlin football identity, and their modern mythology is shaped by community, survival, and supporter-led preservation. The rebuilding and supporter connection to Alte Försterei are central to the club’s story and one of the reasons Union resonate so strongly beyond Berlin.\n\nTheir rise to the Bundesliga and then into European competition felt historically significant because it did not read like a corporate step-change. It read like a club outgrowing what many thought was possible while still feeling like itself.\n\nThat is rare.",
       },
       {
         title: "Recent Seasons",
         body:
-          "Union’s recent seasons have been a study in overachievement and volatility.\n\nPatterns:\n• Strong overperformance through structure and home advantage.\n• Periods of European-level competitiveness.\n• Subsequent seasons where squad stretch and fixture load exposed depth limits.\n\nUnion’s modern narrative is not linear growth. It’s about managing the consequences of rapid ascent. They remain dangerous when their structure is intact, but their margins are thinner than richer clubs.",
+          "Recent Union seasons have been about overachievement, adaptation, and the difficulty of carrying sudden top-level relevance without losing structural integrity.\n\nPatterns:\n• strong periods built on organisation and home advantage\n• moments where European load and squad depth exposed limits\n• ongoing pressure to prove that the rise was not a one-phase anomaly\n\nThe club’s ceiling has changed, but the margins remain tighter than at richer rivals.",
       },
       {
         title: "Playing Style",
         body:
-          "Union are typically a system-led, defensive-responsibility-first side.\n\nCommon traits:\n• Compact shape.\n• High commitment in duels.\n• Strong set-piece emphasis.\n• Direct attacking phases rather than long possession spells.\n\nUnion’s best football looks efficient rather than pretty: win territory, defend hard, exploit moments, and make the match uncomfortable.\n\nAt their strongest, Union can look brutally effective — not because they dominate, but because they control the game’s emotional and physical rhythm.",
+          "Union are generally strongest when the football is collective, disciplined, and physically committed.\n\nCommon traits:\n• compact shape without the ball\n• strong set-piece emphasis\n• direct attacking phases rather than slow-possession obsession\n• a desire to make the match uncomfortable and emotionally tense\n\nUnion do not need to dominate aesthetics to dominate feeling. That is one of their great strengths.",
       },
       {
         title: "Stadium Profile",
         body:
-          "Stadion An der Alten Försterei is one of Germany’s most atmospheric venues.\n\nApproximate capacity: 22,000+.\n\nKey characteristics:\n• Heavy standing culture.\n• Close proximity to the pitch.\n• Forest-adjacent setting and local feel.\n\nIt feels like a community fortress rather than an entertainment complex.",
+          "Stadion An der Alten Försterei is one of Germany’s most distinctive grounds.\n\nApproximate capacity: 22,000+.\n\nThe standing culture, closeness to the pitch, and local setting give it a true fortress feel. It does not feel like an entertainment complex. It feels like a football place, and that difference is obvious as soon as you arrive.",
       },
       {
         title: "Atmosphere & Matchday Feel",
         body:
-          "Union’s atmosphere is intense, unified, and relentless.\n\nTypical patterns:\n• Constant vocal support.\n• Strong ultras-driven rhythm.\n• A sense of collective “we’re in this together.”\n\nThis is one of the Bundesliga’s strongest home environments — not flashy, but powerful and sustained.\n\nEven neutral visitors notice how the crowd behaves like a single unit rather than a collection of individuals.",
+          "Union’s atmosphere is intense, unified and deeply local.\n\nTypical patterns:\n• sustained vocal support rather than burst-only noise\n• a crowd that behaves as one body rather than scattered spectators\n• emotional pressure created through collective rhythm, not flashy spectacle alone\n\nThis is one of the Bundesliga’s strongest home environments because it feels protected and lived-in.",
       },
       {
         title: "Rivalries",
         body:
-          "Hertha BSC – Berlin derby.\n\nThe rivalry carries cultural and identity contrast: Union as the working-class East-rooted club versus Hertha’s more traditional West Berlin positioning.\n\nRB Leipzig also carries a modern “ideological rivalry” element due to Union’s fan culture and Leipzig’s corporate model.",
+          "Hertha BSC remains the defining city rivalry because it carries both Berlin football significance and a sharp cultural contrast.\n\nUnion also carry ideological edge against clubs such as RB Leipzig because of how sharply their supporter identity contrasts with more corporate football models.",
       },
       {
         title: "Legends",
         body:
-          "Union legend culture is heavily tied to loyalty and the rise era.\n\nNotable figures include:\n• Torsten Mattuschka\n\nUnion icons are often celebrated for embodying attitude and community rather than global fame.",
+          "Union legend culture heavily values loyalty, belonging, and contribution to the club’s rise.\n\nCommonly referenced figures include:\n• Torsten Mattuschka\n\nWhat matters most is not fame. It is whether someone feels like Union.",
       },
       {
         title: "Supporter Culture",
         body:
-          "Union supporters are among Germany’s most identity-conscious.\n\nKey traits:\n• Strong local pride.\n• Anti-corporate sentiment.\n• Heavy emphasis on togetherness and authenticity.\n\nMatchday culture feels serious — not sterile, not touristy — and the stadium experience is treated as something to protect.",
+          "Union support is one of the clearest identity cultures in Germany.\n\nKey traits:\n• strong local pride and East-rooted feeling\n• anti-corporate instincts and a protective view of the club’s culture\n• high value placed on togetherness, effort, and authenticity\n\nThis is a support base that cares deeply about the club remaining culturally itself, not just competitively successful.",
       },
       {
         title: "Neutral Visitor Notes",
         body:
-          "• One of the best Bundesliga choices for atmosphere.\n• Expect lots of standing and sustained noise.\n• Arrive early — the approach and build-up matter.\n• Ideal if you want a ground that feels like a real local fortress rather than a polished modern venue.",
+          "• One of the best atmosphere trips in Germany.\n• Ideal if you want a ground that still feels like a real local fortress rather than a polished event venue.\n• Arrive early, because the approach and build-up matter here.\n• Stronger for identity and intimacy than for giant-stadium scale.",
       },
     ],
     links: [{ label: "Official site", url: "https://www.fc-union-berlin.de/" }],
-    updatedAt: "2026-01-27",
+    updatedAt: "2026-03-10",
   },
 
   "vfb-stuttgart": {
@@ -899,56 +879,56 @@ const bundesligaTeamGuides: Record<string, TeamGuide> = {
       {
         title: "Club Overview",
         body:
-          "VfB Stuttgart are one of Germany’s historically important clubs whose modern identity is shaped by dramatic swings between crisis and resurgence. Stuttgart are not a quiet mid-table institution — they are a club with a self-image of belonging near the top end of German football, even when league position does not always reflect that.\n\nStuttgart’s DNA is built around attacking intent, youth development, and a belief in expressive football. Supporters expect proactive play and visible ambition, not merely survival.\n\nFor neutral travellers, Stuttgart offer a large-club Bundesliga experience with strong crowd engagement, a big stadium, and a fanbase that reacts emotionally to both progress and stagnation.",
+          "VfB Stuttgart are one of Germany’s historically important clubs whose identity has always felt bigger than their most recent table position. Stuttgart are not a quiet mid-table institution. They are a club with real historic weight, a major-city setting, and a supporter base that expects football with ambition, not merely survival.\n\nThat expectation is part of what makes Stuttgart compelling. The club’s modern life has swung between crisis, resurgence, and renewed belief, which means the matchday often carries more emotion than a ‘normal’ league fixture would elsewhere.\n\nFor neutral travellers, Stuttgart offer a very strong large-club Bundesliga trip: big ground, engaged support, and enough city quality to turn the match into a proper weekend.",
       },
       {
         title: "History & Legacy",
         body:
-          "Founded in 1893, Stuttgart have won multiple German championships across different eras, giving them genuine heavyweight historical status.\n\nThe club’s legacy is closely tied to talent production. Stuttgart have long been known as a pathway club for elite German players, supplying both domestic rivals and the national team.\n\nUnlike some historically successful clubs, Stuttgart’s modern era has included extended periods of underachievement and relegation battles. This contrast between past stature and recent volatility shapes how supporters view every season.",
+          "Founded in 1893, Stuttgart have real heavyweight historical credentials through multiple national titles and a long reputation as a serious German football institution.\n\nThe club’s legacy also runs through youth development. Stuttgart are strongly associated with producing top-level talent and functioning as a high-quality football environment rather than merely a one-phase successful side.\n\nThat history matters because it shapes supporter expectation. The club are not supposed to think small.",
       },
       {
         title: "Recent Seasons",
         body:
-          "Stuttgart’s recent seasons have been defined by sharp recovery after crisis.\n\nPatterns:\n• Survival-focused campaigns followed by sudden upward surges.\n• Heavy reliance on young, energetic squads.\n• Re-emergence as European-qualification contenders during strong cycles.\n\nWhen momentum is positive, Stuttgart can look like one of the Bundesliga’s most dynamic sides. When structure weakens, collapses can happen quickly.",
+          "Recent Stuttgart seasons have shown just how quickly the club can swing from fragility to force.\n\nPatterns:\n• survival pressure followed by sharp upward surges\n• squads built around youth, tempo, and collective confidence\n• seasons judged by whether Stuttgart look upward-facing and recognisably ambitious\n\nWhen the structure holds, Stuttgart can look like one of the Bundesliga’s most dynamic non-superclub sides.",
       },
       {
         title: "Playing Style",
         body:
-          "Stuttgart favour aggressive, attacking football built on tempo.\n\nCommon traits:\n• High-intensity pressing.\n• Vertical passing.\n• Willingness to commit numbers forward.\n\nThey aim to turn matches into fast, transitional contests rather than slow positional battles.\n\nDefensively, Stuttgart accept a degree of risk in exchange for attacking output. Matches can feel open, entertaining, and occasionally chaotic.",
+          "Stuttgart are usually strongest when the football is fast, brave, and aggressive.\n\nCommon traits:\n• pressing and attacking intensity\n• vertical movement through midfield and wide areas\n• willingness to commit numbers forward\n• a tolerance for open, emotionally active games rather than sterile control\n\nThat makes Stuttgart useful for neutrals. The football often feels live and unafraid.",
       },
       {
         title: "Stadium Profile",
         body:
-          "MHPArena (formerly Mercedes-Benz Arena) is a large modern stadium.\n\nApproximate capacity: 60,000+.\n\nIt features steep stands, strong sightlines, and a bowl-style design that concentrates noise.\n\nThe stadium regularly feels full and visually imposing.",
+          "MHPArena is a major German football venue.\n\nApproximate capacity: 60,000+.\n\nThe scale gives Stuttgart the kind of matchday stage their history demands, while the steep stands and modernised structure help the atmosphere carry well. It feels like a proper big-club ground.",
       },
       {
         title: "Atmosphere & Matchday Feel",
         body:
-          "Stuttgart’s atmosphere is lively and reactive.\n\nTypical patterns:\n• Strong early energy.\n• Sustained noise during attacking momentum.\n• Tension during defensive struggles.\n\nWhen Stuttgart are playing well, the stadium can feel vibrant and restless in a positive way.",
+          "Stuttgart’s atmosphere is expressive and reactive.\n\nTypical patterns:\n• strong early energy when belief is high\n• crowd surges around attacking phases and momentum swings\n• visible emotional volatility when the team look below standard\n\nThis is a fanbase that wants to feel the club striving, not settling.",
       },
       {
         title: "Rivalries",
         body:
-          "Karlsruher SC – primary regional rivalry.\n\nBayern Munich – historically significant due to competition between southern powers.",
+          "Karlsruher SC remains the defining regional rivalry through historical and geographical tension.\n\nBayern Munich also carry weight because of southern-Germany status and historic competitive contrast.",
       },
       {
         title: "Legends",
         body:
-          "• Fritz Walter (VfB Stuttgart)\n• Jürgen Klinsmann\n\nKlinsmann in particular symbolises Stuttgart’s role as a producer of elite attacking talent.",
+          "Stuttgart’s legend culture is rooted in title-era figures and elite talent production.\n\nCommonly referenced names include:\n• Fritz Walter (VfB Stuttgart)\n• Jürgen Klinsmann\n\nThe club’s memory strongly values players who combined quality with symbolic importance for Stuttgart’s status.",
       },
       {
         title: "Supporter Culture",
         body:
-          "Stuttgart supporters are demanding but passionate.\n\nKey traits:\n• Expect attacking football.\n• Strong emotional reactions to form swings.\n• Pride in youth development tradition.",
+          "Stuttgart support is passionate, demanding, and emotionally quick to react.\n\nKey traits:\n• expectation of attacking football and visible ambition\n• pride in the club’s historical size and talent-production reputation\n• low tolerance for passive or lifeless performances\n\nThis is a supporter base that wants Stuttgart to feel like Stuttgart, not a comfortable lower-ceiling imitation.",
       },
       {
         title: "Neutral Visitor Notes",
         body:
-          "• Good choice for high-tempo football.\n• Large, loud stadium experience.\n• Expect an engaged and expressive crowd.\n• Matches often entertaining for neutrals.",
+          "• Strong choice for travellers who want a big traditional Bundesliga club without superclub polish.\n• The city adds a lot, especially if you like museums, food and cleaner logistics.\n• Good pick for high-tempo football and large-stadium energy.\n• Better as a full weekend than as a one-night rush job.",
       },
     ],
     links: [{ label: "Official site", url: "https://www.vfb.de/" }],
-    updatedAt: "2026-01-27",
+    updatedAt: "2026-03-10",
   },
 
   "werder-bremen": {
@@ -961,56 +941,56 @@ const bundesligaTeamGuides: Record<string, TeamGuide> = {
       {
         title: "Club Overview",
         body:
-          "Werder Bremen are one of Germany’s traditional powerhouse clubs whose identity is rooted in attacking football, strong supporter culture, and a belief in expressive play. Even during periods of decline, Werder are never treated as a small club — their historical stature continues to shape expectations.\n\nWerder’s self-image is that of a club meant to compete in the Bundesliga’s upper half. Survival alone is never framed as success; it is tolerated only as a temporary state.\n\nFor neutral travellers, Werder Bremen offer a classic Bundesliga experience: traditional club, riverside stadium, and a fanbase that values both style and commitment.",
+          "Werder Bremen are one of Germany’s classic traditional clubs: historically significant, emotionally important, and built around an identity that values attacking football, club character, and local pride. Bremen are not supposed to feel like a small club. Even through decline and rebuild phases, the badge remains heavier than that.\n\nTheir appeal lies in this combination of tradition and style. Werder are remembered as a club whose best eras were not just successful, but enjoyable. That still shapes supporter expectation.\n\nFor neutral travellers, Bremen are one of Germany’s best classic football-city combinations: pretty compact city, riverside stadium, and a club with genuine Bundesliga heritage.",
       },
       {
         title: "History & Legacy",
         body:
-          "Founded in 1899, Werder Bremen have won multiple German championships and domestic cups, establishing themselves as one of the Bundesliga’s most successful historical clubs.\n\nWerder’s golden eras were characterised by attacking, entertaining football rather than purely pragmatic dominance.\n\nThe club has also enjoyed long spells of European football, reinforcing their identity as a major German institution.\n\nRecent relegation and recovery cycles contrast sharply with this legacy, intensifying supporter frustration but not diminishing historical pride.",
+          "Founded in 1899, Werder Bremen built one of the strongest historical records in German football through titles, cups, European football, and long-term top-flight visibility.\n\nTheir golden eras were tied to attacking confidence and club personality rather than purely functional dominance. That matters because the club’s self-image is not only about winning. It is about how Werder are supposed to feel.\n\nEven when the modern club goes through downturns, the historical memory remains powerful and active.",
       },
       {
         title: "Recent Seasons",
         body:
-          "Werder’s recent seasons reflect stabilisation after crisis.\n\nPatterns:\n• Promotion back to Bundesliga followed by consolidation.\n• Focus on restoring structural stability.\n• Gradual rebuilding rather than rapid spending.\n\nWerder are aiming to re-establish themselves as a reliable top-half side rather than bouncing between divisions.",
+          "Recent Bremen seasons have centred on stabilisation after crisis and a slow attempt to reconnect historical stature with present-day consistency.\n\nPatterns:\n• recovery after relegation or underperformance cycles\n• efforts to rebuild a squad capable of more than mere survival\n• strong emotional importance attached to whether the club look recognisably like Werder again\n\nThe table matters, but the style and self-respect matter too.",
       },
       {
         title: "Playing Style",
         body:
-          "Werder favour proactive, attacking football.\n\nCommon traits:\n• Willingness to build from the back.\n• Emphasis on wing play.\n• Vertical movement through midfield.\n\nThey prefer to take initiative rather than sit in deep defensive blocks.\n\nDefensive stability can fluctuate, making matches feel open and momentum-driven.",
+          "Werder are traditionally associated with proactive football.\n\nCommon traits:\n• willingness to build and attack with intention\n• use of width and movement to open games up\n• less appetite for purely passive, damage-limitation football than many clubs in similar positions\n• games that often become momentum-driven and useful for neutrals\n\nThe club’s best football feels expansive rather than fearful, which is part of why Bremen remain such a likable football stop.",
       },
       {
         title: "Stadium Profile",
         body:
-          "Weserstadion is one of Germany’s most picturesque grounds.\n\nApproximate capacity: 42,000+.\n\nLocated directly on the Weser River, the stadium combines modern renovation with traditional layout.\n\nSightlines are strong and the stadium feels compact for its size.",
+          "Weserstadion is one of Germany’s most attractive stadium settings.\n\nApproximate capacity: 42,000+.\n\nIts riverside location makes it visually and atmospherically distinctive, while the ground itself still feels properly football-centred rather than just scenic. It is one of the Bundesliga’s most pleasant and recognisable matchday environments.",
       },
       {
         title: "Atmosphere & Matchday Feel",
         body:
-          "Atmosphere is consistently strong.\n\nTypical patterns:\n• Loud early support.\n• Continuous singing from ultras sections.\n• Strong reactions to attacking phases.\n\nWerder home matches usually feel lively regardless of opponent.",
+          "Werder atmosphere is lively, traditional, and emotionally warm without losing edge.\n\nTypical patterns:\n• strong support across most fixtures\n• visible crowd response to attacking momentum and effort\n• a matchday feel that blends local pride, old-club weight and relatively relaxed city atmosphere\n\nIt is not Germany’s most aggressive stadium trip, but it is one of the most satisfying.",
       },
       {
         title: "Rivalries",
         body:
-          "Hamburger SV – Nordderby, one of Germany’s most famous rivalries.\n\nBayern Munich – historic competitive rivalry.",
+          "Hamburger SV is the defining rivalry through the Nordderby.\n\nThat fixture still carries major cultural and emotional significance because of history, geography and the fact that both clubs see themselves as larger than recent difficulties.",
       },
       {
         title: "Legends",
         body:
-          "• Marco Bode\n• Miroslav Klose\n• Diego\n\nThese figures represent Werder’s attacking heritage.",
+          "Werder legend culture is strongly tied to the club’s more expressive and successful eras.\n\nCommonly referenced names include:\n• Marco Bode\n• Miroslav Klose\n• Diego\n\nThese figures represent Werder’s attacking heritage and broader football personality.",
       },
       {
         title: "Supporter Culture",
         body:
-          "Werder supporters are loyal and tradition-focused.\n\nKey traits:\n• Strong club identity.\n• Appreciation for attacking intent.\n• Low tolerance for passive football.",
+          "Werder support is loyal, tradition-heavy, and strongly attached to the club’s sense of self.\n\nKey traits:\n• appreciation for attacking intent\n• frustration with football that feels too passive or joyless\n• deep club identity rooted in Bremen rather than in abstract branding\n\nThis is a fanbase that still wants Werder to be Werder, not simply safe.",
       },
       {
         title: "Neutral Visitor Notes",
         body:
-          "• Excellent atmosphere for most fixtures.\n• Scenic stadium setting.\n• Good choice if you enjoy traditional German supporter culture.\n• Expect entertaining football more often than not.",
+          "• One of the best all-round traditional Bundesliga weekends.\n• Strong combination of club history, city quality, and stadium setting.\n• Great choice if you want atmosphere without the heaviest logistical intensity.\n• Bremen is one of the league’s most balanced and likable football trips.",
       },
     ],
     links: [{ label: "Official site", url: "https://www.werder.de/" }],
-    updatedAt: "2026-01-27",
+    updatedAt: "2026-03-10",
   },
 
   "wolfsburg": {
@@ -1023,56 +1003,56 @@ const bundesligaTeamGuides: Record<string, TeamGuide> = {
       {
         title: "Club Overview",
         body:
-          "VfL Wolfsburg are a modern Bundesliga club whose identity is shaped by corporate backing, periodic elite-level competitiveness, and an ongoing attempt to establish themselves as a permanent top-tier force rather than an occasional challenger.\n\nWolfsburg are not driven by century-old mythology in the way many German clubs are. Instead, their identity is functional and performance-oriented: qualify for Europe, challenge for trophies when cycles align, and operate as a serious professional organisation.\n\nFor neutral travellers, Wolfsburg offer a clean, modern Bundesliga experience focused on football quality rather than historical romance.",
+          "VfL Wolfsburg are a modern Bundesliga club whose identity is shaped by corporate backing, periodic top-level competitiveness, and a persistent attempt to establish themselves as a stable upper-tier force rather than a temporary success story. They do not have the emotional folklore of Germany’s old traditional giants, but they do have serious football credibility.\n\nWolfsburg feel functional, professional, and performance-led. That is not especially romantic, but it is honest.\n\nFor neutral travellers, Wolfsburg are a useful football stop if you care about modern German club structure, decent football quality, and a low-friction matchday more than heritage-heavy atmosphere.",
       },
       {
         title: "History & Legacy",
         body:
-          "Founded in 1945, Wolfsburg rose rapidly through German football and reached their defining peak by winning the Bundesliga title in 2009.\n\nThat championship remains the central reference point in club history and demonstrated Wolfsburg’s potential when recruitment, investment, and tactical execution align.\n\nWhile they have not built sustained dominance, Wolfsburg are widely regarded as a club capable of entering European places during strong cycles.",
+          "Founded in 1945, Wolfsburg’s modern historical peak remains the 2009 Bundesliga title, which instantly transformed how the club were viewed. That title matters because it proved Wolfsburg were capable of more than occasional relevance.\n\nSince then, their legacy has been about trying to remain a credible European-level club across different squad and coaching cycles. They are not a giant by tradition, but they are too established now to be dismissed as a novelty project.",
       },
       {
         title: "Recent Seasons",
         body:
-          "Wolfsburg’s recent seasons reflect mid-to-upper table volatility.\n\nPatterns:\n• Finishes across mid-table and European qualification positions.\n• Frequent squad refreshes.\n• Periodic managerial changes.\n\nWolfsburg often look capable of strong runs, but consistency across full seasons remains elusive.",
+          "Recent Wolfsburg seasons have sat in the familiar mid-to-upper-table volatility zone.\n\nPatterns:\n• occasional pushes toward Europe\n• squad churn and managerial resets affecting continuity\n• repeated attempts to find a durable higher-level identity rather than oscillate endlessly\n\nWolfsburg are often judged not by drama, but by whether they are efficient enough to justify the resources behind them.",
       },
       {
         title: "Playing Style",
         body:
-          "Wolfsburg typically favour structured, balanced football.\n\nCommon traits:\n• Organised defensive shape.\n• Vertical transitions.\n• Emphasis on physical midfield profiles.\n\nThey are comfortable mixing possession phases with direct attacking movements.\n\nMatches tend to feel tactically controlled rather than chaotic.",
+          "Wolfsburg are generally at their best when they play balanced, structured football.\n\nCommon traits:\n• organised defensive shape\n• vertical transitions when openings appear\n• physical central profiles and disciplined spacing\n• a preference for tactical order over emotional chaos\n\nTheir games can be less wild than some Bundesliga neutral favourites, but that also makes them cleaner and easier to read.",
       },
       {
         title: "Stadium Profile",
         body:
-          "Volkswagen Arena is a modern football stadium.\n\nApproximate capacity: 30,000+.\n\nCompact, enclosed design with good sightlines and modern facilities.",
+          "Volkswagen Arena is a modern, compact Bundesliga stadium.\n\nApproximate capacity: 30,000+.\n\nIt is enclosed, comfortable, and efficient, with good sightlines and a straightforward event-day layout. The ground reflects the club well: modern, polished, and more functional than mythic.",
       },
       {
         title: "Atmosphere & Matchday Feel",
         body:
-          "Atmosphere is solid but not among Germany’s most intense.\n\nTypical patterns:\n• Good noise in European or big domestic matches.\n• More subdued in routine fixtures.\n\nCrowd engagement rises with team performance.",
+          "Wolfsburg atmosphere is solid but not among the Bundesliga’s defining cultural experiences.\n\nTypical patterns:\n• stronger engagement in bigger fixtures and European-level games\n• a more measured matchday tone in routine league fixtures\n• crowd energy that tends to follow team performance rather than overwhelm it\n\nThis is a cleaner, calmer matchday than many heritage-heavy German grounds provide.",
       },
       {
         title: "Rivalries",
         body:
-          "Hannover 96 – Lower Saxony derby.\n\nBayern Munich – competitive rivalry from title-era encounters.",
+          "Hannover 96 carries the clearest Lower Saxony regional derby significance.\n\nBayern Munich also hold symbolic importance because the 2009 title era created a permanent reference point between Wolfsburg’s greatest peak and Germany’s standard-bearing giant.",
       },
       {
         title: "Legends",
         body:
-          "• Grafite\n• Edin Džeko\n• Diego\n\nKey figures from the 2009 title-winning side.",
+          "Wolfsburg’s legend culture is centred heavily on the club’s major modern peak.\n\nCommonly referenced names include:\n• Grafite\n• Edin Džeko\n• Diego\n\nThose players matter because they represent the moment Wolfsburg became impossible to ignore.",
       },
       {
         title: "Supporter Culture",
         body:
-          "Wolfsburg supporters are pragmatic and performance-focused.\n\nKey traits:\n• Appreciation for professionalism.\n• Less tradition-driven than many Bundesliga clubs.\n• Loyal core support despite corporate image.",
+          "Wolfsburg support is pragmatic, loyal, and less tradition-drenched than most Bundesliga clubs.\n\nKey traits:\n• appreciation for professionalism and competence\n• lower tolerance for drift than the club’s atmosphere reputation might suggest\n• a core support base that remains committed despite the club’s corporate image\n\nIt is a quieter culture than the league’s iconic grounds, but not a fake one.",
       },
       {
         title: "Neutral Visitor Notes",
         body:
-          "• Modern, comfortable stadium.\n• Good chance of seeing technically solid football.\n• Atmosphere depends on opponent.\n• Better suited to football-quality seekers than ultra-culture hunters.",
+          "• Better for modern-football travellers than for old-ground romantics.\n• Easy, efficient matchday and simple stadium logistics.\n• Best used as part of a broader northern-Germany route rather than a pure standalone bucket-list trip.\n• Useful if you want quality and low friction more than mythology.",
       },
     ],
     links: [{ label: "Official site", url: "https://www.vfl-wolfsburg.de/" }],
-    updatedAt: "2026-01-27",
+    updatedAt: "2026-03-10",
   },
 
   "mainz-05": {
@@ -1085,61 +1065,56 @@ const bundesligaTeamGuides: Record<string, TeamGuide> = {
       {
         title: "Club Overview",
         body:
-          "1. FSV Mainz 05 are one of the Bundesliga’s most identity-driven overachievers: a club that survives and competes through structure, coaching clarity, and collective intensity rather than star power. Mainz are rarely built to dominate matches on talent — they’re built to make matches uncomfortable, disrupt rhythm, and win through organisation.\n\nThey’re also a “system club” in the German sense: recruitment, squad profiles, and match plans tend to serve a clear idea rather than a collection of individuals. For neutral travellers, Mainz are a strong pick if you want a properly local Bundesliga experience with real edge — not a tourist spectacle, but a club that feels serious about what it is.",
+          "Mainz 05 are one of the Bundesliga’s clearest system clubs: a side whose top-flight credibility is built on coaching clarity, structural organisation, and collective intensity rather than star power. Mainz rarely try to seduce you with glamour. They win respect by being coherent, difficult, and properly alive in the details.\n\nThat is why the club matter. They are one of modern German football’s best examples of a side surviving and competing through structure, not excess.\n\nFor neutral travellers, Mainz offer a strong ‘real Bundesliga’ trip: compact modern stadium, very local feel, a city that works brilliantly for short breaks, and football that usually has bite.",
       },
       {
         title: "History & Legacy",
         body:
-          "Mainz spent most of their existence outside the top tier and only became a consistent Bundesliga presence in the modern era. Their legacy isn’t trophy-driven — it’s reputation-driven.\n\nThe club is widely associated with one of German football’s defining themes: elite coaching development. Mainz are often discussed as part of the Klopp/Tuchel lineage era, where the club became synonymous with high-intensity, tactically detailed football.\n\nTheir modern identity is built on earning Bundesliga status the hard way: smart coaching, strong conditioning, and cohesion over glamour.",
-      },
-      {
-        title: "Coaching Identity & Tactical Reputation",
-        body:
-          "Mainz are regularly described as a “coaches’ club.” That’s not hype — it’s how they survive.\n\nCommon traits across Mainz eras:\n• Clear tactical structure (especially without the ball).\n• Aggressive pressing phases.\n• Strong emphasis on transitions and set pieces.\n• High physical output and collective responsibility.\n\nEven when Mainz are struggling in the table, the expectation is not beautiful dominance — it’s visible organisation, fight, and a plan.",
+          "Mainz’s significance is not built on a giant trophy haul. It is built on becoming a legitimate top-flight club through intelligence, coaching culture, and a refusal to behave like a small side resigned to inferiority.\n\nThe club’s modern identity is strongly associated with coaching development and tactical clarity. Mainz became one of those clubs football people talk about with respect because of how they think rather than because of how famous they already were.\n\nThat is a serious kind of legacy in modern football.",
       },
       {
         title: "Recent Seasons",
         body:
-          "Mainz’s recent seasons tend to fall into a familiar pattern: periods of strong form driven by intensity and cohesion, followed by stretches where chance creation dries up and the margins get tight.\n\nThey often operate in the “survival plus upside” bracket:\n• The baseline goal is Bundesliga stability.\n• A good cycle looks like top-half pushes and big scalp wins at home.\n• Bad cycles look like long runs of narrow games decided by small moments.\n\nMainz are rarely a soft touch — even when the results are poor, they’re usually hard to play against.",
+          "Recent Mainz seasons have usually followed a recognisable pattern.\n\nPatterns:\n• periods of strong form driven by structure and intensity\n• stretches where chance creation narrows and margins become very fine\n• persistent focus on survival-plus rather than fantasy ambitions disconnected from scale\n\nThe key question is rarely whether Mainz can become a giant. It is whether they still look unmistakably like Mainz: organised, difficult, and competitive.",
       },
       {
         title: "Playing Style",
         body:
-          "Mainz football is usually built around disruption and intensity.\n\nCommon traits:\n• Pressing in coordinated waves rather than constant all-out chaos.\n• Direct progression once the ball is won.\n• Heavy reliance on duel-winning and second balls.\n• Set-piece threat as a genuine weapon.\n\nThey’re not typically a possession exhibition team. The goal is to turn the match into a series of winning moments: win the press, win the duel, win the set piece, punish mistakes.",
+          "Mainz usually thrive when games become physical, structured and tactically demanding.\n\nCommon traits:\n• coordinated pressing rather than random running\n• strong transitional intent after regains\n• repeated emphasis on duels and second balls\n• set pieces treated as major attacking opportunities\n\nThey are not usually a beauty-possession side. The football is built to disrupt, pressure, and convert moments. That makes them a very ‘German football culture’ kind of club.",
       },
       {
         title: "Stadium Profile",
         body:
-          "MEWA Arena is a modern football-specific stadium with steep stands and a compact feel.\n\nApproximate capacity: 33,000+.\n\nIt’s big enough to feel like Bundesliga, but tight enough that noise carries well. Sightlines are strong, and the ground feels purpose-built for a direct, intense matchday rather than a diluted multi-use venue.",
+          "MEWA Arena is a compact, modern, football-specific ground.\n\nApproximate capacity: 33,000+.\n\nThe steepness and compactness give the stadium a more intense feel than its size alone suggests. It suits Mainz because the whole club works better when everything feels slightly tighter and more concentrated.",
       },
       {
         title: "Atmosphere & Matchday Feel",
         body:
-          "Mainz atmosphere is organised and reactive rather than theatrical.\n\nTypical patterns:\n• Strong volume when the team’s intensity is high.\n• Noticeable surges during pressing phases, tackles, and momentum swings.\n• Big uplift against major opponents and regional rivals.\n\nMEWA can feel properly hostile (in a football sense) when Mainz are in “fight mode.” It’s not Dortmund-style spectacle — it’s intensity built from the game itself.",
+          "Mainz atmosphere is organised, local, and reactive in the best sense.\n\nTypical patterns:\n• stronger surges when the pressing and aggression are visible\n• big uplift against major opponents and regional rivals\n• a matchday that feels more serious than touristic, more football-driven than spectacle-driven\n\nThis is not Dortmund-scale noise. It is a proper compact-Bundesliga intensity.",
       },
       {
         title: "Rivalries",
         body:
-          "Eintracht Frankfurt – the Rhine-Main derby edge and the most emotionally charged fixture.\n\nKaiserslautern – historic regional tension (less frequent depending on divisions).\n\nMainz also have a practical ‘statement’ mindset: matches against Bayern/Dortmund often carry extra bite because the club’s identity is tied to proving they can disrupt bigger teams.",
+          "Eintracht Frankfurt is the clearest emotionally charged regional fixture and the one that sharpens Mainz’s place in the wider Rhine-Main football hierarchy.\n\nKaiserslautern also carries historical regional significance where relevant, but Frankfurt is the stronger live modern reference point.",
       },
       {
-        title: "Legends & Icons",
+        title: "Legends",
         body:
-          "Mainz legends skew toward figures who represent the club’s modern rise and identity rather than trophy eras.\n\nCommonly referenced icons include:\n• Jürgen Klopp (as a defining modern figure)\n• Nikolče Noveski\n\nThe legend culture is less about global superstardom and more about people who embodied Mainz’s intensity, cohesion, and upward story.",
+          "Mainz legend culture is more about embodiment of identity than about trophy-era stardom.\n\nCommonly referenced names include:\n• Jürgen Klopp\n• Nikolče Noveski\n\nThat tells you exactly what the club values: system, intensity, leadership, and fit.",
       },
       {
         title: "Supporter Culture",
         body:
-          "Mainz support is local, identity-focused, and expects visible effort.\n\nKey traits:\n• Appreciation for pressing and aggression.\n• Low tolerance for passive, lifeless performances.\n• Strong pride in being organised and underestimated.\n\nThis is a fanbase that judges you on whether you compete properly — not whether you provide entertainment.",
+          "Mainz support is local, proud, and highly responsive to effort and structure.\n\nKey traits:\n• appreciation for aggressive, organised football\n• low tolerance for passive or lifeless performances\n• strong identity built around being underestimated but well coached\n\nThis is a fanbase that wants to see the club compete properly, not decorate the division.",
       },
       {
         title: "Neutral Visitor Notes",
         body:
-          "• A good pick if you prefer ‘real’ Bundesliga intensity over tourist-scale spectacle.\n• Best matchday experience tends to come against Frankfurt and big-name opponents.\n• Mainz games often feel physical and momentum-driven — you’ll notice the pressing and duel battles.\n• MEWA Arena gives a compact, football-first viewing experience with strong sightlines.",
+          "• Excellent pick if you want a smaller, sharper Bundesliga experience rather than a giant tourist stadium.\n• Mainz as a city is a huge plus and makes the whole trip easier and more enjoyable.\n• Better for football-depth travellers than for casual spectacle hunters.\n• Strong city-and-club combination for a short, efficient weekend.",
       },
     ],
     links: [{ label: "Official site", url: "https://www.mainz05.de/" }],
-    updatedAt: "2026-01-27",
+    updatedAt: "2026-03-10",
   },
 };
 
