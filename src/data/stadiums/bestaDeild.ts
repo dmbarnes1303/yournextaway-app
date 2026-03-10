@@ -18,8 +18,14 @@ export const bestaDeildStadiums: Record<string, StadiumRecord> = {
       { label: "Central Reykjavík", minutes: 20, note: "best visitor base" },
     ],
     stayAreas: [
-      { area: "Central Reykjavík", why: "Best overall base for nightlife, hotels and day-to-day transport" },
-      { area: "Kópavogur", why: "Closer and quieter if you want a simpler match-focused stay" },
+      {
+        area: "Central Reykjavík",
+        why: "Best overall base for nightlife, hotels and day-to-day transport",
+      },
+      {
+        area: "Kópavogur",
+        why: "Closer and quieter if you want a simpler match-focused stay",
+      },
     ],
     tips: [
       "Treat this as a Reykjavík-area football trip rather than a pure Kópavogur city break",
@@ -39,11 +45,21 @@ export const bestaDeildStadiums: Record<string, StadiumRecord> = {
     distanceFromAirportKm: 40,
     transit: [
       { label: "Hafnarfjörður centre", minutes: 15, note: "best local anchor" },
-      { label: "Central Reykjavík", minutes: 25, note: "best for most visitors staying overnight" },
+      {
+        label: "Central Reykjavík",
+        minutes: 25,
+        note: "best for most visitors staying overnight",
+      },
     ],
     stayAreas: [
-      { area: "Central Reykjavík", why: "Best all-round stay for hotels, food and nightlife" },
-      { area: "Hafnarfjörður", why: "More convenient if you want shorter matchday travel" },
+      {
+        area: "Central Reykjavík",
+        why: "Best all-round stay for hotels, food and nightlife",
+      },
+      {
+        area: "Hafnarfjörður",
+        why: "More convenient if you want shorter matchday travel",
+      },
     ],
     tips: [
       "Easy to combine with a Reykjavík stay rather than basing the whole trip around Hafnarfjörður",
@@ -62,7 +78,11 @@ export const bestaDeildStadiums: Record<string, StadiumRecord> = {
     airport: "Keflavík International Airport (KEF)",
     distanceFromAirportKm: 52,
     transit: [
-      { label: "Mjódd", minutes: 20, note: "useful bus interchange for the eastern side of Reykjavík" },
+      {
+        label: "Mjódd",
+        minutes: 20,
+        note: "useful bus interchange for the eastern side of Reykjavík",
+      },
       { label: "Central Reykjavík", minutes: 25, note: "best base for most visitors" },
     ],
     stayAreas: [
@@ -87,11 +107,18 @@ export const bestaDeildStadiums: Record<string, StadiumRecord> = {
     distanceFromAirportKm: 72,
     transit: [
       { label: "Akranes centre", minutes: 10, note: "best local base" },
-      { label: "Central Reykjavík", minutes: 55, note: "best if you want stronger nightlife and broader hotel choice" },
+      {
+        label: "Central Reykjavík",
+        minutes: 55,
+        note: "best if you want stronger nightlife and broader hotel choice",
+      },
     ],
     stayAreas: [
       { area: "Akranes", why: "Best for a simple football-first stop" },
-      { area: "Central Reykjavík", why: "Better if you want to turn it into a broader Iceland trip" },
+      {
+        area: "Central Reykjavík",
+        why: "Better if you want to turn it into a broader Iceland trip",
+      },
     ],
     tips: [
       "Strong old-ground feel by Icelandic standards",
@@ -110,16 +137,30 @@ export const bestaDeildStadiums: Record<string, StadiumRecord> = {
     airport: "Vestmannaeyjar Airport (VEY)",
     distanceFromAirportKm: 2,
     transit: [
-      { label: "Vestmannaeyjar town centre", minutes: 10, note: "best local stay anchor" },
-      { label: "Herjólfsdalur / harbour area", minutes: 12, note: "practical for island arrivals" },
+      {
+        label: "Vestmannaeyjar town centre",
+        minutes: 10,
+        note: "best local stay anchor",
+      },
+      {
+        label: "Herjólfsdalur / harbour area",
+        minutes: 12,
+        note: "practical for island arrivals",
+      },
     ],
     stayAreas: [
-      { area: "Vestmannaeyjar town centre", why: "Best for walkability, harbour access and food options" },
-      { area: "Near the harbour", why: "Best if ferry logistics are central to your trip" },
+      {
+        area: "Vestmannaeyjar town centre",
+        why: "Best for walkability, harbour access and food options",
+      },
+      {
+        area: "Near the harbour",
+        why: "Best if ferry logistics are central to your trip",
+      },
     ],
     tips: [
       "This is one of the most distinctive football trips in Europe because of the island setting",
-      "Do not treat it like a normal city-break stadium — transport planning matters far more here",
+      "Do not treat it like a normal city-break stadium; transport planning matters far more here",
     ],
   },
 
@@ -135,11 +176,21 @@ export const bestaDeildStadiums: Record<string, StadiumRecord> = {
     distanceFromAirportKm: 4,
     transit: [
       { label: "Akureyri town centre", minutes: 15, note: "best overall base" },
-      { label: "Akureyri Airport", minutes: 10, note: "very easy airport-to-city movement" },
+      {
+        label: "Akureyri Airport",
+        minutes: 10,
+        note: "very easy airport-to-city movement",
+      },
     ],
     stayAreas: [
-      { area: "Akureyri town centre", why: "Best for food, bars and a clean walkable base" },
-      { area: "Near the harbour", why: "Better if you want the nicest short-break setting" },
+      {
+        area: "Akureyri town centre",
+        why: "Best for food, bars and a clean walkable base",
+      },
+      {
+        area: "Near the harbour",
+        why: "Better if you want the nicest short-break setting",
+      },
     ],
     tips: [
       "Akureyri is one of the stronger non-Reykjavík football bases in Iceland",
@@ -159,11 +210,21 @@ export const bestaDeildStadiums: Record<string, StadiumRecord> = {
     distanceFromAirportKm: 5,
     transit: [
       { label: "Keflavík town centre", minutes: 15, note: "best simple local base" },
-      { label: "Keflavík International Airport", minutes: 10, note: "one of the easiest airport-linked grounds in the league" },
+      {
+        label: "Keflavík International Airport",
+        minutes: 10,
+        note: "one of the easiest airport-linked grounds in the league",
+      },
     ],
     stayAreas: [
-      { area: "Keflavík / Reykjanesbær", why: "Best for airport convenience and short transfers" },
-      { area: "Central Reykjavík", why: "Better if you want nightlife and a fuller city-break experience" },
+      {
+        area: "Keflavík / Reykjanesbær",
+        why: "Best for airport convenience and short transfers",
+      },
+      {
+        area: "Central Reykjavík",
+        why: "Better if you want nightlife and a fuller city-break experience",
+      },
     ],
     tips: [
       "This is one of the easiest Icelandic top-flight grounds to pair with an airport stay",
@@ -186,8 +247,14 @@ export const bestaDeildStadiums: Record<string, StadiumRecord> = {
       { label: "Vesturbær", minutes: 10, note: "closest attractive local area" },
     ],
     stayAreas: [
-      { area: "Central Reykjavík", why: "Best all-round base for transport, bars and hotels" },
-      { area: "Vesturbær", why: "Closest neighbourhood feel and easy access to the ground" },
+      {
+        area: "Central Reykjavík",
+        why: "Best all-round base for transport, bars and hotels",
+      },
+      {
+        area: "Vesturbær",
+        why: "Closest neighbourhood feel and easy access to the ground",
+      },
     ],
     tips: [
       "Compact, old-school Reykjavík football stop",
@@ -210,8 +277,14 @@ export const bestaDeildStadiums: Record<string, StadiumRecord> = {
       { label: "Central Reykjavík", minutes: 20, note: "best overall stay base" },
     ],
     stayAreas: [
-      { area: "Central Reykjavík", why: "Best for nightlife, hotels and stronger overall trip value" },
-      { area: "Garðabær", why: "Simpler if you want shorter matchday travel" },
+      {
+        area: "Central Reykjavík",
+        why: "Best for nightlife, hotels and stronger overall trip value",
+      },
+      {
+        area: "Garðabær",
+        why: "Simpler if you want shorter matchday travel",
+      },
     ],
     tips: [
       "Small stadium, so think of this as a wider Reykjavík-area trip",
@@ -234,8 +307,14 @@ export const bestaDeildStadiums: Record<string, StadiumRecord> = {
       { label: "Akureyri Airport", minutes: 10, note: "simple airport access" },
     ],
     stayAreas: [
-      { area: "Akureyri town centre", why: "Best for a compact football city break" },
-      { area: "Near the harbour", why: "Best for a stronger scenic overnight stay" },
+      {
+        area: "Akureyri town centre",
+        why: "Best for a compact football city break",
+      },
+      {
+        area: "Near the harbour",
+        why: "Best for a stronger scenic overnight stay",
+      },
     ],
     tips: [
       "Good option if you want to pair football with north-Iceland travel",
@@ -254,12 +333,22 @@ export const bestaDeildStadiums: Record<string, StadiumRecord> = {
     airport: "Keflavík International Airport (KEF)",
     distanceFromAirportKm: 47,
     transit: [
-      { label: "Hlemmur / central bus corridor", minutes: 15, note: "best central access point" },
+      {
+        label: "Hlemmur / central bus corridor",
+        minutes: 15,
+        note: "best central access point",
+      },
       { label: "Central Reykjavík", minutes: 10, note: "best base overall" },
     ],
     stayAreas: [
-      { area: "Central Reykjavík", why: "Best all-round base for food, bars and transport" },
-      { area: "Hlíðar", why: "Closer and quieter while still near the city core" },
+      {
+        area: "Central Reykjavík",
+        why: "Best all-round base for food, bars and transport",
+      },
+      {
+        area: "Hlíðar",
+        why: "Closer and quieter while still near the city core",
+      },
     ],
     tips: [
       "Easy stadium to work into a Reykjavík weekend",
@@ -282,8 +371,14 @@ export const bestaDeildStadiums: Record<string, StadiumRecord> = {
       { label: "Central Reykjavík", minutes: 15, note: "best stay base" },
     ],
     stayAreas: [
-      { area: "Central Reykjavík", why: "Best overall for hotels, nightlife and simple match travel" },
-      { area: "South-east Reykjavík", why: "Closer if you want a more practical, quieter base" },
+      {
+        area: "Central Reykjavík",
+        why: "Best overall for hotels, nightlife and simple match travel",
+      },
+      {
+        area: "South-east Reykjavík",
+        why: "Closer if you want a more practical, quieter base",
+      },
     ],
     tips: [
       "Compact modern-feel Reykjavík ground rather than a huge arena experience",
