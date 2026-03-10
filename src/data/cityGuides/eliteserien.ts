@@ -137,10 +137,10 @@ export const eliteserienCityGuides: Record<string, CityGuide> = {
     ],
 
     transport:
-      "Trondheim is manageable. Central walking covers a lot, and onward movement to Lerkendal is simple from a central base. The trick is using the centre as your anchor rather than trying to optimise for tiny savings in stadium proximity.",
+      "Trondheim is manageable. Central walking covers a lot, and onward movement to Lerkendal is simple from a central base. The trick is using the centre as your anchor rather than trying to optimise around it.",
 
     accommodation:
-      "Trondheim centre is the safest all-round base. Bakklandet is the more characterful choice if you want the city to feel memorable rather than merely functional. Either works better than staying near the stadium for convenience alone.",
+      "Trondheim centre is the safest all-round base. Bakklandet is the more characterful choice if you want the city to feel memorable rather than merely functional. Either works better than staying near the ground unless the hotel deal is exceptional.",
   },
 
   stavanger: {
@@ -486,7 +486,7 @@ export const eliteserienCityGuides: Record<string, CityGuide> = {
       "Stay in Lillestrøm if you want pure football convenience. Stay in central Oslo if you want the broader weekend experience and do not mind an easy train in and out.",
   },
 
-  kristiansand: {
+  kristiansund: {
     cityId: "kristiansund",
     name: "Kristiansund",
     country: "Norway",
@@ -569,7 +569,7 @@ export const eliteserienCityGuides: Record<string, CityGuide> = {
       "Stay in the centre and keep the whole trip walkable or near-walkable. There is no reason to get fancy with districts here.",
   },
 
-  fredrikstad: {
+  sarpsborg: {
     cityId: "sarpsborg",
     name: "Sarpsborg",
     country: "Norway",
