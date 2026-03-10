@@ -1,4 +1,5 @@
 import type { TeamGuide, TeamGuideRegistry } from "./types";
+import { teams } from "@/src/data/teams";
 import { normalizeTeamKey, titleFromKey } from "./utils";
 
 import bundesligaGuides from "./bundesliga";
@@ -36,6 +37,7 @@ function isGuide(value: unknown): value is TeamGuide {
   if (!value || typeof value !== "object") return false;
 
   const v = value as Partial<TeamGuide>;
+
   return (
     typeof v.teamKey === "string" &&
     typeof v.name === "string" &&
@@ -129,7 +131,6 @@ const duplicates: Record<string, string[]> = {};
 for (const [sourceName, guides] of Object.entries(SOURCES)) {
   for (const guide of guides) {
     const key = normalizeTeamKey(guide.teamKey);
-
     if (!key) continue;
 
     if (registry[key]) {
@@ -144,9 +145,32 @@ for (const [sourceName, guides] of Object.entries(SOURCES)) {
     registry[key] = {
       ...guide,
       teamKey: key,
+      cityKey: guide.cityKey ? String(guide.cityKey).trim().toLowerCase() : guide.cityKey,
     };
   }
 }
+
+export type MissingTeamGuide = {
+  expectedGuideKey: string;
+  name: string;
+  leagueId?: number;
+  season?: number;
+};
+
+const missing: MissingTeamGuide[] = Object.values(teams)
+  .map((team) => ({
+    expectedGuideKey: normalizeTeamKey(team.teamKey),
+    name: team.name,
+    leagueId: team.leagueId,
+    season: team.season,
+  }))
+  .filter((team) => !!team.expectedGuideKey && !registry[team.expectedGuideKey])
+  .sort((a, b) => {
+    const leagueA = a.leagueId ?? 0;
+    const leagueB = b.leagueId ?? 0;
+    if (leagueA !== leagueB) return leagueA - leagueB;
+    return a.name.localeCompare(b.name);
+  });
 
 export function hasTeamGuide(teamKey: string): boolean {
   return !!registry[normalizeTeamKey(teamKey)];
@@ -157,20 +181,16 @@ export function getTeamGuide(teamKey: string): TeamGuide | null {
   return key ? registry[key] ?? null : null;
 }
 
-export type MissingTeamGuide = {
-  expectedGuideKey: string;
-  name: string;
-  leagueId?: number;
-  season?: number;
-};
-
 export function getMissingTeamGuides(): MissingTeamGuide[] {
-  return [];
+  return missing;
 }
 
 export function getTeamGuidesDebugSnapshot() {
   return {
     guidesCount: Object.keys(registry).length,
+    registryTeamsCount: Object.keys(teams).length,
+    missingCount: missing.length,
+    missing,
     duplicates: Object.entries(duplicates).map(([teamKey, sources]) => ({
       teamKey,
       count: sources.length + 1,
