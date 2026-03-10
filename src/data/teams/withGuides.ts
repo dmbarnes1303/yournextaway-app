@@ -1,5 +1,11 @@
 // src/data/teams/withGuides.ts
-import { teams, getTeam, searchTeams, normalizeTeamKey, type TeamRecord } from "./index";
+import {
+  teams,
+  getTeam,
+  searchTeams,
+  normalizeTeamKey,
+  type TeamRecord,
+} from "./index";
 import { getTeamGuide, hasTeamGuide } from "@/src/data/teamGuides";
 import type { TeamGuide } from "@/src/data/teamGuides/types";
 
@@ -8,71 +14,94 @@ export type TeamRecordWithGuide = TeamRecord & {
   guide?: TeamGuide;
 };
 
-/**
- * Join a team with its guide (if present).
- * Safe: no circular imports because this file is the only place that imports both registries.
- */
-export function getTeamWithGuide(teamInput: string): TeamRecordWithGuide | null {
-  const t = getTeam(teamInput);
-  if (!t) return null;
-
-  const key = normalizeTeamKey(t.teamKey);
-  const guide = getTeamGuide(key);
+function attachGuide(
+  team: TeamRecord,
+  includeGuide: boolean
+): TeamRecordWithGuide {
+  const key = normalizeTeamKey(team.teamKey);
+  const guide = includeGuide ? getTeamGuide(key) : null;
 
   return {
-    ...t,
-    hasGuide: !!guide,
+    ...team,
+    hasGuide: hasTeamGuide(key),
     ...(guide ? { guide } : {}),
   };
 }
 
 /**
- * Search teams and attach "hasGuide" (and optionally the guide).
- * Default: DO NOT attach the full guide bodies (keeps UI lists fast).
+ * Join a single team with guide metadata.
+ * Safe lookup path:
+ * - resolve via teams registry
+ * - normalize key
+ * - attach guide if available
+ */
+export function getTeamWithGuide(
+  teamInput: string,
+  includeGuide = true
+): TeamRecordWithGuide | null {
+  const team = getTeam(teamInput);
+  if (!team) return null;
+
+  return attachGuide(team, includeGuide);
+}
+
+/**
+ * Search teams and attach guide presence.
+ * Default keeps payload lighter by not attaching full guide bodies.
  */
 export function searchTeamsWithGuide(
   query: string,
   limit = 10,
   includeGuide = false
 ): TeamRecordWithGuide[] {
-  const results = searchTeams(query, limit);
-
-  if (!includeGuide) {
-    return results.map((t) => ({
-      ...t,
-      hasGuide: hasTeamGuide(t.teamKey),
-    }));
-  }
-
-  return results.map((t) => {
-    const guide = getTeamGuide(t.teamKey);
-    return {
-      ...t,
-      hasGuide: !!guide,
-      ...(guide ? { guide } : {}),
-    };
-  });
+  return searchTeams(query, limit).map((team) => attachGuide(team, includeGuide));
 }
 
 /**
- * Get all teams (useful for league pages) with guide flags.
+ * All teams with guide metadata.
+ * Useful for audit screens, league checks, and completeness passes.
  */
-export function allTeamsWithGuide(includeGuide = false): TeamRecordWithGuide[] {
-  const list = Object.values(teams);
+export function allTeamsWithGuide(
+  includeGuide = false
+): TeamRecordWithGuide[] {
+  return Object.values(teams).map((team) => attachGuide(team, includeGuide));
+}
 
-  if (!includeGuide) {
-    return list.map((t) => ({
-      ...t,
-      hasGuide: hasTeamGuide(t.teamKey),
-    }));
-  }
+/**
+ * Convenience helpers for audits.
+ */
+export function getTeamsMissingGuides(): TeamRecord[] {
+  return Object.values(teams).filter(
+    (team) => !hasTeamGuide(normalizeTeamKey(team.teamKey))
+  );
+}
 
-  return list.map((t) => {
-    const guide = getTeamGuide(t.teamKey);
-    return {
-      ...t,
-      hasGuide: !!guide,
-      ...(guide ? { guide } : {}),
-    };
-  });
+export function getTeamsWithGuides(): TeamRecordWithGuide[] {
+  return Object.values(teams)
+    .filter((team) => hasTeamGuide(normalizeTeamKey(team.teamKey)))
+    .map((team) => attachGuide(team, true));
+}
+
+export function getTeamGuideCoverageSnapshot() {
+  const all = Object.values(teams);
+  const withGuide = all.filter((team) =>
+    hasTeamGuide(normalizeTeamKey(team.teamKey))
+  );
+  const missing = all.filter(
+    (team) => !hasTeamGuide(normalizeTeamKey(team.teamKey))
+  );
+
+  return {
+    totalTeams: all.length,
+    withGuideCount: withGuide.length,
+    missingGuideCount: missing.length,
+    missingGuides: missing.map((team) => ({
+      teamKey: team.teamKey,
+      name: team.name,
+      country: team.country,
+      city: team.city,
+      leagueId: team.leagueId,
+      stadiumKey: team.stadiumKey,
+    })),
+  };
 }
