@@ -7,6 +7,7 @@ const GYG = {
   stavanger: "https://www.getyourguide.com/en-gb/stavanger-l4561/?partner_id=MAQJREP&utm_medium=online_publisher",
   tromso: "https://www.getyourguide.com/en-gb/tromso-l32375/?partner_id=MAQJREP&utm_medium=online_publisher",
   alesund: "https://www.getyourguide.com/en-gb/alesund-l4559/?partner_id=MAQJREP&utm_medium=online_publisher",
+  bodo: "https://www.getyourguide.com/en-gb/bodo-l32374/?partner_id=MAQJREP&utm_medium=online_publisher",
   kristiansand: "https://www.getyourguide.com/en-gb/kristiansand-l32378/?partner_id=MAQJREP&utm_medium=online_publisher",
 } as const;
 
@@ -59,6 +60,7 @@ export const eliteserienCityGuides: Record<string, CityGuide> = {
     cityId: "bodo",
     name: "Bodø",
     country: "Norway",
+    thingsToDoUrl: GYG.bodo,
     overview:
       "Bodø is one of the most distinctive football destinations in the entire app because the city and club are inseparable from the wider northern setting. This is not a generic weekend break with a stadium bolted on. The geography, weather, light, and the fact that Bodø/Glimt have become a serious football force all combine to make the trip feel sharper and more memorable than the city’s raw size might suggest. The smart approach is simple: stay central, respect the conditions, and let the destination itself do half the work.",
 
