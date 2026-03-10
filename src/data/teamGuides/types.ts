@@ -1,3 +1,5 @@
+// src/data/teamGuides/types.ts
+
 export type TeamGuideSection = {
   title: string;
   body: string;
@@ -40,3 +42,5 @@ export type TeamGuide = {
 };
 
 export type TeamGuideRegistry = Record<string, TeamGuide>;
+
+export default TeamGuide;
