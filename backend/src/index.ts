@@ -1,4 +1,7 @@
 import Fastify from "fastify";
+import dotenv from "dotenv";
+
+dotenv.config();
 
 const app = Fastify({
   logger: true,
@@ -11,10 +14,17 @@ app.get("/hello", async () => {
   };
 });
 
+app.get("/health", async () => {
+  return {
+    status: "ok",
+    service: "yournextaway-backend",
+  };
+});
+
 const start = async () => {
   try {
     await app.listen({
-      port: 3000,
+      port: Number(process.env.PORT) || 3000,
       host: "0.0.0.0",
     });
 
