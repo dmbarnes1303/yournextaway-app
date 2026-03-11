@@ -43,7 +43,11 @@ import { confirmBookedAndOfferProof } from "@/src/services/bookingProof";
 import { getFixtureCertainty } from "@/src/utils/fixtureCertainty";
 
 import { resolveAffiliateUrl } from "@/src/services/partnerLinks";
-import { resolveTicketForFixture, type TicketResolutionResult } from "@/src/services/ticketResolver";
+import {
+  resolveTicketForFixture,
+  type TicketResolutionOption,
+  type TicketResolutionResult,
+} from "@/src/services/ticketResolver";
 
 import { getIataCityCodeForCity, debugCityKey } from "@/src/data/iataCityCodes";
 import { getMatchdayLogistics, buildLogisticsSnippet } from "@/src/data/matchdayLogistics";
@@ -360,6 +364,14 @@ function mapTicketProviderToPartnerId(provider?: string | null): PartnerId {
   return "sportsevents365" as PartnerId;
 }
 
+function providerLabel(provider?: string | null): string {
+  const raw = clean(provider).toLowerCase();
+  if (raw === "footballticketsnet") return "FootballTicketNet";
+  if (raw === "sportsevents365") return "SportsEvents365";
+  if (raw === "gigsberg") return "Gigsberg";
+  return provider || "Provider";
+}
+
 function ticketResolverFailureMessage(resolved: TicketResolutionResult | null): string {
   if (!resolved) {
     return "Ticket resolver didn’t respond. Check backend URL/server.";
@@ -393,6 +405,58 @@ function ticketResolverFailureMessage(resolved: TicketResolutionResult | null): 
 function smartButtonSubtitle(item: SavedItem | null, fallback: string) {
   if (!item) return fallback;
   return livePriceLine(item) || statusLabel(item.status);
+}
+
+function normalizeTicketOptions(resolved: TicketResolutionResult | null): TicketResolutionOption[] {
+  if (!resolved) return [];
+
+  const options = Array.isArray(resolved.options) ? resolved.options : [];
+  const map = new Map<string, TicketResolutionOption>();
+
+  for (const option of options) {
+    const provider = clean(option?.provider);
+    const url = clean(option?.url);
+    const title = clean(option?.title);
+    const score = typeof option?.score === "number" ? option.score : null;
+
+    if (!provider || !url || !title || score == null) continue;
+
+    const key = `${provider.toLowerCase()}|${url}`;
+    if (!map.has(key)) {
+      map.set(key, {
+        provider,
+        exact: Boolean(option.exact),
+        score,
+        url,
+        title,
+        priceText: clean(option.priceText) || null,
+        reason:
+          option.reason === "exact_event" || option.reason === "partial_match"
+            ? option.reason
+            : "search_fallback",
+      });
+    }
+  }
+
+  const values = Array.from(map.values()).sort((a, b) => b.score - a.score);
+
+  if (values.length > 0) return values;
+
+  if (resolved.ok && clean(resolved.provider) && clean(resolved.url) && clean(resolved.title)) {
+    return [
+      {
+        provider: clean(resolved.provider),
+        exact: Boolean(resolved.exact),
+        score: typeof resolved.score === "number" ? resolved.score : 0,
+        url: clean(resolved.url),
+        title: clean(resolved.title),
+        priceText: clean(resolved.priceText) || null,
+        reason: resolved.reason === "exact_event" ? "exact_event" : "search_fallback",
+      },
+    ];
+  }
+
+  return [];
 }
 
 /* -------------------------------------------------------------------------- */
@@ -1127,6 +1191,84 @@ export default function TripDetailScreen() {
     );
   }
 
+  async function openTicketOptionForMatch(args: {
+    mid: string;
+    homeName: string;
+    awayName: string;
+    kickoffIso: string;
+    leagueName?: string;
+    leagueId?: string | number;
+    dateIso?: string;
+    option: TicketResolutionOption;
+    checkedProviders?: string[];
+  }) {
+    await openTrackedPartner({
+      partnerId: mapTicketProviderToPartnerId(args.option.provider),
+      url: args.option.url,
+      title: args.option.title || `Tickets: ${args.homeName} vs ${args.awayName}`,
+      savedItemType: "tickets",
+      metadata: {
+        fixtureId: args.mid,
+        leagueId: args.leagueId,
+        leagueName: args.leagueName,
+        dateIso: args.dateIso,
+        kickoffIso: args.kickoffIso,
+        homeName: args.homeName,
+        awayName: args.awayName,
+        priceMode: "live",
+        ticketProvider: args.option.provider ?? null,
+        resolvedPriceText: args.option.priceText ?? null,
+        resolutionReason: args.option.reason ?? null,
+        exactMatch: Boolean(args.option.exact),
+        score: args.option.score,
+        checkedProviders: args.checkedProviders,
+      },
+    });
+  }
+
+  function showTicketChoiceAlert(args: {
+    mid: string;
+    homeName: string;
+    awayName: string;
+    kickoffIso: string;
+    leagueName?: string;
+    leagueId?: string | number;
+    dateIso?: string;
+    options: TicketResolutionOption[];
+    checkedProviders?: string[];
+  }) {
+    const top = args.options.slice(0, 3);
+
+    Alert.alert(
+      "Choose ticket provider",
+      top
+        .map(
+          (option, index) =>
+            `${index + 1}. ${providerLabel(option.provider)}${clean(option.priceText) ? ` • ${clean(option.priceText)}` : ""}`
+        )
+        .join("\n"),
+      [
+        { text: "Cancel", style: "cancel" },
+        ...top.map((option) => ({
+          text: providerLabel(option.provider),
+          onPress: () =>
+            openTicketOptionForMatch({
+              ...args,
+              option,
+            }),
+        })),
+        {
+          text: "Compare all",
+          onPress: () =>
+            router.push({
+              pathname: "/match/[id]",
+              params: { id: args.mid, tripId: tripId ?? undefined },
+            } as any),
+        },
+      ]
+    );
+  }
+
   async function openTicketsForMatch(matchId: string) {
     const mid = clean(matchId);
     if (!mid) return;
@@ -1169,33 +1311,38 @@ export default function TripDetailScreen() {
         leagueId,
       });
 
-      if (!resolved?.ok || !resolved.url) {
+      const options = normalizeTicketOptions(resolved);
+
+      if (!resolved?.ok || options.length === 0) {
         Alert.alert("Tickets not found", ticketResolverFailureMessage(resolved));
         return;
       }
 
-      const providerPartnerId = mapTicketProviderToPartnerId(resolved.provider);
-
-      await openTrackedPartner({
-        partnerId: providerPartnerId,
-        url: resolved.url,
-        title: resolved.title || `Tickets: ${homeName} vs ${awayName}`,
-        savedItemType: "tickets",
-        metadata: {
-          fixtureId: mid,
-          leagueId,
-          leagueName,
-          dateIso,
-          kickoffIso,
+      if (options.length === 1) {
+        await openTicketOptionForMatch({
+          mid,
           homeName,
           awayName,
-          priceMode: "live",
-          ticketProvider: resolved.provider ?? null,
-          resolvedPriceText: resolved.priceText ?? null,
-          resolutionReason: resolved.reason ?? null,
-          exactMatch: Boolean(resolved.exact),
+          kickoffIso,
+          leagueName,
+          leagueId,
+          dateIso,
+          option: options[0],
           checkedProviders: Array.isArray(resolved.checkedProviders) ? resolved.checkedProviders : undefined,
-        },
+        });
+        return;
+      }
+
+      showTicketChoiceAlert({
+        mid,
+        homeName,
+        awayName,
+        kickoffIso,
+        leagueName,
+        leagueId,
+        dateIso,
+        options,
+        checkedProviders: Array.isArray(resolved.checkedProviders) ? resolved.checkedProviders : undefined,
       });
     } catch {
       Alert.alert("Tickets unavailable", "Ticket search failed before the partner click was created.");
@@ -1366,7 +1513,7 @@ export default function TripDetailScreen() {
     if (!presentByType.hasTickets) {
       return {
         title: "Start with match tickets",
-        body: "Tickets are the anchor. Secure seats first, then build travel around it.",
+        body: "Tickets are the anchor. Compare providers and secure seats first, then build travel around it.",
         cta: "Find tickets",
         onPress: openTickets,
         badge: "High impact",
@@ -1481,7 +1628,7 @@ export default function TripDetailScreen() {
     if (!presentByType.hasTickets && primaryMatchId) {
       add(
         "Tickets",
-        smartButtonSubtitle(primaryTicketItem, "Resolver-backed live option"),
+        smartButtonSubtitle(primaryTicketItem, "Compare live ticket options"),
         () => openTicketsForMatch(primaryMatchId),
         "primary"
       );
@@ -1773,7 +1920,7 @@ export default function TripDetailScreen() {
                               <Text style={styles.matchHint} numberOfLines={1}>
                                 {ticketItem
                                   ? livePriceLine(ticketItem) || `Tap to open tickets (${statusLabel(ticketItem.status)})`
-                                  : "Tap to open resolver-backed live ticket option • Hold for options"}
+                                  : "Tap to compare live ticket options • Hold for options"}
                               </Text>
                             </View>
 
