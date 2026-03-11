@@ -21,6 +21,7 @@ type GigsbergEvent = {
 
 type GigsbergEventsResponse = {
   data?: GigsbergEvent[];
+  items?: GigsbergEvent[];
   total?: number;
   nextPage?: string | number | null;
   prevPage?: string | number | null;
@@ -45,6 +46,7 @@ type GigsbergListing = {
 
 type GigsbergListingsResponse = {
   data?: GigsbergListing[];
+  items?: GigsbergListing[];
   total?: number;
   nextPage?: string | number | null;
   prevPage?: string | number | null;
@@ -247,11 +249,17 @@ function buildEventSearchNames(input: TicketResolveInput): string[] {
 
   return uniqueStrings([
     `${preferredHome} ${preferredAway}`,
+    `${preferredAway} ${preferredHome}`,
     `${preferredHome} vs ${preferredAway}`,
+    `${preferredAway} vs ${preferredHome}`,
     `${rawHome} ${rawAway}`,
+    `${rawAway} ${rawHome}`,
     `${rawHome} vs ${rawAway}`,
+    `${rawAway} vs ${rawHome}`,
     preferredHome,
+    preferredAway,
     rawHome,
+    rawAway,
   ]);
 }
 
@@ -436,6 +444,20 @@ function dedupeEvents(events: GigsbergEvent[]): GigsbergEvent[] {
   return Array.from(map.values());
 }
 
+function extractEvents(parsed: GigsbergEventsResponse | null): GigsbergEvent[] {
+  if (!parsed) return [];
+  if (Array.isArray(parsed.data)) return parsed.data;
+  if (Array.isArray(parsed.items)) return parsed.items;
+  return [];
+}
+
+function extractListings(parsed: GigsbergListingsResponse | null): GigsbergListing[] {
+  if (!parsed) return [];
+  if (Array.isArray(parsed.data)) return parsed.data;
+  if (Array.isArray(parsed.items)) return parsed.items;
+  return [];
+}
+
 async function fetchWithTimeout(
   url: string,
   init?: RequestInit
@@ -532,7 +554,7 @@ async function tryEventEndpoint(
   }
 
   const parsed = safeJsonParse<GigsbergEventsResponse>(response.body);
-  const events = Array.isArray(parsed?.data) ? parsed.data : [];
+  const events = extractEvents(parsed);
 
   console.log("[Gigsberg] events response", {
     endpointPath: path,
@@ -603,6 +625,8 @@ async function tryListingsEndpoint(path: string, eventId: string): Promise<Gigsb
     return [];
   }
 
+  console.log("[Gigsberg DEBUG] raw listings payload", response.body);
+
   if (!response.ok) {
     console.log("[Gigsberg] listings non-200 response", {
       endpointPath: path,
@@ -615,9 +639,7 @@ async function tryListingsEndpoint(path: string, eventId: string): Promise<Gigsb
   }
 
   const parsed = safeJsonParse<GigsbergListingsResponse>(response.body);
-  const listings = Array.isArray(parsed?.data)
-    ? parsed.data.slice(0, LISTINGS_PER_PAGE)
-    : [];
+  const listings = extractListings(parsed).slice(0, LISTINGS_PER_PAGE);
 
   console.log("[Gigsberg] listings response", {
     endpointPath: path,
@@ -809,4 +831,4 @@ export async function resolveGigsbergCandidate(
     priceText: bestListing ? listingPriceText(bestListing.listing) : null,
     reason: exact ? "exact_event" : "partial_match",
   };
-}
+      }
