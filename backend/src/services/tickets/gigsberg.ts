@@ -1,7 +1,7 @@
 import { env, hasGigsbergConfig } from "../../lib/env.js";
 import type { TicketCandidate, TicketResolveInput } from "./types.js";
 import { expandTeamAliases, getPreferredTeamName } from "./teamAliases.js";
-
+console.log("[Gigsberg] STRONG API VERSION LOADED");
 type GigsbergEvent = {
   id?: number | string;
   name?: string;
