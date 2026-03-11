@@ -1,8 +1,7 @@
-// src/components/EmptyState.tsx
-
 import React, { useMemo } from "react";
 import { View, Text, StyleSheet, Pressable, Platform } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+
 import { theme } from "@/src/constants/theme";
 import PressableScale from "@/src/components/PressableScale";
 
@@ -12,31 +11,18 @@ type Action = {
 };
 
 type EmptyStateProps = {
-  // Backwards compatible (required today)
   title: string;
   message: string;
 
-  /**
-   * Optional enhancements (V2)
-   */
-  iconName?: keyof typeof Ionicons.glyphMap; // e.g. "football", "sparkles", "airplane"
+  iconName?: keyof typeof Ionicons.glyphMap;
   iconColor?: string;
   iconSize?: number;
 
-  /**
-   * Visual density control
-   */
   variant?: "default" | "compact";
 
-  /**
-   * Actions (optional)
-   */
   primaryAction?: Action;
   secondaryAction?: Action;
 
-  /**
-   * Optional helper line under message (e.g. "Tip: follow matches to get alerts")
-   */
   hint?: string;
 };
 
@@ -45,7 +31,7 @@ export default function EmptyState({
   message,
   iconName,
   iconColor,
-  iconSize = 34,
+  iconSize = 24,
   variant = "default",
   primaryAction,
   secondaryAction,
@@ -53,30 +39,35 @@ export default function EmptyState({
 }: EmptyStateProps) {
   const resolvedIconName = useMemo(() => {
     if (iconName) return iconName;
-    // Sensible default that feels "premium" and not childish
     return "sparkles";
   }, [iconName]);
 
   const resolvedIconColor = iconColor ?? theme.colors.textSecondary;
-
   const isCompact = variant === "compact";
+  const hasActions = Boolean(primaryAction || secondaryAction);
 
   return (
     <View style={[styles.container, isCompact && styles.containerCompact]}>
-      <View style={styles.iconWrap}>
-        <View style={styles.iconBadge}>
-          <Ionicons name={resolvedIconName} size={iconSize} color={resolvedIconColor} />
-        </View>
+      <View style={[styles.iconBadge, isCompact && styles.iconBadgeCompact]}>
+        <Ionicons
+          name={resolvedIconName}
+          size={isCompact ? Math.max(20, iconSize - 2) : iconSize}
+          color={resolvedIconColor}
+        />
       </View>
 
-      <Text style={[styles.title, isCompact && styles.titleCompact]}>{title}</Text>
+      <Text style={[styles.title, isCompact && styles.titleCompact]} numberOfLines={2}>
+        {title}
+      </Text>
 
-      <Text style={[styles.message, isCompact && styles.messageCompact]}>{message}</Text>
+      <Text style={[styles.message, isCompact && styles.messageCompact]}>
+        {message}
+      </Text>
 
-      {!!hint && <Text style={styles.hint}>{hint}</Text>}
+      {hint ? <Text style={styles.hint}>{hint}</Text> : null}
 
-      {(!!primaryAction || !!secondaryAction) && (
-        <View style={styles.actions}>
+      {hasActions ? (
+        <View style={[styles.actions, isCompact && styles.actionsCompact]}>
           {primaryAction ? (
             <PressableScale onPress={primaryAction.onPress} style={styles.primaryBtnWrap}>
               <View style={styles.primaryBtn}>
@@ -90,7 +81,7 @@ export default function EmptyState({
               onPress={secondaryAction.onPress}
               style={({ pressed }) => [
                 styles.secondaryBtn,
-                pressed && Platform.OS !== "web" ? { opacity: 0.85 } : null,
+                pressed && Platform.OS !== "web" ? styles.secondaryBtnPressed : null,
               ]}
               accessibilityRole="button"
             >
@@ -98,7 +89,7 @@ export default function EmptyState({
             </Pressable>
           ) : null}
         </View>
-      )}
+      ) : null}
     </View>
   );
 }
@@ -106,71 +97,86 @@ export default function EmptyState({
 const styles = StyleSheet.create({
   container: {
     width: "100%",
-    paddingHorizontal: theme.spacing.xl,
-    paddingVertical: theme.spacing.xxl,
     alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 18,
+    paddingVertical: 22,
   },
 
   containerCompact: {
-    paddingVertical: theme.spacing.xl,
-  },
-
-  iconWrap: {
-    marginBottom: theme.spacing.md,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
   },
 
   iconBadge: {
-    width: 64,
-    height: 64,
-    borderRadius: 18,
+    width: 52,
+    height: 52,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.04)",
+    backgroundColor: "rgba(255,255,255,0.035)",
     borderWidth: 1,
-    borderColor: theme.colors.borderSubtle,
+    borderColor: "rgba(255,255,255,0.08)",
+    marginBottom: 12,
+  },
+
+  iconBadgeCompact: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    marginBottom: 10,
   },
 
   title: {
     color: theme.colors.textPrimary,
-    fontSize: theme.fontSize.h2,
-    fontWeight: theme.fontWeight.semibold,
+    fontSize: 18,
+    lineHeight: 22,
+    fontWeight: theme.fontWeight.black,
     textAlign: "center",
-    letterSpacing: 0.2,
+    letterSpacing: 0.15,
+    maxWidth: 520,
   },
 
   titleCompact: {
-    fontSize: theme.fontSize.body,
+    fontSize: 15,
+    lineHeight: 19,
   },
 
   message: {
-    marginTop: theme.spacing.sm,
+    marginTop: 6,
     color: theme.colors.textSecondary,
-    fontSize: theme.fontSize.meta,
-    fontWeight: theme.fontWeight.regular,
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: theme.fontWeight.medium,
     textAlign: "center",
-    lineHeight: 20,
     maxWidth: 520,
   },
 
   messageCompact: {
-    marginTop: theme.spacing.xs,
+    marginTop: 4,
+    fontSize: 11,
+    lineHeight: 16,
   },
 
   hint: {
-    marginTop: theme.spacing.sm,
+    marginTop: 8,
     color: theme.colors.textMuted,
-    fontSize: theme.fontSize.tiny,
-    fontWeight: theme.fontWeight.regular,
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: theme.fontWeight.medium,
     textAlign: "center",
-    lineHeight: 16,
     maxWidth: 520,
   },
 
   actions: {
-    marginTop: theme.spacing.lg,
+    marginTop: 14,
     width: "100%",
     alignItems: "center",
-    gap: theme.spacing.sm,
+    gap: 8,
+  },
+
+  actionsCompact: {
+    marginTop: 12,
   },
 
   primaryBtnWrap: {
@@ -178,37 +184,45 @@ const styles = StyleSheet.create({
   },
 
   primaryBtn: {
-    height: 48,
-    borderRadius: theme.borderRadius.button,
+    minHeight: 44,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
+    paddingHorizontal: 14,
     backgroundColor: theme.colors.accentGreen,
     shadowColor: "#000",
-    shadowOpacity: 0.25,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 8,
+    shadowOpacity: 0.18,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 6,
   },
 
   primaryBtnText: {
     color: "#FFFFFF",
-    fontSize: theme.fontSize.body,
-    fontWeight: theme.fontWeight.semibold,
+    fontSize: 14,
+    fontWeight: theme.fontWeight.bold,
     letterSpacing: 0.2,
   },
 
   secondaryBtn: {
-    paddingVertical: theme.spacing.sm,
-    paddingHorizontal: theme.spacing.md,
-    borderRadius: theme.borderRadius.pill,
+    minHeight: 40,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 999,
     backgroundColor: "rgba(255,255,255,0.04)",
     borderWidth: 1,
     borderColor: theme.colors.borderSubtle,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  secondaryBtnPressed: {
+    opacity: 0.85,
   },
 
   secondaryBtnText: {
     color: theme.colors.textPrimary,
-    fontSize: theme.fontSize.meta,
-    fontWeight: theme.fontWeight.medium,
+    fontSize: 12,
+    fontWeight: theme.fontWeight.semibold,
   },
 });
