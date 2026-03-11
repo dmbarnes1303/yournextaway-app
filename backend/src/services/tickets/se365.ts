@@ -135,7 +135,7 @@ function isExactEvent(ev: Se365Event, input: TicketResolveInput, score: number):
   if (isBadVariant(clean(ev.name))) return false;
 
   const diff = absDays(kickoff, evDt);
-  return diff === 0 && score >= 90;
+  return diff === 0 && score >= 80;
 }
 
 function summarizeEvent(ev: Se365Event) {
