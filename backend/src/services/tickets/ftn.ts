@@ -11,8 +11,8 @@ type FtnEvent = {
   date?: string;
   url?: string;
   event_url?: string;
-  min_price?: string | number;
-  lowest_price?: string | number;
+  min_price?: string | number | Record<string, unknown>;
+  lowest_price?: string | number | Record<string, unknown>;
   home_team_name?: string;
   away_team_name?: string;
 };
@@ -69,9 +69,43 @@ function eventDate(ev: FtnEvent): string {
   return clean(ev.event_date) || clean(ev.date);
 }
 
+function normalizePriceValue(raw: unknown): string | null {
+  if (raw == null) return null;
+
+  if (typeof raw === "string" || typeof raw === "number") {
+    const value = clean(raw);
+    return value || null;
+  }
+
+  if (typeof raw !== "object") return null;
+
+  const obj = raw as Record<string, unknown>;
+
+  const amount =
+    obj.amount ??
+    obj.value ??
+    obj.price ??
+    obj.min_price ??
+    obj.lowest_price;
+
+  const currency =
+    obj.currency ??
+    obj.currency_code ??
+    obj.curr ??
+    obj.symbol ??
+    "";
+
+  const amountText = clean(amount);
+  const currencyText = clean(currency);
+
+  if (amountText && currencyText) return `${amountText} ${currencyText}`.trim();
+  if (amountText) return amountText;
+
+  return null;
+}
+
 function eventPrice(ev: FtnEvent): string | null {
-  const raw = clean(ev.lowest_price) || clean(ev.min_price);
-  return raw || null;
+  return normalizePriceValue(ev.lowest_price) || normalizePriceValue(ev.min_price);
 }
 
 function eventHome(ev: FtnEvent): string {
@@ -98,6 +132,52 @@ function exactTeamsMatch(ev: FtnEvent, input: TicketResolveInput): boolean {
   }
 
   return containsTeamsLoose(eventTitle(ev), input.homeName, input.awayName);
+}
+
+function textContainsVariant(text: string, variant: string): boolean {
+  const value = ` ${norm(text)} `;
+  const needle = ` ${norm(variant)} `;
+  return value.includes(needle);
+}
+
+function variantPenalty(ev: FtnEvent, input: TicketResolveInput): number {
+  const haystack = [eventTitle(ev), eventHome(ev), eventAway(ev)].join(" ").toLowerCase();
+  const inputText = [input.homeName, input.awayName, input.leagueName ?? ""].join(" ").toLowerCase();
+
+  const variants = [
+    "women",
+    "women's",
+    "(women)",
+    "ladies",
+    "feminino",
+    "femenino",
+    "u19",
+    "u20",
+    "u21",
+    "u23",
+    "youth",
+    "juvenil",
+    "b",
+    "b team",
+    "ii",
+    "reserves",
+    "reserve",
+    "academy",
+    "legends",
+  ];
+
+  let penalty = 0;
+
+  for (const variant of variants) {
+    const eventHas = textContainsVariant(haystack, variant);
+    const inputHas = textContainsVariant(inputText, variant);
+
+    if (eventHas && !inputHas) {
+      penalty += 35;
+    }
+  }
+
+  return penalty;
 }
 
 function scoreEvent(ev: FtnEvent, input: TicketResolveInput): number {
@@ -132,6 +212,8 @@ function scoreEvent(ev: FtnEvent, input: TicketResolveInput): number {
 
   if (candidateUrl) score += 5;
   if (eventPrice(ev)) score += 2;
+
+  score -= variantPenalty(ev, input);
 
   return score;
 }
@@ -301,6 +383,7 @@ export async function resolveFtnCandidate(input: TicketResolveInput): Promise<Ti
   }
 
   const exact = exactTeamsMatch(best.ev, input) && best.score >= 90;
+  const normalizedPrice = eventPrice(best.ev);
 
   console.log("[FTN] matched event", {
     title: eventTitle(best.ev),
@@ -309,7 +392,7 @@ export async function resolveFtnCandidate(input: TicketResolveInput): Promise<Ti
     date: eventDate(best.ev),
     score: best.score,
     exact,
-    price: eventPrice(best.ev),
+    price: normalizedPrice,
     url: rawUrl,
   });
 
@@ -319,7 +402,7 @@ export async function resolveFtnCandidate(input: TicketResolveInput): Promise<Ti
     score: best.score,
     url: appendAffiliate(rawUrl),
     title: `Tickets: ${homeName} vs ${awayName}`,
-    priceText: eventPrice(best.ev),
+    priceText: normalizedPrice,
     reason: exact ? "exact_event" : "search_fallback",
   };
 }
