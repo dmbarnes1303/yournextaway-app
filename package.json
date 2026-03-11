@@ -4,7 +4,7 @@
   "main": "index.ts",
   "private": true,
   "scripts": {
-    "dev": "cross-env EXPO_NO_TELEMETRY=1 npx expo start --tunnel -c",
+    "dev": "cross-env EXPO_NO_TELEMETRY=1 npx expo start -c",
     "android": "cross-env EXPO_NO_TELEMETRY=1 npx expo start --android -c",
     "ios": "cross-env EXPO_NO_TELEMETRY=1 npx expo start --ios -c",
     "web": "cross-env EXPO_NO_TELEMETRY=1 npx expo start --web -c",
