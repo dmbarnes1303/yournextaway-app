@@ -34,7 +34,6 @@ export const env = {
   se365AffiliateId: opt("SE365_AFFILIATE_ID", ""),
 
   // Gigsberg
-  // API base should point to integration API, not public site.
   gigsbergBaseUrl: opt("GIGSBERG_BASE_URL", "https://integration2.gigsberg.com/v2"),
   gigsbergApiKey: opt("GIGSBERG_API_KEY", ""),
   gigsbergAffiliateId: opt("GIGSBERG_AFFILIATE_ID", "yournextaway"),
@@ -54,7 +53,11 @@ export function hasSe365Config(): boolean {
 }
 
 export function hasGigsbergConfig(): boolean {
-  return Boolean(env.gigsbergBaseUrl && env.gigsbergApiKey);
+  return Boolean(
+    env.gigsbergBaseUrl &&
+      env.gigsbergApiKey &&
+      env.gigsbergAffiliateId
+  );
 }
 
 export { req };
