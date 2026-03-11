@@ -322,3 +322,51 @@ export async function resolveTicket(
     candidate: summarizeCandidate(se365),
   });
   if (se365) {
+    candidates.push(se365);
+  }
+
+  const gigsberg = await withTimeout("gigsberg", () =>
+    resolveGigsbergCandidate(input)
+  );
+
+  checkedProviders.push("gigsberg");
+  console.log("[tickets] provider result", {
+    provider: "gigsberg",
+    candidate: summarizeCandidate(gigsberg),
+  });
+  if (gigsberg) {
+    candidates.push(gigsberg);
+  }
+
+  const result = buildResolution(candidates, checkedProviders);
+
+  if (result.ok) {
+    console.log("[tickets] resolved", {
+      selectedProvider: result.provider,
+      selectedReason: result.reason,
+      selectedScore: result.score,
+      selectedExact: result.exact,
+      checkedProviders,
+      options: result.options.map((option) => ({
+        provider: option.provider,
+        reason: option.reason,
+        score: option.score,
+        exact: option.exact,
+        priceText: option.priceText ?? null,
+      })),
+      debugNoCache,
+    });
+  } else {
+    console.log("[tickets] no result", {
+      checkedProviders,
+      input: summarizeInput(input),
+      debugNoCache,
+    });
+  }
+
+  if (!debugNoCache) {
+    setCache(cacheKey, result);
+  }
+
+  return result;
+}
