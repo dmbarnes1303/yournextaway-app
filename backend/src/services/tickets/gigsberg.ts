@@ -1,7 +1,7 @@
 import { env, hasGigsbergConfig } from "../../lib/env.js";
 import type { TicketCandidate, TicketResolveInput } from "./types.js";
 import { expandTeamAliases, getPreferredTeamName } from "./teamAliases.js";
-console.log("[Gigsberg] STRONG API VERSION LOADED");
+
 type GigsbergEvent = {
   id?: number | string;
   name?: string;
@@ -112,10 +112,8 @@ function listingEventId(listing: GigsbergListing): string {
 
 function numberFromUnknown(v: unknown): number | null {
   if (typeof v === "number" && Number.isFinite(v)) return v;
-
   const raw = clean(v);
   if (!raw) return null;
-
   const parsed = Number(raw);
   return Number.isFinite(parsed) ? parsed : null;
 }
@@ -199,18 +197,6 @@ function buildPublicSearchUrl(input: TicketResolveInput): string | null {
 
   const url = new URL("https://www.gigsberg.com/search");
   url.searchParams.set("query", query);
-
-  const affiliateId = clean(env.gigsbergAffiliateId);
-  if (affiliateId) {
-    url.searchParams.set("aff", affiliateId);
-  }
-
-  return url.toString();
-}
-
-function buildListingUrl(eventNameValue: string): string {
-  const url = new URL("https://www.gigsberg.com/search");
-  url.searchParams.set("query", eventNameValue);
 
   const affiliateId = clean(env.gigsbergAffiliateId);
   if (affiliateId) {
@@ -433,7 +419,10 @@ async function searchEvents(input: TicketResolveInput): Promise<GigsbergEvent[]>
   const name = `${home} ${away}`.trim();
   const dateWindow = buildDateWindow(input.kickoffIso);
 
-  const url = new URL(`${base}/events/search`);
+  // CRITICAL FIX:
+  // Docs show /event/search (singular), not /events/search.
+  const url = new URL(`${base}/event/search`);
+
   if (name) url.searchParams.set("name", name);
   if (dateWindow.dateFrom) url.searchParams.set("date_from", dateWindow.dateFrom);
   if (dateWindow.dateTo) url.searchParams.set("date_to", dateWindow.dateTo);
@@ -465,6 +454,7 @@ async function searchEvents(input: TicketResolveInput): Promise<GigsbergEvent[]>
     console.log("[Gigsberg] events non-200 response", {
       status: response.status,
       body: response.body.slice(0, 500),
+      requestUrl: url.toString(),
     });
     return [];
   }
@@ -531,6 +521,18 @@ async function searchListingsForEvent(eventId: string): Promise<GigsbergListing[
   });
 
   return listings;
+}
+
+function buildListingUrl(eventNameValue: string): string {
+  const publicBase = new URL("https://www.gigsberg.com/search");
+  publicBase.searchParams.set("query", eventNameValue);
+
+  const affiliateId = clean(env.gigsbergAffiliateId);
+  if (affiliateId) {
+    publicBase.searchParams.set("aff", affiliateId);
+  }
+
+  return publicBase.toString();
 }
 
 export async function resolveGigsbergCandidate(
@@ -600,7 +602,7 @@ export async function resolveGigsbergCandidate(
     return {
       provider: "gigsberg",
       exact: false,
-      score: 22,
+      score: 18,
       url: fallbackUrl,
       title: `Tickets: ${getPreferredTeamName(input.homeName)} vs ${getPreferredTeamName(input.awayName)}`,
       priceText: null,
@@ -628,7 +630,7 @@ export async function resolveGigsbergCandidate(
     return {
       provider: "gigsberg",
       exact: false,
-      score: Math.max(22, bestEvent.score - 20),
+      score: Math.max(20, bestEvent.score - 20),
       url: fallbackUrl,
       title: `Tickets: ${getPreferredTeamName(input.homeName)} vs ${getPreferredTeamName(input.awayName)}`,
       priceText: null,
@@ -644,7 +646,7 @@ export async function resolveGigsbergCandidate(
       buildListingUrl(bestEventName || `${homeName} vs ${awayName}`)
     );
 
-    console.log("[Gigsberg] matched event but no listings, using public event-name fallback", {
+    console.log("[Gigsberg] matched event but no listings, using event fallback", {
       bestEvent: {
         ...summarizeEvent(bestEvent.ev),
         score: bestEvent.score,
