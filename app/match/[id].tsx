@@ -1,4 +1,3 @@
-// app/match/[id].tsx
 import React, { useCallback, useMemo, useState } from "react";
 import { Alert, Image, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -17,12 +16,13 @@ import { theme } from "@/src/constants/theme";
 import { useFixture } from "@/src/hooks/useFixtures";
 import { useTripsStore } from "@/src/state/trips";
 
-import { buildTicketLink } from "@/src/services/partnerLinks";
 import { beginPartnerClick, openUntrackedUrl } from "@/src/services/partnerClicks";
+import { resolveTicketForFixture } from "@/src/services/ticketResolver";
 
 import { getAllStadiums, getStadiumByTeamFromRegistry } from "@/src/data/stadiumRegistry";
 import type { StadiumRecord } from "@/src/data/stadiums/types";
 import { normalizeTeamKey } from "@/src/data/teams";
+import type { PartnerId } from "@/src/core/partners";
 
 /* -------------------------------------------------------------------------- */
 /* Helpers                                                                    */
@@ -179,6 +179,24 @@ function resolveStadiumFromVenueOrTeam(args: {
   }
 
   return null;
+}
+
+function mapTicketProviderToPartnerId(provider?: string | null): PartnerId {
+  const raw = String(provider ?? "").trim().toLowerCase();
+
+  if (raw === "footballticketsnet") return "footballticketsnet" as PartnerId;
+  if (raw === "gigsberg") return "gigsberg" as PartnerId;
+  return "sportsevents365" as PartnerId;
+}
+
+function liveTicketSubtitle(args: { provider?: string | null; priceText?: string | null }) {
+  const provider = String(args.provider ?? "").trim();
+  const priceText = String(args.priceText ?? "").trim();
+
+  if (priceText && provider) return `Best live option • ${priceText} • ${provider}`;
+  if (priceText) return `Best live option • ${priceText}`;
+  if (provider) return `Best live option • ${provider}`;
+  return "Best live option";
 }
 
 /* -------------------------------------------------------------------------- */
@@ -350,32 +368,45 @@ export default function MatchScreen() {
     setOpeningTickets(true);
 
     try {
-      const url = await buildTicketLink({
+      const resolved = await resolveTicketForFixture({
         fixtureId,
-        home: homeName,
-        away: awayName,
+        homeName,
+        awayName,
         kickoffIso,
+        leagueName: leagueName ?? undefined,
         leagueId,
-        leagueName,
-        se365EventId:
-          typeof (trip as any)?.sportsevents365EventId === "number"
-            ? (trip as any).sportsevents365EventId
-            : undefined,
-        se365EventUrl: (fixture as any)?.se365EventUrl ?? null,
       });
 
-      if (!url) {
-        Alert.alert("Tickets not found");
+      if (!resolved?.ok || !resolved.url) {
+        Alert.alert("Tickets not found", "We couldn’t find a suitable tickets listing for this match.");
         return;
       }
 
+      const partnerId = mapTicketProviderToPartnerId(resolved.provider);
+
       await beginPartnerClick({
         tripId,
-        partnerId: "sportsevents365",
-        url,
+        partnerId,
+        url: resolved.url,
         savedItemType: "tickets",
-        title: `Tickets: ${homeName} vs ${awayName}`,
-        metadata: { fixtureId, leagueId, dateIso, kickoffIso, priceMode: "live" },
+        title: resolved.title || `Tickets: ${homeName} vs ${awayName}`,
+        metadata: {
+          fixtureId,
+          leagueId,
+          leagueName,
+          dateIso,
+          kickoffIso,
+          homeName,
+          awayName,
+          priceMode: "live",
+          ticketProvider: resolved.provider ?? null,
+          resolvedPriceText: resolved.priceText ?? null,
+          resolutionReason: resolved.reason ?? null,
+          exactMatch: Boolean(resolved.exact),
+          checkedProviders: Array.isArray((resolved as any)?.checkedProviders)
+            ? (resolved as any).checkedProviders
+            : undefined,
+        },
       });
     } catch {
       Alert.alert("Couldn’t open tickets");
@@ -415,9 +446,8 @@ export default function MatchScreen() {
         <SafeAreaView style={styles.safe}>
           <EmptyState
             title="Match not found"
-            subtitle="Missing fixture ID."
-            actionText="Go back"
-            onAction={() => router.back()}
+            message="Missing fixture ID."
+            primaryAction={{ label: "Go back", onPress: () => router.back() }}
           />
         </SafeAreaView>
       </Background>
@@ -478,7 +508,7 @@ export default function MatchScreen() {
               </View>
 
               <View style={styles.heroHints}>
-                <Chip label="Tickets: live price" variant="primary" />
+                <Chip label="Tickets: resolver-backed" variant="primary" />
                 <Chip label="Hotels: live price" variant="default" />
                 <Chip label={resolvedStadium ? "Travel: mapped" : "Travel: limited"} variant="default" />
               </View>
@@ -488,7 +518,7 @@ export default function MatchScreen() {
           <GlassCard level="default" variant="matte" style={styles.sectionCard}>
             <Text style={styles.sectionTitle}>Tickets</Text>
             <Text style={styles.sectionSub}>
-              Use the tracked partner flow so the click can move through Pending, Booked and into Wallet.
+              Resolver-backed ticket flow. Best provider first, tracked click saved into Pending/Booked/Wallet.
             </Text>
 
             <View style={styles.primaryActionWrap}>
@@ -499,6 +529,15 @@ export default function MatchScreen() {
                 onPress={openTickets}
                 glow
               />
+            </View>
+
+            <View style={styles.ticketHintBox}>
+              <Text style={styles.ticketHintText}>
+                {liveTicketSubtitle({
+                  provider: "FTN / SE365 / Gigsberg fallback",
+                  priceText: null,
+                })}
+              </Text>
             </View>
 
             <View style={styles.actions}>
@@ -591,7 +630,7 @@ export default function MatchScreen() {
             <View style={styles.nextStepsList}>
               <View style={styles.nextStepRow}>
                 <Text style={styles.nextStepNumber}>1</Text>
-                <Text style={styles.nextStepText}>Open tracked tickets</Text>
+                <Text style={styles.nextStepText}>Open resolver-backed tickets</Text>
               </View>
               <View style={styles.nextStepRow}>
                 <Text style={styles.nextStepNumber}>2</Text>
@@ -800,6 +839,22 @@ const styles = StyleSheet.create({
 
   primaryActionWrap: {
     marginTop: 12,
+  },
+
+  ticketHintBox: {
+    marginTop: 10,
+    padding: 10,
+    borderRadius: theme.borderRadius.input,
+    borderWidth: 1,
+    borderColor: theme.colors.borderSubtle,
+    backgroundColor: "rgba(255,255,255,0.03)",
+  },
+
+  ticketHintText: {
+    color: theme.colors.textSecondary,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: theme.fontWeight.medium,
   },
 
   actions: {
