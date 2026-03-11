@@ -268,10 +268,7 @@ function formatKickoffMeta(
     day: "2-digit",
     month: "short",
   });
-  const timePart = d.toLocaleTimeString("en-GB", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  const timePart = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 
   const midnight = d.getHours() === 0 && d.getMinutes() === 0;
   const tbc = looksTbc || snapTbc || midnight;
@@ -353,10 +350,26 @@ function difficultyLabel(value?: TravelDifficulty | null): string | null {
   return null;
 }
 
-function confidenceLabel(value?: number | null): string | null {
+function confidencePctLabel(value?: number | null): string | null {
   if (typeof value !== "number" || !Number.isFinite(value)) return null;
   const pct = Math.max(0, Math.min(100, Math.round(value * 100)));
   return `${pct}% fit`;
+}
+
+function providerLabel(provider?: string | null): string {
+  const raw = clean(provider).toLowerCase();
+  if (raw === "footballticketsnet") return "FootballTicketNet";
+  if (raw === "sportsevents365") return "SportsEvents365";
+  if (raw === "gigsberg") return "Gigsberg";
+  return provider || "Provider";
+}
+
+function ticketConfidenceLabel(score?: number | null): string {
+  const value = typeof score === "number" ? score : 0;
+  if (value >= 90) return "High confidence";
+  if (value >= 75) return "Strong match";
+  if (value >= 60) return "Good match";
+  return "Fallback";
 }
 
 function rankReasonsText(trip: RankedTrip | null): string | null {
@@ -369,14 +382,6 @@ function mapTicketProviderToPartnerId(provider?: string | null): PartnerId {
   if (raw === "footballticketsnet") return "footballticketsnet" as PartnerId;
   if (raw === "gigsberg") return "gigsberg" as PartnerId;
   return "sportsevents365" as PartnerId;
-}
-
-function providerLabel(provider?: string | null): string {
-  const raw = clean(provider).toLowerCase();
-  if (raw === "footballticketsnet") return "FootballTicketNet";
-  if (raw === "sportsevents365") return "SportsEvents365";
-  if (raw === "gigsberg") return "Gigsberg";
-  return provider || "Provider";
 }
 
 function ticketResolverFailureMessage(resolved: TicketResolutionResult | null): string {
@@ -428,24 +433,49 @@ function normalizeTicketOptions(resolved: TicketResolutionResult | null): Ticket
 
     if (!provider || !url || !title || score == null) continue;
 
+    const normalized: TicketResolutionOption = {
+      provider,
+      exact: Boolean(option.exact),
+      score,
+      url,
+      title,
+      priceText: clean(option.priceText) || null,
+      reason:
+        option.reason === "exact_event" || option.reason === "partial_match"
+          ? option.reason
+          : "search_fallback",
+    };
+
     const key = `${provider.toLowerCase()}|${url}`;
-    if (!map.has(key)) {
-      map.set(key, {
-        provider,
-        exact: Boolean(option.exact),
-        score,
-        url,
-        title,
-        priceText: clean(option.priceText) || null,
-        reason:
-          option.reason === "exact_event" || option.reason === "partial_match"
-            ? option.reason
-            : "search_fallback",
-      });
+    const existing = map.get(key);
+
+    if (!existing) {
+      map.set(key, normalized);
+      continue;
+    }
+
+    if (normalized.exact && !existing.exact) {
+      map.set(key, normalized);
+      continue;
+    }
+
+    if (normalized.score > existing.score) {
+      map.set(key, normalized);
     }
   }
 
-  const values = Array.from(map.values()).sort((a, b) => b.score - a.score);
+  const values = Array.from(map.values()).sort((a, b) => {
+    if (a.exact && !b.exact) return -1;
+    if (!a.exact && b.exact) return 1;
+    if (b.score !== a.score) return b.score - a.score;
+
+    const aHasPrice = Boolean(clean(a.priceText));
+    const bHasPrice = Boolean(clean(b.priceText));
+    if (aHasPrice && !bHasPrice) return -1;
+    if (!aHasPrice && bHasPrice) return 1;
+
+    return providerLabel(a.provider).localeCompare(providerLabel(b.provider));
+  });
 
   if (values.length > 0) return values;
 
@@ -458,7 +488,12 @@ function normalizeTicketOptions(resolved: TicketResolutionResult | null): Ticket
         url: clean(resolved.url),
         title: clean(resolved.title),
         priceText: clean(resolved.priceText) || null,
-        reason: resolved.reason === "exact_event" ? "exact_event" : "search_fallback",
+        reason:
+          resolved.reason === "exact_event"
+            ? "exact_event"
+            : resolved.reason === "partial_match"
+            ? "partial_match"
+            : "search_fallback",
       },
     ];
   }
@@ -808,7 +843,7 @@ export default function TripDetailScreen() {
 
     return {
       difficulty: difficultyLabel((rankedTrip as any)?.travelDifficulty ?? null),
-      confidence: confidenceLabel((rankedTrip as any)?.confidence ?? null),
+      confidence: confidencePctLabel((rankedTrip as any)?.confidence ?? null),
       reasons: rankReasonsText(rankedTrip),
       score:
         typeof (rankedTrip as any)?.score === "number" && Number.isFinite((rankedTrip as any)?.score)
@@ -1208,6 +1243,7 @@ export default function TripDetailScreen() {
     dateIso?: string;
     option: TicketResolutionOption;
     checkedProviders?: string[];
+    optionCount?: number;
   }) {
     await openTrackedPartner({
       partnerId: mapTicketProviderToPartnerId(args.option.provider),
@@ -1229,6 +1265,7 @@ export default function TripDetailScreen() {
         exactMatch: Boolean(args.option.exact),
         score: args.option.score,
         checkedProviders: args.checkedProviders,
+        optionCount: args.optionCount,
       },
     });
   }
@@ -1262,6 +1299,7 @@ export default function TripDetailScreen() {
             openTicketOptionForMatch({
               ...args,
               option,
+              optionCount: args.options.length,
             }),
         })),
         {
@@ -1336,6 +1374,7 @@ export default function TripDetailScreen() {
           dateIso,
           option: options[0],
           checkedProviders: Array.isArray(resolved.checkedProviders) ? resolved.checkedProviders : undefined,
+          optionCount: options.length,
         });
         return;
       }
@@ -1874,6 +1913,11 @@ export default function TripDetailScreen() {
                       const ticketItem = ticketsByMatchId[String(mid)];
                       const isPrimary = String(primaryMatchId ?? "") === String(mid);
 
+                      const ticketScore =
+                        typeof ticketItem?.metadata?.score === "number"
+                          ? Number(ticketItem.metadata?.score)
+                          : null;
+
                       return (
                         <View key={mid} style={styles.matchRowWrap}>
                           <Pressable
@@ -1926,9 +1970,16 @@ export default function TripDetailScreen() {
 
                               <Text style={styles.matchHint} numberOfLines={1}>
                                 {ticketItem
-                                  ? livePriceLine(ticketItem) || `Tap to open tickets (${statusLabel(ticketItem.status)})`
+                                  ? livePriceLine(ticketItem) ||
+                                    `Tap to open tickets (${statusLabel(ticketItem.status)})`
                                   : "Tap to compare live ticket options • Hold for options"}
                               </Text>
+
+                              {!ticketItem && ticketScore != null ? (
+                                <Text style={styles.ticketQualityMeta} numberOfLines={1}>
+                                  {ticketConfidenceLabel(ticketScore)}
+                                </Text>
+                              ) : null}
                             </View>
 
                             <TeamCrest name={awayName} logo={awayLogo} />
@@ -2609,7 +2660,19 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
 
-  matchHint: { marginTop: 6, color: theme.colors.textTertiary, fontWeight: "900", fontSize: 11 },
+  matchHint: {
+    marginTop: 6,
+    color: theme.colors.textTertiary,
+    fontWeight: "900",
+    fontSize: 11,
+  },
+
+  ticketQualityMeta: {
+    marginTop: 4,
+    color: "rgba(160,195,255,1)",
+    fontWeight: "900",
+    fontSize: 11,
+  },
 
   matchActionsRow: { flexDirection: "row", gap: 8 },
 
