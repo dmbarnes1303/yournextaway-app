@@ -16,6 +16,7 @@ export type TicketResolveInput = {
   kickoffIso: string;
   leagueName?: string;
   leagueId?: string | number;
+  debugNoCache?: boolean;
 };
 
 export type TicketCandidate = {
