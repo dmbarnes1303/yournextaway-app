@@ -54,6 +54,7 @@ type GigsbergListingsResponse = {
 const GIGSBERG_FETCH_TIMEOUT_MS = 6500;
 const EVENTS_PER_PAGE = 25;
 const LISTINGS_PER_PAGE = 20;
+const MIN_PUBLIC_FALLBACK_SCORE = 22;
 
 function clean(v: unknown): string {
   return String(v ?? "").trim();
@@ -112,8 +113,10 @@ function listingEventId(listing: GigsbergListing): string {
 
 function numberFromUnknown(v: unknown): number | null {
   if (typeof v === "number" && Number.isFinite(v)) return v;
+
   const raw = clean(v);
   if (!raw) return null;
+
   const parsed = Number(raw);
   return Number.isFinite(parsed) ? parsed : null;
 }
@@ -169,24 +172,6 @@ function buildDateWindow(kickoffIso: string): { dateFrom?: string; dateTo?: stri
   };
 }
 
-function appendAffiliate(url: string): string {
-  const base = clean(url);
-  if (!base) return "";
-
-  const affiliateId = clean(env.gigsbergAffiliateId);
-  if (!affiliateId) return base;
-
-  try {
-    const parsed = new URL(base);
-    if (!parsed.searchParams.get("aff")) {
-      parsed.searchParams.set("aff", affiliateId);
-    }
-    return parsed.toString();
-  } catch {
-    return base;
-  }
-}
-
 function buildPublicSearchUrl(input: TicketResolveInput): string | null {
   const home = getPreferredTeamName(input.homeName);
   const away = getPreferredTeamName(input.awayName);
@@ -197,6 +182,18 @@ function buildPublicSearchUrl(input: TicketResolveInput): string | null {
 
   const url = new URL("https://www.gigsberg.com/search");
   url.searchParams.set("query", query);
+
+  const affiliateId = clean(env.gigsbergAffiliateId);
+  if (affiliateId) {
+    url.searchParams.set("aff", affiliateId);
+  }
+
+  return url.toString();
+}
+
+function buildListingUrl(eventNameValue: string): string {
+  const url = new URL("https://www.gigsberg.com/search");
+  url.searchParams.set("query", eventNameValue);
 
   const affiliateId = clean(env.gigsbergAffiliateId);
   if (affiliateId) {
@@ -269,7 +266,6 @@ function scoreEvent(ev: GigsbergEvent, input: TicketResolveInput): number {
   const name = eventName(ev);
   const kickoff = safeDate(input.kickoffIso);
   const evDt = safeDate(eventDate(ev));
-
   const homeVariants = expandTeamAliases(input.homeName);
   const awayVariants = expandTeamAliases(input.awayName);
 
@@ -283,7 +279,6 @@ function scoreEvent(ev: GigsbergEvent, input: TicketResolveInput): number {
 
   if (kickoff && evDt) {
     const diff = absDays(kickoff, evDt);
-
     if (diff === 0) score += 25;
     else if (diff === 1) score += 15;
     else if (diff === 2) score += 8;
@@ -419,10 +414,7 @@ async function searchEvents(input: TicketResolveInput): Promise<GigsbergEvent[]>
   const name = `${home} ${away}`.trim();
   const dateWindow = buildDateWindow(input.kickoffIso);
 
-  // CRITICAL FIX:
-  // Docs show /event/search (singular), not /events/search.
-  const url = new URL(`${base}/event/search`);
-
+  const url = new URL(`${base}/search/events`);
   if (name) url.searchParams.set("name", name);
   if (dateWindow.dateFrom) url.searchParams.set("date_from", dateWindow.dateFrom);
   if (dateWindow.dateTo) url.searchParams.set("date_to", dateWindow.dateTo);
@@ -472,7 +464,7 @@ async function searchEvents(input: TicketResolveInput): Promise<GigsbergEvent[]>
 
 async function searchListingsForEvent(eventId: string): Promise<GigsbergListing[]> {
   const base = env.gigsbergBaseUrl.replace(/\/+$/, "");
-  const url = `${base}/listings/search`;
+  const url = `${base}/search/listings`;
 
   const body = {
     event_id: Number.isFinite(Number(eventId)) ? Number(eventId) : eventId,
@@ -507,12 +499,15 @@ async function searchListingsForEvent(eventId: string): Promise<GigsbergListing[
       eventId,
       status: response.status,
       body: response.body.slice(0, 500),
+      requestUrl: url,
     });
     return [];
   }
 
   const parsed = safeJsonParse<GigsbergListingsResponse>(response.body);
-  const listings = Array.isArray(parsed?.data) ? parsed.data.slice(0, LISTINGS_PER_PAGE) : [];
+  const listings = Array.isArray(parsed?.data)
+    ? parsed.data.slice(0, LISTINGS_PER_PAGE)
+    : [];
 
   console.log("[Gigsberg] listings response", {
     eventId,
@@ -521,18 +516,6 @@ async function searchListingsForEvent(eventId: string): Promise<GigsbergListing[
   });
 
   return listings;
-}
-
-function buildListingUrl(eventNameValue: string): string {
-  const publicBase = new URL("https://www.gigsberg.com/search");
-  publicBase.searchParams.set("query", eventNameValue);
-
-  const affiliateId = clean(env.gigsbergAffiliateId);
-  if (affiliateId) {
-    publicBase.searchParams.set("aff", affiliateId);
-  }
-
-  return publicBase.toString();
 }
 
 export async function resolveGigsbergCandidate(
@@ -570,7 +553,7 @@ export async function resolveGigsbergCandidate(
     return {
       provider: "gigsberg",
       exact: false,
-      score: 18,
+      score: MIN_PUBLIC_FALLBACK_SCORE,
       url: fallbackUrl,
       title: `Tickets: ${getPreferredTeamName(input.homeName)} vs ${getPreferredTeamName(input.awayName)}`,
       priceText: null,
@@ -602,7 +585,7 @@ export async function resolveGigsbergCandidate(
     return {
       provider: "gigsberg",
       exact: false,
-      score: 18,
+      score: MIN_PUBLIC_FALLBACK_SCORE,
       url: fallbackUrl,
       title: `Tickets: ${getPreferredTeamName(input.homeName)} vs ${getPreferredTeamName(input.awayName)}`,
       priceText: null,
@@ -613,6 +596,7 @@ export async function resolveGigsbergCandidate(
   const bestEvent = scoredEvents[0];
   const bestEventId = clean(bestEvent.ev.id);
   const bestEventName = eventName(bestEvent.ev);
+  const exact = isExactEvent(bestEvent.ev, input, bestEvent.score);
 
   if (!bestEventId) {
     const fallbackUrl = buildPublicSearchUrl(input);
@@ -621,6 +605,7 @@ export async function resolveGigsbergCandidate(
       bestEvent: {
         ...summarizeEvent(bestEvent.ev),
         score: bestEvent.score,
+        exact,
       },
       fallbackUrl,
     });
@@ -629,22 +614,19 @@ export async function resolveGigsbergCandidate(
 
     return {
       provider: "gigsberg",
-      exact: false,
-      score: Math.max(20, bestEvent.score - 20),
+      exact,
+      score: Math.max(25, bestEvent.score - 15),
       url: fallbackUrl,
       title: `Tickets: ${getPreferredTeamName(input.homeName)} vs ${getPreferredTeamName(input.awayName)}`,
       priceText: null,
-      reason: "search_fallback",
+      reason: exact ? "partial_match" : "search_fallback",
     };
   }
 
   const listings = await searchListingsForEvent(bestEventId);
-  const exact = isExactEvent(bestEvent.ev, input, bestEvent.score);
 
   if (!listings.length) {
-    const fallbackUrl = appendAffiliate(
-      buildListingUrl(bestEventName || `${homeName} vs ${awayName}`)
-    );
+    const fallbackUrl = buildListingUrl(bestEventName || `${homeName} vs ${awayName}`);
 
     console.log("[Gigsberg] matched event but no listings, using event fallback", {
       bestEvent: {
@@ -658,7 +640,7 @@ export async function resolveGigsbergCandidate(
     return {
       provider: "gigsberg",
       exact,
-      score: exact ? bestEvent.score : Math.max(25, bestEvent.score - 15),
+      score: exact ? bestEvent.score : Math.max(30, bestEvent.score - 10),
       url: fallbackUrl,
       title: `Tickets: ${getPreferredTeamName(input.homeName)} vs ${getPreferredTeamName(input.awayName)}`,
       priceText: null,
@@ -674,13 +656,10 @@ export async function resolveGigsbergCandidate(
     .sort((a, b) => b.score - a.score);
 
   const bestListing = scoredListings[0];
-  const listingUrl = appendAffiliate(
-    buildListingUrl(bestEventName || `${homeName} vs ${awayName}`)
-  );
-
+  const listingUrl = buildListingUrl(bestEventName || `${homeName} vs ${awayName}`);
   const combinedScore = Math.min(
     100,
-    bestEvent.score + Math.min(18, Math.max(0, bestListing?.score ?? 0))
+    bestEvent.score + Math.min(18, bestListing?.score ?? 0)
   );
 
   console.log("[Gigsberg] matched event/listing", {
@@ -708,4 +687,4 @@ export async function resolveGigsbergCandidate(
     priceText: bestListing ? listingPriceText(bestListing.listing) : null,
     reason: exact ? "exact_event" : "partial_match",
   };
-    }
+}
