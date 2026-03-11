@@ -77,9 +77,7 @@ function chooseBestFallback(candidates: TicketCandidate[]): TicketCandidate | nu
   return fallbacks[0] ?? null;
 }
 
-export async function resolveTicket(
-  input: TicketResolveInput
-): Promise<TicketResolution> {
+export async function resolveTicket(input: TicketResolveInput): Promise<TicketResolution> {
   const cacheKey = buildCacheKey(input);
   const cached = getCache(cacheKey);
   if (cached) return cached;
@@ -98,7 +96,6 @@ export async function resolveTicket(
   checkedProviders.push("sportsevents365");
   if (se365) candidates.push(se365);
 
-  // First preference: exact/direct event matches only.
   const bestDirect = chooseBestDirect(candidates);
   if (bestDirect) {
     const result: TicketResolution = {
@@ -117,8 +114,9 @@ export async function resolveTicket(
     return result;
   }
 
-  // Only try Gigsberg if no direct FTN/SE365 match was found.
-  
+  const gigsberg = await resolveGigsbergCandidate(input);
+  checkedProviders.push("gigsberg");
+  if (gigsberg) candidates.push(gigsberg);
 
   const bestFallback = chooseBestFallback(candidates);
   if (bestFallback) {
@@ -141,4 +139,4 @@ export async function resolveTicket(
   const notFound = buildNotFound(checkedProviders);
   setCache(cacheKey, notFound);
   return notFound;
-}
+    }
