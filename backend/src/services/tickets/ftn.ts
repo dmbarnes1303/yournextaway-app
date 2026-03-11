@@ -268,4 +268,58 @@ export async function resolveFtnCandidate(input: TicketResolveInput): Promise<Ti
 
   if (!scored.length) {
     console.log("[FTN] events returned but no strong match", {
-      count
+      count: events.length,
+      sample: events.slice(0, 5).map((ev) => ({
+        title: eventTitle(ev),
+        home: eventHome(ev),
+        away: eventAway(ev),
+        date: eventDate(ev),
+        url: eventUrl(ev),
+        price: eventPrice(ev),
+      })),
+    });
+    return null;
+  }
+
+  const best = scored[0];
+
+  let rawUrl = eventUrl(best.ev);
+
+  if (!rawUrl) {
+    const id = best.ev.event_id ?? best.ev.id;
+    if (id) {
+      rawUrl = `https://footballticketsnet.com/event/${id}`;
+    }
+  }
+
+  if (!rawUrl) {
+    console.log("[FTN] best match missing URL", {
+      title: eventTitle(best.ev),
+      score: best.score,
+    });
+    return null;
+  }
+
+  const exact = exactTeamsMatch(best.ev, input) && best.score >= 90;
+
+  console.log("[FTN] matched event", {
+    title: eventTitle(best.ev),
+    home: eventHome(best.ev),
+    away: eventAway(best.ev),
+    date: eventDate(best.ev),
+    score: best.score,
+    exact,
+    price: eventPrice(best.ev),
+    url: rawUrl,
+  });
+
+  return {
+    provider: "footballticketsnet",
+    exact,
+    score: best.score,
+    url: appendAffiliate(rawUrl),
+    title: `Tickets: ${homeName} vs ${awayName}`,
+    priceText: eventPrice(best.ev),
+    reason: exact ? "exact_event" : "search_fallback",
+  };
+}
