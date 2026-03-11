@@ -117,7 +117,7 @@ function noteTitleFromText(text: string) {
   const t = cleanNoteText(text);
   if (!t) return "Note";
   const firstLine = t.split("\n")[0]?.trim() || "";
-  return firstLine.length > 42 ? firstLine.slice(0, 42).trim() + "…" : firstLine;
+  return firstLine.length > 42 ? `${firstLine.slice(0, 42).trim()}…` : firstLine;
 }
 
 function statusLabel(s: SavedItem["status"]) {
@@ -263,8 +263,15 @@ function formatKickoffMeta(
     return { line: tbc ? "Kickoff: TBC" : "Kickoff: —", tbc: true, iso };
   }
 
-  const datePart = d.toLocaleDateString("en-GB", { weekday: "short", day: "2-digit", month: "short" });
-  const timePart = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  const datePart = d.toLocaleDateString("en-GB", {
+    weekday: "short",
+    day: "2-digit",
+    month: "short",
+  });
+  const timePart = d.toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 
   const midnight = d.getHours() === 0 && d.getMinutes() === 0;
   const tbc = looksTbc || snapTbc || midnight;
