@@ -118,11 +118,7 @@ export async function resolveTicket(
   }
 
   // Only try Gigsberg if no direct FTN/SE365 match was found.
-  const gigsberg = await resolveGigsbergCandidate(input);
-  checkedProviders.push("gigsberg");
-  if (gigsberg) {
-    candidates.push(gigsberg);
-  }
+  
 
   const bestFallback = chooseBestFallback(candidates);
   if (bestFallback) {
