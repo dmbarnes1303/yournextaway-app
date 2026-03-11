@@ -1,67 +1,76 @@
 import { resolveFtnCandidate } from "./ftn.js";
 import { resolveSe365Candidate } from "./se365.js";
 import { resolveGigsbergCandidate } from "./gigsberg.js";
-import type { TicketResolution, TicketResolveInput } from "./types.js";
+import type { TicketCandidate, TicketResolution, TicketResolveInput } from "./types.js";
+
+function normalizeCandidate(candidate: TicketCandidate): TicketCandidate {
+  const isExact = Boolean(candidate.exact);
+
+  return {
+    ...candidate,
+    reason: isExact ? "exact_event" : "search_fallback",
+  };
+}
+
+function compareCandidates(a: TicketCandidate, b: TicketCandidate): number {
+  // Exact beats fallback every time
+  if (a.exact !== b.exact) return a.exact ? -1 : 1;
+
+  // Higher score wins
+  if (a.score !== b.score) return b.score - a.score;
+
+  // Prefer providers with real event resolution over generic search fallback
+  const providerPriority: Record<TicketCandidate["provider"], number> = {
+    footballticketsnet: 3,
+    sportsevents365: 2,
+    gigsberg: 1,
+  };
+
+  return providerPriority[b.provider] - providerPriority[a.provider];
+}
 
 export async function resolveTicket(input: TicketResolveInput): Promise<TicketResolution> {
   const checkedProviders: TicketResolution["checkedProviders"] = [];
+  const candidates: TicketCandidate[] = [];
 
   const ftn = await resolveFtnCandidate(input);
   checkedProviders.push("footballticketsnet");
-  if (ftn) {
-    return {
-      ok: true,
-      provider: ftn.provider,
-      exact: ftn.exact,
-      score: ftn.score,
-      url: ftn.url,
-      title: ftn.title,
-      priceText: ftn.priceText,
-      reason: ftn.reason,
-      checkedProviders,
-    };
-  }
+  if (ftn) candidates.push(normalizeCandidate(ftn));
 
   const se365 = await resolveSe365Candidate(input);
   checkedProviders.push("sportsevents365");
-  if (se365) {
-    return {
-      ok: true,
-      provider: se365.provider,
-      exact: se365.exact,
-      score: se365.score,
-      url: se365.url,
-      title: se365.title,
-      priceText: se365.priceText,
-      reason: se365.reason,
-      checkedProviders,
-    };
-  }
+  if (se365) candidates.push(normalizeCandidate(se365));
 
   const gigsberg = await resolveGigsbergCandidate(input);
   checkedProviders.push("gigsberg");
-  if (gigsberg) {
+  if (gigsberg) candidates.push(normalizeCandidate(gigsberg));
+
+  if (!candidates.length) {
     return {
-      ok: true,
-      provider: gigsberg.provider,
-      exact: gigsberg.exact,
-      score: gigsberg.score,
-      url: gigsberg.url,
-      title: gigsberg.title,
-      priceText: gigsberg.priceText,
-      reason: gigsberg.reason,
+      ok: false,
+      provider: null,
+      exact: false,
+      score: null,
+      url: null,
+      title: null,
+      priceText: null,
+      reason: "not_found",
       checkedProviders,
     };
   }
 
+  const sorted = [...candidates].sort(compareCandidates);
+  const best = sorted[0];
+
   return {
-    ok: false,
-    provider: null,
-    exact: false,
-    score: null,
-    url: null,
-    title: null,
-    reason: "not_found",
+    ok: true,
+    provider: best.provider,
+    exact: best.exact,
+    score: best.score,
+    url: best.url,
+    title: best.title,
+    priceText: best.priceText ?? null,
+    reason: best.reason,
     checkedProviders,
   };
 }
