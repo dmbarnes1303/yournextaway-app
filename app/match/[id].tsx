@@ -212,25 +212,85 @@ function confidenceLabel(score?: number | null): string {
   return "Fallback";
 }
 
+function optionReasonLabel(reason?: TicketResolutionOption["reason"] | string | null) {
+  if (reason === "exact_event") return "Direct event match";
+  if (reason === "partial_match") return "Partial match";
+  return "Search fallback";
+}
+
 function dedupeOptions(result: TicketResolutionResult | null): TicketResolutionOption[] {
   if (!result) return [];
 
   const input = Array.isArray(result.options) ? result.options : [];
-  const cleaned = input.filter(
-    (x) => clean(x?.provider) && clean(x?.url) && clean(x?.title)
-  );
+  const cleaned = input.filter((x) => clean(x?.provider) && clean(x?.url) && clean(x?.title));
 
   const map = new Map<string, TicketResolutionOption>();
   for (const option of cleaned) {
     const key = `${clean(option.provider).toLowerCase()}|${clean(option.url)}`;
-    if (!map.has(key)) {
-      map.set(key, option);
+    const existing = map.get(key);
+
+    if (!existing) {
+      map.set(key, {
+        provider: clean(option.provider),
+        exact: Boolean(option.exact),
+        score: typeof option.score === "number" ? option.score : 0,
+        url: clean(option.url),
+        title: clean(option.title),
+        priceText: clean(option.priceText) || null,
+        reason:
+          option.reason === "exact_event" || option.reason === "partial_match"
+            ? option.reason
+            : "search_fallback",
+      });
+      continue;
+    }
+
+    const nextScore = typeof option.score === "number" ? option.score : 0;
+    const existingScore = typeof existing.score === "number" ? existing.score : 0;
+
+    if (Boolean(option.exact) && !existing.exact) {
+      map.set(key, {
+        provider: clean(option.provider),
+        exact: true,
+        score: nextScore,
+        url: clean(option.url),
+        title: clean(option.title),
+        priceText: clean(option.priceText) || null,
+        reason:
+          option.reason === "exact_event" || option.reason === "partial_match"
+            ? option.reason
+            : "search_fallback",
+      });
+      continue;
+    }
+
+    if (nextScore > existingScore) {
+      map.set(key, {
+        provider: clean(option.provider),
+        exact: Boolean(option.exact),
+        score: nextScore,
+        url: clean(option.url),
+        title: clean(option.title),
+        priceText: clean(option.priceText) || null,
+        reason:
+          option.reason === "exact_event" || option.reason === "partial_match"
+            ? option.reason
+            : "search_fallback",
+      });
     }
   }
 
   const values = Array.from(map.values()).sort((a, b) => {
+    if (a.exact && !b.exact) return -1;
+    if (!a.exact && b.exact) return 1;
     if (b.score !== a.score) return b.score - a.score;
-    return clean(a.priceText).localeCompare(clean(b.priceText));
+
+    const aHasPrice = Boolean(clean(a.priceText));
+    const bHasPrice = Boolean(clean(b.priceText));
+    if (aHasPrice && !bHasPrice) return -1;
+    if (!aHasPrice && bHasPrice) return 1;
+
+    return providerLabel(a.provider).localeCompare(providerLabel(b.provider));
   });
 
   if (values.length > 0) return values;
@@ -257,9 +317,9 @@ function dedupeOptions(result: TicketResolutionResult | null): TicketResolutionO
   return [];
 }
 
-function ticketFlowSubtitle(optionCount: number) {
+function ticketFlowSubtitle(optionCount: number, checkedProvidersCount: number) {
   if (optionCount > 1) {
-    return `Comparison ready: ${optionCount} ticket options found.`;
+    return `Comparison ready: ${optionCount} ticket options found across ${checkedProvidersCount || 3} providers.`;
   }
   return "Resolver-backed: FTN first, SE365 next, Gigsberg as fallback.";
 }
@@ -426,6 +486,13 @@ export default function MatchScreen() {
 
   const ticketOptions = useMemo(() => dedupeOptions(ticketResult), [ticketResult]);
   const bestOption = ticketOptions[0] ?? null;
+  const checkedProviders = useMemo(
+    () =>
+      Array.isArray(ticketResult?.checkedProviders)
+        ? ticketResult!.checkedProviders!.map((x) => clean(x)).filter(Boolean)
+        : [],
+    [ticketResult]
+  );
 
   const goBack = useCallback(() => {
     if (tripId) {
@@ -484,9 +551,7 @@ export default function MatchScreen() {
           resolutionReason: option.reason ?? null,
           exactMatch: Boolean(option.exact),
           score: option.score,
-          checkedProviders: Array.isArray(ticketResult?.checkedProviders)
-            ? ticketResult?.checkedProviders
-            : undefined,
+          checkedProviders: checkedProviders.length > 0 ? checkedProviders : undefined,
           optionCount: ticketOptions.length,
         },
       });
@@ -676,8 +741,20 @@ export default function MatchScreen() {
             </View>
 
             <View style={styles.ticketHintBox}>
-              <Text style={styles.ticketHintText}>{ticketFlowSubtitle(ticketOptions.length)}</Text>
+              <Text style={styles.ticketHintText}>
+                {ticketFlowSubtitle(ticketOptions.length, checkedProviders.length)}
+              </Text>
             </View>
+
+            {checkedProviders.length > 0 ? (
+              <View style={styles.providersWrap}>
+                {checkedProviders.map((provider) => (
+                  <View key={provider} style={styles.providerPill}>
+                    <Text style={styles.providerPillText}>{providerLabel(provider)}</Text>
+                  </View>
+                ))}
+              </View>
+            ) : null}
 
             {bestOption ? (
               <View style={styles.bestOptionBox}>
@@ -694,6 +771,15 @@ export default function MatchScreen() {
             ) : null}
 
             {ticketOptions.length > 1 ? (
+              <View style={styles.compareSummaryBox}>
+                <Text style={styles.compareSummaryTitle}>Compare before you click</Text>
+                <Text style={styles.compareSummaryText}>
+                  Don’t blindly trust the first link. Score, price text, and exact-match status all matter.
+                </Text>
+              </View>
+            ) : null}
+
+            {ticketOptions.length > 0 ? (
               <View style={styles.optionsList}>
                 {ticketOptions.map((option, index) => {
                   const provider = providerLabel(option.provider);
@@ -714,6 +800,11 @@ export default function MatchScreen() {
                                 <Text style={styles.bestBadgeText}>Best</Text>
                               </View>
                             ) : null}
+                            {option.exact ? (
+                              <View style={styles.exactBadge}>
+                                <Text style={styles.exactBadgeText}>Exact</Text>
+                              </View>
+                            ) : null}
                           </View>
 
                           <Text style={styles.optionConfidence}>
@@ -727,13 +818,7 @@ export default function MatchScreen() {
                         </View>
                       </View>
 
-                      <Text style={styles.optionReason}>
-                        {option.reason === "exact_event"
-                          ? "Direct event match"
-                          : option.reason === "partial_match"
-                          ? "Partial match"
-                          : "Search fallback"}
-                      </Text>
+                      <Text style={styles.optionReason}>{optionReasonLabel(option.reason)}</Text>
 
                       <View style={styles.optionActionRow}>
                         <Text style={styles.optionActionText}>
@@ -1065,6 +1150,28 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeight.medium,
   },
 
+  providersWrap: {
+    marginTop: 10,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+
+  providerPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: theme.colors.borderSubtle,
+    backgroundColor: "rgba(255,255,255,0.03)",
+  },
+
+  providerPillText: {
+    color: theme.colors.textSecondary,
+    fontSize: 11,
+    fontWeight: theme.fontWeight.black,
+  },
+
   bestOptionBox: {
     marginTop: 10,
     padding: 12,
@@ -1090,6 +1197,30 @@ const styles = StyleSheet.create({
   },
 
   bestOptionSub: {
+    color: theme.colors.textSecondary,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: theme.fontWeight.medium,
+  },
+
+  compareSummaryBox: {
+    marginTop: 10,
+    padding: 12,
+    borderRadius: theme.borderRadius.input,
+    borderWidth: 1,
+    borderColor: theme.colors.borderSubtle,
+    backgroundColor: "rgba(255,255,255,0.03)",
+    gap: 4,
+  },
+
+  compareSummaryTitle: {
+    color: theme.colors.textPrimary,
+    fontSize: 12,
+    fontWeight: theme.fontWeight.black,
+    letterSpacing: 0.3,
+  },
+
+  compareSummaryText: {
     color: theme.colors.textSecondary,
     fontSize: 12,
     lineHeight: 16,
@@ -1182,6 +1313,21 @@ const styles = StyleSheet.create({
 
   bestBadgeText: {
     color: theme.colors.primary,
+    fontSize: 11,
+    fontWeight: theme.fontWeight.black,
+  },
+
+  exactBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: "rgba(120,170,255,0.14)",
+    borderWidth: 1,
+    borderColor: "rgba(120,170,255,0.28)",
+  },
+
+  exactBadgeText: {
+    color: "rgba(190,215,255,1)",
     fontSize: 11,
     fontWeight: theme.fontWeight.black,
   },
