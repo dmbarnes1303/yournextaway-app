@@ -1,3 +1,13 @@
+export type TicketResolutionOption = {
+  provider: string;
+  exact: boolean;
+  score: number;
+  url: string;
+  title: string;
+  priceText?: string | null;
+  reason: "exact_event" | "search_fallback" | "partial_match";
+};
+
 export type TicketResolutionResult = {
   ok: boolean;
   provider: string | null;
@@ -8,6 +18,7 @@ export type TicketResolutionResult = {
   priceText?: string | null;
   reason: "exact_event" | "search_fallback" | "not_found";
   checkedProviders?: string[];
+  options?: TicketResolutionOption[];
   error?: string;
 };
 
@@ -64,24 +75,91 @@ function buildResolveUrl(base: string, args: ResolveTicketArgs): string | null {
   return `${base}/tickets/resolve?${qs.toString()}`;
 }
 
-function normalizeResolutionResult(input: TicketResolutionResult | null): TicketResolutionResult | null {
+function normalizeOption(input: unknown): TicketResolutionOption | null {
+  if (!input || typeof input !== "object") return null;
+
+  const obj = input as Record<string, unknown>;
+  const provider = clean(obj.provider);
+  const url = clean(obj.url);
+  const title = clean(obj.title);
+  const reason = clean(obj.reason);
+
+  const score =
+    typeof obj.score === "number" && Number.isFinite(obj.score)
+      ? obj.score
+      : null;
+
+  if (!provider || !url || !title || score == null) return null;
+
+  const normalizedReason =
+    reason === "exact_event" ||
+    reason === "search_fallback" ||
+    reason === "partial_match"
+      ? (reason as TicketResolutionOption["reason"])
+      : "search_fallback";
+
+  return {
+    provider,
+    exact: Boolean(obj.exact),
+    score,
+    url,
+    title,
+    priceText: clean(obj.priceText) || null,
+    reason: normalizedReason,
+  };
+}
+
+function normalizeResolutionResult(
+  input: TicketResolutionResult | null
+): TicketResolutionResult | null {
   if (!input) return null;
+
+  const normalizedOptions = Array.isArray(input.options)
+    ? input.options.map((x) => normalizeOption(x)).filter(Boolean) as TicketResolutionOption[]
+    : [];
+
+  const fallbackTop = normalizedOptions[0] ?? null;
+
+  const provider = clean(input.provider) || fallbackTop?.provider || null;
+  const url = clean(input.url) || fallbackTop?.url || null;
+  const title = clean(input.title) || fallbackTop?.title || null;
+  const priceText = clean(input.priceText) || fallbackTop?.priceText || null;
+
+  const score =
+    typeof input.score === "number" && Number.isFinite(input.score)
+      ? input.score
+      : typeof fallbackTop?.score === "number"
+      ? fallbackTop.score
+      : null;
+
+  const exact =
+    typeof input.exact === "boolean"
+      ? input.exact
+      : Boolean(fallbackTop?.exact);
+
+  const rawReason = clean(input.reason);
+  const reason =
+    rawReason === "exact_event" ||
+    rawReason === "search_fallback" ||
+    rawReason === "not_found"
+      ? (rawReason as TicketResolutionResult["reason"])
+      : provider
+      ? "search_fallback"
+      : "not_found";
 
   return {
     ok: Boolean(input.ok),
-    provider: clean(input.provider) || null,
-    exact: Boolean(input.exact),
-    score: typeof input.score === "number" && Number.isFinite(input.score) ? input.score : null,
-    url: clean(input.url) || null,
-    title: clean(input.title) || null,
-    priceText: clean(input.priceText) || null,
-    reason:
-      input.reason === "exact_event" || input.reason === "search_fallback" || input.reason === "not_found"
-        ? input.reason
-        : "not_found",
+    provider,
+    exact,
+    score,
+    url,
+    title,
+    priceText,
+    reason,
     checkedProviders: Array.isArray(input.checkedProviders)
       ? input.checkedProviders.map((x) => clean(x)).filter(Boolean)
       : [],
+    options: normalizedOptions,
     error: clean(input.error) || undefined,
   };
 }
@@ -104,8 +182,8 @@ export async function resolveTicketForFixture(
 
     const raw = await res.text();
     const parsed = safeJsonParse<TicketResolutionResult>(raw);
-
     const normalized = normalizeResolutionResult(parsed);
+
     if (!normalized) {
       return {
         ok: false,
@@ -117,6 +195,7 @@ export async function resolveTicketForFixture(
         priceText: null,
         reason: "not_found",
         checkedProviders: [],
+        options: [],
         error: res.ok ? "invalid_backend_json" : `http_${res.status}`,
       };
     }
@@ -141,7 +220,8 @@ export async function resolveTicketForFixture(
       priceText: null,
       reason: "not_found",
       checkedProviders: [],
+      options: [],
       error: "network_error",
     };
   }
-}
+          }
