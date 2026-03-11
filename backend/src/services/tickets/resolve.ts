@@ -11,6 +11,8 @@ type CacheEntry = {
 const CACHE = new Map<string, CacheEntry>();
 const CACHE_TTL = 1000 * 60 * 10;
 const PROVIDER_TIMEOUT_MS = 7000;
+const MAX_RETURNED_OPTIONS = 3;
+const MIN_FALLBACK_SCORE = 20;
 
 function clean(v: unknown): string {
   return String(v ?? "").trim();
@@ -52,7 +54,9 @@ function deleteCache(key: string) {
   CACHE.delete(key);
 }
 
-function buildNotFound(checkedProviders: TicketResolution["checkedProviders"]): TicketResolution {
+function buildNotFound(
+  checkedProviders: TicketResolution["checkedProviders"]
+): TicketResolution {
   return {
     ok: false,
     provider: null,
@@ -63,23 +67,8 @@ function buildNotFound(checkedProviders: TicketResolution["checkedProviders"]): 
     priceText: null,
     reason: "not_found",
     checkedProviders,
+    options: [],
   };
-}
-
-function chooseBestDirect(candidates: TicketCandidate[]): TicketCandidate | null {
-  const direct = candidates.filter((x) => x.reason === "exact_event");
-  if (!direct.length) return null;
-
-  direct.sort((a, b) => b.score - a.score);
-  return direct[0] ?? null;
-}
-
-function chooseBestFallback(candidates: TicketCandidate[]): TicketCandidate | null {
-  const fallbacks = candidates.filter((x) => x.reason === "search_fallback");
-  if (!fallbacks.length) return null;
-
-  fallbacks.sort((a, b) => b.score - a.score);
-  return fallbacks[0] ?? null;
 }
 
 function summarizeInput(input: TicketResolveInput) {
@@ -147,24 +136,81 @@ async function withTimeout<T>(
   }
 }
 
+function dedupeCandidates(candidates: TicketCandidate[]): TicketCandidate[] {
+  const map = new Map<string, TicketCandidate>();
+
+  for (const candidate of candidates) {
+    const key = [
+      clean(candidate.provider).toLowerCase(),
+      clean(candidate.url).toLowerCase(),
+      clean(candidate.title).toLowerCase(),
+    ].join("|");
+
+    const existing = map.get(key);
+
+    if (!existing || candidate.score > existing.score) {
+      map.set(key, candidate);
+    }
+  }
+
+  return Array.from(map.values());
+}
+
+function sortCandidates(candidates: TicketCandidate[]): TicketCandidate[] {
+  return [...candidates].sort((a, b) => {
+    if (a.reason === "exact_event" && b.reason !== "exact_event") return -1;
+    if (a.reason !== "exact_event" && b.reason === "exact_event") return 1;
+    if (b.score !== a.score) return b.score - a.score;
+    return a.provider.localeCompare(b.provider);
+  });
+}
+
+function filterFallbacks(candidates: TicketCandidate[]): TicketCandidate[] {
+  return candidates.filter((candidate) => {
+    if (candidate.reason === "exact_event") return true;
+    return candidate.score >= MIN_FALLBACK_SCORE;
+  });
+}
+
 function buildResolution(
-  candidate: TicketCandidate,
+  candidates: TicketCandidate[],
   checkedProviders: TicketResolution["checkedProviders"]
 ): TicketResolution {
+  const filtered = filterFallbacks(dedupeCandidates(candidates));
+  const sorted = sortCandidates(filtered);
+  const top = sorted.slice(0, MAX_RETURNED_OPTIONS);
+
+  if (!top.length) {
+    return buildNotFound(checkedProviders);
+  }
+
+  const best = top[0];
+
   return {
     ok: true,
-    provider: candidate.provider,
-    exact: candidate.exact,
-    score: candidate.score,
-    url: candidate.url,
-    title: candidate.title,
-    priceText: candidate.priceText ?? null,
-    reason: candidate.reason,
+    provider: best.provider,
+    exact: best.exact,
+    score: best.score,
+    url: best.url,
+    title: best.title,
+    priceText: best.priceText ?? null,
+    reason: best.reason,
     checkedProviders,
+    options: top.map((candidate) => ({
+      provider: candidate.provider,
+      exact: candidate.exact,
+      score: candidate.score,
+      url: candidate.url,
+      title: candidate.title,
+      priceText: candidate.priceText ?? null,
+      reason: candidate.reason,
+    })),
   };
 }
 
-export async function resolveTicket(input: TicketResolveInput): Promise<TicketResolution> {
+export async function resolveTicket(
+  input: TicketResolveInput
+): Promise<TicketResolution> {
   const cacheKey = buildCacheKey(input);
   const debugNoCache = Boolean(input.debugNoCache);
 
@@ -185,6 +231,9 @@ export async function resolveTicket(input: TicketResolveInput): Promise<TicketRe
         cachedReason: cached.reason,
         cachedScore: cached.score,
         cachedOk: cached.ok,
+        cachedOptions: Array.isArray((cached as any).options)
+          ? (cached as any).options.length
+          : 0,
       });
       return cached;
     }
@@ -217,24 +266,9 @@ export async function resolveTicket(input: TicketResolveInput): Promise<TicketRe
   });
   if (se365) candidates.push(se365);
 
-  const bestDirect = chooseBestDirect(candidates);
-  if (bestDirect) {
-    const result = buildResolution(bestDirect, checkedProviders);
-
-    console.log("[tickets] resolved direct", {
-      selected: summarizeCandidate(bestDirect),
-      checkedProviders,
-      debugNoCache,
-    });
-
-    if (!debugNoCache) {
-      setCache(cacheKey, result);
-    }
-
-    return result;
-  }
-
-  const gigsberg = await withTimeout("gigsberg", () => resolveGigsbergCandidate(input));
+  const gigsberg = await withTimeout("gigsberg", () =>
+    resolveGigsbergCandidate(input)
+  );
 
   checkedProviders.push("gigsberg");
   console.log("[tickets] provider result", {
@@ -243,34 +277,37 @@ export async function resolveTicket(input: TicketResolveInput): Promise<TicketRe
   });
   if (gigsberg) candidates.push(gigsberg);
 
-  const bestFallback = chooseBestFallback(candidates);
-  if (bestFallback) {
-    const result = buildResolution(bestFallback, checkedProviders);
+  const result = buildResolution(candidates, checkedProviders);
 
-    console.log("[tickets] resolved fallback", {
-      selected: summarizeCandidate(bestFallback),
+  if (result.ok) {
+    console.log("[tickets] resolved", {
+      selectedProvider: result.provider,
+      selectedReason: result.reason,
+      selectedScore: result.score,
+      selectedExact: result.exact,
       checkedProviders,
+      options: Array.isArray(result.options)
+        ? result.options.map((option) => ({
+            provider: option.provider,
+            reason: option.reason,
+            score: option.score,
+            exact: option.exact,
+            priceText: option.priceText ?? null,
+          }))
+        : [],
       debugNoCache,
     });
-
-    if (!debugNoCache) {
-      setCache(cacheKey, result);
-    }
-
-    return result;
+  } else {
+    console.log("[tickets] no result", {
+      checkedProviders,
+      input: summarizeInput(input),
+      debugNoCache,
+    });
   }
-
-  const notFound = buildNotFound(checkedProviders);
-
-  console.log("[tickets] no result", {
-    checkedProviders,
-    input: summarizeInput(input),
-    debugNoCache,
-  });
 
   if (!debugNoCache) {
-    setCache(cacheKey, notFound);
+    setCache(cacheKey, result);
   }
 
-  return notFound;
+  return result;
 }
