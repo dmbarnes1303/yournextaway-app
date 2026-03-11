@@ -59,6 +59,44 @@ function appendSe365Aid(url: string): string {
   }
 }
 
+const OMIO_TRACKED_URL = "https://omio.sjv.io/KBjDon";
+
+function buildOmioUrl(ctx: {
+  city: string;
+  startDate?: string | null;
+  endDate?: string | null;
+}): string | null {
+  const base = safeUrl(OMIO_TRACKED_URL);
+  if (!base) return null;
+
+  const city = clean(ctx.city);
+  const startDate = clean(ctx.startDate);
+  const endDate = clean(ctx.endDate);
+
+  try {
+    const url = new URL(base);
+
+    if (city) {
+      url.searchParams.set("destination", city);
+      url.searchParams.set("destination_name", city);
+    }
+
+    if (startDate) {
+      url.searchParams.set("outboundDate", startDate);
+      url.searchParams.set("departureDate", startDate);
+    }
+
+    if (endDate) {
+      url.searchParams.set("inboundDate", endDate);
+      url.searchParams.set("returnDate", endDate);
+    }
+
+    return url.toString();
+  } catch {
+    return base;
+  }
+}
+
 export function buildAffiliateUrl(baseUrl: string, partnerId: string) {
   const url = safeUrl(baseUrl);
   const id = clean(partnerId).toLowerCase();
@@ -120,6 +158,13 @@ export function resolveAffiliateUrl(
 
     case "getyourguide":
       return clean(links.experiencesUrl) || null;
+
+    case "omio":
+      return buildOmioUrl({
+        city,
+        startDate: ctx.startDate ?? null,
+        endDate: ctx.endDate ?? null,
+      });
 
     case "sportsevents365": {
       const direct = clean(AffiliateConfig.sportsevents365Tracked);
