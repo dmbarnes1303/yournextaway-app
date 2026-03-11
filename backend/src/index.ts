@@ -1,9 +1,7 @@
+import "dotenv/config";
 import Fastify from "fastify";
-import dotenv from "dotenv";
 import { env } from "./lib/env.js";
 import { resolveTicket } from "./services/tickets/resolve.js";
-
-dotenv.config();
 
 const app = Fastify({
   logger: true,
@@ -34,6 +32,14 @@ app.get("/health", async () => {
     status: "ok",
     service: "yournextaway-backend",
     port: env.port,
+    ftnConfigured: Boolean(
+      env.ftnBaseUrl &&
+        env.ftnUsername &&
+        env.ftnAffiliateSecret &&
+        env.ftnAffiliateId
+    ),
+    se365Configured: Boolean(env.se365BaseUrl && env.se365ApiKey),
+    gigsbergConfigured: Boolean(env.gigsbergAffiliateId),
   };
 });
 
