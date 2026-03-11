@@ -1,7 +1,7 @@
 import type { TeamGuide } from "./types";
 
 export const eliteserienTeamGuides: Record<string, TeamGuide> = {
-  "aalesund": {
+  aalesund: {
     teamKey: "aalesund",
     name: "Aalesund",
     cityKey: "alesund",
@@ -255,7 +255,7 @@ export const eliteserienTeamGuides: Record<string, TeamGuide> = {
     cityKey: "hamar",
     city: "Hamar",
     country: "Norway",
-    stadium: "Briskeby Arena",
+    stadium: "Briskeby Stadion",
     sections: [
       {
         title: "Club Overview",
@@ -280,7 +280,7 @@ export const eliteserienTeamGuides: Record<string, TeamGuide> = {
       {
         title: "Stadium Profile",
         body:
-          "Briskeby Arena is a classic-feeling ground rather than a giant modern statement venue.\n\nApproximate capacity: just over 8,000.\n\nIt has enough scale for proper professional football while still feeling local and direct. The stadium suits HamKam because it reflects the club’s rooted identity instead of trying to project something artificially grand.\n\nFor visitors, it is a very manageable ground and fits cleanly into a practical football trip.",
+          "Briskeby Stadion is a classic-feeling ground rather than a giant modern statement venue.\n\nApproximate capacity: just over 8,000.\n\nIt has enough scale for proper professional football while still feeling local and direct. The stadium suits HamKam because it reflects the club’s rooted identity instead of trying to project something artificially grand.\n\nFor visitors, it is a very manageable ground and fits cleanly into a practical football trip.",
       },
       {
         title: "Atmosphere & Matchday Feel",
@@ -373,7 +373,7 @@ export const eliteserienTeamGuides: Record<string, TeamGuide> = {
     updatedAt: "2026-03-09",
   },
 
-  kristiansand: {
+  kristiansund: {
     teamKey: "kristiansund",
     name: "Kristiansund",
     cityKey: "kristiansund",
@@ -751,7 +751,7 @@ export const eliteserienTeamGuides: Record<string, TeamGuide> = {
     cityKey: "kristiansand",
     city: "Kristiansand",
     country: "Norway",
-    stadium: "Sør Arena",
+    stadium: "Sparebanken Sør Arena",
     sections: [
       {
         title: "Club Overview",
@@ -776,7 +776,7 @@ export const eliteserienTeamGuides: Record<string, TeamGuide> = {
       {
         title: "Stadium Profile",
         body:
-          "Sør Arena is a modern stadium with enough scale to give Start a proper professional frame.\n\nApproximate capacity: around 14,500.\n\nIt feels like a serious contemporary ground rather than a niche small-club venue. That suits Start’s self-image and gives the matchday a little more presence than some similarly sized provincial trips.\n\nFor visitors, it is comfortable, manageable, and easy to combine with a central stay.",
+          "Sparebanken Sør Arena is a modern stadium with enough scale to give Start a proper professional frame.\n\nApproximate capacity: around 14,500.\n\nIt feels like a serious contemporary ground rather than a niche small-club venue. That suits Start’s self-image and gives the matchday a little more presence than some similarly sized provincial trips.\n\nFor visitors, it is comfortable, manageable, and easy to combine with a central stay.",
       },
       {
         title: "Atmosphere & Matchday Feel",
@@ -937,7 +937,7 @@ export const eliteserienTeamGuides: Record<string, TeamGuide> = {
     cityKey: "stavanger",
     city: "Stavanger",
     country: "Norway",
-    stadium: "SR-Bank Arena",
+    stadium: "Lyse Arena",
     sections: [
       {
         title: "Club Overview",
@@ -962,7 +962,7 @@ export const eliteserienTeamGuides: Record<string, TeamGuide> = {
       {
         title: "Stadium Profile",
         body:
-          "SR-Bank Arena is a modern, substantial ground that suits Viking’s status well.\n\nApproximate capacity: around 16,300.\n\nIt is large enough to feel important without becoming diffuse, and it gives the club a modern home worthy of a serious city side. The venue is straightforward for visitors and works smoothly as part of a Stavanger trip.\n\nFor neutrals, it offers a very solid blend of comfort, scale, and football identity.",
+          "Lyse Arena is a modern, substantial ground that suits Viking’s status well.\n\nApproximate capacity: around 16,300.\n\nIt is large enough to feel important without becoming diffuse, and it gives the club a modern home worthy of a serious city side. The venue is straightforward for visitors and works smoothly as part of a Stavanger trip.\n\nFor neutrals, it offers a very solid blend of comfort, scale, and football identity.",
       },
       {
         title: "Atmosphere & Matchday Feel",

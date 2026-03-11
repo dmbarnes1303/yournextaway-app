@@ -639,62 +639,62 @@ export const austrianBundesligaTeamGuides: Record<string, TeamGuide> = {
     updatedAt: "2026-03-08",
   },
 
-  "austria-klagenfurt": {
-    teamKey: "austria-klagenfurt",
-    name: "Austria Klagenfurt",
-    cityKey: "klagenfurt",
-    city: "Klagenfurt",
+"ried": {
+    teamKey: "ried",
+    name: "SV Ried",
+    cityKey: "ried-im-innkreis",
+    city: "Ried im Innkreis",
     country: "Austria",
-    stadium: "Wörthersee Stadion",
+    stadium: "Josko Arena",
     sections: [
       {
         title: "Club Overview",
         body:
-          "Austria Klagenfurt are more useful as a destination-enhanced football stop than as a club with giant national weight. The lake, the easy airport access and the clean weekend structure all help make this a better trip than the raw club prestige might suggest.",
+          "SV Ried are a classic smaller-scale Austrian football club whose value comes from identity, regional grounding and the fact that they feel like a real provincial football stop rather than a synthetic project. This is not one of Austria’s glamour names, and pretending otherwise would be nonsense. What Ried offer instead is authenticity, club culture and a football-first trip in a town where the match is clearly the main event.\n\nFor neutral travellers, Ried work best as a committed league-coverage stop or as part of a wider Upper Austria route. The appeal is honesty, not spectacle.",
       },
       {
         title: "History & Legacy",
         body:
-          "The club does not sit among Austria’s deepest historical institutions. Its place in the app is more about current relevance, city usefulness and the broader Klagenfurt weekend potential.",
+          "Founded in 1912, Ried have built a respectable place in Austrian football through persistence, cup relevance and repeated periods of top-flight credibility. They are not a giant, but they are also not throwaway filler.\n\nTheir football legacy is built on proving that a smaller-town club can sustain relevance and occasionally punch above its scale. That matters in a league where much of the obvious attention goes to Vienna, Salzburg and Graz.",
       },
       {
         title: "Recent Seasons",
         body:
-          "The value is in remaining competitive and making the city a relevant stop within Austrian top-flight coverage. That is enough. Not every club needs fake myth to justify inclusion.",
+          "Recent Ried seasons are usually judged through the lens of stability, competitiveness and whether the club can protect or rebuild its place at this level. That gives the live product a clear edge: every season tends to feel meaningful because the margins are tighter and the club does not have room for drift.\n\nFor neutrals, the value is that the football usually feels like it matters to the club’s short- and medium-term identity.",
       },
       {
         title: "Playing Style",
         body:
-          "The football is best framed through practical competitiveness rather than glamour. For neutrals, the wider leisure setting often matters as much as the team’s tactical identity.",
+          "Ried are generally better understood through competitiveness, structure and practical football than through any promise of elite technical dominance. The point is not beauty for its own sake. The point is making matches difficult, staying alive in contests and giving the crowd something honest to respond to.\n\nThat can still be enjoyable live, especially if you like football that feels grounded rather than heavily packaged.",
       },
       {
         title: "Stadium & Matchday Feel",
         body:
-          "Wörthersee Stadion is larger and more modern-feel than many clubs in this bracket get. That helps. It gives the trip a cleaner stadium product and pairs well with Klagenfurt’s accessible city-and-lake structure.",
+          "Josko Arena is compact, functional and proportionate to the club. It is not a major-statement stadium, but it works well for the kind of football experience Ried provide.\n\nThe best way to understand the matchday is as a proper provincial club event. Small enough to feel local, serious enough to matter, and straightforward enough that the football stays central.",
       },
       {
         title: "Supporter Culture",
         body:
-          "Support is more modest than Austria’s major football centres, but the trip can still work because of convenience and scenery rather than pure atmosphere power.",
+          "Supporter culture at Ried is local, realistic and rooted in the town-club relationship rather than in giant national mythology. That gives the trip a more authentic feel if you are the kind of neutral who values football places over status-chasing.\n\nThis is not one of Austria’s loudest or most globally recognisable supports, but it is a real one.",
       },
       {
         title: "Rivalries",
         body:
-          "No singular rivalry here dominates the national picture. The club’s value is driven more by location and practical trip-building.",
+          "Ried’s rivalry profile is driven more by regional and comparative identity than by one overwhelming national grudge match. The emotional edge comes from proving the club belongs, defending local pride and competing properly against larger or more visible opponents.",
       },
       {
         title: "Trip Strategy",
         body:
-          "Stay centrally or by the lake depending on whether you want practicality or a more leisure-led weekend. This is a good example of a club whose destination quality boosts the football product.",
+          "Treat Ried as a simple football-first overnight or as one stop in a wider Upper Austria route. Staying locally is the easiest option if the match is your main objective, while Linz works better if you want a stronger broader city base.\n\nBest product angle: honest provincial football trip with low noise and clear purpose.",
       },
       {
         title: "Neutral Visitor Notes",
         body:
-          "• Better than it looks if you value easy scenic weekends.\n• Strong as a short leisure-plus-football break.\n• Not an atmosphere-first flagship.\n• Airport proximity helps a lot.",
+          "• Best for serious full-league coverage rather than casual first-pick Austrian tourism.\n• More authentic than glamorous.\n• Works well as a one-night football stop.\n• Better sold honestly than overhyped.",
       },
     ],
-    links: [{ label: "Official site", url: "https://www.skaustriaklagenfurt.at/" }],
-    updatedAt: "2026-03-08",
+    links: [{ label: "Official site", url: "https://www.svried.at/" }],
+    updatedAt: "2026-03-10",
   },
 };
 

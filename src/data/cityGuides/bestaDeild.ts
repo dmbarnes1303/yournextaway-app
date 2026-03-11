@@ -2,7 +2,7 @@ import type { CityGuide } from "./types";
 
 /**
  * GetYourGuide affiliate entry points (city-level “things to do” pages).
- * Keep this as a single, obvious map so monetisation doesn’t get scattered.
+ * Keep this centralised so monetised outbound links stay easy to audit.
  */
 const GYG = {
   reykjavik:
@@ -19,98 +19,98 @@ export const bestaDeildCityGuides: Record<string, CityGuide> = {
     thingsToDoUrl: GYG.reykjavik,
 
     overview:
-      "Reykjavík is one of the easiest football weekends in the app to make work because the city itself is compact, distinctive, and built for short stays. That matters even more in Iceland, where many football trips are really wider travel trips first and city breaks second. Reykjavík solves that problem immediately. It gives you multiple clubs, walkable neighbourhoods, a real food and bar scene, and enough atmosphere that the weekend still feels like a proper break even if the match itself is not the biggest in the calendar. The smart Reykjavík football trip is obvious: stay central, pick your football carefully, and stop pretending you need to overfill every hour with geothermal clichés just because you’re in Iceland.",
+      "Reykjavík is the anchor city of Icelandic football travel because it gives you what most Iceland stops do not: multiple clubs, a walkable centre, a real food-and-bar scene, and enough quality accommodation that the trip still feels like a proper weekend rather than a logistical exercise. That matters because many Iceland football trips can easily become ‘country trip with a match somewhere in it’ if you do not stay disciplined. Reykjavík avoids that problem. It lets you build a compact, football-led city break where the match actually fits naturally into the weekend instead of feeling bolted on. The correct approach is obvious: stay central, choose the right fixture, and stop trying to cram every geothermal cliché in the country into the same two-day plan.",
 
     topThings: [
       {
-        title: "One Reykjavík matchday done properly",
-        tip: "The city has multiple clubs, so choose the fixture with actual weight rather than blindly picking the nearest kickoff.",
+        title: "One Reykjavík matchday chosen properly",
+        tip: "Fixture quality matters here. Pick the club, rivalry, and table context that actually give the weekend edge.",
       },
       {
-        title: "Hallgrímskirkja and central-city orientation walk",
-        tip: "Best first move because it gives you immediate city shape without wasting time.",
+        title: "Hallgrímskirkja and central orientation walk",
+        tip: "Best first move because it gives you city shape fast without wasting half a day.",
       },
       {
         title: "Old Harbour and waterfront block",
-        tip: "Good for a calmer football-weekend daytime stretch before dinner or pre-match drinks.",
-      },
-      {
-        title: "One strong Reykjavík dinner booking",
-        tip: "Iceland is expensive, so random mediocre choices hurt more. Choose properly.",
-      },
-      {
-        title: "Laugavegur evening",
-        tip: "Best general nightlife and bar axis for most visitors. Easy, central, and no nonsense.",
-      },
-      {
-        title: "Perlan or one paid viewpoint / museum choice",
-        tip: "Choose one. Collecting attractions in Reykjavík is a stupid use of limited football-weekend time.",
+        tip: "Good calmer daytime stretch before pre-match drinks or dinner.",
       },
       {
         title: "Harpa exterior and harbour-side loop",
-        tip: "Worth doing because it’s fast, central, and actually looks like Reykjavík rather than generic city filler.",
+        tip: "Fast, central, and visually worth it without hijacking the whole day.",
+      },
+      {
+        title: "Laugavegur evening",
+        tip: "Still the easiest central nightlife axis for most visitors. No need to reinvent it.",
+      },
+      {
+        title: "One serious dinner booking",
+        tip: "Iceland is expensive, so bad spontaneous choices punish you harder than in most leagues.",
+      },
+      {
+        title: "Perlan or one paid museum/viewpoint choice",
+        tip: "Choose one and move on. Attraction collecting is a stupid use of a football weekend.",
       },
       {
         title: "Football double-header planning",
-        tip: "Reykjavík is one of the few cities in the app where multiple-club coverage can make real sense if fixtures line up.",
+        tip: "Reykjavík is one of the few cities in the app where multi-club coverage can actually make sense if kickoffs line up.",
       },
       {
         title: "Morning coffee and bakery reset",
-        tip: "The city suits slower starts well, especially if you had a proper late one.",
+        tip: "The city suits slower starts well, especially after a proper late night.",
       },
       {
-        title: "Geothermal add-on only if it fits naturally",
-        tip: "Do not let a football trip get hijacked by every tourist cliché in the country.",
+        title: "Geothermal add-on only if it fits cleanly",
+        tip: "Do not let football get buried under generic Iceland tourism filler.",
       },
     ],
 
     tips: [
-      "Stay central. Reykjavík is much better when you can walk most of it.",
-      "Pick the right fixture, not just any fixture. Club context matters here.",
-      "Do not overload the trip with day-tour nonsense if football is the priority.",
-      "A Reykjavík football weekend works best when it is compact and deliberate.",
-      "Expect high prices. Bad planning costs more here than in most leagues.",
+      "Stay central. Reykjavík gets worse fast when you add unnecessary transport.",
+      "Pick the right fixture, not just any fixture.",
+      "Do not overload the trip with out-of-town detours if football is the priority.",
+      "A compact Reykjavík weekend usually works better than an overambitious one.",
+      "Expect high prices and book the good stuff early instead of hoping mediocrity will somehow be charming.",
     ],
 
     food: [
-      "Good central seafood spots",
+      "Strong seafood restaurants in the centre",
       "One proper Icelandic dinner if budget allows",
-      "Bakery and coffee breakfast stops",
-      "Casual burger / grill options",
-      "A booked dinner rather than lazy walk-in roulette",
+      "Bakery-and-coffee breakfast stops",
+      "Casual burger and grill options",
+      "A booked dinner instead of lazy walk-in roulette",
     ],
 
     transport:
-      "Central Reykjavík is very walkable, which is one of its biggest strengths. Most football-weekend visitors should think in walking blocks plus occasional short taxi or bus support rather than trying to engineer complicated transport plans. The airport leg is the only part that really needs deliberate planning.",
+      "Central Reykjavík is highly walkable, which is one of its biggest strengths. Most football-weekend visitors should think in walking blocks plus the occasional short taxi or bus, not in overengineered transport plans. The airport transfer is the one leg that actually needs deliberate planning.",
 
     accommodation:
-      "Stay in central Reykjavík, full stop. That gives you the best football-weekend flow, easiest restaurant and bar access, and least wasted time. Outer-area savings usually are not worth the drag they add.",
+      "Stay in central Reykjavík, full stop. That gives you the best football-weekend flow, easiest bar and restaurant access, and the least wasted time. Outer-area savings usually are not worth the drag they add.",
   },
 
-  "kopavogur": {
+  kopavogur: {
     cityId: "kopavogur",
     name: "Kópavogur",
     country: "Iceland",
 
     overview:
-      "Kópavogur is not a standalone city-break winner ahead of Reykjavík, and there is no point pretending otherwise. The right way to handle it is as a football location tied to the wider capital area, with Breiðablik as the main reason it matters. That does not make it weak. It just means the trip logic is obvious: use Reykjavík as your proper stay-and-play base unless you have a specific reason to go more local. Kópavogur works because the football matters, not because it outshines the capital for nightlife or broad visitor appeal.",
+      "Kópavogur matters because Breiðablik matter. That is the honest version and the correct one. This is not a stronger leisure base than Reykjavík, and pretending otherwise would just make the trip worse. The value comes from having one of Iceland’s most serious modern clubs in the capital region, which means you can fold a strong football stop into a Reykjavík weekend without much friction. The right strategy is usually simple: sleep in Reykjavík, travel over for the football, and let Breiðablik be the reason the stop exists. Kópavogur works best when treated as a football branch from the capital, not as a fake standalone city-break heavyweight.",
 
     topThings: [
       {
         title: "Breiðablik matchday",
-        tip: "The reason this stop belongs in the route. Treat the club as the headline, not the suburb itself.",
+        tip: "The clear reason this stop belongs in the route. Treat the club as the headline, not the suburb.",
       },
       {
         title: "Simple local pre-match block",
-        tip: "Fine for practicality, but do not try to turn Kópavogur into a fake full-tourism weekend.",
+        tip: "Fine for practicality, but do not try to manufacture a giant sightseeing day from nothing.",
       },
       {
         title: "Reykjavík-based stay strategy",
-        tip: "Usually the smartest choice unless convenience matters more than overall trip quality.",
+        tip: "Usually the smartest call unless quiet convenience matters more than overall trip quality.",
       },
       {
         title: "Hamraborg / local-centre orientation",
-        tip: "Enough to place yourself without wasting half the day.",
+        tip: "Enough to place yourself without wasting the whole afternoon.",
       },
       {
         title: "Capital-area football pairing",
@@ -118,23 +118,23 @@ export const bestaDeildCityGuides: Record<string, CityGuide> = {
       },
       {
         title: "One practical local meal",
-        tip: "Useful if it fits your route, but Reykjavík is still stronger overall.",
+        tip: "Useful if it fits your route, but Reykjavík is still stronger for broader dining value.",
       },
       {
-        title: "Short-stay football logic",
-        tip: "This is a football-first stop, not a place to force a giant sightseeing agenda.",
+        title: "Short-stay football-first planning",
+        tip: "This is a football stop, not a place to force a tourism performance.",
       },
       {
         title: "Easy post-match return to Reykjavík",
         tip: "Often the smartest move if you want the weekend to stay lively.",
       },
       {
-        title: "One-night capital-region plan",
-        tip: "Works well if your goal is league coverage and good trip efficiency.",
+        title: "One-night capital-region route building",
+        tip: "Works well if your goal is efficiency and serious league coverage.",
       },
       {
-        title: "No-fuss football stop",
-        tip: "That is where Kópavogur is strongest.",
+        title: "Low-fuss football stop",
+        tip: "That is exactly where Kópavogur is strongest.",
       },
     ],
 
@@ -143,14 +143,14 @@ export const bestaDeildCityGuides: Record<string, CityGuide> = {
       "Breiðablik are the real draw here.",
       "Do not overcomplicate the suburb side of the trip.",
       "Best used as part of a wider capital-area football weekend.",
-      "This is about football quality more than city-break glamour.",
+      "This is about football quality, not city-break glamour.",
     ],
 
     food: [
       "Practical local cafés",
       "Simple pre-match food options",
       "Better wider dinner choices in Reykjavík",
-      "Coffee stop plus quick meal",
+      "Coffee stop plus one quick meal",
     ],
 
     transport:
@@ -160,13 +160,13 @@ export const bestaDeildCityGuides: Record<string, CityGuide> = {
       "Reykjavík is the stronger overall base. Kópavogur only makes sense if you want quieter surroundings and shorter matchday travel.",
   },
 
-  "hafnarfjordur": {
+  hafnarfjordur: {
     cityId: "hafnarfjordur",
     name: "Hafnarfjörður",
     country: "Iceland",
 
     overview:
-      "Hafnarfjörður is more substantial than some of the other Reykjavík-area satellite stops because FH are a serious club and the town has a clearer local identity of its own. Even so, the same rule still applies: for most football travellers this is best handled as part of a wider Reykjavík-area plan, not as a superior replacement for staying in the capital. Hafnarfjörður’s value is that it gives you a proper club environment without demanding a whole separate destination-weekend mentality.",
+      "Hafnarfjörður is a stronger football stop than some of the other Reykjavík-area satellite locations because FH are a genuinely serious club and the town has more local shape of its own. Even so, the same basic rule still applies: for most football travellers this works best as part of a wider capital-area trip, not as a smarter substitute for staying in Reykjavík. The value is that you get a proper club environment with real football weight, a recognisable local centre, and an easy route back into the capital if you want the stronger evening scene. Used properly, Hafnarfjörður is a very good football branch. Used badly, it becomes a place people overstay out of stubbornness.",
 
     topThings: [
       {
@@ -175,7 +175,7 @@ export const bestaDeildCityGuides: Record<string, CityGuide> = {
       },
       {
         title: "Harbour-area walk",
-        tip: "Good for a short local block before or after football without forcing the day too hard.",
+        tip: "Good short local block before or after football without forcing the day too hard.",
       },
       {
         title: "Local-centre food stop",
@@ -190,7 +190,7 @@ export const bestaDeildCityGuides: Record<string, CityGuide> = {
         tip: "Worth doing because FH are serious enough that the local football context matters.",
       },
       {
-        title: "One practical evening here, one bigger evening in Reykjavík",
+        title: "One evening here, one stronger evening in Reykjavík",
         tip: "Usually a better balance than trying to make every night happen in one place.",
       },
       {
@@ -199,7 +199,7 @@ export const bestaDeildCityGuides: Record<string, CityGuide> = {
       },
       {
         title: "Short harbour / town reset",
-        tip: "Useful if you want the trip to feel slightly less generic than airport-hotel-stadium-back.",
+        tip: "Useful if you want the trip to feel less generic than airport-hotel-stadium-back.",
       },
       {
         title: "One-night football stop",
@@ -213,7 +213,7 @@ export const bestaDeildCityGuides: Record<string, CityGuide> = {
 
     tips: [
       "FH make this a serious football stop, not just a suburb detour.",
-      "Still, Reykjavík remains the better all-round stay base for most people.",
+      "Reykjavík remains the better all-round stay base for most people.",
       "Good as part of a wider multi-club Iceland trip.",
       "Keep the plan practical and it works well.",
       "Do not force it into being a giant standalone city break.",
@@ -239,16 +239,16 @@ export const bestaDeildCityGuides: Record<string, CityGuide> = {
     country: "Iceland",
 
     overview:
-      "Akranes is one of the strongest non-capital football-history stops in Iceland because ÍA give the town real weight. That is the key. Without ÍA, it would just be another smaller Icelandic place. With ÍA, it becomes one of the country’s proper football towns. This is a football-first stop with historical depth, not a flashy Iceland lifestyle break. If you treat it that way, it becomes one of the better serious domestic-football trips in the whole league map.",
+      "Akranes is one of the strongest football-history stops in the whole Iceland build because ÍA give the town real national football weight. That is the point. Without the club, this would be a much smaller leisure proposition. With ÍA, it becomes one of Iceland’s genuine football towns and one of the clearest examples of why the country’s football geography is better than just following Reykjavík. This is not a flashy nightlife trip and there is no point pretending it is. It is a football-first stop with deep club meaning, strong local pride, and enough town texture to make the overnight worthwhile if you actually care about football culture instead of just collecting stadium pins.",
 
     topThings: [
       {
         title: "ÍA matchday",
-        tip: "The whole point of the trip and one of the better traditional-club experiences in Iceland.",
+        tip: "The whole reason the trip matters and one of the better traditional-club experiences in Iceland.",
       },
       {
-        title: "Akranes old-town / harbour feel",
-        tip: "Useful because it helps the football stop feel rooted in a real place rather than just a venue pin.",
+        title: "Akranes harbour and town-centre feel",
+        tip: "Useful because it makes the football stop feel rooted in a real place rather than just a venue pin.",
       },
       {
         title: "One local meal done properly",
@@ -256,14 +256,14 @@ export const bestaDeildCityGuides: Record<string, CityGuide> = {
       },
       {
         title: "Football-history mindset",
-        tip: "This is not about nightlife or tourist flash. It is about club significance.",
+        tip: "This trip is about club significance, not urban glamour.",
       },
       {
-        title: "One-night football trip",
+        title: "One-night football stay",
         tip: "Usually the right amount if ÍA are the main target.",
       },
       {
-        title: "Reykjavík-base option",
+        title: "Reykjavík-base alternative",
         tip: "Valid if you want stronger nightlife and are happy to travel in and out.",
       },
       {
@@ -276,7 +276,7 @@ export const bestaDeildCityGuides: Record<string, CityGuide> = {
       },
       {
         title: "Traditional-club route planning",
-        tip: "This is one of the Iceland stops that rewards football seriousness.",
+        tip: "This is one of the Iceland stops that rewards actual football seriousness.",
       },
       {
         title: "No-rush day structure",
@@ -288,8 +288,8 @@ export const bestaDeildCityGuides: Record<string, CityGuide> = {
       "ÍA are the reason this stop matters.",
       "Great for football history and local identity.",
       "Better for serious football travellers than for generic leisure tourists.",
-      "One-night stop works well.",
-      "Reykjavík is still the better base if nightlife matters more than local football immersion.",
+      "One night usually works well.",
+      "Reykjavík is still the stronger base if nightlife matters more than football immersion.",
     ],
 
     food: [
@@ -312,20 +312,20 @@ export const bestaDeildCityGuides: Record<string, CityGuide> = {
     country: "Iceland",
 
     overview:
-      "Vestmannaeyjar is one of the standout football destinations in the whole app because it is one of the rare places where the logistics, location, and club identity all combine to create something genuinely different. This is not just an Iceland stop. It is an island-football trip with real top-flight meaning. That immediately puts it above most ordinary league detours. The catch is obvious: the planning matters. You cannot drift into Vestmannaeyjar with the lazy mindset you can sometimes get away with in a capital city. But if you do it properly, it is one of the best football experiences in the entire Iceland build.",
+      "Vestmannaeyjar is one of the standout football destinations in the entire app because almost nowhere else combines top-flight football, island logistics, volcanic setting, and real club identity this well. This is not a gimmick stop. ÍBV are a proper club in a place that genuinely changes the meaning of the matchday. That is why the trip is so strong. The catch is obvious: planning matters. You cannot treat Vestmannaeyjar like a casual capital-city add-on and expect the weekend to organise itself. But if you handle the ferry or flight properly, allow enough time, and stay overnight, it becomes one of the most memorable football experiences anywhere in the project.",
 
     topThings: [
       {
         title: "ÍBV matchday",
-        tip: "One of the most distinctive football experiences anywhere in the app. Treat it with the respect it deserves.",
+        tip: "One of the most distinctive football experiences anywhere in the app. Treat it like a headline trip, not a novelty extra.",
       },
       {
         title: "Harbour and town-centre orientation",
-        tip: "Best first move because it explains the place immediately and links the football to the island reality.",
+        tip: "Best first move because it immediately explains the place and links the football to the island reality.",
       },
       {
-        title: "Volcanic / landscape viewpoint block",
-        tip: "Do one meaningful natural stop. Do not turn the football trip into an exhausting geography lesson.",
+        title: "One meaningful volcanic / landscape stop",
+        tip: "Do one good natural block. Do not turn the football trip into an exhausting geography marathon.",
       },
       {
         title: "Ferry or air logistics planning",
@@ -333,11 +333,11 @@ export const bestaDeildCityGuides: Record<string, CityGuide> = {
       },
       {
         title: "One proper island dinner",
-        tip: "Worth doing because the place is memorable enough that a rushed bad meal feels especially stupid.",
+        tip: "Worth doing because the place is memorable enough that rushed bad food feels especially stupid.",
       },
       {
         title: "Football-plus-island overnight",
-        tip: "This is one of the clearest cases in the app where staying overnight is part of the experience, not a luxury extra.",
+        tip: "This is one of the clearest cases in the app where staying over is part of the experience, not a luxury extra.",
       },
       {
         title: "Harbour-area evening",
@@ -345,7 +345,7 @@ export const bestaDeildCityGuides: Record<string, CityGuide> = {
       },
       {
         title: "Pre-match local build-up",
-        tip: "Essential. The club and place are too linked for you to parachute in too late.",
+        tip: "Essential. Club and place are too linked for you to parachute in too late.",
       },
       {
         title: "One clean morning-after walk",
@@ -362,7 +362,7 @@ export const bestaDeildCityGuides: Record<string, CityGuide> = {
       "Transport planning matters here far more than in Reykjavík-area stops.",
       "Stay overnight if possible. Rushing this trip is idiotic.",
       "ÍBV plus island setting is what makes this special.",
-      "Do not treat it like a casual same-day add-on unless logistics force you to.",
+      "Do not treat it like a casual same-day add-on unless logistics leave you no choice.",
     ],
 
     food: [
@@ -373,10 +373,10 @@ export const bestaDeildCityGuides: Record<string, CityGuide> = {
     ],
 
     transport:
-      "This is the most planning-sensitive major stop in the Iceland set. The internal town movement is easy enough. The real issue is getting on and off the island cleanly and leaving enough margin for weather and schedule realities.",
+      "This is the most planning-sensitive major stop in the Iceland set. Internal town movement is easy enough. The real issue is getting on and off the island cleanly and leaving enough margin for weather and schedule reality.",
 
     accommodation:
-      "Stay in Vestmannaeyjar town centre or near the harbour. This is one of the clear cases where staying locally massively improves the football trip.",
+      "Stay in Vestmannaeyjar town centre or near the harbour. This is one of the clearest cases where staying locally massively improves the football trip.",
   },
 
   akureyri: {
@@ -386,12 +386,12 @@ export const bestaDeildCityGuides: Record<string, CityGuide> = {
     thingsToDoUrl: GYG.akureyri,
 
     overview:
-      "Akureyri is one of the strongest football cities in the entire Iceland set because it is one of the few places outside Reykjavík where the trip genuinely works as a football city break in its own right. That is because the city is compact, attractive, properly useful for overnight stays, and home to more than one relevant club. It feels like a real football place, not just a scenic stop with a stadium attached. The correct Akureyri trip is simple: stay central, give the football room to matter, and use the city’s size to your advantage rather than pretending you need a huge itinerary to justify the trip.",
+      "Akureyri is one of the strongest football cities in the whole Iceland set because it is one of the few places outside Reykjavík where the trip genuinely works as a football city break in its own right. That is because the town is compact, attractive, easy to stay in, and home to more than one relevant club. It feels like a real football place, not just a scenic stop with a stadium attached. That makes it extremely valuable in the app. The correct Akureyri plan is simple: stay central, choose the right football context, and let the city’s size work for you instead of inventing some oversized itinerary just to feel busy.",
 
     topThings: [
       {
         title: "KA or Þór matchday",
-        tip: "The city is best when you pick the right football context rather than treating all fixtures as interchangeable.",
+        tip: "The city is best when you pick the right football context rather than treating every fixture as interchangeable.",
       },
       {
         title: "Central Akureyri and harbour walk",
@@ -402,7 +402,7 @@ export const bestaDeildCityGuides: Record<string, CityGuide> = {
         tip: "Akureyri is good enough that you should eat properly, not lazily.",
       },
       {
-        title: "Church / hill view orientation",
+        title: "Church / hill-view orientation",
         tip: "Useful for getting city geography and atmosphere quickly.",
       },
       {
@@ -411,11 +411,11 @@ export const bestaDeildCityGuides: Record<string, CityGuide> = {
       },
       {
         title: "One good coffee-and-bakery morning",
-        tip: "This city suits slower starts and compact weekend rhythm very well.",
+        tip: "This city suits slower starts and a compact weekend rhythm very well.",
       },
       {
-        title: "North-Iceland route pairing",
-        tip: "Only if it helps. Do not dilute the football by turning the weekend into a frantic ring-road parody.",
+        title: "North-Iceland route pairing only if it genuinely helps",
+        tip: "Do not dilute the football by turning the weekend into a frantic ring-road parody.",
       },
       {
         title: "Pre-match city-centre block",
@@ -444,7 +444,7 @@ export const bestaDeildCityGuides: Record<string, CityGuide> = {
       "Good town-centre cafés",
       "Bakery breakfasts",
       "One proper evening meal in the centre",
-      "Harbour-area dining if the mood suits it",
+      "Harbour-area dining if it fits the mood",
     ],
 
     transport:
@@ -460,7 +460,7 @@ export const bestaDeildCityGuides: Record<string, CityGuide> = {
     country: "Iceland",
 
     overview:
-      "Keflavík is one of the most practical football stops in the whole Iceland build because the airport proximity changes the entire travel equation. That is its strength and its limitation. It is brilliant for convenience, but weaker than Reykjavík if what you want is an actual big-feel city weekend. The right way to use Keflavík is to be brutally honest about your priorities. If efficiency matters, it is excellent. If atmosphere, nightlife, and broad weekend depth matter more, Reykjavík is still the better base and this becomes a football branch from there.",
+      "Keflavík is one of the most practical football stops in the whole Iceland build because the airport proximity changes the entire travel equation. That is both its strength and its limitation. It is brilliant for efficiency, but weaker than Reykjavík if what you want is an actual city weekend with more atmosphere, bars, and depth. The right way to use Keflavík is to be brutally honest about priorities. If convenience matters, it is excellent. If broader football-weekend feel matters more, Reykjavík is still the better base and Keflavík becomes a football branch from there. Either approach can work. The stupid move is pretending both goals are equal here.",
 
     topThings: [
       {
@@ -477,7 +477,7 @@ export const bestaDeildCityGuides: Record<string, CityGuide> = {
       },
       {
         title: "One practical overnight near the airport",
-        tip: "Excellent if you have early flights and still want football in the trip.",
+        tip: "Excellent if you have an early flight and still want football in the trip.",
       },
       {
         title: "Blue Lagoon / Reykjanes pairing only if it fits naturally",
@@ -485,7 +485,7 @@ export const bestaDeildCityGuides: Record<string, CityGuide> = {
       },
       {
         title: "One practical local dinner",
-        tip: "Good enough if the aim is efficiency rather than major-city energy.",
+        tip: "Good enough if the aim is efficiency rather than big-city energy.",
       },
       {
         title: "Reykjavík-base alternative",
@@ -500,8 +500,8 @@ export const bestaDeildCityGuides: Record<string, CityGuide> = {
         tip: "Works very well here because the transport side is so simple.",
       },
       {
-        title: "Arrival or departure day football",
-        tip: "One of the best places in the entire app for that exact use case.",
+        title: "Arrival-day or departure-day football",
+        tip: "One of the best places in the entire app for exactly that use case.",
       },
     ],
 
@@ -533,12 +533,12 @@ export const bestaDeildCityGuides: Record<string, CityGuide> = {
     country: "Iceland",
 
     overview:
-      "Garðabær is another capital-area football location where the correct answer is usually to treat the football seriously and the town modestly. Stjarnan make it relevant. Without the club, it would not be one of the app’s real football destinations. That is fine. Not every stop needs to win on nightlife or giant-city energy. The trip logic is clear: use Reykjavík as the broader base unless you specifically want quiet convenience, and make Stjarnan the reason the stop exists.",
+      "Garðabær is another capital-area football location where the correct answer is usually to take the football seriously and the town modestly. Stjarnan make it relevant. Without the club, it would not be one of the app’s real football destinations. That is perfectly fine. Not every stop has to win on nightlife or giant-city energy. The trip logic is straightforward: use Reykjavík as the broader base unless you specifically want quiet convenience, and make Stjarnan the reason the stop exists. Garðabær works best when treated as part of a wider Reykjavík football network, not as an isolated city-break statement.",
 
     topThings: [
       {
         title: "Stjarnan matchday",
-        tip: "The football reason this stop belongs in the route. The club is the headline, not the town itself.",
+        tip: "The football reason this stop exists. The club is the headline, not the town itself.",
       },
       {
         title: "Short local-centre orientation",
@@ -554,7 +554,7 @@ export const bestaDeildCityGuides: Record<string, CityGuide> = {
       },
       {
         title: "One practical local meal",
-        tip: "Fine if convenient, but do not expect it to outcompete Reykjavík for wider trip value.",
+        tip: "Fine if convenient, but do not expect it to outperform Reykjavík for wider trip value.",
       },
       {
         title: "Quiet match-first stay",

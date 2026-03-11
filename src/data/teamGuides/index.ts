@@ -1,6 +1,8 @@
-import type { TeamGuide } from "./types";
+import type { TeamGuide, TeamGuideRegistry } from "./types";
 import { teams } from "@/src/data/teams";
-
+import { stadiums } from "@/src/data/stadiums";
+import { cityGuides } from "@/src/data/cityGuides";
+import { normalizeCityKey } from "@/src/utils/city";
 import { normalizeTeamKey, titleFromKey } from "./utils";
 
 import bundesligaGuides from "./bundesliga";
@@ -34,53 +36,147 @@ import bestaDeildGuides from "./bestaDeild";
 import premierLeagueBosniaGuides from "./premierLeagueBosnia";
 import leagueOfIrelandPremierGuides from "./leagueOfIrelandPremier";
 
-import * as legacy from "./teamGuides";
+type SourceGuidesMap = Record<string, TeamGuide[]>;
+type DuplicateMap = Record<string, string[]>;
+type StringIssue = {
+  teamKey: string;
+  name: string;
+  value?: string;
+  expected?: string;
+};
+type WeakGuideIssue = {
+  teamKey: string;
+  name: string;
+  sectionsCount: number;
+  shortSections: string[];
+  missingCityKey: boolean;
+  missingCountry: boolean;
+  missingStadium: boolean;
+  updatedAt?: string;
+};
 
-function toGuides(value: any): TeamGuide[] {
+export type MissingTeamGuide = {
+  expectedGuideKey: string;
+  name: string;
+  leagueId?: number;
+  season?: number;
+};
+
+function cleanStr(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const v = value.trim();
+  return v || undefined;
+}
+
+function cleanBody(value: unknown): string {
+  return String(value ?? "").trim();
+}
+
+function isGuide(value: unknown): value is TeamGuide {
+  if (!value || typeof value !== "object") return false;
+
+  const v = value as Partial<TeamGuide>;
+
+  return (
+    typeof v.teamKey === "string" &&
+    typeof v.name === "string" &&
+    Array.isArray(v.sections)
+  );
+}
+
+function normalizeGuide(input: TeamGuide): TeamGuide {
+  const normalizedTeamKey = normalizeTeamKey(input.teamKey);
+
+  return {
+    ...input,
+    teamKey: normalizedTeamKey,
+    name: cleanStr(input.name) ?? titleFromKey(normalizedTeamKey),
+    cityKey: input.cityKey ? normalizeCityKey(input.cityKey) : undefined,
+    city: cleanStr(input.city),
+    country: cleanStr(input.country),
+    stadium: cleanStr(input.stadium),
+    sections: Array.isArray(input.sections)
+      ? input.sections
+          .filter(
+            (section) =>
+              !!section &&
+              typeof section.title === "string" &&
+              typeof section.body === "string" &&
+              section.title.trim() &&
+              section.body.trim()
+          )
+          .map((section) => ({
+            title: section.title.trim(),
+            body: cleanBody(section.body),
+          }))
+      : [],
+    links: Array.isArray(input.links)
+      ? input.links
+          .filter(
+            (link) =>
+              !!link &&
+              typeof link.label === "string" &&
+              typeof link.url === "string" &&
+              link.label.trim() &&
+              link.url.trim()
+          )
+          .map((link) => ({
+            label: link.label.trim(),
+            url: link.url.trim(),
+          }))
+      : undefined,
+    updatedAt: cleanStr(input.updatedAt),
+  };
+}
+
+function toGuides(value: unknown): TeamGuide[] {
   if (!value) return [];
 
-  if (Array.isArray(value)) return value.filter(Boolean);
+  if (Array.isArray(value)) {
+    return value.filter(isGuide).map(normalizeGuide);
+  }
 
   if (typeof value === "object") {
-    const vals = Object.values(value);
-    if (
-      vals.length &&
-      vals.every((v) => v && typeof v === "object" && "teamKey" in (v as any))
-    ) {
-      return (vals as TeamGuide[]).filter(Boolean);
+    const vals = Object.values(value as Record<string, unknown>);
+    if (vals.length > 0 && vals.every(isGuide)) {
+      return (vals as TeamGuide[]).map(normalizeGuide);
     }
   }
 
   return [];
 }
 
-function extractGuides(mod: any): TeamGuide[] {
-  if (!mod) return [];
+function extractGuides(mod: unknown): TeamGuide[] {
+  if (!mod || typeof mod !== "object") return [];
 
   const out: TeamGuide[] = [];
+  const moduleObj = mod as Record<string, unknown>;
 
-  if (mod.default) out.push(...toGuides(mod.default));
-  out.push(...toGuides(mod));
+  out.push(...toGuides(moduleObj.default));
+  out.push(...toGuides(moduleObj));
 
-  for (const v of Object.values(mod)) {
-    out.push(...toGuides(v));
+  for (const value of Object.values(moduleObj)) {
+    out.push(...toGuides(value));
   }
 
   const seen = new Set<string>();
   const deduped: TeamGuide[] = [];
 
-  for (const g of out) {
-    const k = g?.teamKey;
-    if (!k) continue;
-    if (seen.has(k)) continue;
-    seen.add(k);
-    deduped.push(g);
+  for (const guide of out) {
+    const key = normalizeTeamKey(guide.teamKey);
+    if (!key || seen.has(key)) continue;
+
+    seen.add(key);
+    deduped.push({
+      ...guide,
+      teamKey: key,
+    });
   }
 
   return deduped;
 }
 
-const SOURCES: Record<string, TeamGuide[]> = {
+const SOURCES: SourceGuidesMap = {
   bundesliga: extractGuides(bundesligaGuides),
   laLiga: extractGuides(laLigaGuides),
   ligue1: extractGuides(ligue1Guides),
@@ -111,54 +207,156 @@ const SOURCES: Record<string, TeamGuide[]> = {
   bestaDeild: extractGuides(bestaDeildGuides),
   premierLeagueBosnia: extractGuides(premierLeagueBosniaGuides),
   leagueOfIrelandPremier: extractGuides(leagueOfIrelandPremierGuides),
-  legacy: extractGuides(legacy),
 };
 
-const registry: Record<string, TeamGuide> = {};
-const duplicates: Record<string, number> = {};
+const registry: TeamGuideRegistry = {};
+const duplicates: DuplicateMap = {};
 
 for (const [sourceName, guides] of Object.entries(SOURCES)) {
   for (const guide of guides) {
-    const key = guide?.teamKey;
-
-    if (!key) {
-      console.log(`[teamGuides] Skipping guide without teamKey from ${sourceName}`);
-      continue;
-    }
+    const key = normalizeTeamKey(guide.teamKey);
+    if (!key) continue;
 
     if (registry[key]) {
-      duplicates[key] = (duplicates[key] || 1) + 1;
-      console.log(`[teamGuides] Duplicate teamKey detected: ${key} (source: ${sourceName})`);
+      if (!duplicates[key]) {
+        duplicates[key] = [sourceName];
+      } else {
+        duplicates[key].push(sourceName);
+      }
       continue;
     }
 
-    registry[key] = guide;
+    registry[key] = {
+      ...guide,
+      teamKey: key,
+      cityKey: guide.cityKey ? normalizeCityKey(guide.cityKey) : undefined,
+    };
   }
 }
 
-const missing = Object.values(teams)
-  .filter((t) => !registry[t.teamKey])
-  .map((t) => ({
-    expectedGuideKey: t.teamKey,
-    name: t.name,
-    leagueId: t.leagueId,
-    season: t.season,
-  }));
+const missing: MissingTeamGuide[] = Object.values(teams)
+  .map((team) => ({
+    expectedGuideKey: normalizeTeamKey(team.teamKey),
+    name: team.name,
+    leagueId: team.leagueId,
+    season: team.season,
+  }))
+  .filter((team) => !!team.expectedGuideKey && !registry[team.expectedGuideKey])
+  .sort((a, b) => {
+    const leagueA = a.leagueId ?? 0;
+    const leagueB = b.leagueId ?? 0;
+    if (leagueA !== leagueB) return leagueA - leagueB;
+    return a.name.localeCompare(b.name);
+  });
+
+const cityKeyMismatches: StringIssue[] = [];
+const cityNameMismatches: StringIssue[] = [];
+const countryMismatches: StringIssue[] = [];
+const stadiumNameMismatches: StringIssue[] = [];
+const invalidGuideCityKeys: StringIssue[] = [];
+const weakGuides: WeakGuideIssue[] = [];
+
+for (const guide of Object.values(registry)) {
+  const team = teams[guide.teamKey];
+  if (!team) continue;
+
+  const expectedCityKey = team.cityKey ? normalizeCityKey(team.cityKey) : undefined;
+  const actualCityKey = guide.cityKey ? normalizeCityKey(guide.cityKey) : undefined;
+
+  if (expectedCityKey && actualCityKey && expectedCityKey !== actualCityKey) {
+    cityKeyMismatches.push({
+      teamKey: guide.teamKey,
+      name: guide.name,
+      value: actualCityKey,
+      expected: expectedCityKey,
+    });
+  }
+
+  if (actualCityKey && !cityGuides[actualCityKey]) {
+    invalidGuideCityKeys.push({
+      teamKey: guide.teamKey,
+      name: guide.name,
+      value: actualCityKey,
+    });
+  }
+
+  const teamCity = cleanStr(team.city);
+  const guideCity = cleanStr(guide.city);
+
+  if (teamCity && guideCity && teamCity !== guideCity) {
+    cityNameMismatches.push({
+      teamKey: guide.teamKey,
+      name: guide.name,
+      value: guideCity,
+      expected: teamCity,
+    });
+  }
+
+  const teamCountry = cleanStr(team.country);
+  const guideCountry = cleanStr(guide.country);
+
+  if (teamCountry && guideCountry && teamCountry !== guideCountry) {
+    countryMismatches.push({
+      teamKey: guide.teamKey,
+      name: guide.name,
+      value: guideCountry,
+      expected: teamCountry,
+    });
+  }
+
+  const teamStadium = team.stadiumKey ? stadiums[team.stadiumKey] : undefined;
+  const expectedStadiumName = cleanStr(teamStadium?.name);
+  const guideStadiumName = cleanStr(guide.stadium);
+
+  if (expectedStadiumName && guideStadiumName && expectedStadiumName !== guideStadiumName) {
+    stadiumNameMismatches.push({
+      teamKey: guide.teamKey,
+      name: guide.name,
+      value: guideStadiumName,
+      expected: expectedStadiumName,
+    });
+  }
+
+  const shortSections = guide.sections
+    .filter((section) => cleanBody(section.body).length < 220)
+    .map((section) => section.title);
+
+  const isWeak =
+    guide.sections.length < 10 ||
+    shortSections.length > 0 ||
+    !guide.cityKey ||
+    !guide.country ||
+    !guide.stadium;
+
+  if (isWeak) {
+    weakGuides.push({
+      teamKey: guide.teamKey,
+      name: guide.name,
+      sectionsCount: guide.sections.length,
+      shortSections,
+      missingCityKey: !guide.cityKey,
+      missingCountry: !guide.country,
+      missingStadium: !guide.stadium,
+      updatedAt: guide.updatedAt,
+    });
+  }
+}
+
+cityKeyMismatches.sort((a, b) => a.name.localeCompare(b.name));
+cityNameMismatches.sort((a, b) => a.name.localeCompare(b.name));
+countryMismatches.sort((a, b) => a.name.localeCompare(b.name));
+stadiumNameMismatches.sort((a, b) => a.name.localeCompare(b.name));
+invalidGuideCityKeys.sort((a, b) => a.name.localeCompare(b.name));
+weakGuides.sort((a, b) => a.name.localeCompare(b.name));
 
 export function hasTeamGuide(teamKey: string): boolean {
-  return !!registry[teamKey];
+  return !!registry[normalizeTeamKey(teamKey)];
 }
 
 export function getTeamGuide(teamKey: string): TeamGuide | null {
-  return registry[teamKey] || null;
+  const key = normalizeTeamKey(teamKey);
+  return key ? registry[key] ?? null : null;
 }
-
-export type MissingTeamGuide = {
-  expectedGuideKey: string;
-  name: string;
-  leagueId?: number;
-  season?: number;
-};
 
 export function getMissingTeamGuides(): MissingTeamGuide[] {
   return missing;
@@ -170,8 +368,22 @@ export function getTeamGuidesDebugSnapshot() {
     registryTeamsCount: Object.keys(teams).length,
     missingCount: missing.length,
     missing,
-    duplicates: Object.entries(duplicates).map(([k, v]) => ({ teamKey: k, count: v })),
-    bySource: Object.fromEntries(Object.entries(SOURCES).map(([k, v]) => [k, v.length])),
+    duplicates: Object.entries(duplicates).map(([teamKey, sources]) => ({
+      teamKey,
+      count: sources.length + 1,
+      duplicateSources: sources,
+    })),
+    bySource: Object.fromEntries(
+      Object.entries(SOURCES).map(([key, value]) => [key, value.length])
+    ),
+    audits: {
+      cityKeyMismatches,
+      cityNameMismatches,
+      countryMismatches,
+      stadiumNameMismatches,
+      invalidGuideCityKeys,
+      weakGuides,
+    },
   };
 }
 

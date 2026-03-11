@@ -1,36 +1,47 @@
 // src/data/teams/types.ts
 
 export type TeamRecord = {
-  /** Stable key used in routes and lookups (e.g. "arsenal", "real-madrid") */
+  /** Stable lookup key, e.g. "arsenal", "real-madrid" */
   teamKey: string;
 
-  /** API-Football team id (optional) */
+  /** Optional API-Football team id */
   teamId?: number;
 
   /** Display name */
   name: string;
 
-  /** Country */
+  /** Country display name */
   country?: string;
 
-  /** City */
+  /** City display name */
   city?: string;
 
-  /** League ID (API-Football league id) */
+  /** Optional stable city key for guide linking */
+  cityKey?: string;
+
+  /** API-Football league id */
   leagueId?: number;
 
-  /** Season context */
+  /** Season context if stored locally */
   season?: number;
 
   /** Stadium registry key */
   stadiumKey?: string;
 
-  /** Club foundation year */
+  /** Foundation year */
   founded?: number;
 
-  /** Primary club colours */
+  /** Club colours */
   clubColors?: string[];
 
   /** Search aliases */
   aliases?: string[];
 };
+
+/**
+ * Canonical team registry shape.
+ * Key must match `teamKey`.
+ */
+export type TeamRegistry = Record<string, TeamRecord>;
+
+export default TeamRecord;
