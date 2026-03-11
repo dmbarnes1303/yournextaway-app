@@ -20,6 +20,9 @@ type FtnEvent = {
 type FtnListResponse = {
   events?: FtnEvent[];
   data?: FtnEvent[];
+  success?: boolean | string | number;
+  error?: string;
+  message?: string;
 };
 
 function clean(v: unknown): string {
@@ -49,6 +52,7 @@ function appendAffiliate(url: string): string {
   const base = clean(url);
   if (!base) return "";
   if (/[?&](aid|aff)=/i.test(base)) return base;
+
   const joiner = base.includes("?") ? "&" : "?";
   return `${base}${joiner}aid=${encodeURIComponent(env.ftnAffiliateId)}`;
 }
@@ -93,8 +97,7 @@ function exactTeamsMatch(ev: FtnEvent, input: TicketResolveInput): boolean {
     return evHome === inputHome && evAway === inputAway;
   }
 
-  const title = eventTitle(ev);
-  return containsTeamsLoose(title, input.homeName, input.awayName);
+  return containsTeamsLoose(eventTitle(ev), input.homeName, input.awayName);
 }
 
 function scoreEvent(ev: FtnEvent, input: TicketResolveInput): number {
@@ -102,16 +105,13 @@ function scoreEvent(ev: FtnEvent, input: TicketResolveInput): number {
 
   const title = eventTitle(ev);
   const rawUrl = eventUrl(ev);
-
   const evHome = eventHome(ev);
   const evAway = eventAway(ev);
 
   if (evHome && evAway) {
     if (norm(evHome) === norm(input.homeName) && norm(evAway) === norm(input.awayName)) {
       score += 80;
-    } else if (
-      (norm(evHome) === norm(input.awayName) && norm(evAway) === norm(input.homeName))
-    ) {
+    } else if (norm(evHome) === norm(input.awayName) && norm(evAway) === norm(input.homeName)) {
       score += 20;
     }
   } else if (title && containsTeamsLoose(title, input.homeName, input.awayName)) {
@@ -122,10 +122,12 @@ function scoreEvent(ev: FtnEvent, input: TicketResolveInput): number {
   const evDt = safeDate(eventDate(ev));
   if (kickoff && evDt) {
     const diff = absDays(kickoff, evDt);
+
     if (diff === 0) score += 25;
     else if (diff === 1) score += 15;
-    else if (diff === 2) score += 5;
-    else if (diff > 2) score -= 1000;
+    else if (diff === 2) score += 8;
+    else if (diff === 3) score += 3;
+    else if (diff > 3) score -= 1000;
   }
 
   if (rawUrl) score += 5;
@@ -138,8 +140,51 @@ function isStrongEnough(score: number): boolean {
   return score >= 50;
 }
 
+function formatYmd(date: Date): string {
+  const y = date.getUTCFullYear();
+  const m = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(date.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function addDays(date: Date, days: number): Date {
+  const copy = new Date(date.getTime());
+  copy.setUTCDate(copy.getUTCDate() + days);
+  return copy;
+}
+
+function buildDateWindow(kickoffIso: string): { fromDate?: string; toDate?: string } {
+  const kickoff = safeDate(kickoffIso);
+  if (!kickoff) return {};
+
+  // Wider window to survive provider timezone / listing-date weirdness.
+  const from = addDays(kickoff, -2);
+  const to = addDays(kickoff, 2);
+
+  return {
+    fromDate: formatYmd(from),
+    toDate: formatYmd(to),
+  };
+}
+
 export async function resolveFtnCandidate(input: TicketResolveInput): Promise<TicketCandidate | null> {
-  if (!hasFtnConfig()) return null;
+  if (!hasFtnConfig()) {
+    console.log("[FTN] skipped: missing config");
+    return null;
+  }
+
+  const homeName = clean(input.homeName);
+  const awayName = clean(input.awayName);
+  const kickoffIso = clean(input.kickoffIso);
+
+  if (!homeName || !awayName || !kickoffIso) {
+    console.log("[FTN] skipped: missing required input", {
+      homeName,
+      awayName,
+      kickoffIso,
+    });
+    return null;
+  }
 
   const ts = String(Date.now());
   const sig = sha256(`${env.ftnUsername}-list_events-${ts}-${env.ftnAffiliateSecret}`);
@@ -149,31 +194,48 @@ export async function resolveFtnCandidate(input: TicketResolveInput): Promise<Ti
     u: env.ftnUsername,
     s: sig,
     ts,
-    home_team_name: clean(input.homeName),
-    away_team_name: clean(input.awayName),
+    home_team_name: homeName,
+    away_team_name: awayName,
   });
 
-  const kickoff = clean(input.kickoffIso).slice(0, 10);
-  if (kickoff) {
-    qs.set("from_date", kickoff);
-    qs.set("to_date", kickoff);
-  }
+  const dateWindow = buildDateWindow(kickoffIso);
+  if (dateWindow.fromDate) qs.set("from_date", dateWindow.fromDate);
+  if (dateWindow.toDate) qs.set("to_date", dateWindow.toDate);
 
   const url = `${env.ftnBaseUrl}?${qs.toString()}`;
 
   let res: Response;
   try {
     res = await fetch(url);
-  } catch {
+  } catch (error) {
+    console.log("[FTN] network error", {
+      message: error instanceof Error ? error.message : String(error),
+    });
     return null;
   }
 
-  if (!res.ok) return null;
+  let rawText = "";
+  try {
+    rawText = await res.text();
+  } catch {
+    rawText = "";
+  }
+
+  if (!res.ok) {
+    console.log("[FTN] non-200 response", {
+      status: res.status,
+      body: rawText.slice(0, 500),
+    });
+    return null;
+  }
 
   let json: FtnListResponse | null = null;
   try {
-    json = (await res.json()) as FtnListResponse;
+    json = rawText ? (JSON.parse(rawText) as FtnListResponse) : null;
   } catch {
+    console.log("[FTN] invalid JSON response", {
+      body: rawText.slice(0, 500),
+    });
     return null;
   }
 
@@ -183,7 +245,19 @@ export async function resolveFtnCandidate(input: TicketResolveInput): Promise<Ti
     ? json.data
     : [];
 
-  if (!events.length) return null;
+  if (!events.length) {
+    console.log("[FTN] no events returned", {
+      homeName,
+      awayName,
+      kickoffIso,
+      fromDate: dateWindow.fromDate ?? null,
+      toDate: dateWindow.toDate ?? null,
+      success: json?.success ?? null,
+      error: json?.error ?? null,
+      message: json?.message ?? null,
+    });
+    return null;
+  }
 
   const scored = events
     .map((ev) => ({
@@ -193,21 +267,50 @@ export async function resolveFtnCandidate(input: TicketResolveInput): Promise<Ti
     .filter((x) => isStrongEnough(x.score))
     .sort((a, b) => b.score - a.score);
 
-  if (!scored.length) return null;
+  if (!scored.length) {
+    console.log("[FTN] events returned but no strong match", {
+      count: events.length,
+      sample: events.slice(0, 5).map((ev) => ({
+        title: eventTitle(ev),
+        home: eventHome(ev),
+        away: eventAway(ev),
+        date: eventDate(ev),
+        url: eventUrl(ev),
+        price: eventPrice(ev),
+      })),
+    });
+    return null;
+  }
 
   const best = scored[0];
   const rawUrl = eventUrl(best.ev);
-  if (!rawUrl) return null;
+  if (!rawUrl) {
+    console.log("[FTN] best match missing URL", {
+      title: eventTitle(best.ev),
+      score: best.score,
+    });
+    return null;
+  }
 
   const exact = exactTeamsMatch(best.ev, input) && best.score >= 90;
+
+  console.log("[FTN] matched event", {
+    title: eventTitle(best.ev),
+    home: eventHome(best.ev),
+    away: eventAway(best.ev),
+    date: eventDate(best.ev),
+    score: best.score,
+    exact,
+    price: eventPrice(best.ev),
+  });
 
   return {
     provider: "footballticketsnet",
     exact,
     score: best.score,
     url: appendAffiliate(rawUrl),
-    title: `Tickets: ${clean(input.homeName)} vs ${clean(input.awayName)}`,
+    title: `Tickets: ${homeName} vs ${awayName}`,
     priceText: eventPrice(best.ev),
     reason: exact ? "exact_event" : "search_fallback",
   };
-}
+                                     }
