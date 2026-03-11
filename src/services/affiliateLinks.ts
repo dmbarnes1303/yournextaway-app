@@ -8,18 +8,19 @@ import { formatIsoToYmd } from "@/src/utils/dates";
 
 export type CabinClass = "economy" | "premium" | "business" | "first";
 
-function enc(v: any) {
-  return encodeURIComponent(String(v ?? "").trim());
-}
-
-function clean(v: any): string {
+function clean(v: unknown): string {
   return String(v ?? "").trim();
 }
 
-function ymdOrNull(v: any): string | null {
+function enc(v: unknown) {
+  return encodeURIComponent(clean(v));
+}
+
+function ymdOrNull(v: unknown): string | null {
   const s = clean(v);
   if (!s) return null;
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+
   try {
     return formatIsoToYmd(s);
   } catch {
@@ -41,7 +42,7 @@ function slugCity(city: string) {
     .replace(/\s+/g, "-");
 }
 
-function clampInt(v: any, min: number, max: number, fallback: number) {
+function clampInt(v: unknown, min: number, max: number, fallback: number) {
   const n = Number(v);
   if (!Number.isFinite(n)) return fallback;
   const i = Math.floor(n);
@@ -52,130 +53,150 @@ function appendQuery(
   base: string,
   params: Record<string, string | null | undefined>
 ) {
-  const entries = Object.entries(params).filter(([, v]) => clean(v));
-  if (!entries.length) return base;
+  const safeBase = clean(base);
+  if (!safeBase) return "";
 
-  const joiner = base.includes("?") ? "&" : "?";
+  const entries = Object.entries(params).filter(([, v]) => clean(v));
+  if (!entries.length) return safeBase;
+
+  const joiner = safeBase.includes("?") ? "&" : "?";
   const qs = entries.map(([k, v]) => `${enc(k)}=${enc(v)}`).join("&");
-  return `${base}${joiner}${qs}`;
+  return `${safeBase}${joiner}${qs}`;
+}
+
+function googleSearchUrl(query: string) {
+  return `https://www.google.com/search?q=${enc(query)}`;
+}
+
+function googleMapsSearchUrl(query: string) {
+  return `https://www.google.com/maps/search/?api=1&query=${enc(query)}`;
+}
+
+function buildAviasalesUrl(args: {
+  city: string;
+  originIata: string;
+  startDate: string | null;
+  endDate: string | null;
+  passengers: number;
+  cabinClass: CabinClass;
+}) {
+  const marker = clean(AffiliateConfig.aviasalesMarker);
+  const trackedFallback = clean(AffiliateConfig.aviasalesFallback);
+
+  const cityName = clean(args.city);
+  const origin = clean(args.originIata) || "LON";
+  const destination = cityName ? getIataCityCodeForCity(cityName) : null;
+  const outbound = yyyymmdd(args.startDate);
+  const inbound = yyyymmdd(args.endDate);
+
+  if (marker && destination && outbound) {
+    const routeToken = `${origin}${destination}${outbound}1`;
+    const base = `https://www.aviasales.com/search/${routeToken}?marker=${enc(marker)}`;
+
+    return appendQuery(base, {
+      return_date: inbound,
+      adults: args.passengers > 1 ? String(args.passengers) : null,
+      cabin: args.cabinClass !== "economy" ? args.cabinClass : null,
+    });
+  }
+
+  if (trackedFallback) {
+    return trackedFallback;
+  }
+
+  return googleSearchUrl(`${cityName} flights`);
+}
+
+function buildExpediaUrl(args: {
+  city: string;
+  startDate: string | null;
+  endDate: string | null;
+  passengers: number;
+}) {
+  const cityName = clean(args.city);
+  const token = clean(AffiliateConfig.expediaToken);
+
+  if (!cityName) {
+    return googleSearchUrl("hotels");
+  }
+
+  if (!token) {
+    return googleSearchUrl(`${cityName} hotels`);
+  }
+
+  const slug = slugCity(cityName);
+  const base = `https://expedia.com/affiliates/hotel-search-${slug}.${token}`;
+
+  return appendQuery(base, {
+    startDate: args.startDate,
+    endDate: args.endDate,
+    adults: String(args.passengers),
+  });
+}
+
+function buildKiwitaxiUrl(city: string) {
+  const tracked = clean(AffiliateConfig.kiwitaxiTracked);
+  if (tracked) return tracked;
+  return googleSearchUrl(`${clean(city)} airport transfer`);
+}
+
+function buildTicketsUrl(city: string) {
+  const tracked = clean(AffiliateConfig.sportsevents365Tracked);
+  if (tracked) return tracked;
+  return googleSearchUrl(`${clean(city)} football tickets`);
+}
+
+function buildGetYourGuideUrl(city: string) {
+  const cityName = clean(city);
+  const partnerId = clean(AffiliateConfig.getyourguidePartnerId);
+
+  if (partnerId && cityName) {
+    return `https://www.getyourguide.com/s/?q=${enc(cityName)}&partner_id=${enc(partnerId)}`;
+  }
+
+  return googleSearchUrl(`${cityName} things to do`);
 }
 
 /**
  * Builds partner links with best-effort prefill + tracking.
- * Priority: if tracked config exists -> use it.
- * Prefill: add parameters where stable. If not stable, keep tracked base.
+ * Must never throw.
  */
 export function buildAffiliateLinks(args: {
   city: string;
   startDate?: string | null;
   endDate?: string | null;
   originIata?: string | null;
-
-  passengers?: number | null; // 1–9
+  passengers?: number | null;
   cabinClass?: CabinClass | null;
 }) {
-  const cfg = (AffiliateConfig ?? {}) as any;
-
   const cityName = clean(args.city);
   const startDate = ymdOrNull(args.startDate);
   const endDate = ymdOrNull(args.endDate);
 
-  const origin = clean(args.originIata) || "LON";
-  const dest = cityName ? getIataCityCodeForCity(cityName) : null;
-
+  const originIata = clean(args.originIata) || "LON";
   const passengers = clampInt(args.passengers, 1, 9, 1);
-  const cabinClass: CabinClass =
-    (clean(args.cabinClass) as CabinClass) || "economy";
+  const cabinClass = (clean(args.cabinClass) as CabinClass) || "economy";
 
-  /* -------------------- */
-  /* Flights — Aviasales  */
-  /* -------------------- */
-  // Best case (paid + prefilled): Aviasales prefilled search URL with marker.
-  // Fallback (paid): Travelpayouts short link.
-  // Last fallback: Google search.
-  let flightsUrl = `https://www.google.com/search?q=${enc(
-    cityName + " flights"
-  )}`;
+  const flightsUrl = buildAviasalesUrl({
+    city: cityName,
+    originIata,
+    startDate,
+    endDate,
+    passengers,
+    cabinClass,
+  });
 
-  const marker = clean(cfg.aviasalesMarker);
-  if (dest && startDate && marker) {
-    const out = yyyymmdd(startDate);
-    const ret = yyyymmdd(endDate);
+  const hotelsUrl = buildExpediaUrl({
+    city: cityName,
+    startDate,
+    endDate,
+    passengers,
+  });
 
-    // Known working pattern:
-    // https://www.aviasales.com/search/ORIGDESTYYYYMMDD1?marker=XXXX
-    const base = `https://www.aviasales.com/search/${enc(origin)}${enc(
-      dest
-    )}${enc(out)}1?marker=${enc(marker)}`;
-
-    // Best-effort extra params (ignored if unsupported):
-    flightsUrl = appendQuery(base, {
-      return_date: ret, // auto-return date from trip end
-      adults: passengers !== 1 ? String(passengers) : null,
-      cabin: cabinClass !== "economy" ? cabinClass : null,
-    });
-  } else if (clean(cfg.aviasalesTracked)) {
-    flightsUrl = cfg.aviasalesTracked;
-  }
-
-  /* -------------------- */
-  /* Hotels — Expedia     */
-  /* -------------------- */
-  // Paid + stable: token-based affiliate landing.
-  // Prefill: best-effort query params (Expedia may ignore, but tracking remains).
-  let hotelsUrl = `https://www.google.com/search?q=${enc(
-    cityName + " hotels"
-  )}`;
-
-  const expediaToken = clean(cfg.expediaToken);
-  if (expediaToken && cityName) {
-    const slug = slugCity(cityName);
-    const base = `https://expedia.com/affiliates/hotel-search-${slug}.${expediaToken}`;
-
-    hotelsUrl = appendQuery(base, {
-      startDate: startDate,
-      endDate: endDate,
-      adults: String(passengers),
-    });
-  }
-
-  /* -------------------- */
-  /* Transfers — KiwiTaxi */
-  /* -------------------- */
-  // Paid: always use TP tracked short link if present.
-  const transfersUrl =
-    clean(cfg.kiwitaxiTracked) ||
-    `https://www.google.com/search?q=${enc(cityName + " airport transfer")}`;
-
-  /* -------------------- */
-  /* Tickets — SportsEvents365 */
-  /* -------------------- */
-  // Paid: tracked base (later we can build team/fixture targeting).
-  const ticketsUrl =
-    clean(cfg.sportsevents365Tracked) ||
-    `https://www.google.com/search?q=${enc(cityName + " football tickets")}`;
-
-  /* -------------------- */
-  /* Experiences — GetYourGuide */
-  /* -------------------- */
-  // Paid + robust: partner_id search URL.
-  let experiencesUrl = `https://www.google.com/search?q=${enc(
-    cityName + " things to do"
-  )}`;
-
-  const gygPartnerId = clean(cfg.getyourguidePartnerId);
-  if (gygPartnerId && cityName) {
-    experiencesUrl = `https://www.getyourguide.com/s/?q=${enc(
-      cityName
-    )}&partner_id=${enc(gygPartnerId)}`;
-  }
-
-  /* -------------------- */
-  /* Maps */
-  /* -------------------- */
-  const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${enc(
-    cityName
-  )}`;
+  const transfersUrl = buildKiwitaxiUrl(cityName);
+  const ticketsUrl = buildTicketsUrl(cityName);
+  const experiencesUrl = buildGetYourGuideUrl(cityName);
+  const mapsUrl = googleMapsSearchUrl(cityName);
 
   return {
     flightsUrl,
