@@ -7,6 +7,15 @@ const app = Fastify({
   logger: true,
 });
 
+function clean(v: unknown): string {
+  return String(v ?? "").trim();
+}
+
+function toBool(v: unknown): boolean {
+  const value = clean(v).toLowerCase();
+  return value === "1" || value === "true" || value === "yes";
+}
+
 app.addHook("onSend", async (_request, reply, payload) => {
   reply.header("Cache-Control", "public, max-age=60");
   reply.header("Access-Control-Allow-Origin", "*");
@@ -51,14 +60,16 @@ app.get<{
     kickoffIso?: string;
     leagueName?: string;
     leagueId?: string;
+    debugNoCache?: string;
   };
 }>("/tickets/resolve", async (request, reply) => {
-  const fixtureId = String(request.query.fixtureId ?? "").trim() || undefined;
-  const homeName = String(request.query.homeName ?? "").trim();
-  const awayName = String(request.query.awayName ?? "").trim();
-  const kickoffIso = String(request.query.kickoffIso ?? "").trim();
-  const leagueName = String(request.query.leagueName ?? "").trim() || undefined;
-  const leagueId = String(request.query.leagueId ?? "").trim() || undefined;
+  const fixtureId = clean(request.query.fixtureId) || undefined;
+  const homeName = clean(request.query.homeName);
+  const awayName = clean(request.query.awayName);
+  const kickoffIso = clean(request.query.kickoffIso);
+  const leagueName = clean(request.query.leagueName) || undefined;
+  const leagueId = clean(request.query.leagueId) || undefined;
+  const debugNoCache = toBool(request.query.debugNoCache);
 
   if (!homeName || !awayName || !kickoffIso) {
     reply.code(400);
@@ -76,6 +87,19 @@ app.get<{
     };
   }
 
+  request.log.info(
+    {
+      fixtureId: fixtureId ?? null,
+      homeName,
+      awayName,
+      kickoffIso,
+      leagueName: leagueName ?? null,
+      leagueId: leagueId ?? null,
+      debugNoCache,
+    },
+    "Ticket resolve request received"
+  );
+
   try {
     const result = await resolveTicket({
       fixtureId,
@@ -84,7 +108,25 @@ app.get<{
       kickoffIso,
       leagueName,
       leagueId,
-    });
+      debugNoCache,
+    } as any);
+
+    request.log.info(
+      {
+        fixtureId: fixtureId ?? null,
+        homeName,
+        awayName,
+        kickoffIso,
+        provider: result.provider,
+        exact: result.exact,
+        score: result.score,
+        reason: result.reason,
+        checkedProviders: result.checkedProviders,
+        ok: result.ok,
+        debugNoCache,
+      },
+      "Ticket resolve request completed"
+    );
 
     if (!result.ok) {
       reply.code(404);
@@ -95,12 +137,13 @@ app.get<{
     request.log.error(
       {
         err: error,
-        fixtureId,
+        fixtureId: fixtureId ?? null,
         homeName,
         awayName,
         kickoffIso,
-        leagueName,
-        leagueId,
+        leagueName: leagueName ?? null,
+        leagueId: leagueId ?? null,
+        debugNoCache,
       },
       "Ticket resolution failed"
     );
