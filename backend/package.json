@@ -10,7 +10,6 @@
     "start": "node dist/index.js"
   },
   "dependencies": {
-<<<<<<< HEAD
     "@electric-sql/pglite": "^0.2.0",
     "@fastify/aws-lambda": "^6.1.0",
     "@fastify/multipart": "^9.3.0",
