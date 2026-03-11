@@ -104,7 +104,7 @@ function scoreEvent(ev: FtnEvent, input: TicketResolveInput): number {
   let score = 0;
 
   const title = eventTitle(ev);
-  const rawUrl = eventUrl(ev);
+  const candidateUrl = eventUrl(ev);
   const evHome = eventHome(ev);
   const evAway = eventAway(ev);
 
@@ -130,7 +130,7 @@ function scoreEvent(ev: FtnEvent, input: TicketResolveInput): number {
     else if (diff > 3) score -= 1000;
   }
 
-  if (rawUrl) score += 5;
+  if (candidateUrl) score += 5;
   if (eventPrice(ev)) score += 2;
 
   return score;
@@ -157,7 +157,6 @@ function buildDateWindow(kickoffIso: string): { fromDate?: string; toDate?: stri
   const kickoff = safeDate(kickoffIso);
   if (!kickoff) return {};
 
-  // Wider window to survive provider timezone / listing-date weirdness.
   const from = addDays(kickoff, -2);
   const to = addDays(kickoff, 2);
 
@@ -269,48 +268,4 @@ export async function resolveFtnCandidate(input: TicketResolveInput): Promise<Ti
 
   if (!scored.length) {
     console.log("[FTN] events returned but no strong match", {
-      count: events.length,
-      sample: events.slice(0, 5).map((ev) => ({
-        title: eventTitle(ev),
-        home: eventHome(ev),
-        away: eventAway(ev),
-        date: eventDate(ev),
-        url: eventUrl(ev),
-        price: eventPrice(ev),
-      })),
-    });
-    return null;
-  }
-
-  const best = scored[0];
-  const rawUrl = eventUrl(best.ev);
-  if (!rawUrl) {
-    console.log("[FTN] best match missing URL", {
-      title: eventTitle(best.ev),
-      score: best.score,
-    });
-    return null;
-  }
-
-  const exact = exactTeamsMatch(best.ev, input) && best.score >= 90;
-
-  console.log("[FTN] matched event", {
-    title: eventTitle(best.ev),
-    home: eventHome(best.ev),
-    away: eventAway(best.ev),
-    date: eventDate(best.ev),
-    score: best.score,
-    exact,
-    price: eventPrice(best.ev),
-  });
-
-  return {
-    provider: "footballticketsnet",
-    exact,
-    score: best.score,
-    url: appendAffiliate(rawUrl),
-    title: `Tickets: ${homeName} vs ${awayName}`,
-    priceText: eventPrice(best.ev),
-    reason: exact ? "exact_event" : "search_fallback",
-  };
-                                     }
+      count
