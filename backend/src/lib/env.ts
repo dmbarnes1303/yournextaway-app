@@ -1,6 +1,8 @@
 function req(name: string): string {
   const value = String(process.env[name] ?? "").trim();
-  if (!value) throw new Error(`Missing required env var: ${name}`);
+  if (!value) {
+    throw new Error(`Missing required env var: ${name}`);
+  }
   return value;
 }
 
@@ -8,32 +10,59 @@ function opt(name: string, fallback = ""): string {
   return String(process.env[name] ?? fallback).trim();
 }
 
-export const env = {
-  port: Number(opt("PORT", "3000")) || 3000,
+function optNumber(name: string, fallback: number): number {
+  const raw = String(process.env[name] ?? "").trim();
+  if (!raw) return fallback;
 
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+export const env = {
+  port: optNumber("PORT", 3000),
+
+  // FootballTicketNet
   ftnBaseUrl: opt("FTN_BASE_URL", "https://www.footballticketnet.com/api"),
   ftnUsername: opt("FTN_USERNAME", ""),
   ftnSecretName: opt("FTN_SECRET_NAME", ""),
   ftnAffiliateSecret: opt("FTN_AFFILIATE_SECRET", ""),
   ftnAffiliateId: opt("FTN_AFFILIATE_ID", "yournextaway"),
 
+  // SportsEvents365
   se365BaseUrl: opt("SE365_BASE_URL", ""),
   se365ApiKey: opt("SE365_API_KEY", ""),
   se365AffiliateId: opt("SE365_AFFILIATE_ID", ""),
 
-  gigsbergBaseUrl: opt("GIGSBERG_BASE_URL", ""),
+  // Gigsberg
+  gigsbergBaseUrl: opt("GIGSBERG_BASE_URL", "https://www.gigsberg.com"),
   gigsbergApiKey: opt("GIGSBERG_API_KEY", ""),
   gigsbergAffiliateId: opt("GIGSBERG_AFFILIATE_ID", "yournextaway"),
 };
 
-export function hasFtnConfig() {
-  return Boolean(env.ftnBaseUrl && env.ftnUsername && env.ftnAffiliateSecret);
+export function hasFtnConfig(): boolean {
+  return Boolean(
+    env.ftnBaseUrl &&
+      env.ftnUsername &&
+      env.ftnAffiliateSecret &&
+      env.ftnAffiliateId
+  );
 }
 
-export function hasSe365Config() {
-  return Boolean(env.se365BaseUrl && env.se365ApiKey);
+export function hasSe365Config(): boolean {
+  return Boolean(
+    env.se365BaseUrl &&
+      env.se365ApiKey
+  );
 }
 
-export function hasGigsbergConfig() {
-  return Boolean(env.gigsbergAffiliateId);
+export function hasGigsbergConfig(): boolean {
+  return Boolean(
+    env.gigsbergBaseUrl &&
+      env.gigsbergAffiliateId
+  );
 }
+
+// Keep req available for future hard-required startup checks.
+// Example usage later:
+// const DATABASE_URL = req("DATABASE_URL");
+export { req };

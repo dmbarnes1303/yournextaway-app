@@ -1,4 +1,13 @@
-export type TicketProviderId = "footballticketsnet" | "sportsevents365" | "gigsberg";
+export type TicketProviderId =
+  | "footballticketsnet"
+  | "sportsevents365"
+  | "gigsberg";
+
+export type TicketResolveReason =
+  | "exact_event"
+  | "search_fallback"
+  | "partial_match"
+  | "not_found";
 
 export type TicketResolveInput = {
   fixtureId?: string | number;
@@ -16,7 +25,7 @@ export type TicketCandidate = {
   url: string;
   title: string;
   priceText?: string | null;
-  reason: "exact_event" | "search_fallback";
+  reason: Exclude<TicketResolveReason, "not_found">;
 };
 
 export type TicketResolution = {
@@ -27,6 +36,6 @@ export type TicketResolution = {
   url: string | null;
   title: string | null;
   priceText?: string | null;
-  reason: "exact_event" | "search_fallback" | "not_found";
+  reason: TicketResolveReason;
   checkedProviders: TicketProviderId[];
 };

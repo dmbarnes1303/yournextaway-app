@@ -1,67 +1,112 @@
 import { resolveFtnCandidate } from "./ftn.js";
 import { resolveSe365Candidate } from "./se365.js";
 import { resolveGigsbergCandidate } from "./gigsberg.js";
-import type { TicketResolution, TicketResolveInput } from "./types.js";
+import type { TicketCandidate, TicketResolution, TicketResolveInput } from "./types.js";
 
-export async function resolveTicket(input: TicketResolveInput): Promise<TicketResolution> {
+type CacheEntry = {
+  expires: number;
+  value: TicketResolution;
+};
+
+const CACHE = new Map<string, CacheEntry>();
+
+// 10 minutes cache
+const CACHE_TTL = 1000 * 60 * 10;
+
+function buildCacheKey(input: TicketResolveInput): string {
+  return [
+    input.homeName,
+    input.awayName,
+    input.kickoffIso,
+    input.leagueId ?? "",
+  ]
+    .join("|")
+    .toLowerCase();
+}
+
+function getCache(key: string): TicketResolution | null {
+  const entry = CACHE.get(key);
+
+  if (!entry) return null;
+
+  if (Date.now() > entry.expires) {
+    CACHE.delete(key);
+    return null;
+  }
+
+  return entry.value;
+}
+
+function setCache(key: string, value: TicketResolution) {
+  CACHE.set(key, {
+    expires: Date.now() + CACHE_TTL,
+    value,
+  });
+}
+
+export async function resolveTicket(
+  input: TicketResolveInput
+): Promise<TicketResolution> {
+
+  const cacheKey = buildCacheKey(input);
+  const cached = getCache(cacheKey);
+
+  if (cached) {
+    return cached;
+  }
+
   const checkedProviders: TicketResolution["checkedProviders"] = [];
 
-  const ftn = await resolveFtnCandidate(input);
+  const candidates: TicketCandidate[] = [];
+
+  const [ftn, se365, gigsberg] = await Promise.all([
+    resolveFtnCandidate(input),
+    resolveSe365Candidate(input),
+    resolveGigsbergCandidate(input),
+  ]);
+
   checkedProviders.push("footballticketsnet");
-  if (ftn) {
-    return {
-      ok: true,
-      provider: ftn.provider,
-      exact: ftn.exact,
-      score: ftn.score,
-      url: ftn.url,
-      title: ftn.title,
-      priceText: ftn.priceText,
-      reason: ftn.reason,
-      checkedProviders,
-    };
-  }
+  if (ftn) candidates.push(ftn);
 
-  const se365 = await resolveSe365Candidate(input);
   checkedProviders.push("sportsevents365");
-  if (se365) {
-    return {
-      ok: true,
-      provider: se365.provider,
-      exact: se365.exact,
-      score: se365.score,
-      url: se365.url,
-      title: se365.title,
-      priceText: se365.priceText,
-      reason: se365.reason,
-      checkedProviders,
-    };
-  }
+  if (se365) candidates.push(se365);
 
-  const gigsberg = await resolveGigsbergCandidate(input);
   checkedProviders.push("gigsberg");
-  if (gigsberg) {
-    return {
-      ok: true,
-      provider: gigsberg.provider,
-      exact: gigsberg.exact,
-      score: gigsberg.score,
-      url: gigsberg.url,
-      title: gigsberg.title,
-      priceText: gigsberg.priceText,
-      reason: gigsberg.reason,
+  if (gigsberg) candidates.push(gigsberg);
+
+  if (!candidates.length) {
+    const result: TicketResolution = {
+      ok: false,
+      provider: null,
+      exact: false,
+      score: null,
+      url: null,
+      title: null,
+      priceText: null,
+      reason: "not_found",
       checkedProviders,
     };
+
+    setCache(cacheKey, result);
+    return result;
   }
 
-  return {
-    ok: false,
-    provider: null,
-    exact: false,
-    score: null,
-    url: null,
-    title: null,
-    reason: "not_found",
+  candidates.sort((a, b) => b.score - a.score);
+  const best = candidates[0];
+
+  const result: TicketResolution = {
+    ok: true,
+    provider: best.provider,
+    exact: best.exact,
+    score: best.score,
+    url: best.url,
+    title: best.title,
+    priceText: best.priceText ?? null,
+    reason: best.reason,
     checkedProviders,
   };
+
+  setCache(cacheKey, result);
+
+  return result;
 }

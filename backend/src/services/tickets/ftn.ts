@@ -70,16 +70,53 @@ function eventPrice(ev: FtnEvent): string | null {
   return raw || null;
 }
 
-function containsTeams(name: string, home: string, away: string): boolean {
+function eventHome(ev: FtnEvent): string {
+  return clean(ev.home_team_name);
+}
+
+function eventAway(ev: FtnEvent): string {
+  return clean(ev.away_team_name);
+}
+
+function containsTeamsLoose(name: string, home: string, away: string): boolean {
   const n = norm(name);
   return n.includes(norm(home)) && n.includes(norm(away));
+}
+
+function exactTeamsMatch(ev: FtnEvent, input: TicketResolveInput): boolean {
+  const evHome = norm(eventHome(ev));
+  const evAway = norm(eventAway(ev));
+  const inputHome = norm(input.homeName);
+  const inputAway = norm(input.awayName);
+
+  if (evHome && evAway) {
+    return evHome === inputHome && evAway === inputAway;
+  }
+
+  const title = eventTitle(ev);
+  return containsTeamsLoose(title, input.homeName, input.awayName);
 }
 
 function scoreEvent(ev: FtnEvent, input: TicketResolveInput): number {
   let score = 0;
 
   const title = eventTitle(ev);
-  if (title && containsTeams(title, input.homeName, input.awayName)) score += 60;
+  const rawUrl = eventUrl(ev);
+
+  const evHome = eventHome(ev);
+  const evAway = eventAway(ev);
+
+  if (evHome && evAway) {
+    if (norm(evHome) === norm(input.homeName) && norm(evAway) === norm(input.awayName)) {
+      score += 80;
+    } else if (
+      (norm(evHome) === norm(input.awayName) && norm(evAway) === norm(input.homeName))
+    ) {
+      score += 20;
+    }
+  } else if (title && containsTeamsLoose(title, input.homeName, input.awayName)) {
+    score += 55;
+  }
 
   const kickoff = safeDate(input.kickoffIso);
   const evDt = safeDate(eventDate(ev));
@@ -91,8 +128,14 @@ function scoreEvent(ev: FtnEvent, input: TicketResolveInput): number {
     else if (diff > 2) score -= 1000;
   }
 
-  if (eventUrl(ev)) score += 5;
+  if (rawUrl) score += 5;
+  if (eventPrice(ev)) score += 2;
+
   return score;
+}
+
+function isStrongEnough(score: number): boolean {
+  return score >= 50;
 }
 
 export async function resolveFtnCandidate(input: TicketResolveInput): Promise<TicketCandidate | null> {
@@ -124,6 +167,7 @@ export async function resolveFtnCandidate(input: TicketResolveInput): Promise<Ti
   } catch {
     return null;
   }
+
   if (!res.ok) return null;
 
   let json: FtnListResponse | null = null;
@@ -133,12 +177,20 @@ export async function resolveFtnCandidate(input: TicketResolveInput): Promise<Ti
     return null;
   }
 
-  const events = Array.isArray(json?.events) ? json!.events! : Array.isArray(json?.data) ? json!.data! : [];
+  const events = Array.isArray(json?.events)
+    ? json.events
+    : Array.isArray(json?.data)
+    ? json.data
+    : [];
+
   if (!events.length) return null;
 
   const scored = events
-    .map((ev) => ({ ev, score: scoreEvent(ev, input) }))
-    .filter((x) => x.score > 0)
+    .map((ev) => ({
+      ev,
+      score: scoreEvent(ev, input),
+    }))
+    .filter((x) => isStrongEnough(x.score))
     .sort((a, b) => b.score - a.score);
 
   if (!scored.length) return null;
@@ -147,13 +199,15 @@ export async function resolveFtnCandidate(input: TicketResolveInput): Promise<Ti
   const rawUrl = eventUrl(best.ev);
   if (!rawUrl) return null;
 
+  const exact = exactTeamsMatch(best.ev, input) && best.score >= 90;
+
   return {
     provider: "footballticketsnet",
-    exact: best.score >= 70,
+    exact,
     score: best.score,
     url: appendAffiliate(rawUrl),
     title: `Tickets: ${clean(input.homeName)} vs ${clean(input.awayName)}`,
     priceText: eventPrice(best.ev),
-    reason: "exact_event",
+    reason: exact ? "exact_event" : "search_fallback",
   };
-    }
+}
