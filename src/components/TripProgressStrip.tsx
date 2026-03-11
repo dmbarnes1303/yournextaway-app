@@ -1,4 +1,3 @@
-// src/components/TripProgressStrip.tsx
 import React, { useMemo } from "react";
 import { View, Text, StyleSheet, Pressable } from "react-native";
 import { theme } from "@/src/constants/theme";
@@ -15,44 +14,60 @@ export type TripProgressItem = {
   onPress?: () => void;
 };
 
-function StatePill({ state }: { state: ProgressState }) {
-  const cfg =
-    state === "booked"
-      ? {
-          dot: "rgba(87,162,56,1)",
-          ring: "rgba(87,162,56,0.40)",
-          bg: "rgba(87,162,56,0.12)",
-          text: "✓",
-          textColor: theme.colors.textPrimary,
-        }
-      : state === "saved"
-      ? {
-          dot: "rgba(231,236,231,0.55)",
-          ring: theme.colors.borderSubtle,
-          bg: "rgba(255,255,255,0.06)",
-          text: "•",
-          textColor: theme.colors.textSecondary,
-        }
-      : {
-          dot: "rgba(231,236,231,0.18)",
-          ring: theme.colors.borderSubtle,
-          bg: "rgba(0,0,0,0.10)",
-          text: "",
-          textColor: theme.colors.textMuted,
-        };
+function getStateConfig(state: ProgressState) {
+  if (state === "booked") {
+    return {
+      badgeBg: "rgba(87,162,56,0.16)",
+      badgeBorder: "rgba(87,162,56,0.42)",
+      dot: theme.colors.accentGreen,
+      icon: "✓",
+      iconColor: theme.colors.textPrimary,
+      labelColor: theme.colors.textPrimary,
+      subLabel: "Booked",
+      subLabelColor: "rgba(87,162,56,0.95)",
+      cardBorder: "rgba(87,162,56,0.28)",
+      cardBg: "rgba(87,162,56,0.07)",
+    };
+  }
 
-  return (
-    <View style={[styles.statePill, { backgroundColor: cfg.bg, borderColor: cfg.ring }]}>
-      <View style={[styles.stateDot, { backgroundColor: cfg.dot }]} />
-      {cfg.text ? <Text style={[styles.stateText, { color: cfg.textColor }]}>{cfg.text}</Text> : null}
-    </View>
-  );
+  if (state === "saved") {
+    return {
+      badgeBg: "rgba(255,255,255,0.08)",
+      badgeBorder: "rgba(255,255,255,0.16)",
+      dot: "rgba(231,236,231,0.72)",
+      icon: "•",
+      iconColor: theme.colors.textSecondary,
+      labelColor: theme.colors.textSecondary,
+      subLabel: "Saved",
+      subLabelColor: theme.colors.textMuted,
+      cardBorder: "rgba(255,255,255,0.12)",
+      cardBg: "rgba(255,255,255,0.035)",
+    };
+  }
+
+  return {
+    badgeBg: "rgba(0,0,0,0.14)",
+    badgeBorder: theme.colors.borderSubtle,
+    dot: "rgba(231,236,231,0.22)",
+    icon: "",
+    iconColor: theme.colors.textMuted,
+    labelColor: theme.colors.textMuted,
+    subLabel: "Not started",
+    subLabelColor: theme.colors.textMuted,
+    cardBorder: "rgba(255,255,255,0.10)",
+    cardBg: "rgba(255,255,255,0.02)",
+  };
 }
 
-function stateLabelStyle(state: ProgressState) {
-  if (state === "booked") return styles.labelBooked;
-  if (state === "saved") return styles.labelSaved;
-  return styles.labelEmpty;
+function StateBadge({ state }: { state: ProgressState }) {
+  const cfg = getStateConfig(state);
+
+  return (
+    <View style={[styles.stateBadge, { backgroundColor: cfg.badgeBg, borderColor: cfg.badgeBorder }]}>
+      <View style={[styles.stateDot, { backgroundColor: cfg.dot }]} />
+      {cfg.icon ? <Text style={[styles.stateIcon, { color: cfg.iconColor }]}>{cfg.icon}</Text> : null}
+    </View>
+  );
 }
 
 export default function TripProgressStrip({
@@ -73,31 +88,51 @@ export default function TripProgressStrip({
       <View style={styles.inner}>
         <View style={styles.topRow}>
           <Text style={styles.title}>{title}</Text>
-          <Text style={styles.hint}>Tap to jump</Text>
+          <Text style={styles.hint}>Tap a step</Text>
         </View>
 
-        <View style={styles.rail}>
+        <View style={styles.grid}>
           {ordered.map((it) => {
-            const clickable = !!it.onPress;
-            const node = (
-              <View style={styles.item}>
-                <StatePill state={it.state} />
-                <Text style={[styles.label, stateLabelStyle(it.state)]} numberOfLines={1}>
+            const cfg = getStateConfig(it.state);
+
+            const content = (
+              <View
+                style={[
+                  styles.tile,
+                  {
+                    borderColor: cfg.cardBorder,
+                    backgroundColor: cfg.cardBg,
+                  },
+                ]}
+              >
+                <StateBadge state={it.state} />
+
+                <Text style={[styles.label, { color: cfg.labelColor }]} numberOfLines={1}>
                   {it.label}
+                </Text>
+
+                <Text style={[styles.subLabel, { color: cfg.subLabelColor }]} numberOfLines={1}>
+                  {cfg.subLabel}
                 </Text>
               </View>
             );
 
-            if (!clickable) return <View key={it.key} style={styles.itemWrap}>{node}</View>;
+            if (!it.onPress) {
+              return (
+                <View key={it.key} style={styles.tileWrap}>
+                  {content}
+                </View>
+              );
+            }
 
             return (
               <Pressable
                 key={it.key}
                 onPress={it.onPress}
-                style={({ pressed }) => [styles.itemWrap, pressed && styles.itemPressed]}
+                style={({ pressed }) => [styles.tileWrap, pressed && styles.tilePressed]}
                 android_ripple={{ color: "rgba(255,255,255,0.04)" }}
               >
-                {node}
+                {content}
               </Pressable>
             );
           })}
@@ -105,13 +140,15 @@ export default function TripProgressStrip({
 
         <View style={styles.legendRow}>
           <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: "rgba(231,236,231,0.20)" }]} />
+            <View style={[styles.legendDot, { backgroundColor: "rgba(231,236,231,0.22)" }]} />
             <Text style={styles.legendText}>Not started</Text>
           </View>
+
           <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: "rgba(231,236,231,0.55)" }]} />
+            <View style={[styles.legendDot, { backgroundColor: "rgba(231,236,231,0.72)" }]} />
             <Text style={styles.legendText}>Saved</Text>
           </View>
+
           <View style={styles.legendItem}>
             <View style={[styles.legendDot, { backgroundColor: theme.colors.accentGreen }]} />
             <Text style={styles.legendText}>Booked</Text>
@@ -129,7 +166,7 @@ const styles = StyleSheet.create({
   },
 
   inner: {
-    padding: 12,
+    padding: 14,
     gap: 12,
   },
 
@@ -153,41 +190,42 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
 
-  rail: {
+  grid: {
     flexDirection: "row",
-    gap: 10,
+    gap: 8,
   },
 
-  itemWrap: {
+  tileWrap: {
     flex: 1,
-    borderRadius: theme.borderRadius.input,
-    borderWidth: 1,
-    borderColor: theme.colors.borderSubtle,
-    backgroundColor: "rgba(255,255,255,0.03)",
-    paddingVertical: 10,
-    paddingHorizontal: 10,
+    borderRadius: 14,
     overflow: "hidden",
   },
 
-  itemPressed: {
-    opacity: 0.95,
+  tilePressed: {
+    opacity: 0.94,
   },
 
-  item: {
-    alignItems: "center",
-    gap: 8,
-  },
-
-  statePill: {
-    height: 28,
-    minWidth: 44,
-    borderRadius: 999,
+  tile: {
+    minHeight: 92,
     borderWidth: 1,
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
     alignItems: "center",
     justifyContent: "center",
-    flexDirection: "row",
     gap: 8,
+  },
+
+  stateBadge: {
+    minWidth: 46,
+    height: 28,
+    borderRadius: 999,
+    borderWidth: 1,
     paddingHorizontal: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
   },
 
   stateDot: {
@@ -196,7 +234,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
 
-  stateText: {
+  stateIcon: {
     fontSize: 12,
     fontWeight: theme.fontWeight.black,
     marginTop: -1,
@@ -208,9 +246,11 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
 
-  labelEmpty: { color: theme.colors.textMuted },
-  labelSaved: { color: theme.colors.textSecondary },
-  labelBooked: { color: theme.colors.textPrimary },
+  subLabel: {
+    fontSize: 10,
+    fontWeight: theme.fontWeight.semibold,
+    textAlign: "center",
+  },
 
   legendRow: {
     flexDirection: "row",
