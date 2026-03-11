@@ -14,6 +14,12 @@ const PROVIDER_TIMEOUT_MS = 7000;
 const MAX_RETURNED_OPTIONS = 3;
 const MIN_FALLBACK_SCORE = 20;
 
+const PROVIDER_PRIORITY: Record<string, number> = {
+  footballticketsnet: 1,
+  sportsevents365: 2,
+  gigsberg: 3,
+};
+
 function clean(v: unknown): string {
   return String(v ?? "").trim();
 }
@@ -155,12 +161,24 @@ function dedupeCandidates(candidates: TicketCandidate[]): TicketCandidate[] {
   return Array.from(map.values());
 }
 
+function reasonRank(reason: TicketCandidate["reason"]): number {
+  if (reason === "exact_event") return 1;
+  if (reason === "partial_match") return 2;
+  return 3;
+}
+
+function providerRank(provider: string): number {
+  return PROVIDER_PRIORITY[clean(provider).toLowerCase()] ?? 99;
+}
+
 function sortCandidates(candidates: TicketCandidate[]): TicketCandidate[] {
   return [...candidates].sort((a, b) => {
-    if (a.reason === "exact_event" && b.reason !== "exact_event") return -1;
-    if (a.reason !== "exact_event" && b.reason === "exact_event") return 1;
+    const reasonDiff = reasonRank(a.reason) - reasonRank(b.reason);
+    if (reasonDiff !== 0) return reasonDiff;
+
     if (b.score !== a.score) return b.score - a.score;
-    return a.provider.localeCompare(b.provider);
+
+    return providerRank(a.provider) - providerRank(b.provider);
   });
 }
 
