@@ -32,12 +32,28 @@ export const PARTNERS: Partner[] = [
 
   // Tickets
   {
+    id: "footballticketsnet",
+    name: "FootballTicketNet",
+    category: "tickets",
+    affiliate: true,
+    api: true,
+    deepLinkBase: "https://www.footballticketnet.com/",
+  },
+  {
     id: "sportsevents365",
     name: "SportsEvents365",
     category: "tickets",
     affiliate: true,
     api: true,
     deepLinkBase: "https://www.sportsevents365.com/",
+  },
+  {
+    id: "gigsberg",
+    name: "Gigsberg",
+    category: "tickets",
+    affiliate: true,
+    api: true,
+    deepLinkBase: "https://www.gigsberg.com/",
   },
   {
     id: "seatpick",
@@ -59,7 +75,6 @@ export const PARTNERS: Partner[] = [
   },
 
   // Stays
-  // IMPORTANT: keep expedia_stays because the app uses it (Trip workspace, partnerLinks resolver, etc.)
   {
     id: "expedia_stays",
     name: "Expedia",
@@ -68,7 +83,6 @@ export const PARTNERS: Partner[] = [
     api: false,
     deepLinkBase: "https://www.expedia.co.uk/",
   },
-  // Optional legacy alias. Keep only if older saved items already use partnerId="expedia".
   {
     id: "expedia",
     name: "Expedia",
@@ -177,10 +191,6 @@ export function getPartnerOrNull(id: string): Partner | null {
   return PARTNERS.find((p) => p.id === id) ?? null;
 }
 
-/**
- * Strict accessor: throws if partner id is unknown.
- * Use when it should be impossible for id to be invalid.
- */
 export function getPartner(id: PartnerId | string): Partner {
   const p = getPartnerOrNull(String(id));
   if (!p) throw new Error(`Unknown partner id: ${String(id)}`);
