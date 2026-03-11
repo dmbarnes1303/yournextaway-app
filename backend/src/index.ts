@@ -1,6 +1,6 @@
 import "dotenv/config";
 import Fastify from "fastify";
-import { env } from "./lib/env.js";
+import { env, hasFtnConfig, hasGigsbergConfig, hasSe365Config } from "./lib/env.js";
 import { resolveTicket } from "./services/tickets/resolve.js";
 
 const app = Fastify({
@@ -41,14 +41,9 @@ app.get("/health", async () => {
     status: "ok",
     service: "yournextaway-backend",
     port: env.port,
-    ftnConfigured: Boolean(
-      env.ftnBaseUrl &&
-        env.ftnUsername &&
-        env.ftnAffiliateSecret &&
-        env.ftnAffiliateId
-    ),
-    se365Configured: Boolean(env.se365BaseUrl && env.se365ApiKey),
-    gigsbergConfigured: Boolean(env.gigsbergAffiliateId),
+    ftnConfigured: hasFtnConfig(),
+    se365Configured: hasSe365Config(),
+    gigsbergConfigured: hasGigsbergConfig(),
   };
 });
 
@@ -109,7 +104,7 @@ app.get<{
       leagueName,
       leagueId,
       debugNoCache,
-    } as any);
+    });
 
     request.log.info(
       {
