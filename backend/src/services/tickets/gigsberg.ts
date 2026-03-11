@@ -23,17 +23,18 @@ function buildSearchUrl(input: TicketResolveInput): string | null {
   const query = buildSearchQuery(input);
   if (!query) return null;
 
-  const base = clean(env.gigsbergBaseUrl) || "https://www.gigsberg.com/search";
+  const configuredBase = clean(env.gigsbergBaseUrl);
+  const base = configuredBase || "https://www.gigsberg.com/search";
 
-  // If someone configured a full tracked URL already, respect it.
   const url = new URL(base);
 
   if (!url.searchParams.get("query")) {
     url.searchParams.set("query", query);
   }
 
-  if (!url.searchParams.get("aff") && clean(env.gigsbergAffiliateId)) {
-    url.searchParams.set("aff", clean(env.gigsbergAffiliateId));
+  const affiliateId = clean(env.gigsbergAffiliateId);
+  if (!url.searchParams.get("aff") && affiliateId) {
+    url.searchParams.set("aff", affiliateId);
   }
 
   return url.toString();
@@ -53,9 +54,6 @@ export async function resolveGigsbergCandidate(
   const url = buildSearchUrl(input);
   if (!url) return null;
 
-  // IMPORTANT:
-  // Gigsberg is only a soft search fallback right now.
-  // Do not score it anywhere near direct event matches from FTN / SE365.
   return {
     provider: "gigsberg",
     exact: false,
