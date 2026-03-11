@@ -44,6 +44,7 @@ app.get("/health", async () => {
     ftnConfigured: hasFtnConfig(),
     se365Configured: hasSe365Config(),
     gigsbergConfigured: hasGigsbergConfig(),
+    gigsbergBaseUrl: env.gigsbergBaseUrl,
   };
 });
 
@@ -78,6 +79,7 @@ app.get<{
       priceText: null,
       reason: "not_found",
       checkedProviders: [],
+      options: [],
       error: "homeName, awayName and kickoffIso are required",
     };
   }
@@ -154,6 +156,7 @@ app.get<{
       priceText: null,
       reason: "not_found",
       checkedProviders: [],
+      options: [],
       error: "internal_ticket_resolution_error",
     };
   }
