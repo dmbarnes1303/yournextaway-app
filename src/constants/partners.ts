@@ -1,6 +1,6 @@
 // src/constants/partners.ts
-// Canonical affiliate registry WITH TRACKED BUILDERS
-// Used by Trip + Smart Booking
+// Canonical affiliate registry with tracked builders.
+// Used by Trip, Match and Smart Booking flows.
 
 export type PartnerCategory =
   | "tickets"
@@ -26,7 +26,7 @@ export type Partner = {
 };
 
 /* ------------------------------------------------------------------ */
-/* YOUR REAL AFFILIATE IDS                                            */
+/* YOUR AFFILIATE CONFIG                                              */
 /* ------------------------------------------------------------------ */
 
 export const AffiliateConfig = {
@@ -46,17 +46,22 @@ export const AffiliateConfig = {
 /* Helpers                                                            */
 /* ------------------------------------------------------------------ */
 
-function enc(v: any) {
-  return encodeURIComponent(String(v ?? "").trim());
+function clean(v: unknown): string {
+  return String(v ?? "").trim();
+}
+
+function enc(v: unknown) {
+  return encodeURIComponent(clean(v));
 }
 
 function ymd(v?: string | null) {
-  if (!v) return null;
-  return String(v).slice(0, 10);
+  const value = clean(v);
+  if (!value) return null;
+  return value.slice(0, 10);
 }
 
 function slugCity(city: string) {
-  return String(city)
+  return clean(city)
     .toLowerCase()
     .replace(/&/g, "and")
     .replace(/[^a-z0-9\s-]/g, "")
@@ -64,45 +69,79 @@ function slugCity(city: string) {
     .replace(/\s+/g, "-");
 }
 
+function googleSearchUrl(query: string) {
+  return `https://www.google.com/search?q=${enc(query)}`;
+}
+
+function appendQuery(
+  base: string,
+  params: Record<string, string | null | undefined>
+) {
+  const safeBase = clean(base);
+  if (!safeBase) return null;
+
+  const entries = Object.entries(params).filter(([, v]) => clean(v));
+  if (!entries.length) return safeBase;
+
+  const joiner = safeBase.includes("?") ? "&" : "?";
+  const qs = entries.map(([k, v]) => `${enc(k)}=${enc(v)}`).join("&");
+  return `${safeBase}${joiner}${qs}`;
+}
+
 /* ------------------------------------------------------------------ */
 /* BUILDERS                                                           */
 /* ------------------------------------------------------------------ */
 
 function buildAviasales(ctx: AffiliateContext): string {
-  if (!ctx.city) return AffiliateConfig.aviasalesFallback;
-
+  const fallback = clean(AffiliateConfig.aviasalesFallback);
+  const city = clean(ctx.city);
   const start = ymd(ctx.startDate);
-  if (!start) return AffiliateConfig.aviasalesFallback;
 
-  // NOTE: We don’t have IATA lookup here — fallback search works fine
-  return `https://www.aviasales.com/search/${enc(ctx.city)}/${start}?marker=${AffiliateConfig.aviasalesMarker}`;
+  if (!city || !start) {
+    return fallback || googleSearchUrl(`${city || "travel"} flights`);
+  }
+
+  // This is intentionally a safe fallback builder.
+  // Real prefilled route building is handled in services/affiliateLinks.ts.
+  if (fallback) return fallback;
+
+  return googleSearchUrl(`${city} flights`);
 }
 
 function buildExpedia(ctx: AffiliateContext): string | null {
-  if (!ctx.city) return null;
+  const city = clean(ctx.city);
+  const token = clean(AffiliateConfig.expediaToken);
 
-  const slug = slugCity(ctx.city);
-  const base = `https://expedia.com/affiliates/hotel-search-${slug}.${AffiliateConfig.expediaToken}`;
+  if (!city) return googleSearchUrl("hotels");
+  if (!token) return googleSearchUrl(`${city} hotels`);
 
-  const start = ymd(ctx.startDate);
-  const end = ymd(ctx.endDate);
+  const slug = slugCity(city);
+  const base = `https://expedia.com/affiliates/hotel-search-${slug}.${token}`;
 
-  if (!start || !end) return base;
-
-  return `${base}?startDate=${start}&endDate=${end}`;
+  return appendQuery(base, {
+    startDate: ymd(ctx.startDate),
+    endDate: ymd(ctx.endDate),
+  });
 }
 
-function buildKiwitaxi(): string {
-  return AffiliateConfig.kiwitaxiTracked;
+function buildKiwitaxi(ctx: AffiliateContext): string {
+  const tracked = clean(AffiliateConfig.kiwitaxiTracked);
+  if (tracked) return tracked;
+  return googleSearchUrl(`${clean(ctx.city)} airport transfer`);
 }
 
 function buildGYG(ctx: AffiliateContext): string | null {
-  if (!ctx.city) return null;
-  return `https://www.getyourguide.com/s/?q=${enc(ctx.city)}&partner_id=${AffiliateConfig.getyourguidePartnerId}`;
+  const city = clean(ctx.city);
+  const partnerId = clean(AffiliateConfig.getyourguidePartnerId);
+
+  if (!city) return googleSearchUrl("things to do");
+  if (!partnerId) return googleSearchUrl(`${city} things to do`);
+
+  return `https://www.getyourguide.com/s/?q=${enc(city)}&partner_id=${enc(partnerId)}`;
 }
 
 function buildSE365(): string {
-  return AffiliateConfig.sportsevents365Tracked;
+  return clean(AffiliateConfig.sportsevents365Tracked) || "https://www.sportsevents365.com/";
 }
 
 /* ------------------------------------------------------------------ */
@@ -117,6 +156,14 @@ export const PARTNERS: Partner[] = [
     affiliate: true,
     api: false,
     buildUrl: buildAviasales,
+  },
+  {
+    id: "expedia",
+    name: "Expedia",
+    category: "stays",
+    affiliate: true,
+    api: false,
+    buildUrl: buildExpedia,
   },
   {
     id: "expedia_stays",
@@ -159,15 +206,12 @@ export const PARTNERS: Partner[] = [
 export type PartnerId = (typeof PARTNERS)[number]["id"];
 
 export function getPartner(id: PartnerId): Partner {
-  const p = PARTNERS.find((x) => x.id === id);
-  if (!p) throw new Error(`Unknown partner ${id}`);
-  return p;
+  const partner = PARTNERS.find((x) => x.id === id);
+  if (!partner) throw new Error(`Unknown partner ${id}`);
+  return partner;
 }
 
-export function buildPartnerUrl(
-  id: PartnerId,
-  ctx: AffiliateContext
-): string | null {
+export function buildPartnerUrl(id: PartnerId, ctx: AffiliateContext): string | null {
   try {
     return getPartner(id).buildUrl(ctx);
   } catch {
