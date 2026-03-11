@@ -56,6 +56,17 @@ const EVENTS_PER_PAGE = 25;
 const LISTINGS_PER_PAGE = 20;
 const MIN_PUBLIC_FALLBACK_SCORE = 22;
 
+const EVENT_ENDPOINT_PATHS = [
+  "/search/events",
+  "/events/search",
+  "/event/search",
+] as const;
+
+const LISTING_ENDPOINT_PATHS = [
+  "/search/listings",
+  "/listings/search",
+] as const;
+
 function clean(v: unknown): string {
   return String(v ?? "").trim();
 }
@@ -64,9 +75,28 @@ function norm(v: unknown): string {
   return clean(v).toLowerCase();
 }
 
+function uniqueStrings(values: string[]): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+
+  for (const value of values) {
+    const v = clean(value);
+    if (!v) continue;
+
+    const key = v.toLowerCase();
+    if (seen.has(key)) continue;
+
+    seen.add(key);
+    out.push(v);
+  }
+
+  return out;
+}
+
 function safeDate(v?: string | null): Date | null {
   const s = clean(v);
   if (!s) return null;
+
   const d = new Date(s);
   return Number.isNaN(d.getTime()) ? null : d;
 }
@@ -201,6 +231,28 @@ function buildListingUrl(eventNameValue: string): string {
   }
 
   return url.toString();
+}
+
+function buildApiUrl(path: string): string {
+  const base = env.gigsbergBaseUrl.replace(/\/+$/, "");
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  return `${base}${normalizedPath}`;
+}
+
+function buildEventSearchNames(input: TicketResolveInput): string[] {
+  const rawHome = clean(input.homeName);
+  const rawAway = clean(input.awayName);
+  const preferredHome = getPreferredTeamName(input.homeName);
+  const preferredAway = getPreferredTeamName(input.awayName);
+
+  return uniqueStrings([
+    `${preferredHome} ${preferredAway}`,
+    `${preferredHome} vs ${preferredAway}`,
+    `${rawHome} ${rawAway}`,
+    `${rawHome} vs ${rawAway}`,
+    preferredHome,
+    rawHome,
+  ]);
 }
 
 function containsTeamsLoose(name: string, homeVariants: string[], awayVariants: string[]): boolean {
@@ -364,6 +416,31 @@ function summarizeListing(listing: GigsbergListing) {
   };
 }
 
+function eventDedupKey(ev: GigsbergEvent): string {
+  return [
+    clean(ev.id),
+    eventName(ev),
+    eventDate(ev),
+    eventVenue(ev),
+  ]
+    .join("|")
+    .toLowerCase();
+}
+
+function dedupeEvents(events: GigsbergEvent[]): GigsbergEvent[] {
+  const map = new Map<string, GigsbergEvent>();
+
+  for (const ev of events) {
+    const key = eventDedupKey(ev);
+    if (!key.replace(/\|/g, "")) continue;
+    if (!map.has(key)) {
+      map.set(key, ev);
+    }
+  }
+
+  return Array.from(map.values());
+}
+
 async function fetchWithTimeout(
   url: string,
   init?: RequestInit
@@ -407,15 +484,15 @@ function safeJsonParse<T>(raw: string): T | null {
   }
 }
 
-async function searchEvents(input: TicketResolveInput): Promise<GigsbergEvent[]> {
-  const base = env.gigsbergBaseUrl.replace(/\/+$/, "");
-  const home = getPreferredTeamName(input.homeName);
-  const away = getPreferredTeamName(input.awayName);
-  const name = `${home} ${away}`.trim();
+async function tryEventEndpoint(
+  path: string,
+  input: TicketResolveInput,
+  searchName: string
+): Promise<GigsbergEvent[]> {
   const dateWindow = buildDateWindow(input.kickoffIso);
+  const url = new URL(buildApiUrl(path));
 
-  const url = new URL(`${base}/search/events`);
-  if (name) url.searchParams.set("name", name);
+  if (searchName) url.searchParams.set("name", searchName);
   if (dateWindow.dateFrom) url.searchParams.set("date_from", dateWindow.dateFrom);
   if (dateWindow.dateTo) url.searchParams.set("date_to", dateWindow.dateTo);
   url.searchParams.set("page", "1");
@@ -425,6 +502,8 @@ async function searchEvents(input: TicketResolveInput): Promise<GigsbergEvent[]>
 
   console.log("[Gigsberg] events request start", {
     requestUrl: url.toString(),
+    endpointPath: path,
+    searchName,
     homeName: clean(input.homeName),
     awayName: clean(input.awayName),
     kickoffIso: clean(input.kickoffIso),
@@ -437,6 +516,8 @@ async function searchEvents(input: TicketResolveInput): Promise<GigsbergEvent[]>
     response = await fetchWithTimeout(url.toString(), { method: "GET" });
   } catch (error) {
     console.log("[Gigsberg] events request failed", {
+      endpointPath: path,
+      searchName,
       message: error instanceof Error ? error.message : String(error),
     });
     return [];
@@ -444,6 +525,8 @@ async function searchEvents(input: TicketResolveInput): Promise<GigsbergEvent[]>
 
   if (!response.ok) {
     console.log("[Gigsberg] events non-200 response", {
+      endpointPath: path,
+      searchName,
       status: response.status,
       body: response.body.slice(0, 500),
       requestUrl: url.toString(),
@@ -455,6 +538,8 @@ async function searchEvents(input: TicketResolveInput): Promise<GigsbergEvent[]>
   const events = Array.isArray(parsed?.data) ? parsed.data : [];
 
   console.log("[Gigsberg] events response", {
+    endpointPath: path,
+    searchName,
     count: events.length,
     sample: events.slice(0, 5).map(summarizeEvent),
   });
@@ -462,9 +547,34 @@ async function searchEvents(input: TicketResolveInput): Promise<GigsbergEvent[]>
   return events;
 }
 
-async function searchListingsForEvent(eventId: string): Promise<GigsbergListing[]> {
-  const base = env.gigsbergBaseUrl.replace(/\/+$/, "");
-  const url = `${base}/search/listings`;
+async function searchEvents(input: TicketResolveInput): Promise<GigsbergEvent[]> {
+  const searchNames = buildEventSearchNames(input);
+  const allEvents: GigsbergEvent[] = [];
+
+  for (const searchName of searchNames) {
+    for (const path of EVENT_ENDPOINT_PATHS) {
+      const events = await tryEventEndpoint(path, input, searchName);
+
+      if (events.length > 0) {
+        allEvents.push(...events);
+
+        const deduped = dedupeEvents(allEvents);
+        if (deduped.length >= 10) {
+          return deduped;
+        }
+      }
+    }
+
+    if (allEvents.length > 0) {
+      break;
+    }
+  }
+
+  return dedupeEvents(allEvents);
+}
+
+async function tryListingsEndpoint(path: string, eventId: string): Promise<GigsbergListing[]> {
+  const url = buildApiUrl(path);
 
   const body = {
     event_id: Number.isFinite(Number(eventId)) ? Number(eventId) : eventId,
@@ -472,6 +582,7 @@ async function searchListingsForEvent(eventId: string): Promise<GigsbergListing[
   };
 
   console.log("[Gigsberg] listings request start", {
+    endpointPath: path,
     eventId,
     requestUrl: url,
     body,
@@ -488,6 +599,7 @@ async function searchListingsForEvent(eventId: string): Promise<GigsbergListing[
     });
   } catch (error) {
     console.log("[Gigsberg] listings request failed", {
+      endpointPath: path,
       eventId,
       message: error instanceof Error ? error.message : String(error),
     });
@@ -496,6 +608,7 @@ async function searchListingsForEvent(eventId: string): Promise<GigsbergListing[
 
   if (!response.ok) {
     console.log("[Gigsberg] listings non-200 response", {
+      endpointPath: path,
       eventId,
       status: response.status,
       body: response.body.slice(0, 500),
@@ -510,12 +623,24 @@ async function searchListingsForEvent(eventId: string): Promise<GigsbergListing[
     : [];
 
   console.log("[Gigsberg] listings response", {
+    endpointPath: path,
     eventId,
     count: listings.length,
     sample: listings.slice(0, 5).map(summarizeListing),
   });
 
   return listings;
+}
+
+async function searchListingsForEvent(eventId: string): Promise<GigsbergListing[]> {
+  for (const path of LISTING_ENDPOINT_PATHS) {
+    const listings = await tryListingsEndpoint(path, eventId);
+    if (listings.length > 0) {
+      return listings;
+    }
+  }
+
+  return [];
 }
 
 export async function resolveGigsbergCandidate(
@@ -687,4 +812,4 @@ export async function resolveGigsbergCandidate(
     priceText: bestListing ? listingPriceText(bestListing.listing) : null,
     reason: exact ? "exact_event" : "partial_match",
   };
-}
+  }
