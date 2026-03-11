@@ -1,4 +1,3 @@
-// app/trip/[id].tsx
 import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
@@ -44,7 +43,7 @@ import { confirmBookedAndOfferProof } from "@/src/services/bookingProof";
 import { getFixtureCertainty } from "@/src/utils/fixtureCertainty";
 
 import { resolveAffiliateUrl } from "@/src/services/partnerLinks";
-import { resolveTicketForFixture } from "@/src/services/ticketResolver";
+import { resolveTicketForFixture, type TicketResolutionResult } from "@/src/services/ticketResolver";
 
 import { getIataCityCodeForCity, debugCityKey } from "@/src/data/iataCityCodes";
 import { getMatchdayLogistics, buildLogisticsSnippet } from "@/src/data/matchdayLogistics";
@@ -60,6 +59,10 @@ import type { RankedTrip, TravelDifficulty } from "@/src/features/tripFinder/typ
 
 declare const __DEV__: boolean;
 const DEV = typeof __DEV__ === "boolean" ? __DEV__ : false;
+
+function clean(v: unknown): string {
+  return String(v ?? "").trim();
+}
 
 function coerceId(v: unknown): string | null {
   if (typeof v === "string") return v.trim() || null;
@@ -167,13 +170,13 @@ function buildMetaLine(item: SavedItem) {
 }
 
 function livePriceLine(item: SavedItem): string | null {
-  const hasUrl = !!String(item.partnerUrl ?? "").trim();
+  const hasUrl = !!clean(item.partnerUrl);
   if (!hasUrl) return null;
 
-  const resolvedPrice = String(item.metadata?.resolvedPriceText ?? "").trim();
+  const resolvedPrice = clean(item.metadata?.resolvedPriceText);
 
   if (item.status === "booked") {
-    const p = String(item.priceText ?? "").trim() || resolvedPrice;
+    const p = clean(item.priceText) || resolvedPrice;
     return p ? p : null;
   }
 
@@ -189,9 +192,9 @@ function livePriceLine(item: SavedItem): string | null {
 }
 
 function initials(name: string) {
-  const clean = String(name ?? "").trim();
-  if (!clean) return "—";
-  const parts = clean.split(/\s+/g).filter(Boolean);
+  const cleanName = clean(name);
+  if (!cleanName) return "—";
+  const parts = cleanName.split(/\s+/g).filter(Boolean);
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
   return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
 }
@@ -209,10 +212,8 @@ function TeamCrest({ name, logo }: { name: string; logo?: string | null }) {
 }
 
 function safeFixtureTitle(r: FixtureListRow | null | undefined, fallbackId: string, trip?: Trip | null) {
-  const home =
-    String((r as any)?.teams?.home?.name ?? "").trim() || String((trip as any)?.homeName ?? "").trim();
-  const away =
-    String((r as any)?.teams?.away?.name ?? "").trim() || String((trip as any)?.awayName ?? "").trim();
+  const home = clean((r as any)?.teams?.home?.name) || clean((trip as any)?.homeName);
+  const away = clean((r as any)?.teams?.away?.name) || clean((trip as any)?.awayName);
   if (home && away) return `${home} vs ${away}`;
   if (home) return `${home} match`;
   if (away) return `${away} match`;
@@ -220,14 +221,14 @@ function safeFixtureTitle(r: FixtureListRow | null | undefined, fallbackId: stri
 }
 
 function parseIsoToDate(iso?: string | null): Date | null {
-  const s = String(iso ?? "").trim();
+  const s = clean(iso);
   if (!s) return null;
   const d = new Date(s);
   return Number.isFinite(d.getTime()) ? d : null;
 }
 
 function isoDateOnlyFromKickoffIso(kickoffIso?: string | null): string | null {
-  const raw = String(kickoffIso ?? "").trim();
+  const raw = clean(kickoffIso);
   if (!raw) return null;
   if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
   const d = new Date(raw);
@@ -243,12 +244,12 @@ function formatKickoffMeta(
   trip?: Trip | null
 ): { line: string; tbc: boolean; iso: string | null } {
   const isoRaw = (row as any)?.fixture?.date ?? (trip as any)?.kickoffIso;
-  const iso = String(isoRaw ?? "").trim() || null;
+  const iso = clean(isoRaw) || null;
 
   const d = parseIsoToDate(iso);
 
-  const short = String((row as any)?.fixture?.status?.short ?? "").trim().toUpperCase();
-  const long = String((row as any)?.fixture?.status?.long ?? "").trim();
+  const short = clean((row as any)?.fixture?.status?.short).toUpperCase();
+  const long = clean((row as any)?.fixture?.status?.long);
 
   const looksTbc = short === "TBD" || short === "TBA" || short === "NS" || short === "PST";
   const snapTbc = Boolean((trip as any)?.kickoffTbc);
@@ -271,7 +272,7 @@ function formatKickoffMeta(
 }
 
 function titleCaseCity(s: string) {
-  const v = String(s ?? "").trim();
+  const v = clean(s);
   if (!v) return "Trip";
   const looksSlug = v.includes("-") && v === v.toLowerCase();
   const base = looksSlug ? v.replace(/-/g, " ") : v;
@@ -283,7 +284,7 @@ function titleCaseCity(s: string) {
 }
 
 function buildMapsSearchUrl(query: string) {
-  const q = encodeURIComponent(String(query ?? "").trim());
+  const q = encodeURIComponent(clean(query));
   return `https://www.google.com/maps/search/?api=1&query=${q}`;
 }
 
@@ -292,14 +293,14 @@ function buildMapsDirectionsUrl(
   destination: string,
   mode: "transit" | "walking" | "driving" = "transit"
 ) {
-  const o = encodeURIComponent(String(origin ?? "").trim());
-  const d = encodeURIComponent(String(destination ?? "").trim());
+  const o = encodeURIComponent(clean(origin));
+  const d = encodeURIComponent(clean(destination));
   const m = encodeURIComponent(mode);
   return `https://www.google.com/maps/dir/?api=1&origin=${o}&destination=${d}&travelmode=${m}`;
 }
 
 function isLateKickoff(kickoffIso?: string | null): boolean {
-  const iso = String(kickoffIso ?? "").trim();
+  const iso = clean(kickoffIso);
   if (!iso) return false;
   const d = new Date(iso);
   if (!Number.isFinite(d.getTime())) return false;
@@ -327,7 +328,7 @@ function proCapHint(cap: number, tripCount: number) {
 }
 
 function safeUri(u: unknown): string | null {
-  const s = String(u ?? "").trim();
+  const s = clean(u);
   if (!s) return null;
   if (!/^https?:\/\//i.test(s)) return null;
   return s;
@@ -353,15 +354,49 @@ function rankReasonsText(trip: RankedTrip | null): string | null {
 }
 
 function mapTicketProviderToPartnerId(provider?: string | null): PartnerId {
-  const raw = String(provider ?? "").trim().toLowerCase();
-
+  const raw = clean(provider).toLowerCase();
   if (raw === "footballticketsnet") return "footballticketsnet" as PartnerId;
   if (raw === "gigsberg") return "gigsberg" as PartnerId;
   return "sportsevents365" as PartnerId;
 }
 
+function ticketResolverFailureMessage(resolved: TicketResolutionResult | null): string {
+  if (!resolved) {
+    return "Ticket resolver didn’t respond. Check backend URL/server.";
+  }
+
+  const checkedProviders = Array.isArray(resolved.checkedProviders)
+    ? resolved.checkedProviders.filter(Boolean).join(", ")
+    : "";
+
+  const error = clean((resolved as any)?.error);
+
+  if (error === "network_error") {
+    return "Ticket backend couldn’t be reached. Check backend URL/server.";
+  }
+
+  if (error === "invalid_backend_json") {
+    return "Ticket backend returned invalid JSON.";
+  }
+
+  if (error && error.startsWith("http_")) {
+    return checkedProviders
+      ? `No suitable ticket listing found. Checked: ${checkedProviders}.`
+      : "No suitable ticket listing found.";
+  }
+
+  return checkedProviders
+    ? `No suitable ticket listing found. Checked: ${checkedProviders}.`
+    : "No suitable ticket listing found.";
+}
+
+function smartButtonSubtitle(item: SavedItem | null, fallback: string) {
+  if (!item) return fallback;
+  return livePriceLine(item) || statusLabel(item.status);
+}
+
 /* -------------------------------------------------------------------------- */
-/* screen                                                                      */
+/* screen                                                                     */
 /* -------------------------------------------------------------------------- */
 
 const PLAN_STORAGE_KEY = "yna:plan";
@@ -473,14 +508,14 @@ export default function TripDetailScreen() {
   }, []);
 
   const matchIds = useMemo(() => {
-    const raw = Array.isArray(trip?.matchIds) ? trip!.matchIds : [];
+    const raw = Array.isArray(trip?.matchIds) ? trip.matchIds : [];
     return raw.map((x) => String(x).trim()).filter(Boolean);
   }, [trip?.matchIds]);
 
   const numericMatchIds = useMemo(() => matchIds.filter(isNumericId), [matchIds]);
 
   const primaryMatchId = useMemo(() => {
-    const preferred = String((trip as any)?.fixtureIdPrimary ?? "").trim();
+    const preferred = clean((trip as any)?.fixtureIdPrimary);
     if (preferred && numericMatchIds.includes(preferred)) return preferred;
     return numericMatchIds[0] ?? null;
   }, [trip, numericMatchIds]);
@@ -503,7 +538,7 @@ export default function TripDetailScreen() {
         const map: Record<string, FixtureListRow> = {};
         for (const id of ids) {
           try {
-            const r = await getFixtureById(Number(String(id)));
+            const r = await getFixtureById(Number(id));
             if (r) map[String(id)] = r;
           } catch {}
         }
@@ -527,15 +562,15 @@ export default function TripDetailScreen() {
   }, [primaryMatchId, fixturesById]);
 
   const cityNameRaw = useMemo(() => {
-    const snapCity = String((trip as any)?.displayCity ?? "").trim();
+    const snapCity = clean((trip as any)?.displayCity);
     if (snapCity) return snapCity;
 
-    const snapVenueCity = String((trip as any)?.city ?? "").trim();
+    const snapVenueCity = clean((trip as any)?.city);
     if (snapVenueCity) return snapVenueCity;
 
     if (trip?.cityId) return trip.cityId;
 
-    return String((primaryFixture as any)?.fixture?.venue?.city ?? "").trim() || "Trip";
+    return clean((primaryFixture as any)?.fixture?.venue?.city) || "Trip";
   }, [trip, primaryFixture]);
 
   const cityName = useMemo(() => titleCaseCity(cityNameRaw), [cityNameRaw]);
@@ -549,7 +584,7 @@ export default function TripDetailScreen() {
 
   const affiliateCtx = useMemo(() => {
     if (!trip) return null;
-    const city = String(cityName ?? "").trim();
+    const city = clean(cityName);
     if (!city || city === "Trip") return null;
 
     return {
@@ -584,19 +619,19 @@ export default function TripDetailScreen() {
   );
 
   const primaryHomeName = useMemo(() => {
-    const fromFixture = String((primaryFixture as any)?.teams?.home?.name ?? "").trim();
+    const fromFixture = clean((primaryFixture as any)?.teams?.home?.name);
     if (fromFixture) return fromFixture;
-    return String((trip as any)?.homeName ?? "").trim();
+    return clean((trip as any)?.homeName);
   }, [primaryFixture, trip]);
 
   const primaryLeagueName = useMemo(() => {
-    const fromFixture = String((primaryFixture as any)?.league?.name ?? "").trim();
+    const fromFixture = clean((primaryFixture as any)?.league?.name);
     if (fromFixture) return fromFixture;
-    return String((trip as any)?.leagueName ?? "").trim();
+    return clean((trip as any)?.leagueName);
   }, [primaryFixture, trip]);
 
   const primaryKickoffIso = useMemo(() => {
-    const iso = String((primaryFixture as any)?.fixture?.date ?? (trip as any)?.kickoffIso ?? "").trim();
+    const iso = clean((primaryFixture as any)?.fixture?.date ?? (trip as any)?.kickoffIso);
     return iso || null;
   }, [primaryFixture, trip]);
 
@@ -611,9 +646,9 @@ export default function TripDetailScreen() {
     return primaryLogistics ? buildLogisticsSnippet(primaryLogistics) : "";
   }, [primaryLogistics]);
 
-  const stadiumName = useMemo(() => String((primaryLogistics as any)?.stadium ?? "").trim(), [primaryLogistics]);
+  const stadiumName = useMemo(() => clean((primaryLogistics as any)?.stadium), [primaryLogistics]);
   const stadiumCity = useMemo(
-    () => String((primaryLogistics as any)?.city ?? cityName ?? "").trim(),
+    () => clean((primaryLogistics as any)?.city ?? cityName),
     [primaryLogistics, cityName]
   );
 
@@ -624,50 +659,50 @@ export default function TripDetailScreen() {
 
   const stayBestAreas = useMemo(() => {
     const arr = Array.isArray((primaryLogistics as any)?.stay?.bestAreas)
-      ? (primaryLogistics as any)!.stay!.bestAreas
+      ? (primaryLogistics as any).stay.bestAreas
       : [];
     return arr
       .map((x: any) => ({
-        area: String(x?.area ?? "").trim(),
-        notes: String(x?.notes ?? "").trim(),
+        area: clean(x?.area),
+        notes: clean(x?.notes),
       }))
       .filter((x: any) => x.area);
   }, [primaryLogistics]);
 
   const stayBudgetAreas = useMemo(() => {
     const arr = Array.isArray((primaryLogistics as any)?.stay?.budgetAreas)
-      ? (primaryLogistics as any)!.stay!.budgetAreas
+      ? (primaryLogistics as any).stay.budgetAreas
       : [];
     return arr
       .map((x: any) => ({
-        area: String(x?.area ?? "").trim(),
-        notes: String(x?.notes ?? "").trim(),
+        area: clean(x?.area),
+        notes: clean(x?.notes),
       }))
       .filter((x: any) => x.area);
   }, [primaryLogistics]);
 
   const transportStops = useMemo(() => {
     const stops = Array.isArray((primaryLogistics as any)?.transport?.primaryStops)
-      ? (primaryLogistics as any)!.transport!.primaryStops
+      ? (primaryLogistics as any).transport.primaryStops
       : [];
     return stops
       .slice(0, 3)
-      .map((s: any) => `${String(s?.name ?? "").trim()}${s?.notes ? ` — ${String(s.notes).trim()}` : ""}`)
+      .map((s: any) => `${clean(s?.name)}${s?.notes ? ` — ${clean(s.notes)}` : ""}`)
       .filter(Boolean);
   }, [primaryLogistics]);
 
   const transportTips = useMemo(() => {
     const tips = Array.isArray((primaryLogistics as any)?.transport?.tips)
-      ? (primaryLogistics as any)!.transport!.tips
+      ? (primaryLogistics as any).transport.tips
       : [];
     return tips
       .slice(0, 3)
-      .map((t: any) => String(t).trim())
+      .map((t: any) => clean(t))
       .filter(Boolean);
   }, [primaryLogistics]);
 
   const lateTransportNote = useMemo(() => {
-    const explicit = String((primaryLogistics as any)?.transport?.lateNightNote ?? "").trim();
+    const explicit = clean((primaryLogistics as any)?.transport?.lateNightNote);
     if (explicit) return explicit;
     if (isLateKickoff(primaryKickoffIso)) {
       return "Late kickoff: check last trains/metros and pre-book a taxi/Uber fallback after the match.";
@@ -712,11 +747,11 @@ export default function TripDetailScreen() {
   }, [rankedTrip]);
 
   function getTicketItemForFixture(matchId: string): SavedItem | null {
-    const mid = String(matchId ?? "").trim();
+    const mid = clean(matchId);
     if (!mid) return null;
 
     const candidates = savedItems.filter((x) => x.type === "tickets" && x.status !== "archived");
-    const byFixtureId = candidates.filter((x) => String((x.metadata as any)?.fixtureId ?? "").trim() === mid);
+    const byFixtureId = candidates.filter((x) => clean((x.metadata as any)?.fixtureId) === mid);
     const pool = byFixtureId.length > 0 ? byFixtureId : candidates;
 
     return (
@@ -743,7 +778,7 @@ export default function TripDetailScreen() {
   useEffect(() => {
     if (!DEV) return;
 
-    const city = String(cityName ?? "").trim();
+    const city = clean(cityName);
     if (!city || city === "Trip") return;
 
     const code = getIataCityCodeForCity(city);
@@ -827,7 +862,7 @@ export default function TripDetailScreen() {
       return;
     }
 
-    if (args.partnerId === "googlemaps") {
+    if (args.partnerId === ("googlemaps" as any)) {
       await openUntracked(args.url);
       return;
     }
@@ -848,7 +883,7 @@ export default function TripDetailScreen() {
 
   async function openSavedItem(item: SavedItem) {
     if (!item.partnerUrl) {
-      const text = String(item.metadata?.text ?? "").trim();
+      const text = clean(item.metadata?.text);
       Alert.alert(item.title || "Notes", text || "No details saved.");
       return;
     }
@@ -858,7 +893,7 @@ export default function TripDetailScreen() {
       return;
     }
 
-    const pid = String(item.partnerId ?? "").trim();
+    const pid = clean(item.partnerId);
     if (!pid || pid === "googlemaps") {
       await openUntracked(item.partnerUrl);
       return;
@@ -968,7 +1003,7 @@ export default function TripDetailScreen() {
   }
 
   function openNoteActions(item: SavedItem) {
-    const text = String(item.metadata?.text ?? "").trim();
+    const text = clean(item.metadata?.text);
     Alert.alert(
       item.title || "Notes",
       text || "No details saved.",
@@ -1000,22 +1035,22 @@ export default function TripDetailScreen() {
 
   async function setPrimaryMatch(matchId: string) {
     if (!trip) return;
-    const mid = String(matchId ?? "").trim();
+    const mid = clean(matchId);
     if (!mid) return;
 
-    if (mid === String((trip as any)?.fixtureIdPrimary ?? "").trim()) return;
+    if (mid === clean((trip as any)?.fixtureIdPrimary)) return;
 
     const r = fixturesById[mid] ?? null;
 
-    const homeName = String((r as any)?.teams?.home?.name ?? "").trim() || undefined;
-    const awayName = String((r as any)?.teams?.away?.name ?? "").trim() || undefined;
+    const homeName = clean((r as any)?.teams?.home?.name) || undefined;
+    const awayName = clean((r as any)?.teams?.away?.name) || undefined;
 
-    const leagueName = String((r as any)?.league?.name ?? "").trim() || undefined;
+    const leagueName = clean((r as any)?.league?.name) || undefined;
     const leagueId = typeof (r as any)?.league?.id === "number" ? (r as any).league.id : undefined;
 
-    const kickoffIso = String((r as any)?.fixture?.date ?? "").trim() || undefined;
+    const kickoffIso = clean((r as any)?.fixture?.date) || undefined;
 
-    const statusShort = String((r as any)?.fixture?.status?.short ?? "").trim().toUpperCase();
+    const statusShort = clean((r as any)?.fixture?.status?.short).toUpperCase();
     const midnight = kickoffIso
       ? (() => {
           const d = new Date(kickoffIso);
@@ -1026,8 +1061,8 @@ export default function TripDetailScreen() {
     const kickoffTbc =
       statusShort === "TBD" || statusShort === "TBA" || statusShort === "NS" || statusShort === "PST" || midnight;
 
-    const venueName = String((r as any)?.fixture?.venue?.name ?? "").trim() || undefined;
-    const venueCity = String((r as any)?.fixture?.venue?.city ?? "").trim() || undefined;
+    const venueName = clean((r as any)?.fixture?.venue?.name) || undefined;
+    const venueCity = clean((r as any)?.fixture?.venue?.city) || undefined;
 
     try {
       await tripsStore.setPrimaryMatchForTrip(trip.id, mid);
@@ -1051,7 +1086,7 @@ export default function TripDetailScreen() {
 
   async function removeMatch(matchId: string) {
     if (!trip) return;
-    const mid = String(matchId ?? "").trim();
+    const mid = clean(matchId);
     if (!mid) return;
 
     const count = Array.isArray(trip.matchIds) ? trip.matchIds.length : 0;
@@ -1078,8 +1113,8 @@ export default function TripDetailScreen() {
 
   function openMatchActions(matchId: string) {
     if (!trip) return;
-    const mid = String(matchId ?? "").trim();
-    const isPrimary = mid && mid === String((trip as any)?.fixtureIdPrimary ?? "").trim();
+    const mid = clean(matchId);
+    const isPrimary = mid && mid === clean((trip as any)?.fixtureIdPrimary);
 
     Alert.alert(
       "Match options",
@@ -1093,7 +1128,7 @@ export default function TripDetailScreen() {
   }
 
   async function openTicketsForMatch(matchId: string) {
-    const mid = String(matchId ?? "").trim();
+    const mid = clean(matchId);
     if (!mid) return;
 
     if (!tripId) {
@@ -1109,11 +1144,11 @@ export default function TripDetailScreen() {
 
     const r = fixturesById[mid] ?? null;
 
-    const homeName = String((r as any)?.teams?.home?.name ?? (trip as any)?.homeName ?? "").trim();
-    const awayName = String((r as any)?.teams?.away?.name ?? (trip as any)?.awayName ?? "").trim();
-    const kickoffIso = String((r as any)?.fixture?.date ?? (trip as any)?.kickoffIso ?? "").trim() || null;
+    const homeName = clean((r as any)?.teams?.home?.name ?? (trip as any)?.homeName);
+    const awayName = clean((r as any)?.teams?.away?.name ?? (trip as any)?.awayName);
+    const kickoffIso = clean((r as any)?.fixture?.date ?? (trip as any)?.kickoffIso) || null;
 
-    const leagueName = String((r as any)?.league?.name ?? (trip as any)?.leagueName ?? "").trim() || undefined;
+    const leagueName = clean((r as any)?.league?.name ?? (trip as any)?.leagueName) || undefined;
     const leagueIdRaw = (r as any)?.league?.id ?? (trip as any)?.leagueId;
     const leagueId = typeof leagueIdRaw === "number" || typeof leagueIdRaw === "string" ? leagueIdRaw : undefined;
 
@@ -1135,7 +1170,7 @@ export default function TripDetailScreen() {
       });
 
       if (!resolved?.ok || !resolved.url) {
-        Alert.alert("Tickets not found", "We couldn’t find a suitable tickets listing for this match.");
+        Alert.alert("Tickets not found", ticketResolverFailureMessage(resolved));
         return;
       }
 
@@ -1159,13 +1194,11 @@ export default function TripDetailScreen() {
           resolvedPriceText: resolved.priceText ?? null,
           resolutionReason: resolved.reason ?? null,
           exactMatch: Boolean(resolved.exact),
-          checkedProviders: Array.isArray((resolved as any)?.checkedProviders)
-            ? (resolved as any).checkedProviders
-            : undefined,
+          checkedProviders: Array.isArray(resolved.checkedProviders) ? resolved.checkedProviders : undefined,
         },
       });
     } catch {
-      Alert.alert("Tickets unavailable", "Ticket search failed. Please try again.");
+      Alert.alert("Tickets unavailable", "Ticket search failed before the partner click was created.");
     }
   }
 
@@ -1448,9 +1481,7 @@ export default function TripDetailScreen() {
     if (!presentByType.hasTickets && primaryMatchId) {
       add(
         "Tickets",
-        primaryTicketItem
-          ? livePriceLine(primaryTicketItem) || statusLabel(primaryTicketItem.status)
-          : "Best live option",
+        smartButtonSubtitle(primaryTicketItem, "Resolver-backed live option"),
         () => openTicketsForMatch(primaryMatchId),
         "primary"
       );
@@ -1662,19 +1693,19 @@ export default function TripDetailScreen() {
                       const r = fixturesById[String(mid)];
                       const title = safeFixtureTitle(r, mid, trip);
 
-                      const leagueName = String((r as any)?.league?.name ?? (trip as any)?.leagueName ?? "").trim();
-                      const round = String((r as any)?.league?.round ?? "").trim();
+                      const leagueName = clean((r as any)?.league?.name ?? (trip as any)?.leagueName);
+                      const round = clean((r as any)?.league?.round);
 
-                      const venue = String((r as any)?.fixture?.venue?.name ?? (trip as any)?.venueName ?? "").trim();
-                      const city = String((r as any)?.fixture?.venue?.city ?? (trip as any)?.displayCity ?? "").trim();
+                      const venue = clean((r as any)?.fixture?.venue?.name ?? (trip as any)?.venueName);
+                      const city = clean((r as any)?.fixture?.venue?.city ?? (trip as any)?.displayCity);
 
                       const kickoff = formatKickoffMeta(r, trip);
 
                       const meta1 = [leagueName || null, round || null].filter(Boolean).join(" • ");
                       const meta2 = [venue || null, city || null].filter(Boolean).join(" • ");
 
-                      const homeName = String((r as any)?.teams?.home?.name ?? (trip as any)?.homeName ?? "Home");
-                      const awayName = String((r as any)?.teams?.away?.name ?? (trip as any)?.awayName ?? "Away");
+                      const homeName = clean((r as any)?.teams?.home?.name ?? (trip as any)?.homeName ?? "Home");
+                      const awayName = clean((r as any)?.teams?.away?.name ?? (trip as any)?.awayName ?? "Away");
 
                       const homeLogo = safeUri((r as any)?.teams?.home?.logo);
                       const awayLogo = safeUri((r as any)?.teams?.away?.logo);
@@ -1742,7 +1773,7 @@ export default function TripDetailScreen() {
                               <Text style={styles.matchHint} numberOfLines={1}>
                                 {ticketItem
                                   ? livePriceLine(ticketItem) || `Tap to open tickets (${statusLabel(ticketItem.status)})`
-                                  : "Tap to open best live ticket option • Hold for options"}
+                                  : "Tap to open resolver-backed live ticket option • Hold for options"}
                               </Text>
                             </View>
 
@@ -2147,7 +2178,7 @@ export default function TripDetailScreen() {
 }
 
 /* -------------------------------------------------------------------------- */
-/* styles                                                                      */
+/* styles                                                                     */
 /* -------------------------------------------------------------------------- */
 
 const styles = StyleSheet.create({
@@ -2383,6 +2414,7 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
     fontWeight: "800",
     fontSize: 12,
+    textAlign: "center",
   },
 
   matchRowWrap: { gap: 8 },
