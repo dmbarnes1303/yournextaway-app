@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from "react";
-import { Alert, Image, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
@@ -17,7 +17,11 @@ import { useFixture } from "@/src/hooks/useFixtures";
 import { useTripsStore } from "@/src/state/trips";
 
 import { beginPartnerClick, openUntrackedUrl } from "@/src/services/partnerClicks";
-import { resolveTicketForFixture, type TicketResolutionResult } from "@/src/services/ticketResolver";
+import {
+  resolveTicketForFixture,
+  type TicketResolutionOption,
+  type TicketResolutionResult,
+} from "@/src/services/ticketResolver";
 
 import { getAllStadiums, getStadiumByTeamFromRegistry } from "@/src/data/stadiumRegistry";
 import type { StadiumRecord } from "@/src/data/stadiums/types";
@@ -192,7 +196,66 @@ function mapTicketProviderToPartnerId(provider?: string | null): PartnerId {
   return "sportsevents365" as PartnerId;
 }
 
-function ticketFlowSubtitle() {
+function providerLabel(provider?: string | null): string {
+  const raw = clean(provider).toLowerCase();
+  if (raw === "footballticketsnet") return "FootballTicketNet";
+  if (raw === "sportsevents365") return "SportsEvents365";
+  if (raw === "gigsberg") return "Gigsberg";
+  return provider || "Provider";
+}
+
+function confidenceLabel(score?: number | null): string {
+  const value = typeof score === "number" ? score : 0;
+  if (value >= 90) return "High confidence";
+  if (value >= 75) return "Strong match";
+  if (value >= 60) return "Good match";
+  return "Fallback";
+}
+
+function dedupeOptions(result: TicketResolutionResult | null): TicketResolutionOption[] {
+  if (!result) return [];
+
+  const input = Array.isArray(result.options) ? result.options : [];
+  const cleaned = input.filter(
+    (x) => clean(x?.provider) && clean(x?.url) && clean(x?.title)
+  );
+
+  const map = new Map<string, TicketResolutionOption>();
+  for (const option of cleaned) {
+    const key = `${clean(option.provider).toLowerCase()}|${clean(option.url)}`;
+    if (!map.has(key)) {
+      map.set(key, option);
+    }
+  }
+
+  const values = Array.from(map.values()).sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    return clean(a.priceText).localeCompare(clean(b.priceText));
+  });
+
+  if (values.length > 0) return values;
+
+  if (result.ok && clean(result.url) && clean(result.provider) && clean(result.title)) {
+    return [
+      {
+        provider: clean(result.provider),
+        exact: Boolean(result.exact),
+        score: typeof result.score === "number" ? result.score : 0,
+        url: clean(result.url),
+        title: clean(result.title),
+        priceText: clean(result.priceText) || null,
+        reason: result.reason === "exact_event" ? "exact_event" : "search_fallback",
+      },
+    ];
+  }
+
+  return [];
+}
+
+function ticketFlowSubtitle(optionCount: number) {
+  if (optionCount > 1) {
+    return `Comparison ready: ${optionCount} ticket options found.`;
+  }
   return "Resolver-backed: FTN first, SE365 next, Gigsberg as fallback.";
 }
 
@@ -222,6 +285,10 @@ function openFailureMessage(result: TicketResolutionResult | null): string {
     : "No suitable ticket match found.";
 }
 
+function isBestOption(index: number) {
+  return index === 0;
+}
+
 /* -------------------------------------------------------------------------- */
 /* Screen                                                                     */
 /* -------------------------------------------------------------------------- */
@@ -243,6 +310,8 @@ export default function MatchScreen() {
   );
 
   const [openingTickets, setOpeningTickets] = useState(false);
+  const [ticketResult, setTicketResult] = useState<TicketResolutionResult | null>(null);
+  const [activeProviderUrl, setActiveProviderUrl] = useState<string | null>(null);
 
   const homeName = useMemo(
     () => clean((trip as any)?.homeName ?? (fixture as any)?.teams?.home?.name),
@@ -350,6 +419,9 @@ export default function MatchScreen() {
     return `This trip is built around ${homeName} at home — host city, host stadium, home-side planning.`;
   }, [homeName]);
 
+  const ticketOptions = useMemo(() => dedupeOptions(ticketResult), [ticketResult]);
+  const bestOption = ticketOptions[0] ?? null;
+
   const goBack = useCallback(() => {
     if (tripId) {
       router.push({ pathname: "/trip/[id]", params: { id: tripId } } as any);
@@ -368,6 +440,57 @@ export default function MatchScreen() {
       Alert.alert("Couldn’t open maps");
     }
   }, [venueName, venueCity, venueText]);
+
+  async function openTicketOption(option: TicketResolutionOption) {
+    if (!tripId) {
+      Alert.alert(
+        "Open from a trip",
+        "Open this match from a Trip Workspace so ticket clicks can be saved into Wallet."
+      );
+      return;
+    }
+
+    const url = clean(option.url);
+    if (!url) {
+      Alert.alert("Couldn’t open tickets");
+      return;
+    }
+
+    setActiveProviderUrl(url);
+
+    try {
+      await beginPartnerClick({
+        tripId,
+        partnerId: mapTicketProviderToPartnerId(option.provider),
+        url,
+        savedItemType: "tickets",
+        title: clean(option.title) || `Tickets: ${homeName} vs ${awayName}`,
+        metadata: {
+          fixtureId,
+          leagueId,
+          leagueName,
+          dateIso,
+          kickoffIso,
+          homeName,
+          awayName,
+          priceMode: "live",
+          ticketProvider: clean(option.provider) || null,
+          resolvedPriceText: clean(option.priceText) || null,
+          resolutionReason: option.reason ?? null,
+          exactMatch: Boolean(option.exact),
+          score: option.score,
+          checkedProviders: Array.isArray(ticketResult?.checkedProviders)
+            ? ticketResult?.checkedProviders
+            : undefined,
+          optionCount: ticketOptions.length,
+        },
+      });
+    } catch {
+      Alert.alert("Couldn’t open tickets", "Ticket flow failed before the partner click was created.");
+    } finally {
+      setActiveProviderUrl(null);
+    }
+  }
 
   async function openTickets() {
     if (openingTickets) return;
@@ -400,37 +523,24 @@ export default function MatchScreen() {
         leagueId,
       });
 
-      if (!resolved?.ok || !resolved.url) {
+      setTicketResult(resolved);
+
+      const options = dedupeOptions(resolved);
+
+      if (!resolved?.ok || options.length === 0) {
         Alert.alert("Tickets not found", openFailureMessage(resolved));
         return;
       }
 
-      const partnerId = mapTicketProviderToPartnerId(resolved.provider);
+      if (options.length === 1) {
+        await openTicketOption(options[0]);
+        return;
+      }
 
-      await beginPartnerClick({
-        tripId,
-        partnerId,
-        url: resolved.url,
-        savedItemType: "tickets",
-        title: resolved.title || `Tickets: ${homeName} vs ${awayName}`,
-        metadata: {
-          fixtureId,
-          leagueId,
-          leagueName,
-          dateIso,
-          kickoffIso,
-          homeName,
-          awayName,
-          priceMode: "live",
-          ticketProvider: resolved.provider ?? null,
-          resolvedPriceText: resolved.priceText ?? null,
-          resolutionReason: resolved.reason ?? null,
-          exactMatch: Boolean(resolved.exact),
-          checkedProviders: Array.isArray(resolved.checkedProviders)
-            ? resolved.checkedProviders
-            : undefined,
-        },
-      });
+      Alert.alert(
+        "Ticket options ready",
+        `Found ${options.length} providers. Compare them below before choosing.`
+      );
     } catch {
       Alert.alert("Couldn’t open tickets", "Ticket flow failed before the partner click was created.");
     } finally {
@@ -531,7 +641,7 @@ export default function MatchScreen() {
               </View>
 
               <View style={styles.heroHints}>
-                <Chip label="Tickets: resolver-backed" variant="primary" />
+                <Chip label="Tickets: comparison-ready" variant="primary" />
                 <Chip label="Hotels: live price" variant="default" />
                 <Chip label={resolvedStadium ? "Travel: mapped" : "Travel: limited"} variant="default" />
               </View>
@@ -541,12 +651,12 @@ export default function MatchScreen() {
           <GlassCard level="default" variant="matte" style={styles.sectionCard}>
             <Text style={styles.sectionTitle}>Tickets</Text>
             <Text style={styles.sectionSub}>
-              Resolver-backed ticket flow. Best provider first, tracked click saved into Pending/Booked/Wallet.
+              Resolver-backed ticket flow. Compare providers, then open the one you actually want.
             </Text>
 
             <View style={styles.primaryActionWrap}>
               <Button
-                label={openingTickets ? "Opening…" : "Open tickets"}
+                label={openingTickets ? "Finding options…" : ticketOptions.length > 1 ? "Refresh ticket options" : "Open tickets"}
                 tone="primary"
                 loading={openingTickets}
                 onPress={openTickets}
@@ -555,8 +665,75 @@ export default function MatchScreen() {
             </View>
 
             <View style={styles.ticketHintBox}>
-              <Text style={styles.ticketHintText}>{ticketFlowSubtitle()}</Text>
+              <Text style={styles.ticketHintText}>{ticketFlowSubtitle(ticketOptions.length)}</Text>
             </View>
+
+            {bestOption ? (
+              <View style={styles.bestOptionBox}>
+                <Text style={styles.bestOptionLabel}>Best current option</Text>
+                <Text style={styles.bestOptionTitle}>
+                  {providerLabel(bestOption.provider)}
+                  {clean(bestOption.priceText) ? ` • ${clean(bestOption.priceText)}` : ""}
+                </Text>
+                <Text style={styles.bestOptionSub}>
+                  {confidenceLabel(bestOption.score)}
+                  {bestOption.exact ? " • Exact event match" : " • Resolver-selected"}
+                </Text>
+              </View>
+            ) : null}
+
+            {ticketOptions.length > 1 ? (
+              <View style={styles.optionsList}>
+                {ticketOptions.map((option, index) => {
+                  const provider = providerLabel(option.provider);
+                  const isOpening = activeProviderUrl === clean(option.url);
+
+                  return (
+                    <Pressable
+                      key={`${clean(option.provider)}-${clean(option.url)}-${index}`}
+                      style={[styles.optionCard, isBestOption(index) && styles.optionCardBest]}
+                      onPress={() => openTicketOption(option)}
+                    >
+                      <View style={styles.optionTopRow}>
+                        <View style={{ flex: 1 }}>
+                          <View style={styles.optionTitleRow}>
+                            <Text style={styles.optionProvider}>{provider}</Text>
+                            {isBestOption(index) ? (
+                              <View style={styles.bestBadge}>
+                                <Text style={styles.bestBadgeText}>Best</Text>
+                              </View>
+                            ) : null}
+                          </View>
+
+                          <Text style={styles.optionConfidence}>
+                            {confidenceLabel(option.score)}
+                            {option.exact ? " • Exact match" : ""}
+                          </Text>
+                        </View>
+
+                        <View style={styles.optionPriceWrap}>
+                          <Text style={styles.optionPrice}>{clean(option.priceText) || "Live price"}</Text>
+                        </View>
+                      </View>
+
+                      <Text style={styles.optionReason}>
+                        {option.reason === "exact_event"
+                          ? "Direct event match"
+                          : option.reason === "partial_match"
+                          ? "Partial match"
+                          : "Search fallback"}
+                      </Text>
+
+                      <View style={styles.optionActionRow}>
+                        <Text style={styles.optionActionText}>
+                          {isOpening ? "Opening…" : "Open provider"}
+                        </Text>
+                      </View>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            ) : null}
 
             <View style={styles.actions}>
               <Button label="Official club (search)" tone="secondary" onPress={openOfficialClub} />
@@ -648,7 +825,9 @@ export default function MatchScreen() {
             <View style={styles.nextStepsList}>
               <View style={styles.nextStepRow}>
                 <Text style={styles.nextStepNumber}>1</Text>
-                <Text style={styles.nextStepText}>Open resolver-backed tickets</Text>
+                <Text style={styles.nextStepText}>
+                  {ticketOptions.length > 1 ? "Compare ticket providers" : "Open resolver-backed tickets"}
+                </Text>
               </View>
               <View style={styles.nextStepRow}>
                 <Text style={styles.nextStepNumber}>2</Text>
@@ -873,6 +1052,127 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 17,
     fontWeight: theme.fontWeight.medium,
+  },
+
+  bestOptionBox: {
+    marginTop: 10,
+    padding: 12,
+    borderRadius: theme.borderRadius.input,
+    borderWidth: 1,
+    borderColor: "rgba(87,162,56,0.2)",
+    backgroundColor: "rgba(87,162,56,0.08)",
+    gap: 4,
+  },
+
+  bestOptionLabel: {
+    color: theme.colors.primary,
+    fontSize: 11,
+    fontWeight: theme.fontWeight.black,
+    letterSpacing: 0.5,
+  },
+
+  bestOptionTitle: {
+    color: theme.colors.textPrimary,
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: theme.fontWeight.black,
+  },
+
+  bestOptionSub: {
+    color: theme.colors.textSecondary,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: theme.fontWeight.medium,
+  },
+
+  optionsList: {
+    marginTop: 10,
+    gap: 10,
+  },
+
+  optionCard: {
+    padding: 12,
+    borderRadius: theme.borderRadius.input,
+    borderWidth: 1,
+    borderColor: theme.colors.borderSubtle,
+    backgroundColor: "rgba(255,255,255,0.03)",
+    gap: 8,
+  },
+
+  optionCardBest: {
+    borderColor: "rgba(87,162,56,0.25)",
+    backgroundColor: "rgba(87,162,56,0.08)",
+  },
+
+  optionTopRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+
+  optionTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "wrap",
+  },
+
+  optionProvider: {
+    color: theme.colors.textPrimary,
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: theme.fontWeight.black,
+  },
+
+  optionConfidence: {
+    marginTop: 4,
+    color: theme.colors.textSecondary,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: theme.fontWeight.medium,
+  },
+
+  optionPriceWrap: {
+    marginLeft: "auto",
+    alignItems: "flex-end",
+  },
+
+  optionPrice: {
+    color: theme.colors.textPrimary,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.black,
+  },
+
+  optionReason: {
+    color: theme.colors.textMuted,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: theme.fontWeight.medium,
+  },
+
+  optionActionRow: {
+    marginTop: 2,
+  },
+
+  optionActionText: {
+    color: theme.colors.primary,
+    fontSize: 12,
+    fontWeight: theme.fontWeight.black,
+  },
+
+  bestBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: "rgba(87,162,56,0.18)",
+    borderWidth: 1,
+    borderColor: "rgba(87,162,56,0.3)",
+  },
+
+  bestBadgeText: {
+    color: theme.colors.primary,
+    fontSize: 11,
+    fontWeight: theme.fontWeight.black,
   },
 
   actions: {
