@@ -1,15 +1,28 @@
-import { createApplication } from "@specific-dev/framework";
-import * as schema from "./db/schema.js";
-import { registerHelloRoutes } from "./routes/hello.js";
+import Fastify from "fastify";
 
-// Create application with schema for full database type support
-export const app = await createApplication(schema);
+const app = Fastify({
+  logger: true
+});
 
-// Export App type for use in route files
-export type App = typeof app;
+app.get("/hello", async () => {
+  return {
+    ok: true,
+    message: "YourNextAway backend is running"
+  };
+});
 
-// Register routes
-registerHelloRoutes(app);
+const start = async () => {
+  try {
+    await app.listen({
+      port: 3000,
+      host: "0.0.0.0"
+    });
 
-await app.run();
-app.logger.info("Application running");
+    console.log("Backend running on http://localhost:3000");
+  } catch (err) {
+    app.log.error(err);
+    process.exit(1);
+  }
+};
+
+start();
