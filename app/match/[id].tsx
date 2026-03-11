@@ -244,7 +244,12 @@ function dedupeOptions(result: TicketResolutionResult | null): TicketResolutionO
         url: clean(result.url),
         title: clean(result.title),
         priceText: clean(result.priceText) || null,
-        reason: result.reason === "exact_event" ? "exact_event" : "search_fallback",
+        reason:
+          result.reason === "exact_event"
+            ? "exact_event"
+            : result.reason === "partial_match"
+            ? "partial_match"
+            : "search_fallback",
       },
     ];
   }
@@ -656,7 +661,13 @@ export default function MatchScreen() {
 
             <View style={styles.primaryActionWrap}>
               <Button
-                label={openingTickets ? "Finding options…" : ticketOptions.length > 1 ? "Refresh ticket options" : "Open tickets"}
+                label={
+                  openingTickets
+                    ? "Finding options…"
+                    : ticketOptions.length > 1
+                    ? "Refresh ticket options"
+                    : "Open tickets"
+                }
                 tone="primary"
                 loading={openingTickets}
                 onPress={openTickets}
