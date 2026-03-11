@@ -20,6 +20,10 @@ function safeUrl(value: string): string {
   }
 }
 
+/* -------------------------------------------------------------------------- */
+/* SportsEvents365 tracking                                                   */
+/* -------------------------------------------------------------------------- */
+
 function extractSe365Aid(): string {
   const tracked = clean(AffiliateConfig.sportsevents365Tracked);
   if (!tracked) return "";
@@ -39,6 +43,7 @@ function appendSe365Aid(url: string): string {
 
   try {
     const parsed = new URL(safe);
+
     if (clean(parsed.searchParams.get("a_aid"))) {
       return parsed.toString();
     }
@@ -59,8 +64,21 @@ function appendSe365Aid(url: string): string {
   }
 }
 
+/* -------------------------------------------------------------------------- */
+/* Omio                                                                       */
+/* -------------------------------------------------------------------------- */
+
 const OMIO_TRACKED_URL = "https://omio.sjv.io/KBjDon";
 
+/**
+ * Omio deep-linking support is limited/uncertain here, so this builder:
+ * 1) always returns the tracked base URL if valid
+ * 2) attempts light destination/date query enrichment
+ * 3) fails safely back to the tracked URL
+ *
+ * Tomorrow, when rail/ground transport is modeled properly, this should be
+ * revisited as part of the dedicated transport architecture.
+ */
 function buildOmioUrl(ctx: {
   city: string;
   startDate?: string | null;
@@ -97,7 +115,11 @@ function buildOmioUrl(ctx: {
   }
 }
 
-export function buildAffiliateUrl(baseUrl: string, partnerId: string) {
+/* -------------------------------------------------------------------------- */
+/* Generic tracked URL wrapper                                                */
+/* -------------------------------------------------------------------------- */
+
+export function buildAffiliateUrl(baseUrl: string, partnerId: string): string {
   const url = safeUrl(baseUrl);
   const id = clean(partnerId).toLowerCase();
 
@@ -112,13 +134,21 @@ export function buildAffiliateUrl(baseUrl: string, partnerId: string) {
   }
 }
 
-export function buildTicketLink(args: { eventUrl: string }) {
+/* -------------------------------------------------------------------------- */
+/* Ticket helpers                                                             */
+/* -------------------------------------------------------------------------- */
+
+export function buildTicketLink(args: { eventUrl: string }): string | null {
   const eventUrl = clean(args.eventUrl);
   if (!eventUrl) return null;
 
   const tracked = buildAffiliateUrl(eventUrl, "sportsevents365");
   return tracked || null;
 }
+
+/* -------------------------------------------------------------------------- */
+/* Main partner resolver                                                      */
+/* -------------------------------------------------------------------------- */
 
 export function resolveAffiliateUrl(
   partnerId: string,
