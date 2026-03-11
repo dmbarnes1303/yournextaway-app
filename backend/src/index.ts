@@ -9,6 +9,18 @@ const app = Fastify({
   logger: true,
 });
 
+app.addHook("onSend", async (_request, reply, payload) => {
+  reply.header("Cache-Control", "public, max-age=60");
+  reply.header("Access-Control-Allow-Origin", "*");
+  reply.header("Access-Control-Allow-Methods", "GET,OPTIONS");
+  reply.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  return payload;
+});
+
+app.options("*", async (_request, reply) => {
+  reply.code(204).send();
+});
+
 app.get("/hello", async () => {
   return {
     ok: true,
@@ -18,8 +30,10 @@ app.get("/hello", async () => {
 
 app.get("/health", async () => {
   return {
+    ok: true,
     status: "ok",
     service: "yournextaway-backend",
+    port: env.port,
   };
 });
 
@@ -33,28 +47,72 @@ app.get<{
     leagueId?: string;
   };
 }>("/tickets/resolve", async (request, reply) => {
+  const fixtureId = String(request.query.fixtureId ?? "").trim() || undefined;
   const homeName = String(request.query.homeName ?? "").trim();
   const awayName = String(request.query.awayName ?? "").trim();
   const kickoffIso = String(request.query.kickoffIso ?? "").trim();
+  const leagueName = String(request.query.leagueName ?? "").trim() || undefined;
+  const leagueId = String(request.query.leagueId ?? "").trim() || undefined;
 
   if (!homeName || !awayName || !kickoffIso) {
     reply.code(400);
     return {
       ok: false,
+      provider: null,
+      exact: false,
+      score: null,
+      url: null,
+      title: null,
+      priceText: null,
+      reason: "not_found",
+      checkedProviders: [],
       error: "homeName, awayName and kickoffIso are required",
     };
   }
 
-  const result = await resolveTicket({
-    fixtureId: request.query.fixtureId,
-    homeName,
-    awayName,
-    kickoffIso,
-    leagueName: request.query.leagueName,
-    leagueId: request.query.leagueId,
-  });
+  try {
+    const result = await resolveTicket({
+      fixtureId,
+      homeName,
+      awayName,
+      kickoffIso,
+      leagueName,
+      leagueId,
+    });
 
-  return result;
+    if (!result.ok) {
+      reply.code(404);
+    }
+
+    return result;
+  } catch (error) {
+    request.log.error(
+      {
+        err: error,
+        fixtureId,
+        homeName,
+        awayName,
+        kickoffIso,
+        leagueName,
+        leagueId,
+      },
+      "Ticket resolution failed"
+    );
+
+    reply.code(500);
+    return {
+      ok: false,
+      provider: null,
+      exact: false,
+      score: null,
+      url: null,
+      title: null,
+      priceText: null,
+      reason: "not_found",
+      checkedProviders: [],
+      error: "internal_ticket_resolution_error",
+    };
+  }
 });
 
 const start = async () => {
@@ -64,7 +122,7 @@ const start = async () => {
       host: "0.0.0.0",
     });
 
-    console.log(`Backend running on http://localhost:${env.port}`);
+    app.log.info(`Backend running on http://localhost:${env.port}`);
   } catch (err) {
     app.log.error(err);
     process.exit(1);
