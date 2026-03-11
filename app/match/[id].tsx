@@ -204,6 +204,48 @@ function providerLabel(provider?: string | null): string {
   return provider || "Provider";
 }
 
+function providerShort(provider?: string | null): string {
+  const raw = clean(provider).toLowerCase();
+  if (raw === "footballticketsnet") return "FTN";
+  if (raw === "sportsevents365") return "365";
+  if (raw === "gigsberg") return "G";
+  return "P";
+}
+
+function providerBadgeStyle(provider?: string | null) {
+  const raw = clean(provider).toLowerCase();
+
+  if (raw === "footballticketsnet") {
+    return {
+      borderColor: "rgba(120,170,255,0.35)",
+      backgroundColor: "rgba(120,170,255,0.12)",
+      textColor: "rgba(205,225,255,1)",
+    };
+  }
+
+  if (raw === "sportsevents365") {
+    return {
+      borderColor: "rgba(87,162,56,0.35)",
+      backgroundColor: "rgba(87,162,56,0.12)",
+      textColor: "rgba(208,240,192,1)",
+    };
+  }
+
+  if (raw === "gigsberg") {
+    return {
+      borderColor: "rgba(255,200,80,0.35)",
+      backgroundColor: "rgba(255,200,80,0.12)",
+      textColor: "rgba(255,226,160,1)",
+    };
+  }
+
+  return {
+    borderColor: theme.colors.borderSubtle,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    textColor: theme.colors.textPrimary,
+  };
+}
+
 function confidenceLabel(score?: number | null): string {
   const value = typeof score === "number" ? score : 0;
   if (value >= 90) return "High confidence";
@@ -331,15 +373,15 @@ function openFailureMessage(result: TicketResolutionResult | null): string {
     ? result.checkedProviders.filter(Boolean).join(", ")
     : "";
 
-  if (result.error === "network_error") {
+  if ((result as any).error === "network_error") {
     return "Couldn’t reach the ticket backend. Check backend URL/server.";
   }
 
-  if (result.error === "invalid_backend_json") {
+  if ((result as any).error === "invalid_backend_json") {
     return "Backend responded with invalid JSON.";
   }
 
-  if (result.error && result.error.startsWith("http_")) {
+  if ((result as any).error && String((result as any).error).startsWith("http_")) {
     return providers
       ? `No suitable ticket match found. Checked: ${providers}.`
       : "No suitable ticket match found.";
@@ -352,6 +394,46 @@ function openFailureMessage(result: TicketResolutionResult | null): string {
 
 function isBestOption(index: number) {
   return index === 0;
+}
+
+function ProviderBadge({
+  provider,
+  size = "md",
+  showLabel = false,
+}: {
+  provider?: string | null;
+  size?: "sm" | "md";
+  showLabel?: boolean;
+}) {
+  const badge = providerBadgeStyle(provider);
+  const short = providerShort(provider);
+  const label = providerLabel(provider);
+
+  const circleSize = size === "sm" ? 24 : 30;
+  const fontSize = size === "sm" ? 11 : 12;
+
+  return (
+    <View style={[styles.providerBadgeWrap, showLabel && styles.providerBadgeWrapLabeled]}>
+      <View
+        style={[
+          styles.providerBadgeCircle,
+          {
+            width: circleSize,
+            height: circleSize,
+            borderRadius: circleSize / 2,
+            borderColor: badge.borderColor,
+            backgroundColor: badge.backgroundColor,
+          },
+        ]}
+      >
+        <Text style={[styles.providerBadgeCircleText, { color: badge.textColor, fontSize }]}>
+          {short}
+        </Text>
+      </View>
+
+      {showLabel ? <Text style={styles.providerBadgeLabel}>{label}</Text> : null}
+    </View>
+  );
 }
 
 /* -------------------------------------------------------------------------- */
@@ -643,8 +725,12 @@ export default function MatchScreen() {
   if (!fixtureId) {
     return (
       <Background
-        imageSource={typeof getBackground("match") === "string" ? undefined : (getBackground("match") as any)}
-        imageUrl={typeof getBackground("match") === "string" ? (getBackground("match") as string) : null}
+        imageSource={
+          typeof getBackground("match") === "string" ? undefined : (getBackground("match") as any)
+        }
+        imageUrl={
+          typeof getBackground("match") === "string" ? (getBackground("match") as string) : null
+        }
       >
         <SafeAreaView style={styles.safe}>
           <EmptyState
@@ -713,7 +799,10 @@ export default function MatchScreen() {
               <View style={styles.heroHints}>
                 <Chip label="Tickets: comparison-ready" variant="primary" />
                 <Chip label="Hotels: live price" variant="default" />
-                <Chip label={resolvedStadium ? "Travel: mapped" : "Travel: limited"} variant="default" />
+                <Chip
+                  label={resolvedStadium ? "Travel: mapped" : "Travel: limited"}
+                  variant="default"
+                />
               </View>
             </View>
           </GlassCard>
@@ -749,8 +838,9 @@ export default function MatchScreen() {
             {checkedProviders.length > 0 ? (
               <View style={styles.providersWrap}>
                 {checkedProviders.map((provider) => (
-                  <View key={provider} style={styles.providerPill}>
-                    <Text style={styles.providerPillText}>{providerLabel(provider)}</Text>
+                  <View key={provider} style={styles.providerMiniItem}>
+                    <ProviderBadge provider={provider} size="sm" />
+                    <Text style={styles.providerMiniLabel}>{providerLabel(provider)}</Text>
                   </View>
                 ))}
               </View>
@@ -758,11 +848,17 @@ export default function MatchScreen() {
 
             {bestOption ? (
               <View style={styles.bestOptionBox}>
-                <Text style={styles.bestOptionLabel}>Best current option</Text>
-                <Text style={styles.bestOptionTitle}>
-                  {providerLabel(bestOption.provider)}
-                  {clean(bestOption.priceText) ? ` • ${clean(bestOption.priceText)}` : ""}
-                </Text>
+                <View style={styles.bestOptionTopRow}>
+                  <View style={styles.bestOptionPriceBlock}>
+                    <Text style={styles.bestOptionLabel}>Best current option</Text>
+                    <Text style={styles.bestOptionPrice}>
+                      {clean(bestOption.priceText) || "Live price"}
+                    </Text>
+                  </View>
+
+                  <ProviderBadge provider={bestOption.provider} showLabel />
+                </View>
+
                 <Text style={styles.bestOptionSub}>
                   {confidenceLabel(bestOption.score)}
                   {bestOption.exact ? " • Exact event match" : " • Resolver-selected"}
@@ -782,7 +878,6 @@ export default function MatchScreen() {
             {ticketOptions.length > 0 ? (
               <View style={styles.optionsList}>
                 {ticketOptions.map((option, index) => {
-                  const provider = providerLabel(option.provider);
                   const isOpening = activeProviderUrl === clean(option.url);
 
                   return (
@@ -792,9 +887,17 @@ export default function MatchScreen() {
                       onPress={() => openTicketOption(option)}
                     >
                       <View style={styles.optionTopRow}>
-                        <View style={{ flex: 1 }}>
-                          <View style={styles.optionTitleRow}>
-                            <Text style={styles.optionProvider}>{provider}</Text>
+                        <View style={styles.optionPriceHero}>
+                          <Text style={styles.optionPrice}>{clean(option.priceText) || "Live price"}</Text>
+                          <Text style={styles.optionConfidence}>
+                            {confidenceLabel(option.score)}
+                            {option.exact ? " • Exact match" : ""}
+                          </Text>
+                        </View>
+
+                        <View style={styles.optionRightStack}>
+                          <ProviderBadge provider={option.provider} showLabel />
+                          <View style={styles.optionTagRow}>
                             {isBestOption(index) ? (
                               <View style={styles.bestBadge}>
                                 <Text style={styles.bestBadgeText}>Best</Text>
@@ -806,15 +909,6 @@ export default function MatchScreen() {
                               </View>
                             ) : null}
                           </View>
-
-                          <Text style={styles.optionConfidence}>
-                            {confidenceLabel(option.score)}
-                            {option.exact ? " • Exact match" : ""}
-                          </Text>
-                        </View>
-
-                        <View style={styles.optionPriceWrap}>
-                          <Text style={styles.optionPrice}>{clean(option.priceText) || "Live price"}</Text>
                         </View>
                       </View>
 
@@ -1154,11 +1248,14 @@ const styles = StyleSheet.create({
     marginTop: 10,
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 8,
+    gap: 10,
   },
 
-  providerPill: {
-    paddingHorizontal: 10,
+  providerMiniItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 8,
     paddingVertical: 6,
     borderRadius: 999,
     borderWidth: 1,
@@ -1166,9 +1263,36 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.03)",
   },
 
-  providerPillText: {
+  providerMiniLabel: {
     color: theme.colors.textSecondary,
     fontSize: 11,
+    fontWeight: theme.fontWeight.black,
+  },
+
+  providerBadgeWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+
+  providerBadgeWrapLabeled: {
+    maxWidth: 180,
+  },
+
+  providerBadgeCircle: {
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  providerBadgeCircleText: {
+    fontWeight: theme.fontWeight.black,
+    letterSpacing: 0.4,
+  },
+
+  providerBadgeLabel: {
+    color: theme.colors.textPrimary,
+    fontSize: 12,
     fontWeight: theme.fontWeight.black,
   },
 
@@ -1179,7 +1303,19 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(87,162,56,0.2)",
     backgroundColor: "rgba(87,162,56,0.08)",
-    gap: 4,
+    gap: 6,
+  },
+
+  bestOptionTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+
+  bestOptionPriceBlock: {
+    flex: 1,
+    gap: 2,
   },
 
   bestOptionLabel: {
@@ -1189,10 +1325,10 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
 
-  bestOptionTitle: {
+  bestOptionPrice: {
     color: theme.colors.textPrimary,
-    fontSize: 14,
-    lineHeight: 18,
+    fontSize: 20,
+    lineHeight: 24,
     fontWeight: theme.fontWeight.black,
   },
 
@@ -1249,21 +1385,25 @@ const styles = StyleSheet.create({
   optionTopRow: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: 10,
+    gap: 12,
   },
 
-  optionTitleRow: {
-    flexDirection: "row",
-    alignItems: "center",
+  optionPriceHero: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  optionRightStack: {
+    alignItems: "flex-end",
     gap: 8,
-    flexWrap: "wrap",
+    maxWidth: "45%",
   },
 
-  optionProvider: {
-    color: theme.colors.textPrimary,
-    fontSize: 14,
-    lineHeight: 18,
-    fontWeight: theme.fontWeight.black,
+  optionTagRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    justifyContent: "flex-end",
   },
 
   optionConfidence: {
@@ -1274,14 +1414,10 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeight.medium,
   },
 
-  optionPriceWrap: {
-    marginLeft: "auto",
-    alignItems: "flex-end",
-  },
-
   optionPrice: {
     color: theme.colors.textPrimary,
-    fontSize: 13,
+    fontSize: 20,
+    lineHeight: 24,
     fontWeight: theme.fontWeight.black,
   },
 
