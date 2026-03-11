@@ -17,7 +17,7 @@ import { useFixture } from "@/src/hooks/useFixtures";
 import { useTripsStore } from "@/src/state/trips";
 
 import { beginPartnerClick, openUntrackedUrl } from "@/src/services/partnerClicks";
-import { resolveTicketForFixture } from "@/src/services/ticketResolver";
+import { resolveTicketForFixture, type TicketResolutionResult } from "@/src/services/ticketResolver";
 
 import { getAllStadiums, getStadiumByTeamFromRegistry } from "@/src/data/stadiumRegistry";
 import type { StadiumRecord } from "@/src/data/stadiums/types";
@@ -28,8 +28,12 @@ import type { PartnerId } from "@/src/core/partners";
 /* Helpers                                                                    */
 /* -------------------------------------------------------------------------- */
 
+function clean(v: unknown): string {
+  return String(v ?? "").trim();
+}
+
 function isoDateOnlyFromKickoffIso(kickoffIso?: string | null): string | null {
-  const raw = String(kickoffIso ?? "").trim();
+  const raw = clean(kickoffIso);
   if (!raw) return null;
   if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
 
@@ -43,7 +47,7 @@ function isoDateOnlyFromKickoffIso(kickoffIso?: string | null): string | null {
 }
 
 function formatKickoffLocal(kickoffIso?: string | null): string {
-  const raw = String(kickoffIso ?? "").trim();
+  const raw = clean(kickoffIso);
   if (!raw) return "TBC";
 
   const d = new Date(raw);
@@ -65,9 +69,9 @@ function formatKickoffLocal(kickoffIso?: string | null): string {
 }
 
 function initials(name: string) {
-  const clean = String(name ?? "").trim();
-  if (!clean) return "—";
-  const parts = clean.split(/\s+/g).filter(Boolean);
+  const value = clean(name);
+  if (!value) return "—";
+  const parts = value.split(/\s+/g).filter(Boolean);
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
   return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
 }
@@ -124,8 +128,7 @@ function stripDiacritics(input: string): string {
 }
 
 function normalizeValue(input: string): string {
-  return stripDiacritics(String(input ?? ""))
-    .trim()
+  return stripDiacritics(clean(input))
     .toLowerCase()
     .replace(/&/g, "and")
     .replace(/['’]/g, "")
@@ -149,8 +152,8 @@ function resolveStadiumFromVenueOrTeam(args: {
   venueName?: string | null;
   homeTeamName?: string | null;
 }): StadiumRecord | null {
-  const rawVenue = String(args.venueName ?? "").trim();
-  const rawHome = String(args.homeTeamName ?? "").trim();
+  const rawVenue = clean(args.venueName);
+  const rawHome = clean(args.homeTeamName);
 
   const all = getAllStadiums();
   const venueKey = normalizeValue(rawVenue);
@@ -182,21 +185,41 @@ function resolveStadiumFromVenueOrTeam(args: {
 }
 
 function mapTicketProviderToPartnerId(provider?: string | null): PartnerId {
-  const raw = String(provider ?? "").trim().toLowerCase();
+  const raw = clean(provider).toLowerCase();
 
   if (raw === "footballticketsnet") return "footballticketsnet" as PartnerId;
   if (raw === "gigsberg") return "gigsberg" as PartnerId;
   return "sportsevents365" as PartnerId;
 }
 
-function liveTicketSubtitle(args: { provider?: string | null; priceText?: string | null }) {
-  const provider = String(args.provider ?? "").trim();
-  const priceText = String(args.priceText ?? "").trim();
+function ticketFlowSubtitle() {
+  return "Resolver-backed: FTN first, SE365 next, Gigsberg as fallback.";
+}
 
-  if (priceText && provider) return `Best live option • ${priceText} • ${provider}`;
-  if (priceText) return `Best live option • ${priceText}`;
-  if (provider) return `Best live option • ${provider}`;
-  return "Best live option";
+function openFailureMessage(result: TicketResolutionResult | null): string {
+  if (!result) return "Ticket resolver didn’t respond.";
+
+  const providers = Array.isArray(result.checkedProviders)
+    ? result.checkedProviders.filter(Boolean).join(", ")
+    : "";
+
+  if (result.error === "network_error") {
+    return "Couldn’t reach the ticket backend. Check backend URL/server.";
+  }
+
+  if (result.error === "invalid_backend_json") {
+    return "Backend responded with invalid JSON.";
+  }
+
+  if (result.error && result.error.startsWith("http_")) {
+    return providers
+      ? `No suitable ticket match found. Checked: ${providers}.`
+      : "No suitable ticket match found.";
+  }
+
+  return providers
+    ? `No suitable ticket match found. Checked: ${providers}.`
+    : "No suitable ticket match found.";
 }
 
 /* -------------------------------------------------------------------------- */
@@ -207,8 +230,8 @@ export default function MatchScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
 
-  const fixtureId = String((params as any)?.id ?? "").trim();
-  const tripId = String((params as any)?.tripId ?? "").trim();
+  const fixtureId = clean((params as any)?.id);
+  const tripId = clean((params as any)?.tripId);
 
   const { fixture, loading } = useFixture(fixtureId);
 
@@ -222,12 +245,12 @@ export default function MatchScreen() {
   const [openingTickets, setOpeningTickets] = useState(false);
 
   const homeName = useMemo(
-    () => String((trip as any)?.homeName ?? (fixture as any)?.teams?.home?.name ?? "").trim(),
+    () => clean((trip as any)?.homeName ?? (fixture as any)?.teams?.home?.name),
     [trip, fixture]
   );
 
   const awayName = useMemo(
-    () => String((trip as any)?.awayName ?? (fixture as any)?.teams?.away?.name ?? "").trim(),
+    () => clean((trip as any)?.awayName ?? (fixture as any)?.teams?.away?.name),
     [trip, fixture]
   );
 
@@ -237,8 +260,8 @@ export default function MatchScreen() {
   }, [homeName, awayName]);
 
   const kickoffIso = useMemo(() => {
-    const k = String((trip as any)?.kickoffIso ?? (fixture as any)?.fixture?.date ?? "").trim();
-    return k || null;
+    const value = clean((trip as any)?.kickoffIso ?? (fixture as any)?.fixture?.date);
+    return value || null;
   }, [trip, fixture]);
 
   const kickoffText = useMemo(
@@ -247,12 +270,12 @@ export default function MatchScreen() {
   );
 
   const venueName = useMemo(
-    () => String((trip as any)?.venueName ?? (fixture as any)?.fixture?.venue?.name ?? "").trim(),
+    () => clean((trip as any)?.venueName ?? (fixture as any)?.fixture?.venue?.name),
     [trip, fixture]
   );
 
   const venueCity = useMemo(
-    () => String((trip as any)?.venueCity ?? (fixture as any)?.fixture?.venue?.city ?? "").trim(),
+    () => clean((trip as any)?.venueCity ?? (fixture as any)?.fixture?.venue?.city),
     [trip, fixture]
   );
 
@@ -291,13 +314,13 @@ export default function MatchScreen() {
     (typeof (fixture as any)?.league?.id === "number" ? (fixture as any).league.id : undefined);
 
   const leagueName = useMemo(
-    () => String((trip as any)?.leagueName ?? (fixture as any)?.league?.name ?? "").trim() || null,
+    () => clean((trip as any)?.leagueName ?? (fixture as any)?.league?.name) || null,
     [trip, fixture]
   );
 
   const dateIso = useMemo(() => {
     return (
-      String((trip as any)?.startDate ?? "").trim() ||
+      clean((trip as any)?.startDate) ||
       isoDateOnlyFromKickoffIso((trip as any)?.kickoffIso) ||
       isoDateOnlyFromKickoffIso((fixture as any)?.fixture?.date) ||
       null
@@ -378,7 +401,7 @@ export default function MatchScreen() {
       });
 
       if (!resolved?.ok || !resolved.url) {
-        Alert.alert("Tickets not found", "We couldn’t find a suitable tickets listing for this match.");
+        Alert.alert("Tickets not found", openFailureMessage(resolved));
         return;
       }
 
@@ -403,13 +426,13 @@ export default function MatchScreen() {
           resolvedPriceText: resolved.priceText ?? null,
           resolutionReason: resolved.reason ?? null,
           exactMatch: Boolean(resolved.exact),
-          checkedProviders: Array.isArray((resolved as any)?.checkedProviders)
-            ? (resolved as any).checkedProviders
+          checkedProviders: Array.isArray(resolved.checkedProviders)
+            ? resolved.checkedProviders
             : undefined,
         },
       });
     } catch {
-      Alert.alert("Couldn’t open tickets");
+      Alert.alert("Couldn’t open tickets", "Ticket flow failed before the partner click was created.");
     } finally {
       setOpeningTickets(false);
     }
@@ -532,12 +555,7 @@ export default function MatchScreen() {
             </View>
 
             <View style={styles.ticketHintBox}>
-              <Text style={styles.ticketHintText}>
-                {liveTicketSubtitle({
-                  provider: "FTN / SE365 / Gigsberg fallback",
-                  priceText: null,
-                })}
-              </Text>
+              <Text style={styles.ticketHintText}>{ticketFlowSubtitle()}</Text>
             </View>
 
             <View style={styles.actions}>
