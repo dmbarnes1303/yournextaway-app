@@ -132,6 +132,11 @@ function providerLabel(provider?: string | null): string {
   if (raw === "footballticketsnet") return "FootballTicketNet";
   if (raw === "sportsevents365") return "SportsEvents365";
   if (raw === "gigsberg") return "Gigsberg";
+  if (raw === "aviasales") return "Aviasales";
+  if (raw === "expedia" || raw === "expedia_stays") return "Expedia";
+  if (raw === "kiwitaxi") return "KiwiTaxi";
+  if (raw === "omio") return "Omio";
+  if (raw === "getyourguide") return "GetYourGuide";
   return provider || "Provider";
 }
 
@@ -140,6 +145,11 @@ function providerShort(provider?: string | null): string {
   if (raw === "footballticketsnet") return "FTN";
   if (raw === "sportsevents365") return "365";
   if (raw === "gigsberg") return "G";
+  if (raw === "aviasales") return "AV";
+  if (raw === "expedia" || raw === "expedia_stays") return "EX";
+  if (raw === "kiwitaxi") return "KT";
+  if (raw === "omio") return "OM";
+  if (raw === "getyourguide") return "GYG";
   return "P";
 }
 
@@ -170,6 +180,46 @@ function providerBadgeStyle(provider?: string | null) {
     };
   }
 
+  if (raw === "aviasales") {
+    return {
+      borderColor: "rgba(120,170,255,0.30)",
+      backgroundColor: "rgba(120,170,255,0.10)",
+      textColor: "rgba(210,225,255,1)",
+    };
+  }
+
+  if (raw === "expedia" || raw === "expedia_stays") {
+    return {
+      borderColor: "rgba(87,162,56,0.30)",
+      backgroundColor: "rgba(87,162,56,0.10)",
+      textColor: "rgba(210,240,205,1)",
+    };
+  }
+
+  if (raw === "kiwitaxi") {
+    return {
+      borderColor: "rgba(255,160,120,0.30)",
+      backgroundColor: "rgba(255,160,120,0.10)",
+      textColor: "rgba(255,220,205,1)",
+    };
+  }
+
+  if (raw === "omio") {
+    return {
+      borderColor: "rgba(200,120,255,0.30)",
+      backgroundColor: "rgba(200,120,255,0.10)",
+      textColor: "rgba(235,210,255,1)",
+    };
+  }
+
+  if (raw === "getyourguide") {
+    return {
+      borderColor: "rgba(255,90,120,0.30)",
+      backgroundColor: "rgba(255,90,120,0.10)",
+      textColor: "rgba(255,215,225,1)",
+    };
+  }
+
   return {
     borderColor: "rgba(255,255,255,0.15)",
     backgroundColor: "rgba(255,255,255,0.06)",
@@ -194,6 +244,7 @@ function safePartnerName(item: SavedItem) {
     if (provider === "footballticketsnet") return "FootballTicketNet";
     if (provider === "sportsevents365") return "SportsEvents365";
     if (provider === "gigsberg") return "Gigsberg";
+    if (provider === "omio") return "Omio";
     return null;
   }
 }
@@ -798,11 +849,12 @@ export default function TripDetailScreen() {
 
     const flightsUrl = resolveAffiliateUrl("aviasales", affiliateCtx);
     const hotelsUrl = resolveAffiliateUrl("expedia", affiliateCtx);
+    const omioUrl = resolveAffiliateUrl("omio", affiliateCtx);
     const transfersUrl = resolveAffiliateUrl("kiwitaxi", affiliateCtx);
     const experiencesUrl = resolveAffiliateUrl("getyourguide", affiliateCtx);
     const mapsUrl = buildMapsSearchUrl(`${affiliateCtx.city} travel`);
 
-    return { flightsUrl, hotelsUrl, transfersUrl, experiencesUrl, mapsUrl };
+    return { flightsUrl, hotelsUrl, omioUrl, transfersUrl, experiencesUrl, mapsUrl };
   }, [affiliateCtx]);
 
   const pending = useMemo(() => savedItems.filter((x) => x.status === "pending"), [savedItems]);
@@ -1573,14 +1625,23 @@ export default function TripDetailScreen() {
     };
 
     const openTransfers = () => {
-      const url = affiliateUrls?.transfersUrl;
+      const url = affiliateUrls?.omioUrl || affiliateUrls?.transfersUrl;
+      const partnerId = affiliateUrls?.omioUrl ? ("omio" as PartnerId) : ("kiwitaxi" as PartnerId);
+
       if (!url) return Alert.alert("Not ready", "We need a city + dates saved to build booking links.");
+
       return openTrackedPartner({
-        partnerId: "kiwitaxi" as PartnerId,
+        partnerId,
         url,
         savedItemType: "transfer",
-        title: `Transfers in ${cityName}`,
-        metadata: { city: cityName, startDate: trip?.startDate, endDate: trip?.endDate, priceMode: "live" },
+        title: affiliateUrls?.omioUrl ? `Trains & buses in ${cityName}` : `Transfers in ${cityName}`,
+        metadata: {
+          city: cityName,
+          startDate: trip?.startDate,
+          endDate: trip?.endDate,
+          priceMode: "live",
+          transportMode: affiliateUrls?.omioUrl ? "rail_bus" : "transfer",
+        },
       });
     };
 
@@ -1600,7 +1661,7 @@ export default function TripDetailScreen() {
       { key: "tickets" as const, label: "Tickets", state: presentByType.stateTickets, onPress: openOrExplainTickets },
       { key: "flight" as const, label: "Flights", state: presentByType.stateFlight, onPress: openFlights },
       { key: "hotel" as const, label: "Hotel", state: presentByType.stateHotel, onPress: openHotels },
-      { key: "transfer" as const, label: "Transfer", state: presentByType.stateTransfer, onPress: openTransfers },
+      { key: "transfer" as const, label: affiliateUrls?.omioUrl ? "Rail/Bus" : "Transfer", state: presentByType.stateTransfer, onPress: openTransfers },
       { key: "things" as const, label: "Things", state: presentByType.stateThings, onPress: openThings },
     ];
   }, [
@@ -1697,9 +1758,24 @@ export default function TripDetailScreen() {
 
     return {
       title: "You’re set — add extras if you want",
-      body: "Core planning is complete. If you’re staying longer, add activities or notes.",
-      cta: "View hotels (live)",
-      onPress: openHotels,
+      body: "Core planning is complete. If you’re staying longer, add transport, activities or notes.",
+      cta: affiliateUrls?.omioUrl ? "View rail/bus" : "View hotels (live)",
+      onPress: affiliateUrls?.omioUrl
+        ? () =>
+            openTrackedPartner({
+              partnerId: "omio" as PartnerId,
+              url: affiliateUrls.omioUrl!,
+              savedItemType: "transfer",
+              title: `Trains & buses in ${cityName}`,
+              metadata: {
+                city: cityName,
+                startDate: trip?.startDate,
+                endDate: trip?.endDate,
+                priceMode: "live",
+                transportMode: "rail_bus",
+              },
+            })
+        : openHotels,
       badge: "Ready",
     };
   }, [
@@ -1756,6 +1832,23 @@ export default function TripDetailScreen() {
       });
     };
 
+    const openOmio = () => {
+      if (!affiliateUrls.omioUrl) return Alert.alert("Not ready", "Rail/bus link couldn’t be built.");
+      return openTrackedPartner({
+        partnerId: "omio" as PartnerId,
+        url: affiliateUrls.omioUrl,
+        savedItemType: "transfer",
+        title: `Trains & buses in ${cityName}`,
+        metadata: {
+          city: cityName,
+          startDate: trip.startDate,
+          endDate: trip.endDate,
+          priceMode: "live",
+          transportMode: "rail_bus",
+        },
+      });
+    };
+
     const openTransfers = () => {
       if (!affiliateUrls.transfersUrl) return Alert.alert("Not ready", "Transfers link couldn’t be built.");
       return openTrackedPartner({
@@ -1790,12 +1883,20 @@ export default function TripDetailScreen() {
 
     if (!presentByType.hasFlight) add("Flights", "Aviasales (live)", openFlights, "primary", "aviasales");
     if (!presentByType.hasHotel) add("Hotels", "Expedia (live)", openHotels, "primary", "expedia");
-    if (!presentByType.hasTransfer) add("Transfers", "Kiwitaxi (live)", openTransfers, "neutral", "kiwitaxi");
+    if (!presentByType.hasTransfer && affiliateUrls.omioUrl) {
+      add("Rail / Bus", "Omio (live)", openOmio, "neutral", "omio");
+    } else if (!presentByType.hasTransfer) {
+      add("Transfers", "Kiwitaxi (live)", openTransfers, "neutral", "kiwitaxi");
+    }
     if (!presentByType.hasThings) add("Activities", "GetYourGuide (live)", openThings, "neutral", "getyourguide");
 
     if (btns.length === 0) {
       add("Hotels", "Expedia (live)", openHotels, "primary", "expedia");
-      add("Activities", "GetYourGuide (live)", openThings, "neutral", "getyourguide");
+      if (affiliateUrls.omioUrl) {
+        add("Rail / Bus", "Omio (live)", openOmio, "neutral", "omio");
+      } else {
+        add("Activities", "GetYourGuide (live)", openThings, "neutral", "getyourguide");
+      }
     }
 
     return btns.slice(0, 4);
