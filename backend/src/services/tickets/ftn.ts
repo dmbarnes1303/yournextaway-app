@@ -25,6 +25,8 @@ type FtnListResponse = {
   message?: string;
 };
 
+const FTN_FETCH_TIMEOUT_MS = 6000;
+
 function clean(v: unknown): string {
   return String(v ?? "").trim();
 }
@@ -140,6 +142,12 @@ function textContainsVariant(text: string, variant: string): boolean {
   return value.includes(needle);
 }
 
+function isBadStandaloneToken(text: string, token: string): boolean {
+  const value = ` ${norm(text)} `;
+  const needle = ` ${norm(token)} `;
+  return value.includes(needle);
+}
+
 function variantPenalty(ev: FtnEvent, input: TicketResolveInput): number {
   const haystack = [eventTitle(ev), eventHome(ev), eventAway(ev)].join(" ").toLowerCase();
   const inputText = [input.homeName, input.awayName, input.leagueName ?? ""].join(" ").toLowerCase();
@@ -151,13 +159,15 @@ function variantPenalty(ev: FtnEvent, input: TicketResolveInput): number {
     "ladies",
     "feminino",
     "femenino",
+    "female",
+    "u17",
+    "u18",
     "u19",
     "u20",
     "u21",
     "u23",
     "youth",
     "juvenil",
-    "b",
     "b team",
     "ii",
     "reserves",
@@ -175,6 +185,12 @@ function variantPenalty(ev: FtnEvent, input: TicketResolveInput): number {
     if (eventHas && !inputHas) {
       penalty += 35;
     }
+  }
+
+  const eventHasStandaloneB = isBadStandaloneToken(haystack, "b");
+  const inputHasStandaloneB = isBadStandaloneToken(inputText, "b");
+  if (eventHasStandaloneB && !inputHasStandaloneB) {
+    penalty += 35;
   }
 
   return penalty;
@@ -248,6 +264,44 @@ function buildDateWindow(kickoffIso: string): { fromDate?: string; toDate?: stri
   };
 }
 
+function summarizeEvent(ev: FtnEvent) {
+  return {
+    eventId: clean(ev.event_id) || clean(ev.id) || null,
+    title: eventTitle(ev) || null,
+    home: eventHome(ev) || null,
+    away: eventAway(ev) || null,
+    date: eventDate(ev) || null,
+    url: eventUrl(ev) || null,
+    price: eventPrice(ev) || null,
+  };
+}
+
+async function fetchWithTimeout(url: string): Promise<{ ok: boolean; status: number; body: string }> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), FTN_FETCH_TIMEOUT_MS);
+
+  try {
+    const res = await fetch(url, {
+      signal: controller.signal,
+    });
+
+    let body = "";
+    try {
+      body = await res.text();
+    } catch {
+      body = "";
+    }
+
+    return {
+      ok: res.ok,
+      status: res.status,
+      body,
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export async function resolveFtnCandidate(input: TicketResolveInput): Promise<TicketCandidate | null> {
   if (!hasFtnConfig()) {
     console.log("[FTN] skipped: missing config");
@@ -284,38 +338,46 @@ export async function resolveFtnCandidate(input: TicketResolveInput): Promise<Ti
   if (dateWindow.toDate) qs.set("to_date", dateWindow.toDate);
 
   const url = `${env.ftnBaseUrl}?${qs.toString()}`;
+  const loggableUrl = `${env.ftnBaseUrl}?action=list_events&u=${encodeURIComponent(env.ftnUsername)}&ts=${encodeURIComponent(ts)}&home_team_name=${encodeURIComponent(homeName)}&away_team_name=${encodeURIComponent(awayName)}${dateWindow.fromDate ? `&from_date=${encodeURIComponent(dateWindow.fromDate)}` : ""}${dateWindow.toDate ? `&to_date=${encodeURIComponent(dateWindow.toDate)}` : ""}`;
 
-  let res: Response;
+  console.log("[FTN] request start", {
+    homeName,
+    awayName,
+    kickoffIso,
+    leagueName: clean(input.leagueName) || null,
+    leagueId: clean(input.leagueId) || null,
+    fromDate: dateWindow.fromDate ?? null,
+    toDate: dateWindow.toDate ?? null,
+    requestUrl: loggableUrl,
+  });
+
+  let response: { ok: boolean; status: number; body: string };
   try {
-    res = await fetch(url);
+    response = await fetchWithTimeout(url);
   } catch (error) {
-    console.log("[FTN] network error", {
+    console.log("[FTN] network/timeout error", {
       message: error instanceof Error ? error.message : String(error),
+      requestUrl: loggableUrl,
     });
     return null;
   }
 
-  let rawText = "";
-  try {
-    rawText = await res.text();
-  } catch {
-    rawText = "";
-  }
-
-  if (!res.ok) {
+  if (!response.ok) {
     console.log("[FTN] non-200 response", {
-      status: res.status,
-      body: rawText.slice(0, 500),
+      status: response.status,
+      body: response.body.slice(0, 500),
+      requestUrl: loggableUrl,
     });
     return null;
   }
 
   let json: FtnListResponse | null = null;
   try {
-    json = rawText ? (JSON.parse(rawText) as FtnListResponse) : null;
+    json = response.body ? (JSON.parse(response.body) as FtnListResponse) : null;
   } catch {
     console.log("[FTN] invalid JSON response", {
-      body: rawText.slice(0, 500),
+      body: response.body.slice(0, 500),
+      requestUrl: loggableUrl,
     });
     return null;
   }
@@ -336,14 +398,21 @@ export async function resolveFtnCandidate(input: TicketResolveInput): Promise<Ti
       success: json?.success ?? null,
       error: json?.error ?? null,
       message: json?.message ?? null,
+      requestUrl: loggableUrl,
     });
     return null;
   }
+
+  console.log("[FTN] raw events returned", {
+    count: events.length,
+    sample: events.slice(0, 5).map(summarizeEvent),
+  });
 
   const scored = events
     .map((ev) => ({
       ev,
       score: scoreEvent(ev, input),
+      penalty: variantPenalty(ev, input),
     }))
     .filter((x) => isStrongEnough(x.score))
     .sort((a, b) => b.score - a.score);
@@ -352,12 +421,9 @@ export async function resolveFtnCandidate(input: TicketResolveInput): Promise<Ti
     console.log("[FTN] events returned but no strong match", {
       count: events.length,
       sample: events.slice(0, 5).map((ev) => ({
-        title: eventTitle(ev),
-        home: eventHome(ev),
-        away: eventAway(ev),
-        date: eventDate(ev),
-        url: eventUrl(ev),
-        price: eventPrice(ev),
+        ...summarizeEvent(ev),
+        score: scoreEvent(ev, input),
+        penalty: variantPenalty(ev, input),
       })),
     });
     return null;
@@ -376,8 +442,11 @@ export async function resolveFtnCandidate(input: TicketResolveInput): Promise<Ti
 
   if (!rawUrl) {
     console.log("[FTN] best match missing URL", {
-      title: eventTitle(best.ev),
-      score: best.score,
+      best: {
+        ...summarizeEvent(best.ev),
+        score: best.score,
+        penalty: best.penalty,
+      },
     });
     return null;
   }
@@ -386,14 +455,14 @@ export async function resolveFtnCandidate(input: TicketResolveInput): Promise<Ti
   const normalizedPrice = eventPrice(best.ev);
 
   console.log("[FTN] matched event", {
-    title: eventTitle(best.ev),
-    home: eventHome(best.ev),
-    away: eventAway(best.ev),
-    date: eventDate(best.ev),
-    score: best.score,
-    exact,
-    price: normalizedPrice,
-    url: rawUrl,
+    best: {
+      ...summarizeEvent(best.ev),
+      score: best.score,
+      penalty: best.penalty,
+      exact,
+      resolvedUrl: rawUrl,
+      affiliateUrl: appendAffiliate(rawUrl),
+    },
   });
 
   return {
