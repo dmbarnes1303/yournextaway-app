@@ -127,6 +127,64 @@ function statusLabel(s: SavedItem["status"]) {
   return "Archived";
 }
 
+function providerLabel(provider?: string | null): string {
+  const raw = clean(provider).toLowerCase();
+  if (raw === "footballticketsnet") return "FootballTicketNet";
+  if (raw === "sportsevents365") return "SportsEvents365";
+  if (raw === "gigsberg") return "Gigsberg";
+  return provider || "Provider";
+}
+
+function providerShort(provider?: string | null): string {
+  const raw = clean(provider).toLowerCase();
+  if (raw === "footballticketsnet") return "FTN";
+  if (raw === "sportsevents365") return "365";
+  if (raw === "gigsberg") return "G";
+  return "P";
+}
+
+function providerBadgeStyle(provider?: string | null) {
+  const raw = clean(provider).toLowerCase();
+
+  if (raw === "footballticketsnet") {
+    return {
+      borderColor: "rgba(120,170,255,0.35)",
+      backgroundColor: "rgba(120,170,255,0.12)",
+      textColor: "rgba(205,225,255,1)",
+    };
+  }
+
+  if (raw === "sportsevents365") {
+    return {
+      borderColor: "rgba(87,162,56,0.35)",
+      backgroundColor: "rgba(87,162,56,0.12)",
+      textColor: "rgba(208,240,192,1)",
+    };
+  }
+
+  if (raw === "gigsberg") {
+    return {
+      borderColor: "rgba(255,200,80,0.35)",
+      backgroundColor: "rgba(255,200,80,0.12)",
+      textColor: "rgba(255,226,160,1)",
+    };
+  }
+
+  return {
+    borderColor: "rgba(255,255,255,0.15)",
+    backgroundColor: "rgba(255,255,255,0.06)",
+    textColor: theme.colors.text,
+  };
+}
+
+function ticketConfidenceLabel(score?: number | null): string {
+  const value = typeof score === "number" ? score : 0;
+  if (value >= 90) return "High confidence";
+  if (value >= 75) return "Strong match";
+  if (value >= 60) return "Good match";
+  return "Fallback";
+}
+
 function safePartnerName(item: SavedItem) {
   if (!item.partnerId) return null;
   try {
@@ -211,6 +269,45 @@ function TeamCrest({ name, logo }: { name: string; logo?: string | null }) {
       ) : (
         <Text style={styles.crestFallback}>{initials(name)}</Text>
       )}
+    </View>
+  );
+}
+
+function ProviderBadge({
+  provider,
+  size = "sm",
+  showLabel = false,
+}: {
+  provider?: string | null;
+  size?: "sm" | "md";
+  showLabel?: boolean;
+}) {
+  const badge = providerBadgeStyle(provider);
+  const short = providerShort(provider);
+  const label = providerLabel(provider);
+
+  const circleSize = size === "md" ? 30 : 24;
+  const fontSize = size === "md" ? 12 : 11;
+
+  return (
+    <View style={[styles.providerBadgeWrap, showLabel && styles.providerBadgeWrapLabeled]}>
+      <View
+        style={[
+          styles.providerBadgeCircle,
+          {
+            width: circleSize,
+            height: circleSize,
+            borderRadius: circleSize / 2,
+            borderColor: badge.borderColor,
+            backgroundColor: badge.backgroundColor,
+          },
+        ]}
+      >
+        <Text style={[styles.providerBadgeCircleText, { color: badge.textColor, fontSize }]}>
+          {short}
+        </Text>
+      </View>
+      {showLabel ? <Text style={styles.providerBadgeLabel}>{label}</Text> : null}
     </View>
   );
 }
@@ -356,22 +453,6 @@ function confidencePctLabel(value?: number | null): string | null {
   return `${pct}% fit`;
 }
 
-function providerLabel(provider?: string | null): string {
-  const raw = clean(provider).toLowerCase();
-  if (raw === "footballticketsnet") return "FootballTicketNet";
-  if (raw === "sportsevents365") return "SportsEvents365";
-  if (raw === "gigsberg") return "Gigsberg";
-  return provider || "Provider";
-}
-
-function ticketConfidenceLabel(score?: number | null): string {
-  const value = typeof score === "number" ? score : 0;
-  if (value >= 90) return "High confidence";
-  if (value >= 75) return "Strong match";
-  if (value >= 60) return "Good match";
-  return "Fallback";
-}
-
 function rankReasonsText(trip: RankedTrip | null): string | null {
   if (!trip || !Array.isArray(trip.reasons) || trip.reasons.length === 0) return null;
   return trip.reasons.slice(0, 2).join(" • ");
@@ -499,6 +580,17 @@ function normalizeTicketOptions(resolved: TicketResolutionResult | null): Ticket
   }
 
   return [];
+}
+
+function ticketProviderFromItem(item: SavedItem | null): string | null {
+  if (!item) return null;
+  return clean(item.metadata?.ticketProvider) || clean(item.partnerId) || null;
+}
+
+function itemResolvedScore(item: SavedItem | null): number | null {
+  if (!item) return null;
+  const raw = item.metadata?.score;
+  return typeof raw === "number" && Number.isFinite(raw) ? raw : null;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -1165,7 +1257,11 @@ export default function TripDetailScreen() {
       : true;
 
     const kickoffTbc =
-      statusShort === "TBD" || statusShort === "TBA" || statusShort === "NS" || statusShort === "PST" || midnight;
+      statusShort === "TBD" ||
+      statusShort === "TBA" ||
+      statusShort === "NS" ||
+      statusShort === "PST" ||
+      midnight;
 
     const venueName = clean((r as any)?.fixture?.venue?.name) || undefined;
     const venueCity = clean((r as any)?.fixture?.venue?.city) || undefined;
@@ -1622,10 +1718,21 @@ export default function TripDetailScreen() {
   const smartBookButtons = useMemo(() => {
     if (!affiliateUrls || !trip) return [];
 
-    const btns: Array<{ title: string; sub: string; onPress: () => void; kind?: "primary" | "neutral" }> = [];
+    const btns: Array<{
+      title: string;
+      sub: string;
+      onPress: () => void;
+      kind?: "primary" | "neutral";
+      provider?: string | null;
+    }> = [];
 
-    const add = (title: string, sub: string, onPress: () => void, kind?: "primary" | "neutral") =>
-      btns.push({ title, sub, onPress, kind });
+    const add = (
+      title: string,
+      sub: string,
+      onPress: () => void,
+      kind?: "primary" | "neutral",
+      provider?: string | null
+    ) => btns.push({ title, sub, onPress, kind, provider });
 
     const openHotels = () => {
       if (!affiliateUrls.hotelsUrl) return Alert.alert("Not ready", "Hotels link couldn’t be built.");
@@ -1676,18 +1783,19 @@ export default function TripDetailScreen() {
         "Tickets",
         smartButtonSubtitle(primaryTicketItem, "Compare live ticket options"),
         () => openTicketsForMatch(primaryMatchId),
-        "primary"
+        "primary",
+        ticketProviderFromItem(primaryTicketItem)
       );
     }
 
-    if (!presentByType.hasFlight) add("Flights", "Aviasales (live)", openFlights, "primary");
-    if (!presentByType.hasHotel) add("Hotels", "Expedia (live)", openHotels, "primary");
-    if (!presentByType.hasTransfer) add("Transfers", "Kiwitaxi (live)", openTransfers);
-    if (!presentByType.hasThings) add("Activities", "GetYourGuide (live)", openThings);
+    if (!presentByType.hasFlight) add("Flights", "Aviasales (live)", openFlights, "primary", "aviasales");
+    if (!presentByType.hasHotel) add("Hotels", "Expedia (live)", openHotels, "primary", "expedia");
+    if (!presentByType.hasTransfer) add("Transfers", "Kiwitaxi (live)", openTransfers, "neutral", "kiwitaxi");
+    if (!presentByType.hasThings) add("Activities", "GetYourGuide (live)", openThings, "neutral", "getyourguide");
 
     if (btns.length === 0) {
-      add("Hotels", "Expedia (live)", openHotels, "primary");
-      add("Activities", "GetYourGuide (live)", openThings);
+      add("Hotels", "Expedia (live)", openHotels, "primary", "expedia");
+      add("Activities", "GetYourGuide (live)", openThings, "neutral", "getyourguide");
     }
 
     return btns.slice(0, 4);
@@ -1858,7 +1966,10 @@ export default function TripDetailScreen() {
                         style={[styles.smartBtn, b.kind === "primary" ? styles.smartBtnPrimary : undefined]}
                         onPress={b.onPress}
                       >
-                        <Text style={styles.smartBtnText}>{b.title}</Text>
+                        <View style={styles.smartBtnTop}>
+                          <Text style={styles.smartBtnText}>{b.title}</Text>
+                          {b.provider ? <ProviderBadge provider={b.provider} size="sm" /> : null}
+                        </View>
                         <Text style={styles.smartBtnSub}>{b.sub}</Text>
                       </Pressable>
                     ))}
@@ -1912,11 +2023,8 @@ export default function TripDetailScreen() {
 
                       const ticketItem = ticketsByMatchId[String(mid)];
                       const isPrimary = String(primaryMatchId ?? "") === String(mid);
-
-                      const ticketScore =
-                        typeof ticketItem?.metadata?.score === "number"
-                          ? Number(ticketItem.metadata?.score)
-                          : null;
+                      const ticketScore = itemResolvedScore(ticketItem);
+                      const ticketProvider = ticketProviderFromItem(ticketItem);
 
                       return (
                         <View key={mid} style={styles.matchRowWrap}>
@@ -1927,7 +2035,7 @@ export default function TripDetailScreen() {
                           >
                             <TeamCrest name={homeName} logo={homeLogo} />
 
-                            <View style={{ flex: 1 }}>
+                            <View style={{ flex: 1, minWidth: 0 }}>
                               <View style={styles.matchTitleRow}>
                                 <Text style={styles.matchTitle} numberOfLines={1}>
                                   {title}
@@ -1968,14 +2076,20 @@ export default function TripDetailScreen() {
                                 </Text>
                               ) : null}
 
-                              <Text style={styles.matchHint} numberOfLines={1}>
-                                {ticketItem
-                                  ? livePriceLine(ticketItem) ||
-                                    `Tap to open tickets (${statusLabel(ticketItem.status)})`
-                                  : "Tap to compare live ticket options • Hold for options"}
-                              </Text>
+                              {ticketItem ? (
+                                <View style={styles.ticketSignalRow}>
+                                  {ticketProvider ? <ProviderBadge provider={ticketProvider} size="sm" /> : null}
+                                  <Text style={styles.matchHint} numberOfLines={1}>
+                                    {livePriceLine(ticketItem) || `Tap to open tickets (${statusLabel(ticketItem.status)})`}
+                                  </Text>
+                                </View>
+                              ) : (
+                                <Text style={styles.matchHint} numberOfLines={1}>
+                                  Tap to compare live ticket options • Hold for options
+                                </Text>
+                              )}
 
-                              {!ticketItem && ticketScore != null ? (
+                              {ticketScore != null ? (
                                 <Text style={styles.ticketQualityMeta} numberOfLines={1}>
                                   {ticketConfidenceLabel(ticketScore)}
                                 </Text>
@@ -2197,6 +2311,8 @@ export default function TripDetailScreen() {
                   <View style={{ gap: 10 }}>
                     {pending.map((it) => {
                       const lp = livePriceLine(it);
+                      const provider = ticketProviderFromItem(it);
+
                       return (
                         <View key={it.id} style={styles.itemRow}>
                           <Pressable style={{ flex: 1 }} onPress={() => openSavedItem(it)}>
@@ -2207,9 +2323,12 @@ export default function TripDetailScreen() {
                               <StatusBadge s={it.status} />
                             </View>
 
-                            <Text style={styles.itemMeta} numberOfLines={1}>
-                              {buildMetaLine(it)}
-                            </Text>
+                            <View style={styles.itemMetaRow}>
+                              {provider ? <ProviderBadge provider={provider} size="sm" /> : null}
+                              <Text style={styles.itemMeta} numberOfLines={1}>
+                                {buildMetaLine(it)}
+                              </Text>
+                            </View>
 
                             {lp ? (
                               <Text style={styles.livePriceLine} numberOfLines={1}>
@@ -2241,6 +2360,8 @@ export default function TripDetailScreen() {
                   <View style={{ gap: 10 }}>
                     {booked.map((it) => {
                       const lp = livePriceLine(it);
+                      const provider = ticketProviderFromItem(it);
+
                       return (
                         <View key={it.id} style={styles.itemRow}>
                           <Pressable style={{ flex: 1 }} onPress={() => openSavedItem(it)}>
@@ -2251,9 +2372,12 @@ export default function TripDetailScreen() {
                               <StatusBadge s={it.status} />
                             </View>
 
-                            <Text style={styles.itemMeta} numberOfLines={1}>
-                              {buildMetaLine(it)}
-                            </Text>
+                            <View style={styles.itemMetaRow}>
+                              {provider ? <ProviderBadge provider={provider} size="sm" /> : null}
+                              <Text style={styles.itemMeta} numberOfLines={1}>
+                                {buildMetaLine(it)}
+                              </Text>
+                            </View>
 
                             {lp ? (
                               <Text style={styles.paidLine} numberOfLines={1}>
@@ -2289,6 +2413,8 @@ export default function TripDetailScreen() {
                   <View style={{ gap: 10 }}>
                     {saved.map((it) => {
                       const lp = livePriceLine(it);
+                      const provider = ticketProviderFromItem(it);
+
                       return (
                         <View key={it.id} style={styles.itemRow}>
                           <Pressable style={{ flex: 1 }} onPress={() => openSavedItem(it)}>
@@ -2299,9 +2425,12 @@ export default function TripDetailScreen() {
                               <StatusBadge s={it.status} />
                             </View>
 
-                            <Text style={styles.itemMeta} numberOfLines={1}>
-                              {buildMetaLine(it)}
-                            </Text>
+                            <View style={styles.itemMetaRow}>
+                              {provider ? <ProviderBadge provider={provider} size="sm" /> : null}
+                              <Text style={styles.itemMeta} numberOfLines={1}>
+                                {buildMetaLine(it)}
+                              </Text>
+                            </View>
 
                             {lp ? (
                               <Text style={styles.livePriceLine} numberOfLines={1}>
@@ -2514,16 +2643,19 @@ const styles = StyleSheet.create({
     padding: 12,
     gap: 8,
   },
+
   tripFinderTitle: {
     color: theme.colors.text,
     fontWeight: "900",
     fontSize: 12,
   },
+
   tripFinderBadges: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8,
   },
+
   tripFinderBadge: {
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.14)",
@@ -2532,11 +2664,13 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     backgroundColor: "rgba(255,255,255,0.04)",
   },
+
   tripFinderBadgeText: {
     color: theme.colors.textSecondary,
     fontWeight: "900",
     fontSize: 11,
   },
+
   tripFinderReasons: {
     color: theme.colors.textSecondary,
     fontWeight: "800",
@@ -2580,11 +2714,13 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 12,
   },
+
   sectionTitle: {
     color: theme.colors.text,
     fontWeight: "900",
     marginBottom: 8,
   },
+
   sectionSub: { color: theme.colors.textTertiary, fontWeight: "900", fontSize: 12 },
 
   inlineLinkBtn: {
@@ -2596,30 +2732,69 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     marginTop: 2,
   },
+
   inlineLinkText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: 12 },
 
   smartGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+
   smartBtn: {
     width: "48%",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.15)",
     borderRadius: 12,
     paddingVertical: 12,
-    alignItems: "center",
+    alignItems: "stretch",
     paddingHorizontal: 10,
     backgroundColor: "rgba(0,0,0,0.16)",
   },
+
   smartBtnPrimary: {
     borderColor: "rgba(0,255,136,0.45)",
     backgroundColor: "rgba(0,0,0,0.22)",
   },
+
+  smartBtnTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+
   smartBtnText: { color: theme.colors.text, fontWeight: "900" },
+
   smartBtnSub: {
     marginTop: 4,
     color: theme.colors.textSecondary,
     fontWeight: "800",
     fontSize: 12,
-    textAlign: "center",
+    textAlign: "left",
+  },
+
+  providerBadgeWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+
+  providerBadgeWrapLabeled: {
+    maxWidth: 180,
+  },
+
+  providerBadgeCircle: {
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  providerBadgeCircleText: {
+    fontWeight: "900",
+    letterSpacing: 0.4,
+  },
+
+  providerBadgeLabel: {
+    color: theme.colors.text,
+    fontSize: 12,
+    fontWeight: "900",
   },
 
   matchRowWrap: { gap: 8 },
@@ -2660,11 +2835,19 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
 
-  matchHint: {
+  ticketSignalRow: {
     marginTop: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    minWidth: 0,
+  },
+
+  matchHint: {
     color: theme.colors.textTertiary,
     fontWeight: "900",
     fontSize: 11,
+    flex: 1,
   },
 
   ticketQualityMeta: {
@@ -2696,10 +2879,26 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.18)",
     padding: 12,
   },
+
   proxTitle: { color: theme.colors.text, fontWeight: "900", fontSize: 14, lineHeight: 18 },
+
   proxCity: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: 12 },
-  proxBody: { marginTop: 8, color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12, lineHeight: 16 },
-  proxMuted: { marginTop: 8, color: theme.colors.textTertiary, fontWeight: "900", fontSize: 11, lineHeight: 14 },
+
+  proxBody: {
+    marginTop: 8,
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
+    fontSize: 12,
+    lineHeight: 16,
+  },
+
+  proxMuted: {
+    marginTop: 8,
+    color: theme.colors.textTertiary,
+    fontWeight: "900",
+    fontSize: 11,
+    lineHeight: 14,
+  },
 
   proxBtn: {
     marginTop: 10,
@@ -2710,9 +2909,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "rgba(0,0,0,0.18)",
   },
+
   proxBtnText: { color: theme.colors.text, fontWeight: "900" },
 
   stayLabel: { color: theme.colors.text, fontWeight: "900", fontSize: 12 },
+
   stayBullet: { color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12, lineHeight: 16 },
 
   areaRow: {
@@ -2726,12 +2927,17 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.18)",
     alignItems: "center",
   },
+
   areaTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
+
   areaName: { color: theme.colors.text, fontWeight: "900", flexShrink: 1 },
+
   areaNotes: { marginTop: 6, color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12, lineHeight: 16 },
+
   areaBtns: { gap: 8, alignItems: "flex-end" },
 
   pill: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
+
   pillText: { color: theme.colors.text, fontWeight: "900", fontSize: 11 },
 
   stopRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
@@ -2744,7 +2950,9 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,200,80,0.08)",
     padding: 12,
   },
+
   lateTitle: { color: theme.colors.text, fontWeight: "900", fontSize: 12 },
+
   lateText: { marginTop: 6, color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12, lineHeight: 16 },
 
   itemRow: {
@@ -2768,9 +2976,22 @@ const styles = StyleSheet.create({
 
   itemTitle: { color: theme.colors.text, fontWeight: "900", flexShrink: 1, paddingRight: 6 },
 
-  itemMeta: { marginTop: 4, color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12 },
+  itemMetaRow: {
+    marginTop: 4,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+
+  itemMeta: {
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
+    fontSize: 12,
+    flex: 1,
+  },
 
   livePriceLine: { marginTop: 6, color: theme.colors.textTertiary, fontSize: 12, fontWeight: "900" },
+
   paidLine: { marginTop: 6, color: "rgba(242,244,246,0.92)", fontSize: 12, fontWeight: "900" },
 
   itemActions: { gap: 8, alignItems: "flex-end" },
@@ -2783,19 +3004,29 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.15)",
     backgroundColor: "rgba(0,0,0,0.15)",
   },
+
   smallBtnWide: { flex: 1, alignItems: "center" },
+
   smallBtnPrimary: { borderColor: "rgba(0,255,136,0.35)" },
+
   smallBtnDisabled: { opacity: 0.65 },
+
   smallBtnDanger: { borderColor: "rgba(255,80,80,0.35)" },
+
   smallBtnText: { color: theme.colors.text, fontWeight: "900", fontSize: 12 },
 
   badge: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
+
   badgeText: { color: theme.colors.text, fontWeight: "900", fontSize: 11 },
 
   badgePrimary: { borderColor: "rgba(0,255,136,0.45)", backgroundColor: "rgba(0,255,136,0.10)" },
+
   badgePending: { borderColor: "rgba(255,200,80,0.40)", backgroundColor: "rgba(255,200,80,0.10)" },
+
   badgeSaved: { borderColor: "rgba(0,255,136,0.35)", backgroundColor: "rgba(0,255,136,0.08)" },
+
   badgeBooked: { borderColor: "rgba(120,170,255,0.45)", backgroundColor: "rgba(120,170,255,0.10)" },
+
   badgeArchived: { borderColor: "rgba(255,255,255,0.18)", backgroundColor: "rgba(255,255,255,0.06)" },
 
   noteBox: {
