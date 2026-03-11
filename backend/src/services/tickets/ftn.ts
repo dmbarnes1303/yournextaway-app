@@ -451,7 +451,7 @@ export async function resolveFtnCandidate(input: TicketResolveInput): Promise<Ti
     return null;
   }
 
-  const exact = exactTeamsMatch(best.ev, input) && best.score >= 90;
+  const exact = exactTeamsMatch(best.ev, input) && best.score >= 80;
   const normalizedPrice = eventPrice(best.ev);
 
   console.log("[FTN] matched event", {
