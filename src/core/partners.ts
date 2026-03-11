@@ -3,6 +3,7 @@
 export type PartnerCategory =
   | "tickets"
   | "flights"
+  | "rail"
   | "stays"
   | "transfers"
   | "experiences"
@@ -72,6 +73,16 @@ export const PARTNERS: Partner[] = [
     affiliate: true,
     api: false,
     deepLinkBase: "https://www.aviasales.com/",
+  },
+
+  // Rail / coach
+  {
+    id: "omio",
+    name: "Omio",
+    category: "rail",
+    affiliate: true,
+    api: false,
+    deepLinkBase: "https://www.omio.com/",
   },
 
   // Stays
