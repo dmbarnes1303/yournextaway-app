@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { env, hasFtnConfig } from "../../lib/env.js";
 import type { TicketCandidate, TicketResolveInput } from "./types.js";
+import { expandTeamAliases, getPreferredTeamName } from "./teamAliases.js";
 
 type FtnEvent = {
   event_id?: string | number;
@@ -118,22 +119,36 @@ function eventAway(ev: FtnEvent): string {
   return clean(ev.away_team_name);
 }
 
-function containsTeamsLoose(name: string, home: string, away: string): boolean {
-  const n = norm(name);
-  return n.includes(norm(home)) && n.includes(norm(away));
+function textContainsAny(text: string, variants: string[]): boolean {
+  const haystack = norm(text);
+  return variants.some((variant) => haystack.includes(norm(variant)));
+}
+
+function teamsMatchLoose(
+  title: string,
+  inputHomeVariants: string[],
+  inputAwayVariants: string[]
+): boolean {
+  const titleNorm = norm(title);
+  const homeMatch = inputHomeVariants.some((variant) => titleNorm.includes(norm(variant)));
+  const awayMatch = inputAwayVariants.some((variant) => titleNorm.includes(norm(variant)));
+  return homeMatch && awayMatch;
 }
 
 function exactTeamsMatch(ev: FtnEvent, input: TicketResolveInput): boolean {
+  const inputHomeVariants = expandTeamAliases(input.homeName);
+  const inputAwayVariants = expandTeamAliases(input.awayName);
+
   const evHome = norm(eventHome(ev));
   const evAway = norm(eventAway(ev));
-  const inputHome = norm(input.homeName);
-  const inputAway = norm(input.awayName);
 
   if (evHome && evAway) {
-    return evHome === inputHome && evAway === inputAway;
+    const homeMatch = inputHomeVariants.some((variant) => evHome === norm(variant));
+    const awayMatch = inputAwayVariants.some((variant) => evAway === norm(variant));
+    return homeMatch && awayMatch;
   }
 
-  return containsTeamsLoose(eventTitle(ev), input.homeName, input.awayName);
+  return teamsMatchLoose(eventTitle(ev), inputHomeVariants, inputAwayVariants);
 }
 
 function textContainsVariant(text: string, variant: string): boolean {
@@ -201,16 +216,26 @@ function scoreEvent(ev: FtnEvent, input: TicketResolveInput): number {
 
   const title = eventTitle(ev);
   const candidateUrl = eventUrl(ev);
+
   const evHome = eventHome(ev);
   const evAway = eventAway(ev);
 
+  const inputHomeVariants = expandTeamAliases(input.homeName);
+  const inputAwayVariants = expandTeamAliases(input.awayName);
+
   if (evHome && evAway) {
-    if (norm(evHome) === norm(input.homeName) && norm(evAway) === norm(input.awayName)) {
+    const homeExact = inputHomeVariants.some((variant) => norm(evHome) === norm(variant));
+    const awayExact = inputAwayVariants.some((variant) => norm(evAway) === norm(variant));
+
+    const homeReversed = inputAwayVariants.some((variant) => norm(evHome) === norm(variant));
+    const awayReversed = inputHomeVariants.some((variant) => norm(evAway) === norm(variant));
+
+    if (homeExact && awayExact) {
       score += 80;
-    } else if (norm(evHome) === norm(input.awayName) && norm(evAway) === norm(input.homeName)) {
+    } else if (homeReversed && awayReversed) {
       score += 20;
     }
-  } else if (title && containsTeamsLoose(title, input.homeName, input.awayName)) {
+  } else if (title && teamsMatchLoose(title, inputHomeVariants, inputAwayVariants)) {
     score += 55;
   }
 
@@ -308,8 +333,8 @@ export async function resolveFtnCandidate(input: TicketResolveInput): Promise<Ti
     return null;
   }
 
-  const homeName = clean(input.homeName);
-  const awayName = clean(input.awayName);
+  const homeName = getPreferredTeamName(input.homeName);
+  const awayName = getPreferredTeamName(input.awayName);
   const kickoffIso = clean(input.kickoffIso);
 
   if (!homeName || !awayName || !kickoffIso) {
