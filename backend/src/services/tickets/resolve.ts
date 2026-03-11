@@ -1,7 +1,12 @@
 import { resolveFtnCandidate } from "./ftn.js";
 import { resolveSe365Candidate } from "./se365.js";
 import { resolveGigsbergCandidate } from "./gigsberg.js";
-import type { TicketCandidate, TicketResolution, TicketResolveInput } from "./types.js";
+import type {
+  TicketCandidate,
+  TicketResolution,
+  TicketResolveInput,
+  TicketProviderId,
+} from "./types.js";
 
 type CacheEntry = {
   expires: number;
@@ -9,12 +14,12 @@ type CacheEntry = {
 };
 
 const CACHE = new Map<string, CacheEntry>();
-const CACHE_TTL = 1000 * 60 * 10;
+const CACHE_TTL_MS = 1000 * 60 * 10;
 const PROVIDER_TIMEOUT_MS = 7000;
 const MAX_RETURNED_OPTIONS = 3;
 const MIN_FALLBACK_SCORE = 20;
 
-const PROVIDER_PRIORITY: Record<string, number> = {
+const PROVIDER_PRIORITY: Record<TicketProviderId, number> = {
   footballticketsnet: 1,
   sportsevents365: 2,
   gigsberg: 3,
@@ -22,6 +27,10 @@ const PROVIDER_PRIORITY: Record<string, number> = {
 
 function clean(v: unknown): string {
   return String(v ?? "").trim();
+}
+
+function normalize(v: unknown): string {
+  return clean(v).toLowerCase();
 }
 
 function buildCacheKey(input: TicketResolveInput): string {
@@ -49,14 +58,14 @@ function getCache(key: string): TicketResolution | null {
   return entry.value;
 }
 
-function setCache(key: string, value: TicketResolution) {
+function setCache(key: string, value: TicketResolution): void {
   CACHE.set(key, {
-    expires: Date.now() + CACHE_TTL,
+    expires: Date.now() + CACHE_TTL_MS,
     value,
   });
 }
 
-function deleteCache(key: string) {
+function deleteCache(key: string): void {
   CACHE.delete(key);
 }
 
@@ -133,11 +142,13 @@ async function withTimeout<T>(
     return result;
   } catch (error) {
     const durationMs = Date.now() - startedAt;
+
     console.log(`[tickets] ${label} error`, {
       durationMs,
       timeoutMs,
       message: error instanceof Error ? error.message : String(error),
     });
+
     return null;
   }
 }
@@ -147,14 +158,30 @@ function dedupeCandidates(candidates: TicketCandidate[]): TicketCandidate[] {
 
   for (const candidate of candidates) {
     const key = [
-      clean(candidate.provider).toLowerCase(),
-      clean(candidate.url).toLowerCase(),
-      clean(candidate.title).toLowerCase(),
+      normalize(candidate.provider),
+      normalize(candidate.url),
+      normalize(candidate.title),
     ].join("|");
 
     const existing = map.get(key);
-    if (!existing || candidate.score > existing.score) {
+
+    if (!existing) {
       map.set(key, candidate);
+      continue;
+    }
+
+    if (candidate.score > existing.score) {
+      map.set(key, candidate);
+      continue;
+    }
+
+    if (candidate.score === existing.score) {
+      const currentRank = PROVIDER_PRIORITY[candidate.provider] ?? 99;
+      const existingRank = PROVIDER_PRIORITY[existing.provider] ?? 99;
+
+      if (currentRank < existingRank) {
+        map.set(key, candidate);
+      }
     }
   }
 
@@ -167,16 +194,28 @@ function reasonRank(reason: TicketCandidate["reason"]): number {
   return 3;
 }
 
-function providerRank(provider: string): number {
-  return PROVIDER_PRIORITY[clean(provider).toLowerCase()] ?? 99;
+function providerRank(provider: TicketProviderId): number {
+  return PROVIDER_PRIORITY[provider] ?? 99;
 }
 
 function sortCandidates(candidates: TicketCandidate[]): TicketCandidate[] {
   return [...candidates].sort((a, b) => {
-    const reasonDiff = reasonRank(a.reason) - reasonRank(b.reason);
-    if (reasonDiff !== 0) return reasonDiff;
+    const aReasonRank = reasonRank(a.reason);
+    const bReasonRank = reasonRank(b.reason);
 
-    if (b.score !== a.score) return b.score - a.score;
+    if (aReasonRank !== bReasonRank) {
+      return aReasonRank - bReasonRank;
+    }
+
+    if (b.score !== a.score) {
+      return b.score - a.score;
+    }
+
+    const aHasPrice = Boolean(clean(a.priceText));
+    const bHasPrice = Boolean(clean(b.priceText));
+
+    if (aHasPrice && !bHasPrice) return -1;
+    if (!aHasPrice && bHasPrice) return 1;
 
     return providerRank(a.provider) - providerRank(b.provider);
   });
@@ -197,7 +236,7 @@ function buildResolution(
   const sorted = sortCandidates(filtered);
   const top = sorted.slice(0, MAX_RETURNED_OPTIONS);
 
-  if (!top.length) {
+  if (top.length === 0) {
     return buildNotFound(checkedProviders);
   }
 
@@ -250,6 +289,7 @@ export async function resolveTicket(
         cachedOk: cached.ok,
         cachedOptions: Array.isArray(cached.options) ? cached.options.length : 0,
       });
+
       return cached;
     }
   }
@@ -272,53 +312,13 @@ export async function resolveTicket(
     provider: "footballticketsnet",
     candidate: summarizeCandidate(ftn),
   });
-  if (ftn) candidates.push(ftn);
+  if (ftn) {
+    candidates.push(ftn);
+  }
 
   checkedProviders.push("sportsevents365");
   console.log("[tickets] provider result", {
     provider: "sportsevents365",
     candidate: summarizeCandidate(se365),
   });
-  if (se365) candidates.push(se365);
-
-  const gigsberg = await withTimeout("gigsberg", () => resolveGigsbergCandidate(input));
-
-  checkedProviders.push("gigsberg");
-  console.log("[tickets] provider result", {
-    provider: "gigsberg",
-    candidate: summarizeCandidate(gigsberg),
-  });
-  if (gigsberg) candidates.push(gigsberg);
-
-  const result = buildResolution(candidates, checkedProviders);
-
-  if (result.ok) {
-    console.log("[tickets] resolved", {
-      selectedProvider: result.provider,
-      selectedReason: result.reason,
-      selectedScore: result.score,
-      selectedExact: result.exact,
-      checkedProviders,
-      options: result.options.map((option) => ({
-        provider: option.provider,
-        reason: option.reason,
-        score: option.score,
-        exact: option.exact,
-        priceText: option.priceText ?? null,
-      })),
-      debugNoCache,
-    });
-  } else {
-    console.log("[tickets] no result", {
-      checkedProviders,
-      input: summarizeInput(input),
-      debugNoCache,
-    });
-  }
-
-  if (!debugNoCache) {
-    setCache(cacheKey, result);
-  }
-
-  return result;
-}
+  if (se365) {
