@@ -29,6 +29,16 @@ export type TicketCandidate = {
   reason: Exclude<TicketResolveReason, "not_found">;
 };
 
+export type TicketOption = {
+  provider: TicketProviderId;
+  exact: boolean;
+  score: number;
+  url: string;
+  title: string;
+  priceText?: string | null;
+  reason: Exclude<TicketResolveReason, "not_found">;
+};
+
 export type TicketResolution = {
   ok: boolean;
   provider: TicketProviderId | null;
@@ -39,4 +49,5 @@ export type TicketResolution = {
   priceText?: string | null;
   reason: TicketResolveReason;
   checkedProviders: TicketProviderId[];
+  options: TicketOption[];
 };
