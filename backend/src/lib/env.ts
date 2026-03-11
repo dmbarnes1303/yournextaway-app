@@ -33,8 +33,8 @@ export const env = {
   se365ApiKey: opt("SE365_API_KEY", ""),
   se365AffiliateId: opt("SE365_AFFILIATE_ID", ""),
 
-  // Gigsberg
-  gigsbergBaseUrl: opt("GIGSBERG_BASE_URL", "https://www.gigsberg.com"),
+  // Gigsberg API + affiliate/public search
+  gigsbergBaseUrl: opt("GIGSBERG_BASE_URL", "https://integration2.gigsberg.com/v2"),
   gigsbergApiKey: opt("GIGSBERG_API_KEY", ""),
   gigsbergAffiliateId: opt("GIGSBERG_AFFILIATE_ID", "yournextaway"),
 };
@@ -49,20 +49,16 @@ export function hasFtnConfig(): boolean {
 }
 
 export function hasSe365Config(): boolean {
-  return Boolean(
-    env.se365BaseUrl &&
-      env.se365ApiKey
-  );
+  return Boolean(env.se365BaseUrl && env.se365ApiKey);
 }
 
 export function hasGigsbergConfig(): boolean {
   return Boolean(
     env.gigsbergBaseUrl &&
+      env.gigsbergApiKey &&
       env.gigsbergAffiliateId
   );
 }
 
 // Keep req available for future hard-required startup checks.
-// Example usage later:
-// const DATABASE_URL = req("DATABASE_URL");
 export { req };
