@@ -417,12 +417,7 @@ function summarizeListing(listing: GigsbergListing) {
 }
 
 function eventDedupKey(ev: GigsbergEvent): string {
-  return [
-    clean(ev.id),
-    eventName(ev),
-    eventDate(ev),
-    eventVenue(ev),
-  ]
+  return [clean(ev.id), eventName(ev), eventDate(ev), eventVenue(ev)]
     .join("|")
     .toLowerCase();
 }
@@ -522,6 +517,8 @@ async function tryEventEndpoint(
     });
     return [];
   }
+
+  console.log("[Gigsberg DEBUG] raw events payload", response.body);
 
   if (!response.ok) {
     console.log("[Gigsberg] events non-200 response", {
@@ -812,4 +809,4 @@ export async function resolveGigsbergCandidate(
     priceText: bestListing ? listingPriceText(bestListing.listing) : null,
     reason: exact ? "exact_event" : "partial_match",
   };
-  }
+}
