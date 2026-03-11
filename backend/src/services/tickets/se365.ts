@@ -1,5 +1,6 @@
 import { env, hasSe365Config } from "../../lib/env.js";
 import type { TicketCandidate, TicketResolveInput } from "./types.js";
+import { expandTeamAliases, getPreferredTeamName } from "./teamAliases.js";
 
 type Se365Event = {
   id?: number | string;
@@ -97,7 +98,15 @@ function scoreEvent(ev: Se365Event, input: TicketResolveInput): number {
   let score = 0;
 
   const eventName = clean(ev.name);
-  if (eventName && containsTeamsLoose(eventName, input.homeName, input.awayName)) {
+
+  const homeVariants = expandTeamAliases(input.homeName);
+  const awayVariants = expandTeamAliases(input.awayName);
+
+  const nameMatch = homeVariants.some((home) =>
+    awayVariants.some((away) => containsTeamsLoose(eventName, home, away))
+  );
+
+  if (eventName && nameMatch) {
     score += 60;
   }
 
@@ -127,12 +136,19 @@ function isStrongEnough(score: number): boolean {
 }
 
 function isExactEvent(ev: Se365Event, input: TicketResolveInput, score: number): boolean {
-  const nameMatch = containsTeamsLoose(clean(ev.name), input.homeName, input.awayName);
+  const eventName = clean(ev.name);
+  const homeVariants = expandTeamAliases(input.homeName);
+  const awayVariants = expandTeamAliases(input.awayName);
+
+  const nameMatch = homeVariants.some((home) =>
+    awayVariants.some((away) => containsTeamsLoose(eventName, home, away))
+  );
+
   const kickoff = safeDate(input.kickoffIso);
   const evDt = safeDate(ev.startDate);
 
   if (!nameMatch || !kickoff || !evDt) return false;
-  if (isBadVariant(clean(ev.name))) return false;
+  if (isBadVariant(eventName)) return false;
 
   const diff = absDays(kickoff, evDt);
   return diff === 0 && score >= 80;
@@ -196,18 +212,22 @@ async function fetchSearch(url: string): Promise<Se365Response | null> {
 }
 
 function buildQueries(input: TicketResolveInput): string[] {
-  const home = clean(input.homeName);
-  const away = clean(input.awayName);
+  const homeVariants = expandTeamAliases(input.homeName);
+  const awayVariants = expandTeamAliases(input.awayName);
   const league = clean(input.leagueName);
 
-  const queries = [
-    `${home} ${away}`,
-    `${home} vs ${away}`,
-  ];
+  const queries: string[] = [];
 
-  if (league) {
-    queries.push(`${home} ${away} ${league}`);
-    queries.push(`${home} vs ${away} ${league}`);
+  for (const home of homeVariants) {
+    for (const away of awayVariants) {
+      queries.push(`${home} ${away}`);
+      queries.push(`${home} vs ${away}`);
+
+      if (league) {
+        queries.push(`${home} ${away} ${league}`);
+        queries.push(`${home} vs ${away} ${league}`);
+      }
+    }
   }
 
   return Array.from(new Set(queries.filter(Boolean)));
@@ -217,10 +237,11 @@ function buildTrackedSearchFallback(input: TicketResolveInput): string | null {
   const base = env.se365BaseUrl.replace(/\/+$/, "");
   const aidRaw = clean(env.se365AffiliateId);
 
-  const q = clean(input.leagueName)
-    ? `${clean(input.homeName)} ${clean(input.awayName)} ${clean(input.leagueName)}`
-    : `${clean(input.homeName)} ${clean(input.awayName)}`;
+  const home = getPreferredTeamName(input.homeName);
+  const away = getPreferredTeamName(input.awayName);
+  const league = clean(input.leagueName);
 
+  const q = league ? `${home} ${away} ${league}` : `${home} ${away}`;
   if (!q) return null;
 
   const searchBase = `${base}/events/search?q=${encodeURIComponent(q)}`;
@@ -286,7 +307,7 @@ export async function resolveSe365Candidate(
       exact: false,
       score: 15,
       url: fallbackUrl,
-      title: `Tickets: ${clean(input.homeName)} vs ${clean(input.awayName)}`,
+      title: `Tickets: ${getPreferredTeamName(input.homeName)} vs ${getPreferredTeamName(input.awayName)}`,
       priceText: null,
       reason: "search_fallback",
     };
@@ -333,7 +354,7 @@ export async function resolveSe365Candidate(
       exact: false,
       score: 15,
       url: fallbackUrl,
-      title: `Tickets: ${clean(input.homeName)} vs ${clean(input.awayName)}`,
+      title: `Tickets: ${getPreferredTeamName(input.homeName)} vs ${getPreferredTeamName(input.awayName)}`,
       priceText: null,
       reason: "search_fallback",
     };
@@ -341,6 +362,7 @@ export async function resolveSe365Candidate(
 
   const best = scored[0];
   const rawUrl = clean(best.ev.url);
+
   if (!rawUrl) {
     const fallbackUrl = buildTrackedSearchFallback(input);
 
@@ -359,7 +381,7 @@ export async function resolveSe365Candidate(
       exact: false,
       score: 15,
       url: fallbackUrl,
-      title: `Tickets: ${clean(input.homeName)} vs ${clean(input.awayName)}`,
+      title: `Tickets: ${getPreferredTeamName(input.homeName)} vs ${getPreferredTeamName(input.awayName)}`,
       priceText: null,
       reason: "search_fallback",
     };
@@ -380,8 +402,8 @@ export async function resolveSe365Candidate(
     exact,
     score: best.score,
     url: appendAffiliate(rawUrl),
-    title: `Tickets: ${clean(input.homeName)} vs ${clean(input.awayName)}`,
+    title: `Tickets: ${getPreferredTeamName(input.homeName)} vs ${getPreferredTeamName(input.awayName)}`,
     priceText: clean(best.ev.minPrice) || null,
     reason: exact ? "exact_event" : "search_fallback",
   };
-}
+        }
