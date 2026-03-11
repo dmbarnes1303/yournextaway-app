@@ -148,7 +148,17 @@ function dedupeCandidates(candidates: TicketCandidate[]): TicketCandidate[] {
 
     const existing = map.get(key);
 
-    if (!existing || candidate.score > existing.score) {
+    if (!existing) {
+      map.set(key, candidate);
+      continue;
+    }
+
+    if (candidate.exact && !existing.exact) {
+      map.set(key, candidate);
+      continue;
+    }
+
+    if (candidate.score > existing.score) {
       map.set(key, candidate);
     }
   }
@@ -160,7 +170,20 @@ function sortCandidates(candidates: TicketCandidate[]): TicketCandidate[] {
   return [...candidates].sort((a, b) => {
     if (a.reason === "exact_event" && b.reason !== "exact_event") return -1;
     if (a.reason !== "exact_event" && b.reason === "exact_event") return 1;
+
+    if (a.reason === "partial_match" && b.reason === "search_fallback") return -1;
+    if (a.reason === "search_fallback" && b.reason === "partial_match") return 1;
+
+    if (a.exact && !b.exact) return -1;
+    if (!a.exact && b.exact) return 1;
+
     if (b.score !== a.score) return b.score - a.score;
+
+    const aHasPrice = Boolean(clean(a.priceText));
+    const bHasPrice = Boolean(clean(b.priceText));
+    if (aHasPrice && !bHasPrice) return -1;
+    if (!aHasPrice && bHasPrice) return 1;
+
     return a.provider.localeCompare(b.provider);
   });
 }
@@ -168,6 +191,7 @@ function sortCandidates(candidates: TicketCandidate[]): TicketCandidate[] {
 function filterFallbacks(candidates: TicketCandidate[]): TicketCandidate[] {
   return candidates.filter((candidate) => {
     if (candidate.reason === "exact_event") return true;
+    if (candidate.reason === "partial_match") return candidate.score >= Math.max(35, MIN_FALLBACK_SCORE);
     return candidate.score >= MIN_FALLBACK_SCORE;
   });
 }
@@ -231,9 +255,7 @@ export async function resolveTicket(
         cachedReason: cached.reason,
         cachedScore: cached.score,
         cachedOk: cached.ok,
-        cachedOptions: Array.isArray((cached as any).options)
-          ? (cached as any).options.length
-          : 0,
+        cachedOptions: Array.isArray(cached.options) ? cached.options.length : 0,
       });
       return cached;
     }
