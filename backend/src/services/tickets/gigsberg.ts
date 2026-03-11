@@ -5,21 +5,12 @@ function clean(v: unknown): string {
   return String(v ?? "").trim();
 }
 
-function norm(v: unknown): string {
-  return clean(v).toLowerCase();
-}
-
-function safeDate(v?: string): Date | null {
-  const s = clean(v);
-  if (!s) return null;
-  const d = new Date(s);
-  return Number.isNaN(d.getTime()) ? null : d;
-}
-
 function buildSearchQuery(input: TicketResolveInput): string {
   const home = clean(input.homeName);
   const away = clean(input.awayName);
   const league = clean(input.leagueName);
+
+  if (!home || !away) return "";
 
   if (league) {
     return `${home} vs ${away} ${league} tickets`;
@@ -28,42 +19,24 @@ function buildSearchQuery(input: TicketResolveInput): string {
   return `${home} vs ${away} football tickets`;
 }
 
-function buildSearchUrl(input: TicketResolveInput): string {
+function buildSearchUrl(input: TicketResolveInput): string | null {
   const query = buildSearchQuery(input);
-  const base =
-    clean(env.gigsbergBaseUrl) || "https://www.gigsberg.com/search";
+  if (!query) return null;
 
-  const hasQuery = base.includes("?");
-  const joiner = hasQuery ? "&" : "?";
+  const base = clean(env.gigsbergBaseUrl) || "https://www.gigsberg.com/search";
 
-  let url = base;
+  // If someone configured a full tracked URL already, respect it.
+  const url = new URL(base);
 
-  if (!/[?&]query=/.test(url)) {
-    url = `${url}${joiner}query=${encodeURIComponent(query)}`;
+  if (!url.searchParams.get("query")) {
+    url.searchParams.set("query", query);
   }
 
-  if (!/[?&]aff=/.test(url)) {
-    const affJoiner = url.includes("?") ? "&" : "?";
-    url = `${url}${affJoiner}aff=${encodeURIComponent(env.gigsbergAffiliateId)}`;
+  if (!url.searchParams.get("aff") && clean(env.gigsbergAffiliateId)) {
+    url.searchParams.set("aff", clean(env.gigsbergAffiliateId));
   }
 
-  return url;
-}
-
-function scoreFallback(input: TicketResolveInput): number {
-  let score = 12;
-
-  const home = norm(input.homeName);
-  const away = norm(input.awayName);
-  const league = norm(input.leagueName);
-
-  if (home && away) score += 4;
-  if (league) score += 2;
-
-  const kickoff = safeDate(input.kickoffIso);
-  if (kickoff) score += 2;
-
-  return score;
+  return url.toString();
 }
 
 export async function resolveGigsbergCandidate(
@@ -77,11 +50,17 @@ export async function resolveGigsbergCandidate(
 
   if (!homeName || !awayName || !kickoffIso) return null;
 
+  const url = buildSearchUrl(input);
+  if (!url) return null;
+
+  // IMPORTANT:
+  // Gigsberg is only a soft search fallback right now.
+  // Do not score it anywhere near direct event matches from FTN / SE365.
   return {
     provider: "gigsberg",
     exact: false,
-    score: scoreFallback(input),
-    url: buildSearchUrl(input),
+    score: 5,
+    url,
     title: `Tickets: ${homeName} vs ${awayName}`,
     priceText: null,
     reason: "search_fallback",
