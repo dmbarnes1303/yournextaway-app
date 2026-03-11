@@ -51,12 +51,35 @@ function containsTeamsLoose(name: string, home: string, away: string): boolean {
   return n.includes(norm(home)) && n.includes(norm(away));
 }
 
+function isBadVariant(name: string): boolean {
+  const n = norm(name);
+  return (
+    n.includes("women") ||
+    n.includes("femeni") ||
+    n.includes("feminine") ||
+    n.includes("female") ||
+    n.includes("u19") ||
+    n.includes("u18") ||
+    n.includes("u17") ||
+    n.includes("u21") ||
+    n.includes("u23") ||
+    n.includes("youth") ||
+    n.includes("b team") ||
+    n.includes("ii") ||
+    n.includes("reserves")
+  );
+}
+
 function scoreEvent(ev: Se365Event, input: TicketResolveInput): number {
   let score = 0;
 
   const eventName = clean(ev.name);
   if (eventName && containsTeamsLoose(eventName, input.homeName, input.awayName)) {
     score += 60;
+  }
+
+  if (eventName && isBadVariant(eventName)) {
+    score -= 1000;
   }
 
   const kickoff = safeDate(input.kickoffIso);
@@ -86,19 +109,13 @@ function isExactEvent(ev: Se365Event, input: TicketResolveInput, score: number):
   const evDt = safeDate(ev.startDate);
 
   if (!nameMatch || !kickoff || !evDt) return false;
+  if (isBadVariant(clean(ev.name))) return false;
 
   const diff = absDays(kickoff, evDt);
   return diff === 0 && score >= 90;
 }
 
-export async function resolveSe365Candidate(
-  input: TicketResolveInput
-): Promise<TicketCandidate | null> {
-  if (!hasSe365Config()) return null;
-
-  const q = encodeURIComponent(`${clean(input.homeName)} ${clean(input.awayName)}`);
-  const url = `${env.se365BaseUrl.replace(/\/+$/, "")}/events/search?q=${q}`;
-
+async function fetchSearch(url: string): Promise<Se365Response | null> {
   let res: Response;
   try {
     res = await fetch(url, {
@@ -113,17 +130,61 @@ export async function resolveSe365Candidate(
 
   if (!res.ok) return null;
 
-  let json: Se365Response | null = null;
   try {
-    json = (await res.json()) as Se365Response;
+    return (await res.json()) as Se365Response;
   } catch {
     return null;
   }
+}
 
-  const events = Array.isArray(json?.events) ? json.events : [];
-  if (!events.length) return null;
+function buildQueries(input: TicketResolveInput): string[] {
+  const home = clean(input.homeName);
+  const away = clean(input.awayName);
+  const league = clean(input.leagueName);
 
-  const scored = events
+  const queries = [
+    `${home} ${away}`,
+    `${home} vs ${away}`,
+  ];
+
+  if (league) {
+    queries.push(`${home} ${away} ${league}`);
+  }
+
+  return Array.from(new Set(queries.filter(Boolean)));
+}
+
+export async function resolveSe365Candidate(
+  input: TicketResolveInput
+): Promise<TicketCandidate | null> {
+  if (!hasSe365Config()) return null;
+
+  const base = env.se365BaseUrl.replace(/\/+$/, "");
+  const queries = buildQueries(input);
+
+  const allEvents: Se365Event[] = [];
+
+  for (const q of queries) {
+    const url = `${base}/events/search?q=${encodeURIComponent(q)}`;
+    const json = await fetchSearch(url);
+    const events = Array.isArray(json?.events) ? json.events : [];
+    if (events.length) {
+      allEvents.push(...events);
+    }
+  }
+
+  if (!allEvents.length) return null;
+
+  const deduped = Array.from(
+    new Map(
+      allEvents.map((ev) => [
+        `${clean(ev.id)}|${clean(ev.name)}|${clean(ev.startDate)}`,
+        ev,
+      ])
+    ).values()
+  );
+
+  const scored = deduped
     .map((ev) => ({
       ev,
       score: scoreEvent(ev, input),
