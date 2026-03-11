@@ -37,26 +37,33 @@ function appendAffiliate(url: string): string {
   if (!base) return "";
   if (/\ba_aid=/.test(base)) return base;
   if (!env.se365AffiliateId) return base;
+
   const joiner = base.includes("?") ? "&" : "?";
   const param = env.se365AffiliateId.includes("=")
     ? env.se365AffiliateId
     : `a_aid=${encodeURIComponent(env.se365AffiliateId)}`;
+
   return `${base}${joiner}${param}`;
 }
 
-function containsTeams(name: string, home: string, away: string): boolean {
+function containsTeamsLoose(name: string, home: string, away: string): boolean {
   const n = norm(name);
   return n.includes(norm(home)) && n.includes(norm(away));
 }
 
 function scoreEvent(ev: Se365Event, input: TicketResolveInput): number {
   let score = 0;
-  if (containsTeams(clean(ev.name), input.homeName, input.awayName)) score += 60;
+
+  const eventName = clean(ev.name);
+  if (eventName && containsTeamsLoose(eventName, input.homeName, input.awayName)) {
+    score += 60;
+  }
 
   const kickoff = safeDate(input.kickoffIso);
   const evDt = safeDate(ev.startDate);
   if (kickoff && evDt) {
     const diff = absDays(kickoff, evDt);
+
     if (diff === 0) score += 25;
     else if (diff === 1) score += 15;
     else if (diff === 2) score += 5;
@@ -64,10 +71,29 @@ function scoreEvent(ev: Se365Event, input: TicketResolveInput): number {
   }
 
   if (clean(ev.url)) score += 5;
+  if (clean(ev.minPrice)) score += 2;
+
   return score;
 }
 
-export async function resolveSe365Candidate(input: TicketResolveInput): Promise<TicketCandidate | null> {
+function isStrongEnough(score: number): boolean {
+  return score >= 50;
+}
+
+function isExactEvent(ev: Se365Event, input: TicketResolveInput, score: number): boolean {
+  const nameMatch = containsTeamsLoose(clean(ev.name), input.homeName, input.awayName);
+  const kickoff = safeDate(input.kickoffIso);
+  const evDt = safeDate(ev.startDate);
+
+  if (!nameMatch || !kickoff || !evDt) return false;
+
+  const diff = absDays(kickoff, evDt);
+  return diff === 0 && score >= 90;
+}
+
+export async function resolveSe365Candidate(
+  input: TicketResolveInput
+): Promise<TicketCandidate | null> {
   if (!hasSe365Config()) return null;
 
   const q = encodeURIComponent(`${clean(input.homeName)} ${clean(input.awayName)}`);
@@ -84,6 +110,7 @@ export async function resolveSe365Candidate(input: TicketResolveInput): Promise<
   } catch {
     return null;
   }
+
   if (!res.ok) return null;
 
   let json: Se365Response | null = null;
@@ -93,12 +120,15 @@ export async function resolveSe365Candidate(input: TicketResolveInput): Promise<
     return null;
   }
 
-  const events = Array.isArray(json?.events) ? json!.events! : [];
+  const events = Array.isArray(json?.events) ? json.events : [];
   if (!events.length) return null;
 
   const scored = events
-    .map((ev) => ({ ev, score: scoreEvent(ev, input) }))
-    .filter((x) => x.score > 0)
+    .map((ev) => ({
+      ev,
+      score: scoreEvent(ev, input),
+    }))
+    .filter((x) => isStrongEnough(x.score))
     .sort((a, b) => b.score - a.score);
 
   if (!scored.length) return null;
@@ -107,13 +137,15 @@ export async function resolveSe365Candidate(input: TicketResolveInput): Promise<
   const rawUrl = clean(best.ev.url);
   if (!rawUrl) return null;
 
+  const exact = isExactEvent(best.ev, input, best.score);
+
   return {
     provider: "sportsevents365",
-    exact: best.score >= 70,
+    exact,
     score: best.score,
     url: appendAffiliate(rawUrl),
     title: `Tickets: ${clean(input.homeName)} vs ${clean(input.awayName)}`,
     priceText: clean(best.ev.minPrice) || null,
-    reason: "exact_event",
+    reason: exact ? "exact_event" : "search_fallback",
   };
 }
