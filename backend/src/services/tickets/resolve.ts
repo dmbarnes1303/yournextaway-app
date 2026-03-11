@@ -48,6 +48,10 @@ function setCache(key: string, value: TicketResolution) {
   });
 }
 
+function deleteCache(key: string) {
+  CACHE.delete(key);
+}
+
 function buildNotFound(checkedProviders: TicketResolution["checkedProviders"]): TicketResolution {
   return {
     ok: false,
@@ -86,6 +90,7 @@ function summarizeInput(input: TicketResolveInput) {
     kickoffIso: clean(input.kickoffIso) || null,
     leagueId: clean(input.leagueId) || null,
     leagueName: clean(input.leagueName) || null,
+    debugNoCache: Boolean(input.debugNoCache),
   };
 }
 
@@ -161,18 +166,28 @@ function buildResolution(
 
 export async function resolveTicket(input: TicketResolveInput): Promise<TicketResolution> {
   const cacheKey = buildCacheKey(input);
-  const cached = getCache(cacheKey);
+  const debugNoCache = Boolean(input.debugNoCache);
 
-  if (cached) {
-    console.log("[tickets] cache hit", {
+  if (debugNoCache) {
+    deleteCache(cacheKey);
+    console.log("[tickets] cache bypass requested", {
       key: cacheKey,
       input: summarizeInput(input),
-      cachedProvider: cached.provider,
-      cachedReason: cached.reason,
-      cachedScore: cached.score,
-      cachedOk: cached.ok,
     });
-    return cached;
+  } else {
+    const cached = getCache(cacheKey);
+
+    if (cached) {
+      console.log("[tickets] cache hit", {
+        key: cacheKey,
+        input: summarizeInput(input),
+        cachedProvider: cached.provider,
+        cachedReason: cached.reason,
+        cachedScore: cached.score,
+        cachedOk: cached.ok,
+      });
+      return cached;
+    }
   }
 
   console.log("[tickets] resolve start", {
@@ -209,9 +224,13 @@ export async function resolveTicket(input: TicketResolveInput): Promise<TicketRe
     console.log("[tickets] resolved direct", {
       selected: summarizeCandidate(bestDirect),
       checkedProviders,
+      debugNoCache,
     });
 
-    setCache(cacheKey, result);
+    if (!debugNoCache) {
+      setCache(cacheKey, result);
+    }
+
     return result;
   }
 
@@ -231,9 +250,13 @@ export async function resolveTicket(input: TicketResolveInput): Promise<TicketRe
     console.log("[tickets] resolved fallback", {
       selected: summarizeCandidate(bestFallback),
       checkedProviders,
+      debugNoCache,
     });
 
-    setCache(cacheKey, result);
+    if (!debugNoCache) {
+      setCache(cacheKey, result);
+    }
+
     return result;
   }
 
@@ -242,8 +265,12 @@ export async function resolveTicket(input: TicketResolveInput): Promise<TicketRe
   console.log("[tickets] no result", {
     checkedProviders,
     input: summarizeInput(input),
+    debugNoCache,
   });
 
-  setCache(cacheKey, notFound);
+  if (!debugNoCache) {
+    setCache(cacheKey, notFound);
+  }
+
   return notFound;
 }
