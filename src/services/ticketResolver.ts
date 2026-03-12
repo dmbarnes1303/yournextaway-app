@@ -1,227 +1,206 @@
-export type TicketResolutionOption = {
-  provider: string;
-  exact: boolean;
-  score: number;
-  url: string;
-  title: string;
-  priceText?: string | null;
-  reason: "exact_event" | "search_fallback" | "partial_match";
-};
-
-export type TicketResolutionResult = {
-  ok: boolean;
-  provider: string | null;
-  exact: boolean;
-  score: number | null;
-  url: string | null;
-  title: string | null;
-  priceText?: string | null;
-  reason: "exact_event" | "search_fallback" | "not_found";
-  checkedProviders?: string[];
-  options?: TicketResolutionOption[];
-  error?: string;
-};
-
-export type ResolveTicketArgs = {
-  fixtureId?: string | number;
-  homeName: string;
-  awayName: string;
-  kickoffIso: string;
-  leagueName?: string;
-  leagueId?: string | number;
-};
+// src/services/partnerLinks.ts
+import { AffiliateConfig } from "@/src/constants/partners";
+import { buildAffiliateLinks, type CabinClass } from "@/src/services/affiliateLinks";
+import { getCanonicalPartnerId, getPartnerOrNull } from "@/src/core/partners";
 
 function clean(v: unknown): string {
-  return String(v ?? "").trim();
+  return typeof v === "string" ? v.trim() : String(v ?? "").trim();
 }
 
-function safeJsonParse<T>(value: string): T | null {
+function enc(v: unknown) {
+  return encodeURIComponent(clean(v));
+}
+
+function safeUrl(value: string): string {
+  const url = clean(value);
+  if (!url) return "";
+
   try {
-    return JSON.parse(value) as T;
+    return new URL(url).toString();
   } catch {
-    return null;
+    return "";
   }
 }
 
-function getBackendBaseUrl(): string {
-  const raw =
-    clean(process.env.EXPO_PUBLIC_BACKEND_URL) ||
-    clean((process.env as any)?.EXPO_PUBLIC_BACKEND_BASE_URL);
+/* -------------------------------------------------------------------------- */
+/* SportsEvents365 tracking                                                   */
+/* -------------------------------------------------------------------------- */
 
-  return raw.replace(/\/+$/, "");
+function extractSe365Aid(): string {
+  const tracked = clean(AffiliateConfig.sportsevents365Tracked);
+  if (!tracked) return "";
+
+  try {
+    const url = new URL(tracked);
+    return clean(url.searchParams.get("a_aid"));
+  } catch {
+    const match = tracked.match(/[?&]a_aid=([^&]+)/i);
+    return match?.[1] ? decodeURIComponent(match[1]) : "";
+  }
 }
 
-function buildResolveUrl(base: string, args: ResolveTicketArgs): string | null {
-  const homeName = clean(args.homeName);
-  const awayName = clean(args.awayName);
-  const kickoffIso = clean(args.kickoffIso);
+function appendSe365Aid(url: string): string {
+  const safe = safeUrl(url);
+  if (!safe) return "";
 
-  if (!base || !homeName || !awayName || !kickoffIso) return null;
+  try {
+    const parsed = new URL(safe);
 
-  const qs = new URLSearchParams({
-    homeName,
-    awayName,
-    kickoffIso,
+    if (clean(parsed.searchParams.get("a_aid"))) {
+      return parsed.toString();
+    }
+
+    const aid = extractSe365Aid();
+    if (!aid) return parsed.toString();
+
+    parsed.searchParams.set("a_aid", aid);
+    return parsed.toString();
+  } catch {
+    if (safe.includes("a_aid=")) return safe;
+
+    const aid = extractSe365Aid();
+    if (!aid) return safe;
+
+    const joiner = safe.includes("?") ? "&" : "?";
+    return `${safe}${joiner}a_aid=${enc(aid)}`;
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Omio                                                                       */
+/* -------------------------------------------------------------------------- */
+
+const OMIO_TRACKED_URL = "https://omio.sjv.io/KBjDon";
+
+function buildOmioUrl(ctx: {
+  city: string;
+  startDate?: string | null;
+  endDate?: string | null;
+}): string | null {
+  const base = safeUrl(OMIO_TRACKED_URL);
+  if (!base) return null;
+
+  const city = clean(ctx.city);
+  const startDate = clean(ctx.startDate);
+  const endDate = clean(ctx.endDate);
+
+  try {
+    const url = new URL(base);
+
+    if (city) {
+      url.searchParams.set("destination", city);
+      url.searchParams.set("destination_name", city);
+    }
+
+    if (startDate) {
+      url.searchParams.set("outboundDate", startDate);
+      url.searchParams.set("departureDate", startDate);
+    }
+
+    if (endDate) {
+      url.searchParams.set("inboundDate", endDate);
+      url.searchParams.set("returnDate", endDate);
+    }
+
+    return url.toString();
+  } catch {
+    return base;
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Generic tracked URL wrapper                                                */
+/* -------------------------------------------------------------------------- */
+
+export function buildAffiliateUrl(baseUrl: string, partnerId: string): string {
+  const url = safeUrl(baseUrl);
+  const rawId = clean(partnerId).toLowerCase();
+  if (!url || !rawId) return "";
+
+  const partner = getPartnerOrNull(rawId);
+  const id = partner ? getCanonicalPartnerId(partner.id) : rawId;
+
+  switch (id) {
+    case "sportsevents365":
+      return appendSe365Aid(url);
+    default:
+      return url;
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Ticket helpers                                                             */
+/* -------------------------------------------------------------------------- */
+
+export function buildTicketLink(args: { eventUrl: string }): string | null {
+  const eventUrl = clean(args.eventUrl);
+  if (!eventUrl) return null;
+
+  const tracked = buildAffiliateUrl(eventUrl, "sportsevents365");
+  return tracked || null;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Main partner resolver                                                      */
+/* -------------------------------------------------------------------------- */
+
+export function resolveAffiliateUrl(
+  partnerId: string,
+  ctx: {
+    city: string;
+    startDate?: string | null;
+    endDate?: string | null;
+    originIata?: string | null;
+    passengers?: number | null;
+    cabinClass?: CabinClass | null;
+  }
+): string | null {
+  const rawId = clean(partnerId).toLowerCase();
+  const city = clean(ctx.city);
+
+  if (!rawId || !city) return null;
+
+  const partner = getPartnerOrNull(rawId);
+  const id = partner ? getCanonicalPartnerId(partner.id) : rawId;
+
+  const links = buildAffiliateLinks({
+    city,
+    startDate: ctx.startDate ?? null,
+    endDate: ctx.endDate ?? null,
+    originIata: ctx.originIata ?? null,
+    passengers: ctx.passengers ?? null,
+    cabinClass: ctx.cabinClass ?? null,
   });
 
-  const fixtureId = clean(args.fixtureId);
-  const leagueName = clean(args.leagueName);
-  const leagueId = clean(args.leagueId);
+  switch (id) {
+    case "aviasales":
+      return clean(links.flightsUrl) || null;
 
-  if (fixtureId) qs.set("fixtureId", fixtureId);
-  if (leagueName) qs.set("leagueName", leagueName);
-  if (leagueId) qs.set("leagueId", leagueId);
+    case "expedia":
+      return clean(links.hotelsUrl) || null;
 
-  return `${base}/tickets/resolve?${qs.toString()}`;
-}
+    case "kiwitaxi":
+      return clean(links.transfersUrl) || null;
 
-function normalizeOption(input: unknown): TicketResolutionOption | null {
-  if (!input || typeof input !== "object") return null;
+    case "getyourguide":
+      return clean(links.experiencesUrl) || null;
 
-  const obj = input as Record<string, unknown>;
-  const provider = clean(obj.provider);
-  const url = clean(obj.url);
-  const title = clean(obj.title);
-  const reason = clean(obj.reason);
+    case "omio":
+      return buildOmioUrl({
+        city,
+        startDate: ctx.startDate ?? null,
+        endDate: ctx.endDate ?? null,
+      });
 
-  const score =
-    typeof obj.score === "number" && Number.isFinite(obj.score)
-      ? obj.score
-      : null;
+    case "sportsevents365": {
+      const direct = clean(AffiliateConfig.sportsevents365Tracked);
+      if (direct) return direct;
 
-  if (!provider || !url || !title || score == null) return null;
-
-  const normalizedReason =
-    reason === "exact_event" ||
-    reason === "search_fallback" ||
-    reason === "partial_match"
-      ? (reason as TicketResolutionOption["reason"])
-      : "search_fallback";
-
-  return {
-    provider,
-    exact: Boolean(obj.exact),
-    score,
-    url,
-    title,
-    priceText: clean(obj.priceText) || null,
-    reason: normalizedReason,
-  };
-}
-
-function normalizeResolutionResult(
-  input: TicketResolutionResult | null
-): TicketResolutionResult | null {
-  if (!input) return null;
-
-  const normalizedOptions = Array.isArray(input.options)
-    ? input.options.map((x) => normalizeOption(x)).filter(Boolean) as TicketResolutionOption[]
-    : [];
-
-  const fallbackTop = normalizedOptions[0] ?? null;
-
-  const provider = clean(input.provider) || fallbackTop?.provider || null;
-  const url = clean(input.url) || fallbackTop?.url || null;
-  const title = clean(input.title) || fallbackTop?.title || null;
-  const priceText = clean(input.priceText) || fallbackTop?.priceText || null;
-
-  const score =
-    typeof input.score === "number" && Number.isFinite(input.score)
-      ? input.score
-      : typeof fallbackTop?.score === "number"
-      ? fallbackTop.score
-      : null;
-
-  const exact =
-    typeof input.exact === "boolean"
-      ? input.exact
-      : Boolean(fallbackTop?.exact);
-
-  const rawReason = clean(input.reason);
-  const reason =
-    rawReason === "exact_event" ||
-    rawReason === "search_fallback" ||
-    rawReason === "not_found"
-      ? (rawReason as TicketResolutionResult["reason"])
-      : provider
-      ? "search_fallback"
-      : "not_found";
-
-  return {
-    ok: Boolean(input.ok),
-    provider,
-    exact,
-    score,
-    url,
-    title,
-    priceText,
-    reason,
-    checkedProviders: Array.isArray(input.checkedProviders)
-      ? input.checkedProviders.map((x) => clean(x)).filter(Boolean)
-      : [],
-    options: normalizedOptions,
-    error: clean(input.error) || undefined,
-  };
-}
-
-export async function resolveTicketForFixture(
-  args: ResolveTicketArgs
-): Promise<TicketResolutionResult | null> {
-  const base = getBackendBaseUrl();
-  const url = buildResolveUrl(base, args);
-
-  if (!url) return null;
-
-  try {
-    const res = await fetch(url, {
-      method: "GET",
-      headers: {
-        Accept: "application/json",
-      },
-    });
-
-    const raw = await res.text();
-    const parsed = safeJsonParse<TicketResolutionResult>(raw);
-    const normalized = normalizeResolutionResult(parsed);
-
-    if (!normalized) {
-      return {
-        ok: false,
-        provider: null,
-        exact: false,
-        score: null,
-        url: null,
-        title: null,
-        priceText: null,
-        reason: "not_found",
-        checkedProviders: [],
-        options: [],
-        error: res.ok ? "invalid_backend_json" : `http_${res.status}`,
-      };
+      const fallback = clean(links.ticketsUrl);
+      return fallback ? buildAffiliateUrl(fallback, "sportsevents365") : null;
     }
 
-    if (!res.ok) {
-      return {
-        ...normalized,
-        ok: false,
-        error: normalized.error || `http_${res.status}`,
-      };
-    }
-
-    return normalized;
-  } catch {
-    return {
-      ok: false,
-      provider: null,
-      exact: false,
-      score: null,
-      url: null,
-      title: null,
-      priceText: null,
-      reason: "not_found",
-      checkedProviders: [],
-      options: [],
-      error: "network_error",
-    };
+    default:
+      return null;
   }
-          }
+}
