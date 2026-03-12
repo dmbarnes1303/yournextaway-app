@@ -19,10 +19,11 @@ import NextBestActionCard, { type NextAction } from "@/src/components/NextBestAc
 import TripHealthScore from "@/src/components/TripHealthScore";
 import TripMatchesCard from "@/src/components/trip/TripMatchesCard";
 import TripWorkspaceCard from "@/src/components/trip/TripWorkspaceCard";
+import StayGuidanceCard from "@/src/components/trip/StayGuidanceCard";
 
 import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
-import { parseIsoDateOnly, toIsoDate, DEFAULT_SEASON } from "@/src/constants/football";
+import { DEFAULT_SEASON } from "@/src/constants/football";
 
 import tripsStore, { type Trip } from "@/src/state/trips";
 import savedItemsStore from "@/src/state/savedItems";
@@ -41,7 +42,6 @@ import {
 
 import { beginPartnerClick, openUntrackedUrl } from "@/src/services/partnerClicks";
 import { getFixtureById, type FixtureListRow } from "@/src/services/apiFootball";
-import { formatUkDateOnly } from "@/src/utils/formatters";
 import { confirmBookedAndOfferProof } from "@/src/services/bookingProof";
 import { attachTicketProof } from "@/src/services/ticketAttachment";
 import { getTripProgress, getTripHealth } from "@/src/services/tripProgress";
@@ -55,367 +55,45 @@ import { getIataCityCodeForCity, debugCityKey } from "@/src/data/iataCityCodes";
 import { getMatchdayLogistics, buildLogisticsSnippet } from "@/src/data/matchdayLogistics";
 import storage from "@/src/services/storage";
 import rankTrips from "@/src/features/tripFinder/rankTrips";
-import type { RankedTrip, TravelDifficulty } from "@/src/features/tripFinder/types";
+import type { RankedTrip } from "@/src/features/tripFinder/types";
+
+import {
+  type AffiliateUrls,
+  type PlanValue,
+  type SmartButton,
+  buildMapsDirectionsUrl,
+  buildMapsSearchUrl,
+  clean,
+  cleanNoteText,
+  cleanUpper3,
+  coerceId,
+  confidencePctLabel,
+  defer,
+  difficultyLabel,
+  formatKickoffMeta,
+  getIsoDateOnly,
+  isLateKickoff,
+  isNumericId,
+  itemResolvedScore,
+  livePriceLine,
+  mapTicketProviderToPartnerId,
+  normalizeTicketOptions,
+  noteTitleFromText,
+  proCapHint,
+  rankReasonsText,
+  smartButtonSubtitle,
+  summaryLine,
+  ticketProviderFromItem,
+  ticketResolverFailureMessage,
+  titleCaseCity,
+  tripStatus,
+} from "@/src/features/tripDetail/helpers";
 
 declare const __DEV__: boolean;
 const DEV = typeof __DEV__ === "boolean" ? __DEV__ : false;
 
 const PLAN_STORAGE_KEY = "yna:plan";
 const FREE_TRIP_CAP = 5;
-
-type PlanValue = "not_set" | "free" | "premium";
-
-type AffiliateUrls = {
-  flightsUrl: string;
-  hotelsUrl: string;
-  omioUrl: string;
-  transfersUrl: string;
-  experiencesUrl: string;
-  mapsUrl: string;
-};
-
-type SmartButton = {
-  title: string;
-  sub: string;
-  onPress: () => void;
-  kind?: "primary" | "neutral";
-  provider?: string | null;
-};
-
-function clean(value: unknown): string {
-  return String(value ?? "").trim();
-}
-
-function coerceId(value: unknown): string | null {
-  if (typeof value === "string") return value.trim() || null;
-  if (Array.isArray(value) && typeof value[0] === "string") return value[0].trim() || null;
-  return null;
-}
-
-function isNumericId(value: unknown): value is string {
-  return typeof value === "string" && /^[0-9]+$/.test(value.trim());
-}
-
-function defer(fn: () => void) {
-  setTimeout(fn, 60);
-}
-
-function cleanUpper3(value: unknown, fallback: string) {
-  const upper = String(value ?? "").trim().toUpperCase();
-  return /^[A-Z]{3}$/.test(upper) ? upper : fallback;
-}
-
-function summaryLine(trip: Trip) {
-  const from = trip.startDate ? formatUkDateOnly(trip.startDate) : "—";
-  const to = trip.endDate ? formatUkDateOnly(trip.endDate) : "—";
-  const count = trip.matchIds?.length ?? 0;
-  return `${from} → ${to} • ${count} match${count === 1 ? "" : "es"}`;
-}
-
-function tripStatus(trip: Trip): "Upcoming" | "Past" {
-  const start = trip.startDate ? parseIsoDateOnly(trip.startDate) : null;
-  const end = trip.endDate ? parseIsoDateOnly(trip.endDate) : null;
-  if (!start || !end) return "Upcoming";
-
-  const today = parseIsoDateOnly(toIsoDate(new Date()));
-  if (!today) return "Upcoming";
-
-  return end.getTime() < today.getTime() ? "Past" : "Upcoming";
-}
-
-function cleanNoteText(value: string) {
-  return String(value ?? "").replace(/\r\n/g, "\n").trim();
-}
-
-function noteTitleFromText(text: string) {
-  const cleaned = cleanNoteText(text);
-  if (!cleaned) return "Note";
-  const firstLine = cleaned.split("\n")[0]?.trim() || "";
-  return firstLine.length > 42 ? `${firstLine.slice(0, 42).trim()}…` : firstLine;
-}
-
-function statusLabel(status: SavedItem["status"]) {
-  if (status === "pending") return "Pending";
-  if (status === "saved") return "Saved";
-  if (status === "booked") return "Booked";
-  return "Archived";
-}
-
-function livePriceLine(item: SavedItem): string | null {
-  if (!clean(item.partnerUrl)) return null;
-
-  const resolvedPrice = clean(item.metadata?.resolvedPriceText);
-
-  if (item.status === "booked") {
-    const bookedPrice = clean(item.priceText) || resolvedPrice;
-    return bookedPrice || null;
-  }
-
-  if (resolvedPrice) {
-    const provider = clean(item.partnerId);
-    return provider ? `From ${resolvedPrice} on ${provider}` : `From ${resolvedPrice}`;
-  }
-
-  return "Live price on partner";
-}
-
-function parseIsoToDate(iso?: string | null): Date | null {
-  const raw = clean(iso);
-  if (!raw) return null;
-  const date = new Date(raw);
-  return Number.isFinite(date.getTime()) ? date : null;
-}
-
-function formatKickoffMeta(
-  row?: FixtureListRow | null,
-  trip?: Trip | null
-): { line: string; tbc: boolean; iso: string | null } {
-  const isoRaw = (row as any)?.fixture?.date ?? (trip as any)?.kickoffIso;
-  const iso = clean(isoRaw) || null;
-
-  const date = parseIsoToDate(iso);
-  const short = clean((row as any)?.fixture?.status?.short).toUpperCase();
-  const long = clean((row as any)?.fixture?.status?.long);
-
-  const looksTbc = short === "TBD" || short === "TBA" || short === "NS" || short === "PST";
-  const snapTbc = Boolean((trip as any)?.kickoffTbc);
-
-  if (!date) {
-    const tbc = looksTbc || snapTbc;
-    return { line: tbc ? "Kickoff: TBC" : "Kickoff: —", tbc: true, iso };
-  }
-
-  const datePart = date.toLocaleDateString("en-GB", {
-    weekday: "short",
-    day: "2-digit",
-    month: "short",
-  });
-  const timePart = date.toLocaleTimeString("en-GB", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-
-  const midnight = date.getHours() === 0 && date.getMinutes() === 0;
-  const tbc = looksTbc || snapTbc || midnight;
-
-  if (tbc) return { line: `Kickoff: ${datePart} • TBC`, tbc: true, iso };
-
-  return {
-    line: `Kickoff: ${datePart} • ${timePart}${long ? ` • ${long}` : ""}`,
-    tbc: false,
-    iso,
-  };
-}
-
-function titleCaseCity(value: string) {
-  const cleaned = clean(value);
-  if (!cleaned) return "Trip";
-
-  const looksSlug = cleaned.includes("-") && cleaned === cleaned.toLowerCase();
-  const base = looksSlug ? cleaned.replace(/-/g, " ") : cleaned;
-
-  return base
-    .split(/\s+/g)
-    .filter(Boolean)
-    .map((word) => (word[0] ? word[0].toUpperCase() + word.slice(1) : word))
-    .join(" ");
-}
-
-function buildMapsSearchUrl(query: string) {
-  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(clean(query))}`;
-}
-
-function buildMapsDirectionsUrl(
-  origin: string,
-  destination: string,
-  mode: "transit" | "walking" | "driving" = "transit"
-) {
-  return `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(
-    clean(origin)
-  )}&destination=${encodeURIComponent(clean(destination))}&travelmode=${encodeURIComponent(mode)}`;
-}
-
-function isLateKickoff(kickoffIso?: string | null) {
-  const raw = clean(kickoffIso);
-  if (!raw) return false;
-
-  const date = new Date(raw);
-  if (!Number.isFinite(date.getTime())) return false;
-
-  const h = date.getHours();
-  const m = date.getMinutes();
-  return h > 20 || (h === 20 && m >= 30);
-}
-
-function Pill({ label, kind }: { label: string; kind: "best" | "budget" }) {
-  const colors =
-    kind === "best"
-      ? {
-          borderColor: "rgba(0,255,136,0.35)",
-          backgroundColor: "rgba(0,255,136,0.08)",
-        }
-      : {
-          borderColor: "rgba(255,200,80,0.40)",
-          backgroundColor: "rgba(255,200,80,0.10)",
-        };
-
-  return (
-    <View style={[styles.pill, colors]}>
-      <Text style={styles.pillText}>{label}</Text>
-    </View>
-  );
-}
-
-function proCapHint(cap: number, tripCount: number) {
-  return tripCount < cap
-    ? `Free plan: up to ${cap} saved trips.`
-    : `Free plan cap reached (${cap}). Pro removes the cap.`;
-}
-
-function difficultyLabel(value?: TravelDifficulty | null): string | null {
-  if (!value) return null;
-  if (value === "easy") return "Easy travel";
-  if (value === "medium") return "Moderate travel";
-  if (value === "hard") return "Harder travel";
-  return null;
-}
-
-function confidencePctLabel(value?: number | null): string | null {
-  if (typeof value !== "number" || !Number.isFinite(value)) return null;
-  const pct = Math.max(0, Math.min(100, Math.round(value * 100)));
-  return `${pct}% fit`;
-}
-
-function rankReasonsText(trip: RankedTrip | null): string | null {
-  if (!trip || !Array.isArray(trip.reasons) || trip.reasons.length === 0) return null;
-  return trip.reasons.slice(0, 2).join(" • ");
-}
-
-function mapTicketProviderToPartnerId(provider?: string | null): PartnerId {
-  const raw = clean(provider).toLowerCase();
-  if (raw === "footballticketsnet") return "footballticketsnet" as PartnerId;
-  if (raw === "gigsberg") return "gigsberg" as PartnerId;
-  return "sportsevents365" as PartnerId;
-}
-
-function ticketResolverFailureMessage(resolved: TicketResolutionResult | null): string {
-  if (!resolved) return "Ticket resolver didn’t respond. Check backend URL/server.";
-
-  const checkedProviders = Array.isArray(resolved.checkedProviders)
-    ? resolved.checkedProviders.filter(Boolean).join(", ")
-    : "";
-
-  const error = clean((resolved as any)?.error);
-
-  if (error === "network_error") return "Ticket backend couldn’t be reached. Check backend URL/server.";
-  if (error === "timeout") return "Ticket backend timed out. Try again.";
-  if (error === "invalid_backend_json") return "Ticket backend returned invalid JSON.";
-
-  return checkedProviders
-    ? `No suitable ticket listing found. Checked: ${checkedProviders}.`
-    : "No suitable ticket listing found.";
-}
-
-function smartButtonSubtitle(item: SavedItem | null, fallback: string) {
-  return item ? livePriceLine(item) || statusLabel(item.status) : fallback;
-}
-
-function normalizeTicketOptions(resolved: TicketResolutionResult | null): TicketResolutionOption[] {
-  if (!resolved) return [];
-
-  const options = Array.isArray(resolved.options) ? resolved.options : [];
-  const deduped = new Map<string, TicketResolutionOption>();
-
-  for (const option of options) {
-    const provider = clean(option?.provider);
-    const url = clean(option?.url);
-    const title = clean(option?.title);
-    const score = typeof option?.score === "number" ? option.score : null;
-
-    if (!provider || !url || !title || score == null) continue;
-
-    const normalized: TicketResolutionOption = {
-      provider,
-      exact: Boolean(option.exact),
-      score,
-      url,
-      title,
-      priceText: clean(option.priceText) || null,
-      reason:
-        option.reason === "exact_event" || option.reason === "partial_match"
-          ? option.reason
-          : "search_fallback",
-    };
-
-    const key = `${provider.toLowerCase()}|${url}`;
-    const existing = deduped.get(key);
-
-    if (!existing || (normalized.exact && !existing.exact) || normalized.score > existing.score) {
-      deduped.set(key, normalized);
-    }
-  }
-
-  const values = Array.from(deduped.values()).sort((a, b) => {
-    if (a.exact && !b.exact) return -1;
-    if (!a.exact && b.exact) return 1;
-    if (b.score !== a.score) return b.score - a.score;
-
-    const aHasPrice = Boolean(clean(a.priceText));
-    const bHasPrice = Boolean(clean(b.priceText));
-    if (aHasPrice && !bHasPrice) return -1;
-    if (!aHasPrice && bHasPrice) return 1;
-
-    return a.provider.localeCompare(b.provider);
-  });
-
-  if (values.length > 0) return values;
-
-  if (resolved.ok && clean(resolved.provider) && clean(resolved.url) && clean(resolved.title)) {
-    return [
-      {
-        provider: clean(resolved.provider),
-        exact: Boolean(resolved.exact),
-        score: typeof resolved.score === "number" ? resolved.score : 0,
-        url: clean(resolved.url),
-        title: clean(resolved.title),
-        priceText: clean(resolved.priceText) || null,
-        reason:
-          resolved.reason === "exact_event"
-            ? "exact_event"
-            : resolved.reason === "partial_match"
-              ? "partial_match"
-              : "search_fallback",
-      },
-    ];
-  }
-
-  return [];
-}
-
-function ticketProviderFromItem(item: SavedItem | null): string | null {
-  if (!item) return null;
-  return clean(item.metadata?.ticketProvider) || clean(item.partnerId) || null;
-}
-
-function itemResolvedScore(item: SavedItem | null): number | null {
-  if (!item) return null;
-  const raw = item.metadata?.score;
-  return typeof raw === "number" && Number.isFinite(raw) ? raw : null;
-}
-
-function getIsoDateOnly(raw?: string | null) {
-  const value = clean(raw);
-  if (!value) return undefined;
-  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
-
-  const date = new Date(value);
-  if (!Number.isFinite(date.getTime())) return undefined;
-
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
 
 export default function TripDetailScreen() {
   const router = useRouter();
@@ -1992,164 +1670,20 @@ export default function TripDetailScreen() {
                 getTicketProviderFromItem={ticketProviderFromItem}
               />
 
-              <GlassCard style={styles.card}>
-                <Text style={styles.sectionTitle}>Stay guidance (stadium + best areas)</Text>
-
-                {!primaryLogistics ? (
-                  <EmptyState
-                    title="Stay tips not available"
-                    message="Add a match (or load match details) to unlock stadium-area stay suggestions."
-                  />
-                ) : (
-                  <View style={styles.guidanceStack}>
-                    <View style={styles.proxBox}>
-                      <Text style={styles.proxTitle} numberOfLines={2}>
-                        {stadiumName || "Stadium"}
-                        {stadiumCity ? <Text style={styles.proxCity}> • {stadiumCity}</Text> : null}
-                      </Text>
-
-                      <Text style={styles.proxBody}>
-                        {primaryLogisticsSnippet ||
-                          "Use the areas below as a shortlist. Tap Transit/Walk for real routes in Google Maps."}
-                      </Text>
-
-                      <Pressable onPress={() => openUntracked(stadiumMapsUrl)} style={styles.proxBtn}>
-                        <Text style={styles.proxBtnText}>Open stadium in maps</Text>
-                      </Pressable>
-
-                      <Text style={styles.proxMuted}>
-                        Note: distance/time depends on your exact hotel. Use Transit/Walk for real routes.
-                      </Text>
-                    </View>
-
-                    {stayBestAreas.length > 0 ? (
-                      <View style={styles.guidanceGroup}>
-                        <Text style={styles.stayLabel}>Best areas</Text>
-
-                        {stayBestAreas.slice(0, 3).map((area, idx) => {
-                          const stadiumQuery = [stadiumName || "stadium", stadiumCity].filter(Boolean).join(" ").trim();
-                          const areaQuery = [area.area, stadiumCity].filter(Boolean).join(" ").trim();
-                          const origin = areaQuery || area.area;
-                          const destination = stadiumQuery || stadiumName || "stadium";
-
-                          return (
-                            <View key={`best-${idx}`} style={styles.areaRow}>
-                              <View style={styles.areaLeft}>
-                                <View style={styles.areaTop}>
-                                  <Text style={styles.areaName} numberOfLines={1}>
-                                    {area.area}
-                                  </Text>
-                                  <Pill label="Best area" kind="best" />
-                                </View>
-                                {area.notes ? <Text style={styles.areaNotes}>{area.notes}</Text> : null}
-                              </View>
-
-                              <View style={styles.areaBtns}>
-                                <Pressable onPress={() => openUntracked(buildMapsSearchUrl(origin))} style={styles.smallBtn}>
-                                  <Text style={styles.smallBtnText}>Maps</Text>
-                                </Pressable>
-                                <Pressable
-                                  onPress={() => openUntracked(buildMapsDirectionsUrl(origin, destination, "transit"))}
-                                  style={styles.smallBtn}
-                                >
-                                  <Text style={styles.smallBtnText}>Transit</Text>
-                                </Pressable>
-                                <Pressable
-                                  onPress={() => openUntracked(buildMapsDirectionsUrl(origin, destination, "walking"))}
-                                  style={styles.smallBtn}
-                                >
-                                  <Text style={styles.smallBtnText}>Walk</Text>
-                                </Pressable>
-                              </View>
-                            </View>
-                          );
-                        })}
-                      </View>
-                    ) : null}
-
-                    {stayBudgetAreas.length > 0 ? (
-                      <View style={styles.guidanceGroup}>
-                        <Text style={styles.stayLabel}>Budget-friendly</Text>
-
-                        {stayBudgetAreas.slice(0, 2).map((area, idx) => {
-                          const stadiumQuery = [stadiumName || "stadium", stadiumCity].filter(Boolean).join(" ").trim();
-                          const areaQuery = [area.area, stadiumCity].filter(Boolean).join(" ").trim();
-                          const origin = areaQuery || area.area;
-                          const destination = stadiumQuery || stadiumName || "stadium";
-
-                          return (
-                            <View key={`budget-${idx}`} style={styles.areaRow}>
-                              <View style={styles.areaLeft}>
-                                <View style={styles.areaTop}>
-                                  <Text style={styles.areaName} numberOfLines={1}>
-                                    {area.area}
-                                  </Text>
-                                  <Pill label="Budget" kind="budget" />
-                                </View>
-                                {area.notes ? <Text style={styles.areaNotes}>{area.notes}</Text> : null}
-                              </View>
-
-                              <View style={styles.areaBtns}>
-                                <Pressable onPress={() => openUntracked(buildMapsSearchUrl(origin))} style={styles.smallBtn}>
-                                  <Text style={styles.smallBtnText}>Maps</Text>
-                                </Pressable>
-                                <Pressable
-                                  onPress={() => openUntracked(buildMapsDirectionsUrl(origin, destination, "transit"))}
-                                  style={styles.smallBtn}
-                                >
-                                  <Text style={styles.smallBtnText}>Transit</Text>
-                                </Pressable>
-                                <Pressable
-                                  onPress={() => openUntracked(buildMapsDirectionsUrl(origin, destination, "walking"))}
-                                  style={styles.smallBtn}
-                                >
-                                  <Text style={styles.smallBtnText}>Walk</Text>
-                                </Pressable>
-                              </View>
-                            </View>
-                          );
-                        })}
-                      </View>
-                    ) : null}
-
-                    {transportStops.length > 0 ? (
-                      <View style={styles.guidanceGroup}>
-                        <Text style={styles.stayLabel}>Best transport stops</Text>
-                        {transportStops.map((line, idx) => (
-                          <Pressable
-                            key={`stop-${idx}`}
-                            onPress={() => openUntracked(buildMapsSearchUrl([line, stadiumCity].filter(Boolean).join(" ")))}
-                            style={styles.stopRow}
-                          >
-                            <Text style={styles.stayBullet} numberOfLines={2}>
-                              • {line}
-                            </Text>
-                            <Text style={styles.chev}>›</Text>
-                          </Pressable>
-                        ))}
-                      </View>
-                    ) : null}
-
-                    {transportTips.length > 0 ? (
-                      <View style={styles.guidanceGroup}>
-                        <Text style={styles.stayLabel}>Matchday tips</Text>
-                        {transportTips.map((line, idx) => (
-                          <Text key={`tip-${idx}`} style={styles.stayBullet}>
-                            • {line}
-                          </Text>
-                        ))}
-                      </View>
-                    ) : null}
-
-                    {lateTransportNote ? (
-                      <View style={styles.lateBox}>
-                        <Text style={styles.lateTitle}>Late transport note</Text>
-                        <Text style={styles.lateText}>{lateTransportNote}</Text>
-                      </View>
-                    ) : null}
-                  </View>
-                )}
-              </GlassCard>
+              <StayGuidanceCard
+                primaryLogisticsSnippet={primaryLogisticsSnippet}
+                stadiumName={stadiumName}
+                stadiumCity={stadiumCity}
+                stadiumMapsUrl={stadiumMapsUrl}
+                stayBestAreas={stayBestAreas}
+                stayBudgetAreas={stayBudgetAreas}
+                transportStops={transportStops}
+                transportTips={transportTips}
+                lateTransportNote={lateTransportNote}
+                onOpenUrl={openUntracked}
+                buildMapsSearchUrl={buildMapsSearchUrl}
+                buildMapsDirectionsUrl={buildMapsDirectionsUrl}
+              />
             </>
           ) : null}
         </ScrollView>
@@ -2434,189 +1968,10 @@ const styles = StyleSheet.create({
     textAlign: "left",
   },
 
-  guidanceStack: {
-    gap: 10,
-  },
-
-  guidanceGroup: {
-    gap: 6,
-  },
-
-  proxBox: {
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    borderRadius: 14,
-    backgroundColor: "rgba(0,0,0,0.18)",
-    padding: 12,
-  },
-
-  proxTitle: {
-    color: theme.colors.text,
-    fontWeight: "900",
-    fontSize: 14,
-    lineHeight: 18,
-  },
-
-  proxCity: {
-    color: theme.colors.textSecondary,
-    fontWeight: "900",
-    fontSize: 12,
-  },
-
-  proxBody: {
-    marginTop: 8,
-    color: theme.colors.textSecondary,
-    fontWeight: "800",
-    fontSize: 12,
-    lineHeight: 16,
-  },
-
-  proxMuted: {
-    marginTop: 8,
-    color: theme.colors.textTertiary,
-    fontWeight: "900",
-    fontSize: 11,
-    lineHeight: 14,
-  },
-
-  proxBtn: {
-    marginTop: 10,
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "rgba(0,255,136,0.55)",
-    alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.18)",
-  },
-
-  proxBtnText: {
-    color: theme.colors.text,
-    fontWeight: "900",
-  },
-
-  stayLabel: {
-    color: theme.colors.text,
-    fontWeight: "900",
-    fontSize: 12,
-  },
-
-  stayBullet: {
-    color: theme.colors.textSecondary,
-    fontWeight: "800",
-    fontSize: 12,
-    lineHeight: 16,
-  },
-
-  areaRow: {
-    flexDirection: "row",
-    gap: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.18)",
-    alignItems: "center",
-  },
-
-  areaLeft: {
-    flex: 1,
-  },
-
-  areaTop: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-  },
-
-  areaName: {
-    color: theme.colors.text,
-    fontWeight: "900",
-    flexShrink: 1,
-  },
-
-  areaNotes: {
-    marginTop: 6,
-    color: theme.colors.textSecondary,
-    fontWeight: "800",
-    fontSize: 12,
-    lineHeight: 16,
-  },
-
-  areaBtns: {
-    gap: 8,
-    alignItems: "flex-end",
-  },
-
-  pill: {
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-
-  pillText: {
-    color: theme.colors.text,
-    fontWeight: "900",
-    fontSize: 11,
-  },
-
-  stopRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
-  },
-
-  lateBox: {
-    marginTop: 8,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "rgba(255,200,80,0.28)",
-    backgroundColor: "rgba(255,200,80,0.08)",
-    padding: 12,
-  },
-
-  lateTitle: {
-    color: theme.colors.text,
-    fontWeight: "900",
-    fontSize: 12,
-  },
-
-  lateText: {
-    marginTop: 6,
-    color: theme.colors.textSecondary,
-    fontWeight: "800",
-    fontSize: 12,
-    lineHeight: 16,
-  },
-
-  smallBtn: {
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.15)",
-    backgroundColor: "rgba(0,0,0,0.15)",
-  },
-
-  smallBtnText: {
-    color: theme.colors.text,
-    fontWeight: "900",
-    fontSize: 12,
-  },
-
   mapsInline: {
     marginTop: 10,
     color: theme.colors.textSecondary,
     textAlign: "center",
     fontWeight: "900",
-  },
-
-  chev: {
-    color: theme.colors.textSecondary,
-    fontSize: 22,
-    marginTop: -2,
   },
 });
