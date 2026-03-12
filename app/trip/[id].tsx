@@ -9,7 +9,6 @@ import {
   Alert,
   TextInput,
   Keyboard,
-  Image,
   Platform,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
@@ -18,10 +17,10 @@ import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
 import EmptyState from "@/src/components/EmptyState";
-import FixtureCertaintyBadge from "@/src/components/FixtureCertaintyBadge";
 import TripProgressStrip from "@/src/components/TripProgressStrip";
 import NextBestActionCard, { type NextAction } from "@/src/components/NextBestActionCard";
 import TripHealthScore from "@/src/components/TripHealthScore";
+import TripMatchesCard from "@/src/components/trip/TripMatchesCard";
 
 import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
@@ -48,7 +47,6 @@ import { beginPartnerClick, openUntrackedUrl } from "@/src/services/partnerClick
 import { getFixtureById, type FixtureListRow } from "@/src/services/apiFootball";
 import { formatUkDateOnly } from "@/src/utils/formatters";
 import { confirmBookedAndOfferProof } from "@/src/services/bookingProof";
-import { getFixtureCertainty } from "@/src/utils/fixtureCertainty";
 import { attachTicketProof } from "@/src/services/ticketAttachment";
 import { getTripProgress, getTripHealth } from "@/src/services/tripProgress";
 import { resolveAffiliateUrl } from "@/src/services/partnerLinks";
@@ -233,14 +231,6 @@ function providerBadgeStyle(provider?: string | null) {
   };
 }
 
-function ticketConfidenceLabel(score?: number | null): string {
-  const value = typeof score === "number" ? score : 0;
-  if (value >= 90) return "High confidence";
-  if (value >= 75) return "Strong match";
-  if (value >= 60) return "Good match";
-  return "Fallback";
-}
-
 function safePartnerName(item: SavedItem) {
   if (!item.partnerId) return null;
   try {
@@ -310,14 +300,6 @@ function livePriceLine(item: SavedItem): string | null {
   return `Live price on ${tail}`;
 }
 
-function initials(name: string) {
-  const cleanName = clean(name);
-  if (!cleanName) return "—";
-  const parts = cleanName.split(/\s+/g).filter(Boolean);
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
-}
-
 function getAttachmentCount(item: SavedItem | null): number {
   const atts = Array.isArray(item?.attachments) ? (item.attachments as WalletAttachment[]) : [];
   return atts.length;
@@ -331,18 +313,6 @@ function proofStateText(item: SavedItem): string {
   const count = getAttachmentCount(item);
   if (count <= 0) return "No proof attached yet";
   return `${count} proof file${count === 1 ? "" : "s"} attached`;
-}
-
-function TeamCrest({ name, logo }: { name: string; logo?: string | null }) {
-  return (
-    <View style={styles.crestWrap}>
-      {logo ? (
-        <Image source={{ uri: logo }} style={styles.crestImg} resizeMode="contain" />
-      ) : (
-        <Text style={styles.crestFallback}>{initials(name)}</Text>
-      )}
-    </View>
-  );
 }
 
 function ProviderBadge({
@@ -384,32 +354,11 @@ function ProviderBadge({
   );
 }
 
-function safeFixtureTitle(r: FixtureListRow | null | undefined, fallbackId: string, trip?: Trip | null) {
-  const home = clean((r as any)?.teams?.home?.name) || clean((trip as any)?.homeName);
-  const away = clean((r as any)?.teams?.away?.name) || clean((trip as any)?.awayName);
-  if (home && away) return `${home} vs ${away}`;
-  if (home) return `${home} match`;
-  if (away) return `${away} match`;
-  return `Match ${fallbackId}`;
-}
-
 function parseIsoToDate(iso?: string | null): Date | null {
   const s = clean(iso);
   if (!s) return null;
   const d = new Date(s);
   return Number.isFinite(d.getTime()) ? d : null;
-}
-
-function isoDateOnlyFromKickoffIso(kickoffIso?: string | null): string | null {
-  const raw = clean(kickoffIso);
-  if (!raw) return null;
-  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
-  const d = new Date(raw);
-  if (!Number.isFinite(d.getTime())) return null;
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
 }
 
 function formatKickoffMeta(
@@ -501,13 +450,6 @@ function Pill({ label, kind }: { label: string; kind: "best" | "budget" }) {
 function proCapHint(cap: number, tripCount: number) {
   if (tripCount < cap) return `Free plan: up to ${cap} saved trips.`;
   return `Free plan cap reached (${cap}). Pro removes the cap.`;
-}
-
-function safeUri(u: unknown): string | null {
-  const s = clean(u);
-  if (!s) return null;
-  if (!/^https?:\/\//i.test(s)) return null;
-  return s;
 }
 
 function difficultyLabel(value?: TravelDifficulty | null): string | null {
@@ -1614,7 +1556,17 @@ export default function TripDetailScreen() {
       return;
     }
 
-    const dateIso = trip?.startDate || isoDateOnlyFromKickoffIso(kickoffIso) || undefined;
+    const dateIso = trip?.startDate || (() => {
+      const raw = clean(kickoffIso);
+      if (!raw) return undefined;
+      if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+      const d = new Date(raw);
+      if (!Number.isFinite(d.getTime())) return undefined;
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      return `${y}-${m}-${day}`;
+    })();
 
     try {
       const resolved = await resolveTicketForFixture({
@@ -2513,156 +2465,22 @@ export default function TripDetailScreen() {
                 </GlassCard>
               ) : null}
 
-              <GlassCard style={styles.card}>
-                <View style={styles.sectionTitleRow}>
-                  <Text style={styles.sectionTitle}>Matches</Text>
-                  <Pressable onPress={onAddMatch} style={styles.inlineLinkBtn}>
-                    <Text style={styles.inlineLinkText}>Add match ›</Text>
-                  </Pressable>
-                </View>
-
-                {numericMatchIds.length === 0 ? (
-                  <EmptyState title="No matches added" message="Add a match to unlock match-specific planning." />
-                ) : (
-                  <View style={{ gap: 10 }}>
-                    {numericMatchIds.map((mid) => {
-                      const r = fixturesById[String(mid)];
-                      const title = safeFixtureTitle(r, mid, trip);
-
-                      const leagueName = clean((r as any)?.league?.name ?? (trip as any)?.leagueName);
-                      const round = clean((r as any)?.league?.round);
-                      const venue = clean((r as any)?.fixture?.venue?.name ?? (trip as any)?.venueName);
-                      const city = clean((r as any)?.fixture?.venue?.city ?? (trip as any)?.displayCity);
-                      const kickoff = formatKickoffMeta(r, trip);
-
-                      const meta1 = [leagueName || null, round || null].filter(Boolean).join(" • ");
-                      const meta2 = [venue || null, city || null].filter(Boolean).join(" • ");
-
-                      const homeName = clean((r as any)?.teams?.home?.name ?? (trip as any)?.homeName ?? "Home");
-                      const awayName = clean((r as any)?.teams?.away?.name ?? (trip as any)?.awayName ?? "Away");
-
-                      const homeLogo = safeUri((r as any)?.teams?.home?.logo);
-                      const awayLogo = safeUri((r as any)?.teams?.away?.logo);
-
-                      const logistics = getMatchdayLogistics({ homeTeamName: homeName, leagueName });
-                      const logisticsLine = logistics ? buildLogisticsSnippet(logistics) : "";
-
-                      const certainty = getFixtureCertainty(r as any, {
-                        previousKickoffIso: (trip as any)?.kickoffIso ?? null,
-                      });
-
-                      const ticketItem = ticketsByMatchId[String(mid)];
-                      const isPrimary = String(primaryMatchId ?? "") === String(mid);
-                      const ticketScore = itemResolvedScore(ticketItem);
-                      const ticketProvider = ticketProviderFromItem(ticketItem);
-
-                      return (
-                        <View key={mid} style={styles.matchRowWrap}>
-                          <Pressable
-                            onPress={() => openTicketsForMatch(mid)}
-                            onLongPress={() => openMatchActions(mid)}
-                            style={styles.matchRow}
-                          >
-                            <TeamCrest name={homeName} logo={homeLogo} />
-
-                            <View style={{ flex: 1, minWidth: 0 }}>
-                              <View style={styles.matchTitleRow}>
-                                <Text style={styles.matchTitle} numberOfLines={1}>
-                                  {title}
-                                </Text>
-
-                                {isPrimary ? (
-                                  <View style={[styles.badge, styles.badgePrimary]}>
-                                    <Text style={styles.badgeText}>Primary</Text>
-                                  </View>
-                                ) : null}
-
-                                {ticketItem ? <StatusBadge s={ticketItem.status} /> : null}
-                              </View>
-
-                              <Text style={styles.matchMeta} numberOfLines={1}>
-                                {kickoff.line}
-                              </Text>
-
-                              <View style={{ marginTop: 6 }}>
-                                <FixtureCertaintyBadge state={certainty} />
-                              </View>
-
-                              {meta1 ? (
-                                <Text style={styles.matchMeta} numberOfLines={1}>
-                                  {meta1}
-                                </Text>
-                              ) : null}
-
-                              {meta2 ? (
-                                <Text style={styles.matchMeta} numberOfLines={1}>
-                                  {meta2}
-                                </Text>
-                              ) : null}
-
-                              {logisticsLine ? (
-                                <Text style={styles.logisticsMeta} numberOfLines={1}>
-                                  {logisticsLine}
-                                </Text>
-                              ) : null}
-
-                              {ticketItem ? (
-                                <View style={styles.ticketSignalRow}>
-                                  {ticketProvider ? <ProviderBadge provider={ticketProvider} size="sm" /> : null}
-                                  <Text style={styles.matchHint} numberOfLines={1}>
-                                    {livePriceLine(ticketItem) || `Tap to open tickets (${statusLabel(ticketItem.status)})`}
-                                  </Text>
-                                </View>
-                              ) : (
-                                <Text style={styles.matchHint} numberOfLines={1}>
-                                  Tap to compare live ticket options • Hold for options
-                                </Text>
-                              )}
-
-                              {ticketScore != null ? (
-                                <Text style={styles.ticketQualityMeta} numberOfLines={1}>
-                                  {ticketConfidenceLabel(ticketScore)}
-                                </Text>
-                              ) : null}
-                            </View>
-
-                            <TeamCrest name={awayName} logo={awayLogo} />
-                            <Text style={styles.chev}>›</Text>
-                          </Pressable>
-
-                          <View style={styles.matchActionsRow}>
-                            <Pressable onPress={() => openTicketsForMatch(mid)} style={[styles.smallBtn, styles.smallBtnWide]}>
-                              <Text style={styles.smallBtnText}>Tickets</Text>
-                            </Pressable>
-
-                            {!isPrimary ? (
-                              <Pressable
-                                onPress={() => setPrimaryMatch(mid)}
-                                style={[styles.smallBtn, styles.smallBtnWide, styles.smallBtnPrimary]}
-                              >
-                                <Text style={styles.smallBtnText}>Set primary</Text>
-                              </Pressable>
-                            ) : (
-                              <View style={[styles.smallBtn, styles.smallBtnWide, styles.smallBtnDisabled]}>
-                                <Text style={styles.smallBtnText}>Primary</Text>
-                              </View>
-                            )}
-
-                            <Pressable
-                              onPress={() => removeMatch(mid)}
-                              style={[styles.smallBtn, styles.smallBtnWide, styles.smallBtnDanger]}
-                            >
-                              <Text style={styles.smallBtnText}>Remove</Text>
-                            </Pressable>
-                          </View>
-                        </View>
-                      );
-                    })}
-                  </View>
-                )}
-
-                {fxLoading ? <Text style={styles.mutedInline}>Loading match details…</Text> : null}
-              </GlassCard>
+              <TripMatchesCard
+                trip={trip}
+                numericMatchIds={numericMatchIds}
+                primaryMatchId={primaryMatchId}
+                fixturesById={fixturesById}
+                ticketsByMatchId={ticketsByMatchId}
+                fxLoading={fxLoading}
+                onAddMatch={onAddMatch}
+                onOpenTicketsForMatch={openTicketsForMatch}
+                onOpenMatchActions={openMatchActions}
+                onSetPrimaryMatch={setPrimaryMatch}
+                onRemoveMatch={removeMatch}
+                getTicketProviderFromItem={ticketProviderFromItem}
+                getTicketScoreFromItem={itemResolvedScore}
+                getLivePriceLine={livePriceLine}
+              />
 
               <GlassCard style={styles.card}>
                 <View style={styles.sectionTitleRow}>
@@ -3104,18 +2922,6 @@ const styles = StyleSheet.create({
 
   sectionSub: { color: theme.colors.textTertiary, fontWeight: "900", fontSize: 12 },
 
-  inlineLinkBtn: {
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.14)",
-    backgroundColor: "rgba(0,0,0,0.18)",
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    marginTop: 2,
-  },
-
-  inlineLinkText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: 12 },
-
   smartGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
 
   smartBtn: {
@@ -3177,81 +2983,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "900",
   },
-
-  matchRowWrap: { gap: 8 },
-
-  matchRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.18)",
-  },
-
-  matchTitleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-
-  matchTitle: { color: theme.colors.text, fontWeight: "900", flexShrink: 1 },
-
-  matchMeta: {
-    marginTop: 4,
-    color: theme.colors.textSecondary,
-    fontWeight: "800",
-    fontSize: 12,
-    lineHeight: 16,
-  },
-
-  logisticsMeta: {
-    marginTop: 6,
-    color: theme.colors.textTertiary,
-    fontWeight: "900",
-    fontSize: 12,
-    lineHeight: 16,
-  },
-
-  ticketSignalRow: {
-    marginTop: 6,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    minWidth: 0,
-  },
-
-  matchHint: {
-    color: theme.colors.textTertiary,
-    fontWeight: "900",
-    fontSize: 11,
-    flex: 1,
-  },
-
-  ticketQualityMeta: {
-    marginTop: 4,
-    color: "rgba(160,195,255,1)",
-    fontWeight: "900",
-    fontSize: 11,
-  },
-
-  matchActionsRow: { flexDirection: "row", gap: 8 },
-
-  crestWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 14,
-    backgroundColor: "rgba(255,255,255,0.06)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  crestImg: { width: 26, height: 26 },
-
-  crestFallback: { color: theme.colors.textSecondary, fontWeight: "900" },
 
   workspaceTabsRow: {
     paddingRight: 8,
@@ -3571,8 +3302,6 @@ const styles = StyleSheet.create({
   badge: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
 
   badgeText: { color: theme.colors.text, fontWeight: "900", fontSize: 11 },
-
-  badgePrimary: { borderColor: "rgba(0,255,136,0.45)", backgroundColor: "rgba(0,255,136,0.10)" },
 
   badgePending: { borderColor: "rgba(255,200,80,0.40)", backgroundColor: "rgba(255,200,80,0.10)" },
 
