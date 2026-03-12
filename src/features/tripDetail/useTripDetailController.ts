@@ -1,3 +1,4 @@
+import React from "react";
 import { Alert } from "react-native";
 import { useRouter } from "expo-router";
 
@@ -6,6 +7,7 @@ import savedItemsStore from "@/src/state/savedItems";
 
 import type { PartnerId } from "@/src/core/partners";
 import type { SavedItem, SavedItemType } from "@/src/core/savedItemTypes";
+import type { WorkspaceSectionKey } from "@/src/core/tripWorkspace";
 import { sectionForSavedItemType } from "@/src/core/tripWorkspace";
 
 import { DEFAULT_SEASON } from "@/src/constants/football";
@@ -44,7 +46,7 @@ type Props = {
   setNoteText: SetState<string>;
   setNoteSaving: SetState<boolean>;
   setProofBusyId: SetState<string | null>;
-  setActiveWorkspaceSection: (section: any) => Promise<void> | void;
+  setActiveWorkspaceSection: (section: WorkspaceSectionKey) => Promise<void> | void;
 };
 
 export default function useTripDetailController({
@@ -100,6 +102,7 @@ export default function useTripDetailController({
 
   async function openUntracked(url?: string | null) {
     if (!url) return;
+
     try {
       await openUntrackedUrl(url);
     } catch {
@@ -193,7 +196,7 @@ export default function useTripDetailController({
     try {
       await beginPartnerClick({
         tripId,
-        partnerId: partnerId as any,
+        partnerId: partnerId as PartnerId,
         url: item.partnerUrl,
         savedItemType: item.type,
         title: item.title,
@@ -285,6 +288,7 @@ export default function useTripDetailController({
     }
 
     setNoteSaving(true);
+
     try {
       await savedItemsStore.add({
         tripId,
@@ -585,4 +589,4 @@ export default function useTripDetailController({
     openTicketsForMatch,
     addProofForBookedItem,
   };
-}
+      }
