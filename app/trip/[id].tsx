@@ -49,7 +49,6 @@ import { resolveAffiliateUrl } from "@/src/services/partnerLinks";
 import {
   resolveTicketForFixture,
   type TicketResolutionOption,
-  type TicketResolutionResult,
 } from "@/src/services/ticketResolver";
 import { getIataCityCodeForCity, debugCityKey } from "@/src/data/iataCityCodes";
 import { getMatchdayLogistics, buildLogisticsSnippet } from "@/src/data/matchdayLogistics";
