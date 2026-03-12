@@ -1,4 +1,3 @@
-// src/services/partnerClicks.ts
 import { AppState, Platform } from "react-native";
 import * as WebBrowser from "expo-web-browser";
 
@@ -83,7 +82,7 @@ async function persistLastClick(next: LastPartnerClick | null) {
   try {
     await writeJson(STORAGE_KEY, next);
   } catch {
-    // best-effort
+    // best-effort only
   }
 }
 
@@ -103,7 +102,8 @@ async function loadLastClickOnce() {
     const openedAt = Number(raw.openedAt);
 
     if (!itemId || !tripId || !partnerId || !url) return;
-    if (!Number.isFinite(createdAt) || !Number.isFinite(openedAt)) return;
+    if (!Number.isFinite(createdAt) || createdAt <= 0) return;
+    if (!Number.isFinite(openedAt) || openedAt <= 0) return;
 
     const candidate: LastPartnerClick = {
       itemId,
@@ -179,8 +179,8 @@ function defaultTypeForCategory(category: PartnerCategory): SavedItemType {
       return "flight";
     case "stays":
       return "hotel";
-      case "rail":
-  return "train";
+    case "rail":
+      return "train";
     case "transfers":
       return "transfer";
     case "experiences":
@@ -255,7 +255,7 @@ async function triggerReturnIfPresent(
     try {
       await Promise.resolve(handler(click));
     } catch {
-      // never crash on return prompt flow
+      // never crash return flow
     } finally {
       lastReturnHandledAt = now();
     }
@@ -268,7 +268,9 @@ export function getPartnerClicksDebugState() {
   return { opening, subscribed, lastClick };
 }
 
-export function ensurePartnerReturnWatcher(onReturn: (click: LastPartnerClick) => void | Promise<void>) {
+export function ensurePartnerReturnWatcher(
+  onReturn: (click: LastPartnerClick) => void | Promise<void>
+) {
   onReturnHandler = onReturn;
 
   if (subscribed) {
@@ -288,7 +290,8 @@ export function ensurePartnerReturnWatcher(onReturn: (click: LastPartnerClick) =
   let lastState = AppState.currentState;
 
   const sub = AppState.addEventListener("change", (next) => {
-    const becameActive = Boolean(String(lastState).match(/inactive|background/)) && next === "active";
+    const becameActive =
+      Boolean(String(lastState).match(/inactive|background/)) && next === "active";
     lastState = next;
 
     if (!becameActive) return;
@@ -354,7 +357,9 @@ function buildDefaultTitle(args: {
     case "tickets":
       return city ? `Match tickets for ${city}` : "Match tickets";
     case "insurance":
-      return city ? `Protect yourself: Travel insurance for ${city}` : "Protect yourself: Travel insurance";
+      return city
+        ? `Protect yourself: Travel insurance for ${city}`
+        : "Protect yourself: Travel insurance";
     case "claim":
       return "Claims & compensation: Compensation help";
     default:
@@ -422,7 +427,8 @@ export async function beginPartnerClick(args: {
 
     await ensureSavedItemsLoaded();
 
-    const type: SavedItemType = args.savedItemType ?? defaultTypeForCategory(partner.category);
+    const type: SavedItemType =
+      args.savedItemType ?? defaultTypeForCategory(partner.category);
 
     const reusable = findReusableItem({
       tripId,
@@ -573,4 +579,4 @@ export function __unsafeResetPartnerClickStateForDevOnly() {
   lastClickLoaded = false;
   returnInFlight = false;
   lastReturnHandledAt = 0;
-      }
+}
