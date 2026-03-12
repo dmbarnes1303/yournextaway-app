@@ -32,7 +32,7 @@ import tripsStore, { type Trip } from "@/src/state/trips";
 import savedItemsStore from "@/src/state/savedItems";
 import preferencesStore from "@/src/state/preferences";
 
-import type { SavedItem, SavedItemType } from "@/src/core/savedItemTypes";
+import type { SavedItem, SavedItemType, WalletAttachment } from "@/src/core/savedItemTypes";
 import { getSavedItemTypeLabel } from "@/src/core/savedItemTypes";
 import { getPartner, type PartnerId } from "@/src/core/partners";
 
@@ -41,6 +41,7 @@ import { getFixtureById, type FixtureListRow } from "@/src/services/apiFootball"
 import { formatUkDateOnly } from "@/src/utils/formatters";
 import { confirmBookedAndOfferProof } from "@/src/services/bookingProof";
 import { getFixtureCertainty } from "@/src/utils/fixtureCertainty";
+import { attachTicketProof } from "@/src/services/ticketAttachment";
 
 import { resolveAffiliateUrl } from "@/src/services/partnerLinks";
 import {
@@ -312,6 +313,21 @@ function initials(name: string) {
   return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
 }
 
+function getAttachmentCount(item: SavedItem | null): number {
+  const atts = Array.isArray(item?.attachments) ? (item?.attachments as WalletAttachment[]) : [];
+  return atts.length;
+}
+
+function hasProof(item: SavedItem | null): boolean {
+  return getAttachmentCount(item) > 0;
+}
+
+function proofStateText(item: SavedItem): string {
+  const count = getAttachmentCount(item);
+  if (count <= 0) return "No proof attached yet";
+  return `${count} proof file${count === 1 ? "" : "s"} attached`;
+}
+
 function TeamCrest({ name, logo }: { name: string; logo?: string | null }) {
   return (
     <View style={styles.crestWrap}>
@@ -531,6 +547,10 @@ function ticketResolverFailureMessage(resolved: TicketResolutionResult | null): 
     return "Ticket backend couldn’t be reached. Check backend URL/server.";
   }
 
+  if (error === "timeout") {
+    return "Ticket backend timed out. Try again.";
+  }
+
   if (error === "invalid_backend_json") {
     return "Ticket backend returned invalid JSON.";
   }
@@ -676,6 +696,7 @@ export default function TripDetailScreen() {
   const [originIata, setOriginIata] = useState<string>(preferencesStore.getPreferredOriginIata());
 
   const [plan, setPlan] = useState<PlanValue>("not_set");
+  const [proofBusyId, setProofBusyId] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -688,6 +709,7 @@ export default function TripDetailScreen() {
         else if (p === "Free Plan") setPlan("free");
         else if (p === "Premium Plan") setPlan("premium");
       } catch {}
+
     })();
 
     return () => {
@@ -1195,6 +1217,22 @@ export default function TripDetailScreen() {
     }
   }
 
+  async function addProofForBookedItem(item: SavedItem) {
+    if (!item?.id) return;
+
+    try {
+      setProofBusyId(item.id);
+      const ok = await attachTicketProof(item.id);
+      if (!ok) return;
+
+      Alert.alert("Saved", "Booking proof stored for offline access.");
+    } catch {
+      Alert.alert("Couldn’t add proof", "Try again.");
+    } finally {
+      setProofBusyId(null);
+    }
+  }
+
   function confirmArchive(item: SavedItem) {
     Alert.alert(
       "Archive this item?",
@@ -1547,14 +1585,22 @@ export default function TripDetailScreen() {
   const FREE_TRIP_CAP = 5;
 
   const presentByType = useMemo(() => {
-    const present = (type: SavedItemType) => savedItems.some((x) => x.type === type && x.status !== "archived");
-    const bookedOnly = (type: SavedItemType) => savedItems.some((x) => x.type === type && x.status === "booked");
-    const savedOrPending = (type: SavedItemType) =>
-      savedItems.some((x) => x.type === type && (x.status === "saved" || x.status === "pending"));
+    const present = (...types: SavedItemType[]) =>
+      savedItems.some((x) => types.includes(x.type) && x.status !== "archived");
 
-    const stateFor = (type: SavedItemType): ProgressState => {
-      if (bookedOnly(type)) return "booked";
-      if (savedOrPending(type)) return "saved";
+    const bookedOnly = (...types: SavedItemType[]) =>
+      savedItems.some((x) => types.includes(x.type) && x.status === "booked");
+
+    const pendingOnly = (...types: SavedItemType[]) =>
+      savedItems.some((x) => types.includes(x.type) && x.status === "pending");
+
+    const savedOnly = (...types: SavedItemType[]) =>
+      savedItems.some((x) => types.includes(x.type) && x.status === "saved");
+
+    const stateFor = (...types: SavedItemType[]): ProgressState => {
+      if (bookedOnly(...types)) return "booked";
+      if (pendingOnly(...types)) return "pending";
+      if (savedOnly(...types)) return "saved";
       return "empty";
     };
 
@@ -1562,13 +1608,13 @@ export default function TripDetailScreen() {
       hasTickets: present("tickets"),
       hasFlight: present("flight"),
       hasHotel: present("hotel"),
-      hasTransfer: present("transfer"),
+      hasTransport: present("train", "transfer"),
       hasThings: present("things"),
 
       stateTickets: stateFor("tickets"),
       stateFlight: stateFor("flight"),
       stateHotel: stateFor("hotel"),
-      stateTransfer: stateFor("transfer"),
+      stateTransport: stateFor("train", "transfer"),
       stateThings: stateFor("things"),
     };
   }, [savedItems]);
@@ -1578,14 +1624,14 @@ export default function TripDetailScreen() {
       (presentByType.hasTickets ? 30 : 0) +
       (presentByType.hasFlight ? 25 : 0) +
       (presentByType.hasHotel ? 25 : 0) +
-      (presentByType.hasTransfer ? 10 : 0) +
+      (presentByType.hasTransport ? 10 : 0) +
       (presentByType.hasThings ? 10 : 0);
 
     const missing: string[] = [];
     if (!presentByType.hasTickets) missing.push("tickets");
     if (!presentByType.hasFlight) missing.push("flights");
     if (!presentByType.hasHotel) missing.push("hotel");
-    if (!presentByType.hasTransfer) missing.push("transfers");
+    if (!presentByType.hasTransport) missing.push("transport");
     if (!presentByType.hasThings) missing.push("things to do");
 
     return { score, missing };
@@ -1627,13 +1673,14 @@ export default function TripDetailScreen() {
     const openTransfers = () => {
       const url = affiliateUrls?.omioUrl || affiliateUrls?.transfersUrl;
       const partnerId = affiliateUrls?.omioUrl ? ("omio" as PartnerId) : ("kiwitaxi" as PartnerId);
+      const savedItemType: SavedItemType = affiliateUrls?.omioUrl ? "train" : "transfer";
 
       if (!url) return Alert.alert("Not ready", "We need a city + dates saved to build booking links.");
 
       return openTrackedPartner({
         partnerId,
         url,
-        savedItemType: "transfer",
+        savedItemType,
         title: affiliateUrls?.omioUrl ? `Trains & buses in ${cityName}` : `Transfers in ${cityName}`,
         metadata: {
           city: cityName,
@@ -1661,7 +1708,12 @@ export default function TripDetailScreen() {
       { key: "tickets" as const, label: "Tickets", state: presentByType.stateTickets, onPress: openOrExplainTickets },
       { key: "flight" as const, label: "Flights", state: presentByType.stateFlight, onPress: openFlights },
       { key: "hotel" as const, label: "Hotel", state: presentByType.stateHotel, onPress: openHotels },
-      { key: "transfer" as const, label: affiliateUrls?.omioUrl ? "Rail/Bus" : "Transfer", state: presentByType.stateTransfer, onPress: openTransfers },
+      {
+        key: "transfer" as const,
+        label: affiliateUrls?.omioUrl ? "Rail/Bus" : "Transfer",
+        state: presentByType.stateTransport,
+        onPress: openTransfers,
+      },
       { key: "things" as const, label: "Things", state: presentByType.stateThings, onPress: openThings },
     ];
   }, [
@@ -1674,7 +1726,7 @@ export default function TripDetailScreen() {
     presentByType.stateTickets,
     presentByType.stateFlight,
     presentByType.stateHotel,
-    presentByType.stateTransfer,
+    presentByType.stateTransport,
     presentByType.stateThings,
   ]);
 
@@ -1765,7 +1817,7 @@ export default function TripDetailScreen() {
             openTrackedPartner({
               partnerId: "omio" as PartnerId,
               url: affiliateUrls.omioUrl!,
-              savedItemType: "transfer",
+              savedItemType: "train",
               title: `Trains & buses in ${cityName}`,
               metadata: {
                 city: cityName,
@@ -1837,7 +1889,7 @@ export default function TripDetailScreen() {
       return openTrackedPartner({
         partnerId: "omio" as PartnerId,
         url: affiliateUrls.omioUrl,
-        savedItemType: "transfer",
+        savedItemType: "train",
         title: `Trains & buses in ${cityName}`,
         metadata: {
           city: cityName,
@@ -1883,9 +1935,9 @@ export default function TripDetailScreen() {
 
     if (!presentByType.hasFlight) add("Flights", "Aviasales (live)", openFlights, "primary", "aviasales");
     if (!presentByType.hasHotel) add("Hotels", "Expedia (live)", openHotels, "primary", "expedia");
-    if (!presentByType.hasTransfer && affiliateUrls.omioUrl) {
+    if (!presentByType.hasTransport && affiliateUrls.omioUrl) {
       add("Rail / Bus", "Omio (live)", openOmio, "neutral", "omio");
-    } else if (!presentByType.hasTransfer) {
+    } else if (!presentByType.hasTransport) {
       add("Transfers", "Kiwitaxi (live)", openTransfers, "neutral", "kiwitaxi");
     }
     if (!presentByType.hasThings) add("Activities", "GetYourGuide (live)", openThings, "neutral", "getyourguide");
@@ -1909,7 +1961,7 @@ export default function TripDetailScreen() {
     presentByType.hasTickets,
     presentByType.hasFlight,
     presentByType.hasHotel,
-    presentByType.hasTransfer,
+    presentByType.hasTransport,
     presentByType.hasThings,
     primaryTicketItem,
   ]);
@@ -2462,6 +2514,9 @@ export default function TripDetailScreen() {
                     {booked.map((it) => {
                       const lp = livePriceLine(it);
                       const provider = ticketProviderFromItem(it);
+                      const proofText = proofStateText(it);
+                      const missingProof = !hasProof(it);
+                      const proofBusy = proofBusyId === it.id;
 
                       return (
                         <View key={it.id} style={styles.itemRow}>
@@ -2485,12 +2540,29 @@ export default function TripDetailScreen() {
                                 {lp}
                               </Text>
                             ) : null}
+
+                            <Text
+                              style={[styles.proofLine, missingProof ? styles.proofLineMissing : undefined]}
+                              numberOfLines={1}
+                            >
+                              {proofText}
+                            </Text>
                           </Pressable>
 
                           <View style={styles.itemActions}>
-                            <Pressable onPress={onViewWallet} style={styles.smallBtn}>
-                              <Text style={styles.smallBtnText}>Wallet</Text>
-                            </Pressable>
+                            {missingProof ? (
+                              <Pressable
+                                onPress={() => addProofForBookedItem(it)}
+                                style={[styles.smallBtn, styles.smallBtnPrimary, proofBusy && styles.smallBtnDisabled]}
+                                disabled={proofBusy}
+                              >
+                                <Text style={styles.smallBtnText}>{proofBusy ? "Adding…" : "Add proof"}</Text>
+                              </Pressable>
+                            ) : (
+                              <Pressable onPress={onViewWallet} style={styles.smallBtn}>
+                                <Text style={styles.smallBtnText}>Wallet</Text>
+                              </Pressable>
+                            )}
 
                             <Pressable onPress={() => confirmArchive(it)} style={[styles.smallBtn, styles.smallBtnDanger]}>
                               <Text style={styles.smallBtnText}>Archive</Text>
@@ -3094,6 +3166,17 @@ const styles = StyleSheet.create({
   livePriceLine: { marginTop: 6, color: theme.colors.textTertiary, fontSize: 12, fontWeight: "900" },
 
   paidLine: { marginTop: 6, color: "rgba(242,244,246,0.92)", fontSize: 12, fontWeight: "900" },
+
+  proofLine: {
+    marginTop: 6,
+    color: "rgba(160,195,255,1)",
+    fontSize: 12,
+    fontWeight: "900",
+  },
+
+  proofLineMissing: {
+    color: "rgba(255,200,80,1)",
+  },
 
   itemActions: { gap: 8, alignItems: "flex-end" },
 
