@@ -2,11 +2,12 @@
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system";
 import * as Sharing from "expo-sharing";
-import { Platform, Linking } from "react-native";
+import { Linking, Platform } from "react-native";
 
 import type { WalletAttachment, WalletAttachmentKind } from "@/src/core/savedItemTypes";
 
-const DIR = `${FileSystem.documentDirectory}yna_wallet_attachments/`;
+const BASE_DIR = FileSystem.documentDirectory ?? "";
+const DIR = `${BASE_DIR}yna_wallet_attachments/`;
 
 function now() {
   return Date.now();
@@ -16,7 +17,20 @@ function id(prefix = "att") {
   return `${prefix}_${now()}_${Math.random().toString(16).slice(2)}`;
 }
 
+function cleanString(v: unknown) {
+  return typeof v === "string" ? v.trim() : String(v ?? "").trim();
+}
+
+function sanitizeFilePart(value: unknown) {
+  return cleanString(value)
+    .replace(/[^\w.-]+/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
 async function ensureDir() {
+  if (!DIR) throw new Error("Attachment storage directory unavailable");
+
   try {
     const info = await FileSystem.getInfoAsync(DIR);
     if (info.exists && info.isDirectory) return;
@@ -50,6 +64,7 @@ function safeExt(name?: string, mimeType?: string): string {
   if (m.includes("png")) return ".png";
   if (m.includes("jpeg") || m.includes("jpg")) return ".jpg";
   if (m.includes("webp")) return ".webp";
+  if (m.includes("heic")) return ".heic";
   return "";
 }
 
@@ -64,9 +79,6 @@ type PickerParsed =
     };
 
 function normalizePickerResult(res: any): PickerParsed {
-  // expo-document-picker has varied shapes across versions:
-  // - { canceled: boolean, assets: [...] }
-  // - { type: "cancel" | "success", uri, name, mimeType, size }
   const canceled =
     res?.canceled === true ||
     String(res?.type ?? "").toLowerCase() === "cancel" ||
@@ -75,7 +87,7 @@ function normalizePickerResult(res: any): PickerParsed {
   if (canceled) return { canceled: true };
 
   const asset = Array.isArray(res?.assets) ? res.assets[0] : res;
-  const uri = String(asset?.uri ?? "").trim();
+  const uri = cleanString(asset?.uri);
   if (!uri) throw new Error("No file selected");
 
   return {
@@ -87,7 +99,30 @@ function normalizePickerResult(res: any): PickerParsed {
   };
 }
 
-export async function pickAndStoreAttachmentForItem(_itemId: string): Promise<WalletAttachment> {
+function buildStoredFilename(itemId?: string, name?: string, mimeType?: string) {
+  const ext = safeExt(name, mimeType);
+  const itemPart = sanitizeFilePart(itemId || "item");
+  return `${itemPart}_${id("wallet")}${ext}`;
+}
+
+export function isAppOwnedAttachmentUri(uri: string): boolean {
+  const raw = cleanString(uri);
+  return !!raw && !!DIR && raw.startsWith(DIR);
+}
+
+export async function attachmentExists(att: Pick<WalletAttachment, "uri">): Promise<boolean> {
+  const uri = cleanString(att?.uri);
+  if (!uri) return false;
+
+  try {
+    const info = await FileSystem.getInfoAsync(uri);
+    return !!info.exists;
+  } catch {
+    return false;
+  }
+}
+
+export async function pickAndStoreAttachmentForItem(itemId: string): Promise<WalletAttachment> {
   await ensureDir();
 
   const res = await DocumentPicker.getDocumentAsync({
@@ -100,12 +135,9 @@ export async function pickAndStoreAttachmentForItem(_itemId: string): Promise<Wa
   if (parsed.canceled) throw new Error("cancelled");
 
   const kind = inferKind(parsed.name, parsed.mimeType);
-  const ext = safeExt(parsed.name, parsed.mimeType);
-
-  const storedName = `${id("wallet")}${ext}`;
+  const storedName = buildStoredFilename(itemId, parsed.name, parsed.mimeType);
   const dest = `${DIR}${storedName}`;
 
-  // Copy into app-owned storage (offline)
   try {
     await FileSystem.copyAsync({ from: parsed.uri, to: dest });
 
@@ -119,7 +151,6 @@ export async function pickAndStoreAttachmentForItem(_itemId: string): Promise<Wa
       createdAt: now(),
     };
   } catch {
-    // Best-effort fallback: keep original URI (may not be offline)
     return {
       id: id("att"),
       kind,
@@ -133,16 +164,14 @@ export async function pickAndStoreAttachmentForItem(_itemId: string): Promise<Wa
 }
 
 async function openNativeUri(uri: string) {
-  const raw = String(uri ?? "").trim();
+  const raw = cleanString(uri);
   if (!raw) throw new Error("Missing attachment URI");
 
-  // Web: just open URL-ish
   if (Platform.OS === "web") {
     await Linking.openURL(raw);
     return;
   }
 
-  // Android: file:// often fails; prefer content:// when possible.
   if (Platform.OS === "android") {
     try {
       const fileUri = raw.startsWith("file://") ? raw : `file://${raw}`;
@@ -156,9 +185,10 @@ async function openNativeUri(uri: string) {
     }
   }
 
-  // iOS (and Android fallback): try file:// or raw content://
   const url =
-    raw.startsWith("file://") || raw.startsWith("content://") ? raw : `file://${raw}`;
+    raw.startsWith("file://") || raw.startsWith("content://") || raw.startsWith("http://") || raw.startsWith("https://")
+      ? raw
+      : `file://${raw}`;
 
   const can = await Linking.canOpenURL(url);
   if (!can) throw new Error("Cannot open attachment");
@@ -166,10 +196,9 @@ async function openNativeUri(uri: string) {
 }
 
 export async function openAttachment(att: WalletAttachment) {
-  const uri = String(att?.uri ?? "").trim();
+  const uri = cleanString(att?.uri);
   if (!uri) throw new Error("Missing attachment URI");
 
-  // Best UX: share sheet (user can open in Files/Drive/PDF viewer, etc.)
   try {
     const canShare = await Sharing.isAvailableAsync();
     if (canShare) {
@@ -186,16 +215,15 @@ export async function openAttachment(att: WalletAttachment) {
   await openNativeUri(uri);
 }
 
-export async function deleteAttachmentFile(att: WalletAttachment) {
-  const uri = String(att?.uri ?? "").trim();
-  if (!uri) return;
-
-  // Only delete if it looks like our app-owned dir
-  if (!uri.startsWith(DIR)) return;
+export async function deleteAttachmentFile(att: WalletAttachment): Promise<boolean> {
+  const uri = cleanString(att?.uri);
+  if (!uri) return false;
+  if (!isAppOwnedAttachmentUri(uri)) return false;
 
   try {
     await FileSystem.deleteAsync(uri, { idempotent: true });
+    return true;
   } catch {
-    // best-effort
+    return false;
   }
 }
