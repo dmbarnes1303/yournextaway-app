@@ -1,4 +1,3 @@
-// src/services/ticketAttachment.ts
 import { Alert } from "react-native";
 
 import savedItemsStore from "@/src/state/savedItems";
