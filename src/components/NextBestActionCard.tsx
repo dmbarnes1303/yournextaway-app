@@ -52,14 +52,12 @@ export default function NextBestActionCard({
           {action.title}
         </Text>
 
-        <Text style={styles.body}>
-          {action.body}
-        </Text>
+        <Text style={styles.body}>{action.body}</Text>
 
         {locked ? (
           <View style={styles.lockRow}>
             <Text style={styles.lockText}>
-              Pro unlocks automation and price tracking.
+              Pro unlocks automation, alerts, and price tracking for this step.
             </Text>
           </View>
         ) : null}
