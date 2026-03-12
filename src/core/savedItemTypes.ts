@@ -79,10 +79,7 @@ export function normalizeSavedItemType(input: unknown): SavedItemType | null {
   const raw = String(input ?? "").trim().toLowerCase();
   if (!raw) return null;
 
-  // Legacy / alias mapping
   if (raw === "stay" || raw === "stays" || raw === "hotels") return "hotel";
-
-  // Canonical pass-through
   if (TYPE_SET.has(raw)) return raw as SavedItemType;
 
   return null;
@@ -100,6 +97,25 @@ export function normalizeSavedItemStatus(input: unknown): SavedItemStatus | null
 /* -------------------------------------------------------------------------- */
 
 export type WalletAttachmentKind = "pdf" | "image" | "file";
+
+export const WALLET_ATTACHMENT_KINDS: ReadonlyArray<WalletAttachmentKind> = [
+  "pdf",
+  "image",
+  "file",
+] as const;
+
+const ATTACHMENT_KIND_SET = new Set<string>(WALLET_ATTACHMENT_KINDS);
+
+export function isWalletAttachmentKind(v: unknown): v is WalletAttachmentKind {
+  return typeof v === "string" && ATTACHMENT_KIND_SET.has(v);
+}
+
+export function normalizeWalletAttachmentKind(input: unknown): WalletAttachmentKind {
+  const raw = String(input ?? "").trim().toLowerCase();
+  if (raw === "pdf") return "pdf";
+  if (raw === "image") return "image";
+  return "file";
+}
 
 export type WalletAttachment = {
   id: string;
@@ -123,14 +139,29 @@ export type WalletAttachment = {
   createdAt: number;
 };
 
+export function isWalletAttachment(value: unknown): value is WalletAttachment {
+  if (!value || typeof value !== "object") return false;
+  const v = value as Record<string, unknown>;
+
+  return (
+    typeof v.id === "string" &&
+    !!v.id.trim() &&
+    typeof v.uri === "string" &&
+    !!v.uri.trim() &&
+    isWalletAttachmentKind(v.kind) &&
+    Number.isFinite(Number(v.createdAt)) &&
+    Number(v.createdAt) > 0
+  );
+}
+
 /**
  * SavedItem model
  *
  * NOTE: tripId is optional at type-level because:
- * - your store loader explicitly allows missing tripId (legacy/orphan items)
+ * - the store loader explicitly allows missing tripId (legacy/orphan items)
  * - clearOrphans keeps items with no tripId
  *
- * Screens should treat tripId as required *for trip-scoped views*.
+ * Screens should treat tripId as required for trip-scoped views.
  */
 export type SavedItem = {
   id: SavedItemId;
@@ -164,7 +195,7 @@ export type SavedItem = {
  * - tickets => Match tickets
  * - things  => Experiences
  * - insurance => Protect yourself
- * - claim => Claims & compensation (NOT "Protect yourself")
+ * - claim => Claims & compensation
  * - note/other => Notes
  */
 export function getSavedItemTypeLabel(type: SavedItemType): string {
