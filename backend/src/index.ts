@@ -1,3 +1,4 @@
+// backend/src/index.ts
 import "dotenv/config";
 import Fastify from "fastify";
 import { env, hasFtnConfig, hasGigsbergConfig, hasSe365Config } from "./lib/env.js";
@@ -5,6 +6,8 @@ import { resolveTicket } from "./services/tickets/resolve.js";
 
 const app = Fastify({
   logger: true,
+  requestIdHeader: "x-request-id",
+  genReqId: () => `yna_${Date.now()}_${Math.random().toString(16).slice(2, 8)}`,
 });
 
 function clean(v: unknown): string {
@@ -16,11 +19,20 @@ function toBool(v: unknown): boolean {
   return value === "1" || value === "true" || value === "yes";
 }
 
-app.addHook("onSend", async (_request, reply, payload) => {
-  reply.header("Cache-Control", "public, max-age=60");
+app.addHook("onSend", async (request, reply, payload) => {
+  reply.header("X-Request-Id", request.id);
   reply.header("Access-Control-Allow-Origin", "*");
   reply.header("Access-Control-Allow-Methods", "GET,OPTIONS");
-  reply.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  reply.header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Request-Id");
+
+  if (request.url.startsWith("/tickets/resolve")) {
+    reply.header("Cache-Control", "public, max-age=60");
+  } else if (request.url.startsWith("/health")) {
+    reply.header("Cache-Control", "no-store");
+  } else {
+    reply.header("Cache-Control", "no-store");
+  }
+
   return payload;
 });
 
@@ -28,23 +40,29 @@ app.options("*", async (_request, reply) => {
   reply.code(204).send();
 });
 
-app.get("/hello", async () => {
+app.get("/hello", async (request) => {
   return {
     ok: true,
     message: "YourNextAway backend is running",
+    requestId: request.id,
   };
 });
 
-app.get("/health", async () => {
+app.get("/health", async (request) => {
   return {
     ok: true,
     status: "ok",
     service: "yournextaway-backend",
     port: env.port,
-    ftnConfigured: hasFtnConfig(),
-    se365Configured: hasSe365Config(),
-    gigsbergConfigured: hasGigsbergConfig(),
-    gigsbergBaseUrl: env.gigsbergBaseUrl,
+    requestId: request.id,
+    providers: {
+      footballticketsnet: { configured: hasFtnConfig() },
+      sportsevents365: { configured: hasSe365Config() },
+      gigsberg: {
+        configured: hasGigsbergConfig(),
+        baseUrl: env.gigsbergBaseUrl,
+      },
+    },
   };
 });
 
@@ -81,11 +99,13 @@ app.get<{
       checkedProviders: [],
       options: [],
       error: "homeName, awayName and kickoffIso are required",
+      requestId: request.id,
     };
   }
 
   request.log.info(
     {
+      requestId: request.id,
       fixtureId: fixtureId ?? null,
       homeName,
       awayName,
@@ -110,17 +130,15 @@ app.get<{
 
     request.log.info(
       {
+        requestId: request.id,
         fixtureId: fixtureId ?? null,
-        homeName,
-        awayName,
-        kickoffIso,
         provider: result.provider,
         exact: result.exact,
         score: result.score,
         reason: result.reason,
         checkedProviders: result.checkedProviders,
         ok: result.ok,
-        debugNoCache,
+        error: result.error ?? null,
       },
       "Ticket resolve request completed"
     );
@@ -129,10 +147,14 @@ app.get<{
       reply.code(404);
     }
 
-    return result;
+    return {
+      ...result,
+      requestId: request.id,
+    };
   } catch (error) {
     request.log.error(
       {
+        requestId: request.id,
         err: error,
         fixtureId: fixtureId ?? null,
         homeName,
@@ -158,6 +180,7 @@ app.get<{
       checkedProviders: [],
       options: [],
       error: "internal_ticket_resolution_error",
+      requestId: request.id,
     };
   }
 });
