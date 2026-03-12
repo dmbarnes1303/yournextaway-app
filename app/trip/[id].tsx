@@ -73,27 +73,35 @@ type AffiliateUrls = {
   mapsUrl: string;
 };
 
-function clean(v: unknown): string {
-  return String(v ?? "").trim();
+type SmartButton = {
+  title: string;
+  sub: string;
+  onPress: () => void;
+  kind?: "primary" | "neutral";
+  provider?: string | null;
+};
+
+function clean(value: unknown): string {
+  return String(value ?? "").trim();
 }
 
-function coerceId(v: unknown): string | null {
-  if (typeof v === "string") return v.trim() || null;
-  if (Array.isArray(v) && typeof v[0] === "string") return v[0].trim() || null;
+function coerceId(value: unknown): string | null {
+  if (typeof value === "string") return value.trim() || null;
+  if (Array.isArray(value) && typeof value[0] === "string") return value[0].trim() || null;
   return null;
 }
 
-function isNumericId(v: unknown): v is string {
-  return typeof v === "string" && /^[0-9]+$/.test(v.trim());
+function isNumericId(value: unknown): value is string {
+  return typeof value === "string" && /^[0-9]+$/.test(value.trim());
 }
 
 function defer(fn: () => void) {
   setTimeout(fn, 60);
 }
 
-function cleanUpper3(v: unknown, fallback: string) {
-  const s = String(v ?? "").trim().toUpperCase();
-  return /^[A-Z]{3}$/.test(s) ? s : fallback;
+function cleanUpper3(value: unknown, fallback: string) {
+  const upper = String(value ?? "").trim().toUpperCase();
+  return /^[A-Z]{3}$/.test(upper) ? upper : fallback;
 }
 
 function summaryLine(trip: Trip) {
@@ -114,14 +122,14 @@ function tripStatus(trip: Trip): "Upcoming" | "Past" {
   return end.getTime() < today.getTime() ? "Past" : "Upcoming";
 }
 
-function cleanNoteText(v: string) {
-  return String(v ?? "").replace(/\r\n/g, "\n").trim();
+function cleanNoteText(value: string) {
+  return String(value ?? "").replace(/\r\n/g, "\n").trim();
 }
 
 function noteTitleFromText(text: string) {
-  const cleanText = cleanNoteText(text);
-  if (!cleanText) return "Note";
-  const firstLine = cleanText.split("\n")[0]?.trim() || "";
+  const cleaned = cleanNoteText(text);
+  if (!cleaned) return "Note";
+  const firstLine = cleaned.split("\n")[0]?.trim() || "";
   return firstLine.length > 42 ? `${firstLine.slice(0, 42).trim()}…` : firstLine;
 }
 
@@ -151,10 +159,10 @@ function livePriceLine(item: SavedItem): string | null {
 }
 
 function parseIsoToDate(iso?: string | null): Date | null {
-  const s = clean(iso);
-  if (!s) return null;
-  const d = new Date(s);
-  return Number.isFinite(d.getTime()) ? d : null;
+  const raw = clean(iso);
+  if (!raw) return null;
+  const date = new Date(raw);
+  return Number.isFinite(date.getTime()) ? date : null;
 }
 
 function formatKickoffMeta(
@@ -181,21 +189,29 @@ function formatKickoffMeta(
     day: "2-digit",
     month: "short",
   });
-  const timePart = date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  const timePart = date.toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 
   const midnight = date.getHours() === 0 && date.getMinutes() === 0;
   const tbc = looksTbc || snapTbc || midnight;
 
   if (tbc) return { line: `Kickoff: ${datePart} • TBC`, tbc: true, iso };
-  return { line: `Kickoff: ${datePart} • ${timePart}${long ? ` • ${long}` : ""}`, tbc: false, iso };
+
+  return {
+    line: `Kickoff: ${datePart} • ${timePart}${long ? ` • ${long}` : ""}`,
+    tbc: false,
+    iso,
+  };
 }
 
-function titleCaseCity(s: string) {
-  const value = clean(s);
-  if (!value) return "Trip";
+function titleCaseCity(value: string) {
+  const cleaned = clean(value);
+  if (!cleaned) return "Trip";
 
-  const looksSlug = value.includes("-") && value === value.toLowerCase();
-  const base = looksSlug ? value.replace(/-/g, " ") : value;
+  const looksSlug = cleaned.includes("-") && cleaned === cleaned.toLowerCase();
+  const base = looksSlug ? cleaned.replace(/-/g, " ") : cleaned;
 
   return base
     .split(/\s+/g)
@@ -219,10 +235,10 @@ function buildMapsDirectionsUrl(
 }
 
 function isLateKickoff(kickoffIso?: string | null) {
-  const iso = clean(kickoffIso);
-  if (!iso) return false;
+  const raw = clean(kickoffIso);
+  if (!raw) return false;
 
-  const date = new Date(iso);
+  const date = new Date(raw);
   if (!Number.isFinite(date.getTime())) return false;
 
   const h = date.getHours();
@@ -231,13 +247,19 @@ function isLateKickoff(kickoffIso?: string | null) {
 }
 
 function Pill({ label, kind }: { label: string; kind: "best" | "budget" }) {
-  const cfg =
+  const colors =
     kind === "best"
-      ? { borderColor: "rgba(0,255,136,0.35)", backgroundColor: "rgba(0,255,136,0.08)" }
-      : { borderColor: "rgba(255,200,80,0.40)", backgroundColor: "rgba(255,200,80,0.10)" };
+      ? {
+          borderColor: "rgba(0,255,136,0.35)",
+          backgroundColor: "rgba(0,255,136,0.08)",
+        }
+      : {
+          borderColor: "rgba(255,200,80,0.40)",
+          backgroundColor: "rgba(255,200,80,0.10)",
+        };
 
   return (
-    <View style={[styles.pill, cfg]}>
+    <View style={[styles.pill, colors]}>
       <Text style={styles.pillText}>{label}</Text>
     </View>
   );
@@ -692,14 +714,18 @@ export default function TripDetailScreen() {
     const arr = Array.isArray((primaryLogistics as any)?.stay?.bestAreas)
       ? (primaryLogistics as any).stay.bestAreas
       : [];
-    return arr.map((x: any) => ({ area: clean(x?.area), notes: clean(x?.notes) })).filter((x: any) => x.area);
+    return arr
+      .map((x: any) => ({ area: clean(x?.area), notes: clean(x?.notes) }))
+      .filter((x: any) => x.area);
   }, [primaryLogistics]);
 
   const stayBudgetAreas = useMemo(() => {
     const arr = Array.isArray((primaryLogistics as any)?.stay?.budgetAreas)
       ? (primaryLogistics as any).stay.budgetAreas
       : [];
-    return arr.map((x: any) => ({ area: clean(x?.area), notes: clean(x?.notes) })).filter((x: any) => x.area);
+    return arr
+      .map((x: any) => ({ area: clean(x?.area), notes: clean(x?.notes) }))
+      .filter((x: any) => x.area);
   }, [primaryLogistics]);
 
   const transportStops = useMemo(() => {
@@ -766,11 +792,11 @@ export default function TripDetailScreen() {
 
   const ticketsByMatchId = useMemo(() => {
     const next: Record<string, SavedItem | null> = {};
+    const ticketCandidates = savedItems.filter((x) => x.type === "tickets" && x.status !== "archived");
 
     for (const mid of numericMatchIds) {
-      const candidates = savedItems.filter((x) => x.type === "tickets" && x.status !== "archived");
-      const exact = candidates.filter((x) => clean((x.metadata as any)?.fixtureId) === clean(mid));
-      const pool = exact.length > 0 ? exact : candidates;
+      const exact = ticketCandidates.filter((x) => clean((x.metadata as any)?.fixtureId) === clean(mid));
+      const pool = exact.length > 0 ? exact : ticketCandidates;
 
       next[String(mid)] =
         pool.find((x) => x.status === "pending") ??
@@ -850,7 +876,7 @@ export default function TripDetailScreen() {
     } catch {}
   }
 
-  function onEditTrip() {
+  function openTripBuilder() {
     if (!trip) return;
 
     router.push({
@@ -866,20 +892,12 @@ export default function TripDetailScreen() {
     } as any);
   }
 
-  function onAddMatch() {
-    if (!trip) return;
+  function onEditTrip() {
+    openTripBuilder();
+  }
 
-    router.push({
-      pathname: "/trip/build",
-      params: {
-        tripId: trip.id,
-        from: trip.startDate,
-        to: trip.endDate,
-        city: cityName,
-        leagueId: String(primaryLeagueId ?? ""),
-        season: String(DEFAULT_SEASON),
-      },
-    } as any);
+  function onAddMatch() {
+    openTripBuilder();
   }
 
   function onViewWallet() {
@@ -936,6 +954,30 @@ export default function TripDetailScreen() {
     } catch {
       await openUntracked(args.url);
     }
+  }
+
+  function openPartnerOrAlert(
+    url: string | null | undefined,
+    message: string,
+    config: {
+      partnerId: PartnerId;
+      savedItemType: SavedItemType;
+      title: string;
+      metadata?: Record<string, any>;
+    }
+  ) {
+    if (!url) {
+      Alert.alert("Not ready", message);
+      return;
+    }
+
+    return openTrackedPartner({
+      partnerId: config.partnerId,
+      url,
+      savedItemType: config.savedItemType,
+      title: config.title,
+      metadata: config.metadata,
+    });
   }
 
   async function openSavedItem(item: SavedItem) {
@@ -1049,6 +1091,7 @@ export default function TripDetailScreen() {
     const tripId = clean(trip?.id) || clean(activeTripId);
 
     if (!tripId) return;
+
     if (!text) {
       Alert.alert("Add a note", "Type something first.");
       return;
@@ -1104,7 +1147,11 @@ export default function TripDetailScreen() {
         : true;
 
     const kickoffTbc =
-      statusShort === "TBD" || statusShort === "TBA" || statusShort === "NS" || statusShort === "PST" || midnight;
+      statusShort === "TBD" ||
+      statusShort === "TBA" ||
+      statusShort === "NS" ||
+      statusShort === "PST" ||
+      midnight;
 
     try {
       await tripsStore.setPrimaryMatchForTrip(trip.id, mid);
@@ -1334,67 +1381,6 @@ export default function TripDetailScreen() {
   const tripCount = useMemo(() => tripsStore.getState().trips?.length ?? 0, [tripsLoaded]);
 
   const progressItems = useMemo(() => {
-    const openHotels = () => {
-      const url = affiliateUrls?.hotelsUrl;
-      if (!url) return Alert.alert("Not ready", "We need a city + dates saved to build booking links.");
-
-      return openTrackedPartner({
-        partnerId: "expedia" as PartnerId,
-        url,
-        savedItemType: "hotel",
-        title: `Hotels in ${cityName}`,
-        metadata: { city: cityName, startDate: trip?.startDate, endDate: trip?.endDate, priceMode: "live" },
-      });
-    };
-
-    const openFlights = () => {
-      const url = affiliateUrls?.flightsUrl;
-      if (!url) return Alert.alert("Not ready", "We need a city + dates saved to build booking links.");
-
-      return openTrackedPartner({
-        partnerId: "aviasales" as PartnerId,
-        url,
-        savedItemType: "flight",
-        title: `Flights to ${cityName}`,
-        metadata: { city: cityName, originIata: cleanUpper3(originIata, "LON"), priceMode: "live" },
-      });
-    };
-
-    const openTransfers = () => {
-      const url = affiliateUrls?.omioUrl || affiliateUrls?.transfersUrl;
-      const partnerId = affiliateUrls?.omioUrl ? ("omio" as PartnerId) : ("kiwitaxi" as PartnerId);
-      const savedItemType: SavedItemType = affiliateUrls?.omioUrl ? "train" : "transfer";
-
-      if (!url) return Alert.alert("Not ready", "We need a city + dates saved to build booking links.");
-
-      return openTrackedPartner({
-        partnerId,
-        url,
-        savedItemType,
-        title: affiliateUrls?.omioUrl ? `Trains & buses in ${cityName}` : `Transfers in ${cityName}`,
-        metadata: {
-          city: cityName,
-          startDate: trip?.startDate,
-          endDate: trip?.endDate,
-          priceMode: "live",
-          transportMode: affiliateUrls?.omioUrl ? "rail_bus" : "transfer",
-        },
-      });
-    };
-
-    const openThings = () => {
-      const url = affiliateUrls?.experiencesUrl;
-      if (!url) return Alert.alert("Not ready", "We need a city saved to build booking links.");
-
-      return openTrackedPartner({
-        partnerId: "getyourguide" as PartnerId,
-        url,
-        savedItemType: "things",
-        title: `Experiences in ${cityName}`,
-        metadata: { city: cityName, priceMode: "live" },
-      });
-    };
-
     return [
       {
         key: "tickets" as const,
@@ -1408,17 +1394,91 @@ export default function TripDetailScreen() {
           openTicketsForMatch(primaryMatchId);
         },
       },
-      { key: "flight" as const, label: "Flights", state: progress.flight, onPress: openFlights },
-      { key: "hotel" as const, label: "Hotel", state: progress.hotel, onPress: openHotels },
+      {
+        key: "flight" as const,
+        label: "Flights",
+        state: progress.flight,
+        onPress: () =>
+          openPartnerOrAlert(affiliateUrls?.flightsUrl, "We need a city + dates saved to build booking links.", {
+            partnerId: "aviasales" as PartnerId,
+            savedItemType: "flight",
+            title: `Flights to ${cityName}`,
+            metadata: {
+              city: cityName,
+              originIata: cleanUpper3(originIata, "LON"),
+              priceMode: "live",
+            },
+          }),
+      },
+      {
+        key: "hotel" as const,
+        label: "Hotel",
+        state: progress.hotel,
+        onPress: () =>
+          openPartnerOrAlert(affiliateUrls?.hotelsUrl, "We need a city + dates saved to build booking links.", {
+            partnerId: "expedia" as PartnerId,
+            savedItemType: "hotel",
+            title: `Hotels in ${cityName}`,
+            metadata: {
+              city: cityName,
+              startDate: trip?.startDate,
+              endDate: trip?.endDate,
+              priceMode: "live",
+            },
+          }),
+      },
       {
         key: "transfer" as const,
         label: affiliateUrls?.omioUrl ? "Rail/Bus" : "Transfer",
         state: progress.transfer,
-        onPress: openTransfers,
+        onPress: () =>
+          openPartnerOrAlert(
+            affiliateUrls?.omioUrl || affiliateUrls?.transfersUrl,
+            "We need a city + dates saved to build booking links.",
+            affiliateUrls?.omioUrl
+              ? {
+                  partnerId: "omio" as PartnerId,
+                  savedItemType: "train",
+                  title: `Trains & buses in ${cityName}`,
+                  metadata: {
+                    city: cityName,
+                    startDate: trip?.startDate,
+                    endDate: trip?.endDate,
+                    priceMode: "live",
+                    transportMode: "rail_bus",
+                  },
+                }
+              : {
+                  partnerId: "kiwitaxi" as PartnerId,
+                  savedItemType: "transfer",
+                  title: `Transfers in ${cityName}`,
+                  metadata: {
+                    city: cityName,
+                    startDate: trip?.startDate,
+                    endDate: trip?.endDate,
+                    priceMode: "live",
+                    transportMode: "transfer",
+                  },
+                }
+          ),
       },
-      { key: "things" as const, label: "Things", state: progress.things, onPress: openThings },
+      {
+        key: "things" as const,
+        label: "Things",
+        state: progress.things,
+        onPress: () =>
+          openPartnerOrAlert(affiliateUrls?.experiencesUrl, "We need a city saved to build booking links.", {
+            partnerId: "getyourguide" as PartnerId,
+            savedItemType: "things",
+            title: `Experiences in ${cityName}`,
+            metadata: {
+              city: cityName,
+              priceMode: "live",
+            },
+          }),
+      },
     ];
-  }, [affiliateUrls, cityName, originIata, primaryMatchId, trip?.startDate, trip?.endDate, progress]);
+  }, [affiliateUrls, cityName, originIata, primaryMatchId, progress, trip?.startDate, trip?.endDate]);
 
   const nextAction = useMemo<NextAction | null>(() => {
     const openTickets = () => {
@@ -1429,31 +1489,30 @@ export default function TripDetailScreen() {
       openTicketsForMatch(primaryMatchId);
     };
 
-    const openFlights = () => {
-      const url = affiliateUrls?.flightsUrl;
-      if (!url) return Alert.alert("Not ready", "We need a city + dates saved to build booking links.");
-
-      return openTrackedPartner({
+    const openFlights = () =>
+      openPartnerOrAlert(affiliateUrls?.flightsUrl, "We need a city + dates saved to build booking links.", {
         partnerId: "aviasales" as PartnerId,
-        url,
         savedItemType: "flight",
         title: `Flights to ${cityName}`,
-        metadata: { city: cityName, originIata: cleanUpper3(originIata, "LON"), priceMode: "live" },
+        metadata: {
+          city: cityName,
+          originIata: cleanUpper3(originIata, "LON"),
+          priceMode: "live",
+        },
       });
-    };
 
-    const openHotels = () => {
-      const url = affiliateUrls?.hotelsUrl;
-      if (!url) return Alert.alert("Not ready", "We need a city + dates saved to build booking links.");
-
-      return openTrackedPartner({
+    const openHotels = () =>
+      openPartnerOrAlert(affiliateUrls?.hotelsUrl, "We need a city + dates saved to build booking links.", {
         partnerId: "expedia" as PartnerId,
-        url,
         savedItemType: "hotel",
         title: `Hotels in ${cityName}`,
-        metadata: { city: cityName, startDate: trip?.startDate, endDate: trip?.endDate, priceMode: "live" },
+        metadata: {
+          city: cityName,
+          startDate: trip?.startDate,
+          endDate: trip?.endDate,
+          priceMode: "live",
+        },
       });
-    };
 
     if (!hasTickets) {
       return {
@@ -1508,33 +1567,39 @@ export default function TripDetailScreen() {
         cta: affiliateUrls?.omioUrl ? "View rail/bus" : "View transfers",
         onPress: affiliateUrls?.omioUrl
           ? () =>
-              openTrackedPartner({
-                partnerId: "omio" as PartnerId,
-                url: affiliateUrls.omioUrl!,
-                savedItemType: "train",
-                title: `Trains & buses in ${cityName}`,
-                metadata: {
-                  city: cityName,
-                  startDate: trip?.startDate,
-                  endDate: trip?.endDate,
-                  priceMode: "live",
-                  transportMode: "rail_bus",
-                },
-              })
+              openPartnerOrAlert(
+                affiliateUrls.omioUrl,
+                "We need a city + dates saved to build booking links.",
+                {
+                  partnerId: "omio" as PartnerId,
+                  savedItemType: "train",
+                  title: `Trains & buses in ${cityName}`,
+                  metadata: {
+                    city: cityName,
+                    startDate: trip?.startDate,
+                    endDate: trip?.endDate,
+                    priceMode: "live",
+                    transportMode: "rail_bus",
+                  },
+                }
+              )
           : () =>
-              openTrackedPartner({
-                partnerId: "kiwitaxi" as PartnerId,
-                url: affiliateUrls?.transfersUrl || "",
-                savedItemType: "transfer",
-                title: `Transfers in ${cityName}`,
-                metadata: {
-                  city: cityName,
-                  startDate: trip?.startDate,
-                  endDate: trip?.endDate,
-                  priceMode: "live",
-                  transportMode: "transfer",
-                },
-              }),
+              openPartnerOrAlert(
+                affiliateUrls?.transfersUrl,
+                "We need a city + dates saved to build booking links.",
+                {
+                  partnerId: "kiwitaxi" as PartnerId,
+                  savedItemType: "transfer",
+                  title: `Transfers in ${cityName}`,
+                  metadata: {
+                    city: cityName,
+                    startDate: trip?.startDate,
+                    endDate: trip?.endDate,
+                    priceMode: "live",
+                    transportMode: "transfer",
+                  },
+                }
+              ),
       };
     }
 
@@ -1544,12 +1609,14 @@ export default function TripDetailScreen() {
         body: "Core planning is done. Anything else should improve the trip, not clutter it.",
         cta: "View activities",
         onPress: () =>
-          openTrackedPartner({
+          openPartnerOrAlert(affiliateUrls?.experiencesUrl, "We need a city saved to build booking links.", {
             partnerId: "getyourguide" as PartnerId,
-            url: affiliateUrls?.experiencesUrl || "",
             savedItemType: "things",
             title: `Experiences in ${cityName}`,
-            metadata: { city: cityName, priceMode: "live" },
+            metadata: {
+              city: cityName,
+              priceMode: "live",
+            },
           }),
         badge: "Ready",
       };
@@ -1578,52 +1645,49 @@ export default function TripDetailScreen() {
     trip?.endDate,
   ]);
 
-  const smartBookButtons = useMemo(() => {
+  const smartBookButtons = useMemo<SmartButton[]>(() => {
     if (!affiliateUrls || !trip) return [];
 
-    const buttons: Array<{
-      title: string;
-      sub: string;
-      onPress: () => void;
-      kind?: "primary" | "neutral";
-      provider?: string | null;
-    }> = [];
+    const buttons: SmartButton[] = [];
 
-    const addButton = (
+    const add = (
       title: string,
       sub: string,
       onPress: () => void,
       kind?: "primary" | "neutral",
       provider?: string | null
-    ) => buttons.push({ title, sub, onPress, kind, provider });
+    ) => {
+      buttons.push({ title, sub, onPress, kind, provider });
+    };
 
-    const openHotels = () => {
-      if (!affiliateUrls.hotelsUrl) return Alert.alert("Not ready", "Hotels link couldn’t be built.");
-      return openTrackedPartner({
+    const openHotels = () =>
+      openPartnerOrAlert(affiliateUrls.hotelsUrl, "Hotels link couldn’t be built.", {
         partnerId: "expedia" as PartnerId,
-        url: affiliateUrls.hotelsUrl,
         savedItemType: "hotel",
         title: `Hotels in ${cityName}`,
-        metadata: { city: cityName, startDate: trip.startDate, endDate: trip.endDate, priceMode: "live" },
+        metadata: {
+          city: cityName,
+          startDate: trip.startDate,
+          endDate: trip.endDate,
+          priceMode: "live",
+        },
       });
-    };
 
-    const openFlights = () => {
-      if (!affiliateUrls.flightsUrl) return Alert.alert("Not ready", "Flights link couldn’t be built.");
-      return openTrackedPartner({
+    const openFlights = () =>
+      openPartnerOrAlert(affiliateUrls.flightsUrl, "Flights link couldn’t be built.", {
         partnerId: "aviasales" as PartnerId,
-        url: affiliateUrls.flightsUrl,
         savedItemType: "flight",
         title: `Flights to ${cityName}`,
-        metadata: { city: cityName, originIata: cleanUpper3(originIata, "LON"), priceMode: "live" },
+        metadata: {
+          city: cityName,
+          originIata: cleanUpper3(originIata, "LON"),
+          priceMode: "live",
+        },
       });
-    };
 
-    const openOmio = () => {
-      if (!affiliateUrls.omioUrl) return Alert.alert("Not ready", "Rail/bus link couldn’t be built.");
-      return openTrackedPartner({
+    const openOmio = () =>
+      openPartnerOrAlert(affiliateUrls.omioUrl, "Rail/bus link couldn’t be built.", {
         partnerId: "omio" as PartnerId,
-        url: affiliateUrls.omioUrl,
         savedItemType: "train",
         title: `Trains & buses in ${cityName}`,
         metadata: {
@@ -1634,32 +1698,33 @@ export default function TripDetailScreen() {
           transportMode: "rail_bus",
         },
       });
-    };
 
-    const openTransfers = () => {
-      if (!affiliateUrls.transfersUrl) return Alert.alert("Not ready", "Transfers link couldn’t be built.");
-      return openTrackedPartner({
+    const openTransfers = () =>
+      openPartnerOrAlert(affiliateUrls.transfersUrl, "Transfers link couldn’t be built.", {
         partnerId: "kiwitaxi" as PartnerId,
-        url: affiliateUrls.transfersUrl,
         savedItemType: "transfer",
         title: `Transfers in ${cityName}`,
-        metadata: { city: cityName, startDate: trip.startDate, endDate: trip.endDate, priceMode: "live" },
+        metadata: {
+          city: cityName,
+          startDate: trip.startDate,
+          endDate: trip.endDate,
+          priceMode: "live",
+        },
       });
-    };
 
-    const openThings = () => {
-      if (!affiliateUrls.experiencesUrl) return Alert.alert("Not ready", "Activities link couldn’t be built.");
-      return openTrackedPartner({
+    const openThings = () =>
+      openPartnerOrAlert(affiliateUrls.experiencesUrl, "Activities link couldn’t be built.", {
         partnerId: "getyourguide" as PartnerId,
-        url: affiliateUrls.experiencesUrl,
         savedItemType: "things",
         title: `Experiences in ${cityName}`,
-        metadata: { city: cityName, priceMode: "live" },
+        metadata: {
+          city: cityName,
+          priceMode: "live",
+        },
       });
-    };
 
     if (!hasTickets && primaryMatchId) {
-      addButton(
+      add(
         "Tickets",
         smartButtonSubtitle(primaryTicketItem, "Compare live ticket options"),
         () => openTicketsForMatch(primaryMatchId),
@@ -1668,21 +1733,21 @@ export default function TripDetailScreen() {
       );
     }
 
-    if (!hasFlight) addButton("Flights", "Aviasales (live)", openFlights, "primary", "aviasales");
-    if (!hasHotel) addButton("Hotels", "Expedia (live)", openHotels, "primary", "expedia");
+    if (!hasFlight) add("Flights", "Aviasales (live)", openFlights, "primary", "aviasales");
+    if (!hasHotel) add("Hotels", "Expedia (live)", openHotels, "primary", "expedia");
 
     if (!hasTransport && affiliateUrls.omioUrl) {
-      addButton("Rail / Bus", "Omio (live)", openOmio, "neutral", "omio");
+      add("Rail / Bus", "Omio (live)", openOmio, "neutral", "omio");
     } else if (!hasTransport) {
-      addButton("Transfers", "Kiwitaxi (live)", openTransfers, "neutral", "kiwitaxi");
+      add("Transfers", "Kiwitaxi (live)", openTransfers, "neutral", "kiwitaxi");
     }
 
-    if (!hasThings) addButton("Activities", "GetYourGuide (live)", openThings, "neutral", "getyourguide");
+    if (!hasThings) add("Activities", "GetYourGuide (live)", openThings, "neutral", "getyourguide");
 
     if (buttons.length === 0) {
-      addButton("Hotels", "Expedia (live)", openHotels, "primary", "expedia");
-      if (affiliateUrls.omioUrl) addButton("Rail / Bus", "Omio (live)", openOmio, "neutral", "omio");
-      else addButton("Activities", "GetYourGuide (live)", openThings, "neutral", "getyourguide");
+      add("Hotels", "Expedia (live)", openHotels, "primary", "expedia");
+      if (affiliateUrls.omioUrl) add("Rail / Bus", "Omio (live)", openOmio, "neutral", "omio");
+      else add("Activities", "GetYourGuide (live)", openThings, "neutral", "getyourguide");
     }
 
     return buttons.slice(0, 4);
