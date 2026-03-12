@@ -23,7 +23,6 @@ import TripStayGuidanceCard from "@/src/components/trip/TripStayGuidanceCard";
 
 import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
-import { DEFAULT_SEASON } from "@/src/constants/football";
 
 import tripsStore, { type Trip } from "@/src/state/trips";
 import savedItemsStore from "@/src/state/savedItems";
@@ -543,7 +542,6 @@ export default function TripDetailScreen() {
     activeTripId,
     cityName,
     primaryLeagueId,
-    primaryMatchId,
     fixturesById,
     ticketsByMatchId,
     noteText,
