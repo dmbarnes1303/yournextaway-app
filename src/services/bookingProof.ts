@@ -8,9 +8,6 @@ import { writeJson } from "@/src/state/persist";
 
 const LAST_BOOKED_KEY = "yna_last_booked_v1";
 
-/**
- * Small delay avoids nested Alert timing quirks (esp Android)
- */
 function defer(fn: () => void) {
   setTimeout(fn, 60);
 }
@@ -24,11 +21,11 @@ async function ensureSavedItemsLoaded() {
   }
 }
 
-function getAttachments(item: SavedItem | null) {
-  return Array.isArray(item?.attachments) ? item!.attachments! : [];
+function getAttachments(item?: SavedItem | null) {
+  return Array.isArray(item?.attachments) ? item.attachments : [];
 }
 
-async function persistLastBookedPointer(item: SavedItem | null) {
+async function persistLastBookedPointer(item?: SavedItem | null) {
   const itemId = String(item?.id ?? "").trim();
   const tripId = String(item?.tripId ?? "").trim();
   if (!itemId || !tripId) return;
@@ -45,6 +42,14 @@ async function promptAddProof(itemId: string) {
   if (!id) return;
 
   try {
+    const existingBefore = savedItemsStore.getById(id);
+    if (existingBefore && getAttachments(existingBefore).length > 0) {
+      Alert.alert("Already added", "This booking already has proof stored in Wallet.", [{ text: "OK" }], {
+        cancelable: true,
+      });
+      return;
+    }
+
     const att = await pickAndStoreAttachmentForItem(id);
 
     await ensureSavedItemsLoaded();
@@ -65,26 +70,29 @@ async function promptAddProof(itemId: string) {
 
 /**
  * Call after an item is marked "booked".
- * - Sets "last booked" pointer (for Wallet highlight + back-to-trip)
- * - Confirms it was added to Wallet
- * - If no attachments exist, offers proof upload (PDF/screenshot) for offline access
+ * - stores a "last booked" pointer for Wallet highlighting
+ * - confirms Wallet presence
+ * - offers proof upload if no proof exists yet
  */
 export async function confirmBookedAndOfferProof(itemId: string) {
   const id = String(itemId ?? "").trim();
   if (!id) return;
 
   await ensureSavedItemsLoaded();
-  const item = savedItemsStore.getState().items.find((x) => x.id === id) ?? null;
 
-  // Persist pointer only if item exists (prevents junk pointers)
-  if (item) {
-    await persistLastBookedPointer(item);
+  const item = savedItemsStore.getById(id) ?? null;
+  if (!item) return;
+
+  if (item.status !== "booked") {
+    // Do not lie to the user. If the item is not booked, don't show Wallet-booked messaging.
+    return;
   }
 
-  const title = String(item?.title ?? "").trim() || "Booking";
+  await persistLastBookedPointer(item);
+
+  const title = String(item.title ?? "").trim() || "Booking";
   const atts = getAttachments(item);
 
-  // If proof already exists, don't ask again.
   if (atts.length > 0) {
     Alert.alert("Added to Wallet", `"${title}" is booked and saved in your Wallet.`, [{ text: "OK" }], {
       cancelable: true,
