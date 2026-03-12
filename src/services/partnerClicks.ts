@@ -3,31 +3,10 @@ import { AppState, Platform } from "react-native";
 import * as WebBrowser from "expo-web-browser";
 
 import savedItemsStore from "@/src/state/savedItems";
-import { getPartner, type PartnerId, type PartnerCategory } from "@/src/core/partners";
+import { getPartner, type PartnerCategory, type PartnerId } from "@/src/core/partners";
 import type { SavedItem, SavedItemType } from "@/src/core/savedItemTypes";
 import { getSavedItemTypeLabel } from "@/src/core/savedItemTypes";
 import { readJson, writeJson } from "@/src/state/persist";
-
-/**
- * Phase 1 partner return detection:
- * - tracked open ensures a SavedItem exists in "pending" and stores lastClick
- * - on return, UI can prompt:
- *   YES -> booked
- *   NO  -> saved
- *   NOT NOW -> keep pending
- *
- * Hardening:
- * - global opening guard
- * - rollback if open fails (only if we created a new pending item)
- * - avoid stale zombie prompts (age limit)
- * - instant-dismiss rot: if the browser session was too brief, don't prompt;
- *   instead auto-demote pending -> saved.
- *
- * De-duplication:
- * - Reuse existing matching item (pending > saved > booked)
- * - If saved is reused, promote to pending before opening
- * - If booked is reused, open untracked (no prompt)
- */
 
 export type LastPartnerClick = {
   itemId: string;
@@ -43,15 +22,11 @@ const STORAGE_KEY = "yna_last_partner_click_v1";
 let lastClick: LastPartnerClick | null = null;
 let lastClickLoaded = false;
 
-// Watcher lifecycle
 let subscribed = false;
 let appStateSub: { remove: () => void } | null = null;
 let onReturnHandler: ((click: LastPartnerClick) => void | Promise<void>) | null = null;
 
-// Prevent double-taps / concurrent opens
 let opening = false;
-
-// Return de-dupe gate (prevents double modal from AppState + browser dismiss)
 let returnInFlight = false;
 let lastReturnHandledAt = 0;
 
@@ -59,8 +34,12 @@ function now() {
   return Date.now();
 }
 
+function cleanString(v: unknown) {
+  return typeof v === "string" ? v.trim() : String(v ?? "").trim();
+}
+
 function normalizeUrl(url: string): string {
-  const raw = String(url ?? "").trim();
+  const raw = cleanString(url);
   if (!raw) return "";
 
   const withProto = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
@@ -71,19 +50,36 @@ function normalizeUrl(url: string): string {
     const pathname = u.pathname || "/";
     const search = u.search || "";
     const proto = (u.protocol || "https:").toLowerCase();
-    // (hash intentionally dropped for dedupe)
     return `${proto}//${host}${pathname}${search}`.trim();
   } catch {
     return withProto.trim();
   }
 }
 
+function normalizeUrlLoose(url: string): string {
+  const raw = cleanString(url);
+  if (!raw) return "";
+
+  const withProto = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+
+  try {
+    const u = new URL(withProto);
+    const host = u.hostname.toLowerCase();
+    const pathname = (u.pathname || "/").replace(/\/+$/, "") || "/";
+    const proto = (u.protocol || "https:").toLowerCase();
+    return `${proto}//${host}${pathname}`;
+  } catch {
+    return withProto.trim();
+  }
+}
+
 function isRecent(click: LastPartnerClick) {
-  return now() - click.createdAt <= 1000 * 60 * 60 * 6; // 6 hours
+  return now() - click.createdAt <= 1000 * 60 * 60 * 6;
 }
 
 async function persistLastClick(next: LastPartnerClick | null) {
   lastClick = next;
+
   try {
     await writeJson(STORAGE_KEY, next);
   } catch {
@@ -99,17 +95,25 @@ async function loadLastClickOnce() {
     const raw = await readJson<any>(STORAGE_KEY, null);
     if (!raw || typeof raw !== "object") return;
 
-    const itemId = String(raw.itemId ?? "").trim();
-    const tripId = String(raw.tripId ?? "").trim();
-    const partnerId = String(raw.partnerId ?? "").trim() as PartnerId;
-    const url = normalizeUrl(String(raw.url ?? ""));
+    const itemId = cleanString(raw.itemId);
+    const tripId = cleanString(raw.tripId);
+    const partnerId = cleanString(raw.partnerId) as PartnerId;
+    const url = normalizeUrl(cleanString(raw.url));
     const createdAt = Number(raw.createdAt);
     const openedAt = Number(raw.openedAt);
 
     if (!itemId || !tripId || !partnerId || !url) return;
     if (!Number.isFinite(createdAt) || !Number.isFinite(openedAt)) return;
 
-    const candidate: LastPartnerClick = { itemId, tripId, partnerId, url, createdAt, openedAt };
+    const candidate: LastPartnerClick = {
+      itemId,
+      tripId,
+      partnerId,
+      url,
+      createdAt,
+      openedAt,
+    };
+
     if (!isRecent(candidate)) {
       await persistLastClick(null);
       return;
@@ -123,6 +127,7 @@ async function loadLastClickOnce() {
 
 async function ensureSavedItemsLoaded() {
   if (savedItemsStore.getState().loaded) return;
+
   try {
     await savedItemsStore.load();
   } catch {
@@ -130,14 +135,18 @@ async function ensureSavedItemsLoaded() {
   }
 }
 
+function getItemById(itemId: string): SavedItem | undefined {
+  return savedItemsStore.getById(itemId);
+}
+
 async function tryTransitionPendingToSaved(itemId: string) {
-  const id = String(itemId ?? "").trim();
+  const id = cleanString(itemId);
   if (!id) return;
 
   await ensureSavedItemsLoaded();
-  const cur = savedItemsStore.getState().items.find((x) => x.id === id);
-  if (!cur) return;
-  if (cur.status !== "pending") return;
+
+  const cur = getItemById(id);
+  if (!cur || cur.status !== "pending") return;
 
   try {
     await savedItemsStore.transitionStatus(id, "saved");
@@ -147,13 +156,13 @@ async function tryTransitionPendingToSaved(itemId: string) {
 }
 
 async function tryTransitionSavedToPending(itemId: string) {
-  const id = String(itemId ?? "").trim();
+  const id = cleanString(itemId);
   if (!id) return;
 
   await ensureSavedItemsLoaded();
-  const cur = savedItemsStore.getState().items.find((x) => x.id === id);
-  if (!cur) return;
-  if (cur.status !== "saved") return;
+
+  const cur = getItemById(id);
+  if (!cur || cur.status !== "saved") return;
 
   try {
     await savedItemsStore.transitionStatus(id, "pending");
@@ -189,7 +198,6 @@ async function openUrlInternal(url: string) {
   if (!u) throw new Error("URL is required");
 
   if (Platform.OS === "web") {
-    // eslint-disable-next-line no-undef
     window.open(u, "_blank", "noopener,noreferrer");
     return { type: "opened" as const };
   }
@@ -202,24 +210,19 @@ async function openUrlInternal(url: string) {
   });
 }
 
-/**
- * Consume lastClick and invoke handler (once).
- *
- * Instant dismiss policy:
- * - if browser session was too brief => do NOT prompt
- * - auto-demote pending -> saved so Pending doesn't rot
- *
- * IMPORTANT HARDENING:
- * - AppState and browser dismiss can both fire; we de-dupe with returnInFlight + lastReturnHandledAt.
- */
-async function triggerReturnIfPresent(reason: "appstate" | "browser_dismiss", meta?: { openDurationMs?: number }) {
+async function triggerReturnIfPresent(
+  _reason: "appstate" | "browser_dismiss",
+  meta?: { openDurationMs?: number }
+) {
   const t = now();
   if (returnInFlight) return;
   if (t - lastReturnHandledAt < 1500) return;
 
   returnInFlight = true;
+
   try {
     await loadLastClickOnce();
+
     if (!lastClick) return;
 
     if (!isRecent(lastClick)) {
@@ -243,16 +246,14 @@ async function triggerReturnIfPresent(reason: "appstate" | "browser_dismiss", me
     }
 
     const handler = onReturnHandler;
-    if (!handler) {
-      return;
-    }
+    if (!handler) return;
 
     await persistLastClick(null);
 
     try {
       await Promise.resolve(handler(click));
     } catch {
-      // Never crash the app on return prompt
+      // never crash on return prompt flow
     } finally {
       lastReturnHandledAt = now();
     }
@@ -261,14 +262,10 @@ async function triggerReturnIfPresent(reason: "appstate" | "browser_dismiss", me
   }
 }
 
-/** Dev diagnostics */
 export function getPartnerClicksDebugState() {
   return { opening, subscribed, lastClick };
 }
 
-/**
- * Idempotent watcher.
- */
 export function ensurePartnerReturnWatcher(onReturn: (click: LastPartnerClick) => void | Promise<void>) {
   onReturnHandler = onReturn;
 
@@ -284,7 +281,6 @@ export function ensurePartnerReturnWatcher(onReturn: (click: LastPartnerClick) =
   }
 
   subscribed = true;
-
   loadLastClickOnce().catch(() => null);
 
   let lastState = AppState.currentState;
@@ -292,6 +288,7 @@ export function ensurePartnerReturnWatcher(onReturn: (click: LastPartnerClick) =
   const sub = AppState.addEventListener("change", (next) => {
     const becameActive = Boolean(String(lastState).match(/inactive|background/)) && next === "active";
     lastState = next;
+
     if (!becameActive) return;
 
     triggerReturnIfPresent("appstate").catch(() => null);
@@ -312,8 +309,8 @@ export function ensurePartnerReturnWatcher(onReturn: (click: LastPartnerClick) =
 export async function openUntrackedUrl(url: string) {
   const u = normalizeUrl(url);
   if (!u) throw new Error("url is required");
-
   if (opening) throw new Error("Partner open already in progress");
+
   opening = true;
 
   try {
@@ -323,56 +320,69 @@ export async function openUntrackedUrl(url: string) {
   }
 }
 
-/** Backwards-compat alias used by Wallet */
 export async function openPartnerUrl(url: string) {
   return await openUntrackedUrl(url);
 }
 
 function cleanCity(meta?: Record<string, any>): string | null {
   const raw = meta?.city ?? meta?.destination ?? meta?.place;
-  const s = String(raw ?? "").trim();
+  const s = cleanString(raw);
   return s || null;
 }
 
-function buildDefaultTitle(args: { partnerName: string; type: SavedItemType; metadata?: Record<string, any> }): string {
+function buildDefaultTitle(args: {
+  partnerName: string;
+  type: SavedItemType;
+  metadata?: Record<string, any>;
+}) {
   const city = cleanCity(args.metadata);
   const label = getSavedItemTypeLabel(args.type);
 
   switch (args.type) {
     case "hotel":
-      return city ? `Stay: Hotels in ${city}` : `Stay: Hotels`;
+      return city ? `Stay: Hotels in ${city}` : "Stay: Hotels";
     case "flight":
-      return city ? `Flights to ${city}` : `Flights`;
+      return city ? `Flights to ${city}` : "Flights";
     case "train":
-      return city ? `Trains to ${city}` : `Trains`;
+      return city ? `Trains to ${city}` : "Trains";
     case "transfer":
-      return city ? `Transfers in ${city}` : `Transfers`;
+      return city ? `Transfers in ${city}` : "Transfers";
     case "things":
-      return city ? `Experiences in ${city}` : `Experiences`;
+      return city ? `Experiences in ${city}` : "Experiences";
     case "tickets":
-      return city ? `Match tickets for ${city}` : `Match tickets`;
+      return city ? `Match tickets for ${city}` : "Match tickets";
     case "insurance":
-      return city ? `Protect yourself: Travel insurance for ${city}` : `Protect yourself: Travel insurance`;
+      return city ? `Protect yourself: Travel insurance for ${city}` : "Protect yourself: Travel insurance";
     case "claim":
-      return `Claims & compensation: Compensation help`;
+      return "Claims & compensation: Compensation help";
     default:
       return city ? `${label}: ${city}` : `${label}: ${args.partnerName}`;
   }
 }
 
-function findReusableItem(args: { tripId: string; partnerId: PartnerId; url: string; type: SavedItemType }): SavedItem | null {
-  const tripId = String(args.tripId ?? "").trim();
-  const url = normalizeUrl(args.url);
-  if (!tripId || !url) return null;
+function findReusableItem(args: {
+  tripId: string;
+  partnerId: PartnerId;
+  url: string;
+  type: SavedItemType;
+}): SavedItem | null {
+  const tripId = cleanString(args.tripId);
+  const strictUrl = normalizeUrl(args.url);
+  const looseUrl = normalizeUrlLoose(args.url);
 
-  const items = savedItemsStore.getState().items;
+  if (!tripId || !strictUrl) return null;
+
+  const items = savedItemsStore.getAll();
 
   const matches = items.filter((x) => {
-    if (String(x.tripId) !== tripId) return false;
-    if (String(x.partnerId ?? "") !== String(args.partnerId)) return false;
-    if (normalizeUrl(String(x.partnerUrl ?? "")) !== url) return false;
+    if (cleanString(x.tripId) !== tripId) return false;
+    if (cleanString(x.partnerId) !== cleanString(args.partnerId)) return false;
     if (String(x.type) !== String(args.type)) return false;
-    return true;
+
+    const itemStrict = normalizeUrl(cleanString(x.partnerUrl));
+    const itemLoose = normalizeUrlLoose(cleanString(x.partnerUrl));
+
+    return itemStrict === strictUrl || itemLoose === looseUrl;
   });
 
   if (matches.length === 0) return null;
@@ -400,7 +410,7 @@ export async function beginPartnerClick(args: {
   let item: SavedItem | null = null;
 
   try {
-    const tripId = String(args.tripId ?? "").trim();
+    const tripId = cleanString(args.tripId);
     if (!tripId) throw new Error("tripId is required");
 
     const partner = getPartner(args.partnerId);
@@ -412,7 +422,12 @@ export async function beginPartnerClick(args: {
 
     const type: SavedItemType = args.savedItemType ?? defaultTypeForCategory(partner.category);
 
-    const reusable = findReusableItem({ tripId, partnerId: partner.id as PartnerId, url, type });
+    const reusable = findReusableItem({
+      tripId,
+      partnerId: partner.id as PartnerId,
+      url,
+      type,
+    });
 
     if (reusable) {
       item = reusable;
@@ -424,13 +439,13 @@ export async function beginPartnerClick(args: {
 
       if (item.status === "saved") {
         await tryTransitionSavedToPending(item.id);
-        item = savedItemsStore.getState().items.find((x) => x.id === item!.id) ?? item;
+        item = getItemById(item.id) ?? item;
       }
     }
 
     if (!item) {
       const title =
-        String(args.title ?? "").trim() ||
+        cleanString(args.title) ||
         buildDefaultTitle({
           partnerName: partner.name,
           type,
@@ -469,7 +484,7 @@ export async function beginPartnerClick(args: {
       const res = await openUrlInternal(url);
       const openDurationMs = now() - openedAt;
 
-      const t = String((res as any)?.type ?? "").toLowerCase();
+      const t = cleanString((res as any)?.type).toLowerCase();
       const isDismissLike = t === "dismiss" || t === "cancel";
 
       if (isDismissLike) {
@@ -481,6 +496,7 @@ export async function beginPartnerClick(args: {
           await savedItemsStore.remove(item.id);
         } catch {}
       }
+
       await persistLastClick(null);
       throw e;
     }
@@ -492,7 +508,7 @@ export async function beginPartnerClick(args: {
 }
 
 export async function markBooked(itemId: string) {
-  const id = String(itemId ?? "").trim();
+  const id = cleanString(itemId);
   if (!id) return;
 
   await ensureSavedItemsLoaded();
@@ -506,7 +522,7 @@ export async function markBooked(itemId: string) {
 }
 
 export async function markNotBooked(itemId: string) {
-  const id = String(itemId ?? "").trim();
+  const id = cleanString(itemId);
   if (!id) return;
 
   await tryTransitionPendingToSaved(id);
@@ -527,7 +543,7 @@ export async function dismissReturnPrompt(itemId?: string) {
     return;
   }
 
-  const id = String(itemId ?? "").trim();
+  const id = cleanString(itemId);
   if (id && lastClick.itemId === id) {
     await persistLastClick(null);
     lastReturnHandledAt = now();
@@ -546,6 +562,7 @@ export function __unsafeResetPartnerClickStateForDevOnly() {
   try {
     appStateSub?.remove?.();
   } catch {}
+
   appStateSub = null;
   subscribed = false;
   onReturnHandler = null;
