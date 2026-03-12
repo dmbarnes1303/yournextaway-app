@@ -33,7 +33,7 @@ import savedItemsStore from "@/src/state/savedItems";
 import preferencesStore from "@/src/state/preferences";
 
 import type { SavedItem, SavedItemType, WalletAttachment } from "@/src/core/savedItemTypes";
-import { getSavedItemTypeLabel } from "@/src/core/savedItemTypes";
+import { getSavedItemTypeLabel, isTransportSavedItemType } from "@/src/core/savedItemTypes";
 import { getPartner, type PartnerId } from "@/src/core/partners";
 
 import { beginPartnerClick, openUntrackedUrl } from "@/src/services/partnerClicks";
@@ -270,7 +270,9 @@ function shortDomain(url?: string) {
 
 function buildMetaLine(item: SavedItem) {
   const bits: string[] = [];
-  bits.push(safeTypeLabel(item.type));
+
+  if (isTransportSavedItemType(item.type)) bits.push("Transport");
+  else bits.push(safeTypeLabel(item.type));
 
   const p = safePartnerName(item);
   if (p) bits.push(p);
@@ -644,8 +646,8 @@ function normalizeTicketOptions(resolved: TicketResolutionResult | null): Ticket
           resolved.reason === "exact_event"
             ? "exact_event"
             : resolved.reason === "partial_match"
-            ? "partial_match"
-            : "search_fallback",
+              ? "partial_match"
+              : "search_fallback",
       },
     ];
   }
@@ -662,6 +664,12 @@ function itemResolvedScore(item: SavedItem | null): number | null {
   if (!item) return null;
   const raw = item.metadata?.score;
   return typeof raw === "number" && Number.isFinite(raw) ? raw : null;
+}
+
+function itemSortByFreshness(a: SavedItem, b: SavedItem) {
+  const bTime = Number(b.updatedAt ?? b.createdAt ?? 0) || 0;
+  const aTime = Number(a.updatedAt ?? a.createdAt ?? 0) || 0;
+  return bTime - aTime;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -709,7 +717,6 @@ export default function TripDetailScreen() {
         else if (p === "Free Plan") setPlan("free");
         else if (p === "Premium Plan") setPlan("premium");
       } catch {}
-
     })();
 
     return () => {
@@ -879,14 +886,37 @@ export default function TripDetailScreen() {
     return { flightsUrl, hotelsUrl, omioUrl, transfersUrl, experiencesUrl, mapsUrl };
   }, [affiliateCtx]);
 
-  const pending = useMemo(() => savedItems.filter((x) => x.status === "pending"), [savedItems]);
-  const saved = useMemo(
-    () => savedItems.filter((x) => x.status === "saved" && x.type !== "note"),
+  const pending = useMemo(
+    () => savedItems.filter((x) => x.status === "pending").sort(itemSortByFreshness),
     [savedItems]
   );
-  const booked = useMemo(() => savedItems.filter((x) => x.status === "booked"), [savedItems]);
+
+  const saved = useMemo(
+    () =>
+      savedItems
+        .filter((x) => x.status === "saved" && x.type !== "note")
+        .sort(itemSortByFreshness),
+    [savedItems]
+  );
+
+  const booked = useMemo(
+    () =>
+      savedItems
+        .filter((x) => x.status === "booked")
+        .sort((a, b) => {
+          const aMissing = hasProof(a) ? 1 : 0;
+          const bMissing = hasProof(b) ? 1 : 0;
+          if (aMissing !== bMissing) return aMissing - bMissing;
+          return itemSortByFreshness(a, b);
+        }),
+    [savedItems]
+  );
+
   const notes = useMemo(
-    () => savedItems.filter((x) => x.type === "note" && x.status !== "archived"),
+    () =>
+      savedItems
+        .filter((x) => x.type === "note" && x.status !== "archived")
+        .sort(itemSortByFreshness),
     [savedItems]
   );
 
@@ -1224,7 +1254,6 @@ export default function TripDetailScreen() {
       setProofBusyId(item.id);
       const ok = await attachTicketProof(item.id);
       if (!ok) return;
-
       Alert.alert("Saved", "Booking proof stored for offline access.");
     } catch {
       Alert.alert("Couldn’t add proof", "Try again.");
@@ -1309,10 +1338,10 @@ export default function TripDetailScreen() {
       s === "pending"
         ? styles.badgePending
         : s === "saved"
-        ? styles.badgeSaved
-        : s === "booked"
-        ? styles.badgeBooked
-        : styles.badgeArchived;
+          ? styles.badgeSaved
+          : s === "booked"
+            ? styles.badgeBooked
+            : styles.badgeArchived;
 
     return (
       <View style={[styles.badge, style]}>
@@ -1670,7 +1699,7 @@ export default function TripDetailScreen() {
       });
     };
 
-    const openTransfers = () => {
+    const openTransport = () => {
       const url = affiliateUrls?.omioUrl || affiliateUrls?.transfersUrl;
       const partnerId = affiliateUrls?.omioUrl ? ("omio" as PartnerId) : ("kiwitaxi" as PartnerId);
       const savedItemType: SavedItemType = affiliateUrls?.omioUrl ? "train" : "transfer";
@@ -1710,9 +1739,9 @@ export default function TripDetailScreen() {
       { key: "hotel" as const, label: "Hotel", state: presentByType.stateHotel, onPress: openHotels },
       {
         key: "transfer" as const,
-        label: affiliateUrls?.omioUrl ? "Rail/Bus" : "Transfer",
+        label: "Transport",
         state: presentByType.stateTransport,
-        onPress: openTransfers,
+        onPress: openTransport,
       },
       { key: "things" as const, label: "Things", state: presentByType.stateThings, onPress: openThings },
     ];
@@ -1811,7 +1840,7 @@ export default function TripDetailScreen() {
     return {
       title: "You’re set — add extras if you want",
       body: "Core planning is complete. If you’re staying longer, add transport, activities or notes.",
-      cta: affiliateUrls?.omioUrl ? "View rail/bus" : "View hotels (live)",
+      cta: affiliateUrls?.omioUrl ? "View rail/bus" : "View transport",
       onPress: affiliateUrls?.omioUrl
         ? () =>
             openTrackedPartner({
@@ -1827,7 +1856,20 @@ export default function TripDetailScreen() {
                 transportMode: "rail_bus",
               },
             })
-        : openHotels,
+        : () =>
+            openTrackedPartner({
+              partnerId: "kiwitaxi" as PartnerId,
+              url: affiliateUrls?.transfersUrl!,
+              savedItemType: "transfer",
+              title: `Transfers in ${cityName}`,
+              metadata: {
+                city: cityName,
+                startDate: trip?.startDate,
+                endDate: trip?.endDate,
+                priceMode: "live",
+                transportMode: "transfer",
+              },
+            }),
       badge: "Ready",
     };
   }, [
@@ -1935,17 +1977,19 @@ export default function TripDetailScreen() {
 
     if (!presentByType.hasFlight) add("Flights", "Aviasales (live)", openFlights, "primary", "aviasales");
     if (!presentByType.hasHotel) add("Hotels", "Expedia (live)", openHotels, "primary", "expedia");
+
     if (!presentByType.hasTransport && affiliateUrls.omioUrl) {
-      add("Rail / Bus", "Omio (live)", openOmio, "neutral", "omio");
+      add("Transport", "Omio (live)", openOmio, "neutral", "omio");
     } else if (!presentByType.hasTransport) {
-      add("Transfers", "Kiwitaxi (live)", openTransfers, "neutral", "kiwitaxi");
+      add("Transport", "Kiwitaxi (live)", openTransfers, "neutral", "kiwitaxi");
     }
+
     if (!presentByType.hasThings) add("Activities", "GetYourGuide (live)", openThings, "neutral", "getyourguide");
 
     if (btns.length === 0) {
       add("Hotels", "Expedia (live)", openHotels, "primary", "expedia");
       if (affiliateUrls.omioUrl) {
-        add("Rail / Bus", "Omio (live)", openOmio, "neutral", "omio");
+        add("Transport", "Omio (live)", openOmio, "neutral", "omio");
       } else {
         add("Activities", "GetYourGuide (live)", openThings, "neutral", "getyourguide");
       }
@@ -1968,6 +2012,7 @@ export default function TripDetailScreen() {
 
   const loading = Boolean(tripId && (!tripsLoaded || !savedLoaded));
   const showHeroBanners = pending.length > 0 || saved.length > 0 || booked.length > 0;
+  const bookedWithoutProofCount = booked.filter((x) => !hasProof(x)).length;
 
   return (
     <Background imageSource={getBackground("trips")} overlayOpacity={0.86}>
@@ -2047,6 +2092,7 @@ export default function TripDetailScreen() {
                       <View style={styles.bookedBanner}>
                         <Text style={styles.bookedText}>
                           {booked.length} booked item{booked.length === 1 ? "" : "s"} in Wallet
+                          {bookedWithoutProofCount > 0 ? ` • ${bookedWithoutProofCount} missing proof` : ""}
                         </Text>
                       </View>
                     ) : null}
