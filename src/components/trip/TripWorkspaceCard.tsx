@@ -1,4 +1,4 @@
-import React from "react";
+import React, { memo } from "react";
 import {
   View,
   Text,
@@ -20,19 +20,20 @@ import { getPartner } from "@/src/core/partners";
 import type { WorkspaceSectionKey, TripWorkspace } from "@/src/core/tripWorkspace";
 import { WORKSPACE_SECTIONS } from "@/src/core/tripWorkspace";
 
-function clean(v: unknown): string {
-  return String(v ?? "").trim();
+function clean(value: unknown): string {
+  return String(value ?? "").trim();
 }
 
-function statusLabel(s: SavedItem["status"]) {
-  if (s === "pending") return "Pending";
-  if (s === "saved") return "Saved";
-  if (s === "booked") return "Booked";
+function statusLabel(status: SavedItem["status"]) {
+  if (status === "pending") return "Pending";
+  if (status === "saved") return "Saved";
+  if (status === "booked") return "Booked";
   return "Archived";
 }
 
 function providerLabel(provider?: string | null): string {
   const raw = clean(provider).toLowerCase();
+
   if (raw === "footballticketsnet") return "FootballTicketNet";
   if (raw === "sportsevents365") return "SportsEvents365";
   if (raw === "gigsberg") return "Gigsberg";
@@ -41,11 +42,13 @@ function providerLabel(provider?: string | null): string {
   if (raw === "kiwitaxi") return "KiwiTaxi";
   if (raw === "omio") return "Omio";
   if (raw === "getyourguide") return "GetYourGuide";
+
   return provider || "Provider";
 }
 
 function providerShort(provider?: string | null): string {
   const raw = clean(provider).toLowerCase();
+
   if (raw === "footballticketsnet") return "FTN";
   if (raw === "sportsevents365") return "365";
   if (raw === "gigsberg") return "G";
@@ -54,6 +57,7 @@ function providerShort(provider?: string | null): string {
   if (raw === "kiwitaxi") return "KT";
   if (raw === "omio") return "OM";
   if (raw === "getyourguide") return "GYG";
+
   return "P";
 }
 
@@ -133,14 +137,17 @@ function providerBadgeStyle(provider?: string | null) {
 
 function safePartnerName(item: SavedItem) {
   if (!item.partnerId) return null;
+
   try {
     return getPartner(item.partnerId as any).name;
   } catch {
-    const provider = String(item.metadata?.ticketProvider ?? "").trim();
+    const provider = clean(item.metadata?.ticketProvider);
+
     if (provider === "footballticketsnet") return "FootballTicketNet";
     if (provider === "sportsevents365") return "SportsEvents365";
     if (provider === "gigsberg") return "Gigsberg";
     if (provider === "omio") return "Omio";
+
     return null;
   }
 }
@@ -155,32 +162,32 @@ function safeTypeLabel(type: SavedItemType) {
 
 function shortDomain(url?: string) {
   if (!url) return "";
+
   try {
-    const u = new URL(url);
-    return u.hostname.replace(/^www\./, "");
+    const parsed = new URL(url);
+    return parsed.hostname.replace(/^www\./, "");
   } catch {
     return "";
   }
 }
 
 function buildMetaLine(item: SavedItem) {
-  const bits: string[] = [];
-  bits.push(safeTypeLabel(item.type));
+  const bits: string[] = [safeTypeLabel(item.type)];
 
-  const partner = safePartnerName(item);
-  if (partner) bits.push(partner);
+  const partnerName = safePartnerName(item);
+  if (partnerName) bits.push(partnerName);
 
-  if (item.partnerUrl) {
-    const domain = shortDomain(item.partnerUrl);
-    if (domain) bits.push(domain);
-  }
+  const domain = item.partnerUrl ? shortDomain(item.partnerUrl) : "";
+  if (domain) bits.push(domain);
 
   return bits.join(" • ");
 }
 
 function getAttachmentCount(item: SavedItem | null): number {
-  const atts = Array.isArray(item?.attachments) ? (item?.attachments as WalletAttachment[]) : [];
-  return atts.length;
+  const attachments = Array.isArray(item?.attachments)
+    ? (item.attachments as WalletAttachment[])
+    : [];
+  return attachments.length;
 }
 
 function hasProof(item: SavedItem | null): boolean {
@@ -200,62 +207,17 @@ function sectionStateLabel(sectionKey: WorkspaceSectionKey, total: number) {
   return `${total} items`;
 }
 
-function ProviderBadge({
-  provider,
-  size = "sm",
-  showLabel = false,
-}: {
-  provider?: string | null;
-  size?: "sm" | "md";
-  showLabel?: boolean;
-}) {
-  const badge = providerBadgeStyle(provider);
-  const short = providerShort(provider);
-  const label = providerLabel(provider);
-
-  const circleSize = size === "md" ? 30 : 24;
-  const fontSize = size === "md" ? 12 : 11;
-
-  return (
-    <View style={[styles.providerBadgeWrap, showLabel && styles.providerBadgeWrapLabeled]}>
-      <View
-        style={[
-          styles.providerBadgeCircle,
-          {
-            width: circleSize,
-            height: circleSize,
-            borderRadius: circleSize / 2,
-            borderColor: badge.borderColor,
-            backgroundColor: badge.backgroundColor,
-          },
-        ]}
-      >
-        <Text style={[styles.providerBadgeCircleText, { color: badge.textColor, fontSize }]}>
-          {short}
-        </Text>
-      </View>
-      {showLabel ? <Text style={styles.providerBadgeLabel}>{label}</Text> : null}
-    </View>
-  );
+function sectionTitle(sectionKey: WorkspaceSectionKey) {
+  return WORKSPACE_SECTIONS[sectionKey].title;
 }
 
-function StatusBadge({ status }: { status: SavedItem["status"] }) {
-  const label = statusLabel(status);
-  const style =
-    status === "pending"
-      ? styles.badgePending
-      : status === "saved"
-        ? styles.badgeSaved
-        : status === "booked"
-          ? styles.badgeBooked
-          : styles.badgeArchived;
-
-  return (
-    <View style={[styles.badge, style]}>
-      <Text style={styles.badgeText}>{label}</Text>
-    </View>
-  );
-}
+type PartnerOpenArgs = {
+  partnerId: any;
+  url: string;
+  title: string;
+  savedItemType?: SavedItemType;
+  metadata?: Record<string, any>;
+};
 
 export type TripWorkspaceCardProps = {
   workspaceSnapshot: {
@@ -299,17 +261,640 @@ export type TripWorkspaceCardProps = {
   onConfirmMoveToPending: (item: SavedItem) => void;
   onConfirmArchive: (item: SavedItem) => void;
 
-  onOpenPartner: (args: {
-    partnerId: any;
-    url: string;
-    title: string;
-    savedItemType?: SavedItemType;
-    metadata?: Record<string, any>;
-  }) => void;
+  onOpenPartner: (args: PartnerOpenArgs) => void;
 
   getLivePriceLine: (item: SavedItem) => string | null;
   getTicketProviderFromItem: (item: SavedItem | null) => string | null;
 };
+
+type ProviderBadgeProps = {
+  provider?: string | null;
+  size?: "sm" | "md";
+  showLabel?: boolean;
+};
+
+const ProviderBadge = memo(function ProviderBadge({
+  provider,
+  size = "sm",
+  showLabel = false,
+}: ProviderBadgeProps) {
+  const badge = providerBadgeStyle(provider);
+  const short = providerShort(provider);
+  const label = providerLabel(provider);
+
+  const circleSize = size === "md" ? 30 : 24;
+  const fontSize = size === "md" ? 12 : 11;
+
+  return (
+    <View style={[styles.providerBadgeWrap, showLabel && styles.providerBadgeWrapLabeled]}>
+      <View
+        style={[
+          styles.providerBadgeCircle,
+          {
+            width: circleSize,
+            height: circleSize,
+            borderRadius: circleSize / 2,
+            borderColor: badge.borderColor,
+            backgroundColor: badge.backgroundColor,
+          },
+        ]}
+      >
+        <Text style={[styles.providerBadgeCircleText, { color: badge.textColor, fontSize }]}>
+          {short}
+        </Text>
+      </View>
+      {showLabel ? <Text style={styles.providerBadgeLabel}>{label}</Text> : null}
+    </View>
+  );
+});
+
+const StatusBadge = memo(function StatusBadge({ status }: { status: SavedItem["status"] }) {
+  const label = statusLabel(status);
+
+  const style =
+    status === "pending"
+      ? styles.badgePending
+      : status === "saved"
+        ? styles.badgeSaved
+        : status === "booked"
+          ? styles.badgeBooked
+          : styles.badgeArchived;
+
+  return (
+    <View style={[styles.badge, style]}>
+      <Text style={styles.badgeText}>{label}</Text>
+    </View>
+  );
+});
+
+type WorkspaceItemRowProps = {
+  item: SavedItem;
+  proofBusyId: string | null;
+  onOpenSavedItem: (item: SavedItem) => void;
+  onOpenNoteActions: (item: SavedItem) => void;
+  onConfirmMarkBooked: (item: SavedItem) => void;
+  onAddProofForBookedItem: (item: SavedItem) => void;
+  onViewWallet: () => void;
+  onConfirmMoveToPending: (item: SavedItem) => void;
+  onConfirmArchive: (item: SavedItem) => void;
+  getLivePriceLine: (item: SavedItem) => string | null;
+  getTicketProviderFromItem: (item: SavedItem | null) => string | null;
+};
+
+const WorkspaceItemRow = memo(function WorkspaceItemRow({
+  item,
+  proofBusyId,
+  onOpenSavedItem,
+  onOpenNoteActions,
+  onConfirmMarkBooked,
+  onAddProofForBookedItem,
+  onViewWallet,
+  onConfirmMoveToPending,
+  onConfirmArchive,
+  getLivePriceLine,
+  getTicketProviderFromItem,
+}: WorkspaceItemRowProps) {
+  const livePrice = getLivePriceLine(item);
+  const provider = getTicketProviderFromItem(item);
+  const proofText = proofStateText(item);
+  const missingProof = item.status === "booked" && !hasProof(item);
+  const proofBusy = proofBusyId === item.id;
+  const isNote = item.type === "note" || item.type === "other";
+
+  return (
+    <View style={styles.itemRow}>
+      <Pressable
+        style={styles.itemMain}
+        onPress={() => (isNote ? onOpenNoteActions(item) : onOpenSavedItem(item))}
+      >
+        <View style={styles.itemTitleRow}>
+          <Text style={styles.itemTitle} numberOfLines={1}>
+            {item.title}
+          </Text>
+          <StatusBadge status={item.status} />
+        </View>
+
+        <View style={styles.itemMetaRow}>
+          {provider ? <ProviderBadge provider={provider} size="sm" /> : null}
+          <Text style={styles.itemMeta} numberOfLines={1}>
+            {isNote ? "Notes" : buildMetaLine(item)}
+          </Text>
+        </View>
+
+        {livePrice ? (
+          <Text
+            style={item.status === "booked" ? styles.paidLine : styles.livePriceLine}
+            numberOfLines={1}
+          >
+            {livePrice}
+          </Text>
+        ) : null}
+
+        {item.status === "booked" ? (
+          <Text
+            style={[styles.proofLine, missingProof ? styles.proofLineMissing : undefined]}
+            numberOfLines={1}
+          >
+            {proofText}
+          </Text>
+        ) : null}
+      </Pressable>
+
+      <View style={styles.itemActions}>
+        {item.status !== "booked" ? (
+          <Pressable onPress={() => onConfirmMarkBooked(item)} style={styles.smallBtn}>
+            <Text style={styles.smallBtnText}>Booked</Text>
+          </Pressable>
+        ) : missingProof ? (
+          <Pressable
+            onPress={() => onAddProofForBookedItem(item)}
+            style={[
+              styles.smallBtn,
+              styles.smallBtnPrimary,
+              proofBusy && styles.smallBtnDisabled,
+            ]}
+            disabled={proofBusy}
+          >
+            <Text style={styles.smallBtnText}>{proofBusy ? "Adding…" : "Add proof"}</Text>
+          </Pressable>
+        ) : (
+          <Pressable onPress={onViewWallet} style={styles.smallBtn}>
+            <Text style={styles.smallBtnText}>Wallet</Text>
+          </Pressable>
+        )}
+
+        {item.status === "saved" ? (
+          <Pressable onPress={() => onConfirmMoveToPending(item)} style={styles.smallBtn}>
+            <Text style={styles.smallBtnText}>Pending</Text>
+          </Pressable>
+        ) : null}
+
+        <Pressable
+          onPress={() => onConfirmArchive(item)}
+          style={[styles.smallBtn, styles.smallBtnDanger]}
+        >
+          <Text style={styles.smallBtnText}>Archive</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+});
+
+type SectionContentProps = {
+  sectionKey: WorkspaceSectionKey;
+  items: SavedItem[];
+  primaryMatchId: string | null;
+  affiliateUrls: TripWorkspaceCardProps["affiliateUrls"];
+  cityName: string;
+  originIata: string;
+  tripStartDate?: string | null;
+  tripEndDate?: string | null;
+  noteText: string;
+  noteSaving: boolean;
+  proofBusyId: string | null;
+  stayBestAreas: Array<{ area: string; notes?: string }>;
+  stayBudgetAreas: Array<{ area: string; notes?: string }>;
+  transportStops: string[];
+  onNoteTextChange: (text: string) => void;
+  onAddNote: () => void;
+  onOpenTicketsForPrimaryMatch: () => void;
+  onOpenSavedItem: (item: SavedItem) => void;
+  onOpenNoteActions: (item: SavedItem) => void;
+  onConfirmMarkBooked: (item: SavedItem) => void;
+  onAddProofForBookedItem: (item: SavedItem) => void;
+  onViewWallet: () => void;
+  onConfirmMoveToPending: (item: SavedItem) => void;
+  onConfirmArchive: (item: SavedItem) => void;
+  onOpenPartner: (args: PartnerOpenArgs) => void;
+  getLivePriceLine: (item: SavedItem) => string | null;
+  getTicketProviderFromItem: (item: SavedItem | null) => string | null;
+};
+
+function renderItemList(
+  items: SavedItem[],
+  props: Omit<SectionContentProps, "sectionKey" | "items">
+) {
+  if (items.length === 0) return null;
+
+  return (
+    <View style={styles.listGap}>
+      {items.map((item) => (
+        <WorkspaceItemRow
+          key={item.id}
+          item={item}
+          proofBusyId={props.proofBusyId}
+          onOpenSavedItem={props.onOpenSavedItem}
+          onOpenNoteActions={props.onOpenNoteActions}
+          onConfirmMarkBooked={props.onConfirmMarkBooked}
+          onAddProofForBookedItem={props.onAddProofForBookedItem}
+          onViewWallet={props.onViewWallet}
+          onConfirmMoveToPending={props.onConfirmMoveToPending}
+          onConfirmArchive={props.onConfirmArchive}
+          getLivePriceLine={props.getLivePriceLine}
+          getTicketProviderFromItem={props.getTicketProviderFromItem}
+        />
+      ))}
+    </View>
+  );
+}
+
+const SectionContent = memo(function SectionContent(props: SectionContentProps) {
+  const {
+    sectionKey,
+    items,
+    primaryMatchId,
+    affiliateUrls,
+    cityName,
+    originIata,
+    tripStartDate,
+    tripEndDate,
+    noteText,
+    noteSaving,
+    stayBestAreas,
+    stayBudgetAreas,
+    transportStops,
+    onNoteTextChange,
+    onAddNote,
+    onOpenTicketsForPrimaryMatch,
+    onOpenPartner,
+  } = props;
+
+  if (sectionKey === "tickets") {
+    return (
+      <>
+        {primaryMatchId ? (
+          <Pressable onPress={onOpenTicketsForPrimaryMatch} style={styles.sectionCta}>
+            <Text style={styles.sectionCtaTitle}>Open live ticket options</Text>
+            <Text style={styles.sectionCtaBody}>
+              Compare providers for the primary match and save the route into the workspace.
+            </Text>
+          </Pressable>
+        ) : (
+          <EmptyState
+            title="No match selected"
+            message="Add a match first to unlock ticket planning."
+          />
+        )}
+
+        {renderItemList(items, props)}
+      </>
+    );
+  }
+
+  if (sectionKey === "stay") {
+    return (
+      <>
+        {affiliateUrls?.hotelsUrl ? (
+          <Pressable
+            onPress={() =>
+              onOpenPartner({
+                partnerId: "expedia",
+                url: affiliateUrls.hotelsUrl,
+                savedItemType: "hotel",
+                title: `Hotels in ${cityName}`,
+                metadata: {
+                  city: cityName,
+                  startDate: tripStartDate,
+                  endDate: tripEndDate,
+                  priceMode: "live",
+                },
+              })
+            }
+            style={styles.sectionCta}
+          >
+            <Text style={styles.sectionCtaTitle}>Open live stays</Text>
+            <Text style={styles.sectionCtaBody}>
+              Use the stay guidance below to avoid booking a cheap place in a useless area.
+            </Text>
+          </Pressable>
+        ) : null}
+
+        {stayBestAreas.length > 0 || stayBudgetAreas.length > 0 ? (
+          <View style={styles.guidanceMiniBox}>
+            <Text style={styles.guidanceMiniTitle}>Area shortlist</Text>
+
+            {stayBestAreas.slice(0, 2).map((item, index) => (
+              <Text key={`stay-best-${index}`} style={styles.guidanceMiniLine}>
+                • {item.area}
+                {item.notes ? ` — ${item.notes}` : ""}
+              </Text>
+            ))}
+
+            {stayBudgetAreas.slice(0, 2).map((item, index) => (
+              <Text key={`stay-budget-${index}`} style={styles.guidanceMiniLine}>
+                • {item.area}
+                {item.notes ? ` — ${item.notes}` : ""}
+              </Text>
+            ))}
+          </View>
+        ) : null}
+
+        {items.length > 0 ? (
+          renderItemList(items, props)
+        ) : (
+          <EmptyState
+            title="No stay items yet"
+            message="Save hotels here so the trip isn’t just a vague idea."
+          />
+        )}
+      </>
+    );
+  }
+
+  if (sectionKey === "travel") {
+    return (
+      <>
+        <View style={styles.sectionActionRow}>
+          {affiliateUrls?.flightsUrl ? (
+            <Pressable
+              onPress={() =>
+                onOpenPartner({
+                  partnerId: "aviasales",
+                  url: affiliateUrls.flightsUrl,
+                  savedItemType: "flight",
+                  title: `Flights to ${cityName}`,
+                  metadata: {
+                    city: cityName,
+                    originIata,
+                    priceMode: "live",
+                  },
+                })
+              }
+              style={[styles.smallActionBtn, styles.smallActionBtnPrimary]}
+            >
+              <Text style={styles.smallActionBtnText}>Flights</Text>
+            </Pressable>
+          ) : null}
+
+          {affiliateUrls?.omioUrl ? (
+            <Pressable
+              onPress={() =>
+                onOpenPartner({
+                  partnerId: "omio",
+                  url: affiliateUrls.omioUrl,
+                  savedItemType: "train",
+                  title: `Trains & buses in ${cityName}`,
+                  metadata: {
+                    city: cityName,
+                    startDate: tripStartDate,
+                    endDate: tripEndDate,
+                    priceMode: "live",
+                    transportMode: "rail_bus",
+                  },
+                })
+              }
+              style={styles.smallActionBtn}
+            >
+              <Text style={styles.smallActionBtnText}>Rail / Bus</Text>
+            </Pressable>
+          ) : null}
+        </View>
+
+        {items.length > 0 ? (
+          renderItemList(items, props)
+        ) : (
+          <EmptyState
+            title="No travel items yet"
+            message="Flights or rail should live here, not in your head."
+          />
+        )}
+      </>
+    );
+  }
+
+  if (sectionKey === "transfers") {
+    return (
+      <>
+        {affiliateUrls?.transfersUrl ? (
+          <Pressable
+            onPress={() =>
+              onOpenPartner({
+                partnerId: "kiwitaxi",
+                url: affiliateUrls.transfersUrl,
+                savedItemType: "transfer",
+                title: `Transfers in ${cityName}`,
+                metadata: {
+                  city: cityName,
+                  startDate: tripStartDate,
+                  endDate: tripEndDate,
+                  priceMode: "live",
+                },
+              })
+            }
+            style={styles.sectionCta}
+          >
+            <Text style={styles.sectionCtaTitle}>Open transfer options</Text>
+            <Text style={styles.sectionCtaBody}>
+              Sort airport-to-city and city-to-stadium movement before it becomes a pain.
+            </Text>
+          </Pressable>
+        ) : null}
+
+        {transportStops.length > 0 ? (
+          <View style={styles.guidanceMiniBox}>
+            <Text style={styles.guidanceMiniTitle}>Useful transport stops</Text>
+            {transportStops.map((line, index) => (
+              <Text key={`transport-stop-${index}`} style={styles.guidanceMiniLine}>
+                • {line}
+              </Text>
+            ))}
+          </View>
+        ) : null}
+
+        {items.length > 0 ? (
+          renderItemList(items, props)
+        ) : (
+          <EmptyState
+            title="No transfer items yet"
+            message="This is where local movement should be sorted."
+          />
+        )}
+      </>
+    );
+  }
+
+  if (sectionKey === "things") {
+    return (
+      <>
+        {affiliateUrls?.experiencesUrl ? (
+          <Pressable
+            onPress={() =>
+              onOpenPartner({
+                partnerId: "getyourguide",
+                url: affiliateUrls.experiencesUrl,
+                savedItemType: "things",
+                title: `Experiences in ${cityName}`,
+                metadata: {
+                  city: cityName,
+                  priceMode: "live",
+                },
+              })
+            }
+            style={styles.sectionCta}
+          >
+            <Text style={styles.sectionCtaTitle}>Open activities</Text>
+            <Text style={styles.sectionCtaBody}>
+              Only add things that genuinely improve the trip. Don’t clutter it with filler.
+            </Text>
+          </Pressable>
+        ) : null}
+
+        {items.length > 0 ? (
+          renderItemList(items, props)
+        ) : (
+          <EmptyState
+            title="No things saved yet"
+            message="This section is optional, but useful when it earns its place."
+          />
+        )}
+      </>
+    );
+  }
+
+  if (sectionKey === "insurance") {
+    return items.length > 0 ? (
+      renderItemList(items, props)
+    ) : (
+      <EmptyState
+        title="No insurance saved yet"
+        message="Use this section for cover and policy records."
+      />
+    );
+  }
+
+  if (sectionKey === "claims") {
+    return items.length > 0 ? (
+      renderItemList(items, props)
+    ) : (
+      <EmptyState
+        title="No claim items yet"
+        message="Use this section for compensation, refund and delay evidence."
+      />
+    );
+  }
+
+  return (
+    <>
+      <View style={styles.noteBox}>
+        <TextInput
+          value={noteText}
+          onChangeText={onNoteTextChange}
+          placeholder="Add a note (tickets, hotel shortlist, reminders, anything)…"
+          placeholderTextColor={theme.colors.textSecondary}
+          style={styles.noteInput}
+          multiline
+        />
+
+        <Pressable
+          onPress={onAddNote}
+          disabled={noteSaving}
+          style={[styles.noteSaveBtn, noteSaving && styles.noteSaveBtnDisabled]}
+        >
+          <Text style={styles.noteSaveText}>{noteSaving ? "Saving…" : "Save note"}</Text>
+        </Pressable>
+      </View>
+
+      {items.length > 0 ? (
+        <View style={styles.noteListWrap}>{renderItemList(items, props)}</View>
+      ) : (
+        <View style={styles.noteEmptyWrap}>
+          <EmptyState title="No notes yet" message="Notes you save for this trip appear here." />
+        </View>
+      )}
+    </>
+  );
+});
+
+type WorkspaceTabsProps = {
+  sectionOrder: WorkspaceSectionKey[];
+  activeSection: WorkspaceSectionKey;
+  sectionActiveTotals: Record<WorkspaceSectionKey, number>;
+  onSetActiveSection: (section: WorkspaceSectionKey) => void;
+};
+
+const WorkspaceTabs = memo(function WorkspaceTabs({
+  sectionOrder,
+  activeSection,
+  sectionActiveTotals,
+  onSetActiveSection,
+}: WorkspaceTabsProps) {
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.workspaceTabsRow}
+    >
+      {sectionOrder.map((sectionKey) => {
+        const total = sectionActiveTotals[sectionKey] ?? 0;
+        const selected = activeSection === sectionKey;
+
+        return (
+          <Pressable
+            key={sectionKey}
+            onPress={() => onSetActiveSection(sectionKey)}
+            style={[styles.workspaceTab, selected && styles.workspaceTabActive]}
+          >
+            <Text style={[styles.workspaceTabTitle, selected && styles.workspaceTabTitleActive]}>
+              {sectionTitle(sectionKey)}
+            </Text>
+            <Text style={[styles.workspaceTabSub, selected && styles.workspaceTabSubActive]}>
+              {sectionStateLabel(sectionKey, total)}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </ScrollView>
+  );
+});
+
+type WorkspaceSectionCardProps = {
+  sectionKey: WorkspaceSectionKey;
+  workspace: TripWorkspace | null;
+  activeSection: WorkspaceSectionKey;
+  total: number;
+  children: React.ReactNode;
+  onToggleSection: (section: WorkspaceSectionKey) => void;
+};
+
+const WorkspaceSectionCard = memo(function WorkspaceSectionCard({
+  sectionKey,
+  workspace,
+  activeSection,
+  total,
+  children,
+  onToggleSection,
+}: WorkspaceSectionCardProps) {
+  const section = WORKSPACE_SECTIONS[sectionKey];
+  const collapsed = Boolean(workspace?.collapsed?.[sectionKey]);
+  const selected = activeSection === sectionKey;
+
+  if (!selected) return null;
+
+  return (
+    <View style={styles.workspaceSection}>
+      <Pressable
+        onPress={() => onToggleSection(sectionKey)}
+        style={styles.workspaceSectionHeader}
+      >
+        <View style={styles.flexOne}>
+          <Text style={styles.workspaceSectionTitle}>{section.title}</Text>
+          <Text style={styles.workspaceSectionSub}>
+            {section.subtitle || sectionStateLabel(sectionKey, total)}
+          </Text>
+        </View>
+
+        <View style={styles.workspaceHeaderRight}>
+          <View style={styles.workspaceCountPill}>
+            <Text style={styles.workspaceCountText}>{total}</Text>
+          </View>
+          <Text style={styles.chev}>{collapsed ? "›" : "⌄"}</Text>
+        </View>
+      </Pressable>
+
+      {!collapsed ? <View style={styles.sectionContentWrap}>{children}</View> : null}
+    </View>
+  );
+});
 
 export default function TripWorkspaceCard({
   workspaceSnapshot,
@@ -345,336 +930,6 @@ export default function TripWorkspaceCard({
   getLivePriceLine,
   getTicketProviderFromItem,
 }: TripWorkspaceCardProps) {
-  function renderWorkspaceItem(item: SavedItem) {
-    const livePrice = getLivePriceLine(item);
-    const provider = getTicketProviderFromItem(item);
-    const proofText = proofStateText(item);
-    const missingProof = item.status === "booked" && !hasProof(item);
-    const proofBusy = proofBusyId === item.id;
-    const isNote = item.type === "note" || item.type === "other";
-
-    return (
-      <View key={item.id} style={styles.itemRow}>
-        <Pressable style={{ flex: 1 }} onPress={() => (isNote ? onOpenNoteActions(item) : onOpenSavedItem(item))}>
-          <View style={styles.itemTitleRow}>
-            <Text style={styles.itemTitle} numberOfLines={1}>
-              {item.title}
-            </Text>
-            <StatusBadge status={item.status} />
-          </View>
-
-          <View style={styles.itemMetaRow}>
-            {provider ? <ProviderBadge provider={provider} size="sm" /> : null}
-            <Text style={styles.itemMeta} numberOfLines={1}>
-              {isNote ? "Notes" : buildMetaLine(item)}
-            </Text>
-          </View>
-
-          {livePrice ? (
-            <Text style={item.status === "booked" ? styles.paidLine : styles.livePriceLine} numberOfLines={1}>
-              {livePrice}
-            </Text>
-          ) : null}
-
-          {item.status === "booked" ? (
-            <Text style={[styles.proofLine, missingProof ? styles.proofLineMissing : undefined]} numberOfLines={1}>
-              {proofText}
-            </Text>
-          ) : null}
-        </Pressable>
-
-        <View style={styles.itemActions}>
-          {item.status !== "booked" ? (
-            <Pressable onPress={() => onConfirmMarkBooked(item)} style={styles.smallBtn}>
-              <Text style={styles.smallBtnText}>Booked</Text>
-            </Pressable>
-          ) : missingProof ? (
-            <Pressable
-              onPress={() => onAddProofForBookedItem(item)}
-              style={[styles.smallBtn, styles.smallBtnPrimary, proofBusy && styles.smallBtnDisabled]}
-              disabled={proofBusy}
-            >
-              <Text style={styles.smallBtnText}>{proofBusy ? "Adding…" : "Add proof"}</Text>
-            </Pressable>
-          ) : (
-            <Pressable onPress={onViewWallet} style={styles.smallBtn}>
-              <Text style={styles.smallBtnText}>Wallet</Text>
-            </Pressable>
-          )}
-
-          {item.status === "saved" ? (
-            <Pressable onPress={() => onConfirmMoveToPending(item)} style={styles.smallBtn}>
-              <Text style={styles.smallBtnText}>Pending</Text>
-            </Pressable>
-          ) : null}
-
-          <Pressable onPress={() => onConfirmArchive(item)} style={[styles.smallBtn, styles.smallBtnDanger]}>
-            <Text style={styles.smallBtnText}>Archive</Text>
-          </Pressable>
-        </View>
-      </View>
-    );
-  }
-
-  function renderSectionContent(sectionKey: WorkspaceSectionKey) {
-    const items = groupedBySection[sectionKey] ?? [];
-
-    if (sectionKey === "tickets") {
-      return (
-        <>
-          {primaryMatchId ? (
-            <Pressable onPress={onOpenTicketsForPrimaryMatch} style={styles.sectionCta}>
-              <Text style={styles.sectionCtaTitle}>Open live ticket options</Text>
-              <Text style={styles.sectionCtaBody}>
-                Compare providers for the primary match and save the route into the workspace.
-              </Text>
-            </Pressable>
-          ) : (
-            <EmptyState title="No match selected" message="Add a match first to unlock ticket planning." />
-          )}
-
-          {items.length > 0 ? <View style={{ gap: 10 }}>{items.map(renderWorkspaceItem)}</View> : null}
-        </>
-      );
-    }
-
-    if (sectionKey === "stay") {
-      return (
-        <>
-          {affiliateUrls?.hotelsUrl ? (
-            <Pressable
-              onPress={() =>
-                onOpenPartner({
-                  partnerId: "expedia",
-                  url: affiliateUrls.hotelsUrl!,
-                  savedItemType: "hotel",
-                  title: `Hotels in ${cityName}`,
-                  metadata: {
-                    city: cityName,
-                    startDate: tripStartDate,
-                    endDate: tripEndDate,
-                    priceMode: "live",
-                  },
-                })
-              }
-              style={styles.sectionCta}
-            >
-              <Text style={styles.sectionCtaTitle}>Open live stays</Text>
-              <Text style={styles.sectionCtaBody}>
-                Use the stay guidance below to avoid booking a cheap place in a useless area.
-              </Text>
-            </Pressable>
-          ) : null}
-
-          {stayBestAreas.length > 0 || stayBudgetAreas.length > 0 ? (
-            <View style={styles.guidanceMiniBox}>
-              <Text style={styles.guidanceMiniTitle}>Area shortlist</Text>
-              {stayBestAreas.slice(0, 2).map((x, idx) => (
-                <Text key={`stay-best-${idx}`} style={styles.guidanceMiniLine}>
-                  • {x.area}
-                  {x.notes ? ` — ${x.notes}` : ""}
-                </Text>
-              ))}
-              {stayBudgetAreas.slice(0, 2).map((x, idx) => (
-                <Text key={`stay-budget-${idx}`} style={styles.guidanceMiniLine}>
-                  • {x.area}
-                  {x.notes ? ` — ${x.notes}` : ""}
-                </Text>
-              ))}
-            </View>
-          ) : null}
-
-          {items.length > 0 ? (
-            <View style={{ gap: 10 }}>{items.map(renderWorkspaceItem)}</View>
-          ) : (
-            <EmptyState title="No stay items yet" message="Save hotels here so the trip isn’t just a vague idea." />
-          )}
-        </>
-      );
-    }
-
-    if (sectionKey === "travel") {
-      return (
-        <>
-          <View style={styles.sectionActionRow}>
-            {affiliateUrls?.flightsUrl ? (
-              <Pressable
-                onPress={() =>
-                  onOpenPartner({
-                    partnerId: "aviasales",
-                    url: affiliateUrls.flightsUrl!,
-                    savedItemType: "flight",
-                    title: `Flights to ${cityName}`,
-                    metadata: {
-                      city: cityName,
-                      originIata,
-                      priceMode: "live",
-                    },
-                  })
-                }
-                style={[styles.smallActionBtn, styles.smallActionBtnPrimary]}
-              >
-                <Text style={styles.smallActionBtnText}>Flights</Text>
-              </Pressable>
-            ) : null}
-
-            {affiliateUrls?.omioUrl ? (
-              <Pressable
-                onPress={() =>
-                  onOpenPartner({
-                    partnerId: "omio",
-                    url: affiliateUrls.omioUrl!,
-                    savedItemType: "train",
-                    title: `Trains & buses in ${cityName}`,
-                    metadata: {
-                      city: cityName,
-                      startDate: tripStartDate,
-                      endDate: tripEndDate,
-                      priceMode: "live",
-                      transportMode: "rail_bus",
-                    },
-                  })
-                }
-                style={styles.smallActionBtn}
-              >
-                <Text style={styles.smallActionBtnText}>Rail / Bus</Text>
-              </Pressable>
-            ) : null}
-          </View>
-
-          {items.length > 0 ? (
-            <View style={{ gap: 10 }}>{items.map(renderWorkspaceItem)}</View>
-          ) : (
-            <EmptyState title="No travel items yet" message="Flights or rail should live here, not in your head." />
-          )}
-        </>
-      );
-    }
-
-    if (sectionKey === "transfers") {
-      return (
-        <>
-          {affiliateUrls?.transfersUrl ? (
-            <Pressable
-              onPress={() =>
-                onOpenPartner({
-                  partnerId: "kiwitaxi",
-                  url: affiliateUrls.transfersUrl!,
-                  savedItemType: "transfer",
-                  title: `Transfers in ${cityName}`,
-                  metadata: {
-                    city: cityName,
-                    startDate: tripStartDate,
-                    endDate: tripEndDate,
-                    priceMode: "live",
-                  },
-                })
-              }
-              style={styles.sectionCta}
-            >
-              <Text style={styles.sectionCtaTitle}>Open transfer options</Text>
-              <Text style={styles.sectionCtaBody}>
-                Sort airport-to-city and city-to-stadium movement before it becomes a pain.
-              </Text>
-            </Pressable>
-          ) : null}
-
-          {transportStops.length > 0 ? (
-            <View style={styles.guidanceMiniBox}>
-              <Text style={styles.guidanceMiniTitle}>Useful transport stops</Text>
-              {transportStops.map((line, idx) => (
-                <Text key={`transport-stop-${idx}`} style={styles.guidanceMiniLine}>
-                  • {line}
-                </Text>
-              ))}
-            </View>
-          ) : null}
-
-          {items.length > 0 ? (
-            <View style={{ gap: 10 }}>{items.map(renderWorkspaceItem)}</View>
-          ) : (
-            <EmptyState title="No transfer items yet" message="This is where local movement should be sorted." />
-          )}
-        </>
-      );
-    }
-
-    if (sectionKey === "things") {
-      return (
-        <>
-          {affiliateUrls?.experiencesUrl ? (
-            <Pressable
-              onPress={() =>
-                onOpenPartner({
-                  partnerId: "getyourguide",
-                  url: affiliateUrls.experiencesUrl!,
-                  savedItemType: "things",
-                  title: `Experiences in ${cityName}`,
-                  metadata: { city: cityName, priceMode: "live" },
-                })
-              }
-              style={styles.sectionCta}
-            >
-              <Text style={styles.sectionCtaTitle}>Open activities</Text>
-              <Text style={styles.sectionCtaBody}>
-                Only add things that genuinely improve the trip. Don’t clutter it with filler.
-              </Text>
-            </Pressable>
-          ) : null}
-
-          {items.length > 0 ? (
-            <View style={{ gap: 10 }}>{items.map(renderWorkspaceItem)}</View>
-          ) : (
-            <EmptyState title="No things saved yet" message="This section is optional, but useful when it earns its place." />
-          )}
-        </>
-      );
-    }
-
-    if (sectionKey === "insurance") {
-      return items.length > 0 ? (
-        <View style={{ gap: 10 }}>{items.map(renderWorkspaceItem)}</View>
-      ) : (
-        <EmptyState title="No insurance saved yet" message="Use this section for cover and policy records." />
-      );
-    }
-
-    if (sectionKey === "claims") {
-      return items.length > 0 ? (
-        <View style={{ gap: 10 }}>{items.map(renderWorkspaceItem)}</View>
-      ) : (
-        <EmptyState title="No claim items yet" message="Use this section for compensation, refund and delay evidence." />
-      );
-    }
-
-    return (
-      <>
-        <View style={styles.noteBox}>
-          <TextInput
-            value={noteText}
-            onChangeText={onNoteTextChange}
-            placeholder="Add a note (tickets, hotel shortlist, reminders, anything)…"
-            placeholderTextColor={theme.colors.textSecondary}
-            style={styles.noteInput}
-            multiline
-          />
-
-          <Pressable onPress={onAddNote} disabled={noteSaving} style={[styles.noteSaveBtn, noteSaving && { opacity: 0.7 }]}>
-            <Text style={styles.noteSaveText}>{noteSaving ? "Saving…" : "Save note"}</Text>
-          </Pressable>
-        </View>
-
-        {items.length > 0 ? (
-          <View style={{ gap: 10, marginTop: 10 }}>{items.map(renderWorkspaceItem)}</View>
-        ) : (
-          <View style={{ marginTop: 10 }}>
-            <EmptyState title="No notes yet" message="Notes you save for this trip appear here." />
-          </View>
-        )}
-      </>
-    );
-  }
-
   return (
     <GlassCard style={styles.card}>
       <View style={styles.sectionTitleRow}>
@@ -682,57 +937,57 @@ export default function TripWorkspaceCard({
         <Text style={styles.sectionSub}>{workspaceSnapshot.activeTotal} active items</Text>
       </View>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.workspaceTabsRow}>
+      <WorkspaceTabs
+        sectionOrder={sectionOrder}
+        activeSection={activeSection}
+        sectionActiveTotals={workspaceSnapshot.sectionActiveTotals}
+        onSetActiveSection={onSetActiveSection}
+      />
+
+      <View style={styles.sectionStack}>
         {sectionOrder.map((sectionKey) => {
           const total = workspaceSnapshot.sectionActiveTotals[sectionKey] ?? 0;
-          const selected = activeSection === sectionKey;
+          const items = groupedBySection[sectionKey] ?? [];
 
           return (
-            <Pressable
+            <WorkspaceSectionCard
               key={sectionKey}
-              onPress={() => onSetActiveSection(sectionKey)}
-              style={[styles.workspaceTab, selected && styles.workspaceTabActive]}
+              sectionKey={sectionKey}
+              workspace={workspace}
+              activeSection={activeSection}
+              total={total}
+              onToggleSection={onToggleSection}
             >
-              <Text style={[styles.workspaceTabTitle, selected && styles.workspaceTabTitleActive]}>
-                {WORKSPACE_SECTIONS[sectionKey].title}
-              </Text>
-              <Text style={[styles.workspaceTabSub, selected && styles.workspaceTabSubActive]}>
-                {sectionStateLabel(sectionKey, total)}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
-
-      <View style={{ gap: 10 }}>
-        {sectionOrder.map((sectionKey) => {
-          const section = WORKSPACE_SECTIONS[sectionKey];
-          const total = workspaceSnapshot.sectionActiveTotals[sectionKey] ?? 0;
-          const collapsed = Boolean(workspace?.collapsed?.[sectionKey]);
-          const selected = activeSection === sectionKey;
-
-          if (!selected) return null;
-
-          return (
-            <View key={sectionKey} style={styles.workspaceSection}>
-              <Pressable onPress={() => onToggleSection(sectionKey)} style={styles.workspaceSectionHeader}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.workspaceSectionTitle}>{section.title}</Text>
-                  <Text style={styles.workspaceSectionSub}>
-                    {section.subtitle || sectionStateLabel(sectionKey, total)}
-                  </Text>
-                </View>
-
-                <View style={styles.workspaceHeaderRight}>
-                  <View style={styles.workspaceCountPill}>
-                    <Text style={styles.workspaceCountText}>{total}</Text>
-                  </View>
-                  <Text style={styles.chev}>{collapsed ? "›" : "⌄"}</Text>
-                </View>
-              </Pressable>
-
-              {!collapsed ? <View style={{ marginTop: 10 }}>{renderSectionContent(sectionKey)}</View> : null}
-            </View>
+              <SectionContent
+                sectionKey={sectionKey}
+                items={items}
+                primaryMatchId={primaryMatchId}
+                affiliateUrls={affiliateUrls}
+                cityName={cityName}
+                originIata={originIata}
+                tripStartDate={tripStartDate}
+                tripEndDate={tripEndDate}
+                noteText={noteText}
+                noteSaving={noteSaving}
+                proofBusyId={proofBusyId}
+                stayBestAreas={stayBestAreas}
+                stayBudgetAreas={stayBudgetAreas}
+                transportStops={transportStops}
+                onNoteTextChange={onNoteTextChange}
+                onAddNote={onAddNote}
+                onOpenTicketsForPrimaryMatch={onOpenTicketsForPrimaryMatch}
+                onOpenSavedItem={onOpenSavedItem}
+                onOpenNoteActions={onOpenNoteActions}
+                onConfirmMarkBooked={onConfirmMarkBooked}
+                onAddProofForBookedItem={onAddProofForBookedItem}
+                onViewWallet={onViewWallet}
+                onConfirmMoveToPending={onConfirmMoveToPending}
+                onConfirmArchive={onConfirmArchive}
+                onOpenPartner={onOpenPartner}
+                getLivePriceLine={getLivePriceLine}
+                getTicketProviderFromItem={getTicketProviderFromItem}
+              />
+            </WorkspaceSectionCard>
           );
         })}
       </View>
@@ -741,7 +996,11 @@ export default function TripWorkspaceCard({
 }
 
 const styles = StyleSheet.create({
-  card: { padding: theme.spacing.lg },
+  flexOne: { flex: 1 },
+
+  card: {
+    padding: theme.spacing.lg,
+  },
 
   sectionTitleRow: {
     flexDirection: "row",
@@ -830,6 +1089,10 @@ const styles = StyleSheet.create({
     color: theme.colors.textTertiary,
   },
 
+  sectionStack: {
+    gap: 10,
+  },
+
   workspaceSection: {
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
@@ -876,6 +1139,10 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
     fontWeight: "800",
     fontSize: 12,
+  },
+
+  sectionContentWrap: {
+    marginTop: 10,
   },
 
   sectionCta: {
@@ -950,6 +1217,10 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
 
+  listGap: {
+    gap: 10,
+  },
+
   itemRow: {
     flexDirection: "row",
     gap: 12,
@@ -960,6 +1231,10 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.10)",
     backgroundColor: "rgba(0,0,0,0.18)",
     alignItems: "center",
+  },
+
+  itemMain: {
+    flex: 1,
   },
 
   itemTitleRow: {
@@ -1106,9 +1381,21 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.18)",
   },
 
+  noteSaveBtnDisabled: {
+    opacity: 0.7,
+  },
+
   noteSaveText: {
     color: theme.colors.text,
     fontWeight: "900",
+  },
+
+  noteListWrap: {
+    marginTop: 10,
+  },
+
+  noteEmptyWrap: {
+    marginTop: 10,
   },
 
   chev: {
