@@ -19,7 +19,7 @@ import NextBestActionCard, { type NextAction } from "@/src/components/NextBestAc
 import TripHealthScore from "@/src/components/TripHealthScore";
 import TripMatchesCard from "@/src/components/trip/TripMatchesCard";
 import TripWorkspaceCard from "@/src/components/trip/TripWorkspaceCard";
-import type { PartnerId } from "@/src/core/partners";
+
 import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
 import { parseIsoDateOnly, toIsoDate, DEFAULT_SEASON } from "@/src/constants/football";
@@ -29,6 +29,7 @@ import savedItemsStore from "@/src/state/savedItems";
 import preferencesStore from "@/src/state/preferences";
 import tripWorkspaceStore from "@/src/state/tripWorkspace";
 
+import type { PartnerId } from "@/src/core/partners";
 import type { SavedItem, SavedItemType } from "@/src/core/savedItemTypes";
 import type { WorkspaceSectionKey, TripWorkspace } from "@/src/core/tripWorkspace";
 import {
