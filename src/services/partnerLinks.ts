@@ -1,8 +1,10 @@
+// src/services/partnerLinks.ts
 import { AffiliateConfig } from "@/src/constants/partners";
 import { buildAffiliateLinks, type CabinClass } from "@/src/services/affiliateLinks";
+import { getCanonicalPartnerId, getPartnerOrNull } from "@/src/core/partners";
 
 function clean(v: unknown): string {
-  return String(v ?? "").trim();
+  return typeof v === "string" ? v.trim() : String(v ?? "").trim();
 }
 
 function enc(v: unknown) {
@@ -70,15 +72,6 @@ function appendSe365Aid(url: string): string {
 
 const OMIO_TRACKED_URL = "https://omio.sjv.io/KBjDon";
 
-/**
- * Omio deep-linking support is limited/uncertain here, so this builder:
- * 1) always returns the tracked base URL if valid
- * 2) attempts light destination/date query enrichment
- * 3) fails safely back to the tracked URL
- *
- * Tomorrow, when rail/ground transport is modeled properly, this should be
- * revisited as part of the dedicated transport architecture.
- */
 function buildOmioUrl(ctx: {
   city: string;
   startDate?: string | null;
@@ -121,14 +114,15 @@ function buildOmioUrl(ctx: {
 
 export function buildAffiliateUrl(baseUrl: string, partnerId: string): string {
   const url = safeUrl(baseUrl);
-  const id = clean(partnerId).toLowerCase();
+  const rawId = clean(partnerId).toLowerCase();
+  if (!url || !rawId) return "";
 
-  if (!url) return "";
+  const partner = getPartnerOrNull(rawId);
+  const id = partner ? getCanonicalPartnerId(partner.id) : rawId;
 
   switch (id) {
     case "sportsevents365":
       return appendSe365Aid(url);
-
     default:
       return url;
   }
@@ -161,10 +155,13 @@ export function resolveAffiliateUrl(
     cabinClass?: CabinClass | null;
   }
 ): string | null {
-  const id = clean(partnerId).toLowerCase();
+  const rawId = clean(partnerId).toLowerCase();
   const city = clean(ctx.city);
 
-  if (!id || !city) return null;
+  if (!rawId || !city) return null;
+
+  const partner = getPartnerOrNull(rawId);
+  const id = partner ? getCanonicalPartnerId(partner.id) : rawId;
 
   const links = buildAffiliateLinks({
     city,
@@ -180,7 +177,6 @@ export function resolveAffiliateUrl(
       return clean(links.flightsUrl) || null;
 
     case "expedia":
-    case "expedia_stays":
       return clean(links.hotelsUrl) || null;
 
     case "kiwitaxi":
