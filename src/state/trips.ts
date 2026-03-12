@@ -12,7 +12,7 @@ import { buildMockSavedItemsForSeed } from "@/src/data/mockTripItems";
 const STORAGE_KEY = "yna_trips_v1";
 
 /* -------------------------------------------------------------------------- */
-/* utils */
+/* utils                                                                      */
 /* -------------------------------------------------------------------------- */
 
 function now() {
@@ -27,19 +27,27 @@ function cleanString(v: unknown) {
   return typeof v === "string" ? v.trim() : String(v ?? "").trim();
 }
 
+function toOptionalString(v: unknown): string | undefined {
+  const s = cleanString(v);
+  return s || undefined;
+}
+
+function isPlainObject(v: unknown): v is Record<string, any> {
+  return !!v && typeof v === "object" && !Array.isArray(v);
+}
+
 /**
- * Canonical city key normalizer (Option 1):
+ * Canonical city key normalizer:
  * - lowercases
  * - "&" -> "and"
  * - strips punctuation
  * - spaces -> "-"
  * - collapses repeated "-"
- *
- * IMPORTANT: This is the *source of truth* for Trip.cityId.
  */
 function normalizeCityKey(cityRaw: unknown): string {
   const s = cleanString(cityRaw).toLowerCase();
   if (!s) return "trip";
+
   const out =
     s
       .replace(/&/g, "and")
@@ -47,11 +55,13 @@ function normalizeCityKey(cityRaw: unknown): string {
       .replace(/\s+/g, "-")
       .replace(/-+/g, "-")
       .replace(/^-|-$/g, "") || "trip";
+
   return out;
 }
 
 function cleanMatchIds(v: unknown): string[] {
   if (!Array.isArray(v)) return [];
+
   return v
     .map((m) => cleanString(m))
     .filter(Boolean)
@@ -76,18 +86,26 @@ function toOptionalBool(v: unknown): boolean | undefined {
   return undefined;
 }
 
-/**
- * Conservative cleaner + snapshot-preserving:
- * - requires id, cityId, startDate, endDate
- * - start/end must be YYYY-MM-DD
- * - matchIds coerced to string[]
- * - createdAt/updatedAt defaulted sanely
- * - normalizes cityId
- * - ensures fixtureIdPrimary (if present) is in matchIds; otherwise uses matchIds[0]
- * - preserves extra fields from storage so trip stays readable
- */
+function uniqPush(arr: string[], id: string) {
+  if (!arr.includes(id)) arr.push(id);
+  return arr;
+}
+
+function removeFrom(arr: string[], id: string) {
+  return arr.filter((x) => x !== id);
+}
+
+function cloneTrip<T extends Trip | null | undefined>(trip: T): T {
+  if (!trip) return trip;
+  return { ...(trip as any) };
+}
+
+/* -------------------------------------------------------------------------- */
+/* cleaning + normalization                                                   */
+/* -------------------------------------------------------------------------- */
+
 function cleanLoadedTrip(raw: any): Trip | null {
-  if (!raw || typeof raw !== "object") return null;
+  if (!isPlainObject(raw)) return null;
 
   const id = cleanString(raw.id);
 
@@ -111,23 +129,16 @@ function cleanLoadedTrip(raw: any): Trip | null {
 
   const matchIds = cleanMatchIds(raw.matchIds);
 
-  // Primary fixture sanity
-  const rawPrimary = cleanString(raw.fixtureIdPrimary);
-  let fixtureIdPrimary = rawPrimary || (matchIds[0] ? String(matchIds[0]) : "");
-
-  // Ensure primary is included in matchIds
+  let fixtureIdPrimary = cleanString(raw.fixtureIdPrimary) || (matchIds[0] ? String(matchIds[0]) : "");
   let nextMatchIds = matchIds;
+
   if (fixtureIdPrimary && !nextMatchIds.includes(fixtureIdPrimary)) {
     nextMatchIds = [...nextMatchIds, fixtureIdPrimary];
   }
 
-  // If no matchIds but primary exists, set matchIds = [primary]
   if (fixtureIdPrimary && nextMatchIds.length === 0) nextMatchIds = [fixtureIdPrimary];
-
-  // If still no primary but matchIds exist, set primary = first
   if (!fixtureIdPrimary && nextMatchIds.length > 0) fixtureIdPrimary = String(nextMatchIds[0]);
 
-  // Preserve a nice displayCity when legacy cityId looked human
   const displayCity =
     typeof raw.displayCity === "string" && raw.displayCity.trim()
       ? raw.displayCity.trim()
@@ -149,10 +160,8 @@ function cleanLoadedTrip(raw: any): Trip | null {
     fixtureIdPrimary: fixtureIdPrimary || undefined,
 
     notes: typeof raw.notes === "string" ? raw.notes.trim() : undefined,
-
     ...(displayCity ? { displayCity } : {}),
 
-    // Coerce known snapshot fields to correct types
     homeTeamId: toOptionalNumber(raw.homeTeamId),
     awayTeamId: toOptionalNumber(raw.awayTeamId),
     leagueId: toOptionalNumber(raw.leagueId),
@@ -166,21 +175,105 @@ function cleanLoadedTrip(raw: any): Trip | null {
   return tripAny as Trip;
 }
 
+function normalizeTripPatch(
+  current: Trip,
+  patch: Partial<Omit<Trip, "id" | "createdAt">> & Record<string, any>
+): Record<string, any> {
+  const p: Record<string, any> = {};
+
+  if ("startDate" in patch) {
+    const v = cleanString(patch.startDate);
+    if (isIsoDateOnly(v)) p.startDate = v;
+  }
+
+  if ("endDate" in patch) {
+    const v = cleanString(patch.endDate);
+    if (isIsoDateOnly(v)) p.endDate = v;
+  }
+
+  if ("cityId" in patch) {
+    p.cityId = normalizeCityKey(patch.cityId);
+    p.citySlug = p.cityId;
+  }
+
+  if ("citySlug" in patch && !("cityId" in patch)) {
+    p.citySlug = normalizeCityKey(patch.citySlug ?? current.cityId);
+  }
+
+  if ("displayCity" in patch) {
+    p.displayCity = toOptionalString(patch.displayCity);
+  }
+
+  if ("matchIds" in patch) {
+    p.matchIds = cleanMatchIds(patch.matchIds);
+  }
+
+  if ("fixtureIdPrimary" in patch) {
+    p.fixtureIdPrimary = toOptionalString(patch.fixtureIdPrimary);
+  }
+
+  if ("notes" in patch) {
+    p.notes = typeof patch.notes === "string" ? patch.notes.trim() || undefined : undefined;
+  }
+
+  if ("homeTeamId" in patch) p.homeTeamId = toOptionalNumber(patch.homeTeamId);
+  if ("awayTeamId" in patch) p.awayTeamId = toOptionalNumber(patch.awayTeamId);
+  if ("leagueId" in patch) p.leagueId = toOptionalNumber(patch.leagueId);
+  if ("sportsevents365EventId" in patch) p.sportsevents365EventId = toOptionalNumber(patch.sportsevents365EventId);
+  if ("kickoffTbc" in patch) p.kickoffTbc = toOptionalBool(patch.kickoffTbc);
+
+  const passthroughStringKeys = [
+    "homeName",
+    "awayName",
+    "leagueName",
+    "kickoffIso",
+    "venueName",
+    "venueCity",
+  ] as const;
+
+  for (const key of passthroughStringKeys) {
+    if (key in patch) {
+      p[key] = toOptionalString(patch[key]);
+    }
+  }
+
+  return p;
+}
+
+function normalizeMergedTrip(current: Trip, patch: Record<string, any>): Trip {
+  const merged: any = { ...(current as any), ...patch };
+
+  const mids: string[] = Array.isArray(merged.matchIds) ? cleanMatchIds(merged.matchIds) : [];
+  let primary = cleanString(merged.fixtureIdPrimary);
+
+  if (primary && !mids.includes(primary)) {
+    merged.matchIds = [...mids, primary];
+  } else {
+    merged.matchIds = mids;
+  }
+
+  if (!primary && merged.matchIds.length > 0) {
+    primary = String(merged.matchIds[0]);
+  }
+
+  merged.fixtureIdPrimary = primary || undefined;
+
+  if ("cityId" in merged) {
+    merged.cityId = normalizeCityKey(merged.cityId);
+    merged.citySlug = merged.cityId;
+  }
+
+  merged.updatedAt = now();
+
+  return merged as Trip;
+}
+
 async function persistTrips(trips: Trip[]) {
   await writeJson(STORAGE_KEY, trips);
 }
 
-function uniqPush(arr: string[], id: string) {
-  if (!arr.includes(id)) arr.push(id);
-  return arr;
-}
-
-function removeFrom(arr: string[], id: string) {
-  return arr.filter((x) => x !== id);
-}
-
 /* -------------------------------------------------------------------------- */
-/* state */
+/* state                                                                      */
 /* -------------------------------------------------------------------------- */
 
 type TripsState = {
@@ -197,8 +290,6 @@ type TripsState = {
     matchIds?: string[];
     fixtureIdPrimary?: string;
     notes?: string;
-
-    // allow snapshots without changing Trip type yet
     [k: string]: any;
   }) => Promise<Trip>;
 
@@ -209,9 +300,7 @@ type TripsState = {
   setPrimaryMatchForTrip: (tripId: string, fixtureId: string) => Promise<void>;
 
   deleteTripCascade: (tripId: string) => Promise<void>;
-
   clearAll: () => Promise<void>;
-
   seedMockTrips: () => Promise<void>;
 };
 
@@ -233,14 +322,12 @@ const useTripsStore = create<TripsState>((set, get) => ({
 
       set({ trips: sorted, loaded: true });
 
-      // Dev-only seed: keep UI alive during development.
-      // IMPORTANT: only seed when truly empty.
       // @ts-ignore
       if (typeof __DEV__ !== "undefined" && __DEV__ && sorted.length === 0) {
         try {
           await get().seedMockTrips();
         } catch {
-          // dev-only, ignore
+          // dev-only
         }
       }
     })()
@@ -267,8 +354,7 @@ const useTripsStore = create<TripsState>((set, get) => ({
 
     const matchIds = Array.isArray(input.matchIds) ? cleanMatchIds(input.matchIds) : [];
     const fixtureIdPrimaryRaw = cleanString(input.fixtureIdPrimary);
-    const fixtureIdPrimary =
-      fixtureIdPrimaryRaw || (matchIds[0] ? String(matchIds[0]) : "");
+    const fixtureIdPrimary = fixtureIdPrimaryRaw || (matchIds[0] ? String(matchIds[0]) : "");
 
     const nextMatchIds = fixtureIdPrimary ? uniqPush([...matchIds], fixtureIdPrimary) : matchIds;
 
@@ -290,8 +376,7 @@ const useTripsStore = create<TripsState>((set, get) => ({
       matchIds: nextMatchIds,
       fixtureIdPrimary: fixtureIdPrimary || undefined,
 
-      notes: typeof input.notes === "string" ? input.notes.trim() : undefined,
-
+      notes: typeof input.notes === "string" ? input.notes.trim() || undefined : undefined,
       ...(displayCity ? { displayCity } : {}),
 
       createdAt: now(),
@@ -314,56 +399,18 @@ const useTripsStore = create<TripsState>((set, get) => ({
     const id = cleanString(tripId);
     if (!id) return;
 
+    let changed = false;
+
     const next = get().trips.map((t) => {
       if (t.id !== id) return t;
 
-      const p: any = { ...(patch as any) };
-
-      if ("startDate" in p && !isIsoDateOnly(p.startDate)) delete p.startDate;
-      if ("endDate" in p && !isIsoDateOnly(p.endDate)) delete p.endDate;
-
-      if ("cityId" in p) p.cityId = normalizeCityKey(p.cityId);
-      if ("citySlug" in p) p.citySlug = normalizeCityKey(p.cityId ?? t.cityId);
-
-      if ("matchIds" in p) p.matchIds = cleanMatchIds(p.matchIds);
-
-      if ("fixtureIdPrimary" in p) {
-        const fp = cleanString(p.fixtureIdPrimary);
-        p.fixtureIdPrimary = fp || undefined;
-      }
-
-      if ("notes" in p && typeof p.notes === "string") p.notes = p.notes.trim();
-
-      if ("displayCity" in p && typeof p.displayCity === "string") {
-        const dc = p.displayCity.trim();
-        p.displayCity = dc || undefined;
-      }
-
-      // Coerce common snapshot numeric fields if provided
-      if ("homeTeamId" in p) p.homeTeamId = toOptionalNumber(p.homeTeamId);
-      if ("awayTeamId" in p) p.awayTeamId = toOptionalNumber(p.awayTeamId);
-      if ("leagueId" in p) p.leagueId = toOptionalNumber(p.leagueId);
-      if ("sportsevents365EventId" in p) p.sportsevents365EventId = toOptionalNumber(p.sportsevents365EventId);
-
-      if ("kickoffTbc" in p) {
-        const kb = toOptionalBool(p.kickoffTbc);
-        p.kickoffTbc = kb;
-      }
-
-      // Post-normalize: if we have matchIds and primary, ensure consistency
-      const merged: any = { ...(t as any), ...p };
-
-      const mids: string[] = Array.isArray(merged.matchIds) ? cleanMatchIds(merged.matchIds) : [];
-      let primary = cleanString(merged.fixtureIdPrimary);
-
-      if (primary && !mids.includes(primary)) merged.matchIds = [...mids, primary];
-      else merged.matchIds = mids;
-
-      if (!primary && merged.matchIds.length > 0) primary = String(merged.matchIds[0]);
-      merged.fixtureIdPrimary = primary || undefined;
-
-      return { ...merged, updatedAt: now() } as Trip;
+      const normalizedPatch = normalizeTripPatch(t, patch);
+      const merged = normalizeMergedTrip(t, normalizedPatch);
+      changed = true;
+      return merged;
     });
+
+    if (!changed) return;
 
     const sorted = sortTrips(next);
     set({ trips: sorted, loaded: true });
@@ -384,18 +431,23 @@ const useTripsStore = create<TripsState>((set, get) => ({
 
     const next = get().trips.map((t) => {
       if (t.id !== id) return t;
-      const mids = Array.isArray(t.matchIds) ? cleanMatchIds(t.matchIds) : [];
-      const merged = uniqPush([...mids], fid);
 
-      const out: any = { ...(t as any), matchIds: merged, updatedAt: now() };
-      if (setPrimary) out.fixtureIdPrimary = fid;
-      if (!out.fixtureIdPrimary) out.fixtureIdPrimary = merged[0] || undefined;
+      const mids = Array.isArray(t.matchIds) ? cleanMatchIds(t.matchIds) : [];
+      const mergedIds = uniqPush([...mids], fid);
+
+      const out: any = {
+        ...(t as any),
+        matchIds: mergedIds,
+        fixtureIdPrimary: setPrimary ? fid : cleanString((t as any).fixtureIdPrimary) || mergedIds[0] || undefined,
+        updatedAt: now(),
+      };
 
       return out as Trip;
     });
 
     const sorted = sortTrips(next);
     set({ trips: sorted, loaded: true });
+
     try {
       await persistTrips(sorted);
     } catch {}
@@ -425,6 +477,7 @@ const useTripsStore = create<TripsState>((set, get) => ({
 
     const sorted = sortTrips(next);
     set({ trips: sorted, loaded: true });
+
     try {
       await persistTrips(sorted);
     } catch {}
@@ -519,7 +572,7 @@ const useTripsStore = create<TripsState>((set, get) => ({
 }));
 
 /* -------------------------------------------------------------------------- */
-/* Wrapper                                                                     */
+/* wrapper                                                                    */
 /* -------------------------------------------------------------------------- */
 
 const tripsStore = {
@@ -567,11 +620,55 @@ const tripsStore = {
     await useTripsStore.getState().seedMockTrips();
   },
 
+  getById: (tripId?: string) => {
+    const id = cleanString(tripId);
+    if (!id) return null;
+
+    const s = useTripsStore.getState();
+    const trip = s.trips.find((t) => t.id === id) ?? null;
+    return cloneTrip(trip);
+  },
+
+  getByCityId: (cityId?: string) => {
+    const id = normalizeCityKey(cityId);
+    const s = useTripsStore.getState();
+
+    return s.trips
+      .filter((t) => normalizeCityKey(t.cityId) === id)
+      .map((t) => cloneTrip(t) as Trip);
+  },
+
+  upsertTripSnapshot: async (
+    tripId: string,
+    snapshot: Partial<
+      Pick<
+        Trip,
+        | "homeName"
+        | "awayName"
+        | "leagueName"
+        | "leagueId"
+        | "kickoffIso"
+        | "kickoffTbc"
+        | "venueName"
+        | "venueCity"
+        | "displayCity"
+      >
+    > &
+      Record<string, any>
+  ) => {
+    const id = cleanString(tripId);
+    if (!id) return;
+
+    await useTripsStore.getState().updateTrip(id, snapshot as any);
+  },
+
   getTripByMatchId: (fixtureId: string) => {
     const id = cleanString(fixtureId);
     if (!id) return null;
+
     const s = useTripsStore.getState();
-    return s.trips.find((t) => Array.isArray(t.matchIds) && t.matchIds.includes(id)) ?? null;
+    const trip = s.trips.find((t) => Array.isArray(t.matchIds) && t.matchIds.includes(id)) ?? null;
+    return cloneTrip(trip);
   },
 
   getTripIdByMatchId: (fixtureId: string) => {
