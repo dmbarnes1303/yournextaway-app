@@ -19,7 +19,7 @@ import NextBestActionCard, { type NextAction } from "@/src/components/NextBestAc
 import TripHealthScore from "@/src/components/TripHealthScore";
 import TripMatchesCard from "@/src/components/trip/TripMatchesCard";
 import TripWorkspaceCard from "@/src/components/trip/TripWorkspaceCard";
-import StayGuidanceCard from "@/src/components/trip/StayGuidanceCard";
+import TripStayGuidanceCard from "@/src/components/trip/TripStayGuidanceCard";
 
 import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
@@ -61,7 +61,6 @@ import {
   type AffiliateUrls,
   type PlanValue,
   type SmartButton,
-  buildMapsDirectionsUrl,
   buildMapsSearchUrl,
   clean,
   cleanNoteText,
@@ -1670,19 +1669,17 @@ export default function TripDetailScreen() {
                 getTicketProviderFromItem={ticketProviderFromItem}
               />
 
-              <StayGuidanceCard
-                primaryLogisticsSnippet={primaryLogisticsSnippet}
+              <TripStayGuidanceCard
                 stadiumName={stadiumName}
                 stadiumCity={stadiumCity}
-                stadiumMapsUrl={stadiumMapsUrl}
-                stayBestAreas={stayBestAreas}
-                stayBudgetAreas={stayBudgetAreas}
+                logisticsSnippet={primaryLogisticsSnippet}
+                bestAreas={stayBestAreas}
+                budgetAreas={stayBudgetAreas}
                 transportStops={transportStops}
                 transportTips={transportTips}
                 lateTransportNote={lateTransportNote}
-                onOpenUrl={openUntracked}
-                buildMapsSearchUrl={buildMapsSearchUrl}
-                buildMapsDirectionsUrl={buildMapsDirectionsUrl}
+                stadiumMapsUrl={stadiumMapsUrl}
+                openUrl={openUntracked}
               />
             </>
           ) : null}
