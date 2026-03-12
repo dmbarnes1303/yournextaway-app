@@ -641,8 +641,8 @@ function normalizeTicketOptions(resolved: TicketResolutionResult | null): Ticket
           resolved.reason === "exact_event"
             ? "exact_event"
             : resolved.reason === "partial_match"
-            ? "partial_match"
-            : "search_fallback",
+              ? "partial_match"
+              : "search_fallback",
       },
     ];
   }
@@ -1062,6 +1062,7 @@ export default function TripDetailScreen() {
   const hasHotel = progress.hotel !== "empty";
   const hasTransport = progress.transfer !== "empty";
   const hasThings = progress.things !== "empty";
+  const hasMatch = Boolean(primaryMatchId);
 
   useEffect(() => {
     if (!DEV) return;
@@ -1678,19 +1679,9 @@ export default function TripDetailScreen() {
       },
       { key: "things" as const, label: "Things", state: progress.things, onPress: openThings },
     ];
-  }, [
-    affiliateUrls,
-    cityName,
-    originIata,
-    primaryMatchId,
-    trip?.startDate,
-    trip?.endDate,
-    progress,
-  ]);
+  }, [affiliateUrls, cityName, originIata, primaryMatchId, trip?.startDate, trip?.endDate, progress]);
 
   const nextAction = useMemo<NextAction | null>(() => {
-    const hasMatch = Boolean(primaryMatchId);
-
     const openTickets = () => {
       if (!hasMatch || !primaryMatchId) {
         Alert.alert("Add a match first", "Add a match to unlock tickets + match planning.");
