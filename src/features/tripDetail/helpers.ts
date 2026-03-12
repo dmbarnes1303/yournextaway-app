@@ -1,5 +1,5 @@
 import type { PartnerId } from "@/src/core/partners";
-import type { SavedItem, SavedItemType } from "@/src/core/savedItemTypes";
+import type { SavedItem } from "@/src/core/savedItemTypes";
 import type { Trip } from "@/src/state/trips";
 import { parseIsoDateOnly, toIsoDate } from "@/src/constants/football";
 import { formatUkDateOnly } from "@/src/utils/formatters";
@@ -27,6 +27,18 @@ export type SmartButton = {
   onPress: () => void;
   kind?: "primary" | "neutral";
   provider?: string | null;
+};
+
+export type TripFinderSummary = {
+  difficulty: string | null;
+  confidence: string | null;
+  reasons: string | null;
+  score: number | null;
+};
+
+export type GuidanceArea = {
+  area: string;
+  notes?: string;
 };
 
 export function clean(value: unknown): string {
@@ -137,6 +149,7 @@ export function formatKickoffMeta(
     day: "2-digit",
     month: "short",
   });
+
   const timePart = date.toLocaleTimeString("en-GB", {
     hour: "2-digit",
     minute: "2-digit",
@@ -345,4 +358,4 @@ export function getIsoDateOnly(raw?: string | null) {
   const m = String(date.getMonth() + 1).padStart(2, "0");
   const d = String(date.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
-    }
+}
