@@ -19,7 +19,7 @@ import NextBestActionCard, { type NextAction } from "@/src/components/NextBestAc
 import TripHealthScore from "@/src/components/TripHealthScore";
 import TripMatchesCard from "@/src/components/trip/TripMatchesCard";
 import TripWorkspaceCard from "@/src/components/trip/TripWorkspaceCard";
-
+import type { PartnerId } from "@/src/core/partners";
 import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
 import { parseIsoDateOnly, toIsoDate, DEFAULT_SEASON } from "@/src/constants/football";
