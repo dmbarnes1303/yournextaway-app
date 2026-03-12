@@ -19,7 +19,6 @@ import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
 import EmptyState from "@/src/components/EmptyState";
 import FixtureCertaintyBadge from "@/src/components/FixtureCertaintyBadge";
-
 import TripProgressStrip from "@/src/components/TripProgressStrip";
 import NextBestActionCard, { type NextAction } from "@/src/components/NextBestActionCard";
 import TripHealthScore from "@/src/components/TripHealthScore";
@@ -52,19 +51,15 @@ import { confirmBookedAndOfferProof } from "@/src/services/bookingProof";
 import { getFixtureCertainty } from "@/src/utils/fixtureCertainty";
 import { attachTicketProof } from "@/src/services/ticketAttachment";
 import { getTripProgress, getTripHealth } from "@/src/services/tripProgress";
-
 import { resolveAffiliateUrl } from "@/src/services/partnerLinks";
 import {
   resolveTicketForFixture,
   type TicketResolutionOption,
   type TicketResolutionResult,
 } from "@/src/services/ticketResolver";
-
 import { getIataCityCodeForCity, debugCityKey } from "@/src/data/iataCityCodes";
 import { getMatchdayLogistics, buildLogisticsSnippet } from "@/src/data/matchdayLogistics";
-
 import storage from "@/src/services/storage";
-
 import rankTrips from "@/src/features/tripFinder/rankTrips";
 import type { RankedTrip, TravelDifficulty } from "@/src/features/tripFinder/types";
 
@@ -117,8 +112,7 @@ function tripStatus(t: Trip): "Upcoming" | "Past" {
   const today = parseIsoDateOnly(toIsoDate(new Date()));
   if (!today) return "Upcoming";
 
-  if (end.getTime() < today.getTime()) return "Past";
-  return "Upcoming";
+  return end.getTime() < today.getTime() ? "Past" : "Upcoming";
 }
 
 function cleanNoteText(v: string) {
@@ -302,7 +296,7 @@ function livePriceLine(item: SavedItem): string | null {
 
   if (item.status === "booked") {
     const p = clean(item.priceText) || resolvedPrice;
-    return p ? p : null;
+    return p || null;
   }
 
   if (resolvedPrice) {
@@ -325,7 +319,7 @@ function initials(name: string) {
 }
 
 function getAttachmentCount(item: SavedItem | null): number {
-  const atts = Array.isArray(item?.attachments) ? (item?.attachments as WalletAttachment[]) : [];
+  const atts = Array.isArray(item?.attachments) ? (item.attachments as WalletAttachment[]) : [];
   return atts.length;
 }
 
@@ -426,7 +420,6 @@ function formatKickoffMeta(
   const iso = clean(isoRaw) || null;
 
   const d = parseIsoToDate(iso);
-
   const short = clean((row as any)?.fixture?.status?.short).toUpperCase();
   const long = clean((row as any)?.fixture?.status?.long);
 
@@ -668,7 +661,7 @@ function itemResolvedScore(item: SavedItem | null): number | null {
 function sectionStateLabel(sectionKey: WorkspaceSectionKey, total: number) {
   const title = WORKSPACE_SECTIONS[sectionKey].title;
   if (total <= 0) return `No ${title.toLowerCase()} yet`;
-  if (total === 1) return `1 item`;
+  if (total === 1) return "1 item";
   return `${total} items`;
 }
 
@@ -761,8 +754,7 @@ export default function TripDetailScreen() {
       const s = tripWorkspaceStore.getState();
       setWorkspaceLoaded(s.loaded);
       if (routeTripId) {
-        const ws = s.workspaces[routeTripId] ?? null;
-        setWorkspace(ws);
+        setWorkspace(s.workspaces[routeTripId] ?? null);
       } else {
         setWorkspace(null);
       }
@@ -779,8 +771,7 @@ export default function TripDetailScreen() {
   }, [routeTripId]);
 
   useEffect(() => {
-    if (!routeTripId) return;
-    if (!workspaceLoaded) return;
+    if (!routeTripId || !workspaceLoaded) return;
     tripWorkspaceStore.ensureWorkspace(routeTripId);
   }, [routeTripId, workspaceLoaded]);
 
@@ -826,7 +817,7 @@ export default function TripDetailScreen() {
 
   const activeSection = useMemo<WorkspaceSectionKey>(() => {
     if (workspace?.activeSection) return workspace.activeSection;
-    return sectionOrder[0] as WorkspaceSectionKey;
+    return sectionOrder[0] ?? "tickets";
   }, [workspace?.activeSection, sectionOrder]);
 
   const matchIds = useMemo(() => {
@@ -923,14 +914,14 @@ export default function TripDetailScreen() {
   const affiliateUrls = useMemo(() => {
     if (!affiliateCtx) return null;
 
-    const flightsUrl = resolveAffiliateUrl("aviasales", affiliateCtx);
-    const hotelsUrl = resolveAffiliateUrl("expedia", affiliateCtx);
-    const omioUrl = resolveAffiliateUrl("omio", affiliateCtx);
-    const transfersUrl = resolveAffiliateUrl("kiwitaxi", affiliateCtx);
-    const experiencesUrl = resolveAffiliateUrl("getyourguide", affiliateCtx);
-    const mapsUrl = buildMapsSearchUrl(`${affiliateCtx.city} travel`);
-
-    return { flightsUrl, hotelsUrl, omioUrl, transfersUrl, experiencesUrl, mapsUrl };
+    return {
+      flightsUrl: resolveAffiliateUrl("aviasales", affiliateCtx),
+      hotelsUrl: resolveAffiliateUrl("expedia", affiliateCtx),
+      omioUrl: resolveAffiliateUrl("omio", affiliateCtx),
+      transfersUrl: resolveAffiliateUrl("kiwitaxi", affiliateCtx),
+      experiencesUrl: resolveAffiliateUrl("getyourguide", affiliateCtx),
+      mapsUrl: buildMapsSearchUrl(`${affiliateCtx.city} travel`),
+    };
   }, [affiliateCtx]);
 
   const pending = useMemo(() => savedItems.filter((x) => x.status === "pending"), [savedItems]);
@@ -964,9 +955,10 @@ export default function TripDetailScreen() {
     return getMatchdayLogistics({ homeTeamName: primaryHomeName, leagueName: primaryLeagueName });
   }, [primaryHomeName, primaryLeagueName]);
 
-  const primaryLogisticsSnippet = useMemo(() => {
-    return primaryLogistics ? buildLogisticsSnippet(primaryLogistics) : "";
-  }, [primaryLogistics]);
+  const primaryLogisticsSnippet = useMemo(
+    () => (primaryLogistics ? buildLogisticsSnippet(primaryLogistics) : ""),
+    [primaryLogistics]
+  );
 
   const stadiumName = useMemo(() => clean((primaryLogistics as any)?.stadium), [primaryLogistics]);
   const stadiumCity = useMemo(
@@ -984,10 +976,7 @@ export default function TripDetailScreen() {
       ? (primaryLogistics as any).stay.bestAreas
       : [];
     return arr
-      .map((x: any) => ({
-        area: clean(x?.area),
-        notes: clean(x?.notes),
-      }))
+      .map((x: any) => ({ area: clean(x?.area), notes: clean(x?.notes) }))
       .filter((x: any) => x.area);
   }, [primaryLogistics]);
 
@@ -996,10 +985,7 @@ export default function TripDetailScreen() {
       ? (primaryLogistics as any).stay.budgetAreas
       : [];
     return arr
-      .map((x: any) => ({
-        area: clean(x?.area),
-        notes: clean(x?.notes),
-      }))
+      .map((x: any) => ({ area: clean(x?.area), notes: clean(x?.notes) }))
       .filter((x: any) => x.area);
   }, [primaryLogistics]);
 
@@ -1133,8 +1119,8 @@ export default function TripDetailScreen() {
 
     const key = debugCityKey(city);
     if (!key) return;
-
     if (devWarnedCityKey === key) return;
+
     setDevWarnedCityKey(key);
 
     Alert.alert(
@@ -1427,17 +1413,14 @@ export default function TripDetailScreen() {
     if (!trip) return;
     const mid = clean(matchId);
     if (!mid) return;
-
     if (mid === clean((trip as any)?.fixtureIdPrimary)) return;
 
     const r = fixturesById[mid] ?? null;
 
     const homeName = clean((r as any)?.teams?.home?.name) || undefined;
     const awayName = clean((r as any)?.teams?.away?.name) || undefined;
-
     const leagueName = clean((r as any)?.league?.name) || undefined;
     const leagueId = typeof (r as any)?.league?.id === "number" ? (r as any).league.id : undefined;
-
     const kickoffIso = clean((r as any)?.fixture?.date) || undefined;
 
     const statusShort = clean((r as any)?.fixture?.status?.short).toUpperCase();
@@ -1576,9 +1559,7 @@ export default function TripDetailScreen() {
       top
         .map(
           (option, index) =>
-            `${index + 1}. ${providerLabel(option.provider)}${
-              clean(option.priceText) ? ` • ${clean(option.priceText)}` : ""
-            }`
+            `${index + 1}. ${providerLabel(option.provider)}${clean(option.priceText) ? ` • ${clean(option.priceText)}` : ""}`
         )
         .join("\n"),
       [
@@ -1624,7 +1605,6 @@ export default function TripDetailScreen() {
     const homeName = clean((r as any)?.teams?.home?.name ?? (trip as any)?.homeName);
     const awayName = clean((r as any)?.teams?.away?.name ?? (trip as any)?.awayName);
     const kickoffIso = clean((r as any)?.fixture?.date ?? (trip as any)?.kickoffIso) || null;
-
     const leagueName = clean((r as any)?.league?.name ?? (trip as any)?.leagueName) || undefined;
     const leagueIdRaw = (r as any)?.league?.id ?? (trip as any)?.leagueId;
     const leagueId = typeof leagueIdRaw === "number" || typeof leagueIdRaw === "string" ? leagueIdRaw : undefined;
@@ -2025,11 +2005,8 @@ export default function TripDetailScreen() {
 
     if (btns.length === 0) {
       add("Hotels", "Expedia (live)", openHotels, "primary", "expedia");
-      if (affiliateUrls.omioUrl) {
-        add("Rail / Bus", "Omio (live)", openOmio, "neutral", "omio");
-      } else {
-        add("Activities", "GetYourGuide (live)", openThings, "neutral", "getyourguide");
-      }
+      if (affiliateUrls.omioUrl) add("Rail / Bus", "Omio (live)", openOmio, "neutral", "omio");
+      else add("Activities", "GetYourGuide (live)", openThings, "neutral", "getyourguide");
     }
 
     return btns.slice(0, 4);
@@ -2554,10 +2531,8 @@ export default function TripDetailScreen() {
 
                       const leagueName = clean((r as any)?.league?.name ?? (trip as any)?.leagueName);
                       const round = clean((r as any)?.league?.round);
-
                       const venue = clean((r as any)?.fixture?.venue?.name ?? (trip as any)?.venueName);
                       const city = clean((r as any)?.fixture?.venue?.city ?? (trip as any)?.displayCity);
-
                       const kickoff = formatKickoffMeta(r, trip);
 
                       const meta1 = [leagueName || null, round || null].filter(Boolean).join(" • ");
