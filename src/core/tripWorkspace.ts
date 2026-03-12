@@ -1,3 +1,4 @@
+// src/core/tripWorkspace.ts
 import type { SavedItem, SavedItemStatus, SavedItemType } from "@/src/core/savedItemTypes";
 
 export type WorkspaceSectionKey =
@@ -27,36 +28,64 @@ export type TripWorkspace = {
   updatedAt: number;
 };
 
-export type WorkspaceSectionStatus = "empty" | "saved" | "pending" | "booked";
-
-export type WorkspaceSnapshot = {
-  total: number;
-  activeTotal: number;
-  saved: number;
-  pending: number;
-  booked: number;
-  archived: number;
-
-  sectionTotals: Record<WorkspaceSectionKey, number>;
-  sectionActiveTotals: Record<WorkspaceSectionKey, number>;
-  sectionStatus: Record<WorkspaceSectionKey, WorkspaceSectionStatus>;
-
-  missing: Array<{
-    section: WorkspaceSectionKey;
-    reason: string;
-  }>;
+export const WORKSPACE_SECTIONS: Record<WorkspaceSectionKey, WorkspaceSection> = {
+  tickets: {
+    key: "tickets",
+    title: "Tickets",
+    subtitle: "Seats, official sellers, confirmations",
+    types: ["tickets"],
+    requiredForCompletion: false,
+  },
+  stay: {
+    key: "stay",
+    title: "Stay",
+    subtitle: "Hotels, apartments",
+    types: ["hotel"],
+    requiredForCompletion: false,
+  },
+  travel: {
+    key: "travel",
+    title: "Travel",
+    subtitle: "Flights, trains",
+    types: ["flight", "train"],
+    requiredForCompletion: false,
+  },
+  things: {
+    key: "things",
+    title: "Things to do",
+    subtitle: "Experiences, activities",
+    types: ["things"],
+    requiredForCompletion: false,
+  },
+  transfers: {
+    key: "transfers",
+    title: "Transfers",
+    subtitle: "Airport ↔ city, local rides",
+    types: ["transfer"],
+    requiredForCompletion: false,
+  },
+  insurance: {
+    key: "insurance",
+    title: "Insurance",
+    subtitle: "Travel cover, policy docs",
+    types: ["insurance"],
+    requiredForCompletion: false,
+  },
+  claims: {
+    key: "claims",
+    title: "Claims",
+    subtitle: "Delays, refunds, evidence",
+    types: ["claim"],
+    requiredForCompletion: false,
+  },
+  notes: {
+    key: "notes",
+    title: "Notes",
+    subtitle: "Plans, reminders, links",
+    types: ["note", "other"],
+    requiredForCompletion: false,
+  },
 };
-
-export const WORKSPACE_SECTION_KEYS: WorkspaceSectionKey[] = [
-  "tickets",
-  "stay",
-  "travel",
-  "things",
-  "transfers",
-  "insurance",
-  "claims",
-  "notes",
-];
 
 export const DEFAULT_SECTION_ORDER: WorkspaceSectionKey[] = [
   "tickets",
@@ -69,111 +98,23 @@ export const DEFAULT_SECTION_ORDER: WorkspaceSectionKey[] = [
   "notes",
 ];
 
-const SECTION_KEY_SET = new Set<WorkspaceSectionKey>(WORKSPACE_SECTION_KEYS);
-
-export function isWorkspaceSectionKey(value: unknown): value is WorkspaceSectionKey {
-  return typeof value === "string" && SECTION_KEY_SET.has(value as WorkspaceSectionKey);
-}
-
-export const WORKSPACE_SECTIONS: Record<WorkspaceSectionKey, WorkspaceSection> = {
-  tickets: {
-    key: "tickets",
-    title: "Tickets",
-    subtitle: "Seats, sellers, confirmations",
-    types: ["tickets"],
-    requiredForCompletion: false,
-  },
-  stay: {
-    key: "stay",
-    title: "Stay",
-    subtitle: "Hotels, apartments, places to sleep",
-    types: ["hotel"],
-    requiredForCompletion: false,
-  },
-  travel: {
-    key: "travel",
-    title: "Travel",
-    subtitle: "Flights and rail",
-    types: ["flight", "train"],
-    requiredForCompletion: false,
-  },
-  things: {
-    key: "things",
-    title: "Things to do",
-    subtitle: "Experiences and activities",
-    types: ["things"],
-    requiredForCompletion: false,
-  },
-  transfers: {
-    key: "transfers",
-    title: "Transfers",
-    subtitle: "Airport, local rides, matchday movement",
-    types: ["transfer"],
-    requiredForCompletion: false,
-  },
-  insurance: {
-    key: "insurance",
-    title: "Insurance",
-    subtitle: "Cover and policy docs",
-    types: ["insurance"],
-    requiredForCompletion: false,
-  },
-  claims: {
-    key: "claims",
-    title: "Claims",
-    subtitle: "Delays, refunds, compensation",
-    types: ["claim"],
-    requiredForCompletion: false,
-  },
-  notes: {
-    key: "notes",
-    title: "Notes",
-    subtitle: "Reminders, plans, loose links",
-    types: ["note", "other"],
-    requiredForCompletion: false,
-  },
-};
-
-function cleanString(value: unknown): string {
-  return String(value ?? "").trim();
-}
-
 export function normalizeOrder(order?: WorkspaceSectionKey[] | null): WorkspaceSectionKey[] {
   const input = Array.isArray(order) ? order : [];
   const seen = new Set<WorkspaceSectionKey>();
   const out: WorkspaceSectionKey[] = [];
 
-  for (const raw of input) {
-    if (!isWorkspaceSectionKey(raw)) continue;
-    if (seen.has(raw)) continue;
-    seen.add(raw);
-    out.push(raw);
+  for (const k of input) {
+    if (!k || !(k in WORKSPACE_SECTIONS)) continue;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(k);
   }
 
-  for (const key of DEFAULT_SECTION_ORDER) {
-    if (!seen.has(key)) out.push(key);
-  }
-
-  return out;
-}
-
-export function normalizeCollapsed(
-  value?: Partial<Record<WorkspaceSectionKey, boolean>> | Record<string, unknown> | null
-): Partial<Record<WorkspaceSectionKey, boolean>> {
-  const raw = value && typeof value === "object" ? value : {};
-  const out: Partial<Record<WorkspaceSectionKey, boolean>> = {};
-
-  for (const key of WORKSPACE_SECTION_KEYS) {
-    if (key in raw) {
-      out[key] = Boolean((raw as Record<string, unknown>)[key]);
-    }
+  for (const k of DEFAULT_SECTION_ORDER) {
+    if (!seen.has(k)) out.push(k);
   }
 
   return out;
-}
-
-export function normalizeActiveSection(value?: unknown): WorkspaceSectionKey | undefined {
-  return isWorkspaceSectionKey(value) ? value : undefined;
 }
 
 export function sectionForSavedItemType(type: SavedItemType): WorkspaceSectionKey {
@@ -200,16 +141,7 @@ export function sectionForSavedItemType(type: SavedItemType): WorkspaceSectionKe
   }
 }
 
-export function getWorkspaceSectionsInOrder(order?: WorkspaceSectionKey[] | null): WorkspaceSection[] {
-  return normalizeOrder(order).map((key) => WORKSPACE_SECTIONS[key]);
-}
-
-export function groupSavedItemsBySection(
-  items: SavedItem[],
-  opts?: { includeArchived?: boolean }
-): Record<WorkspaceSectionKey, SavedItem[]> {
-  const includeArchived = Boolean(opts?.includeArchived);
-
+export function groupSavedItemsBySection(items: SavedItem[]) {
   const grouped: Record<WorkspaceSectionKey, SavedItem[]> = {
     tickets: [],
     stay: [],
@@ -221,132 +153,112 @@ export function groupSavedItemsBySection(
     notes: [],
   };
 
-  for (const item of Array.isArray(items) ? items : []) {
-    if (!includeArchived && item.status === "archived") continue;
-    const key = sectionForSavedItemType(item.type);
-    grouped[key].push(item);
+  for (const it of items) {
+    if (it.status === "archived") continue;
+    const key = sectionForSavedItemType(it.type);
+    grouped[key].push(it);
   }
 
   return grouped;
 }
 
 export function countByStatus(items: SavedItem[]) {
-  const counts: Record<SavedItemStatus, number> = {
+  const c: Record<SavedItemStatus, number> = {
     saved: 0,
     pending: 0,
     booked: 0,
     archived: 0,
   };
 
-  for (const item of Array.isArray(items) ? items : []) {
-    counts[item.status] = (counts[item.status] ?? 0) + 1;
+  for (const it of items) {
+    c[it.status] = (c[it.status] ?? 0) + 1;
   }
 
-  return counts;
+  return c;
 }
 
-export function reduceSectionStatus(items: SavedItem[]): WorkspaceSectionStatus {
-  if (!items.length) return "empty";
-  if (items.some((item) => item.status === "booked")) return "booked";
-  if (items.some((item) => item.status === "pending")) return "pending";
-  if (items.some((item) => item.status === "saved")) return "saved";
-  return "empty";
-}
+export type WorkspaceSnapshot = {
+  total: number;
+  activeTotal: number;
+  saved: number;
+  pending: number;
+  booked: number;
+  archived: number;
+
+  sectionTotals: Record<WorkspaceSectionKey, number>;
+  sectionActiveTotals: Record<WorkspaceSectionKey, number>;
+
+  missing: Array<{
+    section: WorkspaceSectionKey;
+    reason: string;
+  }>;
+};
 
 export function computeWorkspaceSnapshot(items: SavedItem[]): WorkspaceSnapshot {
   const allItems = Array.isArray(items) ? items : [];
-  const activeItems = allItems.filter((item) => item.status !== "archived");
+  const activeItems = allItems.filter((it) => it.status !== "archived");
 
-  const allStatusCounts = countByStatus(allItems);
-  const bySectionActive = groupSavedItemsBySection(activeItems, { includeArchived: false });
-  const bySectionAll = groupSavedItemsBySection(allItems, { includeArchived: true });
-
-  const sectionTotals: Record<WorkspaceSectionKey, number> = {
-    tickets: bySectionAll.tickets.length,
-    stay: bySectionAll.stay.length,
-    travel: bySectionAll.travel.length,
-    things: bySectionAll.things.length,
-    transfers: bySectionAll.transfers.length,
-    insurance: bySectionAll.insurance.length,
-    claims: bySectionAll.claims.length,
-    notes: bySectionAll.notes.length,
-  };
+  const bySection = groupSavedItemsBySection(activeItems);
+  const statusCounts = countByStatus(allItems);
 
   const sectionActiveTotals: Record<WorkspaceSectionKey, number> = {
-    tickets: bySectionActive.tickets.length,
-    stay: bySectionActive.stay.length,
-    travel: bySectionActive.travel.length,
-    things: bySectionActive.things.length,
-    transfers: bySectionActive.transfers.length,
-    insurance: bySectionActive.insurance.length,
-    claims: bySectionActive.claims.length,
-    notes: bySectionActive.notes.length,
+    tickets: bySection.tickets.length,
+    stay: bySection.stay.length,
+    travel: bySection.travel.length,
+    things: bySection.things.length,
+    transfers: bySection.transfers.length,
+    insurance: bySection.insurance.length,
+    claims: bySection.claims.length,
+    notes: bySection.notes.length,
   };
 
-  const sectionStatus: Record<WorkspaceSectionKey, WorkspaceSectionStatus> = {
-    tickets: reduceSectionStatus(bySectionActive.tickets),
-    stay: reduceSectionStatus(bySectionActive.stay),
-    travel: reduceSectionStatus(bySectionActive.travel),
-    things: reduceSectionStatus(bySectionActive.things),
-    transfers: reduceSectionStatus(bySectionActive.transfers),
-    insurance: reduceSectionStatus(bySectionActive.insurance),
-    claims: reduceSectionStatus(bySectionActive.claims),
-    notes: reduceSectionStatus(bySectionActive.notes),
+  const sectionTotals: Record<WorkspaceSectionKey, number> = {
+    tickets: allItems.filter((it) => sectionForSavedItemType(it.type) === "tickets").length,
+    stay: allItems.filter((it) => sectionForSavedItemType(it.type) === "stay").length,
+    travel: allItems.filter((it) => sectionForSavedItemType(it.type) === "travel").length,
+    things: allItems.filter((it) => sectionForSavedItemType(it.type) === "things").length,
+    transfers: allItems.filter((it) => sectionForSavedItemType(it.type) === "transfers").length,
+    insurance: allItems.filter((it) => sectionForSavedItemType(it.type) === "insurance").length,
+    claims: allItems.filter((it) => sectionForSavedItemType(it.type) === "claims").length,
+    notes: allItems.filter((it) => sectionForSavedItemType(it.type) === "notes").length,
   };
 
   const missing: WorkspaceSnapshot["missing"] = [];
-
-  if (sectionActiveTotals.tickets === 0) {
-    missing.push({ section: "tickets", reason: "No ticket option saved yet." });
-  }
 
   if (sectionActiveTotals.stay === 0) {
     missing.push({ section: "stay", reason: "No accommodation saved yet." });
   }
 
   if (sectionActiveTotals.travel === 0) {
-    missing.push({ section: "travel", reason: "No travel option saved yet." });
+    missing.push({ section: "travel", reason: "No travel saved yet." });
   }
 
-  if (sectionActiveTotals.transfers === 0) {
-    missing.push({ section: "transfers", reason: "No local transfer option saved yet." });
+  if (sectionActiveTotals.tickets === 0) {
+    missing.push({ section: "tickets", reason: "No ticket option saved yet." });
   }
 
   if (sectionActiveTotals.things === 0) {
-    missing.push({ section: "things", reason: "Nothing extra saved for the trip yet." });
+    missing.push({ section: "things", reason: "Nothing to do saved yet." });
   }
 
   return {
     total: allItems.length,
     activeTotal: activeItems.length,
-    saved: allStatusCounts.saved,
-    pending: allStatusCounts.pending,
-    booked: allStatusCounts.booked,
-    archived: allStatusCounts.archived,
+    saved: statusCounts.saved,
+    pending: statusCounts.pending,
+    booked: statusCounts.booked,
+    archived: statusCounts.archived,
     sectionTotals,
     sectionActiveTotals,
-    sectionStatus,
     missing,
   };
 }
 
-export function cloneWorkspace(workspace: TripWorkspace): TripWorkspace {
-  return {
-    tripId: cleanString(workspace.tripId),
-    sectionOrder: [...normalizeOrder(workspace.sectionOrder)],
-    collapsed: { ...normalizeCollapsed(workspace.collapsed) },
-    activeSection: normalizeActiveSection(workspace.activeSection),
-    createdAt: Number(workspace.createdAt) || Date.now(),
-    updatedAt: Number(workspace.updatedAt) || Number(workspace.createdAt) || Date.now(),
-  };
-}
-
 export function makeDefaultTripWorkspace(tripId: string): TripWorkspace {
-  const id = cleanString(tripId);
   const now = Date.now();
 
   return {
-    tripId: id,
+    tripId: String(tripId),
     sectionOrder: [...DEFAULT_SECTION_ORDER],
     collapsed: {},
     activeSection: "tickets",
