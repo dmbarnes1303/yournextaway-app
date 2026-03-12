@@ -1,9 +1,10 @@
+// src/components/TripProgressStrip.tsx
 import React, { useMemo } from "react";
 import { View, Text, StyleSheet, Pressable } from "react-native";
 import { theme } from "@/src/constants/theme";
 import GlassCard from "@/src/components/GlassCard";
 
-export type ProgressState = "empty" | "saved" | "booked";
+export type ProgressState = "empty" | "saved" | "pending" | "booked";
 
 export type TripProgressKey = "tickets" | "flight" | "hotel" | "transfer" | "things";
 
@@ -27,6 +28,21 @@ function getStateConfig(state: ProgressState) {
       subLabelColor: "rgba(87,162,56,0.95)",
       cardBorder: "rgba(87,162,56,0.28)",
       cardBg: "rgba(87,162,56,0.07)",
+    };
+  }
+
+  if (state === "pending") {
+    return {
+      badgeBg: "rgba(242,201,76,0.12)",
+      badgeBorder: "rgba(242,201,76,0.28)",
+      dot: "rgba(242,201,76,0.92)",
+      icon: "•",
+      iconColor: theme.colors.textSecondary,
+      labelColor: theme.colors.textPrimary,
+      subLabel: "Pending",
+      subLabelColor: "rgba(242,201,76,0.95)",
+      cardBorder: "rgba(242,201,76,0.20)",
+      cardBg: "rgba(242,201,76,0.06)",
     };
   }
 
@@ -147,6 +163,11 @@ export default function TripProgressStrip({
           <View style={styles.legendItem}>
             <View style={[styles.legendDot, { backgroundColor: "rgba(231,236,231,0.72)" }]} />
             <Text style={styles.legendText}>Saved</Text>
+          </View>
+
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: "rgba(242,201,76,0.92)" }]} />
+            <Text style={styles.legendText}>Pending</Text>
           </View>
 
           <View style={styles.legendItem}>
