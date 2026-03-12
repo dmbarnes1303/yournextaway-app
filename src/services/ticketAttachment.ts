@@ -5,19 +5,19 @@ import savedItemsStore from "@/src/state/savedItems";
 import { pickAndStoreAttachmentForItem } from "@/src/services/walletAttachments";
 
 /**
- * LEGACY WRAPPER (Phase 1):
- * This exists because some UI flows still call attachTicketProof(itemId).
+ * Legacy compatibility wrapper.
+ * Some older flows still call attachTicketProof(itemId).
  *
- * Rules:
- * - Use the same picker + storage path as Wallet (pickAndStoreAttachmentForItem)
- * - Then attach it onto the SavedItem so it appears in Wallet offline
- * - Return boolean for simple call sites
- *
- * IMPORTANT:
- * This is NOT tickets-only anymore. It's just "attach booking proof".
+ * This now behaves as:
+ * - load saved items
+ * - verify item exists
+ * - pick and store attachment
+ * - attach proof to the saved item
+ * - return boolean for simple call sites
  */
 async function ensureSavedItemsLoaded() {
   if (savedItemsStore.getState().loaded) return;
+
   try {
     await savedItemsStore.load();
   } catch {
@@ -30,20 +30,28 @@ export async function attachTicketProof(itemId: string): Promise<boolean> {
   if (!id) return false;
 
   try {
-    const att = await pickAndStoreAttachmentForItem(id);
-
     await ensureSavedItemsLoaded();
+
+    const item = savedItemsStore.getById(id);
+    if (!item) {
+      Alert.alert("Couldn’t add attachment", "This booking could not be found.", [{ text: "OK" }], {
+        cancelable: true,
+      });
+      return false;
+    }
+
+    const att = await pickAndStoreAttachmentForItem(id);
     await savedItemsStore.addAttachment(id, att);
 
     return true;
   } catch (e: any) {
     const msg = String(e?.message ?? "");
 
-    // walletAttachments uses this convention
     if (msg === "cancelled") return false;
 
-    // Best-effort feedback; don't crash any booking flow
-    Alert.alert("Couldn’t add attachment", msg || "Try again.", [{ text: "OK" }], { cancelable: true });
+    Alert.alert("Couldn’t add attachment", msg || "Try again.", [{ text: "OK" }], {
+      cancelable: true,
+    });
     return false;
   }
 }
