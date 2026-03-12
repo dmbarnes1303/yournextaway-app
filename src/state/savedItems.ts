@@ -1,4 +1,3 @@
-// src/state/savedItems.ts
 import { create } from "zustand";
 
 import { readJson, writeJson } from "@/src/state/persist";
@@ -15,6 +14,7 @@ import {
   normalizeSavedItemType,
   normalizeWalletAttachmentKind,
 } from "@/src/core/savedItemTypes";
+import { deleteAttachmentFile } from "@/src/services/walletAttachments";
 
 const STORAGE_KEY = "yna_saved_items_v1";
 
@@ -46,6 +46,12 @@ function cleanPositiveNumber(v: unknown): number | undefined {
 function defaultPriceTextForType(type: SavedItemType): string | undefined {
   if (type === "note") return undefined;
   return "View live price";
+}
+
+function sortAttachments(items: WalletAttachment[]): WalletAttachment[] {
+  const copy = [...items];
+  copy.sort((a, b) => (Number(b.createdAt ?? 0) || 0) - (Number(a.createdAt ?? 0) || 0));
+  return copy;
 }
 
 function normalizeAttachment(raw: any): WalletAttachment | null {
@@ -84,9 +90,7 @@ function normalizeAttachments(raw: unknown): WalletAttachment[] | undefined {
   }
 
   if (!cleaned.length) return undefined;
-
-  cleaned.sort((a, b) => (Number(b.createdAt ?? 0) || 0) - (Number(a.createdAt ?? 0) || 0));
-  return cleaned;
+  return sortAttachments(cleaned);
 }
 
 function cleanLoadedItem(raw: any): SavedItem | null {
@@ -160,6 +164,19 @@ function cloneItems(items: SavedItem[]) {
     metadata: item.metadata ? { ...item.metadata } : undefined,
     attachments: item.attachments ? [...item.attachments] : undefined,
   }));
+}
+
+async function deleteOwnedFilesForItems(items: SavedItem[]) {
+  for (const item of items) {
+    const attachments = Array.isArray(item.attachments) ? item.attachments : [];
+    for (const att of attachments) {
+      try {
+        await deleteAttachmentFile(att);
+      } catch {
+        // best-effort
+      }
+    }
+  }
 }
 
 type SavedItemsState = {
@@ -367,11 +384,7 @@ const useSavedItemsStore = create<SavedItemsState>((set, get) => ({
 
     const current = Array.isArray(item.attachments) ? [...item.attachments] : [];
     const deduped = current.filter((x) => x.id !== normalized.id && x.uri !== normalized.uri);
-    const nextAttachments = sortItems(
-      deduped.map((x) => ({ ...x, updatedAt: x.createdAt } as any)).concat([
-        { ...normalized, updatedAt: normalized.createdAt } as any,
-      ])
-    ).map(({ updatedAt, ...rest }: any) => rest) as WalletAttachment[];
+    const nextAttachments = sortAttachments([...deduped, normalized]);
 
     await get().update(cleanId, { attachments: nextAttachments });
   },
@@ -388,7 +401,16 @@ const useSavedItemsStore = create<SavedItemsState>((set, get) => ({
     if (!item) return;
 
     const current = Array.isArray(item.attachments) ? item.attachments : [];
+    const toRemove = current.find((x) => x.id === cleanAttachmentId);
     const nextAttachments = current.filter((x) => x.id !== cleanAttachmentId);
+
+    if (toRemove) {
+      try {
+        await deleteAttachmentFile(toRemove);
+      } catch {
+        // best-effort
+      }
+    }
 
     await get().update(cleanId, {
       attachments: nextAttachments.length ? nextAttachments : undefined,
@@ -401,6 +423,11 @@ const useSavedItemsStore = create<SavedItemsState>((set, get) => ({
     const cleanId = cleanString(id);
     if (!cleanId) return;
 
+    const item = get().items.find((x) => x.id === cleanId);
+    if (item) {
+      await deleteOwnedFilesForItems([item]);
+    }
+
     const next = get().items.filter((x) => x.id !== cleanId);
     set({ items: next, loaded: true });
 
@@ -409,20 +436,32 @@ const useSavedItemsStore = create<SavedItemsState>((set, get) => ({
     } catch {}
   },
 
-  clearAll: async () => {
+  clearAll: async (opts) => {
+    const existing = get().items;
+    if (opts?.deleteAttachmentFiles) {
+      await deleteOwnedFilesForItems(existing);
+    }
+
     set({ items: [], loaded: true });
     try {
       await persistItems([]);
     } catch {}
   },
 
-  clearTrip: async (tripId) => {
+  clearTrip: async (tripId, opts) => {
     if (!get().loaded) await get().load();
 
     const t = cleanString(tripId);
     if (!t) return;
 
-    const next = get().items.filter((x) => x.tripId !== t);
+    const current = get().items;
+    const removed = current.filter((x) => x.tripId === t);
+    const next = current.filter((x) => x.tripId !== t);
+
+    if (opts?.deleteAttachmentFiles) {
+      await deleteOwnedFilesForItems(removed);
+    }
+
     set({ items: next, loaded: true });
 
     try {
@@ -430,11 +469,18 @@ const useSavedItemsStore = create<SavedItemsState>((set, get) => ({
     } catch {}
   },
 
-  clearOrphans: async (validTripIds) => {
+  clearOrphans: async (validTripIds, opts) => {
     if (!get().loaded) await get().load();
 
     const setIds = new Set((validTripIds ?? []).map((x) => cleanString(x)).filter(Boolean));
-    const next = get().items.filter((x) => !x.tripId || setIds.has(String(x.tripId)));
+    const current = get().items;
+
+    const removed = current.filter((x) => x.tripId && !setIds.has(String(x.tripId)));
+    const next = current.filter((x) => !x.tripId || setIds.has(String(x.tripId)));
+
+    if (opts?.deleteAttachmentFiles) {
+      await deleteOwnedFilesForItems(removed);
+    }
 
     set({ items: next, loaded: true });
 
