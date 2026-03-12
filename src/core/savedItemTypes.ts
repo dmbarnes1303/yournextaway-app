@@ -93,6 +93,53 @@ export function normalizeSavedItemStatus(input: unknown): SavedItemStatus | null
 }
 
 /* -------------------------------------------------------------------------- */
+/* Grouping helpers                                                            */
+/* -------------------------------------------------------------------------- */
+
+export type SavedItemUiGroup =
+  | "tickets"
+  | "hotel"
+  | "flight"
+  | "transport"
+  | "things"
+  | "insurance"
+  | "claim"
+  | "note"
+  | "other";
+
+export function isTransportSavedItemType(type: SavedItemType): boolean {
+  return type === "train" || type === "transfer";
+}
+
+export function getSavedItemUiGroup(type: SavedItemType): SavedItemUiGroup {
+  if (isTransportSavedItemType(type)) return "transport";
+  return type;
+}
+
+export function getSavedItemUiGroupLabel(group: SavedItemUiGroup): string {
+  switch (group) {
+    case "tickets":
+      return "Match tickets";
+    case "hotel":
+      return "Hotels";
+    case "flight":
+      return "Flights";
+    case "transport":
+      return "Transport";
+    case "things":
+      return "Experiences";
+    case "insurance":
+      return "Protect yourself";
+    case "claim":
+      return "Claims & compensation";
+    case "note":
+    case "other":
+    default:
+      return "Notes";
+  }
+}
+
+/* -------------------------------------------------------------------------- */
 /* Wallet Attachments (Phase 1)                                                */
 /* -------------------------------------------------------------------------- */
 
@@ -190,13 +237,6 @@ export type SavedItem = {
 
 /**
  * Display labels (what users see).
- *
- * Your requested wording:
- * - tickets => Match tickets
- * - things  => Experiences
- * - insurance => Protect yourself
- * - claim => Claims & compensation
- * - note/other => Notes
  */
 export function getSavedItemTypeLabel(type: SavedItemType): string {
   switch (type) {
