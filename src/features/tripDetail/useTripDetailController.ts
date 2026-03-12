@@ -1,16 +1,11 @@
-// src/features/tripDetail/useTripDetailController.ts
-
-import { useCallback } from "react";
-import { Alert } from "react-native";
 import { useRouter } from "expo-router";
 
 import tripsStore, { type Trip } from "@/src/state/trips";
 import savedItemsStore from "@/src/state/savedItems";
-import tripWorkspaceStore from "@/src/state/tripWorkspace";
 
 import type { PartnerId } from "@/src/core/partners";
 import type { SavedItem, SavedItemType } from "@/src/core/savedItemTypes";
-import { sectionForSavedItemType, type WorkspaceSectionKey } from "@/src/core/tripWorkspace";
+import { sectionForSavedItemType } from "@/src/core/tripWorkspace";
 
 import { beginPartnerClick, openUntrackedUrl } from "@/src/services/partnerClicks";
 import { confirmBookedAndOfferProof } from "@/src/services/bookingProof";
@@ -21,56 +16,34 @@ import {
   type TicketResolutionResult,
 } from "@/src/services/ticketResolver";
 
+import type { FixtureListRow } from "@/src/services/apiFootball";
+
 import {
   clean,
-  cleanNoteText,
   defer,
   getIsoDateOnly,
   mapTicketProviderToPartnerId,
   normalizeTicketOptions,
   noteTitleFromText,
+  cleanNoteText,
   ticketResolverFailureMessage,
 } from "@/src/features/tripDetail/helpers";
 
-type UseTripDetailControllerArgs = {
+type SetState<T> = React.Dispatch<React.SetStateAction<T>>;
+
+type Props = {
   trip: Trip | null;
   activeTripId: string | null;
   cityName: string;
   primaryLeagueId?: number;
   primaryMatchId: string | null;
-
-  fixturesById: Record<string, any>;
+  fixturesById: Record<string, FixtureListRow>;
   ticketsByMatchId: Record<string, SavedItem | null>;
-
   noteText: string;
-  setNoteText: (value: string) => void;
-  setNoteSaving: (value: boolean) => void;
-  setProofBusyId: (value: string | null) => void;
-
-  setActiveWorkspaceSection: (section: WorkspaceSectionKey) => Promise<void> | void;
-
-  openTripBuilderParams?: {
-    season?: string | number;
-  };
-};
-
-type OpenTrackedPartnerArgs = {
-  partnerId: PartnerId;
-  url: string;
-  title: string;
-  savedItemType?: SavedItemType;
-  metadata?: Record<string, any>;
-};
-
-type OpenPartnerOrAlertArgs = {
-  url: string | null | undefined;
-  message: string;
-  config: {
-    partnerId: PartnerId;
-    savedItemType: SavedItemType;
-    title: string;
-    metadata?: Record<string, any>;
-  };
+  setNoteText: SetState<string>;
+  setNoteSaving: SetState<boolean>;
+  setProofBusyId: SetState<string | null>;
+  setActiveWorkspaceSection: (section: any) => Promise<void> | void;
 };
 
 export default function useTripDetailController({
@@ -86,11 +59,10 @@ export default function useTripDetailController({
   setNoteSaving,
   setProofBusyId,
   setActiveWorkspaceSection,
-  openTripBuilderParams,
-}: UseTripDetailControllerArgs) {
+}: Props) {
   const router = useRouter();
 
-  const openTripBuilder = useCallback(() => {
+  function onEditTrip() {
     if (!trip) return;
 
     router.push({
@@ -101,151 +73,164 @@ export default function useTripDetailController({
         to: trip.endDate,
         city: cityName,
         leagueId: String(primaryLeagueId ?? ""),
-        season: String(openTripBuilderParams?.season ?? ""),
+        season: "2025",
       },
     } as any);
-  }, [trip, router, cityName, primaryLeagueId, openTripBuilderParams?.season]);
+  }
 
-  const onEditTrip = useCallback(() => {
-    openTripBuilder();
-  }, [openTripBuilder]);
+  function onAddMatch() {
+    if (!trip) return;
 
-  const onAddMatch = useCallback(() => {
-    openTripBuilder();
-  }, [openTripBuilder]);
+    router.push({
+      pathname: "/trip/build",
+      params: {
+        tripId: trip.id,
+        from: trip.startDate,
+        to: trip.endDate,
+        city: cityName,
+        leagueId: String(primaryLeagueId ?? ""),
+        season: "2025",
+      },
+    } as any);
+  }
 
-  const onViewWallet = useCallback(() => {
+  function onViewWallet() {
     router.push("/(tabs)/wallet" as any);
-  }, [router]);
+  }
 
-  const onUpgradePress = useCallback(() => {
+  function onUpgradePress() {
     Alert.alert(
       "Go Pro",
       "Pro removes caps and adds automation (timeline + alerts). Hook up paywall later — this is the placeholder entry point.",
       [{ text: "OK" }]
     );
-  }, []);
+  }
 
-  const openUntracked = useCallback(async (url?: string | null) => {
+  async function openUntracked(url?: string | null) {
     if (!url) return;
     try {
       await openUntrackedUrl(url);
     } catch {
       Alert.alert("Couldn’t open link");
     }
-  }, []);
+  }
 
-  const openTrackedPartner = useCallback(
-    async ({ partnerId, url, title, savedItemType, metadata }: OpenTrackedPartnerArgs) => {
-      const tripId = clean(trip?.id) || clean(activeTripId);
-      if (!tripId) {
-        Alert.alert("Save trip first", "Save this trip before booking so we can store it in Wallet.");
-        return;
-      }
+  async function openTrackedPartner(args: {
+    partnerId: PartnerId;
+    url: string;
+    title: string;
+    savedItemType?: SavedItemType;
+    metadata?: Record<string, any>;
+  }) {
+    const tripId = clean(trip?.id) || clean(activeTripId);
 
-      if (partnerId === ("googlemaps" as any)) {
-        await openUntracked(url);
-        return;
-      }
+    if (!tripId) {
+      Alert.alert("Save trip first", "Save this trip before booking so we can store it in Wallet.");
+      return;
+    }
 
-      try {
-        await beginPartnerClick({
-          tripId,
-          partnerId,
-          url,
-          savedItemType,
-          title,
-          metadata,
-        });
+    if (args.partnerId === ("googlemaps" as any)) {
+      await openUntracked(args.url);
+      return;
+    }
 
-        const nextSection = savedItemType ? sectionForSavedItemType(savedItemType) : undefined;
-        if (nextSection) {
-          void setActiveWorkspaceSection(nextSection);
-        }
-      } catch {
-        await openUntracked(url);
-      }
-    },
-    [trip?.id, activeTripId, openUntracked, setActiveWorkspaceSection]
-  );
-
-  const openPartnerOrAlert = useCallback(
-    ({ url, message, config }: OpenPartnerOrAlertArgs) => {
-      if (!url) {
-        Alert.alert("Not ready", message);
-        return;
-      }
-
-      return openTrackedPartner({
-        partnerId: config.partnerId,
-        url,
-        savedItemType: config.savedItemType,
-        title: config.title,
-        metadata: config.metadata,
+    try {
+      await beginPartnerClick({
+        tripId,
+        partnerId: args.partnerId,
+        url: args.url,
+        savedItemType: args.savedItemType,
+        title: args.title,
+        metadata: args.metadata,
       });
-    },
-    [openTrackedPartner]
-  );
 
-  const openSavedItem = useCallback(
-    async (item: SavedItem) => {
-      if (!item.partnerUrl) {
-        Alert.alert(item.title || "Notes", clean(item.metadata?.text) || "No details saved.");
-        return;
-      }
+      const nextSection = args.savedItemType ? sectionForSavedItemType(args.savedItemType) : undefined;
+      if (nextSection) void setActiveWorkspaceSection(nextSection);
+    } catch {
+      await openUntracked(args.url);
+    }
+  }
 
-      if (item.status === "booked" || item.status === "archived") {
-        await openUntracked(item.partnerUrl);
-        return;
-      }
+  function openPartnerOrAlert(
+    url: string | null | undefined,
+    message: string,
+    config: {
+      partnerId: PartnerId;
+      savedItemType: SavedItemType;
+      title: string;
+      metadata?: Record<string, any>;
+    }
+  ) {
+    if (!url) {
+      Alert.alert("Not ready", message);
+      return;
+    }
 
-      const partnerId = clean(item.partnerId);
-      if (!partnerId || partnerId === "googlemaps") {
-        await openUntracked(item.partnerUrl);
-        return;
-      }
+    return openTrackedPartner({
+      partnerId: config.partnerId,
+      url,
+      savedItemType: config.savedItemType,
+      title: config.title,
+      metadata: config.metadata,
+    });
+  }
 
-      const tripId = clean(item.tripId) || clean(trip?.id) || clean(activeTripId);
-      if (!tripId) {
-        await openUntracked(item.partnerUrl);
-        return;
-      }
+  async function openSavedItem(item: SavedItem) {
+    if (!item.partnerUrl) {
+      Alert.alert(item.title || "Notes", clean(item.metadata?.text) || "No details saved.");
+      return;
+    }
 
-      try {
-        await beginPartnerClick({
-          tripId,
-          partnerId: partnerId as any,
-          url: item.partnerUrl,
-          savedItemType: item.type,
-          title: item.title,
-          metadata: item.metadata,
-        });
+    if (item.status === "booked" || item.status === "archived") {
+      await openUntracked(item.partnerUrl);
+      return;
+    }
 
-        void setActiveWorkspaceSection(sectionForSavedItemType(item.type));
-      } catch {
-        await openUntracked(item.partnerUrl);
-      }
-    },
-    [trip?.id, activeTripId, openUntracked, setActiveWorkspaceSection]
-  );
+    const partnerId = clean(item.partnerId);
+    if (!partnerId || partnerId === "googlemaps") {
+      await openUntracked(item.partnerUrl);
+      return;
+    }
 
-  const archiveItem = useCallback(async (item: SavedItem) => {
+    const tripId = clean(item.tripId) || clean(trip?.id) || clean(activeTripId);
+    if (!tripId) {
+      await openUntracked(item.partnerUrl);
+      return;
+    }
+
+    try {
+      await beginPartnerClick({
+        tripId,
+        partnerId: partnerId as any,
+        url: item.partnerUrl,
+        savedItemType: item.type,
+        title: item.title,
+        metadata: item.metadata,
+      });
+
+      void setActiveWorkspaceSection(sectionForSavedItemType(item.type));
+    } catch {
+      await openUntracked(item.partnerUrl);
+    }
+  }
+
+  async function archiveItem(item: SavedItem) {
     try {
       await savedItemsStore.transitionStatus(item.id, "archived");
     } catch {
       Alert.alert("Couldn’t archive", "That item can’t be archived right now.");
     }
-  }, []);
+  }
 
-  const moveToPending = useCallback(async (item: SavedItem) => {
+  async function moveToPending(item: SavedItem) {
     try {
       await savedItemsStore.transitionStatus(item.id, "pending");
     } catch {
       Alert.alert("Couldn’t move", "That item can’t be moved right now.");
     }
-  }, []);
+  }
 
-  const markBookedSmart = useCallback(async (item: SavedItem) => {
+  async function markBookedSmart(item: SavedItem) {
     try {
       await savedItemsStore.transitionStatus(item.id, "booked");
       defer(() => {
@@ -254,9 +239,9 @@ export default function useTripDetailController({
     } catch {
       Alert.alert("Couldn’t mark booked", "That item can’t be marked booked right now.");
     }
-  }, []);
+  }
 
-  const addProofForBookedItem = useCallback(async (item: SavedItem) => {
+  async function addProofForBookedItem(item: SavedItem) {
     if (!item?.id) return;
 
     try {
@@ -269,43 +254,34 @@ export default function useTripDetailController({
     } finally {
       setProofBusyId(null);
     }
-  }, [setProofBusyId]);
+  }
 
-  const confirmArchive = useCallback(
-    (item: SavedItem) => {
-      Alert.alert(
-        "Archive this item?",
-        "Archived items are hidden from the trip workspace. You can restore them later (Phase 2).",
-        [
-          { text: "Cancel", style: "cancel" },
-          { text: "Archive", style: "destructive", onPress: () => archiveItem(item) },
-        ]
-      );
-    },
-    [archiveItem]
-  );
-
-  const confirmMarkBooked = useCallback(
-    (item: SavedItem) => {
-      Alert.alert("Mark as booked?", "Only do this if you completed the booking and want it in Wallet.", [
+  function confirmArchive(item: SavedItem) {
+    Alert.alert(
+      "Archive this item?",
+      "Archived items are hidden from the trip workspace. You can restore them later (Phase 2).",
+      [
         { text: "Cancel", style: "cancel" },
-        { text: "Mark booked", onPress: () => markBookedSmart(item) },
-      ]);
-    },
-    [markBookedSmart]
-  );
+        { text: "Archive", style: "destructive", onPress: () => archiveItem(item) },
+      ]
+    );
+  }
 
-  const confirmMoveToPending = useCallback(
-    (item: SavedItem) => {
-      Alert.alert("Move to Pending?", "Use Pending when you’re not sure if you booked it yet.", [
-        { text: "Cancel", style: "cancel" },
-        { text: "Move", onPress: () => moveToPending(item) },
-      ]);
-    },
-    [moveToPending]
-  );
+  function confirmMarkBooked(item: SavedItem) {
+    Alert.alert("Mark as booked?", "Only do this if you completed the booking and want it in Wallet.", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Mark booked", onPress: () => markBookedSmart(item) },
+    ]);
+  }
 
-  const addNote = useCallback(async () => {
+  function confirmMoveToPending(item: SavedItem) {
+    Alert.alert("Move to Pending?", "Use Pending when you’re not sure if you booked it yet.", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Move", onPress: () => moveToPending(item) },
+    ]);
+  }
+
+  async function addNote() {
     const text = cleanNoteText(noteText);
     const tripId = clean(trip?.id) || clean(activeTripId);
 
@@ -333,274 +309,240 @@ export default function useTripDetailController({
     } finally {
       setNoteSaving(false);
     }
-  }, [noteText, trip?.id, activeTripId, setNoteSaving, setNoteText, setActiveWorkspaceSection]);
+  }
 
-  const openNoteActions = useCallback(
-    (item: SavedItem) => {
-      Alert.alert(item.title || "Notes", clean(item.metadata?.text) || "No details saved.", [
-        { text: "Close", style: "cancel" },
-        { text: "Archive", style: "destructive", onPress: () => archiveItem(item) },
-      ]);
-    },
-    [archiveItem]
-  );
+  function openNoteActions(item: SavedItem) {
+    Alert.alert(item.title || "Notes", clean(item.metadata?.text) || "No details saved.", [
+      { text: "Close", style: "cancel" },
+      { text: "Archive", style: "destructive", onPress: () => archiveItem(item) },
+    ]);
+  }
 
-  const setPrimaryMatch = useCallback(
-    async (matchId: string) => {
-      if (!trip) return;
+  async function setPrimaryMatch(matchId: string) {
+    if (!trip) return;
 
-      const mid = clean(matchId);
-      if (!mid || mid === clean((trip as any)?.fixtureIdPrimary)) return;
+    const mid = clean(matchId);
+    if (!mid || mid === clean((trip as any)?.fixtureIdPrimary)) return;
 
-      const row = fixturesById[mid] ?? null;
+    const row = fixturesById[mid] ?? null;
 
-      const homeName = clean((row as any)?.teams?.home?.name) || undefined;
-      const awayName = clean((row as any)?.teams?.away?.name) || undefined;
-      const leagueName = clean((row as any)?.league?.name) || undefined;
-      const leagueId = typeof (row as any)?.league?.id === "number" ? (row as any).league.id : undefined;
-      const kickoffIso = clean((row as any)?.fixture?.date) || undefined;
-      const venueName = clean((row as any)?.fixture?.venue?.name) || undefined;
-      const venueCity = clean((row as any)?.fixture?.venue?.city) || undefined;
+    const homeName = clean((row as any)?.teams?.home?.name) || undefined;
+    const awayName = clean((row as any)?.teams?.away?.name) || undefined;
+    const leagueName = clean((row as any)?.league?.name) || undefined;
+    const leagueId = typeof (row as any)?.league?.id === "number" ? (row as any).league.id : undefined;
+    const kickoffIso = clean((row as any)?.fixture?.date) || undefined;
+    const venueName = clean((row as any)?.fixture?.venue?.name) || undefined;
+    const venueCity = clean((row as any)?.fixture?.venue?.city) || undefined;
 
-      const statusShort = clean((row as any)?.fixture?.status?.short).toUpperCase();
-      const kickoffDate = kickoffIso ? new Date(kickoffIso) : null;
-      const midnight =
-        kickoffDate && Number.isFinite(kickoffDate.getTime())
-          ? kickoffDate.getHours() === 0 && kickoffDate.getMinutes() === 0
-          : true;
+    const statusShort = clean((row as any)?.fixture?.status?.short).toUpperCase();
+    const kickoffDate = kickoffIso ? new Date(kickoffIso) : null;
+    const midnight =
+      kickoffDate && Number.isFinite(kickoffDate.getTime())
+        ? kickoffDate.getHours() === 0 && kickoffDate.getMinutes() === 0
+        : true;
 
-      const kickoffTbc =
-        statusShort === "TBD" ||
-        statusShort === "TBA" ||
-        statusShort === "NS" ||
-        statusShort === "PST" ||
-        midnight;
+    const kickoffTbc =
+      statusShort === "TBD" ||
+      statusShort === "TBA" ||
+      statusShort === "NS" ||
+      statusShort === "PST" ||
+      midnight;
 
-      try {
-        await tripsStore.setPrimaryMatchForTrip(trip.id, mid);
-        await tripsStore.updateTrip(trip.id, {
-          fixtureIdPrimary: mid,
-          homeName,
-          awayName,
-          leagueName,
-          leagueId,
-          kickoffIso,
-          kickoffTbc,
-          venueName,
-          venueCity,
-          displayCity: venueCity || (trip as any)?.displayCity,
-        } as any);
-      } catch {
-        Alert.alert("Couldn’t set primary match", "Try again.");
-      }
-    },
-    [trip, fixturesById]
-  );
+    try {
+      await tripsStore.setPrimaryMatchForTrip(trip.id, mid);
+      await tripsStore.updateTrip(trip.id, {
+        fixtureIdPrimary: mid,
+        homeName,
+        awayName,
+        leagueName,
+        leagueId,
+        kickoffIso,
+        kickoffTbc,
+        venueName,
+        venueCity,
+        displayCity: venueCity || (trip as any)?.displayCity,
+      } as any);
+    } catch {
+      Alert.alert("Couldn’t set primary match", "Try again.");
+    }
+  }
 
-  const removeMatch = useCallback(
-    async (matchId: string) => {
-      if (!trip) return;
+  async function removeMatch(matchId: string) {
+    if (!trip) return;
 
-      const mid = clean(matchId);
-      if (!mid) return;
+    const mid = clean(matchId);
+    if (!mid) return;
 
-      const count = Array.isArray(trip.matchIds) ? trip.matchIds.length : 0;
-      if (count <= 1) {
-        Alert.alert("Can’t remove", "A trip needs at least one match. Add another match first.");
-        return;
-      }
+    const count = Array.isArray(trip.matchIds) ? trip.matchIds.length : 0;
+    if (count <= 1) {
+      Alert.alert("Can’t remove", "A trip needs at least one match. Add another match first.");
+      return;
+    }
 
-      Alert.alert("Remove this match?", "This only removes it from the trip — it won’t delete Wallet items.", [
+    Alert.alert("Remove this match?", "This only removes it from the trip — it won’t delete Wallet items.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Remove",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await tripsStore.removeMatchFromTrip(trip.id, mid);
+          } catch {
+            Alert.alert("Couldn’t remove match", "Try again.");
+          }
+        },
+      },
+    ]);
+  }
+
+  function openMatchActions(matchId: string) {
+    if (!trip) return;
+
+    const mid = clean(matchId);
+    const isPrimary = mid === clean((trip as any)?.fixtureIdPrimary);
+
+    Alert.alert(
+      "Match options",
+      isPrimary ? "This is the primary match for the trip." : "Choose what you want to do with this match.",
+      [
         { text: "Cancel", style: "cancel" },
+        !isPrimary ? { text: "Set as primary", onPress: () => setPrimaryMatch(mid) } : null,
+        { text: "Remove from trip", style: "destructive", onPress: () => removeMatch(mid) },
+      ].filter(Boolean) as any
+    );
+  }
+
+  async function openTicketOptionForMatch(args: {
+    mid: string;
+    homeName: string;
+    awayName: string;
+    kickoffIso: string;
+    leagueName?: string;
+    leagueId?: string | number;
+    dateIso?: string;
+    option: TicketResolutionOption;
+    checkedProviders?: string[];
+    optionCount?: number;
+  }) {
+    await openTrackedPartner({
+      partnerId: mapTicketProviderToPartnerId(args.option.provider),
+      url: args.option.url,
+      title: args.option.title || `Tickets: ${args.homeName} vs ${args.awayName}`,
+      savedItemType: "tickets",
+      metadata: {
+        fixtureId: args.mid,
+        leagueId: args.leagueId,
+        leagueName: args.leagueName,
+        dateIso: args.dateIso,
+        kickoffIso: args.kickoffIso,
+        homeName: args.homeName,
+        awayName: args.awayName,
+        priceMode: "live",
+        ticketProvider: args.option.provider ?? null,
+        resolvedPriceText: args.option.priceText ?? null,
+        resolutionReason: args.option.reason ?? null,
+        exactMatch: Boolean(args.option.exact),
+        score: args.option.score,
+        checkedProviders: args.checkedProviders,
+        optionCount: args.optionCount,
+      },
+    });
+  }
+
+  function showTicketChoiceAlert(args: {
+    mid: string;
+    homeName: string;
+    awayName: string;
+    kickoffIso: string;
+    leagueName?: string;
+    leagueId?: string | number;
+    dateIso?: string;
+    options: TicketResolutionOption[];
+    checkedProviders?: string[];
+  }) {
+    const top = args.options.slice(0, 3);
+
+    Alert.alert(
+      "Choose ticket provider",
+      top
+        .map(
+          (option, index) =>
+            `${index + 1}. ${clean(option.provider)}${clean(option.priceText) ? ` • ${clean(option.priceText)}` : ""}`
+        )
+        .join("\n"),
+      [
+        { text: "Cancel", style: "cancel" },
+        ...top.map((option) => ({
+          text: clean(option.provider),
+          onPress: () =>
+            openTicketOptionForMatch({
+              ...args,
+              option,
+              optionCount: args.options.length,
+            }),
+        })),
         {
-          text: "Remove",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await tripsStore.removeMatchFromTrip(trip.id, mid);
-            } catch {
-              Alert.alert("Couldn’t remove match", "Try again.");
-            }
-          },
+          text: "Compare all",
+          onPress: () =>
+            router.push({
+              pathname: "/match/[id]",
+              params: { id: args.mid, tripId: activeTripId ?? undefined },
+            } as any),
         },
-      ]);
-    },
-    [trip]
-  );
+      ]
+    );
+  }
 
-  const openMatchActions = useCallback(
-    (matchId: string) => {
-      if (!trip) return;
+  async function openTicketsForMatch(matchId: string) {
+    const mid = clean(matchId);
+    if (!mid) return;
 
-      const mid = clean(matchId);
-      const isPrimary = mid === clean((trip as any)?.fixtureIdPrimary);
+    if (!activeTripId) {
+      Alert.alert("Save trip first", "Save this trip before booking so we can store it in Wallet.");
+      return;
+    }
 
-      Alert.alert(
-        "Match options",
-        isPrimary ? "This is the primary match for the trip." : "Choose what you want to do with this match.",
-        [
-          { text: "Cancel", style: "cancel" },
-          !isPrimary ? { text: "Set as primary", onPress: () => setPrimaryMatch(mid) } : null,
-          { text: "Remove from trip", style: "destructive", onPress: () => removeMatch(mid) },
-        ].filter(Boolean) as any
-      );
-    },
-    [trip, setPrimaryMatch, removeMatch]
-  );
+    const existing = ticketsByMatchId[mid];
+    if (existing && existing.type === "tickets" && existing.status !== "archived" && existing.partnerUrl) {
+      await openSavedItem(existing);
+      return;
+    }
 
-  const openTicketOptionForMatch = useCallback(
-    async (args: {
-      mid: string;
-      homeName: string;
-      awayName: string;
-      kickoffIso: string;
-      leagueName?: string;
-      leagueId?: string | number;
-      dateIso?: string;
-      option: TicketResolutionOption;
-      checkedProviders?: string[];
-      optionCount?: number;
-    }) => {
-      await openTrackedPartner({
-        partnerId: mapTicketProviderToPartnerId(args.option.provider),
-        url: args.option.url,
-        title: args.option.title || `Tickets: ${args.homeName} vs ${args.awayName}`,
-        savedItemType: "tickets",
-        metadata: {
-          fixtureId: args.mid,
-          leagueId: args.leagueId,
-          leagueName: args.leagueName,
-          dateIso: args.dateIso,
-          kickoffIso: args.kickoffIso,
-          homeName: args.homeName,
-          awayName: args.awayName,
-          priceMode: "live",
-          ticketProvider: args.option.provider ?? null,
-          resolvedPriceText: args.option.priceText ?? null,
-          resolutionReason: args.option.reason ?? null,
-          exactMatch: Boolean(args.option.exact),
-          score: args.option.score,
-          checkedProviders: args.checkedProviders,
-          optionCount: args.optionCount,
-        },
+    const row = fixturesById[mid] ?? null;
+
+    const homeName = clean((row as any)?.teams?.home?.name ?? (trip as any)?.homeName);
+    const awayName = clean((row as any)?.teams?.away?.name ?? (trip as any)?.awayName);
+    const kickoffIso = clean((row as any)?.fixture?.date ?? (trip as any)?.kickoffIso) || null;
+    const leagueName = clean((row as any)?.league?.name ?? (trip as any)?.leagueName) || undefined;
+    const leagueIdRaw = (row as any)?.league?.id ?? (trip as any)?.leagueId;
+    const leagueId = typeof leagueIdRaw === "number" || typeof leagueIdRaw === "string" ? leagueIdRaw : undefined;
+
+    if (!homeName || !awayName || !kickoffIso) {
+      Alert.alert("Tickets not available", "Missing team names or kickoff time for this match.");
+      return;
+    }
+
+    const dateIso = trip?.startDate || getIsoDateOnly(kickoffIso);
+
+    try {
+      const resolved = await resolveTicketForFixture({
+        fixtureId: mid,
+        homeName,
+        awayName,
+        kickoffIso,
+        leagueName,
+        leagueId,
       });
-    },
-    [openTrackedPartner]
-  );
 
-  const showTicketChoiceAlert = useCallback(
-    (args: {
-      mid: string;
-      homeName: string;
-      awayName: string;
-      kickoffIso: string;
-      leagueName?: string;
-      leagueId?: string | number;
-      dateIso?: string;
-      options: TicketResolutionOption[];
-      checkedProviders?: string[];
-    }) => {
-      const top = args.options.slice(0, 3);
+      const options = normalizeTicketOptions(resolved);
 
-      Alert.alert(
-        "Choose ticket provider",
-        top
-          .map(
-            (option, index) =>
-              `${index + 1}. ${clean(option.provider)}${clean(option.priceText) ? ` • ${clean(option.priceText)}` : ""}`
-          )
-          .join("\n"),
-        [
-          { text: "Cancel", style: "cancel" },
-          ...top.map((option) => ({
-            text: clean(option.provider),
-            onPress: () =>
-              openTicketOptionForMatch({
-                ...args,
-                option,
-                optionCount: args.options.length,
-              }),
-          })),
-          {
-            text: "Compare all",
-            onPress: () =>
-              router.push({
-                pathname: "/match/[id]",
-                params: { id: args.mid, tripId: activeTripId ?? undefined },
-              } as any),
-          },
-        ]
-      );
-    },
-    [openTicketOptionForMatch, router, activeTripId]
-  );
-
-  const openTicketsForMatch = useCallback(
-    async (matchId: string) => {
-      const mid = clean(matchId);
-      if (!mid) return;
-
-      if (!activeTripId) {
-        Alert.alert("Save trip first", "Save this trip before booking so we can store it in Wallet.");
+      if (!resolved?.ok || options.length === 0) {
+        Alert.alert("Tickets not found", ticketResolverFailureMessage(resolved as TicketResolutionResult | null));
         return;
       }
 
-      const existing = ticketsByMatchId[mid];
-      if (existing && existing.type === "tickets" && existing.status !== "archived" && existing.partnerUrl) {
-        await openSavedItem(existing);
-        return;
-      }
-
-      const row = fixturesById[mid] ?? null;
-
-      const homeName = clean((row as any)?.teams?.home?.name ?? (trip as any)?.homeName);
-      const awayName = clean((row as any)?.teams?.away?.name ?? (trip as any)?.awayName);
-      const kickoffIso = clean((row as any)?.fixture?.date ?? (trip as any)?.kickoffIso) || null;
-      const leagueName = clean((row as any)?.league?.name ?? (trip as any)?.leagueName) || undefined;
-      const leagueIdRaw = (row as any)?.league?.id ?? (trip as any)?.leagueId;
-      const leagueId = typeof leagueIdRaw === "number" || typeof leagueIdRaw === "string" ? leagueIdRaw : undefined;
-
-      if (!homeName || !awayName || !kickoffIso) {
-        Alert.alert("Tickets not available", "Missing team names or kickoff time for this match.");
-        return;
-      }
-
-      const dateIso = trip?.startDate || getIsoDateOnly(kickoffIso);
-
-      try {
-        const resolved: TicketResolutionResult | null = await resolveTicketForFixture({
-          fixtureId: mid,
-          homeName,
-          awayName,
-          kickoffIso,
-          leagueName,
-          leagueId,
-        });
-
-        const options = normalizeTicketOptions(resolved);
-
-        if (!resolved?.ok || options.length === 0) {
-          Alert.alert("Tickets not found", ticketResolverFailureMessage(resolved));
-          return;
-        }
-
-        if (options.length === 1) {
-          await openTicketOptionForMatch({
-            mid,
-            homeName,
-            awayName,
-            kickoffIso,
-            leagueName,
-            leagueId,
-            dateIso,
-            option: options[0],
-            checkedProviders: Array.isArray(resolved.checkedProviders) ? resolved.checkedProviders : undefined,
-            optionCount: options.length,
-          });
-          return;
-        }
-
-        showTicketChoiceAlert({
+      if (options.length === 1) {
+        await openTicketOptionForMatch({
           mid,
           homeName,
           awayName,
@@ -608,26 +550,30 @@ export default function useTripDetailController({
           leagueName,
           leagueId,
           dateIso,
-          options,
+          option: options[0],
           checkedProviders: Array.isArray(resolved.checkedProviders) ? resolved.checkedProviders : undefined,
+          optionCount: options.length,
         });
-      } catch {
-        Alert.alert("Tickets unavailable", "Ticket search failed before the partner click was created.");
+        return;
       }
-    },
-    [
-      activeTripId,
-      ticketsByMatchId,
-      openSavedItem,
-      fixturesById,
-      trip,
-      openTicketOptionForMatch,
-      showTicketChoiceAlert,
-    ]
-  );
+
+      showTicketChoiceAlert({
+        mid,
+        homeName,
+        awayName,
+        kickoffIso,
+        leagueName,
+        leagueId,
+        dateIso,
+        options,
+        checkedProviders: Array.isArray(resolved.checkedProviders) ? resolved.checkedProviders : undefined,
+      });
+    } catch {
+      Alert.alert("Tickets unavailable", "Ticket search failed before the partner click was created.");
+    }
+  }
 
   return {
-    openTripBuilder,
     onEditTrip,
     onAddMatch,
     onViewWallet,
@@ -648,8 +594,6 @@ export default function useTripDetailController({
     setPrimaryMatch,
     removeMatch,
     openMatchActions,
-    openTicketOptionForMatch,
-    showTicketChoiceAlert,
     openTicketsForMatch,
   };
-           }
+}
