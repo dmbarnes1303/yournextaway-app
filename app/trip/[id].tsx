@@ -31,10 +31,18 @@ import { parseIsoDateOnly, toIsoDate, DEFAULT_SEASON } from "@/src/constants/foo
 import tripsStore, { type Trip } from "@/src/state/trips";
 import savedItemsStore from "@/src/state/savedItems";
 import preferencesStore from "@/src/state/preferences";
+import tripWorkspaceStore from "@/src/state/tripWorkspace";
 
 import type { SavedItem, SavedItemType, WalletAttachment } from "@/src/core/savedItemTypes";
 import { getSavedItemTypeLabel } from "@/src/core/savedItemTypes";
 import { getPartner, type PartnerId } from "@/src/core/partners";
+import type { WorkspaceSectionKey, TripWorkspace } from "@/src/core/tripWorkspace";
+import {
+  WORKSPACE_SECTIONS,
+  computeWorkspaceSnapshot,
+  groupSavedItemsBySection,
+  sectionForSavedItemType,
+} from "@/src/core/tripWorkspace";
 
 import { beginPartnerClick, openUntrackedUrl } from "@/src/services/partnerClicks";
 import { getFixtureById, type FixtureListRow } from "@/src/services/apiFootball";
@@ -61,6 +69,11 @@ import type { RankedTrip, TravelDifficulty } from "@/src/features/tripFinder/typ
 
 declare const __DEV__: boolean;
 const DEV = typeof __DEV__ === "boolean" ? __DEV__ : false;
+
+const PLAN_STORAGE_KEY = "yna:plan";
+const FREE_TRIP_CAP = 5;
+
+type PlanValue = "not_set" | "free" | "premium";
 
 function clean(v: unknown): string {
   return String(v ?? "").trim();
@@ -530,9 +543,7 @@ function mapTicketProviderToPartnerId(provider?: string | null): PartnerId {
 }
 
 function ticketResolverFailureMessage(resolved: TicketResolutionResult | null): string {
-  if (!resolved) {
-    return "Ticket resolver didn’t respond. Check backend URL/server.";
-  }
+  if (!resolved) return "Ticket resolver didn’t respond. Check backend URL/server.";
 
   const checkedProviders = Array.isArray(resolved.checkedProviders)
     ? resolved.checkedProviders.filter(Boolean).join(", ")
@@ -540,17 +551,9 @@ function ticketResolverFailureMessage(resolved: TicketResolutionResult | null): 
 
   const error = clean((resolved as any)?.error);
 
-  if (error === "network_error") {
-    return "Ticket backend couldn’t be reached. Check backend URL/server.";
-  }
-
-  if (error === "timeout") {
-    return "Ticket backend timed out. Try again.";
-  }
-
-  if (error === "invalid_backend_json") {
-    return "Ticket backend returned invalid JSON.";
-  }
+  if (error === "network_error") return "Ticket backend couldn’t be reached. Check backend URL/server.";
+  if (error === "timeout") return "Ticket backend timed out. Try again.";
+  if (error === "invalid_backend_json") return "Ticket backend returned invalid JSON.";
 
   if (error && error.startsWith("http_")) {
     return checkedProviders
@@ -661,8 +664,12 @@ function itemResolvedScore(item: SavedItem | null): number | null {
   return typeof raw === "number" && Number.isFinite(raw) ? raw : null;
 }
 
-const PLAN_STORAGE_KEY = "yna:plan";
-type PlanValue = "not_set" | "free" | "premium";
+function sectionStateLabel(sectionKey: WorkspaceSectionKey, total: number) {
+  const title = WORKSPACE_SECTIONS[sectionKey].title;
+  if (total <= 0) return `No ${title.toLowerCase()} yet`;
+  if (total === 1) return `1 item`;
+  return `${total} items`;
+}
 
 export default function TripDetailScreen() {
   const router = useRouter();
@@ -676,6 +683,9 @@ export default function TripDetailScreen() {
 
   const [savedLoaded, setSavedLoaded] = useState(savedItemsStore.getState().loaded);
   const [allSavedItems, setAllSavedItems] = useState<SavedItem[]>([]);
+
+  const [workspaceLoaded, setWorkspaceLoaded] = useState(tripWorkspaceStore.getState().loaded);
+  const [workspace, setWorkspace] = useState<TripWorkspace | null>(null);
 
   const [fixturesById, setFixturesById] = useState<Record<string, FixtureListRow>>({});
   const [fxLoading, setFxLoading] = useState(false);
@@ -746,6 +756,34 @@ export default function TripDetailScreen() {
   }, []);
 
   useEffect(() => {
+    const sync = () => {
+      const s = tripWorkspaceStore.getState();
+      setWorkspaceLoaded(s.loaded);
+      if (routeTripId) {
+        const ws = s.workspaces[routeTripId] ?? null;
+        setWorkspace(ws);
+      } else {
+        setWorkspace(null);
+      }
+    };
+
+    const unsub = tripWorkspaceStore.subscribe(sync);
+    sync();
+
+    if (!tripWorkspaceStore.getState().loaded) {
+      tripWorkspaceStore.loadWorkspaces().finally(sync);
+    }
+
+    return () => unsub();
+  }, [routeTripId]);
+
+  useEffect(() => {
+    if (!routeTripId) return;
+    if (!workspaceLoaded) return;
+    tripWorkspaceStore.ensureWorkspace(routeTripId);
+  }, [routeTripId, workspaceLoaded]);
+
+  useEffect(() => {
     let mounted = true;
 
     const sync = () => {
@@ -776,6 +814,15 @@ export default function TripDetailScreen() {
     if (!activeTripId) return [];
     return allSavedItems.filter((x) => clean(x.tripId) === activeTripId);
   }, [allSavedItems, activeTripId]);
+
+  const groupedBySection = useMemo(() => groupSavedItemsBySection(savedItems), [savedItems]);
+  const workspaceSnapshot = useMemo(() => computeWorkspaceSnapshot(savedItems), [savedItems]);
+
+  const sectionOrder = useMemo(() => workspace?.sectionOrder ?? Object.keys(WORKSPACE_SECTIONS) as WorkspaceSectionKey[], [workspace]);
+  const activeSection = useMemo<WorkspaceSectionKey>(() => {
+    if (workspace?.activeSection) return workspace.activeSection;
+    return sectionOrder[0] as WorkspaceSectionKey;
+  }, [workspace?.activeSection, sectionOrder]);
 
   const matchIds = useMemo(() => {
     const raw = Array.isArray(trip?.matchIds) ? trip.matchIds : [];
@@ -1097,6 +1144,22 @@ export default function TripDetailScreen() {
     );
   }, [cityName, devWarnedCityKey]);
 
+  async function setActiveWorkspaceSection(section: WorkspaceSectionKey) {
+    const id = clean(activeTripId);
+    if (!id) return;
+    try {
+      await tripWorkspaceStore.setActiveSection(id, section);
+    } catch {}
+  }
+
+  async function toggleWorkspaceSection(section: WorkspaceSectionKey) {
+    const id = clean(activeTripId);
+    if (!id) return;
+    try {
+      await tripWorkspaceStore.toggleCollapsed(id, section);
+    } catch {}
+  }
+
   function onEditTrip() {
     if (!trip) return;
 
@@ -1176,6 +1239,12 @@ export default function TripDetailScreen() {
         title: args.title,
         metadata: args.metadata,
       });
+
+      const nextSection =
+        args.savedItemType ? sectionForSavedItemType(args.savedItemType) : undefined;
+      if (nextSection) {
+        void setActiveWorkspaceSection(nextSection);
+      }
     } catch {
       await openUntracked(args.url);
     }
@@ -1214,6 +1283,8 @@ export default function TripDetailScreen() {
         title: item.title,
         metadata: item.metadata,
       });
+
+      void setActiveWorkspaceSection(sectionForSavedItemType(item.type));
     } catch {
       await openUntracked(item.partnerUrl);
     }
@@ -1313,6 +1384,7 @@ export default function TripDetailScreen() {
 
       setNoteText("");
       Keyboard.dismiss();
+      void setActiveWorkspaceSection("notes");
     } catch {
       Alert.alert("Couldn’t save note");
     } finally {
@@ -1612,7 +1684,6 @@ export default function TripDetailScreen() {
   }
 
   const tripCount = useMemo(() => (tripsStore.getState().trips?.length ?? 0) as number, [tripsLoaded]);
-  const FREE_TRIP_CAP = 5;
 
   const progressItems = useMemo(() => {
     const openOrExplainTickets = () => {
@@ -1767,7 +1838,10 @@ export default function TripDetailScreen() {
         cta: "View hotels (live)",
         onPress: openHotels,
         secondaryCta: "Stay guidance",
-        onSecondaryPress: () => Alert.alert("Tip", "Scroll down to ‘Stay guidance’ for areas + transport stops."),
+        onSecondaryPress: () => {
+          void setActiveWorkspaceSection("stay");
+          Alert.alert("Tip", "Stay is where your matchday convenience gets won or lost.");
+        },
       };
     }
 
@@ -1971,8 +2045,318 @@ export default function TripDetailScreen() {
     hasThings,
   ]);
 
-  const loading = Boolean(routeTripId && (!tripsLoaded || !savedLoaded));
+  const loading = Boolean(routeTripId && (!tripsLoaded || !savedLoaded || !workspaceLoaded));
   const showHeroBanners = pending.length > 0 || saved.length > 0 || booked.length > 0;
+
+  function renderWorkspaceItem(item: SavedItem) {
+    const lp = livePriceLine(item);
+    const provider = ticketProviderFromItem(item);
+    const proofText = proofStateText(item);
+    const missingProof = item.status === "booked" && !hasProof(item);
+    const proofBusy = proofBusyId === item.id;
+    const isNote = item.type === "note" || item.type === "other";
+
+    return (
+      <View key={item.id} style={styles.itemRow}>
+        <Pressable style={{ flex: 1 }} onPress={() => (isNote ? openNoteActions(item) : openSavedItem(item))}>
+          <View style={styles.itemTitleRow}>
+            <Text style={styles.itemTitle} numberOfLines={1}>
+              {item.title}
+            </Text>
+            <StatusBadge s={item.status} />
+          </View>
+
+          <View style={styles.itemMetaRow}>
+            {provider ? <ProviderBadge provider={provider} size="sm" /> : null}
+            <Text style={styles.itemMeta} numberOfLines={1}>
+              {isNote ? "Notes" : buildMetaLine(item)}
+            </Text>
+          </View>
+
+          {lp ? (
+            <Text style={item.status === "booked" ? styles.paidLine : styles.livePriceLine} numberOfLines={1}>
+              {lp}
+            </Text>
+          ) : null}
+
+          {item.status === "booked" ? (
+            <Text style={[styles.proofLine, missingProof ? styles.proofLineMissing : undefined]} numberOfLines={1}>
+              {proofText}
+            </Text>
+          ) : null}
+        </Pressable>
+
+        <View style={styles.itemActions}>
+          {item.status !== "booked" ? (
+            <Pressable onPress={() => confirmMarkBooked(item)} style={styles.smallBtn}>
+              <Text style={styles.smallBtnText}>Booked</Text>
+            </Pressable>
+          ) : missingProof ? (
+            <Pressable
+              onPress={() => addProofForBookedItem(item)}
+              style={[styles.smallBtn, styles.smallBtnPrimary, proofBusy && styles.smallBtnDisabled]}
+              disabled={proofBusy}
+            >
+              <Text style={styles.smallBtnText}>{proofBusy ? "Adding…" : "Add proof"}</Text>
+            </Pressable>
+          ) : (
+            <Pressable onPress={onViewWallet} style={styles.smallBtn}>
+              <Text style={styles.smallBtnText}>Wallet</Text>
+            </Pressable>
+          )}
+
+          {item.status === "saved" ? (
+            <Pressable onPress={() => confirmMoveToPending(item)} style={styles.smallBtn}>
+              <Text style={styles.smallBtnText}>Pending</Text>
+            </Pressable>
+          ) : null}
+
+          <Pressable onPress={() => confirmArchive(item)} style={[styles.smallBtn, styles.smallBtnDanger]}>
+            <Text style={styles.smallBtnText}>Archive</Text>
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
+
+  function renderSectionContent(sectionKey: WorkspaceSectionKey) {
+    const items = groupedBySection[sectionKey] ?? [];
+
+    if (sectionKey === "tickets") {
+      return (
+        <>
+          {primaryMatchId ? (
+            <Pressable onPress={() => openTicketsForMatch(primaryMatchId)} style={styles.sectionCta}>
+              <Text style={styles.sectionCtaTitle}>Open live ticket options</Text>
+              <Text style={styles.sectionCtaBody}>
+                Compare providers for the primary match and save the route into the workspace.
+              </Text>
+            </Pressable>
+          ) : (
+            <EmptyState title="No match selected" message="Add a match first to unlock ticket planning." />
+          )}
+
+          {items.length > 0 ? <View style={{ gap: 10 }}>{items.map(renderWorkspaceItem)}</View> : null}
+        </>
+      );
+    }
+
+    if (sectionKey === "stay") {
+      return (
+        <>
+          {affiliateUrls?.hotelsUrl ? (
+            <Pressable
+              onPress={() =>
+                openTrackedPartner({
+                  partnerId: "expedia" as PartnerId,
+                  url: affiliateUrls.hotelsUrl!,
+                  savedItemType: "hotel",
+                  title: `Hotels in ${cityName}`,
+                  metadata: { city: cityName, startDate: trip?.startDate, endDate: trip?.endDate, priceMode: "live" },
+                })
+              }
+              style={styles.sectionCta}
+            >
+              <Text style={styles.sectionCtaTitle}>Open live stays</Text>
+              <Text style={styles.sectionCtaBody}>
+                Use the stay guidance below to avoid booking a cheap place in a useless area.
+              </Text>
+            </Pressable>
+          ) : null}
+
+          {stayBestAreas.length > 0 || stayBudgetAreas.length > 0 ? (
+            <View style={styles.guidanceMiniBox}>
+              <Text style={styles.guidanceMiniTitle}>Area shortlist</Text>
+              {stayBestAreas.slice(0, 2).map((x, idx) => (
+                <Text key={`stay-best-${idx}`} style={styles.guidanceMiniLine}>
+                  • {x.area}{x.notes ? ` — ${x.notes}` : ""}
+                </Text>
+              ))}
+              {stayBudgetAreas.slice(0, 2).map((x, idx) => (
+                <Text key={`stay-budget-${idx}`} style={styles.guidanceMiniLine}>
+                  • {x.area}{x.notes ? ` — ${x.notes}` : ""}
+                </Text>
+              ))}
+            </View>
+          ) : null}
+
+          {items.length > 0 ? <View style={{ gap: 10 }}>{items.map(renderWorkspaceItem)}</View> : (
+            <EmptyState title="No stay items yet" message="Save hotels here so the trip isn’t just a vague idea." />
+          )}
+        </>
+      );
+    }
+
+    if (sectionKey === "travel") {
+      return (
+        <>
+          <View style={styles.sectionActionRow}>
+            {affiliateUrls?.flightsUrl ? (
+              <Pressable
+                onPress={() =>
+                  openTrackedPartner({
+                    partnerId: "aviasales" as PartnerId,
+                    url: affiliateUrls.flightsUrl!,
+                    savedItemType: "flight",
+                    title: `Flights to ${cityName}`,
+                    metadata: { city: cityName, originIata: cleanUpper3(originIata, "LON"), priceMode: "live" },
+                  })
+                }
+                style={[styles.smallActionBtn, styles.smallActionBtnPrimary]}
+              >
+                <Text style={styles.smallActionBtnText}>Flights</Text>
+              </Pressable>
+            ) : null}
+
+            {affiliateUrls?.omioUrl ? (
+              <Pressable
+                onPress={() =>
+                  openTrackedPartner({
+                    partnerId: "omio" as PartnerId,
+                    url: affiliateUrls.omioUrl!,
+                    savedItemType: "train",
+                    title: `Trains & buses in ${cityName}`,
+                    metadata: {
+                      city: cityName,
+                      startDate: trip?.startDate,
+                      endDate: trip?.endDate,
+                      priceMode: "live",
+                      transportMode: "rail_bus",
+                    },
+                  })
+                }
+                style={styles.smallActionBtn}
+              >
+                <Text style={styles.smallActionBtnText}>Rail / Bus</Text>
+              </Pressable>
+            ) : null}
+          </View>
+
+          {items.length > 0 ? <View style={{ gap: 10 }}>{items.map(renderWorkspaceItem)}</View> : (
+            <EmptyState title="No travel items yet" message="Flights or rail should live here, not in your head." />
+          )}
+        </>
+      );
+    }
+
+    if (sectionKey === "transfers") {
+      return (
+        <>
+          {affiliateUrls?.transfersUrl ? (
+            <Pressable
+              onPress={() =>
+                openTrackedPartner({
+                  partnerId: "kiwitaxi" as PartnerId,
+                  url: affiliateUrls.transfersUrl!,
+                  savedItemType: "transfer",
+                  title: `Transfers in ${cityName}`,
+                  metadata: { city: cityName, startDate: trip?.startDate, endDate: trip?.endDate, priceMode: "live" },
+                })
+              }
+              style={styles.sectionCta}
+            >
+              <Text style={styles.sectionCtaTitle}>Open transfer options</Text>
+              <Text style={styles.sectionCtaBody}>
+                Sort airport-to-city and city-to-stadium movement before it becomes a pain.
+              </Text>
+            </Pressable>
+          ) : null}
+
+          {transportStops.length > 0 ? (
+            <View style={styles.guidanceMiniBox}>
+              <Text style={styles.guidanceMiniTitle}>Useful transport stops</Text>
+              {transportStops.map((line, idx) => (
+                <Text key={`transport-stop-${idx}`} style={styles.guidanceMiniLine}>
+                  • {line}
+                </Text>
+              ))}
+            </View>
+          ) : null}
+
+          {items.length > 0 ? <View style={{ gap: 10 }}>{items.map(renderWorkspaceItem)}</View> : (
+            <EmptyState title="No transfer items yet" message="This is where local movement should be sorted." />
+          )}
+        </>
+      );
+    }
+
+    if (sectionKey === "things") {
+      return (
+        <>
+          {affiliateUrls?.experiencesUrl ? (
+            <Pressable
+              onPress={() =>
+                openTrackedPartner({
+                  partnerId: "getyourguide" as PartnerId,
+                  url: affiliateUrls.experiencesUrl!,
+                  savedItemType: "things",
+                  title: `Experiences in ${cityName}`,
+                  metadata: { city: cityName, priceMode: "live" },
+                })
+              }
+              style={styles.sectionCta}
+            >
+              <Text style={styles.sectionCtaTitle}>Open activities</Text>
+              <Text style={styles.sectionCtaBody}>
+                Only add things that genuinely improve the trip. Don’t clutter it with filler.
+              </Text>
+            </Pressable>
+          ) : null}
+
+          {items.length > 0 ? <View style={{ gap: 10 }}>{items.map(renderWorkspaceItem)}</View> : (
+            <EmptyState title="No things saved yet" message="This section is optional, but useful when it earns its place." />
+          )}
+        </>
+      );
+    }
+
+    if (sectionKey === "insurance") {
+      return items.length > 0 ? (
+        <View style={{ gap: 10 }}>{items.map(renderWorkspaceItem)}</View>
+      ) : (
+        <EmptyState title="No insurance saved yet" message="Use this section for cover and policy records." />
+      );
+    }
+
+    if (sectionKey === "claims") {
+      return items.length > 0 ? (
+        <View style={{ gap: 10 }}>{items.map(renderWorkspaceItem)}</View>
+      ) : (
+        <EmptyState title="No claim items yet" message="Use this section for compensation, refund and delay evidence." />
+      );
+    }
+
+    return (
+      <>
+        <View style={styles.noteBox}>
+          <TextInput
+            value={noteText}
+            onChangeText={setNoteText}
+            placeholder="Add a note (tickets, hotel shortlist, reminders, anything)…"
+            placeholderTextColor={theme.colors.textSecondary}
+            style={styles.noteInput}
+            multiline
+          />
+
+          <Pressable
+            onPress={addNote}
+            disabled={noteSaving}
+            style={[styles.noteSaveBtn, noteSaving && { opacity: 0.7 }]}
+          >
+            <Text style={styles.noteSaveText}>{noteSaving ? "Saving…" : "Save note"}</Text>
+          </Pressable>
+        </View>
+
+        {items.length > 0 ? (
+          <View style={{ gap: 10, marginTop: 10 }}>{items.map(renderWorkspaceItem)}</View>
+        ) : (
+          <View style={{ marginTop: 10 }}>
+            <EmptyState title="No notes yet" message="Notes you save for this trip appear here." />
+          </View>
+        )}
+      </>
+    );
+  }
 
   return (
     <Background imageSource={getBackground("trips")} overlayOpacity={0.86}>
@@ -1990,6 +2374,7 @@ export default function TripDetailScreen() {
           style={styles.scroll}
           contentContainerStyle={[styles.content, { paddingBottom: theme.spacing.xxl + insets.bottom }]}
           keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
           {!routeTripId && (
             <GlassCard style={styles.card}>
@@ -2006,7 +2391,7 @@ export default function TripDetailScreen() {
             </GlassCard>
           )}
 
-          {!loading && routeTripId && tripsLoaded && savedLoaded && !trip ? (
+          {!loading && routeTripId && tripsLoaded && savedLoaded && workspaceLoaded && !trip ? (
             <GlassCard style={styles.card}>
               <EmptyState title="Trip not found" message="This trip doesn’t exist on this device." />
             </GlassCard>
@@ -2293,6 +2678,71 @@ export default function TripDetailScreen() {
               </GlassCard>
 
               <GlassCard style={styles.card}>
+                <View style={styles.sectionTitleRow}>
+                  <Text style={styles.sectionTitle}>Workspace</Text>
+                  <Text style={styles.sectionSub}>{workspaceSnapshot.activeTotal} active items</Text>
+                </View>
+
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.workspaceTabsRow}>
+                  {sectionOrder.map((sectionKey) => {
+                    const total = workspaceSnapshot.sectionActiveTotals[sectionKey] ?? 0;
+                    const selected = activeSection === sectionKey;
+
+                    return (
+                      <Pressable
+                        key={sectionKey}
+                        onPress={() => setActiveWorkspaceSection(sectionKey)}
+                        style={[styles.workspaceTab, selected && styles.workspaceTabActive]}
+                      >
+                        <Text style={[styles.workspaceTabTitle, selected && styles.workspaceTabTitleActive]}>
+                          {WORKSPACE_SECTIONS[sectionKey].title}
+                        </Text>
+                        <Text style={[styles.workspaceTabSub, selected && styles.workspaceTabSubActive]}>
+                          {sectionStateLabel(sectionKey, total)}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+
+                <View style={{ gap: 10 }}>
+                  {sectionOrder.map((sectionKey) => {
+                    const section = WORKSPACE_SECTIONS[sectionKey];
+                    const total = workspaceSnapshot.sectionActiveTotals[sectionKey] ?? 0;
+                    const collapsed = Boolean(workspace?.collapsed?.[sectionKey]);
+                    const selected = activeSection === sectionKey;
+
+                    if (!selected) return null;
+
+                    return (
+                      <View key={sectionKey} style={styles.workspaceSection}>
+                        <Pressable
+                          onPress={() => toggleWorkspaceSection(sectionKey)}
+                          style={styles.workspaceSectionHeader}
+                        >
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.workspaceSectionTitle}>{section.title}</Text>
+                            <Text style={styles.workspaceSectionSub}>
+                              {section.subtitle || sectionStateLabel(sectionKey, total)}
+                            </Text>
+                          </View>
+
+                          <View style={styles.workspaceHeaderRight}>
+                            <View style={styles.workspaceCountPill}>
+                              <Text style={styles.workspaceCountText}>{total}</Text>
+                            </View>
+                            <Text style={styles.chev}>{collapsed ? "›" : "⌄"}</Text>
+                          </View>
+                        </Pressable>
+
+                        {!collapsed ? <View style={{ marginTop: 10 }}>{renderSectionContent(sectionKey)}</View> : null}
+                      </View>
+                    );
+                  })}
+                </View>
+              </GlassCard>
+
+              <GlassCard style={styles.card}>
                 <Text style={styles.sectionTitle}>Stay guidance (stadium + best areas)</Text>
 
                 {!primaryLogistics ? (
@@ -2451,227 +2901,6 @@ export default function TripDetailScreen() {
                         <Text style={styles.lateText}>{lateTransportNote}</Text>
                       </View>
                     ) : null}
-                  </View>
-                )}
-              </GlassCard>
-
-              <GlassCard style={styles.card}>
-                <Text style={styles.sectionTitle}>Pending</Text>
-                {pending.length === 0 ? (
-                  <EmptyState
-                    title="No pending bookings"
-                    message="When you click a partner link, it appears here until you confirm it’s booked."
-                  />
-                ) : (
-                  <View style={{ gap: 10 }}>
-                    {pending.map((it) => {
-                      const lp = livePriceLine(it);
-                      const provider = ticketProviderFromItem(it);
-
-                      return (
-                        <View key={it.id} style={styles.itemRow}>
-                          <Pressable style={{ flex: 1 }} onPress={() => openSavedItem(it)}>
-                            <View style={styles.itemTitleRow}>
-                              <Text style={styles.itemTitle} numberOfLines={1}>
-                                {it.title}
-                              </Text>
-                              <StatusBadge s={it.status} />
-                            </View>
-
-                            <View style={styles.itemMetaRow}>
-                              {provider ? <ProviderBadge provider={provider} size="sm" /> : null}
-                              <Text style={styles.itemMeta} numberOfLines={1}>
-                                {buildMetaLine(it)}
-                              </Text>
-                            </View>
-
-                            {lp ? (
-                              <Text style={styles.livePriceLine} numberOfLines={1}>
-                                {lp}
-                              </Text>
-                            ) : null}
-                          </Pressable>
-
-                          <View style={styles.itemActions}>
-                            <Pressable onPress={() => confirmMarkBooked(it)} style={styles.smallBtn}>
-                              <Text style={styles.smallBtnText}>Booked</Text>
-                            </Pressable>
-                            <Pressable onPress={() => confirmArchive(it)} style={[styles.smallBtn, styles.smallBtnDanger]}>
-                              <Text style={styles.smallBtnText}>Archive</Text>
-                            </Pressable>
-                          </View>
-                        </View>
-                      );
-                    })}
-                  </View>
-                )}
-              </GlassCard>
-
-              <GlassCard style={styles.card}>
-                <Text style={styles.sectionTitle}>Booked (in Wallet)</Text>
-                {booked.length === 0 ? (
-                  <EmptyState title="No booked items yet" message="When you confirm a booking, it will show here and in Wallet." />
-                ) : (
-                  <View style={{ gap: 10 }}>
-                    {booked.map((it) => {
-                      const lp = livePriceLine(it);
-                      const provider = ticketProviderFromItem(it);
-                      const proofText = proofStateText(it);
-                      const missingProof = !hasProof(it);
-                      const proofBusy = proofBusyId === it.id;
-
-                      return (
-                        <View key={it.id} style={styles.itemRow}>
-                          <Pressable style={{ flex: 1 }} onPress={() => openSavedItem(it)}>
-                            <View style={styles.itemTitleRow}>
-                              <Text style={styles.itemTitle} numberOfLines={1}>
-                                {it.title}
-                              </Text>
-                              <StatusBadge s={it.status} />
-                            </View>
-
-                            <View style={styles.itemMetaRow}>
-                              {provider ? <ProviderBadge provider={provider} size="sm" /> : null}
-                              <Text style={styles.itemMeta} numberOfLines={1}>
-                                {buildMetaLine(it)}
-                              </Text>
-                            </View>
-
-                            {lp ? (
-                              <Text style={styles.paidLine} numberOfLines={1}>
-                                {lp}
-                              </Text>
-                            ) : null}
-
-                            <Text style={[styles.proofLine, missingProof ? styles.proofLineMissing : undefined]} numberOfLines={1}>
-                              {proofText}
-                            </Text>
-                          </Pressable>
-
-                          <View style={styles.itemActions}>
-                            {missingProof ? (
-                              <Pressable
-                                onPress={() => addProofForBookedItem(it)}
-                                style={[styles.smallBtn, styles.smallBtnPrimary, proofBusy && styles.smallBtnDisabled]}
-                                disabled={proofBusy}
-                              >
-                                <Text style={styles.smallBtnText}>{proofBusy ? "Adding…" : "Add proof"}</Text>
-                              </Pressable>
-                            ) : (
-                              <Pressable onPress={onViewWallet} style={styles.smallBtn}>
-                                <Text style={styles.smallBtnText}>Wallet</Text>
-                              </Pressable>
-                            )}
-
-                            <Pressable onPress={() => confirmArchive(it)} style={[styles.smallBtn, styles.smallBtnDanger]}>
-                              <Text style={styles.smallBtnText}>Archive</Text>
-                            </Pressable>
-                          </View>
-                        </View>
-                      );
-                    })}
-                  </View>
-                )}
-              </GlassCard>
-
-              <GlassCard style={styles.card}>
-                <Text style={styles.sectionTitle}>Saved</Text>
-                {saved.length === 0 ? (
-                  <EmptyState
-                    title="No saved items"
-                    message="If you answer “No” after returning from a partner, we keep the link here as Saved."
-                  />
-                ) : (
-                  <View style={{ gap: 10 }}>
-                    {saved.map((it) => {
-                      const lp = livePriceLine(it);
-                      const provider = ticketProviderFromItem(it);
-
-                      return (
-                        <View key={it.id} style={styles.itemRow}>
-                          <Pressable style={{ flex: 1 }} onPress={() => openSavedItem(it)}>
-                            <View style={styles.itemTitleRow}>
-                              <Text style={styles.itemTitle} numberOfLines={1}>
-                                {it.title}
-                              </Text>
-                              <StatusBadge s={it.status} />
-                            </View>
-
-                            <View style={styles.itemMetaRow}>
-                              {provider ? <ProviderBadge provider={provider} size="sm" /> : null}
-                              <Text style={styles.itemMeta} numberOfLines={1}>
-                                {buildMetaLine(it)}
-                              </Text>
-                            </View>
-
-                            {lp ? (
-                              <Text style={styles.livePriceLine} numberOfLines={1}>
-                                {lp}
-                              </Text>
-                            ) : null}
-                          </Pressable>
-
-                          <View style={styles.itemActions}>
-                            <Pressable onPress={() => confirmMarkBooked(it)} style={styles.smallBtn}>
-                              <Text style={styles.smallBtnText}>Booked</Text>
-                            </Pressable>
-
-                            <Pressable onPress={() => confirmMoveToPending(it)} style={styles.smallBtn}>
-                              <Text style={styles.smallBtnText}>Pending</Text>
-                            </Pressable>
-
-                            <Pressable onPress={() => confirmArchive(it)} style={[styles.smallBtn, styles.smallBtnDanger]}>
-                              <Text style={styles.smallBtnText}>Archive</Text>
-                            </Pressable>
-                          </View>
-                        </View>
-                      );
-                    })}
-                  </View>
-                )}
-              </GlassCard>
-
-              <GlassCard style={styles.card}>
-                <Text style={styles.sectionTitle}>Notes</Text>
-
-                <View style={styles.noteBox}>
-                  <TextInput
-                    value={noteText}
-                    onChangeText={setNoteText}
-                    placeholder="Add a note (tickets, hotel shortlist, reminders, anything)…"
-                    placeholderTextColor={theme.colors.textSecondary}
-                    style={styles.noteInput}
-                    multiline
-                  />
-
-                  <Pressable
-                    onPress={addNote}
-                    disabled={noteSaving}
-                    style={[styles.noteSaveBtn, noteSaving && { opacity: 0.7 }]}
-                  >
-                    <Text style={styles.noteSaveText}>{noteSaving ? "Saving…" : "Save note"}</Text>
-                  </Pressable>
-                </View>
-
-                {notes.length === 0 ? (
-                  <View style={{ marginTop: 10 }}>
-                    <EmptyState title="No notes yet" message="Notes you save for this trip appear here." />
-                  </View>
-                ) : (
-                  <View style={{ gap: 10, marginTop: 10 }}>
-                    {notes.map((it) => (
-                      <Pressable key={it.id} onPress={() => openNoteActions(it)} style={styles.noteRow}>
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.itemTitle} numberOfLines={1}>
-                            {it.title}
-                          </Text>
-                          <Text style={styles.itemMeta} numberOfLines={1}>
-                            Notes
-                          </Text>
-                        </View>
-                        <Text style={styles.chev}>›</Text>
-                      </Pressable>
-                    ))}
                   </View>
                 )}
               </GlassCard>
@@ -3040,6 +3269,167 @@ const styles = StyleSheet.create({
 
   crestFallback: { color: theme.colors.textSecondary, fontWeight: "900" },
 
+  workspaceTabsRow: {
+    paddingRight: 8,
+    gap: 10,
+  },
+
+  workspaceTab: {
+    minWidth: 114,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    backgroundColor: "rgba(0,0,0,0.16)",
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+
+  workspaceTabActive: {
+    borderColor: "rgba(0,255,136,0.45)",
+    backgroundColor: "rgba(0,0,0,0.24)",
+  },
+
+  workspaceTabTitle: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 12,
+  },
+
+  workspaceTabTitleActive: {
+    color: theme.colors.text,
+  },
+
+  workspaceTabSub: {
+    marginTop: 4,
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
+    fontSize: 11,
+  },
+
+  workspaceTabSubActive: {
+    color: theme.colors.textTertiary,
+  },
+
+  workspaceSection: {
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.16)",
+    borderRadius: 16,
+    padding: 12,
+  },
+
+  workspaceSectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+
+  workspaceHeaderRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+
+  workspaceCountPill: {
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+
+  workspaceCountText: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 11,
+  },
+
+  workspaceSectionTitle: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 15,
+  },
+
+  workspaceSectionSub: {
+    marginTop: 4,
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
+    fontSize: 12,
+  },
+
+  sectionCta: {
+    borderWidth: 1,
+    borderColor: "rgba(0,255,136,0.22)",
+    backgroundColor: "rgba(0,0,0,0.16)",
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 10,
+  },
+
+  sectionCtaTitle: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 13,
+  },
+
+  sectionCtaBody: {
+    marginTop: 6,
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
+    fontSize: 12,
+    lineHeight: 16,
+  },
+
+  sectionActionRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 10,
+  },
+
+  smallActionBtn: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+    backgroundColor: "rgba(0,0,0,0.16)",
+    borderRadius: 12,
+    paddingVertical: 10,
+    alignItems: "center",
+  },
+
+  smallActionBtnPrimary: {
+    borderColor: "rgba(0,255,136,0.35)",
+  },
+
+  smallActionBtnText: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 12,
+  },
+
+  guidanceMiniBox: {
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    backgroundColor: "rgba(0,0,0,0.14)",
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 10,
+    gap: 6,
+  },
+
+  guidanceMiniTitle: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 12,
+  },
+
+  guidanceMiniLine: {
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
+    fontSize: 12,
+    lineHeight: 16,
+  },
+
   proxBox: {
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
@@ -3236,19 +3626,7 @@ const styles = StyleSheet.create({
 
   noteSaveText: { color: theme.colors.text, fontWeight: "900" },
 
-  noteRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.18)",
-  },
-
   mapsInline: { marginTop: 10, color: theme.colors.textSecondary, textAlign: "center", fontWeight: "900" },
 
-  chev: { color: theme.colors.textSecondary, fontSize: 24, marginTop: -2 },
+  chev: { color: theme.colors.textSecondary, fontSize: 22, marginTop: -2 },
 });
