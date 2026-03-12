@@ -1,4 +1,3 @@
-// app/trip/build.tsx
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   View,
@@ -23,7 +22,12 @@ import EmptyState from "@/src/components/EmptyState";
 import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
 
-import { getFixtures, getFixtureById, getFixturesByRound, type FixtureListRow } from "@/src/services/apiFootball";
+import {
+  getFixtures,
+  getFixtureById,
+  getFixturesByRound,
+  type FixtureListRow,
+} from "@/src/services/apiFootball";
 import tripsStore, { type Trip } from "@/src/state/trips";
 
 import {
@@ -43,14 +47,14 @@ import rankTrips from "@/src/features/tripFinder/rankTrips";
 import type { RankedTrip, TravelDifficulty } from "@/src/features/tripFinder/types";
 
 /* -------------------------------------------------------------------------- */
-/* config                                                                      */
+/* config                                                                     */
 /* -------------------------------------------------------------------------- */
 
 const FREE_TRIP_CAP = 5;
 const WINDOW_DAYS = 90;
 
 /* -------------------------------------------------------------------------- */
-/* helpers                                                                     */
+/* helpers                                                                    */
 /* -------------------------------------------------------------------------- */
 
 function paramString(v: unknown): string | null {
@@ -154,15 +158,19 @@ function buildTripSnapshot(selectedFixture: FixtureListRow, placeholderTbcIds: S
 
   const kickoffTbc = isKickoffTbc(selectedFixture, placeholderTbcIds);
 
-  const leagueId = typeof selectedFixture?.league?.id === "number" ? selectedFixture.league.id : undefined;
-  const homeTeamId = typeof selectedFixture?.teams?.home?.id === "number" ? selectedFixture.teams.home.id : undefined;
-  const awayTeamId = typeof selectedFixture?.teams?.away?.id === "number" ? selectedFixture.teams.away.id : undefined;
+  const leagueId =
+    typeof selectedFixture?.league?.id === "number" ? selectedFixture.league.id : undefined;
+  const homeTeamId =
+    typeof selectedFixture?.teams?.home?.id === "number" ? selectedFixture.teams.home.id : undefined;
+  const awayTeamId =
+    typeof selectedFixture?.teams?.away?.id === "number" ? selectedFixture.teams.away.id : undefined;
 
   return {
     cityId,
     displayCity,
 
-    fixtureIdPrimary: selectedFixture?.fixture?.id != null ? String(selectedFixture.fixture.id) : undefined,
+    fixtureIdPrimary:
+      selectedFixture?.fixture?.id != null ? String(selectedFixture.fixture.id) : undefined,
 
     homeTeamId,
     awayTeamId,
@@ -225,7 +233,7 @@ function findExistingTripIdForFixture(fixtureId: string): string | null {
 
 function difficultyLabel(v?: TravelDifficulty | null) {
   if (v === "easy") return "Easy";
-  if (v === "moderate") return "Moderate";
+  if (v === "medium" || v === "moderate") return "Moderate";
   if (v === "hard") return "Hard";
   if (v === "complex") return "Complex";
   return "Unknown";
@@ -258,7 +266,7 @@ function prefVibeLabel(v: string) {
 }
 
 /* -------------------------------------------------------------------------- */
-/* screen                                                                      */
+/* screen                                                                     */
 /* -------------------------------------------------------------------------- */
 
 export default function TripBuildScreen() {
@@ -309,10 +317,6 @@ export default function TripBuildScreen() {
 
   const [selectedFixture, setSelectedFixture] = useState<FixtureListRow | null>(null);
 
-  /* ------------------------------------------------------------------------ */
-  /* Window (football.ts contract)                                             */
-  /* ------------------------------------------------------------------------ */
-
   const defaultWindow = useMemo(() => getRollingWindowIso({ days: WINDOW_DAYS }), []);
 
   const routeWindow = useMemo<RollingWindowIso>(() => {
@@ -356,18 +360,15 @@ export default function TripBuildScreen() {
     setNotes((prev) => (cleanText(prev) ? prev : t));
   }, []);
 
-  /* ------------------------------------------------------------------------ */
-  /* League options                                                            */
-  /* ------------------------------------------------------------------------ */
-
-  const ALL_LEAGUES: LeagueOption & { key: string } = useMemo(
-    () => ({
-      label: "All leagues",
-      leagueId: 0,
-      season: LEAGUES[0]?.season ?? DEFAULT_SEASON,
-      countryCode: "EU",
-      key: "all",
-    }),
+  const ALL_LEAGUES = useMemo(
+    () =>
+      ({
+        label: "All leagues",
+        leagueId: 0,
+        season: LEAGUES[0]?.season ?? DEFAULT_SEASON,
+        countryCode: "EU",
+        key: "all",
+      }) as LeagueOption & { key: string },
     []
   );
 
@@ -385,19 +386,14 @@ export default function TripBuildScreen() {
     else if (routeLeagueId === 0) setSelectedLeague(ALL_LEAGUES);
   }, [routeLeagueId, routeSeason, isPrefilledFlow, ALL_LEAGUES]);
 
-  const effectiveSeason = useMemo(() => routeSeason ?? selectedLeague.season ?? DEFAULT_SEASON, [routeSeason, selectedLeague]);
-
-  /* ------------------------------------------------------------------------ */
-  /* Apply route city to notes                                                 */
-  /* ------------------------------------------------------------------------ */
+  const effectiveSeason = useMemo(
+    () => routeSeason ?? selectedLeague.season ?? DEFAULT_SEASON,
+    [routeSeason, selectedLeague]
+  );
 
   useEffect(() => {
     if (routeCity) setNotesIfEmpty(`City: ${routeCity}`);
   }, [routeCity, setNotesIfEmpty]);
-
-  /* ------------------------------------------------------------------------ */
-  /* Load edit trip                                                            */
-  /* ------------------------------------------------------------------------ */
 
   useEffect(() => {
     if (!routeTripId) return;
@@ -473,10 +469,6 @@ export default function TripBuildScreen() {
     };
   }, [routeTripId, routeFrom, routeTo, routeSeason, routeWindow]);
 
-  /* ------------------------------------------------------------------------ */
-  /* Prefill fixture (new trip)                                                */
-  /* ------------------------------------------------------------------------ */
-
   useEffect(() => {
     if (!isPrefilledFlow) return;
     if (!routeFixtureId) return;
@@ -525,11 +517,16 @@ export default function TripBuildScreen() {
     return () => {
       cancelled = true;
     };
-  }, [routeFixtureId, isPrefilledFlow, routeCityArea, setNotesIfEmpty, routeFrom, routeTo, routeSeason, routeWindow]);
-
-  /* ------------------------------------------------------------------------ */
-  /* Load fixtures (picker mode)                                               */
-  /* ------------------------------------------------------------------------ */
+  }, [
+    routeFixtureId,
+    isPrefilledFlow,
+    routeCityArea,
+    setNotesIfEmpty,
+    routeFrom,
+    routeTo,
+    routeSeason,
+    routeWindow,
+  ]);
 
   useEffect(() => {
     if (isPrefilledFlow) return;
@@ -631,19 +628,15 @@ export default function TripBuildScreen() {
     if (isEditing) setSetAsPrimaryOnSave(false);
   }, [selectedFixture, isEditing, routeFrom, routeTo]);
 
-  /* ------------------------------------------------------------------------ */
-  /* Trip intelligence                                                         */
-  /* ------------------------------------------------------------------------ */
-
   const selectedRankedTrip = useMemo<RankedTrip | null>(() => {
     if (!selectedFixture) return null;
-    const ranked = rankTrips([selectedFixture]);
+    const ranked = rankTrips([selectedFixture] as any);
     return ranked[0] ?? null;
   }, [selectedFixture]);
 
   const visibleRankMap = useMemo(() => {
-    const ranked = rankTrips(visibleRows);
-    return new Map<string, RankedTrip>(ranked.map((trip) => [fixtureIdStr(trip.fixture), trip]));
+    const ranked = rankTrips(visibleRows as any);
+    return new Map<string, RankedTrip>(ranked.map((trip) => [fixtureIdStr((trip as any).fixture), trip]));
   }, [visibleRows]);
 
   const discoverSummary = useMemo(() => {
@@ -666,10 +659,6 @@ export default function TripBuildScreen() {
 
     return parts;
   }, [prefMode, prefWindow, prefLength, prefFrom, prefVibes]);
-
-  /* ------------------------------------------------------------------------ */
-  /* Save                                                                      */
-  /* ------------------------------------------------------------------------ */
 
   const validateDateOrder = useCallback((): string | null => {
     const a = parseIsoToDate(startIso);
@@ -712,7 +701,16 @@ export default function TripBuildScreen() {
         }
 
         await tripsStore.updateTrip(routeTripId, basePatch);
-        await tripsStore.addMatchToTrip(routeTripId, fixtureId, { setPrimary: !!setAsPrimaryOnSave });
+
+        const alreadyInTrip = existingMatchIds.includes(fixtureId);
+
+        if (!alreadyInTrip) {
+          await tripsStore.addMatchToTrip(routeTripId, fixtureId, {
+            setPrimary: !!setAsPrimaryOnSave,
+          });
+        } else if (setAsPrimaryOnSave) {
+          await tripsStore.setPrimaryMatchForTrip(routeTripId, fixtureId);
+        }
 
         if (setAsPrimaryOnSave) {
           const primaryPatch: any = {
@@ -805,11 +803,8 @@ export default function TripBuildScreen() {
     routeTripId,
     router,
     setAsPrimaryOnSave,
+    existingMatchIds,
   ]);
-
-  /* ------------------------------------------------------------------------ */
-  /* UI computed                                                               */
-  /* ------------------------------------------------------------------------ */
 
   const selectedTitle = useMemo(() => {
     const h = cleanText(selectedFixture?.teams?.home?.name) || "Home";
@@ -872,10 +867,6 @@ export default function TripBuildScreen() {
   }, [isEditing, selectedFixtureId, existingMatchIds]);
 
   const showPickerMode = !isPrefilledFlow;
-
-  /* ------------------------------------------------------------------------ */
-  /* render                                                                    */
-  /* ------------------------------------------------------------------------ */
 
   return (
     <Background imageSource={getBackground("trips")} overlayOpacity={0.86}>
@@ -940,11 +931,11 @@ export default function TripBuildScreen() {
             </GlassCard>
           )}
 
-          {!prefillLoading && error && (
+          {!prefillLoading && error ? (
             <GlassCard level="subtle">
               <EmptyState title="Problem" message={error} />
             </GlassCard>
-          )}
+          ) : null}
 
           {!prefillLoading && selectedFixture ? (
             <GlassCard level="default">
@@ -995,6 +986,12 @@ export default function TripBuildScreen() {
                     <Text style={styles.badgeText}>{isAlreadyInTrip ? "Already in trip" : "Will be added"}</Text>
                   </View>
                 ) : null}
+
+                {editTrip && existingPrimaryId && selectedFixtureId === existingPrimaryId ? (
+                  <View style={styles.badge}>
+                    <Text style={styles.badgeText}>Current primary</Text>
+                  </View>
+                ) : null}
               </View>
 
               {selectedRankedTrip ? (
@@ -1009,7 +1006,9 @@ export default function TripBuildScreen() {
                       <Text style={styles.intelTitle}>Trip intelligence</Text>
                       <Text style={styles.intelSub}>
                         {difficultyLabel(selectedRankedTrip.breakdown.travelDifficulty)} travel •{" "}
-                        {selectedRankedTrip.city || cleanText(selectedFixture?.fixture?.venue?.city) || "City pending"}
+                        {selectedRankedTrip.city ||
+                          cleanText(selectedFixture?.fixture?.venue?.city) ||
+                          "City pending"}
                       </Text>
                     </View>
                   </View>
@@ -1029,7 +1028,9 @@ export default function TripBuildScreen() {
                     </View>
                     <View style={styles.intelPill}>
                       <Text style={styles.intelPillKicker}>Difficulty</Text>
-                      <Text style={styles.intelPillValue}>{difficultyLabel(selectedRankedTrip.breakdown.travelDifficulty)}</Text>
+                      <Text style={styles.intelPillValue}>
+                        {difficultyLabel(selectedRankedTrip.breakdown.travelDifficulty)}
+                      </Text>
                     </View>
                   </View>
 
@@ -1083,7 +1084,9 @@ export default function TripBuildScreen() {
             <GlassCard level="default">
               <Text style={styles.h1}>{isEditing ? "Add a match" : "Pick a match"}</Text>
               <Text style={styles.hint}>
-                {isEditing ? "Select another match to add it to this trip." : "Choose a match to start a trip around it."}
+                {isEditing
+                  ? "Select another match to add it to this trip."
+                  : "Choose a match to start a trip around it."}
               </Text>
 
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 12 }}>
@@ -1098,7 +1101,9 @@ export default function TripBuildScreen() {
                       }}
                       style={[styles.leaguePill, active && styles.leaguePillActive]}
                     >
-                      <Text style={[styles.leaguePillText, active && styles.leaguePillTextActive]}>{l.label}</Text>
+                      <Text style={[styles.leaguePillText, active && styles.leaguePillTextActive]}>
+                        {l.label}
+                      </Text>
                     </Pressable>
                   );
                 })}
@@ -1125,7 +1130,9 @@ export default function TripBuildScreen() {
                   const away = cleanText(r?.teams?.away?.name) || "Away";
 
                   const tbc = isKickoffTbc(r, placeholderTbcIds);
-                  const kick = tbc ? "Kickoff: TBC" : `Kickoff: ${formatUkDateTimeMaybe(r?.fixture?.date) || "TBC"}`;
+                  const kick = tbc
+                    ? "Kickoff: TBC"
+                    : `Kickoff: ${formatUkDateTimeMaybe(r?.fixture?.date) || "TBC"}`;
 
                   const v = cleanText(r?.fixture?.venue?.name);
                   const c = cleanText(r?.fixture?.venue?.city);
@@ -1155,7 +1162,11 @@ export default function TripBuildScreen() {
                       <View style={styles.fxTop}>
                         <View style={styles.fxLeft}>
                           <View style={styles.crestStack}>
-                            {homeLogo ? <Image source={{ uri: homeLogo }} style={styles.crest} /> : <View style={styles.crestFallback} />}
+                            {homeLogo ? (
+                              <Image source={{ uri: homeLogo }} style={styles.crest} />
+                            ) : (
+                              <View style={styles.crestFallback} />
+                            )}
                             {awayLogo ? (
                               <Image source={{ uri: awayLogo }} style={[styles.crest, { marginLeft: -10 }]} />
                             ) : (
@@ -1212,7 +1223,9 @@ export default function TripBuildScreen() {
 
                         {ranked ? (
                           <View style={styles.badge}>
-                            <Text style={styles.badgeText}>{difficultyLabel(ranked.breakdown.travelDifficulty)} travel</Text>
+                            <Text style={styles.badgeText}>
+                              {difficultyLabel(ranked.breakdown.travelDifficulty)} travel
+                            </Text>
                           </View>
                         ) : null}
 
@@ -1277,14 +1290,20 @@ export default function TripBuildScreen() {
 }
 
 /* -------------------------------------------------------------------------- */
-/* styles                                                                      */
+/* styles                                                                     */
 /* -------------------------------------------------------------------------- */
 
 const styles = StyleSheet.create({
   headerCard: { padding: theme.spacing.lg },
 
   bigTitle: { fontSize: 22, fontWeight: "900", color: theme.colors.text, letterSpacing: 0.2 },
-  bigSub: { marginTop: 8, color: theme.colors.textSecondary, fontWeight: "700", lineHeight: 18, fontSize: 13 },
+  bigSub: {
+    marginTop: 8,
+    color: theme.colors.textSecondary,
+    fontWeight: "700",
+    lineHeight: 18,
+    fontSize: 13,
+  },
 
   chipRow: { marginTop: 14, flexDirection: "row", gap: 10 },
   chip: {
@@ -1309,7 +1328,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   prefBarLabel: { color: theme.colors.textTertiary, fontWeight: "900", fontSize: 11 },
-  prefBarText: { marginTop: 4, color: theme.colors.textSecondary, fontWeight: "900", fontSize: 12, lineHeight: 16 },
+  prefBarText: {
+    marginTop: 4,
+    color: theme.colors.textSecondary,
+    fontWeight: "900",
+    fontSize: 12,
+    lineHeight: 16,
+  },
 
   capBar: {
     marginTop: 12,
@@ -1365,7 +1390,10 @@ const styles = StyleSheet.create({
   badgeTbc: { borderColor: "rgba(255,200,0,0.22)", backgroundColor: "rgba(255,200,0,0.06)" },
   badgeTextTbc: { color: "rgba(255,220,140,0.92)" },
 
-  badgeConfirmed: { borderColor: "rgba(75,158,57,0.35)", backgroundColor: "rgba(75,158,57,0.10)" },
+  badgeConfirmed: {
+    borderColor: "rgba(75,158,57,0.35)",
+    backgroundColor: "rgba(75,158,57,0.10)",
+  },
   badgeTextConfirmed: { color: "rgba(140,255,190,0.92)" },
 
   intelCard: {
@@ -1450,7 +1478,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   primaryTitle: { color: theme.colors.text, fontWeight: "900", fontSize: 12 },
-  primarySub: { marginTop: 4, color: theme.colors.textSecondary, fontWeight: "800", fontSize: 11, lineHeight: 14 },
+  primarySub: {
+    marginTop: 4,
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
+    fontSize: 11,
+    lineHeight: 14,
+  },
 
   infoBar: {
     marginTop: 12,
@@ -1509,7 +1543,10 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border,
     backgroundColor: "rgba(0,0,0,0.20)",
   },
-  fxCardSelected: { borderColor: "rgba(75,158,57,0.55)", backgroundColor: "rgba(0,0,0,0.35)" },
+  fxCardSelected: {
+    borderColor: "rgba(75,158,57,0.55)",
+    backgroundColor: "rgba(0,0,0,0.35)",
+  },
 
   fxTop: { flexDirection: "row", gap: 12, alignItems: "flex-start" },
   fxLeft: { flex: 1, flexDirection: "row", gap: 12, alignItems: "center" },
@@ -1524,7 +1561,13 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.10)",
     marginTop: 6,
   },
-  fxLeague: { marginTop: 6, color: theme.colors.textSecondary, fontWeight: "900", fontSize: 11, textAlign: "right" },
+  fxLeague: {
+    marginTop: 6,
+    color: theme.colors.textSecondary,
+    fontWeight: "900",
+    fontSize: 11,
+    textAlign: "right",
+  },
 
   rowScoreBox: {
     minWidth: 34,
@@ -1551,7 +1594,12 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 10,
   },
-  rowReasonText: { color: theme.colors.textSecondary, fontWeight: "800", fontSize: 11, lineHeight: 15 },
+  rowReasonText: {
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
+    fontSize: 11,
+    lineHeight: 15,
+  },
 
   fxSelectRow: { marginTop: 10, flexDirection: "row", alignItems: "center" },
   selectPill: {
@@ -1562,7 +1610,10 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
     paddingHorizontal: 12,
   },
-  selectPillActive: { borderColor: "rgba(75,158,57,0.55)", backgroundColor: "rgba(75,158,57,0.10)" },
+  selectPillActive: {
+    borderColor: "rgba(75,158,57,0.55)",
+    backgroundColor: "rgba(75,158,57,0.10)",
+  },
   selectPillText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: 12 },
   selectPillTextActive: { color: theme.colors.text, fontWeight: "900", fontSize: 12 },
 
