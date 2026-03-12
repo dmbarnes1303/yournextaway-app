@@ -34,7 +34,7 @@ export default function TripHealthScore({
   isPro,
   capHint,
 }: {
-  score: number; // 0..100
+  score: number;
   missing: string[];
   isPro: boolean;
   capHint?: string;
@@ -49,7 +49,6 @@ export default function TripHealthScore({
   }, [missing]);
 
   const fillColor = useMemo(() => {
-    // Keep it restrained: green is “success”, gold is “warning”, red is “error”.
     if (t === "good") return "rgba(87,162,56,0.35)";
     if (t === "ok") return "rgba(242,201,76,0.30)";
     return "rgba(214,69,69,0.28)";
@@ -67,11 +66,15 @@ export default function TripHealthScore({
     return "You’re missing key pieces — avoid booking expensive parts yet.";
   }, [t]);
 
-  const proLine = useMemo(() => {
-    if (!isPro) return "Pro shows what’s missing + adds automation and price tracking.";
-    if (!missingTop.length) return "Nothing critical missing. Add extras if you want.";
+  const detailLine = useMemo(() => {
+    if (!missingTop.length) return "Nothing critical missing. Add extras only if useful.";
     return `Missing: ${missingTop.join(", ")}${missing.length > 3 ? "…" : ""}`;
-  }, [isPro, missingTop, missing.length]);
+  }, [missingTop, missing.length]);
+
+  const supportLine = useMemo(() => {
+    if (!isPro) return "Pro adds automation and price tracking, but your core missing items still matter first.";
+    return detailLine;
+  }, [isPro, detailLine]);
 
   return (
     <GlassCard level="default" variant="matte" style={styles.card} noPadding>
@@ -95,7 +98,7 @@ export default function TripHealthScore({
         </View>
 
         <Text style={styles.detail} numberOfLines={2}>
-          {proLine}
+          {supportLine}
         </Text>
 
         {capHint ? <Text style={styles.capHint}>{capHint}</Text> : null}
