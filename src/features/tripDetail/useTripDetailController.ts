@@ -1,3 +1,4 @@
+import { Alert } from "react-native";
 import { useRouter } from "expo-router";
 
 import tripsStore, { type Trip } from "@/src/state/trips";
@@ -7,6 +8,8 @@ import type { PartnerId } from "@/src/core/partners";
 import type { SavedItem, SavedItemType } from "@/src/core/savedItemTypes";
 import { sectionForSavedItemType } from "@/src/core/tripWorkspace";
 
+import { DEFAULT_SEASON } from "@/src/constants/football";
+
 import { beginPartnerClick, openUntrackedUrl } from "@/src/services/partnerClicks";
 import { confirmBookedAndOfferProof } from "@/src/services/bookingProof";
 import { attachTicketProof } from "@/src/services/ticketAttachment";
@@ -15,7 +18,6 @@ import {
   type TicketResolutionOption,
   type TicketResolutionResult,
 } from "@/src/services/ticketResolver";
-
 import type { FixtureListRow } from "@/src/services/apiFootball";
 
 import {
@@ -36,7 +38,6 @@ type Props = {
   activeTripId: string | null;
   cityName: string;
   primaryLeagueId?: number;
-  primaryMatchId: string | null;
   fixturesById: Record<string, FixtureListRow>;
   ticketsByMatchId: Record<string, SavedItem | null>;
   noteText: string;
@@ -51,7 +52,6 @@ export default function useTripDetailController({
   activeTripId,
   cityName,
   primaryLeagueId,
-  primaryMatchId,
   fixturesById,
   ticketsByMatchId,
   noteText,
@@ -62,7 +62,7 @@ export default function useTripDetailController({
 }: Props) {
   const router = useRouter();
 
-  function onEditTrip() {
+  function openTripBuilder() {
     if (!trip) return;
 
     router.push({
@@ -73,25 +73,17 @@ export default function useTripDetailController({
         to: trip.endDate,
         city: cityName,
         leagueId: String(primaryLeagueId ?? ""),
-        season: "2025",
+        season: String(DEFAULT_SEASON),
       },
     } as any);
   }
 
-  function onAddMatch() {
-    if (!trip) return;
+  function onEditTrip() {
+    openTripBuilder();
+  }
 
-    router.push({
-      pathname: "/trip/build",
-      params: {
-        tripId: trip.id,
-        from: trip.startDate,
-        to: trip.endDate,
-        city: cityName,
-        leagueId: String(primaryLeagueId ?? ""),
-        season: "2025",
-      },
-    } as any);
+  function onAddMatch() {
+    openTripBuilder();
   }
 
   function onViewWallet() {
@@ -582,10 +574,6 @@ export default function useTripDetailController({
     openTrackedPartner,
     openPartnerOrAlert,
     openSavedItem,
-    archiveItem,
-    moveToPending,
-    markBookedSmart,
-    addProofForBookedItem,
     confirmArchive,
     confirmMarkBooked,
     confirmMoveToPending,
@@ -595,5 +583,6 @@ export default function useTripDetailController({
     removeMatch,
     openMatchActions,
     openTicketsForMatch,
+    addProofForBookedItem,
   };
 }
