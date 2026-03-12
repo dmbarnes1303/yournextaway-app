@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -30,7 +30,7 @@ import preferencesStore from "@/src/state/preferences";
 import tripWorkspaceStore from "@/src/state/tripWorkspace";
 
 import type { PartnerId } from "@/src/core/partners";
-import type { SavedItem } from "@/src/core/savedItemTypes";
+import type { SavedItem, SavedItemType } from "@/src/core/savedItemTypes";
 import type { WorkspaceSectionKey, TripWorkspace } from "@/src/core/tripWorkspace";
 import {
   DEFAULT_SECTION_ORDER,
@@ -77,6 +77,13 @@ const DEV = typeof __DEV__ === "boolean" ? __DEV__ : false;
 
 const PLAN_STORAGE_KEY = "yna:plan";
 const FREE_TRIP_CAP = 5;
+
+type PartnerActionConfig = {
+  partnerId: PartnerId;
+  savedItemType: SavedItemType;
+  title: string;
+  metadata?: Record<string, any>;
+};
 
 export default function TripDetailScreen() {
   const params = useLocalSearchParams();
@@ -553,33 +560,33 @@ export default function TripDetailScreen() {
 
   const tripCount = useMemo(() => tripsStore.getState().trips?.length ?? 0, [tripsLoaded]);
 
-  const openFlights = useCallback(
+  const flightAction = useMemo(
     () =>
-      controller.openPartnerOrAlert(
-        affiliateUrls?.flightsUrl,
-        "We need a city + dates saved to build booking links.",
-        {
+      ({
+        url: affiliateUrls?.flightsUrl,
+        message: "We need a city + dates saved to build booking links.",
+        config: {
           partnerId: "aviasales" as PartnerId,
-          savedItemType: "flight",
+          savedItemType: "flight" as SavedItemType,
           title: `Flights to ${cityName}`,
           metadata: {
             city: cityName,
             originIata: cleanUpper3(originIata, "LON"),
             priceMode: "live",
           },
-        }
-      ),
-    [affiliateUrls?.flightsUrl, cityName, controller, originIata]
+        },
+      }) satisfies { url?: string | null; message: string; config: PartnerActionConfig },
+    [affiliateUrls?.flightsUrl, cityName, originIata]
   );
 
-  const openHotels = useCallback(
+  const hotelAction = useMemo(
     () =>
-      controller.openPartnerOrAlert(
-        affiliateUrls?.hotelsUrl,
-        "We need a city + dates saved to build booking links.",
-        {
+      ({
+        url: affiliateUrls?.hotelsUrl,
+        message: "We need a city + dates saved to build booking links.",
+        config: {
           partnerId: "expedia" as PartnerId,
-          savedItemType: "hotel",
+          savedItemType: "hotel" as SavedItemType,
           title: `Hotels in ${cityName}`,
           metadata: {
             city: cityName,
@@ -587,20 +594,20 @@ export default function TripDetailScreen() {
             endDate: trip?.endDate,
             priceMode: "live",
           },
-        }
-      ),
-    [affiliateUrls?.hotelsUrl, cityName, controller, trip?.startDate, trip?.endDate]
+        },
+      }) satisfies { url?: string | null; message: string; config: PartnerActionConfig },
+    [affiliateUrls?.hotelsUrl, cityName, trip?.startDate, trip?.endDate]
   );
 
-  const openTransport = useCallback(
+  const transportAction = useMemo(
     () =>
-      controller.openPartnerOrAlert(
-        affiliateUrls?.omioUrl || affiliateUrls?.transfersUrl,
-        "We need a city + dates saved to build booking links.",
-        affiliateUrls?.omioUrl
+      ({
+        url: affiliateUrls?.omioUrl || affiliateUrls?.transfersUrl,
+        message: "We need a city + dates saved to build booking links.",
+        config: affiliateUrls?.omioUrl
           ? {
               partnerId: "omio" as PartnerId,
-              savedItemType: "train",
+              savedItemType: "train" as SavedItemType,
               title: `Trains & buses in ${cityName}`,
               metadata: {
                 city: cityName,
@@ -612,7 +619,7 @@ export default function TripDetailScreen() {
             }
           : {
               partnerId: "kiwitaxi" as PartnerId,
-              savedItemType: "transfer",
+              savedItemType: "transfer" as SavedItemType,
               title: `Transfers in ${cityName}`,
               metadata: {
                 city: cityName,
@@ -621,35 +628,40 @@ export default function TripDetailScreen() {
                 priceMode: "live",
                 transportMode: "transfer",
               },
-            }
-      ),
-    [
-      affiliateUrls?.omioUrl,
-      affiliateUrls?.transfersUrl,
-      cityName,
-      controller,
-      trip?.startDate,
-      trip?.endDate,
-    ]
+            },
+      }) satisfies { url?: string | null; message: string; config: PartnerActionConfig },
+    [affiliateUrls?.omioUrl, affiliateUrls?.transfersUrl, cityName, trip?.startDate, trip?.endDate]
   );
 
-  const openThings = useCallback(
+  const thingsAction = useMemo(
     () =>
-      controller.openPartnerOrAlert(
-        affiliateUrls?.experiencesUrl,
-        "We need a city saved to build booking links.",
-        {
+      ({
+        url: affiliateUrls?.experiencesUrl,
+        message: "We need a city saved to build booking links.",
+        config: {
           partnerId: "getyourguide" as PartnerId,
-          savedItemType: "things",
+          savedItemType: "things" as SavedItemType,
           title: `Experiences in ${cityName}`,
           metadata: {
             city: cityName,
             priceMode: "live",
           },
-        }
-      ),
-    [affiliateUrls?.experiencesUrl, cityName, controller]
+        },
+      }) satisfies { url?: string | null; message: string; config: PartnerActionConfig },
+    [affiliateUrls?.experiencesUrl, cityName]
   );
+
+  const openFlights = () =>
+    controller.openPartnerOrAlert(flightAction.url, flightAction.message, flightAction.config);
+
+  const openHotels = () =>
+    controller.openPartnerOrAlert(hotelAction.url, hotelAction.message, hotelAction.config);
+
+  const openTransport = () =>
+    controller.openPartnerOrAlert(transportAction.url, transportAction.message, transportAction.config);
+
+  const openThings = () =>
+    controller.openPartnerOrAlert(thingsAction.url, thingsAction.message, thingsAction.config);
 
   const progressItems = useMemo(() => {
     return [
@@ -814,69 +826,6 @@ export default function TripDetailScreen() {
       buttons.push({ title, sub, onPress, kind, provider });
     };
 
-    const openHotelsQuick = () =>
-      controller.openPartnerOrAlert(affiliateUrls.hotelsUrl, "Hotels link couldn’t be built.", {
-        partnerId: "expedia" as PartnerId,
-        savedItemType: "hotel",
-        title: `Hotels in ${cityName}`,
-        metadata: {
-          city: cityName,
-          startDate: trip.startDate,
-          endDate: trip.endDate,
-          priceMode: "live",
-        },
-      });
-
-    const openFlightsQuick = () =>
-      controller.openPartnerOrAlert(affiliateUrls.flightsUrl, "Flights link couldn’t be built.", {
-        partnerId: "aviasales" as PartnerId,
-        savedItemType: "flight",
-        title: `Flights to ${cityName}`,
-        metadata: {
-          city: cityName,
-          originIata: cleanUpper3(originIata, "LON"),
-          priceMode: "live",
-        },
-      });
-
-    const openOmioQuick = () =>
-      controller.openPartnerOrAlert(affiliateUrls.omioUrl, "Rail/bus link couldn’t be built.", {
-        partnerId: "omio" as PartnerId,
-        savedItemType: "train",
-        title: `Trains & buses in ${cityName}`,
-        metadata: {
-          city: cityName,
-          startDate: trip.startDate,
-          endDate: trip.endDate,
-          priceMode: "live",
-          transportMode: "rail_bus",
-        },
-      });
-
-    const openTransfersQuick = () =>
-      controller.openPartnerOrAlert(affiliateUrls.transfersUrl, "Transfers link couldn’t be built.", {
-        partnerId: "kiwitaxi" as PartnerId,
-        savedItemType: "transfer",
-        title: `Transfers in ${cityName}`,
-        metadata: {
-          city: cityName,
-          startDate: trip.startDate,
-          endDate: trip.endDate,
-          priceMode: "live",
-        },
-      });
-
-    const openThingsQuick = () =>
-      controller.openPartnerOrAlert(affiliateUrls.experiencesUrl, "Activities link couldn’t be built.", {
-        partnerId: "getyourguide" as PartnerId,
-        savedItemType: "things",
-        title: `Experiences in ${cityName}`,
-        metadata: {
-          city: cityName,
-          priceMode: "live",
-        },
-      });
-
     if (!hasTickets && primaryMatchId) {
       add(
         "Tickets",
@@ -887,34 +836,36 @@ export default function TripDetailScreen() {
       );
     }
 
-    if (!hasFlight) add("Flights", "Aviasales (live)", openFlightsQuick, "primary", "aviasales");
-    if (!hasHotel) add("Hotels", "Expedia (live)", openHotelsQuick, "primary", "expedia");
+    if (!hasFlight) add("Flights", "Aviasales (live)", openFlights, "primary", "aviasales");
+    if (!hasHotel) add("Hotels", "Expedia (live)", openHotels, "primary", "expedia");
 
     if (!hasTransport && affiliateUrls.omioUrl) {
-      add("Rail / Bus", "Omio (live)", openOmioQuick, "neutral", "omio");
+      add("Rail / Bus", "Omio (live)", openTransport, "neutral", "omio");
     } else if (!hasTransport) {
-      add("Transfers", "Kiwitaxi (live)", openTransfersQuick, "neutral", "kiwitaxi");
+      add("Transfers", "Kiwitaxi (live)", openTransport, "neutral", "kiwitaxi");
     }
 
-    if (!hasThings) add("Activities", "GetYourGuide (live)", openThingsQuick, "neutral", "getyourguide");
+    if (!hasThings) add("Activities", "GetYourGuide (live)", openThings, "neutral", "getyourguide");
 
     if (buttons.length === 0) {
-      add("Hotels", "Expedia (live)", openHotelsQuick, "primary", "expedia");
-      if (affiliateUrls.omioUrl) add("Rail / Bus", "Omio (live)", openOmioQuick, "neutral", "omio");
-      else add("Activities", "GetYourGuide (live)", openThingsQuick, "neutral", "getyourguide");
+      add("Hotels", "Expedia (live)", openHotels, "primary", "expedia");
+      if (affiliateUrls.omioUrl) add("Rail / Bus", "Omio (live)", openTransport, "neutral", "omio");
+      else add("Activities", "GetYourGuide (live)", openThings, "neutral", "getyourguide");
     }
 
     return buttons.slice(0, 4);
   }, [
     affiliateUrls,
-    cityName,
     controller,
     hasFlight,
     hasHotel,
     hasThings,
     hasTickets,
     hasTransport,
-    originIata,
+    openFlights,
+    openHotels,
+    openThings,
+    openTransport,
     primaryMatchId,
     primaryTicketItem,
     trip,
