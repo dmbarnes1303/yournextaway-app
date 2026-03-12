@@ -20,7 +20,7 @@ import GlassCard from "@/src/components/GlassCard";
 import EmptyState from "@/src/components/EmptyState";
 import FixtureCertaintyBadge from "@/src/components/FixtureCertaintyBadge";
 
-import TripProgressStrip, { type ProgressState } from "@/src/components/TripProgressStrip";
+import TripProgressStrip from "@/src/components/TripProgressStrip";
 import NextBestActionCard, { type NextAction } from "@/src/components/NextBestActionCard";
 import TripHealthScore from "@/src/components/TripHealthScore";
 
@@ -33,7 +33,7 @@ import savedItemsStore from "@/src/state/savedItems";
 import preferencesStore from "@/src/state/preferences";
 
 import type { SavedItem, SavedItemType, WalletAttachment } from "@/src/core/savedItemTypes";
-import { getSavedItemTypeLabel, isTransportSavedItemType } from "@/src/core/savedItemTypes";
+import { getSavedItemTypeLabel } from "@/src/core/savedItemTypes";
 import { getPartner, type PartnerId } from "@/src/core/partners";
 
 import { beginPartnerClick, openUntrackedUrl } from "@/src/services/partnerClicks";
@@ -42,6 +42,7 @@ import { formatUkDateOnly } from "@/src/utils/formatters";
 import { confirmBookedAndOfferProof } from "@/src/services/bookingProof";
 import { getFixtureCertainty } from "@/src/utils/fixtureCertainty";
 import { attachTicketProof } from "@/src/services/ticketAttachment";
+import { getTripProgress, getTripHealth } from "@/src/services/tripProgress";
 
 import { resolveAffiliateUrl } from "@/src/services/partnerLinks";
 import {
@@ -57,10 +58,6 @@ import storage from "@/src/services/storage";
 
 import rankTrips from "@/src/features/tripFinder/rankTrips";
 import type { RankedTrip, TravelDifficulty } from "@/src/features/tripFinder/types";
-
-/* -------------------------------------------------------------------------- */
-/* small helpers                                                              */
-/* -------------------------------------------------------------------------- */
 
 declare const __DEV__: boolean;
 const DEV = typeof __DEV__ === "boolean" ? __DEV__ : false;
@@ -270,9 +267,7 @@ function shortDomain(url?: string) {
 
 function buildMetaLine(item: SavedItem) {
   const bits: string[] = [];
-
-  if (isTransportSavedItemType(item.type)) bits.push("Transport");
-  else bits.push(safeTypeLabel(item.type));
+  bits.push(safeTypeLabel(item.type));
 
   const p = safePartnerName(item);
   if (p) bits.push(p);
@@ -646,8 +641,8 @@ function normalizeTicketOptions(resolved: TicketResolutionResult | null): Ticket
           resolved.reason === "exact_event"
             ? "exact_event"
             : resolved.reason === "partial_match"
-              ? "partial_match"
-              : "search_fallback",
+            ? "partial_match"
+            : "search_fallback",
       },
     ];
   }
@@ -665,16 +660,6 @@ function itemResolvedScore(item: SavedItem | null): number | null {
   const raw = item.metadata?.score;
   return typeof raw === "number" && Number.isFinite(raw) ? raw : null;
 }
-
-function itemSortByFreshness(a: SavedItem, b: SavedItem) {
-  const bTime = Number(b.updatedAt ?? b.createdAt ?? 0) || 0;
-  const aTime = Number(a.updatedAt ?? a.createdAt ?? 0) || 0;
-  return bTime - aTime;
-}
-
-/* -------------------------------------------------------------------------- */
-/* screen                                                                     */
-/* -------------------------------------------------------------------------- */
 
 const PLAN_STORAGE_KEY = "yna:plan";
 type PlanValue = "not_set" | "free" | "premium";
@@ -886,37 +871,14 @@ export default function TripDetailScreen() {
     return { flightsUrl, hotelsUrl, omioUrl, transfersUrl, experiencesUrl, mapsUrl };
   }, [affiliateCtx]);
 
-  const pending = useMemo(
-    () => savedItems.filter((x) => x.status === "pending").sort(itemSortByFreshness),
-    [savedItems]
-  );
-
+  const pending = useMemo(() => savedItems.filter((x) => x.status === "pending"), [savedItems]);
   const saved = useMemo(
-    () =>
-      savedItems
-        .filter((x) => x.status === "saved" && x.type !== "note")
-        .sort(itemSortByFreshness),
+    () => savedItems.filter((x) => x.status === "saved" && x.type !== "note"),
     [savedItems]
   );
-
-  const booked = useMemo(
-    () =>
-      savedItems
-        .filter((x) => x.status === "booked")
-        .sort((a, b) => {
-          const aMissing = hasProof(a) ? 1 : 0;
-          const bMissing = hasProof(b) ? 1 : 0;
-          if (aMissing !== bMissing) return aMissing - bMissing;
-          return itemSortByFreshness(a, b);
-        }),
-    [savedItems]
-  );
-
+  const booked = useMemo(() => savedItems.filter((x) => x.status === "booked"), [savedItems]);
   const notes = useMemo(
-    () =>
-      savedItems
-        .filter((x) => x.type === "note" && x.status !== "archived")
-        .sort(itemSortByFreshness),
+    () => savedItems.filter((x) => x.type === "note" && x.status !== "archived"),
     [savedItems]
   );
 
@@ -1076,6 +1038,30 @@ export default function TripDetailScreen() {
     if (!primaryMatchId) return null;
     return ticketsByMatchId[String(primaryMatchId)] ?? null;
   }, [primaryMatchId, ticketsByMatchId]);
+
+  const progress = useMemo(() => {
+    if (!tripId) {
+      return {
+        tickets: "empty",
+        flight: "empty",
+        hotel: "empty",
+        transfer: "empty",
+        things: "empty",
+      } as const;
+    }
+    return getTripProgress(tripId);
+  }, [tripId, savedItems]);
+
+  const readiness = useMemo(() => {
+    if (!tripId) return { score: 0, missing: [] as string[] };
+    return getTripHealth(tripId);
+  }, [tripId, savedItems]);
+
+  const hasTickets = progress.tickets !== "empty";
+  const hasFlight = progress.flight !== "empty";
+  const hasHotel = progress.hotel !== "empty";
+  const hasTransport = progress.transfer !== "empty";
+  const hasThings = progress.things !== "empty";
 
   useEffect(() => {
     if (!DEV) return;
@@ -1613,59 +1599,6 @@ export default function TripDetailScreen() {
   const tripCount = useMemo(() => (tripsStore.getState().trips?.length ?? 0) as number, [tripsLoaded]);
   const FREE_TRIP_CAP = 5;
 
-  const presentByType = useMemo(() => {
-    const present = (...types: SavedItemType[]) =>
-      savedItems.some((x) => types.includes(x.type) && x.status !== "archived");
-
-    const bookedOnly = (...types: SavedItemType[]) =>
-      savedItems.some((x) => types.includes(x.type) && x.status === "booked");
-
-    const pendingOnly = (...types: SavedItemType[]) =>
-      savedItems.some((x) => types.includes(x.type) && x.status === "pending");
-
-    const savedOnly = (...types: SavedItemType[]) =>
-      savedItems.some((x) => types.includes(x.type) && x.status === "saved");
-
-    const stateFor = (...types: SavedItemType[]): ProgressState => {
-      if (bookedOnly(...types)) return "booked";
-      if (pendingOnly(...types)) return "pending";
-      if (savedOnly(...types)) return "saved";
-      return "empty";
-    };
-
-    return {
-      hasTickets: present("tickets"),
-      hasFlight: present("flight"),
-      hasHotel: present("hotel"),
-      hasTransport: present("train", "transfer"),
-      hasThings: present("things"),
-
-      stateTickets: stateFor("tickets"),
-      stateFlight: stateFor("flight"),
-      stateHotel: stateFor("hotel"),
-      stateTransport: stateFor("train", "transfer"),
-      stateThings: stateFor("things"),
-    };
-  }, [savedItems]);
-
-  const readiness = useMemo(() => {
-    const score =
-      (presentByType.hasTickets ? 30 : 0) +
-      (presentByType.hasFlight ? 25 : 0) +
-      (presentByType.hasHotel ? 25 : 0) +
-      (presentByType.hasTransport ? 10 : 0) +
-      (presentByType.hasThings ? 10 : 0);
-
-    const missing: string[] = [];
-    if (!presentByType.hasTickets) missing.push("tickets");
-    if (!presentByType.hasFlight) missing.push("flights");
-    if (!presentByType.hasHotel) missing.push("hotel");
-    if (!presentByType.hasTransport) missing.push("transport");
-    if (!presentByType.hasThings) missing.push("things to do");
-
-    return { score, missing };
-  }, [presentByType]);
-
   const progressItems = useMemo(() => {
     const openOrExplainTickets = () => {
       if (!primaryMatchId) {
@@ -1699,7 +1632,7 @@ export default function TripDetailScreen() {
       });
     };
 
-    const openTransport = () => {
+    const openTransfers = () => {
       const url = affiliateUrls?.omioUrl || affiliateUrls?.transfersUrl;
       const partnerId = affiliateUrls?.omioUrl ? ("omio" as PartnerId) : ("kiwitaxi" as PartnerId);
       const savedItemType: SavedItemType = affiliateUrls?.omioUrl ? "train" : "transfer";
@@ -1734,29 +1667,25 @@ export default function TripDetailScreen() {
     };
 
     return [
-      { key: "tickets" as const, label: "Tickets", state: presentByType.stateTickets, onPress: openOrExplainTickets },
-      { key: "flight" as const, label: "Flights", state: presentByType.stateFlight, onPress: openFlights },
-      { key: "hotel" as const, label: "Hotel", state: presentByType.stateHotel, onPress: openHotels },
+      { key: "tickets" as const, label: "Tickets", state: progress.tickets, onPress: openOrExplainTickets },
+      { key: "flight" as const, label: "Flights", state: progress.flight, onPress: openFlights },
+      { key: "hotel" as const, label: "Hotel", state: progress.hotel, onPress: openHotels },
       {
         key: "transfer" as const,
-        label: "Transport",
-        state: presentByType.stateTransport,
-        onPress: openTransport,
+        label: affiliateUrls?.omioUrl ? "Rail/Bus" : "Transfer",
+        state: progress.transfer,
+        onPress: openTransfers,
       },
-      { key: "things" as const, label: "Things", state: presentByType.stateThings, onPress: openThings },
+      { key: "things" as const, label: "Things", state: progress.things, onPress: openThings },
     ];
   }, [
-    primaryMatchId,
     affiliateUrls,
     cityName,
     originIata,
+    primaryMatchId,
     trip?.startDate,
     trip?.endDate,
-    presentByType.stateTickets,
-    presentByType.stateFlight,
-    presentByType.stateHotel,
-    presentByType.stateTransport,
-    presentByType.stateThings,
+    progress,
   ]);
 
   const nextAction = useMemo<NextAction | null>(() => {
@@ -1794,7 +1723,7 @@ export default function TripDetailScreen() {
       });
     };
 
-    if (!presentByType.hasTickets) {
+    if (!hasTickets) {
       return {
         title: "Start with match tickets",
         body: "Tickets are the anchor. Compare providers and secure seats first, then build travel around it.",
@@ -1807,9 +1736,9 @@ export default function TripDetailScreen() {
     if (kickoffMeta.tbc) {
       return {
         title: "Kickoff not confirmed — book flexible travel",
-        body: "When kickoff is TBC, choose flights/hotels with free changes or good cancellation terms.",
-        cta: presentByType.hasFlight ? "View hotels (live)" : "View flights (live)",
-        onPress: presentByType.hasFlight ? openHotels : openFlights,
+        body: "When kickoff is TBC, choose flights or hotels with flexibility. Locking rigid plans too early is how people get burned.",
+        cta: hasFlight ? "View hotels (live)" : "View flights (live)",
+        onPress: hasFlight ? openHotels : openFlights,
         secondaryCta: "Open tickets",
         onSecondaryPress: openTickets,
         badge: "TBC",
@@ -1817,19 +1746,19 @@ export default function TripDetailScreen() {
       };
     }
 
-    if (!presentByType.hasFlight) {
+    if (!hasFlight) {
       return {
         title: "Add flights for this trip",
-        body: "We’ll always show live prices on the partner (no made-up estimates).",
+        body: "Tickets are in motion, but the trip still isn’t real until transport is covered.",
         cta: "View flights (live)",
         onPress: openFlights,
       };
     }
 
-    if (!presentByType.hasHotel) {
+    if (!hasHotel) {
       return {
         title: "Pick a hotel in a smart area",
-        body: "We’ll open live availability on Expedia. Use stay guidance to avoid bad logistics.",
+        body: "Don’t just book the cheapest room. Use stay guidance so your matchday logistics aren’t awful.",
         cta: "View hotels (live)",
         onPress: openHotels,
         secondaryCta: "Stay guidance",
@@ -1837,52 +1766,81 @@ export default function TripDetailScreen() {
       };
     }
 
+    if (!hasTransport) {
+      return {
+        title: "Sort local transport next",
+        body: "Flights and hotel are covered. Now remove friction between airport, hotel, and stadium.",
+        cta: affiliateUrls?.omioUrl ? "View rail/bus" : "View transfers",
+        onPress: affiliateUrls?.omioUrl
+          ? () =>
+              openTrackedPartner({
+                partnerId: "omio" as PartnerId,
+                url: affiliateUrls.omioUrl!,
+                savedItemType: "train",
+                title: `Trains & buses in ${cityName}`,
+                metadata: {
+                  city: cityName,
+                  startDate: trip?.startDate,
+                  endDate: trip?.endDate,
+                  priceMode: "live",
+                  transportMode: "rail_bus",
+                },
+              })
+          : () =>
+              openTrackedPartner({
+                partnerId: "kiwitaxi" as PartnerId,
+                url: affiliateUrls?.transfersUrl || "",
+                savedItemType: "transfer",
+                title: `Transfers in ${cityName}`,
+                metadata: {
+                  city: cityName,
+                  startDate: trip?.startDate,
+                  endDate: trip?.endDate,
+                  priceMode: "live",
+                  transportMode: "transfer",
+                },
+              }),
+      };
+    }
+
+    if (!hasThings) {
+      return {
+        title: "Trip is covered — add experiences if they help",
+        body: "Core planning is done. Anything else should improve the trip, not clutter it.",
+        cta: "View activities",
+        onPress: () =>
+          openTrackedPartner({
+            partnerId: "getyourguide" as PartnerId,
+            url: affiliateUrls?.experiencesUrl || "",
+            savedItemType: "things",
+            title: `Experiences in ${cityName}`,
+            metadata: { city: cityName, priceMode: "live" },
+          }),
+        badge: "Ready",
+      };
+    }
+
     return {
-      title: "You’re set — add extras if you want",
-      body: "Core planning is complete. If you’re staying longer, add transport, activities or notes.",
-      cta: affiliateUrls?.omioUrl ? "View rail/bus" : "View transport",
-      onPress: affiliateUrls?.omioUrl
-        ? () =>
-            openTrackedPartner({
-              partnerId: "omio" as PartnerId,
-              url: affiliateUrls.omioUrl!,
-              savedItemType: "train",
-              title: `Trains & buses in ${cityName}`,
-              metadata: {
-                city: cityName,
-                startDate: trip?.startDate,
-                endDate: trip?.endDate,
-                priceMode: "live",
-                transportMode: "rail_bus",
-              },
-            })
-        : () =>
-            openTrackedPartner({
-              partnerId: "kiwitaxi" as PartnerId,
-              url: affiliateUrls?.transfersUrl!,
-              savedItemType: "transfer",
-              title: `Transfers in ${cityName}`,
-              metadata: {
-                city: cityName,
-                startDate: trip?.startDate,
-                endDate: trip?.endDate,
-                priceMode: "live",
-                transportMode: "transfer",
-              },
-            }),
+      title: "Core planning complete",
+      body: "You’ve covered the important parts. From here, only add things that genuinely improve the trip.",
+      cta: "View wallet",
+      onPress: onViewWallet,
       badge: "Ready",
     };
   }, [
-    primaryMatchId,
     affiliateUrls,
     cityName,
+    hasFlight,
+    hasHotel,
+    hasMatch,
+    hasThings,
+    hasTickets,
+    hasTransport,
+    kickoffMeta.tbc,
     originIata,
+    primaryMatchId,
     trip?.startDate,
     trip?.endDate,
-    presentByType.hasTickets,
-    presentByType.hasFlight,
-    presentByType.hasHotel,
-    kickoffMeta.tbc,
   ]);
 
   const smartBookButtons = useMemo(() => {
@@ -1965,7 +1923,7 @@ export default function TripDetailScreen() {
       });
     };
 
-    if (!presentByType.hasTickets && primaryMatchId) {
+    if (!hasTickets && primaryMatchId) {
       add(
         "Tickets",
         smartButtonSubtitle(primaryTicketItem, "Compare live ticket options"),
@@ -1975,21 +1933,19 @@ export default function TripDetailScreen() {
       );
     }
 
-    if (!presentByType.hasFlight) add("Flights", "Aviasales (live)", openFlights, "primary", "aviasales");
-    if (!presentByType.hasHotel) add("Hotels", "Expedia (live)", openHotels, "primary", "expedia");
-
-    if (!presentByType.hasTransport && affiliateUrls.omioUrl) {
-      add("Transport", "Omio (live)", openOmio, "neutral", "omio");
-    } else if (!presentByType.hasTransport) {
-      add("Transport", "Kiwitaxi (live)", openTransfers, "neutral", "kiwitaxi");
+    if (!hasFlight) add("Flights", "Aviasales (live)", openFlights, "primary", "aviasales");
+    if (!hasHotel) add("Hotels", "Expedia (live)", openHotels, "primary", "expedia");
+    if (!hasTransport && affiliateUrls.omioUrl) {
+      add("Rail / Bus", "Omio (live)", openOmio, "neutral", "omio");
+    } else if (!hasTransport) {
+      add("Transfers", "Kiwitaxi (live)", openTransfers, "neutral", "kiwitaxi");
     }
-
-    if (!presentByType.hasThings) add("Activities", "GetYourGuide (live)", openThings, "neutral", "getyourguide");
+    if (!hasThings) add("Activities", "GetYourGuide (live)", openThings, "neutral", "getyourguide");
 
     if (btns.length === 0) {
       add("Hotels", "Expedia (live)", openHotels, "primary", "expedia");
       if (affiliateUrls.omioUrl) {
-        add("Transport", "Omio (live)", openOmio, "neutral", "omio");
+        add("Rail / Bus", "Omio (live)", openOmio, "neutral", "omio");
       } else {
         add("Activities", "GetYourGuide (live)", openThings, "neutral", "getyourguide");
       }
@@ -2002,17 +1958,16 @@ export default function TripDetailScreen() {
     cityName,
     originIata,
     primaryMatchId,
-    presentByType.hasTickets,
-    presentByType.hasFlight,
-    presentByType.hasHotel,
-    presentByType.hasTransport,
-    presentByType.hasThings,
     primaryTicketItem,
+    hasTickets,
+    hasFlight,
+    hasHotel,
+    hasTransport,
+    hasThings,
   ]);
 
   const loading = Boolean(tripId && (!tripsLoaded || !savedLoaded));
   const showHeroBanners = pending.length > 0 || saved.length > 0 || booked.length > 0;
-  const bookedWithoutProofCount = booked.filter((x) => !hasProof(x)).length;
 
   return (
     <Background imageSource={getBackground("trips")} overlayOpacity={0.86}>
@@ -2092,7 +2047,6 @@ export default function TripDetailScreen() {
                       <View style={styles.bookedBanner}>
                         <Text style={styles.bookedText}>
                           {booked.length} booked item{booked.length === 1 ? "" : "s"} in Wallet
-                          {bookedWithoutProofCount > 0 ? ` • ${bookedWithoutProofCount} missing proof` : ""}
                         </Text>
                       </View>
                     ) : null}
@@ -2300,10 +2254,7 @@ export default function TripDetailScreen() {
                           </Pressable>
 
                           <View style={styles.matchActionsRow}>
-                            <Pressable
-                              onPress={() => openTicketsForMatch(mid)}
-                              style={[styles.smallBtn, styles.smallBtnWide]}
-                            >
+                            <Pressable onPress={() => openTicketsForMatch(mid)} style={[styles.smallBtn, styles.smallBtnWide]}>
                               <Text style={styles.smallBtnText}>Tickets</Text>
                             </Pressable>
 
@@ -2587,10 +2538,7 @@ export default function TripDetailScreen() {
                               </Text>
                             ) : null}
 
-                            <Text
-                              style={[styles.proofLine, missingProof ? styles.proofLineMissing : undefined]}
-                              numberOfLines={1}
-                            >
+                            <Text style={[styles.proofLine, missingProof ? styles.proofLineMissing : undefined]} numberOfLines={1}>
                               {proofText}
                             </Text>
                           </Pressable>
@@ -2729,10 +2677,6 @@ export default function TripDetailScreen() {
     </Background>
   );
 }
-
-/* -------------------------------------------------------------------------- */
-/* styles                                                                     */
-/* -------------------------------------------------------------------------- */
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },
