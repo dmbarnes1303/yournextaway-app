@@ -1,9 +1,15 @@
-// src/state/tripWorkspace.ts
 import { create } from "zustand";
 
 import { readJson, writeJson } from "@/src/state/persist";
 import type { TripWorkspace, WorkspaceSectionKey } from "@/src/core/tripWorkspace";
-import { makeDefaultTripWorkspace, normalizeOrder } from "@/src/core/tripWorkspace";
+import {
+  cloneWorkspace,
+  isWorkspaceSectionKey,
+  makeDefaultTripWorkspace,
+  normalizeActiveSection,
+  normalizeCollapsed,
+  normalizeOrder,
+} from "@/src/core/tripWorkspace";
 
 type WorkspaceMap = Record<string, TripWorkspace>;
 
@@ -13,63 +19,74 @@ type TripWorkspaceState = {
 
   loadWorkspaces: () => Promise<void>;
 
-  /** Ensure a workspace exists for a tripId and return it */
   ensureWorkspace: (tripId: string) => TripWorkspace;
-
   getWorkspace: (tripId: string) => TripWorkspace | null;
 
   setActiveSection: (tripId: string, section: WorkspaceSectionKey) => Promise<void>;
-
   setSectionOrder: (tripId: string, order: WorkspaceSectionKey[]) => Promise<void>;
-
   toggleCollapsed: (tripId: string, section: WorkspaceSectionKey) => Promise<void>;
-
   setCollapsed: (tripId: string, section: WorkspaceSectionKey, collapsed: boolean) => Promise<void>;
 
   removeWorkspace: (tripId: string) => Promise<void>;
-
   clearAllWorkspaces: () => Promise<void>;
 };
 
 const STORAGE_KEY = "yna_trip_workspaces_v1";
 
+let inflightLoad: Promise<void> | null = null;
+
 function now() {
   return Date.now();
 }
 
-function normalizeWorkspace(x: any): TripWorkspace | null {
-  if (!x || typeof x !== "object") return null;
+function cleanString(value: unknown): string {
+  return String(value ?? "").trim();
+}
 
-  const tripId = String(x.tripId ?? "").trim();
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function normalizeWorkspace(raw: unknown): TripWorkspace | null {
+  if (!isPlainObject(raw)) return null;
+
+  const tripId = cleanString(raw.tripId);
   if (!tripId) return null;
 
-  const sectionOrder = normalizeOrder(Array.isArray(x.sectionOrder) ? x.sectionOrder : undefined);
+  const createdAt =
+    Number.isFinite(Number(raw.createdAt)) && Number(raw.createdAt) > 0 ? Number(raw.createdAt) : now();
 
-  const collapsedRaw = x.collapsed && typeof x.collapsed === "object" ? x.collapsed : {};
-  const collapsed: Partial<Record<WorkspaceSectionKey, boolean>> = {};
-  for (const k of Object.keys(collapsedRaw)) {
-    const key = k as WorkspaceSectionKey;
-    collapsed[key] = !!(collapsedRaw as any)[k];
-  }
-
-  const activeSection =
-    typeof x.activeSection === "string" && x.activeSection.trim() ? (x.activeSection.trim() as WorkspaceSectionKey) : undefined;
-
-  const createdAt = Number.isFinite(Number(x.createdAt)) ? Number(x.createdAt) : now();
-  const updatedAt = Number.isFinite(Number(x.updatedAt)) ? Number(x.updatedAt) : createdAt;
+  const updatedAt =
+    Number.isFinite(Number(raw.updatedAt)) && Number(raw.updatedAt) > 0 ? Number(raw.updatedAt) : createdAt;
 
   return {
     tripId,
-    sectionOrder,
-    collapsed,
-    activeSection,
+    sectionOrder: normalizeOrder(Array.isArray(raw.sectionOrder) ? (raw.sectionOrder as WorkspaceSectionKey[]) : undefined),
+    collapsed: normalizeCollapsed(isPlainObject(raw.collapsed) ? (raw.collapsed as Record<string, unknown>) : undefined),
+    activeSection: normalizeActiveSection(raw.activeSection),
     createdAt,
     updatedAt,
   };
 }
 
+function cloneWorkspaceMap(map: WorkspaceMap): WorkspaceMap {
+  const out: WorkspaceMap = {};
+  for (const key of Object.keys(map)) {
+    out[key] = cloneWorkspace(map[key]);
+  }
+  return out;
+}
+
 async function persist(workspaces: WorkspaceMap) {
-  await writeJson(STORAGE_KEY, workspaces);
+  await writeJson(STORAGE_KEY, cloneWorkspaceMap(workspaces));
+}
+
+function getOrCreateWorkspace(map: WorkspaceMap, tripId: string): TripWorkspace {
+  const id = cleanString(tripId);
+  if (!id) throw new Error("tripId is required");
+
+  const existing = map[id];
+  return existing ? cloneWorkspace(existing) : makeDefaultTripWorkspace(id);
 }
 
 const useTripWorkspaceStore = create<TripWorkspaceState>((set, get) => ({
@@ -77,121 +94,189 @@ const useTripWorkspaceStore = create<TripWorkspaceState>((set, get) => ({
   workspaces: {},
 
   loadWorkspaces: async () => {
-    const raw = await readJson<Record<string, any>>(STORAGE_KEY, {});
-    const next: WorkspaceMap = {};
+    if (get().loaded) return;
+    if (inflightLoad) return inflightLoad;
 
-    for (const key of Object.keys(raw)) {
-      const ws = normalizeWorkspace(raw[key]);
-      if (ws) next[ws.tripId] = ws;
-    }
+    inflightLoad = (async () => {
+      const raw = await readJson<Record<string, unknown>>(STORAGE_KEY, {});
+      const next: WorkspaceMap = {};
 
-    set({ workspaces: next, loaded: true });
+      if (isPlainObject(raw)) {
+        for (const key of Object.keys(raw)) {
+          const ws = normalizeWorkspace(raw[key]);
+          if (!ws) continue;
+          next[ws.tripId] = ws;
+        }
+      }
+
+      set({
+        workspaces: next,
+        loaded: true,
+      });
+
+      try {
+        await persist(next);
+      } catch {
+        // best effort
+      }
+    })()
+      .catch(() => {
+        set({ workspaces: {}, loaded: true });
+      })
+      .finally(() => {
+        inflightLoad = null;
+      });
+
+    return inflightLoad;
   },
 
   ensureWorkspace: (tripId: string) => {
-    const id = String(tripId ?? "").trim();
+    const id = cleanString(tripId);
     if (!id) throw new Error("ensureWorkspace: tripId is required");
 
     const existing = get().workspaces[id];
-    if (existing) return existing;
+    if (existing) return cloneWorkspace(existing);
 
     const ws = makeDefaultTripWorkspace(id);
     const next = { ...get().workspaces, [id]: ws };
-    set({ workspaces: next, loaded: true });
 
-    // Fire-and-forget persist (but still awaited by callers if needed via explicit methods)
+    set({
+      workspaces: next,
+      loaded: true,
+    });
+
     void persist(next);
-
-    return ws;
+    return cloneWorkspace(ws);
   },
 
   getWorkspace: (tripId: string) => {
-    const id = String(tripId ?? "").trim();
+    const id = cleanString(tripId);
     if (!id) return null;
-    return get().workspaces[id] ?? null;
+
+    const existing = get().workspaces[id];
+    return existing ? cloneWorkspace(existing) : null;
   },
 
   setActiveSection: async (tripId, section) => {
-    const id = String(tripId ?? "").trim();
-    if (!id) return;
+    const id = cleanString(tripId);
+    if (!id || !isWorkspaceSectionKey(section)) return;
 
-    const cur = get().workspaces[id] ?? makeDefaultTripWorkspace(id);
-    const nextWs: TripWorkspace = { ...cur, activeSection: section, updatedAt: now() };
+    const current = getOrCreateWorkspace(get().workspaces, id);
+
+    const nextWs: TripWorkspace = {
+      ...current,
+      activeSection: section,
+      updatedAt: now(),
+    };
 
     const next = { ...get().workspaces, [id]: nextWs };
-    set({ workspaces: next, loaded: true });
+
+    set({
+      workspaces: next,
+      loaded: true,
+    });
+
     await persist(next);
   },
 
   setSectionOrder: async (tripId, order) => {
-    const id = String(tripId ?? "").trim();
+    const id = cleanString(tripId);
     if (!id) return;
 
-    const cur = get().workspaces[id] ?? makeDefaultTripWorkspace(id);
-    const nextOrder = normalizeOrder(order);
+    const current = getOrCreateWorkspace(get().workspaces, id);
 
-    const nextWs: TripWorkspace = { ...cur, sectionOrder: nextOrder, updatedAt: now() };
+    const nextWs: TripWorkspace = {
+      ...current,
+      sectionOrder: normalizeOrder(order),
+      updatedAt: now(),
+    };
+
     const next = { ...get().workspaces, [id]: nextWs };
 
-    set({ workspaces: next, loaded: true });
+    set({
+      workspaces: next,
+      loaded: true,
+    });
+
     await persist(next);
   },
 
   toggleCollapsed: async (tripId, section) => {
-    const id = String(tripId ?? "").trim();
-    if (!id) return;
+    const id = cleanString(tripId);
+    if (!id || !isWorkspaceSectionKey(section)) return;
 
-    const cur = get().workspaces[id] ?? makeDefaultTripWorkspace(id);
-    const prev = !!cur.collapsed?.[section];
+    const current = getOrCreateWorkspace(get().workspaces, id);
+    const previous = Boolean(current.collapsed?.[section]);
 
     const nextWs: TripWorkspace = {
-      ...cur,
-      collapsed: { ...cur.collapsed, [section]: !prev },
+      ...current,
+      collapsed: {
+        ...current.collapsed,
+        [section]: !previous,
+      },
       updatedAt: now(),
     };
 
     const next = { ...get().workspaces, [id]: nextWs };
-    set({ workspaces: next, loaded: true });
+
+    set({
+      workspaces: next,
+      loaded: true,
+    });
+
     await persist(next);
   },
 
   setCollapsed: async (tripId, section, collapsed) => {
-    const id = String(tripId ?? "").trim();
-    if (!id) return;
+    const id = cleanString(tripId);
+    if (!id || !isWorkspaceSectionKey(section)) return;
 
-    const cur = get().workspaces[id] ?? makeDefaultTripWorkspace(id);
+    const current = getOrCreateWorkspace(get().workspaces, id);
 
     const nextWs: TripWorkspace = {
-      ...cur,
-      collapsed: { ...cur.collapsed, [section]: !!collapsed },
+      ...current,
+      collapsed: {
+        ...current.collapsed,
+        [section]: Boolean(collapsed),
+      },
       updatedAt: now(),
     };
 
     const next = { ...get().workspaces, [id]: nextWs };
-    set({ workspaces: next, loaded: true });
+
+    set({
+      workspaces: next,
+      loaded: true,
+    });
+
     await persist(next);
   },
 
   removeWorkspace: async (tripId) => {
-    const id = String(tripId ?? "").trim();
+    const id = cleanString(tripId);
     if (!id) return;
 
     const next = { ...get().workspaces };
     delete next[id];
 
-    set({ workspaces: next, loaded: true });
+    set({
+      workspaces: next,
+      loaded: true,
+    });
+
     await persist(next);
   },
 
   clearAllWorkspaces: async () => {
-    set({ workspaces: {}, loaded: true });
+    set({
+      workspaces: {},
+      loaded: true,
+    });
+
     await persist({});
   },
 }));
 
-/**
- * Convenience wrapper, matches your tripsStore style.
- */
 const tripWorkspaceStore = {
   getState: useTripWorkspaceStore.getState,
   setState: useTripWorkspaceStore.setState,
