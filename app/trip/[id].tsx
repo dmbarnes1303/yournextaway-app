@@ -7,9 +7,6 @@ import {
   Pressable,
   ActivityIndicator,
   Alert,
-  TextInput,
-  Keyboard,
-  Platform,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
@@ -21,6 +18,7 @@ import TripProgressStrip from "@/src/components/TripProgressStrip";
 import NextBestActionCard, { type NextAction } from "@/src/components/NextBestActionCard";
 import TripHealthScore from "@/src/components/TripHealthScore";
 import TripMatchesCard from "@/src/components/trip/TripMatchesCard";
+import TripWorkspaceCard from "@/src/components/trip/TripWorkspaceCard";
 
 import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
@@ -31,12 +29,9 @@ import savedItemsStore from "@/src/state/savedItems";
 import preferencesStore from "@/src/state/preferences";
 import tripWorkspaceStore from "@/src/state/tripWorkspace";
 
-import type { SavedItem, SavedItemType, WalletAttachment } from "@/src/core/savedItemTypes";
-import { getSavedItemTypeLabel } from "@/src/core/savedItemTypes";
-import { getPartner, type PartnerId } from "@/src/core/partners";
+import type { SavedItem, SavedItemType } from "@/src/core/savedItemTypes";
 import type { WorkspaceSectionKey, TripWorkspace } from "@/src/core/tripWorkspace";
 import {
-  WORKSPACE_SECTIONS,
   DEFAULT_SECTION_ORDER,
   computeWorkspaceSnapshot,
   groupSavedItemsBySection,
@@ -131,153 +126,6 @@ function statusLabel(s: SavedItem["status"]) {
   return "Archived";
 }
 
-function providerLabel(provider?: string | null): string {
-  const raw = clean(provider).toLowerCase();
-  if (raw === "footballticketsnet") return "FootballTicketNet";
-  if (raw === "sportsevents365") return "SportsEvents365";
-  if (raw === "gigsberg") return "Gigsberg";
-  if (raw === "aviasales") return "Aviasales";
-  if (raw === "expedia" || raw === "expedia_stays") return "Expedia";
-  if (raw === "kiwitaxi") return "KiwiTaxi";
-  if (raw === "omio") return "Omio";
-  if (raw === "getyourguide") return "GetYourGuide";
-  return provider || "Provider";
-}
-
-function providerShort(provider?: string | null): string {
-  const raw = clean(provider).toLowerCase();
-  if (raw === "footballticketsnet") return "FTN";
-  if (raw === "sportsevents365") return "365";
-  if (raw === "gigsberg") return "G";
-  if (raw === "aviasales") return "AV";
-  if (raw === "expedia" || raw === "expedia_stays") return "EX";
-  if (raw === "kiwitaxi") return "KT";
-  if (raw === "omio") return "OM";
-  if (raw === "getyourguide") return "GYG";
-  return "P";
-}
-
-function providerBadgeStyle(provider?: string | null) {
-  const raw = clean(provider).toLowerCase();
-
-  if (raw === "footballticketsnet") {
-    return {
-      borderColor: "rgba(120,170,255,0.35)",
-      backgroundColor: "rgba(120,170,255,0.12)",
-      textColor: "rgba(205,225,255,1)",
-    };
-  }
-
-  if (raw === "sportsevents365") {
-    return {
-      borderColor: "rgba(87,162,56,0.35)",
-      backgroundColor: "rgba(87,162,56,0.12)",
-      textColor: "rgba(208,240,192,1)",
-    };
-  }
-
-  if (raw === "gigsberg") {
-    return {
-      borderColor: "rgba(255,200,80,0.35)",
-      backgroundColor: "rgba(255,200,80,0.12)",
-      textColor: "rgba(255,226,160,1)",
-    };
-  }
-
-  if (raw === "aviasales") {
-    return {
-      borderColor: "rgba(120,170,255,0.30)",
-      backgroundColor: "rgba(120,170,255,0.10)",
-      textColor: "rgba(210,225,255,1)",
-    };
-  }
-
-  if (raw === "expedia" || raw === "expedia_stays") {
-    return {
-      borderColor: "rgba(87,162,56,0.30)",
-      backgroundColor: "rgba(87,162,56,0.10)",
-      textColor: "rgba(210,240,205,1)",
-    };
-  }
-
-  if (raw === "kiwitaxi") {
-    return {
-      borderColor: "rgba(255,160,120,0.30)",
-      backgroundColor: "rgba(255,160,120,0.10)",
-      textColor: "rgba(255,220,205,1)",
-    };
-  }
-
-  if (raw === "omio") {
-    return {
-      borderColor: "rgba(200,120,255,0.30)",
-      backgroundColor: "rgba(200,120,255,0.10)",
-      textColor: "rgba(235,210,255,1)",
-    };
-  }
-
-  if (raw === "getyourguide") {
-    return {
-      borderColor: "rgba(255,90,120,0.30)",
-      backgroundColor: "rgba(255,90,120,0.10)",
-      textColor: "rgba(255,215,225,1)",
-    };
-  }
-
-  return {
-    borderColor: "rgba(255,255,255,0.15)",
-    backgroundColor: "rgba(255,255,255,0.06)",
-    textColor: theme.colors.text,
-  };
-}
-
-function safePartnerName(item: SavedItem) {
-  if (!item.partnerId) return null;
-  try {
-    return getPartner(item.partnerId as any).name;
-  } catch {
-    const provider = String(item.metadata?.ticketProvider ?? "").trim();
-    if (provider === "footballticketsnet") return "FootballTicketNet";
-    if (provider === "sportsevents365") return "SportsEvents365";
-    if (provider === "gigsberg") return "Gigsberg";
-    if (provider === "omio") return "Omio";
-    return null;
-  }
-}
-
-function safeTypeLabel(type: SavedItemType) {
-  try {
-    return getSavedItemTypeLabel(type);
-  } catch {
-    return "Notes";
-  }
-}
-
-function shortDomain(url?: string) {
-  if (!url) return "";
-  try {
-    const u = new URL(url);
-    return u.hostname.replace(/^www\./, "");
-  } catch {
-    return "";
-  }
-}
-
-function buildMetaLine(item: SavedItem) {
-  const bits: string[] = [];
-  bits.push(safeTypeLabel(item.type));
-
-  const p = safePartnerName(item);
-  if (p) bits.push(p);
-
-  if (item.partnerUrl) {
-    const d = shortDomain(item.partnerUrl);
-    if (d) bits.push(d);
-  }
-
-  return bits.join(" • ");
-}
-
 function livePriceLine(item: SavedItem): string | null {
   const hasUrl = !!clean(item.partnerUrl);
   if (!hasUrl) return null;
@@ -290,68 +138,11 @@ function livePriceLine(item: SavedItem): string | null {
   }
 
   if (resolvedPrice) {
-    const pName = safePartnerName(item);
+    const pName = clean(item.partnerId);
     return pName ? `From ${resolvedPrice} on ${pName}` : `From ${resolvedPrice}`;
   }
 
-  const pName = safePartnerName(item);
-  const dom = shortDomain(item.partnerUrl);
-  const tail = pName ? pName : dom ? dom : "partner";
-  return `Live price on ${tail}`;
-}
-
-function getAttachmentCount(item: SavedItem | null): number {
-  const atts = Array.isArray(item?.attachments) ? (item.attachments as WalletAttachment[]) : [];
-  return atts.length;
-}
-
-function hasProof(item: SavedItem | null): boolean {
-  return getAttachmentCount(item) > 0;
-}
-
-function proofStateText(item: SavedItem): string {
-  const count = getAttachmentCount(item);
-  if (count <= 0) return "No proof attached yet";
-  return `${count} proof file${count === 1 ? "" : "s"} attached`;
-}
-
-function ProviderBadge({
-  provider,
-  size = "sm",
-  showLabel = false,
-}: {
-  provider?: string | null;
-  size?: "sm" | "md";
-  showLabel?: boolean;
-}) {
-  const badge = providerBadgeStyle(provider);
-  const short = providerShort(provider);
-  const label = providerLabel(provider);
-
-  const circleSize = size === "md" ? 30 : 24;
-  const fontSize = size === "md" ? 12 : 11;
-
-  return (
-    <View style={[styles.providerBadgeWrap, showLabel && styles.providerBadgeWrapLabeled]}>
-      <View
-        style={[
-          styles.providerBadgeCircle,
-          {
-            width: circleSize,
-            height: circleSize,
-            borderRadius: circleSize / 2,
-            borderColor: badge.borderColor,
-            backgroundColor: badge.backgroundColor,
-          },
-        ]}
-      >
-        <Text style={[styles.providerBadgeCircleText, { color: badge.textColor, fontSize }]}>
-          {short}
-        </Text>
-      </View>
-      {showLabel ? <Text style={styles.providerBadgeLabel}>{label}</Text> : null}
-    </View>
-  );
+  return "Live price on partner";
 }
 
 function parseIsoToDate(iso?: string | null): Date | null {
@@ -562,7 +353,7 @@ function normalizeTicketOptions(resolved: TicketResolutionResult | null): Ticket
     if (aHasPrice && !bHasPrice) return -1;
     if (!aHasPrice && bHasPrice) return 1;
 
-    return providerLabel(a.provider).localeCompare(providerLabel(b.provider));
+    return a.provider.localeCompare(b.provider);
   });
 
   if (values.length > 0) return values;
@@ -598,13 +389,6 @@ function itemResolvedScore(item: SavedItem | null): number | null {
   if (!item) return null;
   const raw = item.metadata?.score;
   return typeof raw === "number" && Number.isFinite(raw) ? raw : null;
-}
-
-function sectionStateLabel(sectionKey: WorkspaceSectionKey, total: number) {
-  const title = WORKSPACE_SECTIONS[sectionKey].title;
-  if (total <= 0) return `No ${title.toLowerCase()} yet`;
-  if (total === 1) return "1 item";
-  return `${total} items`;
 }
 
 export default function TripDetailScreen() {
@@ -695,11 +479,8 @@ export default function TripDetailScreen() {
     const sync = () => {
       const s = tripWorkspaceStore.getState();
       setWorkspaceLoaded(s.loaded);
-      if (routeTripId) {
-        setWorkspace(s.workspaces[routeTripId] ?? null);
-      } else {
-        setWorkspace(null);
-      }
+      if (routeTripId) setWorkspace(s.workspaces[routeTripId] ?? null);
+      else setWorkspace(null);
     };
 
     const unsub = tripWorkspaceStore.subscribe(sync);
@@ -779,9 +560,7 @@ export default function TripDetailScreen() {
     let cancelled = false;
 
     async function run() {
-      const ids = numericMatchIds;
-
-      if (ids.length === 0) {
+      if (numericMatchIds.length === 0) {
         setFixturesById({});
         setFxLoading(false);
         return;
@@ -791,10 +570,10 @@ export default function TripDetailScreen() {
 
       try {
         const map: Record<string, FixtureListRow> = {};
-        for (const id of ids) {
+        for (const id of numericMatchIds) {
           try {
-            const r = await getFixtureById(id);
-            if (r) map[String(id)] = r;
+            const row = await getFixtureById(id);
+            if (row) map[String(id)] = row;
           } catch {}
         }
         if (!cancelled) setFixturesById(map);
@@ -827,7 +606,6 @@ export default function TripDetailScreen() {
     if (fixtureVenueCity) return fixtureVenueCity;
 
     if (trip?.cityId) return trip.cityId;
-
     return "Trip";
   }, [trip, primaryFixture]);
 
@@ -867,10 +645,7 @@ export default function TripDetailScreen() {
   }, [affiliateCtx]);
 
   const pending = useMemo(() => savedItems.filter((x) => x.status === "pending"), [savedItems]);
-  const saved = useMemo(
-    () => savedItems.filter((x) => x.status === "saved" && x.type !== "note"),
-    [savedItems]
-  );
+  const saved = useMemo(() => savedItems.filter((x) => x.status === "saved" && x.type !== "note"), [savedItems]);
   const booked = useMemo(() => savedItems.filter((x) => x.status === "booked"), [savedItems]);
 
   const primaryHomeName = useMemo(() => {
@@ -903,10 +678,7 @@ export default function TripDetailScreen() {
   );
 
   const stadiumName = useMemo(() => clean((primaryLogistics as any)?.stadium), [primaryLogistics]);
-  const stadiumCity = useMemo(
-    () => clean((primaryLogistics as any)?.city ?? cityName),
-    [primaryLogistics, cityName]
-  );
+  const stadiumCity = useMemo(() => clean((primaryLogistics as any)?.city ?? cityName), [primaryLogistics, cityName]);
 
   const stadiumMapsUrl = useMemo(() => {
     const q = [stadiumName || "stadium", stadiumCity].filter(Boolean).join(" ").trim();
@@ -917,18 +689,14 @@ export default function TripDetailScreen() {
     const arr = Array.isArray((primaryLogistics as any)?.stay?.bestAreas)
       ? (primaryLogistics as any).stay.bestAreas
       : [];
-    return arr
-      .map((x: any) => ({ area: clean(x?.area), notes: clean(x?.notes) }))
-      .filter((x: any) => x.area);
+    return arr.map((x: any) => ({ area: clean(x?.area), notes: clean(x?.notes) })).filter((x: any) => x.area);
   }, [primaryLogistics]);
 
   const stayBudgetAreas = useMemo(() => {
     const arr = Array.isArray((primaryLogistics as any)?.stay?.budgetAreas)
       ? (primaryLogistics as any).stay.budgetAreas
       : [];
-    return arr
-      .map((x: any) => ({ area: clean(x?.area), notes: clean(x?.notes) }))
-      .filter((x: any) => x.area);
+    return arr.map((x: any) => ({ area: clean(x?.area), notes: clean(x?.notes) })).filter((x: any) => x.area);
   }, [primaryLogistics]);
 
   const transportStops = useMemo(() => {
@@ -945,10 +713,7 @@ export default function TripDetailScreen() {
     const tips = Array.isArray((primaryLogistics as any)?.transport?.tips)
       ? (primaryLogistics as any).transport.tips
       : [];
-    return tips
-      .slice(0, 3)
-      .map((t: any) => clean(t))
-      .filter(Boolean);
+    return tips.slice(0, 3).map((t: any) => clean(t)).filter(Boolean);
   }, [primaryLogistics]);
 
   const lateTransportNote = useMemo(() => {
@@ -991,7 +756,7 @@ export default function TripDetailScreen() {
       reasons: rankReasonsText(rankedTrip),
       score:
         typeof (rankedTrip as any)?.score === "number" && Number.isFinite((rankedTrip as any)?.score)
-          ? Math.round((rankedTrip as any).score)
+          ? Math.round((rankedTrip as any)?.score)
           : null,
     };
   }, [rankedTrip]);
@@ -1014,9 +779,7 @@ export default function TripDetailScreen() {
 
   const ticketsByMatchId = useMemo(() => {
     const map: Record<string, SavedItem | null> = {};
-    for (const mid of numericMatchIds) {
-      map[String(mid)] = getTicketItemForFixture(String(mid));
-    }
+    for (const mid of numericMatchIds) map[String(mid)] = getTicketItemForFixture(String(mid));
     return map;
   }, [numericMatchIds, savedItems]);
 
@@ -1170,9 +933,7 @@ export default function TripDetailScreen() {
       });
 
       const nextSection = args.savedItemType ? sectionForSavedItemType(args.savedItemType) : undefined;
-      if (nextSection) {
-        void setActiveWorkspaceSection(nextSection);
-      }
+      if (nextSection) void setActiveWorkspaceSection(nextSection);
     } catch {
       await openUntracked(args.url);
     }
@@ -1311,7 +1072,6 @@ export default function TripDetailScreen() {
       } as any);
 
       setNoteText("");
-      Keyboard.dismiss();
       void setActiveWorkspaceSection("notes");
     } catch {
       Alert.alert("Couldn’t save note");
@@ -1330,24 +1090,6 @@ export default function TripDetailScreen() {
         { text: "Archive", style: "destructive", onPress: () => archiveItem(item) },
       ],
       { cancelable: true }
-    );
-  }
-
-  function StatusBadge({ s }: { s: SavedItem["status"] }) {
-    const label = statusLabel(s);
-    const style =
-      s === "pending"
-        ? styles.badgePending
-        : s === "saved"
-          ? styles.badgeSaved
-          : s === "booked"
-            ? styles.badgeBooked
-            : styles.badgeArchived;
-
-    return (
-      <View style={[styles.badge, style]}>
-        <Text style={styles.badgeText}>{label}</Text>
-      </View>
     );
   }
 
@@ -1501,13 +1243,13 @@ export default function TripDetailScreen() {
       top
         .map(
           (option, index) =>
-            `${index + 1}. ${providerLabel(option.provider)}${clean(option.priceText) ? ` • ${clean(option.priceText)}` : ""}`
+            `${index + 1}. ${clean(option.provider)}${clean(option.priceText) ? ` • ${clean(option.priceText)}` : ""}`
         )
         .join("\n"),
       [
         { text: "Cancel", style: "cancel" },
         ...top.map((option) => ({
-          text: providerLabel(option.provider),
+          text: clean(option.provider),
           onPress: () =>
             openTicketOptionForMatch({
               ...args,
@@ -1620,14 +1362,6 @@ export default function TripDetailScreen() {
   const tripCount = useMemo(() => (tripsStore.getState().trips?.length ?? 0) as number, [tripsLoaded]);
 
   const progressItems = useMemo(() => {
-    const openOrExplainTickets = () => {
-      if (!primaryMatchId) {
-        Alert.alert("Add a match first", "Add a match to unlock tickets + match planning.");
-        return;
-      }
-      openTicketsForMatch(primaryMatchId);
-    };
-
     const openHotels = () => {
       const url = affiliateUrls?.hotelsUrl;
       if (!url) return Alert.alert("Not ready", "We need a city + dates saved to build booking links.");
@@ -1687,7 +1421,18 @@ export default function TripDetailScreen() {
     };
 
     return [
-      { key: "tickets" as const, label: "Tickets", state: progress.tickets, onPress: openOrExplainTickets },
+      {
+        key: "tickets" as const,
+        label: "Tickets",
+        state: progress.tickets,
+        onPress: () => {
+          if (!primaryMatchId) {
+            Alert.alert("Add a match first", "Add a match to unlock tickets + match planning.");
+            return;
+          }
+          openTicketsForMatch(primaryMatchId);
+        },
+      },
       { key: "flight" as const, label: "Flights", state: progress.flight, onPress: openFlights },
       { key: "hotel" as const, label: "Hotel", state: progress.hotel, onPress: openHotels },
       {
@@ -1948,11 +1693,8 @@ export default function TripDetailScreen() {
 
     if (!hasFlight) add("Flights", "Aviasales (live)", openFlights, "primary", "aviasales");
     if (!hasHotel) add("Hotels", "Expedia (live)", openHotels, "primary", "expedia");
-    if (!hasTransport && affiliateUrls.omioUrl) {
-      add("Rail / Bus", "Omio (live)", openOmio, "neutral", "omio");
-    } else if (!hasTransport) {
-      add("Transfers", "Kiwitaxi (live)", openTransfers, "neutral", "kiwitaxi");
-    }
+    if (!hasTransport && affiliateUrls.omioUrl) add("Rail / Bus", "Omio (live)", openOmio, "neutral", "omio");
+    else if (!hasTransport) add("Transfers", "Kiwitaxi (live)", openTransfers, "neutral", "kiwitaxi");
     if (!hasThings) add("Activities", "GetYourGuide (live)", openThings, "neutral", "getyourguide");
 
     if (btns.length === 0) {
@@ -1978,326 +1720,6 @@ export default function TripDetailScreen() {
 
   const loading = Boolean(routeTripId && (!tripsLoaded || !savedLoaded || !workspaceLoaded));
   const showHeroBanners = pending.length > 0 || saved.length > 0 || booked.length > 0;
-
-  function renderWorkspaceItem(item: SavedItem) {
-    const lp = livePriceLine(item);
-    const provider = ticketProviderFromItem(item);
-    const proofText = proofStateText(item);
-    const missingProof = item.status === "booked" && !hasProof(item);
-    const proofBusy = proofBusyId === item.id;
-    const isNote = item.type === "note" || item.type === "other";
-
-    return (
-      <View key={item.id} style={styles.itemRow}>
-        <Pressable style={{ flex: 1 }} onPress={() => (isNote ? openNoteActions(item) : openSavedItem(item))}>
-          <View style={styles.itemTitleRow}>
-            <Text style={styles.itemTitle} numberOfLines={1}>
-              {item.title}
-            </Text>
-            <StatusBadge s={item.status} />
-          </View>
-
-          <View style={styles.itemMetaRow}>
-            {provider ? <ProviderBadge provider={provider} size="sm" /> : null}
-            <Text style={styles.itemMeta} numberOfLines={1}>
-              {isNote ? "Notes" : buildMetaLine(item)}
-            </Text>
-          </View>
-
-          {lp ? (
-            <Text style={item.status === "booked" ? styles.paidLine : styles.livePriceLine} numberOfLines={1}>
-              {lp}
-            </Text>
-          ) : null}
-
-          {item.status === "booked" ? (
-            <Text style={[styles.proofLine, missingProof ? styles.proofLineMissing : undefined]} numberOfLines={1}>
-              {proofText}
-            </Text>
-          ) : null}
-        </Pressable>
-
-        <View style={styles.itemActions}>
-          {item.status !== "booked" ? (
-            <Pressable onPress={() => confirmMarkBooked(item)} style={styles.smallBtn}>
-              <Text style={styles.smallBtnText}>Booked</Text>
-            </Pressable>
-          ) : missingProof ? (
-            <Pressable
-              onPress={() => addProofForBookedItem(item)}
-              style={[styles.smallBtn, styles.smallBtnPrimary, proofBusy && styles.smallBtnDisabled]}
-              disabled={proofBusy}
-            >
-              <Text style={styles.smallBtnText}>{proofBusy ? "Adding…" : "Add proof"}</Text>
-            </Pressable>
-          ) : (
-            <Pressable onPress={onViewWallet} style={styles.smallBtn}>
-              <Text style={styles.smallBtnText}>Wallet</Text>
-            </Pressable>
-          )}
-
-          {item.status === "saved" ? (
-            <Pressable onPress={() => confirmMoveToPending(item)} style={styles.smallBtn}>
-              <Text style={styles.smallBtnText}>Pending</Text>
-            </Pressable>
-          ) : null}
-
-          <Pressable onPress={() => confirmArchive(item)} style={[styles.smallBtn, styles.smallBtnDanger]}>
-            <Text style={styles.smallBtnText}>Archive</Text>
-          </Pressable>
-        </View>
-      </View>
-    );
-  }
-
-  function renderSectionContent(sectionKey: WorkspaceSectionKey) {
-    const items = groupedBySection[sectionKey] ?? [];
-
-    if (sectionKey === "tickets") {
-      return (
-        <>
-          {primaryMatchId ? (
-            <Pressable onPress={() => openTicketsForMatch(primaryMatchId)} style={styles.sectionCta}>
-              <Text style={styles.sectionCtaTitle}>Open live ticket options</Text>
-              <Text style={styles.sectionCtaBody}>
-                Compare providers for the primary match and save the route into the workspace.
-              </Text>
-            </Pressable>
-          ) : (
-            <EmptyState title="No match selected" message="Add a match first to unlock ticket planning." />
-          )}
-
-          {items.length > 0 ? <View style={{ gap: 10 }}>{items.map(renderWorkspaceItem)}</View> : null}
-        </>
-      );
-    }
-
-    if (sectionKey === "stay") {
-      return (
-        <>
-          {affiliateUrls?.hotelsUrl ? (
-            <Pressable
-              onPress={() =>
-                openTrackedPartner({
-                  partnerId: "expedia" as PartnerId,
-                  url: affiliateUrls.hotelsUrl!,
-                  savedItemType: "hotel",
-                  title: `Hotels in ${cityName}`,
-                  metadata: { city: cityName, startDate: trip?.startDate, endDate: trip?.endDate, priceMode: "live" },
-                })
-              }
-              style={styles.sectionCta}
-            >
-              <Text style={styles.sectionCtaTitle}>Open live stays</Text>
-              <Text style={styles.sectionCtaBody}>
-                Use the stay guidance below to avoid booking a cheap place in a useless area.
-              </Text>
-            </Pressable>
-          ) : null}
-
-          {stayBestAreas.length > 0 || stayBudgetAreas.length > 0 ? (
-            <View style={styles.guidanceMiniBox}>
-              <Text style={styles.guidanceMiniTitle}>Area shortlist</Text>
-              {stayBestAreas.slice(0, 2).map((x, idx) => (
-                <Text key={`stay-best-${idx}`} style={styles.guidanceMiniLine}>
-                  • {x.area}
-                  {x.notes ? ` — ${x.notes}` : ""}
-                </Text>
-              ))}
-              {stayBudgetAreas.slice(0, 2).map((x, idx) => (
-                <Text key={`stay-budget-${idx}`} style={styles.guidanceMiniLine}>
-                  • {x.area}
-                  {x.notes ? ` — ${x.notes}` : ""}
-                </Text>
-              ))}
-            </View>
-          ) : null}
-
-          {items.length > 0 ? (
-            <View style={{ gap: 10 }}>{items.map(renderWorkspaceItem)}</View>
-          ) : (
-            <EmptyState title="No stay items yet" message="Save hotels here so the trip isn’t just a vague idea." />
-          )}
-        </>
-      );
-    }
-
-    if (sectionKey === "travel") {
-      return (
-        <>
-          <View style={styles.sectionActionRow}>
-            {affiliateUrls?.flightsUrl ? (
-              <Pressable
-                onPress={() =>
-                  openTrackedPartner({
-                    partnerId: "aviasales" as PartnerId,
-                    url: affiliateUrls.flightsUrl!,
-                    savedItemType: "flight",
-                    title: `Flights to ${cityName}`,
-                    metadata: { city: cityName, originIata: cleanUpper3(originIata, "LON"), priceMode: "live" },
-                  })
-                }
-                style={[styles.smallActionBtn, styles.smallActionBtnPrimary]}
-              >
-                <Text style={styles.smallActionBtnText}>Flights</Text>
-              </Pressable>
-            ) : null}
-
-            {affiliateUrls?.omioUrl ? (
-              <Pressable
-                onPress={() =>
-                  openTrackedPartner({
-                    partnerId: "omio" as PartnerId,
-                    url: affiliateUrls.omioUrl!,
-                    savedItemType: "train",
-                    title: `Trains & buses in ${cityName}`,
-                    metadata: {
-                      city: cityName,
-                      startDate: trip?.startDate,
-                      endDate: trip?.endDate,
-                      priceMode: "live",
-                      transportMode: "rail_bus",
-                    },
-                  })
-                }
-                style={styles.smallActionBtn}
-              >
-                <Text style={styles.smallActionBtnText}>Rail / Bus</Text>
-              </Pressable>
-            ) : null}
-          </View>
-
-          {items.length > 0 ? (
-            <View style={{ gap: 10 }}>{items.map(renderWorkspaceItem)}</View>
-          ) : (
-            <EmptyState title="No travel items yet" message="Flights or rail should live here, not in your head." />
-          )}
-        </>
-      );
-    }
-
-    if (sectionKey === "transfers") {
-      return (
-        <>
-          {affiliateUrls?.transfersUrl ? (
-            <Pressable
-              onPress={() =>
-                openTrackedPartner({
-                  partnerId: "kiwitaxi" as PartnerId,
-                  url: affiliateUrls.transfersUrl!,
-                  savedItemType: "transfer",
-                  title: `Transfers in ${cityName}`,
-                  metadata: { city: cityName, startDate: trip?.startDate, endDate: trip?.endDate, priceMode: "live" },
-                })
-              }
-              style={styles.sectionCta}
-            >
-              <Text style={styles.sectionCtaTitle}>Open transfer options</Text>
-              <Text style={styles.sectionCtaBody}>
-                Sort airport-to-city and city-to-stadium movement before it becomes a pain.
-              </Text>
-            </Pressable>
-          ) : null}
-
-          {transportStops.length > 0 ? (
-            <View style={styles.guidanceMiniBox}>
-              <Text style={styles.guidanceMiniTitle}>Useful transport stops</Text>
-              {transportStops.map((line, idx) => (
-                <Text key={`transport-stop-${idx}`} style={styles.guidanceMiniLine}>
-                  • {line}
-                </Text>
-              ))}
-            </View>
-          ) : null}
-
-          {items.length > 0 ? (
-            <View style={{ gap: 10 }}>{items.map(renderWorkspaceItem)}</View>
-          ) : (
-            <EmptyState title="No transfer items yet" message="This is where local movement should be sorted." />
-          )}
-        </>
-      );
-    }
-
-    if (sectionKey === "things") {
-      return (
-        <>
-          {affiliateUrls?.experiencesUrl ? (
-            <Pressable
-              onPress={() =>
-                openTrackedPartner({
-                  partnerId: "getyourguide" as PartnerId,
-                  url: affiliateUrls.experiencesUrl!,
-                  savedItemType: "things",
-                  title: `Experiences in ${cityName}`,
-                  metadata: { city: cityName, priceMode: "live" },
-                })
-              }
-              style={styles.sectionCta}
-            >
-              <Text style={styles.sectionCtaTitle}>Open activities</Text>
-              <Text style={styles.sectionCtaBody}>
-                Only add things that genuinely improve the trip. Don’t clutter it with filler.
-              </Text>
-            </Pressable>
-          ) : null}
-
-          {items.length > 0 ? (
-            <View style={{ gap: 10 }}>{items.map(renderWorkspaceItem)}</View>
-          ) : (
-            <EmptyState title="No things saved yet" message="This section is optional, but useful when it earns its place." />
-          )}
-        </>
-      );
-    }
-
-    if (sectionKey === "insurance") {
-      return items.length > 0 ? (
-        <View style={{ gap: 10 }}>{items.map(renderWorkspaceItem)}</View>
-      ) : (
-        <EmptyState title="No insurance saved yet" message="Use this section for cover and policy records." />
-      );
-    }
-
-    if (sectionKey === "claims") {
-      return items.length > 0 ? (
-        <View style={{ gap: 10 }}>{items.map(renderWorkspaceItem)}</View>
-      ) : (
-        <EmptyState title="No claim items yet" message="Use this section for compensation, refund and delay evidence." />
-      );
-    }
-
-    return (
-      <>
-        <View style={styles.noteBox}>
-          <TextInput
-            value={noteText}
-            onChangeText={setNoteText}
-            placeholder="Add a note (tickets, hotel shortlist, reminders, anything)…"
-            placeholderTextColor={theme.colors.textSecondary}
-            style={styles.noteInput}
-            multiline
-          />
-
-          <Pressable
-            onPress={addNote}
-            disabled={noteSaving}
-            style={[styles.noteSaveBtn, noteSaving && { opacity: 0.7 }]}
-          >
-            <Text style={styles.noteSaveText}>{noteSaving ? "Saving…" : "Save note"}</Text>
-          </Pressable>
-        </View>
-
-        {items.length > 0 ? (
-          <View style={{ gap: 10, marginTop: 10 }}>{items.map(renderWorkspaceItem)}</View>
-        ) : (
-          <View style={{ marginTop: 10 }}>
-            <EmptyState title="No notes yet" message="Notes you save for this trip appear here." />
-          </View>
-        )}
-      </>
-    );
-  }
 
   return (
     <Background imageSource={getBackground("trips")} overlayOpacity={0.86}>
@@ -2404,9 +1826,7 @@ export default function TripDetailScreen() {
                         </View>
                       ) : null}
                     </View>
-                    {tripFinderSummary.reasons ? (
-                      <Text style={styles.tripFinderReasons}>{tripFinderSummary.reasons}</Text>
-                    ) : null}
+                    {tripFinderSummary.reasons ? <Text style={styles.tripFinderReasons}>{tripFinderSummary.reasons}</Text> : null}
                   </View>
                 ) : null}
 
@@ -2452,7 +1872,6 @@ export default function TripDetailScreen() {
                       >
                         <View style={styles.smartBtnTop}>
                           <Text style={styles.smartBtnText}>{b.title}</Text>
-                          {b.provider ? <ProviderBadge provider={b.provider} size="sm" /> : null}
                         </View>
                         <Text style={styles.smartBtnSub}>{b.sub}</Text>
                       </Pressable>
@@ -2482,67 +1901,42 @@ export default function TripDetailScreen() {
                 getLivePriceLine={livePriceLine}
               />
 
-              <GlassCard style={styles.card}>
-                <View style={styles.sectionTitleRow}>
-                  <Text style={styles.sectionTitle}>Workspace</Text>
-                  <Text style={styles.sectionSub}>{workspaceSnapshot.activeTotal} active items</Text>
-                </View>
-
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.workspaceTabsRow}>
-                  {sectionOrder.map((sectionKey) => {
-                    const total = workspaceSnapshot.sectionActiveTotals[sectionKey] ?? 0;
-                    const selected = activeSection === sectionKey;
-
-                    return (
-                      <Pressable
-                        key={sectionKey}
-                        onPress={() => setActiveWorkspaceSection(sectionKey)}
-                        style={[styles.workspaceTab, selected && styles.workspaceTabActive]}
-                      >
-                        <Text style={[styles.workspaceTabTitle, selected && styles.workspaceTabTitleActive]}>
-                          {WORKSPACE_SECTIONS[sectionKey].title}
-                        </Text>
-                        <Text style={[styles.workspaceTabSub, selected && styles.workspaceTabSubActive]}>
-                          {sectionStateLabel(sectionKey, total)}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </ScrollView>
-
-                <View style={{ gap: 10 }}>
-                  {sectionOrder.map((sectionKey) => {
-                    const section = WORKSPACE_SECTIONS[sectionKey];
-                    const total = workspaceSnapshot.sectionActiveTotals[sectionKey] ?? 0;
-                    const collapsed = Boolean(workspace?.collapsed?.[sectionKey]);
-                    const selected = activeSection === sectionKey;
-
-                    if (!selected) return null;
-
-                    return (
-                      <View key={sectionKey} style={styles.workspaceSection}>
-                        <Pressable onPress={() => toggleWorkspaceSection(sectionKey)} style={styles.workspaceSectionHeader}>
-                          <View style={{ flex: 1 }}>
-                            <Text style={styles.workspaceSectionTitle}>{section.title}</Text>
-                            <Text style={styles.workspaceSectionSub}>
-                              {section.subtitle || sectionStateLabel(sectionKey, total)}
-                            </Text>
-                          </View>
-
-                          <View style={styles.workspaceHeaderRight}>
-                            <View style={styles.workspaceCountPill}>
-                              <Text style={styles.workspaceCountText}>{total}</Text>
-                            </View>
-                            <Text style={styles.chev}>{collapsed ? "›" : "⌄"}</Text>
-                          </View>
-                        </Pressable>
-
-                        {!collapsed ? <View style={{ marginTop: 10 }}>{renderSectionContent(sectionKey)}</View> : null}
-                      </View>
-                    );
-                  })}
-                </View>
-              </GlassCard>
+              <TripWorkspaceCard
+                workspaceSnapshot={workspaceSnapshot}
+                workspace={workspace}
+                sectionOrder={sectionOrder}
+                activeSection={activeSection}
+                groupedBySection={groupedBySection}
+                primaryMatchId={primaryMatchId}
+                affiliateUrls={affiliateUrls}
+                cityName={cityName}
+                originIata={cleanUpper3(originIata, "LON")}
+                tripStartDate={trip.startDate}
+                tripEndDate={trip.endDate}
+                noteText={noteText}
+                noteSaving={noteSaving}
+                proofBusyId={proofBusyId}
+                stayBestAreas={stayBestAreas}
+                stayBudgetAreas={stayBudgetAreas}
+                transportStops={transportStops}
+                onSetActiveSection={setActiveWorkspaceSection}
+                onToggleSection={toggleWorkspaceSection}
+                onNoteTextChange={setNoteText}
+                onAddNote={addNote}
+                onOpenTicketsForPrimaryMatch={() => {
+                  if (primaryMatchId) openTicketsForMatch(primaryMatchId);
+                }}
+                onOpenSavedItem={openSavedItem}
+                onOpenNoteActions={openNoteActions}
+                onConfirmMarkBooked={confirmMarkBooked}
+                onAddProofForBookedItem={addProofForBookedItem}
+                onViewWallet={onViewWallet}
+                onConfirmMoveToPending={confirmMoveToPending}
+                onConfirmArchive={confirmArchive}
+                onOpenPartner={openTrackedPartner}
+                getLivePriceLine={livePriceLine}
+                getTicketProviderFromItem={ticketProviderFromItem}
+              />
 
               <GlassCard style={styles.card}>
                 <Text style={styles.sectionTitle}>Stay guidance (stadium + best areas)</Text>
@@ -2957,194 +2351,6 @@ const styles = StyleSheet.create({
     textAlign: "left",
   },
 
-  providerBadgeWrap: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-
-  providerBadgeWrapLabeled: {
-    maxWidth: 180,
-  },
-
-  providerBadgeCircle: {
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  providerBadgeCircleText: {
-    fontWeight: "900",
-    letterSpacing: 0.4,
-  },
-
-  providerBadgeLabel: {
-    color: theme.colors.text,
-    fontSize: 12,
-    fontWeight: "900",
-  },
-
-  workspaceTabsRow: {
-    paddingRight: 8,
-    gap: 10,
-  },
-
-  workspaceTab: {
-    minWidth: 114,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    backgroundColor: "rgba(0,0,0,0.16)",
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-
-  workspaceTabActive: {
-    borderColor: "rgba(0,255,136,0.45)",
-    backgroundColor: "rgba(0,0,0,0.24)",
-  },
-
-  workspaceTabTitle: {
-    color: theme.colors.text,
-    fontWeight: "900",
-    fontSize: 12,
-  },
-
-  workspaceTabTitleActive: {
-    color: theme.colors.text,
-  },
-
-  workspaceTabSub: {
-    marginTop: 4,
-    color: theme.colors.textSecondary,
-    fontWeight: "800",
-    fontSize: 11,
-  },
-
-  workspaceTabSubActive: {
-    color: theme.colors.textTertiary,
-  },
-
-  workspaceSection: {
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.16)",
-    borderRadius: 16,
-    padding: 12,
-  },
-
-  workspaceSectionHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-
-  workspaceHeaderRight: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-
-  workspaceCountPill: {
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.14)",
-    backgroundColor: "rgba(255,255,255,0.04)",
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-
-  workspaceCountText: {
-    color: theme.colors.text,
-    fontWeight: "900",
-    fontSize: 11,
-  },
-
-  workspaceSectionTitle: {
-    color: theme.colors.text,
-    fontWeight: "900",
-    fontSize: 15,
-  },
-
-  workspaceSectionSub: {
-    marginTop: 4,
-    color: theme.colors.textSecondary,
-    fontWeight: "800",
-    fontSize: 12,
-  },
-
-  sectionCta: {
-    borderWidth: 1,
-    borderColor: "rgba(0,255,136,0.22)",
-    backgroundColor: "rgba(0,0,0,0.16)",
-    borderRadius: 14,
-    padding: 12,
-    marginBottom: 10,
-  },
-
-  sectionCtaTitle: {
-    color: theme.colors.text,
-    fontWeight: "900",
-    fontSize: 13,
-  },
-
-  sectionCtaBody: {
-    marginTop: 6,
-    color: theme.colors.textSecondary,
-    fontWeight: "800",
-    fontSize: 12,
-    lineHeight: 16,
-  },
-
-  sectionActionRow: {
-    flexDirection: "row",
-    gap: 8,
-    marginBottom: 10,
-  },
-
-  smallActionBtn: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.14)",
-    backgroundColor: "rgba(0,0,0,0.16)",
-    borderRadius: 12,
-    paddingVertical: 10,
-    alignItems: "center",
-  },
-
-  smallActionBtnPrimary: {
-    borderColor: "rgba(0,255,136,0.35)",
-  },
-
-  smallActionBtnText: {
-    color: theme.colors.text,
-    fontWeight: "900",
-    fontSize: 12,
-  },
-
-  guidanceMiniBox: {
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-    backgroundColor: "rgba(0,0,0,0.14)",
-    borderRadius: 14,
-    padding: 12,
-    marginBottom: 10,
-    gap: 6,
-  },
-
-  guidanceMiniTitle: {
-    color: theme.colors.text,
-    fontWeight: "900",
-    fontSize: 12,
-  },
-
-  guidanceMiniLine: {
-    color: theme.colors.textSecondary,
-    fontWeight: "800",
-    fontSize: 12,
-    lineHeight: 16,
-  },
-
   proxBox: {
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
@@ -3154,7 +2360,6 @@ const styles = StyleSheet.create({
   },
 
   proxTitle: { color: theme.colors.text, fontWeight: "900", fontSize: 14, lineHeight: 18 },
-
   proxCity: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: 12 },
 
   proxBody: {
@@ -3186,7 +2391,6 @@ const styles = StyleSheet.create({
   proxBtnText: { color: theme.colors.text, fontWeight: "900" },
 
   stayLabel: { color: theme.colors.text, fontWeight: "900", fontSize: 12 },
-
   stayBullet: { color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12, lineHeight: 16 },
 
   areaRow: {
@@ -3202,15 +2406,11 @@ const styles = StyleSheet.create({
   },
 
   areaTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
-
   areaName: { color: theme.colors.text, fontWeight: "900", flexShrink: 1 },
-
   areaNotes: { marginTop: 6, color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12, lineHeight: 16 },
-
   areaBtns: { gap: 8, alignItems: "flex-end" },
 
   pill: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
-
   pillText: { color: theme.colors.text, fontWeight: "900", fontSize: 11 },
 
   stopRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
@@ -3225,60 +2425,7 @@ const styles = StyleSheet.create({
   },
 
   lateTitle: { color: theme.colors.text, fontWeight: "900", fontSize: 12 },
-
   lateText: { marginTop: 6, color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12, lineHeight: 16 },
-
-  itemRow: {
-    flexDirection: "row",
-    gap: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.18)",
-    alignItems: "center",
-  },
-
-  itemTitleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-  },
-
-  itemTitle: { color: theme.colors.text, fontWeight: "900", flexShrink: 1, paddingRight: 6 },
-
-  itemMetaRow: {
-    marginTop: 4,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-
-  itemMeta: {
-    color: theme.colors.textSecondary,
-    fontWeight: "800",
-    fontSize: 12,
-    flex: 1,
-  },
-
-  livePriceLine: { marginTop: 6, color: theme.colors.textTertiary, fontSize: 12, fontWeight: "900" },
-
-  paidLine: { marginTop: 6, color: "rgba(242,244,246,0.92)", fontSize: 12, fontWeight: "900" },
-
-  proofLine: {
-    marginTop: 6,
-    color: "rgba(160,195,255,1)",
-    fontSize: 12,
-    fontWeight: "900",
-  },
-
-  proofLineMissing: {
-    color: "rgba(255,200,80,1)",
-  },
-
-  itemActions: { gap: 8, alignItems: "flex-end" },
 
   smallBtn: {
     paddingVertical: 8,
@@ -3289,57 +2436,8 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.15)",
   },
 
-  smallBtnWide: { flex: 1, alignItems: "center" },
-
-  smallBtnPrimary: { borderColor: "rgba(0,255,136,0.35)" },
-
-  smallBtnDisabled: { opacity: 0.65 },
-
-  smallBtnDanger: { borderColor: "rgba(255,80,80,0.35)" },
-
   smallBtnText: { color: theme.colors.text, fontWeight: "900", fontSize: 12 },
 
-  badge: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
-
-  badgeText: { color: theme.colors.text, fontWeight: "900", fontSize: 11 },
-
-  badgePending: { borderColor: "rgba(255,200,80,0.40)", backgroundColor: "rgba(255,200,80,0.10)" },
-
-  badgeSaved: { borderColor: "rgba(0,255,136,0.35)", backgroundColor: "rgba(0,255,136,0.08)" },
-
-  badgeBooked: { borderColor: "rgba(120,170,255,0.45)", backgroundColor: "rgba(120,170,255,0.10)" },
-
-  badgeArchived: { borderColor: "rgba(255,255,255,0.18)", backgroundColor: "rgba(255,255,255,0.06)" },
-
-  noteBox: {
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    borderRadius: 14,
-    backgroundColor: "rgba(0,0,0,0.18)",
-    padding: 12,
-  },
-
-  noteInput: {
-    minHeight: 80,
-    color: theme.colors.text,
-    textAlignVertical: "top",
-    fontWeight: "800",
-    ...(Platform.OS === "ios" ? { paddingTop: 10 } : null),
-  },
-
-  noteSaveBtn: {
-    marginTop: 10,
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "rgba(0,255,136,0.55)",
-    alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.18)",
-  },
-
-  noteSaveText: { color: theme.colors.text, fontWeight: "900" },
-
   mapsInline: { marginTop: 10, color: theme.colors.textSecondary, textAlign: "center", fontWeight: "900" },
-
   chev: { color: theme.colors.textSecondary, fontSize: 22, marginTop: -2 },
 });
