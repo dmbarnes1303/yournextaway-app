@@ -18,10 +18,10 @@ export type Partner = {
   affiliate: boolean;
   api: boolean;
   deepLinkBase?: string;
+  canonicalId?: string;
 };
 
 export const PARTNERS: Partner[] = [
-  // Utility (non-monetised)
   {
     id: "googlemaps",
     name: "Google Maps",
@@ -29,9 +29,9 @@ export const PARTNERS: Partner[] = [
     affiliate: false,
     api: false,
     deepLinkBase: "https://www.google.com/maps",
+    canonicalId: "googlemaps",
   },
 
-  // Tickets
   {
     id: "footballticketsnet",
     name: "FootballTicketNet",
@@ -39,6 +39,7 @@ export const PARTNERS: Partner[] = [
     affiliate: true,
     api: true,
     deepLinkBase: "https://www.footballticketnet.com/",
+    canonicalId: "footballticketsnet",
   },
   {
     id: "sportsevents365",
@@ -47,6 +48,7 @@ export const PARTNERS: Partner[] = [
     affiliate: true,
     api: true,
     deepLinkBase: "https://www.sportsevents365.com/",
+    canonicalId: "sportsevents365",
   },
   {
     id: "gigsberg",
@@ -55,6 +57,7 @@ export const PARTNERS: Partner[] = [
     affiliate: true,
     api: true,
     deepLinkBase: "https://www.gigsberg.com/",
+    canonicalId: "gigsberg",
   },
   {
     id: "seatpick",
@@ -63,9 +66,9 @@ export const PARTNERS: Partner[] = [
     affiliate: true,
     api: false,
     deepLinkBase: "https://seatpick.com/",
+    canonicalId: "seatpick",
   },
 
-  // Flights
   {
     id: "aviasales",
     name: "Aviasales",
@@ -73,9 +76,9 @@ export const PARTNERS: Partner[] = [
     affiliate: true,
     api: false,
     deepLinkBase: "https://www.aviasales.com/",
+    canonicalId: "aviasales",
   },
 
-  // Rail / coach
   {
     id: "omio",
     name: "Omio",
@@ -83,17 +86,9 @@ export const PARTNERS: Partner[] = [
     affiliate: true,
     api: false,
     deepLinkBase: "https://www.omio.com/",
+    canonicalId: "omio",
   },
 
-  // Stays
-  {
-    id: "expedia_stays",
-    name: "Expedia",
-    category: "stays",
-    affiliate: true,
-    api: false,
-    deepLinkBase: "https://www.expedia.co.uk/",
-  },
   {
     id: "expedia",
     name: "Expedia",
@@ -101,9 +96,18 @@ export const PARTNERS: Partner[] = [
     affiliate: true,
     api: false,
     deepLinkBase: "https://www.expedia.co.uk/",
+    canonicalId: "expedia",
+  },
+  {
+    id: "expedia_stays",
+    name: "Expedia",
+    category: "stays",
+    affiliate: true,
+    api: false,
+    deepLinkBase: "https://www.expedia.co.uk/",
+    canonicalId: "expedia",
   },
 
-  // Transfers
   {
     id: "kiwitaxi",
     name: "KiwiTaxi",
@@ -111,6 +115,7 @@ export const PARTNERS: Partner[] = [
     affiliate: true,
     api: false,
     deepLinkBase: "https://kiwitaxi.com/",
+    canonicalId: "kiwitaxi",
   },
   {
     id: "welcomepickups",
@@ -119,9 +124,9 @@ export const PARTNERS: Partner[] = [
     affiliate: true,
     api: false,
     deepLinkBase: "https://www.welcomepickups.com/",
+    canonicalId: "welcomepickups",
   },
 
-  // Experiences
   {
     id: "tiqets",
     name: "Tiqets",
@@ -129,6 +134,7 @@ export const PARTNERS: Partner[] = [
     affiliate: true,
     api: false,
     deepLinkBase: "https://www.tiqets.com/",
+    canonicalId: "tiqets",
   },
   {
     id: "klook",
@@ -137,6 +143,7 @@ export const PARTNERS: Partner[] = [
     affiliate: true,
     api: false,
     deepLinkBase: "https://www.klook.com/",
+    canonicalId: "klook",
   },
   {
     id: "getyourguide",
@@ -145,6 +152,7 @@ export const PARTNERS: Partner[] = [
     affiliate: true,
     api: false,
     deepLinkBase: "https://www.getyourguide.com/",
+    canonicalId: "getyourguide",
   },
   {
     id: "wegotrip",
@@ -153,9 +161,9 @@ export const PARTNERS: Partner[] = [
     affiliate: true,
     api: false,
     deepLinkBase: "https://wegotrip.com/",
+    canonicalId: "wegotrip",
   },
 
-  // Insurance
   {
     id: "safetywing",
     name: "SafetyWing",
@@ -163,6 +171,7 @@ export const PARTNERS: Partner[] = [
     affiliate: true,
     api: false,
     deepLinkBase: "https://safetywing.com/",
+    canonicalId: "safetywing",
   },
   {
     id: "ekta",
@@ -171,9 +180,9 @@ export const PARTNERS: Partner[] = [
     affiliate: true,
     api: false,
     deepLinkBase: "https://ektatraveling.com/",
+    canonicalId: "ekta",
   },
 
-  // Compensation
   {
     id: "airhelp",
     name: "AirHelp",
@@ -181,6 +190,7 @@ export const PARTNERS: Partner[] = [
     affiliate: true,
     api: false,
     deepLinkBase: "https://www.airhelp.com/",
+    canonicalId: "airhelp",
   },
   {
     id: "compensair",
@@ -189,17 +199,24 @@ export const PARTNERS: Partner[] = [
     affiliate: true,
     api: false,
     deepLinkBase: "https://www.compensair.com/",
+    canonicalId: "compensair",
   },
 ];
 
 export type PartnerId = (typeof PARTNERS)[number]["id"];
+
+function clean(v: unknown): string {
+  return typeof v === "string" ? v.trim() : String(v ?? "").trim();
+}
 
 export function getPartnersByCategory(category: PartnerCategory): Partner[] {
   return PARTNERS.filter((p) => p.category === category);
 }
 
 export function getPartnerOrNull(id: string): Partner | null {
-  return PARTNERS.find((p) => p.id === id) ?? null;
+  const raw = clean(id);
+  if (!raw) return null;
+  return PARTNERS.find((p) => p.id === raw) ?? null;
 }
 
 export function getPartner(id: PartnerId | string): Partner {
@@ -210,4 +227,14 @@ export function getPartner(id: PartnerId | string): Partner {
 
 export function isPartnerId(id: string): id is PartnerId {
   return PARTNERS.some((p) => p.id === id);
+}
+
+export function getCanonicalPartnerId(id: PartnerId | string): string {
+  const partner = getPartner(id);
+  return clean(partner.canonicalId) || partner.id;
+}
+
+export function isSamePartner(a?: string | null, b?: string | null): boolean {
+  if (!clean(a) || !clean(b)) return false;
+  return getCanonicalPartnerId(clean(a)) === getCanonicalPartnerId(clean(b));
 }
