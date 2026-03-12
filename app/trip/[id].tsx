@@ -669,13 +669,13 @@ export default function TripDetailScreen() {
   const params = useLocalSearchParams();
   const insets = useSafeAreaInsets();
 
-  const tripId = useMemo(() => coerceId((params as any)?.id), [params]);
+  const routeTripId = useMemo(() => coerceId((params as any)?.id), [params]);
 
   const [trip, setTrip] = useState<Trip | null>(null);
   const [tripsLoaded, setTripsLoaded] = useState(tripsStore.getState().loaded);
 
   const [savedLoaded, setSavedLoaded] = useState(savedItemsStore.getState().loaded);
-  const [savedItems, setSavedItems] = useState<SavedItem[]>([]);
+  const [allSavedItems, setAllSavedItems] = useState<SavedItem[]>([]);
 
   const [fixturesById, setFixturesById] = useState<Record<string, FixtureListRow>>({});
   const [fxLoading, setFxLoading] = useState(false);
@@ -715,7 +715,7 @@ export default function TripDetailScreen() {
     const sync = () => {
       const s = tripsStore.getState();
       setTripsLoaded(s.loaded);
-      setTrip(s.trips.find((x) => x.id === tripId) ?? null);
+      setTrip(s.trips.find((x) => x.id === routeTripId) ?? null);
     };
 
     const unsub = tripsStore.subscribe(sync);
@@ -726,13 +726,13 @@ export default function TripDetailScreen() {
     }
 
     return () => unsub();
-  }, [tripId]);
+  }, [routeTripId]);
 
   useEffect(() => {
     const sync = () => {
       const s = savedItemsStore.getState();
       setSavedLoaded(s.loaded);
-      setSavedItems(s.items.filter((x) => x.tripId === tripId));
+      setAllSavedItems(Array.isArray(s.items) ? s.items : []);
     };
 
     const unsub = savedItemsStore.subscribe(sync);
@@ -743,7 +743,7 @@ export default function TripDetailScreen() {
     }
 
     return () => unsub();
-  }, [tripId]);
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -769,6 +769,13 @@ export default function TripDetailScreen() {
       } catch {}
     };
   }, []);
+
+  const activeTripId = useMemo(() => clean(trip?.id) || clean(routeTripId) || null, [trip?.id, routeTripId]);
+
+  const savedItems = useMemo(() => {
+    if (!activeTripId) return [];
+    return allSavedItems.filter((x) => clean(x.tripId) === activeTripId);
+  }, [allSavedItems, activeTripId]);
 
   const matchIds = useMemo(() => {
     const raw = Array.isArray(trip?.matchIds) ? trip.matchIds : [];
@@ -801,7 +808,7 @@ export default function TripDetailScreen() {
         const map: Record<string, FixtureListRow> = {};
         for (const id of ids) {
           try {
-            const r = await getFixtureById(Number(id));
+            const r = await getFixtureById(id);
             if (r) map[String(id)] = r;
           } catch {}
         }
@@ -828,12 +835,15 @@ export default function TripDetailScreen() {
     const snapCity = clean((trip as any)?.displayCity);
     if (snapCity) return snapCity;
 
-    const snapVenueCity = clean((trip as any)?.city);
+    const snapVenueCity = clean((trip as any)?.venueCity);
     if (snapVenueCity) return snapVenueCity;
+
+    const fixtureVenueCity = clean((primaryFixture as any)?.fixture?.venue?.city);
+    if (fixtureVenueCity) return fixtureVenueCity;
 
     if (trip?.cityId) return trip.cityId;
 
-    return clean((primaryFixture as any)?.fixture?.venue?.city) || "Trip";
+    return "Trip";
   }, [trip, primaryFixture]);
 
   const cityName = useMemo(() => titleCaseCity(cityNameRaw), [cityNameRaw]);
@@ -1040,7 +1050,7 @@ export default function TripDetailScreen() {
   }, [primaryMatchId, ticketsByMatchId]);
 
   const progress = useMemo(() => {
-    if (!tripId) {
+    if (!activeTripId) {
       return {
         tickets: "empty",
         flight: "empty",
@@ -1049,13 +1059,13 @@ export default function TripDetailScreen() {
         things: "empty",
       } as const;
     }
-    return getTripProgress(tripId);
-  }, [tripId, savedItems]);
+    return getTripProgress(activeTripId);
+  }, [activeTripId, savedItems]);
 
   const readiness = useMemo(() => {
-    if (!tripId) return { score: 0, missing: [] as string[] };
-    return getTripHealth(tripId);
-  }, [tripId, savedItems]);
+    if (!activeTripId) return { score: 0, missing: [] as string[] };
+    return getTripHealth(activeTripId);
+  }, [activeTripId, savedItems]);
 
   const hasTickets = progress.tickets !== "empty";
   const hasFlight = progress.flight !== "empty";
@@ -1146,7 +1156,8 @@ export default function TripDetailScreen() {
     savedItemType?: SavedItemType;
     metadata?: Record<string, any>;
   }) {
-    if (!tripId) {
+    const targetTripId = clean(trip?.id) || clean(activeTripId);
+    if (!targetTripId) {
       Alert.alert("Save trip first", "Save this trip before booking so we can store it in Wallet.");
       return;
     }
@@ -1158,7 +1169,7 @@ export default function TripDetailScreen() {
 
     try {
       await beginPartnerClick({
-        tripId,
+        tripId: targetTripId,
         partnerId: args.partnerId,
         url: args.url,
         savedItemType: args.savedItemType,
@@ -1188,14 +1199,15 @@ export default function TripDetailScreen() {
       return;
     }
 
-    if (!tripId) {
+    const targetTripId = clean(item.tripId) || clean(trip?.id) || clean(activeTripId);
+    if (!targetTripId) {
       await openUntracked(item.partnerUrl);
       return;
     }
 
     try {
       await beginPartnerClick({
-        tripId,
+        tripId: targetTripId,
         partnerId: pid as any,
         url: item.partnerUrl,
         savedItemType: item.type,
@@ -1280,7 +1292,9 @@ export default function TripDetailScreen() {
 
   async function addNote() {
     const text = cleanNoteText(noteText);
-    if (!tripId) return;
+    const targetTripId = clean(trip?.id) || clean(activeTripId);
+
+    if (!targetTripId) return;
 
     if (!text) {
       Alert.alert("Add a note", "Type something first.");
@@ -1290,7 +1304,7 @@ export default function TripDetailScreen() {
     setNoteSaving(true);
     try {
       await savedItemsStore.add({
-        tripId,
+        tripId: targetTripId,
         type: "note",
         status: "saved",
         title: noteTitleFromText(text),
@@ -1509,7 +1523,7 @@ export default function TripDetailScreen() {
           onPress: () =>
             router.push({
               pathname: "/match/[id]",
-              params: { id: args.mid, tripId: tripId ?? undefined },
+              params: { id: args.mid, tripId: activeTripId ?? undefined },
             } as any),
         },
       ]
@@ -1520,7 +1534,7 @@ export default function TripDetailScreen() {
     const mid = clean(matchId);
     if (!mid) return;
 
-    if (!tripId) {
+    if (!activeTripId) {
       Alert.alert("Save trip first", "Save this trip before booking so we can store it in Wallet.");
       return;
     }
@@ -1957,7 +1971,7 @@ export default function TripDetailScreen() {
     hasThings,
   ]);
 
-  const loading = Boolean(tripId && (!tripsLoaded || !savedLoaded));
+  const loading = Boolean(routeTripId && (!tripsLoaded || !savedLoaded));
   const showHeroBanners = pending.length > 0 || saved.length > 0 || booked.length > 0;
 
   return (
@@ -1977,7 +1991,7 @@ export default function TripDetailScreen() {
           contentContainerStyle={[styles.content, { paddingBottom: theme.spacing.xxl + insets.bottom }]}
           keyboardShouldPersistTaps="handled"
         >
-          {!tripId && (
+          {!routeTripId && (
             <GlassCard style={styles.card}>
               <EmptyState title="Missing trip id" message="No trip id provided." />
             </GlassCard>
@@ -1992,7 +2006,7 @@ export default function TripDetailScreen() {
             </GlassCard>
           )}
 
-          {!loading && tripId && tripsLoaded && savedLoaded && !trip ? (
+          {!loading && routeTripId && tripsLoaded && savedLoaded && !trip ? (
             <GlassCard style={styles.card}>
               <EmptyState title="Trip not found" message="This trip doesn’t exist on this device." />
             </GlassCard>
