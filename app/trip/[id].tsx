@@ -39,6 +39,7 @@ import { getPartner, type PartnerId } from "@/src/core/partners";
 import type { WorkspaceSectionKey, TripWorkspace } from "@/src/core/tripWorkspace";
 import {
   WORKSPACE_SECTIONS,
+  DEFAULT_SECTION_ORDER,
   computeWorkspaceSnapshot,
   groupSavedItemsBySection,
   sectionForSavedItemType,
@@ -818,7 +819,11 @@ export default function TripDetailScreen() {
   const groupedBySection = useMemo(() => groupSavedItemsBySection(savedItems), [savedItems]);
   const workspaceSnapshot = useMemo(() => computeWorkspaceSnapshot(savedItems), [savedItems]);
 
-  const sectionOrder = useMemo(() => workspace?.sectionOrder ?? Object.keys(WORKSPACE_SECTIONS) as WorkspaceSectionKey[], [workspace]);
+  const sectionOrder = useMemo<WorkspaceSectionKey[]>(
+    () => workspace?.sectionOrder ?? [...DEFAULT_SECTION_ORDER],
+    [workspace]
+  );
+
   const activeSection = useMemo<WorkspaceSectionKey>(() => {
     if (workspace?.activeSection) return workspace.activeSection;
     return sectionOrder[0] as WorkspaceSectionKey;
@@ -934,10 +939,6 @@ export default function TripDetailScreen() {
     [savedItems]
   );
   const booked = useMemo(() => savedItems.filter((x) => x.status === "booked"), [savedItems]);
-  const notes = useMemo(
-    () => savedItems.filter((x) => x.type === "note" && x.status !== "archived"),
-    [savedItems]
-  );
 
   const primaryHomeName = useMemo(() => {
     const fromFixture = clean((primaryFixture as any)?.teams?.home?.name);
@@ -1240,8 +1241,7 @@ export default function TripDetailScreen() {
         metadata: args.metadata,
       });
 
-      const nextSection =
-        args.savedItemType ? sectionForSavedItemType(args.savedItemType) : undefined;
+      const nextSection = args.savedItemType ? sectionForSavedItemType(args.savedItemType) : undefined;
       if (nextSection) {
         void setActiveWorkspaceSection(nextSection);
       }
@@ -1576,7 +1576,9 @@ export default function TripDetailScreen() {
       top
         .map(
           (option, index) =>
-            `${index + 1}. ${providerLabel(option.provider)}${clean(option.priceText) ? ` • ${clean(option.priceText)}` : ""}`
+            `${index + 1}. ${providerLabel(option.provider)}${
+              clean(option.priceText) ? ` • ${clean(option.priceText)}` : ""
+            }`
         )
         .join("\n"),
       [
@@ -2169,18 +2171,22 @@ export default function TripDetailScreen() {
               <Text style={styles.guidanceMiniTitle}>Area shortlist</Text>
               {stayBestAreas.slice(0, 2).map((x, idx) => (
                 <Text key={`stay-best-${idx}`} style={styles.guidanceMiniLine}>
-                  • {x.area}{x.notes ? ` — ${x.notes}` : ""}
+                  • {x.area}
+                  {x.notes ? ` — ${x.notes}` : ""}
                 </Text>
               ))}
               {stayBudgetAreas.slice(0, 2).map((x, idx) => (
                 <Text key={`stay-budget-${idx}`} style={styles.guidanceMiniLine}>
-                  • {x.area}{x.notes ? ` — ${x.notes}` : ""}
+                  • {x.area}
+                  {x.notes ? ` — ${x.notes}` : ""}
                 </Text>
               ))}
             </View>
           ) : null}
 
-          {items.length > 0 ? <View style={{ gap: 10 }}>{items.map(renderWorkspaceItem)}</View> : (
+          {items.length > 0 ? (
+            <View style={{ gap: 10 }}>{items.map(renderWorkspaceItem)}</View>
+          ) : (
             <EmptyState title="No stay items yet" message="Save hotels here so the trip isn’t just a vague idea." />
           )}
         </>
@@ -2232,7 +2238,9 @@ export default function TripDetailScreen() {
             ) : null}
           </View>
 
-          {items.length > 0 ? <View style={{ gap: 10 }}>{items.map(renderWorkspaceItem)}</View> : (
+          {items.length > 0 ? (
+            <View style={{ gap: 10 }}>{items.map(renderWorkspaceItem)}</View>
+          ) : (
             <EmptyState title="No travel items yet" message="Flights or rail should live here, not in your head." />
           )}
         </>
@@ -2273,7 +2281,9 @@ export default function TripDetailScreen() {
             </View>
           ) : null}
 
-          {items.length > 0 ? <View style={{ gap: 10 }}>{items.map(renderWorkspaceItem)}</View> : (
+          {items.length > 0 ? (
+            <View style={{ gap: 10 }}>{items.map(renderWorkspaceItem)}</View>
+          ) : (
             <EmptyState title="No transfer items yet" message="This is where local movement should be sorted." />
           )}
         </>
@@ -2303,7 +2313,9 @@ export default function TripDetailScreen() {
             </Pressable>
           ) : null}
 
-          {items.length > 0 ? <View style={{ gap: 10 }}>{items.map(renderWorkspaceItem)}</View> : (
+          {items.length > 0 ? (
+            <View style={{ gap: 10 }}>{items.map(renderWorkspaceItem)}</View>
+          ) : (
             <EmptyState title="No things saved yet" message="This section is optional, but useful when it earns its place." />
           )}
         </>
@@ -2716,10 +2728,7 @@ export default function TripDetailScreen() {
 
                     return (
                       <View key={sectionKey} style={styles.workspaceSection}>
-                        <Pressable
-                          onPress={() => toggleWorkspaceSection(sectionKey)}
-                          style={styles.workspaceSectionHeader}
-                        >
+                        <Pressable onPress={() => toggleWorkspaceSection(sectionKey)} style={styles.workspaceSectionHeader}>
                           <View style={{ flex: 1 }}>
                             <Text style={styles.workspaceSectionTitle}>{section.title}</Text>
                             <Text style={styles.workspaceSectionSub}>
