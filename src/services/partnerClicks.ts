@@ -179,6 +179,8 @@ function defaultTypeForCategory(category: PartnerCategory): SavedItemType {
       return "flight";
     case "stays":
       return "hotel";
+      case "rail":
+  return "train";
     case "transfers":
       return "transfer";
     case "experiences":
