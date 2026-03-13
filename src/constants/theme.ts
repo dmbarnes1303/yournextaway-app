@@ -7,16 +7,7 @@
  * - Dark theme only
  * - Strict spacing, radius, and type scales
  * - Surfaces are matte; blur/glass is for overlays only
- *
- * Palette (locked):
- * - Dark grey: #171A17
- * - Green:     #57A238
- * - Blue:      #0B2555
- * - Gold:      EU flag gold (here: #F2C94C)
- *
- * NOTE:
- * We KEEP backwards-compatible aliases to avoid breaking older screens
- * while we migrate them to V2 primitives.
+ * - Backgrounds should feel premium and restrained, never illustrative
  */
 
 export const theme = {
@@ -24,15 +15,15 @@ export const theme = {
     // ---------------------------
     // Core surfaces (V2)
     // ---------------------------
-    bgBase: "#0E1110", // app background
-    bgSurface: "#171A17", // primary surface
-    bgElevated: "#1F241F", // elevated card surface
-    bgPressed: "#242A24", // pressed state / subtle highlight
+    bgBase: "#0A0D0E",
+    bgSurface: "#151917",
+    bgElevated: "#1B201D",
+    bgPressed: "#232926",
 
     // Overlays
-    overlay: "rgba(12,14,12,0.78)",
-    overlayStrong: "rgba(10,12,10,0.88)",
-    overlayLight: "rgba(12,14,12,0.62)",
+    overlay: "rgba(8,10,11,0.72)",
+    overlayStrong: "rgba(6,8,9,0.84)",
+    overlayLight: "rgba(10,12,13,0.56)",
 
     // ---------------------------
     // Text (V2)
@@ -47,6 +38,14 @@ export const theme = {
     accentGreen: "#57A238",
     accentBlue: "#0B2555",
     accentGold: "#F2C94C",
+
+    // Branded dark tints for premium backgrounds
+    tintGreenDeep: "#102116",
+    tintGreenSoft: "#183021",
+    tintBlueDeep: "#0A1831",
+    tintBlueSoft: "#102545",
+    tintNeutralDeep: "#111515",
+    tintNeutralSoft: "#1A1F1D",
 
     // ---------------------------
     // Semantic status (V2)
@@ -63,14 +62,12 @@ export const theme = {
     dividerSubtle: "rgba(231,236,231,0.06)",
 
     // ---------------------------
-    // Backwards-compatible aliases (V1 usage)
+    // Backwards-compatible aliases
     // ---------------------------
-    background: "#0E1110",
-    backgroundSecondary: "#171A17",
+    background: "#0A0D0E",
+    backgroundSecondary: "#151917",
 
     text: "#E7ECE7",
-
-    // Older screens use textTertiary for "muted" helper copy
     textTertiary: "#6B736B",
 
     primary: "#57A238",
@@ -85,14 +82,15 @@ export const theme = {
 
   /**
    * Legacy "glass" tokens.
-   * V2 intent: don’t use these for normal cards. Keep only so old screens don’t crash.
+   * Keep these for backwards compatibility.
+   * The visual goal is restrained matte translucency, not flashy blur.
    */
   glass: {
     border: "rgba(231,236,231,0.10)",
     iosBg: {
       subtle: "rgba(255,255,255,0.04)",
-      default: "rgba(255,255,255,0.06)",
-      strong: "rgba(255,255,255,0.08)",
+      default: "rgba(255,255,255,0.055)",
+      strong: "rgba(255,255,255,0.075)",
     },
     androidBg: {
       subtle: "rgba(0,0,0,0.18)",
