@@ -37,34 +37,22 @@ import {
   groupSavedItemsBySection,
 } from "@/src/core/tripWorkspace";
 
-import { getFixtureById, type FixtureListRow } from "@/src/services/apiFootball";
-import { getTripProgress, getTripHealth } from "@/src/services/tripProgress";
-import { resolveAffiliateUrl } from "@/src/services/partnerLinks";
 import { getIataCityCodeForCity, debugCityKey } from "@/src/data/iataCityCodes";
-import { getMatchdayLogistics, buildLogisticsSnippet } from "@/src/data/matchdayLogistics";
 import storage from "@/src/services/storage";
-import rankTrips from "@/src/features/tripFinder/rankTrips";
-import type { RankedTrip } from "@/src/features/tripFinder/types";
 
 import useTripDetailController from "@/src/features/tripDetail/useTripDetailController";
 import useTripDetailViewModel from "@/src/features/tripDetail/useTripDetailViewModel";
+import useTripDetailData from "@/src/features/tripDetail/useTripDetailData";
+
 import {
-  type AffiliateUrls,
   type PlanValue,
   clean,
   cleanUpper3,
   coerceId,
-  confidencePctLabel,
-  difficultyLabel,
-  formatKickoffMeta,
-  isLateKickoff,
-  isNumericId,
   itemResolvedScore,
   livePriceLine,
-  rankReasonsText,
   summaryLine,
   ticketProviderFromItem,
-  titleCaseCity,
   tripStatus,
 } from "@/src/features/tripDetail/helpers";
 
@@ -87,9 +75,6 @@ export default function TripDetailScreen() {
 
   const [workspaceLoaded, setWorkspaceLoaded] = useState(tripWorkspaceStore.getState().loaded);
   const [workspace, setWorkspace] = useState<TripWorkspace | null>(null);
-
-  const [fixturesById, setFixturesById] = useState<Record<string, FixtureListRow>>({});
-  const [fxLoading, setFxLoading] = useState(false);
 
   const [noteText, setNoteText] = useState("");
   const [noteSaving, setNoteSaving] = useState(false);
@@ -231,284 +216,6 @@ export default function TripDetailScreen() {
     [workspace?.activeSection, sectionOrder]
   );
 
-  const numericMatchIds = useMemo(() => {
-    const ids = Array.isArray(trip?.matchIds) ? trip.matchIds : [];
-    return ids.map((x) => String(x).trim()).filter(isNumericId);
-  }, [trip?.matchIds]);
-
-  const primaryMatchId = useMemo(() => {
-    const preferred = clean((trip as any)?.fixtureIdPrimary);
-    if (preferred && numericMatchIds.includes(preferred)) return preferred;
-    return numericMatchIds[0] ?? null;
-  }, [trip, numericMatchIds]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function run() {
-      if (numericMatchIds.length === 0) {
-        setFixturesById({});
-        setFxLoading(false);
-        return;
-      }
-
-      setFxLoading(true);
-
-      try {
-        const next: Record<string, FixtureListRow> = {};
-        for (const id of numericMatchIds) {
-          try {
-            const row = await getFixtureById(id);
-            if (row) next[String(id)] = row;
-          } catch {}
-        }
-        if (!cancelled) setFixturesById(next);
-      } finally {
-        if (!cancelled) setFxLoading(false);
-      }
-    }
-
-    run();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [numericMatchIds]);
-
-  const status = useMemo(() => (trip ? tripStatus(trip) : "Upcoming"), [trip]);
-
-  const primaryFixture = useMemo(
-    () => (primaryMatchId ? fixturesById[String(primaryMatchId)] ?? null : null),
-    [primaryMatchId, fixturesById]
-  );
-
-  const cityName = useMemo(() => {
-    const raw =
-      clean((trip as any)?.displayCity) ||
-      clean((trip as any)?.venueCity) ||
-      clean((primaryFixture as any)?.fixture?.venue?.city) ||
-      clean(trip?.cityId) ||
-      "Trip";
-
-    return titleCaseCity(raw);
-  }, [trip, primaryFixture]);
-
-  const primaryLeagueId = useMemo(() => {
-    const fromFixture = (primaryFixture as any)?.league?.id;
-    if (typeof fromFixture === "number") return fromFixture;
-
-    const fromTrip = (trip as any)?.leagueId;
-    return typeof fromTrip === "number" ? fromTrip : undefined;
-  }, [primaryFixture, trip]);
-
-  const affiliateUrls = useMemo<AffiliateUrls | null>(() => {
-    if (!trip || !clean(cityName) || cityName === "Trip") return null;
-
-    const ctx = {
-      city: clean(cityName),
-      startDate: trip.startDate || null,
-      endDate: trip.endDate || null,
-      originIata: cleanUpper3(originIata, "LON"),
-    };
-
-    return {
-      flightsUrl: resolveAffiliateUrl("aviasales", ctx),
-      hotelsUrl: resolveAffiliateUrl("expedia", ctx),
-      omioUrl: resolveAffiliateUrl("omio", ctx),
-      transfersUrl: resolveAffiliateUrl("kiwitaxi", ctx),
-      experiencesUrl: resolveAffiliateUrl("getyourguide", ctx),
-      mapsUrl: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${ctx.city} travel`)}`,
-    };
-  }, [trip, cityName, originIata]);
-
-  const pending = useMemo(() => savedItems.filter((x) => x.status === "pending"), [savedItems]);
-  const saved = useMemo(
-    () => savedItems.filter((x) => x.status === "saved" && x.type !== "note"),
-    [savedItems]
-  );
-  const booked = useMemo(() => savedItems.filter((x) => x.status === "booked"), [savedItems]);
-
-  const primaryHomeName = useMemo(
-    () => clean((primaryFixture as any)?.teams?.home?.name) || clean((trip as any)?.homeName),
-    [primaryFixture, trip]
-  );
-
-  const primaryLeagueName = useMemo(
-    () => clean((primaryFixture as any)?.league?.name) || clean((trip as any)?.leagueName),
-    [primaryFixture, trip]
-  );
-
-  const primaryKickoffIso = useMemo(
-    () => clean((primaryFixture as any)?.fixture?.date ?? (trip as any)?.kickoffIso) || null,
-    [primaryFixture, trip]
-  );
-
-  const kickoffMeta = useMemo(() => formatKickoffMeta(primaryFixture, trip), [primaryFixture, trip]);
-
-  const primaryLogistics = useMemo(() => {
-    if (!primaryHomeName) return null;
-    return getMatchdayLogistics({ homeTeamName: primaryHomeName, leagueName: primaryLeagueName });
-  }, [primaryHomeName, primaryLeagueName]);
-
-  const primaryLogisticsSnippet = useMemo(
-    () => (primaryLogistics ? buildLogisticsSnippet(primaryLogistics) : ""),
-    [primaryLogistics]
-  );
-
-  const stadiumName = useMemo(() => clean((primaryLogistics as any)?.stadium), [primaryLogistics]);
-  const stadiumCity = useMemo(
-    () => clean((primaryLogistics as any)?.city ?? cityName),
-    [primaryLogistics, cityName]
-  );
-
-  const stadiumMapsUrl = useMemo(() => {
-    const query = [stadiumName || "stadium", stadiumCity].filter(Boolean).join(" ").trim();
-    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
-  }, [stadiumName, stadiumCity]);
-
-  const stayBestAreas = useMemo(() => {
-    const arr = Array.isArray((primaryLogistics as any)?.stay?.bestAreas)
-      ? (primaryLogistics as any).stay.bestAreas
-      : [];
-    return arr
-      .map((x: any) => ({ area: clean(x?.area), notes: clean(x?.notes) }))
-      .filter((x: any) => x.area);
-  }, [primaryLogistics]);
-
-  const stayBudgetAreas = useMemo(() => {
-    const arr = Array.isArray((primaryLogistics as any)?.stay?.budgetAreas)
-      ? (primaryLogistics as any).stay.budgetAreas
-      : [];
-    return arr
-      .map((x: any) => ({ area: clean(x?.area), notes: clean(x?.notes) }))
-      .filter((x: any) => x.area);
-  }, [primaryLogistics]);
-
-  const transportStops = useMemo(() => {
-    const stops = Array.isArray((primaryLogistics as any)?.transport?.primaryStops)
-      ? (primaryLogistics as any).transport.primaryStops
-      : [];
-    return stops
-      .slice(0, 3)
-      .map((s: any) => `${clean(s?.name)}${s?.notes ? ` — ${clean(s.notes)}` : ""}`)
-      .filter(Boolean);
-  }, [primaryLogistics]);
-
-  const transportTips = useMemo(() => {
-    const tips = Array.isArray((primaryLogistics as any)?.transport?.tips)
-      ? (primaryLogistics as any).transport.tips
-      : [];
-    return tips.slice(0, 3).map((x: any) => clean(x)).filter(Boolean);
-  }, [primaryLogistics]);
-
-  const lateTransportNote = useMemo(() => {
-    const explicit = clean((primaryLogistics as any)?.transport?.lateNightNote);
-    if (explicit) return explicit;
-    if (isLateKickoff(primaryKickoffIso)) {
-      return "Late kickoff: check last trains/metros and pre-book a taxi/Uber fallback after the match.";
-    }
-    return "";
-  }, [primaryLogistics, primaryKickoffIso]);
-
-  const rankedTrip = useMemo<RankedTrip | null>(() => {
-    if (!trip || !primaryFixture) return null;
-
-    try {
-      const ranked = rankTrips([
-        {
-          tripId: String(trip.id),
-          fixture: primaryFixture,
-          cityName,
-          originIata: cleanUpper3(originIata, "LON"),
-          startDate: trip.startDate,
-          endDate: trip.endDate,
-          kickoffIso: primaryKickoffIso ?? undefined,
-        } as any,
-      ]);
-
-      return Array.isArray(ranked) && ranked.length > 0 ? ranked[0] : null;
-    } catch {
-      return null;
-    }
-  }, [trip, primaryFixture, cityName, originIata, primaryKickoffIso]);
-
-  const tripFinderSummary = useMemo(() => {
-    if (!rankedTrip) return null;
-
-    return {
-      difficulty: difficultyLabel((rankedTrip as any)?.travelDifficulty ?? null),
-      confidence: confidencePctLabel((rankedTrip as any)?.confidence ?? null),
-      reasons: rankReasonsText(rankedTrip),
-      score:
-        typeof (rankedTrip as any)?.score === "number" && Number.isFinite((rankedTrip as any)?.score)
-          ? Math.round((rankedTrip as any).score)
-          : null,
-    };
-  }, [rankedTrip]);
-
-  const ticketsByMatchId = useMemo(() => {
-    const next: Record<string, SavedItem | null> = {};
-    const ticketCandidates = savedItems.filter((x) => x.type === "tickets" && x.status !== "archived");
-
-    for (const mid of numericMatchIds) {
-      const exact = ticketCandidates.filter((x) => clean((x.metadata as any)?.fixtureId) === clean(mid));
-      const pool = exact.length > 0 ? exact : ticketCandidates;
-
-      next[String(mid)] =
-        pool.find((x) => x.status === "pending") ??
-        pool.find((x) => x.status === "saved") ??
-        pool.find((x) => x.status === "booked") ??
-        null;
-    }
-
-    return next;
-  }, [numericMatchIds, savedItems]);
-
-  const primaryTicketItem = useMemo(
-    () => (primaryMatchId ? ticketsByMatchId[String(primaryMatchId)] ?? null : null),
-    [primaryMatchId, ticketsByMatchId]
-  );
-
-  const progress = useMemo(() => {
-    if (!activeTripId) {
-      return {
-        tickets: "empty",
-        flight: "empty",
-        hotel: "empty",
-        transfer: "empty",
-        things: "empty",
-      } as const;
-    }
-    return getTripProgress(activeTripId);
-  }, [activeTripId, savedItems]);
-
-  const readiness = useMemo(() => {
-    if (!activeTripId) return { score: 0, missing: [] as string[] };
-    return getTripHealth(activeTripId);
-  }, [activeTripId, savedItems]);
-
-  useEffect(() => {
-    if (!DEV) return;
-
-    const city = clean(cityName);
-    if (!city || city === "Trip") return;
-
-    const code = getIataCityCodeForCity(city);
-    if (code) return;
-
-    const key = debugCityKey(city);
-    if (!key || devWarnedCityKey === key) return;
-
-    setDevWarnedCityKey(key);
-
-    Alert.alert(
-      "Missing IATA mapping (dev)",
-      `City: ${city}\n\nNormalized key:\n${key}\n\nAdd it to src/data/iataCityCodes.ts`,
-      [{ text: "OK" }],
-      { cancelable: true }
-    );
-  }, [cityName, devWarnedCityKey]);
-
   async function setActiveWorkspaceSection(section: WorkspaceSectionKey) {
     const id = clean(activeTripId);
     if (!id) return;
@@ -525,13 +232,19 @@ export default function TripDetailScreen() {
     } catch {}
   }
 
+  const data = useTripDetailData({
+    trip,
+    savedItems,
+    originIata,
+  });
+
   const controller = useTripDetailController({
     trip,
     activeTripId,
-    cityName,
-    primaryLeagueId,
-    fixturesById,
-    ticketsByMatchId,
+    cityName: data.cityName,
+    primaryLeagueId: data.primaryLeagueId,
+    fixturesById: data.fixturesById,
+    ticketsByMatchId: data.ticketsByMatchId,
     noteText,
     setNoteText,
     setNoteSaving,
@@ -545,21 +258,45 @@ export default function TripDetailScreen() {
     savedLoaded,
     workspaceLoaded,
     routeTripId,
-    cityName,
+    cityName: data.cityName,
     originIata,
-    affiliateUrls,
-    progress,
-    readiness,
-    pending,
-    saved,
-    booked,
-    primaryMatchId,
-    primaryTicketItem,
+    affiliateUrls: data.affiliateUrls,
+    progress: data.progress,
+    readiness: data.readiness,
+    pending: savedItems.filter((x) => x.status === "pending"),
+    saved: savedItems.filter((x) => x.status === "saved" && x.type !== "note"),
+    booked: savedItems.filter((x) => x.status === "booked"),
+    primaryMatchId: data.primaryMatchId,
+    primaryTicketItem: data.primaryTicketItem,
     isPro,
-    kickoffTbc: kickoffMeta.tbc,
+    kickoffTbc: data.kickoffMeta.tbc,
     controller,
     setActiveWorkspaceSection,
   });
+
+  const status = useMemo(() => (trip ? tripStatus(trip) : "Upcoming"), [trip]);
+
+  useEffect(() => {
+    if (!DEV) return;
+
+    const city = clean(data.cityName);
+    if (!city || city === "Trip") return;
+
+    const code = getIataCityCodeForCity(city);
+    if (code) return;
+
+    const key = debugCityKey(city);
+    if (!key || devWarnedCityKey === key) return;
+
+    setDevWarnedCityKey(key);
+
+    Alert.alert(
+      "Missing IATA mapping (dev)",
+      `City: ${city}\n\nNormalized key:\n${key}\n\nAdd it to src/data/iataCityCodes.ts`,
+      [{ text: "OK" }],
+      { cancelable: true }
+    );
+  }, [data.cityName, devWarnedCityKey]);
 
   return (
     <Background imageSource={getBackground("trips")} overlayOpacity={0.86}>
@@ -604,9 +341,9 @@ export default function TripDetailScreen() {
             <>
               <GlassCard style={styles.hero}>
                 <Text style={styles.kicker}>TRIP WORKSPACE</Text>
-                <Text style={styles.cityTitle}>{cityName}</Text>
+                <Text style={styles.cityTitle}>{data.cityName}</Text>
                 <Text style={styles.heroMeta}>{summaryLine(trip)}</Text>
-                <Text style={styles.heroMetaSmall}>{kickoffMeta.line}</Text>
+                <Text style={styles.heroMetaSmall}>{data.kickoffMeta.line}</Text>
 
                 <View style={styles.heroTopRow}>
                   <View style={styles.statusPill}>
@@ -649,32 +386,40 @@ export default function TripDetailScreen() {
                   </View>
                 ) : null}
 
-                {tripFinderSummary ? (
+                {data.tripFinderSummary ? (
                   <View style={styles.tripFinderBox}>
                     <Text style={styles.tripFinderTitle}>Trip Finder read</Text>
 
                     <View style={styles.tripFinderBadges}>
-                      {tripFinderSummary.difficulty ? (
+                      {data.tripFinderSummary.difficulty ? (
                         <View style={styles.tripFinderBadge}>
-                          <Text style={styles.tripFinderBadgeText}>{tripFinderSummary.difficulty}</Text>
+                          <Text style={styles.tripFinderBadgeText}>
+                            {data.tripFinderSummary.difficulty}
+                          </Text>
                         </View>
                       ) : null}
 
-                      {tripFinderSummary.confidence ? (
+                      {data.tripFinderSummary.confidence ? (
                         <View style={styles.tripFinderBadge}>
-                          <Text style={styles.tripFinderBadgeText}>{tripFinderSummary.confidence}</Text>
+                          <Text style={styles.tripFinderBadgeText}>
+                            {data.tripFinderSummary.confidence}
+                          </Text>
                         </View>
                       ) : null}
 
-                      {tripFinderSummary.score != null ? (
+                      {data.tripFinderSummary.score != null ? (
                         <View style={styles.tripFinderBadge}>
-                          <Text style={styles.tripFinderBadgeText}>Score {tripFinderSummary.score}</Text>
+                          <Text style={styles.tripFinderBadgeText}>
+                            Score {data.tripFinderSummary.score}
+                          </Text>
                         </View>
                       ) : null}
                     </View>
 
-                    {tripFinderSummary.reasons ? (
-                      <Text style={styles.tripFinderReasons}>{tripFinderSummary.reasons}</Text>
+                    {data.tripFinderSummary.reasons ? (
+                      <Text style={styles.tripFinderReasons}>
+                        {data.tripFinderSummary.reasons}
+                      </Text>
                     ) : null}
                   </View>
                 ) : null}
@@ -709,7 +454,7 @@ export default function TripDetailScreen() {
                 </View>
               </GlassCard>
 
-              {affiliateUrls ? (
+              {data.affiliateUrls ? (
                 <GlassCard style={styles.card}>
                   <View style={styles.sectionTitleRow}>
                     <Text style={styles.sectionTitle}>Smart booking</Text>
@@ -731,7 +476,7 @@ export default function TripDetailScreen() {
                     ))}
                   </View>
 
-                  <Pressable onPress={() => controller.openUntracked(affiliateUrls.mapsUrl)}>
+                  <Pressable onPress={() => controller.openUntracked(data.affiliateUrls?.mapsUrl)}>
                     <Text style={styles.mapsInline}>Open maps search</Text>
                   </Pressable>
                 </GlassCard>
@@ -739,11 +484,11 @@ export default function TripDetailScreen() {
 
               <TripMatchesCard
                 trip={trip}
-                numericMatchIds={numericMatchIds}
-                primaryMatchId={primaryMatchId}
-                fixturesById={fixturesById}
-                ticketsByMatchId={ticketsByMatchId}
-                fxLoading={fxLoading}
+                numericMatchIds={data.numericMatchIds}
+                primaryMatchId={data.primaryMatchId}
+                fixturesById={data.fixturesById}
+                ticketsByMatchId={data.ticketsByMatchId}
+                fxLoading={data.fxLoading}
                 onAddMatch={controller.onAddMatch}
                 onOpenTicketsForMatch={controller.openTicketsForMatch}
                 onOpenMatchActions={controller.openMatchActions}
@@ -760,24 +505,24 @@ export default function TripDetailScreen() {
                 sectionOrder={sectionOrder}
                 activeSection={activeSection}
                 groupedBySection={groupedBySection}
-                primaryMatchId={primaryMatchId}
-                affiliateUrls={affiliateUrls}
-                cityName={cityName}
+                primaryMatchId={data.primaryMatchId}
+                affiliateUrls={data.affiliateUrls}
+                cityName={data.cityName}
                 originIata={cleanUpper3(originIata, "LON")}
                 tripStartDate={trip.startDate}
                 tripEndDate={trip.endDate}
                 noteText={noteText}
                 noteSaving={noteSaving}
                 proofBusyId={proofBusyId}
-                stayBestAreas={stayBestAreas}
-                stayBudgetAreas={stayBudgetAreas}
-                transportStops={transportStops}
+                stayBestAreas={data.stayBestAreas}
+                stayBudgetAreas={data.stayBudgetAreas}
+                transportStops={data.transportStops}
                 onSetActiveSection={setActiveWorkspaceSection}
                 onToggleSection={toggleWorkspaceSection}
                 onNoteTextChange={setNoteText}
                 onAddNote={controller.addNote}
                 onOpenTicketsForPrimaryMatch={() => {
-                  if (primaryMatchId) controller.openTicketsForMatch(primaryMatchId);
+                  if (data.primaryMatchId) controller.openTicketsForMatch(data.primaryMatchId);
                 }}
                 onOpenSavedItem={controller.openSavedItem}
                 onOpenNoteActions={controller.openNoteActions}
@@ -792,15 +537,15 @@ export default function TripDetailScreen() {
               />
 
               <TripStayGuidanceCard
-                stadiumName={stadiumName}
-                stadiumCity={stadiumCity}
-                logisticsSnippet={primaryLogisticsSnippet}
-                bestAreas={stayBestAreas}
-                budgetAreas={stayBudgetAreas}
-                transportStops={transportStops}
-                transportTips={transportTips}
-                lateTransportNote={lateTransportNote}
-                stadiumMapsUrl={stadiumMapsUrl}
+                stadiumName={data.stadiumName}
+                stadiumCity={data.stadiumCity}
+                logisticsSnippet={data.primaryLogisticsSnippet}
+                bestAreas={data.stayBestAreas}
+                budgetAreas={data.stayBudgetAreas}
+                transportStops={data.transportStops}
+                transportTips={data.transportTips}
+                lateTransportNote={data.lateTransportNote}
+                stadiumMapsUrl={data.stadiumMapsUrl}
                 openUrl={controller.openUntracked}
               />
             </>
