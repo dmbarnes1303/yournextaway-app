@@ -129,7 +129,7 @@ const cityImages: Record<string, CityImageRecord> = {
     imageUrl:
       "https://images.unsplash.com/photo-1514565131-fce0801e5785?auto=format&fit=crop&w=1600&q=80",
   },
-  newcastle-upon-tyne: {
+  "newcastle-upon-tyne": {
     cityKey: "newcastle-upon-tyne",
     city: "Newcastle upon Tyne",
     country: "England",
