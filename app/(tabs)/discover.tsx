@@ -24,7 +24,6 @@ import {
 } from "@/src/constants/football";
 import { getFixtures, type FixtureListRow } from "@/src/services/apiFootball";
 import {
-  DISCOVER_ALL_CATEGORIES,
   DISCOVER_PRIMARY_CATEGORIES,
   DISCOVER_SECONDARY_CATEGORIES,
   DISCOVER_CATEGORY_META,
@@ -449,16 +448,8 @@ export default function DiscoverScreen() {
     [goFixturesCategory]
   );
 
-  const allCategoriesCovered = useMemo(() => {
-    const shown = new Set([
-      ...prioritisedPrimaryCategories,
-      ...prioritisedSecondaryCategories,
-    ]);
-    return DISCOVER_ALL_CATEGORIES.every((category) => shown.has(category));
-  }, [prioritisedPrimaryCategories, prioritisedSecondaryCategories]);
-
   return (
-    <Background imageSource={getBackground("home")} overlayOpacity={0.68}>
+    <Background imageSource={getBackground("explore")} overlayOpacity={0.56}>
       <SafeAreaView style={styles.container} edges={["top"]}>
         <ScrollView
           style={styles.scroll}
@@ -595,11 +586,7 @@ export default function DiscoverScreen() {
                     {loadingRandom ? (
                       <ActivityIndicator />
                     ) : (
-                      <Ionicons
-                        name="shuffle-outline"
-                        size={20}
-                        color={theme.colors.text}
-                      />
+                      <Ionicons name="shuffle-outline" size={20} color={theme.colors.text} />
                     )}
                   </View>
 
@@ -631,12 +618,6 @@ export default function DiscoverScreen() {
                   When you already want a direct fixture browse without discovery ranking leading.
                 </Text>
               </View>
-
-              {!allCategoriesCovered ? (
-                <Text style={styles.modeWarning}>
-                  Discover category coverage is incomplete. Check the category split.
-                </Text>
-              ) : null}
             </View>
           </GlassCard>
         </ScrollView>
@@ -648,6 +629,7 @@ export default function DiscoverScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   scroll: { flex: 1 },
+
   content: {
     paddingHorizontal: theme.spacing.lg,
     gap: 18,
@@ -657,22 +639,26 @@ const styles = StyleSheet.create({
     marginTop: theme.spacing.lg,
     borderRadius: 26,
   },
+
   heroInner: {
-    padding: theme.spacing.lg,
+    padding: 16,
     gap: 10,
   },
+
   kicker: {
     color: theme.colors.primary,
     fontSize: 11,
     fontWeight: "900",
     letterSpacing: 1.2,
   },
+
   title: {
     color: theme.colors.text,
     fontSize: 26,
     lineHeight: 32,
     fontWeight: "900",
   },
+
   sub: {
     color: theme.colors.textSecondary,
     fontSize: 14,
@@ -690,11 +676,13 @@ const styles = StyleSheet.create({
     padding: 12,
     gap: 6,
   },
+
   heroSummaryLabel: {
     color: theme.colors.textTertiary,
     fontSize: 12,
     fontWeight: "900",
   },
+
   heroSummaryText: {
     color: theme.colors.text,
     fontSize: 13,
@@ -702,24 +690,30 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
 
-  section: { gap: 10 },
+  section: {
+    gap: 10,
+  },
+
   sectionHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 10,
   },
+
   sectionTitle: {
     color: theme.colors.text,
     fontSize: 18,
     fontWeight: "900",
   },
+
   sectionSub: {
     color: theme.colors.textSecondary,
     fontSize: 12,
     lineHeight: 18,
     fontWeight: "800",
   },
+
   sectionSubStrong: {
     color: theme.colors.text,
     fontWeight: "900",
@@ -734,6 +728,7 @@ const styles = StyleSheet.create({
     backgroundColor:
       Platform.OS === "android" ? "rgba(18,20,24,0.34)" : "rgba(18,20,24,0.28)",
   },
+
   resetPillText: {
     color: theme.colors.textSecondary,
     fontSize: 12,
@@ -744,11 +739,13 @@ const styles = StyleSheet.create({
     padding: 14,
     gap: 12,
   },
+
   label: {
     color: theme.colors.textTertiary,
     fontSize: 12,
     fontWeight: "900",
   },
+
   inputWrap: {
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
@@ -758,6 +755,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: Platform.OS === "ios" ? 10 : 8,
   },
+
   input: {
     color: theme.colors.text,
     fontSize: 14,
@@ -769,6 +767,7 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: 8,
   },
+
   chip: {
     borderRadius: 999,
     borderWidth: 1,
@@ -778,16 +777,19 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
     paddingHorizontal: 10,
   },
+
   chipActive: {
     borderColor: "rgba(79,224,138,0.26)",
     backgroundColor:
       Platform.OS === "android" ? theme.glass.androidBg.default : theme.glass.iosBg.default,
   },
+
   chipText: {
     color: theme.colors.textSecondary,
     fontSize: 12,
     fontWeight: "900",
   },
+
   chipTextActive: {
     color: theme.colors.text,
   },
@@ -798,43 +800,53 @@ const styles = StyleSheet.create({
     gap: 10,
     justifyContent: "space-between",
   },
+
   categoryPress: {
     width: "48.5%",
     borderRadius: 18,
     overflow: "hidden",
   },
+
   categoryPressCompact: {
     width: 188,
     borderRadius: 18,
     overflow: "hidden",
   },
+
   categoryCard: {
     borderRadius: 18,
   },
+
   categoryCardPrimary: {
     borderColor: "rgba(79,224,138,0.18)",
   },
+
   categoryCardHighlighted: {
     borderColor: "rgba(79,224,138,0.30)",
   },
+
   categoryCardCompact: {
     minHeight: 110,
   },
+
   categoryInner: {
     padding: 14,
     minHeight: 128,
     gap: 14,
     justifyContent: "space-between",
   },
+
   categoryInnerCompact: {
     minHeight: 112,
   },
+
   categoryTopRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 10,
   },
+
   categoryIconWrap: {
     width: 38,
     height: 38,
@@ -845,14 +857,17 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.10)",
     backgroundColor: "rgba(0,0,0,0.18)",
   },
+
   categoryIconWrapPrimary: {
     borderColor: "rgba(79,224,138,0.18)",
     backgroundColor: "rgba(79,224,138,0.08)",
   },
+
   categoryIconWrapHighlighted: {
     borderColor: "rgba(79,224,138,0.28)",
     backgroundColor: "rgba(79,224,138,0.12)",
   },
+
   matchingPill: {
     borderRadius: 999,
     paddingVertical: 5,
@@ -861,21 +876,25 @@ const styles = StyleSheet.create({
     borderColor: "rgba(79,224,138,0.24)",
     backgroundColor: "rgba(79,224,138,0.10)",
   },
+
   matchingPillText: {
     color: theme.colors.text,
     fontSize: 10,
     fontWeight: "900",
     letterSpacing: 0.3,
   },
+
   categoryTextWrap: {
     gap: 6,
   },
+
   categoryTitle: {
     color: theme.colors.text,
     fontSize: 14,
     lineHeight: 18,
     fontWeight: "900",
   },
+
   categorySubtitle: {
     color: theme.colors.textSecondary,
     fontSize: 12,
@@ -892,31 +911,37 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     overflow: "hidden",
   },
+
   randomCard: {
     borderRadius: 18,
   },
+
   randomInner: {
     paddingVertical: 14,
     paddingHorizontal: 14,
     gap: 8,
     minHeight: 132,
   },
+
   randomTop: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
+
   randomTitle: {
     color: theme.colors.text,
     fontSize: 15,
     fontWeight: "900",
   },
+
   randomSub: {
     color: theme.colors.textSecondary,
     fontSize: 12,
     fontWeight: "800",
     lineHeight: 17,
   },
+
   randomHint: {
     color: theme.colors.textTertiary,
     fontSize: 12,
@@ -928,31 +953,30 @@ const styles = StyleSheet.create({
     padding: 14,
     marginBottom: 4,
   },
+
   modeRow: {
     gap: 12,
   },
+
   modeBlock: {
     gap: 6,
   },
+
   modeDivider: {
     height: 1,
     backgroundColor: "rgba(255,255,255,0.08)",
   },
+
   modeTitle: {
     color: theme.colors.text,
     fontSize: 14,
     fontWeight: "900",
   },
+
   modeText: {
     color: theme.colors.textSecondary,
     fontSize: 12,
     lineHeight: 18,
-    fontWeight: "800",
-  },
-  modeWarning: {
-    color: "#ffb86b",
-    fontSize: 11,
-    lineHeight: 16,
     fontWeight: "800",
   },
 
