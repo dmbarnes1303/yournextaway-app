@@ -40,7 +40,10 @@ import { getFlagImageUrl } from "@/src/utils/flagImages";
 import tripsStore from "@/src/state/trips";
 import useFollowStore from "@/src/state/followStore";
 
-import { computeLikelyPlaceholderTbcIds, kickoffIsoOrNull } from "@/src/utils/kickoffTbc";
+import {
+  computeLikelyPlaceholderTbcIds,
+  kickoffIsoOrNull,
+} from "@/src/utils/kickoffTbc";
 import { getFixtureCertainty } from "@/src/utils/fixtureCertainty";
 
 import { getTicketDifficultyBadge } from "@/src/data/ticketGuides";
@@ -50,6 +53,7 @@ import { POPULAR_TEAM_IDS, getTeam } from "@/src/data/teams";
 import {
   buildDiscoverScores,
   type DiscoverFixture,
+  type DiscoverReason,
 } from "@/src/features/discover/discoverEngine";
 
 /* -------------------------------------------------------------------------- */
@@ -90,7 +94,8 @@ const DISCOVER_CATEGORY_META: Record<
   bigMatches: {
     title: "Big Matches",
     subtitle: "Highest-profile fixtures in the selected window",
-    helper: "Discover mode • ranked for occasion, club size, derby energy, and night factor",
+    helper:
+      "Discover mode • ranked for occasion, club size, derby energy, and night factor",
   },
   derbies: {
     title: "Derbies & Rivalries",
@@ -184,7 +189,11 @@ function isoFromUtcParts(y: number, m0: number, d: number) {
 
 function utcTodayIso() {
   const now = new Date();
-  return isoFromUtcParts(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  return isoFromUtcParts(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate()
+  );
 }
 
 function addDaysIsoUtc(iso: string, days: number) {
@@ -415,7 +424,11 @@ function perfectTripScore(scored: DiscoverFixture): number {
 
 function iconicCityScore(scored: DiscoverFixture): number {
   const city = String(scored.fixture?.fixture?.venue?.city ?? "");
-  return cityPrestigeScore(city) * 50 + baseFixtureScore(scored.fixture) + scored.scores.stadiumScore * 18;
+  return (
+    cityPrestigeScore(city) * 50 +
+    baseFixtureScore(scored.fixture) +
+    scored.scores.stadiumScore * 18
+  );
 }
 
 function bucketListScore(scored: DiscoverFixture): number {
@@ -555,7 +568,12 @@ function discoverScoreForCategory(
 function LeagueFlag({ code, size = "sm" }: { code: string; size?: "sm" | "md" }) {
   const url = getFlagImageUrl(code);
   if (!url) return null;
-  return <Image source={{ uri: url }} style={size === "md" ? styles.flagMd : styles.flag} />;
+  return (
+    <Image
+      source={{ uri: url }}
+      style={size === "md" ? styles.flagMd : styles.flag}
+    />
+  );
 }
 
 function initials(name: string) {
@@ -664,11 +682,15 @@ function buildMonthGrid(year: number, month0: number) {
   const firstW = firstWeekdayUtc(year, month0);
   const cells: Array<{ iso: string; day: number; inMonth: boolean }> = [];
 
-  for (let i = 0; i < firstW; i++) cells.push({ iso: "", day: 0, inMonth: false });
+  for (let i = 0; i < firstW; i++) {
+    cells.push({ iso: "", day: 0, inMonth: false });
+  }
   for (let day = 1; day <= dim; day++) {
     cells.push({ iso: isoFromUtcParts(year, month0, day), day, inMonth: true });
   }
-  while (cells.length % 7 !== 0) cells.push({ iso: "", day: 0, inMonth: false });
+  while (cells.length % 7 !== 0) {
+    cells.push({ iso: "", day: 0, inMonth: false });
+  }
 
   return cells;
 }
@@ -719,6 +741,7 @@ export default function FixturesScreen() {
         : isTopPicksMode
           ? defaultTopFrom
           : minIso;
+
     return clampIsoToWindow(base, minIso, maxIso);
   }, [routeFrom, isTopPicksMode, defaultTopFrom, minIso, maxIso]);
 
@@ -727,6 +750,7 @@ export default function FixturesScreen() {
       routeFrom && isValidIsoDateOnly(routeFrom)
         ? clampIsoToWindow(routeFrom, minIso, maxIso)
         : null;
+
     const b =
       routeTo && isValidIsoDateOnly(routeTo)
         ? clampIsoToWindow(routeTo, minIso, maxIso)
@@ -734,18 +758,33 @@ export default function FixturesScreen() {
 
     if (a && b && a !== b) return normalizeRange(a, b);
 
-    if (isTopPicksMode && !a && !b) return { from: defaultTopFrom, to: defaultTopTo };
+    if (isTopPicksMode && !a && !b) {
+      return { from: defaultTopFrom, to: defaultTopTo };
+    }
 
-    if (!isTopPicksMode && !a && !b) return defaultBrowseRange;
+    if (!isTopPicksMode && !a && !b) {
+      return defaultBrowseRange;
+    }
 
     return null;
-  }, [routeFrom, routeTo, isTopPicksMode, defaultTopFrom, defaultTopTo, defaultBrowseRange, minIso, maxIso]);
+  }, [
+    routeFrom,
+    routeTo,
+    isTopPicksMode,
+    defaultTopFrom,
+    defaultTopTo,
+    defaultBrowseRange,
+    minIso,
+    maxIso,
+  ]);
 
   const [selectedDay, setSelectedDay] = useState<string>(initialDay);
   const [range, setRange] = useState<{ from: string; to: string } | null>(initialRange);
 
   const effectiveRange = useMemo(() => {
-    return range ? normalizeRange(range.from, range.to) : { from: selectedDay, to: selectedDay };
+    return range
+      ? normalizeRange(range.from, range.to)
+      : { from: selectedDay, to: selectedDay };
   }, [range, selectedDay]);
 
   const isRange = useMemo(
@@ -761,7 +800,10 @@ export default function FixturesScreen() {
       return {
         iso,
         top: d.toLocaleDateString("en-GB", { weekday: "short" }),
-        bottom: d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" }),
+        bottom: d.toLocaleDateString("en-GB", {
+          day: "2-digit",
+          month: "short",
+        }),
       };
     });
   }, [selectedDay, minIso, maxIso]);
@@ -787,7 +829,8 @@ export default function FixturesScreen() {
     [selectedLeagues]
   );
 
-  const [activeRegion, setActiveRegion] = useState<LeagueBrowseRegion>("featured-europe");
+  const [activeRegion, setActiveRegion] =
+    useState<LeagueBrowseRegion>("featured-europe");
 
   const leaguesByRegion = useMemo(() => {
     const out: Record<LeagueBrowseRegion, LeagueOption[]> = {
@@ -813,10 +856,14 @@ export default function FixturesScreen() {
   const toggleLeague = useCallback((leagueId: number) => {
     setSelectedLeagueIds((prev) => {
       const has = prev.includes(leagueId);
+
       if (has) return prev.filter((x) => x !== leagueId);
 
       if (prev.length >= MAX_MULTI_LEAGUES) {
-        Alert.alert("Max leagues reached", `You can select up to ${MAX_MULTI_LEAGUES} leagues at once.`);
+        Alert.alert(
+          "Max leagues reached",
+          `You can select up to ${MAX_MULTI_LEAGUES} leagues at once.`
+        );
         return prev;
       }
 
@@ -879,9 +926,7 @@ export default function FixturesScreen() {
 
         if (cancelled) return;
 
-        const flat = batches
-          .flat()
-          .filter((r) => r?.fixture?.id != null);
+        const flat = batches.flat().filter((r) => r?.fixture?.id != null);
 
         if (discoverCategory) {
           const scored = buildDiscoverScores(flat);
@@ -889,16 +934,22 @@ export default function FixturesScreen() {
           const ranked = scored
             .map((item) => ({
               fixture: item.fixture,
+              reasons: item.reasons,
               discoverScore: discoverScoreForCategory(discoverCategory, item),
               kickoffIso: String(item.fixture?.fixture?.date ?? ""),
             }))
             .sort((a, b) => {
-              if (b.discoverScore !== a.discoverScore) return b.discoverScore - a.discoverScore;
+              if (b.discoverScore !== a.discoverScore) {
+                return b.discoverScore - a.discoverScore;
+              }
               return a.kickoffIso.localeCompare(b.kickoffIso);
             })
-            .map((x) => x.fixture);
+            .map((x) => ({
+              ...x.fixture,
+              discoverReasons: x.reasons,
+            }));
 
-          setRows(ranked);
+          setRows(ranked as FixtureListRow[]);
           return;
         }
 
@@ -1041,6 +1092,7 @@ export default function FixturesScreen() {
     const base =
       parseIsoToUtcParts(selectedDay) ??
       parseIsoToUtcParts(minIso) ?? { y: 2026, m0: 0, d: 1 };
+
     return { y: base.y, m0: base.m0 };
   });
 
@@ -1107,6 +1159,7 @@ export default function FixturesScreen() {
   const onCalendarTapDay = useCallback(
     (iso: string) => {
       if (!iso) return;
+
       const d = clampIsoToWindow(iso, minIso, maxIso);
 
       if (calPickA === calPickB) {
@@ -1175,6 +1228,7 @@ export default function FixturesScreen() {
         selectedLeagueIds.length > 0
           ? `${selectedLeagueIds.length}/${MAX_MULTI_LEAGUES} leagues`
           : "Featured scope";
+
       return `${base} • ${datePart} • ${scopePart}`;
     }
 
@@ -1222,6 +1276,10 @@ export default function FixturesScreen() {
         LEAGUES.find((l) => l.leagueId === ctxLeagueId)?.countryCode ||
         "";
 
+      const discoverReasons = Array.isArray((r as any).discoverReasons)
+        ? ((r as any).discoverReasons as DiscoverReason[])
+        : [];
+
       return (
         <View style={styles.rowWrap}>
           <GlassCard style={styles.rowCard} level="default" variant="matte">
@@ -1233,7 +1291,9 @@ export default function FixturesScreen() {
               <View style={styles.rowInner}>
                 <View style={styles.fixtureLeagueLine}>
                   {leagueCode ? <LeagueFlag code={leagueCode} /> : null}
-                  <Text style={styles.fixtureLeagueText}>{String(r?.league?.name ?? "")}</Text>
+                  <Text style={styles.fixtureLeagueText}>
+                    {String(r?.league?.name ?? "")}
+                  </Text>
                 </View>
 
                 <View style={styles.topRow}>
@@ -1274,7 +1334,8 @@ export default function FixturesScreen() {
                       styles.ticketPill,
                       difficulty === "easy" && styles.ticketEasy,
                       difficulty === "medium" && styles.ticketMedium,
-                      (difficulty === "hard" || difficulty === "very_hard") && styles.ticketHard,
+                      (difficulty === "hard" || difficulty === "very_hard") &&
+                        styles.ticketHard,
                     ]}
                   >
                     <Text
@@ -1282,13 +1343,24 @@ export default function FixturesScreen() {
                         styles.ticketText,
                         difficulty === "easy" && styles.ticketTextEasy,
                         difficulty === "medium" && styles.ticketTextMedium,
-                        (difficulty === "hard" || difficulty === "very_hard") && styles.ticketTextHard,
+                        (difficulty === "hard" || difficulty === "very_hard") &&
+                          styles.ticketTextHard,
                       ]}
                     >
                       Home tickets: {ticketDifficultyLabel(difficulty)}
                     </Text>
                   </View>
                 </View>
+
+                {discoverReasons.length > 0 ? (
+                  <View style={styles.discoverReasonRow}>
+                    {discoverReasons.slice(0, 3).map((reason) => (
+                      <View key={reason} style={styles.discoverReasonPill}>
+                        <Text style={styles.discoverReasonText}>{reason}</Text>
+                      </View>
+                    ))}
+                  </View>
+                ) : null}
 
                 <View style={styles.followRow}>
                   <Button
@@ -1309,7 +1381,9 @@ export default function FixturesScreen() {
               <View style={styles.expandArea}>
                 <Button
                   label="Match"
-                  onPress={() => goMatch(fixtureId, { leagueId: ctxLeagueId, season: ctxSeason })}
+                  onPress={() =>
+                    goMatch(fixtureId, { leagueId: ctxLeagueId, season: ctxSeason })
+                  }
                   tone="secondary"
                   size="md"
                   style={{ flex: 1 }}
@@ -1317,7 +1391,10 @@ export default function FixturesScreen() {
                 <Button
                   label="Build trip"
                   onPress={() =>
-                    goTripOrBuild(fixtureId, { leagueId: ctxLeagueId, season: ctxSeason })
+                    goTripOrBuild(fixtureId, {
+                      leagueId: ctxLeagueId,
+                      season: ctxSeason,
+                    })
                   }
                   tone="primary"
                   size="md"
@@ -1330,7 +1407,14 @@ export default function FixturesScreen() {
         </View>
       );
     },
-    [expandedKey, followedIdSet, goMatch, goTripOrBuild, onToggleFollowFromRow, placeholderIds]
+    [
+      expandedKey,
+      followedIdSet,
+      goMatch,
+      goTripOrBuild,
+      onToggleFollowFromRow,
+      placeholderIds,
+    ]
   );
 
   const headerDateLine = useMemo(() => {
@@ -1348,7 +1432,9 @@ export default function FixturesScreen() {
 
   const bg = getBackground("fixtures");
   const bgProps =
-    typeof bg === "string" ? ({ imageUrl: bg } as const) : ({ imageSource: bg } as const);
+    typeof bg === "string"
+      ? ({ imageUrl: bg } as const)
+      : ({ imageSource: bg } as const);
 
   const headerComponent = (
     <View style={styles.headerListWrap}>
@@ -1387,8 +1473,12 @@ export default function FixturesScreen() {
                 onPress={() => onTapStripDate(d.iso)}
                 style={[styles.datePill, active && styles.datePillActive]}
               >
-                <Text style={[styles.dateTop, active && styles.dateTopActive]}>{d.top}</Text>
-                <Text style={[styles.dateBottom, active && styles.dateBottomActive]}>{d.bottom}</Text>
+                <Text style={[styles.dateTop, active && styles.dateTopActive]}>
+                  {d.top}
+                </Text>
+                <Text style={[styles.dateBottom, active && styles.dateBottomActive]}>
+                  {d.bottom}
+                </Text>
               </Pressable>
             );
           })}
@@ -1397,7 +1487,12 @@ export default function FixturesScreen() {
         <View style={styles.scopeRow}>
           <Text style={styles.sectionLabel}>Featured leagues</Text>
           {selectedLeagueIds.length > 0 ? (
-            <Button label="Reset to featured" tone="ghost" size="sm" onPress={resetToFeatured} />
+            <Button
+              label="Reset to featured"
+              tone="ghost"
+              size="sm"
+              onPress={resetToFeatured}
+            />
           ) : null}
         </View>
 
@@ -1463,6 +1558,7 @@ export default function FixturesScreen() {
         <View style={styles.countryGrid}>
           {leaguesByRegion[activeRegion].map((league) => {
             const active = selectedLeagueIds.includes(league.leagueId);
+
             return (
               <Pressable
                 key={`country-card-${league.leagueId}`}
@@ -1505,7 +1601,9 @@ export default function FixturesScreen() {
                 onPress={() => toggleLeague(league.leagueId)}
                 style={[styles.leaguePill, styles.leaguePillActive]}
               >
-                <Text style={[styles.leagueText, styles.leagueTextActive]}>{league.label}</Text>
+                <Text style={[styles.leagueText, styles.leagueTextActive]}>
+                  {league.label}
+                </Text>
                 <LeagueFlag code={league.countryCode} />
               </Pressable>
             ))}
@@ -1533,7 +1631,8 @@ export default function FixturesScreen() {
         <FlatList
           data={loading || error ? [] : filtered}
           keyExtractor={(item, index) => {
-            const fid = item?.fixture?.id != null ? String(item.fixture.id) : `row-${index}`;
+            const fid =
+              item?.fixture?.id != null ? String(item.fixture.id) : `row-${index}`;
             const lid = item?.league?.id != null ? String(item.league.id) : "L";
             return `${lid}-${fid}`;
           }}
@@ -1567,7 +1666,12 @@ export default function FixturesScreen() {
           removeClippedSubviews={false}
         />
 
-        <Modal visible={calendarOpen} animationType="fade" transparent onRequestClose={closeCalendar}>
+        <Modal
+          visible={calendarOpen}
+          animationType="fade"
+          transparent
+          onRequestClose={closeCalendar}
+        >
           <Pressable style={styles.modalBackdrop} onPress={closeCalendar} />
           <View style={styles.modalWrap} pointerEvents="box-none">
             <GlassCard level="strong" variant="glass" forceBlur style={styles.modalSheet}>
@@ -1605,7 +1709,9 @@ export default function FixturesScreen() {
 
                 <View style={styles.calGrid}>
                   {calGrid.map((c, idx) => {
-                    if (!c.inMonth) return <View key={`e-${idx}`} style={styles.calCell} />;
+                    if (!c.inMonth) {
+                      return <View key={`e-${idx}`} style={styles.calCell} />;
+                    }
 
                     const iso = c.iso;
                     const disabled = iso < minIso || iso > maxIso;
@@ -2065,6 +2171,28 @@ const styles = StyleSheet.create({
     gap: 8,
     flexWrap: "wrap",
     justifyContent: "center",
+  },
+
+  discoverReasonRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    justifyContent: "center",
+  },
+
+  discoverReasonPill: {
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    backgroundColor: "rgba(255,255,255,0.05)",
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+
+  discoverReasonText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: theme.colors.textSecondary,
   },
 
   ticketPill: {
