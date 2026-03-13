@@ -7,7 +7,17 @@ type Props = {
   children?: React.ReactNode;
   imageSource?: ImageSourcePropType | { uri: string } | string | null;
   imageUrl?: string | ImageSourcePropType | { uri: string } | null;
+
+  /**
+   * Extra manual dimming layer.
+   * Keep this low. The component already applies readability shading.
+   */
   overlayOpacity?: number;
+
+  /**
+   * Default shading is intentionally moderate.
+   * Heavy values were crushing Trips / Wallet / Profile.
+   */
   topShadeOpacity?: number;
   bottomShadeOpacity?: number;
   centerShadeOpacity?: number;
@@ -18,9 +28,9 @@ export default function Background({
   imageSource = null,
   imageUrl = null,
   overlayOpacity = 0,
-  topShadeOpacity = 0.78,
-  bottomShadeOpacity = 0.90,
-  centerShadeOpacity = 0.22,
+  topShadeOpacity = 0.52,
+  bottomShadeOpacity = 0.68,
+  centerShadeOpacity = 0.08,
 }: Props) {
   const resolvedSource = useMemo<ImageSourcePropType | { uri: string } | null>(() => {
     if (typeof imageUrl === "string" && imageUrl.trim()) return { uri: imageUrl };
@@ -45,8 +55,8 @@ export default function Background({
       <ImageBackground source={resolvedSource} resizeMode="cover" style={styles.image}>
         <LinearGradient
           pointerEvents="none"
-          colors={[`rgba(0,0,0,${topShadeOpacity})`, "rgba(0,0,0,0.14)", "rgba(0,0,0,0.02)"]}
-          locations={[0, 0.48, 1]}
+          colors={[`rgba(0,0,0,${topShadeOpacity})`, "rgba(0,0,0,0.10)", "rgba(0,0,0,0.02)"]}
+          locations={[0, 0.44, 1]}
           start={{ x: 0.5, y: 0 }}
           end={{ x: 0.5, y: 1 }}
           style={styles.topShade}
@@ -54,7 +64,7 @@ export default function Background({
 
         <LinearGradient
           pointerEvents="none"
-          colors={["rgba(0,0,0,0.10)", `rgba(0,0,0,${centerShadeOpacity})`, "rgba(0,0,0,0.10)"]}
+          colors={["rgba(0,0,0,0.04)", `rgba(0,0,0,${centerShadeOpacity})`, "rgba(0,0,0,0.04)"]}
           locations={[0, 0.5, 1]}
           start={{ x: 0, y: 0.5 }}
           end={{ x: 1, y: 0.5 }}
@@ -63,7 +73,7 @@ export default function Background({
 
         <LinearGradient
           pointerEvents="none"
-          colors={["rgba(0,0,0,0.08)", `rgba(0,0,0,${bottomShadeOpacity})`]}
+          colors={["rgba(0,0,0,0.04)", `rgba(0,0,0,${bottomShadeOpacity})`]}
           locations={[0, 1]}
           start={{ x: 0.5, y: 0 }}
           end={{ x: 0.5, y: 1 }}
@@ -102,7 +112,7 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    height: "48%",
+    height: "42%",
   },
 
   centerShade: {
@@ -118,7 +128,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    height: "62%",
+    height: "52%",
   },
 
   content: {
