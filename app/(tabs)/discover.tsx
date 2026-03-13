@@ -449,7 +449,13 @@ export default function DiscoverScreen() {
   );
 
   return (
-    <Background imageSource={getBackground("explore")} overlayOpacity={0.56}>
+    <Background
+  imageSource={getBackground("explore")}
+  overlayOpacity={0.04}
+  topShadeOpacity={0.28}
+  bottomShadeOpacity={0.34}
+  centerShadeOpacity={0.03}
+>
       <SafeAreaView style={styles.container} edges={["top"]}>
         <ScrollView
           style={styles.scroll}
