@@ -3,12 +3,10 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
-  Pressable,
-  ActivityIndicator,
-  Image,
   Alert,
   Modal,
+  Pressable,
+  ActivityIndicator,
   FlatList,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -17,292 +15,66 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
 import EmptyState from "@/src/components/EmptyState";
-import FixtureCertaintyBadge from "@/src/components/FixtureCertaintyBadge";
-import Input from "@/src/components/Input";
 import Button from "@/src/components/Button";
 
-import {
-  discoverScoreForCategory,
-  baseFixtureScore,
-} from "@/src/features/discover/discoverRanking";
-import {
-  DISCOVER_CATEGORY_META,
-  isDiscoverCategory,
-  type DiscoverCategory,
-} from "@/src/features/discover/discoverCategories";
-
-import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
-import { getFixtures, type FixtureListRow } from "@/src/services/apiFootball";
-
+import { getBackground } from "@/src/constants/backgrounds";
 import {
   LEAGUES,
   FEATURED_LEAGUES,
   LEAGUE_BROWSE_REGION_ORDER,
-  LEAGUE_BROWSE_REGION_LABELS,
   type LeagueOption,
   type LeagueBrowseRegion,
 } from "@/src/constants/football";
-import { formatUkDateTimeMaybe } from "@/src/utils/formatters";
-import { getFlagImageUrl } from "@/src/utils/flagImages";
-
-import tripsStore from "@/src/state/trips";
+import { getFixtures } from "@/src/services/apiFootball";
 import useFollowStore from "@/src/state/followStore";
 
 import {
   computeLikelyPlaceholderTbcIds,
   kickoffIsoOrNull,
 } from "@/src/utils/kickoffTbc";
-import { getFixtureCertainty } from "@/src/utils/fixtureCertainty";
-
-import { getTicketDifficultyBadge } from "@/src/data/ticketGuides";
-import type { TicketDifficulty } from "@/src/data/ticketGuides/types";
-import { getTeam } from "@/src/data/teams";
 
 import {
-  buildDiscoverScores,
-  type DiscoverReason,
-  type DiscoverContext,
-  type DiscoverTripLength,
-  type DiscoverVibe,
-} from "@/src/features/discover/discoverEngine";
+  discoverScoreForCategory,
+  baseFixtureScore,
+} from "@/src/features/discover/discoverRanking";
+import { DISCOVER_CATEGORY_META } from "@/src/features/discover/discoverCategories";
+import { buildDiscoverScores } from "@/src/features/discover/discoverEngine";
+
+import {
+  DAYS_AHEAD,
+  STRIP_DAYS,
+  addDaysIsoUtc,
+  buildMonthGrid,
+  clampIsoToWindow,
+  isValidIsoDateOnly,
+  monthLabel,
+  normalizeRange,
+  parseIsoToUtcParts,
+  tomorrowIsoUtc,
+} from "@/src/features/fixtures/date";
+import {
+  buildDiscoverContext,
+  coerceNumber,
+  coerceString,
+  isTopPicksMode,
+  parseDiscoverCategory,
+} from "@/src/features/fixtures/params";
+import {
+  fixtureIsoDateOnly,
+  leagueScopeSubtitle,
+  norm,
+  resolveTripForFixture,
+} from "@/src/features/fixtures/helpers";
+import FixturesHeader from "@/src/features/fixtures/FixturesHeader";
+import FixtureRowCard from "@/src/features/fixtures/FixtureRowCard";
+import type { RankedFixtureRow } from "@/src/features/fixtures/types";
 
 /* -------------------------------------------------------------------------- */
 /* Constants                                                                  */
 /* -------------------------------------------------------------------------- */
 
-const DAYS_AHEAD = 365;
 const MAX_MULTI_LEAGUES = 10;
-const STRIP_DAYS = 7;
-
-type RankedFixtureRow = FixtureListRow & {
-  discoverReasons?: DiscoverReason[];
-};
-
-/* -------------------------------------------------------------------------- */
-/* Param helpers                                                              */
-/* -------------------------------------------------------------------------- */
-
-function coerceString(v: any): string | null {
-  const s = String(v ?? "").trim();
-  return s ? s : null;
-}
-
-function coerceNumber(v: any): number | null {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : null;
-}
-
-function parseDiscoverTripLength(v: unknown): DiscoverTripLength | null {
-  const s = String(v ?? "").trim();
-  if (s === "day" || s === "1" || s === "2" || s === "3") return s;
-  return null;
-}
-
-function parseDiscoverVibes(v: unknown): DiscoverVibe[] {
-  const raw = String(v ?? "").trim();
-  if (!raw) return [];
-  return raw
-    .split(",")
-    .map((part) => String(part ?? "").trim())
-    .filter(
-      (part): part is DiscoverVibe =>
-        part === "easy" ||
-        part === "big" ||
-        part === "nightlife" ||
-        part === "culture" ||
-        part === "warm"
-    );
-}
-
-/* -------------------------------------------------------------------------- */
-/* UTC-safe date helpers                                                      */
-/* -------------------------------------------------------------------------- */
-
-function isoFromUtcParts(y: number, m0: number, d: number) {
-  const ms = Date.UTC(y, m0, d, 0, 0, 0, 0);
-  return new Date(ms).toISOString().slice(0, 10);
-}
-
-function utcTodayIso() {
-  const now = new Date();
-  return isoFromUtcParts(
-    now.getUTCFullYear(),
-    now.getUTCMonth(),
-    now.getUTCDate()
-  );
-}
-
-function addDaysIsoUtc(iso: string, days: number) {
-  const base = new Date(`${iso}T00:00:00.000Z`);
-  const ms = base.getTime() + days * 24 * 60 * 60 * 1000;
-  return new Date(ms).toISOString().slice(0, 10);
-}
-
-function tomorrowIsoUtc() {
-  return addDaysIsoUtc(utcTodayIso(), 1);
-}
-
-function clampIsoToWindow(iso: string, minIso: string, maxIso: string) {
-  const s = String(iso ?? "").trim();
-  if (!s) return minIso;
-  if (s < minIso) return minIso;
-  if (s > maxIso) return maxIso;
-  return s;
-}
-
-function normalizeRange(fromIso: string, toIso: string) {
-  const a = String(fromIso ?? "").trim();
-  const b = String(toIso ?? "").trim();
-  if (!a) return { from: b, to: b };
-  if (!b) return { from: a, to: a };
-  return a <= b ? { from: a, to: b } : { from: b, to: a };
-}
-
-function isValidIsoDateOnly(s: string) {
-  return /^\d{4}-\d{2}-\d{2}$/.test(String(s ?? "").trim());
-}
-
-/* -------------------------------------------------------------------------- */
-/* Ticket helpers                                                             */
-/* -------------------------------------------------------------------------- */
-
-function ticketDifficultyLabel(d: TicketDifficulty | "unknown") {
-  switch (d) {
-    case "easy":
-      return "Easy";
-    case "medium":
-      return "Medium";
-    case "hard":
-      return "Hard";
-    case "very_hard":
-      return "Very hard";
-    default:
-      return "Unknown";
-  }
-}
-
-/* -------------------------------------------------------------------------- */
-/* Fixture helpers                                                            */
-/* -------------------------------------------------------------------------- */
-
-function norm(s: unknown) {
-  return String(s ?? "").trim().toLowerCase();
-}
-
-function fixtureIsoDateOnly(r: FixtureListRow): string | null {
-  const iso = kickoffIsoOrNull(r);
-  if (!iso) return null;
-  const m = iso.match(/^(\d{4}-\d{2}-\d{2})/);
-  return m?.[1] ?? null;
-}
-
-function kickoffPresentation(r: FixtureListRow, placeholderIds?: Set<string>) {
-  const certainty = getFixtureCertainty(r, { placeholderIds });
-  const iso = kickoffIsoOrNull(r);
-
-  if (!iso) {
-    return { primary: "TBC", secondary: "Kickoff time not set yet", certainty };
-  }
-
-  const formatted = formatUkDateTimeMaybe(iso) || "TBC";
-
-  if (certainty === "likely_tbc") {
-    return {
-      primary: formatted,
-      secondary: "Likely placeholder (TV schedule not confirmed)",
-      certainty,
-    };
-  }
-
-  if (certainty === "tbc") {
-    return {
-      primary: formatted,
-      secondary: "Kickoff time not confirmed",
-      certainty,
-    };
-  }
-
-  return {
-    primary: formatted,
-    secondary: null as string | null,
-    certainty,
-  };
-}
-
-function resolveTripForFixture(fixtureId: string): string | null {
-  const trips = tripsStore.getState().trips;
-  const hit = trips.find((t) => (t.matchIds ?? []).includes(String(fixtureId)));
-  return hit ? String(hit.id) : null;
-}
-
-/* -------------------------------------------------------------------------- */
-/* League / country browse helpers                                            */
-/* -------------------------------------------------------------------------- */
-
-function LeagueFlag({ code, size = "sm" }: { code: string; size?: "sm" | "md" }) {
-  const url = getFlagImageUrl(code);
-  if (!url) return null;
-  return (
-    <Image
-      source={{ uri: url }}
-      style={size === "md" ? styles.flagMd : styles.flag}
-    />
-  );
-}
-
-function initials(name: string) {
-  const clean = String(name ?? "").trim();
-  if (!clean) return "—";
-  const parts = clean.split(/\s+/g).filter(Boolean);
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
-}
-
-function TeamCrest({ name, logo }: { name: string; logo?: string | null }) {
-  return (
-    <View style={styles.crestWrap}>
-      {logo ? (
-        <Image source={{ uri: logo }} style={styles.crestImg} resizeMode="contain" />
-      ) : (
-        <Text style={styles.crestFallback}>{initials(name)}</Text>
-      )}
-    </View>
-  );
-}
-
-function prettifyKey(input: string) {
-  return String(input ?? "")
-    .trim()
-    .split("-")
-    .filter(Boolean)
-    .map((part) => {
-      if (part.toLowerCase() === "fc") return "FC";
-      if (part.toLowerCase() === "if") return "IF";
-      return part.charAt(0).toUpperCase() + part.slice(1);
-    })
-    .join(" ");
-}
-
-function featuredClubLine(league: LeagueOption): string {
-  const parts = (league.featuredClubKeys ?? []).slice(0, 2).map((key) => {
-    const team = getTeam(key);
-    if (team?.name && team?.city) return `${team.name} (${team.city})`;
-    if (team?.name) return team.name;
-    return prettifyKey(key);
-  });
-
-  return parts.join(" • ");
-}
-
-function leagueScopeSubtitle(selectedLeagues: LeagueOption[]) {
-  if (selectedLeagues.length === 0) return "Featured leagues";
-  if (selectedLeagues.length === 1) {
-    const one = selectedLeagues[0];
-    return `${one.label} • ${one.country}`;
-  }
-  return `${selectedLeagues.length} leagues selected`;
-}
 
 /* -------------------------------------------------------------------------- */
 /* Concurrency-limited fetch                                                  */
@@ -328,54 +100,6 @@ async function mapLimit<T, R>(
   return results;
 }
 
-/* -------------------------------------------------------------------------- */
-/* Calendar helpers                                                           */
-/* -------------------------------------------------------------------------- */
-
-function daysInMonthUtc(year: number, month0: number) {
-  return new Date(Date.UTC(year, month0 + 1, 0)).getUTCDate();
-}
-
-function firstWeekdayUtc(year: number, month0: number) {
-  const sundayBased = new Date(Date.UTC(year, month0, 1)).getUTCDay();
-  return (sundayBased + 6) % 7;
-}
-
-function monthLabel(year: number, month0: number) {
-  const d = new Date(Date.UTC(year, month0, 1));
-  return d.toLocaleDateString("en-GB", { month: "short", year: "numeric" });
-}
-
-function parseIsoToUtcParts(iso: string) {
-  const m = String(iso ?? "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!m) return null;
-  return { y: Number(m[1]), m0: Number(m[2]) - 1, d: Number(m[3]) };
-}
-
-function buildMonthGrid(year: number, month0: number) {
-  const dim = daysInMonthUtc(year, month0);
-  const firstW = firstWeekdayUtc(year, month0);
-  const cells: Array<{ iso: string; day: number; inMonth: boolean }> = [];
-
-  for (let i = 0; i < firstW; i++) {
-    cells.push({ iso: "", day: 0, inMonth: false });
-  }
-
-  for (let day = 1; day <= dim; day++) {
-    cells.push({ iso: isoFromUtcParts(year, month0, day), day, inMonth: true });
-  }
-
-  while (cells.length % 7 !== 0) {
-    cells.push({ iso: "", day: 0, inMonth: false });
-  }
-
-  return cells;
-}
-
-/* -------------------------------------------------------------------------- */
-/* Screen                                                                     */
-/* -------------------------------------------------------------------------- */
-
 export default function FixturesScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
@@ -386,48 +110,26 @@ export default function FixturesScreen() {
   const routeLeagueId = useMemo(() => coerceNumber((params as any)?.leagueId), [params]);
   const routeFrom = useMemo(() => coerceString((params as any)?.from), [params]);
   const routeTo = useMemo(() => coerceString((params as any)?.to), [params]);
-  const routeDiscover = useMemo(() => coerceString((params as any)?.discover), [params]);
-  const routeDiscoverFrom = useMemo(
-    () => coerceString((params as any)?.discoverFrom),
-    [params]
-  );
-  const routeDiscoverTripLength = useMemo(
-    () => parseDiscoverTripLength((params as any)?.discoverTripLength),
-    [params]
-  );
-  const routeDiscoverVibes = useMemo(
-    () => parseDiscoverVibes((params as any)?.discoverVibes),
-    [params]
-  );
-
   const discoverCategory = useMemo(
-    () => (isDiscoverCategory(routeDiscover) ? routeDiscover : null),
-    [routeDiscover]
+    () => parseDiscoverCategory((params as any)?.discover),
+    [params]
   );
-
-  const discoverContext = useMemo<DiscoverContext | null>(() => {
-    if (!discoverCategory) return null;
-    return {
-      origin: routeDiscoverFrom,
-      tripLength: routeDiscoverTripLength,
-      vibes: routeDiscoverVibes,
-    };
-  }, [
-    discoverCategory,
-    routeDiscoverFrom,
-    routeDiscoverTripLength,
-    routeDiscoverVibes,
-  ]);
+  const discoverContext = useMemo(
+    () =>
+      buildDiscoverContext({
+        discoverCategory,
+        discoverFrom: (params as any)?.discoverFrom,
+        discoverTripLength: (params as any)?.discoverTripLength,
+        discoverVibes: (params as any)?.discoverVibes,
+      }),
+    [params, discoverCategory]
+  );
 
   const routeSort = useMemo(
     () => coerceString((params as any)?.sort) ?? coerceString((params as any)?.mode),
     [params]
   );
-
-  const isTopPicksMode = useMemo(() => {
-    const s = String(routeSort ?? "").toLowerCase();
-    return s === "rating" || s === "toppicks" || s === "top_picks" || s === "top-picks";
-  }, [routeSort]);
+  const topPicksMode = useMemo(() => isTopPicksMode(routeSort), [routeSort]);
 
   const defaultTopFrom = useMemo(() => minIso, [minIso]);
   const defaultTopTo = useMemo(() => addDaysIsoUtc(minIso, 13), [minIso]);
@@ -441,12 +143,12 @@ export default function FixturesScreen() {
     const base =
       routeFrom && isValidIsoDateOnly(routeFrom)
         ? routeFrom
-        : isTopPicksMode
+        : topPicksMode
           ? defaultTopFrom
           : minIso;
 
     return clampIsoToWindow(base, minIso, maxIso);
-  }, [routeFrom, isTopPicksMode, defaultTopFrom, minIso, maxIso]);
+  }, [routeFrom, topPicksMode, defaultTopFrom, minIso, maxIso]);
 
   const initialRange = useMemo(() => {
     const a =
@@ -461,11 +163,11 @@ export default function FixturesScreen() {
 
     if (a && b && a !== b) return normalizeRange(a, b);
 
-    if (isTopPicksMode && !a && !b) {
+    if (topPicksMode && !a && !b) {
       return { from: defaultTopFrom, to: defaultTopTo };
     }
 
-    if (!isTopPicksMode && !a && !b) {
+    if (!topPicksMode && !a && !b) {
       return defaultBrowseRange;
     }
 
@@ -473,7 +175,7 @@ export default function FixturesScreen() {
   }, [
     routeFrom,
     routeTo,
-    isTopPicksMode,
+    topPicksMode,
     defaultTopFrom,
     defaultTopTo,
     defaultBrowseRange,
@@ -646,9 +348,7 @@ export default function FixturesScreen() {
               kickoffIso: String(item.fixture?.fixture?.date ?? ""),
             }))
             .sort((a, b) => {
-              if (b.discoverScore !== a.discoverScore) {
-                return b.discoverScore - a.discoverScore;
-              }
+              if (b.discoverScore !== a.discoverScore) return b.discoverScore - a.discoverScore;
               return a.kickoffIso.localeCompare(b.kickoffIso);
             })
             .map((x) => ({
@@ -660,7 +360,7 @@ export default function FixturesScreen() {
           return;
         }
 
-        if (isTopPicksMode) {
+        if (topPicksMode) {
           flat.sort((a, b) => {
             const sa = baseFixtureScore(a);
             const sb = baseFixtureScore(b);
@@ -694,7 +394,7 @@ export default function FixturesScreen() {
     fetchLeagues,
     fetchFrom,
     fetchTo,
-    isTopPicksMode,
+    topPicksMode,
     discoverCategory,
     discoverContext,
   ]);
@@ -765,7 +465,7 @@ export default function FixturesScreen() {
   );
 
   const onToggleFollowFromRow = useCallback(
-    (r: FixtureListRow) => {
+    (r: RankedFixtureRow) => {
       const fixtureId = r?.fixture?.id != null ? String(r.fixture.id) : "";
       if (!fixtureId) return;
 
@@ -797,8 +497,6 @@ export default function FixturesScreen() {
     },
     [toggleFollow]
   );
-
-  /* ----------------------------- Calendar modal ---------------------------- */
 
   const [calendarOpen, setCalendarOpen] = useState(false);
 
@@ -909,8 +607,6 @@ export default function FixturesScreen() {
     setCalPickB(selectedDay);
   }, [selectedDay]);
 
-  /* ----------------------------- Date strip tap ---------------------------- */
-
   const onTapStripDate = useCallback(
     (iso: string) => {
       const d = clampIsoToWindow(iso, minIso, maxIso);
@@ -920,12 +616,10 @@ export default function FixturesScreen() {
     [minIso, maxIso]
   );
 
-  /* ----------------------------- Titles ----------------------------------- */
-
   const titleText = useMemo(() => {
     if (discoverCategory) return DISCOVER_CATEGORY_META[discoverCategory].title;
-    return isTopPicksMode ? "Top Picks" : "Fixtures";
-  }, [discoverCategory, isTopPicksMode]);
+    return topPicksMode ? "Top Picks" : "Fixtures";
+  }, [discoverCategory, topPicksMode]);
 
   const subtitleText = useMemo(() => {
     if (discoverCategory) return DISCOVER_CATEGORY_META[discoverCategory].subtitle;
@@ -968,189 +662,15 @@ export default function FixturesScreen() {
       selectedLeagueIds.length > 0
         ? ` • ${selectedLeagueIds.length}/${MAX_MULTI_LEAGUES} leagues`
         : " • Featured scope"
-    }${isTopPicksMode ? " • Sorted by rating" : ""}`;
+    }${topPicksMode ? " • Sorted by rating" : ""}`;
   }, [
     discoverCategory,
     isRange,
     effectiveRange,
     selectedLeagueIds.length,
-    isTopPicksMode,
+    topPicksMode,
     discoverContext,
   ]);
-
-  /* ----------------------------- Row rendering ----------------------------- */
-
-  const renderRow = useCallback(
-    ({ item }: { item: RankedFixtureRow }) => {
-      const r = item;
-      const fixtureId = r?.fixture?.id != null ? String(r.fixture.id) : "";
-      if (!fixtureId) return null;
-
-      const rowKey = `${String(r?.league?.id ?? "L")}-${fixtureId}`;
-      const expanded = expandedKey === rowKey;
-
-      const home = String(r?.teams?.home?.name ?? "Home");
-      const away = String(r?.teams?.away?.name ?? "Away");
-
-      const venue = String(r?.fixture?.venue?.name ?? "").trim();
-      const city = String(r?.fixture?.venue?.city ?? "").trim();
-
-      const kickoff = kickoffPresentation(r, placeholderIds);
-      const certainty = kickoff.certainty;
-      const isFollowed = followedIdSet.has(fixtureId);
-
-      const ctxLeagueId = r?.league?.id != null ? Number(r.league.id) : null;
-      const ctxSeason =
-        (r as any)?.league?.season != null ? Number((r as any).league.season) : null;
-
-      const rawDifficulty = home ? getTicketDifficultyBadge(home) : null;
-      const difficulty: TicketDifficulty | "unknown" = rawDifficulty ?? "unknown";
-
-      const leagueCode =
-        String((r?.league as any)?.country ?? "").trim() ||
-        LEAGUES.find((l) => l.leagueId === ctxLeagueId)?.countryCode ||
-        "";
-
-      const discoverReasons = Array.isArray(r.discoverReasons)
-        ? r.discoverReasons
-        : [];
-
-      return (
-        <View style={styles.rowWrap}>
-          <GlassCard style={styles.rowCard} level="default" variant="matte">
-            <Pressable
-              onPress={() => setExpandedKey(expanded ? null : rowKey)}
-              style={({ pressed }) => [styles.rowMainPress, pressed && { opacity: 0.96 }]}
-              android_ripple={{ color: "rgba(255,255,255,0.04)" }}
-            >
-              <View style={styles.rowInner}>
-                <View style={styles.fixtureLeagueLine}>
-                  {leagueCode ? <LeagueFlag code={leagueCode} /> : null}
-                  <Text style={styles.fixtureLeagueText}>
-                    {String(r?.league?.name ?? "")}
-                  </Text>
-                </View>
-
-                <View style={styles.topRow}>
-                  <TeamCrest name={home} logo={r?.teams?.home?.logo} />
-
-                  <View style={styles.centerCol}>
-                    <Text style={styles.teamName} numberOfLines={2}>
-                      {home}
-                    </Text>
-                    <Text style={styles.vs}>vs</Text>
-                    <Text style={styles.teamName} numberOfLines={2}>
-                      {away}
-                    </Text>
-                  </View>
-
-                  <TeamCrest name={away} logo={r?.teams?.away?.logo} />
-                </View>
-
-                <View style={styles.metaBlock}>
-                  <Text style={styles.metaPrimary}>{kickoff.primary}</Text>
-
-                  {venue || city ? (
-                    <Text style={styles.metaVenue}>
-                      {[venue, city].filter(Boolean).join(" • ")}
-                    </Text>
-                  ) : null}
-
-                  {kickoff.secondary ? (
-                    <Text style={styles.metaSecondary}>{kickoff.secondary}</Text>
-                  ) : null}
-                </View>
-
-                <View style={styles.badgeRow}>
-                  <FixtureCertaintyBadge state={certainty} variant="compact" />
-
-                  <View
-                    style={[
-                      styles.ticketPill,
-                      difficulty === "easy" && styles.ticketEasy,
-                      difficulty === "medium" && styles.ticketMedium,
-                      (difficulty === "hard" || difficulty === "very_hard") &&
-                        styles.ticketHard,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.ticketText,
-                        difficulty === "easy" && styles.ticketTextEasy,
-                        difficulty === "medium" && styles.ticketTextMedium,
-                        (difficulty === "hard" || difficulty === "very_hard") &&
-                          styles.ticketTextHard,
-                      ]}
-                    >
-                      Home tickets: {ticketDifficultyLabel(difficulty)}
-                    </Text>
-                  </View>
-                </View>
-
-                {discoverReasons.length > 0 ? (
-                  <View style={styles.discoverReasonRow}>
-                    {discoverReasons.slice(0, 3).map((reason) => (
-                      <View key={reason} style={styles.discoverReasonPill}>
-                        <Text style={styles.discoverReasonText}>{reason}</Text>
-                      </View>
-                    ))}
-                  </View>
-                ) : null}
-
-                <View style={styles.followRow}>
-                  <Button
-                    label={isFollowed ? "Following" : "Follow"}
-                    onPress={() => onToggleFollowFromRow(r)}
-                    tone={isFollowed ? "secondary" : "primary"}
-                    size="sm"
-                    glow={!isFollowed}
-                    style={{ flex: 1 }}
-                  />
-                </View>
-
-                <Text style={styles.tapHint}>Tap for actions</Text>
-              </View>
-            </Pressable>
-
-            {expanded ? (
-              <View style={styles.expandArea}>
-                <Button
-                  label="Match"
-                  onPress={() =>
-                    goMatch(fixtureId, { leagueId: ctxLeagueId, season: ctxSeason })
-                  }
-                  tone="secondary"
-                  size="md"
-                  style={{ flex: 1 }}
-                />
-                <Button
-                  label="Build trip"
-                  onPress={() =>
-                    goTripOrBuild(fixtureId, {
-                      leagueId: ctxLeagueId,
-                      season: ctxSeason,
-                    })
-                  }
-                  tone="primary"
-                  size="md"
-                  glow
-                  style={{ flex: 1 }}
-                />
-              </View>
-            ) : null}
-          </GlassCard>
-        </View>
-      );
-    },
-    [
-      expandedKey,
-      followedIdSet,
-      goMatch,
-      goTripOrBuild,
-      onToggleFollowFromRow,
-      placeholderIds,
-    ]
-  );
 
   const headerDateLine = useMemo(() => {
     if (!isRange) {
@@ -1171,195 +691,6 @@ export default function FixturesScreen() {
       ? ({ imageUrl: bg } as const)
       : ({ imageSource: bg } as const);
 
-  const headerComponent = (
-    <View style={styles.headerListWrap}>
-      <View style={styles.header}>
-        <View style={styles.headerTopRow}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.title}>{titleText}</Text>
-            <Text style={styles.subtitle}>{subtitleText}</Text>
-            <Text style={styles.dateLine}>{headerDateLine}</Text>
-          </View>
-
-          <Button label="Calendar" tone="secondary" size="sm" onPress={openCalendar} />
-        </View>
-
-        <Input
-          value={query}
-          onChangeText={setQuery}
-          placeholder="Search team, city, venue, or league"
-          leftIcon="search"
-          variant="default"
-          returnKeyType="search"
-          allowClear
-        />
-
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ paddingRight: 12 }}
-        >
-          {stripDays.map((d, i) => {
-            const active = !isRange && d.iso === selectedDay;
-
-            return (
-              <Pressable
-                key={`${d.iso}-${i}`}
-                onPress={() => onTapStripDate(d.iso)}
-                style={[styles.datePill, active && styles.datePillActive]}
-              >
-                <Text style={[styles.dateTop, active && styles.dateTopActive]}>
-                  {d.top}
-                </Text>
-                <Text style={[styles.dateBottom, active && styles.dateBottomActive]}>
-                  {d.bottom}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-
-        <View style={styles.scopeRow}>
-          <Text style={styles.sectionLabel}>Featured leagues</Text>
-          {selectedLeagueIds.length > 0 ? (
-            <Button
-              label="Reset to featured"
-              tone="ghost"
-              size="sm"
-              onPress={resetToFeatured}
-            />
-          ) : null}
-        </View>
-
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ paddingRight: 12 }}
-        >
-          {FEATURED_LEAGUES.map((league) => {
-            const active =
-              selectedLeagueIds.length > 0 &&
-              selectedLeagueIds.length === 1 &&
-              selectedLeagueIds[0] === league.leagueId;
-
-            return (
-              <Pressable
-                key={`featured-${league.leagueId}`}
-                onPress={() => selectSingleLeague(league.leagueId)}
-                style={[styles.featuredLeagueCard, active && styles.featuredLeagueCardActive]}
-              >
-                <View style={styles.featuredLeagueTop}>
-                  <LeagueFlag code={league.countryCode} size="md" />
-                  <Text
-                    style={[
-                      styles.featuredLeagueText,
-                      active && styles.featuredLeagueTextActive,
-                    ]}
-                  >
-                    {league.label}
-                  </Text>
-                </View>
-                <Text style={styles.featuredLeagueCountry}>{league.country}</Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-
-        <View style={styles.scopeRow}>
-          <Text style={styles.sectionLabel}>Browse by region</Text>
-        </View>
-
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ paddingRight: 12 }}
-        >
-          {LEAGUE_BROWSE_REGION_ORDER.map((region) => {
-            const active = region === activeRegion;
-            return (
-              <Pressable
-                key={region}
-                onPress={() => setActiveRegion(region)}
-                style={[styles.regionPill, active && styles.regionPillActive]}
-              >
-                <Text style={[styles.regionPillText, active && styles.regionPillTextActive]}>
-                  {LEAGUE_BROWSE_REGION_LABELS[region]}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-
-        <View style={styles.countryGrid}>
-          {leaguesByRegion[activeRegion].map((league) => {
-            const active = selectedLeagueIds.includes(league.leagueId);
-
-            return (
-              <Pressable
-                key={`country-card-${league.leagueId}`}
-                onPress={() => selectSingleLeague(league.leagueId)}
-                onLongPress={() => toggleLeague(league.leagueId)}
-                style={[styles.countryCardWrap, active && styles.countryCardWrapActive]}
-              >
-                <GlassCard style={styles.countryCard} level="default" variant="matte">
-                  <View style={styles.countryCardHeader}>
-                    <LeagueFlag code={league.countryCode} size="md" />
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.countryCardCountry}>{league.country}</Text>
-                      <Text style={styles.countryCardLeague}>{league.label}</Text>
-                    </View>
-                  </View>
-
-                  <Text style={styles.countryCardClubs} numberOfLines={2}>
-                    {featuredClubLine(league)}
-                  </Text>
-
-                  <View style={styles.countryCardFooter}>
-                    <Text style={styles.countryCardHint}>Tap to view</Text>
-                    <Text style={styles.countryCardHint}>Hold to multi-select</Text>
-                  </View>
-                </GlassCard>
-              </Pressable>
-            );
-          })}
-        </View>
-
-        {selectedLeagueIds.length > 0 ? (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ paddingRight: 12 }}
-          >
-            {selectedLeagues.map((league) => (
-              <Pressable
-                key={`selected-${league.leagueId}`}
-                onPress={() => toggleLeague(league.leagueId)}
-                style={[styles.leaguePill, styles.leaguePillActive]}
-              >
-                <Text style={[styles.leagueText, styles.leagueTextActive]}>
-                  {league.label}
-                </Text>
-                <LeagueFlag code={league.countryCode} />
-              </Pressable>
-            ))}
-          </ScrollView>
-        ) : null}
-
-        <Text style={styles.helperLine}>{helperLineText}</Text>
-      </View>
-
-      <View style={styles.content}>
-        <View style={styles.listWrap}>
-          {!loading && !error && filtered.length > 0 ? (
-            <Text style={styles.resultsLine}>
-              {filtered.length} match{filtered.length === 1 ? "" : "es"} found
-            </Text>
-          ) : null}
-        </View>
-      </View>
-    </View>
-  );
-
   return (
     <Background {...bgProps} overlayOpacity={0}>
       <SafeAreaView style={styles.container} edges={["top"]}>
@@ -1371,8 +702,51 @@ export default function FixturesScreen() {
             const lid = item?.league?.id != null ? String(item.league.id) : "L";
             return `${lid}-${fid}`;
           }}
-          renderItem={renderRow}
-          ListHeaderComponent={headerComponent}
+          renderItem={({ item }) => {
+            const fixtureId = item?.fixture?.id != null ? String(item.fixture.id) : "";
+            const rowKey = `${String(item?.league?.id ?? "L")}-${fixtureId}`;
+            const expanded = expandedKey === rowKey;
+            const isFollowed = followedIdSet.has(fixtureId);
+
+            return (
+              <FixtureRowCard
+                item={item}
+                expanded={expanded}
+                isFollowed={isFollowed}
+                placeholderIds={placeholderIds}
+                onToggleExpanded={() => setExpandedKey(expanded ? null : rowKey)}
+                onToggleFollow={() => onToggleFollowFromRow(item)}
+                onPressMatch={goMatch}
+                onPressBuildTrip={goTripOrBuild}
+              />
+            );
+          }}
+          ListHeaderComponent={
+            <FixturesHeader
+              titleText={titleText}
+              subtitleText={subtitleText}
+              headerDateLine={headerDateLine}
+              query={query}
+              setQuery={setQuery}
+              stripDays={stripDays}
+              isRange={isRange}
+              selectedDay={selectedDay}
+              onTapStripDate={onTapStripDate}
+              selectedLeagueIds={selectedLeagueIds}
+              resetToFeatured={resetToFeatured}
+              selectSingleLeague={selectSingleLeague}
+              activeRegion={activeRegion}
+              setActiveRegion={setActiveRegion}
+              leaguesByRegion={leaguesByRegion}
+              toggleLeague={toggleLeague}
+              selectedLeagues={selectedLeagues}
+              helperLineText={helperLineText}
+              loading={loading}
+              error={error}
+              filteredCount={filtered.length}
+              openCalendar={openCalendar}
+            />
+          }
           ListEmptyComponent={
             <View style={[styles.content, styles.listWrap]}>
               {loading ? (
@@ -1504,10 +878,6 @@ export default function FixturesScreen() {
   );
 }
 
-/* -------------------------------------------------------------------------- */
-/* Styles                                                                     */
-/* -------------------------------------------------------------------------- */
-
 const styles = StyleSheet.create({
   container: { flex: 1 },
 
@@ -1515,265 +885,12 @@ const styles = StyleSheet.create({
     paddingBottom: theme.spacing.xl,
   },
 
-  headerListWrap: {
-    width: "100%",
-  },
-
-  header: {
-    paddingHorizontal: theme.spacing.lg,
-    paddingTop: theme.spacing.lg,
-    paddingBottom: theme.spacing.md,
-    gap: theme.spacing.sm,
-  },
-
-  headerTopRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.spacing.sm,
-  },
-
-  title: {
-    color: theme.colors.textPrimary,
-    fontSize: theme.fontSize.h1,
-    fontWeight: theme.fontWeight.semibold,
-  },
-
-  subtitle: {
-    marginTop: 4,
-    color: theme.colors.textSecondary,
-    fontSize: theme.fontSize.meta,
-    fontWeight: theme.fontWeight.medium,
-  },
-
-  dateLine: {
-    marginTop: 6,
-    color: theme.colors.textMuted,
-    fontSize: theme.fontSize.tiny,
-    fontWeight: theme.fontWeight.medium,
-  },
-
-  helperLine: {
-    color: theme.colors.textMuted,
-    fontSize: theme.fontSize.tiny,
-    fontWeight: theme.fontWeight.medium,
-    marginTop: 2,
-  },
-
-  sectionLabel: {
-    color: theme.colors.textPrimary,
-    fontSize: theme.fontSize.meta,
-    fontWeight: theme.fontWeight.semibold,
-  },
-
-  scopeRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: theme.spacing.sm,
-    marginTop: 2,
-  },
-
-  datePill: {
-    borderWidth: 1,
-    borderColor: theme.colors.borderSubtle,
-    borderRadius: theme.borderRadius.card,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    marginRight: 8,
-    backgroundColor: "rgba(255,255,255,0.03)",
-    minWidth: 78,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  datePillActive: {
-    borderColor: "rgba(87,162,56,0.30)",
-    backgroundColor: "rgba(87,162,56,0.10)",
-  },
-
-  dateTop: {
-    color: theme.colors.textSecondary,
-    fontSize: theme.fontSize.tiny,
-    fontWeight: theme.fontWeight.semibold,
-  },
-
-  dateBottom: {
-    color: theme.colors.textPrimary,
-    fontSize: theme.fontSize.meta,
-    fontWeight: theme.fontWeight.semibold,
-    marginTop: 2,
-  },
-
-  dateTopActive: { color: "rgba(87,162,56,0.95)" },
-  dateBottomActive: { color: theme.colors.textPrimary },
-
-  featuredLeagueCard: {
-    width: 160,
-    borderWidth: 1,
-    borderColor: theme.colors.borderSubtle,
-    borderRadius: theme.borderRadius.card,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    marginRight: 10,
-    backgroundColor: "rgba(255,255,255,0.03)",
-    gap: 8,
-  },
-
-  featuredLeagueCardActive: {
-    borderColor: "rgba(87,162,56,0.30)",
-    backgroundColor: "rgba(87,162,56,0.10)",
-  },
-
-  featuredLeagueTop: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-
-  featuredLeagueText: {
-    color: theme.colors.textPrimary,
-    fontWeight: theme.fontWeight.semibold,
-    fontSize: theme.fontSize.meta,
-    flex: 1,
-  },
-
-  featuredLeagueTextActive: {
-    color: theme.colors.textPrimary,
-  },
-
-  featuredLeagueCountry: {
-    color: theme.colors.textSecondary,
-    fontSize: theme.fontSize.tiny,
-    fontWeight: theme.fontWeight.medium,
-  },
-
-  regionPill: {
-    borderWidth: 1,
-    borderColor: theme.colors.borderSubtle,
-    borderRadius: theme.borderRadius.pill,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    marginRight: 8,
-    backgroundColor: "rgba(255,255,255,0.03)",
-  },
-
-  regionPillActive: {
-    borderColor: "rgba(87,162,56,0.30)",
-    backgroundColor: "rgba(87,162,56,0.10)",
-  },
-
-  regionPillText: {
-    color: theme.colors.textSecondary,
-    fontWeight: theme.fontWeight.semibold,
-    fontSize: theme.fontSize.tiny,
-  },
-
-  regionPillTextActive: {
-    color: theme.colors.textPrimary,
-  },
-
-  countryGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "space-between",
-    gap: 12,
-  },
-
-  countryCardWrap: {
-    width: "48.2%",
-  },
-
-  countryCardWrapActive: {
-    transform: [{ scale: 0.99 }],
-  },
-
-  countryCard: {
-    minHeight: 138,
-    borderRadius: theme.borderRadius.sheet,
-    padding: 14,
-    justifyContent: "space-between",
-    borderWidth: 1,
-    borderColor: theme.colors.borderSubtle,
-  },
-
-  countryCardHeader: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 10,
-  },
-
-  countryCardCountry: {
-    color: theme.colors.textPrimary,
-    fontSize: theme.fontSize.meta,
-    fontWeight: theme.fontWeight.semibold,
-  },
-
-  countryCardLeague: {
-    marginTop: 2,
-    color: theme.colors.textSecondary,
-    fontSize: theme.fontSize.tiny,
-    fontWeight: theme.fontWeight.medium,
-  },
-
-  countryCardClubs: {
-    color: theme.colors.textPrimary,
-    fontSize: theme.fontSize.tiny,
-    lineHeight: 18,
-    fontWeight: theme.fontWeight.medium,
-    opacity: 0.96,
-  },
-
-  countryCardFooter: {
-    gap: 2,
-  },
-
-  countryCardHint: {
-    color: theme.colors.textMuted,
-    fontSize: 11,
-    fontWeight: theme.fontWeight.medium,
-  },
-
-  leaguePill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    borderWidth: 1,
-    borderColor: theme.colors.borderSubtle,
-    borderRadius: theme.borderRadius.pill,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    marginRight: 8,
-    backgroundColor: "rgba(255,255,255,0.03)",
-  },
-
-  leaguePillActive: {
-    borderColor: "rgba(87,162,56,0.30)",
-    backgroundColor: "rgba(87,162,56,0.10)",
-  },
-
-  leagueText: {
-    color: theme.colors.textSecondary,
-    fontWeight: theme.fontWeight.semibold,
-    fontSize: theme.fontSize.tiny,
-  },
-
-  leagueTextActive: { color: theme.colors.textPrimary },
-
-  flag: { width: 18, height: 13, borderRadius: 3, opacity: 0.9 },
-  flagMd: { width: 22, height: 16, borderRadius: 4, opacity: 0.95 },
-
   content: {
     paddingHorizontal: theme.spacing.lg,
   },
 
   listWrap: {
     gap: 12,
-  },
-
-  resultsLine: {
-    color: theme.colors.textSecondary,
-    fontSize: theme.fontSize.tiny,
-    fontWeight: theme.fontWeight.medium,
   },
 
   center: {
@@ -1785,212 +902,6 @@ const styles = StyleSheet.create({
   muted: {
     color: theme.colors.textSecondary,
     fontWeight: theme.fontWeight.medium,
-  },
-
-  rowWrap: {
-    width: "100%",
-    paddingHorizontal: theme.spacing.lg,
-    marginBottom: 12,
-  },
-
-  rowCard: {
-    borderRadius: theme.borderRadius.sheet,
-    padding: 0,
-  },
-
-  rowMainPress: {
-    borderRadius: theme.borderRadius.sheet,
-    overflow: "hidden",
-  },
-
-  rowInner: {
-    padding: 16,
-    gap: 12,
-  },
-
-  fixtureLeagueLine: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-  },
-
-  fixtureLeagueText: {
-    color: theme.colors.textMuted,
-    fontSize: theme.fontSize.tiny,
-    fontWeight: theme.fontWeight.medium,
-  },
-
-  topRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 12,
-  },
-
-  crestWrap: {
-    width: 56,
-    height: 56,
-    borderRadius: 18,
-    backgroundColor: "rgba(255,255,255,0.05)",
-    borderWidth: 1,
-    borderColor: theme.colors.borderSubtle,
-    alignItems: "center",
-    justifyContent: "center",
-    overflow: "hidden",
-  },
-
-  crestImg: {
-    width: 38,
-    height: 38,
-    opacity: 0.95,
-  },
-
-  crestFallback: {
-    color: theme.colors.textSecondary,
-    fontWeight: theme.fontWeight.semibold,
-  },
-
-  centerCol: {
-    flex: 1,
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 2,
-  },
-
-  teamName: {
-    color: theme.colors.textPrimary,
-    fontSize: theme.fontSize.body,
-    lineHeight: 20,
-    fontWeight: theme.fontWeight.semibold,
-    width: "100%",
-    textAlign: "center",
-  },
-
-  vs: {
-    color: theme.colors.textMuted,
-    fontSize: theme.fontSize.tiny,
-    fontWeight: theme.fontWeight.medium,
-  },
-
-  metaBlock: {
-    width: "100%",
-    alignItems: "center",
-    gap: 4,
-  },
-
-  metaPrimary: {
-    color: theme.colors.textSecondary,
-    fontSize: theme.fontSize.tiny,
-    fontWeight: theme.fontWeight.semibold,
-    textAlign: "center",
-  },
-
-  metaVenue: {
-    color: theme.colors.textPrimary,
-    fontSize: theme.fontSize.meta,
-    fontWeight: theme.fontWeight.semibold,
-    textAlign: "center",
-    opacity: 0.95,
-  },
-
-  metaSecondary: {
-    color: theme.colors.textMuted,
-    fontSize: theme.fontSize.tiny,
-    textAlign: "center",
-    fontWeight: theme.fontWeight.medium,
-  },
-
-  badgeRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    flexWrap: "wrap",
-    justifyContent: "center",
-  },
-
-  discoverReasonRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 6,
-    justifyContent: "center",
-  },
-
-  discoverReasonPill: {
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    backgroundColor: "rgba(255,255,255,0.05)",
-    borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-
-  discoverReasonText: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: theme.colors.textSecondary,
-  },
-
-  ticketPill: {
-    borderWidth: 1,
-    borderColor: theme.colors.borderSubtle,
-    backgroundColor: "rgba(255,255,255,0.03)",
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: theme.borderRadius.pill,
-  },
-
-  ticketText: {
-    color: theme.colors.textSecondary,
-    fontWeight: theme.fontWeight.semibold,
-    fontSize: 11,
-  },
-
-  ticketEasy: {
-    borderColor: "rgba(87,162,56,0.30)",
-    backgroundColor: "rgba(87,162,56,0.10)",
-  },
-
-  ticketTextEasy: {
-    color: "rgba(87,162,56,0.95)",
-  },
-
-  ticketMedium: {
-    borderColor: "rgba(242,201,76,0.30)",
-    backgroundColor: "rgba(242,201,76,0.10)",
-  },
-
-  ticketTextMedium: {
-    color: "rgba(242,201,76,0.95)",
-  },
-
-  ticketHard: {
-    borderColor: "rgba(214,69,69,0.30)",
-    backgroundColor: "rgba(214,69,69,0.10)",
-  },
-
-  ticketTextHard: {
-    color: "rgba(214,69,69,0.95)",
-  },
-
-  followRow: {
-    marginTop: 2,
-    flexDirection: "row",
-    gap: 10,
-  },
-
-  tapHint: {
-    marginTop: -2,
-    color: theme.colors.textMuted,
-    fontSize: theme.fontSize.tiny,
-    fontWeight: theme.fontWeight.medium,
-    textAlign: "center",
-  },
-
-  expandArea: {
-    flexDirection: "row",
-    gap: 10,
-    padding: 16,
-    paddingTop: 0,
   },
 
   modalBackdrop: {
