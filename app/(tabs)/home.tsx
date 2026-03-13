@@ -80,15 +80,12 @@ function cityKeyFromName(name: string) {
 function dedupeBy<T>(arr: T[], keyFn: (t: T) => string): T[] {
   const seen = new Set<string>();
   const out: T[] = [];
-
   for (const item of arr) {
     const k = keyFn(item);
-    if (!k) continue;
-    if (seen.has(k)) continue;
+    if (!k || seen.has(k)) continue;
     seen.add(k);
     out.push(item);
   }
-
   return out;
 }
 
@@ -121,7 +118,6 @@ function fixtureLine(r: FixtureListRow) {
   const venue = r?.fixture?.venue?.name ?? "";
   const city = r?.fixture?.venue?.city ?? "";
   const extra = [venue, city].filter(Boolean).join(" • ");
-
   return {
     title: `${home} vs ${away}`,
     meta: extra ? `${kickoff} • ${extra}` : kickoff,
@@ -182,11 +178,7 @@ function LeagueStrip({
   onSelect: (league: LeagueOption) => void;
 }) {
   return (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={styles.leagueStripRow}
-    >
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.leagueStripRow}>
       {leagues.map((league) => {
         const active = league.leagueId === activeLeagueId;
 
@@ -201,11 +193,7 @@ function LeagueStrip({
             ]}
             android_ripple={{ color: "rgba(255,255,255,0.08)" }}
           >
-            <Image
-              source={{ uri: league.logo }}
-              style={styles.leagueStripLogo}
-              resizeMode="contain"
-            />
+            <Image source={{ uri: league.logo }} style={styles.leagueStripLogo} resizeMode="contain" />
           </Pressable>
         );
       })}
@@ -247,12 +235,10 @@ function scoreFixture(r: FixtureListRow): number {
 
 function useDebouncedValue<T>(value: T, delayMs: number) {
   const [debounced, setDebounced] = useState(value);
-
   useEffect(() => {
     const t = setTimeout(() => setDebounced(value), delayMs);
     return () => clearTimeout(t);
   }, [value, delayMs]);
-
   return debounced;
 }
 
@@ -277,11 +263,7 @@ function bucketStrengthTone(bucket: WeekendBucket) {
   return "decent";
 }
 
-async function mapLimit<T, R>(
-  items: T[],
-  limit: number,
-  fn: (item: T) => Promise<R>
-): Promise<R[]> {
+async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
   const results: R[] = new Array(items.length) as R[];
   let nextIndex = 0;
 
@@ -298,6 +280,35 @@ async function mapLimit<T, R>(
   );
   await Promise.all(workers);
   return results;
+}
+
+function CityChipPremium({
+  name,
+  countryCode,
+  onPress,
+}: {
+  name: string;
+  countryCode: string;
+  onPress: () => void;
+}) {
+  const flagUrl = getFlagImageUrl(countryCode, { size: 48 });
+  const cityImage = getCityImageUrl(name);
+
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [styles.cityPill, pressed && styles.pressedPill]}
+      android_ripple={{ color: "rgba(255,255,255,0.08)" }}
+    >
+      <Image source={{ uri: cityImage }} style={styles.cityThumb} resizeMode="cover" />
+      <View style={{ gap: 4 }}>
+        <Text style={styles.pillText}>{name}</Text>
+        {flagUrl ? (
+          <Image source={{ uri: flagUrl }} style={styles.cityFlagInline} resizeMode="cover" />
+        ) : null}
+      </View>
+    </Pressable>
+  );
 }
 
 export default function HomeScreen() {
@@ -436,10 +447,7 @@ export default function HomeScreen() {
   }, [tripFinderLeagues, weekendWindow.from, weekendWindow.to]);
 
   const rankedWeekendTrips = useMemo(() => rankTrips(tfRows), [tfRows]);
-  const weekendBuckets = useMemo(
-    () => groupTripsByWeekend(rankedWeekendTrips),
-    [rankedWeekendTrips]
-  );
+  const weekendBuckets = useMemo(() => groupTripsByWeekend(rankedWeekendTrips), [rankedWeekendTrips]);
 
   const bestWeekendBucket = useMemo(() => {
     return [...weekendBuckets].sort((a, b) => {
@@ -449,15 +457,8 @@ export default function HomeScreen() {
     })[0] ?? null;
   }, [weekendBuckets]);
 
-  const bestWeekendTrip = useMemo(
-    () => bestWeekendBucket?.trips?.[0] ?? null,
-    [bestWeekendBucket]
-  );
-
-  const nextWeekendTrips = useMemo(
-    () => bestWeekendBucket?.trips?.slice(1, 3) ?? [],
-    [bestWeekendBucket]
-  );
+  const bestWeekendTrip = useMemo(() => bestWeekendBucket?.trips?.[0] ?? null, [bestWeekendBucket]);
+  const nextWeekendTrips = useMemo(() => bestWeekendBucket?.trips?.slice(1, 3) ?? [], [bestWeekendBucket]);
 
   const [q, setQ] = useState("");
   const qNorm = useMemo(() => q.trim(), [q]);
@@ -474,9 +475,7 @@ export default function HomeScreen() {
     let cancelled = false;
 
     async function ensureIndex() {
-      if (!showSearchResults) return;
-      if (indexRef.current) return;
-      if (buildOnceRef.current) return;
+      if (!showSearchResults || indexRef.current || buildOnceRef.current) return;
 
       buildOnceRef.current = true;
       setSearchBuilding(true);
@@ -503,8 +502,7 @@ export default function HomeScreen() {
 
   const rawSearchResults = useMemo(() => {
     const idx = indexRef.current;
-    if (!idx) return [];
-    if (!qDebounced) return [];
+    if (!idx || !qDebounced) return [];
     return querySearchIndex(idx, qDebounced, { limit: 16 });
   }, [qDebounced, searchBuiltAt]);
 
@@ -563,8 +561,7 @@ export default function HomeScreen() {
 
   const goWeekendTripMatch = useCallback(
     (trip: RankedTrip, bucket?: WeekendBucket | null) => {
-      const fixtureId =
-        trip?.fixture?.fixture?.id != null ? String(trip.fixture.fixture.id) : "";
+      const fixtureId = trip?.fixture?.fixture?.id != null ? String(trip.fixture.fixture.id) : "";
       if (!fixtureId) return;
 
       router.push({
@@ -581,10 +578,8 @@ export default function HomeScreen() {
 
   const goWeekendTripBuild = useCallback(
     (trip: RankedTrip, bucket?: WeekendBucket | null) => {
-      const fixtureId =
-        trip?.fixture?.fixture?.id != null ? String(trip.fixture.fixture.id) : "";
-      const leagueId =
-        trip?.fixture?.league?.id != null ? String(trip.fixture.league.id) : "";
+      const fixtureId = trip?.fixture?.fixture?.id != null ? String(trip.fixture.fixture.id) : "";
+      const leagueId = trip?.fixture?.league?.id != null ? String(trip.fixture.league.id) : "";
       const season =
         (trip?.fixture as any)?.league?.season != null
           ? String((trip.fixture as any).league.season)
@@ -691,16 +686,9 @@ export default function HomeScreen() {
     return r.subtitle ?? "";
   }, []);
 
-  const cities = useMemo(
-    () => dedupeBy(POPULAR_CITIES, (c) => toKey(c.name)).slice(0, 5),
-    []
-  );
-
+  const cities = useMemo(() => dedupeBy(POPULAR_CITIES, (c) => toKey(c.name)).slice(0, 5), []);
   const popularTeams = useMemo(
-    () =>
-      getPopularTeams()
-        .filter((t) => typeof (t as any)?.teamId === "number")
-        .slice(0, 5),
+    () => getPopularTeams().filter((t) => typeof (t as any)?.teamId === "number").slice(0, 5),
     []
   );
 
@@ -754,8 +742,7 @@ export default function HomeScreen() {
 
   const nextTripCityTitle = useMemo(() => {
     if (!nextTrip) return "";
-    const raw =
-      (nextTrip as any).cityName || (nextTrip as any).city || nextTrip.cityId || "Trip";
+    const raw = (nextTrip as any).cityName || (nextTrip as any).city || nextTrip.cityId || "Trip";
     return titleFromSlug(String(raw));
   }, [nextTrip]);
 
@@ -826,8 +813,7 @@ export default function HomeScreen() {
               <Text style={styles.heroKicker}>YOURNEXTAWAY</Text>
               <Text style={styles.heroTitle}>Plan a football city break</Text>
               <Text style={styles.heroSub}>
-                Search a city, team, country, league, or venue — then pick a match and build
-                your trip workspace.
+                Search a city, team, country, league, or venue — then pick a match and build your trip workspace.
               </Text>
 
               <View style={styles.searchBox}>
@@ -884,22 +870,13 @@ export default function HomeScreen() {
                         <Text style={styles.groupEmpty}>No results.</Text>
                       ) : (
                         <View style={styles.resultList}>
-                          {[
-                            ...buckets.teams,
-                            ...buckets.cities,
-                            ...buckets.venues,
-                            ...buckets.countries,
-                            ...buckets.leagues,
-                          ]
+                          {[...buckets.teams, ...buckets.cities, ...buckets.venues, ...buckets.countries, ...buckets.leagues]
                             .slice(0, 12)
                             .map((r, idx) => (
                               <Pressable
                                 key={`${r.key}-${idx}`}
                                 onPress={() => onPressSearchResult(r)}
-                                style={({ pressed }) => [
-                                  styles.resultRow,
-                                  pressed && styles.pressedRow,
-                                ]}
+                                style={({ pressed }) => [styles.resultRow, pressed && styles.pressedRow]}
                                 android_ripple={{ color: "rgba(79,224,138,0.08)" }}
                               >
                                 <View style={{ flex: 1 }}>
@@ -950,11 +927,7 @@ export default function HomeScreen() {
                           setQ("");
                           router.push({
                             pathname: "/team/[teamKey]",
-                            params: {
-                              teamKey: String(t.teamKey),
-                              from: fromIso,
-                              to: toIso,
-                            },
+                            params: { teamKey: String(t.teamKey), from: fromIso, to: toIso },
                           } as any);
                         }}
                         style={({ pressed }) => [styles.teamPill, pressed && styles.pressedPill]}
@@ -1020,11 +993,7 @@ export default function HomeScreen() {
                           bestWeekendTone === "good" && styles.weekendHeroCardGood,
                         ]}
                       >
-                        <Image
-                          source={{ uri: bestWeekendTripImage }}
-                          style={styles.weekendHeroImage}
-                          resizeMode="cover"
-                        />
+                        <Image source={{ uri: bestWeekendTripImage }} style={styles.weekendHeroImage} resizeMode="cover" />
                         <View style={styles.weekendHeroImageOverlay} />
 
                         <View style={styles.weekendHeroContent}>
@@ -1051,9 +1020,7 @@ export default function HomeScreen() {
                                 {formatUkDateTimeMaybe(bestWeekendTrip.kickoffIso)}
                               </Text>
                               <Text style={styles.weekendHeroMeta} numberOfLines={1}>
-                                {[bestWeekendTrip.city, bestWeekendTrip.stadiumName]
-                                  .filter(Boolean)
-                                  .join(" • ")}
+                                {[bestWeekendTrip.city, bestWeekendTrip.stadiumName].filter(Boolean).join(" • ")}
                               </Text>
                             </View>
                           </View>
@@ -1061,9 +1028,7 @@ export default function HomeScreen() {
                           <View style={styles.weekendInfoRow}>
                             <View style={styles.weekendInfoPill}>
                               <Text style={styles.weekendInfoLabel}>Weekend</Text>
-                              <Text style={styles.weekendInfoValue}>
-                                {bestWeekendBucket.label}
-                              </Text>
+                              <Text style={styles.weekendInfoValue}>{bestWeekendBucket.label}</Text>
                             </View>
                             <View style={styles.weekendInfoPill}>
                               <Text style={styles.weekendInfoLabel}>Strength</Text>
@@ -1089,28 +1054,16 @@ export default function HomeScreen() {
 
                           <View style={styles.blockActions}>
                             <Pressable
-                              onPress={() =>
-                                goWeekendTripMatch(bestWeekendTrip, bestWeekendBucket)
-                              }
-                              style={({ pressed }) => [
-                                styles.btn,
-                                styles.btnGhost,
-                                pressed && styles.pressed,
-                              ]}
+                              onPress={() => goWeekendTripMatch(bestWeekendTrip, bestWeekendBucket)}
+                              style={({ pressed }) => [styles.btn, styles.btnGhost, pressed && styles.pressed]}
                               android_ripple={{ color: "rgba(255,255,255,0.08)" }}
                             >
                               <Text style={styles.btnGhostText}>View match</Text>
                             </Pressable>
 
                             <Pressable
-                              onPress={() =>
-                                goWeekendTripBuild(bestWeekendTrip, bestWeekendBucket)
-                              }
-                              style={({ pressed }) => [
-                                styles.btn,
-                                styles.btnPrimary,
-                                pressed && styles.pressed,
-                              ]}
+                              onPress={() => goWeekendTripBuild(bestWeekendTrip, bestWeekendBucket)}
+                              style={({ pressed }) => [styles.btn, styles.btnPrimary, pressed && styles.pressed]}
                               android_ripple={{ color: "rgba(79,224,138,0.10)" }}
                             >
                               <Text style={styles.btnPrimaryText}>Build trip</Text>
@@ -1133,10 +1086,7 @@ export default function HomeScreen() {
                               <Pressable
                                 key={fixtureId}
                                 onPress={() => goWeekendTripMatch(trip, bestWeekendBucket)}
-                                style={({ pressed }) => [
-                                  styles.listRow,
-                                  pressed && styles.pressedRow,
-                                ]}
+                                style={({ pressed }) => [styles.listRow, pressed && styles.pressedRow]}
                                 android_ripple={{ color: "rgba(255,255,255,0.06)" }}
                               >
                                 <View style={styles.listRowTop}>
@@ -1146,21 +1096,13 @@ export default function HomeScreen() {
                                     </Text>
                                   </View>
 
-                                  <Text
-                                    style={styles.listTitle}
-                                    numberOfLines={1}
-                                    ellipsizeMode="tail"
-                                  >
+                                  <Text style={styles.listTitle} numberOfLines={1} ellipsizeMode="tail">
                                     {String(trip.fixture?.teams?.home?.name ?? "Home")} vs{" "}
                                     {String(trip.fixture?.teams?.away?.name ?? "Away")}
                                   </Text>
                                 </View>
 
-                                <Text
-                                  style={styles.listMeta}
-                                  numberOfLines={1}
-                                  ellipsizeMode="tail"
-                                >
+                                <Text style={styles.listMeta} numberOfLines={1} ellipsizeMode="tail">
                                   {[
                                     formatUkDateTimeMaybe(trip.kickoffIso),
                                     trip.city,
@@ -1178,22 +1120,14 @@ export default function HomeScreen() {
                       <View style={styles.blockActions}>
                         <Pressable
                           onPress={goTripFinder}
-                          style={({ pressed }) => [
-                            styles.btn,
-                            styles.btnGhost,
-                            pressed && styles.pressed,
-                          ]}
+                          style={({ pressed }) => [styles.btn, styles.btnGhost, pressed && styles.pressed]}
                           android_ripple={{ color: "rgba(255,255,255,0.08)" }}
                         >
                           <Text style={styles.btnGhostText}>Open Trip Finder</Text>
                         </Pressable>
                         <Pressable
                           onPress={goFootballCalendar}
-                          style={({ pressed }) => [
-                            styles.btn,
-                            styles.btnGhost,
-                            pressed && styles.pressed,
-                          ]}
+                          style={({ pressed }) => [styles.btn, styles.btnGhost, pressed && styles.pressed]}
                           android_ripple={{ color: "rgba(255,255,255,0.08)" }}
                         >
                           <Text style={styles.btnGhostText}>Football Calendar</Text>
@@ -1210,7 +1144,6 @@ export default function HomeScreen() {
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>Upcoming matches</Text>
-
                 <Pressable
                   onPress={() =>
                     goFixtures({
@@ -1225,11 +1158,7 @@ export default function HomeScreen() {
                 </Pressable>
               </View>
 
-              <LeagueStrip
-                leagues={homeTopLeagues}
-                activeLeagueId={league.leagueId}
-                onSelect={setLeague}
-              />
+              <LeagueStrip leagues={homeTopLeagues} activeLeagueId={league.leagueId} onSelect={setLeague} />
 
               <GlassCard strength="default" style={styles.block} noPadding>
                 <View style={styles.blockInner}>
@@ -1257,28 +1186,16 @@ export default function HomeScreen() {
                         style={({ pressed }) => [styles.featured, pressed && styles.pressedRow]}
                         android_ripple={{ color: "rgba(79,224,138,0.08)" }}
                       >
-                        <Image
-                          source={{ uri: featuredCityImage }}
-                          style={styles.featuredImage}
-                          resizeMode="cover"
-                        />
+                        <Image source={{ uri: featuredCityImage }} style={styles.featuredImage} resizeMode="cover" />
                         <View style={styles.featuredImageOverlay} />
 
                         <View style={styles.featuredTop}>
                           <CrestSquare row={featured} />
                           <View style={{ flex: 1 }}>
-                            <Text
-                              style={styles.featuredTitle}
-                              numberOfLines={1}
-                              ellipsizeMode="tail"
-                            >
+                            <Text style={styles.featuredTitle} numberOfLines={1} ellipsizeMode="tail">
                               {fixtureLine(featured).title}
                             </Text>
-                            <Text
-                              style={styles.featuredMeta}
-                              numberOfLines={1}
-                              ellipsizeMode="tail"
-                            >
+                            <Text style={styles.featuredMeta} numberOfLines={1} ellipsizeMode="tail">
                               {fixtureLine(featured).meta}
                             </Text>
                           </View>
@@ -1300,48 +1217,29 @@ export default function HomeScreen() {
                               key={id ?? `l-${idx}`}
                               onPress={() => (id ? goMatch(id) : null)}
                               disabled={!id}
-                              style={({ pressed }) => [
-                                styles.listRow,
-                                pressed && styles.pressedRow,
-                              ]}
+                              style={({ pressed }) => [styles.listRow, pressed && styles.pressedRow]}
                               android_ripple={{ color: "rgba(255,255,255,0.06)" }}
                             >
                               <View style={styles.listRowTop}>
                                 <View style={styles.smallCrests}>
                                   <View style={styles.smallCrest}>
                                     {homeLogo ? (
-                                      <Image
-                                        source={{ uri: homeLogo }}
-                                        style={styles.smallCrestImg}
-                                        resizeMode="contain"
-                                      />
+                                      <Image source={{ uri: homeLogo }} style={styles.smallCrestImg} resizeMode="contain" />
                                     ) : null}
                                   </View>
                                   <View style={styles.smallCrest}>
                                     {awayLogo ? (
-                                      <Image
-                                        source={{ uri: awayLogo }}
-                                        style={styles.smallCrestImg}
-                                        resizeMode="contain"
-                                      />
+                                      <Image source={{ uri: awayLogo }} style={styles.smallCrestImg} resizeMode="contain" />
                                     ) : null}
                                   </View>
                                 </View>
 
-                                <Text
-                                  style={styles.listTitle}
-                                  numberOfLines={1}
-                                  ellipsizeMode="tail"
-                                >
+                                <Text style={styles.listTitle} numberOfLines={1} ellipsizeMode="tail">
                                   {line.title}
                                 </Text>
                               </View>
 
-                              <Text
-                                style={styles.listMeta}
-                                numberOfLines={1}
-                                ellipsizeMode="tail"
-                              >
+                              <Text style={styles.listMeta} numberOfLines={1} ellipsizeMode="tail">
                                 {line.meta}
                               </Text>
                             </Pressable>
@@ -1406,22 +1304,14 @@ export default function HomeScreen() {
                       <View style={styles.blockActions}>
                         <Pressable
                           onPress={goPlanTrip}
-                          style={({ pressed }) => [
-                            styles.btn,
-                            styles.btnPrimary,
-                            pressed && styles.pressed,
-                          ]}
+                          style={({ pressed }) => [styles.btn, styles.btnPrimary, pressed && styles.pressed]}
                           android_ripple={{ color: "rgba(79,224,138,0.10)" }}
                         >
                           <Text style={styles.btnPrimaryText}>Plan a trip</Text>
                         </Pressable>
                         <Pressable
                           onPress={() => router.push("/(tabs)/trips")}
-                          style={({ pressed }) => [
-                            styles.btn,
-                            styles.btnGhost,
-                            pressed && styles.pressed,
-                          ]}
+                          style={({ pressed }) => [styles.btn, styles.btnGhost, pressed && styles.pressed]}
                           android_ripple={{ color: "rgba(255,255,255,0.08)" }}
                         >
                           <Text style={styles.btnGhostText}>Open trips</Text>
@@ -1436,17 +1326,10 @@ export default function HomeScreen() {
                         onPress={() =>
                           router.push({ pathname: "/trip/[id]", params: { id: nextTrip.id } } as any)
                         }
-                        style={({ pressed }) => [
-                          styles.nextTripCard,
-                          pressed && styles.pressedRow,
-                        ]}
+                        style={({ pressed }) => [styles.nextTripCard, pressed && styles.pressedRow]}
                         android_ripple={{ color: "rgba(255,255,255,0.06)" }}
                       >
-                        <Image
-                          source={{ uri: nextTripCityImage }}
-                          style={styles.nextTripImage}
-                          resizeMode="cover"
-                        />
+                        <Image source={{ uri: nextTripCityImage }} style={styles.nextTripImage} resizeMode="cover" />
                         <View style={styles.nextTripImageOverlay} />
 
                         <View style={styles.nextTripContent}>
@@ -1471,22 +1354,14 @@ export default function HomeScreen() {
                       <View style={styles.blockActions}>
                         <Pressable
                           onPress={() => router.push("/(tabs)/trips")}
-                          style={({ pressed }) => [
-                            styles.btn,
-                            styles.btnGhost,
-                            pressed && styles.pressed,
-                          ]}
+                          style={({ pressed }) => [styles.btn, styles.btnGhost, pressed && styles.pressed]}
                           android_ripple={{ color: "rgba(255,255,255,0.08)" }}
                         >
                           <Text style={styles.btnGhostText}>Open trips</Text>
                         </Pressable>
                         <Pressable
                           onPress={goPlanTrip}
-                          style={({ pressed }) => [
-                            styles.btn,
-                            styles.btnPrimary,
-                            pressed && styles.pressed,
-                          ]}
+                          style={({ pressed }) => [styles.btn, styles.btnPrimary, pressed && styles.pressed]}
                           android_ripple={{ color: "rgba(79,224,138,0.10)" }}
                         >
                           <Text style={styles.btnPrimaryText}>Plan another trip</Text>
@@ -1540,11 +1415,7 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   scroll: { flex: 1 },
-  content: {
-    paddingHorizontal: theme.spacing.lg,
-    paddingBottom: theme.spacing.xxl,
-    gap: 18,
-  },
+  content: { paddingHorizontal: theme.spacing.lg, paddingBottom: theme.spacing.xxl, gap: 18 },
 
   pressed: { opacity: 0.94, transform: [{ scale: 0.995 }] },
   pressedRow: { opacity: 0.94 },
@@ -1760,11 +1631,7 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeight.black,
   },
 
-  leagueStripRow: {
-    gap: 12,
-    paddingRight: theme.spacing.lg,
-    marginTop: 2,
-  },
+  leagueStripRow: { gap: 12, paddingRight: theme.spacing.lg, marginTop: 2 },
   leagueStripItem: {
     width: 58,
     height: 58,
@@ -1782,11 +1649,7 @@ const styles = StyleSheet.create({
     backgroundColor:
       Platform.OS === "android" ? theme.glass.androidBg.default : theme.glass.iosBg.default,
   },
-  leagueStripLogo: {
-    width: 34,
-    height: 34,
-    opacity: 0.98,
-  },
+  leagueStripLogo: { width: 34, height: 34, opacity: 0.98 },
 
   block: { borderRadius: 24 },
   blockInner: { padding: 14, gap: 12 },
@@ -1807,11 +1670,7 @@ const styles = StyleSheet.create({
     position: "relative",
     minHeight: 92,
   },
-  featuredImage: {
-    ...StyleSheet.absoluteFillObject,
-    width: "100%",
-    height: "100%",
-  },
+  featuredImage: { ...StyleSheet.absoluteFillObject, width: "100%", height: "100%" },
   featuredImageOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(6,8,10,0.58)",
@@ -1973,11 +1832,7 @@ const styles = StyleSheet.create({
     position: "relative",
     minHeight: 124,
   },
-  nextTripImage: {
-    ...StyleSheet.absoluteFillObject,
-    width: "100%",
-    height: "100%",
-  },
+  nextTripImage: { ...StyleSheet.absoluteFillObject, width: "100%", height: "100%" },
   nextTripImageOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(6,8,10,0.62)",
@@ -2024,12 +1879,7 @@ const styles = StyleSheet.create({
   tilePress: { width: "48.5%", borderRadius: 18, overflow: "hidden" },
   tile: { borderRadius: 18 },
   tileInner: { paddingVertical: 14, paddingHorizontal: 14, gap: 8 },
-  tileTopRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-  },
+  tileTopRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
   tileTitle: {
     color: theme.colors.text,
     fontSize: 15,
@@ -2073,24 +1923,13 @@ const styles = StyleSheet.create({
   weekendHeroCardElite: { borderColor: "rgba(79,224,138,0.24)" },
   weekendHeroCardStrong: { borderColor: "rgba(255,210,90,0.18)" },
   weekendHeroCardGood: { borderColor: "rgba(110,170,255,0.18)" },
-  weekendHeroImage: {
-    ...StyleSheet.absoluteFillObject,
-    width: "100%",
-    height: "100%",
-  },
+  weekendHeroImage: { ...StyleSheet.absoluteFillObject, width: "100%", height: "100%" },
   weekendHeroImageOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(6,8,10,0.60)",
   },
-  weekendHeroContent: {
-    padding: 12,
-    gap: 12,
-  },
-  weekendHeroTop: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 12,
-  },
+  weekendHeroContent: { padding: 12, gap: 12 },
+  weekendHeroTop: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
   weekendScoreBadge: {
     width: 52,
     height: 52,
@@ -2129,11 +1968,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: theme.fontWeight.bold,
   },
-  weekendInfoRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
+  weekendInfoRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   weekendInfoPill: {
     minWidth: 96,
     paddingVertical: 8,
