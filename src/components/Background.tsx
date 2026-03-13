@@ -8,7 +8,6 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { theme } from "@/src/constants/theme";
 import {
-  type BackgroundPattern,
   type BackgroundSource,
   type BackgroundSpec,
   isBackgroundSpec,
@@ -24,7 +23,7 @@ type Props = {
   centerShadeOpacity?: number;
 };
 
-function GlowLayer({
+function SoftTint({
   color,
   opacity,
   style,
@@ -48,63 +47,23 @@ function GlowLayer({
   );
 }
 
-function PatternOverlay({ pattern }: { pattern: BackgroundPattern }) {
-  if (pattern === "none") return null;
+function FocalTint({
+  color,
+  opacity,
+  position,
+}: {
+  color: string;
+  opacity: number;
+  position: "left" | "center" | "right";
+}) {
+  const baseStyle =
+    position === "left"
+      ? styles.focalLeft
+      : position === "right"
+      ? styles.focalRight
+      : styles.focalCenter;
 
-  if (pattern === "pitch") {
-    return (
-      <View pointerEvents="none" style={styles.patternWrap}>
-        <View style={styles.pitchLineTop} />
-        <View style={styles.pitchLineBottom} />
-        <View style={styles.pitchCircle} />
-        <View style={styles.pitchHalfway} />
-      </View>
-    );
-  }
-
-  if (pattern === "routes") {
-    return (
-      <View pointerEvents="none" style={styles.patternWrap}>
-        <View style={[styles.routeArc, styles.routeArcA]} />
-        <View style={[styles.routeArc, styles.routeArcB]} />
-        <View style={[styles.routeArc, styles.routeArcC]} />
-        <View style={[styles.routeDot, { top: "19%", left: "18%" }]} />
-        <View style={[styles.routeDot, { top: "28%", right: "22%" }]} />
-        <View style={[styles.routeDot, { bottom: "26%", left: "28%" }]} />
-      </View>
-    );
-  }
-
-  if (pattern === "grid") {
-    return (
-      <View pointerEvents="none" style={styles.patternWrap}>
-        <View style={[styles.gridLineV, { left: "18%" }]} />
-        <View style={[styles.gridLineV, { left: "50%" }]} />
-        <View style={[styles.gridLineV, { left: "82%" }]} />
-        <View style={[styles.gridLineH, { top: "22%" }]} />
-        <View style={[styles.gridLineH, { top: "50%" }]} />
-        <View style={[styles.gridLineH, { top: "78%" }]} />
-      </View>
-    );
-  }
-
-  if (pattern === "vault") {
-    return (
-      <View pointerEvents="none" style={styles.patternWrap}>
-        <View style={[styles.ticketRect, { top: "15%", left: "9%" }]} />
-        <View style={[styles.ticketRect, { top: "48%", right: "10%" }]} />
-        <View style={[styles.ticketRectSmall, { top: "28%", right: "18%" }]} />
-        <View style={[styles.ticketRectSmall, { bottom: "18%", left: "17%" }]} />
-      </View>
-    );
-  }
-
-  return (
-    <View pointerEvents="none" style={styles.patternWrap}>
-      <View style={[styles.calmBlob, styles.calmBlobA]} />
-      <View style={[styles.calmBlob, styles.calmBlobB]} />
-    </View>
-  );
+  return <SoftTint color={color} opacity={opacity} style={baseStyle} />;
 }
 
 function BrandSpecSurface({
@@ -116,29 +75,37 @@ function BrandSpecSurface({
   children?: React.ReactNode;
   overlayOpacity: number;
 }) {
-  const topGlowOpacity = spec.topGlowOpacity ?? 0.14;
-  const centerGlowOpacity = spec.centerGlowOpacity ?? 0.08;
-  const bottomShadeOpacity = spec.bottomShadeOpacity ?? 0.24;
-  const grainOpacity = spec.grainOpacity ?? 0.025;
+  const topTintOpacity = spec.topTintOpacity ?? 0.08;
+  const focalTintOpacity = spec.focalTintOpacity ?? 0.08;
+  const bottomShadeOpacity = spec.bottomShadeOpacity ?? 0.28;
+  const vignetteOpacity = spec.vignetteOpacity ?? 0.22;
 
   return (
     <View style={styles.root}>
-      <LinearGradient colors={spec.colors} style={styles.image}>
-        <GlowLayer
-          color={spec.topGlowColor}
-          opacity={topGlowOpacity}
-          style={styles.topGlow}
-        />
+      <LinearGradient
+        colors={spec.colors}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 1 }}
+        style={styles.image}
+      >
+        <SoftTint color={spec.topTintColor} opacity={topTintOpacity} style={styles.topTint} />
 
-        {spec.centerGlowColor ? (
-          <GlowLayer
-            color={spec.centerGlowColor}
-            opacity={centerGlowOpacity}
-            style={styles.centerGlow}
+        {spec.focalTintColor ? (
+          <FocalTint
+            color={spec.focalTintColor}
+            opacity={focalTintOpacity}
+            position={spec.focalTintPosition ?? "center"}
           />
         ) : null}
 
-        <PatternOverlay pattern={spec.pattern} />
+        <LinearGradient
+          pointerEvents="none"
+          colors={["rgba(255,255,255,0.02)", "rgba(255,255,255,0.00)"]}
+          locations={[0, 1]}
+          start={{ x: 0.5, y: 0 }}
+          end={{ x: 0.5, y: 1 }}
+          style={styles.highlightWash}
+        />
 
         <LinearGradient
           pointerEvents="none"
@@ -149,16 +116,7 @@ function BrandSpecSurface({
           style={styles.bottomShade}
         />
 
-        <View
-          pointerEvents="none"
-          style={[
-            StyleSheet.absoluteFillObject,
-            {
-              backgroundColor: "#FFFFFF",
-              opacity: grainOpacity,
-            },
-          ]}
-        />
+        <View pointerEvents="none" style={[styles.vignette, { opacity: vignetteOpacity }]} />
 
         {overlayOpacity > 0 ? (
           <View
@@ -242,7 +200,7 @@ export default function Background({
           locations={[0, 0.42, 1]}
           start={{ x: 0.5, y: 0 }}
           end={{ x: 0.5, y: 1 }}
-          style={styles.topShade}
+          style={styles.imageTopShade}
         />
 
         <LinearGradient
@@ -255,7 +213,7 @@ export default function Background({
           locations={[0, 0.5, 1]}
           start={{ x: 0, y: 0.5 }}
           end={{ x: 1, y: 0.5 }}
-          style={styles.centerShade}
+          style={styles.imageCenterShade}
         />
 
         <LinearGradient
@@ -301,20 +259,54 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
-  topShade: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    height: "38%",
+  topTint: {
+    top: -20,
+    left: -20,
+    right: -20,
+    height: "30%",
+    borderRadius: 999,
   },
 
-  centerShade: {
+  focalCenter: {
+    top: "18%",
+    left: "-12%",
+    right: "-12%",
+    height: "42%",
+    borderRadius: 999,
+  },
+
+  focalLeft: {
+    top: "20%",
+    left: "-20%",
+    width: "78%",
+    height: "44%",
+    borderRadius: 999,
+  },
+
+  focalRight: {
+    top: "18%",
+    right: "-20%",
+    width: "78%",
+    height: "44%",
+    borderRadius: 999,
+  },
+
+  highlightWash: {
     position: "absolute",
     top: 0,
-    bottom: 0,
     left: 0,
     right: 0,
+    height: "26%",
+  },
+
+  vignette: {
+    ...StyleSheet.absoluteFillObject,
+    borderColor: "rgba(0,0,0,0.0)",
+    shadowColor: "#000",
+    shadowOpacity: 1,
+    shadowRadius: 80,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 0,
   },
 
   bottomShade: {
@@ -325,158 +317,19 @@ const styles = StyleSheet.create({
     height: "46%",
   },
 
-  topGlow: {
-    top: "-8%",
-    left: "-18%",
-    right: "-18%",
-    height: "34%",
-    borderRadius: 999,
-  },
-
-  centerGlow: {
-    top: "24%",
-    left: "-10%",
-    right: "-10%",
-    height: "24%",
-    borderRadius: 999,
-  },
-
-  patternWrap: {
-    ...StyleSheet.absoluteFillObject,
-    opacity: 0.1,
-  },
-
-  pitchLineTop: {
+  imageTopShade: {
     position: "absolute",
-    top: "14%",
-    left: "7%",
-    right: "7%",
-    height: 1,
-    backgroundColor: "rgba(255,255,255,0.22)",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: "38%",
   },
 
-  pitchLineBottom: {
-    position: "absolute",
-    bottom: "15%",
-    left: "7%",
-    right: "7%",
-    height: 1,
-    backgroundColor: "rgba(255,255,255,0.16)",
-  },
-
-  pitchHalfway: {
-    position: "absolute",
-    top: "22%",
-    bottom: "22%",
-    left: "50%",
-    width: 1,
-    marginLeft: -0.5,
-    backgroundColor: "rgba(255,255,255,0.12)",
-  },
-
-  pitchCircle: {
-    position: "absolute",
-    width: 180,
-    height: 180,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.14)",
-    top: "34%",
-    left: "50%",
-    marginLeft: -90,
-    marginTop: -90,
-  },
-
-  routeArc: {
-    position: "absolute",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.14)",
-    borderRadius: 999,
-    backgroundColor: "transparent",
-  },
-
-  routeArcA: {
-    width: 360,
-    height: 360,
-    top: "-4%",
-    right: "-28%",
-  },
-
-  routeArcB: {
-    width: 260,
-    height: 260,
-    top: "36%",
-    left: "-18%",
-  },
-
-  routeArcC: {
-    width: 420,
-    height: 420,
-    bottom: "-18%",
-    right: "-34%",
-  },
-
-  routeDot: {
-    position: "absolute",
-    width: 6,
-    height: 6,
-    borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.26)",
-  },
-
-  gridLineV: {
+  imageCenterShade: {
     position: "absolute",
     top: 0,
     bottom: 0,
-    width: 1,
-    backgroundColor: "rgba(255,255,255,0.08)",
-  },
-
-  gridLineH: {
-    position: "absolute",
     left: 0,
     right: 0,
-    height: 1,
-    backgroundColor: "rgba(255,255,255,0.08)",
-  },
-
-  ticketRect: {
-    position: "absolute",
-    width: 220,
-    height: 92,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.1)",
-    backgroundColor: "rgba(255,255,255,0.015)",
-  },
-
-  ticketRectSmall: {
-    position: "absolute",
-    width: 150,
-    height: 62,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-    backgroundColor: "rgba(255,255,255,0.01)",
-  },
-
-  calmBlob: {
-    position: "absolute",
-    borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.035)",
-  },
-
-  calmBlobA: {
-    width: 240,
-    height: 240,
-    top: "-4%",
-    right: "-18%",
-  },
-
-  calmBlobB: {
-    width: 200,
-    height: 200,
-    bottom: "-2%",
-    left: "-10%",
   },
 });
