@@ -1,53 +1,45 @@
-import React from "react";
-import { View, Text, StyleSheet } from "react-native";
-import { useLocalSearchParams } from "expo-router";
+import React, { useEffect } from "react";
+import { View, ActivityIndicator, StyleSheet } from "react-native";
+import { useLocalSearchParams, useRouter } from "expo-router";
 
 import {
-  DISCOVER_CATEGORY_META,
+  isDiscoverCategory,
   type DiscoverCategory,
 } from "@/src/features/discover/discoverCategories";
+import { nextWeekendWindowIso } from "@/src/constants/football";
 
 export default function DiscoverCategoryScreen() {
+  const router = useRouter();
   const { category } = useLocalSearchParams<{
-    category: DiscoverCategory;
+    category?: DiscoverCategory | string;
   }>();
 
-  const meta = DISCOVER_CATEGORY_META[category];
+  useEffect(() => {
+    if (!category || !isDiscoverCategory(String(category))) return;
 
-  if (!meta) {
-    return (
-      <View style={styles.center}>
-        <Text>Category not found</Text>
-      </View>
-    );
-  }
+    const window = nextWeekendWindowIso();
+
+    router.replace({
+      pathname: "/(tabs)/fixtures",
+      params: {
+        from: window.from,
+        to: window.to,
+        discover: String(category),
+      },
+    } as any);
+  }, [category, router]);
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>{meta.title}</Text>
-      <Text style={styles.subtitle}>
-        Matches for this category will appear here.
-      </Text>
+      <ActivityIndicator />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20 },
-
-  center: {
+  container: {
     flex: 1,
-    justifyContent: "center",
     alignItems: "center",
-  },
-
-  title: {
-    fontSize: 24,
-    fontWeight: "800",
-  },
-
-  subtitle: {
-    marginTop: 10,
-    opacity: 0.6,
+    justifyContent: "center",
   },
 });
