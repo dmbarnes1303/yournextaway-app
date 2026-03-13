@@ -20,7 +20,14 @@ import EmptyState from "@/src/components/EmptyState";
 import FixtureCertaintyBadge from "@/src/components/FixtureCertaintyBadge";
 import Input from "@/src/components/Input";
 import Button from "@/src/components/Button";
-import { discoverScoreForCategory } from "@/src/features/discover/discoverRanking"
+
+import { discoverScoreForCategory } from "@/src/features/discover/discoverRanking";
+import {
+  DISCOVER_CATEGORY_META,
+  isDiscoverCategory,
+  type DiscoverCategory,
+} from "@/src/features/discover/discoverCategories";
+
 import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
 import { getFixtures, type FixtureListRow } from "@/src/services/apiFootball";
@@ -51,7 +58,6 @@ import { POPULAR_TEAM_IDS, getTeam } from "@/src/data/teams";
 
 import {
   buildDiscoverScores,
-  type DiscoverFixture,
   type DiscoverReason,
 } from "@/src/features/discover/discoverEngine";
 
@@ -63,109 +69,9 @@ const DAYS_AHEAD = 365;
 const MAX_MULTI_LEAGUES = 10;
 const STRIP_DAYS = 7;
 
-/* -------------------------------------------------------------------------- */
-/* Discover                                                                   */
-/* -------------------------------------------------------------------------- */
-
-type DiscoverCategory =
-  | "bigMatches"
-  | "derbies"
-  | "atmospheres"
-  | "valueTrips"
-  | "legendaryStadiums"
-  | "iconicCities"
-  | "perfectTrips"
-  | "nightMatches"
-  | "titleDrama"
-  | "easyTickets"
-  | "bucketList"
-  | "matchdayCulture"
-  | "underratedTrips";
-
 type RankedFixtureRow = FixtureListRow & {
   discoverReasons?: DiscoverReason[];
 };
-
-const DISCOVER_CATEGORY_META: Record<
-  DiscoverCategory,
-  {
-    title: string;
-    subtitle: string;
-    helper: string;
-  }
-> = {
-  bigMatches: {
-    title: "Big Matches",
-    subtitle: "Highest-profile fixtures in the selected window",
-    helper:
-      "Discover mode • ranked for occasion, club size, derby energy, and night factor",
-  },
-  derbies: {
-    title: "Derbies & Rivalries",
-    subtitle: "Fixtures with the strongest rivalry signal",
-    helper: "Discover mode • ranked for derby intensity first",
-  },
-  atmospheres: {
-    title: "Insane Atmospheres",
-    subtitle: "Fixtures likely to deliver the strongest matchday atmosphere",
-    helper: "Discover mode • ranked for atmosphere and occasion",
-  },
-  valueTrips: {
-    title: "Best Value Football Trips",
-    subtitle: "Fixtures leaning toward better-value travel and ticket potential",
-    helper: "Discover mode • ranked for value over prestige",
-  },
-  legendaryStadiums: {
-    title: "Legendary Stadiums",
-    subtitle: "Fixtures weighted toward iconic clubs and stadium pull",
-    helper: "Discover mode • ranked for stadium and club prestige",
-  },
-  iconicCities: {
-    title: "Iconic Football Cities",
-    subtitle: "Fixtures in stronger football city destinations",
-    helper: "Discover mode • ranked for city pull and trip appeal",
-  },
-  perfectTrips: {
-    title: "Perfect Football Trips",
-    subtitle: "Fixtures with the best all-round trip balance",
-    helper: "Discover mode • ranked for overall trip quality",
-  },
-  nightMatches: {
-    title: "Night Matches",
-    subtitle: "Fixtures weighted toward evening kickoffs",
-    helper: "Discover mode • ranked for later kickoffs and atmosphere",
-  },
-  titleDrama: {
-    title: "Title Race Drama",
-    subtitle: "Fixtures leaning toward late-season pressure and stakes",
-    helper: "Discover mode • ranked for title-race tension signals",
-  },
-  easyTickets: {
-    title: "Easy Ticket Matches",
-    subtitle: "Fixtures leaning toward easier home-ticket access",
-    helper: "Discover mode • ranked for easier ticket difficulty first",
-  },
-  bucketList: {
-    title: "Football Bucket List",
-    subtitle: "Fixtures with prestige, atmosphere, and destination pull",
-    helper: "Discover mode • ranked for once-in-a-while trip appeal",
-  },
-  matchdayCulture: {
-    title: "Best Matchday Culture",
-    subtitle: "Fixtures weighted toward atmosphere and football-culture feel",
-    helper: "Discover mode • ranked for culture and atmosphere",
-  },
-  underratedTrips: {
-    title: "Underrated Trips",
-    subtitle: "Fixtures that look better than their mainstream hype",
-    helper: "Discover mode • ranked away from obvious glamour picks",
-  },
-};
-
-function isDiscoverCategory(value: string | null): value is DiscoverCategory {
-  if (!value) return false;
-  return Object.prototype.hasOwnProperty.call(DISCOVER_CATEGORY_META, value);
-}
 
 /* -------------------------------------------------------------------------- */
 /* Param helpers                                                              */
@@ -245,21 +151,6 @@ function ticketDifficultyLabel(d: TicketDifficulty | "unknown") {
       return "Very hard";
     default:
       return "Unknown";
-  }
-}
-
-function ticketDifficultyRank(d: TicketDifficulty | "unknown") {
-  switch (d) {
-    case "easy":
-      return 4;
-    case "medium":
-      return 3;
-    case "hard":
-      return 2;
-    case "very_hard":
-      return 1;
-    default:
-      return 0;
   }
 }
 
@@ -362,7 +253,6 @@ function baseFixtureScore(r: FixtureListRow): number {
 
   return s;
 }
-
 
 /* -------------------------------------------------------------------------- */
 /* League / country browse helpers                                            */
