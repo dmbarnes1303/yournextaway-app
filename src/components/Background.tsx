@@ -1,4 +1,3 @@
-// src/components/Background.tsx
 import React, { useMemo } from "react";
 import { ImageBackground, StyleSheet, View, type ImageSourcePropType } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
@@ -6,30 +5,12 @@ import { theme } from "@/src/constants/theme";
 
 type Props = {
   children?: React.ReactNode;
-
-  /**
-   * Backwards compatibility:
-   * - Some screens pass imageSource (ImageSourcePropType)
-   * - Some screens pass imageUrl (string)
-   * - Some screens now pass getBackground(...) directly, which can be string or RN source
-   *
-   * Prefer imageUrl going forward (remote, crisp).
-   */
   imageSource?: ImageSourcePropType | { uri: string } | string | null;
   imageUrl?: string | ImageSourcePropType | { uri: string } | null;
-
-  /**
-   * Extra dimming layer (kept for legacy usage).
-   * Use sparingly; the primary readability comes from top/bottom gradients.
-   */
   overlayOpacity?: number;
-
-  /**
-   * Fine control: top and bottom gradient strength.
-   * Defaults match the v2 spec: readable without blur.
-   */
-  topShadeOpacity?: number; // e.g. 0.70
-  bottomShadeOpacity?: number; // e.g. 0.85
+  topShadeOpacity?: number;
+  bottomShadeOpacity?: number;
+  centerShadeOpacity?: number;
 };
 
 export default function Background({
@@ -37,8 +18,9 @@ export default function Background({
   imageSource = null,
   imageUrl = null,
   overlayOpacity = 0,
-  topShadeOpacity = 0.70,
-  bottomShadeOpacity = 0.85,
+  topShadeOpacity = 0.74,
+  bottomShadeOpacity = 0.88,
+  centerShadeOpacity = 0.18,
 }: Props) {
   const resolvedSource = useMemo<ImageSourcePropType | { uri: string } | null>(() => {
     if (typeof imageUrl === "string" && imageUrl.trim()) return { uri: imageUrl };
@@ -50,7 +32,6 @@ export default function Background({
     return null;
   }, [imageSource, imageUrl]);
 
-  // If no image is provided, use matte base background (still premium).
   if (!resolvedSource) {
     return (
       <View style={[styles.root, { backgroundColor: theme.colors.bgBase }]}>
@@ -64,7 +45,8 @@ export default function Background({
       <ImageBackground source={resolvedSource} resizeMode="cover" style={styles.image}>
         <LinearGradient
           pointerEvents="none"
-          colors={[`rgba(0,0,0,${topShadeOpacity})`, "rgba(0,0,0,0)"]}
+          colors={[`rgba(0,0,0,${topShadeOpacity})`, "rgba(0,0,0,0.10)", "rgba(0,0,0,0)"]}
+          locations={[0, 0.45, 1]}
           start={{ x: 0.5, y: 0 }}
           end={{ x: 0.5, y: 1 }}
           style={styles.topShade}
@@ -72,7 +54,17 @@ export default function Background({
 
         <LinearGradient
           pointerEvents="none"
+          colors={["rgba(0,0,0,0)", `rgba(0,0,0,${centerShadeOpacity})`, "rgba(0,0,0,0)"]}
+          locations={[0, 0.5, 1]}
+          start={{ x: 0, y: 0.5 }}
+          end={{ x: 1, y: 0.5 }}
+          style={styles.centerShade}
+        />
+
+        <LinearGradient
+          pointerEvents="none"
           colors={["rgba(0,0,0,0)", `rgba(0,0,0,${bottomShadeOpacity})`]}
+          locations={[0, 1]}
           start={{ x: 0.5, y: 0 }}
           end={{ x: 0.5, y: 1 }}
           style={styles.bottomShade}
@@ -113,7 +105,15 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    height: "45%",
+    height: "46%",
+  },
+
+  centerShade: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    left: 0,
+    right: 0,
   },
 
   bottomShade: {
@@ -121,7 +121,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    height: "55%",
+    height: "58%",
   },
 
   content: {
