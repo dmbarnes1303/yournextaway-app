@@ -625,7 +625,13 @@ export default function WalletScreen() {
   }
 
   return (
-    <Background imageSource={getBackground("wallet")} overlayOpacity={0.8}>
+    <Background
+  imageSource={getBackground("wallet")}
+  overlayOpacity={0.03}
+  topShadeOpacity={0.24}
+  bottomShadeOpacity={0.30}
+  centerShadeOpacity={0.02}
+>
       <SafeAreaView style={styles.safe} edges={["top"]}>
         <ScrollView
           style={styles.scroll}
