@@ -1,4 +1,4 @@
-import { Alert, type AlertButton } from "react-native";
+import { Alert } from "react-native";
 import { useCallback, useMemo } from "react";
 
 import tripsStore, { type Trip } from "@/src/state/trips";
@@ -53,7 +53,6 @@ type Params = {
   savedLoaded: boolean;
   workspaceLoaded: boolean;
   routeTripId: string | null;
-
   cityName: string;
   originIata: string;
   affiliateUrls: {
@@ -64,20 +63,15 @@ type Params = {
     experiencesUrl: string;
     mapsUrl: string;
   } | null;
-
   progress: ProgressState;
   readiness: { score: number; missing: string[] };
-
   pending: SavedItem[];
   saved: SavedItem[];
   booked: SavedItem[];
-
   primaryMatchId: string | null;
   primaryTicketItem: SavedItem | null;
-
   isPro: boolean;
   kickoffTbc: boolean;
-
   controller: Controller;
   setActiveWorkspaceSection: (section: string) => Promise<void> | void;
 };
@@ -477,4 +471,4 @@ export default function useTripDetailViewModel({
     heroBannerCounts,
     readiness,
   };
-              }
+}
