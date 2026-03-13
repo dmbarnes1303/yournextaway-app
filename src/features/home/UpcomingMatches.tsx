@@ -68,11 +68,7 @@ function LeagueStrip({
             ]}
             android_ripple={{ color: "rgba(255,255,255,0.08)" }}
           >
-            <Image
-              source={{ uri: league.logo }}
-              style={styles.leagueStripLogo}
-              resizeMode="contain"
-            />
+            <Image source={{ uri: league.logo }} style={styles.leagueStripLogo} resizeMode="contain" />
           </Pressable>
         );
       })}
@@ -99,7 +95,6 @@ type Props = {
     venue?: string;
   }) => void;
   goFixturesHub: () => void;
-  goDiscover: () => void;
   goMatch: (fixtureId: string) => void;
 };
 
@@ -116,7 +111,6 @@ export default function UpcomingMatches({
   fixtureLine,
   goFixtures,
   goFixturesHub,
-  goDiscover,
   goMatch,
 }: Props) {
   return (
@@ -178,7 +172,7 @@ export default function UpcomingMatches({
 
                 <View style={styles.featuredTop}>
                   <CrestSquare row={featured} />
-                  <View style={{ flex: 1 }}>
+                  <View style={styles.featuredTextWrap}>
                     <Text style={styles.featuredTitle} numberOfLines={1} ellipsizeMode="tail">
                       {fixtureLine(featured).title}
                     </Text>
@@ -242,22 +236,13 @@ export default function UpcomingMatches({
                 })}
               </View>
 
-              <View style={styles.blockActions}>
-                <Pressable
-                  onPress={goFixturesHub}
-                  style={({ pressed }) => [styles.btn, styles.btnPrimary, pressed && styles.pressed]}
-                  android_ripple={{ color: "rgba(79,224,138,0.10)" }}
-                >
-                  <Text style={styles.btnPrimaryText}>Browse Fixtures</Text>
-                </Pressable>
-                <Pressable
-                  onPress={goDiscover}
-                  style={({ pressed }) => [styles.btn, styles.btnGhost, pressed && styles.pressed]}
-                  android_ripple={{ color: "rgba(255,255,255,0.08)" }}
-                >
-                  <Text style={styles.btnGhostText}>Need ideas first?</Text>
-                </Pressable>
-              </View>
+              <Pressable
+                onPress={goFixturesHub}
+                style={({ pressed }) => [styles.primaryCta, pressed && styles.pressed]}
+                android_ripple={{ color: "rgba(79,224,138,0.10)" }}
+              >
+                <Text style={styles.primaryCtaText}>Browse Fixtures</Text>
+              </Pressable>
             </>
           ) : null}
         </View>
@@ -268,12 +253,14 @@ export default function UpcomingMatches({
 
 const styles = StyleSheet.create({
   section: { gap: 10 },
+
   sectionHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 10,
   },
+
   sectionTitle: {
     color: theme.colors.text,
     fontSize: 18,
@@ -289,13 +276,19 @@ const styles = StyleSheet.create({
     backgroundColor:
       Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
   },
+
   miniPillText: {
     color: theme.colors.textSecondary,
     fontSize: 12,
     fontWeight: theme.fontWeight.black,
   },
 
-  leagueStripRow: { gap: 12, paddingRight: theme.spacing.lg, marginTop: 2 },
+  leagueStripRow: {
+    gap: 12,
+    paddingRight: theme.spacing.lg,
+    marginTop: 2,
+  },
+
   leagueStripItem: {
     width: 58,
     height: 58,
@@ -308,16 +301,32 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     overflow: "hidden",
   },
+
   leagueStripItemActive: {
     borderColor: "rgba(79,224,138,0.26)",
     backgroundColor:
       Platform.OS === "android" ? theme.glass.androidBg.default : theme.glass.iosBg.default,
   },
-  leagueStripLogo: { width: 34, height: 34, opacity: 0.98 },
-  pressedPill: { opacity: 0.92 },
 
-  block: { borderRadius: 24 },
-  blockInner: { padding: 14, gap: 12 },
+  leagueStripLogo: {
+    width: 34,
+    height: 34,
+    opacity: 0.98,
+  },
+
+  pressedPill: {
+    opacity: 0.92,
+  },
+
+  block: {
+    borderRadius: 24,
+  },
+
+  blockInner: {
+    padding: 14,
+    gap: 12,
+  },
+
   blockKicker: {
     color: theme.colors.textTertiary,
     fontSize: 12,
@@ -325,7 +334,12 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
 
-  center: { paddingVertical: 14, alignItems: "center", gap: 10 },
+  center: {
+    paddingVertical: 14,
+    alignItems: "center",
+    gap: 10,
+  },
+
   muted: {
     color: theme.colors.textSecondary,
     fontSize: 13,
@@ -342,11 +356,18 @@ const styles = StyleSheet.create({
     position: "relative",
     minHeight: 92,
   },
-  featuredImage: { ...StyleSheet.absoluteFillObject, width: "100%", height: "100%" },
+
+  featuredImage: {
+    ...StyleSheet.absoluteFillObject,
+    width: "100%",
+    height: "100%",
+  },
+
   featuredImageOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(6,8,10,0.58)",
   },
+
   featuredTop: {
     paddingVertical: 12,
     paddingHorizontal: 12,
@@ -354,11 +375,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
   },
+
+  featuredTextWrap: {
+    flex: 1,
+  },
+
   featuredTitle: {
     color: theme.colors.text,
     fontSize: 15,
     fontWeight: theme.fontWeight.black,
   },
+
   featuredMeta: {
     marginTop: 4,
     color: "rgba(242,244,246,0.84)",
@@ -377,7 +404,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     overflow: "hidden",
   },
-  crestImg: { width: 28, height: 28, opacity: 0.95 },
+
+  crestImg: {
+    width: 28,
+    height: 28,
+    opacity: 0.95,
+  },
+
   crestFallback: {
     color: theme.colors.textSecondary,
     fontSize: 12,
@@ -385,10 +418,22 @@ const styles = StyleSheet.create({
     letterSpacing: 0.4,
   },
 
-  chev: { color: theme.colors.textTertiary, fontSize: 22, marginTop: -2 },
-  divider: { height: 1, backgroundColor: "rgba(255,255,255,0.06)", marginTop: 2 },
+  chev: {
+    color: theme.colors.textTertiary,
+    fontSize: 22,
+    marginTop: -2,
+  },
 
-  list: { gap: 8 },
+  divider: {
+    height: 1,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    marginTop: 2,
+  },
+
+  list: {
+    gap: 8,
+  },
+
   listRow: {
     paddingVertical: 10,
     paddingHorizontal: 10,
@@ -398,8 +443,19 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.06)",
   },
-  listRowTop: { flexDirection: "row", alignItems: "center", gap: 10 },
-  smallCrests: { flexDirection: "row", gap: 6, alignItems: "center" },
+
+  listRowTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+
+  smallCrests: {
+    flexDirection: "row",
+    gap: 6,
+    alignItems: "center",
+  },
+
   smallCrest: {
     width: 18,
     height: 18,
@@ -411,7 +467,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     overflow: "hidden",
   },
-  smallCrestImg: { width: 14, height: 14, opacity: 0.95 },
+
+  smallCrestImg: {
+    width: 14,
+    height: 14,
+    opacity: 0.95,
+  },
 
   listTitle: {
     flex: 1,
@@ -419,6 +480,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: theme.fontWeight.black,
   },
+
   listMeta: {
     marginTop: 4,
     color: theme.colors.textSecondary,
@@ -426,37 +488,30 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeight.bold,
   },
 
-  blockActions: { flexDirection: "row", gap: 10, marginTop: 2 },
-
-  btn: {
-    flex: 1,
+  primaryCta: {
+    marginTop: 2,
     borderRadius: 16,
     paddingVertical: 12,
     alignItems: "center",
     borderWidth: 1,
     overflow: "hidden",
-  },
-  btnPrimary: {
     borderColor: "rgba(79,224,138,0.24)",
     backgroundColor:
       Platform.OS === "android" ? theme.glass.androidBg.default : theme.glass.iosBg.default,
   },
-  btnPrimaryText: {
+
+  primaryCtaText: {
     color: theme.colors.text,
     fontSize: 14,
     fontWeight: theme.fontWeight.black,
   },
-  btnGhost: {
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor:
-      Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
-  },
-  btnGhostText: {
-    color: theme.colors.textSecondary,
-    fontSize: 14,
-    fontWeight: theme.fontWeight.black,
+
+  pressed: {
+    opacity: 0.94,
+    transform: [{ scale: 0.995 }],
   },
 
-  pressed: { opacity: 0.94, transform: [{ scale: 0.995 }] },
-  pressedRow: { opacity: 0.94 },
+  pressedRow: {
+    opacity: 0.94,
+  },
 });
