@@ -14,6 +14,7 @@ export type FixtureListRow = {
     season?: number | null;
     round?: string | null;
     flag?: string | null;
+    country?: string | null;
   };
   teams: {
     home?: { id?: number; name?: string | null; logo?: string | null };
@@ -37,7 +38,6 @@ const API_BASE = "https://v3.football.api-sports.io";
 
 function getApiKey(): string {
   const key = process.env.EXPO_PUBLIC_API_FOOTBALL_KEY ?? "";
-
   const cleaned = String(key).trim();
 
   if (!cleaned) {
@@ -47,10 +47,7 @@ function getApiKey(): string {
   return cleaned;
 }
 
-async function apiFetch<T>(
-  path: string,
-  params?: Record<string, any>
-): Promise<T> {
+async function apiFetch<T>(path: string, params?: Record<string, any>): Promise<T> {
   const url = new URL(API_BASE + path);
 
   if (params) {
@@ -65,8 +62,8 @@ async function apiFetch<T>(
 
   const res = await fetch(url.toString(), {
     headers: {
-      "x-apisports-key": key
-    }
+      "x-apisports-key": key,
+    },
   });
 
   if (!res.ok) {
@@ -78,9 +75,7 @@ async function apiFetch<T>(
   return json.response as T;
 }
 
-export async function getFixtures(
-  params: FixturesParams
-): Promise<FixtureListRow[]> {
+export async function getFixtures(params: FixturesParams): Promise<FixtureListRow[]> {
   const league = params.league ?? params.leagueId;
   const from = params.from ?? params.fromIso;
   const to = params.to ?? params.toIso;
@@ -91,15 +86,13 @@ export async function getFixtures(
     league,
     season: params.season,
     from,
-    to
+    to,
   });
 
   return Array.isArray(rows) ? rows : [];
 }
 
-export async function getFixtureById(
-  id: number | string
-): Promise<FixtureListRow | null> {
+export async function getFixtureById(id: number | string): Promise<FixtureListRow | null> {
   const rows = await apiFetch<any[]>("/fixtures", { id });
   if (!Array.isArray(rows) || rows.length === 0) return null;
   return rows[0] as FixtureListRow;
@@ -115,7 +108,7 @@ export async function getFixturesByRound(opts: {
   const rows = await apiFetch<FixtureListRow[]>("/fixtures", {
     league: opts.leagueId,
     season: opts.season,
-    round: opts.round
+    round: opts.round,
   });
 
   return Array.isArray(rows) ? rows : [];
@@ -129,7 +122,7 @@ export async function getCountries(): Promise<
   return (rows || []).map((r) => ({
     name: r.name,
     code: r.code,
-    flag: r.flag
+    flag: r.flag,
   }));
 }
 
@@ -141,12 +134,12 @@ export async function getTeams(opts: {
 
   const rows = await apiFetch<any[]>("/teams", {
     league: opts.leagueId,
-    season: opts.season
+    season: opts.season,
   });
 
   return (rows || []).map((r) => ({
     id: r.team?.id,
     name: r.team?.name,
-    logo: r.team?.logo ?? null
+    logo: r.team?.logo ?? null,
   }));
 }
