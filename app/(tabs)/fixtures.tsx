@@ -47,6 +47,11 @@ import { getTicketDifficultyBadge } from "@/src/data/ticketGuides";
 import type { TicketDifficulty } from "@/src/data/ticketGuides/types";
 import { POPULAR_TEAM_IDS, getTeam } from "@/src/data/teams";
 
+import {
+  buildDiscoverScores,
+  type DiscoverFixture,
+} from "@/src/features/discover/discoverEngine";
+
 /* -------------------------------------------------------------------------- */
 /* Constants                                                                  */
 /* -------------------------------------------------------------------------- */
@@ -54,6 +59,105 @@ import { POPULAR_TEAM_IDS, getTeam } from "@/src/data/teams";
 const DAYS_AHEAD = 365;
 const MAX_MULTI_LEAGUES = 10;
 const STRIP_DAYS = 7;
+
+/* -------------------------------------------------------------------------- */
+/* Discover                                                                   */
+/* -------------------------------------------------------------------------- */
+
+type DiscoverCategory =
+  | "bigMatches"
+  | "derbies"
+  | "atmospheres"
+  | "valueTrips"
+  | "legendaryStadiums"
+  | "iconicCities"
+  | "perfectTrips"
+  | "nightMatches"
+  | "titleDrama"
+  | "easyTickets"
+  | "bucketList"
+  | "matchdayCulture"
+  | "underratedTrips";
+
+const DISCOVER_CATEGORY_META: Record<
+  DiscoverCategory,
+  {
+    title: string;
+    subtitle: string;
+    helper: string;
+  }
+> = {
+  bigMatches: {
+    title: "Big Matches",
+    subtitle: "Highest-profile fixtures in the selected window",
+    helper: "Discover mode • ranked for occasion, club size, derby energy, and night factor",
+  },
+  derbies: {
+    title: "Derbies & Rivalries",
+    subtitle: "Fixtures with the strongest rivalry signal",
+    helper: "Discover mode • ranked for derby intensity first",
+  },
+  atmospheres: {
+    title: "Insane Atmospheres",
+    subtitle: "Fixtures likely to deliver the strongest matchday atmosphere",
+    helper: "Discover mode • ranked for atmosphere and occasion",
+  },
+  valueTrips: {
+    title: "Best Value Football Trips",
+    subtitle: "Fixtures leaning toward better-value travel and ticket potential",
+    helper: "Discover mode • ranked for value over prestige",
+  },
+  legendaryStadiums: {
+    title: "Legendary Stadiums",
+    subtitle: "Fixtures weighted toward iconic clubs and stadium pull",
+    helper: "Discover mode • ranked for stadium and club prestige",
+  },
+  iconicCities: {
+    title: "Iconic Football Cities",
+    subtitle: "Fixtures in stronger football city destinations",
+    helper: "Discover mode • ranked for city pull and trip appeal",
+  },
+  perfectTrips: {
+    title: "Perfect Football Trips",
+    subtitle: "Fixtures with the best all-round trip balance",
+    helper: "Discover mode • ranked for overall trip quality",
+  },
+  nightMatches: {
+    title: "Night Matches",
+    subtitle: "Fixtures weighted toward evening kickoffs",
+    helper: "Discover mode • ranked for later kickoffs and atmosphere",
+  },
+  titleDrama: {
+    title: "Title Race Drama",
+    subtitle: "Fixtures leaning toward late-season pressure and stakes",
+    helper: "Discover mode • ranked for title-race tension signals",
+  },
+  easyTickets: {
+    title: "Easy Ticket Matches",
+    subtitle: "Fixtures leaning toward easier home-ticket access",
+    helper: "Discover mode • ranked for easier ticket difficulty first",
+  },
+  bucketList: {
+    title: "Football Bucket List",
+    subtitle: "Fixtures with prestige, atmosphere, and destination pull",
+    helper: "Discover mode • ranked for once-in-a-while trip appeal",
+  },
+  matchdayCulture: {
+    title: "Best Matchday Culture",
+    subtitle: "Fixtures weighted toward atmosphere and football-culture feel",
+    helper: "Discover mode • ranked for culture and atmosphere",
+  },
+  underratedTrips: {
+    title: "Underrated Trips",
+    subtitle: "Fixtures that look better than their mainstream hype",
+    helper: "Discover mode • ranked away from obvious glamour picks",
+  },
+};
+
+function isDiscoverCategory(value: string | null): value is DiscoverCategory {
+  if (!value) return false;
+  return Object.prototype.hasOwnProperty.call(DISCOVER_CATEGORY_META, value);
+}
 
 /* -------------------------------------------------------------------------- */
 /* Param helpers                                                              */
@@ -132,6 +236,21 @@ function ticketDifficultyLabel(d: TicketDifficulty | "unknown") {
   }
 }
 
+function ticketDifficultyRank(d: TicketDifficulty | "unknown") {
+  switch (d) {
+    case "easy":
+      return 4;
+    case "medium":
+      return 3;
+    case "hard":
+      return 2;
+    case "very_hard":
+      return 1;
+    default:
+      return 0;
+  }
+}
+
 /* -------------------------------------------------------------------------- */
 /* Fixture helpers                                                            */
 /* -------------------------------------------------------------------------- */
@@ -187,7 +306,7 @@ function resolveTripForFixture(fixtureId: string): string | null {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Top picks scoring                                                          */
+/* Base scoring                                                               */
 /* -------------------------------------------------------------------------- */
 
 function leagueWeight(leagueId: number | null): number {
@@ -203,7 +322,7 @@ function leagueWeight(leagueId: number | null): number {
   return 60;
 }
 
-function scoreFixture(r: FixtureListRow): number {
+function baseFixtureScore(r: FixtureListRow): number {
   const lid = r?.league?.id != null ? Number(r.league.id) : null;
   let s = leagueWeight(lid);
 
@@ -230,6 +349,203 @@ function scoreFixture(r: FixtureListRow): number {
   if (!iso) s -= 8;
 
   return s;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Discover ranking                                                           */
+/* -------------------------------------------------------------------------- */
+
+function cityPrestigeScore(city: string): number {
+  const key = norm(city);
+  if (!key) return 0;
+
+  if (
+    [
+      "london",
+      "madrid",
+      "barcelona",
+      "milan",
+      "rome",
+      "munich",
+      "amsterdam",
+      "lisbon",
+      "paris",
+      "glasgow",
+      "istanbul",
+      "dortmund",
+      "liverpool",
+      "manchester",
+    ].includes(key)
+  ) {
+    return 3;
+  }
+
+  if (
+    [
+      "porto",
+      "seville",
+      "turin",
+      "naples",
+      "rotterdam",
+      "marseille",
+      "berlin",
+      "vienna",
+      "prague",
+    ].includes(key)
+  ) {
+    return 2;
+  }
+
+  return 0;
+}
+
+function perfectTripScore(scored: DiscoverFixture): number {
+  const r = scored.fixture;
+  const base = baseFixtureScore(r);
+
+  return (
+    base +
+    scored.scores.atmosphereScore * 28 +
+    scored.scores.valueScore * 24 +
+    scored.scores.nightScore * 18 +
+    scored.scores.stadiumScore * 20 +
+    scored.scores.derbyScore * 16
+  );
+}
+
+function iconicCityScore(scored: DiscoverFixture): number {
+  const city = String(scored.fixture?.fixture?.venue?.city ?? "");
+  return cityPrestigeScore(city) * 50 + baseFixtureScore(scored.fixture) + scored.scores.stadiumScore * 18;
+}
+
+function bucketListScore(scored: DiscoverFixture): number {
+  return (
+    baseFixtureScore(scored.fixture) +
+    scored.scores.stadiumScore * 36 +
+    scored.scores.atmosphereScore * 26 +
+    scored.scores.derbyScore * 18 +
+    scored.scores.nightScore * 12
+  );
+}
+
+function matchdayCultureScore(scored: DiscoverFixture): number {
+  return (
+    baseFixtureScore(scored.fixture) +
+    scored.scores.atmosphereScore * 34 +
+    scored.scores.derbyScore * 18 +
+    scored.scores.nightScore * 12
+  );
+}
+
+function underratedTripScore(scored: DiscoverFixture): number {
+  const r = scored.fixture;
+  const base = baseFixtureScore(r);
+
+  const homeId = r?.teams?.home?.id;
+  const awayId = r?.teams?.away?.id;
+  const glamourPenalty =
+    (typeof homeId === "number" && POPULAR_TEAM_IDS.has(homeId) ? 28 : 0) +
+    (typeof awayId === "number" && POPULAR_TEAM_IDS.has(awayId) ? 28 : 0);
+
+  return (
+    base +
+    scored.scores.atmosphereScore * 26 +
+    scored.scores.valueScore * 24 +
+    scored.scores.nightScore * 10 -
+    glamourPenalty
+  );
+}
+
+function discoverScoreForCategory(
+  category: DiscoverCategory,
+  scored: DiscoverFixture
+): number {
+  const r = scored.fixture;
+  const base = baseFixtureScore(r);
+  const home = String(r?.teams?.home?.name ?? "");
+  const rawDifficulty = home ? getTicketDifficultyBadge(home) : null;
+  const difficulty: TicketDifficulty | "unknown" = rawDifficulty ?? "unknown";
+  const easyRank = ticketDifficultyRank(difficulty);
+
+  switch (category) {
+    case "bigMatches":
+      return (
+        base +
+        scored.scores.derbyScore * 34 +
+        scored.scores.atmosphereScore * 28 +
+        scored.scores.nightScore * 14 +
+        scored.scores.titleDramaScore * 18
+      );
+
+    case "derbies":
+      return (
+        base +
+        scored.scores.derbyScore * 60 +
+        scored.scores.atmosphereScore * 18 +
+        scored.scores.nightScore * 8
+      );
+
+    case "atmospheres":
+      return (
+        base +
+        scored.scores.atmosphereScore * 42 +
+        scored.scores.derbyScore * 14 +
+        scored.scores.nightScore * 10
+      );
+
+    case "valueTrips":
+      return (
+        base * 0.45 +
+        scored.scores.valueScore * 60 +
+        easyRank * 10 +
+        scored.scores.nightScore * 6
+      );
+
+    case "legendaryStadiums":
+      return (
+        base +
+        scored.scores.stadiumScore * 52 +
+        scored.scores.atmosphereScore * 12 +
+        scored.scores.derbyScore * 8
+      );
+
+    case "iconicCities":
+      return iconicCityScore(scored);
+
+    case "perfectTrips":
+      return perfectTripScore(scored);
+
+    case "nightMatches":
+      return (
+        base +
+        scored.scores.nightScore * 60 +
+        scored.scores.atmosphereScore * 18 +
+        scored.scores.derbyScore * 10
+      );
+
+    case "titleDrama":
+      return (
+        base +
+        scored.scores.titleDramaScore * 60 +
+        scored.scores.derbyScore * 10 +
+        scored.scores.atmosphereScore * 10
+      );
+
+    case "easyTickets":
+      return easyRank * 80 + scored.scores.valueScore * 12 + base * 0.2;
+
+    case "bucketList":
+      return bucketListScore(scored);
+
+    case "matchdayCulture":
+      return matchdayCultureScore(scored);
+
+    case "underratedTrips":
+      return underratedTripScore(scored);
+
+    default:
+      return base;
+  }
 }
 
 /* -------------------------------------------------------------------------- */
@@ -371,6 +687,12 @@ export default function FixturesScreen() {
   const routeLeagueId = useMemo(() => coerceNumber((params as any)?.leagueId), [params]);
   const routeFrom = useMemo(() => coerceString((params as any)?.from), [params]);
   const routeTo = useMemo(() => coerceString((params as any)?.to), [params]);
+  const routeDiscover = useMemo(() => coerceString((params as any)?.discover), [params]);
+
+  const discoverCategory = useMemo(
+    () => (isDiscoverCategory(routeDiscover) ? routeDiscover : null),
+    [routeDiscover]
+  );
 
   const routeSort = useMemo(
     () => coerceString((params as any)?.sort) ?? coerceString((params as any)?.mode),
@@ -561,10 +883,29 @@ export default function FixturesScreen() {
           .flat()
           .filter((r) => r?.fixture?.id != null);
 
+        if (discoverCategory) {
+          const scored = buildDiscoverScores(flat);
+
+          const ranked = scored
+            .map((item) => ({
+              fixture: item.fixture,
+              discoverScore: discoverScoreForCategory(discoverCategory, item),
+              kickoffIso: String(item.fixture?.fixture?.date ?? ""),
+            }))
+            .sort((a, b) => {
+              if (b.discoverScore !== a.discoverScore) return b.discoverScore - a.discoverScore;
+              return a.kickoffIso.localeCompare(b.kickoffIso);
+            })
+            .map((x) => x.fixture);
+
+          setRows(ranked);
+          return;
+        }
+
         if (isTopPicksMode) {
           flat.sort((a, b) => {
-            const sa = scoreFixture(a);
-            const sb = scoreFixture(b);
+            const sa = baseFixtureScore(a);
+            const sb = baseFixtureScore(b);
             if (sb !== sa) return sb - sa;
             const da = String(a?.fixture?.date ?? "");
             const db = String(b?.fixture?.date ?? "");
@@ -591,7 +932,7 @@ export default function FixturesScreen() {
     return () => {
       cancelled = true;
     };
-  }, [fetchLeagues, fetchFrom, fetchTo, isTopPicksMode]);
+  }, [fetchLeagues, fetchFrom, fetchTo, isTopPicksMode, discoverCategory]);
 
   const filtered = useMemo(() => {
     const base = rows;
@@ -812,6 +1153,42 @@ export default function FixturesScreen() {
     [minIso, maxIso]
   );
 
+  /* ----------------------------- Titles ----------------------------------- */
+
+  const titleText = useMemo(() => {
+    if (discoverCategory) return DISCOVER_CATEGORY_META[discoverCategory].title;
+    return isTopPicksMode ? "Top Picks" : "Fixtures";
+  }, [discoverCategory, isTopPicksMode]);
+
+  const subtitleText = useMemo(() => {
+    if (discoverCategory) return DISCOVER_CATEGORY_META[discoverCategory].subtitle;
+    return leagueSubtitle;
+  }, [discoverCategory, leagueSubtitle]);
+
+  const helperLineText = useMemo(() => {
+    if (discoverCategory) {
+      const base = DISCOVER_CATEGORY_META[discoverCategory].helper;
+      const datePart = isRange
+        ? `${effectiveRange.from} → ${effectiveRange.to}`
+        : effectiveRange.from;
+      const scopePart =
+        selectedLeagueIds.length > 0
+          ? `${selectedLeagueIds.length}/${MAX_MULTI_LEAGUES} leagues`
+          : "Featured scope";
+      return `${base} • ${datePart} • ${scopePart}`;
+    }
+
+    return `${
+      isRange
+        ? `Range • ${effectiveRange.from} → ${effectiveRange.to}`
+        : `Day • ${effectiveRange.from}`
+    }${
+      selectedLeagueIds.length > 0
+        ? ` • ${selectedLeagueIds.length}/${MAX_MULTI_LEAGUES} leagues`
+        : " • Featured scope"
+    }${isTopPicksMode ? " • Sorted by rating" : ""}`;
+  }, [discoverCategory, isRange, effectiveRange, selectedLeagueIds.length, isTopPicksMode]);
+
   /* ----------------------------- Row rendering ----------------------------- */
 
   const renderRow = useCallback(
@@ -969,8 +1346,6 @@ export default function FixturesScreen() {
     return `${effectiveRange.from} → ${effectiveRange.to}`;
   }, [isRange, effectiveRange]);
 
-  const titleText = isTopPicksMode ? "Top Picks" : "Fixtures";
-
   const bg = getBackground("fixtures");
   const bgProps =
     typeof bg === "string" ? ({ imageUrl: bg } as const) : ({ imageSource: bg } as const);
@@ -981,7 +1356,7 @@ export default function FixturesScreen() {
         <View style={styles.headerTopRow}>
           <View style={{ flex: 1 }}>
             <Text style={styles.title}>{titleText}</Text>
-            <Text style={styles.subtitle}>{leagueSubtitle}</Text>
+            <Text style={styles.subtitle}>{subtitleText}</Text>
             <Text style={styles.dateLine}>{headerDateLine}</Text>
           </View>
 
@@ -1137,15 +1512,7 @@ export default function FixturesScreen() {
           </ScrollView>
         ) : null}
 
-        <Text style={styles.helperLine}>
-          {isRange
-            ? `Range • ${effectiveRange.from} → ${effectiveRange.to}`
-            : `Day • ${effectiveRange.from}`}
-          {selectedLeagueIds.length > 0
-            ? ` • ${selectedLeagueIds.length}/${MAX_MULTI_LEAGUES} leagues`
-            : " • Featured scope"}
-          {isTopPicksMode ? " • Sorted by rating" : ""}
-        </Text>
+        <Text style={styles.helperLine}>{helperLineText}</Text>
       </View>
 
       <View style={styles.content}>
