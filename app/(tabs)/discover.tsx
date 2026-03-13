@@ -23,116 +23,16 @@ import {
   windowFromTomorrowIso,
 } from "@/src/constants/football";
 import { getFixtures, type FixtureListRow } from "@/src/services/apiFootball";
+import {
+  DISCOVER_ROWS,
+  DISCOVER_CATEGORY_META,
+  type DiscoverCategory,
+} from "@/src/features/discover/discoverCategories";
 
 type ShortcutWindow = { from: string; to: string };
 type DiscoverWindowKey = "wknd" | "d7" | "d14" | "d30";
 type DiscoverTripLength = "day" | "1" | "2" | "3";
-type DiscoverVibe = "easy" | "big" | "hidden" | "nightlife" | "culture" | "warm";
-
-type DiscoverCategory =
-  | "bigMatches"
-  | "derbies"
-  | "atmospheres"
-  | "valueTrips"
-  | "legendaryStadiums"
-  | "iconicCities"
-  | "perfectTrips"
-  | "nightMatches"
-  | "titleDrama"
-  | "easyTickets"
-  | "bucketList"
-  | "matchdayCulture"
-  | "underratedTrips";
-
-const DISCOVER_ROWS: DiscoverCategory[][] = [
-  ["bigMatches", "derbies", "atmospheres", "valueTrips"],
-  ["legendaryStadiums", "iconicCities", "perfectTrips", "nightMatches"],
-  ["titleDrama", "easyTickets", "bucketList", "matchdayCulture"],
-  ["underratedTrips"],
-];
-
-const DISCOVER_CATEGORY_META: Record<
-  DiscoverCategory,
-  {
-    title: string;
-    subtitle: string;
-    icon: keyof typeof Ionicons.glyphMap;
-    emphasis?: "primary" | "neutral";
-  }
-> = {
-  bigMatches: {
-    title: "Big Matches",
-    subtitle: "High-profile fixtures worth travelling for",
-    icon: "star-outline",
-    emphasis: "primary",
-  },
-  derbies: {
-    title: "Derbies & Rivalries",
-    subtitle: "Tension, history, noise, chaos",
-    icon: "flame-outline",
-    emphasis: "primary",
-  },
-  atmospheres: {
-    title: "Insane Atmospheres",
-    subtitle: "Best noise, intensity and matchday energy",
-    icon: "radio-outline",
-    emphasis: "primary",
-  },
-  valueTrips: {
-    title: "Best Value Football Trips",
-    subtitle: "Better experience-per-pound potential",
-    icon: "cash-outline",
-  },
-  legendaryStadiums: {
-    title: "Legendary Stadiums",
-    subtitle: "Grounds with weight, history and pull",
-    icon: "business-outline",
-  },
-  iconicCities: {
-    title: "Iconic Football Cities",
-    subtitle: "Trips where the city matters as much as the match",
-    icon: "earth-outline",
-  },
-  perfectTrips: {
-    title: "Perfect Football Trips",
-    subtitle: "Strong fixture plus solid travel potential",
-    icon: "navigate-outline",
-  },
-  nightMatches: {
-    title: "Night Matches",
-    subtitle: "Evening kickoffs with better match feel",
-    icon: "moon-outline",
-  },
-  titleDrama: {
-    title: "Title Race Drama",
-    subtitle: "Fixtures with sharper end-of-season stakes",
-    icon: "trophy-outline",
-  },
-  easyTickets: {
-    title: "Easy Ticket Matches",
-    subtitle: "Better chance of accessible home tickets",
-    icon: "ticket-outline",
-  },
-  bucketList: {
-    title: "Football Bucket List",
-    subtitle: "Trips people should do at least once",
-    icon: "bookmark-outline",
-  },
-  matchdayCulture: {
-    title: "Best Matchday Culture",
-    subtitle: "Beyond the 90 minutes",
-    icon: "people-outline",
-  },
-  underratedTrips: {
-    title: "Underrated Trips",
-    subtitle: "Less obvious, more interesting",
-    icon: "sparkles-outline",
-  },
-};
-
-function toKey(s: string) {
-  return String(s ?? "").trim().toLowerCase();
-}
+type DiscoverVibe = "easy" | "big" | "nightlife" | "culture" | "warm";
 
 function labelForKey(key: DiscoverWindowKey) {
   if (key === "wknd") return "This Weekend";
@@ -151,7 +51,6 @@ function labelForTripLength(v: DiscoverTripLength) {
 function labelForVibe(v: DiscoverVibe) {
   if (v === "easy") return "Easy Travel";
   if (v === "big") return "Big Match";
-  if (v === "hidden") return "Different";
   if (v === "nightlife") return "Nightlife";
   if (v === "culture") return "Culture";
   return "Warm-ish";
@@ -175,7 +74,7 @@ async function pickFixtureFromLeagues(
 ) {
   const tried = new Set<number>();
 
-  for (let attempt = 0; attempt < 5; attempt++) {
+  for (let attempt = 0; attempt < 6; attempt++) {
     const remaining = LEAGUES.filter((l) => !tried.has(l.leagueId));
     const next = pickRandom(remaining.length ? remaining : LEAGUES);
     if (!next) break;
@@ -196,7 +95,11 @@ async function pickFixtureFromLeagues(
       const chosen = pickRandom(valid);
       const fixtureId = chosen?.fixture?.id != null ? String(chosen.fixture.id) : null;
       if (fixtureId) {
-        return { fixtureId, leagueId: next.leagueId, season: next.season };
+        return {
+          fixtureId,
+          leagueId: next.leagueId,
+          season: next.season,
+        };
       }
     }
   }
@@ -228,7 +131,7 @@ export default function DiscoverScreen() {
   const [discoverTripLength, setDiscoverTripLength] = useState<DiscoverTripLength>("2");
   const [discoverVibes, setDiscoverVibes] = useState<DiscoverVibe[]>(["easy"]);
   const [discoverFrom, setDiscoverFrom] = useState("");
-  const [loadingMode, setLoadingMode] = useState<"surprise" | "hidden" | null>(null);
+  const [loadingRandom, setLoadingRandom] = useState(false);
 
   const toggleVibe = useCallback((v: DiscoverVibe) => {
     setDiscoverVibes((prev) => {
@@ -277,59 +180,49 @@ export default function DiscoverScreen() {
     [router, currentWindow.from, currentWindow.to]
   );
 
-  const goDiscover = useCallback(
-    async (mode: "surprise" | "hidden") => {
-      if (loadingMode) return;
-      setLoadingMode(mode);
+  const goRandomTrip = useCallback(async () => {
+    if (loadingRandom) return;
+    setLoadingRandom(true);
 
-      try {
-        const window = windowForKey(discoverWindowKey);
+    try {
+      const window = windowForKey(discoverWindowKey);
 
-        const filter = (r: FixtureListRow) => {
-          const venue = String(r?.fixture?.venue?.name ?? "").trim();
-          const city = toKey(String(r?.fixture?.venue?.city ?? ""));
-          if (!venue) return false;
+      const filter = (r: FixtureListRow) => {
+        const venue = String(r?.fixture?.venue?.name ?? "").trim();
+        if (!venue) return false;
+        return true;
+      };
 
-          if (mode === "hidden") {
-            const blocked = new Set([
-              "london",
-              "paris",
-              "rome",
-              "barcelona",
-              "amsterdam",
-              "lisbon",
-            ]);
-            if (!city || blocked.has(city)) return false;
-          }
+      const picked = await pickFixtureFromLeagues(window, filter);
+      if (!picked) return;
 
-          return true;
-        };
-
-        const picked = await pickFixtureFromLeagues(window, filter);
-        if (!picked) return;
-
-        router.push({
-          pathname: "/trip/build",
-          params: {
-            global: "1",
-            fixtureId: picked.fixtureId,
-            leagueId: String(picked.leagueId),
-            season: String(picked.season),
-            from: window.from,
-            to: window.to,
-            prefMode: mode,
-            prefFrom: discoverFrom.trim() ? discoverFrom.trim() : undefined,
-            prefWindow: discoverWindowKey,
-            prefLength: discoverTripLength,
-            prefVibes: discoverVibes.join(","),
-          },
-        } as any);
-      } finally {
-        setLoadingMode(null);
-      }
-    },
-    [loadingMode, discoverWindowKey, discoverFrom, discoverTripLength, discoverVibes, router]
-  );
+      router.push({
+        pathname: "/trip/build",
+        params: {
+          global: "1",
+          fixtureId: picked.fixtureId,
+          leagueId: String(picked.leagueId),
+          season: String(picked.season),
+          from: window.from,
+          to: window.to,
+          prefMode: "random",
+          prefFrom: discoverFrom.trim() ? discoverFrom.trim() : undefined,
+          prefWindow: discoverWindowKey,
+          prefLength: discoverTripLength,
+          prefVibes: discoverVibes.join(","),
+        },
+      } as any);
+    } finally {
+      setLoadingRandom(false);
+    }
+  }, [
+    loadingRandom,
+    discoverWindowKey,
+    discoverFrom,
+    discoverTripLength,
+    discoverVibes,
+    router,
+  ]);
 
   return (
     <Background imageSource={getBackground("home")} overlayOpacity={0.68}>
@@ -344,8 +237,8 @@ export default function DiscoverScreen() {
               <Text style={styles.kicker}>DISCOVER</Text>
               <Text style={styles.title}>Find football trips worth taking</Text>
               <Text style={styles.sub}>
-                Use Discover when you do not know exactly where to go yet. Start with themes,
-                tighten the filters, then jump straight into Fixtures or Build Trip.
+                Use Discover when you do not know where to go yet. Start with themes,
+                tighten the filters, then jump straight into Fixtures and build from there.
               </Text>
 
               <View style={styles.heroSummaryBox}>
@@ -357,69 +250,11 @@ export default function DiscoverScreen() {
 
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Quick discovery</Text>
+              <Text style={styles.sectionTitle}>Discovery filters</Text>
               <Pressable onPress={resetFilters} style={styles.resetPill}>
                 <Text style={styles.resetPillText}>Reset</Text>
               </Pressable>
             </View>
-
-            <View style={styles.grid2}>
-              <Pressable
-                onPress={() => goDiscover("surprise")}
-                disabled={loadingMode !== null}
-                style={({ pressed }) => [
-                  styles.tilePress,
-                  (pressed || loadingMode === "surprise") && styles.pressed,
-                ]}
-              >
-                <GlassCard strength="default" style={styles.tile} noPadding>
-                  <View style={styles.tileInner}>
-                    <View style={styles.tileTop}>
-                      <Text style={styles.tileTitle}>Surprise me</Text>
-                      {loadingMode === "surprise" ? (
-                        <ActivityIndicator />
-                      ) : (
-                        <Ionicons name="shuffle-outline" size={20} color={theme.colors.text} />
-                      )}
-                    </View>
-                    <Text style={styles.tileSub}>
-                      Throws you into a fitting trip using your current discovery setup.
-                    </Text>
-                    <Text style={styles.tileHint}>{filterSummary}</Text>
-                  </View>
-                </GlassCard>
-              </Pressable>
-
-              <Pressable
-                onPress={() => goDiscover("hidden")}
-                disabled={loadingMode !== null}
-                style={({ pressed }) => [
-                  styles.tilePress,
-                  (pressed || loadingMode === "hidden") && styles.pressed,
-                ]}
-              >
-                <GlassCard strength="default" style={styles.tile} noPadding>
-                  <View style={styles.tileInner}>
-                    <View style={styles.tileTop}>
-                      <Text style={styles.tileTitle}>Hidden gems</Text>
-                      {loadingMode === "hidden" ? (
-                        <ActivityIndicator />
-                      ) : (
-                        <Ionicons name="diamond-outline" size={20} color={theme.colors.text} />
-                      )}
-                    </View>
-                    <Text style={styles.tileSub}>
-                      Filters out the obvious football cities and looks for something less lazy.
-                    </Text>
-                    <Text style={styles.tileHint}>Still heuristic-based, but directionally useful.</Text>
-                  </View>
-                </GlassCard>
-              </Pressable>
-            </View>
-          </View>
-
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Discovery filters</Text>
 
             <GlassCard strength="default" style={styles.panel}>
               <Text style={styles.label}>Flying from (optional)</Text>
@@ -461,7 +296,7 @@ export default function DiscoverScreen() {
 
               <Text style={styles.label}>Vibe (up to 3)</Text>
               <View style={styles.chipsRow}>
-                {(["easy", "big", "hidden", "nightlife", "culture", "warm"] as DiscoverVibe[]).map((v) => (
+                {(["easy", "big", "nightlife", "culture", "warm"] as DiscoverVibe[]).map((v) => (
                   <FilterChip
                     key={v}
                     label={labelForVibe(v)}
@@ -476,7 +311,7 @@ export default function DiscoverScreen() {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Browse by theme</Text>
             <Text style={styles.sectionSub}>
-              These routes push you into Fixtures with a Discover context so the app can rank with intent rather than just dumping matches.
+              These routes push you into Fixtures with a Discover context, so the app ranks with intent instead of just dumping matches.
             </Text>
 
             <View style={styles.rows}>
@@ -499,10 +334,7 @@ export default function DiscoverScreen() {
                       >
                         <GlassCard
                           strength="default"
-                          style={[
-                            styles.categoryCard,
-                            primary && styles.categoryCardPrimary,
-                          ]}
+                          style={[styles.categoryCard, primary && styles.categoryCardPrimary]}
                           noPadding
                         >
                           <View style={styles.categoryInner}>
@@ -533,11 +365,50 @@ export default function DiscoverScreen() {
             </View>
           </View>
 
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Randomiser</Text>
+            <Text style={styles.sectionSub}>
+              When you cannot be bothered choosing, let the app throw you into a live option inside your current window.
+            </Text>
+
+            <Pressable
+              onPress={goRandomTrip}
+              disabled={loadingRandom}
+              style={({ pressed }) => [
+                styles.randomPress,
+                (pressed || loadingRandom) && styles.pressed,
+              ]}
+            >
+              <GlassCard strength="default" style={styles.randomCard} noPadding>
+                <View style={styles.randomInner}>
+                  <View style={styles.randomTop}>
+                    <Text style={styles.randomTitle}>Random trip</Text>
+                    {loadingRandom ? (
+                      <ActivityIndicator />
+                    ) : (
+                      <Ionicons
+                        name="shuffle-outline"
+                        size={20}
+                        color={theme.colors.text}
+                      />
+                    )}
+                  </View>
+
+                  <Text style={styles.randomSub}>
+                    Pull one fixture from the current discovery setup and jump straight into Build Trip.
+                  </Text>
+
+                  <Text style={styles.randomHint}>{filterSummary}</Text>
+                </View>
+              </GlassCard>
+            </Pressable>
+          </View>
+
           <GlassCard strength="default" style={styles.infoCard}>
             <Text style={styles.infoTitle}>How to use Discover properly</Text>
             <Text style={styles.infoText}>
-              Use Surprise Me when you want speed. Use Hidden Gems when you want something less obvious.
-              Use the theme cards when you already know the kind of trip you want, but not the exact fixture.
+              Use the theme cards when you know the type of trip you want but not the exact match.
+              Use the randomiser when you want speed and are happy to be surprised.
             </Text>
           </GlassCard>
         </ScrollView>
@@ -635,46 +506,6 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
     fontSize: 12,
     fontWeight: "900",
-  },
-
-  grid2: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-  },
-  tilePress: {
-    width: "48.5%",
-    borderRadius: 18,
-    overflow: "hidden",
-  },
-  tile: { borderRadius: 18 },
-  tileInner: {
-    paddingVertical: 14,
-    paddingHorizontal: 14,
-    gap: 8,
-    minHeight: 154,
-  },
-  tileTop: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  tileTitle: {
-    color: theme.colors.text,
-    fontSize: 15,
-    fontWeight: "900",
-  },
-  tileSub: {
-    color: theme.colors.textSecondary,
-    fontSize: 12,
-    fontWeight: "800",
-    lineHeight: 17,
-  },
-  tileHint: {
-    color: theme.colors.textTertiary,
-    fontSize: 12,
-    fontWeight: "800",
-    lineHeight: 17,
   },
 
   panel: {
@@ -779,6 +610,42 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 17,
     fontWeight: "800",
+  },
+
+  randomPress: {
+    borderRadius: 18,
+    overflow: "hidden",
+  },
+  randomCard: {
+    borderRadius: 18,
+  },
+  randomInner: {
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    gap: 8,
+    minHeight: 132,
+  },
+  randomTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  randomTitle: {
+    color: theme.colors.text,
+    fontSize: 15,
+    fontWeight: "900",
+  },
+  randomSub: {
+    color: theme.colors.textSecondary,
+    fontSize: 12,
+    fontWeight: "800",
+    lineHeight: 17,
+  },
+  randomHint: {
+    color: theme.colors.textTertiary,
+    fontSize: 12,
+    fontWeight: "800",
+    lineHeight: 17,
   },
 
   infoCard: {
