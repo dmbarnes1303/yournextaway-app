@@ -33,7 +33,11 @@ import {
 } from "@/src/constants/football";
 
 import { formatUkDateOnly, formatUkDateTimeMaybe } from "@/src/utils/formatters";
-import { buildSearchIndex, querySearchIndex, type SearchResult } from "@/src/services/searchIndex";
+import {
+  buildSearchIndex,
+  querySearchIndex,
+  type SearchResult,
+} from "@/src/services/searchIndex";
 import { hasTeamGuide } from "@/src/data/teamGuides";
 import { getCityGuide } from "@/src/data/cityGuides";
 import { getFlagImageUrl } from "@/src/utils/flagImages";
@@ -249,11 +253,7 @@ function CityChipPremium({
       <View style={{ gap: 4 }}>
         <Text style={styles.pillText}>{name}</Text>
         {flagUrl ? (
-          <Image
-            source={{ uri: flagUrl }}
-            style={styles.cityFlagInline}
-            resizeMode="cover"
-          />
+          <Image source={{ uri: flagUrl }} style={styles.cityFlagInline} resizeMode="cover" />
         ) : null}
       </View>
     </Pressable>
@@ -537,46 +537,49 @@ export default function HomeScreen() {
     return r.subtitle ?? "";
   }, []);
 
-  const cities = useMemo(() => dedupeBy(POPULAR_CITIES, (c) => toKey(c.name)).slice(0, 5), []);
+  const cities = useMemo(
+    () => dedupeBy(POPULAR_CITIES, (c) => toKey(c.name)).slice(0, 5),
+    []
+  );
   const popularTeams = useMemo(
     () => getPopularTeams().filter((t) => typeof (t as any)?.teamId === "number").slice(0, 5),
     []
   );
 
-  const quickTiles = useMemo(
+  const routeTiles = useMemo(
     () => [
       {
         key: "discover",
         title: "Discover",
-        sub: "Inspiration and themed browsing",
+        sub: "Start with inspiration",
         icon: "🧭",
         onPress: goDiscover,
       },
       {
         key: "fixtures",
         title: "Fixtures",
-        sub: "Browse live match options",
+        sub: "Browse real match options",
         icon: "📅",
         onPress: goFixturesHub,
       },
       {
         key: "trips",
         title: "Trips",
-        sub: "Open saved trip workspaces",
+        sub: "Open saved workspaces",
         icon: "✈️",
         onPress: goTrips,
       },
       {
         key: "wallet",
         title: "Wallet",
-        sub: "Booking docs and confirmations",
+        sub: "Docs and confirmations",
         icon: "💼",
         onPress: goWallet,
       },
       {
         key: "calendar",
-        title: "Football Calendar",
-        sub: "View useful upcoming windows",
+        title: "Calendar",
+        sub: "Useful upcoming windows",
         icon: "🗓️",
         onPress: goFootballCalendar,
       },
@@ -648,8 +651,8 @@ export default function HomeScreen() {
               <Text style={styles.heroKicker}>YOURNEXTAWAY</Text>
               <Text style={styles.heroTitle}>Your football travel hub</Text>
               <Text style={styles.heroSub}>
-                Search a city, team, country, league, or venue — then jump straight into Discover,
-                Fixtures, or Trips.
+                Search a city, team, country, league, or venue. Then go straight into the right part
+                of the app instead of wandering around it.
               </Text>
 
               <View style={styles.searchBox}>
@@ -683,7 +686,7 @@ export default function HomeScreen() {
                     android_ripple={{ color: "rgba(79,224,138,0.10)" }}
                   >
                     <Text style={styles.heroBtnPrimaryText}>Discover</Text>
-                    <Text style={styles.heroBtnSub}>Where should I go?</Text>
+                    <Text style={styles.heroBtnSub}>I need ideas</Text>
                   </Pressable>
 
                   <Pressable
@@ -695,8 +698,8 @@ export default function HomeScreen() {
                     ]}
                     android_ripple={{ color: "rgba(255,255,255,0.08)" }}
                   >
-                    <Text style={styles.heroBtnGhostText}>Browse Fixtures</Text>
-                    <Text style={styles.heroBtnSub}>Show me actual matches</Text>
+                    <Text style={styles.heroBtnGhostText}>Fixtures</Text>
+                    <Text style={styles.heroBtnSub}>I want actual matches</Text>
                   </Pressable>
 
                   <Pressable
@@ -708,8 +711,8 @@ export default function HomeScreen() {
                     ]}
                     android_ripple={{ color: "rgba(255,255,255,0.08)" }}
                   >
-                    <Text style={styles.heroBtnGhostText}>Open Trips</Text>
-                    <Text style={styles.heroBtnSub}>Resume saved planning</Text>
+                    <Text style={styles.heroBtnGhostText}>Trips</Text>
+                    <Text style={styles.heroBtnSub}>Resume planning</Text>
                   </Pressable>
                 </View>
               ) : null}
@@ -733,13 +736,7 @@ export default function HomeScreen() {
                         <Text style={styles.groupEmpty}>No results.</Text>
                       ) : (
                         <View style={styles.resultList}>
-                          {[
-                            ...buckets.teams,
-                            ...buckets.cities,
-                            ...buckets.venues,
-                            ...buckets.countries,
-                            ...buckets.leagues,
-                          ]
+                          {[...buckets.teams, ...buckets.cities, ...buckets.venues, ...buckets.countries, ...buckets.leagues]
                             .slice(0, 12)
                             .map((r, idx) => (
                               <Pressable
@@ -762,60 +759,6 @@ export default function HomeScreen() {
                       )}
                     </>
                   ) : null}
-                </View>
-              ) : null}
-
-              {!showSearchResults ? (
-                <View style={styles.popularBlock}>
-                  <Text style={styles.sectionKicker}>Popular cities</Text>
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.popularRow}
-                    decelerationRate="fast"
-                  >
-                    {cities.map((c) => (
-                      <CityChipPremium
-                        key={`pc-${c.name}`}
-                        name={c.name}
-                        countryCode={c.countryCode}
-                        onPress={() => goCityFromName(c.name)}
-                      />
-                    ))}
-                  </ScrollView>
-
-                  <Text style={[styles.sectionKicker, { marginTop: 10 }]}>Popular teams</Text>
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.popularRow}
-                    decelerationRate="fast"
-                  >
-                    {popularTeams.map((t: any) => (
-                      <Pressable
-                        key={`pt-${String(t.teamKey ?? t.teamId ?? t.name)}`}
-                        onPress={() => {
-                          Keyboard.dismiss();
-                          setQ("");
-                          router.push({
-                            pathname: "/team/[teamKey]",
-                            params: { teamKey: String(t.teamKey), from: fromIso, to: toIso },
-                          } as any);
-                        }}
-                        style={({ pressed }) => [styles.teamPill, pressed && styles.pressedPill]}
-                        android_ripple={{ color: "rgba(255,255,255,0.08)" }}
-                      >
-                        <View style={styles.teamCrestDot}>
-                          <Image
-                            source={{ uri: API_SPORTS_TEAM_LOGO(Number(t.teamId)) }}
-                            style={{ width: 16, height: 16, opacity: 0.95 }}
-                            resizeMode="contain"
-                          />
-                        </View>
-                        <Text style={styles.pillText}>{String(t.name ?? "")}</Text>
-                      </Pressable>
-                    ))}
-                  </ScrollView>
                 </View>
               ) : null}
             </View>
@@ -853,29 +796,21 @@ export default function HomeScreen() {
                     <>
                       <Text style={styles.emptyTitle}>No trips yet</Text>
                       <Text style={styles.emptyMeta}>
-                        Start in Discover if you want ideas, or go straight into Fixtures if you
-                        already know what you want to browse.
+                        Start in Discover if you want ideas. Use Fixtures if you already know you
+                        just want to browse matches.
                       </Text>
 
                       <View style={styles.blockActions}>
                         <Pressable
                           onPress={goDiscover}
-                          style={({ pressed }) => [
-                            styles.btn,
-                            styles.btnPrimary,
-                            pressed && styles.pressed,
-                          ]}
+                          style={({ pressed }) => [styles.btn, styles.btnPrimary, pressed && styles.pressed]}
                           android_ripple={{ color: "rgba(79,224,138,0.10)" }}
                         >
                           <Text style={styles.btnPrimaryText}>Open Discover</Text>
                         </Pressable>
                         <Pressable
                           onPress={goFixturesHub}
-                          style={({ pressed }) => [
-                            styles.btn,
-                            styles.btnGhost,
-                            pressed && styles.pressed,
-                          ]}
+                          style={({ pressed }) => [styles.btn, styles.btnGhost, pressed && styles.pressed]}
                           android_ripple={{ color: "rgba(255,255,255,0.08)" }}
                         >
                           <Text style={styles.btnGhostText}>Browse Fixtures</Text>
@@ -926,22 +861,14 @@ export default function HomeScreen() {
                       <View style={styles.blockActions}>
                         <Pressable
                           onPress={goTrips}
-                          style={({ pressed }) => [
-                            styles.btn,
-                            styles.btnGhost,
-                            pressed && styles.pressed,
-                          ]}
+                          style={({ pressed }) => [styles.btn, styles.btnGhost, pressed && styles.pressed]}
                           android_ripple={{ color: "rgba(255,255,255,0.08)" }}
                         >
                           <Text style={styles.btnGhostText}>Open Trips</Text>
                         </Pressable>
                         <Pressable
                           onPress={goDiscover}
-                          style={({ pressed }) => [
-                            styles.btn,
-                            styles.btnPrimary,
-                            pressed && styles.pressed,
-                          ]}
+                          style={({ pressed }) => [styles.btn, styles.btnPrimary, pressed && styles.pressed]}
                           android_ripple={{ color: "rgba(79,224,138,0.10)" }}
                         >
                           <Text style={styles.btnPrimaryText}>Plan another trip</Text>
@@ -951,6 +878,39 @@ export default function HomeScreen() {
                   ) : null}
                 </View>
               </GlassCard>
+            </View>
+          ) : null}
+
+          {!showSearchResults ? (
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>Choose your route</Text>
+                <Text style={styles.sectionMeta}>Use the right path fast</Text>
+              </View>
+
+              <View style={styles.grid2}>
+                {routeTiles.map((s) => (
+                  <Pressable
+                    key={s.key}
+                    onPress={s.onPress}
+                    style={({ pressed }) => [styles.tilePress, pressed && styles.pressed]}
+                    android_ripple={{ color: "rgba(255,255,255,0.06)" }}
+                  >
+                    <GlassCard strength="default" style={styles.tile} noPadding>
+                      <View style={styles.tileInner}>
+                        <View style={styles.tileTopRow}>
+                          <Text style={styles.tileTitle}>{s.title}</Text>
+                          <View style={styles.tileBadge}>
+                            <Text style={styles.tileBadgeText}>{s.icon}</Text>
+                          </View>
+                        </View>
+                        <Text style={styles.tileSub}>{s.sub}</Text>
+                        <Text style={styles.tileHint}>Tap to open</Text>
+                      </View>
+                    </GlassCard>
+                  </Pressable>
+                ))}
+              </View>
             </View>
           ) : null}
 
@@ -993,7 +953,7 @@ export default function HomeScreen() {
 
                   {!fxLoading && !fxError && featured ? (
                     <>
-                      <Text style={styles.blockKicker}>Featured pick</Text>
+                      <Text style={styles.blockKicker}>Snapshot</Text>
 
                       <Pressable
                         onPress={() => goMatch(String(featured.fixture.id))}
@@ -1042,20 +1002,12 @@ export default function HomeScreen() {
                                 <View style={styles.smallCrests}>
                                   <View style={styles.smallCrest}>
                                     {homeLogo ? (
-                                      <Image
-                                        source={{ uri: homeLogo }}
-                                        style={styles.smallCrestImg}
-                                        resizeMode="contain"
-                                      />
+                                      <Image source={{ uri: homeLogo }} style={styles.smallCrestImg} resizeMode="contain" />
                                     ) : null}
                                   </View>
                                   <View style={styles.smallCrest}>
                                     {awayLogo ? (
-                                      <Image
-                                        source={{ uri: awayLogo }}
-                                        style={styles.smallCrestImg}
-                                        resizeMode="contain"
-                                      />
+                                      <Image source={{ uri: awayLogo }} style={styles.smallCrestImg} resizeMode="contain" />
                                     ) : null}
                                   </View>
                                 </View>
@@ -1076,25 +1028,17 @@ export default function HomeScreen() {
                       <View style={styles.blockActions}>
                         <Pressable
                           onPress={goFixturesHub}
-                          style={({ pressed }) => [
-                            styles.btn,
-                            styles.btnPrimary,
-                            pressed && styles.pressed,
-                          ]}
+                          style={({ pressed }) => [styles.btn, styles.btnPrimary, pressed && styles.pressed]}
                           android_ripple={{ color: "rgba(79,224,138,0.10)" }}
                         >
                           <Text style={styles.btnPrimaryText}>Browse Fixtures</Text>
                         </Pressable>
                         <Pressable
                           onPress={goDiscover}
-                          style={({ pressed }) => [
-                            styles.btn,
-                            styles.btnGhost,
-                            pressed && styles.pressed,
-                          ]}
+                          style={({ pressed }) => [styles.btn, styles.btnGhost, pressed && styles.pressed]}
                           android_ripple={{ color: "rgba(255,255,255,0.08)" }}
                         >
-                          <Text style={styles.btnGhostText}>Open Discover</Text>
+                          <Text style={styles.btnGhostText}>Need ideas first?</Text>
                         </Pressable>
                       </View>
                     </>
@@ -1107,80 +1051,61 @@ export default function HomeScreen() {
           {!showSearchResults ? (
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Quick access</Text>
-                <Text style={styles.sectionMeta}>Use the right route fast</Text>
-              </View>
-
-              <View style={styles.grid2}>
-                {quickTiles.map((s) => (
-                  <Pressable
-                    key={s.key}
-                    onPress={s.onPress}
-                    style={({ pressed }) => [styles.tilePress, pressed && styles.pressed]}
-                    android_ripple={{ color: "rgba(255,255,255,0.06)" }}
-                  >
-                    <GlassCard strength="default" style={styles.tile} noPadding>
-                      <View style={styles.tileInner}>
-                        <View style={styles.tileTopRow}>
-                          <Text style={styles.tileTitle}>{s.title}</Text>
-                          <View style={styles.tileBadge}>
-                            <Text style={styles.tileBadgeText}>{s.icon}</Text>
-                          </View>
-                        </View>
-                        <Text style={styles.tileSub}>{s.sub}</Text>
-                        <Text style={styles.tileHint}>Tap to open</Text>
-                      </View>
-                    </GlassCard>
-                  </Pressable>
-                ))}
-              </View>
-            </View>
-          ) : null}
-
-          {!showSearchResults ? (
-            <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Need ideas?</Text>
-                <Text style={styles.sectionMeta}>Use Discover, not guesswork</Text>
+                <Text style={styles.sectionTitle}>Browse starting points</Text>
+                <Text style={styles.sectionMeta}>City or club first</Text>
               </View>
 
               <GlassCard strength="default" style={styles.block} noPadding>
                 <View style={styles.blockInner}>
-                  <View style={styles.discoverGateway}>
-                    <Text style={styles.gatewayKicker}>DISCOVER</Text>
-                    <Text style={styles.gatewayTitle}>
-                      Use Discover when you do not know where to go yet
-                    </Text>
-                    <Text style={styles.gatewayText}>
-                      Browse by atmospheres, value, easy tickets, big matches, iconic cities, and
-                      more — then jump into ranked Fixtures results.
-                    </Text>
+                  <Text style={styles.sectionKicker}>Popular cities</Text>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.popularRow}
+                    decelerationRate="fast"
+                  >
+                    {cities.map((c) => (
+                      <CityChipPremium
+                        key={`pc-${c.name}`}
+                        name={c.name}
+                        countryCode={c.countryCode}
+                        onPress={() => goCityFromName(c.name)}
+                      />
+                    ))}
+                  </ScrollView>
 
-                    <View style={styles.blockActions}>
+                  <Text style={[styles.sectionKicker, { marginTop: 10 }]}>Popular teams</Text>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.popularRow}
+                    decelerationRate="fast"
+                  >
+                    {popularTeams.map((t: any) => (
                       <Pressable
-                        onPress={goDiscover}
-                        style={({ pressed }) => [
-                          styles.btn,
-                          styles.btnPrimary,
-                          pressed && styles.pressed,
-                        ]}
-                        android_ripple={{ color: "rgba(79,224,138,0.10)" }}
-                      >
-                        <Text style={styles.btnPrimaryText}>Open Discover</Text>
-                      </Pressable>
-                      <Pressable
-                        onPress={goFixturesHub}
-                        style={({ pressed }) => [
-                          styles.btn,
-                          styles.btnGhost,
-                          pressed && styles.pressed,
-                        ]}
+                        key={`pt-${String(t.teamKey ?? t.teamId ?? t.name)}`}
+                        onPress={() => {
+                          Keyboard.dismiss();
+                          setQ("");
+                          router.push({
+                            pathname: "/team/[teamKey]",
+                            params: { teamKey: String(t.teamKey), from: fromIso, to: toIso },
+                          } as any);
+                        }}
+                        style={({ pressed }) => [styles.teamPill, pressed && styles.pressedPill]}
                         android_ripple={{ color: "rgba(255,255,255,0.08)" }}
                       >
-                        <Text style={styles.btnGhostText}>Go straight to Fixtures</Text>
+                        <View style={styles.teamCrestDot}>
+                          <Image
+                            source={{ uri: API_SPORTS_TEAM_LOGO(Number(t.teamId)) }}
+                            style={{ width: 16, height: 16, opacity: 0.95 }}
+                            resizeMode="contain"
+                          />
+                        </View>
+                        <Text style={styles.pillText}>{String(t.name ?? "")}</Text>
                       </Pressable>
-                    </View>
-                  </View>
+                    ))}
+                  </ScrollView>
                 </View>
               </GlassCard>
             </View>
@@ -1340,61 +1265,6 @@ const styles = StyleSheet.create({
   },
 
   chev: { color: theme.colors.textTertiary, fontSize: 22, marginTop: -2 },
-
-  popularBlock: { marginTop: 4, gap: 8 },
-  sectionKicker: {
-    color: theme.colors.textTertiary,
-    fontSize: 12,
-    fontWeight: theme.fontWeight.black,
-    letterSpacing: 0.3,
-  },
-  popularRow: { gap: 10, paddingRight: theme.spacing.lg, paddingVertical: 4 },
-
-  cityPill: {
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor:
-      Platform.OS === "android" ? "rgba(18,20,24,0.32)" : "rgba(18,20,24,0.26)",
-    paddingVertical: 8,
-    paddingHorizontal: 8,
-    overflow: "hidden",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  cityThumb: { width: 42, height: 42, borderRadius: 12 },
-  cityFlagInline: { width: 16, height: 12, borderRadius: 2, opacity: 0.9 },
-  pillText: {
-    color: "rgba(242,244,246,0.86)",
-    fontSize: 13,
-    fontWeight: theme.fontWeight.black,
-  },
-
-  teamPill: {
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor:
-      Platform.OS === "android" ? "rgba(18,20,24,0.32)" : "rgba(18,20,24,0.26)",
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    overflow: "hidden",
-  },
-  teamCrestDot: {
-    width: 22,
-    height: 22,
-    borderRadius: 999,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(0,0,0,0.20)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-    overflow: "hidden",
-  },
 
   section: { gap: 10 },
   sectionHeader: {
@@ -1711,32 +1581,57 @@ const styles = StyleSheet.create({
   },
   tileBadgeText: { fontSize: 16, opacity: 0.95 },
 
-  discoverGateway: {
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-    backgroundColor:
-      Platform.OS === "android" ? "rgba(10,12,14,0.18)" : "rgba(10,12,14,0.14)",
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    gap: 6,
-  },
-  gatewayKicker: {
-    color: "rgba(79,224,138,0.78)",
+  sectionKicker: {
+    color: theme.colors.textTertiary,
     fontSize: 12,
     fontWeight: theme.fontWeight.black,
     letterSpacing: 0.3,
   },
-  gatewayTitle: {
-    color: theme.colors.text,
-    fontSize: 15,
-    fontWeight: theme.fontWeight.black,
-    lineHeight: 20,
+  popularRow: { gap: 10, paddingRight: theme.spacing.lg, paddingVertical: 4 },
+
+  cityPill: {
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor:
+      Platform.OS === "android" ? "rgba(18,20,24,0.32)" : "rgba(18,20,24,0.26)",
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+    overflow: "hidden",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
   },
-  gatewayText: {
-    color: theme.colors.textSecondary,
+  cityThumb: { width: 42, height: 42, borderRadius: 12 },
+  cityFlagInline: { width: 16, height: 12, borderRadius: 2, opacity: 0.9 },
+  pillText: {
+    color: "rgba(242,244,246,0.86)",
     fontSize: 13,
-    fontWeight: theme.fontWeight.bold,
-    lineHeight: 18,
+    fontWeight: theme.fontWeight.black,
+  },
+
+  teamPill: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor:
+      Platform.OS === "android" ? "rgba(18,20,24,0.32)" : "rgba(18,20,24,0.26)",
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    overflow: "hidden",
+  },
+  teamCrestDot: {
+    width: 22,
+    height: 22,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0,0,0,0.20)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    overflow: "hidden",
   },
 });
