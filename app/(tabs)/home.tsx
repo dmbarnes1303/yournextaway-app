@@ -53,18 +53,6 @@ const API_SPORTS_TEAM_LOGO = (teamId: number) =>
 
 type ShortcutWindow = { from: string; to: string };
 
-function toKey(s: string) {
-  return String(s ?? "").trim().toLowerCase();
-}
-
-function cityKeyFromName(name: string) {
-  return toKey(name)
-    .replace(/[’']/g, "")
-    .replace(/[^a-z0-9\s-]/g, "")
-    .trim()
-    .replace(/\s+/g, "-");
-}
-
 function titleFromSlug(s: string) {
   const clean = String(s ?? "").trim();
   if (!clean) return "";
@@ -495,7 +483,7 @@ export default function HomeScreen() {
       <SafeAreaView style={styles.container} edges={["top"]}>
         <ScrollView
           style={styles.scroll}
-          contentContainerStyle={[styles.content, { paddingBottom: 22 + insets.bottom }]}
+          contentContainerStyle={[styles.content, { paddingBottom: 26 + insets.bottom }]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
@@ -546,32 +534,30 @@ export default function HomeScreen() {
                   ) : null}
 
                   {!searchBuilding && !searchError ? (
-                    <>
-                      {flatSearchResults.length === 0 ? (
-                        <Text style={styles.groupEmpty}>No results.</Text>
-                      ) : (
-                        <View style={styles.resultList}>
-                          {flatSearchResults.map((r, idx) => (
-                            <Pressable
-                              key={`${r.key}-${idx}`}
-                              onPress={() => onPressSearchResult(r)}
-                              style={({ pressed }) => [
-                                styles.resultRow,
-                                idx === 0 ? styles.resultRowFirst : null,
-                                pressed && styles.pressedRow,
-                              ]}
-                              android_ripple={{ color: "rgba(87,162,56,0.08)" }}
-                            >
-                              <View style={styles.resultTextWrap}>
-                                <Text style={styles.resultTitle}>{r.title}</Text>
-                                <Text style={styles.resultMeta}>{resultMeta(r)}</Text>
-                              </View>
-                              <Text style={styles.chev}>›</Text>
-                            </Pressable>
-                          ))}
-                        </View>
-                      )}
-                    </>
+                    flatSearchResults.length === 0 ? (
+                      <Text style={styles.groupEmpty}>No results.</Text>
+                    ) : (
+                      <View style={styles.resultList}>
+                        {flatSearchResults.map((r, idx) => (
+                          <Pressable
+                            key={`${r.key}-${idx}`}
+                            onPress={() => onPressSearchResult(r)}
+                            style={({ pressed }) => [
+                              styles.resultRow,
+                              idx === 0 ? styles.resultRowFirst : null,
+                              pressed && styles.pressedRow,
+                            ]}
+                            android_ripple={{ color: "rgba(87,162,56,0.08)" }}
+                          >
+                            <View style={styles.resultTextWrap}>
+                              <Text style={styles.resultTitle}>{r.title}</Text>
+                              <Text style={styles.resultMeta}>{resultMeta(r)}</Text>
+                            </View>
+                            <Text style={styles.chev}>›</Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    )
                   ) : null}
                 </View>
               ) : null}
@@ -622,7 +608,6 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-
   scroll: { flex: 1 },
 
   content: {
@@ -633,11 +618,13 @@ const styles = StyleSheet.create({
 
   hero: {
     marginTop: theme.spacing.lg,
-    borderRadius: 26,
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
   },
 
   heroInner: {
-    padding: 16,
+    padding: 18,
     gap: 10,
   },
 
@@ -645,11 +632,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "flex-start",
+    marginBottom: 2,
   },
 
   logoWrap: {
-    width: 44,
-    height: 44,
+    width: 46,
+    height: 46,
     borderRadius: 999,
     overflow: "hidden",
     borderWidth: 1,
@@ -660,9 +648,9 @@ const styles = StyleSheet.create({
   },
 
   logo: {
-    width: 34,
-    height: 34,
-    opacity: 0.96,
+    width: 36,
+    height: 36,
+    opacity: 0.98,
   },
 
   heroTitle: {
@@ -678,18 +666,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
     fontWeight: theme.fontWeight.bold,
-    opacity: 0.94,
+    opacity: 0.96,
+    maxWidth: "92%",
   },
 
   searchBox: {
-    marginTop: 8,
+    marginTop: 10,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor:
-      Platform.OS === "android" ? "rgba(0,0,0,0.18)" : "rgba(255,255,255,0.05)",
+    backgroundColor: Platform.OS === "android" ? "rgba(0,0,0,0.18)" : "rgba(255,255,255,0.05)",
     borderRadius: 18,
     paddingHorizontal: 14,
-    minHeight: 54,
+    minHeight: 56,
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
@@ -728,8 +716,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.08)",
     borderRadius: 18,
     overflow: "hidden",
-    backgroundColor:
-      Platform.OS === "android" ? "rgba(10,12,14,0.24)" : "rgba(10,12,14,0.20)",
+    backgroundColor: Platform.OS === "android" ? "rgba(10,12,14,0.24)" : "rgba(10,12,14,0.20)",
   },
 
   resultRow: {
