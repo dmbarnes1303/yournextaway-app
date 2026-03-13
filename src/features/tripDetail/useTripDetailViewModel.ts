@@ -208,19 +208,11 @@ export default function useTripDetailViewModel({
   );
 
   const openFlights = useCallback(() => {
-    return controller.openPartnerOrAlert(
-      flightAction.url,
-      flightAction.message,
-      flightAction.config
-    );
+    return controller.openPartnerOrAlert(flightAction.url, flightAction.message, flightAction.config);
   }, [controller, flightAction]);
 
   const openHotels = useCallback(() => {
-    return controller.openPartnerOrAlert(
-      hotelAction.url,
-      hotelAction.message,
-      hotelAction.config
-    );
+    return controller.openPartnerOrAlert(hotelAction.url, hotelAction.message, hotelAction.config);
   }, [controller, hotelAction]);
 
   const openTransport = useCallback(() => {
@@ -232,11 +224,7 @@ export default function useTripDetailViewModel({
   }, [controller, transportAction]);
 
   const openThings = useCallback(() => {
-    return controller.openPartnerOrAlert(
-      thingsAction.url,
-      thingsAction.message,
-      thingsAction.config
-    );
+    return controller.openPartnerOrAlert(thingsAction.url, thingsAction.message, thingsAction.config);
   }, [controller, thingsAction]);
 
   const openTickets = useCallback(() => {
@@ -487,4 +475,4 @@ export default function useTripDetailViewModel({
     heroBannerCounts,
     readiness,
   };
-}
+  }
