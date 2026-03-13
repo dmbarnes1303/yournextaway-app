@@ -23,49 +23,6 @@ type Props = {
   centerShadeOpacity?: number;
 };
 
-function SoftTint({
-  color,
-  opacity,
-  style,
-}: {
-  color: string;
-  opacity: number;
-  style?: any;
-}) {
-  return (
-    <View
-      pointerEvents="none"
-      style={[
-        StyleSheet.absoluteFillObject,
-        style,
-        {
-          backgroundColor: color,
-          opacity,
-        },
-      ]}
-    />
-  );
-}
-
-function FocalTint({
-  color,
-  opacity,
-  position,
-}: {
-  color: string;
-  opacity: number;
-  position: "left" | "center" | "right";
-}) {
-  const baseStyle =
-    position === "left"
-      ? styles.focalLeft
-      : position === "right"
-      ? styles.focalRight
-      : styles.focalCenter;
-
-  return <SoftTint color={color} opacity={opacity} style={baseStyle} />;
-}
-
 function BrandSpecSurface({
   spec,
   children,
@@ -76,9 +33,23 @@ function BrandSpecSurface({
   overlayOpacity: number;
 }) {
   const topTintOpacity = spec.topTintOpacity ?? 0.08;
-  const focalTintOpacity = spec.focalTintOpacity ?? 0.08;
+  const focalTintOpacity = spec.focalTintOpacity ?? 0.06;
   const bottomShadeOpacity = spec.bottomShadeOpacity ?? 0.28;
-  const vignetteOpacity = spec.vignetteOpacity ?? 0.22;
+  const vignetteOpacity = spec.vignetteOpacity ?? 0.18;
+
+  const horizontalTint =
+    spec.focalTintPosition === "left"
+      ? ["rgba(0,0,0,0.00)", `${hexToRgba(spec.focalTintColor ?? "#000000", focalTintOpacity)}`, "rgba(0,0,0,0.00)"]
+      : spec.focalTintPosition === "right"
+      ? ["rgba(0,0,0,0.00)", `${hexToRgba(spec.focalTintColor ?? "#000000", focalTintOpacity)}`, "rgba(0,0,0,0.00)"]
+      : ["rgba(0,0,0,0.00)", `${hexToRgba(spec.focalTintColor ?? "#000000", focalTintOpacity)}`, "rgba(0,0,0,0.00)"];
+
+  const horizontalLocations =
+    spec.focalTintPosition === "left"
+      ? [0, 0.22, 0.58]
+      : spec.focalTintPosition === "right"
+      ? [0.42, 0.78, 1]
+      : [0, 0.5, 1];
 
   return (
     <View style={styles.root}>
@@ -88,19 +59,33 @@ function BrandSpecSurface({
         end={{ x: 0.5, y: 1 }}
         style={styles.image}
       >
-        <SoftTint color={spec.topTintColor} opacity={topTintOpacity} style={styles.topTint} />
+        <LinearGradient
+          pointerEvents="none"
+          colors={[
+            hexToRgba(spec.topTintColor, topTintOpacity),
+            hexToRgba(spec.topTintColor, topTintOpacity * 0.35),
+            "rgba(0,0,0,0.00)",
+          ]}
+          locations={[0, 0.28, 1]}
+          start={{ x: 0.5, y: 0 }}
+          end={{ x: 0.5, y: 1 }}
+          style={styles.topWash}
+        />
 
         {spec.focalTintColor ? (
-          <FocalTint
-            color={spec.focalTintColor}
-            opacity={focalTintOpacity}
-            position={spec.focalTintPosition ?? "center"}
+          <LinearGradient
+            pointerEvents="none"
+            colors={horizontalTint}
+            locations={horizontalLocations}
+            start={{ x: 0, y: 0.5 }}
+            end={{ x: 1, y: 0.5 }}
+            style={styles.centerBand}
           />
         ) : null}
 
         <LinearGradient
           pointerEvents="none"
-          colors={["rgba(255,255,255,0.02)", "rgba(255,255,255,0.00)"]}
+          colors={["rgba(255,255,255,0.018)", "rgba(255,255,255,0.00)"]}
           locations={[0, 1]}
           start={{ x: 0.5, y: 0 }}
           end={{ x: 0.5, y: 1 }}
@@ -116,7 +101,7 @@ function BrandSpecSurface({
           style={styles.bottomShade}
         />
 
-        <View pointerEvents="none" style={[styles.vignette, { opacity: vignetteOpacity }]} />
+        <View pointerEvents="none" style={[styles.edgeVignette, { opacity: vignetteOpacity }]} />
 
         {overlayOpacity > 0 ? (
           <View
@@ -132,6 +117,27 @@ function BrandSpecSurface({
       </LinearGradient>
     </View>
   );
+}
+
+function hexToRgba(hex: string, opacity: number) {
+  const clean = String(hex).replace("#", "").trim();
+  const full =
+    clean.length === 3
+      ? clean
+          .split("")
+          .map((c) => c + c)
+          .join("")
+      : clean;
+
+  const r = parseInt(full.slice(0, 2), 16);
+  const g = parseInt(full.slice(2, 4), 16);
+  const b = parseInt(full.slice(4, 6), 16);
+
+  if ([r, g, b].some((v) => Number.isNaN(v))) {
+    return `rgba(0,0,0,${opacity})`;
+  }
+
+  return `rgba(${r},${g},${b},${opacity})`;
 }
 
 export default function Background({
@@ -259,36 +265,20 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
-  topTint: {
-    top: -20,
-    left: -20,
-    right: -20,
+  topWash: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
     height: "30%",
-    borderRadius: 999,
   },
 
-  focalCenter: {
-    top: "18%",
-    left: "-12%",
-    right: "-12%",
-    height: "42%",
-    borderRadius: 999,
-  },
-
-  focalLeft: {
-    top: "20%",
-    left: "-20%",
-    width: "78%",
-    height: "44%",
-    borderRadius: 999,
-  },
-
-  focalRight: {
-    top: "18%",
-    right: "-20%",
-    width: "78%",
-    height: "44%",
-    borderRadius: 999,
+  centerBand: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    left: 0,
+    right: 0,
   },
 
   highlightWash: {
@@ -296,17 +286,19 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    height: "26%",
+    height: "20%",
   },
 
-  vignette: {
+  edgeVignette: {
     ...StyleSheet.absoluteFillObject,
-    borderColor: "rgba(0,0,0,0.0)",
-    shadowColor: "#000",
-    shadowOpacity: 1,
-    shadowRadius: 80,
-    shadowOffset: { width: 0, height: 0 },
-    elevation: 0,
+    borderLeftWidth: 18,
+    borderRightWidth: 18,
+    borderTopWidth: 10,
+    borderBottomWidth: 26,
+    borderLeftColor: "rgba(0,0,0,0.22)",
+    borderRightColor: "rgba(0,0,0,0.22)",
+    borderTopColor: "rgba(0,0,0,0.10)",
+    borderBottomColor: "rgba(0,0,0,0.28)",
   },
 
   bottomShade: {
