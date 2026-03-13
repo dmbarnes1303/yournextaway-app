@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   TextInput,
   Platform,
   ActivityIndicator,
+  Image,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -15,6 +16,7 @@ import { Ionicons } from "@expo/vector-icons";
 
 import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
+import EmptyState from "@/src/components/EmptyState";
 import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
 import {
@@ -35,6 +37,8 @@ import {
   type DiscoverVibe,
 } from "@/src/features/discover/discoverEngine";
 import { discoverScoreForCategory } from "@/src/features/discover/discoverRanking";
+import { formatUkDateTimeMaybe } from "@/src/utils/formatters";
+import { getCityImageUrl } from "@/src/data/cityImages";
 
 type ShortcutWindow = { from: string; to: string };
 type DiscoverWindowKey = "wknd" | "d7" | "d14" | "d30";
@@ -272,6 +276,46 @@ async function fetchDiscoverPool(params: {
   });
 }
 
+function fixtureTitle(row: FixtureListRow) {
+  const home = row?.teams?.home?.name ?? "Home";
+  const away = row?.teams?.away?.name ?? "Away";
+  return `${home} vs ${away}`;
+}
+
+function fixtureMeta(row: FixtureListRow) {
+  const kickoff = formatUkDateTimeMaybe(row?.fixture?.date);
+  const city = String(row?.fixture?.venue?.city ?? "").trim();
+  const venue = String(row?.fixture?.venue?.name ?? "").trim();
+  const tail = [venue, city].filter(Boolean).join(" • ");
+  return tail ? `${kickoff} • ${tail}` : kickoff;
+}
+
+function fixtureCity(row: FixtureListRow) {
+  return String(row?.fixture?.venue?.city ?? "").trim() || "london";
+}
+
+function whyThisFits(
+  category: DiscoverCategory,
+  vibes: DiscoverVibe[],
+  tripLength: DiscoverTripLength
+) {
+  if (category === "easyTickets") return "Better chance of a cleaner home-ticket route";
+  if (category === "bigMatches") return "Higher-profile fixture with stronger travel pull";
+  if (category === "nightMatches") return "Leans into later kick-offs and bigger occasion feel";
+  if (category === "matchdayCulture") return "Better city + match balance for a fuller weekend";
+  if (category === "iconicCities") return "Stronger place-first football weekend potential";
+  if (tripLength === "2" || tripLength === "3") return "Works well for a football city-break shape";
+  if (vibes.includes("easy")) return "Lower-friction option for a simpler football trip";
+  return "One of the stronger live options from your current setup";
+}
+
+function rankLabel(index: number) {
+  if (index === 0) return "Top fit";
+  if (index === 1) return "Strong";
+  if (index === 2) return "Hot";
+  return `#${index + 1}`;
+}
+
 function FilterChip({
   label,
   active,
@@ -314,6 +358,10 @@ export default function DiscoverScreen() {
   const [discoverVibes, setDiscoverVibes] = useState<DiscoverVibe[]>(["easy"]);
   const [discoverOrigin, setDiscoverOrigin] = useState("");
   const [loadingRandom, setLoadingRandom] = useState(false);
+
+  const [loadingLive, setLoadingLive] = useState(false);
+  const [liveError, setLiveError] = useState<string | null>(null);
+  const [liveRows, setLiveRows] = useState<FixtureListRow[]>([]);
 
   const toggleVibe = useCallback((vibe: DiscoverVibe) => {
     setDiscoverVibes((prev) => {
@@ -373,6 +421,68 @@ export default function DiscoverScreen() {
     return meta?.title ?? "Best-fit routes";
   }, [seededCategory]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function run() {
+      setLoadingLive(true);
+      setLiveError(null);
+
+      try {
+        const pool = await fetchDiscoverPool({
+          window: currentWindow,
+          windowKey: discoverWindowKey,
+          origin: discoverOrigin,
+          tripLength: discoverTripLength,
+          vibes: discoverVibes,
+          category: seededCategory,
+        });
+
+        if (cancelled) return;
+        setLiveRows(pool);
+      } catch (e: any) {
+        if (cancelled) return;
+        setLiveRows([]);
+        setLiveError(e?.message ?? "Failed to load live route previews.");
+      } finally {
+        if (!cancelled) setLoadingLive(false);
+      }
+    }
+
+    run();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    currentWindow,
+    discoverWindowKey,
+    discoverOrigin,
+    discoverTripLength,
+    discoverVibes,
+    seededCategory,
+  ]);
+
+  const rankedLive = useMemo(() => {
+    if (!liveRows.length) return [];
+
+    const scored = buildDiscoverScores(liveRows);
+
+    return scored
+      .map((item) => ({
+        item,
+        score: discoverScoreForCategory(seededCategory, item, {
+          origin: discoverOrigin.trim() || null,
+          tripLength: discoverTripLength,
+          vibes: discoverVibes,
+        }),
+      }))
+      .sort((a, b) => b.score - a.score);
+  }, [liveRows, seededCategory, discoverOrigin, discoverTripLength, discoverVibes]);
+
+  const featuredLive = useMemo(() => rankedLive[0] ?? null, [rankedLive]);
+  const previewLive = useMemo(() => rankedLive.slice(0, 6), [rankedLive]);
+
   const goFixturesCategory = useCallback(
     (category: DiscoverCategory) => {
       router.push({
@@ -392,6 +502,43 @@ export default function DiscoverScreen() {
       currentWindow.from,
       currentWindow.to,
       discoverOrigin,
+      discoverTripLength,
+      discoverVibes,
+    ]
+  );
+
+  const goMatchFromRow = useCallback(
+    (row: FixtureListRow | null | undefined) => {
+      const fixtureId = row?.fixture?.id != null ? String(row.fixture.id) : null;
+      const leagueId = row?.league?.id != null ? String(row.league.id) : null;
+      const season =
+        (row as any)?.league?.season != null ? String((row as any).league.season) : null;
+
+      if (!fixtureId) return;
+
+      router.push({
+        pathname: "/trip/build",
+        params: {
+          global: "1",
+          fixtureId,
+          ...(leagueId ? { leagueId } : {}),
+          ...(season ? { season } : {}),
+          from: currentWindow.from,
+          to: currentWindow.to,
+          prefMode: "discover",
+          prefFrom: discoverOrigin.trim() ? discoverOrigin.trim() : undefined,
+          prefWindow: discoverWindowKey,
+          prefLength: discoverTripLength,
+          prefVibes: discoverVibes.join(","),
+        },
+      } as any);
+    },
+    [
+      router,
+      currentWindow.from,
+      currentWindow.to,
+      discoverOrigin,
+      discoverWindowKey,
       discoverTripLength,
       discoverVibes,
     ]
@@ -631,6 +778,80 @@ export default function DiscoverScreen() {
 
           <View style={styles.section}>
             <View style={styles.sectionHeaderStack}>
+              <Text style={styles.sectionTitle}>Live now</Text>
+              <Text style={styles.sectionSub}>
+                Strong current options based on your setup, not generic filler.
+              </Text>
+            </View>
+
+            {loadingLive ? (
+              <GlassCard strength="default" style={styles.loadingCard}>
+                <View style={styles.center}>
+                  <ActivityIndicator />
+                  <Text style={styles.loadingText}>Loading live route previews…</Text>
+                </View>
+              </GlassCard>
+            ) : null}
+
+            {!loadingLive && liveError ? (
+              <EmptyState title="Live previews unavailable" message={liveError} />
+            ) : null}
+
+            {!loadingLive && !liveError && previewLive.length > 0 ? (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.liveRow}
+              >
+                {previewLive.map((entry, index) => {
+                  const row = entry.item.fixture;
+                  const image = getCityImageUrl(fixtureCity(row));
+                  const why = whyThisFits(
+                    seededCategory,
+                    discoverVibes,
+                    discoverTripLength
+                  );
+
+                  return (
+                    <Pressable
+                      key={String(row?.fixture?.id ?? index)}
+                      onPress={() => goMatchFromRow(row)}
+                      style={({ pressed }) => [styles.livePress, pressed && styles.pressed]}
+                    >
+                      <GlassCard strength="default" style={styles.liveCard} noPadding>
+                        <View style={styles.liveImageWrap}>
+                          <Image
+                            source={{ uri: image }}
+                            style={styles.liveImage}
+                            resizeMode="cover"
+                          />
+                          <View style={styles.liveImageOverlay} />
+                          <View style={styles.liveRankPill}>
+                            <Text style={styles.liveRankText}>{rankLabel(index)}</Text>
+                          </View>
+                        </View>
+
+                        <View style={styles.liveBody}>
+                          <Text style={styles.liveTitle} numberOfLines={2}>
+                            {fixtureTitle(row)}
+                          </Text>
+                          <Text style={styles.liveMeta} numberOfLines={2}>
+                            {fixtureMeta(row)}
+                          </Text>
+                          <Text style={styles.liveWhy} numberOfLines={2}>
+                            {why}
+                          </Text>
+                        </View>
+                      </GlassCard>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            ) : null}
+          </View>
+
+          <View style={styles.section}>
+            <View style={styles.sectionHeaderStack}>
               <Text style={styles.sectionTitle}>Start with a mood</Text>
               <Text style={styles.sectionSub}>
                 Fast entry points for the kind of trip that already sounds good.
@@ -754,7 +975,7 @@ export default function DiscoverScreen() {
 
           <View style={styles.section}>
             <View style={styles.sectionHeaderStack}>
-              <Text style={styles.sectionTitle}>Ranked routes</Text>
+              <Text style={styles.sectionTitle}>Best fit right now</Text>
               <Text style={styles.sectionSub}>
                 Based on your current setup,{" "}
                 <Text style={styles.sectionSubStrong}>{browseModeLabel}</Text> is the best
@@ -762,7 +983,57 @@ export default function DiscoverScreen() {
               </Text>
             </View>
 
-            {leadCategory ? renderLeadCategoryCard(leadCategory) : null}
+            {featuredLive ? (
+              <Pressable
+                onPress={() => goMatchFromRow(featuredLive.item.fixture)}
+                style={({ pressed }) => [styles.featuredPress, pressed && styles.pressed]}
+              >
+                <GlassCard strength="default" style={styles.featuredLiveCard} noPadding>
+                  <View style={styles.featuredLiveImageWrap}>
+                    <Image
+                      source={{ uri: getCityImageUrl(fixtureCity(featuredLive.item.fixture)) }}
+                      style={styles.featuredLiveImage}
+                      resizeMode="cover"
+                    />
+                    <View style={styles.featuredLiveOverlay} />
+                  </View>
+
+                  <View style={styles.featuredLiveBody}>
+                    <View style={styles.featuredLiveTopRow}>
+                      <View style={styles.featuredLiveIconWrap}>
+                        <Ionicons
+                          name={DISCOVER_CATEGORY_META[seededCategory].icon}
+                          size={18}
+                          color={theme.colors.text}
+                        />
+                      </View>
+                      <View style={styles.bestFitPill}>
+                        <Text style={styles.bestFitPillText}>Top live option</Text>
+                      </View>
+                    </View>
+
+                    <Text style={styles.featuredLiveTitle}>
+                      {fixtureTitle(featuredLive.item.fixture)}
+                    </Text>
+
+                    <Text style={styles.featuredLiveMeta}>
+                      {fixtureMeta(featuredLive.item.fixture)}
+                    </Text>
+
+                    <Text style={styles.featuredLiveWhy}>
+                      {whyThisFits(seededCategory, discoverVibes, discoverTripLength)}
+                    </Text>
+
+                    <View style={styles.featuredLiveBottomRow}>
+                      <Text style={styles.featuredLiveCta}>Open this route</Text>
+                      <Text style={styles.leadArrow}>›</Text>
+                    </View>
+                  </View>
+                </GlassCard>
+              </Pressable>
+            ) : leadCategory ? (
+              renderLeadCategoryCard(leadCategory)
+            ) : null}
 
             <View style={styles.primaryGrid}>
               {remainingPrimaryCategories.map((category) =>
@@ -973,6 +1244,101 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeight.black,
   },
 
+  center: {
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    paddingVertical: 20,
+  },
+
+  loadingCard: {
+    borderRadius: 20,
+    padding: 6,
+  },
+
+  loadingText: {
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.bold,
+  },
+
+  liveRow: {
+    gap: 12,
+    paddingRight: theme.spacing.lg,
+  },
+
+  livePress: {
+    width: 250,
+    borderRadius: 20,
+    overflow: "hidden",
+  },
+
+  liveCard: {
+    borderRadius: 20,
+  },
+
+  liveImageWrap: {
+    height: 112,
+    position: "relative",
+  },
+
+  liveImage: {
+    width: "100%",
+    height: "100%",
+  },
+
+  liveImageOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(5,8,10,0.40)",
+  },
+
+  liveRankPill: {
+    position: "absolute",
+    top: 10,
+    left: 10,
+    borderRadius: 999,
+    paddingVertical: 5,
+    paddingHorizontal: 9,
+    borderWidth: 1,
+    borderColor: "rgba(87,162,56,0.22)",
+    backgroundColor: "rgba(6,10,8,0.60)",
+  },
+
+  liveRankText: {
+    color: theme.colors.text,
+    fontSize: 10,
+    fontWeight: theme.fontWeight.black,
+    letterSpacing: 0.3,
+  },
+
+  liveBody: {
+    padding: 14,
+    gap: 6,
+    minHeight: 126,
+  },
+
+  liveTitle: {
+    color: theme.colors.text,
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: theme.fontWeight.black,
+  },
+
+  liveMeta: {
+    color: theme.colors.textSecondary,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: theme.fontWeight.bold,
+  },
+
+  liveWhy: {
+    color: theme.colors.primary,
+    fontSize: 11,
+    lineHeight: 16,
+    fontWeight: theme.fontWeight.black,
+    marginTop: 2,
+  },
+
   inspirationRow: {
     gap: 10,
     paddingRight: theme.spacing.lg,
@@ -1137,6 +1503,88 @@ const styles = StyleSheet.create({
 
   chipTextActive: {
     color: theme.colors.text,
+  },
+
+  featuredPress: {
+    borderRadius: 22,
+    overflow: "hidden",
+  },
+
+  featuredLiveCard: {
+    borderRadius: 22,
+    borderColor: "rgba(87,162,56,0.22)",
+  },
+
+  featuredLiveImageWrap: {
+    height: 152,
+    position: "relative",
+  },
+
+  featuredLiveImage: {
+    width: "100%",
+    height: "100%",
+  },
+
+  featuredLiveOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(5,8,10,0.42)",
+  },
+
+  featuredLiveBody: {
+    padding: 16,
+    gap: 8,
+  },
+
+  featuredLiveTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+
+  featuredLiveIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(87,162,56,0.20)",
+    backgroundColor: "rgba(87,162,56,0.10)",
+  },
+
+  featuredLiveTitle: {
+    color: theme.colors.text,
+    fontSize: 20,
+    lineHeight: 25,
+    fontWeight: theme.fontWeight.black,
+  },
+
+  featuredLiveMeta: {
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: theme.fontWeight.bold,
+  },
+
+  featuredLiveWhy: {
+    color: theme.colors.primary,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: theme.fontWeight.black,
+  },
+
+  featuredLiveBottomRow: {
+    marginTop: 2,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+
+  featuredLiveCta: {
+    color: theme.colors.text,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.black,
   },
 
   leadPress: {
