@@ -392,3 +392,509 @@ export default function HomeScreen() {
     (name: string) => {
       const ck = cityKeyFromName(name);
       if (!ck) return;
+      goCityKey(ck);
+    },
+    [goCityKey]
+  );
+
+  const onPressSearchResult = useCallback(
+    (r: SearchResult) => {
+      const p: any = r.payload;
+
+      if (p?.kind === "team") {
+        Keyboard.dismiss();
+        setQ("");
+        router.push({
+          pathname: "/team/[teamKey]",
+          params: { teamKey: p.slug, from: fromIso, to: toIso },
+        } as any);
+        return;
+      }
+
+      if (p?.kind === "city") {
+        goCityKey(p.slug);
+        return;
+      }
+
+      if (p?.kind === "venue") {
+        const venueName = String(r.title ?? "").trim();
+        Keyboard.dismiss();
+        setQ("");
+        goFixtures({ window: { from: fromIso, to: toIso }, venue: venueName });
+        return;
+      }
+
+      if (p?.kind === "country" || p?.kind === "league") {
+        Keyboard.dismiss();
+        setQ("");
+        goFixtures({
+          window: { from: fromIso, to: toIso },
+          leagueId: Number(p.leagueId),
+          season: Number(p.season),
+        });
+      }
+    },
+    [router, fromIso, toIso, goCityKey, goFixtures]
+  );
+
+  const resultMeta = useCallback((r: SearchResult): string => {
+    const p: any = r.payload;
+    if (r.type === "team" && p?.kind === "team") {
+      return hasTeamGuide(p.slug) ? "Team guide available" : "Team guide coming soon";
+    }
+    if (r.type === "city" && p?.kind === "city") {
+      return getCityGuide(p.slug) ? "City guide available" : "City guide coming soon";
+    }
+    return r.subtitle ?? "";
+  }, []);
+
+  const cities = useMemo(
+    () => dedupeBy(POPULAR_CITIES, (c) => toKey(c.name)).slice(0, 5),
+    []
+  );
+  const popularTeams = useMemo(
+    () => getPopularTeams().filter((t) => typeof (t as any)?.teamId === "number").slice(0, 5),
+    []
+  );
+
+  const routeTiles = useMemo(
+    () => [
+      {
+        key: "discover",
+        title: "Discover",
+        sub: "Start with inspiration",
+        icon: "🧭",
+        onPress: goDiscover,
+      },
+      {
+        key: "fixtures",
+        title: "Fixtures",
+        sub: "Browse real match options",
+        icon: "📅",
+        onPress: goFixturesHub,
+      },
+      {
+        key: "trips",
+        title: "Trips",
+        sub: "Open saved workspaces",
+        icon: "✈️",
+        onPress: goTrips,
+      },
+      {
+        key: "wallet",
+        title: "Wallet",
+        sub: "Docs and confirmations",
+        icon: "💼",
+        onPress: goWallet,
+      },
+      {
+        key: "calendar",
+        title: "Calendar",
+        sub: "Useful upcoming windows",
+        icon: "🗓️",
+        onPress: goFootballCalendar,
+      },
+    ],
+    [goDiscover, goFixturesHub, goTrips, goWallet, goFootballCalendar]
+  );
+
+  const nextTripCityTitle = useMemo(() => {
+    if (!nextTrip) return "";
+    const raw = (nextTrip as any).cityName || (nextTrip as any).city || nextTrip.cityId || "Trip";
+    return titleFromSlug(String(raw));
+  }, [nextTrip]);
+
+  const nextTripCountryCode = useMemo(() => {
+    if (!nextTrip) return "";
+    const raw =
+      (nextTrip as any).countryCode ||
+      (nextTrip as any).country ||
+      (nextTrip as any).countryIso ||
+      (nextTrip as any).countryISO ||
+      "";
+    return String(raw).toUpperCase();
+  }, [nextTrip]);
+
+  const nextTripFlagUrl = useMemo(() => {
+    if (!nextTripCountryCode) return "";
+    return getFlagImageUrl(nextTripCountryCode, { size: 48 }) ?? "";
+  }, [nextTripCountryCode]);
+
+  const nextTripTeamId = useMemo(() => {
+    if (!nextTrip) return null;
+    const raw =
+      (nextTrip as any).teamId ||
+      (nextTrip as any).homeTeamId ||
+      (nextTrip as any).primaryTeamId ||
+      (nextTrip as any).clubTeamId ||
+      null;
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : null;
+  }, [nextTrip]);
+
+  const nextTripCityImage = useMemo(() => {
+    if (!nextTrip) return getCityImageUrl("london");
+    const raw =
+      (nextTrip as any).cityName ||
+      (nextTrip as any).city ||
+      nextTrip.cityId ||
+      nextTripCityTitle ||
+      "Trip";
+    return getCityImageUrl(String(raw));
+  }, [nextTrip, nextTripCityTitle]);
+
+  const featuredCityImage = useMemo(() => {
+    const city = String(featured?.fixture?.venue?.city ?? "").trim();
+    return getCityImageUrl(city || "london");
+  }, [featured]);
+
+  const onOpenTeam = useCallback(
+    (teamKey: string) => {
+      Keyboard.dismiss();
+      setQ("");
+      router.push({
+        pathname: "/team/[teamKey]",
+        params: { teamKey: String(teamKey), from: fromIso, to: toIso },
+      } as any);
+    },
+    [router, fromIso, toIso]
+  );
+
+  const flatSearchResults = useMemo(
+    () =>
+      [
+        ...buckets.teams,
+        ...buckets.cities,
+        ...buckets.venues,
+        ...buckets.countries,
+        ...buckets.leagues,
+      ].slice(0, 12),
+    [buckets]
+  );
+
+  return (
+    <Background imageSource={getBackground("home")} overlayOpacity={0.64}>
+      <SafeAreaView style={styles.container} edges={["top"]}>
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={[styles.content, { paddingBottom: 22 + insets.bottom }]}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <GlassCard strength="strong" style={styles.hero} noPadding>
+            <View style={styles.heroInner}>
+              <Text style={styles.heroKicker}>YOURNEXTAWAY</Text>
+              <Text style={styles.heroTitle}>Your football travel hub</Text>
+              <Text style={styles.heroSub}>
+                Search a city, team, country, league, or venue. Then go straight into the right part
+                of the app instead of wandering around it.
+              </Text>
+
+              <View style={styles.searchBox}>
+                <TextInput
+                  value={q}
+                  onChangeText={setQ}
+                  placeholder="Search…"
+                  placeholderTextColor={theme.colors.textTertiary}
+                  style={styles.searchInput}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  returnKeyType="search"
+                  onSubmitEditing={() => Keyboard.dismiss()}
+                />
+                {qNorm.length > 0 ? (
+                  <Pressable onPress={clearSearch} style={styles.clearBtn} hitSlop={10}>
+                    <Text style={styles.clearText}>Clear</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+
+              {!showSearchResults ? (
+                <View style={styles.heroActionGrid}>
+                  <Pressable
+                    onPress={goDiscover}
+                    style={({ pressed }) => [
+                      styles.heroBtn,
+                      styles.heroBtnPrimary,
+                      pressed && styles.pressed,
+                    ]}
+                    android_ripple={{ color: "rgba(79,224,138,0.10)" }}
+                  >
+                    <Text style={styles.heroBtnPrimaryText}>Discover</Text>
+                    <Text style={styles.heroBtnSub}>I need ideas</Text>
+                  </Pressable>
+
+                  <Pressable
+                    onPress={goFixturesHub}
+                    style={({ pressed }) => [
+                      styles.heroBtn,
+                      styles.heroBtnGhost,
+                      pressed && styles.pressed,
+                    ]}
+                    android_ripple={{ color: "rgba(255,255,255,0.08)" }}
+                  >
+                    <Text style={styles.heroBtnGhostText}>Fixtures</Text>
+                    <Text style={styles.heroBtnSub}>I want actual matches</Text>
+                  </Pressable>
+
+                  <Pressable
+                    onPress={goTrips}
+                    style={({ pressed }) => [
+                      styles.heroBtn,
+                      styles.heroBtnGhost,
+                      pressed && styles.pressed,
+                    ]}
+                    android_ripple={{ color: "rgba(255,255,255,0.08)" }}
+                  >
+                    <Text style={styles.heroBtnGhostText}>Trips</Text>
+                    <Text style={styles.heroBtnSub}>Resume planning</Text>
+                  </Pressable>
+                </View>
+              ) : null}
+
+              {showSearchResults ? (
+                <View style={styles.searchResults}>
+                  {searchBuilding ? (
+                    <View style={styles.centerInline}>
+                      <ActivityIndicator />
+                      <Text style={styles.muted}>Preparing search…</Text>
+                    </View>
+                  ) : null}
+
+                  {!searchBuilding && searchError ? (
+                    <EmptyState title="Search unavailable" message={searchError} />
+                  ) : null}
+
+                  {!searchBuilding && !searchError ? (
+                    <>
+                      {flatSearchResults.length === 0 ? (
+                        <Text style={styles.groupEmpty}>No results.</Text>
+                      ) : (
+                        <View style={styles.resultList}>
+                          {flatSearchResults.map((r, idx) => (
+                            <Pressable
+                              key={`${r.key}-${idx}`}
+                              onPress={() => onPressSearchResult(r)}
+                              style={({ pressed }) => [
+                                styles.resultRow,
+                                pressed && styles.pressedRow,
+                              ]}
+                              android_ripple={{ color: "rgba(79,224,138,0.08)" }}
+                            >
+                              <View style={{ flex: 1 }}>
+                                <Text style={styles.resultTitle}>{r.title}</Text>
+                                <Text style={styles.resultMeta}>{resultMeta(r)}</Text>
+                              </View>
+                              <Text style={styles.chev}>›</Text>
+                            </Pressable>
+                          ))}
+                        </View>
+                      )}
+                    </>
+                  ) : null}
+                </View>
+              ) : null}
+            </View>
+          </GlassCard>
+
+          {!showSearchResults ? (
+            <>
+              <ContinuePlanning
+                loadedTrips={loadedTrips}
+                nextTrip={nextTrip}
+                nextTripCityImage={nextTripCityImage}
+                nextTripFlagUrl={nextTripFlagUrl}
+                nextTripTeamId={nextTripTeamId}
+                nextTripCityTitle={nextTripCityTitle}
+                apiSportsTeamLogo={API_SPORTS_TEAM_LOGO}
+                tripSummaryLine={tripSummaryLine}
+                goTrips={goTrips}
+                goDiscover={goDiscover}
+                goFixturesHub={goFixturesHub}
+                onOpenTrip={(tripId) =>
+                  router.push({ pathname: "/trip/[id]", params: { id: tripId } } as any)
+                }
+              />
+
+              <RouteTiles routeTiles={routeTiles} />
+
+              <UpcomingMatches
+                homeTopLeagues={homeTopLeagues}
+                league={league}
+                setLeague={setLeague}
+                upcomingWindow={upcomingWindow}
+                fxLoading={fxLoading}
+                fxError={fxError}
+                featured={featured}
+                list={list}
+                featuredCityImage={featuredCityImage}
+                fixtureLine={fixtureLine}
+                goFixtures={goFixtures}
+                goFixturesHub={goFixturesHub}
+                goDiscover={goDiscover}
+                goMatch={goMatch}
+              />
+
+              <BrowseStartingPoints
+                cities={cities}
+                popularTeams={popularTeams}
+                apiSportsTeamLogo={API_SPORTS_TEAM_LOGO}
+                goCityFromName={goCityFromName}
+                onOpenTeam={onOpenTeam}
+              />
+            </>
+          ) : null}
+        </ScrollView>
+      </SafeAreaView>
+    </Background>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1 },
+  scroll: { flex: 1 },
+  content: { paddingHorizontal: theme.spacing.lg, paddingBottom: theme.spacing.xxl, gap: 18 },
+
+  hero: { marginTop: theme.spacing.lg, borderRadius: 26 },
+  heroInner: { padding: theme.spacing.lg, gap: 10 },
+
+  heroKicker: {
+    color: theme.colors.primary,
+    fontSize: 11,
+    fontWeight: theme.fontWeight.black,
+    letterSpacing: 1.2,
+  },
+  heroTitle: {
+    color: theme.colors.text,
+    fontSize: 26,
+    lineHeight: 32,
+    fontWeight: theme.fontWeight.black,
+    letterSpacing: 0.2,
+  },
+  heroSub: {
+    color: theme.colors.textSecondary,
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: theme.fontWeight.bold,
+    opacity: 0.94,
+  },
+
+  searchBox: {
+    marginTop: 6,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor:
+      Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    minHeight: 54,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  searchInput: {
+    flex: 1,
+    color: theme.colors.text,
+    fontSize: 15,
+    fontWeight: theme.fontWeight.bold,
+    paddingVertical: Platform.OS === "ios" ? 14 : 12,
+  },
+  clearBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    backgroundColor: "rgba(0,0,0,0.16)",
+  },
+  clearText: {
+    color: theme.colors.textSecondary,
+    fontSize: 12,
+    fontWeight: theme.fontWeight.black,
+  },
+
+  heroActionGrid: {
+    marginTop: 6,
+    gap: 10,
+  },
+  heroBtn: {
+    borderRadius: 18,
+    paddingVertical: 13,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    overflow: "hidden",
+    gap: 4,
+  },
+  heroBtnPrimary: {
+    borderColor: "rgba(79,224,138,0.24)",
+    backgroundColor:
+      Platform.OS === "android" ? theme.glass.androidBg.default : theme.glass.iosBg.default,
+  },
+  heroBtnGhost: {
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor:
+      Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
+  },
+  heroBtnPrimaryText: {
+    color: theme.colors.text,
+    fontSize: 14,
+    fontWeight: theme.fontWeight.black,
+  },
+  heroBtnGhostText: {
+    color: theme.colors.text,
+    fontSize: 14,
+    fontWeight: theme.fontWeight.black,
+  },
+  heroBtnSub: {
+    color: theme.colors.textSecondary,
+    fontSize: 12,
+    fontWeight: theme.fontWeight.bold,
+  },
+
+  searchResults: { marginTop: 10, gap: 10 },
+  resultList: {
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    borderRadius: 18,
+    overflow: "hidden",
+    backgroundColor:
+      Platform.OS === "android" ? "rgba(10,12,14,0.22)" : "rgba(10,12,14,0.18)",
+  },
+  resultRow: {
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255,255,255,0.06)",
+  },
+  resultTitle: {
+    color: theme.colors.text,
+    fontSize: 14,
+    fontWeight: theme.fontWeight.black,
+  },
+  resultMeta: {
+    marginTop: 4,
+    color: theme.colors.textSecondary,
+    fontSize: 12,
+    fontWeight: theme.fontWeight.bold,
+  },
+  groupEmpty: {
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.bold,
+  },
+
+  centerInline: { flexDirection: "row", alignItems: "center", gap: 10 },
+  muted: {
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.bold,
+  },
+
+  chev: { color: theme.colors.textTertiary, fontSize: 22, marginTop: -2 },
+
+  pressed: { opacity: 0.94, transform: [{ scale: 0.995 }] },
+  pressedRow: { opacity: 0.94 },
+});
