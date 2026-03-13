@@ -70,7 +70,8 @@ export default function ContinuePlanning({
                 <Text style={styles.emptyEyebrow}>Workspace ready</Text>
                 <Text style={styles.emptyTitle}>No trip in progress yet</Text>
                 <Text style={styles.emptyMeta}>
-                  Start with Discover if you want inspiration. Use Fixtures if you already want real match options.
+                  Start with Discover if you want inspiration. Use Fixtures if you already want real
+                  match options.
                 </Text>
               </View>
 
@@ -210,8 +211,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor:
-      Platform.OS === "android" ? "rgba(0,0,0,0.18)" : "rgba(255,255,255,0.05)",
+    backgroundColor: Platform.OS === "android" ? "rgba(0,0,0,0.18)" : "rgba(255,255,255,0.05)",
   },
 
   miniPillText: {
@@ -222,6 +222,8 @@ const styles = StyleSheet.create({
 
   block: {
     borderRadius: 24,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
   },
 
   blockInner: {
@@ -269,13 +271,12 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
-    backgroundColor:
-      Platform.OS === "android" ? "rgba(10,12,14,0.20)" : "rgba(10,12,14,0.16)",
+    backgroundColor: Platform.OS === "android" ? "rgba(10,12,14,0.20)" : "rgba(10,12,14,0.16)",
     overflow: "hidden",
   },
 
   tripImageStripWrap: {
-    height: 66,
+    height: 72,
     position: "relative",
     borderBottomWidth: 1,
     borderBottomColor: "rgba(255,255,255,0.06)",
@@ -374,13 +375,12 @@ const styles = StyleSheet.create({
 
   btnPrimary: {
     borderColor: "rgba(87,162,56,0.28)",
-    backgroundColor:
-      Platform.OS === "android" ? "rgba(87,162,56,0.10)" : "rgba(87,162,56,0.08)",
+    backgroundColor: Platform.OS === "android" ? "rgba(87,162,56,0.12)" : "rgba(87,162,56,0.10)",
   },
 
   btnPrimaryText: {
     color: theme.colors.text,
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: theme.fontWeight.black,
   },
 
@@ -392,13 +392,12 @@ const styles = StyleSheet.create({
 
   btnGhost: {
     borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor:
-      Platform.OS === "android" ? "rgba(0,0,0,0.18)" : "rgba(255,255,255,0.05)",
+    backgroundColor: Platform.OS === "android" ? "rgba(0,0,0,0.18)" : "rgba(255,255,255,0.05)",
   },
 
   btnGhostText: {
     color: theme.colors.text,
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: theme.fontWeight.black,
   },
 
