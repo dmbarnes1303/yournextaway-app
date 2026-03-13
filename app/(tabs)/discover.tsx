@@ -58,14 +58,24 @@ type InspirationPreset = {
   windowKey?: DiscoverWindowKey;
 };
 
+type QuickSpark = {
+  id: string;
+  title: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  category: DiscoverCategory;
+  vibe?: DiscoverVibe;
+  windowKey?: DiscoverWindowKey;
+  tripLength?: DiscoverTripLength;
+};
+
 const INSPIRATION_PRESETS: InspirationPreset[] = [
   {
-    id: "weekend",
-    title: "Best this weekend",
-    subtitle: "Strong live options for a quick football break",
+    id: "best-now",
+    title: "Best trips right now",
+    subtitle: "Strong live options for a football trip soon",
     icon: "flash-outline",
     category: "perfectTrips",
-    windowKey: "wknd",
+    windowKey: "d14",
   },
   {
     id: "easy",
@@ -86,14 +96,14 @@ const INSPIRATION_PRESETS: InspirationPreset[] = [
   {
     id: "night",
     title: "Night game energy",
-    subtitle: "Late kick-offs, lights, and stronger matchday mood",
+    subtitle: "Late kick-offs, lights, and stronger occasion feel",
     icon: "moon-outline",
     vibe: "nightlife",
     category: "nightMatches",
   },
   {
     id: "culture",
-    title: "City + match weekends",
+    title: "City + match trips",
     subtitle: "Trips where the place matters as much as the game",
     icon: "business-outline",
     vibe: "culture",
@@ -102,12 +112,68 @@ const INSPIRATION_PRESETS: InspirationPreset[] = [
   {
     id: "warm",
     title: "Warmer escapes",
-    subtitle: "Football weekends with a softer climate pull",
+    subtitle: "Football trips with a softer climate pull",
     icon: "sunny-outline",
     vibe: "warm",
     category: "iconicCities",
   },
 ];
+
+const QUICK_SPARKS: QuickSpark[] = [
+  {
+    id: "derby-nights",
+    title: "Big derby nights",
+    icon: "flame-outline",
+    category: "bigMatches",
+    vibe: "big",
+    windowKey: "d30",
+  },
+  {
+    id: "midweek-europe",
+    title: "Midweek football trips",
+    icon: "calendar-outline",
+    category: "nightMatches",
+    vibe: "nightlife",
+    windowKey: "d14",
+  },
+  {
+    id: "easy-two-night",
+    title: "Easy 2-night trips",
+    icon: "navigate-outline",
+    category: "easyTickets",
+    vibe: "easy",
+    tripLength: "2",
+    windowKey: "d14",
+  },
+  {
+    id: "scenic-cities",
+    title: "Scenic football cities",
+    icon: "earth-outline",
+    category: "iconicCities",
+    vibe: "culture",
+    tripLength: "2",
+    windowKey: "d30",
+  },
+  {
+    id: "best-value",
+    title: "Best value trips",
+    icon: "cash-outline",
+    category: "easyTickets",
+    vibe: "easy",
+    windowKey: "d30",
+  },
+  {
+    id: "loud-atmospheres",
+    title: "Loudest atmospheres",
+    icon: "volume-high-outline",
+    category: "bigMatches",
+    vibe: "big",
+    windowKey: "d14",
+  },
+];
+
+const DISCOVER_NEUTRAL_FALLBACK_IMAGE =
+  "https://images.unsplash.com/photo-1517927033932-b3d18e61fb3a?auto=format&fit=crop&w=1600&h=1000&fm=jpg&q=82";
 
 function labelForKey(key: DiscoverWindowKey) {
   if (key === "wknd") return "This Weekend";
@@ -160,6 +226,15 @@ function rotateStable<T>(arr: T[], seed: number) {
 function clampVibes(next: DiscoverVibe[]) {
   if (next.length <= 3) return next;
   return next.slice(next.length - 3);
+}
+
+function toSlug(value: string) {
+  return String(value ?? "")
+    .toLowerCase()
+    .trim()
+    .replace(/[’']/g, "")
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "-");
 }
 
 function categorySeedFromVibes(vibes: DiscoverVibe[]): DiscoverCategory {
@@ -291,21 +366,84 @@ function fixtureMeta(row: FixtureListRow) {
 }
 
 function fixtureCity(row: FixtureListRow) {
-  return String(row?.fixture?.venue?.city ?? "").trim() || "london";
+  return String(row?.fixture?.venue?.city ?? "").trim() || "";
+}
+
+function getDiscoverCardImage(row: FixtureListRow) {
+  const city = fixtureCity(row);
+  if (city) {
+    const cityImage = getCityImageUrl(city);
+    if (cityImage) return cityImage;
+  }
+  return DISCOVER_NEUTRAL_FALLBACK_IMAGE;
+}
+
+function isMidweekFixture(row: FixtureListRow) {
+  const raw = row?.fixture?.date;
+  if (!raw) return false;
+  const dt = new Date(raw);
+  if (Number.isNaN(dt.getTime())) return false;
+  const day = dt.getDay();
+  return day >= 1 && day <= 4;
+}
+
+function isLateKickoff(row: FixtureListRow) {
+  const raw = row?.fixture?.date;
+  if (!raw) return false;
+  const dt = new Date(raw);
+  if (Number.isNaN(dt.getTime())) return false;
+  const h = dt.getHours();
+  return h >= 19 && h <= 22;
+}
+
+function getFixturePairKey(row: FixtureListRow) {
+  const a = toSlug(row?.teams?.home?.name ?? "");
+  const b = toSlug(row?.teams?.away?.name ?? "");
+  if (!a || !b) return "";
+  return [a, b].sort().join("|");
+}
+
+function trendingLabelForFixture(row: FixtureListRow) {
+  const pair = getFixturePairKey(row);
+  const city = fixtureCity(row);
+
+  const labels: Record<string, string> = {
+    "ajax|feyenoord": "De Klassieker",
+    "celtic|rangers": "Old Firm",
+    "fenerbahce|galatasaray": "Intercontinental Derby",
+    "inter|milan": "Derby della Madonnina",
+    "lazio|roma": "Rome Derby",
+    "manchester-city|manchester-united": "Manchester Derby",
+    "marseille|paris-saint-germain": "Le Classique",
+    "olympiacos|panathinaikos": "Derby of the Eternal Enemies",
+    "real-madrid|atletico-madrid": "Madrid Derby",
+    "real-betis|sevilla": "Seville Derby",
+    "tottenham|arsenal": "North London Derby",
+  };
+
+  if (labels[pair]) return labels[pair];
+  if (city) return `${city} football trip`;
+  return "Trending football trip";
 }
 
 function whyThisFits(
+  row: FixtureListRow,
   category: DiscoverCategory,
   vibes: DiscoverVibe[],
   tripLength: DiscoverTripLength
 ) {
-  if (category === "easyTickets") return "Better chance of a cleaner home-ticket route";
-  if (category === "bigMatches") return "Higher-profile fixture with stronger travel pull";
-  if (category === "nightMatches") return "Leans into later kick-offs and bigger occasion feel";
-  if (category === "matchdayCulture") return "Better city + match balance for a fuller weekend";
-  if (category === "iconicCities") return "Stronger place-first football weekend potential";
-  if (tripLength === "2" || tripLength === "3") return "Works well for a football city-break shape";
-  if (vibes.includes("easy")) return "Lower-friction option for a simpler football trip";
+  if (category === "easyTickets") return "Cleaner route for a simpler football trip";
+  if (category === "bigMatches") return "Stronger occasion feel with more travel pull";
+  if (category === "nightMatches") {
+    if (isLateKickoff(row)) return "Later kick-off gives it bigger lights-on energy";
+    return "Good fit for a later, occasion-led football trip";
+  }
+  if (category === "matchdayCulture") return "Better city + match balance for a fuller trip";
+  if (category === "iconicCities") return "The city itself adds real pull beyond the fixture";
+  if (tripLength === "2" || tripLength === "3") return "Strong shape for a football city break";
+  if (isMidweekFixture(row)) return "Midweek-worthy fixture with travel pull";
+  if (vibes.includes("easy")) return "Lower-friction option from your current setup";
+  if (vibes.includes("big")) return "Leans more towards atmosphere and fixture weight";
   return "One of the stronger live options from your current setup";
 }
 
@@ -314,6 +452,38 @@ function rankLabel(index: number) {
   if (index === 1) return "Strong";
   if (index === 2) return "Hot";
   return `#${index + 1}`;
+}
+
+function trendingScore(row: FixtureListRow, baseScore: number) {
+  let score = baseScore;
+
+  const pair = getFixturePairKey(row);
+  const knownBigPairs = new Set([
+    "ajax|feyenoord",
+    "celtic|rangers",
+    "fenerbahce|galatasaray",
+    "inter|milan",
+    "lazio|roma",
+    "manchester-city|manchester-united",
+    "marseille|paris-saint-germain",
+    "olympiacos|panathinaikos",
+    "real-madrid|atletico-madrid",
+    "real-betis|sevilla",
+    "tottenham|arsenal",
+  ]);
+
+  if (knownBigPairs.has(pair)) score += 80;
+  if (isLateKickoff(row)) score += 14;
+  if (isMidweekFixture(row)) score += 10;
+
+  const leagueId = row?.league?.id;
+  if (leagueId === 39) score += 14;
+  if (leagueId === 140) score += 14;
+  if (leagueId === 135) score += 14;
+  if (leagueId === 78) score += 14;
+  if (leagueId === 61) score += 10;
+
+  return score;
 }
 
 function FilterChip({
@@ -483,6 +653,16 @@ export default function DiscoverScreen() {
   const featuredLive = useMemo(() => rankedLive[0] ?? null, [rankedLive]);
   const previewLive = useMemo(() => rankedLive.slice(0, 6), [rankedLive]);
 
+  const trendingTrips = useMemo(() => {
+    return [...rankedLive]
+      .sort((a, b) => {
+        const aRow = a.item.fixture;
+        const bRow = b.item.fixture;
+        return trendingScore(bRow, b.score) - trendingScore(aRow, a.score);
+      })
+      .slice(0, 6);
+  }, [rankedLive]);
+
   const goFixturesCategory = useCallback(
     (category: DiscoverCategory) => {
       router.push({
@@ -562,6 +742,37 @@ export default function DiscoverScreen() {
       } as any);
     },
     [router, discoverWindowKey, discoverOrigin, discoverTripLength, discoverVibes]
+  );
+
+  const applyQuickSpark = useCallback(
+    (spark: QuickSpark) => {
+      const nextWindowKey = spark.windowKey ?? discoverWindowKey;
+      const nextTripLength = spark.tripLength ?? discoverTripLength;
+      const nextVibes = spark.vibe ? [spark.vibe] : discoverVibes;
+
+      if (spark.windowKey) setDiscoverWindowKey(spark.windowKey);
+      if (spark.tripLength) setDiscoverTripLength(spark.tripLength);
+      if (spark.vibe) setDiscoverVibes([spark.vibe]);
+
+      router.push({
+        pathname: "/(tabs)/fixtures",
+        params: {
+          from: windowForKey(nextWindowKey).from,
+          to: windowForKey(nextWindowKey).to,
+          discover: spark.category,
+          discoverFrom: discoverOrigin.trim() || undefined,
+          discoverTripLength: nextTripLength,
+          discoverVibes: nextVibes.join(","),
+        },
+      } as any);
+    },
+    [
+      router,
+      discoverWindowKey,
+      discoverOrigin,
+      discoverTripLength,
+      discoverVibes,
+    ]
   );
 
   const goRandomTrip = useCallback(async () => {
@@ -764,9 +975,9 @@ export default function DiscoverScreen() {
           <GlassCard strength="strong" style={styles.hero} noPadding>
             <View style={styles.heroInner}>
               <Text style={styles.kicker}>DISCOVER</Text>
-              <Text style={styles.title}>Find your next football weekend</Text>
+              <Text style={styles.title}>Find your next football trip</Text>
               <Text style={styles.sub}>
-                Big atmospheres, easy city breaks, and match trips worth actually taking.
+                Big atmospheres, city breaks, and fixtures worth travelling for.
               </Text>
 
               <View style={styles.heroSummaryBox}>
@@ -805,12 +1016,7 @@ export default function DiscoverScreen() {
               >
                 {previewLive.map((entry, index) => {
                   const row = entry.item.fixture;
-                  const image = getCityImageUrl(fixtureCity(row));
-                  const why = whyThisFits(
-                    seededCategory,
-                    discoverVibes,
-                    discoverTripLength
-                  );
+                  const image = getDiscoverCardImage(row);
 
                   return (
                     <Pressable
@@ -820,11 +1026,7 @@ export default function DiscoverScreen() {
                     >
                       <GlassCard strength="default" style={styles.liveCard} noPadding>
                         <View style={styles.liveImageWrap}>
-                          <Image
-                            source={{ uri: image }}
-                            style={styles.liveImage}
-                            resizeMode="cover"
-                          />
+                          <Image source={{ uri: image }} style={styles.liveImage} resizeMode="cover" />
                           <View style={styles.liveImageOverlay} />
                           <View style={styles.liveRankPill}>
                             <Text style={styles.liveRankText}>{rankLabel(index)}</Text>
@@ -839,7 +1041,7 @@ export default function DiscoverScreen() {
                             {fixtureMeta(row)}
                           </Text>
                           <Text style={styles.liveWhy} numberOfLines={2}>
-                            {why}
+                            {whyThisFits(row, seededCategory, discoverVibes, discoverTripLength)}
                           </Text>
                         </View>
                       </GlassCard>
@@ -848,6 +1050,103 @@ export default function DiscoverScreen() {
                 })}
               </ScrollView>
             ) : null}
+          </View>
+
+          <View style={styles.section}>
+            <View style={styles.sectionHeaderStack}>
+              <Text style={styles.sectionTitle}>Trending football trips</Text>
+              <Text style={styles.sectionSub}>
+                Big fixtures and city pulls people would actually travel for.
+              </Text>
+            </View>
+
+            {loadingLive ? (
+              <GlassCard strength="default" style={styles.loadingCard}>
+                <View style={styles.center}>
+                  <ActivityIndicator />
+                  <Text style={styles.loadingText}>Finding trending trips…</Text>
+                </View>
+              </GlassCard>
+            ) : null}
+
+            {!loadingLive && !liveError && trendingTrips.length > 0 ? (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.trendingRow}
+              >
+                {trendingTrips.map((entry, index) => {
+                  const row = entry.item.fixture;
+                  const image = getDiscoverCardImage(row);
+
+                  return (
+                    <Pressable
+                      key={`trend-${String(row?.fixture?.id ?? index)}`}
+                      onPress={() => goMatchFromRow(row)}
+                      style={({ pressed }) => [styles.trendingPress, pressed && styles.pressed]}
+                    >
+                      <GlassCard strength="default" style={styles.trendingCard} noPadding>
+                        <View style={styles.trendingImageWrap}>
+                          <Image
+                            source={{ uri: image }}
+                            style={styles.trendingImage}
+                            resizeMode="cover"
+                          />
+                          <View style={styles.trendingOverlay} />
+                          <View style={styles.trendingHotPill}>
+                            <Text style={styles.trendingHotText}>🔥 Trending</Text>
+                          </View>
+                        </View>
+
+                        <View style={styles.trendingBody}>
+                          <Text style={styles.trendingTitle} numberOfLines={2}>
+                            {fixtureTitle(row)}
+                          </Text>
+                          <Text style={styles.trendingLabel} numberOfLines={1}>
+                            {trendingLabelForFixture(row)}
+                          </Text>
+                          <Text style={styles.trendingMeta} numberOfLines={2}>
+                            {fixtureMeta(row)}
+                          </Text>
+                        </View>
+                      </GlassCard>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            ) : null}
+          </View>
+
+          <View style={styles.section}>
+            <View style={styles.sectionHeaderStack}>
+              <Text style={styles.sectionTitle}>Quick trip sparks</Text>
+              <Text style={styles.sectionSub}>
+                One-tap routes into the strongest discovery angles.
+              </Text>
+            </View>
+
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.sparkRow}
+            >
+              {QUICK_SPARKS.map((spark) => (
+                <Pressable
+                  key={spark.id}
+                  onPress={() => applyQuickSpark(spark)}
+                  style={({ pressed }) => [styles.sparkPress, pressed && styles.pressed]}
+                >
+                  <GlassCard strength="default" style={styles.sparkCard} noPadding>
+                    <View style={styles.sparkInner}>
+                      <View style={styles.sparkIconWrap}>
+                        <Ionicons name={spark.icon} size={18} color={theme.colors.text} />
+                      </View>
+                      <Text style={styles.sparkTitle}>{spark.title}</Text>
+                    </View>
+                  </GlassCard>
+                </Pressable>
+              ))}
+            </ScrollView>
           </View>
 
           <View style={styles.section}>
@@ -991,7 +1290,7 @@ export default function DiscoverScreen() {
                 <GlassCard strength="default" style={styles.featuredLiveCard} noPadding>
                   <View style={styles.featuredLiveImageWrap}>
                     <Image
-                      source={{ uri: getCityImageUrl(fixtureCity(featuredLive.item.fixture)) }}
+                      source={{ uri: getDiscoverCardImage(featuredLive.item.fixture) }}
                       style={styles.featuredLiveImage}
                       resizeMode="cover"
                     />
@@ -1021,7 +1320,12 @@ export default function DiscoverScreen() {
                     </Text>
 
                     <Text style={styles.featuredLiveWhy}>
-                      {whyThisFits(seededCategory, discoverVibes, discoverTripLength)}
+                      {whyThisFits(
+                        featuredLive.item.fixture,
+                        seededCategory,
+                        discoverVibes,
+                        discoverTripLength
+                      )}
                     </Text>
 
                     <View style={styles.featuredLiveBottomRow}>
@@ -1337,6 +1641,120 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     fontWeight: theme.fontWeight.black,
     marginTop: 2,
+  },
+
+  trendingRow: {
+    gap: 12,
+    paddingRight: theme.spacing.lg,
+  },
+
+  trendingPress: {
+    width: 278,
+    borderRadius: 20,
+    overflow: "hidden",
+  },
+
+  trendingCard: {
+    borderRadius: 20,
+  },
+
+  trendingImageWrap: {
+    height: 126,
+    position: "relative",
+  },
+
+  trendingImage: {
+    width: "100%",
+    height: "100%",
+  },
+
+  trendingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(5,8,10,0.34)",
+  },
+
+  trendingHotPill: {
+    position: "absolute",
+    top: 10,
+    left: 10,
+    borderRadius: 999,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    backgroundColor: "rgba(8,10,10,0.70)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+  },
+
+  trendingHotText: {
+    color: theme.colors.text,
+    fontSize: 10,
+    fontWeight: theme.fontWeight.black,
+    letterSpacing: 0.3,
+  },
+
+  trendingBody: {
+    padding: 14,
+    gap: 6,
+    minHeight: 118,
+  },
+
+  trendingTitle: {
+    color: theme.colors.text,
+    fontSize: 17,
+    lineHeight: 22,
+    fontWeight: theme.fontWeight.black,
+  },
+
+  trendingLabel: {
+    color: theme.colors.primary,
+    fontSize: 12,
+    fontWeight: theme.fontWeight.black,
+  },
+
+  trendingMeta: {
+    color: theme.colors.textSecondary,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: theme.fontWeight.bold,
+  },
+
+  sparkRow: {
+    gap: 10,
+    paddingRight: theme.spacing.lg,
+  },
+
+  sparkPress: {
+    borderRadius: 999,
+    overflow: "hidden",
+  },
+
+  sparkCard: {
+    borderRadius: 999,
+  },
+
+  sparkInner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+  },
+
+  sparkIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(87,162,56,0.18)",
+    backgroundColor: "rgba(87,162,56,0.08)",
+  },
+
+  sparkTitle: {
+    color: theme.colors.text,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.black,
   },
 
   inspirationRow: {
