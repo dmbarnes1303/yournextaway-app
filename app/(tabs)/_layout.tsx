@@ -1,4 +1,3 @@
-// app/(tabs)/_layout.tsx
 import React, { useEffect, useRef } from "react";
 import { Tabs, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -17,8 +16,6 @@ function extractFixtureIdFromNotificationData(data: any): string | null {
   const fixtureId = safeStr(data?.fixtureId);
 
   if (kind === "kickoff_update" && fixtureId) return fixtureId;
-
-  // fallback: if you ever send fixtureId without kind
   if (fixtureId) return fixtureId;
 
   return null;
@@ -28,8 +25,6 @@ export default function TabsLayout() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const tabBarHeight = 60 + Math.max(insets.bottom, 10);
-
-  // Guard against double-processing when app resumes + listener fires
   const lastHandledKeyRef = useRef<string>("");
 
   useEffect(() => {
@@ -45,14 +40,12 @@ export default function TabsLayout() {
         if (lastHandledKeyRef.current === key) return;
         lastHandledKeyRef.current = key;
 
-        // Route to match details
         router.push({ pathname: "/match/[id]", params: { id: fixtureId } } as any);
       } catch {
         // ignore
       }
     };
 
-    // 1) Cold start / background-tap: grab the last response once on mount
     (async () => {
       try {
         const last = await Notifications.getLastNotificationResponseAsync();
@@ -63,7 +56,6 @@ export default function TabsLayout() {
       }
     })();
 
-    // 2) Foreground/background: listen for taps
     const sub = Notifications.addNotificationResponseReceivedListener((response) => {
       handleResponse(response);
     });
@@ -103,35 +95,59 @@ export default function TabsLayout() {
         name="home"
         options={{
           title: "Home",
-          tabBarIcon: ({ color, size }) => <Ionicons name="home-outline" size={size} color={color} />,
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="home-outline" size={size} color={color} />
+          ),
         }}
       />
+
+      <Tabs.Screen
+        name="discover"
+        options={{
+          title: "Discover",
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="compass-outline" size={size} color={color} />
+          ),
+        }}
+      />
+
       <Tabs.Screen
         name="fixtures"
         options={{
           title: "Fixtures",
-          tabBarIcon: ({ color, size }) => <Ionicons name="calendar-outline" size={size} color={color} />,
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="calendar-outline" size={size} color={color} />
+          ),
         }}
       />
+
       <Tabs.Screen
         name="trips"
         options={{
           title: "Trips",
-          tabBarIcon: ({ color, size }) => <Ionicons name="airplane-outline" size={size} color={color} />,
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="airplane-outline" size={size} color={color} />
+          ),
         }}
       />
+
       <Tabs.Screen
         name="wallet"
         options={{
           title: "Wallet",
-          tabBarIcon: ({ color, size }) => <Ionicons name="wallet-outline" size={size} color={color} />,
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="wallet-outline" size={size} color={color} />
+          ),
         }}
       />
+
       <Tabs.Screen
         name="profile"
         options={{
           title: "Profile",
-          tabBarIcon: ({ color, size }) => <Ionicons name="person-outline" size={size} color={color} />,
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="person-outline" size={size} color={color} />
+          ),
         }}
       />
     </Tabs>
