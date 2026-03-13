@@ -49,10 +49,9 @@ export type DiscoverTripLength = "day" | "1" | "2" | "3";
 export type DiscoverVibe = "easy" | "big" | "nightlife" | "culture" | "warm";
 
 export type DiscoverContext = {
-  from?: string | null;
+  origin?: string | null;
   tripLength?: DiscoverTripLength | null;
   vibes?: DiscoverVibe[];
-  origin?: string | null;
 };
 
 /* -------------------------------------------------------------------------- */
@@ -88,6 +87,16 @@ function ticketDifficultyRank(d: TicketDifficulty | "unknown") {
     default:
       return 0;
   }
+}
+
+function hasPopularTeam(id: unknown): boolean {
+  return typeof id === "number" && POPULAR_TEAM_IDS.has(id);
+}
+
+function hasClubSignal(name: string, clubs: string[]): boolean {
+  const key = lower(name);
+  if (!key) return false;
+  return clubs.some((club) => key.includes(club));
 }
 
 /* -------------------------------------------------------------------------- */
@@ -237,6 +246,19 @@ const STRONG_CITIES = [
   "stockholm",
 ];
 
+const NICE_EXTRA_CITIES = [
+  "bologna",
+  "valencia",
+  "bilbao",
+  "hamburg",
+  "brussels",
+  "ghent",
+  "antalya",
+  "split",
+  "nice",
+  "lyon",
+];
+
 const NIGHTLIFE_CITIES = [
   "berlin",
   "amsterdam",
@@ -278,6 +300,18 @@ const WARM_CITIES = [
   "nicosia",
 ];
 
+const CULTURE_CLUBS = [
+  "athletic",
+  "napoli",
+  "marseille",
+  "galatasaray",
+  "fenerbahce",
+  "ajax",
+  "celtic",
+  "rangers",
+  "boca", // harmless if never hit
+];
+
 /* -------------------------------------------------------------------------- */
 /* Individual score calculators                                               */
 /* -------------------------------------------------------------------------- */
@@ -309,11 +343,15 @@ function nightMatchScore(dateIso?: string | null): number {
   return 0;
 }
 
-function stadiumScore(home: string): number {
-  const h = lower(home);
+function stadiumScore(home: string, away: string): number {
+  const homeLegendary = hasClubSignal(home, LEGENDARY_CLUBS);
+  const awayLegendary = hasClubSignal(away, LEGENDARY_CLUBS);
 
-  if (LEGENDARY_CLUBS.some((club) => h.includes(club))) return 3;
-  if (STRONG_SECOND_TIER_STADIUM_CLUBS.some((club) => h.includes(club))) return 2;
+  if (homeLegendary) return 3;
+  if (hasClubSignal(home, STRONG_SECOND_TIER_STADIUM_CLUBS)) return 2;
+
+  if (awayLegendary) return 2;
+  if (hasClubSignal(away, STRONG_SECOND_TIER_STADIUM_CLUBS)) return 1;
 
   return 0;
 }
@@ -380,29 +418,27 @@ function cityScore(city: string): number {
   if (!c) return 0;
   if (ELITE_CITIES.includes(c)) return 3;
   if (STRONG_CITIES.includes(c)) return 2;
-  return 1;
+  if (NICE_EXTRA_CITIES.includes(c)) return 1;
+  return 0;
 }
 
-function cultureScore(home: string, city: string, stadium: number, atmosphere: number): number {
+function cultureScore(
+  home: string,
+  away: string,
+  city: string,
+  stadium: number,
+  atmosphere: number
+): number {
   let score = 0;
+
   score += stadium;
   score += atmosphere >= 4 ? 2 : atmosphere >= 3 ? 1 : 0;
 
   const c = lower(city);
   if (ELITE_CITIES.includes(c) || STRONG_CITIES.includes(c)) score += 1;
 
-  const h = lower(home);
-  if (
-    h.includes("athletic") ||
-    h.includes("napoli") ||
-    h.includes("marseille") ||
-    h.includes("galatasaray") ||
-    h.includes("fenerbahce") ||
-    h.includes("ajax") ||
-    h.includes("celtic")
-  ) {
-    score += 1;
-  }
+  if (hasClubSignal(home, CULTURE_CLUBS)) score += 1;
+  if (hasClubSignal(away, CULTURE_CLUBS)) score += 1;
 
   return Math.min(score, 5);
 }
@@ -426,7 +462,7 @@ function warmWeatherScore(f: FixtureListRow): number {
 }
 
 function ticketEaseScore(f: FixtureListRow): number {
-  const home = String(f?.teams?.home?.name ?? "");
+  const home = clean(f?.teams?.home?.name);
   const rawDifficulty = home ? getTicketDifficultyBadge(home) : null;
   const difficulty: TicketDifficulty | "unknown" = rawDifficulty ?? "unknown";
   return ticketDifficultyRank(difficulty);
@@ -438,7 +474,7 @@ function tripEaseScore(f: FixtureListRow): number {
   const country = lower((f.league as any)?.country);
   const combined = `${city} ${league} ${country}`.trim();
 
-  let score = 1;
+  let score = 0;
 
   if (
     combined.includes("london") ||
@@ -466,14 +502,22 @@ function tripEaseScore(f: FixtureListRow): number {
   return Math.min(score, 4);
 }
 
-function glamourScore(f: FixtureListRow, stadium: number, city: number): number {
+function glamourScore(
+  f: FixtureListRow,
+  stadium: number,
+  city: number,
+  derby: number,
+  atmosphere: number
+): number {
   let score = stadium + city;
 
   const homeId = f?.teams?.home?.id;
   const awayId = f?.teams?.away?.id;
 
-  if (typeof homeId === "number" && POPULAR_TEAM_IDS.has(homeId)) score += 2;
-  if (typeof awayId === "number" && POPULAR_TEAM_IDS.has(awayId)) score += 2;
+  if (hasPopularTeam(homeId)) score += 2;
+  if (hasPopularTeam(awayId)) score += 2;
+  if (derby >= 4) score += 1;
+  if (atmosphere >= 4) score += 1;
 
   return Math.min(score, 8);
 }
@@ -485,13 +529,14 @@ function underratedScore(
   glamour: number
 ): number {
   let score = atmosphere + value;
+
   if (glamour <= 3) score += 2;
 
   const homeId = f?.teams?.home?.id;
   const awayId = f?.teams?.away?.id;
 
-  if (typeof homeId === "number" && POPULAR_TEAM_IDS.has(homeId)) score -= 2;
-  if (typeof awayId === "number" && POPULAR_TEAM_IDS.has(awayId)) score -= 2;
+  if (hasPopularTeam(homeId)) score -= 2;
+  if (hasPopularTeam(awayId)) score -= 2;
 
   return Math.max(0, Math.min(score, 6));
 }
@@ -506,18 +551,18 @@ export function scoreFixture(f: FixtureListRow): DiscoverFixture {
   const city = clean(f.fixture?.venue?.city);
 
   const derby = derbyScore(home, away);
-  const atmosphere = atmosphereScore(home);
-  const stadium = stadiumScore(home);
+  const atmosphere = Math.max(atmosphereScore(home), atmosphereScore(away));
+  const stadium = stadiumScore(home, away);
   const value = valueScore(f);
   const night = nightMatchScore(f.fixture?.date);
   const drama = titleDramaScore(f);
   const cityPull = cityScore(city);
-  const culture = cultureScore(home, city, stadium, atmosphere);
+  const culture = cultureScore(home, away, city, stadium, atmosphere);
   const nightlife = nightlifeScore(city, night);
   const warmth = warmWeatherScore(f);
   const ticketEase = ticketEaseScore(f);
   const tripEase = tripEaseScore(f);
-  const glamour = glamourScore(f, stadium, cityPull);
+  const glamour = glamourScore(f, stadium, cityPull, derby, atmosphere);
   const underrated = underratedScore(f, atmosphere, value, glamour);
 
   const reasons: DiscoverReason[] = [];
@@ -561,4 +606,4 @@ export function scoreFixture(f: FixtureListRow): DiscoverFixture {
 
 export function buildDiscoverScores(fixtures: FixtureListRow[]): DiscoverFixture[] {
   return fixtures.map(scoreFixture);
-                        }
+    }
