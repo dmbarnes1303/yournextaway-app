@@ -472,7 +472,13 @@ export default function HomeScreen() {
   }, [featured]);
 
   return (
-    <Background imageSource={getBackground("home")} overlayOpacity={0.54}>
+    <Background
+  imageSource={getBackground("home")}
+  overlayOpacity={0.06}
+  topShadeOpacity={0.42}
+  bottomShadeOpacity={0.46}
+  centerShadeOpacity={0.05}
+>
       <SafeAreaView style={styles.container} edges={["top"]}>
         <ScrollView
           style={styles.scroll}
