@@ -24,15 +24,20 @@ import {
 } from "@/src/constants/football";
 import { getFixtures, type FixtureListRow } from "@/src/services/apiFootball";
 import {
-  DISCOVER_ROWS,
+  DISCOVER_PRIMARY_CATEGORIES,
+  DISCOVER_SECONDARY_CATEGORIES,
   DISCOVER_CATEGORY_META,
   type DiscoverCategory,
 } from "@/src/features/discover/discoverCategories";
+import {
+  buildDiscoverScores,
+  type DiscoverTripLength,
+  type DiscoverVibe,
+} from "@/src/features/discover/discoverEngine";
+import { discoverScoreForCategory } from "@/src/features/discover/discoverRanking";
 
 type ShortcutWindow = { from: string; to: string };
 type DiscoverWindowKey = "wknd" | "d7" | "d14" | "d30";
-type DiscoverTripLength = "day" | "1" | "2" | "3";
-type DiscoverVibe = "easy" | "big" | "nightlife" | "culture" | "warm";
 
 function labelForKey(key: DiscoverWindowKey) {
   if (key === "wknd") return "This Weekend";
@@ -68,43 +73,22 @@ function pickRandom<T>(arr: T[]): T | null {
   return arr[Math.floor(Math.random() * arr.length)] ?? null;
 }
 
-async function pickFixtureFromLeagues(
-  window: ShortcutWindow,
-  filter: (r: FixtureListRow) => boolean
-) {
-  const tried = new Set<number>();
+async function fetchDiscoverPool(window: ShortcutWindow, maxLeagues = 8) {
+  const shuffled = [...LEAGUES].sort(() => Math.random() - 0.5).slice(0, maxLeagues);
 
-  for (let attempt = 0; attempt < 6; attempt++) {
-    const remaining = LEAGUES.filter((l) => !tried.has(l.leagueId));
-    const next = pickRandom(remaining.length ? remaining : LEAGUES);
-    if (!next) break;
+  const batches = await Promise.all(
+    shuffled.map(async (league) => {
+      const res = await getFixtures({
+        league: league.leagueId,
+        season: league.season,
+        from: window.from,
+        to: window.to,
+      });
+      return Array.isArray(res) ? res : [];
+    })
+  );
 
-    tried.add(next.leagueId);
-
-    const res = await getFixtures({
-      league: next.leagueId,
-      season: next.season,
-      from: window.from,
-      to: window.to,
-    });
-
-    const list = Array.isArray(res) ? res : [];
-    const valid = list.filter((r) => r?.fixture?.id != null).filter(filter);
-
-    if (valid.length > 0) {
-      const chosen = pickRandom(valid);
-      const fixtureId = chosen?.fixture?.id != null ? String(chosen.fixture.id) : null;
-      if (fixtureId) {
-        return {
-          fixtureId,
-          leagueId: next.leagueId,
-          season: next.season,
-        };
-      }
-    }
-  }
-
-  return null;
+  return batches.flat().filter((r) => r?.fixture?.id != null);
 }
 
 function FilterChip({
@@ -121,6 +105,15 @@ function FilterChip({
       <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
     </Pressable>
   );
+}
+
+function categorySeedFromVibes(vibes: DiscoverVibe[]): DiscoverCategory {
+  if (vibes.includes("big")) return "bigMatches";
+  if (vibes.includes("nightlife")) return "nightMatches";
+  if (vibes.includes("culture")) return "matchdayCulture";
+  if (vibes.includes("warm")) return "iconicCities";
+  if (vibes.includes("easy")) return "easyTickets";
+  return "perfectTrips";
 }
 
 export default function DiscoverScreen() {
@@ -174,10 +167,20 @@ export default function DiscoverScreen() {
           from: currentWindow.from,
           to: currentWindow.to,
           discover: category,
+          discoverFrom: discoverFrom.trim() || undefined,
+          discoverTripLength,
+          discoverVibes: discoverVibes.join(","),
         },
       } as any);
     },
-    [router, currentWindow.from, currentWindow.to]
+    [
+      router,
+      currentWindow.from,
+      currentWindow.to,
+      discoverFrom,
+      discoverTripLength,
+      discoverVibes,
+    ]
   );
 
   const goRandomTrip = useCallback(async () => {
@@ -186,23 +189,51 @@ export default function DiscoverScreen() {
 
     try {
       const window = windowForKey(discoverWindowKey);
+      const pool = await fetchDiscoverPool(window, 8);
 
-      const filter = (r: FixtureListRow) => {
+      const valid = pool.filter((r: FixtureListRow) => {
         const venue = String(r?.fixture?.venue?.name ?? "").trim();
-        if (!venue) return false;
-        return true;
-      };
+        return !!venue;
+      });
 
-      const picked = await pickFixtureFromLeagues(window, filter);
-      if (!picked) return;
+      if (!valid.length) return;
+
+      const scored = buildDiscoverScores(valid);
+      const seededCategory = categorySeedFromVibes(discoverVibes);
+
+      const ranked = scored
+        .map((item) => ({
+          item,
+          score: discoverScoreForCategory(seededCategory, item, {
+            origin: discoverFrom.trim() || null,
+            tripLength: discoverTripLength,
+            vibes: discoverVibes,
+          }),
+        }))
+        .sort((a, b) => b.score - a.score);
+
+      const poolTop = ranked.slice(0, Math.min(12, ranked.length));
+      const chosen = pickRandom(poolTop);
+      const fixture = chosen?.item?.fixture ?? null;
+
+      const fixtureId =
+        fixture?.fixture?.id != null ? String(fixture.fixture.id) : null;
+      const leagueId =
+        fixture?.league?.id != null ? String(fixture.league.id) : null;
+      const season =
+        (fixture as any)?.league?.season != null
+          ? String((fixture as any).league.season)
+          : null;
+
+      if (!fixtureId) return;
 
       router.push({
         pathname: "/trip/build",
         params: {
           global: "1",
-          fixtureId: picked.fixtureId,
-          leagueId: String(picked.leagueId),
-          season: String(picked.season),
+          fixtureId,
+          ...(leagueId ? { leagueId } : {}),
+          ...(season ? { season } : {}),
           from: window.from,
           to: window.to,
           prefMode: "random",
@@ -224,6 +255,51 @@ export default function DiscoverScreen() {
     router,
   ]);
 
+  const renderCategoryCard = useCallback(
+    (category: DiscoverCategory, compact = false) => {
+      const meta = DISCOVER_CATEGORY_META[category];
+      const primary = meta.emphasis === "primary";
+
+      return (
+        <Pressable
+          key={category}
+          onPress={() => goFixturesCategory(category)}
+          style={({ pressed }) => [
+            compact ? styles.categoryPressCompact : styles.categoryPress,
+            pressed && styles.pressed,
+          ]}
+        >
+          <GlassCard
+            strength="default"
+            style={[
+              styles.categoryCard,
+              primary && styles.categoryCardPrimary,
+              compact && styles.categoryCardCompact,
+            ]}
+            noPadding
+          >
+            <View style={[styles.categoryInner, compact && styles.categoryInnerCompact]}>
+              <View
+                style={[
+                  styles.categoryIconWrap,
+                  primary && styles.categoryIconWrapPrimary,
+                ]}
+              >
+                <Ionicons name={meta.icon} size={18} color={theme.colors.text} />
+              </View>
+
+              <View style={styles.categoryTextWrap}>
+                <Text style={styles.categoryTitle}>{meta.title}</Text>
+                <Text style={styles.categorySubtitle}>{meta.subtitle}</Text>
+              </View>
+            </View>
+          </GlassCard>
+        </Pressable>
+      );
+    },
+    [goFixturesCategory]
+  );
+
   return (
     <Background imageSource={getBackground("home")} overlayOpacity={0.68}>
       <SafeAreaView style={styles.container} edges={["top"]}>
@@ -237,8 +313,8 @@ export default function DiscoverScreen() {
               <Text style={styles.kicker}>DISCOVER</Text>
               <Text style={styles.title}>Find football trips worth taking</Text>
               <Text style={styles.sub}>
-                Use Discover when you do not know where to go yet. Start with themes,
-                tighten the filters, then jump straight into Fixtures and build from there.
+                Start with a trip type, shape it with filters, then jump into Fixtures with a
+                Discover context instead of a flat match list.
               </Text>
 
               <View style={styles.heroSummaryBox}>
@@ -309,66 +385,37 @@ export default function DiscoverScreen() {
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Browse by theme</Text>
+            <Text style={styles.sectionTitle}>Start with the strongest routes</Text>
             <Text style={styles.sectionSub}>
-              These routes push you into Fixtures with a Discover context, so the app ranks with intent instead of just dumping matches.
+              These are the main Discover entry points. They should feel like deliberate trip types,
+              not a messy category dump.
             </Text>
 
-            <View style={styles.rows}>
-              {DISCOVER_ROWS.map((row, rowIndex) => (
-                <ScrollView
-                  key={`row-${rowIndex}`}
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.rowScroll}
-                >
-                  {row.map((category) => {
-                    const meta = DISCOVER_CATEGORY_META[category];
-                    const primary = meta.emphasis === "primary";
-
-                    return (
-                      <Pressable
-                        key={category}
-                        onPress={() => goFixturesCategory(category)}
-                        style={({ pressed }) => [styles.categoryPress, pressed && styles.pressed]}
-                      >
-                        <GlassCard
-                          strength="default"
-                          style={[styles.categoryCard, primary && styles.categoryCardPrimary]}
-                          noPadding
-                        >
-                          <View style={styles.categoryInner}>
-                            <View
-                              style={[
-                                styles.categoryIconWrap,
-                                primary && styles.categoryIconWrapPrimary,
-                              ]}
-                            >
-                              <Ionicons
-                                name={meta.icon}
-                                size={18}
-                                color={theme.colors.text}
-                              />
-                            </View>
-
-                            <View style={styles.categoryTextWrap}>
-                              <Text style={styles.categoryTitle}>{meta.title}</Text>
-                              <Text style={styles.categorySubtitle}>{meta.subtitle}</Text>
-                            </View>
-                          </View>
-                        </GlassCard>
-                      </Pressable>
-                    );
-                  })}
-                </ScrollView>
-              ))}
+            <View style={styles.primaryGrid}>
+              {DISCOVER_PRIMARY_CATEGORIES.map((category) => renderCategoryCard(category, false))}
             </View>
+          </View>
+
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>More ways to browse</Text>
+            <Text style={styles.sectionSub}>
+              Secondary routes for specific trip moods, city pull or niche browsing.
+            </Text>
+
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.secondaryRow}
+            >
+              {DISCOVER_SECONDARY_CATEGORIES.map((category) => renderCategoryCard(category, true))}
+            </ScrollView>
           </View>
 
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Randomiser</Text>
             <Text style={styles.sectionSub}>
-              When you cannot be bothered choosing, let the app throw you into a live option inside your current window.
+              When you cannot be bothered choosing, this pulls from your current Discover setup and
+              picks from stronger options instead of random junk.
             </Text>
 
             <Pressable
@@ -395,7 +442,8 @@ export default function DiscoverScreen() {
                   </View>
 
                   <Text style={styles.randomSub}>
-                    Pull one fixture from the current discovery setup and jump straight into Build Trip.
+                    Score a live pool using your current setup, then jump into Build Trip from one
+                    of the better options.
                   </Text>
 
                   <Text style={styles.randomHint}>{filterSummary}</Text>
@@ -405,10 +453,10 @@ export default function DiscoverScreen() {
           </View>
 
           <GlassCard strength="default" style={styles.infoCard}>
-            <Text style={styles.infoTitle}>How to use Discover properly</Text>
+            <Text style={styles.infoTitle}>How Discover should be used</Text>
             <Text style={styles.infoText}>
-              Use the theme cards when you know the type of trip you want but not the exact match.
-              Use the randomiser when you want speed and are happy to be surprised.
+              Discover is for when you know the kind of football trip you want, but not the exact
+              match. Use Fixtures when you already know you want a direct fixture browse.
             </Text>
           </GlassCard>
         </ScrollView>
@@ -560,13 +608,19 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
   },
 
-  rows: { gap: 10 },
-  rowScroll: {
+  primaryGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
     gap: 10,
-    paddingRight: theme.spacing.lg,
+    justifyContent: "space-between",
   },
   categoryPress: {
-    width: 192,
+    width: "48.5%",
+    borderRadius: 18,
+    overflow: "hidden",
+  },
+  categoryPressCompact: {
+    width: 188,
     borderRadius: 18,
     overflow: "hidden",
   },
@@ -576,11 +630,17 @@ const styles = StyleSheet.create({
   categoryCardPrimary: {
     borderColor: "rgba(79,224,138,0.18)",
   },
+  categoryCardCompact: {
+    minHeight: 110,
+  },
   categoryInner: {
     padding: 14,
-    minHeight: 124,
+    minHeight: 128,
     gap: 14,
     justifyContent: "space-between",
+  },
+  categoryInnerCompact: {
+    minHeight: 112,
   },
   categoryIconWrap: {
     width: 38,
@@ -610,6 +670,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 17,
     fontWeight: "800",
+  },
+
+  secondaryRow: {
+    gap: 10,
+    paddingRight: theme.spacing.lg,
   },
 
   randomPress: {
