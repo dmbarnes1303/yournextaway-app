@@ -72,7 +72,6 @@ declare const __DEV__: boolean;
 const DEV = typeof __DEV__ === "boolean" ? __DEV__ : false;
 
 const PLAN_STORAGE_KEY = "yna:plan";
-const FREE_TRIP_CAP = 5;
 
 export default function TripDetailScreen() {
   const params = useLocalSearchParams();
@@ -318,7 +317,7 @@ export default function TripDetailScreen() {
       omioUrl: resolveAffiliateUrl("omio", ctx),
       transfersUrl: resolveAffiliateUrl("kiwitaxi", ctx),
       experiencesUrl: resolveAffiliateUrl("getyourguide", ctx),
-      mapsUrl: buildMapsSearchUrl(`${ctx.city} travel`),
+      mapsUrl: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${ctx.city} travel`)}`,
     };
   }, [trip, cityName, originIata]);
 
@@ -364,7 +363,7 @@ export default function TripDetailScreen() {
 
   const stadiumMapsUrl = useMemo(() => {
     const query = [stadiumName || "stadium", stadiumCity].filter(Boolean).join(" ").trim();
-    return buildMapsSearchUrl(query);
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
   }, [stadiumName, stadiumCity]);
 
   const stayBestAreas = useMemo(() => {
