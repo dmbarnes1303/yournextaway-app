@@ -1,30 +1,32 @@
 export type DiscoverCategory =
+  | "bigMatches"
   | "derbies"
   | "atmospheres"
-  | "europeanNights"
-  | "legendaryStadiums"
-  | "perfectWeekends"
-  | "iconicCities"
-  | "easyTickets"
   | "valueTrips"
+  | "legendaryStadiums"
+  | "iconicCities"
+  | "perfectTrips"
+  | "nightMatches"
   | "titleDrama"
+  | "easyTickets"
   | "bucketList"
   | "matchdayCulture"
   | "underratedTrips";
 
 export const DISCOVER_ROWS: DiscoverCategory[][] = [
   [
+    "bigMatches",
     "derbies",
     "atmospheres",
-    "europeanNights",
+    "valueTrips",
     "legendaryStadiums",
-    "perfectWeekends",
   ],
   [
     "iconicCities",
-    "easyTickets",
-    "valueTrips",
+    "perfectTrips",
+    "nightMatches",
     "titleDrama",
+    "easyTickets",
   ],
   [
     "bucketList",
@@ -34,8 +36,13 @@ export const DISCOVER_ROWS: DiscoverCategory[][] = [
 ];
 
 export const DISCOVER_CATEGORY_META = {
+  bigMatches: {
+    title: "Big Matches",
+    icon: "⭐",
+  },
+
   derbies: {
-    title: "Derby Weekends",
+    title: "Derbies & Rivalries",
     icon: "🔥",
   },
 
@@ -44,9 +51,9 @@ export const DISCOVER_CATEGORY_META = {
     icon: "🏟",
   },
 
-  europeanNights: {
-    title: "European Nights",
-    icon: "🌙",
+  valueTrips: {
+    title: "Best Value Football Trips",
+    icon: "💸",
   },
 
   legendaryStadiums: {
@@ -54,29 +61,29 @@ export const DISCOVER_CATEGORY_META = {
     icon: "🏛",
   },
 
-  perfectWeekends: {
-    title: "Perfect Football Weekends",
-    icon: "🧭",
-  },
-
   iconicCities: {
     title: "Iconic Football Cities",
     icon: "🌍",
   },
 
-  easyTickets: {
-    title: "Easy Ticket Matches",
-    icon: "🎟",
+  perfectTrips: {
+    title: "Perfect Football Trips",
+    icon: "🧭",
   },
 
-  valueTrips: {
-    title: "Best Value Trips",
-    icon: "💸",
+  nightMatches: {
+    title: "Night Matches",
+    icon: "🌙",
   },
 
   titleDrama: {
     title: "Title Race Drama",
     icon: "🏆",
+  },
+
+  easyTickets: {
+    title: "Easy Ticket Matches",
+    icon: "🎟",
   },
 
   bucketList: {
