@@ -44,6 +44,67 @@ type RankedDiscoverPick = {
   score: number;
 };
 
+type InspirationPreset = {
+  id: string;
+  title: string;
+  subtitle: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  vibe?: DiscoverVibe;
+  category: DiscoverCategory;
+  windowKey?: DiscoverWindowKey;
+};
+
+const INSPIRATION_PRESETS: InspirationPreset[] = [
+  {
+    id: "weekend",
+    title: "Best this weekend",
+    subtitle: "Strong live options for a quick football break",
+    icon: "flash-outline",
+    category: "perfectTrips",
+    windowKey: "wknd",
+  },
+  {
+    id: "easy",
+    title: "Easy city breaks",
+    subtitle: "Lower-friction trips with cleaner planning potential",
+    icon: "navigate-outline",
+    vibe: "easy",
+    category: "easyTickets",
+  },
+  {
+    id: "big",
+    title: "Big atmospheres",
+    subtitle: "Louder fixtures worth travelling for",
+    icon: "megaphone-outline",
+    vibe: "big",
+    category: "bigMatches",
+  },
+  {
+    id: "night",
+    title: "Night game energy",
+    subtitle: "Late kick-offs, lights, and stronger matchday mood",
+    icon: "moon-outline",
+    vibe: "nightlife",
+    category: "nightMatches",
+  },
+  {
+    id: "culture",
+    title: "City + match weekends",
+    subtitle: "Trips where the place matters as much as the game",
+    icon: "business-outline",
+    vibe: "culture",
+    category: "matchdayCulture",
+  },
+  {
+    id: "warm",
+    title: "Warmer escapes",
+    subtitle: "Football weekends with a softer climate pull",
+    icon: "sunny-outline",
+    vibe: "warm",
+    category: "iconicCities",
+  },
+];
+
 function labelForKey(key: DiscoverWindowKey) {
   if (key === "wknd") return "This Weekend";
   if (key === "d7") return "Next 7 Days";
@@ -336,6 +397,26 @@ export default function DiscoverScreen() {
     ]
   );
 
+  const applyPreset = useCallback(
+    (preset: InspirationPreset) => {
+      if (preset.windowKey) setDiscoverWindowKey(preset.windowKey);
+      if (preset.vibe) setDiscoverVibes([preset.vibe]);
+
+      router.push({
+        pathname: "/(tabs)/fixtures",
+        params: {
+          from: windowForKey(preset.windowKey ?? discoverWindowKey).from,
+          to: windowForKey(preset.windowKey ?? discoverWindowKey).to,
+          discover: preset.category,
+          discoverFrom: discoverOrigin.trim() || undefined,
+          discoverTripLength,
+          discoverVibes: preset.vibe ? preset.vibe : discoverVibes.join(","),
+        },
+      } as any);
+    },
+    [router, discoverWindowKey, discoverOrigin, discoverTripLength, discoverVibes]
+  );
+
   const goRandomTrip = useCallback(async () => {
     if (loadingRandom) return;
 
@@ -440,7 +521,7 @@ export default function DiscoverScreen() {
               </View>
 
               <View style={styles.leadBottomRow}>
-                <Text style={styles.leadHint}>Open ranked fixtures</Text>
+                <Text style={styles.leadHint}>See best options</Text>
                 <Text style={styles.leadArrow}>›</Text>
               </View>
             </View>
@@ -536,10 +617,9 @@ export default function DiscoverScreen() {
           <GlassCard strength="strong" style={styles.hero} noPadding>
             <View style={styles.heroInner}>
               <Text style={styles.kicker}>DISCOVER</Text>
-              <Text style={styles.title}>Find football trips worth taking</Text>
+              <Text style={styles.title}>Find your next football weekend</Text>
               <Text style={styles.sub}>
-                Tell the app the shape of trip you want, then browse ranked routes instead
-                of a flat dump of fixtures.
+                Big atmospheres, easy city breaks, and match trips worth actually taking.
               </Text>
 
               <View style={styles.heroSummaryBox}>
@@ -548,6 +628,42 @@ export default function DiscoverScreen() {
               </View>
             </View>
           </GlassCard>
+
+          <View style={styles.section}>
+            <View style={styles.sectionHeaderStack}>
+              <Text style={styles.sectionTitle}>Start with a mood</Text>
+              <Text style={styles.sectionSub}>
+                Fast entry points for the kind of trip that already sounds good.
+              </Text>
+            </View>
+
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.inspirationRow}
+            >
+              {INSPIRATION_PRESETS.map((preset) => (
+                <Pressable
+                  key={preset.id}
+                  onPress={() => applyPreset(preset)}
+                  style={({ pressed }) => [styles.inspirationPress, pressed && styles.pressed]}
+                >
+                  <GlassCard strength="default" style={styles.inspirationCard} noPadding>
+                    <View style={styles.inspirationInner}>
+                      <View style={styles.inspirationIconWrap}>
+                        <Ionicons name={preset.icon} size={18} color={theme.colors.text} />
+                      </View>
+
+                      <View style={styles.inspirationTextWrap}>
+                        <Text style={styles.inspirationTitle}>{preset.title}</Text>
+                        <Text style={styles.inspirationSub}>{preset.subtitle}</Text>
+                      </View>
+                    </View>
+                  </GlassCard>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
 
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
@@ -659,7 +775,7 @@ export default function DiscoverScreen() {
             <View style={styles.sectionHeaderStack}>
               <Text style={styles.sectionTitle}>More ways to browse</Text>
               <Text style={styles.sectionSub}>
-                Narrower angles when you want city pull, atmosphere, or specific trip types.
+                Narrower angles when you want city pull, atmosphere, or more specific trip types.
               </Text>
             </View>
 
@@ -678,8 +794,7 @@ export default function DiscoverScreen() {
             <View style={styles.sectionHeaderStack}>
               <Text style={styles.sectionTitle}>Concierge pick</Text>
               <Text style={styles.sectionSub}>
-                Not random junk. It pulls a live pool, ranks it against your setup, then
-                drops you into Build Trip from a stronger option.
+                Give the app your setup and let it surface one of the stronger live options.
               </Text>
             </View>
 
@@ -697,7 +812,7 @@ export default function DiscoverScreen() {
                     <View style={styles.randomTopText}>
                       <Text style={styles.randomTitle}>Let the app choose</Text>
                       <Text style={styles.randomSub}>
-                        Uses your current setup before making the final pick.
+                        We rank a live pool against your setup before making the pick.
                       </Text>
                     </View>
 
@@ -856,6 +971,58 @@ const styles = StyleSheet.create({
   sectionSubStrong: {
     color: theme.colors.text,
     fontWeight: theme.fontWeight.black,
+  },
+
+  inspirationRow: {
+    gap: 10,
+    paddingRight: theme.spacing.lg,
+  },
+
+  inspirationPress: {
+    width: 220,
+    borderRadius: 18,
+    overflow: "hidden",
+  },
+
+  inspirationCard: {
+    borderRadius: 18,
+    minHeight: 116,
+  },
+
+  inspirationInner: {
+    padding: 14,
+    minHeight: 116,
+    gap: 12,
+    justifyContent: "space-between",
+  },
+
+  inspirationIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(87,162,56,0.18)",
+    backgroundColor: "rgba(87,162,56,0.08)",
+  },
+
+  inspirationTextWrap: {
+    gap: 6,
+  },
+
+  inspirationTitle: {
+    color: theme.colors.text,
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: theme.fontWeight.black,
+  },
+
+  inspirationSub: {
+    color: theme.colors.textSecondary,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: theme.fontWeight.bold,
   },
 
   resetPill: {
