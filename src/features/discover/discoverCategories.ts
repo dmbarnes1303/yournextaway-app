@@ -42,14 +42,9 @@ export const DISCOVER_SECONDARY_CATEGORIES: DiscoverCategory[] = [
   "underratedTrips",
 ];
 
-/**
- * Kept for backward compatibility with current consumers.
- * Primary row first, then secondary rows.
- */
-export const DISCOVER_ROWS: DiscoverCategory[][] = [
-  DISCOVER_PRIMARY_CATEGORIES,
-  ["legendaryStadiums", "iconicCities", "nightMatches", "titleDrama"],
-  ["bucketList", "matchdayCulture", "underratedTrips"],
+export const DISCOVER_ALL_CATEGORIES: DiscoverCategory[] = [
+  ...DISCOVER_PRIMARY_CATEGORIES,
+  ...DISCOVER_SECONDARY_CATEGORIES,
 ];
 
 export const DISCOVER_CATEGORY_META: Record<DiscoverCategory, DiscoverCategoryMeta> = {
@@ -63,7 +58,7 @@ export const DISCOVER_CATEGORY_META: Record<DiscoverCategory, DiscoverCategoryMe
 
   derbies: {
     title: "Derbies & Rivalries",
-    subtitle: "Tension, history, noise, chaos",
+    subtitle: "History, tension and serious edge",
     helper: "Discover mode • ranked for rivalry intensity first",
     icon: "flame-outline",
     emphasis: "primary",
@@ -71,8 +66,8 @@ export const DISCOVER_CATEGORY_META: Record<DiscoverCategory, DiscoverCategoryMe
 
   atmospheres: {
     title: "Insane Atmospheres",
-    subtitle: "Best noise, intensity and matchday energy",
-    helper: "Discover mode • ranked for atmosphere and culture",
+    subtitle: "Noise, intensity and full matchday energy",
+    helper: "Discover mode • ranked for atmosphere and crowd force",
     icon: "radio-outline",
     emphasis: "primary",
   },
@@ -80,7 +75,7 @@ export const DISCOVER_CATEGORY_META: Record<DiscoverCategory, DiscoverCategoryMe
   valueTrips: {
     title: "Best Value Football Trips",
     subtitle: "Better experience-per-pound potential",
-    helper: "Discover mode • ranked for value, ease and usable quality",
+    helper: "Discover mode • ranked for value, ease and usable trip quality",
     icon: "cash-outline",
     emphasis: "primary",
   },
@@ -88,7 +83,7 @@ export const DISCOVER_CATEGORY_META: Record<DiscoverCategory, DiscoverCategoryMe
   perfectTrips: {
     title: "Perfect Football Trips",
     subtitle: "Best overall football city-break balance",
-    helper: "Discover mode • ranked for overall trip quality, city pull and ease",
+    helper: "Discover mode • ranked for all-round trip quality, city pull and ease",
     icon: "navigate-outline",
     emphasis: "primary",
   },
@@ -96,14 +91,14 @@ export const DISCOVER_CATEGORY_META: Record<DiscoverCategory, DiscoverCategoryMe
   easyTickets: {
     title: "Easy Ticket Matches",
     subtitle: "Better chance of an accessible home-ticket route",
-    helper: "Discover mode • ranked for easier ticket access and trip simplicity",
+    helper: "Discover mode • ranked for ticket access and short-trip simplicity",
     icon: "ticket-outline",
     emphasis: "primary",
   },
 
   legendaryStadiums: {
     title: "Legendary Stadiums",
-    subtitle: "Grounds with weight, history and pull",
+    subtitle: "Grounds with history, status and pull",
     helper: "Discover mode • ranked for stadium prestige and club pull",
     icon: "business-outline",
     emphasis: "secondary",
@@ -112,14 +107,14 @@ export const DISCOVER_CATEGORY_META: Record<DiscoverCategory, DiscoverCategoryMe
   iconicCities: {
     title: "Iconic Football Cities",
     subtitle: "Trips where the city matters as much as the match",
-    helper: "Discover mode • ranked for city pull, nightlife and football weight",
+    helper: "Discover mode • ranked for city pull, football weight and nightlife",
     icon: "earth-outline",
     emphasis: "secondary",
   },
 
   nightMatches: {
     title: "Night Matches",
-    subtitle: "Later kickoffs with better match feel",
+    subtitle: "Later kickoffs with stronger match feel",
     helper: "Discover mode • ranked for evening kickoffs and nightlife fit",
     icon: "moon-outline",
     emphasis: "secondary",
@@ -127,8 +122,8 @@ export const DISCOVER_CATEGORY_META: Record<DiscoverCategory, DiscoverCategoryMe
 
   titleDrama: {
     title: "Title Race Drama",
-    subtitle: "Fixtures with sharper end-of-season stakes",
-    helper: "Discover mode • ranked for pressure and late-season tension",
+    subtitle: "Fixtures with sharper late-season stakes",
+    helper: "Discover mode • ranked for pressure and end-of-season tension",
     icon: "trophy-outline",
     emphasis: "secondary",
   },
