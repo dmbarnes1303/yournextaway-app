@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo } from "react";
-import { View, Text, StyleSheet, FlatList, ActivityIndicator } from "react-native";
+import { View, StyleSheet, FlatList, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 
@@ -186,7 +186,6 @@ export default function FixturesScreen() {
               {loading ? (
                 <View style={styles.center}>
                   <ActivityIndicator />
-                  <Text style={styles.muted}>Loading fixtures…</Text>
                 </View>
               ) : null}
 
@@ -213,49 +212,4 @@ export default function FixturesScreen() {
           visible={calendarOpen}
           onClose={closeCalendar}
           subtitle={
-            calIsRange ? `Range: ${calNorm.from} → ${calNorm.to}` : `Day: ${calNorm.from}`
-          }
-          monthText={monthLabel(calMonthYear.y, calMonthYear.m0)}
-          grid={calGrid}
-          minIso={minIso}
-          maxIso={maxIso}
-          calIsRange={calIsRange}
-          calInRange={calInRange}
-          calIsEdge={calIsEdge}
-          onPrevMonth={calPrevMonth}
-          onNextMonth={calNextMonth}
-          onTapDay={onCalendarTapDay}
-          onClearRange={clearCalendarRange}
-          onApply={applyCalendar}
-        />
-      </SafeAreaView>
-    </Background>
-  );
-}
-
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-
-  flatListContent: {
-    paddingBottom: theme.spacing.xl,
-  },
-
-  content: {
-    paddingHorizontal: theme.spacing.lg,
-  },
-
-  listWrap: {
-    gap: 12,
-  },
-
-  center: {
-    paddingVertical: 24,
-    alignItems: "center",
-    gap: 10,
-  },
-
-  muted: {
-    color: theme.colors.textSecondary,
-    fontWeight: theme.fontWeight.medium,
-  },
-});
+            calIsRange ? `Range: ${calNorm.from} → ${calNorm.to}` : `Day: ${calNorm
