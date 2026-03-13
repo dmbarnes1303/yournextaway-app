@@ -1,5 +1,5 @@
 import React from "react";
-import { Alert } from "react-native";
+import { Alert, type AlertButton } from "react-native";
 import { useRouter } from "expo-router";
 
 import tripsStore, { type Trip } from "@/src/state/trips";
@@ -404,7 +404,7 @@ export default function useTripDetailController({
         { text: "Cancel", style: "cancel" },
         !isPrimary ? { text: "Set as primary", onPress: () => setPrimaryMatch(mid) } : null,
         { text: "Remove from trip", style: "destructive", onPress: () => removeMatch(mid) },
-      ].filter(Boolean) as any
+      ].filter(Boolean) as AlertButton[]
     );
   }
 
