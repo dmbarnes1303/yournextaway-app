@@ -3,7 +3,12 @@ import { getTicketDifficultyBadge } from "@/src/data/ticketGuides";
 import type { TicketDifficulty } from "@/src/data/ticketGuides/types";
 import { POPULAR_TEAM_IDS } from "@/src/data/teams";
 
-import type { DiscoverFixture } from "./discoverEngine";
+import type {
+  DiscoverContext,
+  DiscoverFixture,
+  DiscoverTripLength,
+  DiscoverVibe,
+} from "./discoverEngine";
 import type { DiscoverCategory } from "./discoverCategories";
 
 function norm(s: unknown) {
@@ -66,6 +71,63 @@ function ticketDifficultyRank(d: TicketDifficulty | "unknown") {
   }
 }
 
+function vibesFromContext(ctx?: DiscoverContext | null): DiscoverVibe[] {
+  return Array.isArray(ctx?.vibes) ? ctx!.vibes.filter(Boolean) : [];
+}
+
+function tripLengthFromContext(ctx?: DiscoverContext | null): DiscoverTripLength | null {
+  const value = String(ctx?.tripLength ?? "").trim();
+  if (value === "day" || value === "1" || value === "2" || value === "3") return value;
+  return null;
+}
+
+function vibeBoost(scored: DiscoverFixture, ctx?: DiscoverContext | null) {
+  const vibes = vibesFromContext(ctx);
+  if (!vibes.length) return 0;
+
+  let boost = 0;
+
+  for (const vibe of vibes) {
+    if (vibe === "easy") {
+      boost += scored.scores.ticketEaseScore * 10 + scored.scores.tripEaseScore * 8;
+    } else if (vibe === "big") {
+      boost += scored.scores.derbyScore * 10 + scored.scores.glamourScore * 8;
+    } else if (vibe === "nightlife") {
+      boost += scored.scores.nightlifeScore * 10 + scored.scores.nightScore * 8;
+    } else if (vibe === "culture") {
+      boost += scored.scores.cultureScore * 10 + scored.scores.cityScore * 8;
+    } else if (vibe === "warm") {
+      boost += scored.scores.warmWeatherScore * 12;
+    }
+  }
+
+  return boost;
+}
+
+function tripLengthBoost(scored: DiscoverFixture, ctx?: DiscoverContext | null) {
+  const tripLength = tripLengthFromContext(ctx);
+  if (!tripLength) return 0;
+
+  if (tripLength === "day") {
+    return scored.scores.tripEaseScore * 14 + scored.scores.ticketEaseScore * 8;
+  }
+
+  if (tripLength === "1") {
+    return scored.scores.tripEaseScore * 10 + scored.scores.cityScore * 6;
+  }
+
+  if (tripLength === "2") {
+    return scored.scores.cityScore * 10 + scored.scores.cultureScore * 8;
+  }
+
+  return (
+    scored.scores.cityScore * 12 +
+    scored.scores.cultureScore * 10 +
+    scored.scores.nightlifeScore * 8 +
+    scored.scores.warmWeatherScore * 6
+  );
+}
+
 function cityPrestigeScore(city: string): number {
   const key = norm(city);
 
@@ -85,6 +147,7 @@ function cityPrestigeScore(city: string): number {
       "dortmund",
       "liverpool",
       "manchester",
+      "naples",
     ].includes(key)
   ) {
     return 3;
@@ -95,12 +158,13 @@ function cityPrestigeScore(city: string): number {
       "porto",
       "seville",
       "turin",
-      "naples",
       "rotterdam",
       "marseille",
       "berlin",
       "vienna",
       "prague",
+      "zagreb",
+      "athens",
     ].includes(key)
   ) {
     return 2;
@@ -115,7 +179,9 @@ function iconicCityScore(scored: DiscoverFixture) {
   return (
     cityPrestigeScore(city) * 50 +
     baseFixtureScore(scored.fixture) +
-    scored.scores.stadiumScore * 18
+    scored.scores.stadiumScore * 18 +
+    scored.scores.cultureScore * 16 +
+    scored.scores.nightlifeScore * 10
   );
 }
 
@@ -125,18 +191,21 @@ function bucketListScore(scored: DiscoverFixture) {
     scored.scores.stadiumScore * 36 +
     scored.scores.atmosphereScore * 26 +
     scored.scores.derbyScore * 18 +
-    scored.scores.nightScore * 12
+    scored.scores.nightScore * 12 +
+    scored.scores.cityScore * 14
   );
 }
 
 function perfectTripScore(scored: DiscoverFixture) {
   return (
     baseFixtureScore(scored.fixture) +
-    scored.scores.atmosphereScore * 28 +
-    scored.scores.valueScore * 24 +
-    scored.scores.nightScore * 18 +
-    scored.scores.stadiumScore * 20 +
-    scored.scores.derbyScore * 16
+    scored.scores.atmosphereScore * 24 +
+    scored.scores.valueScore * 20 +
+    scored.scores.cityScore * 18 +
+    scored.scores.cultureScore * 18 +
+    scored.scores.tripEaseScore * 18 +
+    scored.scores.nightlifeScore * 12 +
+    scored.scores.ticketEaseScore * 10
   );
 }
 
@@ -153,16 +222,18 @@ function underratedTripScore(scored: DiscoverFixture) {
 
   return (
     base +
-    scored.scores.atmosphereScore * 26 +
-    scored.scores.valueScore * 24 +
-    scored.scores.nightScore * 10 -
+    scored.scores.underratedScore * 34 +
+    scored.scores.atmosphereScore * 18 +
+    scored.scores.valueScore * 18 +
+    scored.scores.cityScore * 10 -
     glamourPenalty
   );
 }
 
 export function discoverScoreForCategory(
   category: DiscoverCategory,
-  scored: DiscoverFixture
+  scored: DiscoverFixture,
+  ctx?: DiscoverContext | null
 ): number {
   const r = scored.fixture;
   const base = baseFixtureScore(r);
@@ -172,88 +243,112 @@ export function discoverScoreForCategory(
   const difficulty: TicketDifficulty | "unknown" = rawDifficulty ?? "unknown";
   const easyRank = ticketDifficultyRank(difficulty);
 
+  let score = 0;
+
   switch (category) {
     case "bigMatches":
-      return (
+      score =
         base +
         scored.scores.derbyScore * 34 +
-        scored.scores.atmosphereScore * 28 +
-        scored.scores.nightScore * 14 +
-        scored.scores.titleDramaScore * 18
-      );
+        scored.scores.atmosphereScore * 22 +
+        scored.scores.glamourScore * 16 +
+        scored.scores.nightScore * 12 +
+        scored.scores.titleDramaScore * 18;
+      break;
 
     case "derbies":
-      return (
+      score =
         base +
         scored.scores.derbyScore * 60 +
-        scored.scores.atmosphereScore * 18 +
-        scored.scores.nightScore * 8
-      );
+        scored.scores.atmosphereScore * 16 +
+        scored.scores.nightScore * 8;
+      break;
 
     case "atmospheres":
-      return (
+      score =
         base +
         scored.scores.atmosphereScore * 42 +
         scored.scores.derbyScore * 14 +
-        scored.scores.nightScore * 10
-      );
+        scored.scores.cultureScore * 10 +
+        scored.scores.nightScore * 10;
+      break;
 
     case "valueTrips":
-      return (
-        base * 0.45 +
-        scored.scores.valueScore * 60 +
-        easyRank * 10 +
-        scored.scores.nightScore * 6
-      );
+      score =
+        base * 0.4 +
+        scored.scores.valueScore * 58 +
+        scored.scores.ticketEaseScore * 12 +
+        scored.scores.tripEaseScore * 10 +
+        scored.scores.nightScore * 6;
+      break;
 
     case "legendaryStadiums":
-      return (
+      score =
         base +
         scored.scores.stadiumScore * 52 +
-        scored.scores.atmosphereScore * 12 +
-        scored.scores.derbyScore * 8
-      );
+        scored.scores.atmosphereScore * 10 +
+        scored.scores.cityScore * 12 +
+        scored.scores.derbyScore * 8;
+      break;
 
     case "iconicCities":
-      return iconicCityScore(scored);
+      score = iconicCityScore(scored);
+      break;
 
     case "perfectTrips":
-      return perfectTripScore(scored);
+      score = perfectTripScore(scored);
+      break;
 
     case "nightMatches":
-      return (
+      score =
         base +
-        scored.scores.nightScore * 60 +
-        scored.scores.atmosphereScore * 18 +
-        scored.scores.derbyScore * 10
-      );
+        scored.scores.nightScore * 56 +
+        scored.scores.nightlifeScore * 18 +
+        scored.scores.atmosphereScore * 14 +
+        scored.scores.derbyScore * 10;
+      break;
 
     case "titleDrama":
-      return (
+      score =
         base +
         scored.scores.titleDramaScore * 60 +
         scored.scores.derbyScore * 10 +
-        scored.scores.atmosphereScore * 10
-      );
+        scored.scores.atmosphereScore * 10;
+      break;
 
     case "easyTickets":
-      return easyRank * 80 + scored.scores.valueScore * 12 + base * 0.2;
+      score =
+        easyRank * 80 +
+        scored.scores.ticketEaseScore * 18 +
+        scored.scores.tripEaseScore * 12 +
+        scored.scores.valueScore * 10 +
+        base * 0.18;
+      break;
 
     case "bucketList":
-      return bucketListScore(scored);
+      score = bucketListScore(scored);
+      break;
 
     case "matchdayCulture":
-      return (
+      score =
         base +
-        scored.scores.atmosphereScore * 34 +
-        scored.scores.derbyScore * 18 +
-        scored.scores.nightScore * 12
-      );
+        scored.scores.cultureScore * 34 +
+        scored.scores.atmosphereScore * 24 +
+        scored.scores.cityScore * 16 +
+        scored.scores.derbyScore * 12;
+      break;
 
     case "underratedTrips":
-      return underratedTripScore(scored);
+      score = underratedTripScore(scored);
+      break;
 
     default:
-      return base;
+      score = base;
+      break;
   }
+
+  score += vibeBoost(scored, ctx);
+  score += tripLengthBoost(scored, ctx);
+
+  return score;
 }
