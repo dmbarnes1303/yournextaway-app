@@ -140,4 +140,120 @@ function perfectTripScore(scored: DiscoverFixture) {
   );
 }
 
-function
+function underratedTripScore(scored: DiscoverFixture) {
+  const r = scored.fixture;
+  const base = baseFixtureScore(r);
+
+  const homeId = r?.teams?.home?.id;
+  const awayId = r?.teams?.away?.id;
+
+  const glamourPenalty =
+    (typeof homeId === "number" && POPULAR_TEAM_IDS.has(homeId) ? 28 : 0) +
+    (typeof awayId === "number" && POPULAR_TEAM_IDS.has(awayId) ? 28 : 0);
+
+  return (
+    base +
+    scored.scores.atmosphereScore * 26 +
+    scored.scores.valueScore * 24 +
+    scored.scores.nightScore * 10 -
+    glamourPenalty
+  );
+}
+
+export function discoverScoreForCategory(
+  category: DiscoverCategory,
+  scored: DiscoverFixture
+): number {
+  const r = scored.fixture;
+  const base = baseFixtureScore(r);
+
+  const home = String(r?.teams?.home?.name ?? "");
+  const rawDifficulty = home ? getTicketDifficultyBadge(home) : null;
+  const difficulty: TicketDifficulty | "unknown" = rawDifficulty ?? "unknown";
+  const easyRank = ticketDifficultyRank(difficulty);
+
+  switch (category) {
+    case "bigMatches":
+      return (
+        base +
+        scored.scores.derbyScore * 34 +
+        scored.scores.atmosphereScore * 28 +
+        scored.scores.nightScore * 14 +
+        scored.scores.titleDramaScore * 18
+      );
+
+    case "derbies":
+      return (
+        base +
+        scored.scores.derbyScore * 60 +
+        scored.scores.atmosphereScore * 18 +
+        scored.scores.nightScore * 8
+      );
+
+    case "atmospheres":
+      return (
+        base +
+        scored.scores.atmosphereScore * 42 +
+        scored.scores.derbyScore * 14 +
+        scored.scores.nightScore * 10
+      );
+
+    case "valueTrips":
+      return (
+        base * 0.45 +
+        scored.scores.valueScore * 60 +
+        easyRank * 10 +
+        scored.scores.nightScore * 6
+      );
+
+    case "legendaryStadiums":
+      return (
+        base +
+        scored.scores.stadiumScore * 52 +
+        scored.scores.atmosphereScore * 12 +
+        scored.scores.derbyScore * 8
+      );
+
+    case "iconicCities":
+      return iconicCityScore(scored);
+
+    case "perfectTrips":
+      return perfectTripScore(scored);
+
+    case "nightMatches":
+      return (
+        base +
+        scored.scores.nightScore * 60 +
+        scored.scores.atmosphereScore * 18 +
+        scored.scores.derbyScore * 10
+      );
+
+    case "titleDrama":
+      return (
+        base +
+        scored.scores.titleDramaScore * 60 +
+        scored.scores.derbyScore * 10 +
+        scored.scores.atmosphereScore * 10
+      );
+
+    case "easyTickets":
+      return easyRank * 80 + scored.scores.valueScore * 12 + base * 0.2;
+
+    case "bucketList":
+      return bucketListScore(scored);
+
+    case "matchdayCulture":
+      return (
+        base +
+        scored.scores.atmosphereScore * 34 +
+        scored.scores.derbyScore * 18 +
+        scored.scores.nightScore * 12
+      );
+
+    case "underratedTrips":
+      return underratedTripScore(scored);
+
+    default:
+      return base;
+  }
+}
