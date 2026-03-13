@@ -1,3 +1,5 @@
+import { Ionicons } from "@expo/vector-icons";
+
 export type DiscoverCategory =
   | "bigMatches"
   | "derbies"
@@ -12,6 +14,14 @@ export type DiscoverCategory =
   | "bucketList"
   | "matchdayCulture"
   | "underratedTrips";
+
+export type DiscoverCategoryMeta = {
+  title: string;
+  subtitle: string;
+  helper: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  emphasis?: "primary" | "neutral";
+};
 
 export const DISCOVER_ROWS: DiscoverCategory[][] = [
   [
@@ -35,69 +45,115 @@ export const DISCOVER_ROWS: DiscoverCategory[][] = [
   ],
 ];
 
-export const DISCOVER_CATEGORY_META = {
+export const DISCOVER_CATEGORY_META: Record<DiscoverCategory, DiscoverCategoryMeta> = {
   bigMatches: {
     title: "Big Matches",
-    icon: "⭐",
+    subtitle: "High-profile fixtures worth travelling for",
+    helper:
+      "Discover mode • ranked for occasion, club size, derby energy, and night factor",
+    icon: "star-outline",
+    emphasis: "primary",
   },
 
   derbies: {
     title: "Derbies & Rivalries",
-    icon: "🔥",
+    subtitle: "Tension, history, noise, chaos",
+    helper: "Discover mode • ranked for derby intensity first",
+    icon: "flame-outline",
+    emphasis: "primary",
   },
 
   atmospheres: {
     title: "Insane Atmospheres",
-    icon: "🏟",
+    subtitle: "Best noise, intensity and matchday energy",
+    helper: "Discover mode • ranked for atmosphere and occasion",
+    icon: "radio-outline",
+    emphasis: "primary",
   },
 
   valueTrips: {
     title: "Best Value Football Trips",
-    icon: "💸",
+    subtitle: "Better experience-per-pound potential",
+    helper: "Discover mode • ranked for value over prestige",
+    icon: "cash-outline",
+    emphasis: "neutral",
   },
 
   legendaryStadiums: {
     title: "Legendary Stadiums",
-    icon: "🏛",
+    subtitle: "Grounds with weight, history and pull",
+    helper: "Discover mode • ranked for stadium and club prestige",
+    icon: "business-outline",
+    emphasis: "neutral",
   },
 
   iconicCities: {
     title: "Iconic Football Cities",
-    icon: "🌍",
+    subtitle: "Trips where the city matters as much as the match",
+    helper: "Discover mode • ranked for city pull and trip appeal",
+    icon: "earth-outline",
+    emphasis: "neutral",
   },
 
   perfectTrips: {
     title: "Perfect Football Trips",
-    icon: "🧭",
+    subtitle: "Strong fixture plus solid travel potential",
+    helper: "Discover mode • ranked for overall trip quality",
+    icon: "navigate-outline",
+    emphasis: "neutral",
   },
 
   nightMatches: {
     title: "Night Matches",
-    icon: "🌙",
+    subtitle: "Evening kickoffs with better match feel",
+    helper: "Discover mode • ranked for later kickoffs and atmosphere",
+    icon: "moon-outline",
+    emphasis: "neutral",
   },
 
   titleDrama: {
     title: "Title Race Drama",
-    icon: "🏆",
+    subtitle: "Fixtures with sharper end-of-season stakes",
+    helper: "Discover mode • ranked for title-race tension signals",
+    icon: "trophy-outline",
+    emphasis: "neutral",
   },
 
   easyTickets: {
     title: "Easy Ticket Matches",
-    icon: "🎟",
+    subtitle: "Better chance of accessible home tickets",
+    helper: "Discover mode • ranked for easier ticket difficulty first",
+    icon: "ticket-outline",
+    emphasis: "neutral",
   },
 
   bucketList: {
     title: "Football Bucket List",
-    icon: "⭐",
+    subtitle: "Trips people should do at least once",
+    helper:
+      "Discover mode • ranked for prestige, atmosphere, and destination pull",
+    icon: "bookmark-outline",
+    emphasis: "neutral",
   },
 
   matchdayCulture: {
     title: "Best Matchday Culture",
-    icon: "🍻",
+    subtitle: "Beyond the 90 minutes",
+    helper: "Discover mode • ranked for culture and atmosphere",
+    icon: "people-outline",
+    emphasis: "neutral",
   },
 
   underratedTrips: {
     title: "Underrated Trips",
-    icon: "🧠",
+    subtitle: "Less obvious, more interesting",
+    helper: "Discover mode • ranked away from obvious glamour picks",
+    icon: "sparkles-outline",
+    emphasis: "neutral",
   },
 };
+
+export function isDiscoverCategory(value: string | null): value is DiscoverCategory {
+  if (!value) return false;
+  return Object.prototype.hasOwnProperty.call(DISCOVER_CATEGORY_META, value);
+}
