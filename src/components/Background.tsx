@@ -7,27 +7,10 @@ type Props = {
   children?: React.ReactNode;
   imageSource?: ImageSourcePropType | { uri: string } | string | null;
   imageUrl?: string | ImageSourcePropType | { uri: string } | null;
-
-  /**
-   * Extra full-screen darkening layer.
-   * Keep this low. If a screen needs heavy readability help,
-   * tune the top/bottom shades first.
-   */
   overlayOpacity?: number;
-
-  /**
-   * Per-screen shade controls.
-   * These defaults are intentionally balanced, not extreme.
-   */
   topShadeOpacity?: number;
   bottomShadeOpacity?: number;
   centerShadeOpacity?: number;
-
-  /**
-   * Optional subtle colour wash to stop the background feeling flat.
-   * Use tiny values only.
-   */
-  tintOpacity?: number;
 };
 
 export default function Background({
@@ -36,9 +19,8 @@ export default function Background({
   imageUrl = null,
   overlayOpacity = 0,
   topShadeOpacity = 0.34,
-  bottomShadeOpacity = 0.42,
+  bottomShadeOpacity = 0.50,
   centerShadeOpacity = 0.04,
-  tintOpacity = 0.10,
 }: Props) {
   const resolvedSource = useMemo<ImageSourcePropType | { uri: string } | null>(() => {
     if (typeof imageUrl === "string" && imageUrl.trim()) return { uri: imageUrl };
@@ -61,24 +43,14 @@ export default function Background({
   return (
     <View style={styles.root}>
       <ImageBackground source={resolvedSource} resizeMode="cover" style={styles.image}>
-        <View
-          pointerEvents="none"
-          style={[
-            styles.tint,
-            {
-              backgroundColor: `rgba(6,10,14,${tintOpacity})`,
-            },
-          ]}
-        />
-
         <LinearGradient
           pointerEvents="none"
           colors={[
             `rgba(0,0,0,${topShadeOpacity})`,
-            "rgba(0,0,0,0.14)",
-            "rgba(0,0,0,0.02)",
+            "rgba(0,0,0,0.10)",
+            "rgba(0,0,0,0.00)",
           ]}
-          locations={[0, 0.45, 1]}
+          locations={[0, 0.42, 1]}
           start={{ x: 0.5, y: 0 }}
           end={{ x: 0.5, y: 1 }}
           style={styles.topShade}
@@ -87,9 +59,9 @@ export default function Background({
         <LinearGradient
           pointerEvents="none"
           colors={[
-            "rgba(0,0,0,0.01)",
+            "rgba(0,0,0,0.00)",
             `rgba(0,0,0,${centerShadeOpacity})`,
-            "rgba(0,0,0,0.01)",
+            "rgba(0,0,0,0.00)",
           ]}
           locations={[0, 0.5, 1]}
           start={{ x: 0, y: 0.5 }}
@@ -100,7 +72,7 @@ export default function Background({
         <LinearGradient
           pointerEvents="none"
           colors={[
-            "rgba(0,0,0,0.03)",
+            "rgba(0,0,0,0.02)",
             `rgba(0,0,0,${bottomShadeOpacity})`,
           ]}
           locations={[0, 1]}
@@ -112,10 +84,7 @@ export default function Background({
         {overlayOpacity > 0 ? (
           <View
             pointerEvents="none"
-            style={[
-              styles.overlay,
-              { backgroundColor: `rgba(0,0,0,${overlayOpacity})` },
-            ]}
+            style={[styles.overlay, { backgroundColor: `rgba(0,0,0,${overlayOpacity})` }]}
           />
         ) : null}
 
@@ -133,10 +102,6 @@ const styles = StyleSheet.create({
 
   image: {
     flex: 1,
-  },
-
-  tint: {
-    ...StyleSheet.absoluteFillObject,
   },
 
   overlay: {
@@ -164,7 +129,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    height: "42%",
+    height: "46%",
   },
 
   content: {
