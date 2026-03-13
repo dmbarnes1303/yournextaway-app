@@ -70,34 +70,50 @@ async function mapLimit<T, R>(
 }
 
 export function useFixturesScreenData() {
-  const params = useLocalSearchParams();
+  const rawParams = useLocalSearchParams();
+
+  /**
+   * IMPORTANT:
+   * Never depend on the full params object from expo-router.
+   * It may get a new identity on each render and can create effect loops.
+   * Pull out stable primitive route values instead.
+   */
+  const rawLeagueId = rawParams?.leagueId;
+  const rawFrom = rawParams?.from;
+  const rawTo = rawParams?.to;
+  const rawDiscover = rawParams?.discover;
+  const rawDiscoverFrom = rawParams?.discoverFrom;
+  const rawDiscoverTripLength = rawParams?.discoverTripLength;
+  const rawDiscoverVibes = rawParams?.discoverVibes;
+  const rawSort = rawParams?.sort;
+  const rawMode = rawParams?.mode;
 
   const minIso = useMemo(() => tomorrowIsoUtc(), []);
   const maxIso = useMemo(() => addDaysIsoUtc(minIso, DAYS_AHEAD - 1), [minIso]);
 
-  const routeLeagueId = useMemo(() => coerceNumber((params as any)?.leagueId), [params]);
-  const routeFrom = useMemo(() => coerceString((params as any)?.from), [params]);
-  const routeTo = useMemo(() => coerceString((params as any)?.to), [params]);
+  const routeLeagueId = useMemo(() => coerceNumber(rawLeagueId), [rawLeagueId]);
+  const routeFrom = useMemo(() => coerceString(rawFrom), [rawFrom]);
+  const routeTo = useMemo(() => coerceString(rawTo), [rawTo]);
 
   const discoverCategory = useMemo(
-    () => parseDiscoverCategory((params as any)?.discover),
-    [params]
+    () => parseDiscoverCategory(rawDiscover),
+    [rawDiscover]
   );
 
   const discoverContext = useMemo(
     () =>
       buildDiscoverContext({
         discoverCategory,
-        discoverFrom: (params as any)?.discoverFrom,
-        discoverTripLength: (params as any)?.discoverTripLength,
-        discoverVibes: (params as any)?.discoverVibes,
+        discoverFrom: rawDiscoverFrom,
+        discoverTripLength: rawDiscoverTripLength,
+        discoverVibes: rawDiscoverVibes,
       }),
-    [params, discoverCategory]
+    [discoverCategory, rawDiscoverFrom, rawDiscoverTripLength, rawDiscoverVibes]
   );
 
   const routeSort = useMemo(
-    () => coerceString((params as any)?.sort) ?? coerceString((params as any)?.mode),
-    [params]
+    () => coerceString(rawSort) ?? coerceString(rawMode),
+    [rawSort, rawMode]
   );
 
   const topPicksMode = useMemo(() => isTopPicksMode(routeSort), [routeSort]);
@@ -157,6 +173,26 @@ export function useFixturesScreenData() {
   const [selectedDay, setSelectedDay] = useState<string>(initialDay);
   const [range, setRange] = useState<{ from: string; to: string } | null>(initialRange);
 
+  /**
+   * Sync route changes into state when navigation params genuinely change.
+   * Guard updates so we do not create unnecessary render loops.
+   */
+  useEffect(() => {
+    setSelectedDay((prev) => (prev === initialDay ? prev : initialDay));
+  }, [initialDay]);
+
+  useEffect(() => {
+    setRange((prev) => {
+      const prevFrom = prev?.from ?? null;
+      const prevTo = prev?.to ?? null;
+      const nextFrom = initialRange?.from ?? null;
+      const nextTo = initialRange?.to ?? null;
+
+      if (prevFrom === nextFrom && prevTo === nextTo) return prev;
+      return initialRange;
+    });
+  }, [initialRange]);
+
   const effectiveRange = useMemo(() => {
     return range
       ? normalizeRange(range.from, range.to)
@@ -188,6 +224,18 @@ export function useFixturesScreenData() {
     if (routeLeagueId && Number.isFinite(routeLeagueId)) return [routeLeagueId];
     return [];
   });
+
+  useEffect(() => {
+    const nextIds =
+      routeLeagueId && Number.isFinite(routeLeagueId) ? [routeLeagueId] : [];
+
+    setSelectedLeagueIds((prev) => {
+      if (prev.length === nextIds.length && prev.every((v, i) => v === nextIds[i])) {
+        return prev;
+      }
+      return nextIds;
+    });
+  }, [routeLeagueId]);
 
   const selectedLeagues = useMemo(() => {
     if (selectedLeagueIds.length === 0) return [] as LeagueOption[];
@@ -308,7 +356,7 @@ export function useFixturesScreenData() {
         if (discoverCategory) {
           const scored = buildDiscoverScores(flat);
 
-          const ranked: RankedFixtureRow[] = scored
+          const ranked = scored
             .map((item) => ({
               fixture: item.fixture,
               reasons: item.reasons,
@@ -324,7 +372,7 @@ export function useFixturesScreenData() {
               return a.kickoffIso.localeCompare(b.kickoffIso);
             })
             .map((x) => ({
-              ...x.fixture,
+              ...(x.fixture as RankedFixtureRow),
               discoverReasons: x.reasons,
             }));
 
@@ -359,17 +407,11 @@ export function useFixturesScreenData() {
     }
 
     run();
+
     return () => {
       cancelled = true;
     };
-  }, [
-    fetchLeagues,
-    fetchFrom,
-    fetchTo,
-    topPicksMode,
-    discoverCategory,
-    discoverContext,
-  ]);
+  }, [fetchLeagues, fetchFrom, fetchTo, topPicksMode, discoverCategory, discoverContext]);
 
   const filtered = useMemo(() => {
     const base = rows;
@@ -672,4 +714,4 @@ export function useFixturesScreenData() {
     headerDateLine,
     monthLabel,
   };
-}
+      }
