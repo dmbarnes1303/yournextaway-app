@@ -56,6 +56,7 @@ function LeagueStrip({
     >
       {leagues.map((league) => {
         const active = league.leagueId === activeLeagueId;
+        const isLigue1 = String(league.name ?? "").toLowerCase().includes("ligue 1");
 
         return (
           <Pressable
@@ -68,7 +69,13 @@ function LeagueStrip({
             ]}
             android_ripple={{ color: "rgba(255,255,255,0.08)" }}
           >
-            <View style={[styles.leagueLogoDisc, active && styles.leagueLogoDiscActive]}>
+            <View
+              style={[
+                styles.leagueLogoDisc,
+                active && styles.leagueLogoDiscActive,
+                isLigue1 && styles.leagueLogoDiscLight,
+              ]}
+            >
               <Image
                 source={{ uri: league.logo }}
                 style={styles.leagueStripLogo}
@@ -288,8 +295,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor:
-      Platform.OS === "android" ? "rgba(0,0,0,0.18)" : "rgba(255,255,255,0.05)",
+    backgroundColor: Platform.OS === "android" ? "rgba(0,0,0,0.18)" : "rgba(255,255,255,0.05)",
   },
 
   miniPillText: {
@@ -305,13 +311,12 @@ const styles = StyleSheet.create({
   },
 
   leagueStripItem: {
-    width: 62,
-    height: 62,
+    width: 64,
+    height: 64,
     borderRadius: 18,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor:
-      Platform.OS === "android" ? "rgba(0,0,0,0.16)" : "rgba(255,255,255,0.04)",
+    backgroundColor: Platform.OS === "android" ? "rgba(0,0,0,0.16)" : "rgba(255,255,255,0.04)",
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
@@ -319,13 +324,12 @@ const styles = StyleSheet.create({
 
   leagueStripItemActive: {
     borderColor: "rgba(87,162,56,0.26)",
-    backgroundColor:
-      Platform.OS === "android" ? "rgba(87,162,56,0.08)" : "rgba(87,162,56,0.06)",
+    backgroundColor: Platform.OS === "android" ? "rgba(87,162,56,0.08)" : "rgba(87,162,56,0.06)",
   },
 
   leagueLogoDisc: {
-    width: 38,
-    height: 38,
+    width: 40,
+    height: 40,
     borderRadius: 999,
     backgroundColor: "rgba(255,255,255,0.94)",
     alignItems: "center",
@@ -336,9 +340,13 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
   },
 
+  leagueLogoDiscLight: {
+    backgroundColor: "#FFFFFF",
+  },
+
   leagueStripLogo: {
-    width: 26,
-    height: 26,
+    width: 28,
+    height: 28,
     opacity: 0.98,
   },
 
@@ -348,6 +356,8 @@ const styles = StyleSheet.create({
 
   block: {
     borderRadius: 24,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
   },
 
   blockInner: {
@@ -378,11 +388,10 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
-    backgroundColor:
-      Platform.OS === "android" ? "rgba(12,14,16,0.22)" : "rgba(12,14,16,0.18)",
+    backgroundColor: Platform.OS === "android" ? "rgba(12,14,16,0.22)" : "rgba(12,14,16,0.18)",
     overflow: "hidden",
     position: "relative",
-    minHeight: 104,
+    minHeight: 112,
   },
 
   featuredImage: {
@@ -397,7 +406,7 @@ const styles = StyleSheet.create({
   },
 
   featuredTop: {
-    paddingVertical: 14,
+    paddingVertical: 15,
     paddingHorizontal: 14,
     flexDirection: "row",
     alignItems: "center",
@@ -410,7 +419,7 @@ const styles = StyleSheet.create({
 
   featuredTitle: {
     color: theme.colors.text,
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: theme.fontWeight.black,
   },
 
@@ -464,11 +473,10 @@ const styles = StyleSheet.create({
   },
 
   listRow: {
-    paddingVertical: 10,
+    paddingVertical: 11,
     paddingHorizontal: 10,
     borderRadius: 14,
-    backgroundColor:
-      Platform.OS === "android" ? "rgba(10,12,14,0.16)" : "rgba(10,12,14,0.12)",
+    backgroundColor: Platform.OS === "android" ? "rgba(10,12,14,0.16)" : "rgba(10,12,14,0.12)",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.06)",
   },
@@ -525,8 +533,8 @@ const styles = StyleSheet.create({
 
   btn: {
     flex: 1,
-    borderRadius: 16,
-    paddingVertical: 12,
+    borderRadius: 18,
+    paddingVertical: 13,
     alignItems: "center",
     borderWidth: 1,
     overflow: "hidden",
@@ -535,13 +543,12 @@ const styles = StyleSheet.create({
 
   btnPrimary: {
     borderColor: "rgba(87,162,56,0.28)",
-    backgroundColor:
-      Platform.OS === "android" ? "rgba(87,162,56,0.10)" : "rgba(87,162,56,0.08)",
+    backgroundColor: Platform.OS === "android" ? "rgba(87,162,56,0.12)" : "rgba(87,162,56,0.10)",
   },
 
   btnPrimaryText: {
     color: theme.colors.text,
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: theme.fontWeight.black,
   },
 
