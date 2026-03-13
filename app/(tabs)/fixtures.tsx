@@ -21,7 +21,10 @@ import FixtureCertaintyBadge from "@/src/components/FixtureCertaintyBadge";
 import Input from "@/src/components/Input";
 import Button from "@/src/components/Button";
 
-import { discoverScoreForCategory } from "@/src/features/discover/discoverRanking";
+import {
+  discoverScoreForCategory,
+  baseFixtureScore,
+} from "@/src/features/discover/discoverRanking";
 import {
   DISCOVER_CATEGORY_META,
   isDiscoverCategory,
@@ -54,11 +57,14 @@ import { getFixtureCertainty } from "@/src/utils/fixtureCertainty";
 
 import { getTicketDifficultyBadge } from "@/src/data/ticketGuides";
 import type { TicketDifficulty } from "@/src/data/ticketGuides/types";
-import { POPULAR_TEAM_IDS, getTeam } from "@/src/data/teams";
+import { getTeam } from "@/src/data/teams";
 
 import {
   buildDiscoverScores,
   type DiscoverReason,
+  type DiscoverContext,
+  type DiscoverTripLength,
+  type DiscoverVibe,
 } from "@/src/features/discover/discoverEngine";
 
 /* -------------------------------------------------------------------------- */
@@ -85,6 +91,28 @@ function coerceString(v: any): string | null {
 function coerceNumber(v: any): number | null {
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
+}
+
+function parseDiscoverTripLength(v: unknown): DiscoverTripLength | null {
+  const s = String(v ?? "").trim();
+  if (s === "day" || s === "1" || s === "2" || s === "3") return s;
+  return null;
+}
+
+function parseDiscoverVibes(v: unknown): DiscoverVibe[] {
+  const raw = String(v ?? "").trim();
+  if (!raw) return [];
+  return raw
+    .split(",")
+    .map((part) => String(part ?? "").trim())
+    .filter(
+      (part): part is DiscoverVibe =>
+        part === "easy" ||
+        part === "big" ||
+        part === "nightlife" ||
+        part === "culture" ||
+        part === "warm"
+    );
 }
 
 /* -------------------------------------------------------------------------- */
@@ -206,52 +234,6 @@ function resolveTripForFixture(fixtureId: string): string | null {
   const trips = tripsStore.getState().trips;
   const hit = trips.find((t) => (t.matchIds ?? []).includes(String(fixtureId)));
   return hit ? String(hit.id) : null;
-}
-
-/* -------------------------------------------------------------------------- */
-/* Base scoring                                                               */
-/* -------------------------------------------------------------------------- */
-
-function leagueWeight(leagueId: number | null): number {
-  if (leagueId === 39) return 120;
-  if (leagueId === 140) return 105;
-  if (leagueId === 135) return 100;
-  if (leagueId === 78) return 95;
-  if (leagueId === 61) return 90;
-  if (leagueId === 88) return 82;
-  if (leagueId === 94) return 80;
-  if (leagueId === 203) return 78;
-  if (leagueId === 179) return 75;
-  return 60;
-}
-
-function baseFixtureScore(r: FixtureListRow): number {
-  const lid = r?.league?.id != null ? Number(r.league.id) : null;
-  let s = leagueWeight(lid);
-
-  const homeId = r?.teams?.home?.id;
-  const awayId = r?.teams?.away?.id;
-
-  if (typeof homeId === "number" && POPULAR_TEAM_IDS.has(homeId)) s += 60;
-  if (typeof awayId === "number" && POPULAR_TEAM_IDS.has(awayId)) s += 60;
-
-  const venue = String(r?.fixture?.venue?.name ?? "").trim();
-  const city = String(r?.fixture?.venue?.city ?? "").trim();
-  if (venue) s += 10;
-  if (city) s += 6;
-
-  const dt = r?.fixture?.date ? new Date(r.fixture.date) : null;
-  if (dt && !Number.isNaN(dt.getTime())) {
-    const day = dt.getDay();
-    if (day === 5 || day === 6 || day === 0) s += 12;
-    const hr = dt.getHours();
-    if (hr >= 17 && hr <= 21) s += 8;
-  }
-
-  const iso = kickoffIsoOrNull(r);
-  if (!iso) s -= 8;
-
-  return s;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -405,11 +387,37 @@ export default function FixturesScreen() {
   const routeFrom = useMemo(() => coerceString((params as any)?.from), [params]);
   const routeTo = useMemo(() => coerceString((params as any)?.to), [params]);
   const routeDiscover = useMemo(() => coerceString((params as any)?.discover), [params]);
+  const routeDiscoverFrom = useMemo(
+    () => coerceString((params as any)?.discoverFrom),
+    [params]
+  );
+  const routeDiscoverTripLength = useMemo(
+    () => parseDiscoverTripLength((params as any)?.discoverTripLength),
+    [params]
+  );
+  const routeDiscoverVibes = useMemo(
+    () => parseDiscoverVibes((params as any)?.discoverVibes),
+    [params]
+  );
 
   const discoverCategory = useMemo(
     () => (isDiscoverCategory(routeDiscover) ? routeDiscover : null),
     [routeDiscover]
   );
+
+  const discoverContext = useMemo<DiscoverContext | null>(() => {
+    if (!discoverCategory) return null;
+    return {
+      origin: routeDiscoverFrom,
+      tripLength: routeDiscoverTripLength,
+      vibes: routeDiscoverVibes,
+    };
+  }, [
+    discoverCategory,
+    routeDiscoverFrom,
+    routeDiscoverTripLength,
+    routeDiscoverVibes,
+  ]);
 
   const routeSort = useMemo(
     () => coerceString((params as any)?.sort) ?? coerceString((params as any)?.mode),
@@ -630,7 +638,11 @@ export default function FixturesScreen() {
             .map((item) => ({
               fixture: item.fixture,
               reasons: item.reasons,
-              discoverScore: discoverScoreForCategory(discoverCategory, item),
+              discoverScore: discoverScoreForCategory(
+                discoverCategory,
+                item,
+                discoverContext
+              ),
               kickoffIso: String(item.fixture?.fixture?.date ?? ""),
             }))
             .sort((a, b) => {
@@ -678,7 +690,14 @@ export default function FixturesScreen() {
     return () => {
       cancelled = true;
     };
-  }, [fetchLeagues, fetchFrom, fetchTo, isTopPicksMode, discoverCategory]);
+  }, [
+    fetchLeagues,
+    fetchFrom,
+    fetchTo,
+    isTopPicksMode,
+    discoverCategory,
+    discoverContext,
+  ]);
 
   const filtered = useMemo(() => {
     const base = rows;
@@ -924,7 +943,21 @@ export default function FixturesScreen() {
           ? `${selectedLeagueIds.length}/${MAX_MULTI_LEAGUES} leagues`
           : "Featured scope";
 
-      return `${base} • ${datePart} • ${scopePart}`;
+      const extras: string[] = [];
+      if (discoverContext?.tripLength) {
+        if (discoverContext.tripLength === "day") extras.push("Day trip");
+        if (discoverContext.tripLength === "1") extras.push("1 night");
+        if (discoverContext.tripLength === "2") extras.push("2 nights");
+        if (discoverContext.tripLength === "3") extras.push("3 nights");
+      }
+      if (discoverContext?.vibes?.length) {
+        extras.push(discoverContext.vibes.join(", "));
+      }
+      if (discoverContext?.origin) {
+        extras.push(`From ${discoverContext.origin}`);
+      }
+
+      return [base, datePart, scopePart, ...extras].join(" • ");
     }
 
     return `${
@@ -936,7 +969,14 @@ export default function FixturesScreen() {
         ? ` • ${selectedLeagueIds.length}/${MAX_MULTI_LEAGUES} leagues`
         : " • Featured scope"
     }${isTopPicksMode ? " • Sorted by rating" : ""}`;
-  }, [discoverCategory, isRange, effectiveRange, selectedLeagueIds.length, isTopPicksMode]);
+  }, [
+    discoverCategory,
+    isRange,
+    effectiveRange,
+    selectedLeagueIds.length,
+    isTopPicksMode,
+    discoverContext,
+  ]);
 
   /* ----------------------------- Row rendering ----------------------------- */
 
@@ -967,7 +1007,7 @@ export default function FixturesScreen() {
       const difficulty: TicketDifficulty | "unknown" = rawDifficulty ?? "unknown";
 
       const leagueCode =
-        String(r?.league?.country ?? "").trim() ||
+        String((r?.league as any)?.country ?? "").trim() ||
         LEAGUES.find((l) => l.leagueId === ctxLeagueId)?.countryCode ||
         "";
 
