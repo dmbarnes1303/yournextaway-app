@@ -7,18 +7,44 @@ import GlassCard from "@/src/components/GlassCard";
 import { theme } from "@/src/constants/theme";
 import {
   FEATURED_LEAGUES,
-  LEAGUES,
   LEAGUE_BROWSE_REGION_LABELS,
   LEAGUE_BROWSE_REGION_ORDER,
   type LeagueOption,
   type LeagueBrowseRegion,
 } from "@/src/constants/football";
-import type { DiscoverContext } from "@/src/features/discover/discoverEngine";
-import {
-  DISCOVER_CATEGORY_META,
-  type DiscoverCategory,
-} from "@/src/features/discover/discoverCategories";
+
 import { LeagueFlag, featuredClubLine } from "./helpers";
+
+type StripDay = {
+  iso: string;
+  top: string;
+  bottom: string;
+};
+
+type FixturesHeaderProps = {
+  titleText: string;
+  subtitleText: string;
+  headerDateLine: string;
+  query: string;
+  setQuery: (value: string) => void;
+  stripDays: StripDay[];
+  isRange: boolean;
+  selectedDay: string;
+  onTapStripDate: (iso: string) => void;
+  selectedLeagueIds: number[];
+  resetToFeatured: () => void;
+  selectSingleLeague: (leagueId: number) => void;
+  activeRegion: LeagueBrowseRegion;
+  setActiveRegion: (region: LeagueBrowseRegion) => void;
+  leaguesByRegion: Record<LeagueBrowseRegion, LeagueOption[]>;
+  toggleLeague: (leagueId: number) => void;
+  selectedLeagues: LeagueOption[];
+  helperLineText: string;
+  loading: boolean;
+  error: string | null;
+  filteredCount: number;
+  openCalendar: () => void;
+};
 
 export default function FixturesHeader({
   titleText,
@@ -43,35 +69,15 @@ export default function FixturesHeader({
   error,
   filteredCount,
   openCalendar,
-}: {
-  titleText: string;
-  subtitleText: string;
-  headerDateLine: string;
-  query: string;
-  setQuery: (value: string) => void;
-  stripDays: Array<{ iso: string; top: string; bottom: string }>;
-  isRange: boolean;
-  selectedDay: string;
-  onTapStripDate: (iso: string) => void;
-  selectedLeagueIds: number[];
-  resetToFeatured: () => void;
-  selectSingleLeague: (leagueId: number) => void;
-  activeRegion: LeagueBrowseRegion;
-  setActiveRegion: (region: LeagueBrowseRegion) => void;
-  leaguesByRegion: Record<LeagueBrowseRegion, LeagueOption[]>;
-  toggleLeague: (leagueId: number) => void;
-  selectedLeagues: LeagueOption[];
-  helperLineText: string;
-  loading: boolean;
-  error: string | null;
-  filteredCount: number;
-  openCalendar: () => void;
-}) {
+}: FixturesHeaderProps) {
+  const hasManualLeagueSelection = selectedLeagueIds.length > 0;
+  const regionLeagues = leaguesByRegion[activeRegion] ?? [];
+
   return (
     <View style={styles.headerListWrap}>
       <View style={styles.header}>
         <View style={styles.headerTopRow}>
-          <View style={{ flex: 1 }}>
+          <View style={styles.titleWrap}>
             <Text style={styles.title}>{titleText}</Text>
             <Text style={styles.subtitle}>{subtitleText}</Text>
             <Text style={styles.dateLine}>{headerDateLine}</Text>
@@ -93,20 +99,22 @@ export default function FixturesHeader({
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ paddingRight: 12 }}
+          contentContainerStyle={styles.horizontalScrollContent}
         >
-          {stripDays.map((d, i) => {
-            const active = !isRange && d.iso === selectedDay;
+          {stripDays.map((day) => {
+            const active = !isRange && day.iso === selectedDay;
 
             return (
               <Pressable
-                key={`${d.iso}-${i}`}
-                onPress={() => onTapStripDate(d.iso)}
+                key={day.iso}
+                onPress={() => onTapStripDate(day.iso)}
                 style={[styles.datePill, active && styles.datePillActive]}
               >
-                <Text style={[styles.dateTop, active && styles.dateTopActive]}>{d.top}</Text>
+                <Text style={[styles.dateTop, active && styles.dateTopActive]}>
+                  {day.top}
+                </Text>
                 <Text style={[styles.dateBottom, active && styles.dateBottomActive]}>
-                  {d.bottom}
+                  {day.bottom}
                 </Text>
               </Pressable>
             );
@@ -115,7 +123,7 @@ export default function FixturesHeader({
 
         <View style={styles.scopeRow}>
           <Text style={styles.sectionLabel}>Featured leagues</Text>
-          {selectedLeagueIds.length > 0 ? (
+          {hasManualLeagueSelection ? (
             <Button
               label="Reset to featured"
               tone="ghost"
@@ -128,13 +136,11 @@ export default function FixturesHeader({
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ paddingRight: 12 }}
+          contentContainerStyle={styles.horizontalScrollContent}
         >
           {FEATURED_LEAGUES.map((league) => {
             const active =
-              selectedLeagueIds.length > 0 &&
-              selectedLeagueIds.length === 1 &&
-              selectedLeagueIds[0] === league.leagueId;
+              selectedLeagueIds.length === 1 && selectedLeagueIds[0] === league.leagueId;
 
             return (
               <Pressable
@@ -153,6 +159,7 @@ export default function FixturesHeader({
                     {league.label}
                   </Text>
                 </View>
+
                 <Text style={styles.featuredLeagueCountry}>{league.country}</Text>
               </Pressable>
             );
@@ -166,10 +173,11 @@ export default function FixturesHeader({
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ paddingRight: 12 }}
+          contentContainerStyle={styles.horizontalScrollContent}
         >
           {LEAGUE_BROWSE_REGION_ORDER.map((region) => {
             const active = region === activeRegion;
+
             return (
               <Pressable
                 key={region}
@@ -185,7 +193,7 @@ export default function FixturesHeader({
         </ScrollView>
 
         <View style={styles.countryGrid}>
-          {leaguesByRegion[activeRegion].map((league) => {
+          {regionLeagues.map((league) => {
             const active = selectedLeagueIds.includes(league.leagueId);
 
             return (
@@ -198,7 +206,7 @@ export default function FixturesHeader({
                 <GlassCard style={styles.countryCard} level="default" variant="matte">
                   <View style={styles.countryCardHeader}>
                     <LeagueFlag code={league.countryCode} size="md" />
-                    <View style={{ flex: 1 }}>
+                    <View style={styles.countryCardTextWrap}>
                       <Text style={styles.countryCardCountry}>{league.country}</Text>
                       <Text style={styles.countryCardLeague}>{league.label}</Text>
                     </View>
@@ -218,11 +226,11 @@ export default function FixturesHeader({
           })}
         </View>
 
-        {selectedLeagueIds.length > 0 ? (
+        {hasManualLeagueSelection ? (
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ paddingRight: 12 }}
+            contentContainerStyle={styles.horizontalScrollContent}
           >
             {selectedLeagues.map((league) => (
               <Pressable
@@ -230,9 +238,7 @@ export default function FixturesHeader({
                 onPress={() => toggleLeague(league.leagueId)}
                 style={[styles.leaguePill, styles.leaguePillActive]}
               >
-                <Text style={[styles.leagueText, styles.leagueTextActive]}>
-                  {league.label}
-                </Text>
+                <Text style={[styles.leagueText, styles.leagueTextActive]}>{league.label}</Text>
                 <LeagueFlag code={league.countryCode} />
               </Pressable>
             ))}
@@ -271,6 +277,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing.sm,
+  },
+
+  titleWrap: {
+    flex: 1,
   },
 
   title: {
@@ -314,6 +324,10 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
 
+  horizontalScrollContent: {
+    paddingRight: 12,
+  },
+
   datePill: {
     borderWidth: 1,
     borderColor: theme.colors.borderSubtle,
@@ -345,8 +359,13 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
 
-  dateTopActive: { color: "rgba(87,162,56,0.95)" },
-  dateBottomActive: { color: theme.colors.textPrimary },
+  dateTopActive: {
+    color: "rgba(87,162,56,0.95)",
+  },
+
+  dateBottomActive: {
+    color: theme.colors.textPrimary,
+  },
 
   featuredLeagueCard: {
     width: 160,
@@ -443,6 +462,10 @@ const styles = StyleSheet.create({
     gap: 10,
   },
 
+  countryCardTextWrap: {
+    flex: 1,
+  },
+
   countryCardCountry: {
     color: theme.colors.textPrimary,
     fontSize: theme.fontSize.meta,
@@ -498,7 +521,9 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSize.tiny,
   },
 
-  leagueTextActive: { color: theme.colors.textPrimary },
+  leagueTextActive: {
+    color: theme.colors.textPrimary,
+  },
 
   content: {
     paddingHorizontal: theme.spacing.lg,
