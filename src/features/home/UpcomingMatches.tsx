@@ -68,7 +68,13 @@ function LeagueStrip({
             ]}
             android_ripple={{ color: "rgba(255,255,255,0.08)" }}
           >
-            <Image source={{ uri: league.logo }} style={styles.leagueStripLogo} resizeMode="contain" />
+            <View style={[styles.leagueLogoDisc, active && styles.leagueLogoDiscActive]}>
+              <Image
+                source={{ uri: league.logo }}
+                style={styles.leagueStripLogo}
+                resizeMode="contain"
+              />
+            </View>
           </Pressable>
         );
       })}
@@ -117,6 +123,7 @@ export default function UpcomingMatches({
     <View style={styles.section}>
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>Upcoming matches</Text>
+
         <Pressable
           onPress={() =>
             goFixtures({
@@ -156,12 +163,12 @@ export default function UpcomingMatches({
 
           {!fxLoading && !fxError && featured ? (
             <>
-              <Text style={styles.blockKicker}>Snapshot</Text>
+              <Text style={styles.blockKicker}>Featured pick</Text>
 
               <Pressable
                 onPress={() => goMatch(String(featured.fixture.id))}
                 style={({ pressed }) => [styles.featured, pressed && styles.pressedRow]}
-                android_ripple={{ color: "rgba(79,224,138,0.08)" }}
+                android_ripple={{ color: "rgba(87,162,56,0.08)" }}
               >
                 <Image
                   source={{ uri: featuredCityImage }}
@@ -172,14 +179,16 @@ export default function UpcomingMatches({
 
                 <View style={styles.featuredTop}>
                   <CrestSquare row={featured} />
+
                   <View style={styles.featuredTextWrap}>
                     <Text style={styles.featuredTitle} numberOfLines={1} ellipsizeMode="tail">
                       {fixtureLine(featured).title}
                     </Text>
-                    <Text style={styles.featuredMeta} numberOfLines={1} ellipsizeMode="tail">
+                    <Text style={styles.featuredMeta} numberOfLines={2} ellipsizeMode="tail">
                       {fixtureLine(featured).meta}
                     </Text>
                   </View>
+
                   <Text style={styles.chev}>›</Text>
                 </View>
               </Pressable>
@@ -212,6 +221,7 @@ export default function UpcomingMatches({
                               />
                             ) : null}
                           </View>
+
                           <View style={styles.smallCrest}>
                             {awayLogo ? (
                               <Image
@@ -236,13 +246,16 @@ export default function UpcomingMatches({
                 })}
               </View>
 
-              <Pressable
-                onPress={goFixturesHub}
-                style={({ pressed }) => [styles.primaryCta, pressed && styles.pressed]}
-                android_ripple={{ color: "rgba(79,224,138,0.10)" }}
-              >
-                <Text style={styles.primaryCtaText}>Browse Fixtures</Text>
-              </Pressable>
+              <View style={styles.blockActions}>
+                <Pressable
+                  onPress={goFixturesHub}
+                  style={({ pressed }) => [styles.btn, styles.btnPrimary, pressed && styles.pressed]}
+                  android_ripple={{ color: "rgba(87,162,56,0.10)" }}
+                >
+                  <Text style={styles.btnPrimaryText}>Browse Fixtures</Text>
+                  <Text style={styles.btnPrimarySub}>See the wider list</Text>
+                </Pressable>
+              </View>
             </>
           ) : null}
         </View>
@@ -252,7 +265,9 @@ export default function UpcomingMatches({
 }
 
 const styles = StyleSheet.create({
-  section: { gap: 10 },
+  section: {
+    gap: 10,
+  },
 
   sectionHeader: {
     flexDirection: "row",
@@ -274,7 +289,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
     backgroundColor:
-      Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
+      Platform.OS === "android" ? "rgba(0,0,0,0.18)" : "rgba(255,255,255,0.05)",
   },
 
   miniPillText: {
@@ -290,27 +305,40 @@ const styles = StyleSheet.create({
   },
 
   leagueStripItem: {
-    width: 58,
-    height: 58,
+    width: 62,
+    height: 62,
     borderRadius: 18,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
     backgroundColor:
-      Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
+      Platform.OS === "android" ? "rgba(0,0,0,0.16)" : "rgba(255,255,255,0.04)",
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
   },
 
   leagueStripItemActive: {
-    borderColor: "rgba(79,224,138,0.26)",
+    borderColor: "rgba(87,162,56,0.26)",
     backgroundColor:
-      Platform.OS === "android" ? theme.glass.androidBg.default : theme.glass.iosBg.default,
+      Platform.OS === "android" ? "rgba(87,162,56,0.08)" : "rgba(87,162,56,0.06)",
+  },
+
+  leagueLogoDisc: {
+    width: 38,
+    height: 38,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.94)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  leagueLogoDiscActive: {
+    backgroundColor: "#FFFFFF",
   },
 
   leagueStripLogo: {
-    width: 34,
-    height: 34,
+    width: 26,
+    height: 26,
     opacity: 0.98,
   },
 
@@ -328,10 +356,10 @@ const styles = StyleSheet.create({
   },
 
   blockKicker: {
-    color: theme.colors.textTertiary,
-    fontSize: 12,
+    color: theme.colors.primary,
+    fontSize: 11,
     fontWeight: theme.fontWeight.black,
-    letterSpacing: 0.3,
+    letterSpacing: 0.5,
   },
 
   center: {
@@ -354,7 +382,7 @@ const styles = StyleSheet.create({
       Platform.OS === "android" ? "rgba(12,14,16,0.22)" : "rgba(12,14,16,0.18)",
     overflow: "hidden",
     position: "relative",
-    minHeight: 92,
+    minHeight: 104,
   },
 
   featuredImage: {
@@ -365,12 +393,12 @@ const styles = StyleSheet.create({
 
   featuredImageOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(6,8,10,0.58)",
+    backgroundColor: "rgba(6,8,10,0.56)",
   },
 
   featuredTop: {
-    paddingVertical: 12,
-    paddingHorizontal: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
@@ -382,33 +410,34 @@ const styles = StyleSheet.create({
 
   featuredTitle: {
     color: theme.colors.text,
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: theme.fontWeight.black,
   },
 
   featuredMeta: {
-    marginTop: 4,
-    color: "rgba(242,244,246,0.84)",
+    marginTop: 5,
+    color: "rgba(242,244,246,0.86)",
     fontSize: 12,
+    lineHeight: 17,
     fontWeight: theme.fontWeight.bold,
   },
 
   crestWrap: {
-    width: 44,
-    height: 44,
+    width: 46,
+    height: 46,
     borderRadius: 14,
-    backgroundColor: "rgba(255,255,255,0.07)",
+    backgroundColor: "rgba(255,255,255,0.09)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
+    borderColor: "rgba(255,255,255,0.10)",
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
   },
 
   crestImg: {
-    width: 28,
-    height: 28,
-    opacity: 0.95,
+    width: 30,
+    height: 30,
+    opacity: 0.96,
   },
 
   crestFallback: {
@@ -460,7 +489,7 @@ const styles = StyleSheet.create({
     width: 18,
     height: 18,
     borderRadius: 6,
-    backgroundColor: "rgba(0,0,0,0.18)",
+    backgroundColor: "rgba(255,255,255,0.08)",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.06)",
     alignItems: "center",
@@ -488,22 +517,38 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeight.bold,
   },
 
-  primaryCta: {
+  blockActions: {
+    flexDirection: "row",
+    gap: 10,
     marginTop: 2,
+  },
+
+  btn: {
+    flex: 1,
     borderRadius: 16,
     paddingVertical: 12,
     alignItems: "center",
     borderWidth: 1,
     overflow: "hidden",
-    borderColor: "rgba(79,224,138,0.24)",
-    backgroundColor:
-      Platform.OS === "android" ? theme.glass.androidBg.default : theme.glass.iosBg.default,
+    gap: 3,
   },
 
-  primaryCtaText: {
+  btnPrimary: {
+    borderColor: "rgba(87,162,56,0.28)",
+    backgroundColor:
+      Platform.OS === "android" ? "rgba(87,162,56,0.10)" : "rgba(87,162,56,0.08)",
+  },
+
+  btnPrimaryText: {
     color: theme.colors.text,
     fontSize: 14,
     fontWeight: theme.fontWeight.black,
+  },
+
+  btnPrimarySub: {
+    color: theme.colors.textSecondary,
+    fontSize: 11,
+    fontWeight: theme.fontWeight.bold,
   },
 
   pressed: {
