@@ -76,4 +76,59 @@ function unsplashCityFallback(cityKey: string) {
 export const CITY_BACKGROUNDS: Record<string, string> = {
   london: u("photo-1528909514045-2fa4ac7a08ba"),
   manchester: u("photo-1513635269975-59663e0ac1ad"),
-  liverpool: u("photo-150576167
+  liverpool: u("photo-1505761671935-60b3a7427bad"),
+  birmingham: u("photo-1494526585095-c41746248156"),
+  newcastle: u("photo-1470004914212-05527e49370b"),
+  leeds: u("photo-1494526585095-c41746248156"),
+  brighton: u("photo-1507525428034-b723cf961d3e"),
+  bournemouth: u("photo-1507525428034-b723cf961d3e"),
+  nottingham: u("photo-1470123808288-1e59739a7a31"),
+  burnley: u("photo-1473448912268-2022ce9509d8"),
+  sunderland: u("photo-1470004914212-05527e49370b"),
+  brentford: u("photo-1528909514045-2fa4ac7a08ba"),
+  fulham: u("photo-1528909514045-2fa4ac7a08ba"),
+  wolverhampton: u("photo-1473448912268-2022ce9509d8"),
+  "crystal-palace": u("photo-1528909514045-2fa4ac7a08ba"),
+
+  madrid: u("photo-1539037116277-4db20889f2d4"),
+  barcelona: u("photo-1505761671935-60b3a7427bad"),
+  valencia: u("photo-1507525428034-b723cf961d3e"),
+  seville: u("photo-1505761671935-60b3a7427bad"),
+  bilbao: u("photo-1533106418989-88406c7cc8ca"),
+  "san-sebastian": u("photo-1533106418989-88406c7cc8ca"),
+
+  munich: u("photo-1467269204594-9661b134dd2b"),
+  dortmund: u("photo-1517927033932-b3d18e61fb3a"),
+  berlin: u("photo-1526481280695-3c687fd643ed"),
+
+  milan: u("photo-1511818966892-d7d671e672a2"),
+  rome: u("photo-1529156069898-49953e39b3ac"),
+  naples: u("photo-1529260830199-42c24126f198"),
+  turin: u("photo-1516483638261-f4dbaf036963"),
+
+  paris: u("photo-1502602898657-3e91760cbb34"),
+  lyon: u("photo-1529429617124-95b109e86bb8"),
+  marseille: u("photo-1529260830199-42c24126f198"),
+
+  amsterdam: u("photo-1512470876302-972faa2aa9a4"),
+  lisbon: u("photo-1513735492246-483525079686"),
+  porto: u("photo-1555881400-74d7acaacd8b"),
+  vienna: u("photo-1516550893923-42d28e5677af"),
+  prague: u("photo-1519677100203-a0e668c92439"),
+  istanbul: u("photo-1527838832700-5059252407fa"),
+  athens: u("photo-1505664194779-8beaceb93744"),
+  zagreb: u("photo-1528715471579-d1bcf0ba5e83"),
+  glasgow: u("photo-1513635269975-59663e0ac1ad"),
+};
+
+export function getCityBackground(cityInput: string): string | ImageSourcePropType {
+  const key = normalizeCityKey(cityInput);
+  if (!key) return typeof BACKGROUNDS.city === "string" ? BACKGROUNDS.city : "";
+
+  const mapped = CITY_BACKGROUNDS[key];
+  if (mapped) return mapped;
+
+  return unsplashCityFallback(key);
+}
+
+export default BACKGROUNDS;
