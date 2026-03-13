@@ -170,7 +170,6 @@ async function fetchDiscoverPool(params: {
 
   const seed = createStableSeed(seedKey);
   const orderedLeagues = rotateStable(LEAGUES, seed);
-
   const collected: FixtureListRow[] = [];
 
   for (let i = 0; i < orderedLeagues.length && i < maxLeagueFetches; i += batchSize) {
@@ -216,14 +215,31 @@ function FilterChip({
   label,
   active,
   onPress,
+  compact = false,
 }: {
   label: string;
   active: boolean;
   onPress: () => void;
+  compact?: boolean;
 }) {
   return (
-    <Pressable onPress={onPress} style={[styles.chip, active && styles.chipActive]}>
-      <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
+    <Pressable
+      onPress={onPress}
+      style={[
+        styles.chip,
+        compact && styles.chipCompact,
+        active && styles.chipActive,
+      ]}
+    >
+      <Text
+        style={[
+          styles.chipText,
+          compact && styles.chipTextCompact,
+          active && styles.chipTextActive,
+        ]}
+      >
+        {label}
+      </Text>
     </Pressable>
   );
 }
@@ -275,6 +291,9 @@ export default function DiscoverScreen() {
       seededCategory
     );
   }, [prioritisedPrimaryCategories, seededCategory]);
+
+  const leadCategory = prioritisedPrimaryCategories[0];
+  const remainingPrimaryCategories = prioritisedPrimaryCategories.slice(1);
 
   const filterSummary = useMemo(() => {
     const parts = [
@@ -393,8 +412,47 @@ export default function DiscoverScreen() {
     router,
   ]);
 
-  const renderCategoryCard = useCallback(
-    (category: DiscoverCategory, compact = false, highlighted = false) => {
+  const renderLeadCategoryCard = useCallback(
+    (category: DiscoverCategory) => {
+      const meta = DISCOVER_CATEGORY_META[category];
+
+      return (
+        <Pressable
+          key={category}
+          onPress={() => goFixturesCategory(category)}
+          style={({ pressed }) => [styles.leadPress, pressed && styles.pressed]}
+        >
+          <GlassCard strength="default" style={styles.leadCard} noPadding>
+            <View style={styles.leadInner}>
+              <View style={styles.leadTopRow}>
+                <View style={styles.leadIconWrap}>
+                  <Ionicons name={meta.icon} size={20} color={theme.colors.text} />
+                </View>
+
+                <View style={styles.bestFitPill}>
+                  <Text style={styles.bestFitPillText}>Best fit</Text>
+                </View>
+              </View>
+
+              <View style={styles.leadTextWrap}>
+                <Text style={styles.leadTitle}>{meta.title}</Text>
+                <Text style={styles.leadSubtitle}>{meta.subtitle}</Text>
+              </View>
+
+              <View style={styles.leadBottomRow}>
+                <Text style={styles.leadHint}>Open ranked fixtures</Text>
+                <Text style={styles.leadArrow}>›</Text>
+              </View>
+            </View>
+          </GlassCard>
+        </Pressable>
+      );
+    },
+    [goFixturesCategory]
+  );
+
+  const renderPrimaryCategoryCard = useCallback(
+    (category: DiscoverCategory) => {
       const meta = DISCOVER_CATEGORY_META[category];
       const primary = meta.emphasis === "primary";
 
@@ -402,38 +460,51 @@ export default function DiscoverScreen() {
         <Pressable
           key={category}
           onPress={() => goFixturesCategory(category)}
-          style={({ pressed }) => [
-            compact ? styles.categoryPressCompact : styles.categoryPress,
-            pressed && styles.pressed,
-          ]}
+          style={({ pressed }) => [styles.categoryPress, pressed && styles.pressed]}
         >
           <GlassCard
             strength="default"
-            style={[
-              styles.categoryCard,
-              primary && styles.categoryCardPrimary,
-              compact && styles.categoryCardCompact,
-              highlighted && styles.categoryCardHighlighted,
-            ]}
+            style={[styles.categoryCard, primary && styles.categoryCardPrimary]}
             noPadding
           >
-            <View style={[styles.categoryInner, compact && styles.categoryInnerCompact]}>
+            <View style={styles.categoryInner}>
               <View style={styles.categoryTopRow}>
                 <View
                   style={[
                     styles.categoryIconWrap,
                     primary && styles.categoryIconWrapPrimary,
-                    highlighted && styles.categoryIconWrapHighlighted,
                   ]}
                 >
                   <Ionicons name={meta.icon} size={18} color={theme.colors.text} />
                 </View>
+              </View>
 
-                {highlighted ? (
-                  <View style={styles.matchingPill}>
-                    <Text style={styles.matchingPillText}>Best fit</Text>
-                  </View>
-                ) : null}
+              <View style={styles.categoryTextWrap}>
+                <Text style={styles.categoryTitle}>{meta.title}</Text>
+                <Text style={styles.categorySubtitle}>{meta.subtitle}</Text>
+              </View>
+            </View>
+          </GlassCard>
+        </Pressable>
+      );
+    },
+    [goFixturesCategory]
+  );
+
+  const renderSecondaryCategoryCard = useCallback(
+    (category: DiscoverCategory) => {
+      const meta = DISCOVER_CATEGORY_META[category];
+
+      return (
+        <Pressable
+          key={category}
+          onPress={() => goFixturesCategory(category)}
+          style={({ pressed }) => [styles.categoryPressCompact, pressed && styles.pressed]}
+        >
+          <GlassCard strength="default" style={styles.categoryCardCompact} noPadding>
+            <View style={styles.categoryInnerCompact}>
+              <View style={styles.secondaryIconWrap}>
+                <Ionicons name={meta.icon} size={18} color={theme.colors.text} />
               </View>
 
               <View style={styles.categoryTextWrap}>
@@ -450,12 +521,12 @@ export default function DiscoverScreen() {
 
   return (
     <Background
-  imageSource={getBackground("explore")}
-  overlayOpacity={0.04}
-  topShadeOpacity={0.28}
-  bottomShadeOpacity={0.34}
-  centerShadeOpacity={0.03}
->
+      imageSource={getBackground("explore")}
+      overlayOpacity={0.04}
+      topShadeOpacity={0.30}
+      bottomShadeOpacity={0.36}
+      centerShadeOpacity={0.03}
+    >
       <SafeAreaView style={styles.container} edges={["top"]}>
         <ScrollView
           style={styles.scroll}
@@ -467,12 +538,12 @@ export default function DiscoverScreen() {
               <Text style={styles.kicker}>DISCOVER</Text>
               <Text style={styles.title}>Find football trips worth taking</Text>
               <Text style={styles.sub}>
-                Start with the kind of trip you want, tighten the setup, then browse ranked fixtures
-                instead of a flat list.
+                Tell the app the shape of trip you want, then browse ranked routes instead
+                of a flat dump of fixtures.
               </Text>
 
               <View style={styles.heroSummaryBox}>
-                <Text style={styles.heroSummaryLabel}>Current discovery setup</Text>
+                <Text style={styles.heroSummaryLabel}>Current setup</Text>
                 <Text style={styles.heroSummaryText}>{filterSummary}</Text>
               </View>
             </View>
@@ -480,84 +551,117 @@ export default function DiscoverScreen() {
 
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Set the trip shape</Text>
+              <View style={styles.sectionHeaderText}>
+                <Text style={styles.sectionTitle}>Trip setup</Text>
+                <Text style={styles.sectionSub}>
+                  Tighten the search before you browse.
+                </Text>
+              </View>
+
               <Pressable onPress={resetFilters} style={styles.resetPill}>
                 <Text style={styles.resetPillText}>Reset</Text>
               </Pressable>
             </View>
 
-            <GlassCard strength="default" style={styles.panel}>
-              <Text style={styles.label}>Flying from (optional)</Text>
-              <View style={styles.inputWrap}>
-                <TextInput
-                  value={discoverOrigin}
-                  onChangeText={setDiscoverOrigin}
-                  placeholder="e.g. London, LGW, MAN"
-                  placeholderTextColor={theme.colors.textTertiary}
-                  style={styles.input}
-                  autoCapitalize="words"
-                  autoCorrect={false}
-                />
-              </View>
+            <GlassCard strength="default" style={styles.panel} noPadding>
+              <View style={styles.panelInner}>
+                <View style={styles.inputBlock}>
+                  <Text style={styles.label}>Flying from</Text>
+                  <View style={styles.inputWrap}>
+                    <Ionicons
+                      name="airplane-outline"
+                      size={16}
+                      color={theme.colors.textTertiary}
+                    />
+                    <TextInput
+                      value={discoverOrigin}
+                      onChangeText={setDiscoverOrigin}
+                      placeholder="Optional: London, LGW, MAN"
+                      placeholderTextColor={theme.colors.textTertiary}
+                      style={styles.input}
+                      autoCapitalize="words"
+                      autoCorrect={false}
+                    />
+                  </View>
+                </View>
 
-              <Text style={styles.label}>Date window</Text>
-              <View style={styles.chipsRow}>
-                {(["wknd", "d7", "d14", "d30"] as DiscoverWindowKey[]).map((key) => (
-                  <FilterChip
-                    key={key}
-                    label={labelForKey(key)}
-                    active={discoverWindowKey === key}
-                    onPress={() => setDiscoverWindowKey(key)}
-                  />
-                ))}
-              </View>
+                <View style={styles.filterBlock}>
+                  <Text style={styles.label}>Date window</Text>
+                  <View style={styles.chipsRow}>
+                    {(["wknd", "d7", "d14", "d30"] as DiscoverWindowKey[]).map((key) => (
+                      <FilterChip
+                        key={key}
+                        label={labelForKey(key)}
+                        active={discoverWindowKey === key}
+                        onPress={() => setDiscoverWindowKey(key)}
+                      />
+                    ))}
+                  </View>
+                </View>
 
-              <Text style={styles.label}>Trip length</Text>
-              <View style={styles.chipsRow}>
-                {(["day", "1", "2", "3"] as DiscoverTripLength[]).map((length) => (
-                  <FilterChip
-                    key={length}
-                    label={labelForTripLength(length)}
-                    active={discoverTripLength === length}
-                    onPress={() => setDiscoverTripLength(length)}
-                  />
-                ))}
-              </View>
+                <View style={styles.filterBlock}>
+                  <Text style={styles.label}>Trip length</Text>
+                  <View style={styles.chipsRow}>
+                    {(["day", "1", "2", "3"] as DiscoverTripLength[]).map((length) => (
+                      <FilterChip
+                        key={length}
+                        label={labelForTripLength(length)}
+                        active={discoverTripLength === length}
+                        onPress={() => setDiscoverTripLength(length)}
+                      />
+                    ))}
+                  </View>
+                </View>
 
-              <Text style={styles.label}>Vibe (up to 3)</Text>
-              <View style={styles.chipsRow}>
-                {(["easy", "big", "nightlife", "culture", "warm"] as DiscoverVibe[]).map((vibe) => (
-                  <FilterChip
-                    key={vibe}
-                    label={labelForVibe(vibe)}
-                    active={discoverVibes.includes(vibe)}
-                    onPress={() => toggleVibe(vibe)}
-                  />
-                ))}
+                <View style={styles.filterBlock}>
+                  <View style={styles.inlineLabelRow}>
+                    <Text style={styles.label}>Vibe</Text>
+                    <Text style={styles.labelHint}>Pick up to 3</Text>
+                  </View>
+
+                  <View style={styles.chipsRow}>
+                    {(["easy", "big", "nightlife", "culture", "warm"] as DiscoverVibe[]).map(
+                      (vibe) => (
+                        <FilterChip
+                          key={vibe}
+                          label={labelForVibe(vibe)}
+                          active={discoverVibes.includes(vibe)}
+                          onPress={() => toggleVibe(vibe)}
+                        />
+                      )
+                    )}
+                  </View>
+                </View>
               </View>
             </GlassCard>
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Browse ranked routes</Text>
-            <Text style={styles.sectionSub}>
-              Based on your current setup,{" "}
-              <Text style={styles.sectionSubStrong}>{browseModeLabel}</Text> is the strongest
-              starting point. The rest stay available, but the best fit should be pushed up.
-            </Text>
+            <View style={styles.sectionHeaderStack}>
+              <Text style={styles.sectionTitle}>Ranked routes</Text>
+              <Text style={styles.sectionSub}>
+                Based on your current setup,{" "}
+                <Text style={styles.sectionSubStrong}>{browseModeLabel}</Text> is the best
+                place to start.
+              </Text>
+            </View>
+
+            {leadCategory ? renderLeadCategoryCard(leadCategory) : null}
 
             <View style={styles.primaryGrid}>
-              {prioritisedPrimaryCategories.map((category, index) =>
-                renderCategoryCard(category, false, index === 0)
+              {remainingPrimaryCategories.map((category) =>
+                renderPrimaryCategoryCard(category)
               )}
             </View>
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>More ways to browse</Text>
-            <Text style={styles.sectionSub}>
-              Secondary angles for narrower moods, city pull, and more specific trip types.
-            </Text>
+            <View style={styles.sectionHeaderStack}>
+              <Text style={styles.sectionTitle}>More ways to browse</Text>
+              <Text style={styles.sectionSub}>
+                Narrower angles when you want city pull, atmosphere, or specific trip types.
+              </Text>
+            </View>
 
             <ScrollView
               horizontal
@@ -565,17 +669,19 @@ export default function DiscoverScreen() {
               contentContainerStyle={styles.secondaryRow}
             >
               {prioritisedSecondaryCategories.map((category) =>
-                renderCategoryCard(category, true, false)
+                renderSecondaryCategoryCard(category)
               )}
             </ScrollView>
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Let the app pick one</Text>
-            <Text style={styles.sectionSub}>
-              This is not blind roulette. It pulls a stable live pool from your current setup,
-              scores it, then drops you into Build Trip from one of the stronger options.
-            </Text>
+            <View style={styles.sectionHeaderStack}>
+              <Text style={styles.sectionTitle}>Concierge pick</Text>
+              <Text style={styles.sectionSub}>
+                Not random junk. It pulls a live pool, ranks it against your setup, then
+                drops you into Build Trip from a stronger option.
+              </Text>
+            </View>
 
             <Pressable
               onPress={goRandomTrip}
@@ -588,31 +694,47 @@ export default function DiscoverScreen() {
               <GlassCard strength="default" style={styles.randomCard} noPadding>
                 <View style={styles.randomInner}>
                   <View style={styles.randomTop}>
-                    <Text style={styles.randomTitle}>Random trip</Text>
-                    {loadingRandom ? (
-                      <ActivityIndicator />
-                    ) : (
-                      <Ionicons name="shuffle-outline" size={20} color={theme.colors.text} />
-                    )}
+                    <View style={styles.randomTopText}>
+                      <Text style={styles.randomTitle}>Let the app choose</Text>
+                      <Text style={styles.randomSub}>
+                        Uses your current setup before making the final pick.
+                      </Text>
+                    </View>
+
+                    <View style={styles.randomIconWrap}>
+                      {loadingRandom ? (
+                        <ActivityIndicator />
+                      ) : (
+                        <Ionicons
+                          name="sparkles-outline"
+                          size={18}
+                          color={theme.colors.text}
+                        />
+                      )}
+                    </View>
                   </View>
 
-                  <Text style={styles.randomSub}>
-                    Uses your current filters, a stable fixture pool, and category-aware ranking
-                    before making the final pick.
-                  </Text>
+                  <View style={styles.randomSummaryBox}>
+                    <Text style={styles.randomSummaryLabel}>Using</Text>
+                    <Text style={styles.randomHint}>{filterSummary}</Text>
+                  </View>
 
-                  <Text style={styles.randomHint}>{filterSummary}</Text>
+                  <View style={styles.randomButton}>
+                    <Text style={styles.randomButtonText}>
+                      {loadingRandom ? "Finding a strong option..." : "Pick a trip for me"}
+                    </Text>
+                  </View>
                 </View>
               </GlassCard>
             </Pressable>
           </View>
 
-          <GlassCard strength="default" style={styles.modeCard}>
-            <View style={styles.modeRow}>
+          <GlassCard strength="default" style={styles.modeCard} noPadding>
+            <View style={styles.modeInner}>
               <View style={styles.modeBlock}>
                 <Text style={styles.modeTitle}>Use Discover</Text>
                 <Text style={styles.modeText}>
-                  When you know the kind of trip you want but not the exact fixture.
+                  When you know the type of trip you want, but not the exact fixture yet.
                 </Text>
               </View>
 
@@ -621,7 +743,7 @@ export default function DiscoverScreen() {
               <View style={styles.modeBlock}>
                 <Text style={styles.modeTitle}>Use Fixtures</Text>
                 <Text style={styles.modeText}>
-                  When you already want a direct fixture browse without discovery ranking leading.
+                  When you already want a direct match browse without discovery leading.
                 </Text>
               </View>
             </View>
@@ -654,46 +776,48 @@ const styles = StyleSheet.create({
   kicker: {
     color: theme.colors.primary,
     fontSize: 11,
-    fontWeight: "900",
+    fontWeight: theme.fontWeight.black,
     letterSpacing: 1.2,
   },
 
   title: {
     color: theme.colors.text,
-    fontSize: 26,
-    lineHeight: 32,
-    fontWeight: "900",
+    fontSize: 28,
+    lineHeight: 34,
+    fontWeight: theme.fontWeight.black,
   },
 
   sub: {
     color: theme.colors.textSecondary,
     fontSize: 14,
     lineHeight: 20,
-    fontWeight: "800",
+    fontWeight: theme.fontWeight.bold,
   },
 
   heroSummaryBox: {
-    marginTop: 4,
+    marginTop: 6,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    borderRadius: 16,
+    borderColor: "rgba(255,255,255,0.08)",
+    borderRadius: 18,
     backgroundColor:
-      Platform.OS === "android" ? "rgba(18,20,24,0.34)" : "rgba(18,20,24,0.28)",
-    padding: 12,
-    gap: 6,
+      Platform.OS === "android" ? "rgba(0,0,0,0.18)" : "rgba(255,255,255,0.04)",
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    gap: 4,
   },
 
   heroSummaryLabel: {
     color: theme.colors.textTertiary,
-    fontSize: 12,
-    fontWeight: "900",
+    fontSize: 11,
+    fontWeight: theme.fontWeight.black,
+    letterSpacing: 0.4,
   },
 
   heroSummaryText: {
     color: theme.colors.text,
     fontSize: 13,
     lineHeight: 18,
-    fontWeight: "800",
+    fontWeight: theme.fontWeight.black,
   },
 
   section: {
@@ -702,27 +826,36 @@ const styles = StyleSheet.create({
 
   sectionHeader: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     justifyContent: "space-between",
-    gap: 10,
+    gap: 12,
+  },
+
+  sectionHeaderText: {
+    flex: 1,
+    gap: 3,
+  },
+
+  sectionHeaderStack: {
+    gap: 4,
   },
 
   sectionTitle: {
     color: theme.colors.text,
     fontSize: 18,
-    fontWeight: "900",
+    fontWeight: theme.fontWeight.black,
   },
 
   sectionSub: {
     color: theme.colors.textSecondary,
     fontSize: 12,
     lineHeight: 18,
-    fontWeight: "800",
+    fontWeight: theme.fontWeight.bold,
   },
 
   sectionSubStrong: {
     color: theme.colors.text,
-    fontWeight: "900",
+    fontWeight: theme.fontWeight.black,
   },
 
   resetPill: {
@@ -732,40 +865,70 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 12,
     backgroundColor:
-      Platform.OS === "android" ? "rgba(18,20,24,0.34)" : "rgba(18,20,24,0.28)",
+      Platform.OS === "android" ? "rgba(0,0,0,0.18)" : "rgba(255,255,255,0.05)",
   },
 
   resetPillText: {
     color: theme.colors.textSecondary,
     fontSize: 12,
-    fontWeight: "900",
+    fontWeight: theme.fontWeight.black,
   },
 
   panel: {
+    borderRadius: 24,
+  },
+
+  panelInner: {
     padding: 14,
-    gap: 12,
+    gap: 14,
+  },
+
+  inputBlock: {
+    gap: 7,
+  },
+
+  filterBlock: {
+    gap: 8,
   },
 
   label: {
     color: theme.colors.textTertiary,
     fontSize: 12,
-    fontWeight: "900",
+    fontWeight: theme.fontWeight.black,
+    letterSpacing: 0.3,
+  },
+
+  inlineLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+
+  labelHint: {
+    color: theme.colors.textMuted,
+    fontSize: 11,
+    fontWeight: theme.fontWeight.bold,
   },
 
   inputWrap: {
+    minHeight: 52,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
     backgroundColor:
-      Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
+      Platform.OS === "android" ? "rgba(0,0,0,0.16)" : "rgba(255,255,255,0.04)",
     borderRadius: 16,
     paddingHorizontal: 12,
-    paddingVertical: Platform.OS === "ios" ? 10 : 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
   },
 
   input: {
+    flex: 1,
     color: theme.colors.text,
     fontSize: 14,
-    fontWeight: "800",
+    fontWeight: theme.fontWeight.bold,
+    paddingVertical: Platform.OS === "ios" ? 12 : 10,
   },
 
   chipsRow: {
@@ -779,25 +942,120 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
     backgroundColor:
-      Platform.OS === "android" ? "rgba(18,20,24,0.34)" : "rgba(18,20,24,0.28)",
+      Platform.OS === "android" ? "rgba(0,0,0,0.16)" : "rgba(255,255,255,0.04)",
+    paddingVertical: 8,
+    paddingHorizontal: 11,
+  },
+
+  chipCompact: {
     paddingVertical: 7,
     paddingHorizontal: 10,
   },
 
   chipActive: {
-    borderColor: "rgba(79,224,138,0.26)",
+    borderColor: "rgba(87,162,56,0.28)",
     backgroundColor:
-      Platform.OS === "android" ? theme.glass.androidBg.default : theme.glass.iosBg.default,
+      Platform.OS === "android" ? "rgba(87,162,56,0.10)" : "rgba(87,162,56,0.08)",
   },
 
   chipText: {
     color: theme.colors.textSecondary,
     fontSize: 12,
-    fontWeight: "900",
+    fontWeight: theme.fontWeight.black,
+  },
+
+  chipTextCompact: {
+    fontSize: 11,
   },
 
   chipTextActive: {
     color: theme.colors.text,
+  },
+
+  leadPress: {
+    borderRadius: 22,
+    overflow: "hidden",
+  },
+
+  leadCard: {
+    borderRadius: 22,
+    borderColor: "rgba(87,162,56,0.22)",
+  },
+
+  leadInner: {
+    padding: 16,
+    gap: 14,
+    minHeight: 156,
+  },
+
+  leadTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+
+  leadIconWrap: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(87,162,56,0.24)",
+    backgroundColor: "rgba(87,162,56,0.10)",
+  },
+
+  bestFitPill: {
+    borderRadius: 999,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    borderColor: "rgba(87,162,56,0.24)",
+    backgroundColor: "rgba(87,162,56,0.10)",
+  },
+
+  bestFitPillText: {
+    color: theme.colors.text,
+    fontSize: 10,
+    fontWeight: theme.fontWeight.black,
+    letterSpacing: 0.4,
+  },
+
+  leadTextWrap: {
+    gap: 6,
+  },
+
+  leadTitle: {
+    color: theme.colors.text,
+    fontSize: 20,
+    lineHeight: 24,
+    fontWeight: theme.fontWeight.black,
+  },
+
+  leadSubtitle: {
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: theme.fontWeight.bold,
+  },
+
+  leadBottomRow: {
+    marginTop: "auto",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+
+  leadHint: {
+    color: theme.colors.primary,
+    fontSize: 12,
+    fontWeight: theme.fontWeight.black,
+  },
+
+  leadArrow: {
+    color: theme.colors.textTertiary,
+    fontSize: 22,
+    marginTop: -2,
   },
 
   primaryGrid: {
@@ -813,26 +1071,13 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
 
-  categoryPressCompact: {
-    width: 188,
-    borderRadius: 18,
-    overflow: "hidden",
-  },
-
   categoryCard: {
     borderRadius: 18,
+    minHeight: 128,
   },
 
   categoryCardPrimary: {
-    borderColor: "rgba(79,224,138,0.18)",
-  },
-
-  categoryCardHighlighted: {
-    borderColor: "rgba(79,224,138,0.30)",
-  },
-
-  categoryCardCompact: {
-    minHeight: 110,
+    borderColor: "rgba(87,162,56,0.16)",
   },
 
   categoryInner: {
@@ -840,10 +1085,6 @@ const styles = StyleSheet.create({
     minHeight: 128,
     gap: 14,
     justifyContent: "space-between",
-  },
-
-  categoryInnerCompact: {
-    minHeight: 112,
   },
 
   categoryTopRow: {
@@ -861,33 +1102,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.18)",
+    backgroundColor: "rgba(0,0,0,0.16)",
   },
 
   categoryIconWrapPrimary: {
-    borderColor: "rgba(79,224,138,0.18)",
-    backgroundColor: "rgba(79,224,138,0.08)",
-  },
-
-  categoryIconWrapHighlighted: {
-    borderColor: "rgba(79,224,138,0.28)",
-    backgroundColor: "rgba(79,224,138,0.12)",
-  },
-
-  matchingPill: {
-    borderRadius: 999,
-    paddingVertical: 5,
-    paddingHorizontal: 9,
-    borderWidth: 1,
-    borderColor: "rgba(79,224,138,0.24)",
-    backgroundColor: "rgba(79,224,138,0.10)",
-  },
-
-  matchingPillText: {
-    color: theme.colors.text,
-    fontSize: 10,
-    fontWeight: "900",
-    letterSpacing: 0.3,
+    borderColor: "rgba(87,162,56,0.18)",
+    backgroundColor: "rgba(87,162,56,0.08)",
   },
 
   categoryTextWrap: {
@@ -898,14 +1118,14 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     fontSize: 14,
     lineHeight: 18,
-    fontWeight: "900",
+    fontWeight: theme.fontWeight.black,
   },
 
   categorySubtitle: {
     color: theme.colors.textSecondary,
     fontSize: 12,
     lineHeight: 17,
-    fontWeight: "800",
+    fontWeight: theme.fontWeight.bold,
   },
 
   secondaryRow: {
@@ -913,54 +1133,136 @@ const styles = StyleSheet.create({
     paddingRight: theme.spacing.lg,
   },
 
-  randomPress: {
+  categoryPressCompact: {
+    width: 192,
     borderRadius: 18,
     overflow: "hidden",
   },
 
-  randomCard: {
+  categoryCardCompact: {
     borderRadius: 18,
+    minHeight: 116,
+  },
+
+  categoryInnerCompact: {
+    padding: 14,
+    minHeight: 116,
+    gap: 12,
+    justifyContent: "space-between",
+  },
+
+  secondaryIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.16)",
+  },
+
+  randomPress: {
+    borderRadius: 22,
+    overflow: "hidden",
+  },
+
+  randomCard: {
+    borderRadius: 22,
+    borderColor: "rgba(87,162,56,0.16)",
   },
 
   randomInner: {
-    paddingVertical: 14,
-    paddingHorizontal: 14,
-    gap: 8,
-    minHeight: 132,
+    padding: 16,
+    gap: 14,
   },
 
   randomTop: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     justifyContent: "space-between",
+    gap: 12,
+  },
+
+  randomTopText: {
+    flex: 1,
+    gap: 4,
   },
 
   randomTitle: {
     color: theme.colors.text,
-    fontSize: 15,
-    fontWeight: "900",
+    fontSize: 18,
+    fontWeight: theme.fontWeight.black,
   },
 
   randomSub: {
     color: theme.colors.textSecondary,
     fontSize: 12,
-    fontWeight: "800",
-    lineHeight: 17,
+    lineHeight: 18,
+    fontWeight: theme.fontWeight.bold,
+  },
+
+  randomIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(87,162,56,0.18)",
+    backgroundColor: "rgba(87,162,56,0.08)",
+  },
+
+  randomSummaryBox: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    backgroundColor:
+      Platform.OS === "android" ? "rgba(0,0,0,0.16)" : "rgba(255,255,255,0.04)",
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    gap: 4,
+  },
+
+  randomSummaryLabel: {
+    color: theme.colors.textTertiary,
+    fontSize: 11,
+    fontWeight: theme.fontWeight.black,
+    letterSpacing: 0.3,
   },
 
   randomHint: {
-    color: theme.colors.textTertiary,
+    color: theme.colors.text,
     fontSize: 12,
-    fontWeight: "800",
-    lineHeight: 17,
+    lineHeight: 18,
+    fontWeight: theme.fontWeight.bold,
+  },
+
+  randomButton: {
+    minHeight: 48,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(87,162,56,0.28)",
+    backgroundColor:
+      Platform.OS === "android" ? "rgba(87,162,56,0.10)" : "rgba(87,162,56,0.08)",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 14,
+  },
+
+  randomButtonText: {
+    color: theme.colors.text,
+    fontSize: 14,
+    fontWeight: theme.fontWeight.black,
   },
 
   modeCard: {
-    padding: 14,
+    borderRadius: 22,
     marginBottom: 4,
   },
 
-  modeRow: {
+  modeInner: {
+    padding: 14,
     gap: 12,
   },
 
@@ -976,14 +1278,14 @@ const styles = StyleSheet.create({
   modeTitle: {
     color: theme.colors.text,
     fontSize: 14,
-    fontWeight: "900",
+    fontWeight: theme.fontWeight.black,
   },
 
   modeText: {
     color: theme.colors.textSecondary,
     fontSize: 12,
     lineHeight: 18,
-    fontWeight: "800",
+    fontWeight: theme.fontWeight.bold,
   },
 
   pressed: {
