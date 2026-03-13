@@ -1,7 +1,30 @@
 import type { ImageSourcePropType } from "react-native";
 import { normalizeCityKey } from "@/src/utils/city";
 
-export type BackgroundSource = string | ImageSourcePropType;
+export type BackgroundPattern =
+  | "none"
+  | "pitch"
+  | "routes"
+  | "grid"
+  | "vault"
+  | "calm";
+
+export type BackgroundAccent = "green" | "blue" | "neutral" | "mixed";
+
+export type BackgroundSpec = {
+  kind: "spec";
+  accent: BackgroundAccent;
+  pattern: BackgroundPattern;
+  colors: [string, string, string];
+  topGlowColor: string;
+  topGlowOpacity?: number;
+  centerGlowColor?: string;
+  centerGlowOpacity?: number;
+  bottomShadeOpacity?: number;
+  grainOpacity?: number;
+};
+
+export type BackgroundSource = string | ImageSourcePropType | BackgroundSpec;
 
 export type BackgroundKey =
   | "home"
@@ -26,42 +49,241 @@ export type BackgroundKey =
 const u = (photoId: string) =>
   `https://images.unsplash.com/${photoId}?auto=format&fit=crop&w=1800&h=3200&fm=jpg&q=82`;
 
+/**
+ * Main tabs + app shells now use branded generated surfaces instead of photos.
+ * That gives you consistent contrast, cleaner card readability, and a more premium feel.
+ */
 const BACKGROUNDS: Record<BackgroundKey, BackgroundSource> = {
   // Core tabs
-  // Home 1: floodlit stadium / gateway hero
-  home: u("photo-1574629810360-7efbbe195018"),
+  home: {
+    kind: "spec",
+    accent: "green",
+    pattern: "pitch",
+    colors: ["#07110D", "#0A1711", "#101C16"],
+    topGlowColor: "#5CCB5F",
+    topGlowOpacity: 0.16,
+    centerGlowColor: "#173224",
+    centerGlowOpacity: 0.16,
+    bottomShadeOpacity: 0.22,
+    grainOpacity: 0.03,
+  },
 
-  // Discover 5: football travel energy / broader exploration feel
-  explore: u("photo-1522778119026-d647f0596c20"),
+  explore: {
+    kind: "spec",
+    accent: "mixed",
+    pattern: "routes",
+    colors: ["#071018", "#0A1416", "#111A1B"],
+    topGlowColor: "#4E76D9",
+    topGlowOpacity: 0.14,
+    centerGlowColor: "#4FAE72",
+    centerGlowOpacity: 0.1,
+    bottomShadeOpacity: 0.24,
+    grainOpacity: 0.03,
+  },
 
-  // Fixtures 3: pure football / stadium perspective
-  fixtures: u("photo-1547347298-4074fc3086f0"),
-  match: u("photo-1547347298-4074fc3086f0"),
-  stadium: u("photo-1547347298-4074fc3086f0"),
-  team: u("photo-1517927033932-b3d18e61fb3a"),
+  fixtures: {
+    kind: "spec",
+    accent: "blue",
+    pattern: "grid",
+    colors: ["#071018", "#09141C", "#0D1920"],
+    topGlowColor: "#2D6CDF",
+    topGlowOpacity: 0.14,
+    centerGlowColor: "#0F3C64",
+    centerGlowOpacity: 0.12,
+    bottomShadeOpacity: 0.24,
+    grainOpacity: 0.025,
+  },
 
-  // Trips 3: jet engine + wing / journey planning
-  trips: u("photo-1436491865332-7a61a109cc05"),
-  trip: u("photo-1436491865332-7a61a109cc05"),
+  match: {
+    kind: "spec",
+    accent: "blue",
+    pattern: "grid",
+    colors: ["#071018", "#09141C", "#0D1920"],
+    topGlowColor: "#2D6CDF",
+    topGlowOpacity: 0.16,
+    centerGlowColor: "#0F3C64",
+    centerGlowOpacity: 0.14,
+    bottomShadeOpacity: 0.26,
+    grainOpacity: 0.025,
+  },
 
-  // Wallet 5: documents / passports / bookings
-  wallet: u("photo-1450101499163-c8848c66ca85"),
+  stadium: {
+    kind: "spec",
+    accent: "green",
+    pattern: "pitch",
+    colors: ["#07110D", "#09150F", "#0F1A14"],
+    topGlowColor: "#4FAE72",
+    topGlowOpacity: 0.14,
+    centerGlowColor: "#163325",
+    centerGlowOpacity: 0.1,
+    bottomShadeOpacity: 0.24,
+    grainOpacity: 0.03,
+  },
 
-  // Profile 2: calm clean interior / neutral personal space
-  profile: u("photo-1505693416388-ac5ce068fe85"),
+  team: {
+    kind: "spec",
+    accent: "mixed",
+    pattern: "pitch",
+    colors: ["#07110D", "#0A1418", "#101A17"],
+    topGlowColor: "#4FAE72",
+    topGlowOpacity: 0.12,
+    centerGlowColor: "#345FA8",
+    centerGlowOpacity: 0.08,
+    bottomShadeOpacity: 0.24,
+    grainOpacity: 0.03,
+  },
+
+  trips: {
+    kind: "spec",
+    accent: "mixed",
+    pattern: "routes",
+    colors: ["#071018", "#0A1318", "#10171D"],
+    topGlowColor: "#4E76D9",
+    topGlowOpacity: 0.14,
+    centerGlowColor: "#5CCB5F",
+    centerGlowOpacity: 0.08,
+    bottomShadeOpacity: 0.26,
+    grainOpacity: 0.025,
+  },
+
+  trip: {
+    kind: "spec",
+    accent: "mixed",
+    pattern: "routes",
+    colors: ["#071018", "#0A1318", "#10171D"],
+    topGlowColor: "#4E76D9",
+    topGlowOpacity: 0.14,
+    centerGlowColor: "#5CCB5F",
+    centerGlowOpacity: 0.08,
+    bottomShadeOpacity: 0.26,
+    grainOpacity: 0.025,
+  },
+
+  wallet: {
+    kind: "spec",
+    accent: "neutral",
+    pattern: "vault",
+    colors: ["#090B0D", "#101517", "#151B1C"],
+    topGlowColor: "#3C5662",
+    topGlowOpacity: 0.11,
+    centerGlowColor: "#22353A",
+    centerGlowOpacity: 0.08,
+    bottomShadeOpacity: 0.28,
+    grainOpacity: 0.02,
+  },
+
+  profile: {
+    kind: "spec",
+    accent: "neutral",
+    pattern: "calm",
+    colors: ["#0A0C0D", "#111515", "#171B1A"],
+    topGlowColor: "#314438",
+    topGlowOpacity: 0.08,
+    centerGlowColor: "#1B2421",
+    centerGlowOpacity: 0.05,
+    bottomShadeOpacity: 0.24,
+    grainOpacity: 0.018,
+  },
 
   // Entry / onboarding / paywall
-  landing: u("photo-1574629810360-7efbbe195018"),
-  "landing-hero": u("photo-1574629810360-7efbbe195018"),
-  "onboarding-1": u("photo-1574629810360-7efbbe195018"),
-  "onboarding-2": u("photo-1522778119026-d647f0596c20"),
-  "onboarding-3": u("photo-1547347298-4074fc3086f0"),
-  "onboarding-4": u("photo-1436491865332-7a61a109cc05"),
-  paywall: u("photo-1574629810360-7efbbe195018"),
+  landing: {
+    kind: "spec",
+    accent: "green",
+    pattern: "pitch",
+    colors: ["#07110D", "#0A1711", "#101C16"],
+    topGlowColor: "#5CCB5F",
+    topGlowOpacity: 0.16,
+    centerGlowColor: "#173224",
+    centerGlowOpacity: 0.16,
+    bottomShadeOpacity: 0.24,
+    grainOpacity: 0.03,
+  },
 
-  // City fallback
+  "landing-hero": {
+    kind: "spec",
+    accent: "green",
+    pattern: "pitch",
+    colors: ["#07110D", "#0A1711", "#101C16"],
+    topGlowColor: "#5CCB5F",
+    topGlowOpacity: 0.16,
+    centerGlowColor: "#173224",
+    centerGlowOpacity: 0.16,
+    bottomShadeOpacity: 0.24,
+    grainOpacity: 0.03,
+  },
+
+  "onboarding-1": {
+    kind: "spec",
+    accent: "green",
+    pattern: "pitch",
+    colors: ["#07110D", "#0A1711", "#101C16"],
+    topGlowColor: "#5CCB5F",
+    topGlowOpacity: 0.16,
+    centerGlowColor: "#173224",
+    centerGlowOpacity: 0.16,
+    bottomShadeOpacity: 0.24,
+    grainOpacity: 0.03,
+  },
+
+  "onboarding-2": {
+    kind: "spec",
+    accent: "mixed",
+    pattern: "routes",
+    colors: ["#071018", "#0A1416", "#111A1B"],
+    topGlowColor: "#4E76D9",
+    topGlowOpacity: 0.14,
+    centerGlowColor: "#4FAE72",
+    centerGlowOpacity: 0.1,
+    bottomShadeOpacity: 0.24,
+    grainOpacity: 0.03,
+  },
+
+  "onboarding-3": {
+    kind: "spec",
+    accent: "blue",
+    pattern: "grid",
+    colors: ["#071018", "#09141C", "#0D1920"],
+    topGlowColor: "#2D6CDF",
+    topGlowOpacity: 0.14,
+    centerGlowColor: "#0F3C64",
+    centerGlowOpacity: 0.12,
+    bottomShadeOpacity: 0.24,
+    grainOpacity: 0.025,
+  },
+
+  "onboarding-4": {
+    kind: "spec",
+    accent: "mixed",
+    pattern: "routes",
+    colors: ["#071018", "#0A1318", "#10171D"],
+    topGlowColor: "#4E76D9",
+    topGlowOpacity: 0.14,
+    centerGlowColor: "#5CCB5F",
+    centerGlowOpacity: 0.08,
+    bottomShadeOpacity: 0.26,
+    grainOpacity: 0.025,
+  },
+
+  paywall: {
+    kind: "spec",
+    accent: "green",
+    pattern: "pitch",
+    colors: ["#07110D", "#0A1711", "#101C16"],
+    topGlowColor: "#5CCB5F",
+    topGlowOpacity: 0.16,
+    centerGlowColor: "#173224",
+    centerGlowOpacity: 0.16,
+    bottomShadeOpacity: 0.24,
+    grainOpacity: 0.03,
+  },
+
+  // City guides can still use imagery
   city: u("photo-1499856871958-5b9627545d1a"),
 };
+
+export function isBackgroundSpec(value: BackgroundSource): value is BackgroundSpec {
+  return !!value && typeof value === "object" && "kind" in value && value.kind === "spec";
+}
 
 export function getBackground(key: BackgroundKey): BackgroundSource {
   return BACKGROUNDS[key];
@@ -69,8 +291,9 @@ export function getBackground(key: BackgroundKey): BackgroundSource {
 
 export function getBackgroundSource(
   key: BackgroundKey
-): ImageSourcePropType | { uri: string } {
+): ImageSourcePropType | { uri: string } | null {
   const src = BACKGROUNDS[key];
+  if (isBackgroundSpec(src)) return null;
   if (typeof src === "string") return { uri: src };
   return src;
 }
