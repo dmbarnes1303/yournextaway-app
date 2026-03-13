@@ -238,7 +238,13 @@ export default function TripsScreen() {
   /* -------------------------------- render -------------------------------- */
 
   return (
-    <Background imageSource={getBackground("trips")} overlayOpacity={0.84}>
+    <Background
+  imageSource={getBackground("trips")}
+  overlayOpacity={0.02}
+  topShadeOpacity={0.22}
+  bottomShadeOpacity={0.28}
+  centerShadeOpacity={0.02}
+>
       <SafeAreaView style={styles.safe} edges={["top"]}>
         <ScrollView
           contentContainerStyle={[styles.content, { paddingBottom: theme.spacing.xxl + insets.bottom }]}
