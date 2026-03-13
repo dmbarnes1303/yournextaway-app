@@ -1,4 +1,3 @@
-// app/(tabs)/fixtures.tsx
 import React, { useEffect, useMemo, useState, useCallback } from "react";
 import {
   View,
@@ -82,6 +81,10 @@ type DiscoverCategory =
   | "bucketList"
   | "matchdayCulture"
   | "underratedTrips";
+
+type RankedFixtureRow = FixtureListRow & {
+  discoverReasons?: DiscoverReason[];
+};
 
 const DISCOVER_CATEGORY_META: Record<
   DiscoverCategory,
@@ -685,9 +688,11 @@ function buildMonthGrid(year: number, month0: number) {
   for (let i = 0; i < firstW; i++) {
     cells.push({ iso: "", day: 0, inMonth: false });
   }
+
   for (let day = 1; day <= dim; day++) {
     cells.push({ iso: isoFromUtcParts(year, month0, day), day, inMonth: true });
   }
+
   while (cells.length % 7 !== 0) {
     cells.push({ iso: "", day: 0, inMonth: false });
   }
@@ -896,7 +901,7 @@ export default function FixturesScreen() {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [rows, setRows] = useState<FixtureListRow[]>([]);
+  const [rows, setRows] = useState<RankedFixtureRow[]>([]);
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
 
   const placeholderIds = useMemo(() => computeLikelyPlaceholderTbcIds(rows), [rows]);
@@ -931,7 +936,7 @@ export default function FixturesScreen() {
         if (discoverCategory) {
           const scored = buildDiscoverScores(flat);
 
-          const ranked = scored
+          const ranked: RankedFixtureRow[] = scored
             .map((item) => ({
               fixture: item.fixture,
               reasons: item.reasons,
@@ -949,7 +954,7 @@ export default function FixturesScreen() {
               discoverReasons: x.reasons,
             }));
 
-          setRows(ranked as FixtureListRow[]);
+          setRows(ranked);
           return;
         }
 
@@ -970,7 +975,7 @@ export default function FixturesScreen() {
           });
         }
 
-        setRows(flat);
+        setRows(flat as RankedFixtureRow[]);
       } catch (e: any) {
         if (cancelled) return;
         setError(e?.message ?? "Failed to load fixtures.");
@@ -1246,7 +1251,7 @@ export default function FixturesScreen() {
   /* ----------------------------- Row rendering ----------------------------- */
 
   const renderRow = useCallback(
-    ({ item }: { item: FixtureListRow }) => {
+    ({ item }: { item: RankedFixtureRow }) => {
       const r = item;
       const fixtureId = r?.fixture?.id != null ? String(r.fixture.id) : "";
       if (!fixtureId) return null;
@@ -1276,8 +1281,8 @@ export default function FixturesScreen() {
         LEAGUES.find((l) => l.leagueId === ctxLeagueId)?.countryCode ||
         "";
 
-      const discoverReasons = Array.isArray((r as any).discoverReasons)
-        ? ((r as any).discoverReasons as DiscoverReason[])
+      const discoverReasons = Array.isArray(r.discoverReasons)
+        ? r.discoverReasons
         : [];
 
       return (
