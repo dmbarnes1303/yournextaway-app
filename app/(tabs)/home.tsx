@@ -149,40 +149,6 @@ function useDebouncedValue<T>(value: T, delayMs: number) {
   return debounced;
 }
 
-function QuickActionCard({
-  title,
-  sub,
-  variant = "default",
-  onPress,
-}: {
-  title: string;
-  sub: string;
-  variant?: "default" | "primary";
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [styles.quickActionPress, pressed && styles.pressed]}
-      android_ripple={{ color: "rgba(79,224,138,0.08)" }}
-    >
-      <GlassCard
-        strength="default"
-        style={[
-          styles.quickActionCard,
-          variant === "primary" && styles.quickActionCardPrimary,
-        ]}
-        noPadding
-      >
-        <View style={styles.quickActionInner}>
-          <Text style={styles.quickActionTitle}>{title}</Text>
-          <Text style={styles.quickActionSub}>{sub}</Text>
-        </View>
-      </GlassCard>
-    </Pressable>
-  );
-}
-
 export default function HomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -358,14 +324,6 @@ export default function HomeScreen() {
     router.push("/(tabs)/trips" as any);
   }, [router]);
 
-  const goWallet = useCallback(() => {
-    router.push("/(tabs)/wallet" as any);
-  }, [router]);
-
-  const goFootballCalendar = useCallback(() => {
-    router.push("/football-calendar" as any);
-  }, [router]);
-
   const goFixturesHub = useCallback(() => {
     goFixtures({ window: windowFromTomorrowIso(14) });
   }, [goFixtures]);
@@ -513,10 +471,6 @@ export default function HomeScreen() {
     return getCityImageUrl(city || "london");
   }, [featured]);
 
-  const searchContextLine = useMemo(() => {
-    return "Search a city, team, league, country, or venue and jump straight into the right place.";
-  }, []);
-
   return (
     <Background imageSource={getBackground("home")} overlayOpacity={0.64}>
       <SafeAreaView style={styles.container} edges={["top"]}>
@@ -529,8 +483,10 @@ export default function HomeScreen() {
           <GlassCard strength="strong" style={styles.hero} noPadding>
             <View style={styles.heroInner}>
               <Text style={styles.heroKicker}>YOURNEXTAWAY</Text>
-              <Text style={styles.heroTitle}>Your football travel hub</Text>
-              <Text style={styles.heroSub}>{searchContextLine}</Text>
+              <Text style={styles.heroTitle}>Search and keep moving</Text>
+              <Text style={styles.heroSub}>
+                Search a city, team, league, country, or venue and jump straight into the right place.
+              </Text>
 
               <View style={styles.searchBox}>
                 <TextInput
@@ -553,10 +509,9 @@ export default function HomeScreen() {
 
               {!showSearchResults ? (
                 <View style={styles.heroHintBox}>
-                  <Text style={styles.heroHintTitle}>Use Home for control</Text>
+                  <Text style={styles.heroHintTitle}>Home = control</Text>
                   <Text style={styles.heroHintText}>
-                    Discover is for inspiration. Fixtures is for direct match browsing. Home is for
-                    search, resuming trips, and getting somewhere fast.
+                    Use this screen to search, resume planning, and check live upcoming options.
                   </Text>
                 </View>
               ) : null}
@@ -591,7 +546,7 @@ export default function HomeScreen() {
                               ]}
                               android_ripple={{ color: "rgba(79,224,138,0.08)" }}
                             >
-                              <View style={{ flex: 1 }}>
+                              <View style={styles.resultTextWrap}>
                                 <Text style={styles.resultTitle}>{r.title}</Text>
                                 <Text style={styles.resultMeta}>{resultMeta(r)}</Text>
                               </View>
@@ -626,42 +581,6 @@ export default function HomeScreen() {
                 }
               />
 
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Quick actions</Text>
-                <Text style={styles.sectionSub}>
-                  Use Discover when you need ideas. Use Fixtures when you already want real match options.
-                </Text>
-
-                <View style={styles.quickActionsGrid}>
-                  <QuickActionCard
-                    title="Discover"
-                    sub="Need ideas and ranked routes"
-                    variant="primary"
-                    onPress={goDiscover}
-                  />
-                  <QuickActionCard
-                    title="Fixtures"
-                    sub="Browse actual upcoming matches"
-                    onPress={goFixturesHub}
-                  />
-                  <QuickActionCard
-                    title="Trips"
-                    sub="Open saved planning workspaces"
-                    onPress={goTrips}
-                  />
-                  <QuickActionCard
-                    title="Wallet"
-                    sub="Open docs and confirmations"
-                    onPress={goWallet}
-                  />
-                  <QuickActionCard
-                    title="Calendar"
-                    sub="Useful football date windows"
-                    onPress={goFootballCalendar}
-                  />
-                </View>
-              </View>
-
               <UpcomingMatches
                 homeTopLeagues={homeTopLeagues}
                 league={league}
@@ -675,7 +594,6 @@ export default function HomeScreen() {
                 fixtureLine={fixtureLine}
                 goFixtures={goFixtures}
                 goFixturesHub={goFixturesHub}
-                goDiscover={goDiscover}
                 goMatch={goMatch}
               />
             </>
@@ -781,52 +699,6 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeight.bold,
   },
 
-  section: {
-    gap: 10,
-  },
-  sectionTitle: {
-    color: theme.colors.text,
-    fontSize: 18,
-    fontWeight: theme.fontWeight.black,
-  },
-  sectionSub: {
-    color: theme.colors.textSecondary,
-    fontSize: 12,
-    lineHeight: 18,
-    fontWeight: theme.fontWeight.bold,
-  },
-
-  quickActionsGrid: {
-    gap: 10,
-  },
-  quickActionPress: {
-    borderRadius: 18,
-    overflow: "hidden",
-  },
-  quickActionCard: {
-    borderRadius: 18,
-    borderColor: "rgba(255,255,255,0.10)",
-  },
-  quickActionCardPrimary: {
-    borderColor: "rgba(79,224,138,0.22)",
-  },
-  quickActionInner: {
-    paddingVertical: 13,
-    paddingHorizontal: 14,
-    gap: 4,
-  },
-  quickActionTitle: {
-    color: theme.colors.text,
-    fontSize: 14,
-    fontWeight: theme.fontWeight.black,
-  },
-  quickActionSub: {
-    color: theme.colors.textSecondary,
-    fontSize: 12,
-    fontWeight: theme.fontWeight.bold,
-    lineHeight: 17,
-  },
-
   searchResults: {
     marginTop: 10,
     gap: 10,
@@ -850,6 +722,9 @@ const styles = StyleSheet.create({
   },
   resultRowFirst: {
     borderTopWidth: 0,
+  },
+  resultTextWrap: {
+    flex: 1,
   },
   resultTitle: {
     color: theme.colors.text,
@@ -885,10 +760,6 @@ const styles = StyleSheet.create({
     marginTop: -2,
   },
 
-  pressed: {
-    opacity: 0.94,
-    transform: [{ scale: 0.995 }],
-  },
   pressedRow: {
     opacity: 0.94,
   },
