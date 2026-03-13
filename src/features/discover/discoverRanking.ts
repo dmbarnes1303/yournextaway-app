@@ -1,20 +1,19 @@
-import type { FixtureListRow } from "@/src/services/apiFootball";
-import { atmosphereScore } from "./atmosphereScore";
+import type { FixtureListRow } from "@/src/services/apiFootball"
+import { buildDiscoverScores } from "./discoverEngine"
 
 export function rankDiscoverMatches(fixtures: FixtureListRow[]) {
-  return fixtures
-    .map((f) => {
-      const home = f.teams?.home?.name || "";
+  const scored = buildDiscoverScores(fixtures)
 
-      const score =
-        atmosphereScore(home) * 2 +
-        (f.league?.name?.includes("Champions") ? 2 : 0);
-
-      return {
-        fixture: f,
-        score,
-      };
-    })
+  return scored
+    .map((s) => ({
+      fixture: s.fixture,
+      score:
+        s.scores.atmosphereScore +
+        s.scores.derbyScore +
+        s.scores.stadiumScore +
+        s.scores.nightScore +
+        s.scores.titleDramaScore,
+    }))
     .sort((a, b) => b.score - a.score)
-    .map((x) => x.fixture);
+    .map((x) => x.fixture)
 }
