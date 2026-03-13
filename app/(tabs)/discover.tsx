@@ -24,6 +24,7 @@ import {
 } from "@/src/constants/football";
 import { getFixtures, type FixtureListRow } from "@/src/services/apiFootball";
 import {
+  DISCOVER_ALL_CATEGORIES,
   DISCOVER_PRIMARY_CATEGORIES,
   DISCOVER_SECONDARY_CATEGORIES,
   DISCOVER_CATEGORY_META,
@@ -92,13 +93,9 @@ function rotateStable<T>(arr: T[], seed: number) {
   return [...arr.slice(offset), ...arr.slice(0, offset)];
 }
 
-function prioritiseCategories(
-  categories: DiscoverCategory[],
-  preferred: DiscoverCategory
-) {
-  const deduped = Array.from(new Set(categories));
-  const withoutPreferred = deduped.filter((c) => c !== preferred);
-  return deduped.includes(preferred) ? [preferred, ...withoutPreferred] : deduped;
+function clampVibes(next: DiscoverVibe[]) {
+  if (next.length <= 3) return next;
+  return next.slice(next.length - 3);
 }
 
 function categorySeedFromVibes(vibes: DiscoverVibe[]): DiscoverCategory {
@@ -110,15 +107,21 @@ function categorySeedFromVibes(vibes: DiscoverVibe[]): DiscoverCategory {
   return "perfectTrips";
 }
 
-function clampVibes(next: DiscoverVibe[]) {
-  if (next.length <= 3) return next;
-  return next.slice(next.length - 3);
+function prioritiseCategories(
+  categories: DiscoverCategory[],
+  preferred: DiscoverCategory
+): DiscoverCategory[] {
+  const deduped = categories.filter(
+    (category, index) => categories.indexOf(category) === index
+  );
+  const withoutPreferred = deduped.filter((category) => category !== preferred);
+  return deduped.includes(preferred) ? [preferred, ...withoutPreferred] : deduped;
 }
 
 function buildDiscoverSeedKey(params: {
   window: ShortcutWindow;
   windowKey: DiscoverWindowKey;
-  from: string;
+  origin: string;
   tripLength: DiscoverTripLength;
   vibes: DiscoverVibe[];
   category: DiscoverCategory;
@@ -127,7 +130,7 @@ function buildDiscoverSeedKey(params: {
     params.window.from,
     params.window.to,
     params.windowKey,
-    params.from.trim().toLowerCase(),
+    params.origin.trim().toLowerCase(),
     params.tripLength,
     params.vibes.slice().sort().join(","),
     params.category,
@@ -137,7 +140,7 @@ function buildDiscoverSeedKey(params: {
 async function fetchDiscoverPool(params: {
   window: ShortcutWindow;
   windowKey: DiscoverWindowKey;
-  from: string;
+  origin: string;
   tripLength: DiscoverTripLength;
   vibes: DiscoverVibe[];
   category: DiscoverCategory;
@@ -148,7 +151,7 @@ async function fetchDiscoverPool(params: {
   const {
     window,
     windowKey,
-    from,
+    origin,
     tripLength,
     vibes,
     category,
@@ -160,7 +163,7 @@ async function fetchDiscoverPool(params: {
   const seedKey = buildDiscoverSeedKey({
     window,
     windowKey,
-    from,
+    origin,
     tripLength,
     vibes,
     category,
@@ -190,21 +193,22 @@ async function fetchDiscoverPool(params: {
       })
     );
 
-    const flat = results.flat().filter((r) => r?.fixture?.id != null);
+    const flat = results.flat().filter((row) => row?.fixture?.id != null);
     collected.push(...flat);
 
     if (collected.length >= minFixtures) break;
   }
 
   const deduped = new Map<string, FixtureListRow>();
+
   for (const row of collected) {
     const id = row?.fixture?.id != null ? String(row.fixture.id) : null;
     if (!id) continue;
     if (!deduped.has(id)) deduped.set(id, row);
   }
 
-  return Array.from(deduped.values()).filter((r) => {
-    const venue = String(r?.fixture?.venue?.name ?? "").trim();
+  return Array.from(deduped.values()).filter((row) => {
+    const venue = String(row?.fixture?.venue?.name ?? "").trim();
     return !!venue;
   });
 }
@@ -232,13 +236,13 @@ export default function DiscoverScreen() {
   const [discoverWindowKey, setDiscoverWindowKey] = useState<DiscoverWindowKey>("wknd");
   const [discoverTripLength, setDiscoverTripLength] = useState<DiscoverTripLength>("2");
   const [discoverVibes, setDiscoverVibes] = useState<DiscoverVibe[]>(["easy"]);
-  const [discoverFrom, setDiscoverFrom] = useState("");
+  const [discoverOrigin, setDiscoverOrigin] = useState("");
   const [loadingRandom, setLoadingRandom] = useState(false);
 
-  const toggleVibe = useCallback((v: DiscoverVibe) => {
+  const toggleVibe = useCallback((vibe: DiscoverVibe) => {
     setDiscoverVibes((prev) => {
-      const has = prev.includes(v);
-      const next = has ? prev.filter((x) => x !== v) : [...prev, v];
+      const has = prev.includes(vibe);
+      const next = has ? prev.filter((value) => value !== vibe) : [...prev, vibe];
       return clampVibes(next);
     });
   }, []);
@@ -247,7 +251,7 @@ export default function DiscoverScreen() {
     setDiscoverWindowKey("wknd");
     setDiscoverTripLength("2");
     setDiscoverVibes(["easy"]);
-    setDiscoverFrom("");
+    setDiscoverOrigin("");
   }, []);
 
   const currentWindow = useMemo(
@@ -266,9 +270,9 @@ export default function DiscoverScreen() {
   );
 
   const prioritisedSecondaryCategories = useMemo(() => {
-    const excluded = new Set(prioritisedPrimaryCategories);
+    const primarySet = new Set(prioritisedPrimaryCategories);
     return prioritiseCategories(
-      DISCOVER_SECONDARY_CATEGORIES.filter((c) => !excluded.has(c)),
+      DISCOVER_SECONDARY_CATEGORIES.filter((category) => !primarySet.has(category)),
       seededCategory
     );
   }, [prioritisedPrimaryCategories, seededCategory]);
@@ -280,14 +284,14 @@ export default function DiscoverScreen() {
       discoverVibes.length ? discoverVibes.map(labelForVibe).join(" • ") : "Any vibe",
     ];
 
-    if (discoverFrom.trim()) parts.push(`From ${discoverFrom.trim()}`);
+    if (discoverOrigin.trim()) parts.push(`From ${discoverOrigin.trim()}`);
 
     return parts.join("  •  ");
-  }, [discoverWindowKey, discoverTripLength, discoverVibes, discoverFrom]);
+  }, [discoverWindowKey, discoverTripLength, discoverVibes, discoverOrigin]);
 
   const browseModeLabel = useMemo(() => {
-    const seededMeta = DISCOVER_CATEGORY_META[seededCategory];
-    return seededMeta?.title ?? "Best-fit routes";
+    const meta = DISCOVER_CATEGORY_META[seededCategory];
+    return meta?.title ?? "Best-fit routes";
   }, [seededCategory]);
 
   const goFixturesCategory = useCallback(
@@ -298,7 +302,7 @@ export default function DiscoverScreen() {
           from: currentWindow.from,
           to: currentWindow.to,
           discover: category,
-          discoverFrom: discoverFrom.trim() || undefined,
+          discoverFrom: discoverOrigin.trim() || undefined,
           discoverTripLength,
           discoverVibes: discoverVibes.join(","),
         },
@@ -308,7 +312,7 @@ export default function DiscoverScreen() {
       router,
       currentWindow.from,
       currentWindow.to,
-      discoverFrom,
+      discoverOrigin,
       discoverTripLength,
       discoverVibes,
     ]
@@ -321,10 +325,11 @@ export default function DiscoverScreen() {
 
     try {
       const window = windowForKey(discoverWindowKey);
+
       const pool = await fetchDiscoverPool({
         window,
         windowKey: discoverWindowKey,
-        from: discoverFrom,
+        origin: discoverOrigin,
         tripLength: discoverTripLength,
         vibes: discoverVibes,
         category: seededCategory,
@@ -338,7 +343,7 @@ export default function DiscoverScreen() {
         .map((item) => ({
           item,
           score: discoverScoreForCategory(seededCategory, item, {
-            origin: discoverFrom.trim() || null,
+            origin: discoverOrigin.trim() || null,
             tripLength: discoverTripLength,
             vibes: discoverVibes,
           }),
@@ -370,7 +375,7 @@ export default function DiscoverScreen() {
           from: window.from,
           to: window.to,
           prefMode: "random",
-          prefFrom: discoverFrom.trim() ? discoverFrom.trim() : undefined,
+          prefFrom: discoverOrigin.trim() ? discoverOrigin.trim() : undefined,
           prefWindow: discoverWindowKey,
           prefLength: discoverTripLength,
           prefVibes: discoverVibes.join(","),
@@ -382,7 +387,7 @@ export default function DiscoverScreen() {
   }, [
     loadingRandom,
     discoverWindowKey,
-    discoverFrom,
+    discoverOrigin,
     discoverTripLength,
     discoverVibes,
     seededCategory,
@@ -444,6 +449,14 @@ export default function DiscoverScreen() {
     [goFixturesCategory]
   );
 
+  const allCategoriesCovered = useMemo(() => {
+    const shown = new Set([
+      ...prioritisedPrimaryCategories,
+      ...prioritisedSecondaryCategories,
+    ]);
+    return DISCOVER_ALL_CATEGORIES.every((category) => shown.has(category));
+  }, [prioritisedPrimaryCategories, prioritisedSecondaryCategories]);
+
   return (
     <Background imageSource={getBackground("home")} overlayOpacity={0.68}>
       <SafeAreaView style={styles.container} edges={["top"]}>
@@ -457,7 +470,7 @@ export default function DiscoverScreen() {
               <Text style={styles.kicker}>DISCOVER</Text>
               <Text style={styles.title}>Find football trips worth taking</Text>
               <Text style={styles.sub}>
-                Pick the kind of trip you want, sharpen it with filters, then browse ranked fixtures
+                Start with the kind of trip you want, tighten the setup, then browse ranked fixtures
                 instead of a flat list.
               </Text>
 
@@ -480,8 +493,8 @@ export default function DiscoverScreen() {
               <Text style={styles.label}>Flying from (optional)</Text>
               <View style={styles.inputWrap}>
                 <TextInput
-                  value={discoverFrom}
-                  onChangeText={setDiscoverFrom}
+                  value={discoverOrigin}
+                  onChangeText={setDiscoverOrigin}
                   placeholder="e.g. London, LGW, MAN"
                   placeholderTextColor={theme.colors.textTertiary}
                   style={styles.input}
@@ -492,36 +505,36 @@ export default function DiscoverScreen() {
 
               <Text style={styles.label}>Date window</Text>
               <View style={styles.chipsRow}>
-                {(["wknd", "d7", "d14", "d30"] as DiscoverWindowKey[]).map((k) => (
+                {(["wknd", "d7", "d14", "d30"] as DiscoverWindowKey[]).map((key) => (
                   <FilterChip
-                    key={k}
-                    label={labelForKey(k)}
-                    active={discoverWindowKey === k}
-                    onPress={() => setDiscoverWindowKey(k)}
+                    key={key}
+                    label={labelForKey(key)}
+                    active={discoverWindowKey === key}
+                    onPress={() => setDiscoverWindowKey(key)}
                   />
                 ))}
               </View>
 
               <Text style={styles.label}>Trip length</Text>
               <View style={styles.chipsRow}>
-                {(["day", "1", "2", "3"] as DiscoverTripLength[]).map((k) => (
+                {(["day", "1", "2", "3"] as DiscoverTripLength[]).map((length) => (
                   <FilterChip
-                    key={k}
-                    label={labelForTripLength(k)}
-                    active={discoverTripLength === k}
-                    onPress={() => setDiscoverTripLength(k)}
+                    key={length}
+                    label={labelForTripLength(length)}
+                    active={discoverTripLength === length}
+                    onPress={() => setDiscoverTripLength(length)}
                   />
                 ))}
               </View>
 
               <Text style={styles.label}>Vibe (up to 3)</Text>
               <View style={styles.chipsRow}>
-                {(["easy", "big", "nightlife", "culture", "warm"] as DiscoverVibe[]).map((v) => (
+                {(["easy", "big", "nightlife", "culture", "warm"] as DiscoverVibe[]).map((vibe) => (
                   <FilterChip
-                    key={v}
-                    label={labelForVibe(v)}
-                    active={discoverVibes.includes(v)}
-                    onPress={() => toggleVibe(v)}
+                    key={vibe}
+                    label={labelForVibe(vibe)}
+                    active={discoverVibes.includes(vibe)}
+                    onPress={() => toggleVibe(vibe)}
                   />
                 ))}
               </View>
@@ -531,8 +544,9 @@ export default function DiscoverScreen() {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Browse ranked routes</Text>
             <Text style={styles.sectionSub}>
-              Based on your current setup, <Text style={styles.sectionSubStrong}>{browseModeLabel}</Text> is
-              the strongest starting point. The rest stay available, but the screen should push the better fit up.
+              Based on your current setup,{" "}
+              <Text style={styles.sectionSubStrong}>{browseModeLabel}</Text> is the strongest
+              starting point. The rest stay available, but the best fit should be pushed up.
             </Text>
 
             <View style={styles.primaryGrid}>
@@ -545,7 +559,7 @@ export default function DiscoverScreen() {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>More ways to browse</Text>
             <Text style={styles.sectionSub}>
-              Secondary angles for narrower moods, city pull, or more specific browsing.
+              Secondary angles for narrower moods, city pull, and more specific trip types.
             </Text>
 
             <ScrollView
@@ -553,8 +567,8 @@ export default function DiscoverScreen() {
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.secondaryRow}
             >
-              {prioritisedSecondaryCategories.map((category, index) =>
-                renderCategoryCard(category, true, index === 0 && !prioritisedPrimaryCategories.includes(category))
+              {prioritisedSecondaryCategories.map((category) =>
+                renderCategoryCard(category, true, false)
               )}
             </ScrollView>
           </View>
@@ -562,8 +576,8 @@ export default function DiscoverScreen() {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Let the app pick one</Text>
             <Text style={styles.sectionSub}>
-              This is not blind roulette. It pulls a stable live pool from your current setup, scores it,
-              then drops you into Build Trip from one of the better options.
+              This is not blind roulette. It pulls a stable live pool from your current setup,
+              scores it, then drops you into Build Trip from one of the stronger options.
             </Text>
 
             <Pressable
@@ -590,8 +604,8 @@ export default function DiscoverScreen() {
                   </View>
 
                   <Text style={styles.randomSub}>
-                    Uses your current setup, a stable fixture pool, and category-aware ranking before
-                    making the final pick.
+                    Uses your current filters, a stable fixture pool, and category-aware ranking
+                    before making the final pick.
                   </Text>
 
                   <Text style={styles.randomHint}>{filterSummary}</Text>
@@ -614,9 +628,15 @@ export default function DiscoverScreen() {
               <View style={styles.modeBlock}>
                 <Text style={styles.modeTitle}>Use Fixtures</Text>
                 <Text style={styles.modeText}>
-                  When you already want a direct fixture browse without discovery ranking leading the way.
+                  When you already want a direct fixture browse without discovery ranking leading.
                 </Text>
               </View>
+
+              {!allCategoriesCovered ? (
+                <Text style={styles.modeWarning}>
+                  Discover category coverage is incomplete. Check the category split.
+                </Text>
+              ) : null}
             </View>
           </GlassCard>
         </ScrollView>
@@ -927,6 +947,12 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
     fontSize: 12,
     lineHeight: 18,
+    fontWeight: "800",
+  },
+  modeWarning: {
+    color: "#ffb86b",
+    fontSize: 11,
+    lineHeight: 16,
     fontWeight: "800",
   },
 
