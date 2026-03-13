@@ -212,4 +212,44 @@ export default function FixturesScreen() {
           visible={calendarOpen}
           onClose={closeCalendar}
           subtitle={
-            calIsRange ? `Range: ${calNorm.from} → ${calNorm.to}` : `Day: ${calNorm
+            calIsRange ? `Range: ${calNorm.from} → ${calNorm.to}` : `Day: ${calNorm.from}`
+          }
+          monthText={monthLabel(calMonthYear.y, calMonthYear.m0)}
+          grid={calGrid}
+          minIso={minIso}
+          maxIso={maxIso}
+          calIsRange={calIsRange}
+          calInRange={calInRange}
+          calIsEdge={calIsEdge}
+          onPrevMonth={calPrevMonth}
+          onNextMonth={calNextMonth}
+          onTapDay={onCalendarTapDay}
+          onClearRange={clearCalendarRange}
+          onApply={applyCalendar}
+        />
+      </SafeAreaView>
+    </Background>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1 },
+
+  flatListContent: {
+    paddingBottom: theme.spacing.xl,
+  },
+
+  content: {
+    paddingHorizontal: theme.spacing.lg,
+  },
+
+  listWrap: {
+    gap: 12,
+  },
+
+  center: {
+    paddingVertical: 24,
+    alignItems: "center",
+    gap: 10,
+  },
+});
