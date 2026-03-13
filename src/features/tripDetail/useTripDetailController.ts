@@ -367,4 +367,226 @@ export default function useTripDetailController({
     if (!trip) return;
 
     const mid = clean(matchId);
-    if (!
+    if (!mid) return;
+
+    const count = Array.isArray(trip.matchIds) ? trip.matchIds.length : 0;
+    if (count <= 1) {
+      Alert.alert("Can’t remove", "A trip needs at least one match. Add another match first.");
+      return;
+    }
+
+    Alert.alert("Remove this match?", "This only removes it from the trip — it won’t delete Wallet items.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Remove",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await tripsStore.removeMatchFromTrip(trip.id, mid);
+          } catch {
+            Alert.alert("Couldn’t remove match", "Try again.");
+          }
+        },
+      },
+    ]);
+  }
+
+  function openMatchActions(matchId: string) {
+    if (!trip) return;
+
+    const mid = clean(matchId);
+    const isPrimary = mid === clean((trip as any)?.fixtureIdPrimary);
+
+    Alert.alert(
+      "Match options",
+      isPrimary ? "This is the primary match for the trip." : "Choose what you want to do with this match.",
+      [
+        { text: "Cancel", style: "cancel" },
+        !isPrimary ? { text: "Set as primary", onPress: () => setPrimaryMatch(mid) } : null,
+        { text: "Remove from trip", style: "destructive", onPress: () => removeMatch(mid) },
+      ].filter(Boolean) as any
+    );
+  }
+
+  async function openTicketOptionForMatch(args: {
+    mid: string;
+    homeName: string;
+    awayName: string;
+    kickoffIso: string;
+    leagueName?: string;
+    leagueId?: string | number;
+    dateIso?: string;
+    option: TicketResolutionOption;
+    checkedProviders?: string[];
+    optionCount?: number;
+  }) {
+    await openTrackedPartner({
+      partnerId: mapTicketProviderToPartnerId(args.option.provider),
+      url: args.option.url,
+      title: args.option.title || `Tickets: ${args.homeName} vs ${args.awayName}`,
+      savedItemType: "tickets",
+      metadata: {
+        fixtureId: args.mid,
+        leagueId: args.leagueId,
+        leagueName: args.leagueName,
+        dateIso: args.dateIso,
+        kickoffIso: args.kickoffIso,
+        homeName: args.homeName,
+        awayName: args.awayName,
+        priceMode: "live",
+        ticketProvider: args.option.provider ?? null,
+        resolvedPriceText: args.option.priceText ?? null,
+        resolutionReason: args.option.reason ?? null,
+        exactMatch: Boolean(args.option.exact),
+        score: args.option.score,
+        checkedProviders: args.checkedProviders,
+        optionCount: args.optionCount,
+      },
+    });
+  }
+
+  function showTicketChoiceAlert(args: {
+    mid: string;
+    homeName: string;
+    awayName: string;
+    kickoffIso: string;
+    leagueName?: string;
+    leagueId?: string | number;
+    dateIso?: string;
+    options: TicketResolutionOption[];
+    checkedProviders?: string[];
+  }) {
+    const top = args.options.slice(0, 3);
+
+    Alert.alert(
+      "Choose ticket provider",
+      top
+        .map(
+          (option, index) =>
+            `${index + 1}. ${clean(option.provider)}${clean(option.priceText) ? ` • ${clean(option.priceText)}` : ""}`
+        )
+        .join("\n"),
+      [
+        { text: "Cancel", style: "cancel" },
+        ...top.map((option) => ({
+          text: clean(option.provider),
+          onPress: () =>
+            openTicketOptionForMatch({
+              ...args,
+              option,
+              optionCount: args.options.length,
+            }),
+        })),
+        {
+          text: "Compare all",
+          onPress: () =>
+            router.push({
+              pathname: "/match/[id]",
+              params: { id: args.mid, tripId: activeTripId ?? undefined },
+            } as any),
+        },
+      ] as AlertButton[]
+    );
+  }
+
+  async function openTicketsForMatch(matchId: string) {
+    const mid = clean(matchId);
+    if (!mid) return;
+
+    if (!activeTripId) {
+      Alert.alert("Save trip first", "Save this trip before booking so we can store it in Wallet.");
+      return;
+    }
+
+    const existing = ticketsByMatchId[mid];
+    if (existing && existing.type === "tickets" && existing.status !== "archived" && existing.partnerUrl) {
+      await openSavedItem(existing);
+      return;
+    }
+
+    const row = fixturesById[mid] ?? null;
+
+    const homeName = clean((row as any)?.teams?.home?.name ?? (trip as any)?.homeName);
+    const awayName = clean((row as any)?.teams?.away?.name ?? (trip as any)?.awayName);
+    const kickoffIso = clean((row as any)?.fixture?.date ?? (trip as any)?.kickoffIso) || null;
+    const leagueName = clean((row as any)?.league?.name ?? (trip as any)?.leagueName) || undefined;
+    const leagueIdRaw = (row as any)?.league?.id ?? (trip as any)?.leagueId;
+    const leagueId = typeof leagueIdRaw === "number" || typeof leagueIdRaw === "string" ? leagueIdRaw : undefined;
+
+    if (!homeName || !awayName || !kickoffIso) {
+      Alert.alert("Tickets not available", "Missing team names or kickoff time for this match.");
+      return;
+    }
+
+    const dateIso = trip?.startDate || getIsoDateOnly(kickoffIso);
+
+    try {
+      const resolved = await resolveTicketForFixture({
+        fixtureId: mid,
+        homeName,
+        awayName,
+        kickoffIso,
+        leagueName,
+        leagueId,
+      });
+
+      const options = normalizeTicketOptions(resolved);
+
+      if (!resolved?.ok || options.length === 0) {
+        Alert.alert("Tickets not found", ticketResolverFailureMessage(resolved as TicketResolutionResult | null));
+        return;
+      }
+
+      if (options.length === 1) {
+        await openTicketOptionForMatch({
+          mid,
+          homeName,
+          awayName,
+          kickoffIso,
+          leagueName,
+          leagueId,
+          dateIso,
+          option: options[0],
+          checkedProviders: Array.isArray(resolved.checkedProviders) ? resolved.checkedProviders : undefined,
+          optionCount: options.length,
+        });
+        return;
+      }
+
+      showTicketChoiceAlert({
+        mid,
+        homeName,
+        awayName,
+        kickoffIso,
+        leagueName,
+        leagueId,
+        dateIso,
+        options,
+        checkedProviders: Array.isArray(resolved.checkedProviders) ? resolved.checkedProviders : undefined,
+      });
+    } catch {
+      Alert.alert("Tickets unavailable", "Ticket search failed before the partner click was created.");
+    }
+  }
+
+  return {
+    onEditTrip,
+    onAddMatch,
+    onViewWallet,
+    onUpgradePress,
+    openUntracked,
+    openTrackedPartner,
+    openPartnerOrAlert,
+    openSavedItem,
+    confirmArchive,
+    confirmMarkBooked,
+    confirmMoveToPending,
+    addNote,
+    openNoteActions,
+    setPrimaryMatch,
+    removeMatch,
+    openMatchActions,
+    openTicketsForMatch,
+    addProofForBookedItem,
+  };
+}
