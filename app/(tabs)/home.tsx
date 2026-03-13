@@ -9,6 +9,7 @@ import {
   TextInput,
   Platform,
   Keyboard,
+  Image,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -45,12 +46,12 @@ import { getCityImageUrl } from "@/src/data/cityImages";
 import ContinuePlanning from "@/src/features/home/ContinuePlanning";
 import UpcomingMatches from "@/src/features/home/UpcomingMatches";
 
+const HOME_TOP_LEAGUE_IDS = new Set<number>([39, 140, 135, 78, 61, 88, 94]);
+
 const API_SPORTS_TEAM_LOGO = (teamId: number) =>
   `https://media.api-sports.io/football/teams/${teamId}.png`;
 
 type ShortcutWindow = { from: string; to: string };
-
-const HOME_TOP_LEAGUE_IDS = new Set<number>([39, 140, 135, 78, 61, 88, 94]);
 
 function toKey(s: string) {
   return String(s ?? "").trim().toLowerCase();
@@ -85,6 +86,7 @@ function fixtureLine(r: FixtureListRow) {
   const venue = r?.fixture?.venue?.name ?? "";
   const city = r?.fixture?.venue?.city ?? "";
   const extra = [venue, city].filter(Boolean).join(" • ");
+
   return {
     title: `${home} vs ${away}`,
     meta: extra ? `${kickoff} • ${extra}` : kickoff,
@@ -171,7 +173,9 @@ export default function HomeScreen() {
       setLoadedTrips(s.loaded);
       setTrips(s.trips);
     });
+
     if (!tripsStore.getState().loaded) tripsStore.loadTrips().catch(() => {});
+
     return unsub;
   }, []);
 
@@ -222,6 +226,7 @@ export default function HomeScreen() {
     }
 
     run();
+
     return () => {
       cancelled = true;
     };
@@ -273,6 +278,7 @@ export default function HomeScreen() {
     }
 
     ensureIndex().catch(() => null);
+
     return () => {
       cancelled = true;
     };
@@ -348,8 +354,10 @@ export default function HomeScreen() {
     (cityKey: string) => {
       const ck = String(cityKey ?? "").trim();
       if (!ck) return;
+
       Keyboard.dismiss();
       setQ("");
+
       router.push({
         pathname: "/city/key/[cityKey]",
         params: { cityKey: ck, from: fromIso, to: toIso },
@@ -400,12 +408,15 @@ export default function HomeScreen() {
 
   const resultMeta = useCallback((r: SearchResult): string => {
     const p: any = r.payload;
+
     if (r.type === "team" && p?.kind === "team") {
       return hasTeamGuide(p.slug) ? "Team guide available" : "Team guide coming soon";
     }
+
     if (r.type === "city" && p?.kind === "city") {
       return getCityGuide(p.slug) ? "City guide available" : "City guide coming soon";
     }
+
     return r.subtitle ?? "";
   }, []);
 
@@ -471,14 +482,16 @@ export default function HomeScreen() {
     return getCityImageUrl(city || "london");
   }, [featured]);
 
+  const logoSource = useMemo(() => require("@/src/yna-logo.png"), []);
+
   return (
     <Background
-  imageSource={getBackground("home")}
-  overlayOpacity={0.06}
-  topShadeOpacity={0.42}
-  bottomShadeOpacity={0.46}
-  centerShadeOpacity={0.05}
->
+      imageSource={getBackground("home")}
+      overlayOpacity={0.06}
+      topShadeOpacity={0.42}
+      bottomShadeOpacity={0.46}
+      centerShadeOpacity={0.05}
+    >
       <SafeAreaView style={styles.container} edges={["top"]}>
         <ScrollView
           style={styles.scroll}
@@ -488,17 +501,22 @@ export default function HomeScreen() {
         >
           <GlassCard strength="strong" style={styles.hero} noPadding>
             <View style={styles.heroInner}>
-              <Text style={styles.heroKicker}>YOURNEXTAWAY</Text>
-              <Text style={styles.heroTitle}>Search, plan, go</Text>
+              <View style={styles.heroTopRow}>
+                <View style={styles.logoWrap}>
+                  <Image source={logoSource} style={styles.logo} resizeMode="contain" />
+                </View>
+              </View>
+
+              <Text style={styles.heroTitle}>Plan • Fly • Watch • Repeat</Text>
               <Text style={styles.heroSub}>
-                Search a city, team, league, country, or venue and jump straight into the right place.
+                Search by team, city or country and go straight where you need.
               </Text>
 
               <View style={styles.searchBox}>
                 <TextInput
                   value={q}
                   onChangeText={setQ}
-                  placeholder="Search city, team, league, venue…"
+                  placeholder="Search team, city or country"
                   placeholderTextColor={theme.colors.textTertiary}
                   style={styles.searchInput}
                   autoCapitalize="none"
@@ -506,6 +524,7 @@ export default function HomeScreen() {
                   returnKeyType="search"
                   onSubmitEditing={() => Keyboard.dismiss()}
                 />
+
                 {qNorm.length > 0 ? (
                   <Pressable onPress={clearSearch} style={styles.clearBtn} hitSlop={10}>
                     <Text style={styles.clearText}>Clear</Text>
@@ -541,7 +560,7 @@ export default function HomeScreen() {
                                 idx === 0 ? styles.resultRowFirst : null,
                                 pressed && styles.pressedRow,
                               ]}
-                              android_ripple={{ color: "rgba(79,224,138,0.08)" }}
+                              android_ripple={{ color: "rgba(87,162,56,0.08)" }}
                             >
                               <View style={styles.resultTextWrap}>
                                 <Text style={styles.resultTitle}>{r.title}</Text>
@@ -603,6 +622,7 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+
   scroll: { flex: 1 },
 
   content: {
@@ -621,17 +641,34 @@ const styles = StyleSheet.create({
     gap: 10,
   },
 
-  heroKicker: {
-    color: theme.colors.primary,
-    fontSize: 11,
-    fontWeight: theme.fontWeight.black,
-    letterSpacing: 1.2,
+  heroTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-start",
+  },
+
+  logoWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 999,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  logo: {
+    width: 34,
+    height: 34,
+    opacity: 0.96,
   },
 
   heroTitle: {
     color: theme.colors.text,
-    fontSize: 26,
-    lineHeight: 32,
+    fontSize: 28,
+    lineHeight: 34,
     fontWeight: theme.fontWeight.black,
     letterSpacing: 0.2,
   },
@@ -645,11 +682,11 @@ const styles = StyleSheet.create({
   },
 
   searchBox: {
-    marginTop: 6,
+    marginTop: 8,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
     backgroundColor:
-      Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
+      Platform.OS === "android" ? "rgba(0,0,0,0.18)" : "rgba(255,255,255,0.05)",
     borderRadius: 18,
     paddingHorizontal: 14,
     minHeight: 54,
