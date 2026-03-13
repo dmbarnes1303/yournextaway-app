@@ -1,6 +1,18 @@
 import type { FixtureListRow } from "@/src/services/apiFootball";
 import { atmosphereScore } from "./atmosphereScore";
 
+/* -------------------------------------------------------------------------- */
+/* Types                                                                      */
+/* -------------------------------------------------------------------------- */
+
+export type DiscoverReason =
+  | "Major derby"
+  | "Strong atmosphere club"
+  | "Legendary stadium"
+  | "Good value league"
+  | "Evening kickoff"
+  | "Late-season stakes";
+
 export type DiscoverScores = {
   derbyScore: number;
   atmosphereScore: number;
@@ -13,128 +25,98 @@ export type DiscoverScores = {
 export type DiscoverFixture = {
   fixture: FixtureListRow;
   scores: DiscoverScores;
+  reasons: DiscoverReason[];
 };
 
-type ClubSignal = {
-  keys: string[];
-};
+/* -------------------------------------------------------------------------- */
+/* Helpers                                                                    */
+/* -------------------------------------------------------------------------- */
+
+function clean(v: unknown) {
+  return String(v ?? "").trim();
+}
+
+function lower(v: unknown) {
+  return clean(v).toLowerCase();
+}
+
+function includesAny(text: string, keys: string[]) {
+  return keys.some((k) => text.includes(k));
+}
+
+/* -------------------------------------------------------------------------- */
+/* Derby definitions                                                          */
+/* -------------------------------------------------------------------------- */
 
 type DerbyDefinition = {
-  name: string;
   home: string[];
   away: string[];
   score: number;
 };
 
 const DERBIES: DerbyDefinition[] = [
-  {
-    name: "North London Derby",
-    home: ["arsenal"],
-    away: ["tottenham", "spurs", "tottenham hotspur"],
-    score: 4,
-  },
-  {
-    name: "El Clasico",
-    home: ["barcelona", "fc barcelona", "barca"],
-    away: ["real madrid"],
-    score: 5,
-  },
-  {
-    name: "Manchester Derby",
-    home: ["manchester united", "man united"],
-    away: ["manchester city", "man city"],
-    score: 4,
-  },
-  {
-    name: "Merseyside Derby",
-    home: ["liverpool"],
-    away: ["everton"],
-    score: 4,
-  },
-  {
-    name: "Old Firm",
-    home: ["celtic"],
-    away: ["rangers"],
-    score: 5,
-  },
-  {
-    name: "Derby della Madonnina",
-    home: ["inter", "inter milan", "internazionale"],
-    away: ["milan", "ac milan"],
-    score: 5,
-  },
-  {
-    name: "Derby della Capitale",
-    home: ["roma", "as roma"],
-    away: ["lazio"],
-    score: 4,
-  },
-  {
-    name: "Der Klassiker",
-    home: ["bayern", "bayern munich"],
-    away: ["dortmund", "borussia dortmund"],
-    score: 4,
-  },
-  {
-    name: "Seville Derby",
-    home: ["sevilla"],
-    away: ["real betis", "betis"],
-    score: 4,
-  },
-  {
-    name: "Turin Derby",
-    home: ["juventus"],
-    away: ["torino"],
-    score: 3,
-  },
-  {
-    name: "Rome Derby",
-    home: ["roma", "as roma"],
-    away: ["lazio"],
-    score: 4,
-  },
-  {
-    name: "Porto Derby",
-    home: ["porto", "fc porto"],
-    away: ["boavista"],
-    score: 3,
-  },
+  { home: ["arsenal"], away: ["tottenham", "spurs"], score: 4 },
+  { home: ["barcelona", "barca"], away: ["real madrid"], score: 5 },
+  { home: ["manchester united"], away: ["manchester city"], score: 4 },
+  { home: ["liverpool"], away: ["everton"], score: 4 },
+  { home: ["celtic"], away: ["rangers"], score: 5 },
+  { home: ["inter"], away: ["milan"], score: 5 },
+  { home: ["roma"], away: ["lazio"], score: 4 },
+  { home: ["bayern"], away: ["dortmund"], score: 4 },
+  { home: ["sevilla"], away: ["betis"], score: 4 },
+  { home: ["juventus"], away: ["torino"], score: 3 },
+  { home: ["porto"], away: ["boavista"], score: 3 },
 ];
 
-const LEGENDARY_HOME_CLUBS: ClubSignal[] = [
-  { keys: ["real madrid"] },
-  { keys: ["barcelona", "fc barcelona", "barca"] },
-  { keys: ["manchester united", "man united"] },
-  { keys: ["liverpool"] },
-  { keys: ["bayern", "bayern munich"] },
-  { keys: ["milan", "ac milan"] },
-  { keys: ["inter", "inter milan", "internazionale"] },
-  { keys: ["juventus"] },
-  { keys: ["borussia dortmund", "dortmund"] },
-  { keys: ["ajax"] },
-  { keys: ["celtic"] },
-  { keys: ["rangers"] },
-  { keys: ["benfica"] },
-  { keys: ["porto", "fc porto"] },
-  { keys: ["sporting", "sporting cp"] },
+/* -------------------------------------------------------------------------- */
+/* Club prestige signals                                                      */
+/* -------------------------------------------------------------------------- */
+
+const LEGENDARY_CLUBS = [
+  "real madrid",
+  "barcelona",
+  "manchester united",
+  "liverpool",
+  "bayern",
+  "milan",
+  "inter",
+  "juventus",
+  "dortmund",
+  "ajax",
+  "celtic",
+  "rangers",
+  "benfica",
+  "porto",
+  "sporting",
 ];
 
-const STRONG_VALUE_LEAGUE_KEYS = [
+const STRONG_ATMOSPHERE_CLUBS = [
+  "dortmund",
+  "galatasaray",
+  "fenerbahce",
+  "napoli",
+  "marseille",
+  "celtic",
+  "rangers",
+  "ajax",
+];
+
+/* -------------------------------------------------------------------------- */
+/* Value signals                                                              */
+/* -------------------------------------------------------------------------- */
+
+const STRONG_VALUE_LEAGUES = [
   "bundesliga",
-  "eredi",
-  "portugal",
   "primeira",
   "belgium",
-  "jupiler",
   "austria",
-  "bundesliga austria",
   "czech",
   "croatia",
   "poland",
   "switzerland",
 ];
 
-const MID_VALUE_LEAGUE_KEYS = [
+const MID_VALUE_LEAGUES = [
   "netherlands",
   "scotland",
   "denmark",
@@ -142,47 +124,29 @@ const MID_VALUE_LEAGUE_KEYS = [
   "sweden",
 ];
 
-function clean(value: unknown): string {
-  return String(value ?? "").trim();
-}
+/* -------------------------------------------------------------------------- */
+/* Derby detection                                                            */
+/* -------------------------------------------------------------------------- */
 
-function lower(value: unknown): string {
-  return clean(value).toLowerCase();
-}
+function derbyScore(home: string, away: string): number {
+  const h = lower(home);
+  const a = lower(away);
 
-function includesAny(haystack: string, needles: string[]) {
-  return needles.some((needle) => haystack.includes(lower(needle)));
-}
+  for (const d of DERBIES) {
+    const forward = includesAny(h, d.home) && includesAny(a, d.away);
+    const reverse = includesAny(h, d.away) && includesAny(a, d.home);
 
-function clubMatches(name: string, signal: ClubSignal) {
-  return includesAny(name, signal.keys);
-}
-
-function matchPairEitherWay(
-  homeName: string,
-  awayName: string,
-  left: string[],
-  right: string[]
-) {
-  const home = lower(homeName);
-  const away = lower(awayName);
-
-  const forward = includesAny(home, left) && includesAny(away, right);
-  const reverse = includesAny(home, right) && includesAny(away, left);
-
-  return forward || reverse;
-}
-
-function isDerby(home: string, away: string): number {
-  for (const derby of DERBIES) {
-    if (matchPairEitherWay(home, away, derby.home, derby.away)) {
-      return derby.score;
-    }
+    if (forward || reverse) return d.score;
   }
+
   return 0;
 }
 
-function nightMatchScore(dateIso?: string | null): number {
+/* -------------------------------------------------------------------------- */
+/* Night kickoff scoring                                                      */
+/* -------------------------------------------------------------------------- */
+
+function nightMatchScore(dateIso?: string | null) {
   if (!dateIso) return 0;
 
   const d = new Date(dateIso);
@@ -197,109 +161,100 @@ function nightMatchScore(dateIso?: string | null): number {
   return 0;
 }
 
-function stadiumScore(home: string): number {
-  const homeLower = lower(home);
+/* -------------------------------------------------------------------------- */
+/* Stadium / club prestige                                                    */
+/* -------------------------------------------------------------------------- */
 
-  if (LEGENDARY_HOME_CLUBS.some((club) => clubMatches(homeLower, club))) return 3;
+function stadiumScore(home: string) {
+  const h = lower(home);
+
+  if (LEGENDARY_CLUBS.some((c) => h.includes(c))) return 3;
 
   if (
-    includesAny(homeLower, [
-      "atletico",
-      "arsenal",
-      "chelsea",
-      "tottenham",
-      "marseille",
-      "napoli",
-      "fenerbahce",
-      "galatasaray",
-      "besiktas",
-      "psv",
-      "feyenoord",
-      "anderlecht",
-      "club brugge",
-    ])
-  ) {
+    STRONG_ATMOSPHERE_CLUBS.some((c) => h.includes(c))
+  )
     return 2;
-  }
 
   return 0;
 }
 
-function valueScore(f: FixtureListRow): number {
+/* -------------------------------------------------------------------------- */
+/* Value scoring                                                              */
+/* -------------------------------------------------------------------------- */
+
+function valueScore(f: FixtureListRow) {
   const league = lower(f.league?.name);
   const country = lower((f.league as any)?.country);
 
-  const combined = `${league} ${country}`.trim();
+  const combined = `${league} ${country}`;
 
-  if (STRONG_VALUE_LEAGUE_KEYS.some((k) => combined.includes(k))) return 3;
-  if (MID_VALUE_LEAGUE_KEYS.some((k) => combined.includes(k))) return 2;
-
-  if (
-    combined.includes("champions league") ||
-    combined.includes("premier league") ||
-    combined.includes("serie a") ||
-    combined.includes("laliga") ||
-    combined.includes("la liga")
-  ) {
-    return 0;
-  }
+  if (STRONG_VALUE_LEAGUES.some((k) => combined.includes(k))) return 3;
+  if (MID_VALUE_LEAGUES.some((k) => combined.includes(k))) return 2;
 
   return 1;
 }
 
-function titleDramaScore(f: FixtureListRow): number {
+/* -------------------------------------------------------------------------- */
+/* Title drama scoring                                                        */
+/* -------------------------------------------------------------------------- */
+
+function titleDramaScore(f: FixtureListRow) {
   const round = lower(f.league?.round);
-  const league = lower(f.league?.name);
 
   if (!round) return 0;
 
-  const roundMatch = round.match(/(\d{1,2})/);
-  const roundNum = roundMatch ? Number(roundMatch[1]) : null;
+  const match = round.match(/(\d+)/);
+  const roundNum = match ? Number(match[1]) : null;
 
-  if (!roundNum || !Number.isFinite(roundNum)) return 0;
+  if (!roundNum) return 0;
 
-  if (
-    league.includes("premier") ||
-    league.includes("championship") ||
-    league.includes("serie a") ||
-    league.includes("liga") ||
-    league.includes("bundesliga") ||
-    league.includes("eredivisie") ||
-    league.includes("primeira") ||
-    league.includes("scottish") ||
-    league.includes("super lig")
-  ) {
-    if (roundNum >= 34) return 3;
-    if (roundNum >= 30) return 2;
-    if (roundNum >= 26) return 1;
-    return 0;
-  }
-
-  if (roundNum >= 28) return 2;
-  if (roundNum >= 24) return 1;
+  if (roundNum >= 34) return 3;
+  if (roundNum >= 30) return 2;
+  if (roundNum >= 26) return 1;
 
   return 0;
 }
+
+/* -------------------------------------------------------------------------- */
+/* Scoring                                                                    */
+/* -------------------------------------------------------------------------- */
 
 export function scoreFixture(f: FixtureListRow): DiscoverFixture {
   const home = clean(f.teams?.home?.name);
   const away = clean(f.teams?.away?.name);
 
+  const derby = derbyScore(home, away);
+  const atmosphere = atmosphereScore(home);
+  const stadium = stadiumScore(home);
+  const value = valueScore(f);
+  const night = nightMatchScore(f.fixture?.date);
+  const drama = titleDramaScore(f);
+
+  const reasons: DiscoverReason[] = [];
+
+  if (derby >= 4) reasons.push("Major derby");
+  if (atmosphere >= 3) reasons.push("Strong atmosphere club");
+  if (stadium >= 3) reasons.push("Legendary stadium");
+  if (value >= 3) reasons.push("Good value league");
+  if (night >= 2) reasons.push("Evening kickoff");
+  if (drama >= 2) reasons.push("Late-season stakes");
+
   const scores: DiscoverScores = {
-    derbyScore: isDerby(home, away),
-    atmosphereScore: atmosphereScore(home),
-    stadiumScore: stadiumScore(home),
-    valueScore: valueScore(f),
-    nightScore: nightMatchScore(f.fixture?.date),
-    titleDramaScore: titleDramaScore(f),
+    derbyScore: derby,
+    atmosphereScore: atmosphere,
+    stadiumScore: stadium,
+    valueScore: value,
+    nightScore: night,
+    titleDramaScore: drama,
   };
 
   return {
     fixture: f,
     scores,
+    reasons,
   };
 }
 
 export function buildDiscoverScores(fixtures: FixtureListRow[]) {
   return fixtures.map(scoreFixture);
-    }
+}
