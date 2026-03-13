@@ -1,27 +1,19 @@
 import type { ImageSourcePropType } from "react-native";
 import { normalizeCityKey } from "@/src/utils/city";
 
-export type BackgroundPattern =
-  | "none"
-  | "pitch"
-  | "routes"
-  | "grid"
-  | "vault"
-  | "calm";
-
 export type BackgroundAccent = "green" | "blue" | "neutral" | "mixed";
 
 export type BackgroundSpec = {
   kind: "spec";
   accent: BackgroundAccent;
-  pattern: BackgroundPattern;
   colors: [string, string, string];
-  topGlowColor: string;
-  topGlowOpacity?: number;
-  centerGlowColor?: string;
-  centerGlowOpacity?: number;
+  topTintColor: string;
+  topTintOpacity?: number;
+  focalTintColor?: string;
+  focalTintOpacity?: number;
+  focalTintPosition?: "left" | "center" | "right";
+  vignetteOpacity?: number;
   bottomShadeOpacity?: number;
-  grainOpacity?: number;
 };
 
 export type BackgroundSource = string | ImageSourcePropType | BackgroundSpec;
@@ -50,234 +42,239 @@ const u = (photoId: string) =>
   `https://images.unsplash.com/${photoId}?auto=format&fit=crop&w=1800&h=3200&fm=jpg&q=82`;
 
 /**
- * Main tabs + app shells now use branded generated surfaces instead of photos.
- * That gives you consistent contrast, cleaner card readability, and a more premium feel.
+ * Premium non-image background system.
+ *
+ * Important:
+ * - No literal shapes
+ * - No faux football diagrams
+ * - No travel arcs
+ * - No decorative blobs
+ *
+ * Each screen gets only a tonal identity.
  */
 const BACKGROUNDS: Record<BackgroundKey, BackgroundSource> = {
-  // Core tabs
   home: {
     kind: "spec",
     accent: "green",
-    pattern: "pitch",
-    colors: ["#07110D", "#0A1711", "#101C16"],
-    topGlowColor: "#5CCB5F",
-    topGlowOpacity: 0.16,
-    centerGlowColor: "#173224",
-    centerGlowOpacity: 0.16,
-    bottomShadeOpacity: 0.22,
-    grainOpacity: 0.03,
+    colors: ["#08100D", "#09130F", "#0B110E"],
+    topTintColor: "#57A238",
+    topTintOpacity: 0.08,
+    focalTintColor: "#1A3A27",
+    focalTintOpacity: 0.12,
+    focalTintPosition: "center",
+    vignetteOpacity: 0.22,
+    bottomShadeOpacity: 0.28,
   },
 
   explore: {
     kind: "spec",
     accent: "mixed",
-    pattern: "routes",
-    colors: ["#071018", "#0A1416", "#111A1B"],
-    topGlowColor: "#4E76D9",
-    topGlowOpacity: 0.14,
-    centerGlowColor: "#4FAE72",
-    centerGlowOpacity: 0.1,
-    bottomShadeOpacity: 0.24,
-    grainOpacity: 0.03,
+    colors: ["#091017", "#0A1216", "#0A0F11"],
+    topTintColor: "#1A4A84",
+    topTintOpacity: 0.08,
+    focalTintColor: "#1A3B2E",
+    focalTintOpacity: 0.09,
+    focalTintPosition: "center",
+    vignetteOpacity: 0.24,
+    bottomShadeOpacity: 0.30,
   },
 
   fixtures: {
     kind: "spec",
     accent: "blue",
-    pattern: "grid",
-    colors: ["#071018", "#09141C", "#0D1920"],
-    topGlowColor: "#2D6CDF",
-    topGlowOpacity: 0.14,
-    centerGlowColor: "#0F3C64",
-    centerGlowOpacity: 0.12,
-    bottomShadeOpacity: 0.24,
-    grainOpacity: 0.025,
+    colors: ["#08111D", "#09131A", "#090D10"],
+    topTintColor: "#2A5AA8",
+    topTintOpacity: 0.09,
+    focalTintColor: "#123663",
+    focalTintOpacity: 0.10,
+    focalTintPosition: "center",
+    vignetteOpacity: 0.24,
+    bottomShadeOpacity: 0.30,
   },
 
   match: {
     kind: "spec",
     accent: "blue",
-    pattern: "grid",
-    colors: ["#071018", "#09141C", "#0D1920"],
-    topGlowColor: "#2D6CDF",
-    topGlowOpacity: 0.16,
-    centerGlowColor: "#0F3C64",
-    centerGlowOpacity: 0.14,
-    bottomShadeOpacity: 0.26,
-    grainOpacity: 0.025,
+    colors: ["#08111D", "#09131A", "#090D10"],
+    topTintColor: "#2A5AA8",
+    topTintOpacity: 0.10,
+    focalTintColor: "#123663",
+    focalTintOpacity: 0.11,
+    focalTintPosition: "center",
+    vignetteOpacity: 0.24,
+    bottomShadeOpacity: 0.30,
   },
 
   stadium: {
     kind: "spec",
     accent: "green",
-    pattern: "pitch",
-    colors: ["#07110D", "#09150F", "#0F1A14"],
-    topGlowColor: "#4FAE72",
-    topGlowOpacity: 0.14,
-    centerGlowColor: "#163325",
-    centerGlowOpacity: 0.1,
-    bottomShadeOpacity: 0.24,
-    grainOpacity: 0.03,
+    colors: ["#08100D", "#09130F", "#0A0E0C"],
+    topTintColor: "#57A238",
+    topTintOpacity: 0.07,
+    focalTintColor: "#1C3423",
+    focalTintOpacity: 0.10,
+    focalTintPosition: "center",
+    vignetteOpacity: 0.22,
+    bottomShadeOpacity: 0.28,
   },
 
   team: {
     kind: "spec",
     accent: "mixed",
-    pattern: "pitch",
-    colors: ["#07110D", "#0A1418", "#101A17"],
-    topGlowColor: "#4FAE72",
-    topGlowOpacity: 0.12,
-    centerGlowColor: "#345FA8",
-    centerGlowOpacity: 0.08,
-    bottomShadeOpacity: 0.24,
-    grainOpacity: 0.03,
+    colors: ["#08110F", "#0A1215", "#0A0E10"],
+    topTintColor: "#57A238",
+    topTintOpacity: 0.06,
+    focalTintColor: "#123663",
+    focalTintOpacity: 0.08,
+    focalTintPosition: "center",
+    vignetteOpacity: 0.22,
+    bottomShadeOpacity: 0.28,
   },
 
   trips: {
     kind: "spec",
     accent: "mixed",
-    pattern: "routes",
-    colors: ["#071018", "#0A1318", "#10171D"],
-    topGlowColor: "#4E76D9",
-    topGlowOpacity: 0.14,
-    centerGlowColor: "#5CCB5F",
-    centerGlowOpacity: 0.08,
-    bottomShadeOpacity: 0.26,
-    grainOpacity: 0.025,
+    colors: ["#09111A", "#0A1117", "#090D10"],
+    topTintColor: "#1C4E91",
+    topTintOpacity: 0.08,
+    focalTintColor: "#173222",
+    focalTintOpacity: 0.08,
+    focalTintPosition: "right",
+    vignetteOpacity: 0.24,
+    bottomShadeOpacity: 0.30,
   },
 
   trip: {
     kind: "spec",
     accent: "mixed",
-    pattern: "routes",
-    colors: ["#071018", "#0A1318", "#10171D"],
-    topGlowColor: "#4E76D9",
-    topGlowOpacity: 0.14,
-    centerGlowColor: "#5CCB5F",
-    centerGlowOpacity: 0.08,
-    bottomShadeOpacity: 0.26,
-    grainOpacity: 0.025,
+    colors: ["#09111A", "#0A1117", "#090D10"],
+    topTintColor: "#1C4E91",
+    topTintOpacity: 0.08,
+    focalTintColor: "#173222",
+    focalTintOpacity: 0.08,
+    focalTintPosition: "right",
+    vignetteOpacity: 0.24,
+    bottomShadeOpacity: 0.30,
   },
 
   wallet: {
     kind: "spec",
     accent: "neutral",
-    pattern: "vault",
-    colors: ["#090B0D", "#101517", "#151B1C"],
-    topGlowColor: "#3C5662",
-    topGlowOpacity: 0.11,
-    centerGlowColor: "#22353A",
-    centerGlowOpacity: 0.08,
+    colors: ["#0A0D0E", "#0E1212", "#0A0D0D"],
+    topTintColor: "#33423B",
+    topTintOpacity: 0.05,
+    focalTintColor: "#1B2723",
+    focalTintOpacity: 0.07,
+    focalTintPosition: "left",
+    vignetteOpacity: 0.22,
     bottomShadeOpacity: 0.28,
-    grainOpacity: 0.02,
   },
 
   profile: {
     kind: "spec",
     accent: "neutral",
-    pattern: "calm",
-    colors: ["#0A0C0D", "#111515", "#171B1A"],
-    topGlowColor: "#314438",
-    topGlowOpacity: 0.08,
-    centerGlowColor: "#1B2421",
-    centerGlowOpacity: 0.05,
+    colors: ["#0A0C0D", "#0D1111", "#090B0C"],
+    topTintColor: "#314438",
+    topTintOpacity: 0.04,
+    focalTintColor: "#1A221F",
+    focalTintOpacity: 0.05,
+    focalTintPosition: "center",
+    vignetteOpacity: 0.18,
     bottomShadeOpacity: 0.24,
-    grainOpacity: 0.018,
   },
 
-  // Entry / onboarding / paywall
   landing: {
     kind: "spec",
     accent: "green",
-    pattern: "pitch",
-    colors: ["#07110D", "#0A1711", "#101C16"],
-    topGlowColor: "#5CCB5F",
-    topGlowOpacity: 0.16,
-    centerGlowColor: "#173224",
-    centerGlowOpacity: 0.16,
-    bottomShadeOpacity: 0.24,
-    grainOpacity: 0.03,
+    colors: ["#08100D", "#09130F", "#0B110E"],
+    topTintColor: "#57A238",
+    topTintOpacity: 0.08,
+    focalTintColor: "#1A3A27",
+    focalTintOpacity: 0.12,
+    focalTintPosition: "center",
+    vignetteOpacity: 0.22,
+    bottomShadeOpacity: 0.28,
   },
 
   "landing-hero": {
     kind: "spec",
     accent: "green",
-    pattern: "pitch",
-    colors: ["#07110D", "#0A1711", "#101C16"],
-    topGlowColor: "#5CCB5F",
-    topGlowOpacity: 0.16,
-    centerGlowColor: "#173224",
-    centerGlowOpacity: 0.16,
-    bottomShadeOpacity: 0.24,
-    grainOpacity: 0.03,
+    colors: ["#08100D", "#09130F", "#0B110E"],
+    topTintColor: "#57A238",
+    topTintOpacity: 0.08,
+    focalTintColor: "#1A3A27",
+    focalTintOpacity: 0.12,
+    focalTintPosition: "center",
+    vignetteOpacity: 0.22,
+    bottomShadeOpacity: 0.28,
   },
 
   "onboarding-1": {
     kind: "spec",
     accent: "green",
-    pattern: "pitch",
-    colors: ["#07110D", "#0A1711", "#101C16"],
-    topGlowColor: "#5CCB5F",
-    topGlowOpacity: 0.16,
-    centerGlowColor: "#173224",
-    centerGlowOpacity: 0.16,
-    bottomShadeOpacity: 0.24,
-    grainOpacity: 0.03,
+    colors: ["#08100D", "#09130F", "#0B110E"],
+    topTintColor: "#57A238",
+    topTintOpacity: 0.08,
+    focalTintColor: "#1A3A27",
+    focalTintOpacity: 0.12,
+    focalTintPosition: "center",
+    vignetteOpacity: 0.22,
+    bottomShadeOpacity: 0.28,
   },
 
   "onboarding-2": {
     kind: "spec",
     accent: "mixed",
-    pattern: "routes",
-    colors: ["#071018", "#0A1416", "#111A1B"],
-    topGlowColor: "#4E76D9",
-    topGlowOpacity: 0.14,
-    centerGlowColor: "#4FAE72",
-    centerGlowOpacity: 0.1,
-    bottomShadeOpacity: 0.24,
-    grainOpacity: 0.03,
+    colors: ["#091017", "#0A1216", "#0A0F11"],
+    topTintColor: "#1A4A84",
+    topTintOpacity: 0.08,
+    focalTintColor: "#1A3B2E",
+    focalTintOpacity: 0.09,
+    focalTintPosition: "center",
+    vignetteOpacity: 0.24,
+    bottomShadeOpacity: 0.30,
   },
 
   "onboarding-3": {
     kind: "spec",
     accent: "blue",
-    pattern: "grid",
-    colors: ["#071018", "#09141C", "#0D1920"],
-    topGlowColor: "#2D6CDF",
-    topGlowOpacity: 0.14,
-    centerGlowColor: "#0F3C64",
-    centerGlowOpacity: 0.12,
-    bottomShadeOpacity: 0.24,
-    grainOpacity: 0.025,
+    colors: ["#08111D", "#09131A", "#090D10"],
+    topTintColor: "#2A5AA8",
+    topTintOpacity: 0.09,
+    focalTintColor: "#123663",
+    focalTintOpacity: 0.10,
+    focalTintPosition: "center",
+    vignetteOpacity: 0.24,
+    bottomShadeOpacity: 0.30,
   },
 
   "onboarding-4": {
     kind: "spec",
     accent: "mixed",
-    pattern: "routes",
-    colors: ["#071018", "#0A1318", "#10171D"],
-    topGlowColor: "#4E76D9",
-    topGlowOpacity: 0.14,
-    centerGlowColor: "#5CCB5F",
-    centerGlowOpacity: 0.08,
-    bottomShadeOpacity: 0.26,
-    grainOpacity: 0.025,
+    colors: ["#09111A", "#0A1117", "#090D10"],
+    topTintColor: "#1C4E91",
+    topTintOpacity: 0.08,
+    focalTintColor: "#173222",
+    focalTintOpacity: 0.08,
+    focalTintPosition: "right",
+    vignetteOpacity: 0.24,
+    bottomShadeOpacity: 0.30,
   },
 
   paywall: {
     kind: "spec",
     accent: "green",
-    pattern: "pitch",
-    colors: ["#07110D", "#0A1711", "#101C16"],
-    topGlowColor: "#5CCB5F",
-    topGlowOpacity: 0.16,
-    centerGlowColor: "#173224",
-    centerGlowOpacity: 0.16,
-    bottomShadeOpacity: 0.24,
-    grainOpacity: 0.03,
+    colors: ["#08100D", "#09130F", "#0B110E"],
+    topTintColor: "#57A238",
+    topTintOpacity: 0.08,
+    focalTintColor: "#1A3A27",
+    focalTintOpacity: 0.12,
+    focalTintPosition: "center",
+    vignetteOpacity: 0.22,
+    bottomShadeOpacity: 0.28,
   },
 
-  // City guides can still use imagery
+  // Keep imagery only for city guides.
   city: u("photo-1499856871958-5b9627545d1a"),
 };
 
