@@ -40,27 +40,15 @@ import {
 import { hasTeamGuide } from "@/src/data/teamGuides";
 import { getCityGuide } from "@/src/data/cityGuides";
 import { getFlagImageUrl } from "@/src/utils/flagImages";
-import { getPopularTeams } from "@/src/data/teams";
 import { getCityImageUrl } from "@/src/data/cityImages";
 
 import ContinuePlanning from "@/src/features/home/ContinuePlanning";
-import RouteTiles from "@/src/features/home/RouteTiles";
 import UpcomingMatches from "@/src/features/home/UpcomingMatches";
-import BrowseStartingPoints from "@/src/features/home/BrowseStartingPoints";
 
 const API_SPORTS_TEAM_LOGO = (teamId: number) =>
   `https://media.api-sports.io/football/teams/${teamId}.png`;
 
 type ShortcutWindow = { from: string; to: string };
-type CityChip = { name: string; countryCode: string };
-
-const POPULAR_CITIES: CityChip[] = [
-  { name: "Paris", countryCode: "FR" },
-  { name: "Rome", countryCode: "IT" },
-  { name: "Barcelona", countryCode: "ES" },
-  { name: "Amsterdam", countryCode: "NL" },
-  { name: "Lisbon", countryCode: "PT" },
-];
 
 const HOME_TOP_LEAGUE_IDS = new Set<number>([39, 140, 135, 78, 61, 88, 94]);
 
@@ -74,18 +62,6 @@ function cityKeyFromName(name: string) {
     .replace(/[^a-z0-9\s-]/g, "")
     .trim()
     .replace(/\s+/g, "-");
-}
-
-function dedupeBy<T>(arr: T[], keyFn: (t: T) => string): T[] {
-  const seen = new Set<string>();
-  const out: T[] = [];
-  for (const item of arr) {
-    const k = keyFn(item);
-    if (!k || seen.has(k)) continue;
-    seen.add(k);
-    out.push(item);
-  }
-  return out;
 }
 
 function titleFromSlug(s: string) {
@@ -164,11 +140,47 @@ function scoreFixture(r: FixtureListRow): number {
 
 function useDebouncedValue<T>(value: T, delayMs: number) {
   const [debounced, setDebounced] = useState(value);
+
   useEffect(() => {
     const t = setTimeout(() => setDebounced(value), delayMs);
     return () => clearTimeout(t);
   }, [value, delayMs]);
+
   return debounced;
+}
+
+function QuickActionCard({
+  title,
+  sub,
+  variant = "default",
+  onPress,
+}: {
+  title: string;
+  sub: string;
+  variant?: "default" | "primary";
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [styles.quickActionPress, pressed && styles.pressed]}
+      android_ripple={{ color: "rgba(79,224,138,0.08)" }}
+    >
+      <GlassCard
+        strength="default"
+        style={[
+          styles.quickActionCard,
+          variant === "primary" && styles.quickActionCardPrimary,
+        ]}
+        noPadding
+      >
+        <View style={styles.quickActionInner}>
+          <Text style={styles.quickActionTitle}>{title}</Text>
+          <Text style={styles.quickActionSub}>{sub}</Text>
+        </View>
+      </GlassCard>
+    </Pressable>
+  );
 }
 
 export default function HomeScreen() {
@@ -388,15 +400,6 @@ export default function HomeScreen() {
     [router, fromIso, toIso]
   );
 
-  const goCityFromName = useCallback(
-    (name: string) => {
-      const ck = cityKeyFromName(name);
-      if (!ck) return;
-      goCityKey(ck);
-    },
-    [goCityKey]
-  );
-
   const onPressSearchResult = useCallback(
     (r: SearchResult) => {
       const p: any = r.payload;
@@ -448,54 +451,16 @@ export default function HomeScreen() {
     return r.subtitle ?? "";
   }, []);
 
-  const cities = useMemo(
-    () => dedupeBy(POPULAR_CITIES, (c) => toKey(c.name)).slice(0, 5),
-    []
-  );
-  const popularTeams = useMemo(
-    () => getPopularTeams().filter((t) => typeof (t as any)?.teamId === "number").slice(0, 5),
-    []
-  );
-
-  const routeTiles = useMemo(
-    () => [
-      {
-        key: "discover",
-        title: "Discover",
-        sub: "Start with inspiration",
-        icon: "🧭",
-        onPress: goDiscover,
-      },
-      {
-        key: "fixtures",
-        title: "Fixtures",
-        sub: "Browse real match options",
-        icon: "📅",
-        onPress: goFixturesHub,
-      },
-      {
-        key: "trips",
-        title: "Trips",
-        sub: "Open saved workspaces",
-        icon: "✈️",
-        onPress: goTrips,
-      },
-      {
-        key: "wallet",
-        title: "Wallet",
-        sub: "Docs and confirmations",
-        icon: "💼",
-        onPress: goWallet,
-      },
-      {
-        key: "calendar",
-        title: "Calendar",
-        sub: "Useful upcoming windows",
-        icon: "🗓️",
-        onPress: goFootballCalendar,
-      },
-    ],
-    [goDiscover, goFixturesHub, goTrips, goWallet, goFootballCalendar]
+  const flatSearchResults = useMemo(
+    () =>
+      [
+        ...buckets.teams,
+        ...buckets.cities,
+        ...buckets.venues,
+        ...buckets.countries,
+        ...buckets.leagues,
+      ].slice(0, 12),
+    [buckets]
   );
 
   const nextTripCityTitle = useMemo(() => {
@@ -548,29 +513,9 @@ export default function HomeScreen() {
     return getCityImageUrl(city || "london");
   }, [featured]);
 
-  const onOpenTeam = useCallback(
-    (teamKey: string) => {
-      Keyboard.dismiss();
-      setQ("");
-      router.push({
-        pathname: "/team/[teamKey]",
-        params: { teamKey: String(teamKey), from: fromIso, to: toIso },
-      } as any);
-    },
-    [router, fromIso, toIso]
-  );
-
-  const flatSearchResults = useMemo(
-    () =>
-      [
-        ...buckets.teams,
-        ...buckets.cities,
-        ...buckets.venues,
-        ...buckets.countries,
-        ...buckets.leagues,
-      ].slice(0, 12),
-    [buckets]
-  );
+  const searchContextLine = useMemo(() => {
+    return "Search a city, team, league, country, or venue and jump straight into the right place.";
+  }, []);
 
   return (
     <Background imageSource={getBackground("home")} overlayOpacity={0.64}>
@@ -585,16 +530,13 @@ export default function HomeScreen() {
             <View style={styles.heroInner}>
               <Text style={styles.heroKicker}>YOURNEXTAWAY</Text>
               <Text style={styles.heroTitle}>Your football travel hub</Text>
-              <Text style={styles.heroSub}>
-                Search a city, team, country, league, or venue. Then go straight into the right part
-                of the app instead of wandering around it.
-              </Text>
+              <Text style={styles.heroSub}>{searchContextLine}</Text>
 
               <View style={styles.searchBox}>
                 <TextInput
                   value={q}
                   onChangeText={setQ}
-                  placeholder="Search…"
+                  placeholder="Search city, team, league, venue…"
                   placeholderTextColor={theme.colors.textTertiary}
                   style={styles.searchInput}
                   autoCapitalize="none"
@@ -610,45 +552,12 @@ export default function HomeScreen() {
               </View>
 
               {!showSearchResults ? (
-                <View style={styles.heroActionGrid}>
-                  <Pressable
-                    onPress={goDiscover}
-                    style={({ pressed }) => [
-                      styles.heroBtn,
-                      styles.heroBtnPrimary,
-                      pressed && styles.pressed,
-                    ]}
-                    android_ripple={{ color: "rgba(79,224,138,0.10)" }}
-                  >
-                    <Text style={styles.heroBtnPrimaryText}>Discover</Text>
-                    <Text style={styles.heroBtnSub}>I need ideas</Text>
-                  </Pressable>
-
-                  <Pressable
-                    onPress={goFixturesHub}
-                    style={({ pressed }) => [
-                      styles.heroBtn,
-                      styles.heroBtnGhost,
-                      pressed && styles.pressed,
-                    ]}
-                    android_ripple={{ color: "rgba(255,255,255,0.08)" }}
-                  >
-                    <Text style={styles.heroBtnGhostText}>Fixtures</Text>
-                    <Text style={styles.heroBtnSub}>I want actual matches</Text>
-                  </Pressable>
-
-                  <Pressable
-                    onPress={goTrips}
-                    style={({ pressed }) => [
-                      styles.heroBtn,
-                      styles.heroBtnGhost,
-                      pressed && styles.pressed,
-                    ]}
-                    android_ripple={{ color: "rgba(255,255,255,0.08)" }}
-                  >
-                    <Text style={styles.heroBtnGhostText}>Trips</Text>
-                    <Text style={styles.heroBtnSub}>Resume planning</Text>
-                  </Pressable>
+                <View style={styles.heroHintBox}>
+                  <Text style={styles.heroHintTitle}>Use Home for control</Text>
+                  <Text style={styles.heroHintText}>
+                    Discover is for inspiration. Fixtures is for direct match browsing. Home is for
+                    search, resuming trips, and getting somewhere fast.
+                  </Text>
                 </View>
               ) : null}
 
@@ -677,6 +586,7 @@ export default function HomeScreen() {
                               onPress={() => onPressSearchResult(r)}
                               style={({ pressed }) => [
                                 styles.resultRow,
+                                idx === 0 ? styles.resultRowFirst : null,
                                 pressed && styles.pressedRow,
                               ]}
                               android_ripple={{ color: "rgba(79,224,138,0.08)" }}
@@ -716,7 +626,41 @@ export default function HomeScreen() {
                 }
               />
 
-              <RouteTiles routeTiles={routeTiles} />
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Quick actions</Text>
+                <Text style={styles.sectionSub}>
+                  Use Discover when you need ideas. Use Fixtures when you already want real match options.
+                </Text>
+
+                <View style={styles.quickActionsGrid}>
+                  <QuickActionCard
+                    title="Discover"
+                    sub="Need ideas and ranked routes"
+                    variant="primary"
+                    onPress={goDiscover}
+                  />
+                  <QuickActionCard
+                    title="Fixtures"
+                    sub="Browse actual upcoming matches"
+                    onPress={goFixturesHub}
+                  />
+                  <QuickActionCard
+                    title="Trips"
+                    sub="Open saved planning workspaces"
+                    onPress={goTrips}
+                  />
+                  <QuickActionCard
+                    title="Wallet"
+                    sub="Open docs and confirmations"
+                    onPress={goWallet}
+                  />
+                  <QuickActionCard
+                    title="Calendar"
+                    sub="Useful football date windows"
+                    onPress={goFootballCalendar}
+                  />
+                </View>
+              </View>
 
               <UpcomingMatches
                 homeTopLeagues={homeTopLeagues}
@@ -734,14 +678,6 @@ export default function HomeScreen() {
                 goDiscover={goDiscover}
                 goMatch={goMatch}
               />
-
-              <BrowseStartingPoints
-                cities={cities}
-                popularTeams={popularTeams}
-                apiSportsTeamLogo={API_SPORTS_TEAM_LOGO}
-                goCityFromName={goCityFromName}
-                onOpenTeam={onOpenTeam}
-              />
             </>
           ) : null}
         </ScrollView>
@@ -753,10 +689,20 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   scroll: { flex: 1 },
-  content: { paddingHorizontal: theme.spacing.lg, paddingBottom: theme.spacing.xxl, gap: 18 },
+  content: {
+    paddingHorizontal: theme.spacing.lg,
+    paddingBottom: theme.spacing.xxl,
+    gap: 18,
+  },
 
-  hero: { marginTop: theme.spacing.lg, borderRadius: 26 },
-  heroInner: { padding: theme.spacing.lg, gap: 10 },
+  hero: {
+    marginTop: theme.spacing.lg,
+    borderRadius: 26,
+  },
+  heroInner: {
+    padding: theme.spacing.lg,
+    gap: 10,
+  },
 
   heroKicker: {
     color: theme.colors.primary,
@@ -813,45 +759,78 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeight.black,
   },
 
-  heroActionGrid: {
+  heroHintBox: {
     marginTop: 6,
-    gap: 10,
-  },
-  heroBtn: {
-    borderRadius: 18,
-    paddingVertical: 13,
-    paddingHorizontal: 14,
     borderWidth: 1,
-    overflow: "hidden",
-    gap: 4,
-  },
-  heroBtnPrimary: {
-    borderColor: "rgba(79,224,138,0.24)",
+    borderColor: "rgba(255,255,255,0.08)",
+    borderRadius: 16,
     backgroundColor:
-      Platform.OS === "android" ? theme.glass.androidBg.default : theme.glass.iosBg.default,
+      Platform.OS === "android" ? "rgba(18,20,24,0.28)" : "rgba(18,20,24,0.22)",
+    padding: 12,
+    gap: 5,
   },
-  heroBtnGhost: {
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor:
-      Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
-  },
-  heroBtnPrimaryText: {
+  heroHintTitle: {
     color: theme.colors.text,
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: theme.fontWeight.black,
   },
-  heroBtnGhostText: {
-    color: theme.colors.text,
-    fontSize: 14,
-    fontWeight: theme.fontWeight.black,
-  },
-  heroBtnSub: {
+  heroHintText: {
     color: theme.colors.textSecondary,
     fontSize: 12,
+    lineHeight: 17,
     fontWeight: theme.fontWeight.bold,
   },
 
-  searchResults: { marginTop: 10, gap: 10 },
+  section: {
+    gap: 10,
+  },
+  sectionTitle: {
+    color: theme.colors.text,
+    fontSize: 18,
+    fontWeight: theme.fontWeight.black,
+  },
+  sectionSub: {
+    color: theme.colors.textSecondary,
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: theme.fontWeight.bold,
+  },
+
+  quickActionsGrid: {
+    gap: 10,
+  },
+  quickActionPress: {
+    borderRadius: 18,
+    overflow: "hidden",
+  },
+  quickActionCard: {
+    borderRadius: 18,
+    borderColor: "rgba(255,255,255,0.10)",
+  },
+  quickActionCardPrimary: {
+    borderColor: "rgba(79,224,138,0.22)",
+  },
+  quickActionInner: {
+    paddingVertical: 13,
+    paddingHorizontal: 14,
+    gap: 4,
+  },
+  quickActionTitle: {
+    color: theme.colors.text,
+    fontSize: 14,
+    fontWeight: theme.fontWeight.black,
+  },
+  quickActionSub: {
+    color: theme.colors.textSecondary,
+    fontSize: 12,
+    fontWeight: theme.fontWeight.bold,
+    lineHeight: 17,
+  },
+
+  searchResults: {
+    marginTop: 10,
+    gap: 10,
+  },
   resultList: {
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
@@ -868,6 +847,9 @@ const styles = StyleSheet.create({
     gap: 10,
     borderTopWidth: 1,
     borderTopColor: "rgba(255,255,255,0.06)",
+  },
+  resultRowFirst: {
+    borderTopWidth: 0,
   },
   resultTitle: {
     color: theme.colors.text,
@@ -886,15 +868,28 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeight.bold,
   },
 
-  centerInline: { flexDirection: "row", alignItems: "center", gap: 10 },
+  centerInline: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
   muted: {
     color: theme.colors.textSecondary,
     fontSize: 13,
     fontWeight: theme.fontWeight.bold,
   },
 
-  chev: { color: theme.colors.textTertiary, fontSize: 22, marginTop: -2 },
+  chev: {
+    color: theme.colors.textTertiary,
+    fontSize: 22,
+    marginTop: -2,
+  },
 
-  pressed: { opacity: 0.94, transform: [{ scale: 0.995 }] },
-  pressedRow: { opacity: 0.94 },
+  pressed: {
+    opacity: 0.94,
+    transform: [{ scale: 0.995 }],
+  },
+  pressedRow: {
+    opacity: 0.94,
+  },
 });
