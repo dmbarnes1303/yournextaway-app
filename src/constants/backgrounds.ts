@@ -27,31 +27,31 @@ const u = (photoId: string) =>
   `https://images.unsplash.com/${photoId}?auto=format&fit=crop&w=1800&h=3200&fm=jpg&q=82`;
 
 const BACKGROUNDS: Record<BackgroundKey, BackgroundSource> = {
-  // Core football-first surfaces
-  home: u("photo-1574629810360-7efbbe195018"), // floodlit stadium / football atmosphere
-  fixtures: u("photo-1574629810360-7efbbe195018"), // match list should feel football-first
-  match: u("photo-1547347298-4074fc3086f0"), // closer, more intense live-match feel
-  stadium: u("photo-1547347298-4074fc3086f0"),
-  team: u("photo-1517927033932-b3d18e61fb3a"), // football crowd / stadium energy
-  explore: u("photo-1517927033932-b3d18e61fb3a"),
+  // Football-first family: dark, floodlit, quieter, premium
+  home: u("photo-1547347298-4074fc3086f0"),
+  fixtures: u("photo-1547347298-4074fc3086f0"),
+  match: u("photo-1517927033932-b3d18e61fb3a"),
+  stadium: u("photo-1517927033932-b3d18e61fb3a"),
+  team: u("photo-1508098682722-e99c643e7485"),
+  explore: u("photo-1508098682722-e99c643e7485"),
 
-  // Product entry / discovery
-  landing: u("photo-1508098682722-e99c643e7485"), // premium night stadium / event feel
+  // Entry / onboarding
+  landing: u("photo-1508098682722-e99c643e7485"),
   "landing-hero": u("photo-1508098682722-e99c643e7485"),
   "onboarding-1": u("photo-1508098682722-e99c643e7485"),
   "onboarding-2": u("photo-1517927033932-b3d18e61fb3a"),
   "onboarding-3": u("photo-1547347298-4074fc3086f0"),
-  "onboarding-4": u("photo-1522778119026-d647f0596c20"), // airport / travel-night tone
+  "onboarding-4": u("photo-1522778119026-d647f0596c20"),
 
-  // Travel / planning / account surfaces
-  trips: u("photo-1522778119026-d647f0596c20"), // premium night travel / movement
-  trip: u("photo-1499092346589-b9b6be3e94b2"), // city-at-night planning workspace feel
-  wallet: u("photo-1554224155-6726b3ff858f"), // darker finance / documents vibe
-  profile: u("photo-1493246507139-91e8fad9978e"), // understated premium night travel
+  // Travel / planning family
+  trips: u("photo-1493246507139-91e8fad9978e"),
+  trip: u("photo-1499092346589-b9b6be3e94b2"),
+  city: u("photo-1499856871958-5b9627545d1a"),
+
+  // Ops / account / docs family
+  wallet: u("photo-1450101499163-c8848c66ca85"),
+  profile: u("photo-1493246507139-91e8fad9978e"),
   paywall: u("photo-1508098682722-e99c643e7485"),
-
-  // City-specific surfaces
-  city: u("photo-1499856871958-5b9627545d1a"), // fallback premium city-at-night
 };
 
 export function getBackground(key: BackgroundKey): BackgroundSource {
@@ -113,7 +113,7 @@ export const CITY_BACKGROUNDS: Record<string, string> = {
   lyon: u("photo-1529429617124-95b109e86bb8"),
   marseille: u("photo-1529260830199-42c24126f198"),
 
-  // Netherlands / Portugal / others
+  // Others
   amsterdam: u("photo-1512470876302-972faa2aa9a4"),
   lisbon: u("photo-1513735492246-483525079686"),
   porto: u("photo-1555881400-74d7acaacd8b"),
