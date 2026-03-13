@@ -23,104 +23,8 @@ type Props = {
   centerShadeOpacity?: number;
 };
 
-function BrandSpecSurface({
-  spec,
-  children,
-  overlayOpacity,
-}: {
-  spec: BackgroundSpec;
-  children?: React.ReactNode;
-  overlayOpacity: number;
-}) {
-  const topTintOpacity = spec.topTintOpacity ?? 0.08;
-  const focalTintOpacity = spec.focalTintOpacity ?? 0.06;
-  const bottomShadeOpacity = spec.bottomShadeOpacity ?? 0.28;
-  const vignetteOpacity = spec.vignetteOpacity ?? 0.18;
-
-  const horizontalTint =
-    spec.focalTintPosition === "left"
-      ? ["rgba(0,0,0,0.00)", `${hexToRgba(spec.focalTintColor ?? "#000000", focalTintOpacity)}`, "rgba(0,0,0,0.00)"]
-      : spec.focalTintPosition === "right"
-      ? ["rgba(0,0,0,0.00)", `${hexToRgba(spec.focalTintColor ?? "#000000", focalTintOpacity)}`, "rgba(0,0,0,0.00)"]
-      : ["rgba(0,0,0,0.00)", `${hexToRgba(spec.focalTintColor ?? "#000000", focalTintOpacity)}`, "rgba(0,0,0,0.00)"];
-
-  const horizontalLocations =
-    spec.focalTintPosition === "left"
-      ? [0, 0.22, 0.58]
-      : spec.focalTintPosition === "right"
-      ? [0.42, 0.78, 1]
-      : [0, 0.5, 1];
-
-  return (
-    <View style={styles.root}>
-      <LinearGradient
-        colors={spec.colors}
-        start={{ x: 0.5, y: 0 }}
-        end={{ x: 0.5, y: 1 }}
-        style={styles.image}
-      >
-        <LinearGradient
-          pointerEvents="none"
-          colors={[
-            hexToRgba(spec.topTintColor, topTintOpacity),
-            hexToRgba(spec.topTintColor, topTintOpacity * 0.35),
-            "rgba(0,0,0,0.00)",
-          ]}
-          locations={[0, 0.28, 1]}
-          start={{ x: 0.5, y: 0 }}
-          end={{ x: 0.5, y: 1 }}
-          style={styles.topWash}
-        />
-
-        {spec.focalTintColor ? (
-          <LinearGradient
-            pointerEvents="none"
-            colors={horizontalTint}
-            locations={horizontalLocations}
-            start={{ x: 0, y: 0.5 }}
-            end={{ x: 1, y: 0.5 }}
-            style={styles.centerBand}
-          />
-        ) : null}
-
-        <LinearGradient
-          pointerEvents="none"
-          colors={["rgba(255,255,255,0.018)", "rgba(255,255,255,0.00)"]}
-          locations={[0, 1]}
-          start={{ x: 0.5, y: 0 }}
-          end={{ x: 0.5, y: 1 }}
-          style={styles.highlightWash}
-        />
-
-        <LinearGradient
-          pointerEvents="none"
-          colors={["rgba(0,0,0,0.00)", `rgba(0,0,0,${bottomShadeOpacity})`]}
-          locations={[0, 1]}
-          start={{ x: 0.5, y: 0 }}
-          end={{ x: 0.5, y: 1 }}
-          style={styles.bottomShade}
-        />
-
-        <View pointerEvents="none" style={[styles.edgeVignette, { opacity: vignetteOpacity }]} />
-
-        {overlayOpacity > 0 ? (
-          <View
-            pointerEvents="none"
-            style={[
-              styles.overlay,
-              { backgroundColor: `rgba(0,0,0,${overlayOpacity})` },
-            ]}
-          />
-        ) : null}
-
-        <View style={styles.content}>{children}</View>
-      </LinearGradient>
-    </View>
-  );
-}
-
 function hexToRgba(hex: string, opacity: number) {
-  const clean = String(hex).replace("#", "").trim();
+  const clean = String(hex || "").replace("#", "").trim();
   const full =
     clean.length === 3
       ? clean
@@ -138,6 +42,113 @@ function hexToRgba(hex: string, opacity: number) {
   }
 
   return `rgba(${r},${g},${b},${opacity})`;
+}
+
+function BrandSpecSurface({
+  spec,
+  children,
+  overlayOpacity,
+}: {
+  spec: BackgroundSpec;
+  children?: React.ReactNode;
+  overlayOpacity: number;
+}) {
+  const topTintOpacity = spec.topTintOpacity ?? 0.05;
+  const sideTintOpacity = spec.sideTintOpacity ?? 0.03;
+  const bottomShadeOpacity = spec.bottomShadeOpacity ?? 0.18;
+  const vignetteOpacity = spec.vignetteOpacity ?? 0.1;
+
+  const showLeft = spec.sideTintSide === "left" || spec.sideTintSide === "both";
+  const showRight = spec.sideTintSide === "right" || spec.sideTintSide === "both";
+
+  return (
+    <View style={styles.root}>
+      <LinearGradient
+        colors={spec.colors}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 1 }}
+        style={styles.image}
+      >
+        {spec.topTintColor ? (
+          <LinearGradient
+            pointerEvents="none"
+            colors={[
+              hexToRgba(spec.topTintColor, topTintOpacity),
+              hexToRgba(spec.topTintColor, topTintOpacity * 0.35),
+              "rgba(0,0,0,0)",
+            ]}
+            locations={[0, 0.32, 1]}
+            start={{ x: 0.5, y: 0 }}
+            end={{ x: 0.5, y: 1 }}
+            style={styles.topTint}
+          />
+        ) : null}
+
+        {spec.sideTintColor && showLeft ? (
+          <LinearGradient
+            pointerEvents="none"
+            colors={[
+              hexToRgba(spec.sideTintColor, sideTintOpacity),
+              "rgba(0,0,0,0)",
+            ]}
+            locations={[0, 1]}
+            start={{ x: 0, y: 0.5 }}
+            end={{ x: 1, y: 0.5 }}
+            style={styles.leftTint}
+          />
+        ) : null}
+
+        {spec.sideTintColor && showRight ? (
+          <LinearGradient
+            pointerEvents="none"
+            colors={[
+              "rgba(0,0,0,0)",
+              hexToRgba(spec.sideTintColor, sideTintOpacity),
+            ]}
+            locations={[0, 1]}
+            start={{ x: 0, y: 0.5 }}
+            end={{ x: 1, y: 0.5 }}
+            style={styles.rightTint}
+          />
+        ) : null}
+
+        <LinearGradient
+          pointerEvents="none"
+          colors={["rgba(255,255,255,0.012)", "rgba(255,255,255,0)"]}
+          locations={[0, 1]}
+          start={{ x: 0.5, y: 0 }}
+          end={{ x: 0.5, y: 1 }}
+          style={styles.softHighlight}
+        />
+
+        <LinearGradient
+          pointerEvents="none"
+          colors={["rgba(0,0,0,0)", `rgba(0,0,0,${bottomShadeOpacity})`]}
+          locations={[0, 1]}
+          start={{ x: 0.5, y: 0 }}
+          end={{ x: 0.5, y: 1 }}
+          style={styles.bottomShade}
+        />
+
+        <View
+          pointerEvents="none"
+          style={[styles.vignette, { opacity: vignetteOpacity }]}
+        />
+
+        {overlayOpacity > 0 ? (
+          <View
+            pointerEvents="none"
+            style={[
+              styles.overlay,
+              { backgroundColor: `rgba(0,0,0,${overlayOpacity})` },
+            ]}
+          />
+        ) : null}
+
+        <View style={styles.content}>{children}</View>
+      </LinearGradient>
+    </View>
+  );
 }
 
 export default function Background({
@@ -265,40 +276,48 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
-  topWash: {
+  topTint: {
     position: "absolute",
     top: 0,
     left: 0,
     right: 0,
-    height: "30%",
+    height: "24%",
   },
 
-  centerBand: {
+  leftTint: {
     position: "absolute",
     top: 0,
     bottom: 0,
     left: 0,
-    right: 0,
+    width: "30%",
   },
 
-  highlightWash: {
+  rightTint: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    right: 0,
+    width: "30%",
+  },
+
+  softHighlight: {
     position: "absolute",
     top: 0,
     left: 0,
     right: 0,
-    height: "20%",
+    height: "14%",
   },
 
-  edgeVignette: {
+  vignette: {
     ...StyleSheet.absoluteFillObject,
-    borderLeftWidth: 18,
-    borderRightWidth: 18,
-    borderTopWidth: 10,
-    borderBottomWidth: 26,
-    borderLeftColor: "rgba(0,0,0,0.22)",
-    borderRightColor: "rgba(0,0,0,0.22)",
-    borderTopColor: "rgba(0,0,0,0.10)",
-    borderBottomColor: "rgba(0,0,0,0.28)",
+    borderLeftWidth: 10,
+    borderRightWidth: 10,
+    borderTopWidth: 6,
+    borderBottomWidth: 14,
+    borderLeftColor: "rgba(0,0,0,0.18)",
+    borderRightColor: "rgba(0,0,0,0.18)",
+    borderTopColor: "rgba(0,0,0,0.08)",
+    borderBottomColor: "rgba(0,0,0,0.24)",
   },
 
   bottomShade: {
