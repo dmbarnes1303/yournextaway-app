@@ -472,7 +472,7 @@ export default function HomeScreen() {
   }, [featured]);
 
   return (
-    <Background imageSource={getBackground("home")} overlayOpacity={0.64}>
+    <Background imageSource={getBackground("home")} overlayOpacity={0.54}>
       <SafeAreaView style={styles.container} edges={["top"]}>
         <ScrollView
           style={styles.scroll}
@@ -483,7 +483,7 @@ export default function HomeScreen() {
           <GlassCard strength="strong" style={styles.hero} noPadding>
             <View style={styles.heroInner}>
               <Text style={styles.heroKicker}>YOURNEXTAWAY</Text>
-              <Text style={styles.heroTitle}>Search and keep moving</Text>
+              <Text style={styles.heroTitle}>Search, plan, go</Text>
               <Text style={styles.heroSub}>
                 Search a city, team, league, country, or venue and jump straight into the right place.
               </Text>
@@ -506,15 +506,6 @@ export default function HomeScreen() {
                   </Pressable>
                 ) : null}
               </View>
-
-              {!showSearchResults ? (
-                <View style={styles.heroHintBox}>
-                  <Text style={styles.heroHintTitle}>Home = control</Text>
-                  <Text style={styles.heroHintText}>
-                    Use this screen to search, resume planning, and check live upcoming options.
-                  </Text>
-                </View>
-              ) : null}
 
               {showSearchResults ? (
                 <View style={styles.searchResults}>
@@ -607,6 +598,7 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   scroll: { flex: 1 },
+
   content: {
     paddingHorizontal: theme.spacing.lg,
     paddingBottom: theme.spacing.xxl,
@@ -617,8 +609,9 @@ const styles = StyleSheet.create({
     marginTop: theme.spacing.lg,
     borderRadius: 26,
   },
+
   heroInner: {
-    padding: theme.spacing.lg,
+    padding: 16,
     gap: 10,
   },
 
@@ -628,6 +621,7 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeight.black,
     letterSpacing: 1.2,
   },
+
   heroTitle: {
     color: theme.colors.text,
     fontSize: 26,
@@ -635,6 +629,7 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeight.black,
     letterSpacing: 0.2,
   },
+
   heroSub: {
     color: theme.colors.textSecondary,
     fontSize: 14,
@@ -656,6 +651,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
   },
+
   searchInput: {
     flex: 1,
     color: theme.colors.text,
@@ -663,6 +659,7 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeight.bold,
     paddingVertical: Platform.OS === "ios" ? 14 : 12,
   },
+
   clearBtn: {
     paddingVertical: 8,
     paddingHorizontal: 12,
@@ -671,46 +668,27 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.12)",
     backgroundColor: "rgba(0,0,0,0.16)",
   },
+
   clearText: {
     color: theme.colors.textSecondary,
     fontSize: 12,
     fontWeight: theme.fontWeight.black,
   },
 
-  heroHintBox: {
-    marginTop: 6,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-    borderRadius: 16,
-    backgroundColor:
-      Platform.OS === "android" ? "rgba(18,20,24,0.28)" : "rgba(18,20,24,0.22)",
-    padding: 12,
-    gap: 5,
-  },
-  heroHintTitle: {
-    color: theme.colors.text,
-    fontSize: 12,
-    fontWeight: theme.fontWeight.black,
-  },
-  heroHintText: {
-    color: theme.colors.textSecondary,
-    fontSize: 12,
-    lineHeight: 17,
-    fontWeight: theme.fontWeight.bold,
-  },
-
   searchResults: {
     marginTop: 10,
     gap: 10,
   },
+
   resultList: {
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
     borderRadius: 18,
     overflow: "hidden",
     backgroundColor:
-      Platform.OS === "android" ? "rgba(10,12,14,0.22)" : "rgba(10,12,14,0.18)",
+      Platform.OS === "android" ? "rgba(10,12,14,0.24)" : "rgba(10,12,14,0.20)",
   },
+
   resultRow: {
     paddingVertical: 12,
     paddingHorizontal: 12,
@@ -720,23 +698,28 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: "rgba(255,255,255,0.06)",
   },
+
   resultRowFirst: {
     borderTopWidth: 0,
   },
+
   resultTextWrap: {
     flex: 1,
   },
+
   resultTitle: {
     color: theme.colors.text,
     fontSize: 14,
     fontWeight: theme.fontWeight.black,
   },
+
   resultMeta: {
     marginTop: 4,
     color: theme.colors.textSecondary,
     fontSize: 12,
     fontWeight: theme.fontWeight.bold,
   },
+
   groupEmpty: {
     color: theme.colors.textSecondary,
     fontSize: 13,
@@ -748,6 +731,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
   },
+
   muted: {
     color: theme.colors.textSecondary,
     fontSize: 13,
