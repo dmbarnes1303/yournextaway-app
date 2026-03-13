@@ -47,6 +47,15 @@ type ProgressState = {
   things: string;
 };
 
+type AffiliateUrls = {
+  flightsUrl: string;
+  hotelsUrl: string;
+  omioUrl: string;
+  transfersUrl: string;
+  experiencesUrl: string;
+  mapsUrl: string;
+};
+
 type Params = {
   trip: Trip | null;
   tripsLoaded: boolean;
@@ -55,14 +64,7 @@ type Params = {
   routeTripId: string | null;
   cityName: string;
   originIata: string;
-  affiliateUrls: {
-    flightsUrl: string;
-    hotelsUrl: string;
-    omioUrl: string;
-    transfersUrl: string;
-    experiencesUrl: string;
-    mapsUrl: string;
-  } | null;
+  affiliateUrls: AffiliateUrls | null;
   progress: ProgressState;
   readiness: { score: number; missing: string[] };
   pending: SavedItem[];
@@ -75,6 +77,8 @@ type Params = {
   controller: Controller;
   setActiveWorkspaceSection: (section: string) => Promise<void> | void;
 };
+
+const FREE_TRIP_CAP = 5;
 
 export default function useTripDetailViewModel({
   trip,
@@ -204,15 +208,23 @@ export default function useTripDetailViewModel({
   );
 
   const openFlights = useCallback(() => {
-    controller.openPartnerOrAlert(flightAction.url, flightAction.message, flightAction.config);
+    return controller.openPartnerOrAlert(
+      flightAction.url,
+      flightAction.message,
+      flightAction.config
+    );
   }, [controller, flightAction]);
 
   const openHotels = useCallback(() => {
-    controller.openPartnerOrAlert(hotelAction.url, hotelAction.message, hotelAction.config);
+    return controller.openPartnerOrAlert(
+      hotelAction.url,
+      hotelAction.message,
+      hotelAction.config
+    );
   }, [controller, hotelAction]);
 
   const openTransport = useCallback(() => {
-    controller.openPartnerOrAlert(
+    return controller.openPartnerOrAlert(
       transportAction.url,
       transportAction.message,
       transportAction.config
@@ -220,22 +232,29 @@ export default function useTripDetailViewModel({
   }, [controller, transportAction]);
 
   const openThings = useCallback(() => {
-    controller.openPartnerOrAlert(thingsAction.url, thingsAction.message, thingsAction.config);
+    return controller.openPartnerOrAlert(
+      thingsAction.url,
+      thingsAction.message,
+      thingsAction.config
+    );
   }, [controller, thingsAction]);
 
-  const progressItems = useMemo<TripProgressStripItem[]>(() => {
-    return [
+  const openTickets = useCallback(() => {
+    if (!hasMatch || !primaryMatchId) {
+      Alert.alert("Add a match first", "Add a match to unlock tickets + match planning.");
+      return;
+    }
+
+    return controller.openTicketsForMatch(primaryMatchId);
+  }, [controller, hasMatch, primaryMatchId]);
+
+  const progressItems = useMemo<TripProgressStripItem[]>(
+    () => [
       {
         key: "tickets",
         label: "Tickets",
         state: progress.tickets as any,
-        onPress: () => {
-          if (!primaryMatchId) {
-            Alert.alert("Add a match first", "Add a match to unlock tickets + match planning.");
-            return;
-          }
-          controller.openTicketsForMatch(primaryMatchId);
-        },
+        onPress: openTickets,
       },
       {
         key: "flight",
@@ -261,31 +280,23 @@ export default function useTripDetailViewModel({
         state: progress.things as any,
         onPress: openThings,
       },
-    ];
-  }, [
-    affiliateUrls?.omioUrl,
-    controller,
-    openFlights,
-    openHotels,
-    openThings,
-    openTransport,
-    primaryMatchId,
-    progress.flight,
-    progress.hotel,
-    progress.things,
-    progress.tickets,
-    progress.transfer,
-  ]);
+    ],
+    [
+      affiliateUrls?.omioUrl,
+      openFlights,
+      openHotels,
+      openThings,
+      openTickets,
+      openTransport,
+      progress.flight,
+      progress.hotel,
+      progress.things,
+      progress.tickets,
+      progress.transfer,
+    ]
+  );
 
   const nextAction = useMemo<NextAction | null>(() => {
-    const openTickets = () => {
-      if (!hasMatch || !primaryMatchId) {
-        Alert.alert("Add a match first", "Add a match to unlock tickets + match planning.");
-        return;
-      }
-      controller.openTicketsForMatch(primaryMatchId);
-    };
-
     if (!hasTickets) {
       return {
         title: "Start with match tickets",
@@ -360,10 +371,9 @@ export default function useTripDetailViewModel({
     };
   }, [
     affiliateUrls?.omioUrl,
-    controller,
+    controller.onViewWallet,
     hasFlight,
     hasHotel,
-    hasMatch,
     hasThings,
     hasTickets,
     hasTransport,
@@ -371,8 +381,8 @@ export default function useTripDetailViewModel({
     openFlights,
     openHotels,
     openThings,
+    openTickets,
     openTransport,
-    primaryMatchId,
     setActiveWorkspaceSection,
   ]);
 
@@ -395,7 +405,7 @@ export default function useTripDetailViewModel({
       add(
         "Tickets",
         smartButtonSubtitle(primaryTicketItem, "Compare live ticket options"),
-        () => controller.openTicketsForMatch(primaryMatchId),
+        openTickets,
         "primary",
         ticketProviderFromItem(primaryTicketItem)
       );
@@ -410,18 +420,23 @@ export default function useTripDetailViewModel({
       add("Transfers", "Kiwitaxi (live)", openTransport, "neutral", "kiwitaxi");
     }
 
-    if (!hasThings) add("Activities", "GetYourGuide (live)", openThings, "neutral", "getyourguide");
+    if (!hasThings) {
+      add("Activities", "GetYourGuide (live)", openThings, "neutral", "getyourguide");
+    }
 
     if (buttons.length === 0) {
       add("Hotels", "Expedia (live)", openHotels, "primary", "expedia");
-      if (affiliateUrls.omioUrl) add("Rail / Bus", "Omio (live)", openTransport, "neutral", "omio");
-      else add("Activities", "GetYourGuide (live)", openThings, "neutral", "getyourguide");
+
+      if (affiliateUrls.omioUrl) {
+        add("Rail / Bus", "Omio (live)", openTransport, "neutral", "omio");
+      } else {
+        add("Activities", "GetYourGuide (live)", openThings, "neutral", "getyourguide");
+      }
     }
 
     return buttons.slice(0, 4);
   }, [
     affiliateUrls,
-    controller,
     hasFlight,
     hasHotel,
     hasThings,
@@ -430,6 +445,7 @@ export default function useTripDetailViewModel({
     openFlights,
     openHotels,
     openThings,
+    openTickets,
     openTransport,
     primaryMatchId,
     primaryTicketItem,
@@ -437,7 +453,7 @@ export default function useTripDetailViewModel({
   ]);
 
   const capHint = useMemo(
-    () => (!isPro ? proCapHint(5, tripCount) : undefined),
+    () => (!isPro ? proCapHint(FREE_TRIP_CAP, tripCount) : undefined),
     [isPro, tripCount]
   );
 
