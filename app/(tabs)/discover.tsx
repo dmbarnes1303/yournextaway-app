@@ -38,7 +38,7 @@ import {
 } from "@/src/features/discover/discoverEngine";
 import { discoverScoreForCategory } from "@/src/features/discover/discoverRanking";
 import { formatUkDateTimeMaybe } from "@/src/utils/formatters";
-import { getCityImageUrl } from "@/src/data/cityImages";
+import { resolveCityImage } from "@/src/data/cityImages";
 
 type ShortcutWindow = { from: string; to: string };
 type DiscoverWindowKey = "wknd" | "d7" | "d14" | "d30";
@@ -163,7 +163,7 @@ const QUICK_SPARKS: QuickSpark[] = [
     windowKey: "d30",
   },
   {
-    id: "loud-atmospheres",
+    id: "loudest-atmospheres",
     title: "Loudest atmospheres",
     icon: "volume-high-outline",
     category: "bigMatches",
@@ -369,13 +369,27 @@ function fixtureCity(row: FixtureListRow) {
   return String(row?.fixture?.venue?.city ?? "").trim() || "";
 }
 
+function fixtureCountry(row: FixtureListRow) {
+  return String(row?.league?.country ?? "").trim() || "";
+}
+
 function getDiscoverCardImage(row: FixtureListRow) {
-  const city = fixtureCity(row);
-  if (city) {
-    const cityImage = getCityImageUrl(city);
-    if (cityImage) return cityImage;
-  }
-  return DISCOVER_NEUTRAL_FALLBACK_IMAGE;
+  const resolved = resolveCityImage(
+    fixtureCity(row),
+    fixtureCountry(row),
+    DISCOVER_NEUTRAL_FALLBACK_IMAGE
+  );
+
+  return {
+    imageUrl: resolved.imageUrl,
+    matchType: resolved.matchType,
+  };
+}
+
+function imageConfidenceLabel(matchType: "city" | "country" | "fallback") {
+  if (matchType === "city") return "City image";
+  if (matchType === "country") return "Country image";
+  return "Travel image";
 }
 
 function isMidweekFixture(row: FixtureListRow) {
@@ -416,8 +430,8 @@ function trendingLabelForFixture(row: FixtureListRow) {
     "manchester-city|manchester-united": "Manchester Derby",
     "marseille|paris-saint-germain": "Le Classique",
     "olympiacos|panathinaikos": "Derby of the Eternal Enemies",
-    "real-madrid|atletico-madrid": "Madrid Derby",
     "real-betis|sevilla": "Seville Derby",
+    "real-madrid|atletico-madrid": "Madrid Derby",
     "tottenham|arsenal": "North London Derby",
   };
 
@@ -467,8 +481,8 @@ function trendingScore(row: FixtureListRow, baseScore: number) {
     "manchester-city|manchester-united",
     "marseille|paris-saint-germain",
     "olympiacos|panathinaikos",
-    "real-madrid|atletico-madrid",
     "real-betis|sevilla",
+    "real-madrid|atletico-madrid",
     "tottenham|arsenal",
   ]);
 
@@ -625,7 +639,8 @@ export default function DiscoverScreen() {
       cancelled = true;
     };
   }, [
-    currentWindow,
+    currentWindow.from,
+    currentWindow.to,
     discoverWindowKey,
     discoverOrigin,
     discoverTripLength,
@@ -1026,10 +1041,21 @@ export default function DiscoverScreen() {
                     >
                       <GlassCard strength="default" style={styles.liveCard} noPadding>
                         <View style={styles.liveImageWrap}>
-                          <Image source={{ uri: image }} style={styles.liveImage} resizeMode="cover" />
+                          <Image
+                            source={{ uri: image.imageUrl }}
+                            style={styles.liveImage}
+                            resizeMode="cover"
+                          />
                           <View style={styles.liveImageOverlay} />
-                          <View style={styles.liveRankPill}>
-                            <Text style={styles.liveRankText}>{rankLabel(index)}</Text>
+                          <View style={styles.liveTopBar}>
+                            <View style={styles.liveRankPill}>
+                              <Text style={styles.liveRankText}>{rankLabel(index)}</Text>
+                            </View>
+                            <View style={styles.imageSourcePill}>
+                              <Text style={styles.imageSourceText}>
+                                {imageConfidenceLabel(image.matchType)}
+                              </Text>
+                            </View>
                           </View>
                         </View>
 
@@ -1088,13 +1114,20 @@ export default function DiscoverScreen() {
                       <GlassCard strength="default" style={styles.trendingCard} noPadding>
                         <View style={styles.trendingImageWrap}>
                           <Image
-                            source={{ uri: image }}
+                            source={{ uri: image.imageUrl }}
                             style={styles.trendingImage}
                             resizeMode="cover"
                           />
                           <View style={styles.trendingOverlay} />
-                          <View style={styles.trendingHotPill}>
-                            <Text style={styles.trendingHotText}>🔥 Trending</Text>
+                          <View style={styles.trendingTopBar}>
+                            <View style={styles.trendingHotPill}>
+                              <Text style={styles.trendingHotText}>🔥 Trending</Text>
+                            </View>
+                            <View style={styles.imageSourcePill}>
+                              <Text style={styles.imageSourceText}>
+                                {imageConfidenceLabel(image.matchType)}
+                              </Text>
+                            </View>
                           </View>
                         </View>
 
@@ -1290,7 +1323,7 @@ export default function DiscoverScreen() {
                 <GlassCard strength="default" style={styles.featuredLiveCard} noPadding>
                   <View style={styles.featuredLiveImageWrap}>
                     <Image
-                      source={{ uri: getDiscoverCardImage(featuredLive.item.fixture) }}
+                      source={{ uri: getDiscoverCardImage(featuredLive.item.fixture).imageUrl }}
                       style={styles.featuredLiveImage}
                       resizeMode="cover"
                     />
@@ -1596,10 +1629,18 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(5,8,10,0.40)",
   },
 
-  liveRankPill: {
+  liveTopBar: {
     position: "absolute",
     top: 10,
     left: 10,
+    right: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+
+  liveRankPill: {
     borderRadius: 999,
     paddingVertical: 5,
     paddingHorizontal: 9,
@@ -1613,6 +1654,22 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: theme.fontWeight.black,
     letterSpacing: 0.3,
+  },
+
+  imageSourcePill: {
+    borderRadius: 999,
+    paddingVertical: 5,
+    paddingHorizontal: 9,
+    backgroundColor: "rgba(8,10,10,0.66)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+  },
+
+  imageSourceText: {
+    color: theme.colors.text,
+    fontSize: 10,
+    fontWeight: theme.fontWeight.black,
+    letterSpacing: 0.2,
   },
 
   liveBody: {
@@ -1673,10 +1730,18 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(5,8,10,0.34)",
   },
 
-  trendingHotPill: {
+  trendingTopBar: {
     position: "absolute",
     top: 10,
     left: 10,
+    right: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+
+  trendingHotPill: {
     borderRadius: 999,
     paddingVertical: 6,
     paddingHorizontal: 10,
