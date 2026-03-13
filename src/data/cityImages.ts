@@ -219,7 +219,7 @@ const cityImages: Record<string, CityImageRecord> = {
     imageUrl:
       "https://images.unsplash.com/photo-1523531294919-4bcd7c65e216?auto=format&fit=crop&w=1600&q=80",
   },
-  san-sebastian: {
+  "san-sebastian": {
     cityKey: "san-sebastian",
     city: "San Sebastián",
     country: "Spain",
@@ -235,7 +235,7 @@ const cityImages: Record<string, CityImageRecord> = {
     imageUrl:
       "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1600&q=80",
   },
-  vitoria-gasteiz: {
+  "vitoria-gasteiz": {
     cityKey: "vitoria-gasteiz",
     city: "Vitoria-Gasteiz",
     country: "Spain",
