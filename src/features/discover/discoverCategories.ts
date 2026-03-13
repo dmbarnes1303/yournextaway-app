@@ -5,12 +5,12 @@ export type DiscoverCategory =
   | "derbies"
   | "atmospheres"
   | "valueTrips"
+  | "perfectTrips"
+  | "easyTickets"
   | "legendaryStadiums"
   | "iconicCities"
-  | "perfectTrips"
   | "nightMatches"
   | "titleDrama"
-  | "easyTickets"
   | "bucketList"
   | "matchdayCulture"
   | "underratedTrips";
@@ -20,37 +20,43 @@ export type DiscoverCategoryMeta = {
   subtitle: string;
   helper: string;
   icon: keyof typeof Ionicons.glyphMap;
-  emphasis?: "primary" | "neutral";
+  emphasis: "primary" | "secondary";
 };
 
+export const DISCOVER_PRIMARY_CATEGORIES: DiscoverCategory[] = [
+  "bigMatches",
+  "derbies",
+  "atmospheres",
+  "valueTrips",
+  "perfectTrips",
+  "easyTickets",
+];
+
+export const DISCOVER_SECONDARY_CATEGORIES: DiscoverCategory[] = [
+  "legendaryStadiums",
+  "iconicCities",
+  "nightMatches",
+  "titleDrama",
+  "bucketList",
+  "matchdayCulture",
+  "underratedTrips",
+];
+
+/**
+ * Kept for backward compatibility with current consumers.
+ * Primary row first, then secondary rows.
+ */
 export const DISCOVER_ROWS: DiscoverCategory[][] = [
-  [
-    "bigMatches",
-    "derbies",
-    "atmospheres",
-    "valueTrips",
-    "legendaryStadiums",
-  ],
-  [
-    "iconicCities",
-    "perfectTrips",
-    "nightMatches",
-    "titleDrama",
-    "easyTickets",
-  ],
-  [
-    "bucketList",
-    "matchdayCulture",
-    "underratedTrips",
-  ],
+  DISCOVER_PRIMARY_CATEGORIES,
+  ["legendaryStadiums", "iconicCities", "nightMatches", "titleDrama"],
+  ["bucketList", "matchdayCulture", "underratedTrips"],
 ];
 
 export const DISCOVER_CATEGORY_META: Record<DiscoverCategory, DiscoverCategoryMeta> = {
   bigMatches: {
     title: "Big Matches",
     subtitle: "High-profile fixtures worth travelling for",
-    helper:
-      "Discover mode • ranked for occasion, club size, derby energy, and night factor",
+    helper: "Discover mode • ranked for occasion, glamour, atmosphere and stakes",
     icon: "star-outline",
     emphasis: "primary",
   },
@@ -58,7 +64,7 @@ export const DISCOVER_CATEGORY_META: Record<DiscoverCategory, DiscoverCategoryMe
   derbies: {
     title: "Derbies & Rivalries",
     subtitle: "Tension, history, noise, chaos",
-    helper: "Discover mode • ranked for derby intensity first",
+    helper: "Discover mode • ranked for rivalry intensity first",
     icon: "flame-outline",
     emphasis: "primary",
   },
@@ -66,7 +72,7 @@ export const DISCOVER_CATEGORY_META: Record<DiscoverCategory, DiscoverCategoryMe
   atmospheres: {
     title: "Insane Atmospheres",
     subtitle: "Best noise, intensity and matchday energy",
-    helper: "Discover mode • ranked for atmosphere and occasion",
+    helper: "Discover mode • ranked for atmosphere and culture",
     icon: "radio-outline",
     emphasis: "primary",
   },
@@ -74,82 +80,81 @@ export const DISCOVER_CATEGORY_META: Record<DiscoverCategory, DiscoverCategoryMe
   valueTrips: {
     title: "Best Value Football Trips",
     subtitle: "Better experience-per-pound potential",
-    helper: "Discover mode • ranked for value over prestige",
+    helper: "Discover mode • ranked for value, ease and usable quality",
     icon: "cash-outline",
-    emphasis: "neutral",
+    emphasis: "primary",
+  },
+
+  perfectTrips: {
+    title: "Perfect Football Trips",
+    subtitle: "Best overall football city-break balance",
+    helper: "Discover mode • ranked for overall trip quality, city pull and ease",
+    icon: "navigate-outline",
+    emphasis: "primary",
+  },
+
+  easyTickets: {
+    title: "Easy Ticket Matches",
+    subtitle: "Better chance of an accessible home-ticket route",
+    helper: "Discover mode • ranked for easier ticket access and trip simplicity",
+    icon: "ticket-outline",
+    emphasis: "primary",
   },
 
   legendaryStadiums: {
     title: "Legendary Stadiums",
     subtitle: "Grounds with weight, history and pull",
-    helper: "Discover mode • ranked for stadium and club prestige",
+    helper: "Discover mode • ranked for stadium prestige and club pull",
     icon: "business-outline",
-    emphasis: "neutral",
+    emphasis: "secondary",
   },
 
   iconicCities: {
     title: "Iconic Football Cities",
     subtitle: "Trips where the city matters as much as the match",
-    helper: "Discover mode • ranked for city pull and trip appeal",
+    helper: "Discover mode • ranked for city pull, nightlife and football weight",
     icon: "earth-outline",
-    emphasis: "neutral",
-  },
-
-  perfectTrips: {
-    title: "Perfect Football Trips",
-    subtitle: "Strong fixture plus solid travel potential",
-    helper: "Discover mode • ranked for overall trip quality",
-    icon: "navigate-outline",
-    emphasis: "neutral",
+    emphasis: "secondary",
   },
 
   nightMatches: {
     title: "Night Matches",
-    subtitle: "Evening kickoffs with better match feel",
-    helper: "Discover mode • ranked for later kickoffs and atmosphere",
+    subtitle: "Later kickoffs with better match feel",
+    helper: "Discover mode • ranked for evening kickoffs and nightlife fit",
     icon: "moon-outline",
-    emphasis: "neutral",
+    emphasis: "secondary",
   },
 
   titleDrama: {
     title: "Title Race Drama",
     subtitle: "Fixtures with sharper end-of-season stakes",
-    helper: "Discover mode • ranked for title-race tension signals",
+    helper: "Discover mode • ranked for pressure and late-season tension",
     icon: "trophy-outline",
-    emphasis: "neutral",
-  },
-
-  easyTickets: {
-    title: "Easy Ticket Matches",
-    subtitle: "Better chance of accessible home tickets",
-    helper: "Discover mode • ranked for easier ticket difficulty first",
-    icon: "ticket-outline",
-    emphasis: "neutral",
+    emphasis: "secondary",
   },
 
   bucketList: {
     title: "Football Bucket List",
     subtitle: "Trips people should do at least once",
-    helper:
-      "Discover mode • ranked for prestige, atmosphere, and destination pull",
+    helper: "Discover mode • ranked for prestige, atmosphere and destination pull",
     icon: "bookmark-outline",
-    emphasis: "neutral",
+    emphasis: "secondary",
   },
 
   matchdayCulture: {
     title: "Best Matchday Culture",
-    subtitle: "Beyond the 90 minutes",
-    helper: "Discover mode • ranked for culture and atmosphere",
+    subtitle: "Trips that feel bigger than the 90 minutes",
+    helper: "Discover mode • ranked for football culture, city feel and atmosphere",
     icon: "people-outline",
-    emphasis: "neutral",
+    emphasis: "secondary",
   },
 
   underratedTrips: {
     title: "Underrated Trips",
     subtitle: "Less obvious, more interesting",
-    helper: "Discover mode • ranked away from obvious glamour picks",
+    helper: "Discover mode • ranked away from the obvious glamour picks",
     icon: "sparkles-outline",
-    emphasis: "neutral",
+    emphasis: "secondary",
   },
 };
 
