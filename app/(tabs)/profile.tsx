@@ -406,7 +406,13 @@ export default function ProfileScreen() {
   }, [countryCode]);
 
   return (
-    <Background imageSource={getBackground("profile")} overlayOpacity={0.82}>
+    <Background
+  imageSource={getBackground("profile")}
+  overlayOpacity={0.03}
+  topShadeOpacity={0.24}
+  bottomShadeOpacity={0.28}
+  centerShadeOpacity={0.02}
+>
       <SafeAreaView style={styles.container} edges={["top"]}>
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           {/* HEADER */}
