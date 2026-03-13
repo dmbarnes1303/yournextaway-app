@@ -126,7 +126,13 @@ export default function FixturesScreen() {
       : ({ imageSource: bg } as const);
 
   return (
-    <Background {...bgProps} overlayOpacity={0}>
+    <Background
+  {...bgProps}
+  overlayOpacity={0.08}
+  topShadeOpacity={0.36}
+  bottomShadeOpacity={0.42}
+  centerShadeOpacity={0.04}
+>
       <SafeAreaView style={styles.container} edges={["top"]}>
         <FlatList
           data={loading || error ? [] : filtered}
