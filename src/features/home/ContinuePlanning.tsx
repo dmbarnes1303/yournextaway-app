@@ -56,13 +56,6 @@ export default function ContinuePlanning({
 
       <GlassCard strength="default" style={styles.block} noPadding>
         <View style={styles.blockInner}>
-          <View style={styles.hubTop}>
-            <Text style={styles.hubKicker}>Trip workspaces</Text>
-            <Text style={styles.hubSub}>
-              Save your match, links, notes and bookings in one place.
-            </Text>
-          </View>
-
           {!loadedTrips ? (
             <View style={styles.center}>
               <ActivityIndicator />
@@ -118,15 +111,17 @@ export default function ContinuePlanning({
                     {nextTripFlagUrl ? (
                       <Image source={{ uri: nextTripFlagUrl }} style={styles.nextTripFlag} />
                     ) : null}
+
                     {typeof nextTripTeamId === "number" ? (
                       <View style={styles.nextTripCrestDot}>
                         <Image
                           source={{ uri: apiSportsTeamLogo(nextTripTeamId) }}
-                          style={{ width: 16, height: 16, opacity: 0.95 }}
+                          style={styles.nextTripCrest}
                           resizeMode="contain"
                         />
                       </View>
                     ) : null}
+
                     <Text style={styles.nextTripTitle}>{nextTripCityTitle || "Trip"}</Text>
                   </View>
 
@@ -160,12 +155,14 @@ export default function ContinuePlanning({
 
 const styles = StyleSheet.create({
   section: { gap: 10 },
+
   sectionHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 10,
   },
+
   sectionTitle: {
     color: theme.colors.text,
     fontSize: 18,
@@ -181,39 +178,28 @@ const styles = StyleSheet.create({
     backgroundColor:
       Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
   },
+
   miniPillText: {
     color: theme.colors.textSecondary,
     fontSize: 12,
     fontWeight: theme.fontWeight.black,
   },
 
-  block: { borderRadius: 24 },
-  blockInner: { padding: 14, gap: 12 },
-
-  hubTop: {
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-    backgroundColor:
-      Platform.OS === "android" ? "rgba(10,12,14,0.18)" : "rgba(10,12,14,0.14)",
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-  },
-  hubKicker: {
-    color: "rgba(79,224,138,0.78)",
-    fontSize: 12,
-    fontWeight: theme.fontWeight.black,
-    letterSpacing: 0.3,
-  },
-  hubSub: {
-    marginTop: 6,
-    color: theme.colors.textSecondary,
-    fontSize: 13,
-    fontWeight: theme.fontWeight.bold,
-    lineHeight: 18,
+  block: {
+    borderRadius: 24,
   },
 
-  center: { paddingVertical: 14, alignItems: "center", gap: 10 },
+  blockInner: {
+    padding: 14,
+    gap: 12,
+  },
+
+  center: {
+    paddingVertical: 14,
+    alignItems: "center",
+    gap: 10,
+  },
+
   muted: {
     color: theme.colors.textSecondary,
     fontSize: 13,
@@ -225,6 +211,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: theme.fontWeight.black,
   },
+
   emptyMeta: {
     marginTop: 6,
     color: theme.colors.textSecondary,
@@ -233,7 +220,11 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
 
-  blockActions: { flexDirection: "row", gap: 10, marginTop: 2 },
+  blockActions: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 2,
+  },
 
   btn: {
     flex: 1,
@@ -243,21 +234,25 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     overflow: "hidden",
   },
+
   btnPrimary: {
     borderColor: "rgba(79,224,138,0.24)",
     backgroundColor:
       Platform.OS === "android" ? theme.glass.androidBg.default : theme.glass.iosBg.default,
   },
+
   btnPrimaryText: {
     color: theme.colors.text,
     fontSize: 14,
     fontWeight: theme.fontWeight.black,
   },
+
   btnGhost: {
     borderColor: "rgba(255,255,255,0.10)",
     backgroundColor:
       Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
   },
+
   btnGhostText: {
     color: theme.colors.textSecondary,
     fontSize: 14,
@@ -274,17 +269,29 @@ const styles = StyleSheet.create({
     position: "relative",
     minHeight: 124,
   },
-  nextTripImage: { ...StyleSheet.absoluteFillObject, width: "100%", height: "100%" },
+
+  nextTripImage: {
+    ...StyleSheet.absoluteFillObject,
+    width: "100%",
+    height: "100%",
+  },
+
   nextTripImageOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(6,8,10,0.62)",
   },
-  nextTripContent: { paddingVertical: 12, paddingHorizontal: 12 },
+
+  nextTripContent: {
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+  },
+
   nextTripKicker: {
     color: theme.colors.textTertiary,
     fontSize: 12,
     fontWeight: theme.fontWeight.black,
   },
+
   nextTripTitleRow: {
     marginTop: 6,
     flexDirection: "row",
@@ -292,7 +299,14 @@ const styles = StyleSheet.create({
     gap: 8,
     flexWrap: "wrap",
   },
-  nextTripFlag: { width: 18, height: 13, borderRadius: 3, opacity: 0.9 },
+
+  nextTripFlag: {
+    width: 18,
+    height: 13,
+    borderRadius: 3,
+    opacity: 0.9,
+  },
+
   nextTripCrestDot: {
     width: 22,
     height: 22,
@@ -304,11 +318,19 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.08)",
     overflow: "hidden",
   },
+
+  nextTripCrest: {
+    width: 16,
+    height: 16,
+    opacity: 0.95,
+  },
+
   nextTripTitle: {
     color: theme.colors.text,
     fontSize: 18,
     fontWeight: theme.fontWeight.black,
   },
+
   nextTripMeta: {
     marginTop: 6,
     color: "rgba(242,244,246,0.84)",
@@ -317,6 +339,12 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
 
-  pressed: { opacity: 0.94, transform: [{ scale: 0.995 }] },
-  pressedRow: { opacity: 0.94 },
+  pressed: {
+    opacity: 0.94,
+    transform: [{ scale: 0.995 }],
+  },
+
+  pressedRow: {
+    opacity: 0.94,
+  },
 });
