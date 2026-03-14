@@ -1,3 +1,4 @@
+// app/(tabs)/trips.tsx
 import React, { useEffect, useMemo, useState, useCallback } from "react";
 import {
   View,
@@ -26,6 +27,7 @@ import { LEAGUES, parseIsoDateOnly, toIsoDate } from "@/src/constants/football";
 
 import tripsStore, { type Trip } from "@/src/state/trips";
 import savedItemsStore from "@/src/state/savedItems";
+import walletStore, { type WalletTripGroup } from "@/src/state/walletStore";
 import type { SavedItem } from "@/src/core/savedItemTypes";
 
 import { getFlagImageUrl } from "@/src/utils/flagImages";
@@ -35,21 +37,20 @@ import { getFlagImageUrl } from "@/src/utils/flagImages";
 /* -------------------------------------------------------------------------- */
 
 /**
- * PUT YOUR REAL LOGO URL HERE.
- * Use a transparent PNG if possible.
- * Leave blank if you want the reserved logo box to show without an image.
+ * Put your actual hosted logo URL here.
+ * Leaving blank hides the logo panel cleanly instead of showing random filler.
  */
 const TRIPS_HEADER_LOGO = "";
 
 /**
- * Visual fallback map when trip objects do not yet store league/country metadata.
+ * Visual fallback map for trip cards when trip objects do not yet carry full metadata.
  */
 const TRIP_CITY_META: Record<
   string,
   {
     countryCode?: string;
     leagueId?: number;
-    image: string;
+    image?: string;
   }
 > = {
   barcelona: {
@@ -257,6 +258,34 @@ function getTripVisualMeta(t: Trip) {
   };
 }
 
+function buildWalletIndex(groups: WalletTripGroup[]) {
+  const byTrip: Record<
+    string,
+    {
+      booked: number;
+      pending: number;
+      proofs: number;
+      total: number;
+      missingProof: number;
+    }
+  > = {};
+
+  for (const group of groups) {
+    const tripId = String(group.tripId ?? "").trim();
+    if (!tripId) continue;
+
+    const booked = group.items.filter((x) => x.status === "booked").length;
+    const pending = group.items.filter((x) => x.status === "pending").length;
+    const proofs = group.items.filter((x) => x.hasProof).length;
+    const total = group.items.length;
+    const missingProof = group.items.filter((x) => x.status === "booked" && !x.hasProof).length;
+
+    byTrip[tripId] = { booked, pending, proofs, total, missingProof };
+  }
+
+  return byTrip;
+}
+
 /* -------------------------------- Screen -------------------------------- */
 
 export default function TripsScreen() {
@@ -268,6 +297,9 @@ export default function TripsScreen() {
 
   const [loadedItems, setLoadedItems] = useState(savedItemsStore.getState().loaded);
   const [items, setItems] = useState<SavedItem[]>(savedItemsStore.getState().items);
+
+  const [walletGroups, setWalletGroups] = useState<WalletTripGroup[]>([]);
+  const [walletLoaded, setWalletLoaded] = useState(false);
 
   const [deletingTripId, setDeletingTripId] = useState<string | null>(null);
 
@@ -297,9 +329,35 @@ export default function TripsScreen() {
     return unsub;
   }, []);
 
-  const loading = !loadedTrips || !loadedItems;
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadWalletGroups() {
+      try {
+        const groups = await walletStore.getGroupedByTrip();
+        if (!cancelled) {
+          setWalletGroups(groups);
+          setWalletLoaded(true);
+        }
+      } catch {
+        if (!cancelled) {
+          setWalletGroups([]);
+          setWalletLoaded(true);
+        }
+      }
+    }
+
+    loadWalletGroups();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const loading = !loadedTrips || !loadedItems || !walletLoaded;
 
   const countsIndex = useMemo(() => buildCountsIndex(items), [items]);
+  const walletIndex = useMemo(() => buildWalletIndex(walletGroups), [walletGroups]);
 
   const upcoming = useMemo(() => trips.filter(isUpcoming), [trips]);
   const past = useMemo(() => trips.filter((t) => !isUpcoming(t)), [trips]);
@@ -319,6 +377,8 @@ export default function TripsScreen() {
   }, [upcoming, past]);
 
   const featuredCounts = featuredTrip ? countsIndex[featuredTrip.id] : undefined;
+  const featuredWallet = featuredTrip ? walletIndex[featuredTrip.id] : undefined;
+
   const showEmpty = !loading && trips.length === 0;
 
   const openTrip = useCallback(
@@ -333,6 +393,16 @@ export default function TripsScreen() {
 
   const goBuild = useCallback(() => router.push("/trip/build"), [router]);
   const goFixtures = useCallback(() => router.push("/(tabs)/fixtures" as any), [router]);
+
+  const goWalletForTrip = useCallback(
+    (t: Trip) => {
+      router.push({
+        pathname: "/(tabs)/wallet",
+        params: { tripId: t.id },
+      } as any);
+    },
+    [router]
+  );
 
   const actuallyDeleteTrip = useCallback(
     async (t: Trip) => {
@@ -404,7 +474,7 @@ export default function TripsScreen() {
         >
           <GlassCard style={styles.hero} strength="strong" noPadding>
             <View style={styles.heroInner}>
-              <View style={styles.heroHeaderRow}>
+              <View style={styles.heroTopRow}>
                 <View style={styles.heroTextWrap}>
                   <Text style={styles.kicker}>WORKSPACES</Text>
                   <Text style={styles.title}>Trips</Text>
@@ -413,42 +483,45 @@ export default function TripsScreen() {
                   </Text>
                 </View>
 
-                <View style={styles.heroStatsCol}>
-                  <MetricCard
-                    icon="airplane-outline"
-                    value={String(clamp2(totals.tripCount))}
-                    label="Trips"
-                  />
-                  <MetricCard
-                    icon="time-outline"
-                    value={String(clamp2(totals.pending))}
-                    label="Pending"
-                  />
-                  <MetricCard
-                    icon="checkmark-done-outline"
-                    value={String(clamp2(totals.booked))}
-                    label="Booked"
-                  />
+                <View style={styles.heroRightCol}>
+                  <View style={styles.heroStatsCol}>
+                    <MetricCard
+                      icon="airplane-outline"
+                      value={String(clamp2(totals.tripCount))}
+                      label="Trips"
+                    />
+                    <MetricCard
+                      icon="time-outline"
+                      value={String(clamp2(totals.pending))}
+                      label="Pending"
+                    />
+                    <MetricCard
+                      icon="checkmark-done-outline"
+                      value={String(clamp2(totals.booked))}
+                      label="Booked"
+                    />
+                  </View>
                 </View>
               </View>
 
-              <View style={styles.heroLogoStage}>
-                {TRIPS_HEADER_LOGO ? (
-                  <Image
-                    source={{ uri: TRIPS_HEADER_LOGO }}
-                    style={styles.heroLogoStageImage}
-                    resizeMode="contain"
-                  />
-                ) : (
-                  <View style={styles.heroLogoFallback}>
-                    <Ionicons
-                      name="image-outline"
-                      size={28}
-                      color={theme.colors.textTertiary}
+              <View style={styles.heroMidRow}>
+                <View style={styles.logoPanel}>
+                  {TRIPS_HEADER_LOGO ? (
+                    <Image
+                      source={{ uri: TRIPS_HEADER_LOGO }}
+                      style={styles.logoPanelImage}
+                      resizeMode="contain"
                     />
-                    <Text style={styles.heroLogoFallbackText}>Add your logo URL</Text>
-                  </View>
-                )}
+                  ) : (
+                    <View style={styles.logoPanelPlaceholder}>
+                      <Ionicons
+                        name="shield-outline"
+                        size={28}
+                        color={theme.colors.textTertiary}
+                      />
+                    </View>
+                  )}
+                </View>
               </View>
 
               <View style={styles.heroActions}>
@@ -504,7 +577,9 @@ export default function TripsScreen() {
               <SpotlightTripCard
                 trip={featuredTrip}
                 counts={featuredCounts}
+                wallet={featuredWallet}
                 onOpen={openTrip}
+                onOpenWallet={goWalletForTrip}
               />
             </View>
           ) : null}
@@ -547,10 +622,12 @@ export default function TripsScreen() {
                     key={t.id}
                     t={t}
                     counts={countsIndex[t.id]}
+                    wallet={walletIndex[t.id]}
                     deletingTripId={deletingTripId}
                     onOpen={openTrip}
                     onEdit={editTrip}
                     onDelete={deleteTrip}
+                    onOpenWallet={goWalletForTrip}
                   />
                 ))}
               </View>
@@ -569,10 +646,12 @@ export default function TripsScreen() {
                     key={t.id}
                     t={t}
                     counts={countsIndex[t.id]}
+                    wallet={walletIndex[t.id]}
                     deletingTripId={deletingTripId}
                     onOpen={openTrip}
                     onEdit={editTrip}
                     onDelete={deleteTrip}
+                    onOpenWallet={goWalletForTrip}
                   />
                 ))}
               </View>
@@ -624,10 +703,10 @@ function StatusChip({
     kind === "pending"
       ? styles.chipPending
       : kind === "booked"
-        ? styles.chipBooked
-        : kind === "draft"
-          ? styles.chipDraft
-          : styles.chipReady;
+      ? styles.chipBooked
+      : kind === "draft"
+      ? styles.chipDraft
+      : styles.chipReady;
 
   return (
     <View style={[styles.chip, style]}>
@@ -661,16 +740,60 @@ function LeagueMetaInline({ trip }: { trip: Trip }) {
   );
 }
 
+function WalletStrip({
+  wallet,
+  onPress,
+}: {
+  wallet?: {
+    booked: number;
+    pending: number;
+    proofs: number;
+    total: number;
+    missingProof: number;
+  };
+  onPress: () => void;
+}) {
+  const booked = wallet?.booked ?? 0;
+  const pending = wallet?.pending ?? 0;
+  const missingProof = wallet?.missingProof ?? 0;
+
+  return (
+    <Pressable onPress={onPress} style={({ pressed }) => [styles.walletStrip, pressed && styles.pressed]}>
+      <View style={styles.walletStripLeft}>
+        <View style={styles.walletStripIcon}>
+          <Ionicons name="wallet-outline" size={16} color={theme.colors.text} />
+        </View>
+
+        <View style={styles.walletStripTextWrap}>
+          <Text style={styles.walletStripTitle}>Wallet</Text>
+          <Text style={styles.walletStripMeta}>
+            {`${booked} booked • ${pending} pending • ${missingProof} missing proof`}
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.walletStripRight}>
+        <Text style={styles.walletStripLink}>Open in Wallet</Text>
+        <Text style={styles.walletStripArrow}>›</Text>
+      </View>
+    </Pressable>
+  );
+}
+
 /* ------------------------------ Spotlight ------------------------------ */
 
 function SpotlightTripCard({
   trip,
   counts,
+  wallet,
   onOpen,
+  onOpenWallet,
 }: {
   trip: Trip;
   counts?: { total: number; pending: number; booked: number; saved: number };
+  wallet?: { booked: number; pending: number; proofs: number; total: number; missingProof: number };
   onOpen: (t: Trip) => void;
+  onOpenWallet: (t: Trip) => void;
 }) {
   const badge = badgeLabel(trip, counts);
   const progress = tripProgress(counts);
@@ -712,6 +835,8 @@ function SpotlightTripCard({
               <MiniStat label="Booked" value={counts?.booked ?? 0} />
             </View>
 
+            <WalletStrip wallet={wallet} onPress={() => onOpenWallet(trip)} />
+
             <View style={styles.spotlightFooter}>
               <Text style={styles.spotlightCta}>Open workspace</Text>
               <Text style={styles.spotlightArrow}>›</Text>
@@ -737,17 +862,21 @@ function MiniStat({ label, value }: { label: string; value: number }) {
 function TripCard({
   t,
   counts,
+  wallet,
   deletingTripId,
   onOpen,
   onEdit,
   onDelete,
+  onOpenWallet,
 }: {
   t: Trip;
   counts?: { total: number; pending: number; booked: number; saved: number };
+  wallet?: { booked: number; pending: number; proofs: number; total: number; missingProof: number };
   deletingTripId: string | null;
   onOpen: (t: Trip) => void;
   onEdit: (t: Trip) => void;
   onDelete: (t: Trip) => void;
+  onOpenWallet: (t: Trip) => void;
 }) {
   const c = counts ?? { total: 0, pending: 0, booked: 0, saved: 0 };
   const isDeleting = deletingTripId === t.id;
@@ -807,6 +936,8 @@ function TripCard({
             <Pill label="Booked" value={c.booked} />
           </View>
 
+          <WalletStrip wallet={wallet} onPress={() => onOpenWallet(t)} />
+
           <View style={styles.actionsRow}>
             <Pressable
               onPress={() => onEdit(t)}
@@ -818,11 +949,7 @@ function TripCard({
                 isDeleting && { opacity: 0.5 },
               ]}
             >
-              <Ionicons
-                name="create-outline"
-                size={16}
-                color={theme.colors.textSecondary}
-              />
+              <Ionicons name="create-outline" size={16} color={theme.colors.textSecondary} />
               <Text style={styles.actionGhostText}>Edit</Text>
             </Pressable>
 
@@ -836,14 +963,8 @@ function TripCard({
                 isDeleting && { opacity: 0.5 },
               ]}
             >
-              <Ionicons
-                name="trash-outline"
-                size={16}
-                color={"rgba(255,120,120,0.95)"}
-              />
-              <Text style={styles.actionDangerText}>
-                {isDeleting ? "Deleting…" : "Delete"}
-              </Text>
+              <Ionicons name="trash-outline" size={16} color={"rgba(255,120,120,0.95)"} />
+              <Text style={styles.actionDangerText}>{isDeleting ? "Deleting…" : "Delete"}</Text>
             </Pressable>
           </View>
         </ImageBackground>
@@ -882,7 +1003,7 @@ const styles = StyleSheet.create({
     gap: 14,
   },
 
-  heroHeaderRow: {
+  heroTopRow: {
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 12,
@@ -892,41 +1013,43 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
-  heroStatsCol: {
-    width: 82,
-    gap: 8,
-    alignItems: "stretch",
+  heroRightCol: {
+    alignItems: "flex-end",
+    gap: 10,
   },
 
-  heroLogoStage: {
-    minHeight: 168,
-    maxHeight: 168,
-    borderRadius: 24,
+  heroStatsCol: {
+    gap: 8,
+    alignItems: "flex-end",
+  },
+
+  heroMidRow: {
+    minHeight: 140,
+  },
+
+  logoPanel: {
+    flex: 1,
+    minHeight: 140,
+    borderRadius: 22,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
     backgroundColor:
-      Platform.OS === "android" ? "rgba(0,0,0,0.14)" : "rgba(255,255,255,0.03)",
+      Platform.OS === "android" ? "rgba(10,12,14,0.16)" : "rgba(10,12,14,0.12)",
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
   },
 
-  heroLogoStageImage: {
-    width: "78%",
-    height: "78%",
+  logoPanelImage: {
+    width: "82%",
+    height: "82%",
     opacity: 0.98,
   },
 
-  heroLogoFallback: {
+  logoPanelPlaceholder: {
     alignItems: "center",
     justifyContent: "center",
-    gap: 10,
-  },
-
-  heroLogoFallbackText: {
-    color: theme.colors.textTertiary,
-    fontSize: 12,
-    fontWeight: theme.fontWeight.black,
+    opacity: 0.5,
   },
 
   kicker: {
@@ -1153,7 +1276,7 @@ const styles = StyleSheet.create({
   },
 
   spotlightImageWrap: {
-    minHeight: 280,
+    minHeight: 320,
     justifyContent: "flex-end",
   },
 
@@ -1162,7 +1285,7 @@ const styles = StyleSheet.create({
   },
 
   tripImageWrap: {
-    minHeight: 236,
+    minHeight: 292,
     justifyContent: "flex-end",
     overflow: "hidden",
   },
@@ -1341,7 +1464,6 @@ const styles = StyleSheet.create({
   progressTrackSmall: {
     marginTop: 8,
     marginHorizontal: 14,
-    width: undefined,
     height: 6,
     borderRadius: 999,
     backgroundColor: "rgba(255,255,255,0.08)",
@@ -1454,6 +1576,77 @@ const styles = StyleSheet.create({
     color: theme.colors.textTertiary,
     fontSize: 11,
     fontWeight: theme.fontWeight.black,
+  },
+
+  walletStrip: {
+    marginTop: 12,
+    marginHorizontal: 14,
+    minHeight: 56,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor:
+      Platform.OS === "android" ? "rgba(0,0,0,0.20)" : "rgba(255,255,255,0.05)",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+
+  walletStripLeft: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+
+  walletStripIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(87,162,56,0.18)",
+    backgroundColor: "rgba(87,162,56,0.08)",
+  },
+
+  walletStripTextWrap: {
+    flex: 1,
+  },
+
+  walletStripTitle: {
+    color: theme.colors.text,
+    fontSize: 12,
+    fontWeight: theme.fontWeight.black,
+  },
+
+  walletStripMeta: {
+    marginTop: 2,
+    color: theme.colors.textSecondary,
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: theme.fontWeight.bold,
+  },
+
+  walletStripRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+
+  walletStripLink: {
+    color: theme.colors.primary,
+    fontSize: 11,
+    fontWeight: theme.fontWeight.black,
+  },
+
+  walletStripArrow: {
+    color: theme.colors.textTertiary,
+    fontSize: 18,
+    marginTop: -1,
   },
 
   actionsRow: {
