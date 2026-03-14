@@ -1,7 +1,6 @@
 import React from "react";
 import { View, Text, StyleSheet, Modal, Pressable } from "react-native";
 
-import GlassCard from "@/src/components/GlassCard";
 import Button from "@/src/components/Button";
 import { theme } from "@/src/constants/theme";
 
@@ -48,72 +47,82 @@ export default function FixturesCalendarModal({
 }) {
   return (
     <Modal visible={visible} animationType="fade" transparent onRequestClose={onClose}>
-      <Pressable style={styles.modalBackdrop} onPress={onClose} />
-      <View style={styles.modalWrap} pointerEvents="box-none">
-        <GlassCard level="strong" variant="glass" forceBlur style={styles.modalSheet}>
-          <View style={styles.modalInner}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{title}</Text>
+      <View style={styles.backdrop}>
+        <Pressable style={StyleSheet.absoluteFillObject} onPress={onClose} />
+
+        <View style={styles.sheetWrap} pointerEvents="box-none">
+          <View style={styles.sheet}>
+            <View style={styles.header}>
+              <View style={styles.headerTextWrap}>
+                <Text style={styles.title}>{title}</Text>
+                <Text style={styles.subtitle}>{subtitle}</Text>
+              </View>
+
               <Button label="Close" tone="ghost" size="sm" onPress={onClose} />
             </View>
 
-            <Text style={styles.modalSub}>{subtitle}</Text>
-
-            <View style={styles.calHeaderRow}>
-              <Pressable onPress={onPrevMonth} style={styles.calNavBtn} hitSlop={10}>
-                <Text style={styles.calNavText}>‹</Text>
+            <View style={styles.monthRow}>
+              <Pressable onPress={onPrevMonth} style={styles.navBtn} hitSlop={10}>
+                <Text style={styles.navText}>‹</Text>
               </Pressable>
 
-              <Text style={styles.calMonthText}>{monthText}</Text>
+              <Text style={styles.monthText}>{monthText}</Text>
 
-              <Pressable onPress={onNextMonth} style={styles.calNavBtn} hitSlop={10}>
-                <Text style={styles.calNavText}>›</Text>
+              <Pressable onPress={onNextMonth} style={styles.navBtn} hitSlop={10}>
+                <Text style={styles.navText}>›</Text>
               </Pressable>
             </View>
 
-            <View style={styles.calWeekRow}>
+            <View style={styles.weekRow}>
               {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((w) => (
-                <Text key={w} style={styles.calWeekText}>
+                <Text key={w} style={styles.weekText}>
                   {w}
                 </Text>
               ))}
             </View>
 
-            <View style={styles.calGrid}>
+            <View style={styles.grid}>
               {grid.map((cell, idx) => {
                 if (!cell.inMonth) {
-                  return <View key={`e-${idx}`} style={styles.calCell} />;
+                  return <View key={`empty-${idx}`} style={styles.cell} />;
                 }
 
                 const iso = cell.iso;
                 const disabled = iso < minIso || iso > maxIso;
-                const inSel = !disabled && calInRange(iso);
+                const inRange = !disabled && calInRange(iso);
                 const edge = !disabled && calIsEdge(iso);
 
                 return (
-                  <Pressable
-                    key={iso}
-                    disabled={disabled}
-                    onPress={() => onTapDay(iso)}
-                    style={[
-                      styles.calCell,
-                      styles.calDayBtn,
-                      inSel && styles.calDayInRange,
-                      edge && styles.calDayEdge,
-                      disabled && styles.calDayDisabled,
-                    ]}
-                  >
-                    <Text style={[styles.calDayText, edge && styles.calDayTextEdge]}>
-                      {cell.day}
-                    </Text>
-                  </Pressable>
+                  <View key={iso} style={styles.cell}>
+                    <Pressable
+                      disabled={disabled}
+                      onPress={() => onTapDay(iso)}
+                      style={[
+                        styles.dayBtn,
+                        inRange && styles.dayBtnInRange,
+                        edge && styles.dayBtnEdge,
+                        disabled && styles.dayBtnDisabled,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.dayText,
+                          inRange && styles.dayTextInRange,
+                          edge && styles.dayTextEdge,
+                          disabled && styles.dayTextDisabled,
+                        ]}
+                      >
+                        {cell.day}
+                      </Text>
+                    </Pressable>
+                  </View>
                 );
               })}
             </View>
 
-            <View style={styles.modalActions}>
+            <View style={styles.actions}>
               <Button
-                label="Clear range"
+                label="Clear"
                 tone="secondary"
                 size="md"
                 onPress={onClearRange}
@@ -129,152 +138,172 @@ export default function FixturesCalendarModal({
               />
             </View>
 
-            <Text style={styles.modalFootnote}>
-              Tip: tap two different days to set a range. Tap again to reset back to a single day.
+            <Text style={styles.footnote}>
+              Tap two different days to create a range. Tap the same day flow again to go back to
+              a single date.
             </Text>
           </View>
-        </GlassCard>
+        </View>
       </View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  modalBackdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.58)",
-  },
-
-  modalWrap: {
+  backdrop: {
     flex: 1,
+    backgroundColor: "rgba(4,6,8,0.78)",
     justifyContent: "flex-end",
   },
 
-  modalSheet: {
-    borderRadius: 22,
-    marginHorizontal: theme.spacing.lg,
-    marginBottom: theme.spacing.lg,
+  sheetWrap: {
+    paddingHorizontal: theme.spacing.lg,
+    paddingBottom: theme.spacing.lg,
   },
 
-  modalInner: {
-    padding: 14,
-    gap: 12,
+  sheet: {
+    backgroundColor: "#121714",
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    padding: 16,
+    gap: 14,
+    shadowColor: "#000",
+    shadowOpacity: 0.34,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 12,
   },
 
-  modalHeader: {
+  header: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     justifyContent: "space-between",
     gap: 10,
   },
 
-  modalTitle: {
-    color: theme.colors.textPrimary,
-    fontSize: theme.fontSize.h2,
-    fontWeight: theme.fontWeight.semibold,
+  headerTextWrap: {
+    flex: 1,
+    gap: 4,
   },
 
-  modalSub: {
+  title: {
+    color: theme.colors.textPrimary,
+    fontSize: theme.fontSize.h2,
+    fontWeight: theme.fontWeight.black,
+  },
+
+  subtitle: {
     color: theme.colors.textSecondary,
     fontSize: theme.fontSize.meta,
     fontWeight: theme.fontWeight.medium,
+    lineHeight: 20,
   },
 
-  calHeaderRow: {
+  monthRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
 
-  calNavBtn: {
-    width: 36,
-    height: 36,
+  navBtn: {
+    width: 40,
+    height: 40,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: theme.colors.borderSubtle,
-    backgroundColor: "rgba(255,255,255,0.04)",
+    borderColor: "rgba(255,255,255,0.08)",
+    backgroundColor: "#181E1A",
     alignItems: "center",
     justifyContent: "center",
   },
 
-  calNavText: {
-    color: theme.colors.textSecondary,
-    fontSize: 20,
-    fontWeight: theme.fontWeight.semibold,
+  navText: {
+    color: theme.colors.textPrimary,
+    fontSize: 22,
+    fontWeight: theme.fontWeight.black,
     marginTop: -2,
   },
 
-  calMonthText: {
+  monthText: {
     color: theme.colors.textPrimary,
-    fontSize: theme.fontSize.meta,
-    fontWeight: theme.fontWeight.semibold,
+    fontSize: theme.fontSize.body,
+    fontWeight: theme.fontWeight.black,
   },
 
-  calWeekRow: {
+  weekRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    paddingTop: 4,
   },
 
-  calWeekText: {
+  weekText: {
     width: "14.285%",
     textAlign: "center",
     color: theme.colors.textMuted,
     fontSize: 11,
-    fontWeight: theme.fontWeight.medium,
+    fontWeight: theme.fontWeight.semibold,
   },
 
-  calGrid: {
+  grid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    marginTop: 4,
   },
 
-  calCell: {
+  cell: {
     width: "14.285%",
     aspectRatio: 1,
     padding: 4,
   },
 
-  calDayBtn: {
+  dayBtn: {
+    flex: 1,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: theme.colors.borderSubtle,
-    backgroundColor: "rgba(255,255,255,0.03)",
+    borderColor: "rgba(255,255,255,0.08)",
+    backgroundColor: "#181E1A",
     alignItems: "center",
     justifyContent: "center",
   },
 
-  calDayInRange: {
-    backgroundColor: "rgba(87,162,56,0.06)",
+  dayBtnInRange: {
+    backgroundColor: "rgba(87,162,56,0.08)",
+    borderColor: "rgba(87,162,56,0.16)",
   },
 
-  calDayEdge: {
-    borderColor: "rgba(87,162,56,0.30)",
-    backgroundColor: "rgba(87,162,56,0.12)",
+  dayBtnEdge: {
+    backgroundColor: "rgba(87,162,56,0.18)",
+    borderColor: "rgba(87,162,56,0.34)",
   },
 
-  calDayDisabled: {
-    opacity: 0.35,
+  dayBtnDisabled: {
+    backgroundColor: "#141815",
+    borderColor: "rgba(255,255,255,0.04)",
   },
 
-  calDayText: {
+  dayText: {
     color: theme.colors.textSecondary,
-    fontWeight: theme.fontWeight.semibold,
-    fontSize: 12,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.black,
   },
 
-  calDayTextEdge: {
+  dayTextInRange: {
     color: theme.colors.textPrimary,
   },
 
-  modalActions: {
-    flexDirection: "row",
-    gap: 10,
-    marginTop: 4,
+  dayTextEdge: {
+    color: theme.colors.textPrimary,
   },
 
-  modalFootnote: {
+  dayTextDisabled: {
+    color: "rgba(255,255,255,0.22)",
+  },
+
+  actions: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 2,
+  },
+
+  footnote: {
     color: theme.colors.textMuted,
     fontSize: theme.fontSize.tiny,
     fontWeight: theme.fontWeight.medium,
