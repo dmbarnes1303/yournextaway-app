@@ -3,12 +3,30 @@ import { View, Text, StyleSheet, Modal, Pressable } from "react-native";
 
 import Button from "@/src/components/Button";
 import { theme } from "@/src/constants/theme";
+import { formatFixtureDateDisplay, formatFixtureDateRangeDisplay } from "./helpers";
 
 type CalendarCell = {
   iso: string;
   day: number;
   inMonth: boolean;
 };
+
+function formatCalendarSubtitle(raw: string) {
+  const value = String(raw ?? "").trim();
+  if (!value) return "Choose a day or date range";
+
+  const rangeMatch = value.match(/^Range:\s*(\d{4}-\d{2}-\d{2})\s*→\s*(\d{4}-\d{2}-\d{2})$/);
+  if (rangeMatch) {
+    return `Range: ${formatFixtureDateRangeDisplay(rangeMatch[1], rangeMatch[2])}`;
+  }
+
+  const dayMatch = value.match(/^Day:\s*(\d{4}-\d{2}-\d{2})$/);
+  if (dayMatch) {
+    return `Day: ${formatFixtureDateDisplay(dayMatch[1])}`;
+  }
+
+  return value;
+}
 
 export default function FixturesCalendarModal({
   visible,
@@ -55,7 +73,7 @@ export default function FixturesCalendarModal({
             <View style={styles.header}>
               <View style={styles.headerTextWrap}>
                 <Text style={styles.title}>{title}</Text>
-                <Text style={styles.subtitle}>{subtitle}</Text>
+                <Text style={styles.subtitle}>{formatCalendarSubtitle(subtitle)}</Text>
               </View>
 
               <Button label="Close" tone="ghost" size="sm" onPress={onClose} />
