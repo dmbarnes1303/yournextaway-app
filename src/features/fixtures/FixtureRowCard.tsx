@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Text, StyleSheet, Pressable } from "react-native";
+import { View, Text, StyleSheet, Pressable, Image, Platform } from "react-native";
 
 import GlassCard from "@/src/components/GlassCard";
 import Button from "@/src/components/Button";
@@ -55,60 +55,76 @@ export default function FixtureRowCard({
   const rawDifficulty = home ? getTicketDifficultyBadge(home) : null;
   const difficulty: TicketDifficulty | "unknown" = rawDifficulty ?? "unknown";
 
+  const leagueMeta = LEAGUES.find((l) => l.leagueId === ctxLeagueId) ?? null;
   const leagueCode =
+    leagueMeta?.countryCode ||
     String((item?.league as any)?.country ?? "").trim() ||
-    LEAGUES.find((l) => l.leagueId === ctxLeagueId)?.countryCode ||
     "";
 
+  const leagueLogo = leagueMeta?.logo ?? null;
   const discoverReasons = Array.isArray(item.discoverReasons) ? item.discoverReasons : [];
 
   return (
     <View style={styles.rowWrap}>
-      <GlassCard style={styles.rowCard} level="default" variant="matte">
+      <GlassCard style={styles.rowCard} level="default" variant="matte" noPadding>
         <Pressable
           onPress={onToggleExpanded}
-          style={({ pressed }) => [styles.rowMainPress, pressed && { opacity: 0.96 }]}
+          style={({ pressed }) => [styles.rowMainPress, pressed && styles.pressed]}
           android_ripple={{ color: "rgba(255,255,255,0.04)" }}
         >
           <View style={styles.rowInner}>
-            <View style={styles.fixtureLeagueLine}>
-              {leagueCode ? <LeagueFlag code={leagueCode} /> : null}
-              <Text style={styles.fixtureLeagueText}>{String(item?.league?.name ?? "")}</Text>
+            <View style={styles.headerRow}>
+              <View style={styles.leagueCluster}>
+                {leagueLogo ? (
+                  <Image source={{ uri: leagueLogo }} style={styles.leagueLogo} resizeMode="contain" />
+                ) : null}
+                {leagueCode ? <LeagueFlag code={leagueCode} size="sm" /> : null}
+                <Text style={styles.fixtureLeagueText} numberOfLines={1}>
+                  {String(item?.league?.name ?? "")}
+                </Text>
+              </View>
+
+              <View style={styles.headerRight}>
+                <FixtureCertaintyBadge state={certainty} variant="compact" />
+              </View>
             </View>
 
             <View style={styles.topRow}>
-              <TeamCrest name={home} logo={item?.teams?.home?.logo} />
-
-              <View style={styles.centerCol}>
+              <View style={styles.teamSide}>
+                <TeamCrest name={home} logo={item?.teams?.home?.logo} />
                 <Text style={styles.teamName} numberOfLines={2}>
                   {home}
                 </Text>
+              </View>
+
+              <View style={styles.centerCol}>
                 <Text style={styles.vs}>vs</Text>
+                <Text style={styles.metaPrimary}>{kickoff.primary}</Text>
+              </View>
+
+              <View style={styles.teamSide}>
+                <TeamCrest name={away} logo={item?.teams?.away?.logo} />
                 <Text style={styles.teamName} numberOfLines={2}>
                   {away}
                 </Text>
               </View>
-
-              <TeamCrest name={away} logo={item?.teams?.away?.logo} />
             </View>
 
             <View style={styles.metaBlock}>
-              <Text style={styles.metaPrimary}>{kickoff.primary}</Text>
-
               {venue || city ? (
-                <Text style={styles.metaVenue}>
+                <Text style={styles.metaVenue} numberOfLines={2}>
                   {[venue, city].filter(Boolean).join(" • ")}
                 </Text>
               ) : null}
 
               {kickoff.secondary ? (
-                <Text style={styles.metaSecondary}>{kickoff.secondary}</Text>
+                <Text style={styles.metaSecondary} numberOfLines={1}>
+                  {kickoff.secondary}
+                </Text>
               ) : null}
             </View>
 
             <View style={styles.badgeRow}>
-              <FixtureCertaintyBadge state={certainty} variant="compact" />
-
               <View
                 style={[
                   styles.ticketPill,
@@ -125,22 +141,20 @@ export default function FixtureRowCard({
                     (difficulty === "hard" || difficulty === "very_hard") && styles.ticketTextHard,
                   ]}
                 >
-                  Home tickets: {ticketDifficultyLabel(difficulty)}
+                  {ticketDifficultyLabel(difficulty)}
                 </Text>
               </View>
-            </View>
 
-            {discoverReasons.length > 0 ? (
-              <View style={styles.discoverReasonRow}>
-                {discoverReasons.slice(0, 3).map((reason) => (
+              {discoverReasons.length > 0 ? (
+                discoverReasons.slice(0, 2).map((reason) => (
                   <View key={reason} style={styles.discoverReasonPill}>
                     <Text style={styles.discoverReasonText}>{reason}</Text>
                   </View>
-                ))}
-              </View>
-            ) : null}
+                ))
+              ) : null}
+            </View>
 
-            <View style={styles.followRow}>
+            <View style={styles.ctaRow}>
               <Button
                 label={isFollowed ? "Following" : "Follow"}
                 onPress={onToggleFollow}
@@ -149,9 +163,16 @@ export default function FixtureRowCard({
                 glow={!isFollowed}
                 style={{ flex: 1 }}
               />
-            </View>
 
-            <Text style={styles.tapHint}>Tap for actions</Text>
+              <Pressable
+                onPress={onToggleExpanded}
+                style={[styles.moreButton, expanded && styles.moreButtonActive]}
+              >
+                <Text style={[styles.moreButtonText, expanded && styles.moreButtonTextActive]}>
+                  {expanded ? "Hide" : "More"}
+                </Text>
+              </Pressable>
+            </View>
           </View>
         </Pressable>
 
@@ -191,12 +212,12 @@ const styles = StyleSheet.create({
   },
 
   rowCard: {
-    borderRadius: theme.borderRadius.sheet,
-    padding: 0,
+    borderRadius: 24,
+    borderColor: "rgba(255,255,255,0.06)",
   },
 
   rowMainPress: {
-    borderRadius: theme.borderRadius.sheet,
+    borderRadius: 24,
     overflow: "hidden",
   },
 
@@ -205,45 +226,70 @@ const styles = StyleSheet.create({
     gap: 12,
   },
 
-  fixtureLeagueLine: {
+  headerRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
+    justifyContent: "space-between",
+    gap: 12,
+  },
+
+  leagueCluster: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+  },
+
+  leagueLogo: {
+    width: 18,
+    height: 18,
   },
 
   fixtureLeagueText: {
-    color: theme.colors.textMuted,
-    fontSize: theme.fontSize.tiny,
-    fontWeight: theme.fontWeight.medium,
+    color: theme.colors.textSecondary,
+    fontSize: 12,
+    fontWeight: theme.fontWeight.black,
+    flexShrink: 1,
+  },
+
+  headerRight: {
+    alignItems: "flex-end",
   },
 
   topRow: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: 12,
+    gap: 10,
+  },
+
+  teamSide: {
+    flex: 1,
+    alignItems: "center",
+    gap: 8,
   },
 
   centerCol: {
-    flex: 1,
+    width: 76,
     alignItems: "center",
     gap: 6,
-    paddingHorizontal: 2,
+    paddingTop: 8,
   },
 
   teamName: {
-    color: theme.colors.textPrimary,
-    fontSize: theme.fontSize.body,
-    lineHeight: 20,
-    fontWeight: theme.fontWeight.semibold,
+    color: theme.colors.text,
+    fontSize: 15,
+    lineHeight: 19,
+    fontWeight: theme.fontWeight.black,
     width: "100%",
     textAlign: "center",
   },
 
   vs: {
     color: theme.colors.textMuted,
-    fontSize: theme.fontSize.tiny,
-    fontWeight: theme.fontWeight.medium,
+    fontSize: 11,
+    fontWeight: theme.fontWeight.black,
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
   },
 
   metaBlock: {
@@ -254,24 +300,25 @@ const styles = StyleSheet.create({
 
   metaPrimary: {
     color: theme.colors.textSecondary,
-    fontSize: theme.fontSize.tiny,
-    fontWeight: theme.fontWeight.semibold,
+    fontSize: 11,
+    fontWeight: theme.fontWeight.black,
     textAlign: "center",
   },
 
   metaVenue: {
-    color: theme.colors.textPrimary,
-    fontSize: theme.fontSize.meta,
-    fontWeight: theme.fontWeight.semibold,
+    color: theme.colors.text,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.black,
     textAlign: "center",
-    opacity: 0.95,
+    opacity: 0.96,
+    lineHeight: 18,
   },
 
   metaSecondary: {
     color: theme.colors.textMuted,
-    fontSize: theme.fontSize.tiny,
+    fontSize: 11,
     textAlign: "center",
-    fontWeight: theme.fontWeight.medium,
+    fontWeight: theme.fontWeight.bold,
   },
 
   badgeRow: {
@@ -282,17 +329,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 
-  discoverReasonRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 6,
-    justifyContent: "center",
-  },
-
   discoverReasonPill: {
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    backgroundColor: "rgba(255,255,255,0.05)",
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor:
+      Platform.OS === "android" ? "rgba(0,0,0,0.16)" : "rgba(255,255,255,0.04)",
     borderRadius: 999,
     paddingHorizontal: 8,
     paddingVertical: 4,
@@ -300,22 +341,23 @@ const styles = StyleSheet.create({
 
   discoverReasonText: {
     fontSize: 11,
-    fontWeight: "700",
+    fontWeight: theme.fontWeight.black,
     color: theme.colors.textSecondary,
   },
 
   ticketPill: {
     borderWidth: 1,
-    borderColor: theme.colors.borderSubtle,
-    backgroundColor: "rgba(255,255,255,0.03)",
+    borderColor: "rgba(255,255,255,0.08)",
+    backgroundColor:
+      Platform.OS === "android" ? "rgba(0,0,0,0.16)" : "rgba(255,255,255,0.04)",
     paddingVertical: 6,
     paddingHorizontal: 10,
-    borderRadius: theme.borderRadius.pill,
+    borderRadius: 999,
   },
 
   ticketText: {
     color: theme.colors.textSecondary,
-    fontWeight: theme.fontWeight.semibold,
+    fontWeight: theme.fontWeight.black,
     fontSize: 11,
   },
 
@@ -346,18 +388,39 @@ const styles = StyleSheet.create({
     color: "rgba(214,69,69,0.95)",
   },
 
-  followRow: {
+  ctaRow: {
     marginTop: 2,
     flexDirection: "row",
     gap: 10,
+    alignItems: "center",
   },
 
-  tapHint: {
-    marginTop: -2,
-    color: theme.colors.textMuted,
-    fontSize: theme.fontSize.tiny,
-    fontWeight: theme.fontWeight.medium,
-    textAlign: "center",
+  moreButton: {
+    minWidth: 78,
+    minHeight: 36,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor:
+      Platform.OS === "android" ? "rgba(0,0,0,0.16)" : "rgba(255,255,255,0.04)",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 12,
+  },
+
+  moreButtonActive: {
+    borderColor: "rgba(87,162,56,0.28)",
+    backgroundColor: "rgba(87,162,56,0.10)",
+  },
+
+  moreButtonText: {
+    color: theme.colors.textSecondary,
+    fontSize: 12,
+    fontWeight: theme.fontWeight.black,
+  },
+
+  moreButtonTextActive: {
+    color: theme.colors.text,
   },
 
   expandArea: {
@@ -365,5 +428,9 @@ const styles = StyleSheet.create({
     gap: 10,
     padding: 16,
     paddingTop: 0,
+  },
+
+  pressed: {
+    opacity: 0.96,
   },
 });
