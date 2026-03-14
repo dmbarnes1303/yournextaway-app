@@ -131,6 +131,7 @@ export default function FixtureRowCard({
                   difficulty === "easy" && styles.ticketEasy,
                   difficulty === "medium" && styles.ticketMedium,
                   (difficulty === "hard" || difficulty === "very_hard") && styles.ticketHard,
+                  difficulty === "unknown" && styles.ticketUnknown,
                 ]}
               >
                 <Text
@@ -139,19 +140,20 @@ export default function FixtureRowCard({
                     difficulty === "easy" && styles.ticketTextEasy,
                     difficulty === "medium" && styles.ticketTextMedium,
                     (difficulty === "hard" || difficulty === "very_hard") && styles.ticketTextHard,
+                    difficulty === "unknown" && styles.ticketTextUnknown,
                   ]}
                 >
-                  {ticketDifficultyLabel(difficulty)}
+                  Tickets: {ticketDifficultyLabel(difficulty)}
                 </Text>
               </View>
 
-              {discoverReasons.length > 0 ? (
-                discoverReasons.slice(0, 2).map((reason) => (
-                  <View key={reason} style={styles.discoverReasonPill}>
-                    <Text style={styles.discoverReasonText}>{reason}</Text>
-                  </View>
-                ))
-              ) : null}
+              {discoverReasons.length > 0
+                ? discoverReasons.slice(0, 2).map((reason) => (
+                    <View key={reason} style={styles.discoverReasonPill}>
+                      <Text style={styles.discoverReasonText}>{reason}</Text>
+                    </View>
+                  ))
+                : null}
             </View>
 
             <View style={styles.ctaRow}>
@@ -241,8 +243,8 @@ const styles = StyleSheet.create({
   },
 
   leagueLogo: {
-    width: 18,
-    height: 18,
+    width: 28,
+    height: 28,
   },
 
   fixtureLeagueText: {
@@ -269,7 +271,7 @@ const styles = StyleSheet.create({
   },
 
   centerCol: {
-    width: 76,
+    width: 84,
     alignItems: "center",
     gap: 6,
     paddingTop: 8,
@@ -386,6 +388,16 @@ const styles = StyleSheet.create({
 
   ticketTextHard: {
     color: "rgba(214,69,69,0.95)",
+  },
+
+  ticketUnknown: {
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor:
+      Platform.OS === "android" ? "rgba(0,0,0,0.14)" : "rgba(255,255,255,0.03)",
+  },
+
+  ticketTextUnknown: {
+    color: theme.colors.textSecondary,
   },
 
   ctaRow: {
