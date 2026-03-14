@@ -67,6 +67,68 @@ export function formatFixtureDateDisplay(iso: string | null | undefined) {
   return `${day}${suffix} ${month} ${year}`;
 }
 
+export function formatFixtureDateRangeDisplay(
+  fromIso: string | null | undefined,
+  toIso: string | null | undefined
+) {
+  if (!fromIso && !toIso) return "Select dates";
+  if (!fromIso || !toIso) return formatFixtureDateDisplay(fromIso || toIso);
+
+  const from = new Date(fromIso);
+  const to = new Date(toIso);
+
+  if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) {
+    return "Select dates";
+  }
+
+  const fromDay = from.getUTCDate();
+  const toDay = to.getUTCDate();
+
+  const fromSuffix =
+    fromDay % 10 === 1 && fromDay !== 11
+      ? "st"
+      : fromDay % 10 === 2 && fromDay !== 12
+        ? "nd"
+        : fromDay % 10 === 3 && fromDay !== 13
+          ? "rd"
+          : "th";
+
+  const toSuffix =
+    toDay % 10 === 1 && toDay !== 11
+      ? "st"
+      : toDay % 10 === 2 && toDay !== 12
+        ? "nd"
+        : toDay % 10 === 3 && toDay !== 13
+          ? "rd"
+          : "th";
+
+  const fromMonth = from.toLocaleDateString("en-GB", {
+    month: "long",
+    timeZone: "UTC",
+  });
+  const toMonth = to.toLocaleDateString("en-GB", {
+    month: "long",
+    timeZone: "UTC",
+  });
+
+  const fromYear = from.getUTCFullYear();
+  const toYear = to.getUTCFullYear();
+
+  if (fromIso === toIso) {
+    return `${fromDay}${fromSuffix} ${fromMonth} ${fromYear}`;
+  }
+
+  if (fromMonth === toMonth && fromYear === toYear) {
+    return `${fromDay}${fromSuffix} - ${toDay}${toSuffix} ${toMonth} ${toYear}`;
+  }
+
+  if (fromYear === toYear) {
+    return `${fromDay}${fromSuffix} ${fromMonth} - ${toDay}${toSuffix} ${toMonth} ${toYear}`;
+  }
+
+  return `${fromDay}${fromSuffix} ${fromMonth} ${fromYear} - ${toDay}${toSuffix} ${toMonth} ${toYear}`;
+}
+
 export function norm(s: unknown) {
   return String(s ?? "").trim().toLowerCase();
 }
@@ -121,14 +183,18 @@ export function resolveTripForFixture(fixtureId: string): string | null {
   return hit ? String(hit.id) : null;
 }
 
-function normalizeFlagCode(code: string) {
+function getSpecialFlagUrl(code: string) {
   const raw = String(code ?? "").trim().toUpperCase();
 
-  if (!raw) return "";
-  if (raw === "SCO") return "SCOTLAND";
-  if (raw === "ENG") return "ENGLAND";
+  if (raw === "ENG" || raw === "ENGLAND") {
+    return "https://flagcdn.com/w40/gb-eng.png";
+  }
 
-  return raw;
+  if (raw === "SCO" || raw === "SCOTLAND") {
+    return "https://flagcdn.com/w40/gb-sct.png";
+  }
+
+  return null;
 }
 
 export function LeagueFlag({
@@ -138,8 +204,10 @@ export function LeagueFlag({
   code: string;
   size?: "sm" | "md";
 }) {
-  const normalized = normalizeFlagCode(code);
-  const url = getFlagImageUrl(normalized);
+  const specialUrl = getSpecialFlagUrl(code);
+  const fallbackUrl = getFlagImageUrl(String(code ?? "").trim().toUpperCase());
+  const url = specialUrl || fallbackUrl;
+
   if (!url) return null;
 
   return (
