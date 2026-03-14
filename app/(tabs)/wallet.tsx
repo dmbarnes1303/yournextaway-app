@@ -11,9 +11,12 @@ import {
   Text,
   TextInput,
   View,
+  Image,
+  ImageBackground,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect, useRouter } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
@@ -21,9 +24,11 @@ import * as ImagePicker from "expo-image-picker";
 import Background from "@/src/components/Background";
 import EmptyState from "@/src/components/EmptyState";
 import GlassCard from "@/src/components/GlassCard";
+import SectionHeader from "@/src/components/SectionHeader";
 
 import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
+import { LEAGUES } from "@/src/constants/football";
 
 import identity from "@/src/services/identity";
 import {
@@ -38,8 +43,10 @@ import walletStore, {
   type WalletTripGroup,
 } from "@/src/state/walletStore";
 import savedItemsStore from "@/src/state/savedItems";
+import tripsStore, { type Trip } from "@/src/state/trips";
 import { getSavedItemTypeLabel, type SavedItemType } from "@/src/core/savedItemTypes";
 import { attachTicketProof } from "@/src/services/ticketAttachment";
+import { getFlagImageUrl } from "@/src/utils/flagImages";
 
 type WalletDoc = {
   key: string;
@@ -63,6 +70,64 @@ const CATEGORY_FILTERS: Array<{ id: CategoryFilter; label: string }> = [
   { id: "note", label: "Notes" },
   { id: "other", label: "Other" },
 ];
+
+const TRIP_CITY_META: Record<
+  string,
+  {
+    countryCode?: string;
+    leagueId?: number;
+    image?: string;
+  }
+> = {
+  barcelona: {
+    countryCode: "ES",
+    leagueId: 140,
+    image:
+      "https://images.unsplash.com/photo-1543783207-ec64e4d95325?auto=format&fit=crop&w=1600&h=900&q=80",
+  },
+  madrid: {
+    countryCode: "ES",
+    leagueId: 140,
+    image:
+      "https://images.unsplash.com/photo-1539037116277-4db20889f2d4?auto=format&fit=crop&w=1600&h=900&q=80",
+  },
+  milan: {
+    countryCode: "IT",
+    leagueId: 135,
+    image:
+      "https://images.unsplash.com/photo-1516483638261-f4dbaf036963?auto=format&fit=crop&w=1600&h=900&q=80",
+  },
+  rome: {
+    countryCode: "IT",
+    leagueId: 135,
+    image:
+      "https://images.unsplash.com/photo-1552832230-c0197dd311b5?auto=format&fit=crop&w=1600&h=900&q=80",
+  },
+  london: {
+    countryCode: "ENGLAND",
+    leagueId: 39,
+    image:
+      "https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?auto=format&fit=crop&w=1600&h=900&q=80",
+  },
+  manchester: {
+    countryCode: "ENGLAND",
+    leagueId: 39,
+    image:
+      "https://images.unsplash.com/photo-1515586838455-8f8f940d6853?auto=format&fit=crop&w=1600&h=900&q=80",
+  },
+  liverpool: {
+    countryCode: "ENGLAND",
+    leagueId: 39,
+    image:
+      "https://images.unsplash.com/photo-1520034475321-cbe63696469a?auto=format&fit=crop&w=1600&h=900&q=80",
+  },
+  glasgow: {
+    countryCode: "SCOTLAND",
+    leagueId: 179,
+    image:
+      "https://images.unsplash.com/photo-1516483638261-f4dbaf036963?auto=format&fit=crop&w=1600&h=900&q=80",
+  },
+};
 
 function cleanString(v: unknown) {
   return typeof v === "string" ? v.trim() : String(v ?? "").trim();
@@ -92,43 +157,72 @@ function formatDate(uploaded?: string) {
   });
 }
 
+function ordinal(day: number) {
+  if (day % 10 === 1 && day % 100 !== 11) return `${day}st`;
+  if (day % 10 === 2 && day % 100 !== 12) return `${day}nd`;
+  if (day % 10 === 3 && day % 100 !== 13) return `${day}rd`;
+  return `${day}th`;
+}
+
+function formatPrettyDateFromIsoString(iso?: string | null) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+
+  const day = ordinal(d.getUTCDate());
+  const month = d.toLocaleDateString("en-GB", {
+    month: "long",
+    timeZone: "UTC",
+  });
+  const year = d.getUTCFullYear();
+
+  return `${day} ${month} ${year}`;
+}
+
 function formatKickoff(iso?: string | null) {
   if (!iso) return null;
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return null;
 
-  return d.toLocaleString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
+  const day = ordinal(d.getUTCDate());
+  const month = d.toLocaleDateString("en-GB", {
+    month: "long",
+    timeZone: "UTC",
+  });
+  const year = d.getUTCFullYear();
+  const time = d.toLocaleTimeString("en-GB", {
     hour: "2-digit",
     minute: "2-digit",
+    hour12: false,
+    timeZone: "UTC",
   });
+
+  return `${day} ${month} ${year} • ${time}`;
 }
 
 function iconForType(type: SavedItemType) {
   switch (type) {
     case "tickets":
-      return "🎟️";
+      return "ticket-outline";
     case "hotel":
-      return "🏨";
+      return "bed-outline";
     case "flight":
-      return "✈️";
+      return "airplane-outline";
     case "train":
-      return "🚆";
+      return "train-outline";
     case "transfer":
-      return "🚕";
+      return "car-outline";
     case "things":
-      return "✨";
+      return "sparkles-outline";
     case "insurance":
-      return "🛡️";
+      return "shield-checkmark-outline";
     case "claim":
-      return "💷";
+      return "cash-outline";
     case "note":
-      return "📝";
+      return "document-text-outline";
     case "other":
     default:
-      return "📎";
+      return "attach-outline";
   }
 }
 
@@ -151,6 +245,90 @@ function defer(fn: () => void) {
   setTimeout(fn, 50);
 }
 
+function slugify(input: string) {
+  return String(input ?? "")
+    .toLowerCase()
+    .trim()
+    .replace(/[’']/g, "")
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "-");
+}
+
+function titleCase(input: string) {
+  const s = String(input ?? "").trim();
+  if (!s) return "Trip";
+  const cleaned = s.replace(/[-_]+/g, " ").replace(/\s+/g, " ").trim();
+  return cleaned
+    .split(" ")
+    .filter(Boolean)
+    .map((w) => (w[0] ? w[0].toUpperCase() + w.slice(1) : w))
+    .join(" ");
+}
+
+function buildTripIndex(trips: Trip[]) {
+  const index: Record<string, Trip> = {};
+  for (const trip of trips) {
+    const id = cleanString(trip.id);
+    if (id) index[id] = trip;
+  }
+  return index;
+}
+
+function tripCityLabel(trip?: Trip | null) {
+  if (!trip) return "Workspace";
+  const raw = String((trip as any)?.displayCity ?? trip.cityId ?? "").trim();
+  return titleCase(raw || "Workspace");
+}
+
+function getTripVisualMeta(trip?: Trip | null) {
+  if (!trip) return { countryCode: null as string | null, leagueLogo: null as string | null, image: null as string | null };
+
+  const city = tripCityLabel(trip);
+  const slug = slugify(city);
+
+  const storedLeagueId =
+    (trip as any)?.leagueId != null ? Number((trip as any).leagueId) : null;
+  const storedCountryCode = String((trip as any)?.countryCode ?? "").trim() || null;
+  const storedLeagueLogo = String((trip as any)?.leagueLogo ?? "").trim() || null;
+
+  const fallback = TRIP_CITY_META[slug] ?? null;
+  const leagueId = storedLeagueId ?? fallback?.leagueId ?? null;
+  const leagueMeta = leagueId ? LEAGUES.find((l) => l.leagueId === leagueId) ?? null : null;
+
+  const countryCode =
+    storedCountryCode ??
+    leagueMeta?.countryCode ??
+    fallback?.countryCode ??
+    null;
+
+  const leagueLogo = storedLeagueLogo ?? leagueMeta?.logo ?? null;
+  const image =
+    String((trip as any)?.heroImage ?? "").trim() || fallback?.image || null;
+
+  return {
+    countryCode,
+    leagueLogo,
+    image,
+  };
+}
+
+function statusChipTone(status: WalletBooking["status"]) {
+  if (status === "booked") return "booked";
+  if (status === "pending") return "pending";
+  if (status === "saved") return "saved";
+  return "archived";
+}
+
+function buildWalletProgress(items: WalletBooking[]) {
+  if (!items.length) return 0;
+  const booked = items.filter((x) => x.status === "booked").length;
+  return booked / items.length;
+}
+
+function clamp2(n: number) {
+  return Math.max(0, Math.min(99, n));
+}
+
 export default function WalletScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -163,6 +341,7 @@ export default function WalletScreen() {
   const [summary, setSummary] = useState<WalletSummary | null>(null);
   const [groups, setGroups] = useState<WalletTripGroup[]>([]);
   const [remoteDocs, setRemoteDocs] = useState<WalletDoc[]>([]);
+  const [trips, setTrips] = useState<Trip[]>([]);
 
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<CategoryFilter>("all");
@@ -176,7 +355,7 @@ export default function WalletScreen() {
   const loadWallet = useCallback(async () => {
     try {
       setLoading(true);
-      await savedItemsStore.load();
+      await Promise.all([savedItemsStore.load(), tripsStore.loadTrips()]);
 
       const [nextSummary, nextGroups] = await Promise.all([
         walletStore.getWalletSummary(),
@@ -185,10 +364,12 @@ export default function WalletScreen() {
 
       setSummary(nextSummary);
       setGroups(nextGroups);
+      setTrips(tripsStore.getState().trips);
     } catch (e: any) {
       Alert.alert("Wallet", e?.message || "Failed to load bookings.");
       setSummary(null);
       setGroups([]);
+      setTrips([]);
     } finally {
       setLoading(false);
     }
@@ -243,6 +424,8 @@ export default function WalletScreen() {
     }, [refreshAll])
   );
 
+  const tripIndex = useMemo(() => buildTripIndex(trips), [trips]);
+
   const filteredGroups = useMemo(() => {
     const q = cleanString(query).toLowerCase();
 
@@ -261,6 +444,7 @@ export default function WalletScreen() {
             item.tripId ?? "",
             getSavedItemTypeLabel(item.type),
             statusLabel(item.status),
+            tripCityLabel(tripIndex[item.tripId] ?? null),
           ]
             .join(" ")
             .toLowerCase();
@@ -281,7 +465,7 @@ export default function WalletScreen() {
         } as WalletTripGroup;
       })
       .filter(Boolean) as WalletTripGroup[];
-  }, [groups, category, query]);
+  }, [groups, category, query, tripIndex]);
 
   const visibleRemoteDocs = useMemo(() => {
     const q = cleanString(query).toLowerCase();
@@ -307,6 +491,24 @@ export default function WalletScreen() {
       saved: allItems.filter((x) => x.status === "saved").length,
       missingProof: allItems.filter((x) => x.status === "booked" && !x.hasProof).length,
     };
+  }, [filteredGroups]);
+
+  const spotlightGroup = useMemo(() => {
+    if (!filteredGroups.length) return null;
+
+    const sorted = [...filteredGroups].sort((a, b) => {
+      const aBooked = a.items.filter((x) => x.status === "booked").length;
+      const bBooked = b.items.filter((x) => x.status === "booked").length;
+      if (bBooked !== aBooked) return bBooked - aBooked;
+
+      const aPending = a.items.filter((x) => x.status === "pending").length;
+      const bPending = b.items.filter((x) => x.status === "pending").length;
+      if (bPending !== aPending) return bPending - aPending;
+
+      return Number(b.updatedAt ?? 0) - Number(a.updatedAt ?? 0);
+    });
+
+    return sorted[0] ?? null;
   }, [filteredGroups]);
 
   async function pickAsset(kind: UploadKind): Promise<{ uri: string; name: string; mimeType: string } | null> {
@@ -411,7 +613,6 @@ export default function WalletScreen() {
   async function onOpenTrip(tripId?: string) {
     const id = cleanString(tripId);
     if (!id) return;
-
     router.push({ pathname: "/trip/[id]", params: { id } });
   }
 
@@ -487,10 +688,7 @@ export default function WalletScreen() {
         : filteredGroups.flatMap((g) => g.items).filter((x) => x.type === id).length;
 
     return (
-      <Pressable
-        onPress={() => setCategory(id)}
-        style={[styles.chip, active && styles.chipActive]}
-      >
+      <Pressable onPress={() => setCategory(id)} style={[styles.chip, active && styles.chipActive]}>
         <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
         <View style={[styles.chipCount, active && styles.chipCountActive]}>
           <Text style={[styles.chipCountText, active && styles.chipCountTextActive]}>{count}</Text>
@@ -499,9 +697,10 @@ export default function WalletScreen() {
     );
   }
 
-  function Metric({ label, value }: { label: string; value: string }) {
+  function Metric({ label, value, icon }: { label: string; value: string; icon: React.ComponentProps<typeof Ionicons>["name"] }) {
     return (
       <View style={styles.metric}>
+        <Ionicons name={icon} size={16} color={theme.colors.textSecondary} />
         <Text style={styles.metricVal} numberOfLines={1}>
           {value}
         </Text>
@@ -516,23 +715,29 @@ export default function WalletScreen() {
 
     const kickoff = formatKickoff(item.kickoffIso);
     const typeLabel = getSavedItemTypeLabel(item.type);
+    const statusTone = statusChipTone(item.status);
 
     return (
-      <GlassCard style={styles.docCard}>
+      <GlassCard style={styles.docCard} strength="subtle" noPadding>
         <View style={styles.docRow}>
           <View style={styles.docIconWrap}>
-            <Text style={styles.docIcon}>{iconForType(item.type)}</Text>
+            <Ionicons
+              name={iconForType(item.type)}
+              size={18}
+              color={theme.colors.text}
+            />
           </View>
 
           <View style={styles.docMain}>
-            <Text style={styles.docTitle} numberOfLines={1}>
-              {item.title}
-            </Text>
+            <View style={styles.docTitleRow}>
+              <Text style={styles.docTitle} numberOfLines={1}>
+                {item.title}
+              </Text>
+              <StatusPill text={statusLabel(item.status)} tone={statusTone} />
+            </View>
 
             <Text style={styles.docMeta} numberOfLines={2}>
-              {`${typeLabel} • ${statusLabel(item.status)}${
-                item.provider ? ` • ${item.provider}` : ""
-              }`}
+              {`${typeLabel}${item.provider ? ` • ${item.provider}` : ""}`}
             </Text>
 
             {fixtureLine ? (
@@ -555,30 +760,30 @@ export default function WalletScreen() {
                 : "No proof needed yet"}
             </Text>
           </View>
+        </View>
 
-          <View style={styles.docActions}>
-            {item.tripId ? (
-              <Pressable style={styles.smallBtn} onPress={() => onOpenTrip(item.tripId)}>
-                <Text style={styles.smallBtnText}>Trip</Text>
-              </Pressable>
-            ) : null}
-
-            {item.status === "booked" && !item.hasProof ? (
-              <Pressable style={styles.smallBtn} onPress={() => onAddProof(item.id)}>
-                <Text style={styles.smallBtnText}>Add proof</Text>
-              </Pressable>
-            ) : null}
-
-            {item.status === "pending" ? (
-              <Pressable style={styles.smallBtn} onPress={() => onMoveBackToSaved(item.id)}>
-                <Text style={styles.smallBtnText}>Mark saved</Text>
-              </Pressable>
-            ) : null}
-
-            <Pressable style={[styles.smallBtn, styles.smallBtnDanger]} onPress={() => onArchive(item.id)}>
-              <Text style={styles.smallBtnText}>Archive</Text>
+        <View style={styles.docActionsRow}>
+          {item.tripId ? (
+            <Pressable style={styles.smallBtn} onPress={() => onOpenTrip(item.tripId)}>
+              <Text style={styles.smallBtnText}>Open trip</Text>
             </Pressable>
-          </View>
+          ) : null}
+
+          {item.status === "booked" && !item.hasProof ? (
+            <Pressable style={styles.smallBtn} onPress={() => onAddProof(item.id)}>
+              <Text style={styles.smallBtnText}>Add proof</Text>
+            </Pressable>
+          ) : null}
+
+          {item.status === "pending" ? (
+            <Pressable style={styles.smallBtn} onPress={() => onMoveBackToSaved(item.id)}>
+              <Text style={styles.smallBtnText}>Mark saved</Text>
+            </Pressable>
+          ) : null}
+
+          <Pressable style={[styles.smallBtn, styles.smallBtnDanger]} onPress={() => onArchive(item.id)}>
+            <Text style={styles.smallBtnText}>Archive</Text>
+          </Pressable>
         </View>
       </GlassCard>
     );
@@ -590,14 +795,14 @@ export default function WalletScreen() {
     const size = formatSize(d.size);
 
     return (
-      <GlassCard style={styles.docCard}>
+      <GlassCard style={styles.docCard} strength="subtle" noPadding>
         <Pressable
           onPress={() => viewRemoteDoc(d.key)}
-          style={({ pressed }) => [styles.docRow, pressed && { opacity: 0.92 }]}
+          style={({ pressed }) => [styles.docRow, pressed && styles.pressed]}
           android_ripple={{ color: "rgba(255,255,255,0.05)" }}
         >
           <View style={styles.docIconWrap}>
-            <Text style={styles.docIcon}>☁️</Text>
+            <Ionicons name="cloud-outline" size={18} color={theme.colors.text} />
           </View>
 
           <View style={styles.docMain}>
@@ -609,29 +814,29 @@ export default function WalletScreen() {
               {`Backup document • ${size}${date ? ` • ${date}` : ""}`}
             </Text>
           </View>
-
-          <View style={styles.docActions}>
-            <Pressable style={styles.smallBtn} onPress={() => viewRemoteDoc(d.key)}>
-              <Text style={styles.smallBtnText}>View</Text>
-            </Pressable>
-
-            <Pressable style={[styles.smallBtn, styles.smallBtnDanger]} onPress={() => deleteRemoteDoc(d.key)}>
-              <Text style={styles.smallBtnText}>Delete</Text>
-            </Pressable>
-          </View>
         </Pressable>
+
+        <View style={styles.docActionsRow}>
+          <Pressable style={styles.smallBtn} onPress={() => viewRemoteDoc(d.key)}>
+            <Text style={styles.smallBtnText}>View</Text>
+          </Pressable>
+
+          <Pressable style={[styles.smallBtn, styles.smallBtnDanger]} onPress={() => deleteRemoteDoc(d.key)}>
+            <Text style={styles.smallBtnText}>Delete</Text>
+          </Pressable>
+        </View>
       </GlassCard>
     );
   }
 
   return (
     <Background
-  imageSource={getBackground("wallet")}
-  overlayOpacity={0.03}
-  topShadeOpacity={0.24}
-  bottomShadeOpacity={0.30}
-  centerShadeOpacity={0.02}
->
+      imageSource={getBackground("wallet")}
+      overlayOpacity={0.03}
+      topShadeOpacity={0.24}
+      bottomShadeOpacity={0.30}
+      centerShadeOpacity={0.02}
+    >
       <SafeAreaView style={styles.safe} edges={["top"]}>
         <ScrollView
           style={styles.scroll}
@@ -639,52 +844,62 @@ export default function WalletScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          <GlassCard style={styles.hero}>
-            <View style={styles.heroTop}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.kicker}>WALLET</Text>
-                <Text style={styles.h1}>Bookings & proofs</Text>
-                <Text style={styles.h2}>
-                  Your booked items, pending confirmations, and offline proof files in one place.
-                </Text>
+          <GlassCard style={styles.hero} strength="strong" noPadding>
+            <View style={styles.heroInner}>
+              <View style={styles.heroTop}>
+                <View style={styles.heroText}>
+                  <Text style={styles.kicker}>WALLET</Text>
+                  <Text style={styles.h1}>Bookings & proofs</Text>
+                  <Text style={styles.h2}>
+                    Your booked items, pending confirmations, and proof files in one place.
+                  </Text>
+                </View>
+
+                <Pressable
+                  style={[styles.uploadBtn, (uploading || !userId) && { opacity: 0.6 }]}
+                  onPress={chooseRemoteUploadSource}
+                  disabled={uploading || !userId}
+                >
+                  {uploading ? (
+                    <ActivityIndicator />
+                  ) : (
+                    <>
+                      <Ionicons name="cloud-upload-outline" size={16} color={theme.colors.text} />
+                      <Text style={styles.uploadText}>Backup doc</Text>
+                    </>
+                  )}
+                </Pressable>
               </View>
 
-              <Pressable
-                style={[styles.uploadBtn, (uploading || !userId) && { opacity: 0.6 }]}
-                onPress={chooseRemoteUploadSource}
-                disabled={uploading || !userId}
-              >
-                {uploading ? <ActivityIndicator /> : <Text style={styles.uploadText}>Backup doc</Text>}
-              </Pressable>
-            </View>
+              <View style={styles.metricsRow}>
+                <Metric label="Booked" value={String(summary?.booked ?? 0)} icon="checkmark-done-outline" />
+                <Metric label="Pending" value={String(summary?.pending ?? 0)} icon="time-outline" />
+                <Metric label="Proofs" value={String(summary?.withProof ?? 0)} icon="document-attach-outline" />
+              </View>
 
-            <View style={styles.metricsRow}>
-              <Metric label="Booked" value={String(summary?.booked ?? 0)} />
-              <Metric label="Pending" value={String(summary?.pending ?? 0)} />
-              <Metric label="Proofs" value={String(summary?.withProof ?? 0)} />
-            </View>
+              <View style={styles.metricsRow}>
+                <Metric label="Trips" value={String(filteredGroups.length)} icon="airplane-outline" />
+                <Metric label="Missing proof" value={String(derivedCounts.missingProof)} icon="alert-circle-outline" />
+                <Metric label="Backups" value={String(remoteDocs.length)} icon="cloud-outline" />
+              </View>
 
-            <View style={styles.metricsRow}>
-              <Metric label="Trips" value={String(groups.length)} />
-              <Metric label="Missing proof" value={String(derivedCounts.missingProof)} />
-              <Metric label="Backups" value={String(remoteDocs.length)} />
-            </View>
-
-            <View style={styles.searchRow}>
-              <TextInput
-                value={query}
-                onChangeText={setQuery}
-                placeholder="Search bookings, trips, teams, providers…"
-                placeholderTextColor={theme.colors.textSecondary}
-                style={styles.searchInput}
-                returnKeyType="search"
-                onSubmitEditing={() => Keyboard.dismiss()}
-              />
-              {query ? (
-                <Pressable onPress={() => setQuery("")} style={styles.clearBtn}>
-                  <Text style={styles.clearBtnText}>Clear</Text>
-                </Pressable>
-              ) : null}
+              <View style={styles.searchWrap}>
+                <Ionicons name="search-outline" size={18} color={theme.colors.textTertiary} />
+                <TextInput
+                  value={query}
+                  onChangeText={setQuery}
+                  placeholder="Search bookings, trips, teams, providers…"
+                  placeholderTextColor={theme.colors.textSecondary}
+                  style={styles.searchInput}
+                  returnKeyType="search"
+                  onSubmitEditing={() => Keyboard.dismiss()}
+                />
+                {query ? (
+                  <Pressable onPress={() => setQuery("")} style={styles.clearBtn}>
+                    <Text style={styles.clearBtnText}>Clear</Text>
+                  </Pressable>
+                ) : null}
+              </View>
             </View>
           </GlassCard>
 
@@ -694,89 +909,370 @@ export default function WalletScreen() {
             ))}
           </View>
 
+          {!loading && spotlightGroup ? (
+            <View style={styles.section}>
+              <SectionHeader
+                title="Spotlight"
+                subtitle="Most relevant trip workspace in Wallet right now"
+              />
+              <WalletSpotlightCard
+                group={spotlightGroup}
+                trip={tripIndex[spotlightGroup.tripId]}
+                onOpenTrip={onOpenTrip}
+              />
+            </View>
+          ) : null}
+
           {loading || refreshing ? (
-            <GlassCard style={styles.stateCard}>
+            <GlassCard style={styles.stateCard} strength="default">
               <View style={styles.center}>
                 <ActivityIndicator />
                 <Text style={styles.muted}>Loading wallet…</Text>
               </View>
             </GlassCard>
           ) : filteredGroups.length === 0 ? (
-            <GlassCard style={styles.stateCard}>
+            <GlassCard style={styles.stateCard} strength="default">
               <EmptyState
                 title="No wallet items yet"
-                message="Booked items and proof files will appear here. Right now there’s nothing trustworthy to show."
+                message="Booked items and proof files will appear here. Right now there’s nothing useful to show."
               />
             </GlassCard>
           ) : (
-            <View style={{ gap: 12 }}>
-              {filteredGroups.map((group) => (
-                <GlassCard key={group.tripId} style={styles.groupCard}>
-                  <View style={styles.groupHeader}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.groupTitle} numberOfLines={1}>
-                        Trip {group.tripId}
-                      </Text>
-                      <Text style={styles.groupMeta}>
-                        {`${group.bookedCount} booked • ${group.pendingCount} pending • ${group.proofCount} with proof`}
-                      </Text>
-                    </View>
+            <View style={styles.section}>
+              <SectionHeader
+                title="Trip-linked wallet"
+                subtitle={`${filteredGroups.length} workspace${filteredGroups.length === 1 ? "" : "s"} with wallet activity`}
+              />
 
-                    <Pressable style={styles.groupBtn} onPress={() => onOpenTrip(group.tripId)}>
-                      <Text style={styles.groupBtnText}>Open trip</Text>
-                    </Pressable>
-                  </View>
-
-                  <View style={{ gap: 10 }}>
-                    {group.items.map((item) => (
-                      <BookingRow key={item.id} item={item} />
-                    ))}
-                  </View>
-                </GlassCard>
-              ))}
+              <View style={styles.groupList}>
+                {filteredGroups.map((group) => (
+                  <WalletGroupCard
+                    key={group.tripId}
+                    group={group}
+                    trip={tripIndex[group.tripId]}
+                    onOpenTrip={onOpenTrip}
+                    onAddProof={onAddProof}
+                    onMoveBackToSaved={onMoveBackToSaved}
+                    onArchive={onArchive}
+                  />
+                ))}
+              </View>
             </View>
           )}
 
-          <GlassCard style={styles.remoteSection}>
-            <View style={styles.remoteHeader}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.remoteTitle}>Backup documents</Text>
-                <Text style={styles.remoteMeta}>
-                  Optional remote storage for extra files. This is secondary to your actual booked items.
-                </Text>
+          <GlassCard style={styles.remoteSection} strength="default" noPadding>
+            <View style={styles.remoteInner}>
+              <View style={styles.remoteHeader}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.remoteTitle}>Backup documents</Text>
+                  <Text style={styles.remoteMeta}>
+                    Optional remote storage for extra files. Secondary to your actual trip-linked wallet items.
+                  </Text>
+                </View>
+
+                <Pressable style={styles.groupBtn} onPress={() => setRemoteOpen((v) => !v)}>
+                  <Text style={styles.groupBtnText}>{remoteOpen ? "Hide" : "Show"}</Text>
+                </Pressable>
               </View>
 
-              <Pressable style={styles.groupBtn} onPress={() => setRemoteOpen((v) => !v)}>
-                <Text style={styles.groupBtnText}>{remoteOpen ? "Hide" : "Show"}</Text>
-              </Pressable>
-            </View>
+              <View style={styles.metricsRow}>
+                <Metric label="Files" value={String(remoteDocs.length)} icon="document-outline" />
+                <Metric label="Storage" value={formatSize(totalRemoteSize)} icon="server-outline" />
+                <Metric label="User" value={userId ? "Ready" : "Loading"} icon="person-outline" />
+              </View>
 
-            <View style={styles.metricsRow}>
-              <Metric label="Files" value={String(remoteDocs.length)} />
-              <Metric label="Storage" value={formatSize(totalRemoteSize)} />
-              <Metric label="User" value={userId ? "Ready" : "Loading"} />
+              {remoteOpen ? (
+                visibleRemoteDocs.length === 0 ? (
+                  <View style={styles.remoteEmptyWrap}>
+                    <EmptyState
+                      title="No backup documents"
+                      message="You can still upload extra confirmations, screenshots, or receipts here if you want remote backup."
+                    />
+                  </View>
+                ) : (
+                  <View style={styles.remoteList}>
+                    {visibleRemoteDocs.map((d) => (
+                      <RemoteDocRow key={d.key} d={d} />
+                    ))}
+                  </View>
+                )
+              ) : null}
             </View>
-
-            {remoteOpen ? (
-              visibleRemoteDocs.length === 0 ? (
-                <View style={{ marginTop: 12 }}>
-                  <EmptyState
-                    title="No backup documents"
-                    message="You can still upload extra confirmations, screenshots, or receipts here if you want a remote backup."
-                  />
-                </View>
-              ) : (
-                <View style={{ gap: 10, marginTop: 12 }}>
-                  {visibleRemoteDocs.map((d) => (
-                    <RemoteDocRow key={d.key} d={d} />
-                  ))}
-                </View>
-              )
-            ) : null}
           </GlassCard>
         </ScrollView>
       </SafeAreaView>
     </Background>
+  );
+}
+
+function StatusPill({
+  text,
+  tone,
+}: {
+  text: string;
+  tone: "booked" | "pending" | "saved" | "archived";
+}) {
+  return (
+    <View
+      style={[
+        styles.statusPill,
+        tone === "booked" && styles.statusBooked,
+        tone === "pending" && styles.statusPending,
+        tone === "saved" && styles.statusSaved,
+        tone === "archived" && styles.statusArchived,
+      ]}
+    >
+      <Text style={styles.statusPillText}>{text}</Text>
+    </View>
+  );
+}
+
+function WalletSpotlightCard({
+  group,
+  trip,
+  onOpenTrip,
+}: {
+  group: WalletTripGroup;
+  trip?: Trip;
+  onOpenTrip: (tripId?: string) => void;
+}) {
+  const city = tripCityLabel(trip);
+  const visual = getTripVisualMeta(trip);
+  const flagUrl = visual.countryCode ? getFlagImageUrl(visual.countryCode) : null;
+  const progress = buildWalletProgress(group.items);
+  const booked = group.items.filter((x) => x.status === "booked").length;
+  const pending = group.items.filter((x) => x.status === "pending").length;
+  const proofs = group.items.filter((x) => x.hasProof).length;
+  const latestKickoff = group.items
+    .map((x) => x.kickoffIso)
+    .filter(Boolean)
+    .sort()[0];
+  const kickoffText = formatPrettyDateFromIsoString(latestKickoff);
+
+  return (
+    <Pressable onPress={() => onOpenTrip(group.tripId)} style={({ pressed }) => [pressed && styles.pressed]}>
+      <GlassCard style={styles.spotlightCard} strength="default" noPadding>
+        <ImageBackground
+          source={visual.image ? { uri: visual.image } : undefined}
+          style={styles.spotlightImageWrap}
+          imageStyle={styles.spotlightImage}
+        >
+          <View style={styles.tripImageOverlay} />
+          <View style={styles.spotlightInner}>
+            <View style={styles.spotlightTopRow}>
+              <View style={styles.spotlightIconWrap}>
+                <Ionicons name="wallet-outline" size={18} color={theme.colors.text} />
+              </View>
+
+              <StatusPill text={booked > 0 ? "Booked live" : pending > 0 ? "Pending live" : "Saved live"} tone={booked > 0 ? "booked" : pending > 0 ? "pending" : "saved"} />
+            </View>
+
+            <View style={styles.titleVisualRow}>
+              <Text style={styles.spotlightTitle}>{city}</Text>
+
+              <View style={styles.metaInline}>
+                {visual.leagueLogo ? (
+                  <View style={styles.leagueLogoTile}>
+                    <Image source={{ uri: visual.leagueLogo }} style={styles.leagueLogoImg} resizeMode="contain" />
+                  </View>
+                ) : null}
+                {flagUrl ? <Image source={{ uri: flagUrl }} style={styles.countryFlag} resizeMode="cover" /> : null}
+              </View>
+            </View>
+
+            <Text style={styles.spotlightMeta}>
+              {kickoffText ? `${kickoffText} • ${group.items.length} wallet item${group.items.length === 1 ? "" : "s"}` : `${group.items.length} wallet item${group.items.length === 1 ? "" : "s"}`}
+            </Text>
+
+            <Text style={styles.spotlightSub}>
+              {proofs > 0
+                ? `${proofs} proof file${proofs === 1 ? "" : "s"} attached`
+                : booked > 0
+                ? "Booked items still need proof uploads"
+                : "No confirmed proofs yet"}
+            </Text>
+
+            <View style={styles.progressTrack}>
+              <View style={[styles.progressFill, { width: `${Math.max(8, progress * 100)}%` }]} />
+            </View>
+
+            <View style={styles.spotlightStatsRow}>
+              <MiniStat label="Booked" value={booked} />
+              <MiniStat label="Pending" value={pending} />
+              <MiniStat label="Proofs" value={proofs} />
+            </View>
+
+            <View style={styles.spotlightFooter}>
+              <Text style={styles.spotlightCta}>Open workspace</Text>
+              <Text style={styles.spotlightArrow}>›</Text>
+            </View>
+          </View>
+        </ImageBackground>
+      </GlassCard>
+    </Pressable>
+  );
+}
+
+function WalletGroupCard({
+  group,
+  trip,
+  onOpenTrip,
+  onAddProof,
+  onMoveBackToSaved,
+  onArchive,
+}: {
+  group: WalletTripGroup;
+  trip?: Trip;
+  onOpenTrip: (tripId?: string) => void;
+  onAddProof: (itemId: string) => Promise<void>;
+  onMoveBackToSaved: (itemId: string) => Promise<void>;
+  onArchive: (itemId: string) => Promise<void>;
+}) {
+  const city = tripCityLabel(trip);
+  const visual = getTripVisualMeta(trip);
+  const flagUrl = visual.countryCode ? getFlagImageUrl(visual.countryCode) : null;
+  const booked = group.items.filter((x) => x.status === "booked").length;
+  const pending = group.items.filter((x) => x.status === "pending").length;
+  const saved = group.items.filter((x) => x.status === "saved").length;
+  const proofs = group.items.filter((x) => x.hasProof).length;
+
+  return (
+    <GlassCard style={styles.groupCard} strength="subtle" noPadding>
+      <View style={styles.groupInner}>
+        <View style={styles.groupHeaderRow}>
+          <View style={styles.groupHeaderLeft}>
+            <View style={styles.titleVisualRow}>
+              <Text style={styles.groupTitle}>{city}</Text>
+
+              <View style={styles.metaInline}>
+                {visual.leagueLogo ? (
+                  <View style={styles.leagueLogoTile}>
+                    <Image source={{ uri: visual.leagueLogo }} style={styles.leagueLogoImg} resizeMode="contain" />
+                  </View>
+                ) : null}
+                {flagUrl ? <Image source={{ uri: flagUrl }} style={styles.countryFlag} resizeMode="cover" /> : null}
+              </View>
+            </View>
+
+            <Text style={styles.groupMeta}>
+              {`${booked} booked • ${pending} pending • ${saved} saved • ${proofs} with proof`}
+            </Text>
+          </View>
+
+          <Pressable style={styles.groupBtn} onPress={() => onOpenTrip(group.tripId)}>
+            <Text style={styles.groupBtnText}>Open trip</Text>
+          </Pressable>
+        </View>
+
+        <View style={styles.groupBookingList}>
+          {group.items.map((item) => (
+            <WalletBookingCard
+              key={item.id}
+              item={item}
+              onOpenTrip={onOpenTrip}
+              onAddProof={onAddProof}
+              onMoveBackToSaved={onMoveBackToSaved}
+              onArchive={onArchive}
+            />
+          ))}
+        </View>
+      </View>
+    </GlassCard>
+  );
+}
+
+function WalletBookingCard({
+  item,
+  onOpenTrip,
+  onAddProof,
+  onMoveBackToSaved,
+  onArchive,
+}: {
+  item: WalletBooking;
+  onOpenTrip: (tripId?: string) => void;
+  onAddProof: (itemId: string) => Promise<void>;
+  onMoveBackToSaved: (itemId: string) => Promise<void>;
+  onArchive: (itemId: string) => Promise<void>;
+}) {
+  const fixtureLine = item.home && item.away ? `${item.home} v ${item.away}` : null;
+  const kickoff = formatKickoff(item.kickoffIso);
+  const typeLabel = getSavedItemTypeLabel(item.type);
+  const tone = statusChipTone(item.status);
+
+  return (
+    <GlassCard style={styles.docCard} strength="subtle" noPadding>
+      <View style={styles.docRow}>
+        <View style={styles.docIconWrap}>
+          <Ionicons name={iconForType(item.type)} size={18} color={theme.colors.text} />
+        </View>
+
+        <View style={styles.docMain}>
+          <View style={styles.docTitleRow}>
+            <Text style={styles.docTitle} numberOfLines={1}>
+              {item.title}
+            </Text>
+            <StatusPill text={statusLabel(item.status)} tone={tone} />
+          </View>
+
+          <Text style={styles.docMeta} numberOfLines={1}>
+            {`${typeLabel}${item.provider ? ` • ${item.provider}` : ""}`}
+          </Text>
+
+          {fixtureLine ? (
+            <Text style={styles.docSubMeta} numberOfLines={1}>
+              {fixtureLine}
+            </Text>
+          ) : null}
+
+          {kickoff ? (
+            <Text style={styles.docSubMeta} numberOfLines={1}>
+              {kickoff}
+            </Text>
+          ) : null}
+
+          <Text style={styles.docSubMeta} numberOfLines={1}>
+            {item.hasProof
+              ? `${item.attachmentCount} proof file${item.attachmentCount === 1 ? "" : "s"} attached`
+              : item.status === "booked"
+              ? "No proof attached yet"
+              : "No proof needed yet"}
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.docActionsRow}>
+        {item.tripId ? (
+          <Pressable style={styles.smallBtn} onPress={() => onOpenTrip(item.tripId)}>
+            <Text style={styles.smallBtnText}>Trip</Text>
+          </Pressable>
+        ) : null}
+
+        {item.status === "booked" && !item.hasProof ? (
+          <Pressable style={styles.smallBtn} onPress={() => onAddProof(item.id)}>
+            <Text style={styles.smallBtnText}>Add proof</Text>
+          </Pressable>
+        ) : null}
+
+        {item.status === "pending" ? (
+          <Pressable style={styles.smallBtn} onPress={() => onMoveBackToSaved(item.id)}>
+            <Text style={styles.smallBtnText}>Mark saved</Text>
+          </Pressable>
+        ) : null}
+
+        <Pressable style={[styles.smallBtn, styles.smallBtnDanger]} onPress={() => onArchive(item.id)}>
+          <Text style={styles.smallBtnText}>Archive</Text>
+        </Pressable>
+      </View>
+    </GlassCard>
+  );
+}
+
+function MiniStat({ label, value }: { label: string; value: number }) {
+  return (
+    <View style={styles.miniStat}>
+      <Text style={styles.miniStatValue}>{String(clamp2(value))}</Text>
+      <Text style={styles.miniStatLabel}>{label}</Text>
+    </View>
   );
 }
 
@@ -790,13 +1286,25 @@ const styles = StyleSheet.create({
     gap: theme.spacing.lg,
   },
 
-  hero: { padding: theme.spacing.lg, borderRadius: 24 },
+  hero: {
+    borderRadius: 28,
+    borderColor: "rgba(87,162,56,0.12)",
+  },
+
+  heroInner: {
+    padding: 16,
+    gap: 14,
+  },
 
   heroTop: {
     flexDirection: "row",
     alignItems: "flex-start",
     justifyContent: "space-between",
     gap: 12,
+  },
+
+  heroText: {
+    flex: 1,
   },
 
   kicker: {
@@ -809,99 +1317,103 @@ const styles = StyleSheet.create({
   h1: {
     marginTop: 6,
     color: theme.colors.text,
-    fontSize: 28,
+    fontSize: 30,
+    lineHeight: 34,
     fontWeight: theme.fontWeight.black,
-    letterSpacing: -0.3,
   },
 
   h2: {
-    marginTop: 6,
+    marginTop: 8,
     color: theme.colors.textSecondary,
-    fontSize: 13,
+    fontSize: 14,
+    lineHeight: 20,
     fontWeight: theme.fontWeight.bold,
-    lineHeight: 18,
   },
 
   uploadBtn: {
+    minHeight: 42,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.18)",
-    backgroundColor: "rgba(0,0,0,0.22)",
+    borderColor: "rgba(255,255,255,0.12)",
+    backgroundColor:
+      Platform.OS === "android" ? "rgba(10,12,14,0.18)" : "rgba(10,12,14,0.14)",
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 999,
-    minWidth: 110,
+    minWidth: 120,
+    flexDirection: "row",
+    gap: 8,
     alignItems: "center",
     justifyContent: "center",
   },
 
   uploadText: {
     color: theme.colors.text,
-    fontWeight: "900",
-    fontSize: theme.fontSize.sm,
+    fontWeight: theme.fontWeight.black,
+    fontSize: 12,
   },
 
   metricsRow: {
-    marginTop: 12,
     flexDirection: "row",
     gap: 10,
   },
 
   metric: {
     flex: 1,
+    minHeight: 76,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: Platform.OS === "android" ? "rgba(10,12,14,0.18)" : "rgba(10,12,14,0.14)",
-    borderRadius: 16,
+    backgroundColor:
+      Platform.OS === "android" ? "rgba(10,12,14,0.18)" : "rgba(10,12,14,0.14)",
+    borderRadius: 18,
     paddingVertical: 10,
     paddingHorizontal: 10,
     alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
   },
 
   metricVal: {
     color: theme.colors.text,
     fontWeight: theme.fontWeight.black,
-    fontSize: 14,
+    fontSize: 16,
   },
 
   metricKey: {
-    marginTop: 3,
     color: theme.colors.textTertiary,
     fontWeight: theme.fontWeight.black,
     fontSize: 11,
   },
 
-  searchRow: {
-    marginTop: 12,
+  searchWrap: {
+    minHeight: 54,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor:
+      Platform.OS === "android" ? "rgba(0,0,0,0.16)" : "rgba(255,255,255,0.04)",
+    borderRadius: 18,
+    paddingHorizontal: 14,
     flexDirection: "row",
-    gap: 10,
     alignItems: "center",
+    gap: 10,
   },
 
   searchInput: {
     flex: 1,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    backgroundColor: "rgba(0,0,0,0.16)",
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: Platform.OS === "ios" ? 12 : 10,
     color: theme.colors.text,
+    fontSize: 14,
     fontWeight: theme.fontWeight.bold,
+    paddingVertical: Platform.OS === "ios" ? 12 : 10,
   },
 
   clearBtn: {
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    backgroundColor: "rgba(0,0,0,0.16)",
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
   },
 
   clearBtnText: {
     color: theme.colors.textSecondary,
-    fontWeight: theme.fontWeight.black,
     fontSize: 12,
+    fontWeight: theme.fontWeight.black,
   },
 
   chipsRow: {
@@ -915,21 +1427,23 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.14)",
-    backgroundColor: "rgba(0,0,0,0.16)",
+    borderColor: "rgba(255,255,255,0.12)",
+    backgroundColor:
+      Platform.OS === "android" ? "rgba(0,0,0,0.16)" : "rgba(255,255,255,0.04)",
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 999,
   },
 
   chipActive: {
-    borderColor: "rgba(255,255,255,0.26)",
-    backgroundColor: "rgba(255,255,255,0.08)",
+    borderColor: "rgba(255,255,255,0.24)",
+    backgroundColor:
+      Platform.OS === "android" ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.06)",
   },
 
   chipText: {
     color: theme.colors.textSecondary,
-    fontWeight: "900",
+    fontWeight: theme.fontWeight.black,
     fontSize: 12,
   },
 
@@ -955,13 +1469,20 @@ const styles = StyleSheet.create({
 
   chipCountText: {
     color: theme.colors.textSecondary,
-    fontWeight: "900",
+    fontWeight: theme.fontWeight.black,
     fontSize: 11,
   },
 
   chipCountTextActive: {
     color: theme.colors.text,
-    fontWeight: "900",
+  },
+
+  section: {
+    gap: 10,
+  },
+
+  groupList: {
+    gap: 12,
   },
 
   stateCard: {
@@ -977,39 +1498,183 @@ const styles = StyleSheet.create({
 
   muted: {
     color: theme.colors.textSecondary,
-    fontSize: theme.fontSize.sm,
-    fontWeight: "700",
+    fontSize: 13,
+    fontWeight: theme.fontWeight.bold,
+  },
+
+  spotlightCard: {
+    borderRadius: 24,
+    borderColor: "rgba(87,162,56,0.16)",
+    overflow: "hidden",
+  },
+
+  spotlightImageWrap: {
+    minHeight: 260,
+    justifyContent: "flex-end",
+  },
+
+  spotlightImage: {
+    borderRadius: 24,
+  },
+
+  tripImageOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(8,12,10,0.66)",
+  },
+
+  spotlightInner: {
+    padding: 16,
+    gap: 10,
+  },
+
+  spotlightTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+
+  spotlightIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(87,162,56,0.18)",
+    backgroundColor: "rgba(87,162,56,0.08)",
+  },
+
+  titleVisualRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+
+  spotlightTitle: {
+    color: theme.colors.text,
+    fontSize: 24,
+    lineHeight: 28,
+    fontWeight: theme.fontWeight.black,
+    flexShrink: 1,
+  },
+
+  spotlightMeta: {
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: theme.fontWeight.bold,
+  },
+
+  spotlightSub: {
+    color: theme.colors.primary,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: theme.fontWeight.black,
+  },
+
+  progressTrack: {
+    marginTop: 2,
+    width: "100%",
+    height: 8,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    overflow: "hidden",
+  },
+
+  progressFill: {
+    height: "100%",
+    borderRadius: 999,
+    backgroundColor: "rgba(87,162,56,0.92)",
+  },
+
+  spotlightStatsRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+
+  miniStat: {
+    flex: 1,
+    minHeight: 58,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    backgroundColor:
+      Platform.OS === "android" ? "rgba(0,0,0,0.22)" : "rgba(255,255,255,0.06)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  miniStatValue: {
+    color: theme.colors.text,
+    fontSize: 16,
+    fontWeight: theme.fontWeight.black,
+  },
+
+  miniStatLabel: {
+    marginTop: 4,
+    color: theme.colors.textSecondary,
+    fontSize: 11,
+    fontWeight: theme.fontWeight.black,
+  },
+
+  spotlightFooter: {
+    marginTop: 2,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+
+  spotlightCta: {
+    color: theme.colors.text,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.black,
+  },
+
+  spotlightArrow: {
+    color: theme.colors.textTertiary,
+    fontSize: 22,
+    marginTop: -2,
   },
 
   groupCard: {
-    padding: theme.spacing.lg,
-    borderRadius: 22,
+    borderRadius: 24,
+    overflow: "hidden",
   },
 
-  groupHeader: {
+  groupInner: {
+    padding: 14,
+    gap: 12,
+  },
+
+  groupHeaderRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    marginBottom: 12,
+  },
+
+  groupHeaderLeft: {
+    flex: 1,
   },
 
   groupTitle: {
     color: theme.colors.text,
-    fontWeight: "900",
-    fontSize: 16,
+    fontWeight: theme.fontWeight.black,
+    fontSize: 18,
+    flexShrink: 1,
   },
 
   groupMeta: {
-    marginTop: 4,
+    marginTop: 6,
     color: theme.colors.textSecondary,
-    fontWeight: "700",
+    fontWeight: theme.fontWeight.bold,
     fontSize: 12,
   },
 
   groupBtn: {
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.14)",
-    backgroundColor: "rgba(0,0,0,0.16)",
+    borderColor: "rgba(255,255,255,0.12)",
+    backgroundColor:
+      Platform.OS === "android" ? "rgba(10,12,14,0.16)" : "rgba(10,12,14,0.12)",
     borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 9,
@@ -1017,43 +1682,22 @@ const styles = StyleSheet.create({
 
   groupBtnText: {
     color: theme.colors.text,
-    fontWeight: "900",
+    fontWeight: theme.fontWeight.black,
     fontSize: 12,
   },
 
-  remoteSection: {
-    padding: theme.spacing.lg,
-    borderRadius: 24,
-  },
-
-  remoteHeader: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 12,
-  },
-
-  remoteTitle: {
-    color: theme.colors.text,
-    fontWeight: "900",
-    fontSize: 16,
-  },
-
-  remoteMeta: {
-    marginTop: 4,
-    color: theme.colors.textSecondary,
-    fontWeight: "700",
-    fontSize: 12,
-    lineHeight: 18,
+  groupBookingList: {
+    gap: 10,
   },
 
   docCard: {
-    padding: 0,
     borderRadius: 18,
+    overflow: "hidden",
   },
 
   docRow: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     gap: 12,
     padding: 14,
   },
@@ -1064,13 +1708,10 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(0,0,0,0.18)",
+    backgroundColor:
+      Platform.OS === "android" ? "rgba(0,0,0,0.18)" : "rgba(255,255,255,0.05)",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
-  },
-
-  docIcon: {
-    fontSize: 18,
   },
 
   docMain: {
@@ -1078,40 +1719,50 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
 
+  docTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "wrap",
+  },
+
   docTitle: {
     color: theme.colors.text,
-    fontWeight: "900",
+    fontWeight: theme.fontWeight.black,
     fontSize: 14,
+    flexShrink: 1,
   },
 
   docMeta: {
     marginTop: 4,
     color: theme.colors.textSecondary,
-    fontWeight: "700",
+    fontWeight: theme.fontWeight.bold,
     fontSize: 12,
   },
 
   docSubMeta: {
     marginTop: 4,
     color: theme.colors.textTertiary,
-    fontWeight: "700",
+    fontWeight: theme.fontWeight.bold,
     fontSize: 12,
   },
 
-  docActions: {
-    flexDirection: "column",
+  docActionsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
     gap: 8,
-    alignItems: "stretch",
+    paddingHorizontal: 14,
+    paddingBottom: 14,
   },
 
   smallBtn: {
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.14)",
-    backgroundColor: "rgba(0,0,0,0.16)",
+    borderColor: "rgba(255,255,255,0.12)",
+    backgroundColor:
+      Platform.OS === "android" ? "rgba(0,0,0,0.16)" : "rgba(255,255,255,0.04)",
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 12,
-    minWidth: 92,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1123,7 +1774,114 @@ const styles = StyleSheet.create({
 
   smallBtnText: {
     color: theme.colors.text,
-    fontWeight: "900",
+    fontWeight: theme.fontWeight.black,
     fontSize: 12,
+  },
+
+  statusPill: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+
+  statusPillText: {
+    color: theme.colors.text,
+    fontWeight: theme.fontWeight.black,
+    fontSize: 11,
+  },
+
+  statusBooked: {
+    borderColor: "rgba(0,255,136,0.35)",
+    backgroundColor: "rgba(0,255,136,0.08)",
+  },
+
+  statusPending: {
+    borderColor: "rgba(255,200,80,0.40)",
+    backgroundColor: "rgba(255,200,80,0.10)",
+  },
+
+  statusSaved: {
+    borderColor: "rgba(120,170,255,0.45)",
+    backgroundColor: "rgba(120,170,255,0.10)",
+  },
+
+  statusArchived: {
+    borderColor: "rgba(255,255,255,0.16)",
+    backgroundColor: "rgba(255,255,255,0.06)",
+  },
+
+  metaInline: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+
+  leagueLogoTile: {
+    width: 24,
+    height: 24,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor:
+      Platform.OS === "android" ? "rgba(0,0,0,0.22)" : "rgba(255,255,255,0.06)",
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+
+  leagueLogoImg: {
+    width: 18,
+    height: 18,
+  },
+
+  countryFlag: {
+    width: 18,
+    height: 13,
+    borderRadius: 3,
+  },
+
+  remoteSection: {
+    borderRadius: 24,
+    overflow: "hidden",
+  },
+
+  remoteInner: {
+    padding: 16,
+    gap: 12,
+  },
+
+  remoteHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+  },
+
+  remoteTitle: {
+    color: theme.colors.text,
+    fontWeight: theme.fontWeight.black,
+    fontSize: 16,
+  },
+
+  remoteMeta: {
+    marginTop: 4,
+    color: theme.colors.textSecondary,
+    fontWeight: theme.fontWeight.bold,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+
+  remoteEmptyWrap: {
+    marginTop: 4,
+  },
+
+  remoteList: {
+    gap: 10,
+    marginTop: 2,
+  },
+
+  pressed: {
+    opacity: 0.94,
+    transform: [{ scale: 0.995 }],
   },
 });
