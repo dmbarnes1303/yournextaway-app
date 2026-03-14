@@ -8,6 +8,8 @@ import {
   ActivityIndicator,
   Alert,
   Platform,
+  Image,
+  ImageBackground,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -20,13 +22,86 @@ import EmptyState from "@/src/components/EmptyState";
 
 import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
-import { parseIsoDateOnly, toIsoDate } from "@/src/constants/football";
+import { LEAGUES, parseIsoDateOnly, toIsoDate } from "@/src/constants/football";
 
 import tripsStore, { type Trip } from "@/src/state/trips";
 import savedItemsStore from "@/src/state/savedItems";
 import type { SavedItem } from "@/src/core/savedItemTypes";
 
-import { formatUkDateOnly } from "@/src/utils/formatters";
+import { getFlagImageUrl } from "@/src/utils/flagImages";
+
+/* -------------------------------------------------------------------------- */
+/*                                  CONFIG                                    */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Replace this with your real logo path or URL.
+ * If you already have a hosted logo, drop it in here.
+ */
+const TRIPS_HEADER_LOGO =
+  "https://images.unsplash.com/photo-1517466787929-bc90951d0974?auto=format&fit=crop&w=200&q=80";
+
+/**
+ * Visual fallback map when trip objects do not yet store league/country metadata.
+ * Add to this over time as more trips/cities appear.
+ */
+const TRIP_CITY_META: Record<
+  string,
+  {
+    countryCode?: string;
+    leagueId?: number;
+    image: string;
+  }
+> = {
+  barcelona: {
+    countryCode: "ES",
+    leagueId: 140,
+    image:
+      "https://images.unsplash.com/photo-1543783207-ec64e4d95325?auto=format&fit=crop&w=1600&h=900&q=80",
+  },
+  madrid: {
+    countryCode: "ES",
+    leagueId: 140,
+    image:
+      "https://images.unsplash.com/photo-1539037116277-4db20889f2d4?auto=format&fit=crop&w=1600&h=900&q=80",
+  },
+  milan: {
+    countryCode: "IT",
+    leagueId: 135,
+    image:
+      "https://images.unsplash.com/photo-1516483638261-f4dbaf036963?auto=format&fit=crop&w=1600&h=900&q=80",
+  },
+  rome: {
+    countryCode: "IT",
+    leagueId: 135,
+    image:
+      "https://images.unsplash.com/photo-1552832230-c0197dd311b5?auto=format&fit=crop&w=1600&h=900&q=80",
+  },
+  london: {
+    countryCode: "ENGLAND",
+    leagueId: 39,
+    image:
+      "https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?auto=format&fit=crop&w=1600&h=900&q=80",
+  },
+  manchester: {
+    countryCode: "ENGLAND",
+    leagueId: 39,
+    image:
+      "https://images.unsplash.com/photo-1515586838455-8f8f940d6853?auto=format&fit=crop&w=1600&h=900&q=80",
+  },
+  liverpool: {
+    countryCode: "ENGLAND",
+    leagueId: 39,
+    image:
+      "https://images.unsplash.com/photo-1520034475321-cbe63696469a?auto=format&fit=crop&w=1600&h=900&q=80",
+  },
+  glasgow: {
+    countryCode: "SCOTLAND",
+    leagueId: 179,
+    image:
+      "https://images.unsplash.com/photo-1516483638261-f4dbaf036963?auto=format&fit=crop&w=1600&h=900&q=80",
+  },
+};
 
 /* -------------------------------- Helpers -------------------------------- */
 
@@ -46,11 +121,42 @@ function cityLabel(t: Trip) {
   return titleCase(raw || "Trip");
 }
 
+function slugify(input: string) {
+  return String(input ?? "")
+    .toLowerCase()
+    .trim()
+    .replace(/[’']/g, "")
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "-");
+}
+
+function ordinal(day: number) {
+  if (day % 10 === 1 && day % 100 !== 11) return `${day}st`;
+  if (day % 10 === 2 && day % 100 !== 12) return `${day}nd`;
+  if (day % 10 === 3 && day % 100 !== 13) return `${day}rd`;
+  return `${day}th`;
+}
+
+function formatPrettyDate(iso?: string | null) {
+  if (!iso) return "—";
+  const d = new Date(`${iso}T00:00:00.000Z`);
+  if (Number.isNaN(d.getTime())) return "—";
+
+  const day = ordinal(d.getUTCDate());
+  const month = d.toLocaleDateString("en-GB", {
+    month: "long",
+    timeZone: "UTC",
+  });
+  const year = d.getUTCFullYear();
+
+  return `${day} ${month} ${year}`;
+}
+
 function tripSummaryLine(t: Trip) {
-  const a = t.startDate ? formatUkDateOnly(t.startDate) : "—";
-  const b = t.endDate ? formatUkDateOnly(t.endDate) : "—";
+  const a = t.startDate ? formatPrettyDate(t.startDate) : "—";
+  const b = t.endDate ? formatPrettyDate(t.endDate) : "—";
   const n = t.matchIds?.length ?? 0;
-  return `${a} → ${b} • ${n} match${n === 1 ? "" : "es"}`;
+  return `${a} - ${b} • ${n} match${n === 1 ? "" : "es"}`;
 }
 
 function isUpcoming(t: Trip) {
@@ -122,6 +228,36 @@ function progressLabel(counts?: { total: number; pending: number; booked: number
   return `${c.total} item${c.total === 1 ? "" : "s"} saved`;
 }
 
+function getTripVisualMeta(t: Trip) {
+  const city = cityLabel(t);
+  const slug = slugify(city);
+
+  const storedLeagueId =
+    (t as any)?.leagueId != null ? Number((t as any).leagueId) : null;
+  const storedCountryCode = String((t as any)?.countryCode ?? "").trim() || null;
+  const storedLeagueLogo = String((t as any)?.leagueLogo ?? "").trim() || null;
+
+  const fallback = TRIP_CITY_META[slug] ?? null;
+
+  const leagueId = storedLeagueId ?? fallback?.leagueId ?? null;
+  const leagueMeta = leagueId ? LEAGUES.find((l) => l.leagueId === leagueId) ?? null : null;
+
+  const countryCode =
+    storedCountryCode ??
+    leagueMeta?.countryCode ??
+    fallback?.countryCode ??
+    null;
+
+  const leagueLogo = storedLeagueLogo ?? leagueMeta?.logo ?? null;
+  const image = String((t as any)?.heroImage ?? "").trim() || fallback?.image || null;
+
+  return {
+    countryCode,
+    leagueLogo,
+    image,
+  };
+}
+
 /* -------------------------------- Screen -------------------------------- */
 
 export default function TripsScreen() {
@@ -184,7 +320,6 @@ export default function TripsScreen() {
   }, [upcoming, past]);
 
   const featuredCounts = featuredTrip ? countsIndex[featuredTrip.id] : undefined;
-
   const showEmpty = !loading && trips.length === 0;
 
   const openTrip = useCallback(
@@ -279,10 +414,16 @@ export default function TripsScreen() {
                   </Text>
                 </View>
 
-                <View style={styles.heroStatsCol}>
-                  <MetricCard icon="airplane-outline" value={String(clamp2(totals.tripCount))} label="Trips" />
-                  <MetricCard icon="time-outline" value={String(clamp2(totals.pending))} label="Pending" />
-                  <MetricCard icon="checkmark-done-outline" value={String(clamp2(totals.booked))} label="Booked" />
+                <View style={styles.heroRightCol}>
+                  <View style={styles.logoWrap}>
+                    <Image source={{ uri: TRIPS_HEADER_LOGO }} style={styles.logoImg} resizeMode="contain" />
+                  </View>
+
+                  <View style={styles.heroStatsCol}>
+                    <MetricCard icon="airplane-outline" value={String(clamp2(totals.tripCount))} label="Trips" />
+                    <MetricCard icon="time-outline" value={String(clamp2(totals.pending))} label="Pending" />
+                    <MetricCard icon="checkmark-done-outline" value={String(clamp2(totals.booked))} label="Booked" />
+                  </View>
                 </View>
               </View>
 
@@ -459,6 +600,27 @@ function StatusChip({
   );
 }
 
+function LeagueMetaInline({ trip }: { trip: Trip }) {
+  const meta = getTripVisualMeta(trip);
+  const flagUrl = meta.countryCode ? getFlagImageUrl(meta.countryCode) : null;
+
+  if (!meta.leagueLogo && !flagUrl) return null;
+
+  return (
+    <View style={styles.leagueMetaInline}>
+      {meta.leagueLogo ? (
+        <View style={styles.leagueLogoTile}>
+          <Image source={{ uri: meta.leagueLogo }} style={styles.leagueLogoImg} resizeMode="contain" />
+        </View>
+      ) : null}
+
+      {flagUrl ? (
+        <Image source={{ uri: flagUrl }} style={styles.countryFlag} resizeMode="cover" />
+      ) : null}
+    </View>
+  );
+}
+
 /* ------------------------------ Spotlight ------------------------------ */
 
 function SpotlightTripCard({
@@ -472,38 +634,50 @@ function SpotlightTripCard({
 }) {
   const badge = badgeLabel(trip, counts);
   const progress = tripProgress(counts);
+  const visual = getTripVisualMeta(trip);
 
   return (
     <Pressable onPress={() => onOpen(trip)} style={({ pressed }) => [pressed && styles.pressed]}>
       <GlassCard style={styles.spotlightCard} strength="default" noPadding>
-        <View style={styles.spotlightInner}>
-          <View style={styles.spotlightTopRow}>
-            <View style={styles.spotlightBadgeIcon}>
-              <Ionicons name="sparkles-outline" size={18} color={theme.colors.text} />
+        <ImageBackground
+          source={visual.image ? { uri: visual.image } : undefined}
+          style={styles.spotlightImageWrap}
+          imageStyle={styles.spotlightImage}
+        >
+          <View style={styles.tripImageOverlay} />
+          <View style={styles.spotlightInner}>
+            <View style={styles.spotlightTopRow}>
+              <View style={styles.spotlightBadgeIcon}>
+                <Ionicons name="sparkles-outline" size={18} color={theme.colors.text} />
+              </View>
+
+              <StatusChip kind={badge.kind} text={badge.text} />
             </View>
 
-            <StatusChip kind={badge.kind} text={badge.text} />
-          </View>
+            <View style={styles.tripTitleVisualRow}>
+              <Text style={styles.spotlightTitle}>{cityLabel(trip)}</Text>
+              <LeagueMetaInline trip={trip} />
+            </View>
 
-          <Text style={styles.spotlightTitle}>{cityLabel(trip)}</Text>
-          <Text style={styles.spotlightMeta}>{tripSummaryLine(trip)}</Text>
-          <Text style={styles.spotlightSub}>{progressLabel(counts)}</Text>
+            <Text style={styles.spotlightMeta}>{tripSummaryLine(trip)}</Text>
+            <Text style={styles.spotlightSub}>{progressLabel(counts)}</Text>
 
-          <View style={styles.progressTrack}>
-            <View style={[styles.progressFill, { width: `${Math.max(8, progress * 100)}%` }]} />
-          </View>
+            <View style={styles.progressTrack}>
+              <View style={[styles.progressFill, { width: `${Math.max(8, progress * 100)}%` }]} />
+            </View>
 
-          <View style={styles.spotlightStatsRow}>
-            <MiniStat label="Items" value={counts?.total ?? 0} />
-            <MiniStat label="Pending" value={counts?.pending ?? 0} />
-            <MiniStat label="Booked" value={counts?.booked ?? 0} />
-          </View>
+            <View style={styles.spotlightStatsRow}>
+              <MiniStat label="Items" value={counts?.total ?? 0} />
+              <MiniStat label="Pending" value={counts?.pending ?? 0} />
+              <MiniStat label="Booked" value={counts?.booked ?? 0} />
+            </View>
 
-          <View style={styles.spotlightFooter}>
-            <Text style={styles.spotlightCta}>Open workspace</Text>
-            <Text style={styles.spotlightArrow}>›</Text>
+            <View style={styles.spotlightFooter}>
+              <Text style={styles.spotlightCta}>Open workspace</Text>
+              <Text style={styles.spotlightArrow}>›</Text>
+            </View>
           </View>
-        </View>
+        </ImageBackground>
       </GlassCard>
     </Pressable>
   );
@@ -539,6 +713,7 @@ function TripCard({
   const isDeleting = deletingTripId === t.id;
   const badge = badgeLabel(t, c);
   const progress = tripProgress(c);
+  const visual = getTripVisualMeta(t);
 
   return (
     <GlassCard style={styles.tripCard} strength="subtle" noPadding>
@@ -548,65 +723,80 @@ function TripCard({
         style={({ pressed }) => [styles.tripPress, pressed && styles.pressed]}
         android_ripple={{ color: "rgba(255,255,255,0.06)" }}
       >
-        <View style={styles.tripHeaderRow}>
-          <View style={styles.tripHeaderLeft}>
-            <Text style={styles.tripTitle} numberOfLines={1}>
-              {cityLabel(t)}
-            </Text>
-            <Text style={styles.tripMeta} numberOfLines={1}>
-              {tripSummaryLine(t)}
-            </Text>
+        <ImageBackground
+          source={visual.image ? { uri: visual.image } : undefined}
+          style={styles.tripImageWrap}
+          imageStyle={styles.tripImage}
+        >
+          <View style={styles.tripImageOverlay} />
+
+          <View style={styles.tripHeaderRow}>
+            <View style={styles.tripHeaderLeft}>
+              <View style={styles.tripTitleVisualRow}>
+                <Text style={styles.tripTitle} numberOfLines={1}>
+                  {cityLabel(t)}
+                </Text>
+                <LeagueMetaInline trip={t} />
+              </View>
+
+              <Text style={styles.tripMeta} numberOfLines={1}>
+                {tripSummaryLine(t)}
+              </Text>
+            </View>
+
+            <View style={styles.tripHeaderRight}>
+              <StatusChip kind={badge.kind} text={badge.text} />
+              <Text style={styles.chev}>›</Text>
+            </View>
           </View>
 
-          <View style={styles.tripHeaderRight}>
-            <StatusChip kind={badge.kind} text={badge.text} />
-            <Text style={styles.chev}>›</Text>
+          <Text style={styles.tripProgressText}>{progressLabel(c)}</Text>
+
+          <View style={styles.progressTrackSmall}>
+            <View
+              style={[
+                styles.progressFillSmall,
+                { width: `${Math.max(c.total > 0 ? 8 : 0, progress * 100)}%` },
+              ]}
+            />
           </View>
-        </View>
 
-        <Text style={styles.tripProgressText}>{progressLabel(c)}</Text>
+          <View style={styles.pillRow}>
+            <Pill label="Items" value={c.total} />
+            <Pill label="Pending" value={c.pending} />
+            <Pill label="Booked" value={c.booked} />
+          </View>
 
-        <View style={styles.progressTrackSmall}>
-          <View
-            style={[styles.progressFillSmall, { width: `${Math.max(c.total > 0 ? 8 : 0, progress * 100)}%` }]}
-          />
-        </View>
+          <View style={styles.actionsRow}>
+            <Pressable
+              onPress={() => onEdit(t)}
+              disabled={isDeleting}
+              style={({ pressed }) => [
+                styles.actionBtn,
+                styles.actionGhost,
+                pressed && styles.pressed,
+                isDeleting && { opacity: 0.5 },
+              ]}
+            >
+              <Ionicons name="create-outline" size={16} color={theme.colors.textSecondary} />
+              <Text style={styles.actionGhostText}>Edit</Text>
+            </Pressable>
 
-        <View style={styles.pillRow}>
-          <Pill label="Items" value={c.total} />
-          <Pill label="Pending" value={c.pending} />
-          <Pill label="Booked" value={c.booked} />
-        </View>
-
-        <View style={styles.actionsRow}>
-          <Pressable
-            onPress={() => onEdit(t)}
-            disabled={isDeleting}
-            style={({ pressed }) => [
-              styles.actionBtn,
-              styles.actionGhost,
-              pressed && styles.pressed,
-              isDeleting && { opacity: 0.5 },
-            ]}
-          >
-            <Ionicons name="create-outline" size={16} color={theme.colors.textSecondary} />
-            <Text style={styles.actionGhostText}>Edit</Text>
-          </Pressable>
-
-          <Pressable
-            onPress={() => onDelete(t)}
-            disabled={isDeleting}
-            style={({ pressed }) => [
-              styles.actionBtn,
-              styles.actionDanger,
-              pressed && styles.pressed,
-              isDeleting && { opacity: 0.5 },
-            ]}
-          >
-            <Ionicons name="trash-outline" size={16} color={"rgba(255,120,120,0.95)"} />
-            <Text style={styles.actionDangerText}>{isDeleting ? "Deleting…" : "Delete"}</Text>
-          </Pressable>
-        </View>
+            <Pressable
+              onPress={() => onDelete(t)}
+              disabled={isDeleting}
+              style={({ pressed }) => [
+                styles.actionBtn,
+                styles.actionDanger,
+                pressed && styles.pressed,
+                isDeleting && { opacity: 0.5 },
+              ]}
+            >
+              <Ionicons name="trash-outline" size={16} color={"rgba(255,120,120,0.95)"} />
+              <Text style={styles.actionDangerText}>{isDeleting ? "Deleting…" : "Delete"}</Text>
+            </Pressable>
+          </View>
+        </ImageBackground>
       </Pressable>
     </GlassCard>
   );
@@ -650,6 +840,30 @@ const styles = StyleSheet.create({
 
   heroTextWrap: {
     flex: 1,
+  },
+
+  heroRightCol: {
+    alignItems: "flex-end",
+    gap: 10,
+  },
+
+  logoWrap: {
+    width: 74,
+    height: 74,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor:
+      Platform.OS === "android" ? "rgba(10,12,14,0.18)" : "rgba(10,12,14,0.14)",
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+
+  logoImg: {
+    width: 48,
+    height: 48,
+    opacity: 0.98,
   },
 
   kicker: {
@@ -877,6 +1091,31 @@ const styles = StyleSheet.create({
   spotlightCard: {
     borderRadius: 24,
     borderColor: "rgba(87,162,56,0.16)",
+    overflow: "hidden",
+  },
+
+  spotlightImageWrap: {
+    minHeight: 280,
+    justifyContent: "flex-end",
+  },
+
+  spotlightImage: {
+    borderRadius: 24,
+  },
+
+  tripImageWrap: {
+    minHeight: 236,
+    justifyContent: "flex-end",
+    overflow: "hidden",
+  },
+
+  tripImage: {
+    borderRadius: 24,
+  },
+
+  tripImageOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(8,12,10,0.66)",
   },
 
   spotlightInner: {
@@ -901,11 +1140,18 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(87,162,56,0.08)",
   },
 
+  tripTitleVisualRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+
   spotlightTitle: {
     color: theme.colors.text,
     fontSize: 24,
     lineHeight: 28,
     fontWeight: theme.fontWeight.black,
+    flexShrink: 1,
   },
 
   spotlightMeta: {
@@ -927,14 +1173,14 @@ const styles = StyleSheet.create({
     width: "100%",
     height: 8,
     borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.06)",
+    backgroundColor: "rgba(255,255,255,0.08)",
     overflow: "hidden",
   },
 
   progressFill: {
     height: "100%",
     borderRadius: 999,
-    backgroundColor: "rgba(87,162,56,0.90)",
+    backgroundColor: "rgba(87,162,56,0.92)",
   },
 
   spotlightStatsRow: {
@@ -949,7 +1195,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
     backgroundColor:
-      Platform.OS === "android" ? "rgba(0,0,0,0.14)" : "rgba(255,255,255,0.03)",
+      Platform.OS === "android" ? "rgba(0,0,0,0.22)" : "rgba(255,255,255,0.06)",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -988,16 +1234,19 @@ const styles = StyleSheet.create({
 
   tripCard: {
     borderRadius: 24,
+    overflow: "hidden",
   },
 
   tripPress: {
-    padding: 14,
+    padding: 0,
   },
 
   tripHeaderRow: {
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 10,
+    paddingHorizontal: 14,
+    paddingTop: 14,
   },
 
   tripHeaderLeft: {
@@ -1025,6 +1274,7 @@ const styles = StyleSheet.create({
 
   tripProgressText: {
     marginTop: 10,
+    marginHorizontal: 14,
     color: theme.colors.primary,
     fontSize: 12,
     fontWeight: theme.fontWeight.black,
@@ -1032,10 +1282,11 @@ const styles = StyleSheet.create({
 
   progressTrackSmall: {
     marginTop: 8,
-    width: "100%",
+    marginHorizontal: 14,
+    width: undefined,
     height: 6,
     borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.06)",
+    backgroundColor: "rgba(255,255,255,0.08)",
     overflow: "hidden",
   },
 
@@ -1085,8 +1336,39 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,255,136,0.08)",
   },
 
+  leagueMetaInline: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+
+  leagueLogoTile: {
+    width: 24,
+    height: 24,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor:
+      Platform.OS === "android" ? "rgba(0,0,0,0.22)" : "rgba(255,255,255,0.06)",
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+
+  leagueLogoImg: {
+    width: 18,
+    height: 18,
+  },
+
+  countryFlag: {
+    width: 18,
+    height: 13,
+    borderRadius: 3,
+  },
+
   pillRow: {
     marginTop: 12,
+    marginHorizontal: 14,
     flexDirection: "row",
     gap: 10,
   },
@@ -1097,7 +1379,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
     backgroundColor:
-      Platform.OS === "android" ? "rgba(10,12,14,0.16)" : "rgba(10,12,14,0.12)",
+      Platform.OS === "android" ? "rgba(0,0,0,0.22)" : "rgba(255,255,255,0.06)",
     paddingVertical: 10,
     alignItems: "center",
     justifyContent: "center",
@@ -1118,6 +1400,8 @@ const styles = StyleSheet.create({
 
   actionsRow: {
     marginTop: 12,
+    marginHorizontal: 14,
+    marginBottom: 14,
     flexDirection: "row",
     gap: 10,
   },
@@ -1138,7 +1422,7 @@ const styles = StyleSheet.create({
   actionGhost: {
     borderColor: "rgba(255,255,255,0.12)",
     backgroundColor:
-      Platform.OS === "android" ? "rgba(10,12,14,0.16)" : "rgba(10,12,14,0.12)",
+      Platform.OS === "android" ? "rgba(10,12,14,0.22)" : "rgba(255,255,255,0.05)",
   },
 
   actionGhostText: {
@@ -1150,7 +1434,7 @@ const styles = StyleSheet.create({
   actionDanger: {
     borderColor: "rgba(255,90,90,0.32)",
     backgroundColor:
-      Platform.OS === "android" ? "rgba(255,90,90,0.06)" : "rgba(255,90,90,0.05)",
+      Platform.OS === "android" ? "rgba(255,90,90,0.08)" : "rgba(255,90,90,0.06)",
   },
 
   actionDangerText: {
