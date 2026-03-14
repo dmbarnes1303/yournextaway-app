@@ -17,14 +17,54 @@ export function ticketDifficultyLabel(d: TicketDifficulty | "unknown") {
     case "easy":
       return "Easy";
     case "medium":
-      return "Medium";
+      return "Moderate";
     case "hard":
       return "Hard";
     case "very_hard":
       return "Very hard";
     default:
-      return "Unknown";
+      return "Check club sale";
   }
+}
+
+export function ticketDifficultyShortLabel(d: TicketDifficulty | "unknown") {
+  switch (d) {
+    case "easy":
+      return "Easy";
+    case "medium":
+      return "Moderate";
+    case "hard":
+      return "Hard";
+    case "very_hard":
+      return "Very hard";
+    default:
+      return "TBC";
+  }
+}
+
+export function formatFixtureDateDisplay(iso: string | null | undefined) {
+  if (!iso) return "TBC";
+
+  const dt = new Date(iso);
+  if (Number.isNaN(dt.getTime())) return "TBC";
+
+  const day = dt.getUTCDate();
+  const month = dt.toLocaleDateString("en-GB", {
+    month: "long",
+    timeZone: "UTC",
+  });
+  const year = dt.getUTCFullYear();
+
+  const suffix =
+    day % 10 === 1 && day !== 11
+      ? "st"
+      : day % 10 === 2 && day !== 12
+        ? "nd"
+        : day % 10 === 3 && day !== 13
+          ? "rd"
+          : "th";
+
+  return `${day}${suffix} ${month} ${year}`;
 }
 
 export function norm(s: unknown) {
@@ -43,7 +83,11 @@ export function kickoffPresentation(r: FixtureListRow, placeholderIds?: Set<stri
   const iso = kickoffIsoOrNull(r);
 
   if (!iso) {
-    return { primary: "TBC", secondary: "Kickoff time not set yet", certainty };
+    return {
+      primary: "TBC",
+      secondary: "Kickoff time not set yet",
+      certainty,
+    };
   }
 
   const formatted = formatUkDateTimeMaybe(iso) || "TBC";
@@ -51,7 +95,7 @@ export function kickoffPresentation(r: FixtureListRow, placeholderIds?: Set<stri
   if (certainty === "likely_tbc") {
     return {
       primary: formatted,
-      secondary: "Likely placeholder (TV schedule not confirmed)",
+      secondary: "Likely placeholder kickoff",
       certainty,
     };
   }
@@ -77,12 +121,49 @@ export function resolveTripForFixture(fixtureId: string): string | null {
   return hit ? String(hit.id) : null;
 }
 
-export function LeagueFlag({ code, size = "sm" }: { code: string; size?: "sm" | "md" }) {
-  const url = getFlagImageUrl(code);
+function normalizeFlagCode(code: string) {
+  const raw = String(code ?? "").trim().toUpperCase();
+
+  if (!raw) return "";
+  if (raw === "SCO") return "SCOTLAND";
+  if (raw === "ENG") return "ENGLAND";
+
+  return raw;
+}
+
+export function LeagueFlag({
+  code,
+  size = "sm",
+}: {
+  code: string;
+  size?: "sm" | "md";
+}) {
+  const normalized = normalizeFlagCode(code);
+  const url = getFlagImageUrl(normalized);
   if (!url) return null;
+
   return (
-    <Image source={{ uri: url }} style={size === "md" ? styles.flagMd : styles.flag} />
+    <Image
+      source={{ uri: url }}
+      style={size === "md" ? styles.flagMd : styles.flag}
+      resizeMode="cover"
+    />
   );
+}
+
+export function LeagueLogo({
+  logo,
+  size = "md",
+}: {
+  logo?: string | null;
+  size?: "sm" | "md" | "lg";
+}) {
+  if (!logo) return null;
+
+  const style =
+    size === "lg" ? styles.leagueLogoLg : size === "sm" ? styles.leagueLogoSm : styles.leagueLogoMd;
+
+  return <Image source={{ uri: logo }} style={style} resizeMode="contain" />;
 }
 
 export function initials(name: string) {
@@ -139,8 +220,37 @@ export function leagueScopeSubtitle(selectedLeagues: LeagueOption[]) {
 }
 
 const styles = StyleSheet.create({
-  flag: { width: 18, height: 13, borderRadius: 3, opacity: 0.9 },
-  flagMd: { width: 22, height: 16, borderRadius: 4, opacity: 0.95 },
+  flag: {
+    width: 18,
+    height: 13,
+    borderRadius: 3,
+    opacity: 0.95,
+  },
+
+  flagMd: {
+    width: 22,
+    height: 16,
+    borderRadius: 4,
+    opacity: 0.98,
+  },
+
+  leagueLogoSm: {
+    width: 16,
+    height: 16,
+    opacity: 0.96,
+  },
+
+  leagueLogoMd: {
+    width: 22,
+    height: 22,
+    opacity: 0.98,
+  },
+
+  leagueLogoLg: {
+    width: 28,
+    height: 28,
+    opacity: 1,
+  },
 
   crestWrap: {
     width: 56,
