@@ -44,6 +44,7 @@ import {
   fixtureIsoDateOnly,
   leagueScopeSubtitle,
   norm,
+  formatFixtureDateDisplay,
 } from "@/src/features/fixtures/helpers";
 import type { RankedFixtureRow } from "@/src/features/fixtures/types";
 
@@ -72,12 +73,6 @@ async function mapLimit<T, R>(
 export function useFixturesScreenData() {
   const rawParams = useLocalSearchParams();
 
-  /**
-   * IMPORTANT:
-   * Never depend on the full params object from expo-router.
-   * It may get a new identity on each render and can create effect loops.
-   * Pull out stable primitive route values instead.
-   */
   const rawLeagueId = rawParams?.leagueId;
   const rawFrom = rawParams?.from;
   const rawTo = rawParams?.to;
@@ -173,10 +168,6 @@ export function useFixturesScreenData() {
   const [selectedDay, setSelectedDay] = useState<string>(initialDay);
   const [range, setRange] = useState<{ from: string; to: string } | null>(initialRange);
 
-  /**
-   * Sync route changes into state when navigation params genuinely change.
-   * Guard updates so we do not create unnecessary render loops.
-   */
   useEffect(() => {
     setSelectedDay((prev) => (prev === initialDay ? prev : initialDay));
   }, [initialDay]);
@@ -426,9 +417,8 @@ export function useFixturesScreenData() {
       return (
         norm(r?.teams?.home?.name).includes(qNorm) ||
         norm(r?.teams?.away?.name).includes(qNorm) ||
-        norm(r?.fixture?.venue?.name).includes(qNorm) ||
         norm(r?.fixture?.venue?.city).includes(qNorm) ||
-        norm(r?.league?.name).includes(qNorm)
+        norm((r?.league as any)?.country).includes(qNorm)
       );
     });
   }, [rows, isRange, effectiveRange.from, qNorm]);
@@ -596,11 +586,12 @@ export function useFixturesScreenData() {
   }, [discoverCategory, leagueSubtitle]);
 
   const helperLineText = useMemo(() => {
+    const readableFrom = formatFixtureDateDisplay(effectiveRange.from);
+    const readableTo = formatFixtureDateDisplay(effectiveRange.to);
+
     if (discoverCategory) {
       const base = DISCOVER_CATEGORY_META[discoverCategory].helper;
-      const datePart = isRange
-        ? `${effectiveRange.from} → ${effectiveRange.to}`
-        : effectiveRange.from;
+      const datePart = isRange ? `${readableFrom} → ${readableTo}` : readableFrom;
       const scopePart =
         selectedLeagueIds.length > 0
           ? `${selectedLeagueIds.length}/${MAX_MULTI_LEAGUES} leagues`
@@ -627,9 +618,7 @@ export function useFixturesScreenData() {
     }
 
     return `${
-      isRange
-        ? `Range • ${effectiveRange.from} → ${effectiveRange.to}`
-        : `Day • ${effectiveRange.from}`
+      isRange ? `Range • ${readableFrom} → ${readableTo}` : `Day • ${readableFrom}`
     }${
       selectedLeagueIds.length > 0
         ? ` • ${selectedLeagueIds.length}/${MAX_MULTI_LEAGUES} leagues`
@@ -646,16 +635,12 @@ export function useFixturesScreenData() {
 
   const headerDateLine = useMemo(() => {
     if (!isRange) {
-      const d = new Date(`${effectiveRange.from}T00:00:00.000Z}`);
-      return d.toLocaleDateString("en-GB", {
-        weekday: "short",
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-      });
+      return formatFixtureDateDisplay(effectiveRange.from);
     }
 
-    return `${effectiveRange.from} → ${effectiveRange.to}`;
+    return `${formatFixtureDateDisplay(effectiveRange.from)} → ${formatFixtureDateDisplay(
+      effectiveRange.to
+    )}`;
   }, [isRange, effectiveRange]);
 
   return {
@@ -714,4 +699,4 @@ export function useFixturesScreenData() {
     headerDateLine,
     monthLabel,
   };
-      }
+                            }
