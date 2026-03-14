@@ -35,11 +35,11 @@ import { getFlagImageUrl } from "@/src/utils/flagImages";
 /* -------------------------------------------------------------------------- */
 
 /**
- * Replace with your actual hosted transparent logo when ready.
- * This now fills the empty hero space on the left, not the tiny top-right box.
+ * PUT YOUR REAL LOGO URL HERE.
+ * Use a transparent PNG if possible.
+ * Leave blank if you want the reserved logo box to show without an image.
  */
-const TRIPS_HEADER_LOGO =
-  "https://images.unsplash.com/photo-1517466787929-bc90951d0974?auto=format&fit=crop&w=500&q=80";
+const TRIPS_HEADER_LOGO = "";
 
 /**
  * Visual fallback map when trip objects do not yet store league/country metadata.
@@ -404,21 +404,13 @@ export default function TripsScreen() {
         >
           <GlassCard style={styles.hero} strength="strong" noPadding>
             <View style={styles.heroInner}>
-              <View style={styles.heroTopRow}>
-                <View style={styles.heroMainCol}>
+              <View style={styles.heroHeaderRow}>
+                <View style={styles.heroTextWrap}>
                   <Text style={styles.kicker}>WORKSPACES</Text>
                   <Text style={styles.title}>Trips</Text>
                   <Text style={styles.subtitle}>
                     Plan the trip, track what’s still pending, and keep everything in one workspace.
                   </Text>
-
-                  <View style={styles.heroLogoStage}>
-                    <Image
-                      source={{ uri: TRIPS_HEADER_LOGO }}
-                      style={styles.heroLogoStageImage}
-                      resizeMode="contain"
-                    />
-                  </View>
                 </View>
 
                 <View style={styles.heroStatsCol}>
@@ -438,6 +430,25 @@ export default function TripsScreen() {
                     label="Booked"
                   />
                 </View>
+              </View>
+
+              <View style={styles.heroLogoStage}>
+                {TRIPS_HEADER_LOGO ? (
+                  <Image
+                    source={{ uri: TRIPS_HEADER_LOGO }}
+                    style={styles.heroLogoStageImage}
+                    resizeMode="contain"
+                  />
+                ) : (
+                  <View style={styles.heroLogoFallback}>
+                    <Ionicons
+                      name="image-outline"
+                      size={28}
+                      color={theme.colors.textTertiary}
+                    />
+                    <Text style={styles.heroLogoFallbackText}>Add your logo URL</Text>
+                  </View>
+                )}
               </View>
 
               <View style={styles.heroActions}>
@@ -871,13 +882,13 @@ const styles = StyleSheet.create({
     gap: 14,
   },
 
-  heroTopRow: {
+  heroHeaderRow: {
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 12,
   },
 
-  heroMainCol: {
+  heroTextWrap: {
     flex: 1,
   },
 
@@ -888,8 +899,8 @@ const styles = StyleSheet.create({
   },
 
   heroLogoStage: {
-    marginTop: 18,
-    minHeight: 196,
+    minHeight: 168,
+    maxHeight: 168,
     borderRadius: 24,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
@@ -904,6 +915,18 @@ const styles = StyleSheet.create({
     width: "78%",
     height: "78%",
     opacity: 0.98,
+  },
+
+  heroLogoFallback: {
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+  },
+
+  heroLogoFallbackText: {
+    color: theme.colors.textTertiary,
+    fontSize: 12,
+    fontWeight: theme.fontWeight.black,
   },
 
   kicker: {
