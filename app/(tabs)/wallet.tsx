@@ -15,7 +15,7 @@ import {
   ImageBackground,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 
 import * as DocumentPicker from "expo-document-picker";
@@ -200,7 +200,7 @@ function formatKickoff(iso?: string | null) {
   return `${day} ${month} ${year} • ${time}`;
 }
 
-function iconForType(type: SavedItemType) {
+function iconForType(type: SavedItemType): React.ComponentProps<typeof Ionicons>["name"] {
   switch (type) {
     case "tickets":
       return "ticket-outline";
@@ -241,10 +241,6 @@ function statusLabel(status: WalletBooking["status"]) {
   }
 }
 
-function defer(fn: () => void) {
-  setTimeout(fn, 50);
-}
-
 function slugify(input: string) {
   return String(input ?? "")
     .toLowerCase()
@@ -281,7 +277,13 @@ function tripCityLabel(trip?: Trip | null) {
 }
 
 function getTripVisualMeta(trip?: Trip | null) {
-  if (!trip) return { countryCode: null as string | null, leagueLogo: null as string | null, image: null as string | null };
+  if (!trip) {
+    return {
+      countryCode: null as string | null,
+      leagueLogo: null as string | null,
+      image: null as string | null,
+    };
+  }
 
   const city = tripCityLabel(trip);
   const slug = slugify(city);
@@ -313,10 +315,10 @@ function getTripVisualMeta(trip?: Trip | null) {
 }
 
 function statusChipTone(status: WalletBooking["status"]) {
-  if (status === "booked") return "booked";
-  if (status === "pending") return "pending";
-  if (status === "saved") return "saved";
-  return "archived";
+  if (status === "booked") return "booked" as const;
+  if (status === "pending") return "pending" as const;
+  if (status === "saved") return "saved" as const;
+  return "archived" as const;
 }
 
 function buildWalletProgress(items: WalletBooking[]) {
@@ -332,6 +334,7 @@ function clamp2(n: number) {
 export default function WalletScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const params = useLocalSearchParams();
 
   const [userId, setUserId] = useState("");
   const [loading, setLoading] = useState(true);
@@ -346,6 +349,8 @@ export default function WalletScreen() {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<CategoryFilter>("all");
   const [remoteOpen, setRemoteOpen] = useState(false);
+
+  const focusedTripIdParam = useMemo(() => cleanString(params?.tripId), [params]);
 
   const loadUser = useCallback(async () => {
     const uid = await identity.getWalletUserId();
@@ -429,7 +434,7 @@ export default function WalletScreen() {
   const filteredGroups = useMemo(() => {
     const q = cleanString(query).toLowerCase();
 
-    return groups
+    const next = groups
       .map((group) => {
         const items = group.items.filter((item) => {
           if (category !== "all" && item.type !== category) return false;
@@ -444,7 +449,7 @@ export default function WalletScreen() {
             item.tripId ?? "",
             getSavedItemTypeLabel(item.type),
             statusLabel(item.status),
-            tripCityLabel(tripIndex[item.tripId] ?? null),
+            tripCityLabel(tripIndex[group.tripId] ?? null),
           ]
             .join(" ")
             .toLowerCase();
@@ -465,7 +470,15 @@ export default function WalletScreen() {
         } as WalletTripGroup;
       })
       .filter(Boolean) as WalletTripGroup[];
-  }, [groups, category, query, tripIndex]);
+
+    if (!focusedTripIdParam) return next;
+
+    return [...next].sort((a, b) => {
+      if (a.tripId === focusedTripIdParam && b.tripId !== focusedTripIdParam) return -1;
+      if (b.tripId === focusedTripIdParam && a.tripId !== focusedTripIdParam) return 1;
+      return Number(b.updatedAt ?? 0) - Number(a.updatedAt ?? 0);
+    });
+  }, [groups, category, query, tripIndex, focusedTripIdParam]);
 
   const visibleRemoteDocs = useMemo(() => {
     const q = cleanString(query).toLowerCase();
@@ -495,6 +508,10 @@ export default function WalletScreen() {
 
   const spotlightGroup = useMemo(() => {
     if (!filteredGroups.length) return null;
+    if (focusedTripIdParam) {
+      const focused = filteredGroups.find((g) => g.tripId === focusedTripIdParam);
+      if (focused) return focused;
+    }
 
     const sorted = [...filteredGroups].sort((a, b) => {
       const aBooked = a.items.filter((x) => x.status === "booked").length;
@@ -509,9 +526,16 @@ export default function WalletScreen() {
     });
 
     return sorted[0] ?? null;
-  }, [filteredGroups]);
+  }, [filteredGroups, focusedTripIdParam]);
 
-  async function pickAsset(kind: UploadKind): Promise<{ uri: string; name: string; mimeType: string } | null> {
+  const focusedTrip = useMemo(() => {
+    if (!focusedTripIdParam) return null;
+    return tripIndex[focusedTripIdParam] ?? null;
+  }, [focusedTripIdParam, tripIndex]);
+
+  async function pickAsset(
+    kind: UploadKind
+  ): Promise<{ uri: string; name: string; mimeType: string } | null> {
     if (kind === "document") {
       const picked = await DocumentPicker.getDocumentAsync({
         multiple: false,
@@ -697,7 +721,15 @@ export default function WalletScreen() {
     );
   }
 
-  function Metric({ label, value, icon }: { label: string; value: string; icon: React.ComponentProps<typeof Ionicons>["name"] }) {
+  function Metric({
+    label,
+    value,
+    icon,
+  }: {
+    label: string;
+    value: string;
+    icon: React.ComponentProps<typeof Ionicons>["name"];
+  }) {
     return (
       <View style={styles.metric}>
         <Ionicons name={icon} size={16} color={theme.colors.textSecondary} />
@@ -709,132 +741,12 @@ export default function WalletScreen() {
     );
   }
 
-  function BookingRow({ item }: { item: WalletBooking }) {
-    const fixtureLine =
-      item.home && item.away ? `${item.home} v ${item.away}` : null;
-
-    const kickoff = formatKickoff(item.kickoffIso);
-    const typeLabel = getSavedItemTypeLabel(item.type);
-    const statusTone = statusChipTone(item.status);
-
-    return (
-      <GlassCard style={styles.docCard} strength="subtle" noPadding>
-        <View style={styles.docRow}>
-          <View style={styles.docIconWrap}>
-            <Ionicons
-              name={iconForType(item.type)}
-              size={18}
-              color={theme.colors.text}
-            />
-          </View>
-
-          <View style={styles.docMain}>
-            <View style={styles.docTitleRow}>
-              <Text style={styles.docTitle} numberOfLines={1}>
-                {item.title}
-              </Text>
-              <StatusPill text={statusLabel(item.status)} tone={statusTone} />
-            </View>
-
-            <Text style={styles.docMeta} numberOfLines={2}>
-              {`${typeLabel}${item.provider ? ` • ${item.provider}` : ""}`}
-            </Text>
-
-            {fixtureLine ? (
-              <Text style={styles.docSubMeta} numberOfLines={1}>
-                {fixtureLine}
-              </Text>
-            ) : null}
-
-            {kickoff ? (
-              <Text style={styles.docSubMeta} numberOfLines={1}>
-                {kickoff}
-              </Text>
-            ) : null}
-
-            <Text style={styles.docSubMeta} numberOfLines={1}>
-              {item.hasProof
-                ? `${item.attachmentCount} proof file${item.attachmentCount === 1 ? "" : "s"} attached`
-                : item.status === "booked"
-                ? "No proof attached yet"
-                : "No proof needed yet"}
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.docActionsRow}>
-          {item.tripId ? (
-            <Pressable style={styles.smallBtn} onPress={() => onOpenTrip(item.tripId)}>
-              <Text style={styles.smallBtnText}>Open trip</Text>
-            </Pressable>
-          ) : null}
-
-          {item.status === "booked" && !item.hasProof ? (
-            <Pressable style={styles.smallBtn} onPress={() => onAddProof(item.id)}>
-              <Text style={styles.smallBtnText}>Add proof</Text>
-            </Pressable>
-          ) : null}
-
-          {item.status === "pending" ? (
-            <Pressable style={styles.smallBtn} onPress={() => onMoveBackToSaved(item.id)}>
-              <Text style={styles.smallBtnText}>Mark saved</Text>
-            </Pressable>
-          ) : null}
-
-          <Pressable style={[styles.smallBtn, styles.smallBtnDanger]} onPress={() => onArchive(item.id)}>
-            <Text style={styles.smallBtnText}>Archive</Text>
-          </Pressable>
-        </View>
-      </GlassCard>
-    );
-  }
-
-  function RemoteDocRow({ d }: { d: WalletDoc }) {
-    const filename = shortKeyName(d.key);
-    const date = formatDate(d.uploaded);
-    const size = formatSize(d.size);
-
-    return (
-      <GlassCard style={styles.docCard} strength="subtle" noPadding>
-        <Pressable
-          onPress={() => viewRemoteDoc(d.key)}
-          style={({ pressed }) => [styles.docRow, pressed && styles.pressed]}
-          android_ripple={{ color: "rgba(255,255,255,0.05)" }}
-        >
-          <View style={styles.docIconWrap}>
-            <Ionicons name="cloud-outline" size={18} color={theme.colors.text} />
-          </View>
-
-          <View style={styles.docMain}>
-            <Text style={styles.docTitle} numberOfLines={1}>
-              {filename}
-            </Text>
-
-            <Text style={styles.docMeta} numberOfLines={1}>
-              {`Backup document • ${size}${date ? ` • ${date}` : ""}`}
-            </Text>
-          </View>
-        </Pressable>
-
-        <View style={styles.docActionsRow}>
-          <Pressable style={styles.smallBtn} onPress={() => viewRemoteDoc(d.key)}>
-            <Text style={styles.smallBtnText}>View</Text>
-          </Pressable>
-
-          <Pressable style={[styles.smallBtn, styles.smallBtnDanger]} onPress={() => deleteRemoteDoc(d.key)}>
-            <Text style={styles.smallBtnText}>Delete</Text>
-          </Pressable>
-        </View>
-      </GlassCard>
-    );
-  }
-
   return (
     <Background
       imageSource={getBackground("wallet")}
       overlayOpacity={0.03}
       topShadeOpacity={0.24}
-      bottomShadeOpacity={0.30}
+      bottomShadeOpacity={0.3}
       centerShadeOpacity={0.02}
     >
       <SafeAreaView style={styles.safe} edges={["top"]}>
@@ -872,15 +784,39 @@ export default function WalletScreen() {
               </View>
 
               <View style={styles.metricsRow}>
-                <Metric label="Booked" value={String(summary?.booked ?? 0)} icon="checkmark-done-outline" />
-                <Metric label="Pending" value={String(summary?.pending ?? 0)} icon="time-outline" />
-                <Metric label="Proofs" value={String(summary?.withProof ?? 0)} icon="document-attach-outline" />
+                <Metric
+                  label="Booked"
+                  value={String(summary?.booked ?? 0)}
+                  icon="checkmark-done-outline"
+                />
+                <Metric
+                  label="Pending"
+                  value={String(summary?.pending ?? 0)}
+                  icon="time-outline"
+                />
+                <Metric
+                  label="Proofs"
+                  value={String(summary?.withProof ?? 0)}
+                  icon="document-attach-outline"
+                />
               </View>
 
               <View style={styles.metricsRow}>
-                <Metric label="Trips" value={String(filteredGroups.length)} icon="airplane-outline" />
-                <Metric label="Missing proof" value={String(derivedCounts.missingProof)} icon="alert-circle-outline" />
-                <Metric label="Backups" value={String(remoteDocs.length)} icon="cloud-outline" />
+                <Metric
+                  label="Trips"
+                  value={String(filteredGroups.length)}
+                  icon="airplane-outline"
+                />
+                <Metric
+                  label="Missing proof"
+                  value={String(derivedCounts.missingProof)}
+                  icon="alert-circle-outline"
+                />
+                <Metric
+                  label="Backups"
+                  value={String(remoteDocs.length)}
+                  icon="cloud-outline"
+                />
               </View>
 
               <View style={styles.searchWrap}>
@@ -903,6 +839,14 @@ export default function WalletScreen() {
             </View>
           </GlassCard>
 
+          {focusedTrip ? (
+            <FocusedTripStrip
+              trip={focusedTrip}
+              onOpenTrip={onOpenTrip}
+              onClear={() => router.replace("/(tabs)/wallet")}
+            />
+          ) : null}
+
           <View style={styles.chipsRow}>
             {CATEGORY_FILTERS.map((c) => (
               <FilterChip key={c.id} id={c.id} label={c.label} />
@@ -913,7 +857,11 @@ export default function WalletScreen() {
             <View style={styles.section}>
               <SectionHeader
                 title="Spotlight"
-                subtitle="Most relevant trip workspace in Wallet right now"
+                subtitle={
+                  focusedTripIdParam
+                    ? "Focused from Trips"
+                    : "Most relevant trip workspace in Wallet right now"
+                }
               />
               <WalletSpotlightCard
                 group={spotlightGroup}
@@ -950,6 +898,7 @@ export default function WalletScreen() {
                     key={group.tripId}
                     group={group}
                     trip={tripIndex[group.tripId]}
+                    focused={group.tripId === focusedTripIdParam}
                     onOpenTrip={onOpenTrip}
                     onAddProof={onAddProof}
                     onMoveBackToSaved={onMoveBackToSaved}
@@ -992,7 +941,12 @@ export default function WalletScreen() {
                 ) : (
                   <View style={styles.remoteList}>
                     {visibleRemoteDocs.map((d) => (
-                      <RemoteDocRow key={d.key} d={d} />
+                      <RemoteDocRow
+                        key={d.key}
+                        d={d}
+                        viewRemoteDoc={viewRemoteDoc}
+                        deleteRemoteDoc={deleteRemoteDoc}
+                      />
                     ))}
                   </View>
                 )
@@ -1002,6 +956,63 @@ export default function WalletScreen() {
         </ScrollView>
       </SafeAreaView>
     </Background>
+  );
+}
+
+function FocusedTripStrip({
+  trip,
+  onOpenTrip,
+  onClear,
+}: {
+  trip: Trip;
+  onOpenTrip: (tripId?: string) => void;
+  onClear: () => void;
+}) {
+  const visual = getTripVisualMeta(trip);
+  const flagUrl = visual.countryCode ? getFlagImageUrl(visual.countryCode) : null;
+
+  return (
+    <GlassCard style={styles.focusStrip} strength="default" noPadding>
+      <View style={styles.focusStripInner}>
+        <View style={styles.focusStripLeft}>
+          <View style={styles.focusStripIcon}>
+            <Ionicons name="airplane-outline" size={16} color={theme.colors.text} />
+          </View>
+
+          <View style={styles.focusStripText}>
+            <Text style={styles.focusStripLabel}>Opened from Trips</Text>
+            <View style={styles.focusStripTitleRow}>
+              <Text style={styles.focusStripTitle}>{tripCityLabel(trip)}</Text>
+
+              <View style={styles.metaInline}>
+                {visual.leagueLogo ? (
+                  <View style={styles.leagueLogoTile}>
+                    <Image
+                      source={{ uri: visual.leagueLogo }}
+                      style={styles.leagueLogoImg}
+                      resizeMode="contain"
+                    />
+                  </View>
+                ) : null}
+                {flagUrl ? (
+                  <Image source={{ uri: flagUrl }} style={styles.countryFlag} resizeMode="cover" />
+                ) : null}
+              </View>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.focusStripActions}>
+          <Pressable style={styles.focusMiniBtn} onPress={() => onOpenTrip(trip.id)}>
+            <Text style={styles.focusMiniBtnText}>Trip</Text>
+          </Pressable>
+
+          <Pressable style={styles.focusMiniBtn} onPress={onClear}>
+            <Text style={styles.focusMiniBtnText}>All</Text>
+          </Pressable>
+        </View>
+      </View>
+    </GlassCard>
   );
 }
 
@@ -1064,7 +1075,10 @@ function WalletSpotlightCard({
                 <Ionicons name="wallet-outline" size={18} color={theme.colors.text} />
               </View>
 
-              <StatusPill text={booked > 0 ? "Booked live" : pending > 0 ? "Pending live" : "Saved live"} tone={booked > 0 ? "booked" : pending > 0 ? "pending" : "saved"} />
+              <StatusPill
+                text={booked > 0 ? "Booked live" : pending > 0 ? "Pending live" : "Saved live"}
+                tone={booked > 0 ? "booked" : pending > 0 ? "pending" : "saved"}
+              />
             </View>
 
             <View style={styles.titleVisualRow}>
@@ -1081,7 +1095,9 @@ function WalletSpotlightCard({
             </View>
 
             <Text style={styles.spotlightMeta}>
-              {kickoffText ? `${kickoffText} • ${group.items.length} wallet item${group.items.length === 1 ? "" : "s"}` : `${group.items.length} wallet item${group.items.length === 1 ? "" : "s"}`}
+              {kickoffText
+                ? `${kickoffText} • ${group.items.length} wallet item${group.items.length === 1 ? "" : "s"}`
+                : `${group.items.length} wallet item${group.items.length === 1 ? "" : "s"}`}
             </Text>
 
             <Text style={styles.spotlightSub}>
@@ -1116,6 +1132,7 @@ function WalletSpotlightCard({
 function WalletGroupCard({
   group,
   trip,
+  focused,
   onOpenTrip,
   onAddProof,
   onMoveBackToSaved,
@@ -1123,6 +1140,7 @@ function WalletGroupCard({
 }: {
   group: WalletTripGroup;
   trip?: Trip;
+  focused: boolean;
   onOpenTrip: (tripId?: string) => void;
   onAddProof: (itemId: string) => Promise<void>;
   onMoveBackToSaved: (itemId: string) => Promise<void>;
@@ -1137,7 +1155,11 @@ function WalletGroupCard({
   const proofs = group.items.filter((x) => x.hasProof).length;
 
   return (
-    <GlassCard style={styles.groupCard} strength="subtle" noPadding>
+    <GlassCard
+      style={[styles.groupCard, focused && styles.groupCardFocused]}
+      strength="subtle"
+      noPadding
+    >
       <View style={styles.groupInner}>
         <View style={styles.groupHeaderRow}>
           <View style={styles.groupHeaderLeft}>
@@ -1152,6 +1174,12 @@ function WalletGroupCard({
                 ) : null}
                 {flagUrl ? <Image source={{ uri: flagUrl }} style={styles.countryFlag} resizeMode="cover" /> : null}
               </View>
+
+              {focused ? (
+                <View style={styles.focusedTag}>
+                  <Text style={styles.focusedTagText}>Focused</Text>
+                </View>
+              ) : null}
             </View>
 
             <Text style={styles.groupMeta}>
@@ -1267,6 +1295,54 @@ function WalletBookingCard({
   );
 }
 
+function RemoteDocRow({
+  d,
+  viewRemoteDoc,
+  deleteRemoteDoc,
+}: {
+  d: WalletDoc;
+  viewRemoteDoc: (key: string) => Promise<void>;
+  deleteRemoteDoc: (key: string) => Promise<void>;
+}) {
+  const filename = shortKeyName(d.key);
+  const date = formatDate(d.uploaded);
+  const size = formatSize(d.size);
+
+  return (
+    <GlassCard style={styles.docCard} strength="subtle" noPadding>
+      <Pressable
+        onPress={() => viewRemoteDoc(d.key)}
+        style={({ pressed }) => [styles.docRow, pressed && styles.pressed]}
+        android_ripple={{ color: "rgba(255,255,255,0.05)" }}
+      >
+        <View style={styles.docIconWrap}>
+          <Ionicons name="cloud-outline" size={18} color={theme.colors.text} />
+        </View>
+
+        <View style={styles.docMain}>
+          <Text style={styles.docTitle} numberOfLines={1}>
+            {filename}
+          </Text>
+
+          <Text style={styles.docMeta} numberOfLines={1}>
+            {`Backup document • ${size}${date ? ` • ${date}` : ""}`}
+          </Text>
+        </View>
+      </Pressable>
+
+      <View style={styles.docActionsRow}>
+        <Pressable style={styles.smallBtn} onPress={() => viewRemoteDoc(d.key)}>
+          <Text style={styles.smallBtnText}>View</Text>
+        </Pressable>
+
+        <Pressable style={[styles.smallBtn, styles.smallBtnDanger]} onPress={() => deleteRemoteDoc(d.key)}>
+          <Text style={styles.smallBtnText}>Delete</Text>
+        </Pressable>
+      </View>
+    </GlassCard>
+  );
+}
+
 function MiniStat({ label, value }: { label: string; value: number }) {
   return (
     <View style={styles.miniStat}>
@@ -1350,6 +1426,85 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     fontWeight: theme.fontWeight.black,
     fontSize: 12,
+  },
+
+  focusStrip: {
+    borderRadius: 20,
+    borderColor: "rgba(87,162,56,0.18)",
+  },
+
+  focusStripInner: {
+    padding: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+
+  focusStripLeft: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+
+  focusStripIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(87,162,56,0.18)",
+    backgroundColor: "rgba(87,162,56,0.08)",
+  },
+
+  focusStripText: {
+    flex: 1,
+    gap: 2,
+  },
+
+  focusStripLabel: {
+    color: theme.colors.primary,
+    fontSize: 11,
+    fontWeight: theme.fontWeight.black,
+    letterSpacing: 0.3,
+  },
+
+  focusStripTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "wrap",
+  },
+
+  focusStripTitle: {
+    color: theme.colors.text,
+    fontSize: 15,
+    fontWeight: theme.fontWeight.black,
+  },
+
+  focusStripActions: {
+    flexDirection: "row",
+    gap: 8,
+  },
+
+  focusMiniBtn: {
+    minHeight: 34,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    backgroundColor:
+      Platform.OS === "android" ? "rgba(0,0,0,0.16)" : "rgba(255,255,255,0.04)",
+    paddingHorizontal: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  focusMiniBtnText: {
+    color: theme.colors.text,
+    fontSize: 12,
+    fontWeight: theme.fontWeight.black,
   },
 
   metricsRow: {
@@ -1548,6 +1703,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
+    flexWrap: "wrap",
   },
 
   spotlightTitle: {
@@ -1641,6 +1797,10 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
 
+  groupCardFocused: {
+    borderColor: "rgba(87,162,56,0.24)",
+  },
+
   groupInner: {
     padding: 14,
     gap: 12,
@@ -1684,6 +1844,22 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     fontWeight: theme.fontWeight.black,
     fontSize: 12,
+  },
+
+  focusedTag: {
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: "rgba(87,162,56,0.24)",
+    backgroundColor: "rgba(87,162,56,0.10)",
+  },
+
+  focusedTagText: {
+    color: theme.colors.text,
+    fontSize: 10,
+    fontWeight: theme.fontWeight.black,
+    letterSpacing: 0.2,
   },
 
   groupBookingList: {
