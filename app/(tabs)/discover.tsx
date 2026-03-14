@@ -38,8 +38,6 @@ import {
 } from "@/src/features/discover/discoverEngine";
 import { discoverScoreForCategory } from "@/src/features/discover/discoverRanking";
 import { formatUkDateTimeMaybe } from "@/src/utils/formatters";
-import { resolveCityImage } from "@/src/data/cityImages";
-import { getDiscoverCategoryArtwork } from "@/src/features/discover/discoverCategoryArtwork";
 
 type ShortcutWindow = { from: string; to: string };
 type DiscoverWindowKey = "wknd" | "d7" | "d14" | "d30" | "d60" | "d90";
@@ -69,6 +67,9 @@ type QuickSpark = {
   tripLength?: DiscoverTripLength;
 };
 
+const PLACEHOLDER_DISCOVER_IMAGE =
+  "https://images.unsplash.com/photo-1517927033932-b3d18e61fb3a?auto=format&fit=crop&w=1600&h=1000&fm=jpg&q=82";
+
 const INSPIRATION_PRESETS: InspirationPreset[] = [
   {
     id: "best-now",
@@ -76,7 +77,7 @@ const INSPIRATION_PRESETS: InspirationPreset[] = [
     subtitle: "Strong live options for a football trip soon",
     icon: "flash-outline",
     category: "perfectTrips",
-    windowKey: "d14",
+    windowKey: "d30",
   },
   {
     id: "easy",
@@ -85,6 +86,7 @@ const INSPIRATION_PRESETS: InspirationPreset[] = [
     icon: "navigate-outline",
     vibe: "easy",
     category: "easyTickets",
+    windowKey: "d30",
   },
   {
     id: "big",
@@ -93,25 +95,25 @@ const INSPIRATION_PRESETS: InspirationPreset[] = [
     icon: "star-outline",
     vibe: "big",
     category: "bigMatches",
-    windowKey: "d30",
+    windowKey: "d60",
   },
   {
     id: "derbies",
     title: "Derbies & rivalries",
-    subtitle: "History, tension and edge",
+    subtitle: "History, tension and real edge",
     icon: "flame-outline",
     vibe: "big",
     category: "derbies",
-    windowKey: "d60",
+    windowKey: "d90",
   },
   {
     id: "atmospheres",
     title: "Insane atmospheres",
-    subtitle: "Noise, flares and full matchday energy",
+    subtitle: "Noise, intensity and full matchday energy",
     icon: "radio-outline",
     vibe: "big",
     category: "atmospheres",
-    windowKey: "d30",
+    windowKey: "d60",
   },
   {
     id: "culture",
@@ -120,7 +122,7 @@ const INSPIRATION_PRESETS: InspirationPreset[] = [
     icon: "people-outline",
     vibe: "culture",
     category: "matchdayCulture",
-    windowKey: "d30",
+    windowKey: "d60",
   },
 ];
 
@@ -168,16 +170,13 @@ const QUICK_SPARKS: QuickSpark[] = [
   },
   {
     id: "legendary-grounds",
-    title: "Legendary stadium runs",
+    title: "Legendary stadiums",
     icon: "business-outline",
     category: "legendaryStadiums",
     vibe: "culture",
     windowKey: "d90",
   },
 ];
-
-const DISCOVER_NEUTRAL_FALLBACK_IMAGE =
-  "https://images.unsplash.com/photo-1517927033932-b3d18e61fb3a?auto=format&fit=crop&w=1600&h=1000&fm=jpg&q=82";
 
 function labelForKey(key: DiscoverWindowKey) {
   if (key === "wknd") return "This Weekend";
@@ -186,6 +185,15 @@ function labelForKey(key: DiscoverWindowKey) {
   if (key === "d30") return "Next 30 Days";
   if (key === "d60") return "Next 60 Days";
   return "Next 90 Days";
+}
+
+function shortLabelForKey(key: DiscoverWindowKey) {
+  if (key === "wknd") return "Weekend";
+  if (key === "d7") return "7 Days";
+  if (key === "d14") return "14 Days";
+  if (key === "d30") return "30 Days";
+  if (key === "d60") return "60 Days";
+  return "90 Days";
 }
 
 function labelForTripLength(v: DiscoverTripLength) {
@@ -373,22 +381,8 @@ function fixtureMeta(row: FixtureListRow) {
   return tail ? `${kickoff} • ${tail}` : kickoff;
 }
 
-function fixtureCity(row: FixtureListRow) {
-  return String(row?.fixture?.venue?.city ?? "").trim() || "";
-}
-
-function fixtureCountry(row: FixtureListRow) {
-  return String(row?.league?.country ?? "").trim() || "";
-}
-
-function getDiscoverCardImage(row: FixtureListRow) {
-  const resolved = resolveCityImage(
-    fixtureCity(row),
-    fixtureCountry(row),
-    DISCOVER_NEUTRAL_FALLBACK_IMAGE
-  );
-
-  return resolved.imageUrl;
+function getDiscoverCardImage() {
+  return PLACEHOLDER_DISCOVER_IMAGE;
 }
 
 function isMidweekFixture(row: FixtureListRow) {
@@ -418,7 +412,7 @@ function getFixturePairKey(row: FixtureListRow) {
 
 function trendingLabelForFixture(row: FixtureListRow) {
   const pair = getFixturePairKey(row);
-  const city = fixtureCity(row);
+  const city = String(row?.fixture?.venue?.city ?? "").trim();
 
   const labels: Record<string, string> = {
     "ajax|feyenoord": "De Klassieker",
@@ -447,14 +441,16 @@ function whyThisFits(
 ) {
   if (category === "easyTickets") return "Cleaner route for a simpler football trip";
   if (category === "bigMatches") return "Stronger occasion feel with more travel pull";
-  if (category === "derbies") return "History, edge and proper rivalry tension";
-  if (category === "atmospheres") return "High-upside crowd and matchday energy";
+  if (category === "derbies") return "History, edge and real rivalry tension";
+  if (category === "atmospheres") return "Higher-upside crowd and matchday energy";
+  if (category === "valueTrips") return "Better experience-per-pound potential";
   if (category === "nightMatches") {
     if (isLateKickoff(row)) return "Later kick-off gives it bigger lights-on energy";
     return "Good fit for a later, occasion-led football trip";
   }
   if (category === "matchdayCulture") return "Better city + match balance for a fuller trip";
   if (category === "iconicCities") return "The city itself adds real pull beyond the fixture";
+  if (category === "legendaryStadiums") return "Ground and club pull are doing the heavy lifting";
   if (tripLength === "2" || tripLength === "3") return "Strong shape for a football city break";
   if (isMidweekFixture(row)) return "Midweek-worthy fixture with travel pull";
   if (vibes.includes("easy")) return "Lower-friction option from your current setup";
@@ -514,6 +510,21 @@ function FilterChip({
     <Pressable onPress={onPress} style={[styles.chip, active && styles.chipActive]}>
       <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
     </Pressable>
+  );
+}
+
+function SectionHeader({
+  title,
+  subtitle,
+}: {
+  title: string;
+  subtitle: string;
+}) {
+  return (
+    <View style={styles.sectionHeaderStack}>
+      <Text style={styles.sectionTitle}>{title}</Text>
+      <Text style={styles.sectionSub}>{subtitle}</Text>
+    </View>
   );
 }
 
@@ -581,7 +592,7 @@ export default function DiscoverScreen() {
 
     if (discoverOrigin.trim()) parts.push(`From ${discoverOrigin.trim()}`);
 
-    return parts.join("  •  ");
+    return parts.join(" • ");
   }, [discoverWindowKey, discoverTripLength, discoverVibes, discoverOrigin]);
 
   const browseModeLabel = useMemo(() => {
@@ -850,10 +861,9 @@ export default function DiscoverScreen() {
     router,
   ]);
 
-  const renderPrimaryCategoryCard = useCallback(
+  const renderCategoryCard = useCallback(
     (category: DiscoverCategory, compact = false) => {
       const meta = DISCOVER_CATEGORY_META[category];
-      const artwork = getDiscoverCategoryArtwork(category);
       const primary = meta.emphasis === "primary";
 
       return (
@@ -874,10 +884,16 @@ export default function DiscoverScreen() {
             noPadding
           >
             <View style={styles.categoryImageWrap}>
-              <Image source={{ uri: artwork.imageUrl }} style={styles.categoryImage} resizeMode="cover" />
+              <Image
+                source={{ uri: PLACEHOLDER_DISCOVER_IMAGE }}
+                style={styles.categoryImage}
+                resizeMode="cover"
+              />
               <View style={styles.categoryImageOverlay} />
               <View style={styles.categoryEyebrowPill}>
-                <Text style={styles.categoryEyebrowText}>{artwork.eyebrow ?? "Discover"}</Text>
+                <Text style={styles.categoryEyebrowText}>
+                  {compact ? "Browse" : "Discover"}
+                </Text>
               </View>
             </View>
 
@@ -909,7 +925,7 @@ export default function DiscoverScreen() {
     <Background
       imageSource={getBackground("explore")}
       overlayOpacity={0.04}
-      topShadeOpacity={0.30}
+      topShadeOpacity={0.3}
       bottomShadeOpacity={0.36}
       centerShadeOpacity={0.03}
     >
@@ -977,7 +993,7 @@ export default function DiscoverScreen() {
                       (key) => (
                         <FilterChip
                           key={key}
-                          label={labelForKey(key)}
+                          label={shortLabelForKey(key)}
                           active={discoverWindowKey === key}
                           onPress={() => setDiscoverWindowKey(key)}
                         />
@@ -1031,12 +1047,40 @@ export default function DiscoverScreen() {
           </View>
 
           <View style={styles.section}>
-            <View style={styles.sectionHeaderStack}>
-              <Text style={styles.sectionTitle}>Live now</Text>
-              <Text style={styles.sectionSub}>
-                Strong current options based on your setup, not generic filler.
-              </Text>
-            </View>
+            <SectionHeader
+              title="Quick trip sparks"
+              subtitle="One-tap routes into the strongest discovery angles."
+            />
+
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.sparkRow}
+            >
+              {QUICK_SPARKS.map((spark) => (
+                <Pressable
+                  key={spark.id}
+                  onPress={() => applyQuickSpark(spark)}
+                  style={({ pressed }) => [styles.sparkPress, pressed && styles.pressed]}
+                >
+                  <GlassCard strength="default" style={styles.sparkCard} noPadding>
+                    <View style={styles.sparkInner}>
+                      <View style={styles.sparkIconWrap}>
+                        <Ionicons name={spark.icon} size={18} color={theme.colors.text} />
+                      </View>
+                      <Text style={styles.sparkTitle}>{spark.title}</Text>
+                    </View>
+                  </GlassCard>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+
+          <View style={styles.section}>
+            <SectionHeader
+              title="Live now"
+              subtitle="Strong current options based on your setup, not generic filler."
+            />
 
             {loadingLive ? (
               <GlassCard strength="default" style={styles.loadingCard}>
@@ -1059,7 +1103,6 @@ export default function DiscoverScreen() {
               >
                 {previewLive.map((entry, index) => {
                   const row = entry.item.fixture;
-                  const image = getDiscoverCardImage(row);
 
                   return (
                     <Pressable
@@ -1070,7 +1113,7 @@ export default function DiscoverScreen() {
                       <GlassCard strength="default" style={styles.liveCard} noPadding>
                         <View style={styles.liveImageWrap}>
                           <Image
-                            source={{ uri: image }}
+                            source={{ uri: getDiscoverCardImage() }}
                             style={styles.liveImage}
                             resizeMode="cover"
                           />
@@ -1102,12 +1145,10 @@ export default function DiscoverScreen() {
           </View>
 
           <View style={styles.section}>
-            <View style={styles.sectionHeaderStack}>
-              <Text style={styles.sectionTitle}>Trending football trips</Text>
-              <Text style={styles.sectionSub}>
-                Big fixtures and city pulls people would actually travel for.
-              </Text>
-            </View>
+            <SectionHeader
+              title="Trending football trips"
+              subtitle="Big fixtures and city pulls people would actually travel for."
+            />
 
             {loadingLive ? (
               <GlassCard strength="default" style={styles.loadingCard}>
@@ -1126,7 +1167,6 @@ export default function DiscoverScreen() {
               >
                 {trendingTrips.map((entry, index) => {
                   const row = entry.item.fixture;
-                  const image = getDiscoverCardImage(row);
 
                   return (
                     <Pressable
@@ -1137,7 +1177,7 @@ export default function DiscoverScreen() {
                       <GlassCard strength="default" style={styles.trendingCard} noPadding>
                         <View style={styles.trendingImageWrap}>
                           <Image
-                            source={{ uri: image }}
+                            source={{ uri: getDiscoverCardImage() }}
                             style={styles.trendingImage}
                             resizeMode="cover"
                           />
@@ -1169,44 +1209,10 @@ export default function DiscoverScreen() {
           </View>
 
           <View style={styles.section}>
-            <View style={styles.sectionHeaderStack}>
-              <Text style={styles.sectionTitle}>Quick trip sparks</Text>
-              <Text style={styles.sectionSub}>
-                One-tap routes into the strongest discovery angles.
-              </Text>
-            </View>
-
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.sparkRow}
-            >
-              {QUICK_SPARKS.map((spark) => (
-                <Pressable
-                  key={spark.id}
-                  onPress={() => applyQuickSpark(spark)}
-                  style={({ pressed }) => [styles.sparkPress, pressed && styles.pressed]}
-                >
-                  <GlassCard strength="default" style={styles.sparkCard} noPadding>
-                    <View style={styles.sparkInner}>
-                      <View style={styles.sparkIconWrap}>
-                        <Ionicons name={spark.icon} size={18} color={theme.colors.text} />
-                      </View>
-                      <Text style={styles.sparkTitle}>{spark.title}</Text>
-                    </View>
-                  </GlassCard>
-                </Pressable>
-              ))}
-            </ScrollView>
-          </View>
-
-          <View style={styles.section}>
-            <View style={styles.sectionHeaderStack}>
-              <Text style={styles.sectionTitle}>Start with a mood</Text>
-              <Text style={styles.sectionSub}>
-                Fast entry points for the kind of trip that already sounds good.
-              </Text>
-            </View>
+            <SectionHeader
+              title="Start with a mood"
+              subtitle="Fast entry points for the kind of trip that already sounds good."
+            />
 
             <ScrollView
               horizontal
@@ -1237,14 +1243,10 @@ export default function DiscoverScreen() {
           </View>
 
           <View style={styles.section}>
-            <View style={styles.sectionHeaderStack}>
-              <Text style={styles.sectionTitle}>Best fit right now</Text>
-              <Text style={styles.sectionSub}>
-                Based on your current setup,{" "}
-                <Text style={styles.sectionSubStrong}>{browseModeLabel}</Text> is the best
-                place to start.
-              </Text>
-            </View>
+            <SectionHeader
+              title="Best fit right now"
+              subtitle={`Based on your current setup, ${browseModeLabel} is the best place to start.`}
+            />
 
             {featuredLive ? (
               <Pressable
@@ -1254,7 +1256,7 @@ export default function DiscoverScreen() {
                 <GlassCard strength="default" style={styles.featuredLiveCard} noPadding>
                   <View style={styles.featuredLiveImageWrap}>
                     <Image
-                      source={{ uri: getDiscoverCardImage(featuredLive.item.fixture) }}
+                      source={{ uri: getDiscoverCardImage() }}
                       style={styles.featuredLiveImage}
                       resizeMode="cover"
                     />
@@ -1300,23 +1302,19 @@ export default function DiscoverScreen() {
                 </GlassCard>
               </Pressable>
             ) : leadCategory ? (
-              renderPrimaryCategoryCard(leadCategory)
+              renderCategoryCard(leadCategory)
             ) : null}
 
             <View style={styles.primaryGrid}>
-              {remainingPrimaryCategories.map((category) =>
-                renderPrimaryCategoryCard(category)
-              )}
+              {remainingPrimaryCategories.map((category) => renderCategoryCard(category))}
             </View>
           </View>
 
           <View style={styles.section}>
-            <View style={styles.sectionHeaderStack}>
-              <Text style={styles.sectionTitle}>More ways to browse</Text>
-              <Text style={styles.sectionSub}>
-                Narrower angles when you want city pull, atmosphere, or more specific trip types.
-              </Text>
-            </View>
+            <SectionHeader
+              title="More ways to browse"
+              subtitle="Narrower angles when you want city pull, atmosphere, or more specific trip types."
+            />
 
             <ScrollView
               horizontal
@@ -1324,18 +1322,16 @@ export default function DiscoverScreen() {
               contentContainerStyle={styles.secondaryRow}
             >
               {prioritisedSecondaryCategories.map((category) =>
-                renderPrimaryCategoryCard(category, true)
+                renderCategoryCard(category, true)
               )}
             </ScrollView>
           </View>
 
           <View style={styles.section}>
-            <View style={styles.sectionHeaderStack}>
-              <Text style={styles.sectionTitle}>Concierge pick</Text>
-              <Text style={styles.sectionSub}>
-                Give the app your setup and let it surface one of the stronger live options.
-              </Text>
-            </View>
+            <SectionHeader
+              title="Concierge pick"
+              subtitle="Give the app your setup and let it surface one of the stronger live options."
+            />
 
             <Pressable
               onPress={goRandomTrip}
@@ -1487,11 +1483,6 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeight.bold,
   },
 
-  sectionSubStrong: {
-    color: theme.colors.text,
-    fontWeight: theme.fontWeight.black,
-  },
-
   center: {
     alignItems: "center",
     justifyContent: "center",
@@ -1625,6 +1616,45 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 17,
     fontWeight: theme.fontWeight.bold,
+  },
+
+  sparkRow: {
+    gap: 10,
+    paddingRight: theme.spacing.lg,
+  },
+
+  sparkPress: {
+    borderRadius: 999,
+    overflow: "hidden",
+  },
+
+  sparkCard: {
+    borderRadius: 999,
+  },
+
+  sparkInner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+  },
+
+  sparkIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(87,162,56,0.18)",
+    backgroundColor: "rgba(87,162,56,0.08)",
+  },
+
+  sparkTitle: {
+    color: theme.colors.text,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.black,
   },
 
   liveRow: {
@@ -1793,45 +1823,6 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeight.bold,
   },
 
-  sparkRow: {
-    gap: 10,
-    paddingRight: theme.spacing.lg,
-  },
-
-  sparkPress: {
-    borderRadius: 999,
-    overflow: "hidden",
-  },
-
-  sparkCard: {
-    borderRadius: 999,
-  },
-
-  sparkInner: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 11,
-  },
-
-  sparkIconWrap: {
-    width: 28,
-    height: 28,
-    borderRadius: 999,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "rgba(87,162,56,0.18)",
-    backgroundColor: "rgba(87,162,56,0.08)",
-  },
-
-  sparkTitle: {
-    color: theme.colors.text,
-    fontSize: 13,
-    fontWeight: theme.fontWeight.black,
-  },
-
   inspirationRow: {
     gap: 10,
     paddingRight: theme.spacing.lg,
@@ -1996,6 +1987,12 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: theme.fontWeight.black,
     letterSpacing: 0.4,
+  },
+
+  leadArrow: {
+    color: theme.colors.textTertiary,
+    fontSize: 22,
+    marginTop: -2,
   },
 
   primaryGrid: {
