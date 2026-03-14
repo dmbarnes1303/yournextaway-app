@@ -35,15 +35,14 @@ import { getFlagImageUrl } from "@/src/utils/flagImages";
 /* -------------------------------------------------------------------------- */
 
 /**
- * Replace this with your real logo path or URL.
- * If you already have a hosted logo, drop it in here.
+ * Replace with your actual hosted transparent logo when ready.
+ * This now fills the empty hero space on the left, not the tiny top-right box.
  */
 const TRIPS_HEADER_LOGO =
-  "https://images.unsplash.com/photo-1517466787929-bc90951d0974?auto=format&fit=crop&w=200&q=80";
+  "https://images.unsplash.com/photo-1517466787929-bc90951d0974?auto=format&fit=crop&w=500&q=80";
 
 /**
  * Visual fallback map when trip objects do not yet store league/country metadata.
- * Add to this over time as more trips/cities appear.
  */
 const TRIP_CITY_META: Record<
   string,
@@ -406,29 +405,46 @@ export default function TripsScreen() {
           <GlassCard style={styles.hero} strength="strong" noPadding>
             <View style={styles.heroInner}>
               <View style={styles.heroTopRow}>
-                <View style={styles.heroTextWrap}>
+                <View style={styles.heroMainCol}>
                   <Text style={styles.kicker}>WORKSPACES</Text>
                   <Text style={styles.title}>Trips</Text>
                   <Text style={styles.subtitle}>
                     Plan the trip, track what’s still pending, and keep everything in one workspace.
                   </Text>
+
+                  <View style={styles.heroLogoStage}>
+                    <Image
+                      source={{ uri: TRIPS_HEADER_LOGO }}
+                      style={styles.heroLogoStageImage}
+                      resizeMode="contain"
+                    />
+                  </View>
                 </View>
 
-                <View style={styles.heroRightCol}>
-                  <View style={styles.logoWrap}>
-                    <Image source={{ uri: TRIPS_HEADER_LOGO }} style={styles.logoImg} resizeMode="contain" />
-                  </View>
-
-                  <View style={styles.heroStatsCol}>
-                    <MetricCard icon="airplane-outline" value={String(clamp2(totals.tripCount))} label="Trips" />
-                    <MetricCard icon="time-outline" value={String(clamp2(totals.pending))} label="Pending" />
-                    <MetricCard icon="checkmark-done-outline" value={String(clamp2(totals.booked))} label="Booked" />
-                  </View>
+                <View style={styles.heroStatsCol}>
+                  <MetricCard
+                    icon="airplane-outline"
+                    value={String(clamp2(totals.tripCount))}
+                    label="Trips"
+                  />
+                  <MetricCard
+                    icon="time-outline"
+                    value={String(clamp2(totals.pending))}
+                    label="Pending"
+                  />
+                  <MetricCard
+                    icon="checkmark-done-outline"
+                    value={String(clamp2(totals.booked))}
+                    label="Booked"
+                  />
                 </View>
               </View>
 
               <View style={styles.heroActions}>
-                <Pressable onPress={goBuild} style={({ pressed }) => [styles.primaryAction, pressed && styles.pressed]}>
+                <Pressable
+                  onPress={goBuild}
+                  style={({ pressed }) => [styles.primaryAction, pressed && styles.pressed]}
+                >
                   <View style={styles.primaryActionIcon}>
                     <Ionicons name="add-outline" size={18} color={theme.colors.text} />
                   </View>
@@ -438,7 +454,10 @@ export default function TripsScreen() {
                   </View>
                 </Pressable>
 
-                <Pressable onPress={goFixtures} style={({ pressed }) => [styles.secondaryAction, pressed && styles.pressed]}>
+                <Pressable
+                  onPress={goFixtures}
+                  style={({ pressed }) => [styles.secondaryAction, pressed && styles.pressed]}
+                >
                   <View style={styles.secondaryActionIcon}>
                     <Ionicons name="calendar-outline" size={18} color={theme.colors.text} />
                   </View>
@@ -486,12 +505,18 @@ export default function TripsScreen() {
                 message="Start from a fixture, then build your trip workspace around tickets, travel and saved items."
               />
               <View style={styles.emptyActions}>
-                <Pressable onPress={goBuild} style={({ pressed }) => [styles.emptyAction, pressed && styles.pressed]}>
+                <Pressable
+                  onPress={goBuild}
+                  style={({ pressed }) => [styles.emptyAction, pressed && styles.pressed]}
+                >
                   <Ionicons name="add-circle-outline" size={18} color={theme.colors.text} />
                   <Text style={styles.emptyActionText}>Create trip</Text>
                 </Pressable>
 
-                <Pressable onPress={goFixtures} style={({ pressed }) => [styles.emptyAction, pressed && styles.pressed]}>
+                <Pressable
+                  onPress={goFixtures}
+                  style={({ pressed }) => [styles.emptyAction, pressed && styles.pressed]}
+                >
                   <Ionicons name="search-outline" size={18} color={theme.colors.text} />
                   <Text style={styles.emptyActionText}>Browse fixtures</Text>
                 </Pressable>
@@ -610,7 +635,11 @@ function LeagueMetaInline({ trip }: { trip: Trip }) {
     <View style={styles.leagueMetaInline}>
       {meta.leagueLogo ? (
         <View style={styles.leagueLogoTile}>
-          <Image source={{ uri: meta.leagueLogo }} style={styles.leagueLogoImg} resizeMode="contain" />
+          <Image
+            source={{ uri: meta.leagueLogo }}
+            style={styles.leagueLogoImg}
+            resizeMode="contain"
+          />
         </View>
       ) : null}
 
@@ -778,7 +807,11 @@ function TripCard({
                 isDeleting && { opacity: 0.5 },
               ]}
             >
-              <Ionicons name="create-outline" size={16} color={theme.colors.textSecondary} />
+              <Ionicons
+                name="create-outline"
+                size={16}
+                color={theme.colors.textSecondary}
+              />
               <Text style={styles.actionGhostText}>Edit</Text>
             </Pressable>
 
@@ -792,8 +825,14 @@ function TripCard({
                 isDeleting && { opacity: 0.5 },
               ]}
             >
-              <Ionicons name="trash-outline" size={16} color={"rgba(255,120,120,0.95)"} />
-              <Text style={styles.actionDangerText}>{isDeleting ? "Deleting…" : "Delete"}</Text>
+              <Ionicons
+                name="trash-outline"
+                size={16}
+                color={"rgba(255,120,120,0.95)"}
+              />
+              <Text style={styles.actionDangerText}>
+                {isDeleting ? "Deleting…" : "Delete"}
+              </Text>
             </Pressable>
           </View>
         </ImageBackground>
@@ -838,31 +877,32 @@ const styles = StyleSheet.create({
     gap: 12,
   },
 
-  heroTextWrap: {
+  heroMainCol: {
     flex: 1,
   },
 
-  heroRightCol: {
-    alignItems: "flex-end",
-    gap: 10,
+  heroStatsCol: {
+    width: 82,
+    gap: 8,
+    alignItems: "stretch",
   },
 
-  logoWrap: {
-    width: 74,
-    height: 74,
-    borderRadius: 18,
+  heroLogoStage: {
+    marginTop: 18,
+    minHeight: 196,
+    borderRadius: 24,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
+    borderColor: "rgba(255,255,255,0.08)",
     backgroundColor:
-      Platform.OS === "android" ? "rgba(10,12,14,0.18)" : "rgba(10,12,14,0.14)",
+      Platform.OS === "android" ? "rgba(0,0,0,0.14)" : "rgba(255,255,255,0.03)",
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
   },
 
-  logoImg: {
-    width: 48,
-    height: 48,
+  heroLogoStageImage: {
+    width: "78%",
+    height: "78%",
     opacity: 0.98,
   },
 
@@ -887,11 +927,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
     fontWeight: theme.fontWeight.bold,
-  },
-
-  heroStatsCol: {
-    gap: 8,
-    alignItems: "flex-end",
   },
 
   metricCard: {
