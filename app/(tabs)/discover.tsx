@@ -987,10 +987,54 @@ export default function DiscoverScreen() {
                 Big atmospheres, city breaks, and fixtures worth travelling for.
               </Text>
 
-              <View style={styles.heroSummaryBox}>
-                <Text style={styles.heroSummaryLabel}>Current setup</Text>
-                <Text style={styles.heroSummaryText}>{filterSummary}</Text>
-              </View>
+              {featuredLive ? (
+                <Pressable
+                  onPress={() => goMatchFromRow(featuredLive.item.fixture)}
+                  style={({ pressed }) => [styles.heroFeaturePress, pressed && styles.pressed]}
+                >
+                  <View style={styles.heroFeatureImageWrap}>
+                    <Image
+                      source={{ uri: getDiscoverCardImage() }}
+                      style={styles.heroFeatureImage}
+                      resizeMode="cover"
+                    />
+                    <View style={styles.heroFeatureOverlay} />
+                    <View style={styles.heroFeatureBadge}>
+                      <Text style={styles.heroFeatureBadgeText}>Top pick for your setup</Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.heroFeatureBody}>
+                    <View style={styles.heroFeatureTopRow}>
+                      <View style={styles.heroFeatureIconWrap}>
+                        <Ionicons
+                          name={DISCOVER_CATEGORY_META[seededCategory].icon}
+                          size={18}
+                          color={theme.colors.text}
+                        />
+                      </View>
+                      <Text style={styles.heroFeatureCtaInline}>Open route</Text>
+                    </View>
+
+                    <Text style={styles.heroFeatureTitle} numberOfLines={2}>
+                      {fixtureTitle(featuredLive.item.fixture)}
+                    </Text>
+
+                    <Text style={styles.heroFeatureMeta} numberOfLines={2}>
+                      {fixtureMeta(featuredLive.item.fixture)}
+                    </Text>
+
+                    <Text style={styles.heroFeatureWhy} numberOfLines={2}>
+                      {whyThisFits(
+                        featuredLive.item.fixture,
+                        seededCategory,
+                        discoverVibes,
+                        discoverTripLength
+                      )}
+                    </Text>
+                  </View>
+                </Pressable>
+              ) : null}
 
               <Pressable onPress={toggleSetup} style={styles.heroActionRow}>
                 <View style={styles.heroActionPill}>
@@ -1356,62 +1400,7 @@ export default function DiscoverScreen() {
               subtitle={`Based on your current setup, ${browseModeLabel} is the best place to start.`}
             />
 
-            {featuredLive ? (
-              <Pressable
-                onPress={() => goMatchFromRow(featuredLive.item.fixture)}
-                style={({ pressed }) => [styles.featuredPress, pressed && styles.pressed]}
-              >
-                <GlassCard strength="default" style={styles.featuredLiveCard} noPadding>
-                  <View style={styles.featuredLiveImageWrap}>
-                    <Image
-                      source={{ uri: getDiscoverCardImage() }}
-                      style={styles.featuredLiveImage}
-                      resizeMode="cover"
-                    />
-                    <View style={styles.featuredLiveOverlay} />
-                  </View>
-
-                  <View style={styles.featuredLiveBody}>
-                    <View style={styles.featuredLiveTopRow}>
-                      <View style={styles.featuredLiveIconWrap}>
-                        <Ionicons
-                          name={DISCOVER_CATEGORY_META[seededCategory].icon}
-                          size={18}
-                          color={theme.colors.text}
-                        />
-                      </View>
-                      <View style={styles.bestFitPill}>
-                        <Text style={styles.bestFitPillText}>Top live option</Text>
-                      </View>
-                    </View>
-
-                    <Text style={styles.featuredLiveTitle}>
-                      {fixtureTitle(featuredLive.item.fixture)}
-                    </Text>
-
-                    <Text style={styles.featuredLiveMeta}>
-                      {fixtureMeta(featuredLive.item.fixture)}
-                    </Text>
-
-                    <Text style={styles.featuredLiveWhy}>
-                      {whyThisFits(
-                        featuredLive.item.fixture,
-                        seededCategory,
-                        discoverVibes,
-                        discoverTripLength
-                      )}
-                    </Text>
-
-                    <View style={styles.featuredLiveBottomRow}>
-                      <Text style={styles.featuredLiveCta}>Open this route</Text>
-                      <Text style={styles.leadArrow}>›</Text>
-                    </View>
-                  </View>
-                </GlassCard>
-              </Pressable>
-            ) : leadCategory ? (
-              renderCategoryCard(leadCategory)
-            ) : null}
+            {!featuredLive && leadCategory ? renderCategoryCard(leadCategory) : null}
 
             <View style={styles.primaryGrid}>
               {remainingPrimaryCategories.map((category) => renderCategoryCard(category))}
@@ -1532,34 +1521,100 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeight.bold,
   },
 
-  heroSummaryBox: {
-    marginTop: 4,
+  heroFeaturePress: {
+    borderRadius: 22,
+    overflow: "hidden",
+    marginTop: 2,
+  },
+
+  heroFeatureImageWrap: {
+    height: 178,
+    position: "relative",
+  },
+
+  heroFeatureImage: {
+    width: "100%",
+    height: "100%",
+  },
+
+  heroFeatureOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(5,8,10,0.42)",
+  },
+
+  heroFeatureBadge: {
+    position: "absolute",
+    top: 12,
+    left: 12,
+    borderRadius: 999,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-    borderRadius: 18,
-    backgroundColor:
-      Platform.OS === "android" ? "rgba(0,0,0,0.18)" : "rgba(255,255,255,0.04)",
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    gap: 4,
+    borderColor: "rgba(87,162,56,0.24)",
+    backgroundColor: "rgba(6,10,8,0.64)",
   },
 
-  heroSummaryLabel: {
-    color: theme.colors.textTertiary,
-    fontSize: 11,
-    fontWeight: theme.fontWeight.black,
-    letterSpacing: 0.4,
-  },
-
-  heroSummaryText: {
+  heroFeatureBadgeText: {
     color: theme.colors.text,
+    fontSize: 10,
+    fontWeight: theme.fontWeight.black,
+    letterSpacing: 0.3,
+  },
+
+  heroFeatureBody: {
+    padding: 14,
+    gap: 7,
+    backgroundColor:
+      Platform.OS === "android" ? "rgba(0,0,0,0.22)" : "rgba(255,255,255,0.05)",
+  },
+
+  heroFeatureTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+
+  heroFeatureIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(87,162,56,0.20)",
+    backgroundColor: "rgba(87,162,56,0.10)",
+  },
+
+  heroFeatureCtaInline: {
+    color: theme.colors.primary,
+    fontSize: 12,
+    fontWeight: theme.fontWeight.black,
+  },
+
+  heroFeatureTitle: {
+    color: theme.colors.text,
+    fontSize: 20,
+    lineHeight: 25,
+    fontWeight: theme.fontWeight.black,
+  },
+
+  heroFeatureMeta: {
+    color: theme.colors.textSecondary,
     fontSize: 13,
     lineHeight: 18,
+    fontWeight: theme.fontWeight.bold,
+  },
+
+  heroFeatureWhy: {
+    color: theme.colors.primary,
+    fontSize: 12,
+    lineHeight: 17,
     fontWeight: theme.fontWeight.black,
   },
 
   heroActionRow: {
-    gap: 10,
+    gap: 8,
     marginTop: 2,
   },
 
