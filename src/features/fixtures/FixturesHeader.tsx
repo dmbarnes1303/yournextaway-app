@@ -1,13 +1,5 @@
 import React, { useMemo, useState } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  Pressable,
-  Image,
-  Platform,
-} from "react-native";
+import { View, Text, StyleSheet, ScrollView, Pressable, Image, Platform } from "react-native";
 
 import Input from "@/src/components/Input";
 import GlassCard from "@/src/components/GlassCard";
@@ -20,7 +12,11 @@ import {
   type LeagueBrowseRegion,
 } from "@/src/constants/football";
 
-import { LeagueFlag, featuredClubLine } from "./helpers";
+import {
+  LeagueFlag,
+  LeagueLogo,
+  featuredClubLine,
+} from "./helpers";
 
 type StripDay = {
   iso: string;
@@ -53,6 +49,11 @@ type FixturesHeaderProps = {
   openCalendar: () => void;
 };
 
+function compactDateLine(headerDateLine: string, isRange: boolean) {
+  if (!headerDateLine) return isRange ? "Date range" : "Select date";
+  return headerDateLine;
+}
+
 function CompactLeagueBadge({
   league,
   active,
@@ -64,8 +65,12 @@ function CompactLeagueBadge({
 }) {
   return (
     <Pressable onPress={onPress} style={[styles.featuredChip, active && styles.featuredChipActive]}>
-      <Image source={{ uri: league.logo }} style={styles.featuredChipLogo} resizeMode="contain" />
+      <View style={styles.featuredChipLogoTile}>
+        <LeagueLogo logo={league.logo} size="lg" />
+      </View>
+
       <LeagueFlag code={league.countryCode} size="sm" />
+
       <View style={styles.featuredChipTextWrap}>
         <Text
           style={[styles.featuredChipTitle, active && styles.featuredChipTitleActive]}
@@ -79,17 +84,6 @@ function CompactLeagueBadge({
       </View>
     </Pressable>
   );
-}
-
-function IonWrap({
-  name,
-  small = false,
-}: {
-  name: React.ComponentProps<typeof import("@expo/vector-icons").Ionicons>["name"];
-  small?: boolean;
-}) {
-  const { Ionicons } = require("@expo/vector-icons");
-  return <Ionicons name={name} size={small ? 15 : 18} color={theme.colors.text} />;
 }
 
 export default function FixturesHeader({
@@ -138,19 +132,21 @@ export default function FixturesHeader({
       <View style={styles.header}>
         <GlassCard strength="strong" style={styles.heroCard} noPadding>
           <View style={styles.heroInner}>
-            <View style={styles.heroTextWrap}>
-              <Text style={styles.kicker}>FIXTURES</Text>
-              <Text style={styles.title}>{titleText}</Text>
-              <Text style={styles.subtitle}>{subtitleText}</Text>
+            <View style={styles.heroTopRow}>
+              <View style={styles.heroTextWrap}>
+                <Text style={styles.kicker}>FIXTURES</Text>
+                <Text style={styles.title}>{titleText}</Text>
+                <Text style={styles.subtitle}>{subtitleText}</Text>
+              </View>
             </View>
 
             <View style={styles.heroMetaRow}>
-              <Pressable onPress={openCalendar} style={styles.heroMetaPill}>
+              <View style={styles.heroMetaPill}>
                 <IonWrap name="calendar-clear-outline" small />
                 <Text style={styles.heroMetaText} numberOfLines={1}>
-                  {headerDateLine}
+                  {compactDateLine(headerDateLine, isRange)}
                 </Text>
-              </Pressable>
+              </View>
 
               <View style={styles.heroMetaPillMuted}>
                 <Text style={styles.heroMetaMutedText} numberOfLines={1}>
@@ -174,10 +170,9 @@ export default function FixturesHeader({
         <View style={styles.quickBlock}>
           <View style={styles.inlineRow}>
             <Text style={styles.sectionLabel}>Date</Text>
-
             <Pressable onPress={openCalendar} style={styles.inlineAction}>
               <IonWrap name="options-outline" small />
-              <Text style={styles.inlineActionText}>{isRange ? "Change range" : "Pick range"}</Text>
+              <Text style={styles.inlineActionText}>Pick range</Text>
             </Pressable>
           </View>
 
@@ -248,15 +243,11 @@ export default function FixturesHeader({
                 onPress={() => toggleLeague(league.leagueId)}
                 style={[styles.leaguePill, styles.leaguePillActive]}
               >
-                <Image
-                  source={{ uri: league.logo }}
-                  style={styles.selectedLeagueLogo}
-                  resizeMode="contain"
-                />
+                <View style={styles.selectedLeagueLogoTile}>
+                  <LeagueLogo logo={league.logo} size="md" />
+                </View>
                 <LeagueFlag code={league.countryCode} size="sm" />
-                <Text style={[styles.leagueText, styles.leagueTextActive]} numberOfLines={1}>
-                  {league.label}
-                </Text>
+                <Text style={[styles.leagueText, styles.leagueTextActive]}>{league.label}</Text>
               </Pressable>
             ))}
           </ScrollView>
@@ -272,7 +263,6 @@ export default function FixturesHeader({
                 <View style={styles.browserToggleIcon}>
                   <IonWrap name="globe-outline" />
                 </View>
-
                 <View style={styles.browserToggleTextWrap}>
                   <Text style={styles.browserToggleTitle}>Explore leagues</Text>
                   <Text style={styles.browserToggleSub}>
@@ -332,11 +322,9 @@ export default function FixturesHeader({
                     >
                       <GlassCard style={styles.countryCard} level="default" variant="matte">
                         <View style={styles.countryCardHeader}>
-                          <Image
-                            source={{ uri: league.logo }}
-                            style={styles.countryCardLogo}
-                            resizeMode="contain"
-                          />
+                          <View style={styles.countryCardLogoTile}>
+                            <LeagueLogo logo={league.logo} size="lg" />
+                          </View>
                           <LeagueFlag code={league.countryCode} size="md" />
                         </View>
 
@@ -379,6 +367,17 @@ export default function FixturesHeader({
   );
 }
 
+function IonWrap({
+  name,
+  small = false,
+}: {
+  name: React.ComponentProps<typeof import("@expo/vector-icons").Ionicons>["name"];
+  small?: boolean;
+}) {
+  const { Ionicons } = require("@expo/vector-icons");
+  return <Ionicons name={name} size={small ? 15 : 18} color={theme.colors.text} />;
+}
+
 const styles = StyleSheet.create({
   headerListWrap: {
     width: "100%",
@@ -388,7 +387,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.lg,
     paddingTop: theme.spacing.lg,
     paddingBottom: theme.spacing.md,
-    gap: 10,
+    gap: 12,
   },
 
   heroCard: {
@@ -401,8 +400,14 @@ const styles = StyleSheet.create({
     gap: 12,
   },
 
+  heroTopRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+  },
+
   heroTextWrap: {
-    gap: 0,
+    flex: 1,
   },
 
   kicker: {
@@ -552,7 +557,7 @@ const styles = StyleSheet.create({
   },
 
   featuredChip: {
-    minWidth: 182,
+    minWidth: 188,
     borderRadius: 18,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
@@ -563,7 +568,7 @@ const styles = StyleSheet.create({
       Platform.OS === "android" ? "rgba(0,0,0,0.16)" : "rgba(255,255,255,0.04)",
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 10,
   },
 
   featuredChipActive: {
@@ -572,9 +577,16 @@ const styles = StyleSheet.create({
       Platform.OS === "android" ? "rgba(87,162,56,0.10)" : "rgba(87,162,56,0.08)",
   },
 
-  featuredChipLogo: {
-    width: 24,
-    height: 24,
+  featuredChipLogoTile: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    backgroundColor:
+      Platform.OS === "android" ? "rgba(255,255,255,0.03)" : "rgba(255,255,255,0.04)",
   },
 
   featuredChipTextWrap: {
@@ -610,7 +622,6 @@ const styles = StyleSheet.create({
     marginRight: 8,
     backgroundColor:
       Platform.OS === "android" ? "rgba(0,0,0,0.16)" : "rgba(255,255,255,0.04)",
-    maxWidth: 220,
   },
 
   leaguePillActive: {
@@ -619,16 +630,22 @@ const styles = StyleSheet.create({
       Platform.OS === "android" ? "rgba(87,162,56,0.10)" : "rgba(87,162,56,0.08)",
   },
 
-  selectedLeagueLogo: {
-    width: 18,
-    height: 18,
+  selectedLeagueLogoTile: {
+    width: 24,
+    height: 24,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    backgroundColor:
+      Platform.OS === "android" ? "rgba(255,255,255,0.03)" : "rgba(255,255,255,0.04)",
   },
 
   leagueText: {
     color: theme.colors.textSecondary,
     fontWeight: theme.fontWeight.black,
     fontSize: 11,
-    flexShrink: 1,
   },
 
   leagueTextActive: {
@@ -740,7 +757,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "space-between",
-    rowGap: 10,
+    gap: 12,
   },
 
   countryCardWrap: {
@@ -752,7 +769,7 @@ const styles = StyleSheet.create({
   },
 
   countryCard: {
-    minHeight: 138,
+    minHeight: 158,
     borderRadius: 22,
     padding: 14,
     justifyContent: "space-between",
@@ -766,13 +783,20 @@ const styles = StyleSheet.create({
     gap: 10,
   },
 
-  countryCardLogo: {
-    width: 28,
-    height: 28,
+  countryCardLogoTile: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    backgroundColor:
+      Platform.OS === "android" ? "rgba(255,255,255,0.03)" : "rgba(255,255,255,0.04)",
   },
 
   countryCardTextWrap: {
-    marginTop: 8,
+    marginTop: 10,
     gap: 2,
   },
 
