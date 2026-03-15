@@ -57,6 +57,7 @@ type InspirationPreset = {
   vibe?: DiscoverVibe;
   category: DiscoverCategory;
   windowKey?: DiscoverWindowKey;
+  tripLength?: DiscoverTripLength;
 };
 
 type QuickSpark = {
@@ -89,6 +90,8 @@ type MultiMatchTrip = {
 const PLACEHOLDER_DISCOVER_IMAGE =
   "https://images.unsplash.com/photo-1517927033932-b3d18e61fb3a?auto=format&fit=crop&w=1600&h=1000&fm=jpg&q=82";
 
+const EUROPEAN_COMPETITION_IDS = new Set([2, 3, 848]);
+
 const INSPIRATION_PRESETS: InspirationPreset[] = [
   {
     id: "best-now",
@@ -106,6 +109,7 @@ const INSPIRATION_PRESETS: InspirationPreset[] = [
     vibe: "easy",
     category: "easyTickets",
     windowKey: "d30",
+    tripLength: "2",
   },
   {
     id: "big",
@@ -126,13 +130,22 @@ const INSPIRATION_PRESETS: InspirationPreset[] = [
     windowKey: "d90",
   },
   {
-    id: "atmospheres",
-    title: "Insane atmospheres",
-    subtitle: "Noise, intensity and full matchday energy",
-    icon: "radio-outline",
+    id: "europe",
+    title: "European nights",
+    subtitle: "Champions League, Europa League and Conference League pull",
+    icon: "flash-outline",
     vibe: "big",
-    category: "atmospheres",
-    windowKey: "d60",
+    category: "europeanNights",
+    windowKey: "d30",
+  },
+  {
+    id: "weekend",
+    title: "Weekend football trips",
+    subtitle: "Friday-to-Sunday trips with cleaner stacking potential",
+    icon: "calendar-outline",
+    category: "weekendTrips",
+    windowKey: "wknd",
+    tripLength: "2",
   },
   {
     id: "culture",
@@ -147,6 +160,30 @@ const INSPIRATION_PRESETS: InspirationPreset[] = [
 
 const QUICK_SPARKS: QuickSpark[] = [
   {
+    id: "european-nights",
+    title: "European nights",
+    icon: "flash-outline",
+    category: "europeanNights",
+    vibe: "big",
+    windowKey: "d30",
+  },
+  {
+    id: "weekend-stacks",
+    title: "Weekend football trips",
+    icon: "calendar-outline",
+    category: "weekendTrips",
+    tripLength: "2",
+    windowKey: "wknd",
+  },
+  {
+    id: "multi-match",
+    title: "Multi-match trips",
+    icon: "git-compare-outline",
+    category: "multiMatchTrips",
+    tripLength: "2",
+    windowKey: "d30",
+  },
+  {
     id: "derby-nights",
     title: "Big derby nights",
     icon: "flame-outline",
@@ -157,18 +194,9 @@ const QUICK_SPARKS: QuickSpark[] = [
   {
     id: "midweek-football",
     title: "Midweek football trips",
-    icon: "calendar-outline",
+    icon: "moon-outline",
     category: "nightMatches",
     vibe: "nightlife",
-    windowKey: "d30",
-  },
-  {
-    id: "easy-two-night",
-    title: "Easy 2-night trips",
-    icon: "navigate-outline",
-    category: "easyTickets",
-    vibe: "easy",
-    tripLength: "2",
     windowKey: "d30",
   },
   {
@@ -185,14 +213,6 @@ const QUICK_SPARKS: QuickSpark[] = [
     icon: "bookmark-outline",
     category: "bucketList",
     vibe: "big",
-    windowKey: "d90",
-  },
-  {
-    id: "legendary-grounds",
-    title: "Legendary stadiums",
-    icon: "business-outline",
-    category: "legendaryStadiums",
-    vibe: "culture",
     windowKey: "d90",
   },
 ];
@@ -294,7 +314,15 @@ function toSlug(value: string) {
     .replace(/\s+/g, "-");
 }
 
-function categorySeedFromVibes(vibes: DiscoverVibe[]): DiscoverCategory {
+function categorySeedFromFilters(params: {
+  vibes: DiscoverVibe[];
+  windowKey: DiscoverWindowKey;
+  tripLength: DiscoverTripLength;
+}): DiscoverCategory {
+  const { vibes, windowKey, tripLength } = params;
+
+  if (windowKey === "wknd") return "weekendTrips";
+  if (tripLength === "2" || tripLength === "3") return "multiMatchTrips";
   if (vibes.includes("big")) return "bigMatches";
   if (vibes.includes("nightlife")) return "nightMatches";
   if (vibes.includes("culture")) return "matchdayCulture";
@@ -351,8 +379,8 @@ async function fetchDiscoverPool(params: {
     tripLength,
     vibes,
     category,
-    minFixtures = 40,
-    maxLeagueFetches = 18,
+    minFixtures = 52,
+    maxLeagueFetches = 24,
     batchSize = 6,
   } = params;
 
@@ -366,11 +394,23 @@ async function fetchDiscoverPool(params: {
   });
 
   const seed = createStableSeed(seedKey);
-  const orderedLeagues = rotateStable(LEAGUES, seed);
+
+  const europeanLeagues = LEAGUES.filter((league) =>
+    EUROPEAN_COMPETITION_IDS.has(league.leagueId)
+  );
+  const domesticLeagues = LEAGUES.filter(
+    (league) => !EUROPEAN_COMPETITION_IDS.has(league.leagueId)
+  );
+
+  const preferred =
+    category === "europeanNights"
+      ? [...rotateStable(europeanLeagues, seed), ...rotateStable(domesticLeagues, seed)]
+      : [...rotateStable(domesticLeagues, seed), ...rotateStable(europeanLeagues, seed)];
+
   const collected: FixtureListRow[] = [];
 
-  for (let i = 0; i < orderedLeagues.length && i < maxLeagueFetches; i += batchSize) {
-    const batch = orderedLeagues.slice(i, Math.min(i + batchSize, maxLeagueFetches));
+  for (let i = 0; i < preferred.length && i < maxLeagueFetches; i += batchSize) {
+    const batch = preferred.slice(i, Math.min(i + batchSize, maxLeagueFetches));
 
     const results = await Promise.all(
       batch.map(async (league) => {
@@ -444,6 +484,21 @@ function isLateKickoff(row: FixtureListRow) {
   return h >= 19 && h <= 22;
 }
 
+function isWeekendFixture(row: FixtureListRow) {
+  const raw = row?.fixture?.date;
+  if (!raw) return false;
+  const dt = new Date(raw);
+  if (Number.isNaN(dt.getTime())) return false;
+  const day = dt.getDay();
+  return day === 5 || day === 6 || day === 0;
+}
+
+function isEuropeanCompetition(row: FixtureListRow) {
+  const leagueId = row?.league?.id != null ? Number(row.league.id) : null;
+  if (leagueId == null) return false;
+  return EUROPEAN_COMPETITION_IDS.has(leagueId);
+}
+
 function getFixturePairKey(row: FixtureListRow) {
   const a = toSlug(row?.teams?.home?.name ?? "");
   const b = toSlug(row?.teams?.away?.name ?? "");
@@ -470,6 +525,7 @@ function trendingLabelForFixture(row: FixtureListRow) {
   };
 
   if (labels[pair]) return labels[pair];
+  if (isEuropeanCompetition(row)) return "European night";
   if (city) return `${city} football trip`;
   return "Trending football trip";
 }
@@ -485,6 +541,17 @@ function whyThisFits(
   if (category === "derbies") return "History, edge and real rivalry tension";
   if (category === "atmospheres") return "Higher-upside crowd and matchday energy";
   if (category === "valueTrips") return "Better experience-per-pound potential";
+  if (category === "europeanNights") {
+    return isEuropeanCompetition(row)
+      ? "Continental night with stronger occasion value"
+      : "This still ranks because the trip itself has pull";
+  }
+  if (category === "multiMatchTrips") return "Good anchor fixture for stacking a bigger trip";
+  if (category === "weekendTrips") {
+    return isWeekendFixture(row)
+      ? "Weekend-timed fixture that suits a cleaner football break"
+      : "Still workable for a football weekend with the right second match";
+  }
   if (category === "nightMatches") {
     if (isLateKickoff(row)) return "Later kick-off gives it bigger lights-on energy";
     return "Good fit for a later, occasion-led football trip";
@@ -525,6 +592,7 @@ function trendingScore(row: FixtureListRow, baseScore: number) {
   ]);
 
   if (knownBigPairs.has(pair)) score += 80;
+  if (isEuropeanCompetition(row)) score += 50;
   if (isLateKickoff(row)) score += 14;
   if (isMidweekFixture(row)) score += 10;
 
@@ -581,6 +649,7 @@ function buildMultiMatchTrips(
   params: {
     vibes: DiscoverVibe[];
     tripLength: DiscoverTripLength;
+    windowKey: DiscoverWindowKey;
   }
 ): MultiMatchTrip[] {
   const rankedRows = rankedLive.map((entry) => ({
@@ -647,14 +716,19 @@ function buildMultiMatchTrips(
 
     if (style === "same-city") score += 35;
     if (style === "nearby-cities") score += 20;
+    if (params.windowKey === "wknd" && daysSpan <= 3) score += 28;
 
     if (params.tripLength === "2" && daysSpan <= 4) score += 16;
     if (params.tripLength === "3" && daysSpan <= 5) score += 12;
     if (params.vibes.includes("easy") && style === "same-city") score += 18;
     if (params.vibes.includes("culture") && cityLabel) score += 8;
     if (params.vibes.includes("big")) {
-      const derbyish = sorted.some((row) => trendingLabelForFixture(row).toLowerCase().includes("derby"));
+      const derbyish = sorted.some((row) =>
+        trendingLabelForFixture(row).toLowerCase().includes("derby")
+      );
+      const euroish = sorted.some((row) => isEuropeanCompetition(row));
       if (derbyish) score += 18;
+      if (euroish) score += 12;
     }
 
     const labels = [
@@ -842,8 +916,13 @@ export default function DiscoverScreen() {
   );
 
   const seededCategory = useMemo(
-    () => categorySeedFromVibes(discoverVibes),
-    [discoverVibes]
+    () =>
+      categorySeedFromFilters({
+        vibes: discoverVibes,
+        windowKey: discoverWindowKey,
+        tripLength: discoverTripLength,
+      }),
+    [discoverVibes, discoverWindowKey, discoverTripLength]
   );
 
   const prioritisedPrimaryCategories = useMemo(
@@ -971,8 +1050,9 @@ export default function DiscoverScreen() {
       buildMultiMatchTrips(rankedLive, {
         vibes: discoverVibes,
         tripLength: discoverTripLength,
+        windowKey: discoverWindowKey,
       }),
-    [rankedLive, discoverVibes, discoverTripLength]
+    [rankedLive, discoverVibes, discoverTripLength, discoverWindowKey]
   );
 
   const goFixturesCategory = useCallback(
@@ -1043,7 +1123,7 @@ export default function DiscoverScreen() {
         params: {
           from: trip.from,
           to: trip.to,
-          discover: "perfectTrips",
+          discover: discoverWindowKey === "wknd" ? "weekendTrips" : "multiMatchTrips",
           discoverFrom: discoverOrigin.trim() || undefined,
           discoverTripLength,
           discoverVibes: discoverVibes.join(","),
@@ -1053,23 +1133,28 @@ export default function DiscoverScreen() {
         },
       } as any);
     },
-    [router, discoverOrigin, discoverTripLength, discoverVibes]
+    [router, discoverOrigin, discoverTripLength, discoverVibes, discoverWindowKey]
   );
 
   const applyPreset = useCallback(
     (preset: InspirationPreset) => {
+      const nextWindowKey = preset.windowKey ?? discoverWindowKey;
+      const nextTripLength = preset.tripLength ?? discoverTripLength;
+      const nextVibes = preset.vibe ? [preset.vibe] : discoverVibes;
+
       if (preset.windowKey) setDiscoverWindowKey(preset.windowKey);
+      if (preset.tripLength) setDiscoverTripLength(preset.tripLength);
       if (preset.vibe) setDiscoverVibes([preset.vibe]);
 
       router.push({
         pathname: "/(tabs)/fixtures",
         params: {
-          from: windowForKey(preset.windowKey ?? discoverWindowKey).from,
-          to: windowForKey(preset.windowKey ?? discoverWindowKey).to,
+          from: windowForKey(nextWindowKey).from,
+          to: windowForKey(nextWindowKey).to,
           discover: preset.category,
           discoverFrom: discoverOrigin.trim() || undefined,
-          discoverTripLength,
-          discoverVibes: preset.vibe ? preset.vibe : discoverVibes.join(","),
+          discoverTripLength: nextTripLength,
+          discoverVibes: nextVibes.join(","),
         },
       } as any);
     },
@@ -1262,7 +1347,7 @@ export default function DiscoverScreen() {
               <Text style={styles.kicker}>DISCOVER</Text>
               <Text style={styles.title}>Find your next football trip</Text>
               <Text style={styles.sub}>
-                Big atmospheres, city breaks, and fixtures worth travelling for.
+                Big atmospheres, city breaks, European nights, and stacked football weekends.
               </Text>
 
               {featuredLive ? (
