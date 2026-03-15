@@ -130,7 +130,7 @@ export const DEFAULT_CALENDAR_YEAR_SEASON = currentCalendarYear();
  * LEAGUES is derived from this grouped structure.
  */
 export const FOOTBALL_BY_COUNTRY: Record<string, CountryFootballConfig> = {
-  uefa: {
+  europe: {
     country: "Europe",
     countryCode: "EU",
     browseRegion: "featured-europe",
@@ -143,7 +143,7 @@ export const FOOTBALL_BY_COUNTRY: Record<string, CountryFootballConfig> = {
         season: DEFAULT_SEASON,
         featured: true,
         homeVisible: true,
-        featuredClubKeys: ["real-madrid", "bayern-munich", "manchester-city"],
+        featuredClubKeys: [],
       },
       {
         slug: "uefa-europa-league",
@@ -153,7 +153,7 @@ export const FOOTBALL_BY_COUNTRY: Record<string, CountryFootballConfig> = {
         season: DEFAULT_SEASON,
         featured: true,
         homeVisible: true,
-        featuredClubKeys: ["liverpool", "roma", "sevilla"],
+        featuredClubKeys: [],
       },
       {
         slug: "uefa-conference-league",
@@ -163,7 +163,7 @@ export const FOOTBALL_BY_COUNTRY: Record<string, CountryFootballConfig> = {
         season: DEFAULT_SEASON,
         featured: true,
         homeVisible: true,
-        featuredClubKeys: ["fiorentina", "real-betis", "west-ham"],
+        featuredClubKeys: [],
       },
     ],
   },
@@ -750,7 +750,7 @@ export function getCountryFootballConfig(countryKey: string): CountryFootballCon
 
 /**
  * Used when a fixture kickoff is not confirmed yet.
- * This is intentionally display-first (strings) so UI can show "Likely Sat 15:00"
+ * This is intentionally display-first (strings) so UI can show "Likely Tue 20:00"
  * without timezone complexity.
  */
 export type LeagueSlotRule = {
@@ -1072,4 +1072,4 @@ export function nextWeekendWindowIso(): RollingWindowIso {
   const to = toIsoDate(sun);
 
   return normalizeWindowIso({ from, to }, 2);
-        }
+          }
