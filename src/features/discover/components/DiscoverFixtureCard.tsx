@@ -1,5 +1,5 @@
 import React from "react";
-import { Pressable, Text, StyleSheet, View, Image } from "react-native";
+import { View, Text, StyleSheet, Pressable, Image } from "react-native";
 
 import GlassCard from "@/src/components/GlassCard";
 import { theme } from "@/src/constants/theme";
@@ -9,22 +9,25 @@ type Variant = "live" | "trending";
 
 type Props = {
   title: string;
-  meta: string;
   subtitle: string;
   badge: string;
   onPress: () => void;
   variant?: Variant;
+  meta?: string;
+  imageUri?: string;
 };
 
 export default function DiscoverFixtureCard({
   title,
-  meta,
   subtitle,
   badge,
   onPress,
   variant = "live",
+  meta,
+  imageUri,
 }: Props) {
   const isTrending = variant === "trending";
+  const uri = imageUri || PLACEHOLDER_DISCOVER_IMAGE;
 
   return (
     <Pressable
@@ -41,7 +44,7 @@ export default function DiscoverFixtureCard({
       >
         <View style={isTrending ? styles.trendingImageWrap : styles.liveImageWrap}>
           <Image
-            source={{ uri: PLACEHOLDER_DISCOVER_IMAGE }}
+            source={{ uri }}
             style={isTrending ? styles.trendingImage : styles.liveImage}
             resizeMode="cover"
           />
@@ -62,25 +65,21 @@ export default function DiscoverFixtureCard({
             {title}
           </Text>
 
-          {isTrending ? (
-            <>
-              <Text style={styles.trendingLabel} numberOfLines={1}>
-                {subtitle}
-              </Text>
-              <Text style={styles.trendingMeta} numberOfLines={2}>
-                {meta}
-              </Text>
-            </>
-          ) : (
-            <>
-              <Text style={styles.liveMeta} numberOfLines={2}>
-                {meta}
-              </Text>
-              <Text style={styles.liveWhy} numberOfLines={2}>
-                {subtitle}
-              </Text>
-            </>
-          )}
+          {meta ? (
+            <Text
+              style={isTrending ? styles.trendingMeta : styles.liveMeta}
+              numberOfLines={2}
+            >
+              {meta}
+            </Text>
+          ) : null}
+
+          <Text
+            style={isTrending ? styles.trendingLabel : styles.liveWhy}
+            numberOfLines={isTrending ? 1 : 2}
+          >
+            {subtitle}
+          </Text>
         </View>
       </GlassCard>
     </Pressable>
@@ -231,17 +230,17 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeight.black,
   },
 
-  trendingLabel: {
-    color: theme.colors.primary,
-    fontSize: 12,
-    fontWeight: theme.fontWeight.black,
-  },
-
   trendingMeta: {
     color: theme.colors.textSecondary,
     fontSize: 12,
     lineHeight: 17,
     fontWeight: theme.fontWeight.bold,
+  },
+
+  trendingLabel: {
+    color: theme.colors.primary,
+    fontSize: 12,
+    fontWeight: theme.fontWeight.black,
   },
 
   pressed: {
