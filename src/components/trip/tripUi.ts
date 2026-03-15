@@ -36,12 +36,12 @@ export function parseIsoToDate(iso?: string | null): Date | null {
 }
 
 export function safeFixtureTitle(
-  r: FixtureListRow | null | undefined,
+  row: FixtureListRow | null | undefined,
   fallbackId: string,
   trip?: Trip | null
 ) {
-  const home = clean((r as any)?.teams?.home?.name) || clean((trip as any)?.homeName);
-  const away = clean((r as any)?.teams?.away?.name) || clean((trip as any)?.awayName);
+  const home = clean((row as any)?.teams?.home?.name) || clean((trip as any)?.homeName);
+  const away = clean((row as any)?.teams?.away?.name) || clean((trip as any)?.awayName);
 
   if (home && away) return `${home} vs ${away}`;
   if (home) return `${home} match`;
@@ -54,7 +54,6 @@ export function formatKickoffMeta(
   row?: FixtureListRow | null,
   trip?: Trip | null
 ): { line: string; tbc: boolean; iso: string | null } {
-
   const isoRaw = (row as any)?.fixture?.date ?? (trip as any)?.kickoffIso;
   const iso = clean(isoRaw) || null;
 
@@ -88,7 +87,6 @@ export function formatKickoffMeta(
   });
 
   const midnight = d.getHours() === 0 && d.getMinutes() === 0;
-
   const tbc = looksTbc || snapTbc || midnight;
 
   if (tbc) {
@@ -115,6 +113,8 @@ export function providerLabel(provider?: string | null): string {
   if (raw === "kiwitaxi") return "KiwiTaxi";
   if (raw === "omio") return "Omio";
   if (raw === "getyourguide") return "GetYourGuide";
+  if (raw === "safetywing") return "SafetyWing";
+  if (raw === "airhelp") return "AirHelp";
 
   return provider || "Provider";
 }
@@ -130,6 +130,8 @@ export function providerShort(provider?: string | null): string {
   if (raw === "kiwitaxi") return "KT";
   if (raw === "omio") return "OM";
   if (raw === "getyourguide") return "GYG";
+  if (raw === "safetywing") return "SW";
+  if (raw === "airhelp") return "AH";
 
   return "P";
 }
@@ -201,6 +203,22 @@ export function providerBadgeStyle(provider?: string | null) {
     };
   }
 
+  if (raw === "safetywing") {
+    return {
+      borderColor: "rgba(120,220,190,0.28)",
+      backgroundColor: "rgba(120,220,190,0.10)",
+      textColor: "rgba(210,255,245,1)",
+    };
+  }
+
+  if (raw === "airhelp") {
+    return {
+      borderColor: "rgba(255,120,170,0.30)",
+      backgroundColor: "rgba(255,120,170,0.10)",
+      textColor: "rgba(255,220,235,1)",
+    };
+  }
+
   return {
     borderColor: "rgba(255,255,255,0.15)",
     backgroundColor: "rgba(255,255,255,0.06)",
@@ -208,10 +226,10 @@ export function providerBadgeStyle(provider?: string | null) {
   };
 }
 
-export function statusLabel(s: SavedItem["status"]) {
-  if (s === "pending") return "Pending";
-  if (s === "saved") return "Saved";
-  if (s === "booked") return "Booked";
+export function statusLabel(status: SavedItem["status"]) {
+  if (status === "pending") return "Pending";
+  if (status === "saved") return "Saved";
+  if (status === "booked") return "Booked";
   return "Archived";
 }
 
@@ -223,4 +241,63 @@ export function ticketConfidenceLabel(score?: number | null): string {
   if (value >= 60) return "Good match";
 
   return "Fallback";
+}
+
+export function shortDomain(url?: string | null): string {
+  const value = clean(url);
+  if (!value) return "";
+
+  try {
+    const parsed = new URL(value);
+    return parsed.hostname.replace(/^www\./, "");
+  } catch {
+    return "";
+  }
+}
+
+export function savedItemMetaLine(item: SavedItem): string {
+  const bits: string[] = [];
+
+  const typeLabel =
+    item.type === "tickets"
+      ? "Match tickets"
+      : item.type === "hotel"
+        ? "Hotel"
+        : item.type === "flight"
+          ? "Flight"
+          : item.type === "train"
+            ? "Train"
+            : item.type === "transfer"
+              ? "Transfer"
+              : item.type === "things"
+                ? "Experience"
+                : item.type === "insurance"
+                  ? "Insurance"
+                  : item.type === "claim"
+                    ? "Claim"
+                    : "Note";
+
+  bits.push(typeLabel);
+
+  const provider = clean(item.metadata?.ticketProvider) || clean(item.partnerId);
+  if (provider) bits.push(providerLabel(provider));
+
+  const domain = shortDomain(item.partnerUrl);
+  if (domain) bits.push(domain);
+
+  return bits.join(" • ");
+}
+
+export function attachmentCount(item: SavedItem | null): number {
+  return Array.isArray(item?.attachments) ? item.attachments.length : 0;
+}
+
+export function hasAttachments(item: SavedItem | null): boolean {
+  return attachmentCount(item) > 0;
+}
+
+export function proofStateText(item: SavedItem): string {
+  const count = attachmentCount(item);
+  if (count <= 0) return "No proof attached yet";
+  return `${count} proof file${count === 1 ? "" : "s"} attached`;
 }
