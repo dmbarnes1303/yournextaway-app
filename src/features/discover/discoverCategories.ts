@@ -13,7 +13,10 @@ export type DiscoverCategory =
   | "titleDrama"
   | "bucketList"
   | "matchdayCulture"
-  | "underratedTrips";
+  | "underratedTrips"
+  | "europeanNights"
+  | "multiMatchTrips"
+  | "weekendTrips";
 
 export type DiscoverCategoryMeta = {
   title: string;
@@ -24,15 +27,18 @@ export type DiscoverCategoryMeta = {
 };
 
 export const DISCOVER_PRIMARY_CATEGORIES: DiscoverCategory[] = [
+  "perfectTrips",
   "bigMatches",
   "derbies",
   "atmospheres",
   "valueTrips",
-  "perfectTrips",
   "easyTickets",
+  "multiMatchTrips",
+  "weekendTrips",
 ];
 
 export const DISCOVER_SECONDARY_CATEGORIES: DiscoverCategory[] = [
+  "europeanNights",
   "legendaryStadiums",
   "iconicCities",
   "nightMatches",
@@ -94,6 +100,30 @@ export const DISCOVER_CATEGORY_META: Record<DiscoverCategory, DiscoverCategoryMe
     helper: "Discover mode • ranked for ticket access and short-trip simplicity",
     icon: "ticket-outline",
     emphasis: "primary",
+  },
+
+  multiMatchTrips: {
+    title: "Multi-Match Trips",
+    subtitle: "Cities and fixtures with stronger stacking potential",
+    helper: "Discover mode • ranked for football trips that can support multiple matches",
+    icon: "git-compare-outline",
+    emphasis: "primary",
+  },
+
+  weekendTrips: {
+    title: "Weekend Football Trips",
+    subtitle: "Stronger Friday-to-Sunday football travel options",
+    helper: "Discover mode • ranked for weekend viability, city break fit and match stacking potential",
+    icon: "calendar-outline",
+    emphasis: "primary",
+  },
+
+  europeanNights: {
+    title: "European Nights",
+    subtitle: "Champions League, Europa League and Conference League travel pull",
+    helper: "Discover mode • ranked for continental nights, occasion and glamour",
+    icon: "flash-outline",
+    emphasis: "secondary",
   },
 
   legendaryStadiums: {
