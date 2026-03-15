@@ -1,7 +1,7 @@
 import React, { useCallback, useMemo } from "react";
 import { View, StyleSheet, FlatList, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 
 import Background from "@/src/components/Background";
 import EmptyState from "@/src/components/EmptyState";
@@ -17,8 +17,28 @@ import FixturesCalendarModal from "@/src/features/fixtures/FixturesCalendarModal
 import { useFixturesScreenData } from "@/src/features/fixtures/useFixturesScreenData";
 import type { RankedFixtureRow } from "@/src/features/fixtures/types";
 
+function cleanString(value: unknown) {
+  return String(value ?? "").trim();
+}
+
+function getSingleParam(value: unknown) {
+  if (Array.isArray(value)) return cleanString(value[0]);
+  return cleanString(value);
+}
+
+function getCsvParamSet(value: unknown) {
+  const raw = Array.isArray(value) ? value.join(",") : cleanString(value);
+  return new Set(
+    raw
+      .split(",")
+      .map((part) => cleanString(part))
+      .filter(Boolean)
+  );
+}
+
 export default function FixturesScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams();
 
   const {
     effectiveRange,
@@ -71,8 +91,38 @@ export default function FixturesScreen() {
     monthLabel,
   } = useFixturesScreenData();
 
+  const comboMode = getSingleParam(params?.comboMode) === "1";
+  const comboTitle = getSingleParam(params?.comboTitle);
+  const comboIdSet = useMemo(() => getCsvParamSet(params?.comboIds), [params]);
+
   const minIso = useMemo(() => tomorrowIsoUtc(), []);
   const maxIso = useMemo(() => addDaysIsoUtc(minIso, DAYS_AHEAD - 1), [minIso]);
+
+  const visibleRows = useMemo(() => {
+    if (!comboMode || comboIdSet.size === 0) return filtered;
+
+    return filtered.filter((item) => {
+      const fixtureId =
+        item?.fixture?.id != null ? String(item.fixture.id) : "";
+      return comboIdSet.has(fixtureId);
+    });
+  }, [filtered, comboMode, comboIdSet]);
+
+  const derivedTitleText = comboMode
+    ? comboTitle || "Multi-match trip"
+    : titleText;
+
+  const derivedSubtitleText = comboMode
+    ? "Selected fixtures for a stacked football trip."
+    : subtitleText;
+
+  const derivedHelperLineText = comboMode
+    ? `${visibleRows.length} selected fixture${visibleRows.length === 1 ? "" : "s"} • open one to build the trip around it`
+    : helperLineText;
+
+  const derivedHeaderDateLine = comboMode
+    ? `${headerDateLine} • combo view`
+    : headerDateLine;
 
   const goMatch = useCallback(
     (id: string, ctx?: { leagueId?: number | null; season?: number | null }) => {
@@ -113,10 +163,13 @@ export default function FixturesScreen() {
           to: effectiveRange.to,
           ...(ctx?.leagueId ? { leagueId: String(ctx.leagueId) } : {}),
           ...(ctx?.season ? { season: String(ctx.season) } : {}),
+          ...(comboMode ? { comboMode: "1" } : {}),
+          ...(comboTitle ? { comboTitle } : {}),
+          ...(comboIdSet.size > 0 ? { comboIds: [...comboIdSet].join(",") } : {}),
         },
       } as any);
     },
-    [router, effectiveRange.from, effectiveRange.to]
+    [router, effectiveRange.from, effectiveRange.to, comboMode, comboTitle, comboIdSet]
   );
 
   const bg = useMemo(() => getBackground("fixtures"), []);
@@ -127,15 +180,15 @@ export default function FixturesScreen() {
 
   return (
     <Background
-  {...bgProps}
-  overlayOpacity={0.08}
-  topShadeOpacity={0.36}
-  bottomShadeOpacity={0.42}
-  centerShadeOpacity={0.04}
->
+      {...bgProps}
+      overlayOpacity={0.08}
+      topShadeOpacity={0.36}
+      bottomShadeOpacity={0.42}
+      centerShadeOpacity={0.04}
+    >
       <SafeAreaView style={styles.container} edges={["top"]}>
         <FlatList
-          data={loading || error ? [] : filtered}
+          data={loading || error ? [] : visibleRows}
           keyExtractor={(item, index) => {
             const fid =
               item?.fixture?.id != null ? String(item.fixture.id) : `row-${index}`;
@@ -163,9 +216,9 @@ export default function FixturesScreen() {
           }}
           ListHeaderComponent={
             <FixturesHeader
-              titleText={titleText}
-              subtitleText={subtitleText}
-              headerDateLine={headerDateLine}
+              titleText={derivedTitleText}
+              subtitleText={derivedSubtitleText}
+              headerDateLine={derivedHeaderDateLine}
               query={query}
               setQuery={setQuery}
               stripDays={stripDays}
@@ -180,10 +233,10 @@ export default function FixturesScreen() {
               leaguesByRegion={leaguesByRegion}
               toggleLeague={toggleLeague}
               selectedLeagues={selectedLeagues}
-              helperLineText={helperLineText}
+              helperLineText={derivedHelperLineText}
               loading={loading}
               error={error}
-              filteredCount={filtered.length}
+              filteredCount={visibleRows.length}
               openCalendar={openCalendar}
             />
           }
@@ -201,9 +254,13 @@ export default function FixturesScreen() {
 
               {!loading && !error ? (
                 <EmptyState
-                  title="No matches found"
-                  message="Try another date, another region, or a different league selection."
-                  iconName="search"
+                  title={comboMode ? "No combo fixtures found" : "No matches found"}
+                  message={
+                    comboMode
+                      ? "This stacked trip no longer matches the current fixture view. Widen the date range or reopen it from Discover."
+                      : "Try another date, another region, or a different league selection."
+                  }
+                  iconName={comboMode ? "git-compare" : "search"}
                 />
               ) : null}
             </View>
