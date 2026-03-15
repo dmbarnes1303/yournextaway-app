@@ -121,15 +121,6 @@ const INSPIRATION_PRESETS: InspirationPreset[] = [
     windowKey: "d60",
   },
   {
-    id: "derbies",
-    title: "Derbies & rivalries",
-    subtitle: "History, tension and real edge",
-    icon: "flame-outline",
-    vibe: "big",
-    category: "derbies",
-    windowKey: "d90",
-  },
-  {
     id: "europe",
     title: "European nights",
     subtitle: "Champions League, Europa League and Conference League pull",
@@ -206,14 +197,6 @@ const QUICK_SPARKS: QuickSpark[] = [
     category: "valueTrips",
     vibe: "easy",
     windowKey: "d60",
-  },
-  {
-    id: "bucket-list",
-    title: "Bucket-list football",
-    icon: "bookmark-outline",
-    category: "bucketList",
-    vibe: "big",
-    windowKey: "d90",
   },
 ];
 
@@ -544,7 +527,7 @@ function whyThisFits(
   if (category === "europeanNights") {
     return isEuropeanCompetition(row)
       ? "Continental night with stronger occasion value"
-      : "This still ranks because the trip itself has pull";
+      : "Still strong enough to survive European-night ranking";
   }
   if (category === "multiMatchTrips") return "Good anchor fixture for stacking a bigger trip";
   if (category === "weekendTrips") {
@@ -767,10 +750,7 @@ function buildMultiMatchTrips(
         rows,
         scoreBase,
         `${size} matches in ${bucket.city}`,
-        `${bucket.city} football trip across ${Math.max(
-          1,
-          daysBetweenIso(fixtureIsoDateOnly(rows[0]), fixtureIsoDateOnly(rows[rows.length - 1])) + 1
-        )} days`,
+        `${bucket.city} football trip`,
         "same-city",
         bucket.city,
         bucket.country,
@@ -811,9 +791,7 @@ function buildMultiMatchTrips(
         rows,
         scoreBase,
         `${size} matches across ${bucket.country}`,
-        cityNames.length
-          ? `${cityNames.join(" • ")}`
-          : `${bucket.country} multi-match trip`,
+        cityNames.length ? cityNames.join(" • ") : `${bucket.country} multi-match trip`,
         cityNames.length <= 2 ? "nearby-cities" : "country-run",
         cityNames[0] ?? "",
         bucket.country,
@@ -1438,7 +1416,7 @@ export default function DiscoverScreen() {
                   <GlassCard strength="default" style={styles.sparkCard} noPadding>
                     <View style={styles.sparkInner}>
                       <View style={styles.sparkIconWrap}>
-                        <Ionicons name={spark.icon} size={18} color={theme.colors.text} />
+                        <Ionicons name={spark.icon} size={17} color={theme.colors.text} />
                       </View>
                       <Text style={styles.sparkTitle}>{spark.title}</Text>
                     </View>
@@ -1451,7 +1429,7 @@ export default function DiscoverScreen() {
           <View style={styles.section}>
             <SectionHeader
               title="Multi-match trips"
-              subtitle="The addictive bit: stack more than one match into the same trip."
+              subtitle="Stack more than one match into the same trip."
             />
 
             {loadingLive ? (
@@ -1498,7 +1476,7 @@ export default function DiscoverScreen() {
                           {trip.title}
                         </Text>
 
-                        <Text style={styles.multiSubline} numberOfLines={2}>
+                        <Text style={styles.multiSubline} numberOfLines={1}>
                           {trip.subtitle}
                         </Text>
 
@@ -1515,7 +1493,7 @@ export default function DiscoverScreen() {
                         </View>
 
                         <View style={styles.multiMatchList}>
-                          {trip.rows.slice(0, 3).map((row, rowIndex) => (
+                          {trip.rows.slice(0, 2).map((row, rowIndex) => (
                             <Text
                               key={`${trip.id}-${String(row?.fixture?.id ?? rowIndex)}`}
                               style={styles.multiMatchLine}
@@ -1951,48 +1929,48 @@ const styles = StyleSheet.create({
 
   content: {
     paddingHorizontal: theme.spacing.lg,
-    gap: 18,
+    gap: 16,
   },
 
   hero: {
     marginTop: theme.spacing.lg,
-    borderRadius: 26,
+    borderRadius: 24,
   },
 
   heroInner: {
-    padding: 16,
-    gap: 12,
+    padding: 15,
+    gap: 10,
   },
 
   kicker: {
     color: theme.colors.primary,
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: theme.fontWeight.black,
-    letterSpacing: 1.2,
+    letterSpacing: 1.1,
   },
 
   title: {
     color: theme.colors.text,
-    fontSize: 28,
-    lineHeight: 34,
+    fontSize: 27,
+    lineHeight: 32,
     fontWeight: theme.fontWeight.black,
   },
 
   sub: {
     color: theme.colors.textSecondary,
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 13,
+    lineHeight: 18,
     fontWeight: theme.fontWeight.bold,
   },
 
   heroFeaturePress: {
-    borderRadius: 22,
+    borderRadius: 20,
     overflow: "hidden",
     marginTop: 2,
   },
 
   heroFeatureImageWrap: {
-    height: 178,
+    height: 170,
     position: "relative",
   },
 
@@ -2136,14 +2114,14 @@ const styles = StyleSheet.create({
 
   sectionTitle: {
     color: theme.colors.text,
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: theme.fontWeight.black,
   },
 
   sectionSub: {
     color: theme.colors.textSecondary,
     fontSize: 12,
-    lineHeight: 18,
+    lineHeight: 17,
     fontWeight: theme.fontWeight.bold,
   },
 
@@ -2184,7 +2162,7 @@ const styles = StyleSheet.create({
   },
 
   panel: {
-    borderRadius: 24,
+    borderRadius: 22,
   },
 
   panelInner: {
@@ -2193,7 +2171,7 @@ const styles = StyleSheet.create({
   },
 
   setupCollapsedCard: {
-    borderRadius: 22,
+    borderRadius: 20,
     borderColor: "rgba(87,162,56,0.12)",
   },
 
@@ -2413,7 +2391,7 @@ const styles = StyleSheet.create({
   },
 
   multiPress: {
-    width: 296,
+    width: 292,
     borderRadius: 22,
     overflow: "hidden",
   },
@@ -2424,7 +2402,7 @@ const styles = StyleSheet.create({
   },
 
   multiImageWrap: {
-    height: 132,
+    height: 126,
     position: "relative",
   },
 
@@ -2467,13 +2445,13 @@ const styles = StyleSheet.create({
   multiBody: {
     padding: 14,
     gap: 8,
-    minHeight: 190,
+    minHeight: 184,
   },
 
   multiTitle: {
     color: theme.colors.text,
-    fontSize: 18,
-    lineHeight: 23,
+    fontSize: 17,
+    lineHeight: 22,
     fontWeight: theme.fontWeight.black,
   },
 
@@ -2570,7 +2548,7 @@ const styles = StyleSheet.create({
   },
 
   livePress: {
-    width: 250,
+    width: 246,
     borderRadius: 20,
     overflow: "hidden",
   },
@@ -2580,7 +2558,7 @@ const styles = StyleSheet.create({
   },
 
   liveImageWrap: {
-    height: 112,
+    height: 108,
     position: "relative",
   },
 
@@ -2623,7 +2601,7 @@ const styles = StyleSheet.create({
   liveBody: {
     padding: 14,
     gap: 6,
-    minHeight: 126,
+    minHeight: 124,
   },
 
   liveTitle: {
@@ -2654,7 +2632,7 @@ const styles = StyleSheet.create({
   },
 
   trendingPress: {
-    width: 278,
+    width: 274,
     borderRadius: 20,
     overflow: "hidden",
   },
@@ -2664,7 +2642,7 @@ const styles = StyleSheet.create({
   },
 
   trendingImageWrap: {
-    height: 126,
+    height: 122,
     position: "relative",
   },
 
@@ -2707,13 +2685,13 @@ const styles = StyleSheet.create({
   trendingBody: {
     padding: 14,
     gap: 6,
-    minHeight: 118,
+    minHeight: 116,
   },
 
   trendingTitle: {
     color: theme.colors.text,
-    fontSize: 17,
-    lineHeight: 22,
+    fontSize: 16,
+    lineHeight: 21,
     fontWeight: theme.fontWeight.black,
   },
 
@@ -2736,19 +2714,19 @@ const styles = StyleSheet.create({
   },
 
   inspirationPress: {
-    width: 220,
+    width: 216,
     borderRadius: 18,
     overflow: "hidden",
   },
 
   inspirationCard: {
     borderRadius: 18,
-    minHeight: 116,
+    minHeight: 112,
   },
 
   inspirationInner: {
     padding: 14,
-    minHeight: 116,
+    minHeight: 112,
     gap: 12,
     justifyContent: "space-between",
   },
@@ -2812,19 +2790,19 @@ const styles = StyleSheet.create({
   },
 
   categoryPressCompact: {
-    width: 214,
+    width: 212,
     borderRadius: 18,
     overflow: "hidden",
   },
 
   categoryCard: {
     borderRadius: 18,
-    minHeight: 222,
+    minHeight: 214,
   },
 
   categoryCardCompact: {
     borderRadius: 18,
-    minHeight: 192,
+    minHeight: 184,
   },
 
   categoryCardPrimary: {
@@ -2832,7 +2810,7 @@ const styles = StyleSheet.create({
   },
 
   categoryImageWrap: {
-    height: 96,
+    height: 92,
     position: "relative",
   },
 
@@ -2867,14 +2845,14 @@ const styles = StyleSheet.create({
 
   categoryInner: {
     padding: 14,
-    minHeight: 126,
+    minHeight: 120,
     gap: 12,
     justifyContent: "space-between",
   },
 
   categoryInnerCompact: {
     padding: 14,
-    minHeight: 96,
+    minHeight: 92,
     gap: 12,
     justifyContent: "space-between",
   },
