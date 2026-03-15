@@ -4,6 +4,8 @@ import { View, Text, StyleSheet, Pressable, Image } from "react-native";
 import GlassCard from "@/src/components/GlassCard";
 import { theme } from "@/src/constants/theme";
 import { PLACEHOLDER_DISCOVER_IMAGE } from "@/src/features/discover/discoverPresets";
+import { estimateFixturePricing } from "@/src/features/discover/discoverPrice";
+import type { FixtureListRow } from "@/src/services/apiFootball";
 
 type Variant = "live" | "trending";
 
@@ -15,6 +17,7 @@ type Props = {
   variant?: Variant;
   meta?: string;
   imageUri?: string;
+  row?: FixtureListRow;
 };
 
 export default function DiscoverFixtureCard({
@@ -25,9 +28,15 @@ export default function DiscoverFixtureCard({
   variant = "live",
   meta,
   imageUri,
+  row,
 }: Props) {
   const isTrending = variant === "trending";
   const uri = imageUri || PLACEHOLDER_DISCOVER_IMAGE;
+  const pricing = row ? estimateFixturePricing(row) : null;
+
+  const tripLabel = pricing?.tripLabel ?? null;
+  const ticketLabel = pricing?.ticketLabel ?? null;
+  const confidence = pricing?.confidence ?? "low";
 
   return (
     <Pressable
@@ -51,12 +60,19 @@ export default function DiscoverFixtureCard({
           <View
             style={isTrending ? styles.trendingImageOverlay : styles.liveImageOverlay}
           />
+
           <View style={isTrending ? styles.trendingTopBar : styles.liveTopBar}>
             <View style={isTrending ? styles.trendingHotPill : styles.liveRankPill}>
               <Text style={isTrending ? styles.trendingHotText : styles.liveRankText}>
                 {badge}
               </Text>
             </View>
+
+            {tripLabel ? (
+              <View style={styles.pricePill}>
+                <Text style={styles.pricePillText}>{tripLabel}</Text>
+              </View>
+            ) : null}
           </View>
         </View>
 
@@ -74,12 +90,34 @@ export default function DiscoverFixtureCard({
             </Text>
           ) : null}
 
+          {tripLabel || ticketLabel ? (
+            <View style={styles.pricingRow}>
+              {tripLabel ? (
+                <View style={styles.pricingChipStrong}>
+                  <Text style={styles.pricingChipStrongText}>{tripLabel} trip</Text>
+                </View>
+              ) : null}
+
+              {ticketLabel ? (
+                <View style={styles.pricingChip}>
+                  <Text style={styles.pricingChipText}>{ticketLabel} ticket</Text>
+                </View>
+              ) : null}
+            </View>
+          ) : null}
+
           <Text
             style={isTrending ? styles.trendingLabel : styles.liveWhy}
             numberOfLines={isTrending ? 1 : 2}
           >
             {subtitle}
           </Text>
+
+          {pricing ? (
+            <Text style={styles.estimateNote} numberOfLines={1}>
+              Estimated pricing • {confidence} confidence
+            </Text>
+          ) : null}
         </View>
       </GlassCard>
     </Pressable>
@@ -119,7 +157,8 @@ const styles = StyleSheet.create({
     right: 10,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "flex-start",
+    justifyContent: "space-between",
+    gap: 8,
   },
 
   liveRankPill: {
@@ -141,7 +180,7 @@ const styles = StyleSheet.create({
   liveBody: {
     padding: 14,
     gap: 6,
-    minHeight: 124,
+    minHeight: 146,
   },
 
   liveTitle: {
@@ -198,7 +237,8 @@ const styles = StyleSheet.create({
     right: 10,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "flex-start",
+    justifyContent: "space-between",
+    gap: 8,
   },
 
   trendingHotPill: {
@@ -220,7 +260,7 @@ const styles = StyleSheet.create({
   trendingBody: {
     padding: 14,
     gap: 6,
-    minHeight: 116,
+    minHeight: 138,
   },
 
   trendingTitle: {
@@ -241,6 +281,67 @@ const styles = StyleSheet.create({
     color: theme.colors.primary,
     fontSize: 12,
     fontWeight: theme.fontWeight.black,
+  },
+
+  pricePill: {
+    borderRadius: 999,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+    backgroundColor: "rgba(8,10,10,0.70)",
+  },
+
+  pricePillText: {
+    color: theme.colors.text,
+    fontSize: 10,
+    fontWeight: theme.fontWeight.black,
+    letterSpacing: 0.2,
+  },
+
+  pricingRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 2,
+  },
+
+  pricingChip: {
+    borderRadius: 999,
+    paddingVertical: 5,
+    paddingHorizontal: 9,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(255,255,255,0.04)",
+  },
+
+  pricingChipText: {
+    color: theme.colors.textSecondary,
+    fontSize: 10,
+    fontWeight: theme.fontWeight.black,
+  },
+
+  pricingChipStrong: {
+    borderRadius: 999,
+    paddingVertical: 5,
+    paddingHorizontal: 9,
+    borderWidth: 1,
+    borderColor: "rgba(87,162,56,0.24)",
+    backgroundColor: "rgba(87,162,56,0.10)",
+  },
+
+  pricingChipStrongText: {
+    color: theme.colors.text,
+    fontSize: 10,
+    fontWeight: theme.fontWeight.black,
+  },
+
+  estimateNote: {
+    color: theme.colors.textTertiary,
+    fontSize: 10,
+    lineHeight: 14,
+    fontWeight: theme.fontWeight.bold,
+    marginTop: 2,
   },
 
   pressed: {
