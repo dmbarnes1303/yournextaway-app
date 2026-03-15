@@ -41,6 +41,35 @@ export type GuidanceArea = {
   notes?: string;
 };
 
+export type PartnerUiBadgeStyle = {
+  borderColor: string;
+  backgroundColor: string;
+  textColor: string;
+};
+
+export type SourceSurface =
+  | "smart_booking"
+  | "next_best_action"
+  | "progress_strip"
+  | "workspace_cta"
+  | "workspace_item"
+  | "match_screen"
+  | "ticket_choice_alert"
+  | "match_card"
+  | "unknown";
+
+export type SourceSection =
+  | "tickets"
+  | "stay"
+  | "travel"
+  | "transfers"
+  | "things"
+  | "insurance"
+  | "claims"
+  | "notes"
+  | "summary"
+  | "unknown";
+
 export function clean(value: unknown): string {
   return String(value ?? "").trim();
 }
@@ -100,10 +129,173 @@ export function statusLabel(status: SavedItem["status"]) {
   return "Archived";
 }
 
+export function providerLabel(provider?: string | null): string {
+  const raw = clean(provider).toLowerCase();
+
+  if (raw === "footballticketsnet") return "FootballTicketNet";
+  if (raw === "sportsevents365") return "SportsEvents365";
+  if (raw === "gigsberg") return "Gigsberg";
+  if (raw === "seatpick") return "SeatPick";
+  if (raw === "aviasales") return "Aviasales";
+  if (raw === "expedia" || raw === "expedia_stays") return "Expedia";
+  if (raw === "kiwitaxi") return "KiwiTaxi";
+  if (raw === "welcomepickups") return "Welcome Pickups";
+  if (raw === "omio") return "Omio";
+  if (raw === "getyourguide") return "GetYourGuide";
+  if (raw === "klook") return "Klook";
+  if (raw === "tiqets") return "Tiqets";
+  if (raw === "wegotrip") return "WeGoTrip";
+  if (raw === "safetywing") return "SafetyWing";
+  if (raw === "ekta") return "EKTA";
+  if (raw === "airhelp") return "AirHelp";
+  if (raw === "compensair") return "Compensair";
+  if (raw === "googlemaps") return "Google Maps";
+
+  return clean(provider) || "Provider";
+}
+
+export function providerShort(provider?: string | null): string {
+  const raw = clean(provider).toLowerCase();
+
+  if (raw === "footballticketsnet") return "FTN";
+  if (raw === "sportsevents365") return "365";
+  if (raw === "gigsberg") return "G";
+  if (raw === "seatpick") return "SP";
+  if (raw === "aviasales") return "AV";
+  if (raw === "expedia" || raw === "expedia_stays") return "EX";
+  if (raw === "kiwitaxi") return "KT";
+  if (raw === "welcomepickups") return "WP";
+  if (raw === "omio") return "OM";
+  if (raw === "getyourguide") return "GYG";
+  if (raw === "klook") return "KL";
+  if (raw === "tiqets") return "TQ";
+  if (raw === "wegotrip") return "WGT";
+  if (raw === "safetywing") return "SW";
+  if (raw === "ekta") return "EK";
+  if (raw === "airhelp") return "AH";
+  if (raw === "compensair") return "CP";
+  if (raw === "googlemaps") return "MAP";
+
+  return "P";
+}
+
+export function providerBadgeStyle(provider?: string | null): PartnerUiBadgeStyle {
+  const raw = clean(provider).toLowerCase();
+
+  if (raw === "footballticketsnet") {
+    return {
+      borderColor: "rgba(120,170,255,0.35)",
+      backgroundColor: "rgba(120,170,255,0.12)",
+      textColor: "rgba(205,225,255,1)",
+    };
+  }
+
+  if (raw === "sportsevents365") {
+    return {
+      borderColor: "rgba(87,162,56,0.35)",
+      backgroundColor: "rgba(87,162,56,0.12)",
+      textColor: "rgba(208,240,192,1)",
+    };
+  }
+
+  if (raw === "gigsberg") {
+    return {
+      borderColor: "rgba(255,200,80,0.35)",
+      backgroundColor: "rgba(255,200,80,0.12)",
+      textColor: "rgba(255,226,160,1)",
+    };
+  }
+
+  if (raw === "aviasales") {
+    return {
+      borderColor: "rgba(120,170,255,0.30)",
+      backgroundColor: "rgba(120,170,255,0.10)",
+      textColor: "rgba(210,225,255,1)",
+    };
+  }
+
+  if (raw === "expedia" || raw === "expedia_stays") {
+    return {
+      borderColor: "rgba(87,162,56,0.30)",
+      backgroundColor: "rgba(87,162,56,0.10)",
+      textColor: "rgba(210,240,205,1)",
+    };
+  }
+
+  if (raw === "kiwitaxi" || raw === "welcomepickups") {
+    return {
+      borderColor: "rgba(255,160,120,0.30)",
+      backgroundColor: "rgba(255,160,120,0.10)",
+      textColor: "rgba(255,220,205,1)",
+    };
+  }
+
+  if (raw === "omio") {
+    return {
+      borderColor: "rgba(200,120,255,0.30)",
+      backgroundColor: "rgba(200,120,255,0.10)",
+      textColor: "rgba(235,210,255,1)",
+    };
+  }
+
+  if (raw === "getyourguide" || raw === "klook" || raw === "tiqets" || raw === "wegotrip") {
+    return {
+      borderColor: "rgba(255,90,120,0.30)",
+      backgroundColor: "rgba(255,90,120,0.10)",
+      textColor: "rgba(255,215,225,1)",
+    };
+  }
+
+  if (raw === "airhelp" || raw === "compensair") {
+    return {
+      borderColor: "rgba(255,120,120,0.30)",
+      backgroundColor: "rgba(255,120,120,0.10)",
+      textColor: "rgba(255,220,220,1)",
+    };
+  }
+
+  if (raw === "safetywing" || raw === "ekta") {
+    return {
+      borderColor: "rgba(120,220,200,0.30)",
+      backgroundColor: "rgba(120,220,200,0.10)",
+      textColor: "rgba(210,250,245,1)",
+    };
+  }
+
+  return {
+    borderColor: "rgba(255,255,255,0.15)",
+    backgroundColor: "rgba(255,255,255,0.06)",
+    textColor: "rgba(242,244,246,1)",
+  };
+}
+
+export function ticketConfidenceLabel(score?: number | null): string | null {
+  if (typeof score !== "number" || !Number.isFinite(score)) return null;
+  if (score >= 90) return "High confidence match";
+  if (score >= 75) return "Strong ticket match";
+  if (score >= 60) return "Good ticket match";
+  return "Fallback ticket match";
+}
+
+export function confidenceLabel(score?: number | null): string {
+  if (typeof score !== "number" || !Number.isFinite(score)) return "Fallback";
+  if (score >= 90) return "High confidence";
+  if (score >= 75) return "Strong match";
+  if (score >= 60) return "Good match";
+  return "Fallback";
+}
+
+export function optionReasonLabel(reason?: TicketResolutionOption["reason"] | string | null) {
+  if (reason === "exact_event") return "Direct event match";
+  if (reason === "partial_match") return "Partial match";
+  return "Search fallback";
+}
+
 export function livePriceLine(item: SavedItem): string | null {
   if (!clean(item.partnerUrl)) return null;
 
   const resolvedPrice = clean(item.metadata?.resolvedPriceText);
+  const provider = providerLabel(clean(item.metadata?.ticketProvider) || clean(item.partnerId));
 
   if (item.status === "booked") {
     const bookedPrice = clean(item.priceText) || resolvedPrice;
@@ -111,11 +303,10 @@ export function livePriceLine(item: SavedItem): string | null {
   }
 
   if (resolvedPrice) {
-    const provider = clean(item.partnerId);
     return provider ? `From ${resolvedPrice} on ${provider}` : `From ${resolvedPrice}`;
   }
 
-  return "Live price on partner";
+  return provider ? `Live price on ${provider}` : "Live price on partner";
 }
 
 export function parseIsoToDate(iso?: string | null): Date | null {
@@ -236,6 +427,7 @@ export function mapTicketProviderToPartnerId(provider?: string | null): PartnerI
   const raw = clean(provider).toLowerCase();
   if (raw === "footballticketsnet") return "footballticketsnet" as PartnerId;
   if (raw === "gigsberg") return "gigsberg" as PartnerId;
+  if (raw === "seatpick") return "seatpick" as PartnerId;
   return "sportsevents365" as PartnerId;
 }
 
@@ -308,7 +500,7 @@ export function normalizeTicketOptions(
     if (aHasPrice && !bHasPrice) return -1;
     if (!aHasPrice && bHasPrice) return 1;
 
-    return a.provider.localeCompare(b.provider);
+    return providerLabel(a.provider).localeCompare(providerLabel(b.provider));
   });
 
   if (values.length > 0) return values;
