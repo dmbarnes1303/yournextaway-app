@@ -17,10 +17,24 @@ function hasPopularTeam(id: unknown): boolean {
   return typeof id === "number" && POPULAR_TEAM_IDS.has(id);
 }
 
+const EUROPEAN_COMPETITION_IDS = new Set([2, 3, 848]);
+
+function isEuropeanCompetitionFixture(r: FixtureListRow): boolean {
+  const leagueId = r?.league?.id != null ? Number(r.league.id) : null;
+  if (leagueId == null) return false;
+  return EUROPEAN_COMPETITION_IDS.has(leagueId);
+}
+
+function isWeekendFixture(r: FixtureListRow): boolean {
+  const raw = r?.fixture?.date;
+  if (!raw) return false;
+  const dt = new Date(raw);
+  if (Number.isNaN(dt.getTime())) return false;
+  const day = dt.getDay();
+  return day === 5 || day === 6 || day === 0;
+}
+
 function leagueWeight(leagueId: number | null): number {
-  if (leagueId === 2) return 118; // Champions League
-  if (leagueId === 3) return 96; // Europa League
-  if (leagueId === 848) return 84; // Conference League
   if (leagueId === 39) return 112; // Premier League
   if (leagueId === 140) return 102; // La Liga
   if (leagueId === 135) return 98; // Serie A
@@ -30,19 +44,10 @@ function leagueWeight(leagueId: number | null): number {
   if (leagueId === 94) return 80; // Primeira Liga
   if (leagueId === 203) return 78; // Super Lig
   if (leagueId === 179) return 75; // Scottish Premiership
+  if (leagueId === 2) return 116; // Champions League
+  if (leagueId === 3) return 92; // Europa League
+  if (leagueId === 848) return 84; // Conference League
   return 60;
-}
-
-function isEuropeanCompetition(leagueId: number | null): boolean {
-  return leagueId === 2 || leagueId === 3 || leagueId === 848;
-}
-
-function isWeekendFixture(dateIso?: string | null): boolean {
-  if (!dateIso) return false;
-  const dt = new Date(dateIso);
-  if (Number.isNaN(dt.getTime())) return false;
-  const day = dt.getUTCDay();
-  return day === 5 || day === 6 || day === 0;
 }
 
 export function baseFixtureScore(r: FixtureListRow): number {
@@ -63,14 +68,14 @@ export function baseFixtureScore(r: FixtureListRow): number {
 
   const dt = r?.fixture?.date ? new Date(r.fixture.date) : null;
   if (dt && !Number.isNaN(dt.getTime())) {
-    const day = dt.getUTCDay();
+    const day = dt.getDay();
     if (day === 5 || day === 6 || day === 0) score += 12;
 
-    const hr = dt.getUTCHours();
+    const hr = dt.getHours();
     if (hr >= 17 && hr <= 21) score += 8;
   }
 
-  if (isEuropeanCompetition(lid)) score += 10;
+  if (isEuropeanCompetitionFixture(r)) score += 22;
 
   return score;
 }
@@ -93,25 +98,14 @@ function vibeBoost(scored: DiscoverFixture, ctx?: DiscoverContext | null) {
 
   for (const vibe of vibes) {
     if (vibe === "easy") {
-      boost +=
-        scored.scores.ticketEaseScore * 8 +
-        scored.scores.tripEaseScore * 6 +
-        scored.scores.weekendTripScore * 2;
+      boost += scored.scores.ticketEaseScore * 8 + scored.scores.tripEaseScore * 6;
     } else if (vibe === "big") {
-      boost +=
-        scored.scores.derbyScore * 8 +
-        scored.scores.glamourScore * 6 +
-        scored.scores.europeScore * 8;
+      boost += scored.scores.derbyScore * 8 + scored.scores.glamourScore * 6;
+      if (isEuropeanCompetitionFixture(scored.fixture)) boost += 18;
     } else if (vibe === "nightlife") {
-      boost +=
-        scored.scores.nightlifeScore * 8 +
-        scored.scores.nightScore * 6 +
-        scored.scores.weekendTripScore * 3;
+      boost += scored.scores.nightlifeScore * 8 + scored.scores.nightScore * 6;
     } else if (vibe === "culture") {
-      boost +=
-        scored.scores.cultureScore * 8 +
-        scored.scores.cityScore * 6 +
-        scored.scores.multiMatchScore * 4;
+      boost += scored.scores.cultureScore * 8 + scored.scores.cityScore * 6;
     } else if (vibe === "warm") {
       boost += scored.scores.warmWeatherScore * 10;
     }
@@ -125,27 +119,18 @@ function tripLengthBoost(scored: DiscoverFixture, ctx?: DiscoverContext | null) 
   if (!tripLength) return 0;
 
   if (tripLength === "day") {
-    return (
-      scored.scores.tripEaseScore * 12 +
-      scored.scores.ticketEaseScore * 6 -
-      scored.scores.multiMatchScore * 2
-    );
+    return scored.scores.tripEaseScore * 12 + scored.scores.ticketEaseScore * 6;
   }
 
   if (tripLength === "1") {
-    return (
-      scored.scores.tripEaseScore * 8 +
-      scored.scores.cityScore * 5 +
-      scored.scores.weekendTripScore * 4
-    );
+    return scored.scores.tripEaseScore * 8 + scored.scores.cityScore * 5;
   }
 
   if (tripLength === "2") {
     return (
       scored.scores.cityScore * 8 +
       scored.scores.cultureScore * 6 +
-      scored.scores.multiMatchScore * 8 +
-      scored.scores.weekendTripScore * 6
+      scored.scores.tripEaseScore * 6
     );
   }
 
@@ -153,9 +138,7 @@ function tripLengthBoost(scored: DiscoverFixture, ctx?: DiscoverContext | null) 
     scored.scores.cityScore * 10 +
     scored.scores.cultureScore * 8 +
     scored.scores.nightlifeScore * 6 +
-    scored.scores.warmWeatherScore * 4 +
-    scored.scores.multiMatchScore * 12 +
-    scored.scores.weekendTripScore * 8
+    scored.scores.warmWeatherScore * 4
   );
 }
 
@@ -213,8 +196,7 @@ function iconicCityScore(scored: DiscoverFixture) {
     scored.scores.cityScore * 18 +
     scored.scores.cultureScore * 16 +
     scored.scores.stadiumScore * 14 +
-    scored.scores.nightlifeScore * 10 +
-    scored.scores.multiMatchScore * 12
+    scored.scores.nightlifeScore * 10
   );
 }
 
@@ -226,8 +208,7 @@ function bucketListScore(scored: DiscoverFixture) {
     scored.scores.derbyScore * 16 +
     scored.scores.cityScore * 14 +
     scored.scores.glamourScore * 10 +
-    scored.scores.nightScore * 8 +
-    scored.scores.europeScore * 18
+    scored.scores.nightScore * 8
   );
 }
 
@@ -240,9 +221,7 @@ function perfectTripScore(scored: DiscoverFixture) {
     scored.scores.cultureScore * 16 +
     scored.scores.tripEaseScore * 18 +
     scored.scores.ticketEaseScore * 12 +
-    scored.scores.nightlifeScore * 10 +
-    scored.scores.multiMatchScore * 10 +
-    scored.scores.weekendTripScore * 8
+    scored.scores.nightlifeScore * 10
   );
 }
 
@@ -262,45 +241,59 @@ function underratedTripScore(scored: DiscoverFixture) {
     scored.scores.underratedScore * 32 +
     scored.scores.atmosphereScore * 16 +
     scored.scores.valueScore * 16 +
-    scored.scores.cityScore * 8 +
-    scored.scores.multiMatchScore * 6 -
+    scored.scores.cityScore * 8 -
     glamourPenalty
   );
 }
 
 function europeanNightsScore(scored: DiscoverFixture) {
-  return (
-    baseFixtureScore(scored.fixture) +
-    scored.scores.europeScore * 46 +
-    scored.scores.nightScore * 18 +
-    scored.scores.glamourScore * 16 +
-    scored.scores.atmosphereScore * 14 +
-    scored.scores.cityScore * 8
-  );
+  const r = scored.fixture;
+  let score =
+    baseFixtureScore(r) +
+    scored.scores.glamourScore * 20 +
+    scored.scores.atmosphereScore * 18 +
+    scored.scores.nightScore * 16 +
+    scored.scores.cityScore * 12 +
+    scored.scores.stadiumScore * 10;
+
+  if (isEuropeanCompetitionFixture(r)) score += 120;
+  if (scored.scores.derbyScore >= 3) score += 10;
+
+  return score;
 }
 
 function multiMatchTripsScore(scored: DiscoverFixture) {
-  return (
-    baseFixtureScore(scored.fixture) * 0.55 +
-    scored.scores.multiMatchScore * 52 +
-    scored.scores.weekendTripScore * 20 +
-    scored.scores.cityScore * 18 +
+  const r = scored.fixture;
+  let score =
+    baseFixtureScore(r) +
+    scored.scores.tripEaseScore * 24 +
+    scored.scores.cityScore * 20 +
     scored.scores.cultureScore * 14 +
-    scored.scores.tripEaseScore * 10 +
-    scored.scores.europeScore * 8
-  );
+    scored.scores.ticketEaseScore * 10 +
+    scored.scores.valueScore * 10 +
+    scored.scores.nightScore * 8;
+
+  if (isEuropeanCompetitionFixture(r)) score += 18;
+  if (isWeekendFixture(r)) score += 14;
+
+  return score;
 }
 
 function weekendTripsScore(scored: DiscoverFixture) {
-  return (
-    baseFixtureScore(scored.fixture) * 0.48 +
-    scored.scores.weekendTripScore * 58 +
-    scored.scores.multiMatchScore * 18 +
-    scored.scores.nightlifeScore * 14 +
-    scored.scores.cityScore * 12 +
-    scored.scores.tripEaseScore * 10 +
-    scored.scores.nightScore * 8
-  );
+  const r = scored.fixture;
+  let score =
+    baseFixtureScore(r) +
+    scored.scores.tripEaseScore * 22 +
+    scored.scores.cityScore * 16 +
+    scored.scores.cultureScore * 12 +
+    scored.scores.ticketEaseScore * 10 +
+    scored.scores.valueScore * 8 +
+    scored.scores.nightlifeScore * 8;
+
+  if (isWeekendFixture(r)) score += 95;
+  if (isEuropeanCompetitionFixture(r)) score -= 10;
+
+  return score;
 }
 
 export function discoverScoreForCategory(
@@ -321,8 +314,7 @@ export function discoverScoreForCategory(
         scored.scores.atmosphereScore * 20 +
         scored.scores.glamourScore * 16 +
         scored.scores.titleDramaScore * 16 +
-        scored.scores.nightScore * 10 +
-        scored.scores.europeScore * 20;
+        scored.scores.nightScore * 10;
       break;
 
     case "derbies":
@@ -339,8 +331,7 @@ export function discoverScoreForCategory(
         scored.scores.atmosphereScore * 40 +
         scored.scores.cultureScore * 12 +
         scored.scores.derbyScore * 12 +
-        scored.scores.nightScore * 8 +
-        scored.scores.europeScore * 10;
+        scored.scores.nightScore * 8;
       break;
 
     case "valueTrips":
@@ -349,8 +340,7 @@ export function discoverScoreForCategory(
         scored.scores.valueScore * 56 +
         scored.scores.ticketEaseScore * 14 +
         scored.scores.tripEaseScore * 12 +
-        scored.scores.cityScore * 6 +
-        scored.scores.weekendTripScore * 6;
+        scored.scores.cityScore * 6;
       break;
 
     case "perfectTrips":
@@ -365,14 +355,25 @@ export function discoverScoreForCategory(
         base * 0.14;
       break;
 
+    case "multiMatchTrips":
+      score = multiMatchTripsScore(scored);
+      break;
+
+    case "weekendTrips":
+      score = weekendTripsScore(scored);
+      break;
+
+    case "europeanNights":
+      score = europeanNightsScore(scored);
+      break;
+
     case "legendaryStadiums":
       score =
         base +
         scored.scores.stadiumScore * 50 +
         scored.scores.atmosphereScore * 10 +
         scored.scores.cityScore * 10 +
-        scored.scores.derbyScore * 6 +
-        scored.scores.europeScore * 10;
+        scored.scores.derbyScore * 6;
       break;
 
     case "iconicCities":
@@ -385,8 +386,7 @@ export function discoverScoreForCategory(
         scored.scores.nightScore * 54 +
         scored.scores.nightlifeScore * 20 +
         scored.scores.atmosphereScore * 12 +
-        scored.scores.derbyScore * 8 +
-        scored.scores.europeScore * 16;
+        scored.scores.derbyScore * 8;
       break;
 
     case "titleDrama":
@@ -394,8 +394,7 @@ export function discoverScoreForCategory(
         base +
         scored.scores.titleDramaScore * 54 +
         scored.scores.derbyScore * 10 +
-        scored.scores.atmosphereScore * 10 +
-        scored.scores.europeScore * 8;
+        scored.scores.atmosphereScore * 10;
       break;
 
     case "bucketList":
@@ -408,24 +407,11 @@ export function discoverScoreForCategory(
         scored.scores.cultureScore * 34 +
         scored.scores.atmosphereScore * 22 +
         scored.scores.cityScore * 14 +
-        scored.scores.derbyScore * 10 +
-        scored.scores.multiMatchScore * 10;
+        scored.scores.derbyScore * 10;
       break;
 
     case "underratedTrips":
       score = underratedTripScore(scored);
-      break;
-
-    case "europeanNights":
-      score = europeanNightsScore(scored);
-      break;
-
-    case "multiMatchTrips":
-      score = multiMatchTripsScore(scored);
-      break;
-
-    case "weekendTrips":
-      score = weekendTripsScore(scored);
       break;
 
     default:
@@ -436,9 +422,5 @@ export function discoverScoreForCategory(
   score += vibeBoost(scored, ctx);
   score += tripLengthBoost(scored, ctx);
 
-  if (isWeekendFixture(r?.fixture?.date)) {
-    score += 3;
-  }
-
   return score;
-                                  }
+  }
