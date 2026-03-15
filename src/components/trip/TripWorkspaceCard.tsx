@@ -19,6 +19,11 @@ import { getSavedItemTypeLabel } from "@/src/core/savedItemTypes";
 import { getPartner } from "@/src/core/partners";
 import type { WorkspaceSectionKey, TripWorkspace } from "@/src/core/tripWorkspace";
 import { WORKSPACE_SECTIONS } from "@/src/core/tripWorkspace";
+import {
+  providerBadgeStyle,
+  providerLabel,
+  providerShort,
+} from "@/src/features/tripDetail/helpers";
 
 function clean(value: unknown): string {
   return String(value ?? "").trim();
@@ -29,110 +34,6 @@ function statusLabel(status: SavedItem["status"]) {
   if (status === "saved") return "Saved";
   if (status === "booked") return "Booked";
   return "Archived";
-}
-
-function providerLabel(provider?: string | null): string {
-  const raw = clean(provider).toLowerCase();
-
-  if (raw === "footballticketsnet") return "FootballTicketNet";
-  if (raw === "sportsevents365") return "SportsEvents365";
-  if (raw === "gigsberg") return "Gigsberg";
-  if (raw === "aviasales") return "Aviasales";
-  if (raw === "expedia" || raw === "expedia_stays") return "Expedia";
-  if (raw === "kiwitaxi") return "KiwiTaxi";
-  if (raw === "omio") return "Omio";
-  if (raw === "getyourguide") return "GetYourGuide";
-
-  return provider || "Provider";
-}
-
-function providerShort(provider?: string | null): string {
-  const raw = clean(provider).toLowerCase();
-
-  if (raw === "footballticketsnet") return "FTN";
-  if (raw === "sportsevents365") return "365";
-  if (raw === "gigsberg") return "G";
-  if (raw === "aviasales") return "AV";
-  if (raw === "expedia" || raw === "expedia_stays") return "EX";
-  if (raw === "kiwitaxi") return "KT";
-  if (raw === "omio") return "OM";
-  if (raw === "getyourguide") return "GYG";
-
-  return "P";
-}
-
-function providerBadgeStyle(provider?: string | null) {
-  const raw = clean(provider).toLowerCase();
-
-  if (raw === "footballticketsnet") {
-    return {
-      borderColor: "rgba(120,170,255,0.35)",
-      backgroundColor: "rgba(120,170,255,0.12)",
-      textColor: "rgba(205,225,255,1)",
-    };
-  }
-
-  if (raw === "sportsevents365") {
-    return {
-      borderColor: "rgba(87,162,56,0.35)",
-      backgroundColor: "rgba(87,162,56,0.12)",
-      textColor: "rgba(208,240,192,1)",
-    };
-  }
-
-  if (raw === "gigsberg") {
-    return {
-      borderColor: "rgba(255,200,80,0.35)",
-      backgroundColor: "rgba(255,200,80,0.12)",
-      textColor: "rgba(255,226,160,1)",
-    };
-  }
-
-  if (raw === "aviasales") {
-    return {
-      borderColor: "rgba(120,170,255,0.30)",
-      backgroundColor: "rgba(120,170,255,0.10)",
-      textColor: "rgba(210,225,255,1)",
-    };
-  }
-
-  if (raw === "expedia" || raw === "expedia_stays") {
-    return {
-      borderColor: "rgba(87,162,56,0.30)",
-      backgroundColor: "rgba(87,162,56,0.10)",
-      textColor: "rgba(210,240,205,1)",
-    };
-  }
-
-  if (raw === "kiwitaxi") {
-    return {
-      borderColor: "rgba(255,160,120,0.30)",
-      backgroundColor: "rgba(255,160,120,0.10)",
-      textColor: "rgba(255,220,205,1)",
-    };
-  }
-
-  if (raw === "omio") {
-    return {
-      borderColor: "rgba(200,120,255,0.30)",
-      backgroundColor: "rgba(200,120,255,0.10)",
-      textColor: "rgba(235,210,255,1)",
-    };
-  }
-
-  if (raw === "getyourguide") {
-    return {
-      borderColor: "rgba(255,90,120,0.30)",
-      backgroundColor: "rgba(255,90,120,0.10)",
-      textColor: "rgba(255,215,225,1)",
-    };
-  }
-
-  return {
-    borderColor: "rgba(255,255,255,0.15)",
-    backgroundColor: "rgba(255,255,255,0.06)",
-    textColor: theme.colors.text,
-  };
 }
 
 function safePartnerName(item: SavedItem) {
@@ -147,6 +48,10 @@ function safePartnerName(item: SavedItem) {
     if (provider === "sportsevents365") return "SportsEvents365";
     if (provider === "gigsberg") return "Gigsberg";
     if (provider === "omio") return "Omio";
+    if (provider === "aviasales") return "Aviasales";
+    if (provider === "expedia") return "Expedia";
+    if (provider === "kiwitaxi") return "KiwiTaxi";
+    if (provider === "getyourguide") return "GetYourGuide";
 
     return null;
   }
@@ -557,6 +462,8 @@ const SectionContent = memo(function SectionContent(props: SectionContentProps) 
                   startDate: tripStartDate,
                   endDate: tripEndDate,
                   priceMode: "live",
+                  sourceSurface: "workspace_cta",
+                  sourceSection: "stay",
                 },
               })
             }
@@ -616,7 +523,11 @@ const SectionContent = memo(function SectionContent(props: SectionContentProps) 
                   metadata: {
                     city: cityName,
                     originIata,
+                    startDate: tripStartDate,
+                    endDate: tripEndDate,
                     priceMode: "live",
+                    sourceSurface: "workspace_cta",
+                    sourceSection: "travel",
                   },
                 })
               }
@@ -640,6 +551,8 @@ const SectionContent = memo(function SectionContent(props: SectionContentProps) 
                     endDate: tripEndDate,
                     priceMode: "live",
                     transportMode: "rail_bus",
+                    sourceSurface: "workspace_cta",
+                    sourceSection: "travel",
                   },
                 })
               }
@@ -678,6 +591,8 @@ const SectionContent = memo(function SectionContent(props: SectionContentProps) 
                   startDate: tripStartDate,
                   endDate: tripEndDate,
                   priceMode: "live",
+                  sourceSurface: "workspace_cta",
+                  sourceSection: "transfers",
                 },
               })
             }
@@ -726,7 +641,11 @@ const SectionContent = memo(function SectionContent(props: SectionContentProps) 
                 title: `Experiences in ${cityName}`,
                 metadata: {
                   city: cityName,
+                  startDate: tripStartDate,
+                  endDate: tripEndDate,
                   priceMode: "live",
+                  sourceSurface: "workspace_cta",
+                  sourceSection: "things",
                 },
               })
             }
