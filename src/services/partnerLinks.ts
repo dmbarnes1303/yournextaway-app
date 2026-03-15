@@ -1,17 +1,25 @@
-// src/services/partnerLinks.ts
 import { AffiliateConfig } from "@/src/constants/partners";
 import { buildAffiliateLinks, type CabinClass } from "@/src/services/affiliateLinks";
 import { getCanonicalPartnerId, getPartnerOrNull } from "@/src/core/partners";
 
-function clean(v: unknown): string {
-  return typeof v === "string" ? v.trim() : String(v ?? "").trim();
+type ResolveAffiliateContext = {
+  city: string;
+  startDate?: string | null;
+  endDate?: string | null;
+  originIata?: string | null;
+  passengers?: number | null;
+  cabinClass?: CabinClass | null;
+};
+
+function clean(value: unknown): string {
+  return typeof value === "string" ? value.trim() : String(value ?? "").trim();
 }
 
-function enc(v: unknown) {
-  return encodeURIComponent(clean(v));
+function enc(value: unknown): string {
+  return encodeURIComponent(clean(value));
 }
 
-function safeUrl(value: string): string {
+function safeUrl(value: unknown): string {
   const url = clean(value);
   if (!url) return "";
 
@@ -20,6 +28,14 @@ function safeUrl(value: string): string {
   } catch {
     return "";
   }
+}
+
+function getResolvedPartnerId(partnerId: string): string {
+  const rawId = clean(partnerId).toLowerCase();
+  if (!rawId) return "";
+
+  const partner = getPartnerOrNull(rawId);
+  return partner ? getCanonicalPartnerId(partner.id) : rawId;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -114,15 +130,14 @@ function buildOmioUrl(ctx: {
 
 export function buildAffiliateUrl(baseUrl: string, partnerId: string): string {
   const url = safeUrl(baseUrl);
-  const rawId = clean(partnerId).toLowerCase();
-  if (!url || !rawId) return "";
+  const resolvedId = getResolvedPartnerId(partnerId);
 
-  const partner = getPartnerOrNull(rawId);
-  const id = partner ? getCanonicalPartnerId(partner.id) : rawId;
+  if (!url || !resolvedId) return "";
 
-  switch (id) {
+  switch (resolvedId) {
     case "sportsevents365":
       return appendSe365Aid(url);
+
     default:
       return url;
   }
@@ -146,22 +161,12 @@ export function buildTicketLink(args: { eventUrl: string }): string | null {
 
 export function resolveAffiliateUrl(
   partnerId: string,
-  ctx: {
-    city: string;
-    startDate?: string | null;
-    endDate?: string | null;
-    originIata?: string | null;
-    passengers?: number | null;
-    cabinClass?: CabinClass | null;
-  }
+  ctx: ResolveAffiliateContext
 ): string | null {
-  const rawId = clean(partnerId).toLowerCase();
+  const resolvedId = getResolvedPartnerId(partnerId);
   const city = clean(ctx.city);
 
-  if (!rawId || !city) return null;
-
-  const partner = getPartnerOrNull(rawId);
-  const id = partner ? getCanonicalPartnerId(partner.id) : rawId;
+  if (!resolvedId || !city) return null;
 
   const links = buildAffiliateLinks({
     city,
@@ -172,7 +177,7 @@ export function resolveAffiliateUrl(
     cabinClass: ctx.cabinClass ?? null,
   });
 
-  switch (id) {
+  switch (resolvedId) {
     case "aviasales":
       return clean(links.flightsUrl) || null;
 
