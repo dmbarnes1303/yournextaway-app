@@ -47,10 +47,6 @@ import {
   fetchDiscoverPool,
   fixtureMeta,
   fixtureTitle,
-  isEuropeanCompetition,
-  isLateKickoff,
-  isMidweekFixture,
-  isWeekendFixture,
   labelForKey,
   labelForTripLength,
   labelForVibe,
@@ -74,7 +70,6 @@ import type {
 } from "@/src/features/discover/types";
 
 import DiscoverCategoryCard from "@/src/features/discover/components/DiscoverCategoryCard";
-import DiscoverFilterChip from "@/src/features/discover/components/DiscoverFilterChip";
 import DiscoverFixtureCard from "@/src/features/discover/components/DiscoverFixtureCard";
 import DiscoverSectionHeader from "@/src/features/discover/components/DiscoverSectionHeader";
 import DiscoverTripSetup from "@/src/features/discover/components/DiscoverTripSetup";
@@ -688,28 +683,21 @@ export default function DiscoverScreen() {
             ) : null}
           </View>
 
-          <View style={styles.section}>
-            <DiscoverTripSetup
-              setupExpanded={setupExpanded}
-              browseModeLabel={browseModeLabel}
-              filterSummary={filterSummary}
-              discoverOrigin={discoverOrigin}
-              discoverWindowKey={discoverWindowKey}
-              discoverTripLength={discoverTripLength}
-              discoverVibes={discoverVibes}
-              onToggleSetup={toggleSetup}
-              onResetFilters={resetFilters}
-              onChangeOrigin={setDiscoverOrigin}
-              onChangeWindowKey={setDiscoverWindowKey}
-              onChangeTripLength={setDiscoverTripLength}
-              onToggleVibe={toggleVibe}
-              shortLabelForKey={shortLabelForKey}
-              shortLabelForTripLength={shortLabelForTripLength}
-              shortLabelForVibe={shortLabelForVibe}
-              labelForTripLength={labelForTripLength}
-              labelForVibe={labelForVibe}
-            />
-          </View>
+          <DiscoverTripSetup
+            setupExpanded={setupExpanded}
+            onToggleSetup={toggleSetup}
+            onReset={resetFilters}
+            browseModeLabel={browseModeLabel}
+            filterSummary={filterSummary}
+            discoverOrigin={discoverOrigin}
+            setDiscoverOrigin={setDiscoverOrigin}
+            discoverWindowKey={discoverWindowKey}
+            setDiscoverWindowKey={setDiscoverWindowKey}
+            discoverTripLength={discoverTripLength}
+            setDiscoverTripLength={setDiscoverTripLength}
+            discoverVibes={discoverVibes}
+            onToggleVibe={toggleVibe}
+          />
 
           <View style={styles.section}>
             <DiscoverSectionHeader
@@ -739,6 +727,7 @@ export default function DiscoverScreen() {
                 {previewLive.map((entry, index) => (
                   <DiscoverFixtureCard
                     key={String(entry.item.fixture?.fixture?.id ?? index)}
+                    variant="live"
                     title={fixtureTitle(entry.item.fixture)}
                     meta={fixtureMeta(entry.item.fixture)}
                     subtitle={whyThisFits(
@@ -747,7 +736,6 @@ export default function DiscoverScreen() {
                       discoverVibes,
                       discoverTripLength
                     )}
-                    imageUri={getDiscoverCardImage()}
                     badge={rankLabel(index)}
                     onPress={() => goMatchFromRow(entry.item.fixture)}
                   />
@@ -780,10 +768,10 @@ export default function DiscoverScreen() {
                 {trendingTrips.map((entry, index) => (
                   <DiscoverFixtureCard
                     key={`trend-${String(entry.item.fixture?.fixture?.id ?? index)}`}
+                    variant="trending"
                     title={fixtureTitle(entry.item.fixture)}
-                    meta={fixtureMeta(entry.item.fixture)}
                     subtitle={trendingLabelForFixture(entry.item.fixture)}
-                    imageUri={getDiscoverCardImage()}
+                    meta={fixtureMeta(entry.item.fixture)}
                     badge="🔥 Trending"
                     onPress={() => goMatchFromRow(entry.item.fixture)}
                   />
@@ -836,8 +824,7 @@ export default function DiscoverScreen() {
               <DiscoverCategoryCard
                 category={leadCategory}
                 compact={false}
-                imageUri={PLACEHOLDER_DISCOVER_IMAGE}
-                onPress={() => goFixturesCategory(leadCategory)}
+                onPress={goFixturesCategory}
               />
             ) : null}
 
@@ -847,8 +834,7 @@ export default function DiscoverScreen() {
                   key={category}
                   category={category}
                   compact={false}
-                  imageUri={PLACEHOLDER_DISCOVER_IMAGE}
-                  onPress={() => goFixturesCategory(category)}
+                  onPress={goFixturesCategory}
                 />
               ))}
             </View>
@@ -870,8 +856,7 @@ export default function DiscoverScreen() {
                   key={category}
                   category={category}
                   compact
-                  imageUri={PLACEHOLDER_DISCOVER_IMAGE}
-                  onPress={() => goFixturesCategory(category)}
+                  onPress={goFixturesCategory}
                 />
               ))}
             </ScrollView>
