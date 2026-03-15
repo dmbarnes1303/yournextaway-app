@@ -483,73 +483,73 @@ export default function TripsScreen() {
                   </Text>
                 </View>
 
-                <View style={styles.heroRightCol}>
-                  <View style={styles.heroStatsCol}>
-                    <MetricCard
-                      icon="airplane-outline"
-                      value={String(clamp2(totals.tripCount))}
-                      label="Trips"
-                    />
-                    <MetricCard
-                      icon="time-outline"
-                      value={String(clamp2(totals.pending))}
-                      label="Pending"
-                    />
-                    <MetricCard
-                      icon="checkmark-done-outline"
-                      value={String(clamp2(totals.booked))}
-                      label="Booked"
-                    />
-                  </View>
-                </View>
-              </View>
-
-              <View style={styles.heroMidRow}>
-                <View style={styles.logoPanel}>
-                  {TRIPS_HEADER_LOGO ? (
-                    <Image
-                      source={{ uri: TRIPS_HEADER_LOGO }}
-                      style={styles.logoPanelImage}
-                      resizeMode="contain"
-                    />
-                  ) : (
-                    <View style={styles.logoPanelPlaceholder}>
-                      <Ionicons
-                        name="shield-outline"
-                        size={28}
-                        color={theme.colors.textTertiary}
+                <View style={styles.heroLogoSlot}>
+                  <View style={styles.logoPanel}>
+                    {TRIPS_HEADER_LOGO ? (
+                      <Image
+                        source={{ uri: TRIPS_HEADER_LOGO }}
+                        style={styles.logoPanelImage}
+                        resizeMode="contain"
                       />
-                    </View>
-                  )}
+                    ) : (
+                      <View style={styles.logoPanelPlaceholder}>
+                        <Ionicons
+                          name="shield-outline"
+                          size={28}
+                          color={theme.colors.textTertiary}
+                        />
+                      </View>
+                    )}
+                  </View>
                 </View>
               </View>
 
-              <View style={styles.heroActions}>
-                <Pressable
-                  onPress={goBuild}
-                  style={({ pressed }) => [styles.primaryAction, pressed && styles.pressed]}
-                >
-                  <View style={styles.primaryActionIcon}>
-                    <Ionicons name="add-outline" size={18} color={theme.colors.text} />
-                  </View>
-                  <View style={styles.primaryActionTextWrap}>
-                    <Text style={styles.primaryActionTitle}>Build a trip</Text>
-                    <Text style={styles.primaryActionSub}>Create a new workspace</Text>
-                  </View>
-                </Pressable>
+              <View style={styles.heroLowerRow}>
+                <View style={styles.heroStatsCol}>
+                  <MetricCard
+                    icon="airplane-outline"
+                    value={String(clamp2(totals.tripCount))}
+                    label="Trips"
+                  />
+                  <MetricCard
+                    icon="time-outline"
+                    value={String(clamp2(totals.pending))}
+                    label="Pending"
+                  />
+                  <MetricCard
+                    icon="checkmark-done-outline"
+                    value={String(clamp2(totals.booked))}
+                    label="Booked"
+                  />
+                </View>
 
-                <Pressable
-                  onPress={goFixtures}
-                  style={({ pressed }) => [styles.secondaryAction, pressed && styles.pressed]}
-                >
-                  <View style={styles.secondaryActionIcon}>
-                    <Ionicons name="calendar-outline" size={18} color={theme.colors.text} />
-                  </View>
-                  <View style={styles.secondaryActionTextWrap}>
-                    <Text style={styles.secondaryActionTitle}>Browse fixtures</Text>
-                    <Text style={styles.secondaryActionSub}>Start from a match</Text>
-                  </View>
-                </Pressable>
+                <View style={styles.heroActions}>
+                  <Pressable
+                    onPress={goBuild}
+                    style={({ pressed }) => [styles.primaryAction, pressed && styles.pressed]}
+                  >
+                    <View style={styles.primaryActionIcon}>
+                      <Ionicons name="add-outline" size={18} color={theme.colors.text} />
+                    </View>
+                    <View style={styles.primaryActionTextWrap}>
+                      <Text style={styles.primaryActionTitle}>Build a trip</Text>
+                      <Text style={styles.primaryActionSub}>Create a new workspace</Text>
+                    </View>
+                  </Pressable>
+
+                  <Pressable
+                    onPress={goFixtures}
+                    style={({ pressed }) => [styles.secondaryAction, pressed && styles.pressed]}
+                  >
+                    <View style={styles.secondaryActionIcon}>
+                      <Ionicons name="calendar-outline" size={18} color={theme.colors.text} />
+                    </View>
+                    <View style={styles.secondaryActionTextWrap}>
+                      <Text style={styles.secondaryActionTitle}>Browse fixtures</Text>
+                      <Text style={styles.secondaryActionSub}>Start from a match</Text>
+                    </View>
+                  </Pressable>
+                </View>
               </View>
 
               <View style={styles.heroSummaryRow}>
@@ -1005,31 +1005,22 @@ const styles = StyleSheet.create({
 
   heroTopRow: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "stretch",
     gap: 12,
   },
 
   heroTextWrap: {
     flex: 1,
+    justifyContent: "space-between",
   },
 
-  heroRightCol: {
-    alignItems: "flex-end",
-    gap: 10,
-  },
-
-  heroStatsCol: {
-    gap: 8,
-    alignItems: "flex-end",
-  },
-
-  heroMidRow: {
-    minHeight: 140,
+  heroLogoSlot: {
+    width: 118,
   },
 
   logoPanel: {
     flex: 1,
-    minHeight: 140,
+    minHeight: 124,
     borderRadius: 22,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
@@ -1041,8 +1032,8 @@ const styles = StyleSheet.create({
   },
 
   logoPanelImage: {
-    width: "82%",
-    height: "82%",
+    width: "84%",
+    height: "84%",
     opacity: 0.98,
   },
 
@@ -1050,6 +1041,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     opacity: 0.5,
+  },
+
+  heroLowerRow: {
+    flexDirection: "row",
+    gap: 10,
+    alignItems: "stretch",
+  },
+
+  heroStatsCol: {
+    width: 92,
+    gap: 8,
   },
 
   kicker: {
@@ -1076,7 +1078,7 @@ const styles = StyleSheet.create({
   },
 
   metricCard: {
-    width: 82,
+    flex: 1,
     minHeight: 72,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
@@ -1103,7 +1105,7 @@ const styles = StyleSheet.create({
   },
 
   heroActions: {
-    flexDirection: "row",
+    flex: 1,
     gap: 10,
   },
 
