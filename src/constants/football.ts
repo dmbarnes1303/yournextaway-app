@@ -130,6 +130,44 @@ export const DEFAULT_CALENDAR_YEAR_SEASON = currentCalendarYear();
  * LEAGUES is derived from this grouped structure.
  */
 export const FOOTBALL_BY_COUNTRY: Record<string, CountryFootballConfig> = {
+  uefa: {
+    country: "Europe",
+    countryCode: "EU",
+    browseRegion: "featured-europe",
+    leagues: [
+      {
+        slug: "uefa-champions-league",
+        label: "Champions League",
+        leagueId: 2,
+        logo: leagueLogo(2),
+        season: DEFAULT_SEASON,
+        featured: true,
+        homeVisible: true,
+        featuredClubKeys: ["real-madrid", "bayern-munich", "manchester-city"],
+      },
+      {
+        slug: "uefa-europa-league",
+        label: "Europa League",
+        leagueId: 3,
+        logo: leagueLogo(3),
+        season: DEFAULT_SEASON,
+        featured: true,
+        homeVisible: true,
+        featuredClubKeys: ["liverpool", "roma", "sevilla"],
+      },
+      {
+        slug: "uefa-conference-league",
+        label: "Conference League",
+        leagueId: 848,
+        logo: leagueLogo(848),
+        season: DEFAULT_SEASON,
+        featured: true,
+        homeVisible: true,
+        featuredClubKeys: ["fiorentina", "real-betis", "west-ham"],
+      },
+    ],
+  },
+
   england: {
     country: "England",
     countryCode: "ENG",
@@ -723,6 +761,21 @@ export type LeagueSlotRule = {
 
 export const LEAGUE_SLOT_RULES: LeagueSlotRule[] = [
   {
+    leagueId: 2,
+    primarySlot: "Tue 20:00",
+    typicalSlots: ["Tue 17:45", "Tue 20:00", "Wed 17:45", "Wed 20:00"],
+  },
+  {
+    leagueId: 3,
+    primarySlot: "Thu 20:00",
+    typicalSlots: ["Thu 17:45", "Thu 20:00"],
+  },
+  {
+    leagueId: 848,
+    primarySlot: "Thu 20:00",
+    typicalSlots: ["Thu 17:45", "Thu 20:00"],
+  },
+  {
     leagueId: 39,
     primarySlot: "Sat 15:00",
     typicalSlots: ["Fri 20:00", "Sat 12:30", "Sat 15:00", "Sat 17:30", "Sun 14:00", "Sun 16:30", "Mon 20:00"],
@@ -1019,4 +1072,4 @@ export function nextWeekendWindowIso(): RollingWindowIso {
   const to = toIsoDate(sun);
 
   return normalizeWindowIso({ from, to }, 2);
-    }
+        }
