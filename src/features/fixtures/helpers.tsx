@@ -12,6 +12,49 @@ import type { TicketDifficulty } from "@/src/data/ticketGuides/types";
 import type { LeagueOption } from "@/src/constants/football";
 import { getTeam } from "@/src/data/teams";
 
+const EUROPEAN_COMPETITION_META: Record<
+  number,
+  {
+    short: string;
+    display: string;
+    confirmedSecondary: string;
+    tbcSecondary: string;
+    likelySecondary: string;
+  }
+> = {
+  2: {
+    short: "UCL",
+    display: "Champions League",
+    confirmedSecondary: "European night",
+    tbcSecondary: "European night • kickoff time not confirmed",
+    likelySecondary: "European night • likely placeholder kickoff",
+  },
+  3: {
+    short: "UEL",
+    display: "Europa League",
+    confirmedSecondary: "European night",
+    tbcSecondary: "European night • kickoff time not confirmed",
+    likelySecondary: "European night • likely placeholder kickoff",
+  },
+  848: {
+    short: "UECL",
+    display: "Conference League",
+    confirmedSecondary: "European night",
+    tbcSecondary: "European night • kickoff time not confirmed",
+    likelySecondary: "European night • likely placeholder kickoff",
+  },
+};
+
+export function isEuropeanCompetitionLeagueId(leagueId?: number | null) {
+  if (leagueId == null) return false;
+  return !!EUROPEAN_COMPETITION_META[Number(leagueId)];
+}
+
+export function getEuropeanCompetitionMeta(leagueId?: number | null) {
+  if (leagueId == null) return null;
+  return EUROPEAN_COMPETITION_META[Number(leagueId)] ?? null;
+}
+
 export function ticketDifficultyLabel(d: TicketDifficulty | "unknown") {
   switch (d) {
     case "easy":
@@ -143,11 +186,13 @@ export function fixtureIsoDateOnly(r: FixtureListRow): string | null {
 export function kickoffPresentation(r: FixtureListRow, placeholderIds?: Set<string>) {
   const certainty = getFixtureCertainty(r, { placeholderIds });
   const iso = kickoffIsoOrNull(r);
+  const leagueId = r?.league?.id != null ? Number(r.league.id) : null;
+  const europeanMeta = getEuropeanCompetitionMeta(leagueId);
 
   if (!iso) {
     return {
       primary: "TBC",
-      secondary: "Kickoff time not set yet",
+      secondary: europeanMeta?.tbcSecondary ?? "Kickoff time not set yet",
       certainty,
     };
   }
@@ -157,7 +202,7 @@ export function kickoffPresentation(r: FixtureListRow, placeholderIds?: Set<stri
   if (certainty === "likely_tbc") {
     return {
       primary: formatted,
-      secondary: "Likely placeholder kickoff",
+      secondary: europeanMeta?.likelySecondary ?? "Likely placeholder kickoff",
       certainty,
     };
   }
@@ -165,14 +210,14 @@ export function kickoffPresentation(r: FixtureListRow, placeholderIds?: Set<stri
   if (certainty === "tbc") {
     return {
       primary: formatted,
-      secondary: "Kickoff time not confirmed",
+      secondary: europeanMeta?.tbcSecondary ?? "Kickoff time not confirmed",
       certainty,
     };
   }
 
   return {
     primary: formatted,
-    secondary: null as string | null,
+    secondary: europeanMeta?.confirmedSecondary ?? null,
     certainty,
   };
 }
@@ -268,6 +313,17 @@ export function prettifyKey(input: string) {
 }
 
 export function featuredClubLine(league: LeagueOption): string {
+  const europeanMeta = getEuropeanCompetitionMeta(league.leagueId);
+  if (europeanMeta) {
+    const parts = (league.featuredClubKeys ?? []).slice(0, 3).map((key) => {
+      const team = getTeam(key);
+      if (team?.name) return team.name;
+      return prettifyKey(key);
+    });
+
+    return parts.join(" • ");
+  }
+
   const parts = (league.featuredClubKeys ?? []).slice(0, 2).map((key) => {
     const team = getTeam(key);
     if (team?.name && team?.city) return `${team.name} (${team.city})`;
@@ -280,10 +336,26 @@ export function featuredClubLine(league: LeagueOption): string {
 
 export function leagueScopeSubtitle(selectedLeagues: LeagueOption[]) {
   if (selectedLeagues.length === 0) return "Featured leagues";
+
   if (selectedLeagues.length === 1) {
     const one = selectedLeagues[0];
+    const europeanMeta = getEuropeanCompetitionMeta(one.leagueId);
+    if (europeanMeta) return europeanMeta.display;
     return `${one.label} • ${one.country}`;
   }
+
+  const europeanCount = selectedLeagues.filter((league) =>
+    isEuropeanCompetitionLeagueId(league.leagueId)
+  ).length;
+
+  if (europeanCount === selectedLeagues.length) {
+    return `${selectedLeagues.length} European competitions selected`;
+  }
+
+  if (europeanCount > 0) {
+    return `${selectedLeagues.length} leagues selected • incl. Europe`;
+  }
+
   return `${selectedLeagues.length} leagues selected`;
 }
 
