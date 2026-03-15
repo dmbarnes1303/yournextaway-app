@@ -5,10 +5,14 @@ import {
 } from "@/src/constants/football";
 import { getFixtures, type FixtureListRow } from "@/src/services/apiFootball";
 import { formatUkDateTimeMaybe } from "@/src/utils/formatters";
-
 import type { DiscoverCategory } from "./discoverCategories";
 import type { DiscoverTripLength, DiscoverVibe } from "./discoverEngine";
-import type { DiscoverWindowKey, MultiMatchTrip, RankedDiscoverPick, ShortcutWindow } from "./types";
+import type {
+  DiscoverWindowKey,
+  MultiMatchTrip,
+  RankedDiscoverPick,
+  ShortcutWindow,
+} from "./types";
 
 const EUROPEAN_COMPETITION_IDS = new Set([2, 3, 848]);
 
@@ -74,12 +78,26 @@ export function pickRandom<T>(arr: T[]): T | null {
   return arr[Math.floor(Math.random() * arr.length)] ?? null;
 }
 
+function createStableSeed(input: string) {
+  let h = 0;
+  for (let i = 0; i < input.length; i += 1) {
+    h = (h * 31 + input.charCodeAt(i)) >>> 0;
+  }
+  return h;
+}
+
+function rotateStable<T>(arr: T[], seed: number) {
+  if (!arr.length) return arr;
+  const offset = seed % arr.length;
+  return [...arr.slice(offset), ...arr.slice(0, offset)];
+}
+
 export function clampVibes(next: DiscoverVibe[]) {
   if (next.length <= 3) return next;
   return next.slice(next.length - 3);
 }
 
-export function toSlug(value: string) {
+function toSlug(value: string) {
   return String(value ?? "")
     .toLowerCase()
     .trim()
@@ -114,20 +132,6 @@ export function prioritiseCategories(
   );
   const withoutPreferred = deduped.filter((category) => category !== preferred);
   return deduped.includes(preferred) ? [preferred, ...withoutPreferred] : deduped;
-}
-
-function createStableSeed(input: string) {
-  let h = 0;
-  for (let i = 0; i < input.length; i += 1) {
-    h = (h * 31 + input.charCodeAt(i)) >>> 0;
-  }
-  return h;
-}
-
-function rotateStable<T>(arr: T[], seed: number) {
-  if (!arr.length) return arr;
-  const offset = seed % arr.length;
-  return [...arr.slice(offset), ...arr.slice(0, offset)];
 }
 
 function buildDiscoverSeedKey(params: {
