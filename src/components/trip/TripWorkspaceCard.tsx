@@ -1,4 +1,4 @@
-import React, { memo } from "react";
+import React, { memo, useMemo } from "react";
 import {
   View,
   Text,
@@ -116,6 +116,41 @@ function sectionTitle(sectionKey: WorkspaceSectionKey) {
   return WORKSPACE_SECTIONS[sectionKey].title;
 }
 
+function sectionLead(sectionKey: WorkspaceSectionKey) {
+  if (sectionKey === "tickets") return "Start here. Tickets anchor the whole trip.";
+  if (sectionKey === "travel") return "Flights and rail should be handled early, not guessed later.";
+  if (sectionKey === "stay") return "A bad hotel area ruins matchday logistics.";
+  if (sectionKey === "transfers") return "Sort the airport-city-stadium chain before it becomes friction.";
+  if (sectionKey === "things") return "Only add extras that improve the trip.";
+  if (sectionKey === "insurance") return "Store cover and policy evidence in one place.";
+  if (sectionKey === "claims") return "Keep refund, delay and compensation evidence together.";
+  return "Keep useful planning notes here.";
+}
+
+function itemPriorityTone(item: SavedItem) {
+  if (item.status === "booked" && !hasProof(item)) return styles.itemToneWarn;
+  if (item.status === "pending") return styles.itemTonePending;
+  if (item.status === "booked") return styles.itemToneBooked;
+  if (item.status === "saved") return styles.itemToneSaved;
+  return styles.itemToneNeutral;
+}
+
+function statusTone(status: SavedItem["status"]) {
+  if (status === "pending") return styles.badgePending;
+  if (status === "saved") return styles.badgeSaved;
+  if (status === "booked") return styles.badgeBooked;
+  return styles.badgeArchived;
+}
+
+function itemActionHint(item: SavedItem, livePrice: string | null) {
+  if (item.type === "note" || item.type === "other") return "Tap to review note";
+  if (item.status === "booked" && !hasProof(item)) return "Booked but proof missing";
+  if (item.status === "booked") return "Booked and stored";
+  if (item.status === "pending") return livePrice || "Pending confirmation";
+  if (item.status === "saved") return livePrice || "Saved option";
+  return "Archived item";
+}
+
 type PartnerOpenArgs = {
   partnerId: any;
   url: string;
@@ -215,18 +250,8 @@ const ProviderBadge = memo(function ProviderBadge({
 
 const StatusBadge = memo(function StatusBadge({ status }: { status: SavedItem["status"] }) {
   const label = statusLabel(status);
-
-  const style =
-    status === "pending"
-      ? styles.badgePending
-      : status === "saved"
-        ? styles.badgeSaved
-        : status === "booked"
-          ? styles.badgeBooked
-          : styles.badgeArchived;
-
   return (
-    <View style={[styles.badge, style]}>
+    <View style={[styles.badge, statusTone(status)]}>
       <Text style={styles.badgeText}>{label}</Text>
     </View>
   );
@@ -265,9 +290,10 @@ const WorkspaceItemRow = memo(function WorkspaceItemRow({
   const missingProof = item.status === "booked" && !hasProof(item);
   const proofBusy = proofBusyId === item.id;
   const isNote = item.type === "note" || item.type === "other";
+  const actionHint = itemActionHint(item, livePrice);
 
   return (
-    <View style={styles.itemRow}>
+    <View style={[styles.itemRow, itemPriorityTone(item)]}>
       <Pressable
         style={styles.itemMain}
         onPress={() => (isNote ? onOpenNoteActions(item) : onOpenSavedItem(item))}
@@ -285,6 +311,10 @@ const WorkspaceItemRow = memo(function WorkspaceItemRow({
             {isNote ? "Notes" : buildMetaLine(item)}
           </Text>
         </View>
+
+        <Text style={styles.itemHintLine} numberOfLines={1}>
+          {actionHint}
+        </Text>
 
         {livePrice ? (
           <Text
@@ -429,19 +459,26 @@ const SectionContent = memo(function SectionContent(props: SectionContentProps) 
       <>
         {primaryMatchId ? (
           <Pressable onPress={onOpenTicketsForPrimaryMatch} style={styles.sectionCta}>
-            <Text style={styles.sectionCtaTitle}>Open live ticket options</Text>
+            <Text style={styles.sectionCtaTitle}>Compare live ticket options</Text>
             <Text style={styles.sectionCtaBody}>
-              Compare providers for the primary match and save the route into the workspace.
+              This is the anchor step. If tickets are not sorted, the rest of the trip is built on guesswork.
             </Text>
           </Pressable>
         ) : (
           <EmptyState
             title="No match selected"
-            message="Add a match first to unlock ticket planning."
+            message="Add a match first. No fixture means no proper ticket route."
           />
         )}
 
-        {renderItemList(items, props)}
+        {items.length > 0 ? (
+          renderItemList(items, props)
+        ) : (
+          <EmptyState
+            title="No ticket items yet"
+            message="Open ticket options and save the strongest route here."
+          />
+        )}
       </>
     );
   }
@@ -471,7 +508,7 @@ const SectionContent = memo(function SectionContent(props: SectionContentProps) 
           >
             <Text style={styles.sectionCtaTitle}>Open live stays</Text>
             <Text style={styles.sectionCtaBody}>
-              Use the stay guidance below to avoid booking a cheap place in a useless area.
+              Use stay guidance before booking. Cheap in the wrong area is not smart value.
             </Text>
           </Pressable>
         ) : null}
@@ -501,7 +538,7 @@ const SectionContent = memo(function SectionContent(props: SectionContentProps) 
         ) : (
           <EmptyState
             title="No stay items yet"
-            message="Save hotels here so the trip isn’t just a vague idea."
+            message="Save hotel options here so the trip becomes a real booking plan, not a vague intention."
           />
         )}
       </>
@@ -568,7 +605,7 @@ const SectionContent = memo(function SectionContent(props: SectionContentProps) 
         ) : (
           <EmptyState
             title="No travel items yet"
-            message="Flights or rail should live here, not in your head."
+            message="Flights or rail should be decided early. Leaving them vague is how trips get messy."
           />
         )}
       </>
@@ -600,7 +637,7 @@ const SectionContent = memo(function SectionContent(props: SectionContentProps) 
           >
             <Text style={styles.sectionCtaTitle}>Open transfer options</Text>
             <Text style={styles.sectionCtaBody}>
-              Sort airport-to-city and city-to-stadium movement before it becomes a pain.
+              Handle airport-city-stadium movement before matchday friction hits.
             </Text>
           </Pressable>
         ) : null}
@@ -621,7 +658,7 @@ const SectionContent = memo(function SectionContent(props: SectionContentProps) 
         ) : (
           <EmptyState
             title="No transfer items yet"
-            message="This is where local movement should be sorted."
+            message="This section should remove local transport guesswork."
           />
         )}
       </>
@@ -653,7 +690,7 @@ const SectionContent = memo(function SectionContent(props: SectionContentProps) 
           >
             <Text style={styles.sectionCtaTitle}>Open activities</Text>
             <Text style={styles.sectionCtaBody}>
-              Only add things that genuinely improve the trip. Don’t clutter it with filler.
+              Add extras only if they improve the trip. Filler is pointless.
             </Text>
           </Pressable>
         ) : null}
@@ -663,7 +700,7 @@ const SectionContent = memo(function SectionContent(props: SectionContentProps) 
         ) : (
           <EmptyState
             title="No things saved yet"
-            message="This section is optional, but useful when it earns its place."
+            message="This section is optional. Good when useful, bad when bloated."
           />
         )}
       </>
@@ -676,7 +713,7 @@ const SectionContent = memo(function SectionContent(props: SectionContentProps) 
     ) : (
       <EmptyState
         title="No insurance saved yet"
-        message="Use this section for cover and policy records."
+        message="Store policy routes and cover records here."
       />
     );
   }
@@ -687,7 +724,7 @@ const SectionContent = memo(function SectionContent(props: SectionContentProps) 
     ) : (
       <EmptyState
         title="No claim items yet"
-        message="Use this section for compensation, refund and delay evidence."
+        message="Use this for compensation, refund and delay evidence."
       />
     );
   }
@@ -695,6 +732,11 @@ const SectionContent = memo(function SectionContent(props: SectionContentProps) 
   return (
     <>
       <View style={styles.noteBox}>
+        <Text style={styles.noteBoxTitle}>Trip notes</Text>
+        <Text style={styles.noteBoxSub}>
+          Save only useful notes: ticket thoughts, hotel shortlist, reminders, booking gaps.
+        </Text>
+
         <TextInput
           value={noteText}
           onChangeText={onNoteTextChange}
@@ -717,7 +759,10 @@ const SectionContent = memo(function SectionContent(props: SectionContentProps) 
         <View style={styles.noteListWrap}>{renderItemList(items, props)}</View>
       ) : (
         <View style={styles.noteEmptyWrap}>
-          <EmptyState title="No notes yet" message="Notes you save for this trip appear here." />
+          <EmptyState
+            title="No notes yet"
+            message="Notes you actually need should live here, not scattered across your phone."
+          />
         </View>
       )}
     </>
@@ -798,7 +843,7 @@ const WorkspaceSectionCard = memo(function WorkspaceSectionCard({
         <View style={styles.flexOne}>
           <Text style={styles.workspaceSectionTitle}>{section.title}</Text>
           <Text style={styles.workspaceSectionSub}>
-            {section.subtitle || sectionStateLabel(sectionKey, total)}
+            {sectionLead(sectionKey)}
           </Text>
         </View>
 
@@ -811,6 +856,30 @@ const WorkspaceSectionCard = memo(function WorkspaceSectionCard({
       </Pressable>
 
       {!collapsed ? <View style={styles.sectionContentWrap}>{children}</View> : null}
+    </View>
+  );
+});
+
+const WorkspaceSummaryStrip = memo(function WorkspaceSummaryStrip({
+  snapshot,
+}: {
+  snapshot: TripWorkspaceCardProps["workspaceSnapshot"];
+}) {
+  const summary = useMemo(() => {
+    const totals = snapshot.sectionActiveTotals;
+    return [
+      `Tickets ${totals.tickets ?? 0}`,
+      `Travel ${totals.travel ?? 0}`,
+      `Stay ${totals.stay ?? 0}`,
+      `Transfers ${totals.transfers ?? 0}`,
+      `Things ${totals.things ?? 0}`,
+    ];
+  }, [snapshot]);
+
+  return (
+    <View style={styles.summaryStrip}>
+      <Text style={styles.summaryStripTitle}>Workspace snapshot</Text>
+      <Text style={styles.summaryStripText}>{summary.join(" • ")}</Text>
     </View>
   );
 });
@@ -855,6 +924,8 @@ export default function TripWorkspaceCard({
         <Text style={styles.sectionTitle}>Workspace</Text>
         <Text style={styles.sectionSub}>{workspaceSnapshot.activeTotal} active items</Text>
       </View>
+
+      <WorkspaceSummaryStrip snapshot={workspaceSnapshot} />
 
       <WorkspaceTabs
         sectionOrder={sectionOrder}
@@ -938,6 +1009,30 @@ const styles = StyleSheet.create({
     color: theme.colors.textTertiary,
     fontWeight: "900",
     fontSize: 12,
+  },
+
+  summaryStrip: {
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "rgba(0,255,136,0.18)",
+    backgroundColor: "rgba(0,0,0,0.16)",
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+
+  summaryStripTitle: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 12,
+  },
+
+  summaryStripText: {
+    marginTop: 4,
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
+    fontSize: 12,
+    lineHeight: 16,
   },
 
   providerBadgeWrap: {
@@ -1058,6 +1153,7 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
     fontWeight: "800",
     fontSize: 12,
+    lineHeight: 16,
   },
 
   sectionContentWrap: {
@@ -1147,9 +1243,32 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderRadius: 14,
     borderWidth: 1,
+    alignItems: "center",
+  },
+
+  itemToneNeutral: {
     borderColor: "rgba(255,255,255,0.10)",
     backgroundColor: "rgba(0,0,0,0.18)",
-    alignItems: "center",
+  },
+
+  itemTonePending: {
+    borderColor: "rgba(255,200,80,0.24)",
+    backgroundColor: "rgba(255,200,80,0.07)",
+  },
+
+  itemToneSaved: {
+    borderColor: "rgba(0,255,136,0.18)",
+    backgroundColor: "rgba(0,255,136,0.05)",
+  },
+
+  itemToneBooked: {
+    borderColor: "rgba(120,170,255,0.20)",
+    backgroundColor: "rgba(120,170,255,0.06)",
+  },
+
+  itemToneWarn: {
+    borderColor: "rgba(255,200,80,0.28)",
+    backgroundColor: "rgba(255,200,80,0.08)",
   },
 
   itemMain: {
@@ -1182,6 +1301,13 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     fontSize: 12,
     flex: 1,
+  },
+
+  itemHintLine: {
+    marginTop: 5,
+    color: theme.colors.textTertiary,
+    fontWeight: "900",
+    fontSize: 11,
   },
 
   livePriceLine: {
@@ -1282,11 +1408,26 @@ const styles = StyleSheet.create({
     padding: 12,
   },
 
+  noteBoxTitle: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 13,
+  },
+
+  noteBoxSub: {
+    marginTop: 6,
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
+    fontSize: 12,
+    lineHeight: 16,
+  },
+
   noteInput: {
     minHeight: 80,
     color: theme.colors.text,
     textAlignVertical: "top",
     fontWeight: "800",
+    marginTop: 10,
     ...(Platform.OS === "ios" ? { paddingTop: 10 } : null),
   },
 
