@@ -1,12 +1,11 @@
-// src/core/tripWorkspace.ts
 import type { SavedItem, SavedItemStatus, SavedItemType } from "@/src/core/savedItemTypes";
 
 export type WorkspaceSectionKey =
   | "tickets"
   | "stay"
   | "travel"
-  | "things"
   | "transfers"
+  | "things"
   | "insurance"
   | "claims"
   | "notes";
@@ -50,18 +49,18 @@ export const WORKSPACE_SECTIONS: Record<WorkspaceSectionKey, WorkspaceSection> =
     types: ["flight", "train"],
     requiredForCompletion: false,
   },
-  things: {
-    key: "things",
-    title: "Things to do",
-    subtitle: "Experiences, activities",
-    types: ["things"],
-    requiredForCompletion: false,
-  },
   transfers: {
     key: "transfers",
     title: "Transfers",
     subtitle: "Airport ↔ city, local rides",
     types: ["transfer"],
+    requiredForCompletion: false,
+  },
+  things: {
+    key: "things",
+    title: "Things to do",
+    subtitle: "Experiences, activities",
+    types: ["things"],
     requiredForCompletion: false,
   },
   insurance: {
@@ -91,8 +90,8 @@ export const DEFAULT_SECTION_ORDER: WorkspaceSectionKey[] = [
   "tickets",
   "stay",
   "travel",
-  "things",
   "transfers",
+  "things",
   "insurance",
   "claims",
   "notes",
@@ -126,10 +125,10 @@ export function sectionForSavedItemType(type: SavedItemType): WorkspaceSectionKe
     case "flight":
     case "train":
       return "travel";
-    case "things":
-      return "things";
     case "transfer":
       return "transfers";
+    case "things":
+      return "things";
     case "insurance":
       return "insurance";
     case "claim":
@@ -146,8 +145,8 @@ export function groupSavedItemsBySection(items: SavedItem[]) {
     tickets: [],
     stay: [],
     travel: [],
-    things: [],
     transfers: [],
+    things: [],
     insurance: [],
     claims: [],
     notes: [],
@@ -184,10 +183,8 @@ export type WorkspaceSnapshot = {
   pending: number;
   booked: number;
   archived: number;
-
   sectionTotals: Record<WorkspaceSectionKey, number>;
   sectionActiveTotals: Record<WorkspaceSectionKey, number>;
-
   missing: Array<{
     section: WorkspaceSectionKey;
     reason: string;
@@ -205,8 +202,8 @@ export function computeWorkspaceSnapshot(items: SavedItem[]): WorkspaceSnapshot 
     tickets: bySection.tickets.length,
     stay: bySection.stay.length,
     travel: bySection.travel.length,
-    things: bySection.things.length,
     transfers: bySection.transfers.length,
+    things: bySection.things.length,
     insurance: bySection.insurance.length,
     claims: bySection.claims.length,
     notes: bySection.notes.length,
@@ -216,14 +213,18 @@ export function computeWorkspaceSnapshot(items: SavedItem[]): WorkspaceSnapshot 
     tickets: allItems.filter((it) => sectionForSavedItemType(it.type) === "tickets").length,
     stay: allItems.filter((it) => sectionForSavedItemType(it.type) === "stay").length,
     travel: allItems.filter((it) => sectionForSavedItemType(it.type) === "travel").length,
-    things: allItems.filter((it) => sectionForSavedItemType(it.type) === "things").length,
     transfers: allItems.filter((it) => sectionForSavedItemType(it.type) === "transfers").length,
+    things: allItems.filter((it) => sectionForSavedItemType(it.type) === "things").length,
     insurance: allItems.filter((it) => sectionForSavedItemType(it.type) === "insurance").length,
     claims: allItems.filter((it) => sectionForSavedItemType(it.type) === "claims").length,
     notes: allItems.filter((it) => sectionForSavedItemType(it.type) === "notes").length,
   };
 
   const missing: WorkspaceSnapshot["missing"] = [];
+
+  if (sectionActiveTotals.tickets === 0) {
+    missing.push({ section: "tickets", reason: "No ticket option saved yet." });
+  }
 
   if (sectionActiveTotals.stay === 0) {
     missing.push({ section: "stay", reason: "No accommodation saved yet." });
@@ -233,12 +234,8 @@ export function computeWorkspaceSnapshot(items: SavedItem[]): WorkspaceSnapshot 
     missing.push({ section: "travel", reason: "No travel saved yet." });
   }
 
-  if (sectionActiveTotals.tickets === 0) {
-    missing.push({ section: "tickets", reason: "No ticket option saved yet." });
-  }
-
-  if (sectionActiveTotals.things === 0) {
-    missing.push({ section: "things", reason: "Nothing to do saved yet." });
+  if (sectionActiveTotals.transfers === 0) {
+    missing.push({ section: "transfers", reason: "No transfer option saved yet." });
   }
 
   return {
@@ -265,4 +262,4 @@ export function makeDefaultTripWorkspace(tripId: string): TripWorkspace {
     createdAt: now,
     updatedAt: now,
   };
-}
+    }
