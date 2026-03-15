@@ -93,8 +93,7 @@ function StatusBadge({ status }: { status: SavedItem["status"] }) {
 function buildMatchCardData(
   trip: Trip,
   matchId: string,
-  fixture: FixtureListRow | undefined,
-  ticketItem: SavedItem | null
+  fixture: FixtureListRow | undefined
 ) {
   const title = safeFixtureTitle(fixture, matchId, trip);
 
@@ -132,7 +131,6 @@ function buildMatchCardData(
     metaBottom,
     logisticsLine,
     certainty,
-    ticketItem,
   };
 }
 
@@ -173,7 +171,7 @@ export default function TripMatchesCard({
             const ticketProvider = getTicketProviderFromItem(ticketItem);
             const ticketScore = getTicketScoreFromItem(ticketItem);
 
-            const data = buildMatchCardData(trip, matchId, fixture, ticketItem);
+            const data = buildMatchCardData(trip, matchId, fixture);
 
             return (
               <View key={matchId} style={styles.matchRowWrap}>
