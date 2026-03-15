@@ -1,10 +1,16 @@
-import { Ionicons } from "@expo/vector-icons";
-
 import type { FixtureListRow } from "@/src/services/apiFootball";
+import type {
+  DiscoverFixture,
+  DiscoverTripLength,
+  DiscoverVibe,
+} from "./discoverEngine";
 import type { DiscoverCategory } from "./discoverCategories";
-import type { DiscoverFixture, DiscoverTripLength, DiscoverVibe } from "./discoverEngine";
+import type { Ionicons } from "@expo/vector-icons";
 
-export type ShortcutWindow = { from: string; to: string };
+export type ShortcutWindow = {
+  from: string;
+  to: string;
+};
 
 export type DiscoverWindowKey = "wknd" | "d7" | "d14" | "d30" | "d60" | "d90";
 
