@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   View,
-  Text,
   StyleSheet,
   ScrollView,
   Pressable,
@@ -10,6 +9,7 @@ import {
   Image,
   LayoutAnimation,
   UIManager,
+  Text,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -73,6 +73,10 @@ import DiscoverCategoryCard from "@/src/features/discover/components/DiscoverCat
 import DiscoverFixtureCard from "@/src/features/discover/components/DiscoverFixtureCard";
 import DiscoverSectionHeader from "@/src/features/discover/components/DiscoverSectionHeader";
 import DiscoverTripSetup from "@/src/features/discover/components/DiscoverTripSetup";
+import DiscoverHero from "@/src/features/discover/components/DiscoverHero";
+import DiscoverQuickSparks from "@/src/features/discover/components/DiscoverQuickSparks";
+import DiscoverInspirationRow from "@/src/features/discover/components/DiscoverInspirationRow";
+import DiscoverConciergeCard from "@/src/features/discover/components/DiscoverConciergeCard";
 
 if (
   Platform.OS === "android" &&
@@ -476,110 +480,34 @@ export default function DiscoverScreen() {
           contentContainerStyle={[styles.content, { paddingBottom: 24 + insets.bottom }]}
           showsVerticalScrollIndicator={false}
         >
-          <GlassCard strength="strong" style={styles.hero} noPadding>
-            <View style={styles.heroInner}>
-              <Text style={styles.kicker}>DISCOVER</Text>
-              <Text style={styles.title}>Find your next football trip</Text>
-              <Text style={styles.sub}>
-                Big atmospheres, city breaks, European nights, and stacked football weekends.
-              </Text>
-
-              {featuredLive ? (
-                <Pressable
-                  onPress={() => goMatchFromRow(featuredLive.item.fixture)}
-                  style={({ pressed }) => [styles.heroFeaturePress, pressed && styles.pressed]}
-                >
-                  <View style={styles.heroFeatureImageWrap}>
-                    <Image
-                      source={{ uri: getDiscoverCardImage() }}
-                      style={styles.heroFeatureImage}
-                      resizeMode="cover"
-                    />
-                    <View style={styles.heroFeatureOverlay} />
-                    <View style={styles.heroFeatureBadge}>
-                      <Text style={styles.heroFeatureBadgeText}>Top pick for your setup</Text>
-                    </View>
-                  </View>
-
-                  <View style={styles.heroFeatureBody}>
-                    <View style={styles.heroFeatureTopRow}>
-                      <View style={styles.heroFeatureIconWrap}>
-                        <Ionicons
-                          name={DISCOVER_CATEGORY_META[seededCategory].icon}
-                          size={18}
-                          color={theme.colors.text}
-                        />
-                      </View>
-                      <Text style={styles.heroFeatureCtaInline}>Open route</Text>
-                    </View>
-
-                    <Text style={styles.heroFeatureTitle} numberOfLines={2}>
-                      {fixtureTitle(featuredLive.item.fixture)}
-                    </Text>
-
-                    <Text style={styles.heroFeatureMeta} numberOfLines={2}>
-                      {fixtureMeta(featuredLive.item.fixture)}
-                    </Text>
-
-                    <Text style={styles.heroFeatureWhy} numberOfLines={2}>
-                      {whyThisFits(
-                        featuredLive.item.fixture,
-                        seededCategory,
-                        discoverVibes,
-                        discoverTripLength
-                      )}
-                    </Text>
-                  </View>
-                </Pressable>
-              ) : null}
-
-              <Pressable onPress={toggleSetup} style={styles.heroActionRow}>
-                <View style={styles.heroActionPill}>
-                  <Ionicons
-                    name={setupExpanded ? "chevron-up-outline" : "options-outline"}
-                    size={16}
-                    color={theme.colors.text}
-                  />
-                  <Text style={styles.heroActionText}>
-                    {setupExpanded ? "Hide trip setup" : "Edit trip setup"}
-                  </Text>
-                </View>
-
-                <View style={styles.heroMiniSummary}>
-                  <Text style={styles.heroMiniSummaryText}>{compactSummary}</Text>
-                </View>
-              </Pressable>
-            </View>
-          </GlassCard>
+          <DiscoverHero
+            compactSummary={compactSummary}
+            setupExpanded={setupExpanded}
+            onToggleSetup={toggleSetup}
+            featuredTitle={featuredLive ? fixtureTitle(featuredLive.item.fixture) : null}
+            featuredMeta={featuredLive ? fixtureMeta(featuredLive.item.fixture) : null}
+            featuredWhy={
+              featuredLive
+                ? whyThisFits(
+                    featuredLive.item.fixture,
+                    seededCategory,
+                    discoverVibes,
+                    discoverTripLength
+                  )
+                : null
+            }
+            featuredIcon={DISCOVER_CATEGORY_META[seededCategory].icon}
+            onPressFeatured={
+              featuredLive ? () => goMatchFromRow(featuredLive.item.fixture) : undefined
+            }
+          />
 
           <View style={styles.section}>
             <DiscoverSectionHeader
               title="Explore now"
               subtitle="Fast entry points so the screen feels alive straight away."
             />
-
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.sparkRow}
-            >
-              {QUICK_SPARKS.map((spark) => (
-                <Pressable
-                  key={spark.id}
-                  onPress={() => applyQuickSpark(spark)}
-                  style={({ pressed }) => [styles.sparkPress, pressed && styles.pressed]}
-                >
-                  <GlassCard strength="default" style={styles.sparkCard} noPadding>
-                    <View style={styles.sparkInner}>
-                      <View style={styles.sparkIconWrap}>
-                        <Ionicons name={spark.icon} size={17} color={theme.colors.text} />
-                      </View>
-                      <Text style={styles.sparkTitle}>{spark.title}</Text>
-                    </View>
-                  </GlassCard>
-                </Pressable>
-              ))}
-            </ScrollView>
+            <DiscoverQuickSparks sparks={QUICK_SPARKS} onPressSpark={applyQuickSpark} />
           </View>
 
           <View style={styles.section}>
@@ -785,33 +713,10 @@ export default function DiscoverScreen() {
               title="Start with a mood"
               subtitle="Fast entry points for the kind of trip that already sounds good."
             />
-
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.inspirationRow}
-            >
-              {INSPIRATION_PRESETS.map((preset) => (
-                <Pressable
-                  key={preset.id}
-                  onPress={() => applyPreset(preset)}
-                  style={({ pressed }) => [styles.inspirationPress, pressed && styles.pressed]}
-                >
-                  <GlassCard strength="default" style={styles.inspirationCard} noPadding>
-                    <View style={styles.inspirationInner}>
-                      <View style={styles.inspirationIconWrap}>
-                        <Ionicons name={preset.icon} size={18} color={theme.colors.text} />
-                      </View>
-
-                      <View style={styles.inspirationTextWrap}>
-                        <Text style={styles.inspirationTitle}>{preset.title}</Text>
-                        <Text style={styles.inspirationSub}>{preset.subtitle}</Text>
-                      </View>
-                    </View>
-                  </GlassCard>
-                </Pressable>
-              ))}
-            </ScrollView>
+            <DiscoverInspirationRow
+              presets={INSPIRATION_PRESETS}
+              onPressPreset={applyPreset}
+            />
           </View>
 
           <View style={styles.section}>
@@ -867,51 +772,11 @@ export default function DiscoverScreen() {
               title="Concierge pick"
               subtitle="Give the app your setup and let it surface one of the stronger live options."
             />
-
-            <Pressable
+            <DiscoverConciergeCard
+              loading={loadingRandom}
+              filterSummary={filterSummary}
               onPress={goRandomTrip}
-              disabled={loadingRandom}
-              style={({ pressed }) => [
-                styles.randomPress,
-                (pressed || loadingRandom) && styles.pressed,
-              ]}
-            >
-              <GlassCard strength="default" style={styles.randomCard} noPadding>
-                <View style={styles.randomInner}>
-                  <View style={styles.randomTop}>
-                    <View style={styles.randomTopText}>
-                      <Text style={styles.randomTitle}>Let the app choose</Text>
-                      <Text style={styles.randomSub}>
-                        We rank a live pool against your setup before making the pick.
-                      </Text>
-                    </View>
-
-                    <View style={styles.randomIconWrap}>
-                      {loadingRandom ? (
-                        <ActivityIndicator />
-                      ) : (
-                        <Ionicons
-                          name="sparkles-outline"
-                          size={18}
-                          color={theme.colors.text}
-                        />
-                      )}
-                    </View>
-                  </View>
-
-                  <View style={styles.randomSummaryBox}>
-                    <Text style={styles.randomSummaryLabel}>Using</Text>
-                    <Text style={styles.randomHint}>{filterSummary}</Text>
-                  </View>
-
-                  <View style={styles.randomButton}>
-                    <Text style={styles.randomButtonText}>
-                      {loadingRandom ? "Finding a strong option..." : "Pick a trip for me"}
-                    </Text>
-                  </View>
-                </View>
-              </GlassCard>
-            </Pressable>
+            />
           </View>
         </ScrollView>
       </SafeAreaView>
@@ -926,166 +791,6 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: theme.spacing.lg,
     gap: 16,
-  },
-
-  hero: {
-    marginTop: theme.spacing.lg,
-    borderRadius: 24,
-  },
-
-  heroInner: {
-    padding: 15,
-    gap: 10,
-  },
-
-  kicker: {
-    color: theme.colors.primary,
-    fontSize: 10,
-    fontWeight: theme.fontWeight.black,
-    letterSpacing: 1.1,
-  },
-
-  title: {
-    color: theme.colors.text,
-    fontSize: 27,
-    lineHeight: 32,
-    fontWeight: theme.fontWeight.black,
-  },
-
-  sub: {
-    color: theme.colors.textSecondary,
-    fontSize: 13,
-    lineHeight: 18,
-    fontWeight: theme.fontWeight.bold,
-  },
-
-  heroFeaturePress: {
-    borderRadius: 20,
-    overflow: "hidden",
-    marginTop: 2,
-  },
-
-  heroFeatureImageWrap: {
-    height: 170,
-    position: "relative",
-  },
-
-  heroFeatureImage: {
-    width: "100%",
-    height: "100%",
-  },
-
-  heroFeatureOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(5,8,10,0.42)",
-  },
-
-  heroFeatureBadge: {
-    position: "absolute",
-    top: 12,
-    left: 12,
-    borderRadius: 999,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderWidth: 1,
-    borderColor: "rgba(87,162,56,0.24)",
-    backgroundColor: "rgba(6,10,8,0.64)",
-  },
-
-  heroFeatureBadgeText: {
-    color: theme.colors.text,
-    fontSize: 10,
-    fontWeight: theme.fontWeight.black,
-    letterSpacing: 0.3,
-  },
-
-  heroFeatureBody: {
-    padding: 14,
-    gap: 7,
-    backgroundColor:
-      Platform.OS === "android" ? "rgba(0,0,0,0.22)" : "rgba(255,255,255,0.05)",
-  },
-
-  heroFeatureTopRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-  },
-
-  heroFeatureIconWrap: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "rgba(87,162,56,0.20)",
-    backgroundColor: "rgba(87,162,56,0.10)",
-  },
-
-  heroFeatureCtaInline: {
-    color: theme.colors.primary,
-    fontSize: 12,
-    fontWeight: theme.fontWeight.black,
-  },
-
-  heroFeatureTitle: {
-    color: theme.colors.text,
-    fontSize: 20,
-    lineHeight: 25,
-    fontWeight: theme.fontWeight.black,
-  },
-
-  heroFeatureMeta: {
-    color: theme.colors.textSecondary,
-    fontSize: 13,
-    lineHeight: 18,
-    fontWeight: theme.fontWeight.bold,
-  },
-
-  heroFeatureWhy: {
-    color: theme.colors.primary,
-    fontSize: 12,
-    lineHeight: 17,
-    fontWeight: theme.fontWeight.black,
-  },
-
-  heroActionRow: {
-    gap: 8,
-    marginTop: 2,
-  },
-
-  heroActionPill: {
-    alignSelf: "flex-start",
-    minHeight: 40,
-    borderRadius: 999,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    borderWidth: 1,
-    borderColor: "rgba(87,162,56,0.24)",
-    backgroundColor:
-      Platform.OS === "android" ? "rgba(87,162,56,0.10)" : "rgba(87,162,56,0.08)",
-  },
-
-  heroActionText: {
-    color: theme.colors.text,
-    fontSize: 13,
-    fontWeight: theme.fontWeight.black,
-  },
-
-  heroMiniSummary: {
-    alignSelf: "flex-start",
-  },
-
-  heroMiniSummaryText: {
-    color: theme.colors.textSecondary,
-    fontSize: 12,
-    lineHeight: 17,
-    fontWeight: theme.fontWeight.bold,
   },
 
   section: {
@@ -1108,45 +813,6 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
     fontSize: 13,
     fontWeight: theme.fontWeight.bold,
-  },
-
-  sparkRow: {
-    gap: 10,
-    paddingRight: theme.spacing.lg,
-  },
-
-  sparkPress: {
-    borderRadius: 999,
-    overflow: "hidden",
-  },
-
-  sparkCard: {
-    borderRadius: 999,
-  },
-
-  sparkInner: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 11,
-  },
-
-  sparkIconWrap: {
-    width: 28,
-    height: 28,
-    borderRadius: 999,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "rgba(87,162,56,0.18)",
-    backgroundColor: "rgba(87,162,56,0.08)",
-  },
-
-  sparkTitle: {
-    color: theme.colors.text,
-    fontSize: 13,
-    fontWeight: theme.fontWeight.black,
   },
 
   multiRow: {
@@ -1316,58 +982,6 @@ const styles = StyleSheet.create({
     paddingRight: theme.spacing.lg,
   },
 
-  inspirationRow: {
-    gap: 10,
-    paddingRight: theme.spacing.lg,
-  },
-
-  inspirationPress: {
-    width: 216,
-    borderRadius: 18,
-    overflow: "hidden",
-  },
-
-  inspirationCard: {
-    borderRadius: 18,
-    minHeight: 112,
-  },
-
-  inspirationInner: {
-    padding: 14,
-    minHeight: 112,
-    gap: 12,
-    justifyContent: "space-between",
-  },
-
-  inspirationIconWrap: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "rgba(87,162,56,0.18)",
-    backgroundColor: "rgba(87,162,56,0.08)",
-  },
-
-  inspirationTextWrap: {
-    gap: 6,
-  },
-
-  inspirationTitle: {
-    color: theme.colors.text,
-    fontSize: 14,
-    lineHeight: 18,
-    fontWeight: theme.fontWeight.black,
-  },
-
-  inspirationSub: {
-    color: theme.colors.textSecondary,
-    fontSize: 12,
-    lineHeight: 17,
-    fontWeight: theme.fontWeight.bold,
-  },
-
   primaryGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -1378,100 +992,6 @@ const styles = StyleSheet.create({
   secondaryRow: {
     gap: 10,
     paddingRight: theme.spacing.lg,
-  },
-
-  randomPress: {
-    borderRadius: 22,
-    overflow: "hidden",
-  },
-
-  randomCard: {
-    borderRadius: 22,
-    borderColor: "rgba(87,162,56,0.16)",
-  },
-
-  randomInner: {
-    padding: 16,
-    gap: 14,
-  },
-
-  randomTop: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    gap: 12,
-  },
-
-  randomTopText: {
-    flex: 1,
-    gap: 4,
-  },
-
-  randomTitle: {
-    color: theme.colors.text,
-    fontSize: 18,
-    fontWeight: theme.fontWeight.black,
-  },
-
-  randomSub: {
-    color: theme.colors.textSecondary,
-    fontSize: 12,
-    lineHeight: 18,
-    fontWeight: theme.fontWeight.bold,
-  },
-
-  randomIconWrap: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "rgba(87,162,56,0.18)",
-    backgroundColor: "rgba(87,162,56,0.08)",
-  },
-
-  randomSummaryBox: {
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-    backgroundColor:
-      Platform.OS === "android" ? "rgba(0,0,0,0.16)" : "rgba(255,255,255,0.04)",
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    gap: 4,
-  },
-
-  randomSummaryLabel: {
-    color: theme.colors.textTertiary,
-    fontSize: 11,
-    fontWeight: theme.fontWeight.black,
-    letterSpacing: 0.3,
-  },
-
-  randomHint: {
-    color: theme.colors.text,
-    fontSize: 12,
-    lineHeight: 18,
-    fontWeight: theme.fontWeight.bold,
-  },
-
-  randomButton: {
-    minHeight: 48,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "rgba(87,162,56,0.28)",
-    backgroundColor:
-      Platform.OS === "android" ? "rgba(87,162,56,0.10)" : "rgba(87,162,56,0.08)",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 14,
-  },
-
-  randomButtonText: {
-    color: theme.colors.text,
-    fontSize: 14,
-    fontWeight: theme.fontWeight.black,
   },
 
   pressed: {
