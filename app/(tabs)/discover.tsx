@@ -69,6 +69,23 @@ type QuickSpark = {
   tripLength?: DiscoverTripLength;
 };
 
+type MultiMatchTrip = {
+  id: string;
+  title: string;
+  subtitle: string;
+  score: number;
+  matchCount: number;
+  daysSpan: number;
+  from: string;
+  to: string;
+  cityLabel: string;
+  countryLabel: string;
+  style: "same-city" | "nearby-cities" | "country-run";
+  fixtureIds: string[];
+  rows: FixtureListRow[];
+  labels: string[];
+};
+
 const PLACEHOLDER_DISCOVER_IMAGE =
   "https://images.unsplash.com/photo-1517927033932-b3d18e61fb3a?auto=format&fit=crop&w=1600&h=1000&fm=jpg&q=82";
 
@@ -440,6 +457,8 @@ function trendingLabelForFixture(row: FixtureListRow) {
 
   const labels: Record<string, string> = {
     "ajax|feyenoord": "De Klassieker",
+    "arsenal|tottenham": "North London Derby",
+    "atletico-madrid|real-madrid": "Madrid Derby",
     "celtic|rangers": "Old Firm",
     "fenerbahce|galatasaray": "Intercontinental Derby",
     "inter|milan": "Derby della Madonnina",
@@ -448,8 +467,6 @@ function trendingLabelForFixture(row: FixtureListRow) {
     "marseille|paris-saint-germain": "Le Classique",
     "olympiacos|panathinaikos": "Derby of the Eternal Enemies",
     "real-betis|sevilla": "Seville Derby",
-    "real-madrid|atletico-madrid": "Madrid Derby",
-    "tottenham|arsenal": "North London Derby",
   };
 
   if (labels[pair]) return labels[pair];
@@ -495,6 +512,8 @@ function trendingScore(row: FixtureListRow, baseScore: number) {
   const pair = getFixturePairKey(row);
   const knownBigPairs = new Set([
     "ajax|feyenoord",
+    "arsenal|tottenham",
+    "atletico-madrid|real-madrid",
     "celtic|rangers",
     "fenerbahce|galatasaray",
     "inter|milan",
@@ -503,8 +522,6 @@ function trendingScore(row: FixtureListRow, baseScore: number) {
     "marseille|paris-saint-germain",
     "olympiacos|panathinaikos",
     "real-betis|sevilla",
-    "real-madrid|atletico-madrid",
-    "tottenham|arsenal",
   ]);
 
   if (knownBigPairs.has(pair)) score += 80;
@@ -519,6 +536,238 @@ function trendingScore(row: FixtureListRow, baseScore: number) {
   if (leagueId === 61) score += 10;
 
   return score;
+}
+
+function fixtureIsoDateOnly(row: FixtureListRow) {
+  const raw = String(row?.fixture?.date ?? "").trim();
+  if (!raw) return "";
+  return raw.slice(0, 10);
+}
+
+function parseSafeDate(value?: string | null) {
+  if (!value) return null;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function daysBetweenIso(a: string, b: string) {
+  const da = parseSafeDate(`${a}T00:00:00.000Z`);
+  const db = parseSafeDate(`${b}T00:00:00.000Z`);
+  if (!da || !db) return 0;
+  return Math.round((db.getTime() - da.getTime()) / 86400000);
+}
+
+function cityKeyFromRow(row: FixtureListRow) {
+  const city = String(row?.fixture?.venue?.city ?? "").trim();
+  return toSlug(city);
+}
+
+function cityLabelFromRow(row: FixtureListRow) {
+  return String(row?.fixture?.venue?.city ?? "").trim();
+}
+
+function countryLabelFromRow(row: FixtureListRow) {
+  return String((row?.league as any)?.country ?? "").trim();
+}
+
+function styleLabel(style: MultiMatchTrip["style"]) {
+  if (style === "same-city") return "Same-city";
+  if (style === "nearby-cities") return "Nearby cities";
+  return "Country run";
+}
+
+function buildMultiMatchTrips(
+  rankedLive: RankedDiscoverPick[],
+  params: {
+    vibes: DiscoverVibe[];
+    tripLength: DiscoverTripLength;
+  }
+): MultiMatchTrip[] {
+  const rankedRows = rankedLive.map((entry) => ({
+    row: entry.item.fixture,
+    baseScore: entry.score,
+  }));
+
+  const byCity = new Map<string, { city: string; country: string; items: typeof rankedRows }>();
+  const byCountry = new Map<string, { country: string; items: typeof rankedRows }>();
+
+  for (const entry of rankedRows) {
+    const cityKey = cityKeyFromRow(entry.row);
+    const city = cityLabelFromRow(entry.row);
+    const country = countryLabelFromRow(entry.row);
+
+    if (cityKey && city) {
+      const existing = byCity.get(cityKey) ?? { city, country, items: [] };
+      existing.items.push(entry);
+      byCity.set(cityKey, existing);
+    }
+
+    if (country) {
+      const countryKey = toSlug(country);
+      const existing = byCountry.get(countryKey) ?? { country, items: [] };
+      existing.items.push(entry);
+      byCountry.set(countryKey, existing);
+    }
+  }
+
+  const trips: MultiMatchTrip[] = [];
+
+  const makeTrip = (
+    rows: FixtureListRow[],
+    scoreBase: number,
+    title: string,
+    subtitle: string,
+    style: MultiMatchTrip["style"],
+    cityLabel: string,
+    countryLabel: string,
+    bonusLabels: string[]
+  ): MultiMatchTrip | null => {
+    if (rows.length < 2) return null;
+
+    const sorted = [...rows].sort((a, b) =>
+      String(a?.fixture?.date ?? "").localeCompare(String(b?.fixture?.date ?? ""))
+    );
+
+    const from = fixtureIsoDateOnly(sorted[0]);
+    const to = fixtureIsoDateOnly(sorted[sorted.length - 1]);
+    if (!from || !to) return null;
+
+    const daysSpan = Math.max(1, daysBetweenIso(from, to) + 1);
+    if (daysSpan > 6) return null;
+
+    const fixtureIds = sorted
+      .map((row) => (row?.fixture?.id != null ? String(row.fixture.id) : ""))
+      .filter(Boolean);
+
+    if (fixtureIds.length < 2) return null;
+
+    let score = scoreBase;
+    score += rows.length * 50;
+    score += Math.max(0, 28 - daysSpan * 3);
+
+    if (style === "same-city") score += 35;
+    if (style === "nearby-cities") score += 20;
+
+    if (params.tripLength === "2" && daysSpan <= 4) score += 16;
+    if (params.tripLength === "3" && daysSpan <= 5) score += 12;
+    if (params.vibes.includes("easy") && style === "same-city") score += 18;
+    if (params.vibes.includes("culture") && cityLabel) score += 8;
+    if (params.vibes.includes("big")) {
+      const derbyish = sorted.some((row) => trendingLabelForFixture(row).toLowerCase().includes("derby"));
+      if (derbyish) score += 18;
+    }
+
+    const labels = [
+      `${rows.length} matches`,
+      `${daysSpan} days`,
+      styleLabel(style),
+      ...bonusLabels,
+    ].filter(Boolean);
+
+    return {
+      id: `${style}-${toSlug(title)}-${fixtureIds.join("-")}`,
+      title,
+      subtitle,
+      score,
+      matchCount: rows.length,
+      daysSpan,
+      from,
+      to,
+      cityLabel,
+      countryLabel,
+      style,
+      fixtureIds,
+      rows: sorted,
+      labels,
+    };
+  };
+
+  for (const [, bucket] of byCity.entries()) {
+    const sorted = [...bucket.items].sort((a, b) => b.baseScore - a.baseScore).slice(0, 5);
+
+    for (let size = Math.min(3, sorted.length); size >= 2; size -= 1) {
+      const rows = sorted.slice(0, size).map((item) => item.row);
+      const scoreBase = sorted.slice(0, size).reduce((sum, item) => sum + item.baseScore, 0);
+
+      const trip = makeTrip(
+        rows,
+        scoreBase,
+        `${size} matches in ${bucket.city}`,
+        `${bucket.city} football trip across ${Math.max(
+          1,
+          daysBetweenIso(fixtureIsoDateOnly(rows[0]), fixtureIsoDateOnly(rows[rows.length - 1])) + 1
+        )} days`,
+        "same-city",
+        bucket.city,
+        bucket.country,
+        bucket.country ? [bucket.country] : []
+      );
+
+      if (trip) trips.push(trip);
+    }
+  }
+
+  for (const [, bucket] of byCountry.entries()) {
+    const sameCountryRows = [...bucket.items]
+      .sort((a, b) => b.baseScore - a.baseScore)
+      .slice(0, 8);
+
+    const uniqueCityRows: typeof sameCountryRows = [];
+    const seenCities = new Set<string>();
+
+    for (const item of sameCountryRows) {
+      const cityKey = cityKeyFromRow(item.row);
+      if (!cityKey || seenCities.has(cityKey)) continue;
+      seenCities.add(cityKey);
+      uniqueCityRows.push(item);
+    }
+
+    for (let size = Math.min(3, uniqueCityRows.length); size >= 2; size -= 1) {
+      const rows = uniqueCityRows.slice(0, size).map((item) => item.row);
+      const scoreBase = uniqueCityRows
+        .slice(0, size)
+        .reduce((sum, item) => sum + item.baseScore, 0);
+
+      const cityNames = rows
+        .map((row) => cityLabelFromRow(row))
+        .filter(Boolean)
+        .slice(0, 3);
+
+      const trip = makeTrip(
+        rows,
+        scoreBase,
+        `${size} matches across ${bucket.country}`,
+        cityNames.length
+          ? `${cityNames.join(" • ")}`
+          : `${bucket.country} multi-match trip`,
+        cityNames.length <= 2 ? "nearby-cities" : "country-run",
+        cityNames[0] ?? "",
+        bucket.country,
+        cityNames
+      );
+
+      if (trip) trips.push(trip);
+    }
+  }
+
+  const deduped = new Map<string, MultiMatchTrip>();
+  for (const trip of trips) {
+    const key = [...trip.fixtureIds].sort().join("|");
+    const existing = deduped.get(key);
+    if (!existing || trip.score > existing.score) deduped.set(key, trip);
+  }
+
+  return [...deduped.values()].sort((a, b) => b.score - a.score).slice(0, 8);
+}
+
+function comboWhy(trip: MultiMatchTrip) {
+  if (trip.style === "same-city") {
+    return "Lowest-friction way to turn one match into a proper football trip.";
+  }
+  if (trip.style === "nearby-cities") {
+    return "Multiple fixtures without stretching the travel too far.";
+  }
+  return "A denser football run with more than one genuine reason to travel.";
 }
 
 function FilterChip({
@@ -717,6 +966,15 @@ export default function DiscoverScreen() {
       .slice(0, 6);
   }, [rankedLive]);
 
+  const multiMatchTrips = useMemo(
+    () =>
+      buildMultiMatchTrips(rankedLive, {
+        vibes: discoverVibes,
+        tripLength: discoverTripLength,
+      }),
+    [rankedLive, discoverVibes, discoverTripLength]
+  );
+
   const goFixturesCategory = useCallback(
     (category: DiscoverCategory) => {
       router.push({
@@ -776,6 +1034,26 @@ export default function DiscoverScreen() {
       discoverTripLength,
       discoverVibes,
     ]
+  );
+
+  const goMultiMatchTrip = useCallback(
+    (trip: MultiMatchTrip) => {
+      router.push({
+        pathname: "/(tabs)/fixtures",
+        params: {
+          from: trip.from,
+          to: trip.to,
+          discover: "perfectTrips",
+          discoverFrom: discoverOrigin.trim() || undefined,
+          discoverTripLength,
+          discoverVibes: discoverVibes.join(","),
+          comboMode: "1",
+          comboTitle: trip.title,
+          comboIds: trip.fixtureIds.join(","),
+        },
+      } as any);
+    },
+    [router, discoverOrigin, discoverTripLength, discoverVibes]
   );
 
   const applyPreset = useCallback(
@@ -1083,6 +1361,107 @@ export default function DiscoverScreen() {
                 </Pressable>
               ))}
             </ScrollView>
+          </View>
+
+          <View style={styles.section}>
+            <SectionHeader
+              title="Multi-match trips"
+              subtitle="The addictive bit: stack more than one match into the same trip."
+            />
+
+            {loadingLive ? (
+              <GlassCard strength="default" style={styles.loadingCard}>
+                <View style={styles.center}>
+                  <ActivityIndicator />
+                  <Text style={styles.loadingText}>Building multi-match routes…</Text>
+                </View>
+              </GlassCard>
+            ) : null}
+
+            {!loadingLive && !liveError && multiMatchTrips.length > 0 ? (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.multiRow}
+              >
+                {multiMatchTrips.map((trip, index) => (
+                  <Pressable
+                    key={trip.id}
+                    onPress={() => goMultiMatchTrip(trip)}
+                    style={({ pressed }) => [styles.multiPress, pressed && styles.pressed]}
+                  >
+                    <GlassCard strength="default" style={styles.multiCard} noPadding>
+                      <View style={styles.multiImageWrap}>
+                        <Image
+                          source={{ uri: getDiscoverCardImage() }}
+                          style={styles.multiImage}
+                          resizeMode="cover"
+                        />
+                        <View style={styles.multiOverlay} />
+
+                        <View style={styles.multiTopBar}>
+                          <View style={styles.multiRankPill}>
+                            <Text style={styles.multiRankText}>
+                              {index === 0 ? "Best combo" : `${trip.matchCount} matches`}
+                            </Text>
+                          </View>
+                        </View>
+                      </View>
+
+                      <View style={styles.multiBody}>
+                        <Text style={styles.multiTitle} numberOfLines={2}>
+                          {trip.title}
+                        </Text>
+
+                        <Text style={styles.multiSubline} numberOfLines={2}>
+                          {trip.subtitle}
+                        </Text>
+
+                        <Text style={styles.multiWhy} numberOfLines={2}>
+                          {comboWhy(trip)}
+                        </Text>
+
+                        <View style={styles.multiLabelRow}>
+                          {trip.labels.slice(0, 3).map((label) => (
+                            <View key={`${trip.id}-${label}`} style={styles.multiLabelPill}>
+                              <Text style={styles.multiLabelText}>{label}</Text>
+                            </View>
+                          ))}
+                        </View>
+
+                        <View style={styles.multiMatchList}>
+                          {trip.rows.slice(0, 3).map((row, rowIndex) => (
+                            <Text
+                              key={`${trip.id}-${String(row?.fixture?.id ?? rowIndex)}`}
+                              style={styles.multiMatchLine}
+                              numberOfLines={1}
+                            >
+                              {`${rowIndex + 1}. ${fixtureTitle(row)}`}
+                            </Text>
+                          ))}
+                        </View>
+
+                        <View style={styles.multiFooter}>
+                          <Text style={styles.multiFooterText}>
+                            {`${trip.matchCount} matches in ${trip.daysSpan} days`}
+                          </Text>
+                          <Text style={styles.multiFooterArrow}>›</Text>
+                        </View>
+                      </View>
+                    </GlassCard>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            ) : null}
+
+            {!loadingLive && !liveError && multiMatchTrips.length === 0 ? (
+              <GlassCard strength="default" style={styles.noComboCard}>
+                <Text style={styles.noComboTitle}>No strong combos yet</Text>
+                <Text style={styles.noComboText}>
+                  Widen the date window or ease the vibe filters and the app will surface stacked trips.
+                </Text>
+              </GlassCard>
+            ) : null}
           </View>
 
           <View style={styles.section}>
@@ -1943,6 +2322,163 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeight.black,
   },
 
+  multiRow: {
+    gap: 12,
+    paddingRight: theme.spacing.lg,
+  },
+
+  multiPress: {
+    width: 296,
+    borderRadius: 22,
+    overflow: "hidden",
+  },
+
+  multiCard: {
+    borderRadius: 22,
+    borderColor: "rgba(87,162,56,0.16)",
+  },
+
+  multiImageWrap: {
+    height: 132,
+    position: "relative",
+  },
+
+  multiImage: {
+    width: "100%",
+    height: "100%",
+  },
+
+  multiOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(5,8,10,0.38)",
+  },
+
+  multiTopBar: {
+    position: "absolute",
+    top: 10,
+    left: 10,
+    right: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-start",
+  },
+
+  multiRankPill: {
+    borderRadius: 999,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    borderColor: "rgba(87,162,56,0.22)",
+    backgroundColor: "rgba(6,10,8,0.64)",
+  },
+
+  multiRankText: {
+    color: theme.colors.text,
+    fontSize: 10,
+    fontWeight: theme.fontWeight.black,
+    letterSpacing: 0.3,
+  },
+
+  multiBody: {
+    padding: 14,
+    gap: 8,
+    minHeight: 190,
+  },
+
+  multiTitle: {
+    color: theme.colors.text,
+    fontSize: 18,
+    lineHeight: 23,
+    fontWeight: theme.fontWeight.black,
+  },
+
+  multiSubline: {
+    color: theme.colors.textSecondary,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: theme.fontWeight.bold,
+  },
+
+  multiWhy: {
+    color: theme.colors.primary,
+    fontSize: 11,
+    lineHeight: 16,
+    fontWeight: theme.fontWeight.black,
+  },
+
+  multiLabelRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+
+  multiLabelPill: {
+    borderRadius: 999,
+    paddingVertical: 5,
+    paddingHorizontal: 9,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor:
+      Platform.OS === "android" ? "rgba(0,0,0,0.18)" : "rgba(255,255,255,0.04)",
+  },
+
+  multiLabelText: {
+    color: theme.colors.textSecondary,
+    fontSize: 10,
+    fontWeight: theme.fontWeight.black,
+  },
+
+  multiMatchList: {
+    gap: 4,
+    marginTop: 2,
+  },
+
+  multiMatchLine: {
+    color: theme.colors.text,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: theme.fontWeight.bold,
+  },
+
+  multiFooter: {
+    marginTop: "auto",
+    paddingTop: 2,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+
+  multiFooterText: {
+    color: theme.colors.text,
+    fontSize: 12,
+    fontWeight: theme.fontWeight.black,
+  },
+
+  multiFooterArrow: {
+    color: theme.colors.textTertiary,
+    fontSize: 22,
+    marginTop: -2,
+  },
+
+  noComboCard: {
+    borderRadius: 20,
+    padding: 16,
+  },
+
+  noComboTitle: {
+    color: theme.colors.text,
+    fontSize: 15,
+    fontWeight: theme.fontWeight.black,
+  },
+
+  noComboText: {
+    marginTop: 6,
+    color: theme.colors.textSecondary,
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: theme.fontWeight.bold,
+  },
+
   liveRow: {
     gap: 12,
     paddingRight: theme.spacing.lg,
@@ -2175,110 +2711,6 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
     fontSize: 12,
     fontWeight: theme.fontWeight.black,
-  },
-
-  featuredPress: {
-    borderRadius: 22,
-    overflow: "hidden",
-  },
-
-  featuredLiveCard: {
-    borderRadius: 22,
-    borderColor: "rgba(87,162,56,0.22)",
-  },
-
-  featuredLiveImageWrap: {
-    height: 152,
-    position: "relative",
-  },
-
-  featuredLiveImage: {
-    width: "100%",
-    height: "100%",
-  },
-
-  featuredLiveOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(5,8,10,0.42)",
-  },
-
-  featuredLiveBody: {
-    padding: 16,
-    gap: 8,
-  },
-
-  featuredLiveTopRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-  },
-
-  featuredLiveIconWrap: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "rgba(87,162,56,0.20)",
-    backgroundColor: "rgba(87,162,56,0.10)",
-  },
-
-  featuredLiveTitle: {
-    color: theme.colors.text,
-    fontSize: 20,
-    lineHeight: 25,
-    fontWeight: theme.fontWeight.black,
-  },
-
-  featuredLiveMeta: {
-    color: theme.colors.textSecondary,
-    fontSize: 13,
-    lineHeight: 18,
-    fontWeight: theme.fontWeight.bold,
-  },
-
-  featuredLiveWhy: {
-    color: theme.colors.primary,
-    fontSize: 12,
-    lineHeight: 17,
-    fontWeight: theme.fontWeight.black,
-  },
-
-  featuredLiveBottomRow: {
-    marginTop: 2,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-
-  featuredLiveCta: {
-    color: theme.colors.text,
-    fontSize: 13,
-    fontWeight: theme.fontWeight.black,
-  },
-
-  bestFitPill: {
-    borderRadius: 999,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderWidth: 1,
-    borderColor: "rgba(87,162,56,0.24)",
-    backgroundColor: "rgba(87,162,56,0.10)",
-  },
-
-  bestFitPillText: {
-    color: theme.colors.text,
-    fontSize: 10,
-    fontWeight: theme.fontWeight.black,
-    letterSpacing: 0.4,
-  },
-
-  leadArrow: {
-    color: theme.colors.textTertiary,
-    fontSize: 22,
-    marginTop: -2,
   },
 
   primaryGrid: {
