@@ -90,6 +90,28 @@ function StatusBadge({ status }: { status: SavedItem["status"] }) {
   );
 }
 
+function ticketStateLine(ticketItem: SavedItem | null, livePrice: string | null) {
+  if (!ticketItem) return "No ticket route saved yet";
+  if (ticketItem.status === "booked") return livePrice || "Ticket booked";
+  if (ticketItem.status === "pending") return livePrice || "Ticket route pending";
+  if (ticketItem.status === "saved") return livePrice || "Ticket option saved";
+  return "Archived ticket route";
+}
+
+function urgencyLine(args: {
+  isPrimary: boolean;
+  ticketItem: SavedItem | null;
+  certaintyLine: string;
+}) {
+  const { isPrimary, ticketItem, certaintyLine } = args;
+
+  if (isPrimary && !ticketItem) return "Primary match not ticketed yet";
+  if (isPrimary && ticketItem?.status === "pending") return "Primary match ticket still pending";
+  if (isPrimary && ticketItem?.status === "saved") return "Primary match ticket route saved";
+  if (isPrimary && ticketItem?.status === "booked") return "Primary match anchored";
+  return certaintyLine;
+}
+
 function buildMatchCardData(
   trip: Trip,
   matchId: string,
@@ -134,6 +156,16 @@ function buildMatchCardData(
   };
 }
 
+function sortMatchIds(matchIds: string[], primaryMatchId: string | null) {
+  const primary = String(primaryMatchId ?? "").trim();
+  if (!primary) return matchIds;
+  return [...matchIds].sort((a, b) => {
+    if (a === primary) return -1;
+    if (b === primary) return 1;
+    return 0;
+  });
+}
+
 export default function TripMatchesCard({
   trip,
   numericMatchIds,
@@ -150,10 +182,17 @@ export default function TripMatchesCard({
   getTicketScoreFromItem,
   getLivePriceLine,
 }: Props) {
+  const orderedMatchIds = sortMatchIds(numericMatchIds, primaryMatchId);
+
   return (
     <GlassCard style={styles.card}>
       <View style={styles.sectionTitleRow}>
-        <Text style={styles.sectionTitle}>Matches</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.sectionTitle}>Matches</Text>
+          <Text style={styles.sectionSub}>
+            The primary match should drive the trip. Everything else supports it.
+          </Text>
+        </View>
 
         <Pressable onPress={onAddMatch} style={styles.inlineLinkBtn}>
           <Text style={styles.inlineLinkText}>Add match ›</Text>
@@ -161,24 +200,36 @@ export default function TripMatchesCard({
       </View>
 
       {numericMatchIds.length === 0 ? (
-        <EmptyState title="No matches added" message="Add a match to unlock match-specific planning." />
+        <EmptyState
+          title="No matches added"
+          message="Add a match to unlock ticket-first planning and make this trip actually usable."
+        />
       ) : (
         <View style={styles.list}>
-          {numericMatchIds.map((matchId) => {
+          {orderedMatchIds.map((matchId) => {
             const fixture = fixturesById[String(matchId)];
             const ticketItem = ticketsByMatchId[String(matchId)] ?? null;
             const isPrimary = String(primaryMatchId ?? "") === String(matchId);
             const ticketProvider = getTicketProviderFromItem(ticketItem);
             const ticketScore = getTicketScoreFromItem(ticketItem);
+            const livePrice = ticketItem ? getLivePriceLine(ticketItem) : null;
 
             const data = buildMatchCardData(trip, matchId, fixture);
+            const urgency = urgencyLine({
+              isPrimary,
+              ticketItem,
+              certaintyLine: data.kickoff.line,
+            });
 
             return (
               <View key={matchId} style={styles.matchRowWrap}>
                 <Pressable
                   onPress={() => onOpenTicketsForMatch(matchId)}
                   onLongPress={() => onOpenMatchActions(matchId)}
-                  style={styles.matchRow}
+                  style={[
+                    styles.matchRow,
+                    isPrimary && styles.matchRowPrimary,
+                  ]}
                 >
                   <TeamCrest name={data.homeName} logo={data.homeLogo} />
 
@@ -197,8 +248,8 @@ export default function TripMatchesCard({
                       {ticketItem ? <StatusBadge status={ticketItem.status} /> : null}
                     </View>
 
-                    <Text style={styles.matchMeta} numberOfLines={1}>
-                      {data.kickoff.line}
+                    <Text style={[styles.matchUrgency, isPrimary && styles.matchUrgencyPrimary]} numberOfLines={1}>
+                      {urgency}
                     </Text>
 
                     <View style={styles.certaintyWrap}>
@@ -223,24 +274,22 @@ export default function TripMatchesCard({
                       </Text>
                     ) : null}
 
-                    {ticketItem ? (
-                      <View style={styles.ticketSignalRow}>
-                        {ticketProvider ? <ProviderBadge provider={ticketProvider} /> : null}
-                        <Text style={styles.matchHint} numberOfLines={1}>
-                          {getLivePriceLine(ticketItem) || `Tap to open tickets (${statusLabel(ticketItem.status)})`}
-                        </Text>
-                      </View>
-                    ) : (
+                    <View style={styles.ticketSignalRow}>
+                      {ticketProvider ? <ProviderBadge provider={ticketProvider} /> : null}
                       <Text style={styles.matchHint} numberOfLines={1}>
-                        Tap to compare live ticket options • Hold for options
+                        {ticketStateLine(ticketItem, livePrice)}
                       </Text>
-                    )}
+                    </View>
 
                     {ticketScore != null ? (
                       <Text style={styles.ticketQualityMeta} numberOfLines={1}>
                         {ticketConfidenceLabel(ticketScore)}
                       </Text>
-                    ) : null}
+                    ) : (
+                      <Text style={styles.ticketQualityMetaMuted} numberOfLines={1}>
+                        Tap to compare live ticket options
+                      </Text>
+                    )}
                   </View>
 
                   <TeamCrest name={data.awayName} logo={data.awayLogo} />
@@ -250,9 +299,15 @@ export default function TripMatchesCard({
                 <View style={styles.matchActionsRow}>
                   <Pressable
                     onPress={() => onOpenTicketsForMatch(matchId)}
-                    style={[styles.smallBtn, styles.smallBtnWide]}
+                    style={[
+                      styles.smallBtn,
+                      styles.smallBtnWide,
+                      isPrimary && styles.smallBtnPrimaryStrong,
+                    ]}
                   >
-                    <Text style={styles.smallBtnText}>Tickets</Text>
+                    <Text style={styles.smallBtnText}>
+                      {ticketItem ? "Open tickets" : "Find tickets"}
+                    </Text>
                   </Pressable>
 
                   {!isPrimary ? (
@@ -264,7 +319,7 @@ export default function TripMatchesCard({
                     </Pressable>
                   ) : (
                     <View style={[styles.smallBtn, styles.smallBtnWide, styles.smallBtnDisabled]}>
-                      <Text style={styles.smallBtnText}>Primary</Text>
+                      <Text style={styles.smallBtnText}>Trip anchor</Text>
                     </View>
                   )}
 
@@ -297,15 +352,23 @@ const styles = StyleSheet.create({
 
   sectionTitleRow: {
     flexDirection: "row",
-    alignItems: "baseline",
+    alignItems: "flex-start",
     justifyContent: "space-between",
     gap: 12,
+    marginBottom: 8,
   },
 
   sectionTitle: {
     color: theme.colors.text,
     fontWeight: "900",
-    marginBottom: 8,
+    marginBottom: 4,
+  },
+
+  sectionSub: {
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
+    fontSize: 12,
+    lineHeight: 16,
   },
 
   inlineLinkBtn: {
@@ -347,6 +410,11 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.18)",
   },
 
+  matchRowPrimary: {
+    borderColor: "rgba(0,255,136,0.30)",
+    backgroundColor: "rgba(0,255,136,0.06)",
+  },
+
   matchContent: {
     flex: 1,
     minWidth: 0,
@@ -362,6 +430,18 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     fontWeight: "900",
     flexShrink: 1,
+  },
+
+  matchUrgency: {
+    marginTop: 4,
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 12,
+    lineHeight: 16,
+  },
+
+  matchUrgencyPrimary: {
+    color: theme.colors.primary,
   },
 
   matchMeta: {
@@ -403,6 +483,13 @@ const styles = StyleSheet.create({
     marginTop: 4,
     color: "rgba(160,195,255,1)",
     fontWeight: "900",
+    fontSize: 11,
+  },
+
+  ticketQualityMetaMuted: {
+    marginTop: 4,
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
     fontSize: 11,
   },
 
@@ -467,6 +554,11 @@ const styles = StyleSheet.create({
 
   smallBtnPrimary: {
     borderColor: "rgba(0,255,136,0.35)",
+  },
+
+  smallBtnPrimaryStrong: {
+    borderColor: "rgba(0,255,136,0.48)",
+    backgroundColor: "rgba(0,255,136,0.08)",
   },
 
   smallBtnDisabled: {
