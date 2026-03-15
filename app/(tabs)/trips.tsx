@@ -32,19 +32,8 @@ import type { SavedItem } from "@/src/core/savedItemTypes";
 
 import { getFlagImageUrl } from "@/src/utils/flagImages";
 
-/* -------------------------------------------------------------------------- */
-/*                                  CONFIG                                    */
-/* -------------------------------------------------------------------------- */
-
-/**
- * Put your actual hosted logo URL here.
- * Leaving blank hides the logo panel cleanly instead of showing random filler.
- */
 const TRIPS_HEADER_LOGO = "";
 
-/**
- * Visual fallback map for trip cards when trip objects do not yet carry full metadata.
- */
 const TRIP_CITY_META: Record<
   string,
   {
@@ -102,8 +91,6 @@ const TRIP_CITY_META: Record<
       "https://images.unsplash.com/photo-1516483638261-f4dbaf036963?auto=format&fit=crop&w=1600&h=900&q=80",
   },
 };
-
-/* -------------------------------- Helpers -------------------------------- */
 
 function titleCase(input: string) {
   const s = String(input ?? "").trim();
@@ -223,9 +210,9 @@ function progressLabel(counts?: { total: number; pending: number; booked: number
   const c = counts ?? { total: 0, pending: 0, booked: 0, saved: 0 };
   if (c.total <= 0) return "Nothing saved yet";
   if (c.booked === c.total) return "Everything booked";
-  if (c.booked > 0) return `${c.booked}/${c.total} items booked`;
-  if (c.pending > 0) return `${c.pending} item${c.pending === 1 ? "" : "s"} pending`;
-  return `${c.total} item${c.total === 1 ? "" : "s"} saved`;
+  if (c.booked > 0) return `${c.booked}/${c.total} booked`;
+  if (c.pending > 0) return `${c.pending} pending`;
+  return `${c.total} saved`;
 }
 
 function getTripVisualMeta(t: Trip) {
@@ -285,8 +272,6 @@ function buildWalletIndex(groups: WalletTripGroup[]) {
 
   return byTrip;
 }
-
-/* -------------------------------- Screen -------------------------------- */
 
 export default function TripsScreen() {
   const router = useRouter();
@@ -436,7 +421,7 @@ export default function TripsScreen() {
             onPress: () => {
               const msg =
                 `This cannot be undone.\n\n` +
-                `Deleting this trip will also remove ALL saved links, pending items, booked items, and any Wallet attachments for this trip from this device.`;
+                `Deleting this trip will also remove all saved links, pending items, booked items, and any wallet attachments for this trip from this device.`;
 
               Alert.alert("Confirm delete", msg, [
                 { text: "Cancel", style: "cancel" },
@@ -479,77 +464,67 @@ export default function TripsScreen() {
                   <Text style={styles.kicker}>WORKSPACES</Text>
                   <Text style={styles.title}>Trips</Text>
                   <Text style={styles.subtitle}>
-                    Plan the trip, track what’s still pending, and keep everything in one workspace.
+                    Plan the trip, track key progress, and keep each football getaway in one clean workspace.
                   </Text>
                 </View>
 
-                <View style={styles.heroLogoSlot}>
-                  <View style={styles.logoPanel}>
-                    {TRIPS_HEADER_LOGO ? (
+                {TRIPS_HEADER_LOGO ? (
+                  <View style={styles.heroLogoSlot}>
+                    <View style={styles.logoPanel}>
                       <Image
                         source={{ uri: TRIPS_HEADER_LOGO }}
                         style={styles.logoPanelImage}
                         resizeMode="contain"
                       />
-                    ) : (
-                      <View style={styles.logoPanelPlaceholder}>
-                        <Ionicons
-                          name="shield-outline"
-                          size={28}
-                          color={theme.colors.textTertiary}
-                        />
-                      </View>
-                    )}
+                    </View>
                   </View>
-                </View>
+                ) : null}
               </View>
 
-              <View style={styles.heroLowerRow}>
-                <View style={styles.heroStatsCol}>
-                  <MetricCard
-                    icon="airplane-outline"
-                    value={String(clamp2(totals.tripCount))}
-                    label="Trips"
-                  />
-                  <MetricCard
-                    icon="time-outline"
-                    value={String(clamp2(totals.pending))}
-                    label="Pending"
-                  />
-                  <MetricCard
-                    icon="checkmark-done-outline"
-                    value={String(clamp2(totals.booked))}
-                    label="Booked"
-                  />
-                </View>
+              <View style={styles.heroStatsRow}>
+                <MetricCard
+                  icon="airplane-outline"
+                  value={String(clamp2(totals.tripCount))}
+                  label="Trips"
+                />
+                <MetricCard
+                  icon="time-outline"
+                  value={String(clamp2(totals.pending))}
+                  label="Pending"
+                />
+                <MetricCard
+                  icon="checkmark-done-outline"
+                  value={String(clamp2(totals.booked))}
+                  label="Booked"
+                />
+              </View>
 
-                <View style={styles.heroActions}>
-                  <Pressable
-                    onPress={goBuild}
-                    style={({ pressed }) => [styles.primaryAction, pressed && styles.pressed]}
-                  >
-                    <View style={styles.primaryActionIcon}>
-                      <Ionicons name="add-outline" size={18} color={theme.colors.text} />
-                    </View>
-                    <View style={styles.primaryActionTextWrap}>
-                      <Text style={styles.primaryActionTitle}>Build a trip</Text>
-                      <Text style={styles.primaryActionSub}>Create a new workspace</Text>
-                    </View>
-                  </Pressable>
+              <View style={styles.heroActionsRow}>
+                <Pressable
+                  onPress={goBuild}
+                  style={({ pressed }) => [styles.primaryAction, pressed && styles.pressed]}
+                >
+                  <View style={styles.primaryActionIcon}>
+                    <Ionicons name="add-outline" size={18} color={theme.colors.text} />
+                  </View>
+                  <View style={styles.primaryActionTextWrap}>
+                    <Text style={styles.primaryActionTitle}>Build a trip</Text>
+                    <Text style={styles.primaryActionSub}>Create a new workspace</Text>
+                  </View>
+                </Pressable>
 
-                  <Pressable
-                    onPress={goFixtures}
-                    style={({ pressed }) => [styles.secondaryAction, pressed && styles.pressed]}
-                  >
-                    <View style={styles.secondaryActionIcon}>
-                      <Ionicons name="calendar-outline" size={18} color={theme.colors.text} />
-                    </View>
-                    <View style={styles.secondaryActionTextWrap}>
-                      <Text style={styles.secondaryActionTitle}>Browse fixtures</Text>
-                      <Text style={styles.secondaryActionSub}>Start from a match</Text>
-                    </View>
-                  </Pressable>
-                </View>
+                <Pressable
+                  onPress={goFixtures}
+                  style={({ pressed }) => [styles.secondaryAction, pressed && styles.pressed]}
+                >
+                  <View style={styles.secondaryActionIcon}>
+                    <Ionicons name="calendar-outline" size={18} color={theme.colors.text} />
+                  </View>
+                  <View style={styles.secondaryActionTextWrap}>
+                    <Text style={styles.secondaryActionTitle}>Browse fixtures</Text>
+                    <Text style={styles.secondaryActionSub}>Start from a match</Text>
+                  </View>
+                </Pressable>
               </View>
 
               <View style={styles.heroSummaryRow}>
@@ -663,8 +638,6 @@ export default function TripsScreen() {
   );
 }
 
-/* ------------------------------ Bits ------------------------------ */
-
 function MetricCard({
   icon,
   label,
@@ -703,10 +676,10 @@ function StatusChip({
     kind === "pending"
       ? styles.chipPending
       : kind === "booked"
-      ? styles.chipBooked
-      : kind === "draft"
-      ? styles.chipDraft
-      : styles.chipReady;
+        ? styles.chipBooked
+        : kind === "draft"
+          ? styles.chipDraft
+          : styles.chipReady;
 
   return (
     <View style={[styles.chip, style]}>
@@ -773,14 +746,12 @@ function WalletStrip({
       </View>
 
       <View style={styles.walletStripRight}>
-        <Text style={styles.walletStripLink}>Open in Wallet</Text>
+        <Text style={styles.walletStripLink}>Open</Text>
         <Text style={styles.walletStripArrow}>›</Text>
       </View>
     </Pressable>
   );
 }
-
-/* ------------------------------ Spotlight ------------------------------ */
 
 function SpotlightTripCard({
   trip,
@@ -807,7 +778,7 @@ function SpotlightTripCard({
           style={styles.spotlightImageWrap}
           imageStyle={styles.spotlightImage}
         >
-          <View style={styles.tripImageOverlay} />
+          <View style={styles.tripImageOverlayStrong} />
           <View style={styles.spotlightInner}>
             <View style={styles.spotlightTopRow}>
               <View style={styles.spotlightBadgeIcon}>
@@ -856,8 +827,6 @@ function MiniStat({ label, value }: { label: string; value: number }) {
     </View>
   );
 }
-
-/* ------------------------------ Trip Card ------------------------------ */
 
 function TripCard({
   t,
@@ -915,7 +884,6 @@ function TripCard({
 
             <View style={styles.tripHeaderRight}>
               <StatusChip kind={badge.kind} text={badge.text} />
-              <Text style={styles.chev}>›</Text>
             </View>
           </View>
 
@@ -963,7 +931,7 @@ function TripCard({
                 isDeleting && { opacity: 0.5 },
               ]}
             >
-              <Ionicons name="trash-outline" size={16} color={"rgba(255,120,120,0.95)"} />
+              <Ionicons name="trash-outline" size={15} color={"rgba(255,145,145,0.82)"} />
               <Text style={styles.actionDangerText}>{isDeleting ? "Deleting…" : "Delete"}</Text>
             </Pressable>
           </View>
@@ -981,8 +949,6 @@ function Pill({ label, value }: { label: string; value: number }) {
     </View>
   );
 }
-
-/* -------------------------------- Styles -------------------------------- */
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },
@@ -1005,22 +971,20 @@ const styles = StyleSheet.create({
 
   heroTopRow: {
     flexDirection: "row",
-    alignItems: "stretch",
+    alignItems: "flex-start",
     gap: 12,
   },
 
   heroTextWrap: {
     flex: 1,
-    justifyContent: "space-between",
   },
 
   heroLogoSlot: {
-    width: 118,
+    width: 108,
   },
 
   logoPanel: {
-    flex: 1,
-    minHeight: 124,
+    minHeight: 108,
     borderRadius: 22,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
@@ -1037,21 +1001,9 @@ const styles = StyleSheet.create({
     opacity: 0.98,
   },
 
-  logoPanelPlaceholder: {
-    alignItems: "center",
-    justifyContent: "center",
-    opacity: 0.5,
-  },
-
-  heroLowerRow: {
+  heroStatsRow: {
     flexDirection: "row",
     gap: 10,
-    alignItems: "stretch",
-  },
-
-  heroStatsCol: {
-    width: 92,
-    gap: 8,
   },
 
   kicker: {
@@ -1079,7 +1031,7 @@ const styles = StyleSheet.create({
 
   metricCard: {
     flex: 1,
-    minHeight: 72,
+    minHeight: 74,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
     backgroundColor:
@@ -1104,14 +1056,14 @@ const styles = StyleSheet.create({
     fontSize: 11,
   },
 
-  heroActions: {
-    flex: 1,
+  heroActionsRow: {
+    flexDirection: "row",
     gap: 10,
   },
 
   primaryAction: {
     flex: 1,
-    minHeight: 76,
+    minHeight: 82,
     borderRadius: 20,
     borderWidth: 1,
     borderColor: "rgba(79,224,138,0.34)",
@@ -1151,7 +1103,7 @@ const styles = StyleSheet.create({
 
   secondaryAction: {
     flex: 1,
-    minHeight: 76,
+    minHeight: 82,
     borderRadius: 20,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
@@ -1278,7 +1230,7 @@ const styles = StyleSheet.create({
   },
 
   spotlightImageWrap: {
-    minHeight: 320,
+    minHeight: 308,
     justifyContent: "flex-end",
   },
 
@@ -1287,7 +1239,7 @@ const styles = StyleSheet.create({
   },
 
   tripImageWrap: {
-    minHeight: 292,
+    minHeight: 258,
     justifyContent: "flex-end",
     overflow: "hidden",
   },
@@ -1298,7 +1250,12 @@ const styles = StyleSheet.create({
 
   tripImageOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(8,12,10,0.66)",
+    backgroundColor: "rgba(7,11,9,0.68)",
+  },
+
+  tripImageOverlayStrong: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(7,11,9,0.62)",
   },
 
   spotlightInner: {
@@ -1378,7 +1335,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
     backgroundColor:
-      Platform.OS === "android" ? "rgba(0,0,0,0.22)" : "rgba(255,255,255,0.06)",
+      Platform.OS === "android" ? "rgba(0,0,0,0.26)" : "rgba(255,255,255,0.07)",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1478,13 +1435,6 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(87,162,56,0.88)",
   },
 
-  chev: {
-    color: theme.colors.textTertiary,
-    fontSize: 24,
-    fontWeight: theme.fontWeight.black,
-    marginTop: -4,
-  },
-
   chip: {
     borderWidth: 1,
     borderRadius: 999,
@@ -1561,7 +1511,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
     backgroundColor:
-      Platform.OS === "android" ? "rgba(0,0,0,0.22)" : "rgba(255,255,255,0.06)",
+      Platform.OS === "android" ? "rgba(0,0,0,0.26)" : "rgba(255,255,255,0.07)",
     paddingVertical: 10,
     alignItems: "center",
     justifyContent: "center",
@@ -1586,9 +1536,9 @@ const styles = StyleSheet.create({
     minHeight: 56,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
+    borderColor: "rgba(255,255,255,0.12)",
     backgroundColor:
-      Platform.OS === "android" ? "rgba(0,0,0,0.20)" : "rgba(255,255,255,0.05)",
+      Platform.OS === "android" ? "rgba(7,10,9,0.42)" : "rgba(7,10,9,0.34)",
     paddingHorizontal: 12,
     paddingVertical: 10,
     flexDirection: "row",
@@ -1627,7 +1577,7 @@ const styles = StyleSheet.create({
 
   walletStripMeta: {
     marginTop: 2,
-    color: theme.colors.textSecondary,
+    color: "rgba(231,236,231,0.82)",
     fontSize: 11,
     lineHeight: 15,
     fontWeight: theme.fontWeight.bold,
@@ -1652,7 +1602,7 @@ const styles = StyleSheet.create({
   },
 
   actionsRow: {
-    marginTop: 12,
+    marginTop: 10,
     marginHorizontal: 14,
     marginBottom: 14,
     flexDirection: "row",
@@ -1661,10 +1611,10 @@ const styles = StyleSheet.create({
 
   actionBtn: {
     flex: 1,
-    minHeight: 48,
+    minHeight: 46,
     borderRadius: 16,
     borderWidth: 1,
-    paddingVertical: 12,
+    paddingVertical: 11,
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
@@ -1675,7 +1625,7 @@ const styles = StyleSheet.create({
   actionGhost: {
     borderColor: "rgba(255,255,255,0.12)",
     backgroundColor:
-      Platform.OS === "android" ? "rgba(10,12,14,0.22)" : "rgba(255,255,255,0.05)",
+      Platform.OS === "android" ? "rgba(10,12,14,0.26)" : "rgba(255,255,255,0.06)",
   },
 
   actionGhostText: {
@@ -1685,14 +1635,14 @@ const styles = StyleSheet.create({
   },
 
   actionDanger: {
-    borderColor: "rgba(255,90,90,0.32)",
+    borderColor: "rgba(255,90,90,0.18)",
     backgroundColor:
-      Platform.OS === "android" ? "rgba(255,90,90,0.08)" : "rgba(255,90,90,0.06)",
+      Platform.OS === "android" ? "rgba(255,90,90,0.04)" : "rgba(255,90,90,0.035)",
   },
 
   actionDangerText: {
-    color: "rgba(255,120,120,0.95)",
-    fontWeight: theme.fontWeight.black,
+    color: "rgba(255,145,145,0.82)",
+    fontWeight: theme.fontWeight.bold,
     fontSize: 13,
   },
 
