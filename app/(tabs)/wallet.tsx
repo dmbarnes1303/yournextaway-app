@@ -776,7 +776,7 @@ export default function WalletScreen() {
                   <Text style={styles.kicker}>WALLET</Text>
                   <Text style={styles.h1}>Bookings & proofs</Text>
                   <Text style={styles.h2}>
-                    Your booked items, pending confirmations, and proof files in one place.
+                    Keep booked items, pending confirmations, and proof files together without digging through separate screens.
                   </Text>
                 </View>
 
@@ -790,7 +790,7 @@ export default function WalletScreen() {
                   ) : (
                     <>
                       <Ionicons name="cloud-upload-outline" size={16} color={theme.colors.text} />
-                      <Text style={styles.uploadText}>Backup doc</Text>
+                      <Text style={styles.uploadText}>Backup file</Text>
                     </>
                   )}
                 </Pressable>
@@ -873,7 +873,7 @@ export default function WalletScreen() {
                 title="Spotlight"
                 subtitle={
                   focusedTripIdParam
-                    ? "Focused from Trips"
+                    ? "Wallet view for the trip you opened"
                     : "Most relevant trip workspace in Wallet right now"
                 }
               />
@@ -895,9 +895,40 @@ export default function WalletScreen() {
           ) : filteredGroups.length === 0 ? (
             <GlassCard style={styles.stateCard} strength="default">
               <EmptyState
-                title="No wallet items yet"
-                message="Booked items and proof files will appear here. Right now there’s nothing useful to show."
+                title="No wallet activity yet"
+                message={
+                  focusedTrip
+                    ? "This trip has no booked or pending wallet items yet. Start by saving tickets, travel or experiences from the trip workspace."
+                    : "Booked items and proof files will show here once you start building real trip activity."
+                }
               />
+              <View style={styles.emptyActions}>
+                {focusedTrip ? (
+                  <Pressable
+                    style={({ pressed }) => [styles.emptyActionPrimary, pressed && styles.pressed]}
+                    onPress={() => onOpenTrip(focusedTrip.id)}
+                  >
+                    <Ionicons name="airplane-outline" size={18} color={theme.colors.text} />
+                    <Text style={styles.emptyActionPrimaryText}>Open trip workspace</Text>
+                  </Pressable>
+                ) : (
+                  <Pressable
+                    style={({ pressed }) => [styles.emptyActionPrimary, pressed && styles.pressed]}
+                    onPress={() => router.push("/(tabs)/trips" as any)}
+                  >
+                    <Ionicons name="briefcase-outline" size={18} color={theme.colors.text} />
+                    <Text style={styles.emptyActionPrimaryText}>Go to Trips</Text>
+                  </Pressable>
+                )}
+
+                <Pressable
+                  style={({ pressed }) => [styles.emptyActionSecondary, pressed && styles.pressed]}
+                  onPress={() => router.push("/(tabs)/fixtures" as any)}
+                >
+                  <Ionicons name="calendar-outline" size={18} color={theme.colors.text} />
+                  <Text style={styles.emptyActionSecondaryText}>Browse fixtures</Text>
+                </Pressable>
+              </View>
             </GlassCard>
           ) : (
             <View style={styles.section}>
@@ -923,22 +954,23 @@ export default function WalletScreen() {
             </View>
           )}
 
-          <GlassCard style={styles.remoteSection} strength="default" noPadding>
+          <GlassCard style={styles.remoteSection} strength="subtle" noPadding>
             <View style={styles.remoteInner}>
               <View style={styles.remoteHeader}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.remoteTitle}>Backup documents</Text>
+                <View style={styles.remoteHeaderText}>
+                  <Text style={styles.remoteEyebrow}>Optional backup</Text>
+                  <Text style={styles.remoteTitle}>Extra backup documents</Text>
                   <Text style={styles.remoteMeta}>
-                    Optional remote storage for extra files. Secondary to your actual trip-linked wallet items.
+                    Use this only for additional remote storage. It should not compete with the actual trip-linked wallet above.
                   </Text>
                 </View>
 
-                <Pressable style={styles.groupBtn} onPress={() => setRemoteOpen((v) => !v)}>
-                  <Text style={styles.groupBtnText}>{remoteOpen ? "Hide" : "Show"}</Text>
+                <Pressable style={styles.remoteToggleBtn} onPress={() => setRemoteOpen((v) => !v)}>
+                  <Text style={styles.remoteToggleBtnText}>{remoteOpen ? "Hide" : "Show"}</Text>
                 </Pressable>
               </View>
 
-              <View style={styles.metricsRow}>
+              <View style={styles.remoteMetricsRow}>
                 <Metric label="Files" value={String(remoteDocs.length)} icon="document-outline" />
                 <Metric label="Storage" value={formatSize(totalRemoteSize)} icon="server-outline" />
                 <Metric label="User" value={userId ? "Ready" : "Loading"} icon="person-outline" />
@@ -949,7 +981,7 @@ export default function WalletScreen() {
                   <View style={styles.remoteEmptyWrap}>
                     <EmptyState
                       title="No backup documents"
-                      message="You can still upload extra confirmations, screenshots, or receipts here if you want remote backup."
+                      message="Add confirmations, screenshots, or receipts only if you want an extra remote copy."
                     />
                   </View>
                 ) : (
@@ -996,7 +1028,7 @@ function FocusedTripStrip({
           </View>
 
           <View style={styles.focusStripText}>
-            <Text style={styles.focusStripLabel}>Opened from Trips</Text>
+            <Text style={styles.focusStripLabel}>Trip focus active</Text>
             <View style={styles.focusStripTitleRow}>
               <Text style={styles.focusStripTitle}>{tripCityLabel(trip)}</Text>
 
@@ -1016,11 +1048,11 @@ function FocusedTripStrip({
               </View>
             </View>
 
-            {filteredOut ? (
-              <Text style={styles.focusStripMuted}>
-                Current search/filter is hiding this trip from the list below.
-              </Text>
-            ) : null}
+            <Text style={styles.focusStripMuted}>
+              {filteredOut
+                ? "Your current search or category filter is hiding this trip’s wallet items below."
+                : "You’re looking at Wallet through this specific trip workspace."}
+            </Text>
           </View>
         </View>
 
@@ -1090,7 +1122,7 @@ function WalletSpotlightCard({
           style={styles.spotlightImageWrap}
           imageStyle={styles.spotlightImage}
         >
-          <View style={styles.tripImageOverlay} />
+          <View style={styles.tripImageOverlayStrong} />
           <View style={styles.spotlightInner}>
             <View style={styles.spotlightTopRow}>
               <View style={styles.spotlightIconWrap}>
@@ -1126,8 +1158,8 @@ function WalletSpotlightCard({
               {proofs > 0
                 ? `${proofs} proof file${proofs === 1 ? "" : "s"} attached`
                 : booked > 0
-                ? "Booked items still need proof uploads"
-                : "No confirmed proofs yet"}
+                  ? "Booked items still need proof uploads"
+                  : "No confirmed proofs yet"}
             </Text>
 
             <View style={styles.progressTrack}>
@@ -1284,8 +1316,8 @@ function WalletBookingCard({
             {item.hasProof
               ? `${item.attachmentCount} proof file${item.attachmentCount === 1 ? "" : "s"} attached`
               : item.status === "booked"
-              ? "No proof attached yet"
-              : "No proof needed yet"}
+                ? "No proof attached yet"
+                : "No proof needed yet"}
           </Text>
         </View>
       </View>
@@ -1298,8 +1330,8 @@ function WalletBookingCard({
         ) : null}
 
         {item.status === "booked" && !item.hasProof ? (
-          <Pressable style={styles.smallBtn} onPress={() => onAddProof(item.id)}>
-            <Text style={styles.smallBtnText}>Add proof</Text>
+          <Pressable style={styles.smallBtnPrimary} onPress={() => onAddProof(item.id)}>
+            <Text style={styles.smallBtnPrimaryText}>Add proof</Text>
           </Pressable>
         ) : null}
 
@@ -1310,7 +1342,7 @@ function WalletBookingCard({
         ) : null}
 
         <Pressable style={[styles.smallBtn, styles.smallBtnDanger]} onPress={() => onArchive(item.id)}>
-          <Text style={styles.smallBtnText}>Archive</Text>
+          <Text style={styles.smallBtnDangerText}>Archive</Text>
         </Pressable>
       </View>
     </GlassCard>
@@ -1358,7 +1390,7 @@ function RemoteDocRow({
         </Pressable>
 
         <Pressable style={[styles.smallBtn, styles.smallBtnDanger]} onPress={() => deleteRemoteDoc(d.key)}>
-          <Text style={styles.smallBtnText}>Delete</Text>
+          <Text style={styles.smallBtnDangerText}>Delete</Text>
         </Pressable>
       </View>
     </GlassCard>
@@ -1431,13 +1463,13 @@ const styles = StyleSheet.create({
   uploadBtn: {
     minHeight: 42,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
+    borderColor: "rgba(255,255,255,0.10)",
     backgroundColor:
-      Platform.OS === "android" ? "rgba(10,12,14,0.18)" : "rgba(10,12,14,0.14)",
+      Platform.OS === "android" ? "rgba(10,12,14,0.14)" : "rgba(10,12,14,0.10)",
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 999,
-    minWidth: 120,
+    minWidth: 118,
     flexDirection: "row",
     gap: 8,
     alignItems: "center",
@@ -1445,7 +1477,7 @@ const styles = StyleSheet.create({
   },
 
   uploadText: {
-    color: theme.colors.text,
+    color: theme.colors.textSecondary,
     fontWeight: theme.fontWeight.black,
     fontSize: 12,
   },
@@ -1687,6 +1719,52 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeight.bold,
   },
 
+  emptyActions: {
+    marginTop: 14,
+    flexDirection: "row",
+    gap: 10,
+  },
+
+  emptyActionPrimary: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(79,224,138,0.30)",
+    backgroundColor:
+      Platform.OS === "android" ? "rgba(79,224,138,0.10)" : "rgba(79,224,138,0.08)",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+
+  emptyActionPrimaryText: {
+    color: theme.colors.text,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.black,
+  },
+
+  emptyActionSecondary: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor:
+      Platform.OS === "android" ? "rgba(10,12,14,0.16)" : "rgba(10,12,14,0.12)",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+
+  emptyActionSecondaryText: {
+    color: theme.colors.text,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.black,
+  },
+
   spotlightCard: {
     borderRadius: 24,
     borderColor: "rgba(87,162,56,0.16)",
@@ -1702,9 +1780,9 @@ const styles = StyleSheet.create({
     borderRadius: 24,
   },
 
-  tripImageOverlay: {
+  tripImageOverlayStrong: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(8,12,10,0.66)",
+    backgroundColor: "rgba(7,11,9,0.62)",
   },
 
   spotlightInner: {
@@ -1785,7 +1863,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
     backgroundColor:
-      Platform.OS === "android" ? "rgba(0,0,0,0.22)" : "rgba(255,255,255,0.06)",
+      Platform.OS === "android" ? "rgba(0,0,0,0.26)" : "rgba(255,255,255,0.07)",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1973,14 +2051,38 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 
+  smallBtnPrimary: {
+    borderWidth: 1,
+    borderColor: "rgba(79,224,138,0.30)",
+    backgroundColor:
+      Platform.OS === "android" ? "rgba(79,224,138,0.10)" : "rgba(79,224,138,0.08)",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
   smallBtnDanger: {
-    borderColor: "rgba(255,80,80,0.30)",
-    backgroundColor: "rgba(255,80,80,0.10)",
+    borderColor: "rgba(255,80,80,0.18)",
+    backgroundColor: "rgba(255,80,80,0.05)",
   },
 
   smallBtnText: {
     color: theme.colors.text,
     fontWeight: theme.fontWeight.black,
+    fontSize: 12,
+  },
+
+  smallBtnPrimaryText: {
+    color: theme.colors.text,
+    fontWeight: theme.fontWeight.black,
+    fontSize: 12,
+  },
+
+  smallBtnDangerText: {
+    color: "rgba(255,145,145,0.82)",
+    fontWeight: theme.fontWeight.bold,
     fontSize: 12,
   },
 
@@ -2050,6 +2152,7 @@ const styles = StyleSheet.create({
   remoteSection: {
     borderRadius: 24,
     overflow: "hidden",
+    opacity: 0.96,
   },
 
   remoteInner: {
@@ -2063,7 +2166,20 @@ const styles = StyleSheet.create({
     gap: 12,
   },
 
+  remoteHeaderText: {
+    flex: 1,
+  },
+
+  remoteEyebrow: {
+    color: theme.colors.textTertiary,
+    fontWeight: theme.fontWeight.black,
+    fontSize: 10,
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+  },
+
   remoteTitle: {
+    marginTop: 4,
     color: theme.colors.text,
     fontWeight: theme.fontWeight.black,
     fontSize: 16,
@@ -2075,6 +2191,28 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeight.bold,
     fontSize: 12,
     lineHeight: 18,
+  },
+
+  remoteToggleBtn: {
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor:
+      Platform.OS === "android" ? "rgba(0,0,0,0.14)" : "rgba(255,255,255,0.03)",
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+
+  remoteToggleBtnText: {
+    color: theme.colors.textSecondary,
+    fontWeight: theme.fontWeight.black,
+    fontSize: 12,
+  },
+
+  remoteMetricsRow: {
+    flexDirection: "row",
+    gap: 10,
+    opacity: 0.92,
   },
 
   remoteEmptyWrap: {
