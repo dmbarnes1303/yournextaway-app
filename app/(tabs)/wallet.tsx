@@ -133,6 +133,11 @@ function cleanString(v: unknown) {
   return typeof v === "string" ? v.trim() : String(v ?? "").trim();
 }
 
+function getSingleParam(value: unknown) {
+  if (Array.isArray(value)) return cleanString(value[0]);
+  return cleanString(value);
+}
+
 function shortKeyName(key: string) {
   const parts = String(key || "").split("/").filter(Boolean);
   return parts[parts.length - 1] || key;
@@ -350,7 +355,7 @@ export default function WalletScreen() {
   const [category, setCategory] = useState<CategoryFilter>("all");
   const [remoteOpen, setRemoteOpen] = useState(false);
 
-  const focusedTripIdParam = useMemo(() => cleanString(params?.tripId), [params]);
+  const focusedTripIdParam = useMemo(() => getSingleParam(params?.tripId), [params]);
 
   const loadUser = useCallback(async () => {
     const uid = await identity.getWalletUserId();
@@ -431,10 +436,10 @@ export default function WalletScreen() {
 
   const tripIndex = useMemo(() => buildTripIndex(trips), [trips]);
 
-  const filteredGroups = useMemo(() => {
+  const baseFilteredGroups = useMemo(() => {
     const q = cleanString(query).toLowerCase();
 
-    const next = groups
+    return groups
       .map((group) => {
         const items = group.items.filter((item) => {
           if (category !== "all" && item.type !== category) return false;
@@ -470,15 +475,22 @@ export default function WalletScreen() {
         } as WalletTripGroup;
       })
       .filter(Boolean) as WalletTripGroup[];
+  }, [groups, category, query, tripIndex]);
 
-    if (!focusedTripIdParam) return next;
+  const focusedTripGroupExistsInFiltered = useMemo(() => {
+    if (!focusedTripIdParam) return false;
+    return baseFilteredGroups.some((g) => g.tripId === focusedTripIdParam);
+  }, [baseFilteredGroups, focusedTripIdParam]);
 
-    return [...next].sort((a, b) => {
+  const filteredGroups = useMemo(() => {
+    if (!focusedTripIdParam) return baseFilteredGroups;
+
+    return [...baseFilteredGroups].sort((a, b) => {
       if (a.tripId === focusedTripIdParam && b.tripId !== focusedTripIdParam) return -1;
       if (b.tripId === focusedTripIdParam && a.tripId !== focusedTripIdParam) return 1;
       return Number(b.updatedAt ?? 0) - Number(a.updatedAt ?? 0);
     });
-  }, [groups, category, query, tripIndex, focusedTripIdParam]);
+  }, [baseFilteredGroups, focusedTripIdParam]);
 
   const visibleRemoteDocs = useMemo(() => {
     const q = cleanString(query).toLowerCase();
@@ -508,6 +520,7 @@ export default function WalletScreen() {
 
   const spotlightGroup = useMemo(() => {
     if (!filteredGroups.length) return null;
+
     if (focusedTripIdParam) {
       const focused = filteredGroups.find((g) => g.tripId === focusedTripIdParam);
       if (focused) return focused;
@@ -842,8 +855,9 @@ export default function WalletScreen() {
           {focusedTrip ? (
             <FocusedTripStrip
               trip={focusedTrip}
+              filteredOut={!focusedTripGroupExistsInFiltered}
               onOpenTrip={onOpenTrip}
-              onClear={() => router.replace("/(tabs)/wallet")}
+              onClear={() => router.replace("/(tabs)/wallet" as any)}
             />
           ) : null}
 
@@ -961,10 +975,12 @@ export default function WalletScreen() {
 
 function FocusedTripStrip({
   trip,
+  filteredOut,
   onOpenTrip,
   onClear,
 }: {
   trip: Trip;
+  filteredOut: boolean;
   onOpenTrip: (tripId?: string) => void;
   onClear: () => void;
 }) {
@@ -999,6 +1015,12 @@ function FocusedTripStrip({
                 ) : null}
               </View>
             </View>
+
+            {filteredOut ? (
+              <Text style={styles.focusStripMuted}>
+                Current search/filter is hiding this trip from the list below.
+              </Text>
+            ) : null}
           </View>
         </View>
 
@@ -1482,6 +1504,14 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     fontSize: 15,
     fontWeight: theme.fontWeight.black,
+  },
+
+  focusStripMuted: {
+    marginTop: 4,
+    color: theme.colors.textSecondary,
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: theme.fontWeight.bold,
   },
 
   focusStripActions: {
