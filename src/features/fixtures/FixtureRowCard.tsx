@@ -8,6 +8,7 @@ import { theme } from "@/src/constants/theme";
 import { LEAGUES } from "@/src/constants/football";
 import { getTicketDifficultyBadge } from "@/src/data/ticketGuides";
 import type { TicketDifficulty } from "@/src/data/ticketGuides/types";
+import { estimateFixturePricing } from "@/src/features/discover/discoverPrice";
 
 import {
   LeagueFlag,
@@ -72,14 +73,22 @@ function cityVenueLine(city: string, venue: string) {
   return parts.join(" • ");
 }
 
-function bookingSummaryLine(difficulty: TicketDifficulty | "unknown", followed: boolean) {
+function bookingSummaryLine(
+  difficulty: TicketDifficulty | "unknown",
+  followed: boolean,
+  tripLabel: string | null,
+  ticketLabel: string | null
+) {
   const ticketLine =
-    difficulty === "unknown"
+    ticketLabel ||
+    (difficulty === "unknown"
       ? "Tickets live"
-      : `Tickets: ${ticketDifficultyLabel(difficulty)}`;
+      : `Tickets: ${ticketDifficultyLabel(difficulty)}`);
 
+  const tripLine = tripLabel ? `${tripLabel} trip` : "Flights/hotels prefilled";
   const followLine = followed ? "Following" : "Build trip now";
-  return `${ticketLine} • Flights/hotels prefilled • ${followLine}`;
+
+  return `${ticketLine} • ${tripLine} • ${followLine}`;
 }
 
 export default function FixtureRowCard({
@@ -136,8 +145,12 @@ export default function FixtureRowCard({
       ? (item as any).breakdown.combinedScore
       : null;
 
+  const pricing = estimateFixturePricing(item);
+  const tripLabel = pricing.tripLabel;
+  const ticketLabel = pricing.ticketLabel;
+
   const tripAngle = tripAngleLabel(item, difficulty);
-  const bookingLine = bookingSummaryLine(difficulty, isFollowed);
+  const bookingLine = bookingSummaryLine(difficulty, isFollowed, tripLabel, ticketLabel);
   const placeLine = cityVenueLine(city, venue);
 
   const routeCtx: FixtureRouteCtx = {
@@ -218,6 +231,22 @@ export default function FixtureRowCard({
                 </Text>
               ) : null}
             </View>
+
+            {(tripLabel || ticketLabel) ? (
+              <View style={styles.priceRow}>
+                {tripLabel ? (
+                  <View style={styles.pricePillStrong}>
+                    <Text style={styles.pricePillStrongText}>{tripLabel} trip</Text>
+                  </View>
+                ) : null}
+
+                {ticketLabel ? (
+                  <View style={styles.pricePill}>
+                    <Text style={styles.pricePillText}>{ticketLabel} ticket</Text>
+                  </View>
+                ) : null}
+              </View>
+            ) : null}
 
             <View style={styles.signalRow}>
               <View style={[styles.signalPill, difficultyTone(difficulty)]}>
@@ -303,8 +332,10 @@ export default function FixtureRowCard({
                 </View>
 
                 <View style={styles.expandCard}>
-                  <Text style={styles.expandKicker}>Booking flow</Text>
-                  <Text style={styles.expandValueSmall}>Tickets → Travel → Stay</Text>
+                  <Text style={styles.expandKicker}>Price guide</Text>
+                  <Text style={styles.expandValueSmall}>
+                    {tripLabel || ticketLabel || "Live prices"}
+                  </Text>
                 </View>
               </View>
 
@@ -496,6 +527,46 @@ const styles = StyleSheet.create({
     fontSize: 10,
     textAlign: "center",
     fontWeight: theme.fontWeight.bold,
+  },
+
+  priceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    flexWrap: "wrap",
+    justifyContent: "center",
+    marginTop: 10,
+  },
+
+  pricePill: {
+    borderWidth: 1,
+    paddingVertical: 5,
+    paddingHorizontal: 9,
+    borderRadius: 999,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor:
+      Platform.OS === "android" ? "rgba(0,0,0,0.14)" : "rgba(255,255,255,0.03)",
+  },
+
+  pricePillText: {
+    color: theme.colors.textSecondary,
+    fontWeight: theme.fontWeight.black,
+    fontSize: 10,
+  },
+
+  pricePillStrong: {
+    borderWidth: 1,
+    paddingVertical: 5,
+    paddingHorizontal: 9,
+    borderRadius: 999,
+    borderColor: "rgba(87,162,56,0.30)",
+    backgroundColor: "rgba(87,162,56,0.10)",
+  },
+
+  pricePillStrongText: {
+    color: theme.colors.text,
+    fontWeight: theme.fontWeight.black,
+    fontSize: 10,
   },
 
   signalRow: {
