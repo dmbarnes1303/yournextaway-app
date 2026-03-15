@@ -21,7 +21,11 @@ export type Partner = {
   canonicalId?: string;
 };
 
-export const PARTNERS: Partner[] = [
+function clean(value: unknown): string {
+  return typeof value === "string" ? value.trim() : String(value ?? "").trim();
+}
+
+export const PARTNERS = [
   {
     id: "googlemaps",
     name: "Google Maps",
@@ -201,32 +205,55 @@ export const PARTNERS: Partner[] = [
     deepLinkBase: "https://www.compensair.com/",
     canonicalId: "compensair",
   },
-];
+] as const satisfies readonly Partner[];
 
 export type PartnerId = (typeof PARTNERS)[number]["id"];
 
-function clean(v: unknown): string {
-  return typeof v === "string" ? v.trim() : String(v ?? "").trim();
+const PARTNER_MAP: Record<string, Partner> = Object.fromEntries(
+  PARTNERS.map((partner) => [partner.id, partner])
+);
+
+const PARTNERS_BY_CATEGORY: Record<PartnerCategory, Partner[]> = {
+  tickets: [],
+  flights: [],
+  rail: [],
+  stays: [],
+  transfers: [],
+  experiences: [],
+  insurance: [],
+  compensation: [],
+  utility: [],
+};
+
+for (const partner of PARTNERS) {
+  PARTNERS_BY_CATEGORY[partner.category].push(partner);
 }
 
 export function getPartnersByCategory(category: PartnerCategory): Partner[] {
-  return PARTNERS.filter((p) => p.category === category);
+  return [...PARTNERS_BY_CATEGORY[category]];
 }
 
-export function getPartnerOrNull(id: string): Partner | null {
+export function getPartnerOrNull(id: string | null | undefined): Partner | null {
   const raw = clean(id);
   if (!raw) return null;
-  return PARTNERS.find((p) => p.id === raw) ?? null;
+  return PARTNER_MAP[raw] ?? null;
 }
 
 export function getPartner(id: PartnerId | string): Partner {
-  const p = getPartnerOrNull(String(id));
-  if (!p) throw new Error(`Unknown partner id: ${String(id)}`);
-  return p;
+  const raw = clean(id);
+  const partner = getPartnerOrNull(raw);
+
+  if (!partner) {
+    throw new Error(`Unknown partner id: ${raw}`);
+  }
+
+  return partner;
 }
 
-export function isPartnerId(id: string): id is PartnerId {
-  return PARTNERS.some((p) => p.id === id);
+export function isPartnerId(id: string | null | undefined): id is PartnerId {
+  const raw = clean(id);
+  if (!raw) return false;
+  return raw in PARTNER_MAP;
 }
 
 export function getCanonicalPartnerId(id: PartnerId | string): string {
@@ -235,6 +262,14 @@ export function getCanonicalPartnerId(id: PartnerId | string): string {
 }
 
 export function isSamePartner(a?: string | null, b?: string | null): boolean {
-  if (!clean(a) || !clean(b)) return false;
-  return getCanonicalPartnerId(clean(a)) === getCanonicalPartnerId(clean(b));
+  const left = clean(a);
+  const right = clean(b);
+
+  if (!left || !right) return false;
+
+  try {
+    return getCanonicalPartnerId(left) === getCanonicalPartnerId(right);
+  } catch {
+    return false;
+  }
 }
