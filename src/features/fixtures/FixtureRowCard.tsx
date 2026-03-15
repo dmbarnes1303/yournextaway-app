@@ -17,6 +17,20 @@ import {
 } from "./helpers";
 import type { RankedFixtureRow, FixtureRouteCtx } from "./types";
 
+const UEFA_COMPETITION_IDS = new Set([2, 3, 848]);
+
+function displayLeagueName(leagueId: number | null, leagueName: string) {
+  if (leagueId === 2) return "UEFA Champions League";
+  if (leagueId === 3) return "UEFA Europa League";
+  if (leagueId === 848) return "UEFA Conference League";
+  return leagueName;
+}
+
+function isEuropeanCompetition(leagueId: number | null) {
+  if (leagueId == null) return false;
+  return UEFA_COMPETITION_IDS.has(leagueId);
+}
+
 export default function FixtureRowCard({
   item,
   expanded,
@@ -63,6 +77,11 @@ export default function FixtureRowCard({
 
   const leagueLogo = leagueMeta?.logo ?? null;
   const discoverReasons = Array.isArray(item.discoverReasons) ? item.discoverReasons : [];
+  const leagueName = displayLeagueName(
+    ctxLeagueId,
+    String(item?.league?.name ?? "")
+  );
+  const european = isEuropeanCompetition(ctxLeagueId);
 
   return (
     <View style={styles.rowWrap}>
@@ -80,7 +99,7 @@ export default function FixtureRowCard({
                 ) : null}
                 {leagueCode ? <LeagueFlag code={leagueCode} size="sm" /> : null}
                 <Text style={styles.fixtureLeagueText} numberOfLines={1}>
-                  {String(item?.league?.name ?? "")}
+                  {leagueName}
                 </Text>
               </View>
 
@@ -121,6 +140,10 @@ export default function FixtureRowCard({
                 <Text style={styles.metaSecondary} numberOfLines={1}>
                   {kickoff.secondary}
                 </Text>
+              ) : european ? (
+                <Text style={styles.metaSecondary} numberOfLines={1}>
+                  European night
+                </Text>
               ) : null}
             </View>
 
@@ -148,7 +171,7 @@ export default function FixtureRowCard({
               </View>
 
               {discoverReasons.length > 0
-                ? discoverReasons.slice(0, 2).map((reason) => (
+                ? discoverReasons.slice(0, 1).map((reason) => (
                     <View key={reason} style={styles.discoverReasonPill}>
                       <Text style={styles.discoverReasonText}>{reason}</Text>
                     </View>
@@ -210,46 +233,46 @@ const styles = StyleSheet.create({
   rowWrap: {
     width: "100%",
     paddingHorizontal: theme.spacing.lg,
-    marginBottom: 12,
+    marginBottom: 10,
   },
 
   rowCard: {
-    borderRadius: 24,
+    borderRadius: 22,
     borderColor: "rgba(255,255,255,0.06)",
   },
 
   rowMainPress: {
-    borderRadius: 24,
+    borderRadius: 22,
     overflow: "hidden",
   },
 
   rowInner: {
-    padding: 16,
-    gap: 12,
+    padding: 14,
+    gap: 10,
   },
 
   headerRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: 12,
+    gap: 10,
   },
 
   leagueCluster: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    gap: 7,
+    gap: 6,
   },
 
   leagueLogo: {
-    width: 28,
-    height: 28,
+    width: 24,
+    height: 24,
   },
 
   fixtureLeagueText: {
     color: theme.colors.textSecondary,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: theme.fontWeight.black,
     flexShrink: 1,
   },
@@ -261,26 +284,26 @@ const styles = StyleSheet.create({
   topRow: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: 10,
+    gap: 8,
   },
 
   teamSide: {
     flex: 1,
     alignItems: "center",
-    gap: 8,
+    gap: 6,
   },
 
   centerCol: {
-    width: 84,
+    width: 80,
     alignItems: "center",
-    gap: 6,
-    paddingTop: 8,
+    gap: 5,
+    paddingTop: 7,
   },
 
   teamName: {
     color: theme.colors.text,
-    fontSize: 15,
-    lineHeight: 19,
+    fontSize: 14,
+    lineHeight: 18,
     fontWeight: theme.fontWeight.black,
     width: "100%",
     textAlign: "center",
@@ -288,7 +311,7 @@ const styles = StyleSheet.create({
 
   vs: {
     color: theme.colors.textMuted,
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: theme.fontWeight.black,
     textTransform: "uppercase",
     letterSpacing: 0.6,
@@ -297,7 +320,7 @@ const styles = StyleSheet.create({
   metaBlock: {
     width: "100%",
     alignItems: "center",
-    gap: 4,
+    gap: 3,
   },
 
   metaPrimary: {
@@ -309,16 +332,16 @@ const styles = StyleSheet.create({
 
   metaVenue: {
     color: theme.colors.text,
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: theme.fontWeight.black,
     textAlign: "center",
     opacity: 0.96,
-    lineHeight: 18,
+    lineHeight: 17,
   },
 
   metaSecondary: {
     color: theme.colors.textMuted,
-    fontSize: 11,
+    fontSize: 10,
     textAlign: "center",
     fontWeight: theme.fontWeight.bold,
   },
@@ -326,7 +349,7 @@ const styles = StyleSheet.create({
   badgeRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 7,
     flexWrap: "wrap",
     justifyContent: "center",
   },
@@ -342,7 +365,7 @@ const styles = StyleSheet.create({
   },
 
   discoverReasonText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: theme.fontWeight.black,
     color: theme.colors.textSecondary,
   },
@@ -352,15 +375,15 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.08)",
     backgroundColor:
       Platform.OS === "android" ? "rgba(0,0,0,0.16)" : "rgba(255,255,255,0.04)",
-    paddingVertical: 6,
-    paddingHorizontal: 10,
+    paddingVertical: 5,
+    paddingHorizontal: 9,
     borderRadius: 999,
   },
 
   ticketText: {
     color: theme.colors.textSecondary,
     fontWeight: theme.fontWeight.black,
-    fontSize: 11,
+    fontSize: 10,
   },
 
   ticketEasy: {
@@ -401,16 +424,16 @@ const styles = StyleSheet.create({
   },
 
   ctaRow: {
-    marginTop: 2,
+    marginTop: 1,
     flexDirection: "row",
-    gap: 10,
+    gap: 8,
     alignItems: "center",
   },
 
   moreButton: {
-    minWidth: 78,
-    minHeight: 36,
-    borderRadius: 14,
+    minWidth: 74,
+    minHeight: 34,
+    borderRadius: 13,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
     backgroundColor:
@@ -427,7 +450,7 @@ const styles = StyleSheet.create({
 
   moreButtonText: {
     color: theme.colors.textSecondary,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: theme.fontWeight.black,
   },
 
@@ -437,8 +460,8 @@ const styles = StyleSheet.create({
 
   expandArea: {
     flexDirection: "row",
-    gap: 10,
-    padding: 16,
+    gap: 8,
+    padding: 14,
     paddingTop: 0,
   },
 
