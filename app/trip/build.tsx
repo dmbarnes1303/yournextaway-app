@@ -168,22 +168,16 @@ function buildTripSnapshot(selectedFixture: FixtureListRow, placeholderTbcIds: S
   return {
     cityId,
     displayCity,
-
     fixtureIdPrimary:
       selectedFixture?.fixture?.id != null ? String(selectedFixture.fixture.id) : undefined,
-
     homeTeamId,
     awayTeamId,
-
     homeName: homeName || undefined,
     awayName: awayName || undefined,
-
     leagueId,
     leagueName: leagueName || undefined,
-
     kickoffIso,
     kickoffTbc,
-
     venueName: venueName || undefined,
     venueCity: venueCity || undefined,
   };
@@ -265,6 +259,29 @@ function prefVibeLabel(v: string) {
   return v;
 }
 
+function scoreTone(score?: number | null) {
+  const value = typeof score === "number" ? score : 0;
+  if (value >= 78) return styles.scoreStrong;
+  if (value >= 62) return styles.scoreOkay;
+  return styles.scoreWeak;
+}
+
+function bookingReadinessLabel(row: RankedTrip | null) {
+  if (!row) return "Trip planning ready";
+  const difficulty = difficultyLabel(row.breakdown.travelDifficulty);
+  return `${difficulty} travel • Trip planning ready`;
+}
+
+function selectedFlowSummary(isEditing: boolean, setAsPrimaryOnSave: boolean) {
+  if (isEditing) {
+    return setAsPrimaryOnSave
+      ? "Save this match as the trip anchor, then continue into tickets, flights, hotels and extras."
+      : "Add this match into the trip, then continue planning around the saved workspace.";
+  }
+
+  return "Save this trip, then move straight into ticket search, prefilled flights/hotels, extras and Wallet.";
+}
+
 /* -------------------------------------------------------------------------- */
 /* screen                                                                     */
 /* -------------------------------------------------------------------------- */
@@ -318,7 +335,6 @@ export default function TripBuildScreen() {
   const [selectedFixture, setSelectedFixture] = useState<FixtureListRow | null>(null);
 
   const defaultWindow = useMemo(() => getRollingWindowIso({ days: WINDOW_DAYS }), []);
-
   const routeWindow = useMemo<RollingWindowIso>(() => {
     if (!isIsoDateOnly(routeFrom) && !isIsoDateOnly(routeTo)) return defaultWindow;
 
@@ -331,7 +347,6 @@ export default function TripBuildScreen() {
   const [startIso, setStartIso] = useState(routeWindow.from);
   const [endIso, setEndIso] = useState(routeWindow.to);
   const [notes, setNotes] = useState("");
-
   const [endTouched, setEndTouched] = useState<boolean>(Boolean(isIsoDateOnly(routeTo)));
 
   const [editTrip, setEditTrip] = useState<Trip | null>(null);
@@ -756,26 +771,18 @@ export default function TripBuildScreen() {
         cityId: snap.cityId,
         startDate: startIso,
         endDate: endIso,
-
         matchIds: [fixtureId],
         fixtureIdPrimary: fixtureId,
-
         notes: cleanText(notes),
-
         displayCity: snap.displayCity,
-
         homeTeamId: snap.homeTeamId,
         awayTeamId: snap.awayTeamId,
-
         homeName: snap.homeName,
         awayName: snap.awayName,
-
         leagueId: snap.leagueId,
         leagueName: snap.leagueName,
-
         kickoffIso: snap.kickoffIso,
         kickoffTbc: snap.kickoffTbc,
-
         venueName: snap.venueName,
         venueCity: snap.venueCity,
       };
@@ -842,7 +849,7 @@ export default function TripBuildScreen() {
       const n = existingMatchIds.length;
       return `Update dates/notes and add more matches to this trip. (${n} match${n === 1 ? "" : "es"})`;
     }
-    return "Pick a match, then we’ll save a trip with dates, notes, and planning links.";
+    return "Lock the fixture first, then use the saved trip as the booking workspace for tickets, travel, stays, extras and Wallet.";
   }, [isEditing, existingMatchIds.length]);
 
   const selectedLeagueLabel = useMemo(() => {
@@ -867,6 +874,7 @@ export default function TripBuildScreen() {
   }, [isEditing, selectedFixtureId, existingMatchIds]);
 
   const showPickerMode = !isPrefilledFlow;
+  const selectedFlowLine = selectedFlowSummary(isEditing, setAsPrimaryOnSave);
 
   return (
     <Background imageSource={getBackground("trips")} overlayOpacity={0.86}>
@@ -914,6 +922,23 @@ export default function TripBuildScreen() {
                 <Text style={styles.prefBarText}>{discoverSummary.join(" • ")}</Text>
               </View>
             ) : null}
+
+            <View style={styles.flowStrip}>
+              <View style={styles.flowStep}>
+                <Text style={styles.flowStepNumber}>1</Text>
+                <Text style={styles.flowStepText}>Pick fixture</Text>
+              </View>
+              <View style={styles.flowDivider} />
+              <View style={styles.flowStep}>
+                <Text style={styles.flowStepNumber}>2</Text>
+                <Text style={styles.flowStepText}>Save trip</Text>
+              </View>
+              <View style={styles.flowDivider} />
+              <View style={styles.flowStep}>
+                <Text style={styles.flowStepNumber}>3</Text>
+                <Text style={styles.flowStepText}>Book + save proof</Text>
+              </View>
+            </View>
 
             {!isEditing ? (
               <View style={styles.capBar}>
@@ -997,7 +1022,7 @@ export default function TripBuildScreen() {
               {selectedRankedTrip ? (
                 <View style={styles.intelCard}>
                   <View style={styles.intelTopRow}>
-                    <View style={styles.intelScoreBox}>
+                    <View style={[styles.intelScoreBox, scoreTone(selectedRankedTrip.breakdown.combinedScore)]}>
                       <Text style={styles.intelScoreValue}>{selectedRankedTrip.breakdown.combinedScore}</Text>
                       <Text style={styles.intelScoreLabel}>Trip score</Text>
                     </View>
@@ -1009,6 +1034,9 @@ export default function TripBuildScreen() {
                         {selectedRankedTrip.city ||
                           cleanText(selectedFixture?.fixture?.venue?.city) ||
                           "City pending"}
+                      </Text>
+                      <Text style={styles.intelSubAlt}>
+                        {bookingReadinessLabel(selectedRankedTrip)}
                       </Text>
                     </View>
                   </View>
@@ -1047,12 +1075,32 @@ export default function TripBuildScreen() {
                 </View>
               ) : null}
 
+              <View style={styles.nextStageBox}>
+                <Text style={styles.nextStageTitle}>What happens after save</Text>
+                <Text style={styles.nextStageText}>{selectedFlowLine}</Text>
+
+                <View style={styles.nextStageRow}>
+                  <View style={styles.nextStagePill}>
+                    <Text style={styles.nextStagePillText}>Tickets</Text>
+                  </View>
+                  <View style={styles.nextStagePill}>
+                    <Text style={styles.nextStagePillText}>Flights</Text>
+                  </View>
+                  <View style={styles.nextStagePill}>
+                    <Text style={styles.nextStagePillText}>Hotels</Text>
+                  </View>
+                  <View style={styles.nextStagePill}>
+                    <Text style={styles.nextStagePillText}>Wallet</Text>
+                  </View>
+                </View>
+              </View>
+
               {isEditing ? (
                 <View style={styles.primaryRow}>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.primaryTitle}>Set as primary match</Text>
                     <Text style={styles.primarySub}>
-                      Primary match drives kickoff banner + stay guidance + planning defaults.
+                      Primary match drives kickoff banner, stay guidance, ticket flow and booking defaults.
                     </Text>
                   </View>
                   <Switch value={setAsPrimaryOnSave} onValueChange={setSetAsPrimaryOnSave} />
@@ -1068,11 +1116,11 @@ export default function TripBuildScreen() {
                 </View>
               ) : null}
 
-              <Text style={styles.label}>Notes (optional)</Text>
+              <Text style={styles.label}>Trip notes (optional)</Text>
               <TextInput
                 value={notes}
                 onChangeText={setNotes}
-                placeholder="Anything you want to remember…"
+                placeholder="Stay area, ticket thoughts, reminders, anything worth keeping with the trip…"
                 placeholderTextColor={theme.colors.textSecondary}
                 style={styles.notes}
                 multiline
@@ -1086,7 +1134,7 @@ export default function TripBuildScreen() {
               <Text style={styles.hint}>
                 {isEditing
                   ? "Select another match to add it to this trip."
-                  : "Choose a match to start a trip around it."}
+                  : "Choose the fixture you want to build the whole trip around."}
               </Text>
 
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 12 }}>
@@ -1188,12 +1236,16 @@ export default function TripBuildScreen() {
                                 {vc}
                               </Text>
                             ) : null}
+
+                            <Text style={styles.fxFlowMeta} numberOfLines={1}>
+                              Save trip → tickets → flights/hotels → extras
+                            </Text>
                           </View>
                         </View>
 
                         <View style={styles.fxRight}>
                           {ranked ? (
-                            <View style={styles.rowScoreBox}>
+                            <View style={[styles.rowScoreBox, scoreTone(ranked.breakdown.combinedScore)]}>
                               <Text style={styles.rowScoreValue}>{ranked.breakdown.combinedScore}</Text>
                             </View>
                           ) : null}
@@ -1275,9 +1327,9 @@ export default function TripBuildScreen() {
               {selectedFixture
                 ? isEditing
                   ? setAsPrimaryOnSave
-                    ? "This match becomes the trip primary."
+                    ? "This match becomes the trip anchor."
                     : "This match will be added to the trip."
-                  : "Keep links, notes, and bookings in one place"
+                  : "Create the booking workspace for tickets, travel, extras and Wallet."
                 : "Select a match to continue"}
             </Text>
           </Pressable>
@@ -1334,6 +1386,40 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     fontSize: 12,
     lineHeight: 16,
+  },
+
+  flowStrip: {
+    marginTop: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(87,162,56,0.18)",
+    backgroundColor: "rgba(87,162,56,0.07)",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  flowStep: {
+    flex: 1,
+    alignItems: "center",
+    gap: 4,
+  },
+  flowStepNumber: {
+    color: theme.colors.primary,
+    fontWeight: "900",
+    fontSize: 12,
+  },
+  flowStepText: {
+    color: theme.colors.text,
+    fontWeight: "800",
+    fontSize: 11,
+    textAlign: "center",
+  },
+  flowDivider: {
+    width: 10,
+    height: 1,
+    backgroundColor: "rgba(255,255,255,0.18)",
   },
 
   capBar: {
@@ -1414,10 +1500,20 @@ const styles = StyleSheet.create({
     height: 72,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: "rgba(75,158,57,0.35)",
-    backgroundColor: "rgba(75,158,57,0.10)",
     alignItems: "center",
     justifyContent: "center",
+  },
+  scoreStrong: {
+    borderColor: "rgba(75,158,57,0.35)",
+    backgroundColor: "rgba(75,158,57,0.10)",
+  },
+  scoreOkay: {
+    borderColor: "rgba(242,201,76,0.28)",
+    backgroundColor: "rgba(242,201,76,0.10)",
+  },
+  scoreWeak: {
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(255,255,255,0.04)",
   },
   intelScoreValue: {
     color: theme.colors.text,
@@ -1433,6 +1529,7 @@ const styles = StyleSheet.create({
   },
   intelTitle: { color: theme.colors.text, fontWeight: "900", fontSize: 15 },
   intelSub: { marginTop: 6, color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12 },
+  intelSubAlt: { marginTop: 4, color: theme.colors.textTertiary, fontWeight: "900", fontSize: 11 },
 
   intelPillRow: {
     marginTop: 12,
@@ -1464,6 +1561,46 @@ const styles = StyleSheet.create({
   },
   reasonTitle: { color: theme.colors.text, fontWeight: "900", fontSize: 12 },
   reasonText: { color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12, lineHeight: 16 },
+
+  nextStageBox: {
+    marginTop: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(87,162,56,0.18)",
+    backgroundColor: "rgba(87,162,56,0.07)",
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    gap: 8,
+  },
+  nextStageTitle: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 12,
+  },
+  nextStageText: {
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  nextStageRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  nextStagePill: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    backgroundColor: "rgba(0,0,0,0.14)",
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+  },
+  nextStagePillText: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 11,
+  },
 
   primaryRow: {
     marginTop: 12,
@@ -1574,8 +1711,6 @@ const styles = StyleSheet.create({
     height: 28,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "rgba(75,158,57,0.35)",
-    backgroundColor: "rgba(75,158,57,0.10)",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1584,6 +1719,12 @@ const styles = StyleSheet.create({
   fxTitle: { color: theme.colors.text, fontWeight: "900", fontSize: 15 },
   fxMeta: { color: theme.colors.textSecondary, marginTop: 5, fontWeight: "800", fontSize: 12 },
   fxMeta2: { color: theme.colors.textTertiary, marginTop: 4, fontWeight: "800", fontSize: 12 },
+  fxFlowMeta: {
+    color: theme.colors.textTertiary,
+    marginTop: 6,
+    fontWeight: "900",
+    fontSize: 11,
+  },
 
   rowReasonBox: {
     marginTop: 10,
@@ -1637,7 +1778,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   saveText: { color: theme.colors.text, fontWeight: "900", fontSize: 15 },
-  saveSub: { marginTop: 6, color: theme.colors.textSecondary, fontWeight: "800", fontSize: 11 },
+  saveSub: { marginTop: 6, color: theme.colors.textSecondary, fontWeight: "800", fontSize: 11, textAlign: "center" },
 
   err: { marginTop: 10, color: "rgba(255,80,80,0.95)", fontWeight: "900" },
 });
