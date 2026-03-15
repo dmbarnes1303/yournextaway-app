@@ -735,4 +735,4 @@ export function scoreFixture(f: FixtureListRow): DiscoverFixture {
 
 export function buildDiscoverScores(fixtures: FixtureListRow[]): DiscoverFixture[] {
   return fixtures.map(scoreFixture);
-}
+  }
