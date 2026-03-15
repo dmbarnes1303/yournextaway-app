@@ -24,7 +24,7 @@ export type DiscoverReason =
   | "Champions League night"
   | "Europa League trip"
   | "Conference League value"
-  | "European away-day feel"
+  | "Continental occasion"
   | "Multi-match city potential"
   | "Weekend double potential";
 
@@ -600,8 +600,12 @@ function underratedScore(
 }
 
 function europeScore(f: FixtureListRow, glamour: number, atmosphere: number): number {
-  if (isChampionsLeague(f)) return Math.min(5, 3 + (glamour >= 5 ? 1 : 0) + (atmosphere >= 4 ? 1 : 0));
-  if (isEuropaLeague(f)) return Math.min(4, 2 + (atmosphere >= 4 ? 1 : 0));
+  if (isChampionsLeague(f)) {
+    return Math.min(5, 3 + (glamour >= 5 ? 1 : 0) + (atmosphere >= 4 ? 1 : 0));
+  }
+  if (isEuropaLeague(f)) {
+    return Math.min(4, 2 + (atmosphere >= 4 ? 1 : 0));
+  }
   if (isConferenceLeague(f)) return 2;
   return 0;
 }
@@ -693,10 +697,12 @@ export function scoreFixture(f: FixtureListRow): DiscoverFixture {
   if (warmth >= 3) reasons.push("Warmer-weather option");
   if (underrated >= 4) reasons.push("Less obvious high-upside trip");
 
-  if (isChampionsLeague(f)) reasons.push("Champions League night");
-  if (isEuropaLeague(f)) reasons.push("Europa League trip");
+  if (isChampionsLeague(f) && europe >= 4) reasons.push("Champions League night");
+  if (isEuropaLeague(f) && europe >= 3) reasons.push("Europa League trip");
   if (isConferenceLeague(f) && value >= 2) reasons.push("Conference League value");
-  if (isEuropeanCompetition(f) && atmosphere >= 3) reasons.push("European away-day feel");
+  if (isEuropeanCompetition(f) && (glamour >= 5 || atmosphere >= 4)) {
+    reasons.push("Continental occasion");
+  }
   if (multiMatch >= 4) reasons.push("Multi-match city potential");
   if (weekendTrip >= 4) reasons.push("Weekend double potential");
 
@@ -729,4 +735,4 @@ export function scoreFixture(f: FixtureListRow): DiscoverFixture {
 
 export function buildDiscoverScores(fixtures: FixtureListRow[]): DiscoverFixture[] {
   return fixtures.map(scoreFixture);
-  }
+}
