@@ -31,6 +31,8 @@ import {
   noteTitleFromText,
   cleanNoteText,
   ticketResolverFailureMessage,
+  type SourceSection,
+  type SourceSurface,
 } from "@/src/features/tripDetail/helpers";
 
 type SetState<T> = React.Dispatch<React.SetStateAction<T>>;
@@ -48,6 +50,39 @@ type Props = {
   setProofBusyId: SetState<string | null>;
   setActiveWorkspaceSection: (section: WorkspaceSectionKey) => Promise<void> | void;
 };
+
+type TrackedPartnerArgs = {
+  partnerId: PartnerId;
+  url: string;
+  title: string;
+  savedItemType?: SavedItemType;
+  metadata?: Record<string, any>;
+};
+
+function inferSourceSectionFromSavedItemType(type?: SavedItemType): SourceSection {
+  switch (type) {
+    case "tickets":
+      return "tickets";
+    case "hotel":
+      return "stay";
+    case "flight":
+    case "train":
+      return "travel";
+    case "transfer":
+      return "transfers";
+    case "things":
+      return "things";
+    case "insurance":
+      return "insurance";
+    case "claim":
+      return "claims";
+    case "note":
+    case "other":
+      return "notes";
+    default:
+      return "unknown";
+  }
+}
 
 export default function useTripDetailController({
   trip,
@@ -110,13 +145,31 @@ export default function useTripDetailController({
     }
   }
 
-  async function openTrackedPartner(args: {
-    partnerId: PartnerId;
-    url: string;
-    title: string;
-    savedItemType?: SavedItemType;
-    metadata?: Record<string, any>;
-  }) {
+  function withTrackingContext(
+    args: TrackedPartnerArgs,
+    sourceSurface: SourceSurface = "unknown"
+  ): TrackedPartnerArgs {
+    const tripId = clean(trip?.id) || clean(activeTripId) || null;
+    const sourceSection =
+      (clean(args.metadata?.sourceSection) as SourceSection) ||
+      inferSourceSectionFromSavedItemType(args.savedItemType);
+
+    return {
+      ...args,
+      metadata: {
+        tripId,
+        city: cityName,
+        startDate: trip?.startDate ?? null,
+        endDate: trip?.endDate ?? null,
+        primaryMatchId: clean((trip as any)?.fixtureIdPrimary) || null,
+        sourceSurface,
+        sourceSection,
+        ...(args.metadata ?? {}),
+      },
+    };
+  }
+
+  async function openTrackedPartner(args: TrackedPartnerArgs) {
     const tripId = clean(trip?.id) || clean(activeTripId);
 
     if (!tripId) {
@@ -129,20 +182,25 @@ export default function useTripDetailController({
       return;
     }
 
+    const enriched = withTrackingContext(args, (args.metadata?.sourceSurface as SourceSurface) || "unknown");
+
     try {
       await beginPartnerClick({
         tripId,
-        partnerId: args.partnerId,
-        url: args.url,
-        savedItemType: args.savedItemType,
-        title: args.title,
-        metadata: args.metadata,
+        partnerId: enriched.partnerId,
+        url: enriched.url,
+        savedItemType: enriched.savedItemType,
+        title: enriched.title,
+        metadata: enriched.metadata,
       });
 
-      const nextSection = args.savedItemType ? sectionForSavedItemType(args.savedItemType) : undefined;
+      const nextSection = enriched.savedItemType
+        ? sectionForSavedItemType(enriched.savedItemType)
+        : undefined;
+
       if (nextSection) void setActiveWorkspaceSection(nextSection);
     } catch {
-      await openUntracked(args.url);
+      await openUntracked(enriched.url);
     }
   }
 
@@ -200,7 +258,14 @@ export default function useTripDetailController({
         url: item.partnerUrl,
         savedItemType: item.type,
         title: item.title,
-        metadata: item.metadata,
+        metadata: {
+          city: cityName,
+          startDate: trip?.startDate ?? null,
+          endDate: trip?.endDate ?? null,
+          sourceSurface: "workspace_item",
+          sourceSection: inferSourceSectionFromSavedItemType(item.type),
+          ...(item.metadata ?? {}),
+        },
       });
 
       void setActiveWorkspaceSection(sectionForSavedItemType(item.type));
@@ -295,7 +360,12 @@ export default function useTripDetailController({
         type: "note",
         status: "saved",
         title: noteTitleFromText(text),
-        metadata: { text },
+        metadata: {
+          text,
+          city: cityName,
+          sourceSurface: "workspace_cta",
+          sourceSection: "notes",
+        },
       } as any);
 
       setNoteText("");
@@ -441,6 +511,8 @@ export default function useTripDetailController({
         score: args.option.score,
         checkedProviders: args.checkedProviders,
         optionCount: args.optionCount,
+        sourceSurface: "ticket_choice_alert",
+        sourceSection: "tickets",
       },
     });
   }
