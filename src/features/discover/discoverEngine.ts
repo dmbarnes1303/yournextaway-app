@@ -20,7 +20,13 @@ export type DiscoverReason =
   | "Better for a short trip"
   | "Strong nightlife destination"
   | "Warmer-weather option"
-  | "Less obvious high-upside trip";
+  | "Less obvious high-upside trip"
+  | "Champions League night"
+  | "Europa League trip"
+  | "Conference League value"
+  | "European away-day feel"
+  | "Multi-match city potential"
+  | "Weekend double potential";
 
 export type DiscoverScores = {
   derbyScore: number;
@@ -37,6 +43,9 @@ export type DiscoverScores = {
   tripEaseScore: number;
   glamourScore: number;
   underratedScore: number;
+  europeScore: number;
+  multiMatchScore: number;
+  weekendTripScore: number;
 };
 
 export type DiscoverFixture = {
@@ -97,6 +106,44 @@ function hasClubSignal(name: string, clubs: string[]): boolean {
   const key = lower(name);
   if (!key) return false;
   return clubs.some((club) => key.includes(club));
+}
+
+function parseFixtureDate(dateIso?: string | null): Date | null {
+  if (!dateIso) return null;
+  const d = new Date(dateIso);
+  return Number.isFinite(d.getTime()) ? d : null;
+}
+
+function getLeagueId(f: FixtureListRow): number | null {
+  return f?.league?.id != null ? Number(f.league.id) : null;
+}
+
+function isChampionsLeague(f: FixtureListRow): boolean {
+  return getLeagueId(f) === 2;
+}
+
+function isEuropaLeague(f: FixtureListRow): boolean {
+  return getLeagueId(f) === 3;
+}
+
+function isConferenceLeague(f: FixtureListRow): boolean {
+  return getLeagueId(f) === 848;
+}
+
+function isEuropeanCompetition(f: FixtureListRow): boolean {
+  const id = getLeagueId(f);
+  return id === 2 || id === 3 || id === 848;
+}
+
+function isWeekendFixture(f: FixtureListRow): boolean {
+  const d = parseFixtureDate(f?.fixture?.date);
+  if (!d) return false;
+  const day = d.getUTCDay();
+  return day === 5 || day === 6 || day === 0;
+}
+
+function cityKey(f: FixtureListRow): string {
+  return lower(f?.fixture?.venue?.city);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -309,7 +356,7 @@ const CULTURE_CLUBS = [
   "ajax",
   "celtic",
   "rangers",
-  "boca", // harmless if never hit
+  "boca",
 ];
 
 /* -------------------------------------------------------------------------- */
@@ -330,12 +377,10 @@ function derbyScore(home: string, away: string): number {
 }
 
 function nightMatchScore(dateIso?: string | null): number {
-  if (!dateIso) return 0;
+  const d = parseFixtureDate(dateIso);
+  if (!d) return 0;
 
-  const d = new Date(dateIso);
-  if (!Number.isFinite(d.getTime())) return 0;
-
-  const hour = d.getHours();
+  const hour = d.getUTCHours();
 
   if (hour >= 20) return 3;
   if (hour >= 18) return 2;
@@ -357,6 +402,11 @@ function stadiumScore(home: string, away: string): number {
 }
 
 function valueScore(f: FixtureListRow): number {
+  const leagueId = getLeagueId(f);
+  if (leagueId === 848) return 3;
+  if (leagueId === 3) return 2;
+  if (leagueId === 2) return 0;
+
   const league = lower(f.league?.name);
   const country = lower((f.league as any)?.country);
   const combined = `${league} ${country}`.trim();
@@ -379,6 +429,8 @@ function valueScore(f: FixtureListRow): number {
 }
 
 function titleDramaScore(f: FixtureListRow): number {
+  if (isEuropeanCompetition(f)) return 2;
+
   const round = lower(f.league?.round);
   const league = lower(f.league?.name);
 
@@ -494,7 +546,10 @@ function tripEaseScore(f: FixtureListRow): number {
     combined.includes("la liga") ||
     combined.includes("serie a") ||
     combined.includes("eredivisie") ||
-    combined.includes("primeira")
+    combined.includes("primeira") ||
+    combined.includes("champions league") ||
+    combined.includes("europa league") ||
+    combined.includes("conference league")
   ) {
     score += 1;
   }
@@ -518,6 +573,8 @@ function glamourScore(
   if (hasPopularTeam(awayId)) score += 2;
   if (derby >= 4) score += 1;
   if (atmosphere >= 4) score += 1;
+  if (isChampionsLeague(f)) score += 2;
+  else if (isEuropaLeague(f)) score += 1;
 
   return Math.min(score, 8);
 }
@@ -531,6 +588,7 @@ function underratedScore(
   let score = atmosphere + value;
 
   if (glamour <= 3) score += 2;
+  if (isConferenceLeague(f)) score += 1;
 
   const homeId = f?.teams?.home?.id;
   const awayId = f?.teams?.away?.id;
@@ -539,6 +597,58 @@ function underratedScore(
   if (hasPopularTeam(awayId)) score -= 2;
 
   return Math.max(0, Math.min(score, 6));
+}
+
+function europeScore(f: FixtureListRow, glamour: number, atmosphere: number): number {
+  if (isChampionsLeague(f)) return Math.min(5, 3 + (glamour >= 5 ? 1 : 0) + (atmosphere >= 4 ? 1 : 0));
+  if (isEuropaLeague(f)) return Math.min(4, 2 + (atmosphere >= 4 ? 1 : 0));
+  if (isConferenceLeague(f)) return 2;
+  return 0;
+}
+
+function multiMatchScore(f: FixtureListRow, cityPull: number, tripEase: number): number {
+  const city = cityKey(f);
+
+  let score = 0;
+  if (cityPull >= 3) score += 2;
+  else if (cityPull >= 2) score += 1;
+
+  if (tripEase >= 3) score += 1;
+
+  if (
+    city === "london" ||
+    city === "istanbul" ||
+    city === "madrid" ||
+    city === "milan" ||
+    city === "rome" ||
+    city === "manchester" ||
+    city === "liverpool" ||
+    city === "glasgow"
+  ) {
+    score += 2;
+  }
+
+  if (isEuropeanCompetition(f)) score += 1;
+
+  return Math.min(score, 5);
+}
+
+function weekendTripScore(
+  f: FixtureListRow,
+  night: number,
+  cityPull: number,
+  nightlife: number,
+  multiMatch: number
+): number {
+  let score = 0;
+
+  if (isWeekendFixture(f)) score += 2;
+  if (night >= 2) score += 1;
+  if (cityPull >= 2) score += 1;
+  if (nightlife >= 3) score += 1;
+  if (multiMatch >= 3) score += 1;
+
+  return Math.min(score, 5);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -564,6 +674,9 @@ export function scoreFixture(f: FixtureListRow): DiscoverFixture {
   const tripEase = tripEaseScore(f);
   const glamour = glamourScore(f, stadium, cityPull, derby, atmosphere);
   const underrated = underratedScore(f, atmosphere, value, glamour);
+  const europe = europeScore(f, glamour, atmosphere);
+  const multiMatch = multiMatchScore(f, cityPull, tripEase);
+  const weekendTrip = weekendTripScore(f, night, cityPull, nightlife, multiMatch);
 
   const reasons: DiscoverReason[] = [];
 
@@ -580,6 +693,13 @@ export function scoreFixture(f: FixtureListRow): DiscoverFixture {
   if (warmth >= 3) reasons.push("Warmer-weather option");
   if (underrated >= 4) reasons.push("Less obvious high-upside trip");
 
+  if (isChampionsLeague(f)) reasons.push("Champions League night");
+  if (isEuropaLeague(f)) reasons.push("Europa League trip");
+  if (isConferenceLeague(f) && value >= 2) reasons.push("Conference League value");
+  if (isEuropeanCompetition(f) && atmosphere >= 3) reasons.push("European away-day feel");
+  if (multiMatch >= 4) reasons.push("Multi-match city potential");
+  if (weekendTrip >= 4) reasons.push("Weekend double potential");
+
   const scores: DiscoverScores = {
     derbyScore: derby,
     atmosphereScore: atmosphere,
@@ -595,6 +715,9 @@ export function scoreFixture(f: FixtureListRow): DiscoverFixture {
     tripEaseScore: tripEase,
     glamourScore: glamour,
     underratedScore: underrated,
+    europeScore: europe,
+    multiMatchScore: multiMatch,
+    weekendTripScore: weekendTrip,
   };
 
   return {
@@ -606,4 +729,4 @@ export function scoreFixture(f: FixtureListRow): DiscoverFixture {
 
 export function buildDiscoverScores(fixtures: FixtureListRow[]): DiscoverFixture[] {
   return fixtures.map(scoreFixture);
-    }
+  }
