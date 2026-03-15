@@ -1,16 +1,15 @@
 import React from "react";
-import { View, Text, StyleSheet, Pressable, Image } from "react-native";
+import { Pressable, Text, StyleSheet, View, Image } from "react-native";
 
 import GlassCard from "@/src/components/GlassCard";
 import { theme } from "@/src/constants/theme";
-import { type FixtureListRow } from "@/src/services/apiFootball";
 import { PLACEHOLDER_DISCOVER_IMAGE } from "@/src/features/discover/discoverPresets";
 
 type Variant = "live" | "trending";
 
 type Props = {
-  row: FixtureListRow;
   title: string;
+  meta: string;
   subtitle: string;
   badge: string;
   onPress: () => void;
@@ -18,8 +17,8 @@ type Props = {
 };
 
 export default function DiscoverFixtureCard({
-  row,
   title,
+  meta,
   subtitle,
   badge,
   onPress,
@@ -63,12 +62,25 @@ export default function DiscoverFixtureCard({
             {title}
           </Text>
 
-          <Text
-            style={isTrending ? styles.trendingLabel : styles.liveMeta}
-            numberOfLines={isTrending ? 1 : 2}
-          >
-            {subtitle}
-          </Text>
+          {isTrending ? (
+            <>
+              <Text style={styles.trendingLabel} numberOfLines={1}>
+                {subtitle}
+              </Text>
+              <Text style={styles.trendingMeta} numberOfLines={2}>
+                {meta}
+              </Text>
+            </>
+          ) : (
+            <>
+              <Text style={styles.liveMeta} numberOfLines={2}>
+                {meta}
+              </Text>
+              <Text style={styles.liveWhy} numberOfLines={2}>
+                {subtitle}
+              </Text>
+            </>
+          )}
         </View>
       </GlassCard>
     </Pressable>
@@ -130,7 +142,7 @@ const styles = StyleSheet.create({
   liveBody: {
     padding: 14,
     gap: 6,
-    minHeight: 110,
+    minHeight: 124,
   },
 
   liveTitle: {
@@ -145,6 +157,14 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 17,
     fontWeight: theme.fontWeight.bold,
+  },
+
+  liveWhy: {
+    color: theme.colors.primary,
+    fontSize: 11,
+    lineHeight: 16,
+    fontWeight: theme.fontWeight.black,
+    marginTop: 2,
   },
 
   trendingPress: {
@@ -201,7 +221,7 @@ const styles = StyleSheet.create({
   trendingBody: {
     padding: 14,
     gap: 6,
-    minHeight: 110,
+    minHeight: 116,
   },
 
   trendingTitle: {
@@ -215,6 +235,13 @@ const styles = StyleSheet.create({
     color: theme.colors.primary,
     fontSize: 12,
     fontWeight: theme.fontWeight.black,
+  },
+
+  trendingMeta: {
+    color: theme.colors.textSecondary,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: theme.fontWeight.bold,
   },
 
   pressed: {
