@@ -61,6 +61,36 @@ const DEV = typeof __DEV__ === "boolean" ? __DEV__ : false;
 
 const PLAN_STORAGE_KEY = "yna:plan";
 
+function heroStatusTone(status: string) {
+  const value = String(status ?? "").trim().toLowerCase();
+
+  if (value === "upcoming") return styles.statusPillUpcoming;
+  if (value === "in progress") return styles.statusPillLive;
+  if (value === "completed") return styles.statusPillComplete;
+  return styles.statusPillUpcoming;
+}
+
+function completionTone(value: number) {
+  if (value >= 85) return styles.completionStrong;
+  if (value >= 55) return styles.completionMid;
+  return styles.completionSoft;
+}
+
+function formatCoreCompleteLabel(count?: number | null) {
+  const value = typeof count === "number" ? count : 0;
+  return `${value}/4 core steps complete`;
+}
+
+function nextStepLabel(stepKey?: string | null) {
+  const v = String(stepKey ?? "").trim();
+  if (v === "tickets") return "Next step: Tickets";
+  if (v === "flight") return "Next step: Flights";
+  if (v === "hotel") return "Next step: Hotel";
+  if (v === "transfer") return "Next step: Transport";
+  if (v === "things") return "Next step: Extras";
+  return "Core trip flow complete";
+}
+
 export default function TripDetailScreen() {
   const params = useLocalSearchParams();
   const insets = useSafeAreaInsets();
@@ -101,8 +131,14 @@ export default function TripDetailScreen() {
           return;
         }
 
-        if (value === "Free Plan") setPlan("free");
-        if (value === "Premium Plan") setPlan("premium");
+        if (value === "Free Plan") {
+          setPlan("free");
+          return;
+        }
+
+        if (value === "Premium Plan") {
+          setPlan("premium");
+        }
       } catch {}
     })();
 
@@ -312,7 +348,10 @@ export default function TripDetailScreen() {
       <SafeAreaView style={styles.safe} edges={["bottom"]}>
         <ScrollView
           style={styles.scroll}
-          contentContainerStyle={[styles.content, { paddingBottom: theme.spacing.xxl + insets.bottom }]}
+          contentContainerStyle={[
+            styles.content,
+            { paddingBottom: theme.spacing.xxl + insets.bottom },
+          ]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
@@ -333,7 +372,10 @@ export default function TripDetailScreen() {
 
           {!vm.loading && routeTripId && tripsLoaded && savedLoaded && workspaceLoaded && !trip ? (
             <GlassCard style={styles.card}>
-              <EmptyState title="Trip not found" message="This trip doesn’t exist on this device." />
+              <EmptyState
+                title="Trip not found"
+                message="This trip doesn’t exist on this device."
+              />
             </GlassCard>
           ) : null}
 
@@ -346,13 +388,44 @@ export default function TripDetailScreen() {
                 <Text style={styles.heroMetaSmall}>{data.kickoffMeta.line}</Text>
 
                 <View style={styles.heroTopRow}>
-                  <View style={styles.statusPill}>
+                  <View style={[styles.statusPill, heroStatusTone(status)]}>
                     <Text style={styles.statusText}>{status}</Text>
                   </View>
 
                   <Pressable onPress={controller.onViewWallet} style={styles.walletBtn}>
                     <Text style={styles.walletBtnText}>Wallet ›</Text>
                   </Pressable>
+                </View>
+
+                <View style={styles.funnelCard}>
+                  <View style={styles.funnelTopRow}>
+                    <View style={[styles.completionScoreBox, completionTone(vm.tripCompletionPct ?? 0)]}>
+                      <Text style={styles.completionScoreValue}>{vm.tripCompletionPct ?? 0}%</Text>
+                      <Text style={styles.completionScoreLabel}>Trip built</Text>
+                    </View>
+
+                    <View style={styles.funnelCopyWrap}>
+                      <Text style={styles.funnelTitle}>{vm.bookingFunnelLabel}</Text>
+                      <Text style={styles.funnelSub}>{vm.completionSummary}</Text>
+                      <Text style={styles.funnelSubAlt}>
+                        {formatCoreCompleteLabel(vm.completeCoreCount)}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.funnelBadgeRow}>
+                    <View style={styles.funnelBadge}>
+                      <Text style={styles.funnelBadgeText}>
+                        {nextStepLabel(vm.nextIncompleteStep?.key)}
+                      </Text>
+                    </View>
+
+                    {vm.commercialSummaryLine ? (
+                      <View style={styles.funnelBadge}>
+                        <Text style={styles.funnelBadgeText}>{vm.commercialSummaryLine}</Text>
+                      </View>
+                    ) : null}
+                  </View>
                 </View>
 
                 {vm.showHeroBanners ? (
@@ -425,18 +498,26 @@ export default function TripDetailScreen() {
                 ) : null}
 
                 <View style={styles.heroActions}>
-                  <Pressable onPress={controller.onEditTrip} style={[styles.btn, styles.btnPrimary]}>
+                  <Pressable
+                    onPress={controller.onEditTrip}
+                    style={[styles.btn, styles.btnPrimary]}
+                  >
                     <Text style={styles.btnPrimaryText}>Edit trip</Text>
                   </Pressable>
 
                   {!isPro ? (
-                    <Pressable onPress={controller.onUpgradePress} style={[styles.btn, styles.btnSecondary]}>
+                    <Pressable
+                      onPress={controller.onUpgradePress}
+                      style={[styles.btn, styles.btnSecondary]}
+                    >
                       <Text style={styles.btnSecondaryText}>Go Pro</Text>
                     </Pressable>
                   ) : null}
                 </View>
 
-                {!originLoaded ? <Text style={styles.mutedInline}>Loading departure preference…</Text> : null}
+                {!originLoaded ? (
+                  <Text style={styles.mutedInline}>Loading departure preference…</Text>
+                ) : null}
 
                 <View style={styles.heroBottomStack}>
                   <TripProgressStrip items={vm.progressItems} />
@@ -461,11 +542,20 @@ export default function TripDetailScreen() {
                     <Text style={styles.sectionSub}>Live prices on partners</Text>
                   </View>
 
+                  {vm.commercialSummaryLine ? (
+                    <View style={styles.smartSummaryBar}>
+                      <Text style={styles.smartSummaryText}>{vm.commercialSummaryLine}</Text>
+                    </View>
+                  ) : null}
+
                   <View style={styles.smartGrid}>
                     {vm.smartBookButtons.map((button, index) => (
                       <Pressable
                         key={`${button.title}-${index}`}
-                        style={[styles.smartBtn, button.kind === "primary" && styles.smartBtnPrimary]}
+                        style={[
+                          styles.smartBtn,
+                          button.kind === "primary" && styles.smartBtnPrimary,
+                        ]}
                         onPress={button.onPress}
                       >
                         <View style={styles.smartBtnTop}>
@@ -476,7 +566,9 @@ export default function TripDetailScreen() {
                     ))}
                   </View>
 
-                  <Pressable onPress={() => controller.openUntracked(data.affiliateUrls?.mapsUrl)}>
+                  <Pressable
+                    onPress={() => controller.openUntracked(data.affiliateUrls?.mapsUrl)}
+                  >
                     <Text style={styles.mapsInline}>Open maps search</Text>
                   </Pressable>
                 </GlassCard>
@@ -623,12 +715,23 @@ const styles = StyleSheet.create({
 
   statusPill: {
     borderWidth: 1,
-    borderColor: "rgba(0,255,136,0.4)",
     borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 4,
     alignSelf: "flex-start",
     backgroundColor: "rgba(0,0,0,0.18)",
+  },
+
+  statusPillUpcoming: {
+    borderColor: "rgba(0,255,136,0.4)",
+  },
+
+  statusPillLive: {
+    borderColor: "rgba(255,200,80,0.45)",
+  },
+
+  statusPillComplete: {
+    borderColor: "rgba(120,170,255,0.45)",
   },
 
   statusText: {
@@ -649,6 +752,107 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     fontWeight: "900",
     fontSize: 12,
+  },
+
+  funnelCard: {
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    borderRadius: 16,
+    backgroundColor: "rgba(0,0,0,0.18)",
+    padding: 12,
+    gap: 10,
+  },
+
+  funnelTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+
+  completionScoreBox: {
+    width: 84,
+    height: 84,
+    borderRadius: 20,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  completionStrong: {
+    borderColor: "rgba(0,255,136,0.40)",
+    backgroundColor: "rgba(0,255,136,0.10)",
+  },
+
+  completionMid: {
+    borderColor: "rgba(255,200,80,0.35)",
+    backgroundColor: "rgba(255,200,80,0.10)",
+  },
+
+  completionSoft: {
+    borderColor: "rgba(255,255,255,0.14)",
+    backgroundColor: "rgba(255,255,255,0.04)",
+  },
+
+  completionScoreValue: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 24,
+    lineHeight: 28,
+  },
+
+  completionScoreLabel: {
+    marginTop: 2,
+    color: theme.colors.textSecondary,
+    fontWeight: "900",
+    fontSize: 10,
+  },
+
+  funnelCopyWrap: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  funnelTitle: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 15,
+  },
+
+  funnelSub: {
+    marginTop: 6,
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
+    fontSize: 12,
+    lineHeight: 16,
+  },
+
+  funnelSubAlt: {
+    marginTop: 4,
+    color: theme.colors.textTertiary,
+    fontWeight: "900",
+    fontSize: 11,
+  },
+
+  funnelBadgeRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+
+  funnelBadge: {
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    backgroundColor: "rgba(0,0,0,0.16)",
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+
+  funnelBadgeText: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 11,
   },
 
   bannersRow: {
@@ -789,6 +993,23 @@ const styles = StyleSheet.create({
     color: theme.colors.textTertiary,
     fontWeight: "900",
     fontSize: 12,
+  },
+
+  smartSummaryBar: {
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: "rgba(0,255,136,0.18)",
+    backgroundColor: "rgba(0,0,0,0.16)",
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+
+  smartSummaryText: {
+    color: theme.colors.textSecondary,
+    fontWeight: "900",
+    fontSize: 12,
+    lineHeight: 16,
   },
 
   smartGrid: {
