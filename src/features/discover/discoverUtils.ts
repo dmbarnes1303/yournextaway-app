@@ -153,6 +153,36 @@ function buildDiscoverSeedKey(params: {
   ].join("|");
 }
 
+function buildPreferredLeagueOrder(seed: number, category: DiscoverCategory) {
+  const europeanLeagues = LEAGUES.filter((league) =>
+    EUROPEAN_COMPETITION_IDS.has(league.leagueId)
+  );
+  const domesticLeagues = LEAGUES.filter(
+    (league) => !EUROPEAN_COMPETITION_IDS.has(league.leagueId)
+  );
+
+  const rotatedEuropean = rotateStable(europeanLeagues, seed);
+  const rotatedDomestic = rotateStable(domesticLeagues, seed);
+
+  if (category === "europeanNights") {
+    return [...rotatedEuropean, ...rotatedDomestic];
+  }
+
+  return [...rotatedDomestic, ...rotatedEuropean];
+}
+
+function dedupeFixtures(rows: FixtureListRow[]) {
+  const deduped = new Map<string, FixtureListRow>();
+
+  for (const row of rows) {
+    const id = row?.fixture?.id != null ? String(row.fixture.id) : "";
+    if (!id) continue;
+    if (!deduped.has(id)) deduped.set(id, row);
+  }
+
+  return Array.from(deduped.values());
+}
+
 export async function fetchDiscoverPool(params: {
   window: ShortcutWindow;
   windowKey: DiscoverWindowKey;
@@ -172,7 +202,7 @@ export async function fetchDiscoverPool(params: {
     vibes,
     category,
     minFixtures = 52,
-    maxLeagueFetches = 24,
+    maxLeagueFetches,
     batchSize = 6,
   } = params;
 
@@ -186,23 +216,17 @@ export async function fetchDiscoverPool(params: {
   });
 
   const seed = createStableSeed(seedKey);
-
-  const europeanLeagues = LEAGUES.filter((league) =>
-    EUROPEAN_COMPETITION_IDS.has(league.leagueId)
-  );
-  const domesticLeagues = LEAGUES.filter(
-    (league) => !EUROPEAN_COMPETITION_IDS.has(league.leagueId)
+  const preferred = buildPreferredLeagueOrder(seed, category);
+  const effectiveMaxLeagueFetches = Math.min(
+    Math.max(1, maxLeagueFetches ?? preferred.length),
+    preferred.length
   );
 
-  const preferred =
-    category === "europeanNights"
-      ? [...rotateStable(europeanLeagues, seed), ...rotateStable(domesticLeagues, seed)]
-      : [...rotateStable(domesticLeagues, seed), ...rotateStable(europeanLeagues, seed)];
-
+  const leaguesToFetch = preferred.slice(0, effectiveMaxLeagueFetches);
   const collected: FixtureListRow[] = [];
 
-  for (let i = 0; i < preferred.length && i < maxLeagueFetches; i += batchSize) {
-    const batch = preferred.slice(i, Math.min(i + batchSize, maxLeagueFetches));
+  for (let i = 0; i < leaguesToFetch.length; i += batchSize) {
+    const batch = leaguesToFetch.slice(i, i + batchSize);
 
     const results = await Promise.all(
       batch.map(async (league) => {
@@ -213,6 +237,7 @@ export async function fetchDiscoverPool(params: {
             from: window.from,
             to: window.to,
           });
+
           return Array.isArray(res) ? res : [];
         } catch {
           return [];
@@ -220,23 +245,16 @@ export async function fetchDiscoverPool(params: {
       })
     );
 
-    const flat = results.flat().filter((row) => row?.fixture?.id != null);
-    collected.push(...flat);
+    collected.push(...results.flat().filter((row) => row?.fixture?.id != null));
 
-    if (collected.length >= minFixtures) break;
+    if (collected.length >= minFixtures && i + batchSize >= leaguesToFetch.length) {
+      break;
+    }
   }
 
-  const deduped = new Map<string, FixtureListRow>();
-
-  for (const row of collected) {
-    const id = row?.fixture?.id != null ? String(row.fixture.id) : null;
-    if (!id) continue;
-    if (!deduped.has(id)) deduped.set(id, row);
-  }
-
-  return Array.from(deduped.values()).filter((row) => {
+  return dedupeFixtures(collected).filter((row) => {
     const venue = String(row?.fixture?.venue?.name ?? "").trim();
-    return !!venue;
+    return Boolean(venue);
   });
 }
 
@@ -394,10 +412,14 @@ export function trendingScore(row: FixtureListRow, baseScore: number) {
   return score;
 }
 
-function fixtureIsoDateOnly(row: FixtureListRow) {
+function fixtureIsoDateOnlyInternal(row: FixtureListRow) {
   const raw = String(row?.fixture?.date ?? "").trim();
   if (!raw) return "";
   return raw.slice(0, 10);
+}
+
+export function fixtureIsoDateOnly(row: FixtureListRow) {
+  return fixtureIsoDateOnlyInternal(row);
 }
 
 function parseSafeDate(value?: string | null) {
@@ -485,8 +507,8 @@ export function buildMultiMatchTrips(
       String(a?.fixture?.date ?? "").localeCompare(String(b?.fixture?.date ?? ""))
     );
 
-    const from = fixtureIsoDateOnly(sorted[0]);
-    const to = fixtureIsoDateOnly(sorted[sorted.length - 1]);
+    const from = fixtureIsoDateOnlyInternal(sorted[0]);
+    const to = fixtureIsoDateOnlyInternal(sorted[sorted.length - 1]);
     if (!from || !to) return null;
 
     const daysSpan = Math.max(1, daysBetweenIso(from, to) + 1);
@@ -625,4 +647,4 @@ export function comboWhy(trip: MultiMatchTrip) {
     return "Multiple fixtures without stretching the travel too far.";
   }
   return "A denser football run with more than one genuine reason to travel.";
-  }
+}
