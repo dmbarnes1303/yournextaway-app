@@ -31,9 +31,10 @@ export type ResolveTicketArgs = {
   kickoffIso: string;
   leagueName?: string;
   leagueId?: string | number;
+  debugNoCache?: boolean;
 };
 
-const REQUEST_TIMEOUT_MS = 12000;
+const REQUEST_TIMEOUT_MS = 20000;
 
 function clean(v: unknown): string {
   return typeof v === "string" ? v.trim() : String(v ?? "").trim();
@@ -87,6 +88,9 @@ function buildResolveUrl(base: string, args: ResolveTicketArgs): string | null {
   if (fixtureId) qs.set("fixtureId", fixtureId);
   if (leagueName) qs.set("leagueName", leagueName);
   if (leagueId) qs.set("leagueId", leagueId);
+  if (args.debugNoCache) qs.set("debugNoCache", "1");
+
+  qs.set("_ts", String(Date.now()));
 
   return `${base}/tickets/resolve?${qs.toString()}`;
 }
@@ -131,7 +135,9 @@ function normalizeResolutionResult(
   if (!input) return null;
 
   const normalizedOptions = Array.isArray(input.options)
-    ? input.options.map((x) => normalizeOption(x)).filter(Boolean) as TicketResolutionOption[]
+    ? (input.options
+        .map((x) => normalizeOption(x))
+        .filter(Boolean) as TicketResolutionOption[])
     : [];
 
   const fallbackTop = normalizedOptions[0] ?? null;
@@ -200,14 +206,47 @@ export async function resolveTicketForFixture(
   args: ResolveTicketArgs
 ): Promise<TicketResolutionResult | null> {
   const base = getBackendBaseUrl();
+
   if (!base) {
+    console.log("[ticketResolver] missing backend base url", {
+      EXPO_PUBLIC_BACKEND_URL: clean(process.env.EXPO_PUBLIC_BACKEND_URL),
+      EXPO_PUBLIC_BACKEND_BASE_URL: clean(
+        (process.env as any)?.EXPO_PUBLIC_BACKEND_BASE_URL
+      ),
+    });
     return makeErrorResult("missing_backend_url");
   }
 
   const url = buildResolveUrl(base, args);
-  if (!url) return null;
 
-  const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+  if (!url) {
+    console.log("[ticketResolver] could not build resolve url", {
+      base,
+      fixtureId: clean(args.fixtureId),
+      homeName: clean(args.homeName),
+      awayName: clean(args.awayName),
+      kickoffIso: clean(args.kickoffIso),
+      leagueName: clean(args.leagueName),
+      leagueId: clean(args.leagueId),
+    });
+    return makeErrorResult("invalid_resolve_args");
+  }
+
+  console.log("[ticketResolver] request start", {
+    base,
+    url,
+    fixtureId: clean(args.fixtureId),
+    homeName: clean(args.homeName),
+    awayName: clean(args.awayName),
+    kickoffIso: clean(args.kickoffIso),
+    leagueName: clean(args.leagueName),
+    leagueId: clean(args.leagueId),
+    debugNoCache: Boolean(args.debugNoCache),
+  });
+
+  const controller =
+    typeof AbortController !== "undefined" ? new AbortController() : null;
+
   const timeout = controller
     ? setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
     : null;
@@ -217,19 +256,34 @@ export async function resolveTicketForFixture(
       method: "GET",
       headers: {
         Accept: "application/json",
+        "Cache-Control": "no-cache",
+        Pragma: "no-cache",
       },
+      cache: "no-store",
       signal: controller?.signal,
     });
 
     const raw = await res.text();
+
+    console.log("[ticketResolver] raw response", {
+      status: res.status,
+      ok: res.ok,
+      bodyPreview: raw.slice(0, 800),
+    });
+
     const parsed = safeJsonParse<TicketResolutionResult>(raw);
     const normalized = normalizeResolutionResult(parsed);
 
     if (!normalized) {
+      console.log("[ticketResolver] invalid backend json", {
+        status: res.status,
+        raw,
+      });
       return makeErrorResult(res.ok ? "invalid_backend_json" : `http_${res.status}`);
     }
 
     if (!res.ok) {
+      console.log("[ticketResolver] backend non-ok normalized response", normalized);
       return {
         ...normalized,
         ok: false,
@@ -237,9 +291,28 @@ export async function resolveTicketForFixture(
       };
     }
 
+    console.log("[ticketResolver] normalized success", {
+      provider: normalized.provider,
+      reason: normalized.reason,
+      score: normalized.score,
+      optionsCount: Array.isArray(normalized.options)
+        ? normalized.options.length
+        : 0,
+      checkedProviders: normalized.checkedProviders ?? [],
+    });
+
     return normalized;
   } catch (e: any) {
-    if (String(e?.name ?? "") === "AbortError") {
+    const name = String(e?.name ?? "");
+    const message = String(e?.message ?? "");
+
+    console.log("[ticketResolver] fetch failed", {
+      name,
+      message,
+      url,
+    });
+
+    if (name === "AbortError") {
       return makeErrorResult("timeout");
     }
 
