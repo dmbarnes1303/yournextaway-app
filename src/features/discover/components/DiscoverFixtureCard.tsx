@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { View, Text, StyleSheet, Pressable, Image } from "react-native";
 
 import GlassCard from "@/src/components/GlassCard";
@@ -20,6 +20,17 @@ type Props = {
   row?: FixtureListRow;
 };
 
+function estimatedLabel(value: string | null, suffix?: string) {
+  if (!value) return null;
+  return suffix ? `Est. ${value.slice(5)} ${suffix}` : `Est. ${value.slice(5)}`;
+}
+
+function confidenceLabel(confidence: "low" | "medium" | "high") {
+  if (confidence === "high") return "Estimate confidence: high";
+  if (confidence === "medium") return "Estimate confidence: medium";
+  return "Estimate confidence: low";
+}
+
 export default function DiscoverFixtureCard({
   title,
   subtitle,
@@ -32,10 +43,15 @@ export default function DiscoverFixtureCard({
 }: Props) {
   const isTrending = variant === "trending";
   const uri = imageUri || PLACEHOLDER_DISCOVER_IMAGE;
-  const pricing = row ? estimateFixturePricing(row) : null;
 
-  const tripLabel = pricing?.tripLabel ?? null;
-  const ticketLabel = pricing?.ticketLabel ?? null;
+  const pricing = useMemo(() => {
+    return row ? estimateFixturePricing(row) : null;
+  }, [row]);
+
+  const tripEstimate = pricing?.tripLabel ? estimatedLabel(pricing.tripLabel, "trip") : null;
+  const ticketEstimate = pricing?.ticketLabel
+    ? estimatedLabel(pricing.ticketLabel, "ticket")
+    : null;
   const confidence = pricing?.confidence ?? "low";
 
   return (
@@ -68,9 +84,11 @@ export default function DiscoverFixtureCard({
               </Text>
             </View>
 
-            {tripLabel ? (
+            {tripEstimate ? (
               <View style={styles.pricePill}>
-                <Text style={styles.pricePillText}>{tripLabel}</Text>
+                <Text style={styles.pricePillText} numberOfLines={1}>
+                  {tripEstimate}
+                </Text>
               </View>
             ) : null}
           </View>
@@ -90,17 +108,17 @@ export default function DiscoverFixtureCard({
             </Text>
           ) : null}
 
-          {tripLabel || ticketLabel ? (
+          {tripEstimate || ticketEstimate ? (
             <View style={styles.pricingRow}>
-              {tripLabel ? (
+              {tripEstimate ? (
                 <View style={styles.pricingChipStrong}>
-                  <Text style={styles.pricingChipStrongText}>{tripLabel} trip</Text>
+                  <Text style={styles.pricingChipStrongText}>{tripEstimate}</Text>
                 </View>
               ) : null}
 
-              {ticketLabel ? (
+              {ticketEstimate ? (
                 <View style={styles.pricingChip}>
-                  <Text style={styles.pricingChipText}>{ticketLabel} ticket</Text>
+                  <Text style={styles.pricingChipText}>{ticketEstimate}</Text>
                 </View>
               ) : null}
             </View>
@@ -115,7 +133,7 @@ export default function DiscoverFixtureCard({
 
           {pricing ? (
             <Text style={styles.estimateNote} numberOfLines={1}>
-              Estimated pricing • {confidence} confidence
+              Estimated only • {confidenceLabel(confidence)}
             </Text>
           ) : null}
         </View>
@@ -290,6 +308,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.14)",
     backgroundColor: "rgba(8,10,10,0.70)",
+    maxWidth: 132,
   },
 
   pricePillText: {
