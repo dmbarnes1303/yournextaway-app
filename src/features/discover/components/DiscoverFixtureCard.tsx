@@ -1,5 +1,3 @@
-// src/features/discover/components/DiscoverFixtureCard.tsx
-
 import React, { useMemo } from "react";
 import { View, Text, StyleSheet, Pressable, Image, Platform } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -29,13 +27,29 @@ function clean(value: unknown): string {
 
 function estimatedLabel(value: string | null, suffix?: string) {
   if (!value) return null;
-  return suffix ? `Est. ${value.slice(5)} ${suffix}` : `Est. ${value.slice(5)}`;
+  const stripped = value.replace(/^From\s+/i, "");
+  return suffix ? `Est. ${stripped} ${suffix}` : `Est. ${stripped}`;
 }
 
-function confidenceLabel(confidence: "low" | "medium" | "high") {
-  if (confidence === "high") return "Estimate confidence: high";
-  if (confidence === "medium") return "Estimate confidence: medium";
-  return "Estimate confidence: low";
+function confidenceCopy(confidence: "low" | "medium" | "high") {
+  if (confidence === "high") {
+    return {
+      short: "High confidence",
+      foot: "Estimate based on strong fixture detail",
+    };
+  }
+
+  if (confidence === "medium") {
+    return {
+      short: "Medium confidence",
+      foot: "Estimate based on partial fixture detail",
+    };
+  }
+
+  return {
+    short: "Early estimate",
+    foot: "Estimate based on limited fixture detail",
+  };
 }
 
 function confidenceTone(confidence: "low" | "medium" | "high") {
@@ -50,31 +64,46 @@ function confidenceTextTone(confidence: "low" | "medium" | "high") {
   return styles.confidenceLowText;
 }
 
-function formatTeamsLine(row?: FixtureListRow) {
-  const home = clean(row?.teams?.home?.name);
-  const away = clean(row?.teams?.away?.name);
-  if (!home && !away) return null;
-  if (home && away) return `${home} vs ${away}`;
-  return home || away || null;
-}
-
 function formatLeagueLine(row?: FixtureListRow) {
   const league = clean(row?.league?.name);
   const country = clean((row?.league as any)?.country);
+
   if (league && country) return `${league} • ${country}`;
   return league || country || null;
 }
 
-function routeAngleLabel(variant: Variant, pricingAvailable: boolean, subtitle: string) {
-  if (subtitle) return subtitle;
-  if (variant === "trending") {
-    return pricingAvailable
-      ? "High-interest football trip with live route potential"
-      : "Big-occasion football trip worth opening";
+function routeAngleLabel(
+  variant: Variant,
+  subtitle: string,
+  pricing: {
+    tripEstimate: string | null;
+    ticketEstimate: string | null;
   }
-  return pricingAvailable
-    ? "Trip-ready route with estimated cost guidance"
-    : "Live discovery route worth checking now";
+) {
+  if (subtitle) return subtitle;
+
+  if (variant === "trending") {
+    if (pricing.tripEstimate) return "Big-interest football trip with strong travel pull";
+    if (pricing.ticketEstimate) return "High-interest fixture with usable ticket guidance";
+    return "Big-occasion football trip worth opening now";
+  }
+
+  if (pricing.tripEstimate) return "Trip-ready route with estimated cost guidance";
+  if (pricing.ticketEstimate) return "Live route with early ticket cost guidance";
+  return "Live discovery route worth checking now";
+}
+
+function ctaLabel(variant: Variant) {
+  return variant === "trending" ? "Open trip" : "View route";
+}
+
+function topRightLabel(variant: Variant, tripEstimate: string | null) {
+  if (tripEstimate) return tripEstimate;
+  return variant === "trending" ? "Open trip" : "Live route";
+}
+
+function imageHeight(variant: Variant) {
+  return variant === "trending" ? 138 : 122;
 }
 
 export default function DiscoverFixtureCard({
@@ -97,10 +126,13 @@ export default function DiscoverFixtureCard({
   const tripEstimate = pricing?.tripLabel ? estimatedLabel(pricing.tripLabel, "trip") : null;
   const ticketEstimate = pricing?.ticketLabel ? estimatedLabel(pricing.ticketLabel, "ticket") : null;
   const confidence = pricing?.confidence ?? "low";
+  const confidenceUi = confidenceCopy(confidence);
 
-  const teamsLine = formatTeamsLine(row);
   const leagueLine = formatLeagueLine(row);
-  const routeAngle = routeAngleLabel(variant, Boolean(tripEstimate || ticketEstimate), subtitle);
+  const routeAngle = routeAngleLabel(variant, subtitle, {
+    tripEstimate,
+    ticketEstimate,
+  });
 
   return (
     <Pressable
@@ -115,12 +147,8 @@ export default function DiscoverFixtureCard({
         style={isTrending ? styles.trendingCard : styles.liveCard}
         noPadding
       >
-        <View style={isTrending ? styles.trendingImageWrap : styles.liveImageWrap}>
-          <Image
-            source={{ uri }}
-            style={isTrending ? styles.trendingImage : styles.liveImage}
-            resizeMode="cover"
-          />
+        <View style={[styles.imageWrap, { height: imageHeight(variant) }]}>
+          <Image source={{ uri }} style={styles.image} resizeMode="cover" />
           <View style={isTrending ? styles.trendingImageOverlay : styles.liveImageOverlay} />
 
           <View style={styles.topBar}>
@@ -130,20 +158,18 @@ export default function DiscoverFixtureCard({
               </Text>
             </View>
 
-            {tripEstimate ? (
-              <View style={styles.heroPricePill}>
-                <Ionicons name="airplane-outline" size={11} color={theme.colors.text} />
-                <Text style={styles.heroPricePillText} numberOfLines={1}>
-                  {tripEstimate}
-                </Text>
-              </View>
-            ) : (
-              <View style={styles.heroGhostPill}>
-                <Text style={styles.heroGhostPillText}>
-                  {isTrending ? "Open trip" : "Live route"}
-                </Text>
-              </View>
-            )}
+            <View style={tripEstimate ? styles.heroPricePill : styles.heroGhostPill}>
+              {tripEstimate ? (
+                <>
+                  <Ionicons name="airplane-outline" size={11} color={theme.colors.text} />
+                  <Text style={styles.heroPricePillText} numberOfLines={1}>
+                    {topRightLabel(variant, tripEstimate)}
+                  </Text>
+                </>
+              ) : (
+                <Text style={styles.heroGhostPillText}>{topRightLabel(variant, null)}</Text>
+              )}
+            </View>
           </View>
 
           {leagueLine ? (
@@ -156,77 +182,54 @@ export default function DiscoverFixtureCard({
         </View>
 
         <View style={isTrending ? styles.trendingBody : styles.liveBody}>
-          {teamsLine ? (
-            <Text style={styles.teamsLine} numberOfLines={1}>
-              {teamsLine}
-            </Text>
-          ) : null}
-
           <Text style={isTrending ? styles.trendingTitle : styles.liveTitle} numberOfLines={2}>
             {title}
           </Text>
 
           {meta ? (
-            <Text style={isTrending ? styles.trendingMeta : styles.liveMeta} numberOfLines={2}>
+            <Text style={styles.metaText} numberOfLines={2}>
               {meta}
             </Text>
           ) : null}
 
-          <Text
-            style={isTrending ? styles.trendingAngle : styles.liveAngle}
-            numberOfLines={2}
-          >
+          <Text style={isTrending ? styles.trendingAngle : styles.liveAngle} numberOfLines={2}>
             {routeAngle}
           </Text>
 
-          {tripEstimate || ticketEstimate ? (
-            <View style={styles.pricingRow}>
-              {tripEstimate ? (
-                <View style={styles.pricingChipStrong}>
-                  <Text style={styles.pricingChipStrongText}>{tripEstimate}</Text>
-                </View>
-              ) : null}
+          {tripEstimate || ticketEstimate || pricing ? (
+            <View style={styles.pricingBlock}>
+              <View style={styles.pricingRow}>
+                {tripEstimate ? (
+                  <View style={styles.pricingChipStrong}>
+                    <Text style={styles.pricingChipStrongText}>{tripEstimate}</Text>
+                  </View>
+                ) : null}
 
-              {ticketEstimate ? (
-                <View style={styles.pricingChip}>
-                  <Text style={styles.pricingChipText}>{ticketEstimate}</Text>
-                </View>
-              ) : null}
+                {ticketEstimate ? (
+                  <View style={styles.pricingChip}>
+                    <Text style={styles.pricingChipText}>{ticketEstimate}</Text>
+                  </View>
+                ) : null}
 
-              {pricing ? (
-                <View style={[styles.confidenceChip, confidenceTone(confidence)]}>
-                  <Text style={[styles.confidenceChipText, confidenceTextTone(confidence)]}>
-                    {confidence === "high"
-                      ? "High confidence"
-                      : confidence === "medium"
-                        ? "Medium confidence"
-                        : "Low confidence"}
-                  </Text>
-                </View>
-              ) : null}
+                {pricing ? (
+                  <View style={[styles.confidenceChip, confidenceTone(confidence)]}>
+                    <Text style={[styles.confidenceChipText, confidenceTextTone(confidence)]}>
+                      {confidenceUi.short}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
             </View>
           ) : null}
 
           <View style={styles.footerRow}>
-            {pricing ? (
-              <Text style={styles.estimateNote} numberOfLines={1}>
-                Estimated only • {confidenceLabel(confidence)}
-              </Text>
-            ) : (
-              <Text style={styles.estimateNote} numberOfLines={1}>
-                Live discovery route
-              </Text>
-            )}
+            <Text style={styles.estimateNote} numberOfLines={2}>
+              {pricing ? confidenceUi.foot : "Live discovery route"}
+            </Text>
 
             <View style={styles.ctaInline}>
-              <Text style={styles.ctaInlineText}>
-                {isTrending ? "Open trip" : "View route"}
-              </Text>
-              <Ionicons
-                name="arrow-forward-outline"
-                size={13}
-                color={theme.colors.primary}
-              />
+              <Text style={styles.ctaInlineText}>{ctaLabel(variant)}</Text>
+              <Ionicons name="arrow-forward-outline" size={13} color={theme.colors.primary} />
             </View>
           </View>
         </View>
@@ -237,13 +240,13 @@ export default function DiscoverFixtureCard({
 
 const styles = StyleSheet.create({
   livePress: {
-    width: 262,
+    width: 264,
     borderRadius: 22,
     overflow: "hidden",
   },
 
   trendingPress: {
-    width: 286,
+    width: 290,
     borderRadius: 22,
     overflow: "hidden",
   },
@@ -254,31 +257,21 @@ const styles = StyleSheet.create({
 
   trendingCard: {
     borderRadius: 22,
+    borderColor: "rgba(255,255,255,0.10)",
   },
 
-  liveImageWrap: {
-    height: 118,
+  imageWrap: {
     position: "relative",
   },
 
-  trendingImageWrap: {
-    height: 132,
-    position: "relative",
-  },
-
-  liveImage: {
-    width: "100%",
-    height: "100%",
-  },
-
-  trendingImage: {
+  image: {
     width: "100%",
     height: "100%",
   },
 
   liveImageOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(5,8,10,0.42)",
+    backgroundColor: "rgba(5,8,10,0.44)",
   },
 
   trendingImageOverlay: {
@@ -330,7 +323,7 @@ const styles = StyleSheet.create({
   },
 
   heroPricePill: {
-    maxWidth: 148,
+    maxWidth: 150,
     borderRadius: 999,
     paddingVertical: 6,
     paddingHorizontal: 10,
@@ -367,8 +360,8 @@ const styles = StyleSheet.create({
   bottomImageLabel: {
     position: "absolute",
     left: 10,
-    bottom: 10,
     right: 10,
+    bottom: 10,
   },
 
   bottomImageLabelText: {
@@ -381,22 +374,13 @@ const styles = StyleSheet.create({
   liveBody: {
     padding: 14,
     gap: 6,
-    minHeight: 170,
+    minHeight: 168,
   },
 
   trendingBody: {
     padding: 14,
-    gap: 6,
-    minHeight: 178,
-  },
-
-  teamsLine: {
-    color: theme.colors.textTertiary,
-    fontSize: 10,
-    lineHeight: 14,
-    fontWeight: theme.fontWeight.black,
-    letterSpacing: 0.5,
-    textTransform: "uppercase",
+    gap: 7,
+    minHeight: 182,
   },
 
   liveTitle: {
@@ -413,14 +397,7 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeight.black,
   },
 
-  liveMeta: {
-    color: theme.colors.textSecondary,
-    fontSize: 12,
-    lineHeight: 17,
-    fontWeight: theme.fontWeight.bold,
-  },
-
-  trendingMeta: {
+  metaText: {
     color: theme.colors.textSecondary,
     fontSize: 12,
     lineHeight: 17,
@@ -443,11 +420,14 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
 
+  pricingBlock: {
+    marginTop: 4,
+  },
+
   pricingRow: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8,
-    marginTop: 4,
   },
 
   pricingChip: {
@@ -523,7 +503,7 @@ const styles = StyleSheet.create({
   footerRow: {
     marginTop: 4,
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-end",
     justifyContent: "space-between",
     gap: 10,
   },
@@ -540,6 +520,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
+    paddingBottom: 1,
   },
 
   ctaInlineText: {
