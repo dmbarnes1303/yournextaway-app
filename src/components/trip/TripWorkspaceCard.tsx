@@ -42,7 +42,7 @@ function safePartnerName(item: SavedItem) {
   try {
     return getPartner(item.partnerId as any).name;
   } catch {
-    const provider = clean(item.metadata?.ticketProvider);
+    const provider = clean(item.metadata?.ticketProvider).toLowerCase();
 
     if (provider === "footballticketsnet") return "FootballTicketNet";
     if (provider === "sportsevents365") return "SportsEvents365";
@@ -65,25 +65,28 @@ function safeTypeLabel(type: SavedItemType) {
   }
 }
 
-function shortDomain(url?: string) {
-  if (!url) return "";
+function friendlyTypeLabel(type: SavedItemType) {
+  const raw = safeTypeLabel(type).toLowerCase();
 
-  try {
-    const parsed = new URL(url);
-    return parsed.hostname.replace(/^www\./, "");
-  } catch {
-    return "";
-  }
+  if (raw.includes("ticket")) return "Tickets";
+  if (raw.includes("flight")) return "Flights";
+  if (raw.includes("hotel")) return "Stay";
+  if (raw.includes("train")) return "Rail";
+  if (raw.includes("transfer")) return "Transfers";
+  if (raw.includes("insurance")) return "Insurance";
+  if (raw.includes("claim")) return "Claims";
+  if (raw.includes("thing")) return "Activities";
+  if (raw.includes("note")) return "Notes";
+  if (raw.includes("other")) return "Notes";
+
+  return safeTypeLabel(type);
 }
 
 function buildMetaLine(item: SavedItem) {
-  const bits: string[] = [safeTypeLabel(item.type)];
+  const bits: string[] = [friendlyTypeLabel(item.type)];
 
   const partnerName = safePartnerName(item);
   if (partnerName) bits.push(partnerName);
-
-  const domain = item.partnerUrl ? shortDomain(item.partnerUrl) : "";
-  if (domain) bits.push(domain);
 
   return bits.join(" • ");
 }
@@ -101,12 +104,15 @@ function hasProof(item: SavedItem | null): boolean {
 
 function proofStateText(item: SavedItem): string {
   const count = getAttachmentCount(item);
-  if (count <= 0) return "No proof attached yet";
-  return `${count} proof file${count === 1 ? "" : "s"} attached`;
+
+  if (count <= 0) return "No booking proof added yet";
+  if (count === 1) return "1 proof file added";
+  return `${count} proof files added`;
 }
 
 function sectionStateLabel(sectionKey: WorkspaceSectionKey, total: number) {
   const title = WORKSPACE_SECTIONS[sectionKey].title;
+
   if (total <= 0) return `No ${title.toLowerCase()} yet`;
   if (total === 1) return "1 item";
   return `${total} items`;
@@ -142,12 +148,36 @@ function statusTone(status: SavedItem["status"]) {
   return styles.badgeArchived;
 }
 
+function cleanUserFacingPriceLine(value: string | null) {
+  const raw = clean(value);
+  if (!raw) return null;
+
+  return raw
+    .replace(/\bLive price on\b/gi, "Live price •")
+    .replace(/\bFrom\b/gi, "From")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function itemActionHint(item: SavedItem, livePrice: string | null) {
-  if (item.type === "note" || item.type === "other") return "Tap to review note";
-  if (item.status === "booked" && !hasProof(item)) return "Booked but proof missing";
-  if (item.status === "booked") return "Booked and stored";
-  if (item.status === "pending") return livePrice || "Pending confirmation";
-  if (item.status === "saved") return livePrice || "Saved option";
+  if (item.type === "note" || item.type === "other") return "Tap to open note";
+
+  if (item.status === "booked" && !hasProof(item)) {
+    return "Booked, but proof still needs adding";
+  }
+
+  if (item.status === "booked") {
+    return "Booked and stored";
+  }
+
+  if (item.status === "pending") {
+    return livePrice ? "Awaiting confirmation" : "Awaiting confirmation";
+  }
+
+  if (item.status === "saved") {
+    return livePrice ? "Ready to review" : "Saved to compare later";
+  }
+
   return "Archived item";
 }
 
@@ -284,7 +314,7 @@ const WorkspaceItemRow = memo(function WorkspaceItemRow({
   getLivePriceLine,
   getTicketProviderFromItem,
 }: WorkspaceItemRowProps) {
-  const livePrice = getLivePriceLine(item);
+  const livePrice = cleanUserFacingPriceLine(getLivePriceLine(item));
   const provider = getTicketProviderFromItem(item);
   const proofText = proofStateText(item);
   const missingProof = item.status === "booked" && !hasProof(item);
@@ -842,9 +872,7 @@ const WorkspaceSectionCard = memo(function WorkspaceSectionCard({
       >
         <View style={styles.flexOne}>
           <Text style={styles.workspaceSectionTitle}>{section.title}</Text>
-          <Text style={styles.workspaceSectionSub}>
-            {sectionLead(sectionKey)}
-          </Text>
+          <Text style={styles.workspaceSectionSub}>{sectionLead(sectionKey)}</Text>
         </View>
 
         <View style={styles.workspaceHeaderRight}>
