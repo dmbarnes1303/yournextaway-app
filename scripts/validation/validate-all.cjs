@@ -13,9 +13,8 @@ let failed = false;
 for (const relPath of checks) {
   console.log(`\n>>> Running ${relPath}\n`);
 
-  const result = spawnSync("node", [path.join(root, relPath)], {
+  const result = spawnSync(process.execPath, [path.join(root, relPath)], {
     stdio: "inherit",
-    shell: true,
   });
 
   if (result.status !== 0) {
