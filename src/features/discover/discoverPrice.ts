@@ -13,18 +13,22 @@ export type DiscoverPriceEstimate = {
 };
 
 const EUROPEAN_LEAGUE_TIERS = new Map<number, number>([
-  [286, 6], // UEFA Champions League
-  [244, 5], // UEFA Europa League
-  [357, 4], // UEFA Europa Conference League
+  [2, 6],   // UEFA Champions League
+  [3, 5],   // UEFA Europa League
+  [848, 4], // UEFA Europa Conference League
 
-  [39, 5], // Premier League
+  [286, 6], // UEFA Champions League (alt/provider mapping)
+  [244, 5], // UEFA Europa League (alt/provider mapping)
+  [357, 4], // UEFA Europa Conference League (alt/provider mapping)
+
+  [39, 5],  // Premier League
   [140, 5], // La Liga
   [135, 5], // Serie A
-  [78, 5], // Bundesliga
+  [78, 5],  // Bundesliga
 
-  [61, 4], // Ligue 1
-  [88, 4], // Eredivisie
-  [94, 4], // Primeira Liga
+  [61, 4],  // Ligue 1
+  [88, 4],  // Eredivisie
+  [94, 4],  // Primeira Liga
   [203, 4], // Super Lig
 
   [179, 3], // Scotland
