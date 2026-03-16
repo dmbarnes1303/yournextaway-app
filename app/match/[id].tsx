@@ -102,8 +102,8 @@ function Crest({
     size === "lg"
       ? { outer: 84, inner: 58, radius: 24 }
       : size === "sm"
-      ? { outer: 52, inner: 34, radius: 16 }
-      : { outer: 64, inner: 44, radius: 20 };
+        ? { outer: 52, inner: 34, radius: 16 }
+        : { outer: 64, inner: 44, radius: 20 };
 
   return (
     <View
@@ -357,8 +357,8 @@ function dedupeOptions(result: TicketResolutionResult | null): TicketResolutionO
           result.reason === "exact_event"
             ? "exact_event"
             : result.reason === "partial_match"
-            ? "partial_match"
-            : "search_fallback",
+              ? "partial_match"
+              : "search_fallback",
       },
     ];
   }
@@ -373,8 +373,16 @@ function openFailureMessage(result: TicketResolutionResult | null): string {
     ? result.checkedProviders.filter(Boolean).join(", ")
     : "";
 
+  if ((result as any).error === "missing_backend_url") {
+    return "App backend URL is missing.";
+  }
+
   if ((result as any).error === "network_error") {
     return "Couldn’t reach the ticket service.";
+  }
+
+  if ((result as any).error === "timeout") {
+    return "Ticket service timed out.";
   }
 
   if ((result as any).error === "invalid_backend_json") {
@@ -537,8 +545,7 @@ export default function MatchScreen() {
   const leagueSeason =
     (typeof (fixture as any)?.league?.season === "number"
       ? (fixture as any).league.season
-      : undefined) ??
-    undefined;
+      : undefined) ?? undefined;
 
   const dateIso = useMemo(() => {
     return (
@@ -572,7 +579,7 @@ export default function MatchScreen() {
   const checkedProviders = useMemo(
     () =>
       Array.isArray(ticketResult?.checkedProviders)
-        ? ticketResult!.checkedProviders!.map((x) => clean(x)).filter(Boolean)
+        ? ticketResult.checkedProviders.map((x) => clean(x)).filter(Boolean)
         : [],
     [ticketResult]
   );
@@ -681,6 +688,39 @@ export default function MatchScreen() {
 
       const options = dedupeOptions(resolved);
 
+      const backendUrl =
+        clean(process.env.EXPO_PUBLIC_BACKEND_URL) ||
+        clean((process.env as any)?.EXPO_PUBLIC_BACKEND_BASE_URL) ||
+        null;
+
+      console.log("[MATCH SCREEN] resolved =", JSON.stringify(resolved, null, 2));
+      console.log("[MATCH SCREEN] options =", JSON.stringify(options, null, 2));
+      console.log("[MATCH SCREEN] backendUrl =", backendUrl);
+
+      Alert.alert(
+        "Ticket debug",
+        JSON.stringify(
+          {
+            fixtureId: fixtureId || null,
+            homeName: homeName || null,
+            awayName: awayName || null,
+            kickoffIso: kickoffIso || null,
+            leagueName: leagueName || null,
+            leagueId: leagueId ?? null,
+            backendUrl,
+            ok: resolved?.ok ?? null,
+            error: (resolved as any)?.error ?? null,
+            reason: resolved?.reason ?? null,
+            provider: resolved?.provider ?? null,
+            optionsCount: options.length,
+            checkedProviders:
+              Array.isArray(resolved?.checkedProviders) ? resolved?.checkedProviders : [],
+          },
+          null,
+          2
+        )
+      );
+
       if (!resolved?.ok || options.length === 0) {
         Alert.alert("No ticket options found", openFailureMessage(resolved));
         return;
@@ -690,8 +730,11 @@ export default function MatchScreen() {
         await openTicketOption(options[0]);
         return;
       }
-    } catch {
-      Alert.alert("Couldn’t load ticket options");
+    } catch (e: any) {
+      Alert.alert(
+        "Couldn’t load ticket options",
+        String(e?.message ?? e ?? "unknown_error")
+      );
     } finally {
       setOpeningTickets(false);
     }
@@ -797,21 +840,26 @@ export default function MatchScreen() {
                     openingTickets
                       ? "Finding tickets…"
                       : ticketOptions.length > 1
-                      ? "Refresh ticket options"
-                      : "View ticket options"
+                        ? "Refresh ticket options"
+                        : "View ticket options"
                   }
                   tone="primary"
                   loading={openingTickets}
                   onPress={openTickets}
                   glow
                 />
-                <Button label="Build trip around this match" tone="secondary" onPress={goBuildTrip} />
+                <Button
+                  label="Build trip around this match"
+                  tone="secondary"
+                  onPress={goBuildTrip}
+                />
               </View>
 
               {!tripId ? (
                 <View style={styles.helperBox}>
                   <Text style={styles.helperText}>
-                    You can check ticket options now. Build a trip if you want to save bookings and keep everything in Wallet.
+                    You can check ticket options now. Build a trip if you want to save bookings and
+                    keep everything in Wallet.
                   </Text>
                 </View>
               ) : null}
@@ -915,11 +963,7 @@ export default function MatchScreen() {
             ) : null}
 
             <View style={styles.actions}>
-              <Button
-                label="Official club website"
-                tone="secondary"
-                onPress={openOfficialClub}
-              />
+              <Button label="Official club website" tone="secondary" onPress={openOfficialClub} />
             </View>
           </GlassCard>
 
@@ -992,7 +1036,8 @@ export default function MatchScreen() {
               <View style={styles.emptyInfoCard}>
                 <Text style={styles.emptyInfoLabel}>Venue guide not mapped yet</Text>
                 <Text style={styles.emptyInfoText}>
-                  Directions still work, but airport, transport and stay-area guidance have not been added for this stadium yet.
+                  Directions still work, but airport, transport and stay-area guidance have not
+                  been added for this stadium yet.
                 </Text>
               </View>
             )}
@@ -1001,7 +1046,8 @@ export default function MatchScreen() {
           <GlassCard level="default" variant="matte" style={styles.sectionCard}>
             <Text style={styles.sectionTitle}>Build around this match</Text>
             <Text style={styles.sectionSub}>
-              Save this fixture into a trip workspace and then sort tickets, travel, hotel and everything else around it.
+              Save this fixture into a trip workspace and then sort tickets, travel, hotel and
+              everything else around it.
             </Text>
 
             <View style={styles.nextStepsList}>
