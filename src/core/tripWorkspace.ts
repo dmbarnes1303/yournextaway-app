@@ -97,23 +97,80 @@ export const DEFAULT_SECTION_ORDER: WorkspaceSectionKey[] = [
   "notes",
 ];
 
+export function isWorkspaceSectionKey(value: unknown): value is WorkspaceSectionKey {
+  return typeof value === "string" && value in WORKSPACE_SECTIONS;
+}
+
 export function normalizeOrder(order?: WorkspaceSectionKey[] | null): WorkspaceSectionKey[] {
   const input = Array.isArray(order) ? order : [];
   const seen = new Set<WorkspaceSectionKey>();
   const out: WorkspaceSectionKey[] = [];
 
-  for (const k of input) {
-    if (!k || !(k in WORKSPACE_SECTIONS)) continue;
-    if (seen.has(k)) continue;
-    seen.add(k);
-    out.push(k);
+  for (const raw of input) {
+    if (!isWorkspaceSectionKey(raw)) continue;
+    if (seen.has(raw)) continue;
+    seen.add(raw);
+    out.push(raw);
   }
 
-  for (const k of DEFAULT_SECTION_ORDER) {
-    if (!seen.has(k)) out.push(k);
+  for (const key of DEFAULT_SECTION_ORDER) {
+    if (!seen.has(key)) out.push(key);
   }
 
   return out;
+}
+
+export function normalizeCollapsed(
+  collapsed?: Record<string, unknown> | null
+): Partial<Record<WorkspaceSectionKey, boolean>> {
+  const out: Partial<Record<WorkspaceSectionKey, boolean>> = {};
+  if (!collapsed || typeof collapsed !== "object") return out;
+
+  for (const key of DEFAULT_SECTION_ORDER) {
+    const value = collapsed[key];
+    if (typeof value === "boolean") {
+      out[key] = value;
+    }
+  }
+
+  return out;
+}
+
+export function normalizeActiveSection(value: unknown): WorkspaceSectionKey {
+  if (isWorkspaceSectionKey(value)) return value;
+  return DEFAULT_SECTION_ORDER[0];
+}
+
+export function makeDefaultTripWorkspace(tripId: string): TripWorkspace {
+  const now = Date.now();
+
+  return {
+    tripId: String(tripId),
+    sectionOrder: [...DEFAULT_SECTION_ORDER],
+    collapsed: {},
+    activeSection: "tickets",
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+export function cloneWorkspace(workspace: TripWorkspace): TripWorkspace {
+  return {
+    tripId: String(workspace.tripId),
+    sectionOrder: normalizeOrder(workspace.sectionOrder),
+    collapsed: normalizeCollapsed(workspace.collapsed),
+    activeSection: normalizeActiveSection(workspace.activeSection),
+    createdAt:
+      Number.isFinite(workspace.createdAt) && workspace.createdAt > 0
+        ? workspace.createdAt
+        : Date.now(),
+    updatedAt:
+      Number.isFinite(workspace.updatedAt) && workspace.updatedAt > 0
+        ? workspace.updatedAt
+        : Number.isFinite(workspace.createdAt) && workspace.createdAt > 0
+          ? workspace.createdAt
+          : Date.now(),
+  };
 }
 
 export function sectionForSavedItemType(type: SavedItemType): WorkspaceSectionKey {
@@ -250,16 +307,3 @@ export function computeWorkspaceSnapshot(items: SavedItem[]): WorkspaceSnapshot 
     missing,
   };
 }
-
-export function makeDefaultTripWorkspace(tripId: string): TripWorkspace {
-  const now = Date.now();
-
-  return {
-    tripId: String(tripId),
-    sectionOrder: [...DEFAULT_SECTION_ORDER],
-    collapsed: {},
-    activeSection: "tickets",
-    createdAt: now,
-    updatedAt: now,
-  };
-    }
