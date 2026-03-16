@@ -78,17 +78,25 @@ function completionTone(value: number) {
 
 function formatCoreCompleteLabel(count?: number | null) {
   const value = typeof count === "number" ? count : 0;
-  return `${value}/4 core steps complete`;
+  return `${value}/4 key steps done`;
 }
 
 function nextStepLabel(stepKey?: string | null) {
   const v = String(stepKey ?? "").trim();
-  if (v === "tickets") return "Next step: Tickets";
-  if (v === "flight") return "Next step: Flights";
-  if (v === "hotel") return "Next step: Hotel";
-  if (v === "transfer") return "Next step: Transport";
-  if (v === "things") return "Next step: Extras";
-  return "Core trip flow complete";
+  if (v === "tickets") return "Next: Tickets";
+  if (v === "flight") return "Next: Flights";
+  if (v === "hotel") return "Next: Hotel";
+  if (v === "transfer") return "Next: Transport";
+  if (v === "things") return "Next: Extras";
+  return "Trip basics complete";
+}
+
+function statusLabel(status: string) {
+  const value = String(status ?? "").trim().toLowerCase();
+  if (value === "upcoming") return "Upcoming";
+  if (value === "in progress") return "In progress";
+  if (value === "completed") return "Completed";
+  return "Upcoming";
 }
 
 export default function TripDetailScreen() {
@@ -382,30 +390,37 @@ export default function TripDetailScreen() {
           {trip ? (
             <>
               <GlassCard style={styles.hero}>
-                <Text style={styles.kicker}>TRIP WORKSPACE</Text>
+                <Text style={styles.kicker}>YOUR TRIP</Text>
                 <Text style={styles.cityTitle}>{data.cityName}</Text>
                 <Text style={styles.heroMeta}>{summaryLine(trip)}</Text>
                 <Text style={styles.heroMetaSmall}>{data.kickoffMeta.line}</Text>
 
                 <View style={styles.heroTopRow}>
                   <View style={[styles.statusPill, heroStatusTone(status)]}>
-                    <Text style={styles.statusText}>{status}</Text>
+                    <Text style={styles.statusText}>{statusLabel(status)}</Text>
                   </View>
 
                   <Pressable onPress={controller.onViewWallet} style={styles.walletBtn}>
-                    <Text style={styles.walletBtnText}>Wallet ›</Text>
+                    <Text style={styles.walletBtnText}>Wallet</Text>
                   </Pressable>
                 </View>
 
                 <View style={styles.funnelCard}>
                   <View style={styles.funnelTopRow}>
-                    <View style={[styles.completionScoreBox, completionTone(vm.tripCompletionPct ?? 0)]}>
-                      <Text style={styles.completionScoreValue}>{vm.tripCompletionPct ?? 0}%</Text>
-                      <Text style={styles.completionScoreLabel}>Trip built</Text>
+                    <View
+                      style={[
+                        styles.completionScoreBox,
+                        completionTone(vm.tripCompletionPct ?? 0),
+                      ]}
+                    >
+                      <Text style={styles.completionScoreValue}>
+                        {vm.tripCompletionPct ?? 0}%
+                      </Text>
+                      <Text style={styles.completionScoreLabel}>Complete</Text>
                     </View>
 
                     <View style={styles.funnelCopyWrap}>
-                      <Text style={styles.funnelTitle}>{vm.bookingFunnelLabel}</Text>
+                      <Text style={styles.funnelTitle}>Trip progress</Text>
                       <Text style={styles.funnelSub}>{vm.completionSummary}</Text>
                       <Text style={styles.funnelSubAlt}>
                         {formatCoreCompleteLabel(vm.completeCoreCount)}
@@ -422,7 +437,9 @@ export default function TripDetailScreen() {
 
                     {vm.commercialSummaryLine ? (
                       <View style={styles.funnelBadge}>
-                        <Text style={styles.funnelBadgeText}>{vm.commercialSummaryLine}</Text>
+                        <Text style={styles.funnelBadgeText}>
+                          {vm.commercialSummaryLine}
+                        </Text>
                       </View>
                     ) : null}
                   </View>
@@ -459,44 +476,6 @@ export default function TripDetailScreen() {
                   </View>
                 ) : null}
 
-                {data.tripFinderSummary ? (
-                  <View style={styles.tripFinderBox}>
-                    <Text style={styles.tripFinderTitle}>Trip Finder read</Text>
-
-                    <View style={styles.tripFinderBadges}>
-                      {data.tripFinderSummary.difficulty ? (
-                        <View style={styles.tripFinderBadge}>
-                          <Text style={styles.tripFinderBadgeText}>
-                            {data.tripFinderSummary.difficulty}
-                          </Text>
-                        </View>
-                      ) : null}
-
-                      {data.tripFinderSummary.confidence ? (
-                        <View style={styles.tripFinderBadge}>
-                          <Text style={styles.tripFinderBadgeText}>
-                            {data.tripFinderSummary.confidence}
-                          </Text>
-                        </View>
-                      ) : null}
-
-                      {data.tripFinderSummary.score != null ? (
-                        <View style={styles.tripFinderBadge}>
-                          <Text style={styles.tripFinderBadgeText}>
-                            Score {data.tripFinderSummary.score}
-                          </Text>
-                        </View>
-                      ) : null}
-                    </View>
-
-                    {data.tripFinderSummary.reasons ? (
-                      <Text style={styles.tripFinderReasons}>
-                        {data.tripFinderSummary.reasons}
-                      </Text>
-                    ) : null}
-                  </View>
-                ) : null}
-
                 <View style={styles.heroActions}>
                   <Pressable
                     onPress={controller.onEditTrip}
@@ -516,7 +495,7 @@ export default function TripDetailScreen() {
                 </View>
 
                 {!originLoaded ? (
-                  <Text style={styles.mutedInline}>Loading departure preference…</Text>
+                  <Text style={styles.mutedInline}>Loading departure airport…</Text>
                 ) : null}
 
                 <View style={styles.heroBottomStack}>
@@ -538,13 +517,15 @@ export default function TripDetailScreen() {
               {data.affiliateUrls ? (
                 <GlassCard style={styles.card}>
                   <View style={styles.sectionTitleRow}>
-                    <Text style={styles.sectionTitle}>Smart booking</Text>
-                    <Text style={styles.sectionSub}>Live prices on partners</Text>
+                    <Text style={styles.sectionTitle}>Book this trip</Text>
+                    <Text style={styles.sectionSub}>Prices and partner links</Text>
                   </View>
 
                   {vm.commercialSummaryLine ? (
                     <View style={styles.smartSummaryBar}>
-                      <Text style={styles.smartSummaryText}>{vm.commercialSummaryLine}</Text>
+                      <Text style={styles.smartSummaryText}>
+                        {vm.commercialSummaryLine}
+                      </Text>
                     </View>
                   ) : null}
 
@@ -569,7 +550,7 @@ export default function TripDetailScreen() {
                   <Pressable
                     onPress={() => controller.openUntracked(data.affiliateUrls?.mapsUrl)}
                   >
-                    <Text style={styles.mapsInline}>Open maps search</Text>
+                    <Text style={styles.mapsInline}>Open in Maps</Text>
                   </Pressable>
                 </GlassCard>
               ) : null}
@@ -683,6 +664,7 @@ const styles = StyleSheet.create({
     color: theme.colors.primary,
     fontWeight: "900",
     fontSize: theme.fontSize.xs,
+    letterSpacing: 0.7,
   },
 
   cityTitle: {
@@ -891,50 +873,6 @@ const styles = StyleSheet.create({
   bookedText: {
     color: "rgba(160,195,255,1)",
     fontWeight: "900",
-  },
-
-  tripFinderBox: {
-    marginTop: 12,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    borderRadius: 14,
-    backgroundColor: "rgba(0,0,0,0.18)",
-    padding: 12,
-    gap: 8,
-  },
-
-  tripFinderTitle: {
-    color: theme.colors.text,
-    fontWeight: "900",
-    fontSize: 12,
-  },
-
-  tripFinderBadges: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-
-  tripFinderBadge: {
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.14)",
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    backgroundColor: "rgba(255,255,255,0.04)",
-  },
-
-  tripFinderBadgeText: {
-    color: theme.colors.textSecondary,
-    fontWeight: "900",
-    fontSize: 11,
-  },
-
-  tripFinderReasons: {
-    color: theme.colors.textSecondary,
-    fontWeight: "800",
-    fontSize: 12,
-    lineHeight: 16,
   },
 
   heroActions: {
