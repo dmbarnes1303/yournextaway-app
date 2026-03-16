@@ -13,18 +13,18 @@ export type DiscoverPriceEstimate = {
 };
 
 const EUROPEAN_LEAGUE_TIERS = new Map<number, number>([
-  [2, 6],   // Champions League
-  [3, 5],   // Europa League
-  [848, 4], // Europa Conference League
+  [286, 6], // UEFA Champions League
+  [244, 5], // UEFA Europa League
+  [357, 4], // UEFA Europa Conference League
 
-  [39, 5],  // Premier League
+  [39, 5], // Premier League
   [140, 5], // La Liga
   [135, 5], // Serie A
-  [78, 5],  // Bundesliga
+  [78, 5], // Bundesliga
 
-  [61, 4],  // Ligue 1
-  [88, 4],  // Eredivisie
-  [94, 4],  // Primeira Liga
+  [61, 4], // Ligue 1
+  [88, 4], // Eredivisie
+  [94, 4], // Primeira Liga
   [203, 4], // Super Lig
 
   [179, 3], // Scotland
@@ -122,11 +122,7 @@ function leagueTier(row: FixtureListRow): number {
   const country = lower(getLeagueCountry(row));
   const combined = `${league} ${country}`;
 
-  if (
-    combined.includes("champions league") ||
-    combined.includes("uefa champions")
-  ) return 6;
-
+  if (combined.includes("champions league") || combined.includes("uefa champions")) return 6;
   if (combined.includes("europa league")) return 5;
   if (combined.includes("conference league")) return 4;
 
@@ -135,14 +131,18 @@ function leagueTier(row: FixtureListRow): number {
     combined.includes("la liga") ||
     combined.includes("serie a") ||
     combined.includes("bundesliga")
-  ) return 5;
+  ) {
+    return 5;
+  }
 
   if (
     combined.includes("ligue 1") ||
     combined.includes("eredivisie") ||
     combined.includes("primeira liga") ||
     combined.includes("super lig")
-  ) return 4;
+  ) {
+    return 4;
+  }
 
   if (
     combined.includes("scotland") ||
@@ -157,7 +157,9 @@ function leagueTier(row: FixtureListRow): number {
     combined.includes("czech") ||
     combined.includes("serbia") ||
     combined.includes("iceland")
-  ) return 3;
+  ) {
+    return 3;
+  }
 
   return 2;
 }
@@ -257,7 +259,16 @@ function cityHotelFloor(city: string, country: string, tier: number): number {
   }
 
   if (
-    ["porto", "seville", "valencia", "naples", "turin", "dortmund", "glasgow", "marseille"].includes(c)
+    [
+      "porto",
+      "seville",
+      "valencia",
+      "naples",
+      "turin",
+      "dortmund",
+      "glasgow",
+      "marseille",
+    ].includes(c)
   ) {
     return 80;
   }
@@ -316,12 +327,7 @@ function ticketFloor(row: FixtureListRow): number {
   const away = lower(getAwayName(row));
   const difficulty = ticketDifficulty(row);
 
-  let base =
-    tier >= 6 ? 95 :
-    tier >= 5 ? 70 :
-    tier >= 4 ? 45 :
-    tier >= 3 ? 30 :
-    20;
+  let base = tier >= 6 ? 95 : tier >= 5 ? 70 : tier >= 4 ? 45 : tier >= 3 ? 30 : 20;
 
   if (isBigClub(home)) base += 12;
   if (isBigClub(away)) base += 12;
@@ -383,4 +389,4 @@ export function estimateFixturePricing(row: FixtureListRow): DiscoverPriceEstima
     ticketLabel: formatFromPrice(ticketFromGbp),
     tripLabel: formatFromPrice(tripFromGbp),
   };
-}
+      }
