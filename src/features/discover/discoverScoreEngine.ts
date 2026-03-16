@@ -49,10 +49,28 @@ export type DiscoverScores = {
   weekendTripScore: number;
 };
 
+export type DiscoverSignals = {
+  homeTeamKey: string;
+  awayTeamKey: string;
+  leagueId: number | null;
+  leagueCountry: string;
+  cityKey: string;
+  isEuropeanCompetition: boolean;
+  isChampionsLeague: boolean;
+  isEuropaLeague: boolean;
+  isConferenceLeague: boolean;
+  isWeekendFixture: boolean;
+  isEveningKickoff: boolean;
+  hasPopularHomeTeam: boolean;
+  hasPopularAwayTeam: boolean;
+  ticketDifficulty: TicketDifficulty | "unknown";
+};
+
 export type DiscoverFixture = {
   fixture: FixtureListRow;
   scores: DiscoverScores;
   reasons: DiscoverReason[];
+  signals: DiscoverSignals;
 };
 
 export type DiscoverTripLength = "day" | "1" | "2" | "3";
@@ -117,6 +135,15 @@ function getRoundLabel(f: FixtureListRow): string {
   return lower(f?.league?.round);
 }
 
+function getLeagueCountry(f: FixtureListRow): string {
+  const fromFixture = lower((f.league as any)?.country);
+  if (fromFixture) return fromFixture;
+
+  const leagueId = getLeagueId(f);
+  if (!leagueId) return "";
+  return lower(getLeagueById(leagueId)?.country);
+}
+
 function isChampionsLeague(f: FixtureListRow): boolean {
   return getLeagueId(f) === 2;
 }
@@ -141,6 +168,13 @@ function isWeekendFixture(f: FixtureListRow): boolean {
   return day === 5 || day === 6 || day === 0;
 }
 
+function isEveningKickoff(f: FixtureListRow): boolean {
+  const d = parseFixtureDate(f?.fixture?.date);
+  if (!d) return false;
+  const hour = d.getUTCHours();
+  return hour >= 18;
+}
+
 function cityKey(f: FixtureListRow): string {
   return lower(f?.fixture?.venue?.city);
 }
@@ -162,13 +196,13 @@ function teamKey(input?: string | null): string {
 /* -------------------------------------------------------------------------- */
 
 type LeagueProfile = {
-  prestige: number;     // big-club / glamour baseline
-  value: number;        // better pound-for-experience
-  travelEase: number;   // accessibility / airport / common routes
-  culture: number;      // football culture density
-  nightlife: number;    // destination nightlife pull
-  warmth: number;       // climate pull
-  stackability: number; // multi-match / city stacking potential
+  prestige: number;
+  value: number;
+  travelEase: number;
+  culture: number;
+  nightlife: number;
+  warmth: number;
+  stackability: number;
 };
 
 const DEFAULT_LEAGUE_PROFILE: LeagueProfile = {
@@ -182,40 +216,40 @@ const DEFAULT_LEAGUE_PROFILE: LeagueProfile = {
 };
 
 const LEAGUE_PROFILES: Record<number, LeagueProfile> = {
-  2:   { prestige: 5, value: 1, travelEase: 3, culture: 4, nightlife: 3, warmth: 1, stackability: 3 }, // UCL
-  3:   { prestige: 4, value: 2, travelEase: 3, culture: 4, nightlife: 3, warmth: 1, stackability: 3 }, // UEL
-  848: { prestige: 3, value: 4, travelEase: 3, culture: 3, nightlife: 2, warmth: 1, stackability: 3 }, // UECL
+  2: { prestige: 5, value: 1, travelEase: 3, culture: 4, nightlife: 3, warmth: 1, stackability: 3 },
+  3: { prestige: 4, value: 2, travelEase: 3, culture: 4, nightlife: 3, warmth: 1, stackability: 3 },
+  848: { prestige: 3, value: 4, travelEase: 3, culture: 3, nightlife: 2, warmth: 1, stackability: 3 },
 
-  39:  { prestige: 5, value: 1, travelEase: 5, culture: 4, nightlife: 4, warmth: 0, stackability: 4 }, // EPL
-  140: { prestige: 5, value: 2, travelEase: 4, culture: 4, nightlife: 4, warmth: 4, stackability: 4 }, // La Liga
-  135: { prestige: 5, value: 2, travelEase: 4, culture: 5, nightlife: 4, warmth: 4, stackability: 4 }, // Serie A
-  78:  { prestige: 4, value: 4, travelEase: 4, culture: 4, nightlife: 3, warmth: 0, stackability: 3 }, // Bundesliga
-  61:  { prestige: 4, value: 2, travelEase: 4, culture: 3, nightlife: 4, warmth: 1, stackability: 3 }, // Ligue 1
-  88:  { prestige: 4, value: 3, travelEase: 4, culture: 4, nightlife: 4, warmth: 0, stackability: 3 }, // Eredivisie
-  94:  { prestige: 4, value: 4, travelEase: 4, culture: 4, nightlife: 4, warmth: 4, stackability: 3 }, // Primeira Liga
-  179: { prestige: 4, value: 3, travelEase: 3, culture: 5, nightlife: 3, warmth: 0, stackability: 2 }, // Scotland
-  203: { prestige: 4, value: 4, travelEase: 3, culture: 5, nightlife: 4, warmth: 3, stackability: 4 }, // Turkey
-  144: { prestige: 3, value: 4, travelEase: 4, culture: 3, nightlife: 3, warmth: 0, stackability: 2 }, // Belgium
-  218: { prestige: 3, value: 4, travelEase: 3, culture: 3, nightlife: 3, warmth: 0, stackability: 2 }, // Austria
-  207: { prestige: 3, value: 4, travelEase: 3, culture: 3, nightlife: 2, warmth: 0, stackability: 2 }, // Switzerland
-  197: { prestige: 3, value: 4, travelEase: 3, culture: 5, nightlife: 3, warmth: 3, stackability: 2 }, // Greece
-  119: { prestige: 3, value: 4, travelEase: 3, culture: 3, nightlife: 3, warmth: 0, stackability: 2 }, // Denmark
-  345: { prestige: 3, value: 4, travelEase: 3, culture: 4, nightlife: 3, warmth: 0, stackability: 2 }, // Czech
-  106: { prestige: 3, value: 4, travelEase: 3, culture: 4, nightlife: 3, warmth: 0, stackability: 2 }, // Poland
-  210: { prestige: 3, value: 4, travelEase: 3, culture: 4, nightlife: 3, warmth: 3, stackability: 2 }, // Croatia
-  286: { prestige: 3, value: 4, travelEase: 2, culture: 5, nightlife: 3, warmth: 1, stackability: 2 }, // Serbia
-  271: { prestige: 2, value: 4, travelEase: 3, culture: 3, nightlife: 3, warmth: 1, stackability: 2 }, // Hungary
-  283: { prestige: 2, value: 4, travelEase: 2, culture: 3, nightlife: 3, warmth: 1, stackability: 2 }, // Romania
-  332: { prestige: 2, value: 4, travelEase: 2, culture: 3, nightlife: 3, warmth: 0, stackability: 2 }, // Slovakia
-  373: { prestige: 2, value: 4, travelEase: 2, culture: 3, nightlife: 2, warmth: 1, stackability: 2 }, // Slovenia
-  172: { prestige: 2, value: 4, travelEase: 2, culture: 3, nightlife: 2, warmth: 1, stackability: 1 }, // Bulgaria
-  318: { prestige: 2, value: 4, travelEase: 2, culture: 3, nightlife: 3, warmth: 4, stackability: 1 }, // Cyprus
-  315: { prestige: 2, value: 4, travelEase: 2, culture: 3, nightlife: 2, warmth: 1, stackability: 1 }, // Bosnia
-  357: { prestige: 2, value: 4, travelEase: 3, culture: 3, nightlife: 3, warmth: 0, stackability: 2 }, // Ireland
-  113: { prestige: 2, value: 4, travelEase: 3, culture: 4, nightlife: 3, warmth: 0, stackability: 2 }, // Sweden
-  103: { prestige: 2, value: 4, travelEase: 3, culture: 4, nightlife: 2, warmth: 0, stackability: 2 }, // Norway
-  244: { prestige: 2, value: 4, travelEase: 2, culture: 3, nightlife: 2, warmth: 0, stackability: 1 }, // Finland
-  164: { prestige: 2, value: 4, travelEase: 2, culture: 3, nightlife: 2, warmth: 0, stackability: 1 }, // Iceland
+  39: { prestige: 5, value: 1, travelEase: 5, culture: 4, nightlife: 4, warmth: 0, stackability: 4 },
+  140: { prestige: 5, value: 2, travelEase: 4, culture: 4, nightlife: 4, warmth: 4, stackability: 4 },
+  135: { prestige: 5, value: 2, travelEase: 4, culture: 5, nightlife: 4, warmth: 4, stackability: 4 },
+  78: { prestige: 4, value: 4, travelEase: 4, culture: 4, nightlife: 3, warmth: 0, stackability: 3 },
+  61: { prestige: 4, value: 2, travelEase: 4, culture: 3, nightlife: 4, warmth: 1, stackability: 3 },
+  88: { prestige: 4, value: 3, travelEase: 4, culture: 4, nightlife: 4, warmth: 0, stackability: 3 },
+  94: { prestige: 4, value: 4, travelEase: 4, culture: 4, nightlife: 4, warmth: 4, stackability: 3 },
+  179: { prestige: 4, value: 3, travelEase: 3, culture: 5, nightlife: 3, warmth: 0, stackability: 2 },
+  203: { prestige: 4, value: 4, travelEase: 3, culture: 5, nightlife: 4, warmth: 3, stackability: 4 },
+  144: { prestige: 3, value: 4, travelEase: 4, culture: 3, nightlife: 3, warmth: 0, stackability: 2 },
+  218: { prestige: 3, value: 4, travelEase: 3, culture: 3, nightlife: 3, warmth: 0, stackability: 2 },
+  207: { prestige: 3, value: 4, travelEase: 3, culture: 3, nightlife: 2, warmth: 0, stackability: 2 },
+  197: { prestige: 3, value: 4, travelEase: 3, culture: 5, nightlife: 3, warmth: 3, stackability: 2 },
+  119: { prestige: 3, value: 4, travelEase: 3, culture: 3, nightlife: 3, warmth: 0, stackability: 2 },
+  345: { prestige: 3, value: 4, travelEase: 3, culture: 4, nightlife: 3, warmth: 0, stackability: 2 },
+  106: { prestige: 3, value: 4, travelEase: 3, culture: 4, nightlife: 3, warmth: 0, stackability: 2 },
+  210: { prestige: 3, value: 4, travelEase: 3, culture: 4, nightlife: 3, warmth: 3, stackability: 2 },
+  286: { prestige: 3, value: 4, travelEase: 2, culture: 5, nightlife: 3, warmth: 1, stackability: 2 },
+  271: { prestige: 2, value: 4, travelEase: 3, culture: 3, nightlife: 3, warmth: 1, stackability: 2 },
+  283: { prestige: 2, value: 4, travelEase: 2, culture: 3, nightlife: 3, warmth: 1, stackability: 2 },
+  332: { prestige: 2, value: 4, travelEase: 2, culture: 3, nightlife: 3, warmth: 0, stackability: 2 },
+  373: { prestige: 2, value: 4, travelEase: 2, culture: 3, nightlife: 2, warmth: 1, stackability: 2 },
+  172: { prestige: 2, value: 4, travelEase: 2, culture: 3, nightlife: 2, warmth: 1, stackability: 1 },
+  318: { prestige: 2, value: 4, travelEase: 2, culture: 3, nightlife: 3, warmth: 4, stackability: 1 },
+  315: { prestige: 2, value: 4, travelEase: 2, culture: 3, nightlife: 2, warmth: 1, stackability: 1 },
+  357: { prestige: 2, value: 4, travelEase: 3, culture: 3, nightlife: 3, warmth: 0, stackability: 2 },
+  113: { prestige: 2, value: 4, travelEase: 3, culture: 4, nightlife: 3, warmth: 0, stackability: 2 },
+  103: { prestige: 2, value: 4, travelEase: 3, culture: 4, nightlife: 2, warmth: 0, stackability: 2 },
+  244: { prestige: 2, value: 4, travelEase: 2, culture: 3, nightlife: 2, warmth: 0, stackability: 1 },
+  164: { prestige: 2, value: 4, travelEase: 2, culture: 3, nightlife: 2, warmth: 0, stackability: 1 },
 };
 
 function getLeagueProfile(f: FixtureListRow): LeagueProfile {
@@ -614,8 +648,7 @@ function nightlifeScore(city: string, night: number, f: FixtureListRow): number 
 
 function warmWeatherScore(f: FixtureListRow): number {
   const city = lower(f.fixture?.venue?.city);
-  const country =
-    lower((f.league as any)?.country) || lower(getLeagueById(getLeagueId(f) ?? -1)?.country);
+  const country = getLeagueCountry(f);
 
   let score = getLeagueProfile(f).warmth;
   if (WARM_COUNTRY_KEYS.some((key) => country.includes(key))) score += 1;
@@ -626,7 +659,13 @@ function warmWeatherScore(f: FixtureListRow): number {
 
 function ticketEaseScore(f: FixtureListRow): number {
   const home = clean(f?.teams?.home?.name);
-  const rawDifficulty = home ? getTicketDifficultyBadge(home) : null;
+  const away = clean(f?.teams?.away?.name);
+  const leagueId = getLeagueId(f);
+
+  const rawDifficulty =
+    (home ? getTicketDifficultyBadge(home, leagueId) : null) ??
+    (away ? getTicketDifficultyBadge(away, leagueId) : null);
+
   const difficulty: TicketDifficulty | "unknown" = rawDifficulty ?? "unknown";
   return ticketDifficultyRank(difficulty);
 }
@@ -748,6 +787,38 @@ function weekendTripScore(
   return clampScore(score, 0, 5);
 }
 
+function buildSignals(
+  f: FixtureListRow,
+  homeKeyValue: string,
+  awayKeyValue: string
+): DiscoverSignals {
+  const leagueId = getLeagueId(f);
+  const home = clean(f?.teams?.home?.name);
+  const away = clean(f?.teams?.away?.name);
+
+  const ticketDifficulty =
+    getTicketDifficultyBadge(home, leagueId) ??
+    getTicketDifficultyBadge(away, leagueId) ??
+    "unknown";
+
+  return {
+    homeTeamKey: homeKeyValue,
+    awayTeamKey: awayKeyValue,
+    leagueId,
+    leagueCountry: getLeagueCountry(f),
+    cityKey: cityKey(f),
+    isEuropeanCompetition: isEuropeanCompetition(f),
+    isChampionsLeague: isChampionsLeague(f),
+    isEuropaLeague: isEuropaLeague(f),
+    isConferenceLeague: isConferenceLeague(f),
+    isWeekendFixture: isWeekendFixture(f),
+    isEveningKickoff: isEveningKickoff(f),
+    hasPopularHomeTeam: hasPopularTeam(f?.teams?.home?.id),
+    hasPopularAwayTeam: hasPopularTeam(f?.teams?.away?.id),
+    ticketDifficulty,
+  };
+}
+
 /* -------------------------------------------------------------------------- */
 /* Main scoring                                                               */
 /* -------------------------------------------------------------------------- */
@@ -759,11 +830,14 @@ export function scoreFixture(f: FixtureListRow): DiscoverFixture {
 
   const leagueProfile = getLeagueProfile(f);
 
+  const homeTeamKey = teamKey(home);
+  const awayTeamKey = teamKey(away);
+
   const derby = derbyScore(home, away);
 
   let atmosphere = Math.max(atmosphereScore(home), atmosphereScore(away), leagueProfile.culture);
-  if (HIGH_ATMOSPHERE_CLUB_KEYS.has(teamKey(home))) atmosphere += 1;
-  if (HIGH_ATMOSPHERE_CLUB_KEYS.has(teamKey(away))) atmosphere += 1;
+  if (HIGH_ATMOSPHERE_CLUB_KEYS.has(homeTeamKey)) atmosphere += 1;
+  if (HIGH_ATMOSPHERE_CLUB_KEYS.has(awayTeamKey)) atmosphere += 1;
   if (derby >= 4) atmosphere += 1;
   atmosphere = clampScore(atmosphere, 1, 5);
 
@@ -801,7 +875,9 @@ export function scoreFixture(f: FixtureListRow): DiscoverFixture {
   if (isChampionsLeague(f)) reasons.push("Champions League night");
   if (isEuropaLeague(f)) reasons.push("Europa League trip");
   if (isConferenceLeague(f) && value >= 3) reasons.push("Conference League value");
-  if (isEuropeanCompetition(f) && (glamour >= 5 || atmosphere >= 4)) reasons.push("Continental occasion");
+  if (isEuropeanCompetition(f) && (glamour >= 5 || atmosphere >= 4)) {
+    reasons.push("Continental occasion");
+  }
   if (multiMatch >= 4) reasons.push("Multi-match city potential");
   if (weekendTrip >= 4) reasons.push("Weekend double potential");
 
@@ -829,9 +905,10 @@ export function scoreFixture(f: FixtureListRow): DiscoverFixture {
     fixture: f,
     scores,
     reasons: uniq(reasons),
+    signals: buildSignals(f, homeTeamKey, awayTeamKey),
   };
 }
 
 export function buildDiscoverScores(fixtures: FixtureListRow[]): DiscoverFixture[] {
   return fixtures.map(scoreFixture);
-}
+  }
