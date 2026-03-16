@@ -83,48 +83,6 @@ function appendSe365Aid(url: string): string {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Omio                                                                       */
-/* -------------------------------------------------------------------------- */
-
-const OMIO_TRACKED_URL = "https://omio.sjv.io/KBjDon";
-
-function buildOmioUrl(ctx: {
-  city: string;
-  startDate?: string | null;
-  endDate?: string | null;
-}): string | null {
-  const base = safeUrl(OMIO_TRACKED_URL);
-  if (!base) return null;
-
-  const city = clean(ctx.city);
-  const startDate = clean(ctx.startDate);
-  const endDate = clean(ctx.endDate);
-
-  try {
-    const url = new URL(base);
-
-    if (city) {
-      url.searchParams.set("destination", city);
-      url.searchParams.set("destination_name", city);
-    }
-
-    if (startDate) {
-      url.searchParams.set("outboundDate", startDate);
-      url.searchParams.set("departureDate", startDate);
-    }
-
-    if (endDate) {
-      url.searchParams.set("inboundDate", endDate);
-      url.searchParams.set("returnDate", endDate);
-    }
-
-    return url.toString();
-  } catch {
-    return base;
-  }
-}
-
-/* -------------------------------------------------------------------------- */
 /* Generic tracked URL wrapper                                                */
 /* -------------------------------------------------------------------------- */
 
@@ -147,11 +105,13 @@ export function buildAffiliateUrl(baseUrl: string, partnerId: string): string {
 /* Ticket helpers                                                             */
 /* -------------------------------------------------------------------------- */
 
-export function buildTicketLink(args: { eventUrl: string }): string | null {
+export function buildTicketLink(args: { eventUrl: string; partnerId?: string | null }): string | null {
   const eventUrl = clean(args.eventUrl);
+  const partnerId = clean(args.partnerId) || "sportsevents365";
+
   if (!eventUrl) return null;
 
-  const tracked = buildAffiliateUrl(eventUrl, "sportsevents365");
+  const tracked = buildAffiliateUrl(eventUrl, partnerId);
   return tracked || null;
 }
 
@@ -166,7 +126,7 @@ export function resolveAffiliateUrl(
   const resolvedId = getResolvedPartnerId(partnerId);
   const city = clean(ctx.city);
 
-  if (!resolvedId || !city) return null;
+  if (!resolvedId) return null;
 
   const links = buildAffiliateLinks({
     city,
@@ -191,19 +151,18 @@ export function resolveAffiliateUrl(
       return clean(links.experiencesUrl) || null;
 
     case "omio":
-      return buildOmioUrl({
-        city,
-        startDate: ctx.startDate ?? null,
-        endDate: ctx.endDate ?? null,
-      });
+      return clean(links.transportUrl) || null;
+
+    case "safetywing":
+      return clean(links.insuranceUrl) || null;
 
     case "sportsevents365": {
-      const direct = clean(AffiliateConfig.sportsevents365Tracked);
-      if (direct) return direct;
-
-      const fallback = clean(links.ticketsUrl);
-      return fallback ? buildAffiliateUrl(fallback, "sportsevents365") : null;
+      const direct = clean(links.ticketsUrl);
+      return direct ? buildAffiliateUrl(direct, "sportsevents365") : null;
     }
+
+    case "google":
+      return clean(links.mapsUrl) || null;
 
     default:
       return null;
