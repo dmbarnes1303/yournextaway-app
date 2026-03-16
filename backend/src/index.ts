@@ -27,8 +27,6 @@ app.addHook("onSend", async (request, reply, payload) => {
 
   if (request.url.startsWith("/tickets/resolve")) {
     reply.header("Cache-Control", "public, max-age=60");
-  } else if (request.url.startsWith("/health")) {
-    reply.header("Cache-Control", "no-store");
   } else {
     reply.header("Cache-Control", "no-store");
   }
@@ -38,6 +36,15 @@ app.addHook("onSend", async (request, reply, payload) => {
 
 app.options("*", async (_request, reply) => {
   reply.code(204).send();
+});
+
+app.get("/", async (request) => {
+  return {
+    ok: true,
+    message: "YourNextAway backend is running",
+    requestId: request.id,
+    service: "yournextaway-backend",
+  };
 });
 
 app.get("/hello", async (request) => {
@@ -54,6 +61,7 @@ app.get("/health", async (request) => {
     status: "ok",
     service: "yournextaway-backend",
     port: env.port,
+    host: "0.0.0.0",
     requestId: request.id,
     providers: {
       footballticketsnet: { configured: hasFtnConfig() },
@@ -192,7 +200,13 @@ const start = async () => {
       host: "0.0.0.0",
     });
 
-    app.log.info(`Backend running on http://localhost:${env.port}`);
+    app.log.info(
+      {
+        localhost: `http://localhost:${env.port}`,
+        network: `http://192.168.1.39:${env.port}`,
+      },
+      "Backend running"
+    );
   } catch (err) {
     app.log.error(err);
     process.exit(1);
