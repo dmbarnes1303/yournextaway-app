@@ -12,7 +12,10 @@
     "build:web": "npx expo export -p web && npx workbox generateSW workbox-config.js",
     "prebuild:android": "npx expo prebuild -p android",
     "eas:build:android": "npx eas build -p android",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "validate:data": "node scripts/validation/validate-data-coverage.cjs",
+    "validate:commercial": "node scripts/validation/validate-commercial-integrity.cjs",
+    "validate": "node scripts/validation/validate-all.cjs"
   },
   "dependencies": {
     "@babel/plugin-proposal-export-namespace-from": "^7.18.9",
