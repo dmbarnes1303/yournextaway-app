@@ -26,9 +26,14 @@ type ProviderStats = {
   lastErrorAt: number | null;
 };
 
+type TimedResult<T> = {
+  value: T | null;
+  timedOut: boolean;
+};
+
 const CACHE = new Map<string, CacheEntry>();
 const CACHE_TTL_MS = 1000 * 60 * 10;
-const PROVIDER_TIMEOUT_MS = 7000;
+const PROVIDER_TIMEOUT_MS = 3500;
 const MAX_RETURNED_OPTIONS = 3;
 const MIN_FALLBACK_SCORE = 20;
 
@@ -39,9 +44,9 @@ const PROVIDER_PRIORITY: Record<TicketProviderId, number> = {
 };
 
 const PROVIDER_HOST_ALLOWLIST: Record<TicketProviderId, string[]> = {
-  footballticketsnet: ["footballticketnet.com"],
-  sportsevents365: ["sportsevents365.com"],
-  gigsberg: ["gigsberg.com"],
+  footballticketsnet: ["footballticketnet.com", "www.footballticketnet.com"],
+  sportsevents365: ["sportsevents365.com", "www.sportsevents365.com"],
+  gigsberg: ["gigsberg.com", "www.gigsberg.com"],
 };
 
 const PROVIDER_STATS: Record<TicketProviderId, ProviderStats> = {
@@ -146,7 +151,7 @@ function summarizeInput(input: TicketResolveInput) {
     kickoffIso: clean(input.kickoffIso) || null,
     leagueId: clean(input.leagueId) || null,
     leagueName: clean(input.leagueName) || null,
-    debugNoCache: Boolean(input.debugNoCache),
+    debugNoCache: Boolean((input as any).debugNoCache),
   };
 }
 
@@ -220,13 +225,13 @@ async function withTimeout<T>(
   provider: TicketProviderId,
   fn: () => Promise<T>,
   timeoutMs = PROVIDER_TIMEOUT_MS
-): Promise<{ value: T | null; timedOut: boolean }> {
+): Promise<TimedResult<T>> {
   const startedAt = Date.now();
 
   return new Promise((resolve) => {
     let settled = false;
 
-    const timeout = setTimeout(() => {
+    const timer = setTimeout(() => {
       if (settled) return;
       settled = true;
 
@@ -241,14 +246,13 @@ async function withTimeout<T>(
       .then((result) => {
         if (settled) return;
         settled = true;
-        clearTimeout(timeout);
-
+        clearTimeout(timer);
         resolve({ value: result, timedOut: false });
       })
       .catch((error) => {
         if (settled) return;
         settled = true;
-        clearTimeout(timeout);
+        clearTimeout(timer);
 
         const durationMs = Date.now() - startedAt;
         console.log(`[tickets] ${provider} error`, {
@@ -435,6 +439,26 @@ function buildGuaranteedFallbackCandidates(
     });
   }
 
+  if (!existingProviders.has("footballticketsnet")) {
+    const ftnUrl = new URL("https://www.footballticketnet.com/search");
+    ftnUrl.searchParams.set("q", query);
+
+    const aid = clean(env.ftnAffiliateId);
+    if (aid) {
+      ftnUrl.searchParams.set("aid", aid);
+    }
+
+    out.push({
+      provider: "footballticketsnet",
+      exact: false,
+      score: 24,
+      url: ftnUrl.toString(),
+      title: `Tickets: ${clean(input.homeName)} vs ${clean(input.awayName)}`,
+      priceText: null,
+      reason: "search_fallback",
+    });
+  }
+
   return out;
 }
 
@@ -471,7 +495,7 @@ export async function resolveTicket(
   input: TicketResolveInput
 ): Promise<TicketResolution> {
   const cacheKey = buildCacheKey(input);
-  const debugNoCache = Boolean(input.debugNoCache);
+  const debugNoCache = Boolean((input as any).debugNoCache);
 
   if (debugNoCache) {
     deleteCache(cacheKey);
@@ -492,7 +516,6 @@ export async function resolveTicket(
         cachedOk: cached.ok,
         cachedOptions: Array.isArray(cached.options) ? cached.options.length : 0,
       });
-
       return cached;
     }
   }
@@ -502,36 +525,50 @@ export async function resolveTicket(
     input: summarizeInput(input),
   });
 
-  const checkedProviders: TicketResolution["checkedProviders"] = [];
-  const candidates: TicketCandidate[] = [];
+  const checkedProviders: TicketResolution["checkedProviders"] = [
+    "footballticketsnet",
+    "sportsevents365",
+    "gigsberg",
+  ];
 
-  const [ftn, se365] = await Promise.all([
+  const providerPromises: Array<Promise<TicketCandidate | null>> = [
     runProvider("footballticketsnet", () => resolveFtnCandidate(input)),
     runProvider("sportsevents365", () => resolveSe365Candidate(input)),
-  ]);
+    runProvider("gigsberg", () => resolveGigsbergCandidate(input)),
+  ];
 
-  checkedProviders.push("footballticketsnet");
-  console.log("[tickets] provider result", {
-    provider: "footballticketsnet",
-    candidate: summarizeCandidate(ftn),
-  });
-  if (ftn) candidates.push(ftn);
+  const settled = await Promise.allSettled(providerPromises);
 
-  checkedProviders.push("sportsevents365");
-  console.log("[tickets] provider result", {
-    provider: "sportsevents365",
-    candidate: summarizeCandidate(se365),
-  });
-  if (se365) candidates.push(se365);
+  const candidates: TicketCandidate[] = [];
 
-  const gigsberg = await runProvider("gigsberg", () => resolveGigsbergCandidate(input));
+  const providerOrder: TicketProviderId[] = [
+    "footballticketsnet",
+    "sportsevents365",
+    "gigsberg",
+  ];
 
-  checkedProviders.push("gigsberg");
-  console.log("[tickets] provider result", {
-    provider: "gigsberg",
-    candidate: summarizeCandidate(gigsberg),
-  });
-  if (gigsberg) candidates.push(gigsberg);
+  for (let i = 0; i < settled.length; i += 1) {
+    const provider = providerOrder[i];
+    const result = settled[i];
+
+    if (result.status === "fulfilled") {
+      console.log("[tickets] provider result", {
+        provider,
+        candidate: summarizeCandidate(result.value),
+      });
+      if (result.value) {
+        candidates.push(result.value);
+      }
+    } else {
+      console.log("[tickets] provider promise rejected", {
+        provider,
+        message:
+          result.reason instanceof Error
+            ? result.reason.message
+            : String(result.reason),
+      });
+    }
+  }
 
   const fallbackCandidates = buildGuaranteedFallbackCandidates(input, candidates);
 
@@ -574,4 +611,4 @@ export async function resolveTicket(
   }
 
   return result;
-    }
+                }
