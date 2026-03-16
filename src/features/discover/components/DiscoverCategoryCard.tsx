@@ -1,5 +1,3 @@
-// src/features/discover/components/DiscoverCategoryCard.tsx
-
 import React from "react";
 import { View, Text, StyleSheet, Pressable, Image, Platform } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -21,39 +19,39 @@ type Props = {
 function categoryActionLabel(category: DiscoverCategory) {
   switch (category) {
     case "bigMatches":
-      return "See big fixtures";
+      return "Browse big fixtures";
     case "derbies":
-      return "See rivalries";
+      return "Browse rivalries";
     case "atmospheres":
-      return "See loudest trips";
+      return "Browse loudest trips";
     case "valueTrips":
-      return "See best value";
+      return "Browse value routes";
     case "perfectTrips":
-      return "See best trips";
+      return "Browse best trips";
     case "easyTickets":
-      return "See easier routes";
+      return "Browse easier routes";
     case "multiMatchTrips":
-      return "See stacked trips";
+      return "Browse stacked trips";
     case "weekendTrips":
-      return "See weekend options";
+      return "Browse weekend trips";
     case "europeanNights":
-      return "See European nights";
+      return "Browse European nights";
     case "legendaryStadiums":
-      return "See iconic grounds";
+      return "Browse iconic grounds";
     case "iconicCities":
-      return "See city-led trips";
+      return "Browse city-led trips";
     case "nightMatches":
-      return "See night fixtures";
+      return "Browse night fixtures";
     case "titleDrama":
-      return "See pressure games";
+      return "Browse pressure games";
     case "bucketList":
-      return "See must-do trips";
+      return "Browse must-do trips";
     case "matchdayCulture":
-      return "See culture picks";
+      return "Browse culture picks";
     case "underratedTrips":
-      return "See overlooked gems";
+      return "Browse hidden gems";
     default:
-      return "Open route";
+      return "Open category";
   }
 }
 
@@ -72,7 +70,7 @@ function categoryTagLabel(category: DiscoverCategory, compact: boolean) {
     case "valueTrips":
       return "Value";
     case "easyTickets":
-      return "Lower friction";
+      return "Low friction";
     case "multiMatchTrips":
       return "Stackable";
     case "weekendTrips":
@@ -98,26 +96,40 @@ function categoryTagLabel(category: DiscoverCategory, compact: boolean) {
   }
 }
 
-function helperLine(category: DiscoverCategory, compact: boolean) {
-  if (compact) return null;
-
+function helperLine(category: DiscoverCategory) {
   switch (category) {
     case "perfectTrips":
       return "Best overall balance of fixture, city, access and trip quality.";
     case "bigMatches":
-      return "Higher-profile fixtures with stronger travel pull and occasion feel.";
+      return "Higher-profile fixtures with stronger occasion feel.";
     case "derbies":
-      return "History, edge and rivalry tension first.";
+      return "History, rivalry tension and edge first.";
     case "atmospheres":
       return "Crowd force, noise and matchday intensity.";
     case "valueTrips":
-      return "Better experience-per-pound without dead-end filler.";
+      return "Better experience-per-pound potential.";
     case "easyTickets":
       return "Cleaner routes where access looks more realistic.";
     case "multiMatchTrips":
       return "Trips that can support more than one match.";
     case "weekendTrips":
       return "Friday-to-Sunday football breaks that actually work.";
+    case "europeanNights":
+      return "Continental fixtures with stronger night-game pull.";
+    case "legendaryStadiums":
+      return "Ground prestige and club pull doing the heavy lifting.";
+    case "iconicCities":
+      return "Trips where the city matters as much as the match.";
+    case "nightMatches":
+      return "Later kickoffs with better lights-on energy.";
+    case "titleDrama":
+      return "Fixtures with sharper late-season pressure.";
+    case "bucketList":
+      return "Trips that should be done at least once.";
+    case "matchdayCulture":
+      return "Football culture beyond the 90 minutes.";
+    case "underratedTrips":
+      return "Less obvious trips with stronger upside than expected.";
     default:
       return "Open this route to browse ranked live options.";
   }
@@ -132,7 +144,7 @@ export default function DiscoverCategoryCard({
   const primary = meta.emphasis === "primary";
   const actionLabel = categoryActionLabel(category);
   const tagLabel = categoryTagLabel(category, compact);
-  const helper = helperLine(category, compact);
+  const helper = compact ? null : helperLine(category);
 
   return (
     <Pressable
@@ -172,10 +184,6 @@ export default function DiscoverCategoryCard({
             >
               <Text style={styles.categoryEyebrowText}>{tagLabel}</Text>
             </View>
-
-            <View style={styles.imageTopIconPill}>
-              <Ionicons name={meta.icon} size={14} color={theme.colors.text} />
-            </View>
           </View>
         </View>
 
@@ -189,12 +197,6 @@ export default function DiscoverCategoryCard({
             >
               <Ionicons name={meta.icon} size={18} color={theme.colors.text} />
             </View>
-
-            {!compact ? (
-              <View style={styles.inlineActionPill}>
-                <Text style={styles.inlineActionPillText}>{actionLabel}</Text>
-              </View>
-            ) : null}
           </View>
 
           <View style={styles.categoryTextWrap}>
@@ -215,7 +217,7 @@ export default function DiscoverCategoryCard({
 
           <View style={styles.categoryFooterRow}>
             <Text style={styles.categoryFooterText} numberOfLines={1}>
-              {compact ? actionLabel : "Open ranked routes"}
+              {actionLabel}
             </Text>
 
             <View
@@ -245,19 +247,19 @@ const styles = StyleSheet.create({
   },
 
   categoryPressCompact: {
-    width: 228,
+    width: 224,
     borderRadius: 20,
     overflow: "hidden",
   },
 
   categoryCard: {
     borderRadius: 20,
-    minHeight: 262,
+    minHeight: 246,
   },
 
   categoryCardCompact: {
     borderRadius: 20,
-    minHeight: 206,
+    minHeight: 188,
   },
 
   categoryCardPrimary: {
@@ -265,12 +267,12 @@ const styles = StyleSheet.create({
   },
 
   categoryImageWrap: {
-    height: 102,
+    height: 98,
     position: "relative",
   },
 
   categoryImageWrapCompact: {
-    height: 88,
+    height: 84,
     position: "relative",
   },
 
@@ -295,8 +297,7 @@ const styles = StyleSheet.create({
     right: 10,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
+    justifyContent: "flex-start",
   },
 
   categoryEyebrowPill: {
@@ -320,27 +321,16 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
 
-  imageTopIconPill: {
-    width: 30,
-    height: 30,
-    borderRadius: 999,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    backgroundColor: "rgba(8,10,10,0.58)",
-  },
-
   categoryInner: {
     padding: 14,
-    minHeight: 160,
+    minHeight: 148,
     gap: 12,
     justifyContent: "space-between",
   },
 
   categoryInnerCompact: {
     padding: 14,
-    minHeight: 118,
+    minHeight: 104,
     gap: 12,
     justifyContent: "space-between",
   },
@@ -348,7 +338,7 @@ const styles = StyleSheet.create({
   categoryTopRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    justifyContent: "flex-start",
     gap: 10,
   },
 
@@ -367,22 +357,6 @@ const styles = StyleSheet.create({
   categoryIconWrapPrimary: {
     borderColor: "rgba(87,162,56,0.18)",
     backgroundColor: "rgba(87,162,56,0.08)",
-  },
-
-  inlineActionPill: {
-    borderRadius: 999,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-    backgroundColor:
-      Platform.OS === "android" ? "rgba(0,0,0,0.14)" : "rgba(255,255,255,0.04)",
-  },
-
-  inlineActionPillText: {
-    color: theme.colors.textSecondary,
-    fontSize: 10,
-    fontWeight: theme.fontWeight.black,
   },
 
   categoryTextWrap: {
