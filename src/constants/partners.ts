@@ -1,18 +1,22 @@
 // src/constants/partners.ts
 // Affiliate configuration + lightweight tracked partner registry.
-// Used by Trip, Match and Smart Booking flows for safe fallback link building.
+// This file is intentionally limited to:
+// 1) tracked config values
+// 2) lightweight registry metadata
+// 3) simple safe partner URL builders
 //
-// IMPORTANT:
-// This is NOT the full app-wide canonical partner identity model.
-// That lives in src/core/partners.ts.
-// This file should stay focused on affiliate config + fallback URL builders only.
+// Canonical partner identity / aliases live elsewhere.
+// This file should not pretend Google search is a real affiliate layer.
 
 export type PartnerCategory =
   | "tickets"
   | "flights"
   | "stays"
   | "transfers"
-  | "experiences";
+  | "experiences"
+  | "transport"
+  | "insurance"
+  | "claims";
 
 export type AffiliateContext = {
   city: string;
@@ -31,7 +35,7 @@ export type Partner = {
 };
 
 /* -------------------------------------------------------------------------- */
-/* Affiliate config                                                            */
+/* Affiliate config                                                           */
 /* -------------------------------------------------------------------------- */
 
 export const AffiliateConfig = {
@@ -45,10 +49,22 @@ export const AffiliateConfig = {
   sportsevents365Tracked: "https://www.sportsevents365.com/?a_aid=69834e80ec9d3",
 
   getyourguidePartnerId: "MAQJIREP",
+
+  omioTracked: "https://omio.sjv.io/KBjDon",
+
+  safetywingTracked: "",
+
+  ektaTracked: "",
+  klookTracked: "",
+  tiqetsTracked: "",
+  wegotripTracked: "",
+  airhelpTracked: "",
+  compensairTracked: "",
+  welcomepickupsTracked: "",
 } as const;
 
 /* -------------------------------------------------------------------------- */
-/* Helpers                                                                     */
+/* Helpers                                                                    */
 /* -------------------------------------------------------------------------- */
 
 function clean(value: unknown): string {
@@ -74,8 +90,15 @@ function slugCity(city: string): string {
     .replace(/\s+/g, "-");
 }
 
-function googleSearchUrl(query: string): string {
-  return `https://www.google.com/search?q=${enc(query)}`;
+function safeTrackedUrl(value: unknown): string | null {
+  const raw = clean(value);
+  if (!raw) return null;
+
+  try {
+    return new URL(raw).toString();
+  } catch {
+    return null;
+  }
 }
 
 function appendQuery(
@@ -94,31 +117,31 @@ function appendQuery(
 }
 
 /* -------------------------------------------------------------------------- */
-/* Fallback builders                                                           */
+/* Lightweight builders                                                       */
 /* -------------------------------------------------------------------------- */
 
-function buildAviasales(ctx: AffiliateContext): string {
-  const fallback = clean(AffiliateConfig.aviasalesFallback);
+function buildAviasales(ctx: AffiliateContext): string | null {
+  const fallback = safeTrackedUrl(AffiliateConfig.aviasalesFallback);
+  if (!fallback) return null;
+
   const city = clean(ctx.city);
   const start = ymd(ctx.startDate);
 
-  // This registry intentionally does NOT do full route-prefill logic.
-  // That belongs in src/services/affiliateLinks.ts.
-  if (!city || !start) {
-    return fallback || googleSearchUrl(`${city || "travel"} flights`);
-  }
+  if (!city || !start) return fallback;
 
-  if (fallback) return fallback;
-
-  return googleSearchUrl(`${city} flights`);
+  return appendQuery(fallback, {
+    destination: city,
+    departureDate: start,
+    returnDate: ymd(ctx.endDate),
+    origin: clean(ctx.originIata) || null,
+  });
 }
 
 function buildExpedia(ctx: AffiliateContext): string | null {
   const city = clean(ctx.city);
   const token = clean(AffiliateConfig.expediaToken);
 
-  if (!city) return googleSearchUrl("hotels");
-  if (!token) return googleSearchUrl(`${city} hotels`);
+  if (!city || !token) return null;
 
   const slug = slugCity(city);
   const base = `https://expedia.com/affiliates/hotel-search-${slug}.${token}`;
@@ -129,29 +152,70 @@ function buildExpedia(ctx: AffiliateContext): string | null {
   });
 }
 
-function buildKiwitaxi(ctx: AffiliateContext): string {
-  const tracked = clean(AffiliateConfig.kiwitaxiTracked);
-  if (tracked) return tracked;
+function buildKiwitaxi(ctx: AffiliateContext): string | null {
+  const tracked = safeTrackedUrl(AffiliateConfig.kiwitaxiTracked);
+  if (!tracked) return null;
 
-  return googleSearchUrl(`${clean(ctx.city)} airport transfer`);
+  return appendQuery(tracked, {
+    to: clean(ctx.city) || null,
+    destination: clean(ctx.city) || null,
+    date: ymd(ctx.startDate),
+  });
 }
 
-function buildGetYourGuide(ctx: AffiliateContext): string {
+function buildGetYourGuide(ctx: AffiliateContext): string | null {
   const city = clean(ctx.city);
   const partnerId = clean(AffiliateConfig.getyourguidePartnerId);
 
-  if (!city) return googleSearchUrl("things to do");
-  if (!partnerId) return googleSearchUrl(`${city} things to do`);
+  if (!city || !partnerId) return null;
 
   return `https://www.getyourguide.com/s/?q=${enc(city)}&partner_id=${enc(partnerId)}`;
 }
 
-function buildSportsEvents365(_ctx: AffiliateContext): string {
-  return clean(AffiliateConfig.sportsevents365Tracked) || "https://www.sportsevents365.com/";
+function buildSportsEvents365(ctx: AffiliateContext): string | null {
+  const tracked = safeTrackedUrl(AffiliateConfig.sportsevents365Tracked);
+  if (!tracked) return null;
+
+  return appendQuery(tracked, {
+    q: clean(ctx.city) || null,
+    city: clean(ctx.city) || null,
+    from: ymd(ctx.startDate),
+    to: ymd(ctx.endDate),
+  });
+}
+
+function buildOmio(ctx: AffiliateContext): string | null {
+  const tracked = safeTrackedUrl(AffiliateConfig.omioTracked);
+  if (!tracked) return null;
+
+  return appendQuery(tracked, {
+    destination: clean(ctx.city) || null,
+    destination_name: clean(ctx.city) || null,
+    outboundDate: ymd(ctx.startDate),
+    departureDate: ymd(ctx.startDate),
+    inboundDate: ymd(ctx.endDate),
+    returnDate: ymd(ctx.endDate),
+  });
+}
+
+function buildSafetyWing(ctx: AffiliateContext): string | null {
+  const tracked = safeTrackedUrl(AffiliateConfig.safetywingTracked);
+  if (!tracked) return null;
+
+  return appendQuery(tracked, {
+    startDate: ymd(ctx.startDate),
+    endDate: ymd(ctx.endDate),
+  });
+}
+
+function buildTrackedOnly(key: keyof typeof AffiliateConfig) {
+  return function buildTrackedPartner(_ctx: AffiliateContext): string | null {
+    return safeTrackedUrl(AffiliateConfig[key]);
+  };
 }
 
 /* -------------------------------------------------------------------------- */
-/* Registry                                                                    */
+/* Registry                                                                   */
 /* -------------------------------------------------------------------------- */
 
 export const PARTNERS = [
@@ -165,14 +229,6 @@ export const PARTNERS = [
   },
   {
     id: "expedia",
-    name: "Expedia",
-    category: "stays",
-    affiliate: true,
-    api: false,
-    buildUrl: buildExpedia,
-  },
-  {
-    id: "expedia_stays",
     name: "Expedia",
     category: "stays",
     affiliate: true,
@@ -203,10 +259,82 @@ export const PARTNERS = [
     api: true,
     buildUrl: buildSportsEvents365,
   },
+  {
+    id: "omio",
+    name: "Omio",
+    category: "transport",
+    affiliate: true,
+    api: false,
+    buildUrl: buildOmio,
+  },
+  {
+    id: "safetywing",
+    name: "SafetyWing",
+    category: "insurance",
+    affiliate: true,
+    api: false,
+    buildUrl: buildSafetyWing,
+  },
+  {
+    id: "ekta",
+    name: "EKTA",
+    category: "insurance",
+    affiliate: true,
+    api: false,
+    buildUrl: buildTrackedOnly("ektaTracked"),
+  },
+  {
+    id: "klook",
+    name: "Klook",
+    category: "experiences",
+    affiliate: true,
+    api: false,
+    buildUrl: buildTrackedOnly("klookTracked"),
+  },
+  {
+    id: "tiqets",
+    name: "Tiqets",
+    category: "experiences",
+    affiliate: true,
+    api: false,
+    buildUrl: buildTrackedOnly("tiqetsTracked"),
+  },
+  {
+    id: "wegotrip",
+    name: "WeGoTrip",
+    category: "experiences",
+    affiliate: true,
+    api: false,
+    buildUrl: buildTrackedOnly("wegotripTracked"),
+  },
+  {
+    id: "airhelp",
+    name: "AirHelp",
+    category: "claims",
+    affiliate: true,
+    api: false,
+    buildUrl: buildTrackedOnly("airhelpTracked"),
+  },
+  {
+    id: "compensair",
+    name: "Compensair",
+    category: "claims",
+    affiliate: true,
+    api: false,
+    buildUrl: buildTrackedOnly("compensairTracked"),
+  },
+  {
+    id: "welcomepickups",
+    name: "Welcome Pickups",
+    category: "transfers",
+    affiliate: true,
+    api: false,
+    buildUrl: buildTrackedOnly("welcomepickupsTracked"),
+  },
 ] as const satisfies readonly Partner[];
 
 /* -------------------------------------------------------------------------- */
-/* Lookup helpers                                                              */
+/* Lookup helpers                                                             */
 /* -------------------------------------------------------------------------- */
 
 export type PartnerId = (typeof PARTNERS)[number]["id"];
