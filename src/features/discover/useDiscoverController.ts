@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+// src/features/discover/useDiscoverController.ts
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LayoutAnimation } from "react-native";
 import { useRouter } from "expo-router";
 
@@ -11,6 +13,7 @@ import {
 } from "@/src/features/discover/discoverCategories";
 import {
   buildDiscoverScores,
+  type DiscoverContext,
   type DiscoverTripLength,
   type DiscoverVibe,
 } from "@/src/features/discover/discoverEngine";
@@ -92,8 +95,32 @@ export type UseDiscoverControllerReturn = {
   };
 };
 
+function safeTrim(value: unknown) {
+  return String(value ?? "").trim();
+}
+
+function buildRouteParamsFromRow(
+  row: FixtureListRow | null | undefined,
+  extra: Record<string, string | undefined>
+) {
+  const fixtureId = row?.fixture?.id != null ? String(row.fixture.id) : null;
+  if (!fixtureId) return null;
+
+  const leagueId = row?.league?.id != null ? String(row.league.id) : undefined;
+  const season =
+    (row as any)?.league?.season != null ? String((row as any).league.season) : undefined;
+
+  return {
+    fixtureId,
+    ...(leagueId ? { leagueId } : {}),
+    ...(season ? { season } : {}),
+    ...extra,
+  };
+}
+
 export default function useDiscoverController(): UseDiscoverControllerReturn {
   const router = useRouter();
+  const liveRequestIdRef = useRef(0);
 
   const [discoverWindowKey, setDiscoverWindowKey] = useState<DiscoverWindowKey>("d30");
   const [discoverTripLength, setDiscoverTripLength] = useState<DiscoverTripLength>("2");
@@ -105,6 +132,73 @@ export default function useDiscoverController(): UseDiscoverControllerReturn {
   const [loadingLive, setLoadingLive] = useState(false);
   const [liveError, setLiveError] = useState<string | null>(null);
   const [liveRows, setLiveRows] = useState<FixtureListRow[]>([]);
+
+  const originTrimmed = useMemo(() => safeTrim(discoverOrigin), [discoverOrigin]);
+
+  const currentWindow = useMemo(() => {
+    return windowForKey(discoverWindowKey);
+  }, [discoverWindowKey]);
+
+  const seededCategory = useMemo(() => {
+    return categorySeedFromFilters({
+      vibes: discoverVibes,
+      windowKey: discoverWindowKey,
+      tripLength: discoverTripLength,
+    });
+  }, [discoverVibes, discoverWindowKey, discoverTripLength]);
+
+  const discoverContext = useMemo<DiscoverContext>(
+    () => ({
+      origin: originTrimmed || null,
+      tripLength: discoverTripLength,
+      vibes: discoverVibes,
+    }),
+    [originTrimmed, discoverTripLength, discoverVibes]
+  );
+
+  const prioritisedPrimaryCategories = useMemo(() => {
+    return prioritiseCategories(DISCOVER_PRIMARY_CATEGORIES, seededCategory);
+  }, [seededCategory]);
+
+  const prioritisedSecondaryCategories = useMemo(() => {
+    const primarySet = new Set(prioritisedPrimaryCategories);
+    return prioritiseCategories(
+      DISCOVER_SECONDARY_CATEGORIES.filter((category) => !primarySet.has(category)),
+      seededCategory
+    );
+  }, [prioritisedPrimaryCategories, seededCategory]);
+
+  const leadCategory = prioritisedPrimaryCategories[0];
+  const remainingPrimaryCategories = prioritisedPrimaryCategories.slice(1);
+
+  const filterSummary = useMemo(() => {
+    const parts = [
+      labelForKey(discoverWindowKey),
+      labelForTripLength(discoverTripLength),
+      discoverVibes.length ? discoverVibes.map(labelForVibe).join(" • ") : "Any vibe",
+    ];
+
+    if (originTrimmed) parts.push(`From ${originTrimmed}`);
+    return parts.join(" • ");
+  }, [discoverWindowKey, discoverTripLength, discoverVibes, originTrimmed]);
+
+  const compactSummary = useMemo(() => {
+    const parts = [
+      shortLabelForKey(discoverWindowKey),
+      shortLabelForTripLength(discoverTripLength),
+      discoverVibes.length
+        ? discoverVibes.map(shortLabelForVibe).join(" + ")
+        : "Any vibe",
+    ];
+
+    if (originTrimmed) parts.push(originTrimmed);
+    return parts.join(" • ");
+  }, [discoverWindowKey, discoverTripLength, discoverVibes, originTrimmed]);
+
+  const browseModeLabel = useMemo(() => {
+    const meta = DISCOVER_CATEGORY_META[seededCategory];
+    return meta?.title ?? "Best-fit routes";
+  }, [seededCategory]);
 
   const toggleSetup = useCallback(() => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -126,68 +220,9 @@ export default function useDiscoverController(): UseDiscoverControllerReturn {
     setDiscoverOrigin("");
   }, []);
 
-  const currentWindow = useMemo(
-    () => windowForKey(discoverWindowKey),
-    [discoverWindowKey]
-  );
-
-  const seededCategory = useMemo(
-    () =>
-      categorySeedFromFilters({
-        vibes: discoverVibes,
-        windowKey: discoverWindowKey,
-        tripLength: discoverTripLength,
-      }),
-    [discoverVibes, discoverWindowKey, discoverTripLength]
-  );
-
-  const prioritisedPrimaryCategories = useMemo(
-    () => prioritiseCategories(DISCOVER_PRIMARY_CATEGORIES, seededCategory),
-    [seededCategory]
-  );
-
-  const prioritisedSecondaryCategories = useMemo(() => {
-    const primarySet = new Set(prioritisedPrimaryCategories);
-    return prioritiseCategories(
-      DISCOVER_SECONDARY_CATEGORIES.filter((category) => !primarySet.has(category)),
-      seededCategory
-    );
-  }, [prioritisedPrimaryCategories, seededCategory]);
-
-  const leadCategory = prioritisedPrimaryCategories[0];
-  const remainingPrimaryCategories = prioritisedPrimaryCategories.slice(1);
-
-  const filterSummary = useMemo(() => {
-    const parts = [
-      labelForKey(discoverWindowKey),
-      labelForTripLength(discoverTripLength),
-      discoverVibes.length ? discoverVibes.map(labelForVibe).join(" • ") : "Any vibe",
-    ];
-
-    if (discoverOrigin.trim()) parts.push(`From ${discoverOrigin.trim()}`);
-    return parts.join(" • ");
-  }, [discoverWindowKey, discoverTripLength, discoverVibes, discoverOrigin]);
-
-  const compactSummary = useMemo(() => {
-    const parts = [
-      shortLabelForKey(discoverWindowKey),
-      shortLabelForTripLength(discoverTripLength),
-      discoverVibes.length
-        ? discoverVibes.map(shortLabelForVibe).join(" + ")
-        : "Any vibe",
-    ];
-
-    if (discoverOrigin.trim()) parts.push(discoverOrigin.trim());
-    return parts.join(" • ");
-  }, [discoverWindowKey, discoverTripLength, discoverVibes, discoverOrigin]);
-
-  const browseModeLabel = useMemo(() => {
-    const meta = DISCOVER_CATEGORY_META[seededCategory];
-    return meta?.title ?? "Best-fit routes";
-  }, [seededCategory]);
-
   useEffect(() => {
-    let cancelled = false;
+    const requestId = ++liveRequestIdRef.current;
+    let active = true;
 
     async function run() {
       setLoadingLive(true);
@@ -197,57 +232,60 @@ export default function useDiscoverController(): UseDiscoverControllerReturn {
         const pool = await fetchDiscoverPool({
           window: currentWindow,
           windowKey: discoverWindowKey,
-          origin: discoverOrigin,
+          origin: originTrimmed,
           tripLength: discoverTripLength,
           vibes: discoverVibes,
           category: seededCategory,
         });
 
-        if (cancelled) return;
+        if (!active || requestId !== liveRequestIdRef.current) return;
         setLiveRows(pool);
       } catch (e: any) {
-        if (cancelled) return;
+        if (!active || requestId !== liveRequestIdRef.current) return;
         setLiveRows([]);
         setLiveError(e?.message ?? "Failed to load live route previews.");
       } finally {
-        if (!cancelled) setLoadingLive(false);
+        if (active && requestId === liveRequestIdRef.current) {
+          setLoadingLive(false);
+        }
       }
     }
 
     run();
 
     return () => {
-      cancelled = true;
+      active = false;
     };
   }, [
-    currentWindow.from,
-    currentWindow.to,
+    currentWindow,
     discoverWindowKey,
-    discoverOrigin,
+    originTrimmed,
     discoverTripLength,
     discoverVibes,
     seededCategory,
   ]);
 
-  const rankedLive = useMemo<RankedDiscoverPick[]>(() => {
+  const scoredLive = useMemo(() => {
     if (!liveRows.length) return [];
+    return buildDiscoverScores(liveRows);
+  }, [liveRows]);
 
-    const scored = buildDiscoverScores(liveRows);
+  const rankedLive = useMemo<RankedDiscoverPick[]>(() => {
+    if (!scoredLive.length) return [];
 
-    return scored
+    return scoredLive
       .map((item) => ({
         item,
-        score: discoverScoreForCategory(seededCategory, item, {
-          origin: discoverOrigin.trim() || null,
-          tripLength: discoverTripLength,
-          vibes: discoverVibes,
-        }),
+        score: discoverScoreForCategory(seededCategory, item, discoverContext),
       }))
       .sort((a, b) => b.score - a.score);
-  }, [liveRows, seededCategory, discoverOrigin, discoverTripLength, discoverVibes]);
+  }, [scoredLive, seededCategory, discoverContext]);
 
   const featuredLive = useMemo(() => rankedLive[0] ?? null, [rankedLive]);
-  const previewLive = useMemo(() => rankedLive.slice(0, 6), [rankedLive]);
+
+  const previewLive = useMemo(() => {
+    return rankedLive.slice(0, 6);
+  }, [rankedLive]);
 
   const trendingTrips = useMemo(() => {
     return [...rankedLive]
@@ -259,15 +297,13 @@ export default function useDiscoverController(): UseDiscoverControllerReturn {
       .slice(0, 6);
   }, [rankedLive]);
 
-  const multiMatchTrips = useMemo(
-    () =>
-      buildMultiMatchTrips(rankedLive, {
-        vibes: discoverVibes,
-        tripLength: discoverTripLength,
-        windowKey: discoverWindowKey,
-      }),
-    [rankedLive, discoverVibes, discoverTripLength, discoverWindowKey]
-  );
+  const multiMatchTrips = useMemo(() => {
+    return buildMultiMatchTrips(rankedLive, {
+      vibes: discoverVibes,
+      tripLength: discoverTripLength,
+      windowKey: discoverWindowKey,
+    });
+  }, [rankedLive, discoverVibes, discoverTripLength, discoverWindowKey]);
 
   const goFixturesCategory = useCallback(
     (category: DiscoverCategory) => {
@@ -277,7 +313,7 @@ export default function useDiscoverController(): UseDiscoverControllerReturn {
           from: currentWindow.from,
           to: currentWindow.to,
           discover: category,
-          discoverFrom: discoverOrigin.trim() || undefined,
+          discoverFrom: originTrimmed || undefined,
           discoverTripLength,
           discoverVibes: discoverVibes.join(","),
         },
@@ -287,7 +323,7 @@ export default function useDiscoverController(): UseDiscoverControllerReturn {
       router,
       currentWindow.from,
       currentWindow.to,
-      discoverOrigin,
+      originTrimmed,
       discoverTripLength,
       discoverVibes,
     ]
@@ -295,35 +331,29 @@ export default function useDiscoverController(): UseDiscoverControllerReturn {
 
   const goMatchFromRow = useCallback(
     (row: FixtureListRow | null | undefined) => {
-      const fixtureId = row?.fixture?.id != null ? String(row.fixture.id) : null;
-      const leagueId = row?.league?.id != null ? String(row.league.id) : null;
-      const season =
-        (row as any)?.league?.season != null ? String((row as any).league.season) : null;
+      const params = buildRouteParamsFromRow(row, {
+        global: "1",
+        from: currentWindow.from,
+        to: currentWindow.to,
+        prefMode: "discover",
+        prefFrom: originTrimmed || undefined,
+        prefWindow: discoverWindowKey,
+        prefLength: discoverTripLength,
+        prefVibes: discoverVibes.join(","),
+      });
 
-      if (!fixtureId) return;
+      if (!params) return;
 
       router.push({
         pathname: "/trip/build",
-        params: {
-          global: "1",
-          fixtureId,
-          ...(leagueId ? { leagueId } : {}),
-          ...(season ? { season } : {}),
-          from: currentWindow.from,
-          to: currentWindow.to,
-          prefMode: "discover",
-          prefFrom: discoverOrigin.trim() || undefined,
-          prefWindow: discoverWindowKey,
-          prefLength: discoverTripLength,
-          prefVibes: discoverVibes.join(","),
-        },
+        params,
       } as any);
     },
     [
       router,
       currentWindow.from,
       currentWindow.to,
-      discoverOrigin,
+      originTrimmed,
       discoverWindowKey,
       discoverTripLength,
       discoverVibes,
@@ -338,7 +368,7 @@ export default function useDiscoverController(): UseDiscoverControllerReturn {
           from: trip.from,
           to: trip.to,
           discover: discoverWindowKey === "wknd" ? "weekendTrips" : "multiMatchTrips",
-          discoverFrom: discoverOrigin.trim() || undefined,
+          discoverFrom: originTrimmed || undefined,
           discoverTripLength,
           discoverVibes: discoverVibes.join(","),
           comboMode: "1",
@@ -347,7 +377,7 @@ export default function useDiscoverController(): UseDiscoverControllerReturn {
         },
       } as any);
     },
-    [router, discoverOrigin, discoverTripLength, discoverVibes, discoverWindowKey]
+    [router, originTrimmed, discoverTripLength, discoverVibes, discoverWindowKey]
   );
 
   const applyPreset = useCallback(
@@ -360,19 +390,27 @@ export default function useDiscoverController(): UseDiscoverControllerReturn {
       if (preset.tripLength) setDiscoverTripLength(preset.tripLength);
       if (preset.vibe) setDiscoverVibes([preset.vibe]);
 
+      const nextWindow = windowForKey(nextWindowKey);
+
       router.push({
         pathname: "/(tabs)/fixtures",
         params: {
-          from: windowForKey(nextWindowKey).from,
-          to: windowForKey(nextWindowKey).to,
+          from: nextWindow.from,
+          to: nextWindow.to,
           discover: preset.category,
-          discoverFrom: discoverOrigin.trim() || undefined,
+          discoverFrom: originTrimmed || undefined,
           discoverTripLength: nextTripLength,
           discoverVibes: nextVibes.join(","),
         },
       } as any);
     },
-    [router, discoverWindowKey, discoverOrigin, discoverTripLength, discoverVibes]
+    [
+      router,
+      discoverWindowKey,
+      discoverTripLength,
+      discoverVibes,
+      originTrimmed,
+    ]
   );
 
   const applyQuickSpark = useCallback(
@@ -385,83 +423,69 @@ export default function useDiscoverController(): UseDiscoverControllerReturn {
       if (spark.tripLength) setDiscoverTripLength(spark.tripLength);
       if (spark.vibe) setDiscoverVibes([spark.vibe]);
 
+      const nextWindow = windowForKey(nextWindowKey);
+
       router.push({
         pathname: "/(tabs)/fixtures",
         params: {
-          from: windowForKey(nextWindowKey).from,
-          to: windowForKey(nextWindowKey).to,
+          from: nextWindow.from,
+          to: nextWindow.to,
           discover: spark.category,
-          discoverFrom: discoverOrigin.trim() || undefined,
+          discoverFrom: originTrimmed || undefined,
           discoverTripLength: nextTripLength,
           discoverVibes: nextVibes.join(","),
         },
       } as any);
     },
-    [router, discoverWindowKey, discoverOrigin, discoverTripLength, discoverVibes]
+    [
+      router,
+      discoverWindowKey,
+      discoverTripLength,
+      discoverVibes,
+      originTrimmed,
+    ]
   );
 
   const goRandomTrip = useCallback(async () => {
-    if (loadingRandom) return;
+    if (loadingRandom || !rankedLive.length) return;
 
     setLoadingRandom(true);
 
     try {
-      if (!liveRows.length) return;
-
-      const scored = buildDiscoverScores(liveRows);
-
-      const ranked: RankedDiscoverPick[] = scored
-        .map((item) => ({
-          item,
-          score: discoverScoreForCategory(seededCategory, item, {
-            origin: discoverOrigin.trim() || null,
-            tripLength: discoverTripLength,
-            vibes: discoverVibes,
-          }),
-        }))
-        .sort((a, b) => b.score - a.score);
-
-      const poolTop = ranked.slice(0, Math.min(12, ranked.length));
+      const poolTop = rankedLive.slice(0, Math.min(12, rankedLive.length));
       const chosen = pickRandom(poolTop);
       const row = chosen?.item?.fixture ?? null;
 
-      const fixtureId = row?.fixture?.id != null ? String(row.fixture.id) : null;
-      const leagueId = row?.league?.id != null ? String(row.league.id) : null;
-      const season =
-        (row as any)?.league?.season != null ? String((row as any).league.season) : null;
+      const params = buildRouteParamsFromRow(row, {
+        global: "1",
+        from: currentWindow.from,
+        to: currentWindow.to,
+        prefMode: "random",
+        prefFrom: originTrimmed || undefined,
+        prefWindow: discoverWindowKey,
+        prefLength: discoverTripLength,
+        prefVibes: discoverVibes.join(","),
+      });
 
-      if (!fixtureId) return;
+      if (!params) return;
 
       router.push({
         pathname: "/trip/build",
-        params: {
-          global: "1",
-          fixtureId,
-          ...(leagueId ? { leagueId } : {}),
-          ...(season ? { season } : {}),
-          from: currentWindow.from,
-          to: currentWindow.to,
-          prefMode: "random",
-          prefFrom: discoverOrigin.trim() || undefined,
-          prefWindow: discoverWindowKey,
-          prefLength: discoverTripLength,
-          prefVibes: discoverVibes.join(","),
-        },
+        params,
       } as any);
     } finally {
       setLoadingRandom(false);
     }
   }, [
     loadingRandom,
-    liveRows,
-    seededCategory,
-    discoverOrigin,
-    discoverTripLength,
-    discoverVibes,
+    rankedLive,
     router,
     currentWindow.from,
     currentWindow.to,
+    originTrimmed,
     discoverWindowKey,
+    discoverTripLength,
+    discoverVibes,
   ]);
 
   return {
@@ -511,4 +535,4 @@ export default function useDiscoverController(): UseDiscoverControllerReturn {
       rankLabel,
     },
   };
-}
+  }
