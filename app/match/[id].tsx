@@ -1,12 +1,19 @@
 import React, { useCallback, useMemo, useState } from "react";
-import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import {
+  Alert,
+  Image,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
 import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
 import EmptyState from "@/src/components/EmptyState";
-import FixtureCertaintyBadge from "@/src/components/FixtureCertaintyBadge";
 import Button from "@/src/components/Button";
 import Chip from "@/src/components/Chip";
 
@@ -52,10 +59,10 @@ function isoDateOnlyFromKickoffIso(kickoffIso?: string | null): string | null {
 
 function formatKickoffLocal(kickoffIso?: string | null): string {
   const raw = clean(kickoffIso);
-  if (!raw) return "TBC";
+  if (!raw) return "Kickoff time TBC";
 
   const d = new Date(raw);
-  if (Number.isNaN(d.getTime())) return "TBC";
+  if (Number.isNaN(d.getTime())) return "Kickoff time TBC";
 
   const date = d.toLocaleDateString("en-GB", {
     weekday: "short",
@@ -255,9 +262,9 @@ function confidenceLabel(score?: number | null): string {
 }
 
 function optionReasonLabel(reason?: TicketResolutionOption["reason"] | string | null) {
-  if (reason === "exact_event") return "Direct event match";
-  if (reason === "partial_match") return "Partial match";
-  return "Search fallback";
+  if (reason === "exact_event") return "Direct match";
+  if (reason === "partial_match") return "Close match";
+  return "Search result";
 }
 
 function dedupeOptions(result: TicketResolutionResult | null): TicketResolutionOption[] {
@@ -359,37 +366,30 @@ function dedupeOptions(result: TicketResolutionResult | null): TicketResolutionO
   return [];
 }
 
-function ticketFlowSubtitle(optionCount: number, checkedProvidersCount: number) {
-  if (optionCount > 1) {
-    return `Comparison ready: ${optionCount} ticket options found across ${checkedProvidersCount || 3} providers.`;
-  }
-  return "Resolver-backed: FTN first, SE365 next, Gigsberg as fallback.";
-}
-
 function openFailureMessage(result: TicketResolutionResult | null): string {
-  if (!result) return "Ticket resolver didn’t respond.";
+  if (!result) return "Ticket options could not be loaded.";
 
   const providers = Array.isArray(result.checkedProviders)
     ? result.checkedProviders.filter(Boolean).join(", ")
     : "";
 
   if ((result as any).error === "network_error") {
-    return "Couldn’t reach the ticket backend. Check backend URL/server.";
+    return "Couldn’t reach the ticket service.";
   }
 
   if ((result as any).error === "invalid_backend_json") {
-    return "Backend responded with invalid JSON.";
+    return "Ticket service returned invalid data.";
   }
 
   if ((result as any).error && String((result as any).error).startsWith("http_")) {
     return providers
-      ? `No suitable ticket match found. Checked: ${providers}.`
-      : "No suitable ticket match found.";
+      ? `No suitable ticket option found. Checked: ${providers}.`
+      : "No suitable ticket option found.";
   }
 
   return providers
-    ? `No suitable ticket match found. Checked: ${providers}.`
-    : "No suitable ticket match found.";
+    ? `No suitable ticket option found. Checked: ${providers}.`
+    : "No suitable ticket option found.";
 }
 
 function isBestOption(index: number) {
@@ -481,7 +481,7 @@ export default function MatchScreen() {
   }, [trip, fixture]);
 
   const kickoffText = useMemo(
-    () => (kickoffIso ? formatKickoffLocal(kickoffIso) : "Kickoff TBC"),
+    () => (kickoffIso ? formatKickoffLocal(kickoffIso) : "Kickoff time TBC"),
     [kickoffIso]
   );
 
@@ -534,6 +534,12 @@ export default function MatchScreen() {
     [trip, fixture]
   );
 
+  const leagueSeason =
+    (typeof (fixture as any)?.league?.season === "number"
+      ? (fixture as any).league.season
+      : undefined) ??
+    undefined;
+
   const dateIso = useMemo(() => {
     return (
       clean((trip as any)?.startDate) ||
@@ -543,10 +549,10 @@ export default function MatchScreen() {
     );
   }, [trip, fixture]);
 
-  const certaintyState = useMemo(() => {
-    if (!kickoffIso) return "tbc" as const;
-    if ((trip as any)?.kickoffTbc) return "tbc" as const;
-    return "confirmed" as const;
+  const kickoffConfirmed = useMemo(() => {
+    if (!kickoffIso) return false;
+    if ((trip as any)?.kickoffTbc) return false;
+    return true;
   }, [kickoffIso, trip]);
 
   const airportLine = useMemo(() => {
@@ -560,11 +566,6 @@ export default function MatchScreen() {
   const transitItems = useMemo(() => resolvedStadium?.transit ?? [], [resolvedStadium]);
   const stayItems = useMemo(() => resolvedStadium?.stayAreas ?? [], [resolvedStadium]);
   const tipItems = useMemo(() => resolvedStadium?.tips ?? [], [resolvedStadium]);
-
-  const homeSupportNote = useMemo(() => {
-    if (!homeName) return "Plan the match around the host city and home club.";
-    return `This trip is built around ${homeName} at home — host city, host stadium, home-side planning.`;
-  }, [homeName]);
 
   const ticketOptions = useMemo(() => dedupeOptions(ticketResult), [ticketResult]);
   const bestOption = ticketOptions[0] ?? null;
@@ -584,6 +585,19 @@ export default function MatchScreen() {
     router.back();
   }, [router, tripId]);
 
+  const goBuildTrip = useCallback(() => {
+    if (!fixtureId) return;
+
+    router.push({
+      pathname: "/trip/build",
+      params: {
+        fixtureId,
+        ...(leagueId ? { leagueId: String(leagueId) } : {}),
+        ...(leagueSeason ? { season: String(leagueSeason) } : {}),
+      },
+    } as any);
+  }, [router, fixtureId, leagueId, leagueSeason]);
+
   const openDirections = useCallback(async () => {
     const q = encodeURIComponent([venueName, venueCity].filter(Boolean).join(" ") || venueText);
     const url = `https://www.google.com/maps/search/?api=1&query=${q}`;
@@ -596,14 +610,6 @@ export default function MatchScreen() {
   }, [venueName, venueCity, venueText]);
 
   async function openTicketOption(option: TicketResolutionOption) {
-    if (!tripId) {
-      Alert.alert(
-        "Open from a trip",
-        "Open this match from a Trip Workspace so ticket clicks can be saved into Wallet."
-      );
-      return;
-    }
-
     const url = clean(option.url);
     if (!url) {
       Alert.alert("Couldn’t open tickets");
@@ -613,32 +619,36 @@ export default function MatchScreen() {
     setActiveProviderUrl(url);
 
     try {
-      await beginPartnerClick({
-        tripId,
-        partnerId: mapTicketProviderToPartnerId(option.provider),
-        url,
-        savedItemType: "tickets",
-        title: clean(option.title) || `Tickets: ${homeName} vs ${awayName}`,
-        metadata: {
-          fixtureId,
-          leagueId,
-          leagueName,
-          dateIso,
-          kickoffIso,
-          homeName,
-          awayName,
-          priceMode: "live",
-          ticketProvider: clean(option.provider) || null,
-          resolvedPriceText: clean(option.priceText) || null,
-          resolutionReason: option.reason ?? null,
-          exactMatch: Boolean(option.exact),
-          score: option.score,
-          checkedProviders: checkedProviders.length > 0 ? checkedProviders : undefined,
-          optionCount: ticketOptions.length,
-        },
-      });
+      if (tripId) {
+        await beginPartnerClick({
+          tripId,
+          partnerId: mapTicketProviderToPartnerId(option.provider),
+          url,
+          savedItemType: "tickets",
+          title: clean(option.title) || `Tickets: ${homeName} vs ${awayName}`,
+          metadata: {
+            fixtureId,
+            leagueId,
+            leagueName,
+            dateIso,
+            kickoffIso,
+            homeName,
+            awayName,
+            priceMode: "live",
+            ticketProvider: clean(option.provider) || null,
+            resolvedPriceText: clean(option.priceText) || null,
+            resolutionReason: option.reason ?? null,
+            exactMatch: Boolean(option.exact),
+            score: option.score,
+            checkedProviders: checkedProviders.length > 0 ? checkedProviders : undefined,
+            optionCount: ticketOptions.length,
+          },
+        });
+      } else {
+        await openUntrackedUrl(url);
+      }
     } catch {
-      Alert.alert("Couldn’t open tickets", "Ticket flow failed before the partner click was created.");
+      Alert.alert("Couldn’t open tickets");
     } finally {
       setActiveProviderUrl(null);
     }
@@ -647,18 +657,10 @@ export default function MatchScreen() {
   async function openTickets() {
     if (openingTickets) return;
 
-    if (!tripId) {
-      Alert.alert(
-        "Open from a trip",
-        "Open this match from a Trip Workspace so ticket clicks can be saved into Wallet."
-      );
-      return;
-    }
-
     if (!homeName || !awayName || !kickoffIso) {
       Alert.alert(
         "Tickets not ready",
-        "Missing match details (teams/kickoff). Try again after the match loads."
+        "This match is missing some key details. Try again once it has fully loaded."
       );
       return;
     }
@@ -680,7 +682,7 @@ export default function MatchScreen() {
       const options = dedupeOptions(resolved);
 
       if (!resolved?.ok || options.length === 0) {
-        Alert.alert("Tickets not found", openFailureMessage(resolved));
+        Alert.alert("No ticket options found", openFailureMessage(resolved));
         return;
       }
 
@@ -688,37 +690,21 @@ export default function MatchScreen() {
         await openTicketOption(options[0]);
         return;
       }
-
-      Alert.alert(
-        "Ticket options ready",
-        `Found ${options.length} providers. Compare them below before choosing.`
-      );
     } catch {
-      Alert.alert("Couldn’t open tickets", "Ticket flow failed before the partner click was created.");
+      Alert.alert("Couldn’t load ticket options");
     } finally {
       setOpeningTickets(false);
     }
   }
 
   const openOfficialClub = useCallback(async () => {
-    const q = encodeURIComponent(`${homeName} vs ${awayName} official tickets`);
+    const q = encodeURIComponent(`${homeName} official tickets ${homeName} vs ${awayName}`);
     const url = `https://www.google.com/search?q=${q}`;
 
     try {
       await openUntrackedUrl(url);
     } catch {
-      Alert.alert("Couldn’t open link");
-    }
-  }, [homeName, awayName]);
-
-  const openGoogleTicketsSearch = useCallback(async () => {
-    const q = encodeURIComponent(`${homeName} vs ${awayName} tickets`);
-    const url = `https://www.google.com/search?q=${q}`;
-
-    try {
-      await openUntrackedUrl(url);
-    } catch {
-      Alert.alert("Couldn’t open link");
+      Alert.alert("Couldn’t open official club page");
     }
   }, [homeName, awayName]);
 
@@ -748,109 +734,101 @@ export default function MatchScreen() {
   const imageSource = typeof bg === "string" ? null : (bg as any);
 
   return (
-    <Background imageUrl={imageUrl} imageSource={imageSource} overlayOpacity={0.12}>
+    <Background imageUrl={imageUrl} imageSource={imageSource} overlayOpacity={0.14}>
       <SafeAreaView style={styles.safe} edges={["top"]}>
         <View style={styles.header}>
           <Button label="Back" tone="secondary" size="sm" onPress={goBack} />
-          <View style={{ flex: 1 }} />
         </View>
 
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           <GlassCard level="default" variant="matte" style={styles.heroCard} noPadding>
             <View style={styles.heroInner}>
-              <View style={styles.heroLabelRow}>
-                <Text style={styles.heroKicker}>MATCH DAY</Text>
+              <View style={styles.heroTopRow}>
+                <Text style={styles.heroKicker}>MATCH</Text>
                 {leagueName ? <Chip label={leagueName} variant="default" /> : null}
               </View>
 
-              <View style={styles.heroCrestsRow}>
-                <View style={styles.homeClubCol}>
+              <View style={styles.teamsRow}>
+                <View style={styles.teamCol}>
                   <Crest name={homeName || "Home"} uri={crestHome} size="lg" emphasize />
-                  <Text style={styles.homeClubTag}>Host club</Text>
-                </View>
-
-                <View style={styles.heroCenter}>
-                  <Text style={styles.heroTitle} numberOfLines={3}>
-                    {title}
+                  <Text style={styles.teamLabel} numberOfLines={2}>
+                    {homeName || "Home"}
                   </Text>
-
-                  <View style={styles.heroMetaRow}>
-                    <FixtureCertaintyBadge state={certaintyState} variant="compact" />
-                    <Chip label="Home-side trip" variant="primary" />
-                  </View>
                 </View>
 
-                <View style={styles.awayClubCol}>
-                  <Crest name={awayName || "Away"} uri={crestAway} size="sm" />
-                  <Text style={styles.awayClubTag}>Visitors</Text>
+                <View style={styles.vsCol}>
+                  <Text style={styles.vsText}>vs</Text>
+                </View>
+
+                <View style={styles.teamCol}>
+                  <Crest name={awayName || "Away"} uri={crestAway} size="lg" />
+                  <Text style={styles.teamLabel} numberOfLines={2}>
+                    {awayName || "Away"}
+                  </Text>
                 </View>
               </View>
 
-              <View style={styles.heroMetaBlock}>
+              <View style={styles.heroInfoBlock}>
+                <Text style={styles.heroTitle}>{title}</Text>
                 <Text style={styles.metaLine}>{kickoffText}</Text>
                 <Text style={styles.metaLineMuted}>{venueText}</Text>
               </View>
 
-              <View style={styles.homeFocusBox}>
-                <Text style={styles.homeFocusLabel}>Home focus</Text>
-                <Text style={styles.homeFocusText}>{homeSupportNote}</Text>
+              <View style={styles.statusRow}>
+                <Chip
+                  label={kickoffConfirmed ? "Kickoff confirmed" : "Kickoff time TBC"}
+                  variant={kickoffConfirmed ? "primary" : "default"}
+                />
+                {ticketOptions.length > 0 ? (
+                  <Chip
+                    label={
+                      ticketOptions.length === 1
+                        ? "1 ticket option found"
+                        : `${ticketOptions.length} ticket options found`
+                    }
+                    variant="default"
+                  />
+                ) : null}
               </View>
 
-              <View style={styles.heroHints}>
-                <Chip label="Tickets: comparison-ready" variant="primary" />
-                <Chip label="Hotels: live price" variant="default" />
-                <Chip
-                  label={resolvedStadium ? "Travel: mapped" : "Travel: limited"}
-                  variant="default"
+              <View style={styles.heroActions}>
+                <Button
+                  label={
+                    openingTickets
+                      ? "Finding tickets…"
+                      : ticketOptions.length > 1
+                      ? "Refresh ticket options"
+                      : "View ticket options"
+                  }
+                  tone="primary"
+                  loading={openingTickets}
+                  onPress={openTickets}
+                  glow
                 />
+                <Button label="Build trip around this match" tone="secondary" onPress={goBuildTrip} />
               </View>
+
+              {!tripId ? (
+                <View style={styles.helperBox}>
+                  <Text style={styles.helperText}>
+                    You can check ticket options now. Build a trip if you want to save bookings and keep everything in Wallet.
+                  </Text>
+                </View>
+              ) : null}
             </View>
           </GlassCard>
 
           <GlassCard level="default" variant="matte" style={styles.sectionCard}>
             <Text style={styles.sectionTitle}>Tickets</Text>
             <Text style={styles.sectionSub}>
-              Resolver-backed ticket flow. Compare providers, then open the one you actually want.
+              See the best available ticket routes for this match, then open the one you want.
             </Text>
-
-            <View style={styles.primaryActionWrap}>
-              <Button
-                label={
-                  openingTickets
-                    ? "Finding options…"
-                    : ticketOptions.length > 1
-                    ? "Refresh ticket options"
-                    : "Open tickets"
-                }
-                tone="primary"
-                loading={openingTickets}
-                onPress={openTickets}
-                glow
-              />
-            </View>
-
-            <View style={styles.ticketHintBox}>
-              <Text style={styles.ticketHintText}>
-                {ticketFlowSubtitle(ticketOptions.length, checkedProviders.length)}
-              </Text>
-            </View>
-
-            {checkedProviders.length > 0 ? (
-              <View style={styles.providersWrap}>
-                {checkedProviders.map((provider) => (
-                  <View key={provider} style={styles.providerMiniItem}>
-                    <ProviderBadge provider={provider} size="sm" />
-                    <Text style={styles.providerMiniLabel}>{providerLabel(provider)}</Text>
-                  </View>
-                ))}
-              </View>
-            ) : null}
 
             {bestOption ? (
               <View style={styles.bestOptionBox}>
                 <View style={styles.bestOptionTopRow}>
                   <View style={styles.bestOptionPriceBlock}>
-                    <Text style={styles.bestOptionLabel}>Best current option</Text>
+                    <Text style={styles.bestOptionLabel}>Best option right now</Text>
                     <Text style={styles.bestOptionPrice}>
                       {clean(bestOption.priceText) || "Live price"}
                     </Text>
@@ -861,17 +839,26 @@ export default function MatchScreen() {
 
                 <Text style={styles.bestOptionSub}>
                   {confidenceLabel(bestOption.score)}
-                  {bestOption.exact ? " • Exact event match" : " • Resolver-selected"}
+                  {bestOption.exact ? " • Exact event match" : " • Best available result"}
                 </Text>
               </View>
-            ) : null}
-
-            {ticketOptions.length > 1 ? (
-              <View style={styles.compareSummaryBox}>
-                <Text style={styles.compareSummaryTitle}>Compare before you click</Text>
-                <Text style={styles.compareSummaryText}>
-                  Don’t blindly trust the first link. Score, price text, and exact-match status all matter.
+            ) : (
+              <View style={styles.emptyInfoCard}>
+                <Text style={styles.emptyInfoLabel}>No ticket options loaded yet</Text>
+                <Text style={styles.emptyInfoText}>
+                  Tap “View ticket options” to load live ticket routes for this fixture.
                 </Text>
+              </View>
+            )}
+
+            {checkedProviders.length > 0 ? (
+              <View style={styles.providersWrap}>
+                {checkedProviders.map((provider) => (
+                  <View key={provider} style={styles.providerMiniItem}>
+                    <ProviderBadge provider={provider} size="sm" />
+                    <Text style={styles.providerMiniLabel}>{providerLabel(provider)}</Text>
+                  </View>
+                ))}
               </View>
             ) : null}
 
@@ -888,7 +875,9 @@ export default function MatchScreen() {
                     >
                       <View style={styles.optionTopRow}>
                         <View style={styles.optionPriceHero}>
-                          <Text style={styles.optionPrice}>{clean(option.priceText) || "Live price"}</Text>
+                          <Text style={styles.optionPrice}>
+                            {clean(option.priceText) || "Live price"}
+                          </Text>
                           <Text style={styles.optionConfidence}>
                             {confidenceLabel(option.score)}
                             {option.exact ? " • Exact match" : ""}
@@ -916,7 +905,7 @@ export default function MatchScreen() {
 
                       <View style={styles.optionActionRow}>
                         <Text style={styles.optionActionText}>
-                          {isOpening ? "Opening…" : "Open provider"}
+                          {isOpening ? "Opening…" : "Open ticket option"}
                         </Text>
                       </View>
                     </Pressable>
@@ -926,15 +915,18 @@ export default function MatchScreen() {
             ) : null}
 
             <View style={styles.actions}>
-              <Button label="Official club (search)" tone="secondary" onPress={openOfficialClub} />
-              <Button label="Google tickets search" tone="secondary" onPress={openGoogleTicketsSearch} />
+              <Button
+                label="Official club website"
+                tone="secondary"
+                onPress={openOfficialClub}
+              />
             </View>
           </GlassCard>
 
           <GlassCard level="default" variant="matte" style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>Stadium & logistics</Text>
+            <Text style={styles.sectionTitle}>Stadium & local info</Text>
             <Text style={styles.sectionSub}>
-              Host-stadium intelligence: airport, transport, stay areas and matchday tips.
+              Useful basics for getting there and choosing where to stay.
             </Text>
 
             <View style={styles.primaryActionWrap}>
@@ -944,14 +936,14 @@ export default function MatchScreen() {
             {resolvedStadium ? (
               <View style={styles.infoGrid}>
                 <View style={styles.infoBlock}>
-                  <Text style={styles.infoBlockLabel}>Airport</Text>
+                  <Text style={styles.infoBlockLabel}>Nearest airport</Text>
                   <Text style={styles.infoBlockText}>
                     {airportLine ?? "Airport detail not added yet"}
                   </Text>
                 </View>
 
                 <View style={styles.infoBlock}>
-                  <Text style={styles.infoBlockLabel}>Transport</Text>
+                  <Text style={styles.infoBlockLabel}>Getting there</Text>
                   {transitItems.length > 0 ? (
                     transitItems.map((item, index) => {
                       const suffix =
@@ -998,37 +990,39 @@ export default function MatchScreen() {
               </View>
             ) : (
               <View style={styles.emptyInfoCard}>
-                <Text style={styles.emptyInfoLabel}>Travel intelligence</Text>
+                <Text style={styles.emptyInfoLabel}>Venue guide not mapped yet</Text>
                 <Text style={styles.emptyInfoText}>
-                  This venue is not mapped yet. Directions still work, but airport, transport and stay-area guidance are not available yet.
+                  Directions still work, but airport, transport and stay-area guidance have not been added for this stadium yet.
                 </Text>
               </View>
             )}
           </GlassCard>
 
           <GlassCard level="default" variant="matte" style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>Next best action</Text>
+            <Text style={styles.sectionTitle}>Build around this match</Text>
             <Text style={styles.sectionSub}>
-              Don’t overcomplicate it. Lock the match first, then move into the trip workspace and fill the rest around it.
+              Save this fixture into a trip workspace and then sort tickets, travel, hotel and everything else around it.
             </Text>
 
             <View style={styles.nextStepsList}>
               <View style={styles.nextStepRow}>
                 <Text style={styles.nextStepNumber}>1</Text>
-                <Text style={styles.nextStepText}>
-                  {ticketOptions.length > 1 ? "Compare ticket providers" : "Open resolver-backed tickets"}
-                </Text>
+                <Text style={styles.nextStepText}>Choose your ticket route</Text>
               </View>
               <View style={styles.nextStepRow}>
                 <Text style={styles.nextStepNumber}>2</Text>
-                <Text style={styles.nextStepText}>Check stadium logistics</Text>
+                <Text style={styles.nextStepText}>Save the match into a trip</Text>
               </View>
               <View style={styles.nextStepRow}>
                 <Text style={styles.nextStepNumber}>3</Text>
                 <Text style={styles.nextStepText}>
-                  Return to your trip workspace and build around this match
+                  Add flights, hotel and extras in the trip workspace
                 </Text>
               </View>
+            </View>
+
+            <View style={styles.primaryActionWrap}>
+              <Button label="Build trip around this match" tone="primary" onPress={goBuildTrip} glow />
             </View>
           </GlassCard>
 
@@ -1052,6 +1046,7 @@ const styles = StyleSheet.create({
     paddingBottom: theme.spacing.sm,
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "flex-start",
     gap: 12,
   },
 
@@ -1070,7 +1065,7 @@ const styles = StyleSheet.create({
     gap: 14,
   },
 
-  heroLabelRow: {
+  heroTopRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -1084,41 +1079,41 @@ const styles = StyleSheet.create({
     letterSpacing: 0.7,
   },
 
-  heroCrestsRow: {
+  teamsRow: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
     gap: 12,
   },
 
-  homeClubCol: {
-    alignItems: "center",
-    gap: 8,
-  },
-
-  awayClubCol: {
-    alignItems: "center",
-    gap: 8,
-  },
-
-  homeClubTag: {
-    color: theme.colors.primary,
-    fontSize: 11,
-    fontWeight: theme.fontWeight.black,
-    letterSpacing: 0.3,
-  },
-
-  awayClubTag: {
-    color: theme.colors.textMuted,
-    fontSize: 11,
-    fontWeight: theme.fontWeight.black,
-    letterSpacing: 0.3,
-  },
-
-  heroCenter: {
+  teamCol: {
     flex: 1,
-    minWidth: 0,
     alignItems: "center",
-    gap: 10,
+    gap: 8,
+  },
+
+  vsCol: {
+    width: 34,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  vsText: {
+    color: theme.colors.textMuted,
+    fontSize: 16,
+    fontWeight: theme.fontWeight.black,
+  },
+
+  teamLabel: {
+    color: theme.colors.textPrimary,
+    fontSize: 12,
+    fontWeight: theme.fontWeight.black,
+    textAlign: "center",
+  },
+
+  heroInfoBlock: {
+    alignItems: "center",
+    gap: 4,
   },
 
   heroTitle: {
@@ -1129,16 +1124,30 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
 
-  heroMetaRow: {
+  statusRow: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8,
     justifyContent: "center",
   },
 
-  heroMetaBlock: {
-    alignItems: "center",
-    gap: 4,
+  heroActions: {
+    gap: 10,
+  },
+
+  helperBox: {
+    padding: 12,
+    borderRadius: theme.borderRadius.input,
+    borderWidth: 1,
+    borderColor: theme.colors.borderSubtle,
+    backgroundColor: "rgba(255,255,255,0.03)",
+  },
+
+  helperText: {
+    color: theme.colors.textSecondary,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: theme.fontWeight.medium,
   },
 
   metaLine: {
@@ -1153,35 +1162,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: theme.fontWeight.medium,
     textAlign: "center",
-  },
-
-  homeFocusBox: {
-    padding: 12,
-    borderRadius: theme.borderRadius.input,
-    borderWidth: 1,
-    borderColor: "rgba(87,162,56,0.18)",
-    backgroundColor: "rgba(87,162,56,0.08)",
-    gap: 4,
-  },
-
-  homeFocusLabel: {
-    color: theme.colors.primary,
-    fontSize: 11,
-    fontWeight: theme.fontWeight.black,
-    letterSpacing: 0.5,
-  },
-
-  homeFocusText: {
-    color: theme.colors.textPrimary,
-    fontSize: 13,
-    lineHeight: 18,
-    fontWeight: theme.fontWeight.medium,
-  },
-
-  heroHints: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
   },
 
   crestWrap: {
@@ -1226,22 +1206,6 @@ const styles = StyleSheet.create({
 
   primaryActionWrap: {
     marginTop: 12,
-  },
-
-  ticketHintBox: {
-    marginTop: 10,
-    padding: 10,
-    borderRadius: theme.borderRadius.input,
-    borderWidth: 1,
-    borderColor: theme.colors.borderSubtle,
-    backgroundColor: "rgba(255,255,255,0.03)",
-  },
-
-  ticketHintText: {
-    color: theme.colors.textSecondary,
-    fontSize: 12,
-    lineHeight: 17,
-    fontWeight: theme.fontWeight.medium,
   },
 
   providersWrap: {
@@ -1297,7 +1261,7 @@ const styles = StyleSheet.create({
   },
 
   bestOptionBox: {
-    marginTop: 10,
+    marginTop: 12,
     padding: 12,
     borderRadius: theme.borderRadius.input,
     borderWidth: 1,
@@ -1333,30 +1297,6 @@ const styles = StyleSheet.create({
   },
 
   bestOptionSub: {
-    color: theme.colors.textSecondary,
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: theme.fontWeight.medium,
-  },
-
-  compareSummaryBox: {
-    marginTop: 10,
-    padding: 12,
-    borderRadius: theme.borderRadius.input,
-    borderWidth: 1,
-    borderColor: theme.colors.borderSubtle,
-    backgroundColor: "rgba(255,255,255,0.03)",
-    gap: 4,
-  },
-
-  compareSummaryTitle: {
-    color: theme.colors.textPrimary,
-    fontSize: 12,
-    fontWeight: theme.fontWeight.black,
-    letterSpacing: 0.3,
-  },
-
-  compareSummaryText: {
     color: theme.colors.textSecondary,
     fontSize: 12,
     lineHeight: 16,
