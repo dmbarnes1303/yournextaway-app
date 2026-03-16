@@ -1,3 +1,5 @@
+// app/(tabs)/discover.tsx
+
 import React from "react";
 import {
   View,
@@ -5,17 +7,18 @@ import {
   ScrollView,
   Platform,
   UIManager,
+  Text,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 import Background from "@/src/components/Background";
 import EmptyState from "@/src/components/EmptyState";
+import GlassCard from "@/src/components/GlassCard";
+import Button from "@/src/components/Button";
 import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
 
-import {
-  DISCOVER_CATEGORY_META,
-} from "@/src/features/discover/discoverCategories";
+import { DISCOVER_CATEGORY_META } from "@/src/features/discover/discoverCategories";
 import {
   INSPIRATION_PRESETS,
   QUICK_SPARKS,
@@ -37,6 +40,10 @@ if (
   UIManager.setLayoutAnimationEnabledExperimental
 ) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
+function SectionSpacer() {
+  return <View style={styles.sectionSpacer} />;
 }
 
 export default function DiscoverScreen() {
@@ -84,18 +91,25 @@ export default function DiscoverScreen() {
     helpers,
   } = useDiscoverController();
 
+  const hasLiveRows = previewLive.length > 0;
+  const hasTrendingRows = trendingTrips.length > 0;
+  const hasMultiMatchTrips = multiMatchTrips.length > 0;
+
   return (
     <Background
       imageSource={getBackground("explore")}
-      overlayOpacity={0.04}
-      topShadeOpacity={0.3}
-      bottomShadeOpacity={0.36}
-      centerShadeOpacity={0.03}
+      overlayOpacity={0.05}
+      topShadeOpacity={0.32}
+      bottomShadeOpacity={0.4}
+      centerShadeOpacity={0.04}
     >
       <SafeAreaView style={styles.container} edges={["top"]}>
         <ScrollView
           style={styles.scroll}
-          contentContainerStyle={[styles.content, { paddingBottom: 24 + insets.bottom }]}
+          contentContainerStyle={[
+            styles.content,
+            { paddingBottom: 28 + insets.bottom },
+          ]}
           showsVerticalScrollIndicator={false}
         >
           <DiscoverHero
@@ -120,27 +134,6 @@ export default function DiscoverScreen() {
             }
           />
 
-          <View style={styles.section}>
-            <DiscoverSectionHeader
-              title="Explore now"
-              subtitle="Fast entry points so the screen feels alive straight away."
-            />
-            <DiscoverQuickSparks sparks={QUICK_SPARKS} onPressSpark={applyQuickSpark} />
-          </View>
-
-          <View style={styles.section}>
-            <DiscoverSectionHeader
-              title="Multi-match trips"
-              subtitle="Stack more than one match into the same trip."
-            />
-            <DiscoverMultiMatchRow
-              loading={loadingLive}
-              error={liveError}
-              trips={multiMatchTrips}
-              onPressTrip={goMultiMatchTrip}
-            />
-          </View>
-
           <DiscoverTripSetup
             setupExpanded={setupExpanded}
             onToggleSetup={toggleSetup}
@@ -159,13 +152,30 @@ export default function DiscoverScreen() {
 
           <View style={styles.section}>
             <DiscoverSectionHeader
-              title="Live now"
-              subtitle="Strong current options based on your setup, not generic filler."
+              title="Fast ways in"
+              subtitle="Start with a trip type, not a blank search."
+            />
+            <DiscoverQuickSparks sparks={QUICK_SPARKS} onPressSpark={applyQuickSpark} />
+          </View>
+
+          <SectionSpacer />
+
+          <View style={styles.section}>
+            <DiscoverSectionHeader
+              title="Best live options"
+              subtitle="Current fixtures that fit your setup now, not generic filler."
             />
 
-            {loadingLive ? null : liveError ? (
+            {loadingLive ? (
+              <GlassCard style={styles.stateCard} level="default" variant="matte">
+                <Text style={styles.stateTitle}>Loading live routes</Text>
+                <Text style={styles.stateText}>
+                  Pulling the strongest current football-trip options across your selected window.
+                </Text>
+              </GlassCard>
+            ) : liveError ? (
               <EmptyState title="Live previews unavailable" message={liveError} />
-            ) : previewLive.length > 0 ? (
+            ) : hasLiveRows ? (
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
@@ -189,16 +199,30 @@ export default function DiscoverScreen() {
                   />
                 ))}
               </ScrollView>
-            ) : null}
+            ) : (
+              <GlassCard style={styles.stateCard} level="default" variant="matte">
+                <Text style={styles.stateTitle}>No live fits yet</Text>
+                <Text style={styles.stateText}>
+                  Try widening the date window, switching trip length, or dropping one vibe so
+                  Discover can surface more routes.
+                </Text>
+              </GlassCard>
+            )}
           </View>
+
+          <SectionSpacer />
 
           <View style={styles.section}>
             <DiscoverSectionHeader
-              title="Trending football trips"
-              subtitle="Big fixtures and city pulls people would actually travel for."
+              title="Trending trips"
+              subtitle="The louder, bigger, more travel-worthy fixtures in the current pool."
             />
 
-            {loadingLive ? null : !liveError && trendingTrips.length > 0 ? (
+            {loadingLive ? (
+              <GlassCard style={styles.stateCardThin} level="default" variant="matte">
+                <Text style={styles.stateText}>Building trending football-trip picks…</Text>
+              </GlassCard>
+            ) : hasTrendingRows ? (
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
@@ -217,13 +241,51 @@ export default function DiscoverScreen() {
                   />
                 ))}
               </ScrollView>
-            ) : null}
+            ) : (
+              <GlassCard style={styles.stateCardThin} level="default" variant="matte">
+                <Text style={styles.stateText}>
+                  No trending routes surfaced from the current live pool.
+                </Text>
+              </GlassCard>
+            )}
           </View>
+
+          <SectionSpacer />
 
           <View style={styles.section}>
             <DiscoverSectionHeader
-              title="Start with a mood"
-              subtitle="Fast entry points for the kind of trip that already sounds good."
+              title="Multi-match trips"
+              subtitle="Stack more than one fixture into the same football break."
+            />
+
+            {loadingLive ? (
+              <GlassCard style={styles.stateCardThin} level="default" variant="matte">
+                <Text style={styles.stateText}>Looking for stackable trip combinations…</Text>
+              </GlassCard>
+            ) : hasMultiMatchTrips ? (
+              <DiscoverMultiMatchRow
+                loading={loadingLive}
+                error={liveError}
+                trips={multiMatchTrips}
+                onPressTrip={goMultiMatchTrip}
+              />
+            ) : (
+              <GlassCard style={styles.stateCard} level="default" variant="matte">
+                <Text style={styles.stateTitle}>No strong combos yet</Text>
+                <Text style={styles.stateText}>
+                  Your current setup is producing mainly single-match routes. Try a longer window or
+                  2–3 nights to unlock better stackable options.
+                </Text>
+              </GlassCard>
+            )}
+          </View>
+
+          <SectionSpacer />
+
+          <View style={styles.section}>
+            <DiscoverSectionHeader
+              title="Start from a mood"
+              subtitle="Fast editorial routes for the kind of trip that already sounds right."
             />
             <DiscoverInspirationRow
               presets={INSPIRATION_PRESETS}
@@ -231,36 +293,42 @@ export default function DiscoverScreen() {
             />
           </View>
 
+          <SectionSpacer />
+
           <View style={styles.section}>
             <DiscoverSectionHeader
-              title="Best fit right now"
-              subtitle={`Based on your current setup, ${browseModeLabel} is the best place to start.`}
+              title="Best browse route"
+              subtitle={`Right now, ${browseModeLabel} is the strongest angle from your setup.`}
             />
 
-            {!featuredLive && leadCategory ? (
-              <DiscoverCategoryCard
-                category={leadCategory}
-                compact={false}
-                onPress={goFixturesCategory}
-              />
-            ) : null}
-
-            <View style={styles.primaryGrid}>
-              {remainingPrimaryCategories.map((category) => (
+            <View style={styles.bestFitBlock}>
+              {!featuredLive && leadCategory ? (
                 <DiscoverCategoryCard
-                  key={category}
-                  category={category}
+                  category={leadCategory}
                   compact={false}
                   onPress={goFixturesCategory}
                 />
-              ))}
+              ) : null}
+
+              <View style={styles.primaryGrid}>
+                {remainingPrimaryCategories.map((category) => (
+                  <DiscoverCategoryCard
+                    key={category}
+                    category={category}
+                    compact={false}
+                    onPress={goFixturesCategory}
+                  />
+                ))}
+              </View>
             </View>
           </View>
 
+          <SectionSpacer />
+
           <View style={styles.section}>
             <DiscoverSectionHeader
-              title="More ways to browse"
-              subtitle="Narrower angles when you want city pull, atmosphere, or more specific trip types."
+              title="Specialist browse angles"
+              subtitle="Use narrower lenses when you care more about atmosphere, city pull, stakes or specific trip logic."
             />
 
             <ScrollView
@@ -279,15 +347,26 @@ export default function DiscoverScreen() {
             </ScrollView>
           </View>
 
+          <SectionSpacer />
+
           <View style={styles.section}>
             <DiscoverSectionHeader
-              title="Concierge pick"
-              subtitle="Give the app your setup and let it surface one of the stronger live options."
+              title="Need one good answer?"
+              subtitle="Let Discover stop browsing and just hand you one of the strongest live routes."
             />
             <DiscoverConciergeCard
               loading={loadingRandom}
               filterSummary={filterSummary}
               onPress={goRandomTrip}
+            />
+          </View>
+
+          <View style={styles.bottomActionWrap}>
+            <Button
+              label="Browse all live fits"
+              onPress={() => goFixturesCategory(seededCategory)}
+              tone="primary"
+              glow
             />
           </View>
         </ScrollView>
@@ -297,16 +376,25 @@ export default function DiscoverScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  scroll: { flex: 1 },
+  container: {
+    flex: 1,
+  },
+
+  scroll: {
+    flex: 1,
+  },
 
   content: {
     paddingHorizontal: theme.spacing.lg,
-    gap: 16,
+    gap: 18,
   },
 
   section: {
-    gap: 10,
+    gap: 12,
+  },
+
+  sectionSpacer: {
+    height: 2,
   },
 
   liveRow: {
@@ -319,6 +407,10 @@ const styles = StyleSheet.create({
     paddingRight: theme.spacing.lg,
   },
 
+  bestFitBlock: {
+    gap: 10,
+  },
+
   primaryGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -329,5 +421,37 @@ const styles = StyleSheet.create({
   secondaryRow: {
     gap: 10,
     paddingRight: theme.spacing.lg,
+  },
+
+  stateCard: {
+    borderRadius: 20,
+    padding: 16,
+    gap: 8,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+
+  stateCardThin: {
+    borderRadius: 18,
+    padding: 14,
+    gap: 6,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+
+  stateTitle: {
+    color: theme.colors.text,
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: theme.fontWeight.black,
+  },
+
+  stateText: {
+    color: theme.colors.textSecondary,
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: theme.fontWeight.bold,
+  },
+
+  bottomActionWrap: {
+    paddingTop: 4,
   },
 });
