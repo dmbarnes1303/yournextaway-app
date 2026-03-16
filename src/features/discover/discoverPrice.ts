@@ -12,6 +12,43 @@ export type DiscoverPriceEstimate = {
   tripLabel: string | null;
 };
 
+const EUROPEAN_LEAGUE_TIERS = new Map<number, number>([
+  [2, 6],   // Champions League
+  [3, 5],   // Europa League
+  [848, 4], // Europa Conference League
+
+  [39, 5],  // Premier League
+  [140, 5], // La Liga
+  [135, 5], // Serie A
+  [78, 5],  // Bundesliga
+
+  [61, 4],  // Ligue 1
+  [88, 4],  // Eredivisie
+  [94, 4],  // Primeira Liga
+  [203, 4], // Super Lig
+
+  [179, 3], // Scotland
+  [144, 3], // Belgium
+  [218, 3], // Austria
+  [210, 3], // Switzerland
+  [119, 3], // Denmark
+  [113, 3], // Sweden
+  [103, 3], // Norway
+  [197, 3], // Greece
+  [106, 3], // Poland
+  [345, 3], // Czech Republic
+  [207, 3], // Serbia
+  [164, 3], // Iceland
+
+  [271, 2], // Hungary
+  [283, 2], // Romania
+  [332, 2], // Slovakia
+  [373, 2], // Slovenia
+  [318, 2], // Cyprus
+  [172, 2], // Bulgaria
+  [315, 2], // Bosnia
+]);
+
 function clean(value: unknown): string {
   return String(value ?? "").trim();
 }
@@ -77,38 +114,9 @@ function isEvening(row: FixtureListRow): boolean {
 
 function leagueTier(row: FixtureListRow): number {
   const id = getLeagueId(row);
-
-  if (id === 2) return 6; // UCL
-  if (id === 3) return 5; // UEL
-  if (id === 848) return 4; // UECL
-
-  if (id === 39) return 5; // EPL
-  if (id === 140) return 5; // La Liga
-  if (id === 135) return 5; // Serie A
-  if (id === 78) return 5; // Bundesliga
-  if (id === 61) return 4; // Ligue 1
-
-  if (id === 88) return 4; // Eredivisie
-  if (id === 94) return 4; // Primeira Liga
-  if (id === 203) return 4; // Super Lig
-  if (id === 179) return 3; // Scotland
-  if (id === 144) return 3; // Jupiler Pro League
-  if (id === 218) return 3; // Austria
-  if (id === 210) return 3; // Switzerland
-  if (id === 119) return 3; // Denmark
-  if (id === 113) return 3; // Sweden
-  if (id === 103) return 3; // Norway
-  if (id === 197) return 3; // Greece
-  if (id === 235) return 3; // Croatia
-  if (id === 345) return 3; // Czech
-  if (id === 207) return 3; // Serbia
-  if (id === 244) return 3; // Poland
-  if (id === 307) return 2; // Hungary
-  if (id === 253) return 2; // Romania
-  if (id === 286) return 2; // Slovakia
-  if (id === 292) return 2; // Slovenia
-  if (id === 383) return 2; // Cyprus
-  if (id === 357) return 2; // Bulgaria
+  if (id != null && EUROPEAN_LEAGUE_TIERS.has(id)) {
+    return EUROPEAN_LEAGUE_TIERS.get(id) ?? 2;
+  }
 
   const league = lower(getLeagueName(row));
   const country = lower(getLeagueCountry(row));
@@ -118,6 +126,7 @@ function leagueTier(row: FixtureListRow): number {
     combined.includes("champions league") ||
     combined.includes("uefa champions")
   ) return 6;
+
   if (combined.includes("europa league")) return 5;
   if (combined.includes("conference league")) return 4;
 
@@ -131,8 +140,24 @@ function leagueTier(row: FixtureListRow): number {
   if (
     combined.includes("ligue 1") ||
     combined.includes("eredivisie") ||
-    combined.includes("primeira")
+    combined.includes("primeira liga") ||
+    combined.includes("super lig")
   ) return 4;
+
+  if (
+    combined.includes("scotland") ||
+    combined.includes("belgium") ||
+    combined.includes("austria") ||
+    combined.includes("switzerland") ||
+    combined.includes("denmark") ||
+    combined.includes("sweden") ||
+    combined.includes("norway") ||
+    combined.includes("greece") ||
+    combined.includes("poland") ||
+    combined.includes("czech") ||
+    combined.includes("serbia") ||
+    combined.includes("iceland")
+  ) return 3;
 
   return 2;
 }
@@ -223,22 +248,40 @@ function cityHotelFloor(city: string, country: string, tier: number): number {
   const c = lower(city);
   const k = lower(country);
 
-  if (
-    ["london", "paris", "amsterdam", "munich", "milan"].includes(c)
-  ) return 110;
+  if (["london", "paris", "amsterdam", "munich", "milan"].includes(c)) return 110;
 
   if (
     ["madrid", "barcelona", "rome", "lisbon", "istanbul", "liverpool", "manchester"].includes(c)
-  ) return 95;
+  ) {
+    return 95;
+  }
 
   if (
     ["porto", "seville", "valencia", "naples", "turin", "dortmund", "glasgow", "marseille"].includes(c)
-  ) return 80;
+  ) {
+    return 80;
+  }
 
   if (
-    ["spain", "portugal", "italy", "greece", "turkey", "croatia", "poland", "czech republic", "hungary", "romania", "serbia", "bulgaria"].some((x) =>
-      k.includes(x)
-    )
+    [
+      "spain",
+      "portugal",
+      "italy",
+      "greece",
+      "turkey",
+      "croatia",
+      "poland",
+      "czech republic",
+      "hungary",
+      "romania",
+      "serbia",
+      "bulgaria",
+      "bosnia",
+      "slovakia",
+      "slovenia",
+      "cyprus",
+      "iceland",
+    ].some((x) => k.includes(x))
   ) {
     return tier >= 4 ? 75 : 60;
   }
@@ -253,7 +296,7 @@ function flightFloor(country: string, city: string, tier: number): number {
   if (["london", "manchester", "liverpool", "glasgow"].includes(c)) return 35;
   if (["paris", "amsterdam", "brussels", "dortmund", "munich"].includes(c)) return 55;
   if (["madrid", "barcelona", "rome", "milan", "lisbon", "porto"].includes(c)) return 70;
-  if (["istanbul", "athens", "split"].includes(c)) return 95;
+  if (["istanbul", "athens", "split", "reykjavik"].includes(c)) return 95;
 
   if (
     ["spain", "portugal", "italy", "germany", "france", "netherlands", "belgium"].some((x) =>
@@ -289,7 +332,6 @@ function ticketFloor(row: FixtureListRow): number {
   if (isEvening(row)) base += 5;
 
   if (difficulty === "easy") base -= 8;
-  if (difficulty === "medium") base += 0;
   if (difficulty === "hard") base += 15;
   if (difficulty === "very_hard") base += 35;
 
@@ -300,7 +342,6 @@ function tripFloor(row: FixtureListRow, hotelNightFromGbp: number, flightFromGbp
   const ticket = ticketFloor(row);
   const weekendBump = isWeekend(row) ? 15 : 0;
   const eveningBump = isEvening(row) ? 5 : 0;
-
   const trip = ticket + hotelNightFromGbp + flightFromGbp + weekendBump + eveningBump;
   return roundToNearest5(trip);
 }
