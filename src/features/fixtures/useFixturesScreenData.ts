@@ -4,7 +4,6 @@ import { useLocalSearchParams } from "expo-router";
 
 import {
   LEAGUES,
-  FEATURED_LEAGUES,
   LEAGUE_BROWSE_REGION_ORDER,
   type LeagueOption,
   type LeagueBrowseRegion,
@@ -236,13 +235,13 @@ export function useFixturesScreenData() {
 
   const fetchLeagues = useMemo(() => {
     if (selectedLeagues.length > 0) return selectedLeagues;
-    return FEATURED_LEAGUES;
+    return LEAGUES;
   }, [selectedLeagues]);
 
-  const leagueSubtitle = useMemo(
-    () => leagueScopeSubtitle(selectedLeagues),
-    [selectedLeagues]
-  );
+  const leagueSubtitle = useMemo(() => {
+    if (selectedLeagues.length > 0) return leagueScopeSubtitle(selectedLeagues);
+    return "All competitions";
+  }, [selectedLeagues]);
 
   const [activeRegion, setActiveRegion] =
     useState<LeagueBrowseRegion>("featured-europe");
@@ -595,7 +594,7 @@ export function useFixturesScreenData() {
       const scopePart =
         selectedLeagueIds.length > 0
           ? `${selectedLeagueIds.length}/${MAX_MULTI_LEAGUES} leagues`
-          : "Featured scope";
+          : "All competitions";
 
       const extras: string[] = [];
 
@@ -622,7 +621,7 @@ export function useFixturesScreenData() {
     }${
       selectedLeagueIds.length > 0
         ? ` • ${selectedLeagueIds.length}/${MAX_MULTI_LEAGUES} leagues`
-        : " • Featured scope"
+        : " • All competitions"
     }${topPicksMode ? " • Sorted by rating" : ""}`;
   }, [
     discoverCategory,
@@ -699,4 +698,4 @@ export function useFixturesScreenData() {
     headerDateLine,
     monthLabel,
   };
-                            }
+               }
